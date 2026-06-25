@@ -35,9 +35,7 @@ export function renderFixtureInput(fixture: SandboxFixture): string {
   const payload = (fixture.payload ?? {}) as Record<string, unknown>
   const parts: string[] = []
 
-  const block = payload.block as
-    | { title?: string; type?: string; description?: string }
-    | undefined
+  const block = payload.block as { title?: string; type?: string; description?: string } | undefined
   if (block) {
     const heading = block.type ? `${block.title ?? 'Untitled'} (${block.type})` : block.title
     parts.push(`# ${heading ?? 'Untitled'}`)
@@ -78,7 +76,7 @@ export function renderFixtureInput(fixture: SandboxFixture): string {
 
 /** System prompt for the Sandbox judge — a reference-free rubric grader. */
 export const JUDGE_SYSTEM_PROMPT = [
-  'You are a meticulous, impartial evaluator. You grade an AI agent\'s output for a given',
+  "You are a meticulous, impartial evaluator. You grade an AI agent's output for a given",
   'task against a fixed rubric, scoring each dimension from 1 (poor) to 5 (excellent).',
   'Judge ONLY against the task input and the candidate output you are given — never invent',
   'context. Be calibrated: reserve 5 for genuinely excellent work and 1 for output that',
@@ -125,7 +123,11 @@ export function coerceJudgeScores(rubric: Rubric, raw: unknown): SandboxGradeDim
   const byKey = new Map<string, { score?: unknown; rationale?: unknown }>()
   const scores = extractScoreArray(raw)
   for (const entry of scores) {
-    if (entry && typeof entry === 'object' && typeof (entry as { key?: unknown }).key === 'string') {
+    if (
+      entry &&
+      typeof entry === 'object' &&
+      typeof (entry as { key?: unknown }).key === 'string'
+    ) {
       byKey.set((entry as { key: string }).key, entry as { score?: unknown; rationale?: unknown })
     }
   }
@@ -157,13 +159,21 @@ export function toFindingsObjectiveResult(score: ExpectationScore): SandboxObjec
 }
 
 /** Score a candidate's output against a fixture's `findings` objective, if it declares one. */
-export function objectiveFor(fixture: SandboxFixture, output: string): SandboxObjectiveResult | null {
+export function objectiveFor(
+  fixture: SandboxFixture,
+  output: string,
+): SandboxObjectiveResult | null {
   const objective = fixture.objective
   if (!objective || objective.kind !== 'findings') return null
   return toFindingsObjectiveResult(scoreExpectations(objective.expectations, output))
 }
 
-/** Extract the first JSON value (object or array) embedded in a model's reply. */
+/**
+ * Extract the first JSON value (object or array) embedded in a model's reply. The
+ * brace/bracket matcher is string-literal aware: braces inside a JSON string value (e.g.
+ * a `rationale` containing an unbalanced `}`) are skipped, so a valid reply isn't truncated
+ * into a parse failure (which would default every dimension to the lowest score).
+ */
 export function extractJson(text: string): unknown {
   const trimmed = text.trim()
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)
@@ -173,9 +183,18 @@ export function extractJson(text: string): unknown {
   const open = candidate[start]
   const close = open === '{' ? '}' : ']'
   let depth = 0
+  let inString = false
+  let escaped = false
   for (let i = start; i < candidate.length; i++) {
     const ch = candidate[i]
-    if (ch === open) depth++
+    if (inString) {
+      if (escaped) escaped = false
+      else if (ch === '\\') escaped = true
+      else if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') inString = true
+    else if (ch === open) depth++
     else if (ch === close) {
       depth--
       if (depth === 0) {

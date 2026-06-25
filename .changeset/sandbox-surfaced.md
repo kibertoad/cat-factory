@@ -3,6 +3,9 @@
 '@cat-factory/server': minor
 '@cat-factory/worker': minor
 '@cat-factory/node-server': minor
+'@cat-factory/contracts': minor
+'@cat-factory/kernel': minor
+'@cat-factory/sandbox': minor
 '@cat-factory/app': minor
 ---
 
@@ -36,3 +39,18 @@ package's `sandbox-migrations/` (see `deploy/backend/wrangler.toml`). On Node th
 
 Container/repo fixtures (a real checkout) are not yet supported by the in-product run
 driver and are refused at launch; the builtin fixtures are all inline.
+
+Run-driver hardening: a relaunch clears the prior result grid first (new
+`SandboxRunRepository`/`SandboxGradeRepository.removeByExperiment`, mirrored on D1 +
+Drizzle) instead of accumulating duplicate cells; the experiment's terminal status is
+derived from the cell outcomes and always settled (`failed` when every cell failed, never
+left `running`); the token budget must be ≥ 1 (a `0` budget is rejected at create rather
+than silently failing every cell); the judge model defaults to the deployment routing
+default (no hardcoded vendor) and requires an explicit `judgeModel` when none is
+configured; the judge-reply JSON extractor is string-literal aware so an unbalanced brace
+inside a rationale no longer collapses every score to the minimum. The fixture↔kind
+mapping the UI filters by now lives on the `@cat-factory/sandbox` catalog
+(`SandboxAgentKindMeta.fixtureKinds`) instead of a parallel frontend switch. NOTE: the
+run-driver still executes the matrix inline in the launch request (bounded by the cell cap
++ token budget); a durable fan-out (Workflows / pg-boss) for large matrices remains a
+follow-up.

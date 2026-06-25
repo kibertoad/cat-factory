@@ -15,7 +15,13 @@ import type {
   SandboxRunRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { assertFound, ConflictError, inlineModelRef, requireWorkspace, ValidationError } from '@cat-factory/kernel'
+import {
+  assertFound,
+  ConflictError,
+  inlineModelRef,
+  requireWorkspace,
+  ValidationError,
+} from '@cat-factory/kernel'
 import { catFactoryObservability } from '@cat-factory/agents'
 import { SANDBOX_REPO_FIXTURE_KINDS } from '@cat-factory/contracts'
 import {
@@ -102,6 +108,11 @@ export class SandboxRunService {
     const fixtures = await this.resolveFixtures(workspaceId, experiment)
     const rubric = rubricFor(meta.rubric)
 
+    // A relaunch re-runs from scratch: drop the prior result grid (grades before runs, so
+    // the grade scoping subquery still resolves the cells) so cells don't accumulate.
+    await this.deps.sandboxGradeRepository.removeByExperiment(workspaceId, experimentId)
+    await this.deps.sandboxRunRepository.removeByExperiment(workspaceId, experimentId)
+
     // Persist the queued grid first, then drive each cell.
     const now = this.deps.clock.now()
     const runs = expandMatrix(experiment, {
@@ -112,79 +123,95 @@ export class SandboxRunService {
     for (const run of runs) await this.deps.sandboxRunRepository.upsert(workspaceId, run)
     await this.deps.sandboxExperimentRepository.setStatus(workspaceId, experimentId, 'running')
 
+    // Drive every cell synchronously to completion. The terminal status is derived from
+    // the cell outcomes and ALWAYS settled in `finally` — a thrown error (or every cell
+    // failing) leaves the experiment `failed`, never stuck `running`. NOTE: this runs the
+    // whole matrix inline in the request; the cell cap + token budget bound it, but a true
+    // durable fan-out (Workflows / pg-boss, like execution+bootstrap) is the proper home
+    // for large matrices and the tracked follow-up.
     const budget = experiment.budgetTokens
     let spent = 0
-    for (const run of runs) {
-      if (budget !== null && spent >= budget) {
-        await this.failRun(workspaceId, run, 'Token budget exhausted before this cell ran.')
-        continue
+    let succeeded = 0
+    try {
+      for (const run of runs) {
+        if (budget !== null && spent >= budget) {
+          await this.failRun(workspaceId, run, 'Token budget exhausted before this cell ran.')
+          continue
+        }
+        try {
+          const prompt = prompts.get(run.promptVersionId)
+          const fixture = fixtures.get(run.fixtureId)
+          if (!prompt) throw new ValidationError(`Unknown prompt version "${run.promptVersionId}"`)
+          if (!fixture) throw new ValidationError(`Unknown fixture "${run.fixtureId}"`)
+
+          const taskInput = renderFixtureInput(fixture)
+          const candidateRef = this.refFor(run.model)
+          const started = this.deps.clock.now()
+          const candidate = await generateText({
+            model: provider.resolve(candidateRef),
+            system: prompt.systemText,
+            prompt: taskInput,
+            temperature: 0.2,
+            maxOutputTokens: 4000,
+            providerOptions: catFactoryObservability({
+              agentKind: `sandbox:${experiment.agentKind}`,
+              workspaceId,
+            }),
+          })
+          const latencyMs = this.deps.clock.now() - started
+          const usage = {
+            inputTokens: candidate.usage.inputTokens ?? 0,
+            outputTokens: candidate.usage.outputTokens ?? 0,
+          }
+          spent += usage.inputTokens + usage.outputTokens
+
+          const done: SandboxRun = {
+            ...run,
+            status: 'done',
+            outputText: candidate.text,
+            usage,
+            latencyMs,
+            startedAt: started,
+            finishedAt: this.deps.clock.now(),
+          }
+          await this.deps.sandboxRunRepository.upsert(workspaceId, done)
+
+          // Grade the cell (rubric + objective) and persist it.
+          const judgeRef = this.refFor(experiment.judgeModel)
+          const judged = await generateText({
+            model: provider.resolve(judgeRef),
+            system: JUDGE_SYSTEM_PROMPT,
+            prompt: buildJudgePrompt(rubric, taskInput, candidate.text, expectationsOf(fixture)),
+            temperature: 0,
+            maxOutputTokens: 2000,
+            providerOptions: catFactoryObservability({ agentKind: 'sandbox:judge', workspaceId }),
+          })
+          spent += (judged.usage.inputTokens ?? 0) + (judged.usage.outputTokens ?? 0)
+          const scores = coerceJudgeScores(rubric, extractJson(judged.text))
+          const grade: SandboxGrade = {
+            id: this.deps.idGenerator.next('sbg'),
+            runId: run.id,
+            judgeModel: experiment.judgeModel,
+            scores,
+            weightedTotal: weightedTotal(meta.rubric, scores),
+            objective: objectiveFor(fixture, candidate.text),
+            createdAt: this.deps.clock.now(),
+          }
+          await this.deps.sandboxGradeRepository.upsert(workspaceId, grade)
+          succeeded++
+        } catch (e) {
+          await this.failRun(workspaceId, run, e instanceof Error ? e.message : String(e))
+        }
       }
-      try {
-        const prompt = prompts.get(run.promptVersionId)
-        const fixture = fixtures.get(run.fixtureId)
-        if (!prompt) throw new ValidationError(`Unknown prompt version "${run.promptVersionId}"`)
-        if (!fixture) throw new ValidationError(`Unknown fixture "${run.fixtureId}"`)
-
-        const taskInput = renderFixtureInput(fixture)
-        const candidateRef = this.refFor(run.model)
-        const started = this.deps.clock.now()
-        const candidate = await generateText({
-          model: provider.resolve(candidateRef),
-          system: prompt.systemText,
-          prompt: taskInput,
-          temperature: 0.2,
-          maxOutputTokens: 4000,
-          providerOptions: catFactoryObservability({
-            agentKind: `sandbox:${experiment.agentKind}`,
-            workspaceId,
-          }),
-        })
-        const latencyMs = this.deps.clock.now() - started
-        const usage = {
-          inputTokens: candidate.usage.inputTokens ?? 0,
-          outputTokens: candidate.usage.outputTokens ?? 0,
-        }
-        spent += usage.inputTokens + usage.outputTokens
-
-        const done: SandboxRun = {
-          ...run,
-          status: 'done',
-          outputText: candidate.text,
-          usage,
-          latencyMs,
-          startedAt: started,
-          finishedAt: this.deps.clock.now(),
-        }
-        await this.deps.sandboxRunRepository.upsert(workspaceId, done)
-
-        // Grade the cell (rubric + objective) and persist it.
-        const judgeRef = this.refFor(experiment.judgeModel)
-        const judged = await generateText({
-          model: provider.resolve(judgeRef),
-          system: JUDGE_SYSTEM_PROMPT,
-          prompt: buildJudgePrompt(rubric, taskInput, candidate.text, expectationsOf(fixture)),
-          temperature: 0,
-          maxOutputTokens: 2000,
-          providerOptions: catFactoryObservability({ agentKind: 'sandbox:judge', workspaceId }),
-        })
-        spent += (judged.usage.inputTokens ?? 0) + (judged.usage.outputTokens ?? 0)
-        const scores = coerceJudgeScores(rubric, extractJson(judged.text))
-        const grade: SandboxGrade = {
-          id: this.deps.idGenerator.next('sbg'),
-          runId: run.id,
-          judgeModel: experiment.judgeModel,
-          scores,
-          weightedTotal: weightedTotal(meta.rubric, scores),
-          objective: objectiveFor(fixture, candidate.text),
-          createdAt: this.deps.clock.now(),
-        }
-        await this.deps.sandboxGradeRepository.upsert(workspaceId, grade)
-      } catch (e) {
-        await this.failRun(workspaceId, run, e instanceof Error ? e.message : String(e))
-      }
+    } finally {
+      // Settle the terminal status from the outcomes: any successful cell → `done`,
+      // otherwise `failed`. This always runs, so the experiment is never left `running`.
+      await this.deps.sandboxExperimentRepository.setStatus(
+        workspaceId,
+        experimentId,
+        succeeded > 0 ? 'done' : 'failed',
+      )
     }
-
-    await this.deps.sandboxExperimentRepository.setStatus(workspaceId, experimentId, 'done')
     return this.detail(workspaceId, experimentId)
   }
 
@@ -259,7 +286,10 @@ export class SandboxRunService {
     return inlineModelRef(resolved, this.deps.defaultModelRef ?? resolved)
   }
 
-  private async detail(workspaceId: string, experimentId: string): Promise<SandboxExperimentDetail> {
+  private async detail(
+    workspaceId: string,
+    experimentId: string,
+  ): Promise<SandboxExperimentDetail> {
     const experiment = assertFound(
       await this.deps.sandboxExperimentRepository.get(workspaceId, experimentId),
       'SandboxExperiment',

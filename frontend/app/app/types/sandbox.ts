@@ -136,6 +136,8 @@ export interface SandboxAgentKindMeta {
   label: string
   bucket: 'inline' | 'container'
   rubric: 'requirement-review' | 'code-review' | 'implementation'
+  /** Fixture kinds this agent is exercised against (the UI filters the library by these). */
+  fixtureKinds: SandboxFixtureKind[]
   basePromptId: string | null
 }
 

@@ -314,11 +314,7 @@ export class D1SandboxExperimentRepository implements SandboxExperimentRepositor
       .run()
   }
 
-  async setStatus(
-    workspaceId: string,
-    id: string,
-    status: SandboxExperimentStatus,
-  ): Promise<void> {
+  async setStatus(workspaceId: string, id: string, status: SandboxExperimentStatus): Promise<void> {
     await this.db
       .prepare(`UPDATE experiments SET status = ? WHERE workspace_id = ? AND id = ?`)
       .bind(status, workspaceId, id)
@@ -464,6 +460,13 @@ export class D1SandboxRunRepository implements SandboxRunRepository {
       .bind(status, workspaceId, id)
       .run()
   }
+
+  async removeByExperiment(workspaceId: string, experimentId: string): Promise<void> {
+    await this.db
+      .prepare(`DELETE FROM runs WHERE workspace_id = ? AND experiment_id = ?`)
+      .bind(workspaceId, experimentId)
+      .run()
+  }
 }
 
 // ---- grades -----------------------------------------------------------------
@@ -540,6 +543,19 @@ export class D1SandboxGradeRepository implements SandboxGradeRepository {
         grade.objective ? JSON.stringify(grade.objective) : null,
         grade.createdAt,
       )
+      .run()
+  }
+
+  async removeByExperiment(workspaceId: string, experimentId: string): Promise<void> {
+    // Grades carry no experiment_id; scope them through their run. Callers clear grades
+    // BEFORE runs so this subquery still resolves the experiment's cells.
+    await this.db
+      .prepare(
+        `DELETE FROM grades
+           WHERE workspace_id = ?
+             AND run_id IN (SELECT id FROM runs WHERE workspace_id = ? AND experiment_id = ?)`,
+      )
+      .bind(workspaceId, workspaceId, experimentId)
       .run()
   }
 }

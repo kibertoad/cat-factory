@@ -396,6 +396,7 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const experiment = await call<SandboxExperiment>('POST', `${base}/experiments`, {
           name: 'Reviewer shootout',
           agentKind: 'requirements-review',
+          judgeModel: 'anthropic:claude-opus-4-8',
           matrix: {
             promptVersionIds: ['baseline:requirement-review'],
             models: ['anthropic:claude-opus-4-8'],
@@ -424,6 +425,20 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           matrix: { promptVersionIds: [], models: [], fixtureIds: [] },
         })
         expect(empty.status).toBeGreaterThanOrEqual(400)
+
+        // A zero token budget is rejected at create (it would otherwise fail every cell).
+        const zeroBudget = await call('POST', `${base}/experiments`, {
+          name: 'No budget',
+          agentKind: 'requirements-review',
+          judgeModel: 'anthropic:claude-opus-4-8',
+          matrix: {
+            promptVersionIds: ['baseline:requirement-review'],
+            models: ['anthropic:claude-opus-4-8'],
+            fixtureIds: [fixture.id],
+          },
+          budgetTokens: 0,
+        })
+        expect(zeroBudget.status).toBeGreaterThanOrEqual(400)
       })
     })
 

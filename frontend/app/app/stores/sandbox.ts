@@ -58,7 +58,8 @@ export const useSandboxStore = defineStore('sandbox', () => {
       models.value = modelList
       available.value = true
     } catch (e) {
-      const status = (e as { statusCode?: number; response?: { status?: number } })?.statusCode ??
+      const status =
+        (e as { statusCode?: number; response?: { status?: number } })?.statusCode ??
         (e as { response?: { status?: number } })?.response?.status
       if (status === 503) {
         available.value = false
@@ -71,21 +72,19 @@ export const useSandboxStore = defineStore('sandbox', () => {
   }
 
   /** Selectable models for the experiment picker (the backend computed `available`). */
-  const selectableModels = computed(() =>
-    models.value.filter((m) => m.available !== false),
-  )
+  const selectableModels = computed(() => models.value.filter((m) => m.available !== false))
 
   /** Prompt versions for one agent kind (baselines first, then candidates). */
   function promptsForKind(agentKind: string): SandboxPromptVersion[] {
     return prompts.value.filter((p) => p.agentKind === agentKind)
   }
 
-  /** Fixtures authored for one agent kind, matched by the fixture↔kind mapping the catalog implies. */
+  /** Fixtures authored for one agent kind, filtered by the catalog's `fixtureKinds`. */
   function fixturesForKind(agentKind: string): SandboxFixture[] {
     const meta = agentKinds.value.find((k) => k.agentKind === agentKind)
     if (!meta) return fixtures.value
-    // Fixtures carry a `kind` (requirements/code-review/…); map the agent's rubric/kind to it.
-    const wanted = fixtureKindsForAgent(agentKind)
+    // The backend catalog is the source of truth for the fixture↔kind mapping.
+    const wanted = meta.fixtureKinds
     return fixtures.value.filter((f) => wanted.includes(f.kind))
   }
 
@@ -157,21 +156,3 @@ export const useSandboxStore = defineStore('sandbox', () => {
     launch,
   }
 })
-
-/** The inline fixture kinds a given agent kind is graded with (mirrors the Sandbox catalog). */
-function fixtureKindsForAgent(agentKind: string): string[] {
-  switch (agentKind) {
-    case 'requirements-review':
-      return ['requirements']
-    case 'clarity-review':
-      return ['clarity']
-    case 'reviewer':
-      return ['code-review']
-    case 'architect-companion':
-      return ['architecture']
-    case 'coder':
-      return ['repo-feature', 'repo-bug']
-    default:
-      return ['requirements', 'clarity', 'code-review', 'architecture']
-  }
-}

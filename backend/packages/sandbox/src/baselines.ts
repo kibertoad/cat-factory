@@ -1,4 +1,5 @@
 import { PROMPT_VERSIONS, promptVersionLabel, systemPromptFor } from '@cat-factory/agents'
+import type { SandboxFixtureKind } from '@cat-factory/contracts'
 import type { SandboxPromptVersion } from '@cat-factory/kernel'
 import type { SandboxTaskType } from './rubrics.js'
 
@@ -23,6 +24,12 @@ export interface SandboxAgentKindMeta {
   /** Which rubric the judge grades this kind's output against. */
   rubric: SandboxTaskType
   /**
+   * The fixture kinds this agent is exercised against (the fixture↔kind mapping the UI
+   * filters the library by). Source of truth here so the frontend reads it off the catalog
+   * instead of re-encoding the mapping in a parallel switch that can silently drift.
+   */
+  fixtureKinds: readonly SandboxFixtureKind[]
+  /**
    * The version-controlled baseline prompt id (a `PROMPT_VERSIONS` key) this kind's
    * system prompt comes from. When null, the baseline text is read from
    * `systemPromptFor(agentKind)` and labelled `<kind>@v1`.
@@ -37,6 +44,7 @@ export const SANDBOX_AGENT_KINDS: readonly SandboxAgentKindMeta[] = [
     label: 'Requirements review',
     bucket: 'inline',
     rubric: 'requirement-review',
+    fixtureKinds: ['requirements'],
     basePromptId: 'requirement-review',
   },
   {
@@ -44,6 +52,7 @@ export const SANDBOX_AGENT_KINDS: readonly SandboxAgentKindMeta[] = [
     label: 'Clarity (bug-report) review',
     bucket: 'inline',
     rubric: 'requirement-review',
+    fixtureKinds: ['clarity'],
     basePromptId: 'clarity-review',
   },
   {
@@ -51,6 +60,7 @@ export const SANDBOX_AGENT_KINDS: readonly SandboxAgentKindMeta[] = [
     label: 'Code reviewer',
     bucket: 'inline',
     rubric: 'code-review',
+    fixtureKinds: ['code-review'],
     basePromptId: 'review',
   },
   {
@@ -62,6 +72,7 @@ export const SANDBOX_AGENT_KINDS: readonly SandboxAgentKindMeta[] = [
     label: 'Architecture-proposal review',
     bucket: 'inline',
     rubric: 'requirement-review',
+    fixtureKinds: ['architecture'],
     basePromptId: null,
   },
   {
@@ -69,6 +80,7 @@ export const SANDBOX_AGENT_KINDS: readonly SandboxAgentKindMeta[] = [
     label: 'Coder (implementation)',
     bucket: 'container',
     rubric: 'implementation',
+    fixtureKinds: ['repo-feature', 'repo-bug'],
     basePromptId: 'build',
   },
 ]

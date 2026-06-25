@@ -2466,11 +2466,7 @@ export class DrizzleSandboxExperimentRepository implements SandboxExperimentRepo
       })
   }
 
-  async setStatus(
-    workspaceId: string,
-    id: string,
-    status: SandboxExperimentStatus,
-  ): Promise<void> {
+  async setStatus(workspaceId: string, id: string, status: SandboxExperimentStatus): Promise<void> {
     await this.db
       .update(sandboxExperiments)
       .set({ status })
@@ -2542,7 +2538,7 @@ export class DrizzleSandboxRunRepository implements SandboxRunRepository {
           eq(sandboxRuns.status, 'queued'),
         ),
       )
-      .orderBy(sandboxRuns.id)
+      .orderBy(sandboxRuns.started_at, sandboxRuns.id)
     return rows.map(rowToSandboxRun)
   }
 
@@ -2601,6 +2597,14 @@ export class DrizzleSandboxRunRepository implements SandboxRunRepository {
       .set({ status })
       .where(and(eq(sandboxRuns.workspace_id, workspaceId), eq(sandboxRuns.id, id)))
   }
+
+  async removeByExperiment(workspaceId: string, experimentId: string): Promise<void> {
+    await this.db
+      .delete(sandboxRuns)
+      .where(
+        and(eq(sandboxRuns.workspace_id, workspaceId), eq(sandboxRuns.experiment_id, experimentId)),
+      )
+  }
 }
 
 type SandboxGradeRow = typeof sandboxGrades.$inferSelect
@@ -2642,7 +2646,10 @@ export class DrizzleSandboxGradeRepository implements SandboxGradeRepository {
         ),
       )
       .where(
-        and(eq(sandboxGrades.workspace_id, workspaceId), eq(sandboxRuns.experiment_id, experimentId)),
+        and(
+          eq(sandboxGrades.workspace_id, workspaceId),
+          eq(sandboxRuns.experiment_id, experimentId),
+        ),
       )
       .orderBy(sandboxGrades.created_at)
     return rows.map((r) => rowToSandboxGrade(r.grade))
@@ -2672,6 +2679,21 @@ export class DrizzleSandboxGradeRepository implements SandboxGradeRepository {
           objective: values.objective,
         },
       })
+  }
+
+  async removeByExperiment(workspaceId: string, experimentId: string): Promise<void> {
+    // Grades carry no experiment_id; scope them through their run's experiment.
+    const runIds = this.db
+      .select({ id: sandboxRuns.id })
+      .from(sandboxRuns)
+      .where(
+        and(eq(sandboxRuns.workspace_id, workspaceId), eq(sandboxRuns.experiment_id, experimentId)),
+      )
+    await this.db
+      .delete(sandboxGrades)
+      .where(
+        and(eq(sandboxGrades.workspace_id, workspaceId), inArray(sandboxGrades.run_id, runIds)),
+      )
   }
 }
 

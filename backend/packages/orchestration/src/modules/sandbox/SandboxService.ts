@@ -110,7 +110,11 @@ export class SandboxService {
     const meta = sandboxKindMeta(input.agentKind)
     const name = input.name ?? meta?.label ?? input.agentKind
     const version = firstVersionFromBaseline(
-      { agentKind: source.agentKind, systemText: source.systemText, basePromptId: source.basePromptId },
+      {
+        agentKind: source.agentKind,
+        systemText: source.systemText,
+        basePromptId: source.basePromptId,
+      },
       name,
       {
         id: this.deps.idGenerator.next('sbp'),
@@ -255,7 +259,9 @@ export class SandboxService {
       throw new ValidationError(`"${input.agentKind}" is not a Sandbox-testable agent kind`)
     }
     if (!isRunnableMatrix(input.matrix)) {
-      throw new ValidationError('The experiment matrix needs at least one prompt, model and fixture')
+      throw new ValidationError(
+        'The experiment matrix needs at least one prompt, model and fixture',
+      )
     }
     const repeats = input.repeats ?? 1
     const total = cellCount(input.matrix, repeats)
@@ -301,8 +307,19 @@ export class SandboxService {
     }
   }
 
+  /**
+   * The judge model to use when the caller didn't pick one: the deployment's routing
+   * default. We do NOT guess a provider — if no default is configured (e.g. a minimal
+   * deployment), require an explicit `judgeModel` at create time rather than defaulting to
+   * a vendor that may have no key, which would otherwise fail every cell's grade at launch.
+   */
   private defaultJudgeModel(): string {
     const ref = this.deps.defaultModelRef
-    return ref ? `${ref.provider}:${ref.model}` : 'anthropic:claude-opus-4-8'
+    if (!ref) {
+      throw new ValidationError(
+        'No default model is configured for the Sandbox judge; specify judgeModel explicitly.',
+      )
+    }
+    return `${ref.provider}:${ref.model}`
   }
 }

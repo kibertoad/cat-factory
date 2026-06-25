@@ -48,10 +48,14 @@ export interface SandboxRunRepository {
   listQueued(workspaceId: string, experimentId: string): Promise<SandboxRun[]>
   upsert(workspaceId: string, run: SandboxRun): Promise<void>
   setStatus(workspaceId: string, id: string, status: SandboxRunStatus): Promise<void>
+  /** Drop every cell of an experiment (a relaunch clears the prior grid first). */
+  removeByExperiment(workspaceId: string, experimentId: string): Promise<void>
 }
 
 export interface SandboxGradeRepository {
   getByRun(workspaceId: string, runId: string): Promise<SandboxGrade | null>
   listByExperiment(workspaceId: string, experimentId: string): Promise<SandboxGrade[]>
   upsert(workspaceId: string, grade: SandboxGrade): Promise<void>
+  /** Drop every grade of an experiment's cells (a relaunch clears the prior grid first). */
+  removeByExperiment(workspaceId: string, experimentId: string): Promise<void>
 }
