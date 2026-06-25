@@ -3,6 +3,7 @@
 '@cat-factory/server': patch
 '@cat-factory/orchestration': patch
 '@cat-factory/kernel': patch
+'@cat-factory/integrations': patch
 '@cat-factory/executor-harness': patch
 ---
 
@@ -47,3 +48,10 @@ bumped to match). The dead `/spec` handler is removed in a later sweep step.
 
 Cross-runtime conformance asserts the post-op shards + commits the `spec/` artifact onto the
 work branch via `RepoFiles` on both runtimes.
+
+Also fixes a facade-parity gap in the self-hosted runner-pool result coercion
+(`HttpRunnerPoolProvider.coerceRunnerResult`): the generic `agent`-kind structured channel
+`custom` was missing from the pass-through allow-list, so a migrated kind's doc
+(blueprints / spec-writer / merger / on-call) was silently dropped on a runner-pool backend
+while the Cloudflare/local transports — which return the harness view verbatim — kept it.
+`custom` now passes through, and a regression test covers it.
