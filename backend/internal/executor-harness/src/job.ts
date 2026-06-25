@@ -942,6 +942,23 @@ export interface FixerResult {
 /** How the generic agent runs: read-only exploration, or edit-and-push coding. */
 export type AgentMode = 'explore' | 'coding'
 
+/**
+ * Explore mode: how a container agent stands its dependencies up before the run (the
+ * tester). `local` brings the service's docker-compose infra up on localhost for the
+ * duration of the run; `ephemeral` is a no-op stand-up (the env is already deployed and
+ * its URL reaches the agent through its prompt). Absent ⇒ the harness manages no infra.
+ */
+export interface AgentInfraSpec {
+  /** `local` stands infra up via docker-compose; `ephemeral` tests a deployed env. */
+  environment: 'local' | 'ephemeral'
+  /** Local mode: the service declared no infra dependencies (spin nothing up). */
+  noInfraDependencies?: boolean
+  /** Local mode: repo-relative docker-compose path to stand the dependencies up. */
+  composePath?: string
+  /** Ephemeral mode: the provisioned environment URL (echoed for context only). */
+  environmentUrl?: string
+}
+
 /** How an explore agent's reply is consumed. */
 export interface AgentOutputSpec {
   /** `prose` keeps the reply text; `structured` parses (and optionally repairs) it to JSON. */
@@ -982,6 +999,13 @@ export interface AgentJob extends HarnessAuthFields {
   full?: boolean
   /** Explore mode: how to consume the reply. Absent ⇒ prose. */
   output?: AgentOutputSpec
+  /**
+   * Explore mode: stand the service's dependencies up before the agent runs (the
+   * tester). Brings the docker-compose infra up on localhost for the duration of the
+   * run and tears it down afterward; a stand-up failure is non-fatal (surfaced to the
+   * agent as a note). The agent makes no commits regardless. Absent ⇒ no infra managed.
+   */
+  infra?: AgentInfraSpec
   /** Coding mode: a fresh branch to create off the clone before running (else work on `branch`). */
   newBranch?: string
   /** Coding mode: branch the produced change is pushed to (defaults to `newBranch ?? branch`). */
@@ -1010,6 +1034,23 @@ export interface AgentResult {
   branch?: string
   error?: string
   usage?: { inputTokens: number; outputTokens: number }
+}
+
+/** Parse the explore-mode infra stand-up spec, or undefined when absent/unrecognised. */
+function parseAgentInfraSpec(value: unknown): AgentInfraSpec | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const o = value as Record<string, unknown>
+  const environment =
+    o.environment === 'local' ? 'local' : o.environment === 'ephemeral' ? 'ephemeral' : undefined
+  if (!environment) return undefined
+  return {
+    environment,
+    ...(o.noInfraDependencies === true ? { noInfraDependencies: true } : {}),
+    ...(typeof o.composePath === 'string' && o.composePath ? { composePath: o.composePath } : {}),
+    ...(typeof o.environmentUrl === 'string' && o.environmentUrl
+      ? { environmentUrl: o.environmentUrl }
+      : {}),
+  }
 }
 
 /** Validate + narrow an untrusted body into an {@link AgentJob}, throwing on bad input. */
@@ -1045,6 +1086,7 @@ export function parseAgentJob(input: unknown): AgentJob {
           return { title: str(p.title, 'pr.title'), body: typeof p.body === 'string' ? p.body : '' }
         })()
       : undefined
+  const infra = parseAgentInfraSpec(o.infra)
   const job: AgentJob = {
     jobId: str(o.jobId, 'jobId'),
     mode,
@@ -1060,6 +1102,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     ...(o.webSearch === true ? { webSearch: true } : {}),
     ...(o.full === true ? { full: true } : {}),
     ...(output ? { output } : {}),
+    ...(infra ? { infra } : {}),
     ...(typeof o.newBranch === 'string' && o.newBranch ? { newBranch: o.newBranch } : {}),
     ...(typeof o.pushBranch === 'string' && o.pushBranch ? { pushBranch: o.pushBranch } : {}),
     ...(typeof o.commitMessage === 'string' && o.commitMessage

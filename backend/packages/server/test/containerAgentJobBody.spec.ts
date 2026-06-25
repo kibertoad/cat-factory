@@ -75,6 +75,7 @@ function makeExecutor(): { executor: ContainerAgentExecutor; captured: Captured[
 function context(
   agentKind: string,
   overrides: Partial<AgentRunContext['block']> = {},
+  service?: AgentRunContext['service'],
 ): AgentRunContext {
   return {
     agentKind: agentKind as AgentRunContext['agentKind'],
@@ -90,6 +91,7 @@ function context(
       description: 'Implement the widget feature.',
       ...overrides,
     },
+    ...(service ? { service } : {}),
     priorOutputs: [],
     decisions: [],
   }
@@ -144,6 +146,27 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
       context('tester', { pullRequest: PR, agentConfig: { 'tester.environment': 'local' } }),
     )
     expect(captured[0]).toMatchSnapshot()
+  })
+
+  it('tester (local, no infra) gets the no-dependencies run-mode guidance', async () => {
+    // A service that declares no infra dependencies must be told nothing was stood up —
+    // not the default "your infra has been stood up on localhost" line (which would send
+    // the agent hunting for services that never started).
+    await executor.startJob(
+      context(
+        'tester',
+        { pullRequest: PR, agentConfig: { 'tester.environment': 'local' } },
+        { noInfraDependencies: true },
+      ),
+    )
+    const userPrompt = captured[0].spec.userPrompt as string
+    expect(userPrompt).toContain('Run mode: local, no infra dependencies')
+    expect(userPrompt).not.toContain('have been stood up on localhost')
+    // The infra spec still flags it so the harness spins nothing up.
+    expect(captured[0].spec.infra).toMatchObject({
+      environment: 'local',
+      noInfraDependencies: true,
+    })
   })
 
   it('fixer', async () => {
@@ -264,6 +287,60 @@ describe('ContainerAgentExecutor.pollJob (kind-aware result coercion)', () => {
       result: {
         output: 'fallback summary',
         mergeAssessment: { complexity: 1, risk: 1, impact: 1, rationale: 'fallback summary' },
+      },
+    })
+  })
+
+  it('maps a tester custom result into a coerced testReport (greenlight withheld on a blocker)', async () => {
+    const executor = makeExecutorReturning({
+      summary: 'Ran the suite.',
+      custom: {
+        // greenlight:true with an open high-severity concern must NOT auto-pass.
+        greenlight: true,
+        summary: 'Two flows broke.',
+        tested: ['login', 42],
+        outcomes: [
+          { name: 'login', status: 'failed', detail: '500 on submit' },
+          { name: 'mystery', status: 'banana' },
+        ],
+        concerns: [{ title: 'Login 500', detail: 'crashes', severity: 'high' }],
+        environment: 'local',
+      },
+    })
+    const update = await executor.pollJob(handle('tester'))
+    expect(update).toEqual({
+      state: 'done',
+      result: {
+        output: 'Ran the suite.',
+        testReport: {
+          greenlight: false,
+          summary: 'Two flows broke.',
+          tested: ['login'],
+          outcomes: [
+            { name: 'login', status: 'failed', detail: '500 on submit' },
+            { name: 'mystery', status: 'skipped' },
+          ],
+          concerns: [{ title: 'Login 500', detail: 'crashes', severity: 'high' }],
+          environment: 'local',
+        },
+      },
+    })
+  })
+
+  it('garbage tester JSON coerces to a safe, no-greenlight report', async () => {
+    const executor = makeExecutorReturning({ summary: 'nothing usable', custom: { junk: true } })
+    const update = await executor.pollJob(handle('tester'))
+    expect(update).toEqual({
+      state: 'done',
+      result: {
+        output: 'nothing usable',
+        testReport: {
+          greenlight: false,
+          summary: 'nothing usable',
+          tested: [],
+          outcomes: [],
+          concerns: [],
+        },
       },
     })
   })

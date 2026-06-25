@@ -492,7 +492,7 @@ reading the code.",
 
 exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > tester (local env) 1`] = `
 {
-  "kind": "test",
+  "kind": "agent",
   "ref": {
     "jobId": "ex_1-tester",
     "runId": "ex_1",
@@ -502,8 +502,17 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > tester (lo
     "ghToken": "GH-TOKEN",
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
+    "infra": {
+      "environment": "local",
+      "noInfraDependencies": false,
+    },
     "jobId": "ex_1-tester",
+    "mode": "explore",
     "model": "@cf/test/model",
+    "output": {
+      "kind": "structured",
+      "shapeHint": "Expected a test report: {"greenlight": boolean, "summary": string, "tested": string[], "outcomes": [{"name": string, "status": "passed"|"failed"|"skipped", "detail"?: string}], "concerns": [{"title": string, "detail": string, "severity": "low"|"medium"|"high"|"critical"}]}.",
+    },
     "proxyBaseUrl": "https://proxy.test/v1",
     "repo": {
       "baseBranch": "main",
@@ -552,10 +561,6 @@ This repository may contain a prescriptive SPECIFICATION for the service under t
 - \`spec/modules/<module>/<feature>.json\` is the canonical machine-readable shard the markdown is rendered from; consult it when you need exact detail.
 - \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
 Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
-    "test": {
-      "environment": "local",
-      "noInfraDependencies": false,
-    },
     "userPrompt": "Pipeline: Standard build
 Block: Add widget (feature)
 Description: Implement the widget feature.

@@ -60,6 +60,25 @@ describe('parseAgentJob', () => {
     })
   })
 
+  it('carries the explore-mode infra stand-up spec through (the tester)', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'explore',
+      output: { kind: 'structured' },
+      infra: { environment: 'local', composePath: 'docker-compose.yml' },
+    })
+    expect(job.infra).toEqual({ environment: 'local', composePath: 'docker-compose.yml' })
+  })
+
+  it('drops an infra spec with no recognised environment', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'explore',
+      infra: { composePath: 'docker-compose.yml' },
+    })
+    expect(job.infra).toBeUndefined()
+  })
+
   it('accepts a coding job with a fresh branch + PR', () => {
     const job = parseAgentJob({
       ...base,

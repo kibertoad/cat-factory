@@ -93,6 +93,9 @@ export function testerEnvironmentSection(context: AgentRunContext): string {
     return '\nRun mode: ephemeral environment — test against the provided environment URL; do not start the service locally.'
   }
   if (env === 'local') {
+    if (context.service?.noInfraDependencies) {
+      return '\nRun mode: local, no infra dependencies — just install, build and run the test suite directly (nothing was stood up for you).'
+    }
     return '\nRun mode: local — the service’s infra dependencies have been stood up on localhost; start the service yourself and test it there.'
   }
   return ''
