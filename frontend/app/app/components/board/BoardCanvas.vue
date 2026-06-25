@@ -170,10 +170,29 @@ function recentreOnZoomOut() {
   void setViewport({ x: width / 2 - tx * vp.zoom, y: height / 2 - ty * vp.zoom, zoom: vp.zoom })
 }
 
+// Compensation state: the last layout we reconciled the camera against, and whether
+// we were in the expand band on the previous tick. Declared before the watches that
+// use them (the lod watch arms the baseline on band entry; see below).
+let prevOffsets = new Map<string, Offset>()
+let prevWasClose = false
+
 watch(
   () => lodAtLeast(ui.lod, 'close'),
   (isClose, wasClose) => {
-    if (wasClose && !isClose) recentreOnZoomOut()
+    if (isClose && !wasClose) {
+      // Entering the expand band: frames haven't expanded yet (the raf driver grants
+      // expansion a frame later), so capture the still-zero layout as the baseline and
+      // arm compensation NOW. The expansion that follows then pans against this zero
+      // baseline, keeping the service under the cursor put as you zoom in. Without
+      // this, the first frameOffsets change (the expansion itself) would be swallowed
+      // as the baseline and the zoom-in shift would never be compensated.
+      prevOffsets = frameOffsets.value
+      prevWasClose = true
+    }
+    if (wasClose && !isClose) {
+      prevWasClose = false
+      recentreOnZoomOut()
+    }
   },
 )
 
@@ -221,13 +240,11 @@ function frameAnchorId(offsets: Map<string, Offset>, cx: number, cy: number): st
 // so it stays put and the band shows zero on-screen snap. Sticky grants make this
 // oscillation-free: the compensating pan can only reveal frames further out (which
 // push their own right neighbours off-screen, never the anchor), never collapse one.
-let prevOffsets = new Map<string, Offset>()
-let prevWasClose = false
 watch(frameOffsets, (offsets) => {
   const isClose = lodAtLeast(ui.lod, 'close')
-  // Only compensate for shifts WHILE staying in the expand band. The band-entry
-  // baseline (prevWasClose flips true here, no pan this tick) and the band-exit
-  // collapse (handled by the zoom-out recentre) are deliberately skipped.
+  // Only compensate while in the expand band and already armed. The band-entry
+  // baseline is captured by the lod watch above; the band-exit collapse is handled by
+  // the zoom-out recentre. Both are skipped here.
   if (!isClose || !prevWasClose) {
     prevOffsets = offsets
     prevWasClose = isClose
