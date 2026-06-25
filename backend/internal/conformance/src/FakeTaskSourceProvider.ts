@@ -3,6 +3,7 @@ import type {
   TaskCredentials,
   TaskSearchResult,
   TaskSourceDescriptor,
+  TaskSourceDiagnostic,
   TaskSourceKind,
   TaskSourceProvider,
   NormalizedTaskConnection,
@@ -29,6 +30,9 @@ export class FakeTaskSourceProvider implements TaskSourceProvider {
   /** Canned search hits + recorded queries, for the search endpoint tests. */
   searchResults: TaskSearchResult[] = []
   readonly searchCalls: { credentials: TaskCredentials; query: string }[] = []
+  /** Canned setup-check verdict + recorded calls, for the diagnostics endpoint tests. */
+  diagnostic: Omit<TaskSourceDiagnostic, 'source'> = { ok: true, status: 'ready', message: 'ok' }
+  readonly diagnoseCalls: { workspaceId: string; credentials: TaskCredentials | null }[] = []
 
   constructor(
     readonly kind: TaskSourceKind = 'jira',
@@ -89,5 +93,13 @@ export class FakeTaskSourceProvider implements TaskSourceProvider {
   async search(credentials: TaskCredentials, query: string): Promise<TaskSearchResult[]> {
     this.searchCalls.push({ credentials, query })
     return this.searchResults
+  }
+
+  async diagnose(input: {
+    workspaceId: string
+    credentials: TaskCredentials | null
+  }): Promise<TaskSourceDiagnostic> {
+    this.diagnoseCalls.push({ workspaceId: input.workspaceId, credentials: input.credentials })
+    return { source: this.kind, ...this.diagnostic }
   }
 }

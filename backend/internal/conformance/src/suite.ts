@@ -8,6 +8,7 @@ import {
   type ScheduleRun,
   seedPipelines,
   type SourceTask,
+  type TaskSourceDiagnostic,
   type TaskSourceState,
   type SlackMemberMappingEntry,
   type SlackNotificationSettings,
@@ -1292,6 +1293,39 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           ref: 'PROJ-7',
         })
         expect(ok.status).toBe(201)
+      })
+
+      it('runs a live setup-check, gating on connection then delegating to the provider', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace({ seed: false })
+        const ws = workspace.id
+
+        // A credentialed source with no connection yet reports `not_connected` —
+        // the service gates on availability before it would ever probe.
+        const before = await call<TaskSourceDiagnostic>(
+          'POST',
+          `/workspaces/${ws}/task-sources/jira/diagnostics`,
+        )
+        expect(before.status).toBe(200)
+        expect(before.body.ok).toBe(false)
+        expect(before.body.status).toBe('not_connected')
+
+        // Once connected, the check delegates to the provider's live probe (the fake
+        // returns a ready verdict), so a configured source reports ready.
+        await call('POST', `/workspaces/${ws}/task-sources/jira/connect`, {
+          credentials: {
+            baseUrl: 'https://acme.atlassian.net',
+            accountEmail: 'd@a.io',
+            apiToken: 't',
+          },
+        })
+        const after = await call<TaskSourceDiagnostic>(
+          'POST',
+          `/workspaces/${ws}/task-sources/jira/diagnostics`,
+        )
+        expect(after.status).toBe(200)
+        expect(after.body.ok).toBe(true)
+        expect(after.body.status).toBe('ready')
       })
     })
 

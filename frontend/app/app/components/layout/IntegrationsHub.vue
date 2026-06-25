@@ -12,7 +12,15 @@ const github = useGitHubStore()
 const slack = useSlackStore()
 const documents = useDocumentsStore()
 const tasks = useTasksStore()
+const tracker = useTrackerStore()
 const releaseHealth = useReleaseHealthStore()
+
+// The selected filing tracker, as a badge label ("GitHub Issues" / "Jira").
+const trackerLabel = computed(() => {
+  if (tracker.settings.tracker === 'github') return 'GitHub Issues'
+  if (tracker.settings.tracker === 'jira') return 'Jira'
+  return undefined
+})
 
 // The observability connection status drives the hub's connected badge. Load it
 // lazily when the hub opens (the secret-less connection view is cheap).
@@ -130,11 +138,13 @@ const groups = computed<IntegrationGroup[]>(() => {
       })
     }
     trackers.push({
-      key: 'task:writeback',
-      icon: 'i-lucide-message-square-reply',
-      label: 'Issue tracker writeback',
-      description: 'Comment on the PR and close the linked issue on merge.',
-      onClick: () => go(() => ui.openWorkspaceSettings('writeback')),
+      key: 'task:tracker',
+      icon: 'i-lucide-list-checks',
+      label: 'Issue tracker settings',
+      description: 'Choose the filing tracker, enable linking sources, and configure writeback.',
+      status: trackerLabel.value,
+      connected: tracker.settings.tracker !== null,
+      onClick: () => go(() => ui.openWorkspaceSettings('tracker')),
     })
     out.push({ title: 'Task trackers', items: trackers })
   }

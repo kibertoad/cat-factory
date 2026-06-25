@@ -2,8 +2,13 @@ import type { Clock } from '@cat-factory/kernel'
 import type { TaskConnectionRecord, TaskConnectionRepository } from '@cat-factory/kernel'
 import type { TaskSourceSettingsRepository } from '@cat-factory/kernel'
 import type { GitHubInstallationRepository } from '@cat-factory/kernel'
-import type { TaskSourceProvider, TaskSourceRegistry } from '@cat-factory/kernel'
-import type { TaskConnection, TaskSourceKind, TaskSourceState } from '@cat-factory/kernel'
+import type { TaskCredentials, TaskSourceProvider, TaskSourceRegistry } from '@cat-factory/kernel'
+import type {
+  TaskConnection,
+  TaskSourceDiagnostic,
+  TaskSourceKind,
+  TaskSourceState,
+} from '@cat-factory/kernel'
 import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
@@ -94,6 +99,89 @@ export class TaskConnectionService {
     return (
       (await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, provider.kind)) !== null
     )
+  }
+
+  /**
+   * Live "check setup" probe for a source: gate on availability first (a GitHub
+   * App must be installed, a credentialed source must be connected), then delegate
+   * the real authenticate-and-read check to the provider. The result classifies
+   * exactly what's wrong (not installed / not connected / auth failed / missing
+   * permission / unreachable) with an actionable message, so the panel can guide
+   * setup instead of just hiding behind "install integration first".
+   */
+  async diagnose(workspaceId: string, source: TaskSourceKind): Promise<TaskSourceDiagnostic> {
+    const provider = this.deps.registry.get(source)
+    if (!provider) {
+      return {
+        source,
+        ok: false,
+        status: 'error',
+        message: `The ${source} task source isn't configured on this deployment.`,
+      }
+    }
+    const label = provider.descriptor.label
+
+    if (ridesGitHubApp(provider)) {
+      const installed =
+        !!this.deps.installations &&
+        (await this.deps.installations.getByWorkspace(workspaceId)) !== null
+      if (!installed) {
+        return {
+          source,
+          ok: false,
+          status: 'not_installed',
+          message: `${label} rides this workspace's GitHub App, which isn't installed yet. Install it under Integrations → GitHub, then re-check.`,
+        }
+      }
+      return this.runProviderDiagnose(provider, { workspaceId, credentials: null }, label)
+    }
+
+    // Credentialed source (Jira, …): a connection must exist before we can probe.
+    const connection = await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
+    if (!connection) {
+      return {
+        source,
+        ok: false,
+        status: 'not_connected',
+        message: `${label} isn't connected yet. Connect it with an account email and API token, then re-check.`,
+      }
+    }
+    return this.runProviderDiagnose(
+      provider,
+      { workspaceId, credentials: connection.credentials },
+      label,
+    )
+  }
+
+  /**
+   * Run a provider's live `diagnose`, defending against a provider that lacks one
+   * (static "ready" verdict — availability was already confirmed above) or one
+   * that rejects despite the contract (mapped to a generic error rather than
+   * bubbling out of the check endpoint).
+   */
+  private async runProviderDiagnose(
+    provider: TaskSourceProvider,
+    input: { workspaceId: string; credentials: TaskCredentials | null },
+    label: string,
+  ): Promise<TaskSourceDiagnostic> {
+    if (!provider.diagnose) {
+      return {
+        source: provider.kind,
+        ok: true,
+        status: 'ready',
+        message: `${label} is configured.`,
+      }
+    }
+    try {
+      return await provider.diagnose(input)
+    } catch (err) {
+      return {
+        source: provider.kind,
+        ok: false,
+        status: 'error',
+        message: `${label} check failed unexpectedly: ${err instanceof Error ? err.message : String(err)}`,
+      }
+    }
   }
 
   /** The workspace's toggle for a source (defaults to enabled when no row exists). */

@@ -3,14 +3,14 @@
 // configuration that used to live in separate windows:
 //   - Workspace: the run-timing escalation threshold + per-service running-task limit.
 //   - Merge thresholds: the auto-merge preset library.
-//   - Issue writeback: the tracker writeback toggles.
+//   - Issue tracker: filing-tracker selection + linking sources + writeback.
 //   - Service best practices: the default fragments new services inherit.
 // The latter three are body-only section components rendered in tabs here (no longer
 // standalone modals).
 import { reactive, ref, watch } from 'vue'
 import type { CreateTaskType, TaskLimitMode } from '~/types/domain'
 import MergeThresholdsPanel from '~/components/settings/MergeThresholdsPanel.vue'
-import IssueTrackerWritebackPanel from '~/components/settings/IssueTrackerWritebackPanel.vue'
+import IssueTrackerPanel from '~/components/settings/IssueTrackerPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
 
 const ui = useUiStore()
@@ -38,10 +38,10 @@ const tabs = [
   },
   { value: 'merge', label: 'Merge thresholds', icon: 'i-lucide-git-merge', slot: 'merge' },
   {
-    value: 'writeback',
-    label: 'Issue writeback',
-    icon: 'i-lucide-message-square-reply',
-    slot: 'writeback',
+    value: 'tracker',
+    label: 'Issue tracker',
+    icon: 'i-lucide-list-checks',
+    slot: 'tracker',
   },
   {
     value: 'fragments',
@@ -200,9 +200,9 @@ async function save() {
           <MergeThresholdsPanel />
         </template>
 
-        <!-- Issue writeback -->
-        <template #writeback>
-          <IssueTrackerWritebackPanel />
+        <!-- Issue tracker -->
+        <template #tracker>
+          <IssueTrackerPanel />
         </template>
 
         <!-- Service best practices -->

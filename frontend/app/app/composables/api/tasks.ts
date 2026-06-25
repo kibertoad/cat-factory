@@ -3,6 +3,7 @@ import type {
   SourceTask,
   TaskConnection,
   TaskSearchResult,
+  TaskSourceDiagnostic,
   TaskSourceKind,
   TaskSourceState,
 } from '~/types/domain'
@@ -40,6 +41,13 @@ export function tasksApi({ http, ws }: ApiContext) {
 
     disconnectTaskSource: (workspaceId: string, source: TaskSourceKind) =>
       http(`${ws(workspaceId)}/task-sources/${source}/connection`, { method: 'DELETE' }),
+
+    // Live "check setup" probe: authenticates against the source and reads a slice
+    // of its issues API, returning a classified verdict the panel renders verbatim.
+    checkTaskSource: (workspaceId: string, source: TaskSourceKind) =>
+      http<TaskSourceDiagnostic>(`${ws(workspaceId)}/task-sources/${source}/diagnostics`, {
+        method: 'POST',
+      }),
 
     listTasks: (workspaceId: string) => http<SourceTask[]>(`${ws(workspaceId)}/tasks`),
 

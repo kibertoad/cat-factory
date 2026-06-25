@@ -5,6 +5,7 @@ import {
   type TaskContent,
   type TaskCredentials,
   type TaskSearchResult,
+  type TaskSourceDiagnostic,
   type TaskSourceProvider,
   type NormalizedTaskConnection,
 } from '@cat-factory/kernel'
@@ -124,6 +125,93 @@ export class JiraProvider implements TaskSourceProvider {
       labels: Array.isArray(f.labels) ? f.labels : [],
       description: jiraLogic.adfToMarkdown(f.description),
       comments,
+    }
+  }
+
+  /**
+   * Live setup check: authenticate against `/myself` (the cheapest authenticated
+   * read) with the stored email + API token. A 401 means Jira rejected the
+   * credentials (wrong email/token, or a revoked token); a 403 means the account
+   * is authenticated but lacks access; anything else surfaces verbatim. A thrown
+   * fetch (DNS/network) ⇒ unreachable. Resolves (never rejects), per the port.
+   */
+  async diagnose(input: {
+    workspaceId: string
+    credentials: TaskCredentials | null
+  }): Promise<TaskSourceDiagnostic> {
+    const creds = input.credentials
+    if (!creds?.baseUrl || !creds.accountEmail || !creds.apiToken) {
+      return {
+        source: 'jira',
+        ok: false,
+        status: 'not_connected',
+        message: 'Jira has no stored credentials. Connect it with a site URL, email and API token.',
+      }
+    }
+    const base = creds.baseUrl.replace(/\/+$/, '')
+    try {
+      atlassianLogic.assertSafeAtlassianBaseUrl(base)
+    } catch (err) {
+      return {
+        source: 'jira',
+        ok: false,
+        status: 'error',
+        message: err instanceof Error ? err.message : `Unsafe Jira base URL: ${base}`,
+      }
+    }
+    const auth = btoa(`${creds.accountEmail}:${creds.apiToken}`)
+    let res: Response
+    try {
+      res = await fetch(`${base}/rest/api/3/myself`, {
+        method: 'GET',
+        headers: {
+          authorization: `Basic ${auth}`,
+          accept: 'application/json',
+          'user-agent': USER_AGENT,
+        },
+      })
+    } catch {
+      return {
+        source: 'jira',
+        ok: false,
+        status: 'unreachable',
+        message: `Couldn't reach ${base}. Check the site URL and network connectivity, then re-check.`,
+      }
+    }
+    if (res.status === 401) {
+      return {
+        source: 'jira',
+        ok: false,
+        status: 'auth_failed',
+        message:
+          'Jira rejected the account email or API token (401). Re-check the email and generate a fresh API token, then reconnect.',
+      }
+    }
+    if (res.status === 403) {
+      return {
+        source: 'jira',
+        ok: false,
+        status: 'forbidden',
+        message:
+          'Jira authenticated the account but denied access (403). Confirm the account can view the project, then re-check.',
+      }
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      return {
+        source: 'jira',
+        ok: false,
+        status: 'error',
+        message: `Jira returned ${res.status} for /myself: ${text.slice(0, 200)}`,
+      }
+    }
+    const me = (await res.json().catch(() => null)) as { displayName?: string } | null
+    return {
+      source: 'jira',
+      ok: true,
+      status: 'ready',
+      message: `Authenticated to ${base}.`,
+      detail: me?.displayName ? `Signed in as ${me.displayName}.` : null,
     }
   }
 

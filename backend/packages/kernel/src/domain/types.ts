@@ -85,6 +85,8 @@ export type {
   TaskSourceKind,
   TaskSourceDescriptor,
   TaskSourceState,
+  TaskSourceDiagnostic,
+  TaskSourceDiagnosticStatus,
   TaskConnection,
   TaskComment,
   SourceTask,

@@ -99,6 +99,21 @@ export function taskSourceController(): Hono<AppEnv> {
     return c.body(null, 204)
   })
 
+  // Live "check setup" probe: actually authenticate against the source and read a
+  // slice of its issues API, returning a classified verdict (ready / not installed
+  // / not connected / auth failed / missing permission / unreachable) so the UI can
+  // tell a configured-but-broken source from a working one. POST (it performs a
+  // live external call), no body — the source is the path param.
+  app.post('/task-sources/:source/diagnostics', async (c) => {
+    const tasks = requireTasks(c)
+    if (!tasks) return unavailable(c)
+    const diagnostic = await tasks.connectionService.diagnose(
+      param(c, 'workspaceId'),
+      sourceParam(c),
+    )
+    return c.json(diagnostic)
+  })
+
   // ---- issues -------------------------------------------------------------
 
   app.get('/tasks', async (c) => {
