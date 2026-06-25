@@ -42,9 +42,14 @@ export function listUserSecretKinds(): UserSecretKindHandler[] {
   return [...registry.values()]
 }
 
-const GITHUB_API_DEFAULT = 'https://api.github.com'
+// The token is always validated against (and used against) public github.com. A
+// per-user GitHub Enterprise Server base is NOT offered: it is not threaded into the
+// engine's GitHub client at run time (so a GHES base would silently not apply to real
+// runs), and a strict SSRF guard would reject the internal hosts GHES typically runs
+// on. Probing a user-supplied base would also be a server-side request-forgery vector.
+const GITHUB_API_BASE = 'https://api.github.com'
 
-/** The GitHub PAT kind: a token secret + an optional GHES API base. */
+/** The GitHub PAT kind: a single token secret, validated against github.com. */
 registerUserSecretKind({
   kind: 'github_pat',
   label: 'GitHub personal access token',
@@ -57,18 +62,10 @@ registerUserSecretKind({
       placeholder: 'ghp_… (scopes: repo, workflow)',
       help: 'Runs you initiate use YOUR GitHub access (pushes, PR author, CI actor).',
     },
-    {
-      key: 'apiBase',
-      label: 'GitHub API base URL',
-      required: false,
-      placeholder: GITHUB_API_DEFAULT,
-      help: 'Only for GitHub Enterprise Server; leave blank for github.com.',
-    },
   ],
   async testConnection(input, ctx) {
-    const apiBase = (input.metadata?.apiBase?.trim() || GITHUB_API_DEFAULT).replace(/\/+$/, '')
     try {
-      const res = await ctx.fetch(`${apiBase}/user`, {
+      const res = await ctx.fetch(`${GITHUB_API_BASE}/user`, {
         headers: {
           authorization: `Bearer ${input.secret}`,
           accept: 'application/vnd.github+json',

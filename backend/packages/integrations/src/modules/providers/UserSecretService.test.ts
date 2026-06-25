@@ -20,7 +20,10 @@ class FakeRepo implements UserSecretRepository {
     return this.rows.find((r) => r.userId === userId && r.kind === kind) ?? null
   }
   async upsert(record: UserSecretRecord) {
-    this.rows = [...this.rows.filter((r) => !(r.userId === record.userId && r.kind === record.kind)), record]
+    this.rows = [
+      ...this.rows.filter((r) => !(r.userId === record.userId && r.kind === record.kind)),
+      record,
+    ]
   }
   async remove(userId: string, kind: string) {
     this.rows = this.rows.filter((r) => !(r.userId === userId && r.kind === kind))
@@ -52,7 +55,9 @@ describe('UserSecretService', () => {
     expect(status).toMatchObject({ kind: 'github_pat', hasSecret: true })
     expect(status).not.toHaveProperty('secret')
     expect(repo.rows[0]!.secretCipher).toBe('enc(ghp_abc)')
-    expect(JSON.parse(repo.rows[0]!.metadataJson!)).toEqual({ apiBase: 'https://ghe.example/api/v3' })
+    expect(JSON.parse(repo.rows[0]!.metadataJson!)).toEqual({
+      apiBase: 'https://ghe.example/api/v3',
+    })
     expect(await service.resolve('usr_1', 'github_pat')).toBe('ghp_abc')
   })
 
@@ -71,12 +76,12 @@ describe('UserSecretService', () => {
     expect(await service.get('usr_1', 'github_pat')).toBeNull()
   })
 
-  it('describes the github_pat kind (a secret field + optional apiBase, test supported)', () => {
+  it('describes the github_pat kind (a single secret token field, test supported)', () => {
     const { service } = build()
     const descriptor = service.describe('github_pat')
     expect(descriptor?.supportsTest).toBe(true)
     expect(descriptor?.configFields.find((f) => f.secret)?.key).toBe('token')
-    expect(descriptor?.configFields.map((f) => f.key)).toContain('apiBase')
+    expect(descriptor?.configFields.map((f) => f.key)).toEqual(['token'])
   })
 
   it('tests a github_pat by probing GET /user', async () => {
