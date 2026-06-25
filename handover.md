@@ -107,7 +107,7 @@ section + `backend/docs/custom-agents.md` are the current source of truth for th
    `migrate-blueprints-generic-kind.md`. **The `FakeGitHubClient.commitFiles` impls capture
    the whole input so `deletions` passes through transparently — no fake change needed.**
 
-4b. ✅ **spec-writer** — DONE this branch (`migrate-spec-writer-generic-kind`, PR pending).
+4b. ✅ **spec-writer** — DONE this branch (`migrate-spec-writer-generic-kind`, PR #196).
    `spec-writer` dispatches `kind:'agent'` `mode:'explore'` structured, clone `work` (the
    per-block `cat-factory/<blockId>`) via `buildMigratedBuiltInBody`; `toRunResult` coerces
    `custom`→`spec` (`coerceSpecDoc`). The SHARD+commit is a BUILT-IN backend post-op
