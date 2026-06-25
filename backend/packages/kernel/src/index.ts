@@ -85,6 +85,7 @@ export {
   registerGate,
   registeredGateFactories,
   clearRegisteredGates,
+  stubGateContext,
 } from './domain/gate-registry.js'
 export {
   type StepResolverContext,
@@ -95,6 +96,7 @@ export {
   registerStepResolver,
   registeredStepResolverFactories,
   clearRegisteredStepResolvers,
+  stubResolverContext,
 } from './domain/step-resolver-registry.js'
 
 export * from './ports/index.js'

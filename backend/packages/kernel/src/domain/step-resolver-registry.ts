@@ -106,3 +106,12 @@ export function registeredStepResolverFactories(): {
 export function clearRegisteredStepResolvers(): void {
   registry.clear()
 }
+
+/**
+ * A minimal {@link ResolverContext} for tests that invoke a resolver factory in isolation
+ * (the real one is built by `ExecutionService.makeResolverContext`). Centralised here so a
+ * new required `ResolverContext` field is filled in ONE place instead of every test.
+ */
+export function stubResolverContext(overrides: Partial<ResolverContext> = {}): ResolverContext {
+  return { runInitiatorScope: (_initiatedBy, fn) => fn(), ...overrides }
+}

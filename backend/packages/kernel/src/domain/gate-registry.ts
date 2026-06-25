@@ -200,3 +200,19 @@ export function registeredGateFactories(): { kind: string; factory: GateFactory 
 export function clearRegisteredGates(): void {
   registry.clear()
 }
+
+/**
+ * A minimal {@link GateContext} for tests that invoke a gate factory in isolation (the
+ * real one is built by `ExecutionService.makeGateContext`). Defaults to harmless no-ops;
+ * pass `overrides` to assert against a specific seam. Centralised here so a new required
+ * `GateContext` field is filled in ONE place instead of every gate test.
+ */
+export function stubGateContext(overrides: Partial<GateContext> = {}): GateContext {
+  return {
+    clock: { now: () => 0 },
+    getBlock: async () => null,
+    runInitiatorScope: (_initiatedBy, fn) => fn(),
+    raiseNotification: async () => {},
+    ...overrides,
+  }
+}

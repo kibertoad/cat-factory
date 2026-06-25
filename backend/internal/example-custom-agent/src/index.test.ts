@@ -6,7 +6,7 @@ import {
   registeredKindRequiresContainer,
   registeredPostOps,
 } from '@cat-factory/agents'
-import type { GateContext, RepoFiles, ResolverContext } from '@cat-factory/kernel'
+import type { RepoFiles } from '@cat-factory/kernel'
 import {
   clearRegisteredGates,
   clearRegisteredPipelines,
@@ -14,6 +14,8 @@ import {
   registeredGateFactories,
   registeredStepResolverFactories,
   seedPipelines,
+  stubGateContext,
+  stubResolverContext,
 } from '@cat-factory/kernel'
 import {
   EXAMPLE_AGENT_KINDS,
@@ -24,6 +26,7 @@ import {
   SECURITY_AUDITOR_KIND,
   registerExampleCustomAgents,
   renderComplianceReport,
+  wireLicenseProvider,
 } from './index.js'
 
 // The package self-registers on import (side effect), but tests clear the global registries
@@ -40,6 +43,8 @@ afterEach(() => {
   clearRegisteredPipelines()
   clearRegisteredGates()
   clearRegisteredStepResolvers()
+  // The license provider is a module-level handle; clear it so a wired test can't leak.
+  wireLicenseProvider(undefined)
 })
 
 describe('example custom agents', () => {
@@ -77,23 +82,42 @@ describe('example custom agents', () => {
     expect(registeredAgentStep(LICENSE_FIXER_KIND)?.surface).toBe('container-coding')
 
     // Build the gate with a throwaway context; without a wired provider it passes through.
-    const ctx: GateContext = {
-      clock: { now: () => 0 },
-      getBlock: async () => null,
-      runInitiatorScope: (_initiatedBy, fn) => fn(),
-      raiseNotification: async () => {},
-    }
-    const gate = registered.find((g) => g.kind === LICENSE_CHECK_KIND)!.factory(ctx)
+    const gate = registered.find((g) => g.kind === LICENSE_CHECK_KIND)!.factory(stubGateContext())
     expect(gate.helperKind).toBe(LICENSE_FIXER_KIND)
     // Unwired ⇒ a harmless pass-through, so a bare import is always safe.
     expect(gate.wired()).toBe(false)
   })
 
+  it('arms the gate via wireLicenseProvider: probe maps a clean/dirty report to pass/fail', async () => {
+    // Exercise the example's REAL wired()/probe() path (the licenseProvider deref) — the
+    // engine-drive conformance tests inject verdicts through a test-local factory, so this
+    // is the only coverage of the seam a deployment actually copies.
+    const check = vi.fn(async () => ({ clean: true, headSha: 'sha-1', summary: 'all good' }))
+    wireLicenseProvider({ check })
+    const gate = registeredGateFactories()
+      .find((g) => g.kind === LICENSE_CHECK_KIND)!
+      .factory(stubGateContext())
+
+    // Wired now ⇒ the gate runs its probe instead of passing through.
+    expect(gate.wired()).toBe(true)
+    const pass = await gate.probe('ws', 'blk_1')
+    expect(check).toHaveBeenCalledWith('ws', 'blk_1')
+    expect(pass.status).toBe('pass')
+    expect(pass.headSha).toBe('sha-1')
+
+    // A dirty report ⇒ a fail verdict the engine escalates to the license-fixer.
+    check.mockResolvedValueOnce({ clean: false, headSha: 'sha-2', summary: 'src/a.ts missing' })
+    const fail = await gate.probe('ws', 'blk_1')
+    expect(fail.status).toBe('fail')
+    expect(fail.failureSummary).toContain('missing')
+  })
+
   it('registers a step resolver that summarises the security auditor’s output', async () => {
     const registered = registeredStepResolverFactories()
     expect(registered.map((r) => r.kind)).toContain(SECURITY_AUDITOR_KIND)
-    const ctx: ResolverContext = { runInitiatorScope: (_initiatedBy, fn) => fn() }
-    const resolver = registered.find((r) => r.kind === SECURITY_AUDITOR_KIND)!.factory(ctx)
+    const resolver = registered
+      .find((r) => r.kind === SECURITY_AUDITOR_KIND)!
+      .factory(stubResolverContext())
     const resolution = await resolver.resolve({
       workspaceId: 'ws',
       instance: { id: 'exec' } as never,

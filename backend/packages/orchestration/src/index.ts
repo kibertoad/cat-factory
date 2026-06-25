@@ -27,6 +27,7 @@ export {
   registerGate,
   registeredGateFactories,
   clearRegisteredGates,
+  stubGateContext,
   type StepResolverContext,
   type StepResolution,
   type StepCompletionResolver,
@@ -35,6 +36,7 @@ export {
   registerStepResolver,
   registeredStepResolverFactories,
   clearRegisteredStepResolvers,
+  stubResolverContext,
 } from '@cat-factory/kernel'
 export {
   driveExecution,
@@ -84,8 +86,11 @@ export * as scheduleLogic from './modules/recurring/schedule.logic.js'
 export {
   NotificationService,
   type NotificationServiceDependencies,
-  type RaiseNotificationInput,
 } from './modules/notifications/NotificationService.js'
+// `RaiseNotificationInput` lives in @cat-factory/kernel (so runtime-neutral extension
+// seams — e.g. a custom gate's `onExhausted` — can build one without depending on this
+// package); surfaced here for discovery alongside the NotificationService that consumes it.
+export type { RaiseNotificationInput } from '@cat-factory/kernel'
 export {
   MergePresetService,
   type MergePresetServiceDependencies,

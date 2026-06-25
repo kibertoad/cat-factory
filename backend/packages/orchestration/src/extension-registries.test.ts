@@ -6,7 +6,7 @@ import {
   systemPromptFor,
   userPromptFor,
 } from '@cat-factory/agents'
-import type { AgentRunContext, GateContext, ResolverContext } from '@cat-factory/kernel'
+import type { AgentRunContext } from '@cat-factory/kernel'
 import {
   clearRegisteredGates,
   clearRegisteredPipelines,
@@ -17,6 +17,8 @@ import {
   registerStepResolver,
   registeredStepResolverFactories,
   seedPipelines,
+  stubGateContext,
+  stubResolverContext,
 } from '@cat-factory/kernel'
 
 // The installation-level extension seams that let a deployment (e.g. a proprietary org
@@ -117,15 +119,7 @@ describe('pipeline registry', () => {
 })
 
 // A throwaway context for invoking a factory in isolation (the ExecutionService builds the
-// real one). The pure-registry tests don't call the seams, so stubs suffice.
-const gateCtx = (): GateContext => ({
-  clock: { now: () => 0 },
-  getBlock: async () => null,
-  runInitiatorScope: (_initiatedBy, fn) => fn(),
-  raiseNotification: async () => {},
-})
-const resolverCtx = (): ResolverContext => ({ runInitiatorScope: (_initiatedBy, fn) => fn() })
-
+// real one). The pure-registry tests don't call the seams, so the shared kernel stubs suffice.
 describe('gate registry', () => {
   afterEach(() => clearRegisteredGates())
 
@@ -150,7 +144,7 @@ describe('gate registry', () => {
     }))
     const registered = registeredGateFactories()
     expect(registered.map((g) => g.kind)).toEqual(['license-check'])
-    const def = registered[0]!.factory(gateCtx())
+    const def = registered[0]!.factory(stubGateContext())
     expect(def.kind).toBe('license-check')
     expect(def.helperKind).toBe('license-fixer')
   })
@@ -168,7 +162,7 @@ describe('gate registry', () => {
     registerGate('license-check', make('fixer-b'))
     const registered = registeredGateFactories()
     expect(registered).toHaveLength(1)
-    expect(registered[0]!.factory(gateCtx()).helperKind).toBe('fixer-b')
+    expect(registered[0]!.factory(stubGateContext()).helperKind).toBe('fixer-b')
   })
 })
 
@@ -183,7 +177,7 @@ describe('step-resolver registry', () => {
     }))
     const registered = registeredStepResolverFactories()
     expect(registered.map((r) => r.kind)).toEqual(['security-auditor'])
-    expect(registered[0]!.factory(resolverCtx()).kind).toBe('security-auditor')
+    expect(registered[0]!.factory(stubResolverContext()).kind).toBe('security-auditor')
   })
 
   it('replaces an earlier registration of the same kind (last wins)', () => {

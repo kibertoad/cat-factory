@@ -10,10 +10,6 @@ import type {
 import { assertFound, requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 
-// Re-exported from kernel (where it lives so runtime-neutral extension seams — e.g. a
-// custom gate's `onExhausted` — can build one without depending on orchestration).
-export type { RaiseNotificationInput } from '@cat-factory/kernel'
-
 export interface NotificationServiceDependencies {
   notificationRepository: NotificationRepository
   workspaceRepository: WorkspaceRepository
