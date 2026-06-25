@@ -33,6 +33,9 @@ const META: Record<Notification['type'], { icon: string; color: Accent; action: 
   // with the iteration-cap prompt; requirements → the review window); "act" just marks it
   // read (the decision itself is resolved in that surface, not here).
   decision_required: { icon: 'i-lucide-circle-help', color: 'warning', action: 'Mark read' },
+  // Clicking the title opens the human-testing window for the task (see `reveal`); "act" just
+  // marks it read (the gate is resolved in that window — confirm / request a fix — not here).
+  human_test_ready: { icon: 'i-lucide-user-check', color: 'primary', action: 'Mark read' },
 }
 
 /** A notification the escalation sweep has flagged as overdue (waited past the threshold). */
@@ -77,7 +80,23 @@ function reveal(n: Notification) {
   if (n.type === 'requirement_review') ui.openRequirementReview(n.blockId)
   else if (n.type === 'clarity_review') ui.openClarityReview(n.blockId)
   else if (n.type === 'decision_required') revealDecision(n)
+  else if (n.type === 'human_test_ready') revealHumanTest(n)
   else ui.select(n.blockId)
+}
+
+/**
+ * Open the human-testing window for a parked `human-test` gate: find the run's parked
+ * human-test step and open it through the universal step dispatch (its archetype declares
+ * the `human-test` result view). Falls back to focusing the block.
+ */
+function revealHumanTest(n: Notification) {
+  const instance = n.executionId ? execution.getInstance(n.executionId) : undefined
+  const idx =
+    instance?.steps.findIndex(
+      (s) => s.agentKind === 'human-test' && s.state === 'waiting_decision',
+    ) ?? -1
+  if (instance && idx >= 0) ui.openStepDetail(instance.id, idx)
+  else if (n.blockId) ui.select(n.blockId)
 }
 
 /**

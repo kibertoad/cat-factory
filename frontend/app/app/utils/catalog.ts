@@ -132,6 +132,18 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
       "Turns scenarios into runnable tests — Playwright for frontend, the project's own framework for backend; adds only new ones.",
   },
   {
+    kind: 'human-test',
+    label: 'Human Testing',
+    icon: 'i-lucide-user-check',
+    color: '#f59e0b',
+    category: 'test',
+    description:
+      'Spins up an ephemeral environment and pauses for a person to validate the change in a live URL — request a fix from findings, pull main + redeploy, or recreate/destroy the env — before the pipeline continues.',
+    // Opens the dedicated human-testing window (env URL + confirm / request-fix / pull-main /
+    // recreate / destroy) instead of the generic prose step-detail panel.
+    resultView: 'human-test',
+  },
+  {
     kind: 'documenter',
     label: 'Documenter',
     icon: 'i-lucide-book-open-text',

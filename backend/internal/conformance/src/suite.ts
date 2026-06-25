@@ -720,6 +720,78 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('human-testing gate', () => {
+      // The gate is a runtime-neutral engine step: it parks for a human, dispatches the
+      // Tester's `fixer` from findings, and advances on confirm — identically on every
+      // facade. The ephemeral-environment provider is NOT wired in the conformance harness,
+      // so the gate runs in its degraded (manual) mode — which still exercises all the
+      // engine wiring (routing, park, the pendingAction re-entry + signal, helper dispatch
+      // via the shared async executor, the recordStepResult helper-completion hook, advance).
+      it('parks for a human, dispatches the fixer on request-fix, and advances on confirm', async () => {
+        const app = harness.makeApp({
+          asyncKinds: ['coder', 'fixer'],
+          // The coder opens a PR so the gate's fixer has a branch to push to.
+          pullRequest: {
+            url: 'https://github.com/o/r/pull/1',
+            number: 1,
+            branch: 'feat/login',
+          },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + human test',
+          agentKinds: ['coder', 'human-test'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        // Drive: the coder runs (async), then the human-test gate parks awaiting the human.
+        // With no env provider wired the gate is in degraded (manual) mode — no live env.
+        let execs = await app.drive(wsId)
+        let exec = execs.find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('blocked')
+        let step = exec.steps.find((s) => s.agentKind === 'human-test')!
+        expect(step.state).toBe('waiting_decision')
+        expect(step.humanTest?.phase).toBe('awaiting_human')
+        expect(step.humanTest?.environment ?? null).toBeNull()
+        expect(step.humanTest?.degradedReason).toBeTruthy()
+
+        // Request a fix from findings: the gate dispatches the Tester's `fixer` against the
+        // PR branch; on its completion the gate re-parks (degraded again, no env to rebuild).
+        const fix = await app.call(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/human-test/request-fix`,
+          { findings: 'The login button does nothing.' },
+        )
+        expect(fix.status).toBe(200)
+        execs = await app.drive(wsId)
+        exec = execs.find((e) => e.blockId === 'task_login')!
+        step = exec.steps.find((s) => s.agentKind === 'human-test')!
+        expect(step.state).toBe('waiting_decision')
+        expect(step.humanTest?.attempts).toBe(1)
+        expect(step.humanTest?.rounds?.[0]?.kind).toBe('fix')
+        expect(step.humanTest?.rounds?.[0]?.helperKind).toBe('fixer')
+        expect(step.humanTest?.rounds?.[0]?.outcome).toBe('completed')
+
+        // Confirm: the gate (the last step) finishes and the run completes.
+        const confirm = await app.call(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/human-test/confirm`,
+        )
+        expect(confirm.status).toBe(200)
+        execs = await app.drive(wsId)
+        exec = execs.find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const done = exec.steps.find((s) => s.agentKind === 'human-test')!
+        expect(done.state).toBe('done')
+        expect(done.humanTest?.phase).toBe('passed')
+      })
+    })
+
     describe('prompt-fragment library (managed catalog)', () => {
       it('lists (200 not 503), creates, edits and removes a tier-owned fragment', async () => {
         const { call, createWorkspace } = harness.makeApp()

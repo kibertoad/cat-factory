@@ -375,4 +375,18 @@ export interface GitHubClient {
     issueOrPrNumber: number,
     body: string,
   ): Promise<void>
+  /**
+   * Merge one branch into another via the repo Merges API (`POST /repos/.../merges`),
+   * server-side — no checkout. Used by the human-testing gate's "pull latest main into the
+   * branch" action: `base` is the branch to merge INTO (the PR head branch), `head` is the
+   * branch/sha to merge in (the repo default branch). Maps GitHub's response to a verdict:
+   *   - `merged`   — a merge commit was created (201).
+   *   - `noop`     — already up to date, nothing to merge (204).
+   *   - `conflict` — the merge conflicts (409); the caller escalates to a conflict-resolver.
+   */
+  mergeBranch(
+    installationId: number,
+    ref: GitHubRepoRef,
+    input: { base: string; head: string },
+  ): Promise<'merged' | 'noop' | 'conflict'>
 }

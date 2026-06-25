@@ -5,6 +5,7 @@ import { testReportSchema, testEnvironmentSchema } from './testing.js'
 import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from './consensus.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
 import { releaseSignalSchema } from './release.js'
+import { environmentStatusSchema } from './environments.js'
 import {
   agentKindSchema,
   agentStateSchema,
@@ -727,6 +728,94 @@ export const testerStepStateSchema = v.object({
 export type TesterStepState = v.InferOutput<typeof testerStepStateSchema>
 
 /**
+ * The compact ephemeral-environment view a `human-test` gate carries on its step, so the
+ * dedicated window can surface the live URL/status without a second fetch. The full record
+ * (with encrypted access creds) lives in the `environments` table; this is the non-secret
+ * projection. Null in degraded manual mode (no env provider wired) or after the human
+ * destroys the env from the gate.
+ */
+export const humanTestEnvironmentSchema = v.object({
+  /** The `environments` row id, so the window can fetch access creds / re-poll status. */
+  id: v.string(),
+  /** The provisioned public URL the human tests against (null while still provisioning). */
+  url: v.nullable(v.string()),
+  /** The environment lifecycle status; see {@link environmentStatusSchema}. */
+  status: environmentStatusSchema,
+  /** Epoch ms the environment expires (TTL), when known. */
+  expiresAt: v.optional(v.nullable(v.number())),
+})
+export type HumanTestEnvironment = v.InferOutput<typeof humanTestEnvironmentSchema>
+
+/**
+ * One round of human-driven remediation on a `human-test` gate: the human wrote findings and
+ * asked for a fix (helper `fixer`), or pulled main and hit a conflict (helper
+ * `conflict-resolver`). Appended when the round opens and stamped with its outcome once the
+ * helper job settles, so the window can show the full history of what was asked and how it ended.
+ */
+export const humanTestRoundSchema = v.object({
+  /** The kind of round — a findings-driven fix or a pull-main-with-conflicts resolve. */
+  kind: v.picklist(['fix', 'pull-main']),
+  /** The human's findings prompt (fix), or a one-line note for the pull-main round. */
+  findings: v.string(),
+  /** The helper container kind this round dispatched (`fixer` / `conflict-resolver`). */
+  helperKind: v.string(),
+  /** The helper job's id while it ran, for cross-referencing the run timeline. */
+  jobId: v.optional(v.nullable(v.string())),
+  /** How the helper ended once its job settled. Absent while still in flight. */
+  outcome: v.optional(v.nullable(v.picklist(['completed', 'failed']))),
+  /** Epoch ms the round opened (the human clicked Request fix / Pull main). */
+  at: v.number(),
+})
+export type HumanTestRound = v.InferOutput<typeof humanTestRoundSchema>
+
+/**
+ * State a `human-test` gate carries while it runs. Unlike a polling gate (`ci`/`conflicts`)
+ * there is no programmatic verdict — the HUMAN is the verdict — so the step spins up an
+ * ephemeral environment, parks for a person to validate it, and on demand dispatches the same
+ * helpers the other gates use (the Tester's `fixer` for findings; the `conflict-resolver` for a
+ * conflicting pull-main). Phases:
+ *   - `provisioning`        — an environment is being stood up (the driver polls until ready).
+ *   - `awaiting_human`      — parked: the human tests the env and confirms / requests a fix / etc.
+ *   - `fixing`              — a `fixer` job (from the human's findings) is in flight.
+ *   - `resolving_conflicts` — a `conflict-resolver` job (from a conflicting pull-main) is in flight.
+ *   - `passed`             — the human confirmed; the env is torn down and the run advances.
+ */
+export const humanTestStepStateSchema = v.object({
+  phase: v.picklist(['provisioning', 'awaiting_human', 'fixing', 'resolving_conflicts', 'passed']),
+  /** The live ephemeral environment (null in degraded manual mode / after destroy). */
+  environment: v.optional(v.nullable(humanTestEnvironmentSchema)),
+  /**
+   * Why no environment was auto-provisioned — set in degraded manual mode (no env provider
+   * wired, or provisioning errored) so the window can explain it and let the human test
+   * against the PR branch manually. Absent when an env was provisioned.
+   */
+  degradedReason: v.optional(v.nullable(v.string())),
+  /** How many helper (fixer / conflict-resolver) attempts have been dispatched so far. */
+  attempts: v.number(),
+  /** Ceiling on helper attempts, resolved from the task's merge preset (`ciMaxAttempts`). */
+  maxAttempts: v.number(),
+  /** The PR head commit being tested, when known. */
+  headSha: v.optional(v.nullable(v.string())),
+  /** Append-only history of fix / pull-main rounds; see {@link humanTestRoundSchema}. */
+  rounds: v.optional(v.array(humanTestRoundSchema)),
+  /**
+   * Transient action the human requested while the gate is parked — recorded on the parked
+   * step and consumed by the durable driver when it re-enters the gate (the analogue of
+   * `pendingIncorporation` on a requirements gate). Cleared once the driver acts on it.
+   */
+  pendingAction: v.optional(
+    v.nullable(
+      v.object({
+        type: v.picklist(['confirm', 'request-fix', 'pull-main', 'recreate']),
+        /** The findings prompt for a `request-fix` action. */
+        findings: v.optional(v.string()),
+      }),
+    ),
+  ),
+})
+export type HumanTestStepState = v.InferOutput<typeof humanTestStepStateSchema>
+
+/**
  * Per-step LLM observability rollup: a compact aggregate over every model call the
  * step's container made, recorded by the LLM proxy and summed by the engine for the
  * board. It surfaces, at a glance, token usage, how close the step ran to its
@@ -781,6 +870,11 @@ export const pipelineStepSchema = v.object({
   gate: v.optional(v.nullable(gateStepStateSchema)),
   /** Live Tester→Fixer loop state while a `tester` step runs/fixes; see {@link testerStepStateSchema}. */
   test: v.optional(v.nullable(testerStepStateSchema)),
+  /**
+   * Live state of a `human-test` gate (ephemeral env + human validation loop); see
+   * {@link humanTestStepStateSchema}. Absent for every other step kind.
+   */
+  humanTest: v.optional(v.nullable(humanTestStepStateSchema)),
   /** Live subtask counts while an async (container) step runs; see {@link stepSubtasksSchema}. */
   subtasks: v.optional(stepSubtasksSchema),
   /**

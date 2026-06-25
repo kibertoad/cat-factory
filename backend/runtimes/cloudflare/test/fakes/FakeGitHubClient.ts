@@ -278,6 +278,18 @@ export class FakeGitHubClient implements GitHubClient {
     this.writes.push({ method: 'mergePullRequest', ref, args: { number, input } })
   }
 
+  /** The verdict the next {@link mergeBranch} returns; default a clean merge. */
+  mergeBranchOutcome: 'merged' | 'noop' | 'conflict' = 'merged'
+
+  async mergeBranch(
+    _installationId: number,
+    ref: GitHubRepoRef,
+    input: { base: string; head: string },
+  ): Promise<'merged' | 'noop' | 'conflict'> {
+    this.writes.push({ method: 'mergeBranch', ref, args: { input } })
+    return this.mergeBranchOutcome
+  }
+
   async deleteBranch(_installationId: number, ref: GitHubRepoRef, branch: string): Promise<void> {
     this.writes.push({ method: 'deleteBranch', ref, args: { branch } })
   }

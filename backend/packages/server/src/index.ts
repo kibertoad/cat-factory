@@ -138,6 +138,10 @@ export {
   type GitHubMergeabilityProviderDependencies,
 } from './github/GitHubMergeabilityProvider.js'
 export {
+  GitHubBranchUpdater,
+  type GitHubBranchUpdaterDependencies,
+} from './github/GitHubBranchUpdater.js'
+export {
   GitHubPullRequestMerger,
   type GitHubPullRequestMergerDependencies,
 } from './github/GitHubPullRequestMerger.js'

@@ -155,6 +155,7 @@ import { D1ModelPresetRepository } from './repositories/D1ModelPresetRepository'
 import { D1ServiceFragmentDefaultsRepository } from './repositories/D1ServiceFragmentDefaultsRepository'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
+import { GitHubBranchUpdater } from './github/GitHubBranchUpdater'
 import { GitHubPullRequestMerger } from './github/GitHubPullRequestMerger'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { GitHubAppAuth } from './github/GitHubAppAuth'
@@ -526,6 +527,11 @@ function selectMergeLifecycleDeps(
       blockRepository,
     })
     deps.mergeabilityProvider = new GitHubMergeabilityProvider({
+      githubClient,
+      resolveRepoTarget,
+      blockRepository,
+    })
+    deps.branchUpdater = new GitHubBranchUpdater({
       githubClient,
       resolveRepoTarget,
       blockRepository,
