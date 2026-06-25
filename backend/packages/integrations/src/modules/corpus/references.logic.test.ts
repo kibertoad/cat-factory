@@ -11,9 +11,11 @@ describe('extractReferences', () => {
     expect(extractReferences(text).jiraKeys).toEqual(['PROJ-123', 'ABC-9'])
   })
 
-  it('extracts bare and cross-repo GitHub refs, stripping the leading #', () => {
-    const text = 'Fixes #42 and depends on octo/repo#7.'
-    expect(extractReferences(text).githubRefs).toEqual(['42', 'octo/repo#7'])
+  it('extracts only fully-qualified GitHub refs, ignoring ambiguous bare #N', () => {
+    const text = 'Fixes #42 and depends on octo/repo#7 and also another/svc#11.'
+    // A bare `#42` is ambiguous across a multi-repo workspace and is NOT extracted;
+    // only `owner/repo#N` (matchable against a stored external id) is kept.
+    expect(extractReferences(text).githubRefs).toEqual(['octo/repo#7', 'another/svc#11'])
   })
 
   it('extracts URLs and trims trailing punctuation', () => {

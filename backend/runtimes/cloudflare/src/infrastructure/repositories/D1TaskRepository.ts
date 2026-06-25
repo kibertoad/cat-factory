@@ -1,4 +1,5 @@
 import type { TaskComment, TaskRecord, TaskRepository, TaskSourceKind } from '@cat-factory/kernel'
+import { urlMatchCandidates } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface TaskRow {
@@ -134,6 +135,17 @@ export class D1TaskRepository implements TaskRepository {
       .bind(workspaceId, blockId)
       .all<TaskRow>()
     return results.map(rowToRecord)
+  }
+
+  async getByUrl(workspaceId: string, url: string): Promise<TaskRecord | null> {
+    const [a, b] = urlMatchCandidates(url)
+    const row = await this.db
+      .prepare(
+        'SELECT * FROM tasks WHERE workspace_id = ? AND url IN (?, ?) AND deleted_at IS NULL ORDER BY synced_at DESC LIMIT 1',
+      )
+      .bind(workspaceId, a, b)
+      .first<TaskRow>()
+    return row ? rowToRecord(row) : null
   }
 
   async linkBlock(

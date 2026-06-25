@@ -1,4 +1,5 @@
 import type { DocumentRecord, DocumentRepository, DocumentSourceKind } from '@cat-factory/kernel'
+import { urlMatchCandidates } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface DocumentRow {
@@ -103,6 +104,17 @@ export class D1DocumentRepository implements DocumentRepository {
       .bind(workspaceId, blockId)
       .all<DocumentRow>()
     return results.map(rowToRecord)
+  }
+
+  async getByUrl(workspaceId: string, url: string): Promise<DocumentRecord | null> {
+    const [a, b] = urlMatchCandidates(url)
+    const row = await this.db
+      .prepare(
+        'SELECT * FROM documents WHERE workspace_id = ? AND url IN (?, ?) AND deleted_at IS NULL ORDER BY synced_at DESC LIMIT 1',
+      )
+      .bind(workspaceId, a, b)
+      .first<DocumentRow>()
+    return row ? rowToRecord(row) : null
   }
 
   async linkBlock(

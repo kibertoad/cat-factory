@@ -344,11 +344,13 @@ export class AgentContextBuilder {
    * Resolve the high-confidence external context for a block: the docs/tasks a human
    * attached to it (only when `includeLinked` — skipped in reworked mode, where the
    * incorporated requirements doc already folds them in) UNIONed with any items the
-   * `description` names explicitly (a Jira key, a URL), resolved against the corpus
-   * already imported for the workspace. Each source repo is optional, so this is a
-   * no-op for sources that aren't wired. Deduped by (source, externalId). The full
-   * body travels to the container as a materialised file; the prompt carries only the
-   * one-line `summary` (see the executor + `linkedContextSection`).
+   * `description` names explicitly (a Jira key, a fully-qualified GitHub `owner/repo#N`,
+   * or a URL), each resolved against the imported corpus by a POINT LOOKUP (no
+   * full-corpus scan — a single keyed/URL query per named reference). Each source repo
+   * is optional, so this is a no-op for sources that aren't wired. Deduped by
+   * (source, externalId). The full body travels to the container as a materialised
+   * file; the prompt carries only the one-line `summary` (see the executor +
+   * `linkedContextSection`).
    */
   private async resolveLinkedContext(
     workspaceId: string,
@@ -363,39 +365,33 @@ export class AgentContextBuilder {
     const tasks = new Map<string, TaskRecord>()
     const docKey = (d: DocumentRecord) => `${d.source}:${d.externalId}`
     const taskKey = (t: TaskRecord) => `${t.source}:${t.externalId}`
+    const addDoc = (d: DocumentRecord | null) => {
+      if (d && !docs.has(docKey(d))) docs.set(docKey(d), d)
+    }
+    const addTask = (t: TaskRecord | null) => {
+      if (t && !tasks.has(taskKey(t))) tasks.set(taskKey(t), t)
+    }
 
     if (opts.includeLinked) {
       if (this.deps.documents)
-        for (const d of await this.deps.documents.listByBlock(workspaceId, blockId))
-          docs.set(docKey(d), d)
+        for (const d of await this.deps.documents.listByBlock(workspaceId, blockId)) addDoc(d)
       if (this.deps.tasks)
-        for (const t of await this.deps.tasks.listByBlock(workspaceId, blockId))
-          tasks.set(taskKey(t), t)
+        for (const t of await this.deps.tasks.listByBlock(workspaceId, blockId)) addTask(t)
     }
 
-    // Resolve explicitly-named references against the imported corpus. Only items that
-    // actually exist are added (the resolution discards noise, e.g. a `UTF-8` that
-    // happens to match the Jira key shape); nothing is fetched live.
+    // Resolve explicitly-named references against the imported corpus by a POINT LOOKUP
+    // per reference — never a full-corpus scan. Only items that actually exist are added
+    // (a `UTF-8` that happens to match the Jira-key shape just resolves to nothing);
+    // nothing is fetched live.
     const refs = extractReferences(description ?? '')
-    if (refs.jiraKeys.length || refs.githubRefs.length || refs.urls.length) {
-      const urls = new Set(refs.urls.map(normalizeUrl))
-      const jira = new Set(refs.jiraKeys)
-      const gh = new Set(refs.githubRefs)
-      if (this.deps.documents) {
-        for (const d of await this.deps.documents.listByWorkspace(workspaceId)) {
-          if (docs.has(docKey(d))) continue
-          if (urls.has(normalizeUrl(d.url))) docs.set(docKey(d), d)
-        }
-      }
-      if (this.deps.tasks) {
-        for (const t of await this.deps.tasks.listByWorkspace(workspaceId)) {
-          if (tasks.has(taskKey(t))) continue
-          const byUrl = urls.has(normalizeUrl(t.url))
-          const byJira = t.source === 'jira' && jira.has(t.externalId)
-          const byGithub = t.source === 'github' && gh.has(t.externalId)
-          if (byUrl || byJira || byGithub) tasks.set(taskKey(t), t)
-        }
-      }
+    if (this.deps.tasks) {
+      for (const key of refs.jiraKeys) addTask(await this.deps.tasks.get(workspaceId, 'jira', key))
+      for (const ref of refs.githubRefs)
+        addTask(await this.deps.tasks.get(workspaceId, 'github', ref))
+    }
+    for (const url of refs.urls) {
+      if (this.deps.documents) addDoc(await this.deps.documents.getByUrl(workspaceId, url))
+      if (this.deps.tasks) addTask(await this.deps.tasks.getByUrl(workspaceId, url))
     }
 
     return {
@@ -414,11 +410,6 @@ export class AgentContextBuilder {
     if (!this.deps.environmentProvisioning) return null
     return this.deps.environmentProvisioning.resolveForBlock(workspaceId, blockId)
   }
-}
-
-/** Canonicalise a URL for equality (drop trailing slashes + lowercase host/scheme). */
-function normalizeUrl(url: string): string {
-  return url.trim().replace(/\/+$/, '').toLowerCase()
 }
 
 /** Map a document record to the agent-context doc shape (summary index + materialisable body). */

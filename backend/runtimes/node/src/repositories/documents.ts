@@ -6,7 +6,8 @@ import type {
   DocumentSourceKind,
   SecretCipher,
 } from '@cat-factory/kernel'
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { urlMatchCandidates } from '@cat-factory/kernel'
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { documentConnections, documents } from '../db/schema.js'
 
@@ -229,6 +230,22 @@ export class DrizzleDocumentRepository implements DocumentRepository {
       )
       .orderBy(desc(documents.synced_at))
     return rows.map(rowToDocument)
+  }
+
+  async getByUrl(workspaceId: string, url: string): Promise<DocumentRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(documents)
+      .where(
+        and(
+          eq(documents.workspace_id, workspaceId),
+          inArray(documents.url, urlMatchCandidates(url)),
+          isNull(documents.deleted_at),
+        ),
+      )
+      .orderBy(desc(documents.synced_at))
+      .limit(1)
+    return rows[0] ? rowToDocument(rows[0]) : null
   }
 
   async linkBlock(

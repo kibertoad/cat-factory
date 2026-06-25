@@ -62,10 +62,17 @@ export class DocumentImportService {
     // Preserve any existing block link across a re-import.
     const existing = await this.deps.documentRepository.get(workspaceId, source, content.externalId)
     const hash = contentHash(content.body)
-    // Idempotent re-import: when the body is byte-for-byte unchanged (and the row is
-    // live), keep the existing projection — no needless write, and the block link and
-    // synced time are preserved exactly.
-    if (existing && existing.deletedAt === null && existing.contentHash === hash) {
+    // Idempotent re-import: skip the write only when NOTHING that reaches an agent has
+    // changed — the body (by hash) AND the title/url metadata (which feed the prompt's
+    // summary index and the materialised file's `Source:` header). A renamed/moved page
+    // whose body is unchanged still re-projects so the stale title/url don't linger.
+    if (
+      existing &&
+      existing.deletedAt === null &&
+      existing.contentHash === hash &&
+      existing.title === content.title &&
+      existing.url === content.url
+    ) {
       return toSourceDocument(existing)
     }
     const record: DocumentRecord = {

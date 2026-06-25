@@ -87,6 +87,7 @@ export {
   contentHash,
 } from './shared/markdown.logic.js'
 export { normalizeAtlassianBaseUrl, assertSafeAtlassianBaseUrl } from './shared/atlassian.logic.js'
+export { normalizeUrl, urlMatchCandidates } from './shared/url.logic.js'
 
 export { requireWorkspace } from './workspace-guard.js'
 

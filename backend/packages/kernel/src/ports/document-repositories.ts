@@ -65,6 +65,12 @@ export interface DocumentRepository {
   ): Promise<DocumentRecord | null>
   /** Every live document imported into the workspace, across sources. */
   listByWorkspace(workspaceId: string): Promise<DocumentRecord[]>
+  /**
+   * Resolve a single live document by its canonical `url` (trailing-slash tolerant),
+   * across sources. Used to resolve a URL named explicitly in a block's description
+   * against the imported corpus without scanning every document body.
+   */
+  getByUrl(workspaceId: string, url: string): Promise<DocumentRecord | null>
   /** Live documents attached to a board block (resolved during execution). */
   listByBlock(workspaceId: string, blockId: string): Promise<DocumentRecord[]>
   /** Attach a document to a board block (or detach with null). */

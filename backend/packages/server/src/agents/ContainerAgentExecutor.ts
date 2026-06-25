@@ -177,33 +177,49 @@ function contextFileName(base: string, used: Set<string>): string {
   return name
 }
 
+type ContextDoc = NonNullable<AgentRunContext['block']['contextDocs']>[number]
+type ContextTask = NonNullable<AgentRunContext['block']['contextTasks']>[number]
+
 /**
  * Materialise the block's linked context (docs + tracker issues) into files the harness
  * writes under CONTEXT_DIR in the checkout, so a container agent reads them on demand.
  * Each file is prefixed with its title + source URL (the zero-cost slice of Anthropic's
  * contextual-retrieval). Bounded by {@link CONTEXT_BUDGET.maxContextFileBytes} so a large
- * corpus can't bloat the job body; items past the cap are dropped (the summary index in
- * the prompt still names them, and the agent simply won't find a file for those).
+ * corpus can't bloat the job body; items past the cap are dropped.
+ *
+ * Returns both the files AND the docs/tasks that actually fit (`contextDocs`/`contextTasks`),
+ * so the caller can render the prompt's summary index from exactly the materialised set —
+ * the prompt never names a file the agent won't find on disk.
  */
-function buildContextFiles(
-  context: AgentRunContext,
-): { path: string; title: string; url: string; content: string }[] {
+function buildContextFiles(context: AgentRunContext): {
+  files: { path: string; title: string; url: string; content: string }[]
+  contextDocs: ContextDoc[]
+  contextTasks: ContextTask[]
+} {
   const { contextDocs, contextTasks } = context.block
-  if (!contextDocs?.length && !contextTasks?.length) return []
   const files: { path: string; title: string; url: string; content: string }[] = []
+  const keptDocs: ContextDoc[] = []
+  const keptTasks: ContextTask[] = []
+  if (!contextDocs?.length && !contextTasks?.length)
+    return { files, contextDocs: keptDocs, contextTasks: keptTasks }
   const used = new Set<string>()
   let bytes = 0
-  const add = (title: string, url: string, baseName: string, raw: string) => {
+  // Write the file when it fits the byte budget; report back whether it was kept so the
+  // caller can keep the prompt index in lock-step with what's on disk.
+  const fit = (title: string, url: string, baseName: string, raw: string): boolean => {
     const content = `# ${title}\nSource: ${url}\n\n${raw}`
     const size = new TextEncoder().encode(content).length
-    if (bytes + size > CONTEXT_BUDGET.maxContextFileBytes) return
+    if (bytes + size > CONTEXT_BUDGET.maxContextFileBytes) return false
     bytes += size
     files.push({ path: contextFileName(baseName, used), title, url, content })
+    return true
   }
-  for (const doc of contextDocs ?? []) add(doc.title, doc.url, doc.title, doc.body || doc.excerpt)
+  for (const doc of contextDocs ?? [])
+    if (fit(doc.title, doc.url, doc.title, doc.body || doc.excerpt)) keptDocs.push(doc)
   for (const task of contextTasks ?? [])
-    add(`[${task.key}] ${task.title}`, task.url, task.key, renderTaskContext(task))
-  return files
+    if (fit(`[${task.key}] ${task.title}`, task.url, task.key, renderTaskContext(task)))
+      keptTasks.push(task)
+  return { files, contextDocs: keptDocs, contextTasks: keptTasks }
 }
 
 export interface ContainerAgentExecutorDependencies {
@@ -717,7 +733,11 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Linked-context bodies are materialised into the checkout (under CONTEXT_DIR) so a
     // container agent can read what it needs on demand; the prompt only lists them. The
     // harness can't reach Jira/GitHub itself, so everything is prepared here, up front.
-    const contextFiles = buildContextFiles(context)
+    const {
+      files: contextFiles,
+      contextDocs: keptDocs,
+      contextTasks: keptTasks,
+    } = buildContextFiles(context)
     const common = {
       jobId,
       model: ref.model,
@@ -727,6 +747,12 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       ...(contextFiles.length ? { contextFiles } : {}),
     }
+    // Render the prompt's linked-context summary index from exactly the items that were
+    // materialised (some may have been dropped at the byte cap), so the agent is never
+    // pointed at a `.cat-context/` file that doesn't exist.
+    const promptContext: AgentRunContext = contextFiles.length
+      ? { ...context, block: { ...context.block, contextDocs: keptDocs, contextTasks: keptTasks } }
+      : context
     // The proxy-backed web-tools nudge + switch, shared by the kinds that allow web
     // access (coder/mocker/ci-fixer/fixer/tester/read-only). The harness surfaces the
     // tools only when web search is configured in the container env. Per-kind hint
@@ -736,7 +762,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
     }
 
-    const { body, kind } = this.buildKindBody(context, {
+    const { body, kind } = this.buildKindBody(promptContext, {
       common,
       webTools,
       repo,
