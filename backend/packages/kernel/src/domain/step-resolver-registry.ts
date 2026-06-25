@@ -1,4 +1,6 @@
-import type { AgentRunResult, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
+import type { ExecutionInstance, PipelineStep } from './types.js'
+import type { AgentRunResult } from '../ports/agent-executor.js'
+import type { RunInitiatorScope } from '../ports/user-secret-repositories.js'
 
 // The post-completion resolver abstraction — the agent-definition extension point for
 // DETERMINISTIC backend logic that must run after an agent step finishes.
@@ -18,6 +20,8 @@ import type { AgentRunResult, ExecutionInstance, PipelineStep } from '@cat-facto
 //
 // A resolver is registered by `agentKind` (mirroring the `GateDefinition` registry).
 // Adding one is a new registry entry, not a new special-case branch in `recordStepResult`.
+// Lives in kernel so a deployment package can register its OWN resolver as a startup
+// import side effect (see {@link registerStepResolver}) without depending on orchestration.
 
 /** Context handed to a step-completion resolver after its step's agent finished. */
 export interface StepResolverContext {
@@ -44,9 +48,8 @@ export interface StepResolution {
 
 /**
  * Deterministic backend logic run after an agent step completes, keyed by `agentKind`.
- * Registered in {@link ExecutionService} (see `buildStepResolverRegistry`); the engine
- * runs the matching resolver in `recordStepResult` once the step's agent has finished,
- * regardless of the step's position in the pipeline.
+ * The engine runs the matching resolver in `recordStepResult` once the step's agent has
+ * finished, regardless of the step's position in the pipeline.
  */
 export interface StepCompletionResolver {
   /** Matches the step's `agentKind` (e.g. `merger`). */
@@ -59,4 +62,47 @@ export interface StepCompletionResolver {
   applies?(result: AgentRunResult): boolean
   /** Run the mechanical post-completion logic. */
   resolve(ctx: StepResolverContext): Promise<StepResolution | void>
+}
+
+/**
+ * The shared engine seams a registered (custom) resolver legitimately needs, handed to
+ * its factory at registry-build time. Minimal by design — a resolver acts on the
+ * `result` it receives and reaches any external system through a provider it closes over.
+ */
+export interface ResolverContext {
+  /** Run a function under the run initiator's ambient context (per-user credentials). */
+  runInitiatorScope: RunInitiatorScope
+}
+
+/**
+ * A registered resolver is a factory the engine invokes ONCE at registry-build time with
+ * a {@link ResolverContext}, mirroring {@link GateFactory}.
+ */
+export type StepResolverFactory = (ctx: ResolverContext) => StepCompletionResolver
+
+// Process-wide registry, mirroring the gate / agent-kind / pipeline registry seams.
+// Registration is a startup import side effect, read once when an ExecutionService lazily
+// builds its resolver registry — register at startup, before serving.
+const registry = new Map<string, StepResolverFactory>()
+
+/**
+ * Register a custom step-completion resolver, keyed by the step `agentKind` whose
+ * completion it resolves. A later registration of the same kind replaces the earlier one,
+ * and a registered resolver replaces a built-in of the same kind.
+ */
+export function registerStepResolver(kind: string, factory: StepResolverFactory): void {
+  registry.set(kind, factory)
+}
+
+/** The registered custom step resolvers (registration order). */
+export function registeredStepResolverFactories(): {
+  kind: string
+  factory: StepResolverFactory
+}[] {
+  return [...registry].map(([kind, factory]) => ({ kind, factory }))
+}
+
+/** Drop all registered step resolvers. Intended for tests that exercise registration. */
+export function clearRegisteredStepResolvers(): void {
+  registry.clear()
 }

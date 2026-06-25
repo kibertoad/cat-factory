@@ -328,6 +328,7 @@ export type { CreateTicketRequest, CreatedTicket, TicketTrackerProvider } from '
 export type { IssueWritebackProvider } from './issue-writeback.js'
 export {
   type NotificationChannel,
+  type RaiseNotificationInput,
   CompositeNotificationChannel,
   NoopNotificationChannel,
 } from './notification-channel.js'

@@ -3,13 +3,16 @@ import type {
   IdGenerator,
   Notification,
   NotificationChannel,
-  NotificationPayload,
   NotificationRepository,
-  NotificationType,
+  RaiseNotificationInput,
   ResolveNotificationAction,
 } from '@cat-factory/kernel'
 import { assertFound, requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
+
+// Re-exported from kernel (where it lives so runtime-neutral extension seams — e.g. a
+// custom gate's `onExhausted` — can build one without depending on orchestration).
+export type { RaiseNotificationInput } from '@cat-factory/kernel'
 
 export interface NotificationServiceDependencies {
   notificationRepository: NotificationRepository
@@ -23,16 +26,6 @@ export interface NotificationServiceDependencies {
    * can omit it (the repository remains the canonical store either way).
    */
   channel?: NotificationChannel
-}
-
-/** What a caller (the execution engine) supplies to raise a notification. */
-export interface RaiseNotificationInput {
-  type: NotificationType
-  blockId: string | null
-  executionId: string | null
-  title: string
-  body: string
-  payload?: NotificationPayload | null
 }
 
 /**

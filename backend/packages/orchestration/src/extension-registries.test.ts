@@ -6,8 +6,18 @@ import {
   systemPromptFor,
   userPromptFor,
 } from '@cat-factory/agents'
-import type { AgentRunContext } from '@cat-factory/kernel'
-import { clearRegisteredPipelines, registerPipeline, seedPipelines } from '@cat-factory/kernel'
+import type { AgentRunContext, GateContext, ResolverContext } from '@cat-factory/kernel'
+import {
+  clearRegisteredGates,
+  clearRegisteredPipelines,
+  clearRegisteredStepResolvers,
+  registerGate,
+  registeredGateFactories,
+  registerPipeline,
+  registerStepResolver,
+  registeredStepResolverFactories,
+  seedPipelines,
+} from '@cat-factory/kernel'
 
 // The installation-level extension seams that let a deployment (e.g. a proprietary org
 // package) mix in custom agent kinds and predefined pipelines, mirroring how
@@ -103,5 +113,82 @@ describe('pipeline registry', () => {
     // Same ids in the same order — replaced in place, not appended.
     expect(pipelines.map((p) => p.id)).toEqual(builtins)
     expect(pipelines.find((p) => p.id === 'pl_quick')?.name).toBe('Org quick')
+  })
+})
+
+// A throwaway context for invoking a factory in isolation (the ExecutionService builds the
+// real one). The pure-registry tests don't call the seams, so stubs suffice.
+const gateCtx = (): GateContext => ({
+  clock: { now: () => 0 },
+  getBlock: async () => null,
+  runInitiatorScope: (_initiatedBy, fn) => fn(),
+  raiseNotification: async () => {},
+})
+const resolverCtx = (): ResolverContext => ({ runInitiatorScope: (_initiatedBy, fn) => fn() })
+
+describe('gate registry', () => {
+  afterEach(() => clearRegisteredGates())
+
+  it('exposes a registered gate factory, invokable to a GateDefinition of that kind', () => {
+    expect(registeredGateFactories()).toHaveLength(0)
+    registerGate('license-check', (ctx) => ({
+      kind: 'license-check',
+      helperKind: 'license-fixer',
+      wired: () => true,
+      unwiredOutput: 'skipped',
+      probe: async () => ({ status: 'pass', headSha: null }),
+      onExhausted: async ({ workspaceId }) => {
+        await ctx.raiseNotification(workspaceId, {
+          type: 'decision_required',
+          blockId: null,
+          executionId: null,
+          title: 't',
+          body: 'b',
+        })
+        return { error: 'spent' }
+      },
+    }))
+    const registered = registeredGateFactories()
+    expect(registered.map((g) => g.kind)).toEqual(['license-check'])
+    const def = registered[0]!.factory(gateCtx())
+    expect(def.kind).toBe('license-check')
+    expect(def.helperKind).toBe('license-fixer')
+  })
+
+  it('replaces an earlier registration of the same kind (last wins)', () => {
+    const make = (helperKind: string) => (): ReturnType<Parameters<typeof registerGate>[1]> => ({
+      kind: 'license-check',
+      helperKind,
+      wired: () => true,
+      unwiredOutput: 'skipped',
+      probe: async () => ({ status: 'pass', headSha: null }),
+      onExhausted: async () => ({ error: 'spent' }),
+    })
+    registerGate('license-check', make('fixer-a'))
+    registerGate('license-check', make('fixer-b'))
+    const registered = registeredGateFactories()
+    expect(registered).toHaveLength(1)
+    expect(registered[0]!.factory(gateCtx()).helperKind).toBe('fixer-b')
+  })
+})
+
+describe('step-resolver registry', () => {
+  afterEach(() => clearRegisteredStepResolvers())
+
+  it('exposes a registered resolver factory, invokable to a resolver of that kind', () => {
+    expect(registeredStepResolverFactories()).toHaveLength(0)
+    registerStepResolver('security-auditor', () => ({
+      kind: 'security-auditor',
+      resolve: async () => ({ output: 'done' }),
+    }))
+    const registered = registeredStepResolverFactories()
+    expect(registered.map((r) => r.kind)).toEqual(['security-auditor'])
+    expect(registered[0]!.factory(resolverCtx()).kind).toBe('security-auditor')
+  })
+
+  it('replaces an earlier registration of the same kind (last wins)', () => {
+    registerStepResolver('x', () => ({ kind: 'x', resolve: async () => ({ output: 'a' }) }))
+    registerStepResolver('x', () => ({ kind: 'x', resolve: async () => ({ output: 'b' }) }))
+    expect(registeredStepResolverFactories()).toHaveLength(1)
   })
 })

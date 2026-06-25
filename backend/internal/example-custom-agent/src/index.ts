@@ -1,7 +1,7 @@
 import type { AgentKindDefinition } from '@cat-factory/agents'
 import { registerAgentKinds } from '@cat-factory/agents'
-import type { RepoOp } from '@cat-factory/kernel'
-import { registerPipeline } from '@cat-factory/kernel'
+import type { GateProbe, RepoOp, StepCompletionResolver } from '@cat-factory/kernel'
+import { registerGate, registerPipeline, registerStepResolver } from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // A WORKED EXAMPLE of a company-authored agent package.
@@ -28,6 +28,10 @@ import { registerPipeline } from '@cat-factory/kernel'
 export const ORG_REVIEWER_KIND = 'org-reviewer'
 export const SECURITY_AUDITOR_KIND = 'security-auditor'
 export const ORG_AUDIT_PIPELINE_ID = 'pl_org_audit'
+
+/** The custom polling-gate step kind + the helper agent it escalates to on a red verdict. */
+export const LICENSE_CHECK_KIND = 'license-check'
+export const LICENSE_FIXER_KIND = 'license-fixer'
 
 /** Where the security auditor's rendered report lands in the repo. */
 const REPORT_PATH = 'compliance/REPORT.md'
@@ -167,12 +171,91 @@ export const EXAMPLE_AGENT_KINDS: AgentKindDefinition[] = [
       resultView: 'generic-structured',
     },
   },
+  {
+    // The HELPER agent the `license-check` gate (below) escalates to on a red verdict: a
+    // container-coding agent that clones the PR branch, adds the missing license headers,
+    // and pushes back onto the same branch (no new PR) — exactly like the built-in
+    // `ci-fixer` relates to the `ci` gate. A custom gate's helper is just a registered
+    // agent kind; the gate seam needs no new dispatch machinery.
+    kind: LICENSE_FIXER_KIND,
+    systemPrompt:
+      'You are a license-header fixer. Add the required company SPDX license header to every ' +
+      'source file in the change that is missing it, leaving all other content untouched. ' +
+      'Commit and push your changes; do NOT open a pull request.',
+    agent: { surface: 'container-coding', clone: { branch: 'pr' } },
+    presentation: {
+      label: 'License Fixer',
+      icon: 'i-lucide-file-pen',
+      color: '#10b981',
+      description: 'Adds missing license headers to the change and pushes the fix.',
+      category: 'build',
+    },
+  },
 ]
 
+// ---------------------------------------------------------------------------
+// A WORKED EXAMPLE of a company-authored polling GATE + a step-completion RESOLVER.
+//
+// A gate is the OTHER half of the extension story (alongside agents): a deterministic
+// programmatic precheck that only escalates to a helper agent on a negative verdict — the
+// "skip the expensive work when it's unnecessary" contract the built-in `ci` / `conflicts`
+// gates use. Here `license-check` checks that the change carries the required license
+// headers and only spins up the `license-fixer` agent when something is missing.
+//
+// Like a custom model provider, the gate's data source (the `LicenseProvider`) is wired by
+// the deployment at startup via {@link wireLicenseProvider}; the gate factory closes over
+// it. Until it's wired the gate is a harmless pass-through, so a bare
+// `import '@cat-factory/example-custom-agent'` is always safe.
+// ---------------------------------------------------------------------------
+
+/** The verdict the deployment-supplied license checker returns for a block's PR. */
+export interface LicenseCheckReport {
+  /** Whether every file in the change carries the required header. */
+  clean: boolean
+  /** The PR head commit the check ran against, or null when there is no open PR. */
+  headSha: string | null
+  /** A short human-readable summary (the failing files, on a red verdict). */
+  summary?: string
+}
+
+/** The deployment-supplied data source for the {@link LICENSE_CHECK_KIND} gate. */
+export interface LicenseProvider {
+  check(workspaceId: string, blockId: string): Promise<LicenseCheckReport>
+}
+
+// The provider is a module-level handle the facade wires at startup; the gate factory
+// closes over it. Unwired ⇒ the gate passes through (see `wired()` below).
+let licenseProvider: LicenseProvider | undefined
+
+/** Wire (or clear) the license checker the {@link LICENSE_CHECK_KIND} gate probes. */
+export function wireLicenseProvider(provider: LicenseProvider | undefined): void {
+  licenseProvider = provider
+}
+
 /**
- * Register the example kinds + the `pl_org_audit` pipeline that chains them. Idempotent
- * (registry replaces by id), so importing the package and calling this explicitly are safe
- * to combine. Called automatically as an import side effect below.
+ * POST-COMPLETION RESOLVER for the security auditor: after its step finishes, fold the
+ * structured assessment into a deterministic human-readable step summary. A resolver is the
+ * seam for backend follow-up the engine drives from the agent's result — distinct from a
+ * post-op (which writes the repo): this one just shapes what the run-detail UI shows. A
+ * no-op when the agent returned nothing parseable.
+ */
+const auditorSummaryResolver: StepCompletionResolver = {
+  kind: SECURITY_AUDITOR_KIND,
+  applies: (result) => result.custom !== undefined,
+  resolve: async ({ result }) => {
+    const assessment = coerceAssessment(result.custom)
+    const count = assessment.findings?.length ?? 0
+    const risk =
+      assessment.risk !== undefined ? ` (risk ${(assessment.risk * 100).toFixed(0)}%)` : ''
+    return { output: `Security audit complete: ${count} finding(s)${risk}.` }
+  },
+}
+
+/**
+ * Register the example kinds + the `pl_org_audit` pipeline that chains them, plus the
+ * example `license-check` gate + the auditor summary resolver. Idempotent (registries
+ * replace by id/kind), so importing the package and calling this explicitly are safe to
+ * combine. Called automatically as an import side effect below.
  */
 export function registerExampleCustomAgents(): void {
   registerAgentKinds(EXAMPLE_AGENT_KINDS)
@@ -181,6 +264,47 @@ export function registerExampleCustomAgents(): void {
     name: 'Org compliance audit',
     agentKinds: [ORG_REVIEWER_KIND, SECURITY_AUDITOR_KIND],
   })
+  // The custom polling gate — a deterministic precheck that escalates to `license-fixer`.
+  registerGate(LICENSE_CHECK_KIND, (ctx) => ({
+    kind: LICENSE_CHECK_KIND,
+    helperKind: LICENSE_FIXER_KIND,
+    wired: () => licenseProvider !== undefined,
+    unwiredOutput: 'License gate skipped (no license provider configured).',
+    probe: async (workspaceId, blockId): Promise<GateProbe> => {
+      const report = await licenseProvider!.check(workspaceId, blockId)
+      if (report.clean) {
+        return {
+          status: 'pass',
+          headSha: report.headSha,
+          passOutput: report.summary ?? 'License gate passed: all files carry the required header.',
+        }
+      }
+      return {
+        status: 'fail',
+        headSha: report.headSha,
+        failureSummary: report.summary ?? 'Some files are missing the required license header.',
+      }
+    },
+    // Hand the failing-file summary to the fixer as resolved context, like the CI gate.
+    helperPriorOutput: (summary) => ({ agentKind: LICENSE_CHECK_KIND, output: summary }),
+    onExhausted: async ({ workspaceId, instance, block, step, summary }) => {
+      const attempts = step.gate?.attempts ?? 0
+      await ctx.raiseNotification(workspaceId, {
+        type: 'decision_required',
+        blockId: block.id,
+        executionId: instance.id,
+        title: 'License headers still missing',
+        body:
+          `The change still has files missing the required license header after ` +
+          `${attempts} fixer attempt(s). ${summary ?? ''}`.trim(),
+      })
+      return {
+        error:
+          `License headers still missing after ${attempts} fixer attempt(s). ${summary ?? ''}`.trim(),
+      }
+    },
+  }))
+  registerStepResolver(auditorSummaryResolver.kind, () => auditorSummaryResolver)
 }
 
 // Side-effect registration: `import '@cat-factory/example-custom-agent'` is enough.

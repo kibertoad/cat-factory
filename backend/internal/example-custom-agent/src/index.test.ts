@@ -6,10 +6,19 @@ import {
   registeredKindRequiresContainer,
   registeredPostOps,
 } from '@cat-factory/agents'
-import type { RepoFiles } from '@cat-factory/kernel'
-import { clearRegisteredPipelines, seedPipelines } from '@cat-factory/kernel'
+import type { GateContext, RepoFiles, ResolverContext } from '@cat-factory/kernel'
+import {
+  clearRegisteredGates,
+  clearRegisteredPipelines,
+  clearRegisteredStepResolvers,
+  registeredGateFactories,
+  registeredStepResolverFactories,
+  seedPipelines,
+} from '@cat-factory/kernel'
 import {
   EXAMPLE_AGENT_KINDS,
+  LICENSE_CHECK_KIND,
+  LICENSE_FIXER_KIND,
   ORG_AUDIT_PIPELINE_ID,
   ORG_REVIEWER_KIND,
   SECURITY_AUDITOR_KIND,
@@ -17,16 +26,20 @@ import {
   renderComplianceReport,
 } from './index.js'
 
-// The package self-registers on import (side effect), but tests clear the global registry
+// The package self-registers on import (side effect), but tests clear the global registries
 // for isolation — so register fresh before each test and clean up after.
 beforeEach(() => {
   clearRegisteredAgentKinds()
   clearRegisteredPipelines()
+  clearRegisteredGates()
+  clearRegisteredStepResolvers()
   registerExampleCustomAgents()
 })
 afterEach(() => {
   clearRegisteredAgentKinds()
   clearRegisteredPipelines()
+  clearRegisteredGates()
+  clearRegisteredStepResolvers()
 })
 
 describe('example custom agents', () => {
@@ -42,14 +55,54 @@ describe('example custom agents', () => {
   })
 
   it('exposes presentation so the kinds become first-class palette blocks', () => {
+    const validCategories = new Set(['review', 'design', 'build', 'test', 'docs', 'gates'])
     for (const def of EXAMPLE_AGENT_KINDS) {
       expect(def.presentation?.label).toBeTruthy()
-      expect(def.presentation?.category).toBe('review')
+      expect(validCategories.has(def.presentation?.category ?? '')).toBe(true)
     }
+    // The two reviewers are review blocks; the license-fixer helper is a build block.
+    expect(registeredAgentKind(ORG_REVIEWER_KIND)?.presentation?.category).toBe('review')
+    expect(registeredAgentKind(SECURITY_AUDITOR_KIND)?.presentation?.category).toBe('review')
+    expect(registeredAgentKind(LICENSE_FIXER_KIND)?.presentation?.category).toBe('build')
     // The auditor opens the shared generic structured viewer.
     expect(registeredAgentKind(SECURITY_AUDITOR_KIND)?.presentation?.resultView).toBe(
       'generic-structured',
     )
+  })
+
+  it('registers the license-check gate, escalating to the license-fixer helper kind', () => {
+    const registered = registeredGateFactories()
+    expect(registered.map((g) => g.kind)).toContain(LICENSE_CHECK_KIND)
+    // The helper is itself a registered agent kind (a container-coding fixer).
+    expect(registeredAgentStep(LICENSE_FIXER_KIND)?.surface).toBe('container-coding')
+
+    // Build the gate with a throwaway context; without a wired provider it passes through.
+    const ctx: GateContext = {
+      clock: { now: () => 0 },
+      getBlock: async () => null,
+      runInitiatorScope: (_initiatedBy, fn) => fn(),
+      raiseNotification: async () => {},
+    }
+    const gate = registered.find((g) => g.kind === LICENSE_CHECK_KIND)!.factory(ctx)
+    expect(gate.helperKind).toBe(LICENSE_FIXER_KIND)
+    // Unwired ⇒ a harmless pass-through, so a bare import is always safe.
+    expect(gate.wired()).toBe(false)
+  })
+
+  it('registers a step resolver that summarises the security auditor’s output', async () => {
+    const registered = registeredStepResolverFactories()
+    expect(registered.map((r) => r.kind)).toContain(SECURITY_AUDITOR_KIND)
+    const ctx: ResolverContext = { runInitiatorScope: (_initiatedBy, fn) => fn() }
+    const resolver = registered.find((r) => r.kind === SECURITY_AUDITOR_KIND)!.factory(ctx)
+    const resolution = await resolver.resolve({
+      workspaceId: 'ws',
+      instance: { id: 'exec' } as never,
+      step: {} as never,
+      result: { output: 'done', custom: { risk: 0.2, findings: [{ title: 'a' }, { title: 'b' }] } },
+      isFinalStep: true,
+    })
+    expect(resolution?.output).toContain('2 finding(s)')
+    expect(resolution?.output).toContain('20%')
   })
 
   it('appends the pl_org_audit pipeline chaining the two kinds', () => {

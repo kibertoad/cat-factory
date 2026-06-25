@@ -13,6 +13,29 @@ export {
   type ExecutionServiceDependencies,
 } from './modules/execution/ExecutionService.js'
 export type { AdvanceOptions, AdvanceResult } from './modules/execution/advance.js'
+// The gate / step-resolver extension seams live in @cat-factory/kernel (so a deployment
+// package can register one without depending on this package); re-exported here for
+// discovery alongside the engine they extend.
+export {
+  type GateProbe,
+  type GateHelperOutcome,
+  type GateExhaustedArgs,
+  type GateDefinition,
+  type GateContext,
+  type GateFactory,
+  recordGateAttempt,
+  registerGate,
+  registeredGateFactories,
+  clearRegisteredGates,
+  type StepResolverContext,
+  type StepResolution,
+  type StepCompletionResolver,
+  type ResolverContext,
+  type StepResolverFactory,
+  registerStepResolver,
+  registeredStepResolverFactories,
+  clearRegisteredStepResolvers,
+} from '@cat-factory/kernel'
 export {
   driveExecution,
   type DriveConfig,

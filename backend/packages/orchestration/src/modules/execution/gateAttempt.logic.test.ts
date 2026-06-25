@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { GateStepState } from '@cat-factory/kernel'
-import { recordGateAttempt } from './gates.js'
+import { recordGateAttempt } from '@cat-factory/kernel'
 
 const gate = (over: Partial<GateStepState> = {}): GateStepState => ({
   phase: 'checking',
