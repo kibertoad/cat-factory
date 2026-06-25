@@ -1,5 +1,16 @@
 # @cat-factory/local-server
 
+## 0.11.9
+
+### Patch Changes
+
+- Updated dependencies [2aae8bc]
+  - @cat-factory/kernel@0.26.0
+  - @cat-factory/agents@0.14.4
+  - @cat-factory/orchestration@0.19.1
+  - @cat-factory/server@0.23.4
+  - @cat-factory/node-server@0.18.4
+
 ## 0.11.8
 
 ### Patch Changes
