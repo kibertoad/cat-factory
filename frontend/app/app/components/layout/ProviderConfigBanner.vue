@@ -42,7 +42,11 @@ const show = computed(() => pending.value.length > 0 && !dismissed.value)
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
               <h2 class="text-lg font-semibold text-amber-100">
-                {{ pending.length > 1 ? 'Providers need configuration' : `${LABEL[pending[0]!]} needs configuration` }}
+                {{
+                  pending.length > 1
+                    ? 'Providers need configuration'
+                    : `${LABEL[pending[0]!]} needs configuration`
+                }}
               </h2>
               <UButton
                 color="neutral"

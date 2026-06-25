@@ -15,8 +15,8 @@ const block = computed<Block | undefined>(() => board.getBlock(props.id))
 const members = computed(() => board.epicMembers(props.id))
 const total = computed(() => members.value.length)
 const done = computed(() => members.value.filter((m) => m.status === 'done').length)
-const active = computed(() =>
-  members.value.filter((m) => m.status === 'in_progress' || m.status === 'pr_ready').length,
+const active = computed(
+  () => members.value.filter((m) => m.status === 'in_progress' || m.status === 'pr_ready').length,
 )
 const selected = computed(() => ui.selectedBlockId === props.id)
 </script>
@@ -26,9 +26,7 @@ const selected = computed(() => ui.selectedBlockId === props.id)
     v-if="block"
     :data-block-id="block.id"
     class="w-56 cursor-pointer rounded-lg border bg-slate-900/90 px-3 py-2 shadow-lg backdrop-blur transition-colors"
-    :class="
-      selected ? 'border-violet-400 ring-1 ring-violet-400/50' : 'border-violet-500/40'
-    "
+    :class="selected ? 'border-violet-400 ring-1 ring-violet-400/50' : 'border-violet-500/40'"
     @click="ui.select(block.id)"
   >
     <div class="flex items-center gap-1.5">

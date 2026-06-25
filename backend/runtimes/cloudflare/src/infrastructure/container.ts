@@ -153,6 +153,17 @@ import { D1PipelineScheduleRepository } from './repositories/D1PipelineScheduleR
 import { D1TrackerSettingsRepository } from './repositories/D1TrackerSettingsRepository'
 import { D1ModelPresetRepository } from './repositories/D1ModelPresetRepository'
 import { D1ServiceFragmentDefaultsRepository } from './repositories/D1ServiceFragmentDefaultsRepository'
+// The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). Importing
+// it registers the gates via the public seam; the facade wires each gate's provider below.
+import {
+  type GateProviderOverrides,
+  applyGateProviders,
+  clearGateProviders,
+  wireCiStatusProvider,
+  wireMergeabilityProvider,
+  wireReleaseHealthProvider,
+  wireIncidentEnrichment,
+} from '@cat-factory/gates'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
 import { GitHubBranchUpdater } from './github/GitHubBranchUpdater'
@@ -521,16 +532,14 @@ function selectMergeLifecycleDeps(
     })
     const resolveRepoTarget = buildResolveRepoTarget(db)
     const blockRepository = new D1BlockRepository({ db })
-    deps.ciStatusProvider = new GitHubCiStatusProvider({
-      githubClient,
-      resolveRepoTarget,
-      blockRepository,
-    })
-    deps.mergeabilityProvider = new GitHubMergeabilityProvider({
-      githubClient,
-      resolveRepoTarget,
-      blockRepository,
-    })
+    // The `ci` / `conflicts` gates now live in `@cat-factory/gates`; wire their providers into
+    // the gate suite (deployment-global handles) instead of onto the engine's CoreDependencies.
+    wireCiStatusProvider(
+      new GitHubCiStatusProvider({ githubClient, resolveRepoTarget, blockRepository }),
+    )
+    wireMergeabilityProvider(
+      new GitHubMergeabilityProvider({ githubClient, resolveRepoTarget, blockRepository }),
+    )
     deps.branchUpdater = new GitHubBranchUpdater({
       githubClient,
       resolveRepoTarget,
@@ -564,18 +573,19 @@ function selectReleaseHealthDeps(
     masterKeyBase64: config.releaseHealth.encryptionKey,
     info: OBSERVABILITY_CIPHER_INFO,
   })
-  const deps: Partial<CoreDependencies> = {
-    observabilityConnectionRepository,
-    releaseHealthConfigRepository,
-    observabilitySecretCipher,
-    releaseHealthProvider: new RegistryReleaseHealthProvider({
+  // The post-release-health gate + its on-call escalation now live in `@cat-factory/gates`;
+  // wire their providers into the gate suite (deployment-global handles). The observability
+  // connection/config repos + cipher stay on CoreDependencies — they power the management API
+  // (ReleaseHealthService), not the gate.
+  wireReleaseHealthProvider(
+    new RegistryReleaseHealthProvider({
       observabilityConnectionRepository,
       releaseHealthConfigRepository,
       blockRepository: new D1BlockRepository({ db }),
       secretCipher: observabilitySecretCipher,
       registry: defaultObservabilityRegistry,
     }),
-  }
+  )
   const enrichers: IncidentEnrichmentProvider[] = []
   if (config.incidentEnrichment.pagerDuty) {
     enrichers.push(new PagerDutyEnrichmentProvider(config.incidentEnrichment.pagerDuty))
@@ -584,9 +594,13 @@ function selectReleaseHealthDeps(
     enrichers.push(new IncidentIoEnrichmentProvider(config.incidentEnrichment.incidentIo))
   }
   if (enrichers.length > 0) {
-    deps.incidentEnrichment = new CompositeIncidentEnrichmentProvider(enrichers)
+    wireIncidentEnrichment(new CompositeIncidentEnrichmentProvider(enrichers))
   }
-  return deps
+  return {
+    observabilityConnectionRepository,
+    releaseHealthConfigRepository,
+    observabilitySecretCipher,
+  }
 }
 
 /**
@@ -1417,12 +1431,24 @@ function selectFragmentLibraryDeps(
 export function buildContainer(
   env: Env,
   overrides: Partial<CoreDependencies> = {},
-  opts: { cloudflareModelsEnabled?: boolean } = {},
+  opts: { cloudflareModelsEnabled?: boolean; gateProviders?: GateProviderOverrides } = {},
 ): Container {
   const config = loadConfig(env)
   const db = env.DB
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
+
+  // The built-in gates' providers are deployment-global module handles (in `@cat-factory/gates`),
+  // not per-container DI. Reset them up-front so each build re-wires from a clean slate and only
+  // the gates this env actually configures stay wired: `selectMergeLifecycleDeps` /
+  // `selectReleaseHealthDeps` wire their providers only inside their `enabled` branches and never
+  // clear, so without this reset a provider wired by an earlier (configured) build would leak into
+  // a later (unconfigured) build and make its gate probe a stale handle instead of passing through.
+  // Any test-injected gate providers (`opts.gateProviders`) are applied at the END of this build
+  // (after the config wiring below) so they OVERRIDE it — the only way an externally-supplied
+  // provider survives the per-request rebuild, and so a deployment that ALSO wires a real provider
+  // can't clobber the test's. Gates read their provider lazily at probe time, so the last write wins.
+  clearGateProviders()
 
   // The runner-backend factory is shared by every container-backed flow (the
   // implementation executor and the repo bootstrapper), so both dispatch through the
@@ -1560,6 +1586,11 @@ export function buildContainer(
     runInitiatorScope: runWithInitiator,
     ...overrides,
   }
+
+  // Apply any test-injected gate providers LAST, so they override the config wiring done by the
+  // `select*Deps` spreads above (the conformance suite drives the externalized CI gate over a
+  // faked verdict). Production leaves `gateProviders` undefined, so this is a no-op outside tests.
+  applyGateProviders(opts.gateProviders)
 
   return {
     ...createCore(dependencies),

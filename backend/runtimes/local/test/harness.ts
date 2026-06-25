@@ -19,6 +19,7 @@ import {
   createDrizzleRepositories,
   migrate,
 } from '@cat-factory/node-server'
+import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { Clock, ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type { LocalRunner, UpsertLocalModelEndpointInput } from '@cat-factory/contracts'
@@ -83,6 +84,7 @@ export function makeConformanceApp(
   opts?: {
     cloudflareModelsEnabled?: boolean
     resolveRunRepoContext?: CoreDependencies['resolveRunRepoContext']
+    gateProviders?: GateProviderOverrides
   },
 ): ConformanceApp {
   const recorder = new RecordingEventPublisher()
@@ -114,6 +116,8 @@ export function makeConformanceApp(
     // provider available to start a run. The suite still forces this OFF for the
     // provider-key assertions that exercise the unconfigured path.
     cloudflareModelsEnabled: opts?.cloudflareModelsEnabled ?? true,
+    // Re-wire any faked gate providers after the build's reset (the suite drives the CI gate).
+    gateProviders: opts?.gateProviders,
   })
   const app = createApp(container, TEST_ENV)
 

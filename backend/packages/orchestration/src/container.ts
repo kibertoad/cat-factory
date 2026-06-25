@@ -54,7 +54,6 @@ import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import type { ClarityReviewRepository } from '@cat-factory/kernel'
 import type { SubscriptionActivationRepository } from '@cat-factory/kernel'
 import type {
-  CiStatusProvider,
   MergePresetRepository,
   WorkspaceSettingsRepository,
   ModelPresetRepository,
@@ -63,10 +62,7 @@ import type {
   NotificationRepository,
   PipelineScheduleRepository,
   PullRequestMerger,
-  PullRequestMergeabilityProvider,
   BranchUpdater,
-  ReleaseHealthProvider,
-  IncidentEnrichmentProvider,
   ObservabilityConnectionRepository,
   ReleaseHealthConfigRepository,
   TicketTrackerProvider,
@@ -466,18 +462,15 @@ export interface CoreDependencies {
   slackMemberMappingRepository?: SlackMemberMappingRepository
   slackSecretCipher?: SecretCipher
   slackOAuth?: { clientId: string; clientSecret: string; redirectUrl: string }
-  /** Reads a block's PR CI checks so the `ci` step can gate on green CI. */
-  ciStatusProvider?: CiStatusProvider
-  /** Reads a block's PR mergeability so the `conflicts` step can gate on it. */
-  mergeabilityProvider?: PullRequestMergeabilityProvider
+  // The `ci` / `conflicts` / `post-release-health` gates' providers (CI status,
+  // mergeability, release health) + the on-call incident enrichment are no longer engine
+  // dependencies: the gate suite ships as `@cat-factory/gates` and each facade wires those
+  // providers into it via the package's `wireX` handles. Only the merge collaborators below
+  // remain on the engine (the `merger` resolver stays a privileged built-in).
   /** Merges the repo default branch into a block's PR branch (human-test "pull main"). */
   branchUpdater?: BranchUpdater
   /** Performs the real GitHub merge so a task's `done` means "PR merged". */
   pullRequestMerger?: PullRequestMerger
-  /** Reads a release's Datadog monitors/SLOs so the `post-release-health` gate can watch. */
-  releaseHealthProvider?: ReleaseHealthProvider
-  /** Annotates an open PagerDuty/incident.io incident with the on-call investigation. */
-  incidentEnrichment?: IncidentEnrichmentProvider
   /** Stores a workspace's observability connection (provider + sealed credentials). */
   observabilityConnectionRepository?: ObservabilityConnectionRepository
   /** Stores per-block monitor/SLO mappings the post-release-health gate reads. */

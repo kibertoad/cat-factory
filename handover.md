@@ -40,15 +40,15 @@ each kind is migrated.
 
 ## 2. Status of the 7 tasks
 
-| #   | Task                                                       | Status                                               |
-| --- | ---------------------------------------------------------- | ---------------------------------------------------- |
-| 1   | Backend transform library + `RepoFiles` port               | ✅ DONE — merged in **PR #166**                      |
-| 2   | `AgentDefinition` + pre/post-op model                      | ✅ DONE — merged in **PR #166**                      |
-| 3   | Harness: generic `agent` kind (explore/coding)             | ✅ DONE — merged in **PR #169**                      |
-| 4   | Backend engine: pre/post-op hooks + dispatch (live wiring) | ✅ DONE — merged in **PR #177**                      |
-| 5   | Convert each built-in agent, parity-gated (strangler)      | ✅ DONE — all built-ins on the generic `agent` kind   |
-| 6   | Frontend data-driven palette + generic result view         | ✅ DONE — merged in **PR #177**                      |
-| 7   | Example package + docs + conformance + changesets          | ✅ DONE — merged in **PR #177**                      |
+| #   | Task                                                       | Status                                              |
+| --- | ---------------------------------------------------------- | --------------------------------------------------- |
+| 1   | Backend transform library + `RepoFiles` port               | ✅ DONE — merged in **PR #166**                     |
+| 2   | `AgentDefinition` + pre/post-op model                      | ✅ DONE — merged in **PR #166**                     |
+| 3   | Harness: generic `agent` kind (explore/coding)             | ✅ DONE — merged in **PR #169**                     |
+| 4   | Backend engine: pre/post-op hooks + dispatch (live wiring) | ✅ DONE — merged in **PR #177**                     |
+| 5   | Convert each built-in agent, parity-gated (strangler)      | ✅ DONE — all built-ins on the generic `agent` kind |
+| 6   | Frontend data-driven palette + generic result view         | ✅ DONE — merged in **PR #177**                     |
+| 7   | Example package + docs + conformance + changesets          | ✅ DONE — merged in **PR #177**                     |
 
 - PR #166: `custom-agent-foundations` (merged, released).
 - PR #169: generic manifest-driven `agent` harness kind + backend dispatch (merged).
@@ -89,7 +89,7 @@ section + `backend/docs/custom-agents.md` are the current source of truth for th
    clone-`work` (opens PR). `runCodingAgent` ALREADY does branch-resume + checkpoint, so the
    generic coding path is behaviour-equivalent to `/run` (server builds clean). `/run`/
    `handleRun` is deleted in the harness-cleanup step (→ image bump).
-4a. ✅ **blueprints** — DONE this branch (`migrate-blueprints-spec-generic-kind`, PR pending).
+   4a. ✅ **blueprints** — DONE this branch (`migrate-blueprints-spec-generic-kind`, PR pending).
    `blueprints` dispatches `kind:'agent'` `mode:'explore'` structured (clone `pr` →
    `prBranch ?? baseBranch`) via `buildMigratedBuiltInBody`; `toRunResult` coerces
    `custom`→`blueprintService` (`coerceBlueprintService`). The render+commit is a BUILT-IN
@@ -108,48 +108,49 @@ section + `backend/docs/custom-agents.md` are the current source of truth for th
    the whole input so `deletions` passes through transparently — no fake change needed.**
 
 4b. ✅ **spec-writer** — DONE this branch (`migrate-spec-writer-generic-kind`, PR #196).
-   `spec-writer` dispatches `kind:'agent'` `mode:'explore'` structured, clone `work` (the
-   per-block `cat-factory/<blockId>`) via `buildMigratedBuiltInBody`; `toRunResult` coerces
-   `custom`→`spec` (`coerceSpecDoc`). The SHARD+commit is a BUILT-IN backend post-op
-   `specPostOp` (`@cat-factory/agents` `repo-ops/builtin.ts`) over `RepoFiles`, keyed by the
-   engine's built-in map (`builtInPostOps`). It reproduces the harness `spec.ts` reconcile:
-   (a) ORPHAN-PRUNE removed canonical `modules/**` shards (recursive `listDirectory` →
-   deletions channel); (b) SEED-ONCE Gherkin (only commit a `features/<m>/<g>.feature` that
-   is ABSENT, never overwrite); (c) drop the legacy monolithic files (`spec/spec.json`/
-   `rules.md`/`version.json` + flat `features/*.feature`) on sight. Idempotent: no
-   version.json, so it byte-compares each rendered shard via `getFile` and skips the commit
-   when ALL match + nothing to seed/prune (replay-safe). Branch resolution: `builtInRepoOpBranch`
-   is now kind-aware/async — spec-writer reuses `resolveRepoOpBranch({clone:'work'})` (ensure
-   work branch, matching dispatch); blueprints keeps `prBranch ?? baseBranch`. **Prompt
-   redesign (still wants a real-model smoketest as the rollout gate):** the explore agent now
-   READS the baseline from its own checkout — `SPEC_WRITER_SYSTEM_PROMPT` updated to point at
-   `spec/overview.md` + the `spec/modules/**` shards, and a new `specWriterUserPrompt(context)`
-   carries the task increment + read-the-baseline + reuse-the-taxonomy guidance the harness
-   `buildUserPrompt`/`renderTaxonomyInventory` used to inject. NO image bump (handleAgent
-   explore-structured already serves it). Tests: `containerAgentJobBody.spec.ts` snapshot +
-   spec pollJob coercion; `agents` `repo-ops/builtin.test.ts` (shard/seed-once/prune/legacy/
-   idempotency); conformance assertion (post-op shards+commits onto the work branch, both
-   runtimes). Changeset `migrate-spec-writer-generic-kind.md`. The dead `/spec` harness handler
-   is deleted in the harness-cleanup step (§8, image bump); `result.spec` in `toRunResult` is
-   now dead (removed when the kernel `RunnerJobResult.spec` is slimmed, §9).
-5. ✅ **tester** — DONE this branch (`migrate-tester-generic-kind`, PR #200). `tester`
-   dispatches `kind:'agent'` `mode:'explore'` structured (clone `pr`) via
-   `buildMigratedBuiltInBody`; `toRunResult` coerces `custom`→`testReport`
-   (`coerceTestReport`: the harness `/test` handler's conservative defaults + the
-   greenlight-only-when-no-blocker rule, which `TesterController` re-applies). The harness
-   `AgentJob` grew `infra?: {environment, noInfraDependencies?, composePath?, environmentUrl?}`
-   and `runExploreMode` now stands the docker-compose infra up before the agent + tears it
-   down in a `finally` (lifted `standUpInfra`/`tearDownInfra` into `agent.ts`), folding a
-   stand-up-failure note into the prompt. The run-mode/ephemeral-URL guidance was NOT
-   re-added in the harness — it already rides in the backend `roleSystemPrompt` (TESTER role)
-   + `userPromptFor` (`testerEnvironmentSection` + `environmentSection`), so the migrated body
-   keeps the same prompts; only `kind` (test→agent), `mode`, `output`, and `test`→`infra`
-   changed in the snapshot. **Image bump 1.12.x → 1.13.0** (harness `src/**` changed: new
-   `infra` field + explore-mode infra lifecycle) — deploy tag + `wrangler.toml` set to 1.13.0.
-   Tests: `containerAgentJobBody.spec.ts` snapshot + tester pollJob coercion (2 cases);
-   harness `agent.test.ts` infra-parse (2 cases). Changeset `migrate-tester-generic-kind.md`.
-   The dead `/test` harness handler is deleted in the harness-cleanup step (§8); `result.report`
-   in `toRunResult` is now dead (removed when kernel `RunnerJobResult.report` is slimmed, §9).
+`spec-writer` dispatches `kind:'agent'` `mode:'explore'` structured, clone `work` (the
+per-block `cat-factory/<blockId>`) via `buildMigratedBuiltInBody`; `toRunResult` coerces
+`custom`→`spec` (`coerceSpecDoc`). The SHARD+commit is a BUILT-IN backend post-op
+`specPostOp` (`@cat-factory/agents` `repo-ops/builtin.ts`) over `RepoFiles`, keyed by the
+engine's built-in map (`builtInPostOps`). It reproduces the harness `spec.ts` reconcile:
+(a) ORPHAN-PRUNE removed canonical `modules/**` shards (recursive `listDirectory` →
+deletions channel); (b) SEED-ONCE Gherkin (only commit a `features/<m>/<g>.feature` that
+is ABSENT, never overwrite); (c) drop the legacy monolithic files (`spec/spec.json`/
+`rules.md`/`version.json` + flat `features/*.feature`) on sight. Idempotent: no
+version.json, so it byte-compares each rendered shard via `getFile` and skips the commit
+when ALL match + nothing to seed/prune (replay-safe). Branch resolution: `builtInRepoOpBranch`
+is now kind-aware/async — spec-writer reuses `resolveRepoOpBranch({clone:'work'})` (ensure
+work branch, matching dispatch); blueprints keeps `prBranch ?? baseBranch`. **Prompt
+redesign (still wants a real-model smoketest as the rollout gate):** the explore agent now
+READS the baseline from its own checkout — `SPEC_WRITER_SYSTEM_PROMPT` updated to point at
+`spec/overview.md` + the `spec/modules/**` shards, and a new `specWriterUserPrompt(context)`
+carries the task increment + read-the-baseline + reuse-the-taxonomy guidance the harness
+`buildUserPrompt`/`renderTaxonomyInventory` used to inject. NO image bump (handleAgent
+explore-structured already serves it). Tests: `containerAgentJobBody.spec.ts` snapshot +
+spec pollJob coercion; `agents` `repo-ops/builtin.test.ts` (shard/seed-once/prune/legacy/
+idempotency); conformance assertion (post-op shards+commits onto the work branch, both
+runtimes). Changeset `migrate-spec-writer-generic-kind.md`. The dead `/spec` harness handler
+is deleted in the harness-cleanup step (§8, image bump); `result.spec` in `toRunResult` is
+now dead (removed when the kernel `RunnerJobResult.spec` is slimmed, §9). 5. ✅ **tester** — DONE this branch (`migrate-tester-generic-kind`, PR #200). `tester`
+dispatches `kind:'agent'` `mode:'explore'` structured (clone `pr`) via
+`buildMigratedBuiltInBody`; `toRunResult` coerces `custom`→`testReport`
+(`coerceTestReport`: the harness `/test` handler's conservative defaults + the
+greenlight-only-when-no-blocker rule, which `TesterController` re-applies). The harness
+`AgentJob` grew `infra?: {environment, noInfraDependencies?, composePath?, environmentUrl?}`
+and `runExploreMode` now stands the docker-compose infra up before the agent + tears it
+down in a `finally` (lifted `standUpInfra`/`tearDownInfra` into `agent.ts`), folding a
+stand-up-failure note into the prompt. The run-mode/ephemeral-URL guidance was NOT
+re-added in the harness — it already rides in the backend `roleSystemPrompt` (TESTER role)
+
+- `userPromptFor` (`testerEnvironmentSection` + `environmentSection`), so the migrated body
+  keeps the same prompts; only `kind` (test→agent), `mode`, `output`, and `test`→`infra`
+  changed in the snapshot. **Image bump 1.12.x → 1.13.0** (harness `src/**` changed: new
+  `infra` field + explore-mode infra lifecycle) — deploy tag + `wrangler.toml` set to 1.13.0.
+  Tests: `containerAgentJobBody.spec.ts` snapshot + tester pollJob coercion (2 cases);
+  harness `agent.test.ts` infra-parse (2 cases). Changeset `migrate-tester-generic-kind.md`.
+  The dead `/test` harness handler is deleted in the harness-cleanup step (§8); `result.report`
+  in `toRunResult` is now dead (removed when kernel `RunnerJobResult.report` is slimmed, §9).
+
 6. ✅ **conflict-resolver** — DONE (branch `migrate-conflict-bootstrap-generic-kind`).
    `AgentJob` grew `mergeBase?: string`; `runCodingMode` branches to `runConflictResolution`
    (full clone → `mergeBranch` → surface conflict hunks → refuse a half-resolved tree →
@@ -158,7 +159,7 @@ section + `backend/docs/custom-agents.md` are the current source of truth for th
    `container-coding` clone `pr` full + `mergeBase: repo.baseBranch` + the compact task-ref
    prompt. The outcome maps via `pushed` (no PR); `result.resolved` is gone.
 7. ✅ **bootstrap** — DONE. `AgentJob` grew `bootstrap?: {target, reference via repo, reinit,
-   forcePush, fromScratch?}` + `AgentResult.defaultBranch`; `runCodingMode` branches to
+forcePush, fromScratch?}` + `AgentResult.defaultBranch`; `runCodingMode` branches to
    `runBootstrap` (clone reference or empty dir → no-op guard → `reinitAndPush` to the target;
    `producedRepoContent`/`reinitAndPush` lifted). `ContainerRepoBootstrapper.startBootstrap`
    dispatches `kind:'agent'` coding with the bootstrap spec; `linkRepoToBlock` stays in

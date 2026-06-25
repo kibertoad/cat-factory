@@ -11,6 +11,7 @@
     { "path": "../../packages/agents/tsconfig.build.json" },
     { "path": "../../packages/consensus/tsconfig.build.json" },
     { "path": "../../packages/contracts/tsconfig.build.json" },
+    { "path": "../../packages/gates/tsconfig.build.json" },
     { "path": "../../packages/integrations/tsconfig.build.json" },
     { "path": "../../packages/kernel/tsconfig.build.json" },
     { "path": "../../packages/observability-langfuse/tsconfig.build.json" },

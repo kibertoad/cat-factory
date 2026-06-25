@@ -9,7 +9,7 @@ agreed during planning:
 1. Remove the per-finding "Save answer" button (value just typed into the field).
 2. Show a spinner on the board pipeline list while re-review/incorporation run; visualize companions.
 3. Add a "Recommend something" option backed by a new **Requirement Writer** companion (repo-
-   + standards- + web-grounded), reviewed by the human one by one.
+   - standards- + web-grounded), reviewed by the human one by one.
 4. Spec-writer incorporates **only business requirements**; "no new specs" is a valid outcome
    for technical tasks, and the spec reviewer corroborates it.
 5. An explicit **technical** label on a task, set by hand or by the review agents, that makes
@@ -30,6 +30,7 @@ facades + conformance), and the Nuxt frontend `pnpm --filter @cat-factory/app ty
 passes. Changeset: `.changeset/requirements-review-recommendations.md`.
 
 ### Item 1 — auto-save answers (no button)
+
 - `frontend/app/app/components/requirements/RequirementsReviewWindow.vue`
   - Removed the "Save answer" button. The answer `<UTextarea>` is seeded from `item.reply`
     (a `watch(review,…)`), persists on `@blur` via `persistDraft()` (only when changed), and
@@ -37,6 +38,7 @@ passes. Changeset: `.changeset/requirements-review-recommendations.md`.
   - The standalone "recorded answer" box now only renders for non-editable findings.
 
 ### Item 2 — board progress for the review companions
+
 - `frontend/app/app/composables/useReviewStage.ts` — `ReviewStage` gains `'recommending'`.
 - `'Recommending…'` label added alongside `Incorporating…`/`Re-reviewing…` in:
   `components/pipeline/PipelineProgress.vue`, `components/board/nodes/TaskCard.vue`,
@@ -46,7 +48,9 @@ passes. Changeset: `.changeset/requirements-review-recommendations.md`.
   `gateCompanionFor` / `COMPANION_STATE_META` (unchanged).
 
 ### Item 3 — "Recommend something" + the Requirement Writer (end-to-end)
+
 **Contracts** (`backend/packages/contracts/src/requirements.ts`)
+
 - `ReviewItemStatus` gains `'recommend_requested'` (counts as settled, not `open`).
 - `RecommendationStatus`, `RequirementRecommendation` (snapshots the source finding by
   title/detail, carries `recommendedText`, `note`, `groundedInFragment`), and a
@@ -56,6 +60,7 @@ passes. Changeset: `.changeset/requirements-review-recommendations.md`.
 - Frontend mirror: `frontend/app/app/types/requirements.ts`.
 
 **Persistence (both runtimes — parity)**
+
 - D1: column added in `backend/runtimes/cloudflare/migrations/0009_requirement_recommendations.sql`;
   `D1RequirementReviewRepository` reads/writes `recommendations`.
 - Node/Drizzle: `recommendations` column in `backend/runtimes/node/src/db/schema.ts`;
@@ -64,10 +69,12 @@ passes. Changeset: `.changeset/requirements-review-recommendations.md`.
   (hand-authored v1 snapshot+SQL — drizzle-kit needs a TTY this env lacks).
 
 **Prompt** (`backend/packages/agents`)
+
 - `WRITER_SYSTEM_PROMPT` in `src/agents/prompts/requirements.ts`; registered as
   `requirement-writer@v1` in `src/agents/kinds/versions.ts`; exported from `src/index.ts`.
 
 **Service** (`backend/packages/orchestration/src/modules/requirements/`)
+
 - `requirements.logic.ts`: `buildRecommendationPrompt` (grounding order fragments → spec/
   tech-spec → web), `coerceRecommendations`, grounding types.
 - `RequirementReviewService.ts`: `recommend()`, `acceptRecommendation()`,
@@ -80,10 +87,12 @@ passes. Changeset: `.changeset/requirements-review-recommendations.md`.
   `serviceFragmentIds`, unions block `fragmentIds`, resolves via `getFragment`).
 
 **Controller** (`backend/packages/server/src/modules/requirements/RequirementReviewController.ts`)
+
 - `POST /blocks/:blockId/requirement-review/recommend`
 - `POST /requirement-reviews/:reviewId/recommendations/:recId/{accept,reject,re-request}`
 
 **Frontend**
+
 - `composables/api/reviews.ts`: `requestRecommendations`, `acceptRecommendation`,
   `rejectRecommendation`, `reRequestRecommendation`.
 - `stores/requirements.ts`: matching actions, a `recommending` Set + `isRecommending`, and
@@ -105,6 +114,7 @@ technical-label inference assertions, run against a throwaway `postgres:18-alpin
 the spec-writer prompt lives in `@cat-factory/server`, not the harness). Not yet committed.
 
 ### Item 4 — business-only specs + "no new specs" outcome
+
 - New `AgentRunResult.noBusinessSpecs` channel (`kernel/ports/agent-executor.ts`). `toRunResult`
   (`server/.../ContainerAgentExecutor.ts`) reads `{"noBusinessSpecs":true}` off the spec-writer's
   structured JSON, sets the flag, and skips the `spec` channel; `specPostOp`
@@ -116,6 +126,7 @@ the spec-writer prompt lives in `@cat-factory/server`, not the harness). Not yet
   the writer's determination and emit the flag.
 
 ### Item 5 — explicit `technical` label
+
 - `Block.technical?: boolean | null` (`contracts/entities.ts` + frontend `types/domain.ts`);
   persisted on both runtimes (D1 `0010_block_technical.sql` + Drizzle column + hand-authored
   `drizzle/20260625140000_block_technical/` — a MERGED-head snapshot unioning the three branched
@@ -144,9 +155,11 @@ bump prompt versions on any prompt edit, add a changeset, and add cross-runtime 
 assertions. **Do not land a shared behaviour into only one facade** (parity is a showstopper).
 
 ### C — tech-spec writer/reviewer pair (after the architect)
+
 Mirror the spec-writer/spec-companion pattern. Captures architecture / tech-stack / cross-
 cutting patterns (pagination, REST-vs-gRPC, libraries) so the Requirement Writer can ground
 technical recommendations on `tech-spec/`.
+
 - New kinds `tech-spec-writer` (container coding) + `tech-spec-companion` (companion,
   `targets: ['tech-spec-writer']` in `backend/packages/agents/src/agents/kinds/companions.ts`).
 - `tech-spec-writer` system/user prompts (sibling of `SPEC_WRITER_SYSTEM_PROMPT` in
@@ -163,7 +176,9 @@ technical recommendations on `tech-spec/`.
 - Frontend: palette/result view for `tech-spec-writer` (snapshot/catalog seam).
 
 ### E — web-search UI connection + Writer gateway access
+
 Move Brave/SearXNG creds from env → a UI-managed connection (mirror `observability_connections`).
+
 - New `web_search_connections` table: D1 migration + Drizzle schema/column + generated
   migration + both repos; cipher tag `cat-factory:web-search`; inject `webSearchSecretCipher`
   in both facades' `container.ts`.
@@ -181,7 +196,9 @@ Move Brave/SearXNG creds from env → a UI-managed connection (mirror `observabi
   through the inline executor.
 
 ### F — items 4 & 5
+
 **Item 4 — business-only spec prompts (bump versions)**
+
 - Extend `SPEC_WRITER_SYSTEM_PROMPT` + `specWriterUserPrompt` (`ContainerAgentExecutor.ts`):
   incorporate ONLY business requirements; for purely technical tasks "no new specs" is valid —
   return the baseline unchanged and emit `result.noBusinessSpecs: true` (add optional field to
@@ -193,6 +210,7 @@ Move Brave/SearXNG creds from env → a UI-managed connection (mirror `observabi
   `CompanionController`.
 
 **Item 5 — the `technical` label**
+
 - Add `technical?: boolean` (default undefined) to `blockSchema`
   (`backend/packages/contracts/src/entities.ts`) + frontend mirror
   (`frontend/app/app/types/domain.ts`); persist (blocks-table column D1 ⇄ Drizzle + generated
@@ -211,6 +229,7 @@ Move Brave/SearXNG creds from env → a UI-managed connection (mirror `observabi
   versions.
 
 ### Tests still owed
+
 - Cross-runtime conformance (`backend/internal/conformance`): a recommendation grounded on a
   repo file + an accepted recommendation folding into the next incorporation; the `technical`
   label human-override + engine-inference; a tech-spec post-op commit. Run against **both**
@@ -220,6 +239,7 @@ Move Brave/SearXNG creds from env → a UI-managed connection (mirror `observabi
 ---
 
 ## How to verify what's landed
+
 - Backend build: `pnpm -r --filter './backend/**' build` (green).
 - Frontend typecheck: `cd frontend/app && pnpm typecheck` (green).
 - Full backend suite (Postgres needed for the Node suite): `pnpm test:run` from the repo root.
@@ -231,6 +251,7 @@ Move Brave/SearXNG creds from env → a UI-managed connection (mirror `observabi
   suggestion (note the "current standard" badge when it came from a fragment) → incorporate.
 
 ## Gotchas / notes for the next session
+
 - `drizzle-kit generate` needs a TTY (fails in the sandboxed shell). The Node migration for
   the recommendations column was hand-authored (folder + `migration.sql` + `snapshot.json`
   with a fresh `id`, `prevIds` chained to the previous snapshot, the new column in `ddl`).

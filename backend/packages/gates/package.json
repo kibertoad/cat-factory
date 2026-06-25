@@ -1,0 +1,40 @@
+{
+  "name": "@cat-factory/gates",
+  "version": "0.0.0",
+  "description": "The built-in polling-gate suite (CI, merge-conflicts, post-release health + the on-call escalation) for the Agent Architecture Board, authored entirely through the public gate-registry seam — depends only on @cat-factory/kernel + @cat-factory/contracts, never the engine. A deployment imports it for side effect and wires each gate's provider via the exported wireX handles.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/cat-factory.git",
+    "directory": "backend/packages/gates"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@cat-factory/contracts": "workspace:*",
+    "@cat-factory/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "7.0.1-rc",
+    "vitest": "^4.1.9"
+  }
+}

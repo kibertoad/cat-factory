@@ -287,7 +287,8 @@ export function buildRecommendationPrompt(
         'finding, recommend exactly that and return its id as "fromStandard"):',
       '',
     )
-    for (const fr of grounding.fragments) lines.push(`### standard ${fr.id}: ${fr.title}`, fr.body, '')
+    for (const fr of grounding.fragments)
+      lines.push(`### standard ${fr.id}: ${fr.title}`, fr.body, '')
   }
   if (grounding.specExcerpts.length) {
     lines.push('', 'IN-REPO SPECIFICATIONS (business `spec/` + technical `tech-spec/`):', '')

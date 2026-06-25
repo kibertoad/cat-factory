@@ -74,7 +74,9 @@ export function runnerPoolController(): Hono<AppEnv> {
   app.post('/runner-pool/connection/test', jsonBody(testRunnerPoolConnectionSchema), async (c) => {
     const runners = requireRunners(c)
     if (!runners) return unavailable(c)
-    return c.json(await runners.connectionService.testConnection(param(c, 'workspaceId'), c.req.valid('json')))
+    return c.json(
+      await runners.connectionService.testConnection(param(c, 'workspaceId'), c.req.valid('json')),
+    )
   })
 
   return app
