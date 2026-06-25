@@ -30,6 +30,7 @@ const RECOMMENDED_SLUGS = [
   'openai/gpt-5.5',
   'google/gemini-3-pro',
   'deepseek/deepseek-chat',
+  'moonshotai/kimi-k2.7-code',
 ]
 
 // Whether the workspace/user has an OpenRouter key connected at any reachable scope.
@@ -105,18 +106,35 @@ async function connectKey() {
   if (!keyValue.value.trim() || !workspace.workspaceId) return
   connectingKey.value = true
   try {
+    const scope = keyScope.value
     const input = {
       provider: 'openrouter' as const,
       label: keyLabel.value.trim() || 'openrouter key',
       key: keyValue.value.trim(),
     }
-    if (keyScope.value === 'workspace') await apiKeys.addWorkspaceKey(input)
-    else await apiKeys.addUserKey(input)
+    // The save endpoint stores the key WITHOUT validating it, so a wrong/expired key
+    // would otherwise be reported as "connected". Probe OpenRouter with the freshly
+    // stored key and only announce success when it's actually reachable; on rejection
+    // roll the key back so `keyConnected` stays false and the form remains for a retry.
+    const created =
+      scope === 'workspace' ? await apiKeys.addWorkspaceKey(input) : await apiKeys.addUserKey(input)
+    const result = await store.refresh(workspace.workspaceId)
+    if (!result.reachable) {
+      if (created) {
+        if (scope === 'workspace') await apiKeys.removeWorkspaceKey(created.id).catch(() => {})
+        else await apiKeys.removeUserKey(created.id).catch(() => {})
+      }
+      toast.add({
+        title: 'Could not connect key',
+        description: store.refreshError ?? 'OpenRouter rejected the key.',
+        icon: 'i-lucide-triangle-alert',
+        color: 'error',
+      })
+      return
+    }
     keyValue.value = ''
     keyLabel.value = ''
     toast.add({ title: 'OpenRouter key connected', icon: 'i-lucide-check', color: 'success' })
-    // Now that a key exists, load the live catalog automatically.
-    await refresh()
   } catch (e) {
     toast.add({
       title: 'Could not connect key',
