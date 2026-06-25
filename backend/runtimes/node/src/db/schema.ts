@@ -166,6 +166,7 @@ export const blocks = pgTable(
     model_id: text('model_id'),
     pull_request: text('pull_request'),
     merge_preset_id: text('merge_preset_id'),
+    model_preset_id: text('model_preset_id'),
     pipeline_id: text('pipeline_id'),
     // Task-level agent config-contribution values (JSON id->value map).
     agent_config: text('agent_config'),
@@ -328,21 +329,29 @@ export const tokenUsage = pgTable(
   (t) => [index('idx_token_usage_created').on(t.created_at)],
 )
 
-// Per-workspace, per-agent-kind default model selection (mirror of D1 migration
-// 0028). One row per (workspace, agent kind); the model each kind defaults to,
-// overriding the env routing for that workspace. A kind absent for a workspace
-// falls back to the env routing.
-export const workspaceModelDefaults = pgTable(
-  'workspace_model_defaults',
+// Per-workspace model presets (mirror of D1 migration 0006's `model_presets`). A
+// preset is one `base_model_id` applied to every agent kind plus per-kind `overrides`
+// (JSON object, agentKind -> model id). A task selects one via `blocks.model_preset_id`;
+// none -> the workspace default (`is_default`, exactly one per workspace — the
+// repository demotes the prior default when promoting a new one). `is_default` is 0/1
+// to mirror the D1 integer flag. Replaces the old `workspace_model_defaults` map.
+export const modelPresets = pgTable(
+  'model_presets',
   {
     workspace_id: text('workspace_id').notNull(),
-    agent_kind: text('agent_kind').notNull(),
-    model_id: text('model_id').notNull(),
-    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+    id: text('id').notNull(),
+    name: text('name').notNull(),
+    base_model_id: text('base_model_id').notNull(),
+    overrides: text('overrides').notNull().default('{}'),
+    is_default: integer('is_default').notNull().default(0),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.agent_kind] })],
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    // Fast lookup of a workspace's default preset (mirrors idx_model_presets_default).
+    index('idx_model_presets_default').on(t.workspace_id, t.is_default),
+  ],
 )
-
 // Per-workspace default service-fragment selection (mirror of D1 migration 0040). One
 // row per workspace; the best-practice fragment ids new services inherit, JSON array.
 export const workspaceFragmentDefaults = pgTable('workspace_fragment_defaults', {

@@ -158,12 +158,12 @@ const commands = computed<Command[]>(() => {
     run: () => ui.openWorkspaceSettings(),
   })
   list.push({
-    id: 'model-defaults',
-    label: 'Default models for agents',
+    id: 'model-configuration',
+    label: 'Model Configuration',
     group: 'Workspace',
     icon: 'i-lucide-cpu',
-    keywords: 'model llm routing agent kind default',
-    run: () => ui.openModelDefaults(),
+    keywords: 'model llm routing agent kind default preset configuration',
+    run: () => ui.openModelConfig(),
   })
   list.push({
     id: 'service-fragment-defaults',

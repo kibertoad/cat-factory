@@ -281,6 +281,7 @@ export interface ExecutionServiceDependencies {
   resolveWorkspaceModelDefault?: (
     workspaceId: string,
     agentKind: string,
+    modelPresetId?: string,
   ) => Promise<string | undefined>
   /**
    * Optional: resolve the provider capabilities (configured direct keys +
@@ -453,6 +454,7 @@ export class ExecutionService {
   private readonly resolveWorkspaceModelDefault?: (
     workspaceId: string,
     agentKind: string,
+    modelPresetId?: string,
   ) => Promise<string | undefined>
   /** Whether the runtime can run the Tester's local DinD infra (false = limited mode). */
   private readonly localTestInfraSupported: boolean
@@ -627,6 +629,7 @@ export class ExecutionService {
     return this.resolveIndividualVendors(
       workspaceId,
       block.modelId,
+      block.modelPresetId,
       pipeline?.agentKinds ?? [],
       hasPersonalSubscription,
     )
@@ -645,6 +648,7 @@ export class ExecutionService {
     return this.resolveIndividualVendors(
       workspaceId,
       block.modelId,
+      block.modelPresetId,
       run.steps.map((s) => s.agentKind),
       hasPersonalSubscription,
     )
@@ -660,6 +664,7 @@ export class ExecutionService {
   private resolveIndividualVendors(
     workspaceId: string,
     blockModelId: string | undefined,
+    modelPresetId: string | undefined,
     agentKinds: string[],
     hasPersonalSubscription: HasPersonalSubscription,
   ): Promise<SubscriptionVendor[]> {
@@ -667,7 +672,7 @@ export class ExecutionService {
     return resolveIndividualVendors(
       blockModelId,
       agentKinds,
-      resolveDefault ? (kind) => resolveDefault(workspaceId, kind) : undefined,
+      resolveDefault ? (kind) => resolveDefault(workspaceId, kind, modelPresetId) : undefined,
       hasPersonalSubscription,
     )
   }
@@ -726,7 +731,7 @@ export class ExecutionService {
       check(block.modelId)
     } else if (this.resolveWorkspaceModelDefault) {
       for (const kind of pipeline.agentKinds) {
-        check(await this.resolveWorkspaceModelDefault(workspaceId, kind))
+        check(await this.resolveWorkspaceModelDefault(workspaceId, kind, block.modelPresetId))
       }
     }
     if (unconfigured.size > 0) {

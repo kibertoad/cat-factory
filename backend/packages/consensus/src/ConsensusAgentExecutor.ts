@@ -53,6 +53,7 @@ export interface ConsensusAgentExecutorDependencies {
   resolveWorkspaceModelDefault?: (
     workspaceId: string,
     agentKind: string,
+    modelPresetId?: string,
   ) => Promise<string | undefined>
   /** Persists the session transcript (the observability surface). Optional. */
   sessionRepository?: ConsensusSessionRepository
@@ -135,6 +136,7 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
       {
         agentKind: context.agentKind,
         blockModelId: context.block.modelId,
+        modelPresetId: context.block.modelPresetId,
         workspaceId: context.workspaceId,
       },
     )

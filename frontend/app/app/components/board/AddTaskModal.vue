@@ -18,6 +18,7 @@ const board = useBoardStore()
 const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const mergePresets = useMergePresetsStore()
+const modelPresets = useModelPresetsStore()
 const pipelines = usePipelinesStore()
 const agentConfig = useAgentConfigStore()
 const toast = useToast()
@@ -94,6 +95,7 @@ const recurringFrameId = computed(() => {
 // Run configuration picked up front. Empty string = use the default (workspace
 // default merge preset / no pinned pipeline).
 const mergePresetId = ref('')
+const modelPresetId = ref('')
 const pipelineId = ref('')
 
 const presetMenu = computed(() => [
@@ -119,6 +121,32 @@ const selectedPresetLabel = computed(() => {
       : 'Workspace default'
   }
   return mergePresets.presets.find((p) => p.id === mergePresetId.value)?.name ?? 'Workspace default'
+})
+
+// Model preset: which model each agent runs on. Empty = workspace default preset.
+const modelPresetMenu = computed(() => [
+  [
+    {
+      label: modelPresets.defaultPreset
+        ? `Default (${modelPresets.defaultPreset.name})`
+        : 'Workspace default',
+      icon: 'i-lucide-rotate-ccw',
+      onSelect: () => (modelPresetId.value = ''),
+    },
+    ...modelPresets.presets.map((p) => ({
+      label: p.name,
+      icon: 'i-lucide-cpu',
+      onSelect: () => (modelPresetId.value = p.id),
+    })),
+  ],
+])
+const selectedModelPresetLabel = computed(() => {
+  if (!modelPresetId.value) {
+    return modelPresets.defaultPreset
+      ? `Default (${modelPresets.defaultPreset.name})`
+      : 'Workspace default'
+  }
+  return modelPresets.presets.find((p) => p.id === modelPresetId.value)?.name ?? 'Workspace default'
 })
 
 const pipelineMenu = computed(() => [
@@ -242,6 +270,7 @@ watch(open, (isOpen) => {
   timeboxHours.value = undefined
   docKind.value = ''
   mergePresetId.value = ''
+  modelPresetId.value = ''
   pipelineId.value = ''
   agentConfigValues.value = {}
   pendingContext.value = []
@@ -278,6 +307,7 @@ async function add() {
         taskType: taskType.value as CreateTaskType,
         ...(typeFields ? { taskTypeFields: typeFields } : {}),
         ...(mergePresetId.value ? { mergePresetId: mergePresetId.value } : {}),
+        ...(modelPresetId.value ? { modelPresetId: modelPresetId.value } : {}),
         ...(pipelineId.value ? { pipelineId: pipelineId.value } : {}),
         ...(Object.keys(agentConfigValues.value).length
           ? { agentConfig: agentConfigValues.value }
@@ -448,6 +478,21 @@ async function add() {
                   class="w-full justify-between"
                 >
                   {{ selectedPresetLabel }}
+                </UButton>
+              </UDropdownMenu>
+            </UFormField>
+
+            <UFormField label="Model preset">
+              <UDropdownMenu :items="modelPresetMenu" class="w-full">
+                <UButton
+                  color="neutral"
+                  variant="subtle"
+                  size="sm"
+                  icon="i-lucide-cpu"
+                  trailing-icon="i-lucide-chevron-down"
+                  class="w-full justify-between"
+                >
+                  {{ selectedModelPresetLabel }}
                 </UButton>
               </UDropdownMenu>
             </UFormField>

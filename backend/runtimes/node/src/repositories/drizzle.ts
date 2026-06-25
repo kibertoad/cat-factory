@@ -28,7 +28,8 @@ import type {
   ObservabilityProviderKind,
   ReleaseHealthConfigRecord,
   ReleaseHealthConfigRepository,
-  ModelDefaultsRepository,
+  ModelPreset,
+  ModelPresetRepository,
   ServiceFragmentDefaultsRepository,
   LlmCallMetric,
   LlmCallMetricRepository,
@@ -105,10 +106,10 @@ import {
   services,
   tokenUsage,
   trackerSettings,
+  modelPresets,
   userIdentities,
   users,
   workspaceFragmentDefaults,
-  workspaceModelDefaults,
   workspaceServices,
   workspaceSettings,
   workspaces,
@@ -1078,56 +1079,115 @@ class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
   }
 }
 
+type ModelPresetRow = typeof modelPresets.$inferSelect
+
+function rowToModelPreset(row: ModelPresetRow): ModelPreset {
+  let overrides: Record<string, string> = {}
+  try {
+    const parsed = JSON.parse(row.overrides) as unknown
+    if (parsed && typeof parsed === 'object') overrides = parsed as Record<string, string>
+  } catch {
+    // A malformed JSON column degrades to no overrides (base model applies to all).
+  }
+  return {
+    id: row.id,
+    name: row.name,
+    baseModelId: row.base_model_id,
+    overrides,
+    isDefault: row.is_default === 1,
+    createdAt: row.created_at,
+  }
+}
+
 /**
- * A workspace's per-agent-kind default models, one row per (workspace, agent kind)
- * in `workspace_model_defaults`. `replace` rewrites the whole map for a workspace
- * in a transaction (delete-all then insert-each), so a kind omitted is cleared.
+ * Per-workspace model presets over Postgres (the Drizzle mirror of the Worker's
+ * `D1ModelPresetRepository`, migration 0006). A preset is one `base_model_id` applied
+ * to every agent kind plus per-kind `overrides` (a JSON column). Enforces the
+ * single-default invariant: promoting a preset to default demotes every other in the
+ * workspace before the upsert. The default preset cannot be removed. Behaviourally
+ * identical to the D1 repo so the cross-runtime conformance suite asserts the same
+ * preset resolution.
  */
-class DrizzleModelDefaultsRepository implements ModelDefaultsRepository {
+class DrizzleModelPresetRepository implements ModelPresetRepository {
   constructor(private readonly db: DrizzleDb) {}
 
-  async get(workspaceId: string): Promise<Record<string, string>> {
+  async get(workspaceId: string, id: string): Promise<ModelPreset | null> {
     const rows = await this.db
-      .select({
-        agentKind: workspaceModelDefaults.agent_kind,
-        modelId: workspaceModelDefaults.model_id,
-      })
-      .from(workspaceModelDefaults)
-      .where(eq(workspaceModelDefaults.workspace_id, workspaceId))
-    const map: Record<string, string> = {}
-    for (const row of rows) map[row.agentKind] = row.modelId
-    return map
+      .select()
+      .from(modelPresets)
+      .where(and(eq(modelPresets.workspace_id, workspaceId), eq(modelPresets.id, id)))
+      .limit(1)
+    return rows[0] ? rowToModelPreset(rows[0]) : null
   }
 
-  async getForKind(workspaceId: string, agentKind: string): Promise<string | null> {
-    const [row] = await this.db
-      .select({ modelId: workspaceModelDefaults.model_id })
-      .from(workspaceModelDefaults)
+  async list(workspaceId: string): Promise<ModelPreset[]> {
+    const rows = await this.db
+      .select()
+      .from(modelPresets)
+      .where(eq(modelPresets.workspace_id, workspaceId))
+      .orderBy(modelPresets.created_at)
+    return rows.map(rowToModelPreset)
+  }
+
+  async getDefault(workspaceId: string): Promise<ModelPreset | null> {
+    const rows = await this.db
+      .select()
+      .from(modelPresets)
+      .where(and(eq(modelPresets.workspace_id, workspaceId), eq(modelPresets.is_default, 1)))
+      .orderBy(modelPresets.created_at)
+      .limit(1)
+    return rows[0] ? rowToModelPreset(rows[0]) : null
+  }
+
+  async upsert(workspaceId: string, preset: ModelPreset): Promise<void> {
+    const values = {
+      workspace_id: workspaceId,
+      id: preset.id,
+      name: preset.name,
+      base_model_id: preset.baseModelId,
+      overrides: JSON.stringify(preset.overrides),
+      is_default: preset.isDefault ? 1 : 0,
+      created_at: preset.createdAt,
+    }
+    // Demote + upsert run in one transaction so the single-default invariant can never
+    // be observed broken (zero or two defaults) by a concurrent reader or partial failure.
+    await this.db.transaction(async (tx) => {
+      if (preset.isDefault) {
+        await tx
+          .update(modelPresets)
+          .set({ is_default: 0 })
+          .where(
+            and(
+              eq(modelPresets.workspace_id, workspaceId),
+              sql`${modelPresets.id} <> ${preset.id}`,
+            ),
+          )
+      }
+      await tx
+        .insert(modelPresets)
+        .values(values)
+        .onConflictDoUpdate({
+          target: [modelPresets.workspace_id, modelPresets.id],
+          set: {
+            name: values.name,
+            base_model_id: values.base_model_id,
+            overrides: values.overrides,
+            is_default: values.is_default,
+          },
+        })
+    })
+  }
+
+  async remove(workspaceId: string, id: string): Promise<void> {
+    await this.db
+      .delete(modelPresets)
       .where(
         and(
-          eq(workspaceModelDefaults.workspace_id, workspaceId),
-          eq(workspaceModelDefaults.agent_kind, agentKind),
+          eq(modelPresets.workspace_id, workspaceId),
+          eq(modelPresets.id, id),
+          eq(modelPresets.is_default, 0),
         ),
       )
-    return row ? row.modelId : null
-  }
-
-  async replace(workspaceId: string, defaults: Record<string, string>): Promise<void> {
-    const updatedAt = Date.now()
-    const values = Object.entries(defaults).map(([agentKind, modelId]) => ({
-      workspace_id: workspaceId,
-      agent_kind: agentKind,
-      model_id: modelId,
-      updated_at: updatedAt,
-    }))
-    // Rewrite the whole per-kind map atomically: clear the workspace's rows, then
-    // insert one per entry, so a reader never sees a partial map.
-    await this.db.transaction(async (tx) => {
-      await tx
-        .delete(workspaceModelDefaults)
-        .where(eq(workspaceModelDefaults.workspace_id, workspaceId))
-      if (values.length > 0) await tx.insert(workspaceModelDefaults).values(values)
-    })
   }
 }
 
@@ -2342,7 +2402,7 @@ export interface CoreRepositories {
   tokenUsageRepository: TokenUsageRepository
   llmCallMetricRepository: LlmCallMetricRepository
   agentRunRepository: AgentRunRepository
-  modelDefaultsRepository: ModelDefaultsRepository
+  modelPresetRepository: ModelPresetRepository
   serviceFragmentDefaultsRepository: ServiceFragmentDefaultsRepository
   pipelineScheduleRepository: PipelineScheduleRepository
   trackerSettingsRepository: TrackerSettingsRepository
@@ -2372,7 +2432,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     tokenUsageRepository: new DrizzleTokenUsageRepository(db),
     llmCallMetricRepository: new DrizzleLlmCallMetricRepository(db),
     agentRunRepository: new DrizzleAgentRunRepository(db),
-    modelDefaultsRepository: new DrizzleModelDefaultsRepository(db),
+    modelPresetRepository: new DrizzleModelPresetRepository(db),
     serviceFragmentDefaultsRepository: new DrizzleServiceFragmentDefaultsRepository(db),
     pipelineScheduleRepository: new DrizzlePipelineScheduleRepository(db),
     trackerSettingsRepository: new DrizzleTrackerSettingsRepository(db),

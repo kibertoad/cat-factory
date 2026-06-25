@@ -79,7 +79,7 @@ export const useUiStore = defineStore('ui', () => {
   // today, pluggable). NB: distinct from `observabilityInstanceId` below, which is the
   // LLM per-call observability panel.
   const observabilityConnectionOpen = ref(false)
-  const modelDefaultsOpen = ref(false)
+  const modelConfigOpen = ref(false)
   // LLM-vendor subscription credentials (the token pool powering the Claude Code
   // / Codex harnesses).
   const vendorCredentialsOpen = ref(false)
@@ -306,11 +306,11 @@ export const useUiStore = defineStore('ui', () => {
   function closeObservabilityConnection() {
     observabilityConnectionOpen.value = false
   }
-  function openModelDefaults() {
-    modelDefaultsOpen.value = true
+  function openModelConfig() {
+    modelConfigOpen.value = true
   }
-  function closeModelDefaults() {
-    modelDefaultsOpen.value = false
+  function closeModelConfig() {
+    modelConfigOpen.value = false
   }
   function openVendorCredentials() {
     vendorCredentialsOpen.value = true
@@ -376,7 +376,7 @@ export const useUiStore = defineStore('ui', () => {
     workspaceSettingsOpen,
     workspaceSettingsTab,
     observabilityConnectionOpen,
-    modelDefaultsOpen,
+    modelConfigOpen,
     vendorCredentialsOpen,
     localModelsOpen,
     openRouterOpen,
@@ -430,8 +430,8 @@ export const useUiStore = defineStore('ui', () => {
     setWorkspaceSettingsTab,
     openObservabilityConnection,
     closeObservabilityConnection,
-    openModelDefaults,
-    closeModelDefaults,
+    openModelConfig,
+    closeModelConfig,
     openVendorCredentials,
     closeVendorCredentials,
     openLocalModels,

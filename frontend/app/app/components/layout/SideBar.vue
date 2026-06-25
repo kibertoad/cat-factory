@@ -174,9 +174,9 @@ watch(
           size="sm"
           icon="i-lucide-cpu"
           class="justify-start"
-          @click="ui.openModelDefaults()"
+          @click="ui.openModelConfig()"
         >
-          Default models
+          Model Configuration
         </UButton>
       </div>
     </section>

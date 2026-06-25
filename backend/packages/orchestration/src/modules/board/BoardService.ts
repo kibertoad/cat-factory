@@ -358,6 +358,7 @@ export class BoardService {
     // task's auto-merge, and the pipeline its Run controls default to. Empty strings
     // are treated as "not set" (workspace default preset / no pinned pipeline).
     if (input.mergePresetId) block.mergePresetId = input.mergePresetId
+    if (input.modelPresetId) block.modelPresetId = input.modelPresetId
     if (input.pipelineId) block.pipelineId = input.pipelineId
     // Task-level agent-contributed config values (e.g. the Tester's environment),
     // chosen on the creation form from the selected pipeline's contributing agents.
