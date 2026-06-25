@@ -95,12 +95,16 @@ export const blockSchema = v.object({
    * with no externally-observable behaviour). When `true` the implementer treats the task
    * definition / incorporated requirements as the PRIMARY source of truth and the
    * committed specs as a regression-spotting reference, not the authority; the spec-writer
-   * is free to produce no business specs. A human may set it explicitly (creation checkbox
-   * / inspector toggle) and that choice is NEVER overridden by the engine; left unset
-   * it is inferred from the spec phase (the writer's `noBusinessSpecs` + the spec-companion's
-   * corroboration). Only meaningful on `task`-level blocks. `null`/absent ⇒ not yet
-   * determined (the engine may infer it); a concrete `true`/`false` is authoritative. The
-   * inspector toggle is tri-state (unset / technical / business): "unset" sends `null`.
+   * is free to produce no business specs. `false` is the explicit BUSINESS case: the
+   * spec-writer is then required to produce specs (it is told not to claim "no business
+   * specs"), and the implementer follows the spec as usual. A human may set it explicitly
+   * (creation checkbox / inspector toggle); left unset it is inferred from the spec phase
+   * (the writer's `noBusinessSpecs` + the spec-companion's corroboration). Only meaningful
+   * on `task`-level blocks. `null`/absent ⇒ not yet determined (the engine may infer it).
+   * Once a concrete `true`/`false` is recorded it is authoritative and the engine does NOT
+   * re-infer over it — whether it was set by a human or a prior inference — for stability;
+   * a human can still change it any time via the tri-state inspector toggle (unset /
+   * technical / business, where "unset" sends `null` to re-open it to inference).
    */
   technical: v.optional(v.nullable(v.boolean())),
   /**
@@ -900,6 +904,14 @@ export const pipelineStepSchema = v.object({
    * label. Absent for every other kind / a writer that produced specs.
    */
   noBusinessSpecs: v.optional(v.boolean()),
+  /**
+   * Set on a `spec-companion` step from its `technicalCorroborated` verdict (whether it
+   * agreed the task is purely technical). Recorded on the step — not just read off the
+   * live assessment — so the engine can infer the block's `technical` label both on the
+   * companion's automatic convergence AND on a human "proceed" past the iteration cap,
+   * where only the persisted step survives. Absent for every other kind / no opinion.
+   */
+  technicalCorroborated: v.optional(v.boolean()),
   /** Text the agent produced for this step (when LLM execution is enabled). */
   output: v.optional(v.string()),
   /**

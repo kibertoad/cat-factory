@@ -2,10 +2,15 @@
 //
 // The spec-writer determines whether a task is purely technical (it produces NO business
 // specs — `noBusinessSpecs`), and the spec-companion corroborates or disputes that
-// determination (`technicalCorroborated`). Those two signals coexist exactly once: when
-// the spec-companion CONVERGES (passes). This function turns them into the inferred
-// `technical` label, honouring the rule that a human-set value is authoritative and is
-// NEVER overridden by the engine.
+// determination (`technicalCorroborated`). Both signals are persisted on their steps, so
+// the engine can run this inference when the spec-companion CONVERGES (passes) AND when a
+// human PROCEEDS past the companion's iteration cap.
+//
+// Authority/stability rule: once a concrete label is recorded it is frozen — this function
+// returns `undefined` (no change) for any existing `true`/`false`, whether it was set by a
+// human or by a prior inference. A human-set value is thus never overridden by the engine,
+// and an inferred value is not silently flip-flopped on a re-run either; to re-open a task
+// to inference a human clears the label back to "unset" (`null`) via the inspector toggle.
 
 /**
  * Decide the `technical` label to persist on a block from the spec phase, or `undefined`
@@ -20,8 +25,9 @@
  * @returns the boolean to persist, or `undefined` to make no change.
  *
  * Rules:
- *  - A concrete existing label (`true`/`false`) is authoritative — return `undefined`
- *    (never override a human's, or an already-settled, choice).
+ *  - A concrete existing label (`true`/`false`) is authoritative and frozen — return
+ *    `undefined` (never override a human's, or an already-settled inferred, choice; a human
+ *    re-opens it by clearing the label to `null`).
  *  - With no companion opinion (`technicalCorroborated === undefined`) infer nothing.
  *  - Otherwise the label is `noBusinessSpecs && technicalCorroborated`: a task is technical
  *    only when the writer produced no business specs AND the companion agrees. Specs

@@ -240,8 +240,11 @@ export function linkedContextSection(context: AgentRunContext): string {
 /**
  * Render the "this task is TECHNICAL" marker when the block carries the resolved
  * technical label, or an empty string otherwise. The static rule for how to act on it
- * lives in the build system prompt; this is the per-task signal that activates it (so the
+ * lives in the BUILD system prompt; this is the per-task signal that activates it (so the
  * implementer knows to treat the task definition as primary and the spec as a reference).
+ * Only the build user prompt appends it (see {@link renderStandardUserPrompt}) — the
+ * architect/reviewer phases have no matching system rule, so they keep their normal,
+ * spec-led behaviour.
  */
 export function technicalContextSection(context: AgentRunContext): string {
   if (!context.block.technical) return ''
@@ -260,7 +263,9 @@ export function renderStandardUserPrompt(phase: StandardPhase, context: AgentRun
     USER_TEMPLATES[phase](toView(context)) +
     linkedContextSection(context) +
     environmentSection(context) +
-    technicalContextSection(context)
+    // Only the implementer (build) acts on the TECHNICAL marker — its system prompt carries
+    // the matching rule. The architect/reviewer have no such rule, so don't change their prompt.
+    (phase === 'build' ? technicalContextSection(context) : '')
   // Collapse the blank lines that conditionals leave behind, then trim.
   return rendered.replace(/\n{3,}/g, '\n\n').trim()
 }

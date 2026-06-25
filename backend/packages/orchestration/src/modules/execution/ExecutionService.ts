@@ -25,7 +25,6 @@ import {
   parseOnCallAssessment,
   parseSpecDoc,
   DEFAULT_COMPANION_MAX_ATTEMPTS,
-  type CompanionAssessment,
   type OnCallAssessment,
 } from '@cat-factory/contracts'
 import {
@@ -599,8 +598,8 @@ export class ExecutionService {
       parkStepOnDecision: (ws, i, s, p) => this.parkStepOnDecision(ws, i, s, p),
       raiseDecisionRequired: (ws, i) => this.raiseDecisionRequired(ws, i),
       loopCompanionProducer: (i, ci, rw) => this.loopCompanionProducer(i, ci, rw),
-      inferTechnicalLabel: (ws, block, producer, assessment) =>
-        this.inferBlockTechnical(ws, block, producer, assessment),
+      inferTechnicalLabel: (ws, block, producer, companionStep) =>
+        this.inferBlockTechnical(ws, block, producer, companionStep),
     })
     this.testerController = new TesterController({
       blockRepository,
@@ -1625,25 +1624,29 @@ export class ExecutionService {
   }
 
   /**
-   * Infer + persist the block's `technical` label on spec-companion convergence (item 5):
+   * Infer + persist the block's `technical` label from the settled spec phase (item 5):
    * combine the spec-writer's `noBusinessSpecs` determination (recorded on the producer
-   * step) with the companion's `technicalCorroborated` verdict. A human-set value is
-   * authoritative and is NEVER overridden (the pure {@link inferTechnicalLabel} returns
-   * `undefined` then). Best-effort: a persistence hiccup must not wedge the run.
+   * step) with the spec-companion's `technicalCorroborated` verdict (recorded on the
+   * companion step). Driven both on the companion's automatic convergence and on a human
+   * "proceed" past the iteration cap, since both signals live on the persisted steps. An
+   * already-determined value is authoritative and is NEVER re-inferred (the pure
+   * {@link inferTechnicalLabel} returns `undefined` then). Best-effort: the label is a
+   * convenience (re-inferable, and human-overridable), so a persistence hiccup must NOT
+   * wedge the run — a failed write is swallowed.
    */
   private async inferBlockTechnical(
     workspaceId: string,
     block: Block,
     producerStep: PipelineStep,
-    assessment: CompanionAssessment,
+    companionStep: PipelineStep,
   ): Promise<void> {
     const technical = inferTechnicalLabel(
       block.technical,
       producerStep.noBusinessSpecs === true,
-      assessment.technicalCorroborated,
+      companionStep.technicalCorroborated,
     )
     if (technical === undefined) return
-    await this.blockRepository.update(workspaceId, block.id, { technical })
+    await this.blockRepository.update(workspaceId, block.id, { technical }).catch(() => {})
   }
 
   /**
@@ -3087,6 +3090,15 @@ export class ExecutionService {
       proceed: async () => {
         step.companion!.exceeded = undefined
         step.approval!.status = 'approved'
+        // The spec-companion never reached its automatic PASS branch, but both signals are
+        // persisted (the producer's `noBusinessSpecs` + this step's `technicalCorroborated`),
+        // so infer the block's `technical` label here too — best-effort, human-authority
+        // preserved — before advancing.
+        if (step.agentKind === 'spec-companion') {
+          const producer = instance.steps[this.companionProducerIndex(instance, stepIndex)]
+          const block = await this.blockRepository.get(workspaceId, instance.blockId)
+          if (producer && block) await this.inferBlockTechnical(workspaceId, block, producer, step)
+        }
         await this.advancePastResolvedGate(workspaceId, instance, stepIndex)
       },
     })

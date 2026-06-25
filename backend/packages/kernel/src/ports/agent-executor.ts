@@ -69,12 +69,14 @@ export interface AgentRunContext {
      */
     resolvedFragments?: { id: string; body: string }[]
     /**
-     * Whether this task is purely TECHNICAL (a refactor / non-functional / internal
-     * change). When `true`, the implementer treats the task definition / incorporated
-     * requirements as the PRIMARY source of truth and the committed specs as a
-     * regression-spotting reference, not the authority. Set by the engine from the block's
-     * resolved `technical` label (human-set or inferred from the spec phase); absent ⇒ not
-     * a technical task (the normal spec-led behaviour).
+     * The task's resolved BUSINESS-vs-TECHNICAL label, when determined. `true` ⇒ purely
+     * TECHNICAL (a refactor / non-functional / internal change): the implementer treats the
+     * task definition / incorporated requirements as the PRIMARY source of truth and the
+     * committed specs as a regression-spotting reference, and the spec-writer may produce no
+     * business specs. `false` ⇒ explicitly BUSINESS: the spec-writer MUST produce specs (it
+     * is told not to claim "no business specs"). Set by the engine from the block's resolved
+     * `technical` label (human-set or inferred from the spec phase); absent ⇒ not yet
+     * determined (the normal spec-led behaviour).
      */
     technical?: boolean
     /** Id of the model picked for this block (overrides the agent routing), if any. */

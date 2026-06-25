@@ -1439,6 +1439,22 @@ function blueprintUserPrompt(): string {
 function specWriterUserPrompt(context: AgentRunContext): string {
   const block = context.block
   const header = `### ${block.title || '(untitled task)'}${block.id ? ` (block ${block.id})` : ''}`
+  // Honour an explicit human-set BUSINESS/TECHNICAL label: a task pinned business HAS
+  // business requirements, so the "no new specs" escape hatch is withdrawn; a task pinned
+  // technical is told the empty outcome is expected. Left unset, the writer self-determines.
+  const technicalGuidance =
+    block.technical === false
+      ? 'This task is explicitly flagged BUSINESS: it HAS business requirements, so you MUST ' +
+        'return the full updated specification. Do NOT respond with {"noBusinessSpecs": true}.'
+      : block.technical === true
+        ? 'This task is explicitly flagged TECHNICAL (a refactor / dependency bump / internal ' +
+          'or non-functional change with NO new externally-observable behaviour): "no business ' +
+          'requirements" is the expected outcome — respond with ONLY {"noBusinessSpecs": true} ' +
+          'and change nothing, unless you find genuine externally-observable behaviour to spec.'
+        : 'If this task is purely TECHNICAL (a refactor / dependency bump / internal or ' +
+          'non-functional change that introduces NO new externally-observable behaviour), it ' +
+          'has no business requirements: respond with ONLY {"noBusinessSpecs": true} and ' +
+          'change nothing.'
   return [
     'Apply this ONE task as an INCREMENT onto the service specification.',
     '',
@@ -1458,10 +1474,8 @@ function specWriterUserPrompt(context: AgentRunContext): string {
     '',
     `${header}\n\n${block.description?.trim() || '(no description)'}`,
     '',
-    'If this task is purely TECHNICAL (a refactor / dependency bump / internal or ' +
-      'non-functional change that introduces NO new externally-observable behaviour), it has ' +
-      'no business requirements: respond with ONLY {"noBusinessSpecs": true} and change ' +
-      'nothing. Otherwise return the COMPLETE updated document (baseline plus this task’s ' +
+    technicalGuidance +
+      ' Otherwise return the COMPLETE updated document (baseline plus this task’s ' +
       'increment), not a diff. Respond with ONLY the JSON object — no prose, no code fences.',
   ].join('\n')
 }

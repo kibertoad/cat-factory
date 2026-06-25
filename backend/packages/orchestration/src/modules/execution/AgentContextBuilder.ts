@@ -148,9 +148,11 @@ export class AgentContextBuilder {
         description,
         fragmentIds: block.fragmentIds,
         ...(resolved ? { resolvedFragments: resolved.fragments } : {}),
-        // A concrete technical label (true ⇒ task definition is primary, specs are a
-        // regression reference); omitted when unset/business so the prompt stays unchanged.
-        ...(block.technical === true ? { technical: true } : {}),
+        // The resolved technical label, threaded whenever a concrete determination exists
+        // (true ⇒ task definition is primary + spec-writer may skip specs; false ⇒ explicit
+        // business, spec-writer must produce specs). Omitted only when unset, so an
+        // undetermined task keeps the unchanged spec-led behaviour.
+        ...(typeof block.technical === 'boolean' ? { technical: block.technical } : {}),
         modelId: block.modelId,
         ...(block.modelPresetId ? { modelPresetId: block.modelPresetId } : {}),
         ...(agentConfig ? { agentConfig } : {}),
