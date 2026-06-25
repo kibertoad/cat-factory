@@ -1,5 +1,12 @@
 # @cat-factory/integrations
 
+## 0.10.1
+
+### Patch Changes
+
+- Updated dependencies [c8bd144]
+  - @cat-factory/kernel@0.13.1
+
 ## 0.10.0
 
 ### Minor Changes
