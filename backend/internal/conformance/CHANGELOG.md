@@ -1,5 +1,16 @@
 # @cat-factory/conformance
 
+## 0.7.14
+
+### Patch Changes
+
+- Updated dependencies [ce27690]
+  - @cat-factory/kernel@0.13.2
+  - @cat-factory/agents@0.11.4
+  - @cat-factory/orchestration@0.10.2
+  - @cat-factory/integrations@0.10.2
+  - @cat-factory/prompt-fragments@0.7.9
+
 ## 0.7.13
 
 ### Patch Changes
