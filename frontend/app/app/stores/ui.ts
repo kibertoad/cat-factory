@@ -102,6 +102,8 @@ export const useUiStore = defineStore('ui', () => {
   const vendorCredentialsOpen = ref(false)
   // Per-user settings panel: the signed-in user's own-machine local model runners.
   const localModelsOpen = ref(false)
+  // The Sandbox (parallel prompt/model testing) surface — an opt-in, on-demand window.
+  const sandboxOpen = ref(false)
   const userSecretsOpen = ref(false)
   // Per-workspace settings panel: the OpenRouter dynamic catalog (browse/enable gateway models).
   const openRouterOpen = ref(false)
@@ -359,6 +361,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeLocalModels() {
     localModelsOpen.value = false
   }
+  function openSandbox() {
+    sandboxOpen.value = true
+  }
+  function closeSandbox() {
+    sandboxOpen.value = false
+  }
   function openUserSecrets() {
     userSecretsOpen.value = true
   }
@@ -458,6 +466,7 @@ export const useUiStore = defineStore('ui', () => {
     modelConfigOpen,
     vendorCredentialsOpen,
     localModelsOpen,
+    sandboxOpen,
     userSecretsOpen,
     openRouterOpen,
     aiProviderSetupOpen,
@@ -520,6 +529,8 @@ export const useUiStore = defineStore('ui', () => {
     closeVendorCredentials,
     openLocalModels,
     closeLocalModels,
+    openSandbox,
+    closeSandbox,
     openUserSecrets,
     closeUserSecrets,
     openOpenRouter,

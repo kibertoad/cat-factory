@@ -9,7 +9,8 @@
   },
   "files": [
     "dist",
-    "migrations"
+    "migrations",
+    "sandbox-migrations"
   ],
   "type": "module",
   "main": "./dist/index.js",

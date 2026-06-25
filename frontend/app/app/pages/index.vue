@@ -31,6 +31,7 @@ import WorkspaceSettingsPanel from '~/components/settings/WorkspaceSettingsPanel
 import ObservabilityConnectionPanel from '~/components/settings/ObservabilityConnectionPanel.vue'
 import ModelConfigurationPanel from '~/components/settings/ModelConfigurationPanel.vue'
 import LocalModelEndpointsPanel from '~/components/settings/LocalModelEndpointsPanel.vue'
+import SandboxPanel from '~/components/sandbox/SandboxPanel.vue'
 import UserSecretsSection from '~/components/settings/UserSecretsSection.vue'
 import OpenRouterCatalogPanel from '~/components/settings/OpenRouterCatalogPanel.vue'
 import VendorCredentialsModal from '~/components/providers/VendorCredentialsModal.vue'
@@ -184,6 +185,7 @@ watch(
       <ObservabilityConnectionPanel />
       <ModelConfigurationPanel />
       <LocalModelEndpointsPanel />
+      <SandboxPanel />
       <UserSecretsSection />
       <OpenRouterCatalogPanel />
       <VendorCredentialsModal />

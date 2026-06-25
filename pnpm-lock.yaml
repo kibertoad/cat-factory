@@ -288,6 +288,9 @@ importers:
       '@cat-factory/prompt-fragments':
         specifier: workspace:*
         version: link:../prompt-fragments
+      '@cat-factory/sandbox':
+        specifier: workspace:*
+        version: link:../sandbox
       '@cat-factory/spend':
         specifier: workspace:*
         version: link:../spend

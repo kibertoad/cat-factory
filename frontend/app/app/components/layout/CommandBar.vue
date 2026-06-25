@@ -181,6 +181,14 @@ const commands = computed<Command[]>(() => {
     keywords: 'local model runner ollama lm studio llamacpp vllm endpoint',
     run: () => ui.openLocalModels(),
   })
+  list.push({
+    id: 'sandbox',
+    label: 'Open Sandbox',
+    group: 'Workspace',
+    icon: 'i-lucide-flask-conical',
+    keywords: 'sandbox prompt model test experiment judge fixture benchmark evaluate',
+    run: () => ui.openSandbox(),
+  })
 
   return list
 })

@@ -35,6 +35,7 @@
     "@cat-factory/integrations": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/prompt-fragments": "workspace:*",
+    "@cat-factory/sandbox": "workspace:*",
     "@cat-factory/spend": "workspace:*",
     "@cat-factory/workspaces": "workspace:*",
     "ai": "^6.0.209"

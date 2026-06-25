@@ -96,6 +96,18 @@ export {
   type MergePresetServiceDependencies,
 } from './modules/merge/MergePresetService.js'
 export {
+  SandboxService,
+  type SandboxServiceDependencies,
+  type SandboxExperimentDetail,
+  type SandboxOverview,
+  MAX_SANDBOX_CELLS,
+} from './modules/sandbox/SandboxService.js'
+export {
+  SandboxRunService,
+  type SandboxRunServiceDependencies,
+} from './modules/sandbox/SandboxRunService.js'
+export * as sandboxLogic from './modules/sandbox/sandbox.logic.js'
+export {
   WorkspaceSettingsService,
   type WorkspaceSettingsServiceDependencies,
 } from './modules/settings/WorkspaceSettingsService.js'
@@ -166,6 +178,7 @@ export {
   type ReleaseHealthModule,
   type SlackModule,
   type MergePresetsModule,
+  type SandboxModule,
   type WorkspaceSettingsModule,
   type ModelPresetsModule,
   type ServiceFragmentDefaultsModule,

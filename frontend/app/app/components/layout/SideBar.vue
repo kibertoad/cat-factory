@@ -125,6 +125,19 @@ watch(
         >
           Integrations
         </UButton>
+        <!-- The Sandbox: try prompt versions/models against graded fixtures, off to the
+             side of the board. Opens the on-demand testing window. -->
+        <UButton
+          block
+          color="primary"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-flask-conical"
+          class="justify-start"
+          @click="ui.openSandbox()"
+        >
+          Sandbox
+        </UButton>
       </div>
     </section>
 

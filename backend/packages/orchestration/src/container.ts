@@ -54,6 +54,13 @@ import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import type { ClarityReviewRepository } from '@cat-factory/kernel'
 import type { SubscriptionActivationRepository } from '@cat-factory/kernel'
 import type {
+  SandboxPromptVersionRepository,
+  SandboxFixtureRepository,
+  SandboxExperimentRepository,
+  SandboxRunRepository,
+  SandboxGradeRepository,
+} from '@cat-factory/kernel'
+import type {
   CiStatusProvider,
   MergePresetRepository,
   WorkspaceSettingsRepository,
@@ -132,6 +139,8 @@ import { RequirementReviewService } from './modules/requirements/RequirementRevi
 import { ClarityReviewService } from './modules/clarity/ClarityReviewService.js'
 import { NotificationService } from './modules/notifications/NotificationService.js'
 import { MergePresetService } from './modules/merge/MergePresetService.js'
+import { SandboxService } from './modules/sandbox/SandboxService.js'
+import { SandboxRunService } from './modules/sandbox/SandboxRunService.js'
 import { WorkspaceSettingsService } from './modules/settings/WorkspaceSettingsService.js'
 import { ReleaseHealthService } from './modules/releaseHealth/ReleaseHealthService.js'
 import {
@@ -486,6 +495,19 @@ export interface CoreDependencies {
   observabilitySecretCipher?: SecretCipher
   /** Resolves a task's merge threshold preset (auto-merge ceilings + CI attempt budget). */
   mergePresetRepository?: MergePresetRepository
+  // ---- Sandbox (parallel prompt/model testing surface; opt-in) --------------
+  // Flat repository fields like every other feature; both runtime facades contribute
+  // them by spreading one sandbox-owned `Partial<CoreDependencies>` mixin (the
+  // `selectSandboxDeps`/`sandboxDependencies` factory), so neither facade's container
+  // body enumerates them. Present (all five) → the `sandbox` module assembles its
+  // management CRUD + run-driver; the reviewer-style inline model config
+  // (`modelProviderResolver`/`requirementReviewModel`/`requirementReviewResolveModel`)
+  // is reused so a cell resolves its model like a pipeline step.
+  sandboxPromptVersionRepository?: SandboxPromptVersionRepository
+  sandboxFixtureRepository?: SandboxFixtureRepository
+  sandboxExperimentRepository?: SandboxExperimentRepository
+  sandboxRunRepository?: SandboxRunRepository
+  sandboxGradeRepository?: SandboxGradeRepository
   /**
    * Stores a workspace's runtime settings (the human-wait escalation threshold + the
    * per-service running-task limit policy). Optional and default-off: absent → the
@@ -628,6 +650,14 @@ export interface MergePresetsModule {
   service: MergePresetService
 }
 
+/** The Sandbox feature's services, present only when its repositories are wired. */
+export interface SandboxModule {
+  /** Management CRUD (prompt versions, fixtures, experiments). */
+  service: SandboxService
+  /** The run-driver + judge (`launch` an experiment). */
+  runService: SandboxRunService
+}
+
 /** The workspace-settings feature's service, present only when its repository is wired. */
 export interface WorkspaceSettingsModule {
   service: WorkspaceSettingsService
@@ -710,6 +740,8 @@ export interface Core {
   slack?: SlackModule
   /** Present only when the merge-preset repository is wired (see CoreDependencies). */
   mergePresets?: MergePresetsModule
+  /** Present only when the Sandbox repositories are wired (see CoreDependencies). */
+  sandbox?: SandboxModule
   /** Present only when the workspace-settings repository is wired (see CoreDependencies). */
   settings?: WorkspaceSettingsModule
   /** Present only when the model-preset repository is wired (see CoreDependencies). */
@@ -1268,6 +1300,51 @@ function createMergePresetsModule(deps: CoreDependencies): MergePresetsModule | 
   return { service }
 }
 
+/**
+ * Assemble the Sandbox module when its five repositories are present (both runtime
+ * facades wire them together). Reuses the requirements reviewer's inline model config —
+ * the per-scope provider resolver, the routing default ref, and the block-model resolver
+ * — so a Sandbox cell (and the judge) resolves its catalog id exactly like a pipeline step.
+ */
+function createSandboxModule(deps: CoreDependencies): SandboxModule | undefined {
+  const {
+    sandboxPromptVersionRepository,
+    sandboxFixtureRepository,
+    sandboxExperimentRepository,
+    sandboxRunRepository,
+    sandboxGradeRepository,
+  } = deps
+  if (
+    !sandboxPromptVersionRepository ||
+    !sandboxFixtureRepository ||
+    !sandboxExperimentRepository ||
+    !sandboxRunRepository ||
+    !sandboxGradeRepository
+  ) {
+    return undefined
+  }
+  const repositories = {
+    sandboxPromptVersionRepository,
+    sandboxFixtureRepository,
+    sandboxExperimentRepository,
+    sandboxRunRepository,
+    sandboxGradeRepository,
+    workspaceRepository: deps.workspaceRepository,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+  }
+  const defaultModelRef = deps.requirementReviewModel ?? deps.documentPlannerModel
+  const service = new SandboxService({ ...repositories, defaultModelRef })
+  const runService = new SandboxRunService({
+    ...repositories,
+    modelProviderResolver: deps.modelProviderResolver,
+    modelProvider: deps.modelProvider,
+    resolveModelId: deps.requirementReviewResolveModel,
+    defaultModelRef,
+  })
+  return { service, runService }
+}
+
 /** Assemble the workspace-settings module when its repository is present. */
 function createWorkspaceSettingsModule(
   deps: CoreDependencies,
@@ -1442,6 +1519,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   const notifications = createNotificationsModule(dependencies)
   const slack = createSlackModule(dependencies)
   const mergePresets = createMergePresetsModule(dependencies)
+  const sandbox = createSandboxModule(dependencies)
   // Built before the execution engine so the per-service running-task limit can be
   // enforced at start() (and the escalation sweep can read the waiting threshold).
   const settings = createWorkspaceSettingsModule(dependencies)
@@ -1523,6 +1601,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(notifications ? { notifications } : {}),
     ...(slack ? { slack } : {}),
     ...(mergePresets ? { mergePresets } : {}),
+    ...(sandbox ? { sandbox } : {}),
     ...(settings ? { settings } : {}),
     ...(releaseHealth ? { releaseHealth } : {}),
     ...(modelPresets ? { modelPresets } : {}),

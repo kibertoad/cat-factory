@@ -3,6 +3,9 @@ import {
   type ExecutionInstance,
   type MergeThresholdPreset,
   type ModelPreset,
+  type SandboxExperiment,
+  type SandboxFixture,
+  type SandboxPromptVersion,
   type Pipeline,
   type PipelineSchedule,
   type ScheduleRun,
@@ -339,6 +342,88 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         // The library rides along on the workspace snapshot.
         const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
         expect((snapshot.body.modelPresets ?? []).some((p) => p.name === 'Mixed')).toBe(true)
+      })
+    })
+
+    describe('sandbox (prompt/model testing surface)', () => {
+      it('lists baselines, clones+versions prompts, seeds fixtures and defines experiments', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/sandbox`
+
+        // Overview seeds the builtin fixtures on first load and exposes the testable
+        // agent-kind catalog + the shipped baselines (synthetic, never persisted).
+        const overview = await call<{
+          agentKinds: { agentKind: string }[]
+          prompts: SandboxPromptVersion[]
+          fixtures: SandboxFixture[]
+          experiments: SandboxExperiment[]
+        }>('GET', `${base}/overview`)
+        expect(overview.status).toBe(200)
+        expect(overview.body.agentKinds.some((k) => k.agentKind === 'requirements-review')).toBe(
+          true,
+        )
+        expect(overview.body.prompts.some((p) => p.origin === 'baseline')).toBe(true)
+        expect(overview.body.fixtures.length).toBeGreaterThan(0)
+        const fixture = overview.body.fixtures.find((f) => f.kind === 'requirements')!
+        expect(fixture).toBeTruthy()
+
+        // Clone the requirements-review baseline into an editable candidate lineage (v1).
+        const cloned = await call<SandboxPromptVersion>('POST', `${base}/prompts/clone`, {
+          agentKind: 'requirements-review',
+          basePromptId: 'requirement-review',
+          name: 'My reviewer',
+        })
+        expect(cloned.status).toBe(201)
+        expect(cloned.body.origin).toBe('candidate')
+        expect(cloned.body.version).toBe(1)
+        expect(cloned.body.systemText.length).toBeGreaterThan(0)
+
+        // Append an edited version onto the lineage (v2 on the same lineage id).
+        const v2 = await call<SandboxPromptVersion>('POST', `${base}/prompts`, {
+          parentId: cloned.body.id,
+          systemText: `${cloned.body.systemText}\n\nAlways check authz.`,
+        })
+        expect(v2.status).toBe(201)
+        expect(v2.body.version).toBe(2)
+        expect(v2.body.lineageId).toBe(cloned.body.lineageId)
+
+        // Both candidate versions + the baselines come back from the prompt listing.
+        const prompts = await call<SandboxPromptVersion[]>('GET', `${base}/prompts`)
+        expect(prompts.body.filter((p) => p.lineageId === cloned.body.lineageId)).toHaveLength(2)
+
+        // Define a draft experiment over the baseline prompt × one model × the fixture.
+        const experiment = await call<SandboxExperiment>('POST', `${base}/experiments`, {
+          name: 'Reviewer shootout',
+          agentKind: 'requirements-review',
+          matrix: {
+            promptVersionIds: ['baseline:requirement-review'],
+            models: ['anthropic:claude-opus-4-8'],
+            fixtureIds: [fixture.id],
+          },
+        })
+        expect(experiment.status).toBe(201)
+        expect(experiment.body.status).toBe('draft')
+        expect(experiment.body.judgeModel.length).toBeGreaterThan(0)
+
+        // The experiment + its (still empty) result grid read back.
+        const detail = await call<{
+          experiment: SandboxExperiment
+          runs: unknown[]
+          grades: unknown[]
+        }>('GET', `${base}/experiments/${experiment.body.id}`)
+        expect(detail.status).toBe(200)
+        expect(detail.body.experiment.id).toBe(experiment.body.id)
+        expect(detail.body.runs).toHaveLength(0)
+        expect(detail.body.grades).toHaveLength(0)
+
+        // A non-runnable matrix is rejected at create time.
+        const empty = await call('POST', `${base}/experiments`, {
+          name: 'Bad',
+          agentKind: 'requirements-review',
+          matrix: { promptVersionIds: [], models: [], fixtureIds: [] },
+        })
+        expect(empty.status).toBeGreaterThanOrEqual(400)
       })
     })
 
