@@ -7,6 +7,7 @@ interface WorkspaceSettingsRow {
   task_limit_mode: string
   task_limit_shared: number | null
   task_limit_per_type: string | null
+  store_agent_context: number
 }
 
 function rowToSettings(row: WorkspaceSettingsRow): WorkspaceSettings {
@@ -23,6 +24,7 @@ function rowToSettings(row: WorkspaceSettingsRow): WorkspaceSettings {
     taskLimitMode: row.task_limit_mode as TaskLimitMode,
     taskLimitShared: row.task_limit_shared,
     taskLimitPerType: perType,
+    storeAgentContext: row.store_agent_context === 1,
   }
 }
 
@@ -51,13 +53,14 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
       .prepare(
         `INSERT INTO workspace_settings
            (workspace_id, waiting_escalation_minutes, task_limit_mode, task_limit_shared,
-            task_limit_per_type)
-         VALUES (?, ?, ?, ?, ?)
+            task_limit_per_type, store_agent_context)
+         VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id) DO UPDATE SET
            waiting_escalation_minutes = excluded.waiting_escalation_minutes,
            task_limit_mode = excluded.task_limit_mode,
            task_limit_shared = excluded.task_limit_shared,
-           task_limit_per_type = excluded.task_limit_per_type`,
+           task_limit_per_type = excluded.task_limit_per_type,
+           store_agent_context = excluded.store_agent_context`,
       )
       .bind(
         workspaceId,
@@ -65,6 +68,7 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
         settings.taskLimitMode,
         settings.taskLimitShared,
         settings.taskLimitPerType ? JSON.stringify(settings.taskLimitPerType) : null,
+        settings.storeAgentContext ? 1 : 0,
       )
       .run()
   }

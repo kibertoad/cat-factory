@@ -46,6 +46,7 @@ export class WorkspaceSettingsService {
         patch.taskLimitShared !== undefined ? patch.taskLimitShared : current.taskLimitShared,
       taskLimitPerType:
         patch.taskLimitPerType !== undefined ? patch.taskLimitPerType : current.taskLimitPerType,
+      storeAgentContext: patch.storeAgentContext ?? current.storeAgentContext,
     }
     // Keep the limit fields consistent with the mode so the enforcement logic + UI never
     // read a stale cap from an inactive mode.

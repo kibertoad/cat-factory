@@ -1,4 +1,5 @@
 import {
+  type AgentContextRecorder,
   type AgentExecutor,
   type Clock,
   CompositeNotificationChannel,
@@ -49,6 +50,7 @@ import {
   IncidentIoEnrichmentProvider,
 } from '@cat-factory/integrations'
 import {
+  AgentContextObservabilityService,
   type CoreDependencies,
   createCore,
   resolvePresetModelForKind,
@@ -114,6 +116,7 @@ import { D1ServiceRepository } from './repositories/D1ServiceRepository'
 import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepository'
 import { D1TokenUsageRepository } from './repositories/D1TokenUsageRepository'
 import { D1LlmCallMetricRepository } from './repositories/D1LlmCallMetricRepository'
+import { D1AgentContextSnapshotRepository } from './repositories/D1AgentContextSnapshotRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
 import {
   D1SlackConnectionRepository,
@@ -270,6 +273,7 @@ function selectAgentExecutor(
   resolveTransport: ResolveRunnerTransport | null,
   subscriptions?: ProviderSubscriptionService,
   personalSubscriptions?: PersonalSubscriptionService,
+  agentContextObservability?: AgentContextRecorder,
 ): AgentExecutor {
   const inline = new AiAgentExecutor({
     modelProviderResolver: buildModelProviderResolver(env, db),
@@ -297,6 +301,7 @@ function selectAgentExecutor(
     resolveTransport,
     subscriptions,
     personalSubscriptions,
+    agentContextObservability,
   )
   if (!container) {
     throw new Error(
@@ -960,6 +965,7 @@ function buildContainerExecutor(
   resolveTransport: ResolveRunnerTransport | null,
   subscriptions?: ProviderSubscriptionService,
   personalSubscriptions?: PersonalSubscriptionService,
+  agentContextObservability?: AgentContextRecorder,
 ): AgentExecutor | null {
   if (
     !config.github.enabled ||
@@ -1042,6 +1048,8 @@ function buildContainerExecutor(
     // Forward container tool spans to Langfuse (when configured) as child spans under
     // the run trace — the same sink the LLM proxy fans generations out to.
     llmTraceSink: buildLangfuseSink(config),
+    // Record the complete provided context per dispatch (best-effort, gated in the sink).
+    ...(agentContextObservability ? { agentContextObservability } : {}),
   })
 }
 
@@ -1421,6 +1429,16 @@ export function buildContainer(
 ): Container {
   const config = loadConfig(env)
   const db = env.DB
+  // Telemetry (llm_call_metrics + agent_context_snapshots) lives in its own D1 database
+  // — append-heavy/high-volume/short-retention, unlike the transactional domain. The
+  // binding is required: fail fast here rather than NPE deep in a repo on first write.
+  const telemetryDb = env.TELEMETRY_DB
+  if (!telemetryDb) {
+    throw new Error(
+      'TELEMETRY_DB binding is required (the dedicated telemetry D1 database). ' +
+        'Add a [[d1_databases]] entry with binding = "TELEMETRY_DB" to wrangler.toml.',
+    )
+  }
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
 
@@ -1470,6 +1488,19 @@ export function buildContainer(
   // consensus transcript pushes ride the same hub as run/board events).
   const eventPublisher = selectEventPublisher(env, db)
 
+  // Agent-context observability sink: records the complete, redacted context provided
+  // to each container agent (composed prompts + folded-in fragments + injected files).
+  // Gated by the deployment prompt-recording switch + the workspace storeAgentContext
+  // setting. Wired into the executor (write) AND createCore (read). Telemetry rows live
+  // in the dedicated TELEMETRY_DB database.
+  const agentContextObservability = new AgentContextObservabilityService({
+    agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({ db: telemetryDb }),
+    workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
+    idGenerator,
+    clock,
+    recordPrompts: config.observability.recordPrompts,
+  })
+
   const dependencies: CoreDependencies = {
     workspaceRepository: new D1WorkspaceRepository({ db }),
     accountRepository: new D1AccountRepository({ db }),
@@ -1484,8 +1515,11 @@ export function buildContainer(
     serviceRepository: new D1ServiceRepository({ db }),
     workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
-    llmCallMetricRepository: new D1LlmCallMetricRepository({ db }),
+    llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
     recordLlmPrompts: config.observability.recordPrompts,
+    // Re-exposed on the core for the agent-context read endpoint; the same instance is
+    // injected into the container executor below for the write path.
+    agentContextObservability,
     idGenerator,
     clock,
     // When a caller injects its own agentExecutor (tests pass a FakeAgentExecutor)
@@ -1503,6 +1537,7 @@ export function buildContainer(
           resolveTransport,
           subscriptions,
           personalSubscriptions,
+          agentContextObservability,
         ),
         env,
         config,

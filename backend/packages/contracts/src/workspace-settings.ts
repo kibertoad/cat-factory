@@ -37,6 +37,15 @@ export const workspaceSettingsSchema = v.object({
   taskLimitShared: v.nullable(limitSchema),
   /** The per-type caps, when {@link taskLimitMode} is `per_type`. Null otherwise. */
   taskLimitPerType: v.nullable(taskLimitPerTypeSchema),
+  /**
+   * Whether to store the complete context provided to each container agent (the
+   * fully composed system + user prompts, the best-practice fragment bodies folded
+   * in, and the full content of the files injected into the container) for the
+   * observability viewer. On by default. The heavy, potentially sensitive bodies ride
+   * the same retention window as the per-call LLM telemetry, and storing is also
+   * suppressed when the deployment disables prompt recording (`LLM_RECORD_PROMPTS`).
+   */
+  storeAgentContext: v.boolean(),
 })
 export type WorkspaceSettings = v.InferOutput<typeof workspaceSettingsSchema>
 
@@ -48,5 +57,6 @@ export const updateWorkspaceSettingsSchema = v.object({
   taskLimitMode: v.optional(taskLimitModeSchema),
   taskLimitShared: v.optional(v.nullable(limitSchema)),
   taskLimitPerType: v.optional(v.nullable(taskLimitPerTypeSchema)),
+  storeAgentContext: v.optional(v.boolean()),
 })
 export type UpdateWorkspaceSettingsInput = v.InferOutput<typeof updateWorkspaceSettingsSchema>

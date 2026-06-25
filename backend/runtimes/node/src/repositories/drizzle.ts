@@ -10,6 +10,8 @@ import type {
   EmailConnectionRepository,
   EmailProviderKind,
   AgentRunKind,
+  AgentContextSnapshot,
+  AgentContextSnapshotRepository,
   CloudProvider,
   AgentRunRef,
   AgentRunRepository,
@@ -90,6 +92,7 @@ import type { DrizzleDb } from '../db/client.js'
 import {
   accountInvitations,
   accounts,
+  agentContextSnapshots,
   agentRuns,
   blocks,
   consensusSessions,
@@ -1076,6 +1079,82 @@ class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
       .delete(llmCallMetrics)
       .where(lt(llmCallMetrics.created_at, epochMs))
       .returning({ id: llmCallMetrics.id })
+    return deleted.length
+  }
+}
+
+type AgentContextSnapshotRow = typeof agentContextSnapshots.$inferSelect
+
+function rowToAgentContextSnapshot(row: AgentContextSnapshotRow): AgentContextSnapshot {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    executionId: row.execution_id,
+    agentKind: row.agent_kind,
+    stepIndex: row.step_index,
+    createdAt: row.created_at,
+    model: row.model,
+    harness: row.harness,
+    systemPrompt: row.system_prompt,
+    userPrompt: row.user_prompt,
+    fragments: parseJsonArray<AgentContextSnapshot['fragments'][number]>(row.fragments),
+    contextFiles: parseJsonArray<AgentContextSnapshot['contextFiles'][number]>(row.context_files),
+    extras: parseAgentContextExtras(row.extras),
+  }
+}
+
+/** Parse the extras JSON object column, degrading a malformed value to {}. */
+function parseAgentContextExtras(text: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(text) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+class DrizzleAgentContextSnapshotRepository implements AgentContextSnapshotRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async record(snapshot: AgentContextSnapshot): Promise<void> {
+    await this.db.insert(agentContextSnapshots).values({
+      id: snapshot.id,
+      workspace_id: snapshot.workspaceId,
+      execution_id: snapshot.executionId,
+      agent_kind: snapshot.agentKind,
+      step_index: snapshot.stepIndex,
+      created_at: snapshot.createdAt,
+      model: snapshot.model,
+      harness: snapshot.harness,
+      system_prompt: snapshot.systemPrompt,
+      user_prompt: snapshot.userPrompt,
+      fragments: JSON.stringify(snapshot.fragments),
+      context_files: JSON.stringify(snapshot.contextFiles),
+      extras: JSON.stringify(snapshot.extras),
+    })
+  }
+
+  async listByExecution(workspaceId: string, executionId: string): Promise<AgentContextSnapshot[]> {
+    const rows = await this.db
+      .select()
+      .from(agentContextSnapshots)
+      .where(
+        and(
+          eq(agentContextSnapshots.workspace_id, workspaceId),
+          eq(agentContextSnapshots.execution_id, executionId),
+        ),
+      )
+      .orderBy(desc(agentContextSnapshots.created_at), desc(agentContextSnapshots.id))
+    return rows.map(rowToAgentContextSnapshot)
+  }
+
+  async deleteOlderThan(epochMs: number): Promise<number> {
+    const deleted = await this.db
+      .delete(agentContextSnapshots)
+      .where(lt(agentContextSnapshots.created_at, epochMs))
+      .returning({ id: agentContextSnapshots.id })
     return deleted.length
   }
 }
@@ -2209,6 +2288,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
       taskLimitMode: row.task_limit_mode as WorkspaceSettings['taskLimitMode'],
       taskLimitShared: row.task_limit_shared,
       taskLimitPerType: perType,
+      storeAgentContext: row.store_agent_context === 1,
     }
   }
 
@@ -2221,6 +2301,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
       task_limit_per_type: settings.taskLimitPerType
         ? JSON.stringify(settings.taskLimitPerType)
         : null,
+      store_agent_context: settings.storeAgentContext ? 1 : 0,
     }
     await this.db
       .insert(workspaceSettings)
@@ -2232,6 +2313,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
           task_limit_mode: values.task_limit_mode,
           task_limit_shared: values.task_limit_shared,
           task_limit_per_type: values.task_limit_per_type,
+          store_agent_context: values.store_agent_context,
         },
       })
   }
@@ -2398,6 +2480,7 @@ export interface CoreRepositories {
   executionRepository: ExecutionRepository
   tokenUsageRepository: TokenUsageRepository
   llmCallMetricRepository: LlmCallMetricRepository
+  agentContextSnapshotRepository: AgentContextSnapshotRepository
   agentRunRepository: AgentRunRepository
   modelPresetRepository: ModelPresetRepository
   serviceFragmentDefaultsRepository: ServiceFragmentDefaultsRepository
@@ -2428,6 +2511,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     executionRepository: new DrizzleExecutionRepository(db, clock),
     tokenUsageRepository: new DrizzleTokenUsageRepository(db),
     llmCallMetricRepository: new DrizzleLlmCallMetricRepository(db),
+    agentContextSnapshotRepository: new DrizzleAgentContextSnapshotRepository(db),
     agentRunRepository: new DrizzleAgentRunRepository(db),
     modelPresetRepository: new DrizzleModelPresetRepository(db),
     serviceFragmentDefaultsRepository: new DrizzleServiceFragmentDefaultsRepository(db),

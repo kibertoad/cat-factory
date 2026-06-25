@@ -493,6 +493,8 @@ export interface WorkspaceSettings {
   taskLimitShared: number | null
   /** The per-type caps, when `taskLimitMode` is `per_type` (type → cap). */
   taskLimitPerType: Partial<Record<CreateTaskType, number>> | null
+  /** Whether to store the complete provided-context snapshot for each container agent. */
+  storeAgentContext: boolean
 }
 
 /** Patch a workspace's settings (only the supplied fields change). */
@@ -501,6 +503,7 @@ export interface UpdateWorkspaceSettingsInput {
   taskLimitMode?: TaskLimitMode
   taskLimitShared?: number | null
   taskLimitPerType?: Partial<Record<CreateTaskType, number>> | null
+  storeAgentContext?: boolean
 }
 
 /**

@@ -366,31 +366,9 @@ CREATE TABLE notifications (
   resolved_at   INTEGER,
   PRIMARY KEY (workspace_id, id)
 );
-CREATE TABLE llm_call_metrics (
-  id                 TEXT    NOT NULL PRIMARY KEY,
-  workspace_id       TEXT    NOT NULL,
-  execution_id       TEXT,
-  agent_kind         TEXT    NOT NULL,
-  provider           TEXT    NOT NULL,
-  model              TEXT    NOT NULL,
-  created_at         INTEGER NOT NULL,
-  streaming          INTEGER NOT NULL DEFAULT 0,
-  message_count      INTEGER NOT NULL DEFAULT 0,
-  tool_count         INTEGER NOT NULL DEFAULT 0,
-  request_max_tokens INTEGER,
-  prompt_tokens      INTEGER NOT NULL DEFAULT 0,
-  completion_tokens  INTEGER NOT NULL DEFAULT 0,
-  total_tokens       INTEGER NOT NULL DEFAULT 0,
-  finish_reason      TEXT,
-  upstream_ms        INTEGER NOT NULL DEFAULT 0,
-  overhead_ms        INTEGER NOT NULL DEFAULT 0,
-  total_ms           INTEGER NOT NULL DEFAULT 0,
-  ok                 INTEGER NOT NULL DEFAULT 1,
-  http_status        INTEGER,
-  error_message      TEXT,
-  prompt_text        TEXT    NOT NULL DEFAULT '',
-  response_text      TEXT    NOT NULL DEFAULT ''
-, prompt_prefix_count INTEGER NOT NULL DEFAULT 0, prompt_hash TEXT NOT NULL DEFAULT '', cached_prompt_tokens INTEGER NOT NULL DEFAULT 0);
+-- llm_call_metrics + agent_context_snapshots now live in the dedicated TELEMETRY_DB
+-- database (see telemetry-migrations/), not the main DB. Their write profile
+-- (append-heavy, high-volume, short retention) is unlike the transactional domain.
 CREATE TABLE workspace_model_defaults (
   workspace_id TEXT    NOT NULL,
   agent_kind   TEXT    NOT NULL,
@@ -637,9 +615,6 @@ CREATE INDEX idx_merge_presets_default
   ON merge_threshold_presets (workspace_id, is_default);
 CREATE INDEX idx_notifications_open ON notifications (workspace_id, status, created_at);
 CREATE INDEX idx_notifications_block ON notifications (workspace_id, block_id, type, status);
-CREATE INDEX idx_llm_call_metrics_execution
-  ON llm_call_metrics (workspace_id, execution_id, created_at);
-CREATE INDEX idx_llm_call_metrics_created ON llm_call_metrics (created_at);
 CREATE INDEX idx_pipeline_schedules_due ON pipeline_schedules (enabled, next_run_at);
 CREATE INDEX idx_pipeline_schedules_block ON pipeline_schedules (workspace_id, block_id);
 CREATE INDEX idx_schedule_runs_schedule

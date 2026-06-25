@@ -1,4 +1,7 @@
 import {
+  type AgentContextFile,
+  type AgentContextFragment,
+  type AgentContextRecorder,
   type AgentJobHandle,
   type AgentJobUpdate,
   type AgentRunContext,
@@ -7,6 +10,7 @@ import {
   type HarnessKind,
   type LlmTraceSink,
   type ModelRef,
+  type RecordAgentContextInput,
   type RunnerDispatchKind,
   type RunnerDispatchOptions,
   type RunnerJobRef,
@@ -142,6 +146,63 @@ export type RecordSubscriptionUsage = (
  */
 function stepJobId(executionId: string, agentKind: string): string {
   return `${executionId}-${agentKind}`
+}
+
+/**
+ * Build the redacted agent-context snapshot from a dispatched job body + run context.
+ * Deliberately an ALLOW-LIST: it copies the composed prompts, the folded-in fragment
+ * bodies and the injected context files, plus a handful of structural fields — and
+ * NEVER any credential (the GitHub token, the proxy session token, a leased
+ * subscription token, or the clone URL that embeds them).
+ */
+function buildAgentContextRecord(
+  context: AgentRunContext,
+  body: Record<string, unknown>,
+  model: string,
+  ids: { workspaceId: string; executionId: string },
+): RecordAgentContextInput {
+  const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+  const repo = (body.repo ?? {}) as Record<string, unknown>
+  const contextFiles = Array.isArray(body.contextFiles)
+    ? (body.contextFiles as unknown[]).map((f): AgentContextFile => {
+        const file = (f ?? {}) as Record<string, unknown>
+        return {
+          path: str(file.path),
+          title: str(file.title),
+          url: str(file.url),
+          content: str(file.content),
+        }
+      })
+    : []
+  const fragments: AgentContextFragment[] = (context.block.resolvedFragments ?? []).map((fr) => ({
+    id: fr.id,
+    body: fr.body,
+  }))
+  return {
+    workspaceId: ids.workspaceId,
+    executionId: ids.executionId,
+    agentKind: context.agentKind,
+    stepIndex: context.stepIndex,
+    model,
+    harness: typeof body.harness === 'string' ? body.harness : 'pi',
+    systemPrompt: str(body.systemPrompt),
+    userPrompt: str(body.userPrompt),
+    fragments,
+    contextFiles,
+    extras: {
+      pipelineName: context.pipelineName,
+      mode: body.mode,
+      repo: { owner: str(repo.owner), name: str(repo.name), baseBranch: str(repo.baseBranch) },
+      branch: body.branch,
+      serviceDirectory: repo.serviceDirectory,
+      webSearch: body.webSearch ?? false,
+      infra: body.infra,
+      decisions: context.decisions,
+      ...(context.revision
+        ? { revision: { feedback: context.revision.feedback, hadPriorProposal: true } }
+        : {}),
+    },
+  }
 }
 
 /**
@@ -306,6 +367,14 @@ export interface ContainerAgentExecutorDependencies {
    * Best-effort and isolated: a sink failure never affects the job lifecycle.
    */
   llmTraceSink?: LlmTraceSink
+  /**
+   * Optional agent-context observability recorder. When wired, each dispatch records the
+   * complete, redacted context provided to the agent (composed prompts + folded-in
+   * fragment bodies + the files injected into the container). Best-effort and gated
+   * inside the recorder (the deployment's prompt-recording switch + the workspace's
+   * `storeAgentContext` setting); absent ⇒ nothing is captured.
+   */
+  agentContextObservability?: AgentContextRecorder
 }
 
 /** Poll cadence for the non-durable `run()` fallback (the durable driver sleeps between polls itself). */
@@ -505,6 +574,18 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     const jobId = body.jobId as string
     const ref: RunnerJobRef = { runId: executionId, jobId }
     await this.jobs.dispatch(workspaceId, ref, body, kind, this.dispatchOptions(context))
+    // Capture the complete provided context for observability (best-effort, gated inside
+    // the recorder). This is the only place the fully composed prompts + the injected
+    // file bodies exist as one unit; proxy telemetry never sees the `.cat-context` files.
+    if (this.deps.agentContextObservability) {
+      try {
+        await this.deps.agentContextObservability.record(
+          buildAgentContextRecord(context, body, model, { workspaceId, executionId }),
+        )
+      } catch {
+        // Swallowed: observability never breaks a dispatch.
+      }
+    }
     // Carry the run id + workspace on the handle so the poll/stop site can re-address
     // the same per-run container (Cloudflare vs. self-hosted pool) given only the
     // handle; carry the leased subscription token id so a finished subscription job

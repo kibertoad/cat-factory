@@ -1,4 +1,5 @@
 import type {
+  AgentContextSnapshotRepository,
   Clock,
   LlmCallMetricRepository,
   PipelineScheduleRepository,
@@ -22,6 +23,8 @@ export const SCHEDULE_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 export interface RetentionRepos {
   tokenUsageRepository: Pick<TokenUsageRepository, 'deleteOlderThan'>
   llmCallMetricRepository: Pick<LlmCallMetricRepository, 'deleteOlderThan'>
+  // The agent-context observability sink rides the same window as llmCallMetrics.
+  agentContextSnapshotRepository: Pick<AgentContextSnapshotRepository, 'deleteOlderThan'>
   pipelineScheduleRepository: Pick<PipelineScheduleRepository, 'pruneRunsBefore'>
   // Personal-credential per-run activations whose TTL has passed (individual-usage
   // subscriptions). Mirrors the Worker's activation-sweeper cron.
@@ -32,6 +35,7 @@ export interface RetentionRepos {
 export interface RetentionResult {
   tokenUsage: number
   llmCallMetrics: number
+  agentContextSnapshots: number
   scheduleRuns: number
   activations: number
 }
@@ -70,6 +74,10 @@ export async function sweepRetention(
     llmCallMetrics: await prune(retention.llmCallMetricsMs, now, (c) =>
       repos.llmCallMetricRepository.deleteOlderThan(c),
     ),
+    // Same window as the LLM call telemetry: heavy prompt + injected-file bodies.
+    agentContextSnapshots: await prune(retention.llmCallMetricsMs, now, (c) =>
+      repos.agentContextSnapshotRepository.deleteOlderThan(c),
+    ),
     // Fixed ~1-week window (not part of the configurable retention policy).
     scheduleRuns: await prune(SCHEDULE_RUN_RETENTION_MS, now, (c) =>
       repos.pipelineScheduleRepository.pruneRunsBefore(c),
@@ -93,14 +101,17 @@ export function startRetentionSweeper(
 ): () => void {
   const tick = async () => {
     try {
-      const { tokenUsage, llmCallMetrics, scheduleRuns, activations } = await sweepRetention(
-        repos,
-        retention,
-        clock.now(),
-      )
-      if (tokenUsage > 0 || llmCallMetrics > 0 || scheduleRuns > 0 || activations > 0) {
+      const { tokenUsage, llmCallMetrics, agentContextSnapshots, scheduleRuns, activations } =
+        await sweepRetention(repos, retention, clock.now())
+      if (
+        tokenUsage > 0 ||
+        llmCallMetrics > 0 ||
+        agentContextSnapshots > 0 ||
+        scheduleRuns > 0 ||
+        activations > 0
+      ) {
         log.info(
-          { tokenUsage, llmCallMetrics, scheduleRuns, activations },
+          { tokenUsage, llmCallMetrics, agentContextSnapshots, scheduleRuns, activations },
           'retention sweep reclaimed rows',
         )
       }

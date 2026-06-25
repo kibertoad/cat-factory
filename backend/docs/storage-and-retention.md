@@ -13,6 +13,25 @@ tens of millions of rows away. The point of writing them down now is
 that every fix here is cheap while the tables are small and progressively more
 disruptive once they aren't.
 
+## Telemetry lives in its own store
+
+Telemetry has a very different write profile from the transactional domain
+(append-heavy, high-volume, write-and-rarely-read, short retention), so the
+observability tables live in a **dedicated telemetry store** rather than the main DB:
+
+- **Cloudflare:** a separate, required `TELEMETRY_DB` D1 database (its own
+  `[[d1_databases]]` binding + `migrations_dir = telemetry-migrations`). Provision it
+  once with `wrangler d1 create cat_factory_telemetry` and paste the id into
+  `wrangler.toml`. The worker fails fast at container build if the binding is absent.
+- **Node:** a `telemetry` Postgres schema (declared via `pgSchema('telemetry')` in
+  `db/schema.ts`), served by the same connection/pool; `migrate()` creates it on boot.
+
+Two tables live there: `llm_call_metrics` (per-call LLM telemetry) and
+`agent_context_snapshots` (the complete, redacted context provided to each container
+agent — composed prompts, folded-in fragment bodies, and the full content of the files
+injected into the container). Both are pruned to the same window
+(`LLM_CALL_METRICS_RETENTION_DAYS`, default 3 days).
+
 ## How the retention sweep is wired
 
 `sweepRetention` (`src/infrastructure/workflows/retention.ts`) prunes each

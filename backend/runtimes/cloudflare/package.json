@@ -9,7 +9,8 @@
   },
   "files": [
     "dist",
-    "migrations"
+    "migrations",
+    "telemetry-migrations"
   ],
   "type": "module",
   "main": "./dist/index.js",

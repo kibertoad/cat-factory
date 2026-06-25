@@ -28,6 +28,15 @@ export type GitHubSyncMessage =
 export interface Env {
   DB: D1Database
 
+  /**
+   * Dedicated D1 database for telemetry (the `llm_call_metrics` + `agent_context_snapshots`
+   * tables). Telemetry is append-heavy, high-volume and short-retention, a very different
+   * write profile from the transactional domain, so it lives in its own database. Required:
+   * the worker fails fast at container build if it is unbound (see buildContainer). Its
+   * schema ships under `telemetry-migrations/` (a separate `migrations_dir` in wrangler.toml).
+   */
+  TELEMETRY_DB: D1Database
+
   /** Cloudflare Workers AI binding (optional; used when provider = workers-ai). */
   AI?: Ai
 

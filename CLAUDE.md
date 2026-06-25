@@ -641,6 +641,36 @@ AgentRunController.ts`) resolves the kind via `getRef`, then calls
     board card, the inspector, and `TaskExecution.vue`. A failed execution now leaves
     its block `blocked` (NOT the old success-looking `pr_ready`).
 
+## Telemetry & agent-context observability (isolated store)
+
+Two observability sinks capture what runs do, and both live in a **dedicated telemetry
+store** (separate from the transactional domain — append-heavy/high-volume/short-retention):
+a separate **required** `TELEMETRY_DB` D1 database on Cloudflare and a `telemetry` Postgres
+**schema** (`pgSchema('telemetry')`, same connection) on Node. Both tables are pruned to the
+same window (`LLM_CALL_METRICS_RETENTION_DAYS`, default 3 days) by the existing retention
+sweep.
+
+- **`llm_call_metrics`** — per proxied LLM call (prompt/response delta-stored, tokens,
+  timing). Recorded by the LLM proxy via `LlmObservabilityService`. This captures what the
+  model *received* per call.
+- **`agent_context_snapshots`** — the complete context an agent was *provided* per container
+  dispatch: the fully fragment-composed system + user prompts, the best-practice fragment
+  bodies folded in, and the **full content of the files injected into the container**
+  (`.cat-context/*` — which the agent reads via tools, so they never reach proxy telemetry).
+  Recorded best-effort by `ContainerAgentExecutor.startJob` (after dispatch) via
+  `AgentContextObservabilityService` (orchestration), built per-facade and injected into both
+  the executor (write) and `createCore` (read). The snapshot is a **redacted allow-list**
+  projection of the dispatched job — NEVER a token or credential-bearing URL.
+- **Gating**: storing requires BOTH the deployment prompt-recording switch
+  (`LLM_RECORD_PROMPTS`) AND the per-workspace `storeAgentContext` setting (on by default; a
+  toggle in `WorkspaceSettingsPanel.vue`).
+- **Surfacing**: `GET /workspaces/:ws/executions/:executionId/agent-context` →
+  `stores/observability.ts` → the "Provided context" view in `ObservabilityPanel.vue`
+  (alongside the existing "Model activity" call list).
+- **Parity**: the D1 repo (`D1AgentContextSnapshotRepository`) ⇄ Drizzle repo, asserted by
+  the cross-runtime `defineAgentContextSuite`. The Cloudflare facade fails fast at container
+  build if `TELEMETRY_DB` is unbound.
+
 ## Board / service / repo-linkage model
 
 - A "service" on the board is just a `Block` with `level: 'frame'`,

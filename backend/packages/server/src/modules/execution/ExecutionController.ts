@@ -88,6 +88,19 @@ export function executionController(): Hono<AppEnv> {
     return c.json({ executionId, calls })
   })
 
+  // The complete context provided to each container agent in a run: the composed
+  // system + user prompts, the best-practice fragment bodies folded in, and the full
+  // content of the files injected into the container. Empty when the agent-context
+  // sink is not wired or the workspace disabled storing it.
+  app.get('/executions/:executionId/agent-context', async (c) => {
+    const executionId = param(c, 'executionId')
+    const observability = c.get('container').agentContextObservability
+    const snapshots = observability
+      ? await observability.listByExecution(param(c, 'workspaceId'), executionId)
+      : []
+    return c.json({ executionId, snapshots })
+  })
+
   // LLM-friendly export of a run's model activity: a self-describing JSON bundle
   // (totals + per-agent insights + every call, with derived ratios) meant to be
   // handed straight to a model for analysis. Sets a download filename.

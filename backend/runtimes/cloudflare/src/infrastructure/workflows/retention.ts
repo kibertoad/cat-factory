@@ -1,4 +1,5 @@
 import type {
+  AgentContextSnapshotRepository,
   Clock,
   CommitProjectionRepository,
   LlmCallMetricRepository,
@@ -30,6 +31,8 @@ export interface RetentionDeps {
   rateLimitRepository: RateLimitRepository
   commitRepository: CommitProjectionRepository
   llmCallMetricRepository: LlmCallMetricRepository
+  /** Agent-context snapshots; pruned on the same window as the LLM call telemetry. */
+  agentContextSnapshotRepository: AgentContextSnapshotRepository
   /** Optional: prunes recurring-pipeline run history to {@link SCHEDULE_RUN_RETENTION_MS}. */
   pipelineScheduleRepository?: PipelineScheduleRepository
   clock: Clock
@@ -42,6 +45,7 @@ export interface RetentionResult {
   rateLimits: number
   commits: number
   llmCallMetrics: number
+  agentContextSnapshots: number
   scheduleRuns: number
 }
 
@@ -65,6 +69,7 @@ export async function sweepRetention({
   rateLimitRepository,
   commitRepository,
   llmCallMetricRepository,
+  agentContextSnapshotRepository,
   pipelineScheduleRepository,
   clock,
   policy,
@@ -78,6 +83,10 @@ export async function sweepRetention({
     commits: await prune(policy.commitMs, now, (c) => commitRepository.deleteOlderThan(c)),
     llmCallMetrics: await prune(policy.llmCallMetricsMs, now, (c) =>
       llmCallMetricRepository.deleteOlderThan(c),
+    ),
+    // Same window as the LLM call telemetry (heavy prompt + injected-file bodies).
+    agentContextSnapshots: await prune(policy.llmCallMetricsMs, now, (c) =>
+      agentContextSnapshotRepository.deleteOlderThan(c),
     ),
     scheduleRuns: pipelineScheduleRepository
       ? await prune(SCHEDULE_RUN_RETENTION_MS, now, (c) =>

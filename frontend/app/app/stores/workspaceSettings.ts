@@ -9,6 +9,7 @@ const DEFAULTS: WorkspaceSettings = {
   taskLimitMode: 'off',
   taskLimitShared: null,
   taskLimitPerType: null,
+  storeAgentContext: true,
 }
 
 /**

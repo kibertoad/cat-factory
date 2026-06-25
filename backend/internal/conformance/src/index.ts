@@ -25,4 +25,5 @@ export { makeIncorporatedReview, makeReadyReviewWithOpenItem } from './requireme
 export { makeIncorporatedClarityReview } from './clarity-fixtures.js'
 export { defineConformanceSuite } from './suite.js'
 export { defineLlmMetricsSuite } from './llm-metrics-suite.js'
+export { defineAgentContextSuite } from './agent-context-suite.js'
 export { CONFORMANCE_DRIVE_CONFIG, driveWorkspace } from './drive.js'
