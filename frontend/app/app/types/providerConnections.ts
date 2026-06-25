@@ -31,6 +31,12 @@ export interface ProviderDescriptor {
   missingRequired: string[]
   /** Base manifest a native provider's flat fields are overlaid onto before save. */
   manifestTemplate?: Record<string, unknown>
+  /**
+   * The CURRENT saved manifest (non-secret — only secret-ref key names), present once a
+   * connection exists. Edits are overlaid onto this (not the bare `manifestTemplate`) so
+   * re-saving preserves previously-stored providerConfig instead of dropping it.
+   */
+  savedManifest?: Record<string, unknown>
 }
 
 /** A workspace's provider binding, as exposed to clients (never secret values). */

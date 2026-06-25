@@ -47,9 +47,24 @@ const testResult = ref<{ ok: boolean; message?: string } | null>(null)
 const testing = ref(false)
 const busy = ref(false)
 
+// Seed the draft from the saved manifest so an edit starts from the CURRENT non-secret config
+// (baseUrl + providerConfig) rather than blanks — re-saving then re-sends it instead of
+// dropping it. Secret fields are never prefilled (write-only); they must be re-entered to save.
 function resetDraft() {
-  values.value = {}
   testResult.value = null
+  const saved = descriptor.value?.savedManifest
+  const cfg = (saved?.providerConfig as Record<string, unknown> | undefined) ?? {}
+  const next: Record<string, string> = {}
+  for (const f of descriptor.value?.configFields ?? []) {
+    if (f.secret) continue
+    if (f.key === 'baseUrl') {
+      const b = saved?.baseUrl ?? connection.value?.baseUrl
+      if (typeof b === 'string') next[f.key] = b
+    } else if (typeof cfg[f.key] === 'string') {
+      next[f.key] = cfg[f.key] as string
+    }
+  }
+  values.value = next
 }
 
 watch(
@@ -62,6 +77,10 @@ watch(
 
 /** A native provider ships a manifest scaffold ⇒ we can author/register the full manifest. */
 const canAuthor = computed(() => !!descriptor.value?.manifestTemplate)
+const secretFieldCount = computed(
+  () => (descriptor.value?.configFields ?? []).filter((f) => f.secret).length,
+)
+const hasSecretFields = computed(() => secretFieldCount.value > 0)
 /** Already-configured manifest provider: we can still rotate its secrets. */
 const canRotateSecrets = computed(() => !canAuthor.value && !!connection.value)
 
@@ -81,11 +100,18 @@ const canSave = computed(() => {
   return (descriptor.value.missingRequired ?? []).every(satisfied)
 })
 
-/** Overlay the flat field values onto the provider's manifest scaffold. */
+/**
+ * Overlay the flat field values onto the provider's manifest. We base the overlay on the
+ * CURRENT saved manifest when one exists (so previously-stored providerConfig — including
+ * nested values the flat form doesn't render — survives a re-save), falling back to the bare
+ * `manifestTemplate` scaffold on a first connect. Native providers only (a manifest provider
+ * has no template ⇒ null, and rotates secrets via the dedicated path instead).
+ */
 function buildManifestPayload(): { manifest: Record<string, unknown>; secrets: Record<string, string> } | null {
   const template = descriptor.value?.manifestTemplate
   if (!template) return null
-  const manifest: Record<string, unknown> = structuredClone(template)
+  const base = descriptor.value?.savedManifest ?? template
+  const manifest: Record<string, unknown> = structuredClone(base)
   const providerConfig: Record<string, unknown> = {
     ...((manifest.providerConfig as Record<string, unknown> | undefined) ?? {}),
   }
@@ -220,6 +246,12 @@ function fieldHelp(key: string): string | undefined {
         >
           <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             {{ connection ? 'Update configuration' : 'Connect' }}
+          </p>
+          <!-- A native re-register replaces the whole manifest; secrets are write-only so they
+               must be re-supplied. Non-secret config is prefilled, so it survives a save. -->
+          <p v-if="connection && canAuthor && hasSecretFields" class="text-[11px] text-amber-300/80">
+            Re-enter the secret field{{ secretFieldCount > 1 ? 's' : '' }} to save changes — stored
+            secrets are write-only and aren't shown.
           </p>
 
           <UFormField

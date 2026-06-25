@@ -168,4 +168,44 @@ describe('EnvironmentConnectionService — describeProvider.missingRequired', ()
     const descriptor = await service.describeProvider('ws1')
     expect(descriptor.missingRequired).toEqual(['apiToken'])
   })
+
+  // A `baseUrl` field is persisted onto the manifest's `baseUrl` (not providerConfig / the
+  // secret bundle), so the missingRequired read path must count it — otherwise a required
+  // baseUrl field would stay "missing" forever and the banner could never clear.
+  it('clears a required `baseUrl` field once the manifest carries a baseUrl', async () => {
+    const repo = fakeConnections()
+    const service = new EnvironmentConnectionService({
+      environmentConnectionRepository: repo,
+      workspaceRepository: fakeWorkspaces,
+      secretCipher: fakeCipher,
+      clock,
+      environmentProvider: {
+        describeConfig: () => [{ key: 'baseUrl', label: 'Base URL', required: true }],
+      } as unknown as EnvironmentProvider,
+      providerKind: 'native',
+    })
+
+    expect((await service.describeProvider('ws1')).missingRequired).toEqual(['baseUrl'])
+
+    await service.register('ws1', { manifest: baseManifest, secrets: {} })
+    expect((await service.describeProvider('ws1')).missingRequired).toEqual([])
+  })
+
+  // The descriptor exposes the saved manifest so the connect form can overlay edits onto it
+  // (preserving stored providerConfig) — but it must never leak a secret VALUE.
+  it('exposes the saved manifest without any secret value', async () => {
+    const repo = fakeConnections()
+    const service = nativeService(repo)
+    await service.register('ws1', {
+      manifest: { ...baseManifest, providerConfig: { project: 'acme-web', nested: { a: [1, 2] } } },
+      secrets: { apiToken: 'super-secret-token' },
+    })
+
+    const descriptor = await service.describeProvider('ws1')
+    expect((descriptor.savedManifest as { providerConfig: unknown }).providerConfig).toEqual({
+      project: 'acme-web',
+      nested: { a: [1, 2] },
+    })
+    expect(JSON.stringify(descriptor)).not.toContain('super-secret-token')
+  })
 })

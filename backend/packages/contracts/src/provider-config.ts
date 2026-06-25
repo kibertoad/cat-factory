@@ -79,6 +79,16 @@ export const providerDescriptorSchema = v.object({
    * carrying NO secret values — only the shape + secret-ref keys.
    */
   manifestTemplate: v.optional(v.record(v.string(), v.unknown())),
+  /**
+   * The provider's CURRENT saved manifest, when a connection exists. Non-secret: the
+   * manifest only carries secret-ref key NAMES (the actual values live in the encrypted
+   * bundle and are never returned), so this is safe to expose. The native connect form
+   * overlays edited fields onto THIS (falling back to `manifestTemplate` on a first
+   * connect), so re-saving preserves previously-stored `providerConfig` — including nested
+   * values the flat form doesn't render — instead of silently dropping it. Absent ⇒ no
+   * connection yet.
+   */
+  savedManifest: v.optional(v.record(v.string(), v.unknown())),
 })
 export type ProviderDescriptor = v.InferOutput<typeof providerDescriptorSchema>
 
