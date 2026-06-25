@@ -283,6 +283,10 @@ export type AgentKind =
   // read-only `bug-investigator` container agent enriches it into a prose report.
   | 'clarity-review'
   | 'bug-investigator'
+  // The human-testing gate: spins up an ephemeral environment and PARKS for a person to
+  // validate the change in a live URL, dispatching the Tester's `fixer` (from findings) or
+  // the `conflict-resolver` (on a conflicting pull-main) on demand. Opens its own window.
+  | 'human-test'
 
 /** A draggable agent definition shown in the agent palette. */
 /** Palette grouping for the agent archetypes (collapsible sections in the builder). */

@@ -168,6 +168,11 @@ export type {
   GateStepState,
   GateFailingCheck,
   GateAttempt,
+  // Human-testing gate shapes (ephemeral env + human validation loop).
+  HumanTestStepState,
+  HumanTestEnvironment,
+  HumanTestRound,
+  RequestHumanTestFixInput,
   MergeAssessment,
   MergeThresholdPreset,
   RequirementConcernLevel,

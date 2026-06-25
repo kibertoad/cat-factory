@@ -638,6 +638,26 @@ export class FetchGitHubClient implements GitHubClient {
     })
   }
 
+  async mergeBranch(
+    installationId: number,
+    ref: GitHubRepoRef,
+    input: { base: string; head: string },
+  ): Promise<'merged' | 'noop' | 'conflict'> {
+    try {
+      const { status } = await this.request(`/repos/${ref.owner}/${ref.repo}/merges`, {
+        installationId,
+        method: 'POST',
+        body: { base: input.base, head: input.head },
+      })
+      // 201 → a merge commit was created; 204 → already up to date (nothing to merge).
+      return status === 204 ? 'noop' : 'merged'
+    } catch (err) {
+      // 409 is GitHub's signal that the merge conflicts; the caller escalates from here.
+      if (err instanceof GitHubApiError && err.status === 409) return 'conflict'
+      throw err
+    }
+  }
+
   async deleteBranch(installationId: number, ref: GitHubRepoRef, branch: string): Promise<void> {
     try {
       await this.request(

@@ -61,6 +61,7 @@ import type {
   PipelineScheduleRepository,
   PullRequestMerger,
   PullRequestMergeabilityProvider,
+  BranchUpdater,
   ReleaseHealthProvider,
   IncidentEnrichmentProvider,
   ObservabilityConnectionRepository,
@@ -435,6 +436,8 @@ export interface CoreDependencies {
   ciStatusProvider?: CiStatusProvider
   /** Reads a block's PR mergeability so the `conflicts` step can gate on it. */
   mergeabilityProvider?: PullRequestMergeabilityProvider
+  /** Merges the repo default branch into a block's PR branch (human-test "pull main"). */
+  branchUpdater?: BranchUpdater
   /** Performs the real GitHub merge so a task's `done` means "PR merged". */
   pullRequestMerger?: PullRequestMerger
   /** Reads a release's Datadog monitors/SLOs so the `post-release-health` gate can watch. */
@@ -1368,6 +1371,8 @@ export function createCore(dependencies: CoreDependencies): Core {
     requirementReviewService: requirements?.service,
     clarityReviewService: clarity?.service,
     environmentProvisioning: environments?.provisioningService,
+    environmentTeardown: environments?.teardownService,
+    branchUpdater: dependencies.branchUpdater,
     blueprintReconciler,
     notificationService: notifications?.service,
     workspaceSettingsService: settings?.service,

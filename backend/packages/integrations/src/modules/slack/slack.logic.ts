@@ -21,6 +21,7 @@ export const SLACK_ROUTABLE_TYPES: NotificationType[] = [
   'ci_failed',
   'requirement_review',
   'release_regression',
+  'human_test_ready',
 ]
 
 /** A mapping entry's role, defaulting to `engineering` when unset (legacy entries). */
@@ -55,6 +56,9 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   // the task's creator.
   release_regression: { roles: ['engineering'], includeCreator: true },
   decision_required: { roles: [], includeCreator: true },
+  // The human-testing gate is a product-facing validation moment: tell the task's creator
+  // (whoever owns driving it) and the product reviewers.
+  human_test_ready: { roles: ['product'], includeCreator: true },
 }
 
 /** The mention audience for a notification type. */
@@ -135,6 +139,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   clarity_review: ':mag: Bug-report triage',
   release_regression: ':rotating_light: Release regression',
   decision_required: ':vertical_traffic_light: Decision needed',
+  human_test_ready: ':test_tube: Ready for human testing',
 }
 
 /** Format a percentage from a 0..1 score for the assessment context line. */
