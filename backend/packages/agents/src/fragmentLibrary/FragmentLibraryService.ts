@@ -1,12 +1,14 @@
 import type { PromptFragment } from '@cat-factory/contracts'
-import { FRAGMENTS } from '@cat-factory/prompt-fragments'
+import { FRAGMENTS, getFragment } from '@cat-factory/prompt-fragments'
 import type {
+  CreateDocumentFragmentInput,
   CreatePromptFragmentInput,
+  DocumentContentResolver,
   FragmentOwnerKind,
   ResolvedFragment,
   UpdatePromptFragmentInput,
 } from '@cat-factory/kernel'
-import { ValidationError } from '@cat-factory/kernel'
+import { ValidationError, buildExcerpt } from '@cat-factory/kernel'
 import type { Clock } from '@cat-factory/kernel'
 import type {
   FragmentSelector,
@@ -25,6 +27,9 @@ import {
 } from './fragment-catalog.js'
 import { slugFromPath } from './fragment-source.logic.js'
 
+/** Default freshness window for a document-backed fragment's live body (5 min). */
+export const DEFAULT_DOCUMENT_FRAGMENT_TTL_MS = 5 * 60 * 1000
+
 export interface FragmentLibraryServiceDependencies {
   promptFragmentRepository: PromptFragmentRepository
   workspaceRepository: WorkspaceRepository
@@ -33,6 +38,14 @@ export interface FragmentLibraryServiceDependencies {
   selector?: FragmentSelector
   /** Built-in catalog tier; overridable for tests. Defaults to the shipped FRAGMENTS. */
   builtins?: PromptFragment[]
+  /**
+   * Live document reader for document-backed fragments. When absent the feature
+   * is off: creating/refreshing a document fragment throws, and run resolution
+   * uses each entry's last-resolved `body` unchanged.
+   */
+  documentContentResolver?: DocumentContentResolver
+  /** Freshness window for a document-backed body; defaults to {@link DEFAULT_DOCUMENT_FRAGMENT_TTL_MS}. */
+  documentFragmentTtlMs?: number
 }
 
 /**
@@ -49,6 +62,8 @@ export class FragmentLibraryService implements FragmentResolver {
   private readonly clock: Clock
   private readonly selector: FragmentSelector
   private readonly builtins: PromptFragment[]
+  private readonly documentResolver?: DocumentContentResolver
+  private readonly ttlMs: number
 
   constructor(deps: FragmentLibraryServiceDependencies) {
     this.repo = deps.promptFragmentRepository
@@ -56,6 +71,8 @@ export class FragmentLibraryService implements FragmentResolver {
     this.clock = deps.clock
     this.selector = deps.selector ?? new DeterministicFragmentSelector()
     this.builtins = deps.builtins ?? FRAGMENTS
+    this.documentResolver = deps.documentContentResolver
+    this.ttlMs = deps.documentFragmentTtlMs ?? DEFAULT_DOCUMENT_FRAGMENT_TTL_MS
   }
 
   /** This tier's hand-authored/sourced fragments (raw, not merged), newest first. */
@@ -87,12 +104,103 @@ export class FragmentLibraryService implements FragmentResolver {
       sourceId: null,
       sourcePath: null,
       sourceSha: null,
+      docSource: null,
+      docExternalId: null,
+      resolvedAt: null,
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
     }
     await this.repo.upsert(record)
     return recordToWire(record)
+  }
+
+  /**
+   * Link an external document (Confluence/Notion page or GitHub file) as a
+   * **living** fragment at a tier. Fetches the page now to seed the catalog entry
+   * (title/body/summary) and stores its `documentRef` so run-time resolution can
+   * re-read it. The fetch goes through `fetchViaWorkspaceId`'s stored connection —
+   * the addressed workspace for a workspace-tier link, or the caller-supplied
+   * `viaWorkspaceId` for an account-tier link.
+   */
+  async createFromDocument(
+    ownerKind: FragmentOwnerKind,
+    ownerId: string,
+    input: CreateDocumentFragmentInput,
+    fetchViaWorkspaceId: string,
+  ): Promise<PromptFragment> {
+    if (!this.documentResolver) {
+      throw new ValidationError('The document-source integration is not configured')
+    }
+    const content = await this.documentResolver.fetch(fetchViaWorkspaceId, input.source, input.ref)
+    const fragmentId = (input.id ?? slugFromPath(content.title)).trim()
+    if (!fragmentId) {
+      throw new ValidationError('A fragment id (or a document with a non-empty title) is required')
+    }
+    const now = this.clock.now()
+    const record: PromptFragmentRecord = {
+      fragmentId,
+      ownerKind,
+      ownerId,
+      version: '1.0.0',
+      title: content.title,
+      category: input.category?.trim() || null,
+      summary: buildExcerpt(content.body),
+      body: content.body,
+      appliesTo: input.appliesTo ?? null,
+      tags: input.tags && input.tags.length ? input.tags : null,
+      sourceId: null,
+      sourcePath: null,
+      sourceSha: null,
+      docSource: input.source,
+      docExternalId: content.externalId,
+      resolvedAt: now,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    }
+    await this.repo.upsert(record)
+    return recordToWire(record)
+  }
+
+  /**
+   * Force an immediate live re-resolve of a document-backed fragment (the UI
+   * "refresh now" action), bypassing the TTL. No-op-ish for a non-document
+   * fragment (throws). Throws if the fetch fails so the caller sees the error.
+   */
+  async refresh(
+    ownerKind: FragmentOwnerKind,
+    ownerId: string,
+    fragmentId: string,
+    viaWorkspaceId: string,
+  ): Promise<PromptFragment> {
+    if (!this.documentResolver) {
+      throw new ValidationError('The document-source integration is not configured')
+    }
+    const existing = await this.repo.get(ownerKind, ownerId, fragmentId)
+    if (!existing || existing.deletedAt !== null) {
+      throw new ValidationError(`Fragment '${fragmentId}' was not found`)
+    }
+    if (!existing.docSource || existing.docExternalId === null) {
+      throw new ValidationError(`Fragment '${fragmentId}' is not document-backed`)
+    }
+    const content = await this.documentResolver.fetch(
+      viaWorkspaceId,
+      existing.docSource,
+      existing.docExternalId,
+    )
+    const now = this.clock.now()
+    const next: PromptFragmentRecord = {
+      ...existing,
+      title: content.title,
+      summary: buildExcerpt(content.body),
+      body: content.body,
+      docExternalId: content.externalId,
+      resolvedAt: now,
+      updatedAt: now,
+    }
+    await this.repo.upsert(next)
+    return recordToWire(next)
   }
 
   /**
@@ -122,6 +230,9 @@ export class FragmentLibraryService implements FragmentResolver {
       sourceId: null,
       sourcePath: null,
       sourceSha: null,
+      docSource: null,
+      docExternalId: null,
+      resolvedAt: null,
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
@@ -171,6 +282,9 @@ export class FragmentLibraryService implements FragmentResolver {
       sourceId: null,
       sourcePath: null,
       sourceSha: null,
+      docSource: null,
+      docExternalId: null,
+      resolvedAt: null,
       createdAt: now,
       updatedAt: now,
       deletedAt: now,
@@ -229,6 +343,82 @@ export class FragmentLibraryService implements FragmentResolver {
       selectedIds: ordered.map((e) => e.id),
     }
   }
+
+  /**
+   * Resolve a set of already-selected fragment ids to their bodies against the
+   * merged tenant catalog (built-in ∪ account ∪ workspace) — this is what the
+   * execution engine drives instead of the static `getFragment` map, so managed
+   * fragments actually reach a run. For a **document-backed** entry whose cached
+   * body is stale (older than the TTL), it live-fetches the page's current
+   * content via the document resolver, persists the refreshed body, and uses it;
+   * any fetch failure falls back to the last-resolved `body` so a run never
+   * blocks. Unknown ids are dropped; the result preserves the input order.
+   */
+  async resolveBodiesForRun(
+    workspaceId: string,
+    ids: string[],
+  ): Promise<{ id: string; body: string }[]> {
+    if (ids.length === 0) return []
+    const catalog = await this.resolveCatalog(workspaceId)
+    const byId = new Map(catalog.map((e) => [e.id, e]))
+
+    const out: { id: string; body: string }[] = []
+    const seen = new Set<string>()
+    for (const id of ids) {
+      if (seen.has(id)) continue
+      seen.add(id)
+      const entry = byId.get(id)
+      if (!entry) {
+        // Not in the tenant catalog — fall back to a deployment-registered
+        // built-in (the static pool), else drop the stale selection.
+        const builtin = getFragment(id)
+        if (builtin) out.push({ id, body: builtin.body })
+        continue
+      }
+      const body = entry.documentRef
+        ? await this.resolveDocumentBody(workspaceId, entry)
+        : entry.body
+      out.push({ id, body })
+    }
+    return out
+  }
+
+  /**
+   * The live body for a document-backed catalog entry: re-fetch from the source
+   * when stale (and the resolver is wired), persisting the refresh; otherwise the
+   * cached body. Never throws — a failed fetch degrades to the cached body.
+   */
+  private async resolveDocumentBody(
+    workspaceId: string,
+    entry: ResolvedCatalogEntry,
+  ): Promise<string> {
+    const ref = entry.documentRef
+    if (!ref || !this.documentResolver || entry.tier === 'builtin') return entry.body
+    const now = this.clock.now()
+    const fresh = entry.resolvedAt !== null && now - entry.resolvedAt < this.ttlMs
+    if (fresh) return entry.body
+    const ownerId =
+      entry.tier === 'account' ? await this.workspaces.accountOf(workspaceId) : workspaceId
+    if (!ownerId) return entry.body
+    try {
+      const content = await this.documentResolver.fetch(workspaceId, ref.source, ref.externalId)
+      const existing = await this.repo.get(entry.tier, ownerId, entry.id)
+      if (existing) {
+        await this.repo.upsert({
+          ...existing,
+          title: content.title,
+          summary: buildExcerpt(content.body),
+          body: content.body,
+          docExternalId: content.externalId,
+          resolvedAt: now,
+          updatedAt: now,
+        })
+      }
+      return content.body
+    } catch {
+      return entry.body // source unreachable → last-resolved body keeps the run going
+    }
+  }
 }
 
 function recordToWire(record: PromptFragmentRecord): PromptFragment {
@@ -245,5 +435,9 @@ function recordToWire(record: PromptFragmentRecord): PromptFragment {
   if (record.sourceId && record.sourcePath !== null && record.sourceSha !== null) {
     fragment.source = { sourceId: record.sourceId, path: record.sourcePath, sha: record.sourceSha }
   }
+  if (record.docSource && record.docExternalId !== null) {
+    fragment.documentRef = { source: record.docSource, externalId: record.docExternalId }
+  }
+  if (record.resolvedAt !== null) fragment.resolvedAt = record.resolvedAt
   return fragment
 }

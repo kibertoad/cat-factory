@@ -86,7 +86,7 @@ import {
   classifyReleaseHealth,
   describeRegressedSignals,
 } from './release.logic.js'
-import { AgentContextBuilder } from './AgentContextBuilder.js'
+import { AgentContextBuilder, type FragmentBodyResolver } from './AgentContextBuilder.js'
 import { CompanionController } from './CompanionController.js'
 import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
@@ -295,6 +295,13 @@ export interface ExecutionServiceDependencies {
    * answer → incorporate → re-review loop). Absent → the gate step passes through.
    */
   clarityReviewService?: ClarityReviewService
+  /**
+   * Optional: resolves fragment ids against the merged tenant catalog (managed +
+   * document-backed fragments), live-resolving linked Confluence/Notion/GitHub
+   * documents at run time. Wired only when the prompt-fragment library is
+   * configured; absent → the engine resolves against the static built-in pool.
+   */
+  fragmentResolver?: FragmentBodyResolver
   /**
    * Optional: when the individual-usage subscription store is configured, a finished
    * run's per-run credential activation is deleted here the moment it reaches a terminal
@@ -556,6 +563,7 @@ export class ExecutionService {
     requirementReviewService,
     clarityReviewRepository,
     clarityReviewService,
+    fragmentResolver,
     environmentProvisioning,
     environmentTeardown,
     branchUpdater,
@@ -605,6 +613,7 @@ export class ExecutionService {
       requirementReviews: requirementReviewRepository,
       clarityReviews: clarityReviewRepository,
       environmentProvisioning,
+      fragmentResolver,
     })
     this.mergeResolver = new MergeResolver({
       blockRepository,
@@ -3561,7 +3570,10 @@ export class ExecutionService {
     )
     // A dependent's OTHER blockers may live in another workspace (a shared service); resolve
     // them so `dependenciesMet` doesn't treat a cross-workspace blocker as missing-⇒-satisfied.
-    await this.augmentWithCrossWorkspaceDeps(blocks, dependents.flatMap((d) => d.dependsOn))
+    await this.augmentWithCrossWorkspaceDeps(
+      blocks,
+      dependents.flatMap((d) => d.dependsOn),
+    )
     for (const dependent of dependents) {
       // All of the dependent's blockers must now be satisfied (not just the one that merged).
       if (!dependenciesMet(blocks, dependent.id)) continue

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type {
+  CreateDocumentFragmentInput,
   CreatePromptFragmentInput,
   FragmentSource,
   LinkFragmentSourceInput,
@@ -77,6 +78,28 @@ export const useFragmentLibraryStore = defineStore('fragmentLibrary', () => {
     await Promise.all([reloadTier(), refreshResolved()])
   }
 
+  /** Link an external document as a living (dynamically-resolved) fragment. */
+  async function createDocumentFragment(input: CreateDocumentFragmentInput) {
+    loading.value = true
+    try {
+      await api.createDocumentFragment('workspace', workspace.requireId(), input)
+      await Promise.all([reloadTier(), refreshResolved()])
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /** Force an immediate live re-resolve of a document-backed fragment. */
+  async function refreshDocumentFragment(fragmentId: string) {
+    loading.value = true
+    try {
+      await api.refreshFragment('workspace', workspace.requireId(), fragmentId)
+      await Promise.all([reloadTier(), refreshResolved()])
+    } finally {
+      loading.value = false
+    }
+  }
+
   /** Tombstone a fragment at the workspace tier (suppresses an inherited one). */
   async function remove(fragmentId: string) {
     await api.deleteFragment('workspace', workspace.requireId(), fragmentId)
@@ -137,6 +160,8 @@ export const useFragmentLibraryStore = defineStore('fragmentLibrary', () => {
     probe,
     refreshResolved,
     create,
+    createDocumentFragment,
+    refreshDocumentFragment,
     update,
     remove,
     linkSource,

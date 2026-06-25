@@ -59,6 +59,16 @@ export function buildRevisionContext(step: PipelineStep): {
   }
 }
 
+/**
+ * Resolves already-selected fragment ids to their bodies against the merged
+ * tenant catalog, live-resolving any document-backed entries. Implemented by the
+ * fragment-library service; wired only when the library is configured. Absent →
+ * the builder falls back to the static `getFragment` pool (built-ins only).
+ */
+export interface FragmentBodyResolver {
+  resolveBodiesForRun(workspaceId: string, ids: string[]): Promise<{ id: string; body: string }[]>
+}
+
 /** The collaborators the context builder reads from (all owned by the engine container). */
 export interface AgentContextBuilderDeps {
   workspaceRepository: WorkspaceRepository
@@ -69,6 +79,12 @@ export interface AgentContextBuilderDeps {
   requirementReviews?: RequirementReviewRepository
   clarityReviews?: ClarityReviewRepository
   environmentProvisioning?: EnvironmentProvisioningService
+  /**
+   * Optional: resolves fragment ids against the merged tenant catalog (managed +
+   * document-backed entries). When wired the engine uses it instead of the static
+   * pool, so curated and living-document fragments actually reach a run.
+   */
+  fragmentResolver?: FragmentBodyResolver
 }
 
 /**
@@ -297,12 +313,16 @@ export class AgentContextBuilder {
         seen.add(id)
         ids.push(id)
       }
-      const fragments = ids
-        .map((id) => {
-          const fragment = getFragment(id)
-          return fragment ? { id, body: fragment.body } : null
-        })
-        .filter((f): f is { id: string; body: string } => f !== null)
+      // Prefer the tenant-catalog resolver (managed + live document-backed
+      // fragments) when wired; otherwise resolve against the static built-in pool.
+      const fragments = this.deps.fragmentResolver
+        ? await this.deps.fragmentResolver.resolveBodiesForRun(workspaceId, ids)
+        : ids
+            .map((id) => {
+              const fragment = getFragment(id)
+              return fragment ? { id, body: fragment.body } : null
+            })
+            .filter((f): f is { id: string; body: string } => f !== null)
       if (fragments.length === 0) return null
       step.selectedFragmentIds = fragments.map((f) => f.id)
       return { fragments }

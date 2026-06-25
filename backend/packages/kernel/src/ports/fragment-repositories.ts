@@ -1,4 +1,9 @@
-import type { AgentKind, BlockType, FragmentOwnerKind } from '../domain/types.js'
+import type {
+  AgentKind,
+  BlockType,
+  DocumentSourceKind,
+  FragmentOwnerKind,
+} from '../domain/types.js'
 
 // ---------------------------------------------------------------------------
 // Persistence ports for the prompt-fragment library (ADR 0006). The worker
@@ -33,6 +38,16 @@ export interface PromptFragmentRecord {
   sourceId: string | null
   sourcePath: string | null
   sourceSha: string | null
+  /**
+   * Provenance, when the body is a **living** external document (a Confluence/
+   * Notion page or a GitHub file). Both null for hand-authored / repo-sourced /
+   * built-in fragments. When set, `body` is the last-resolved snapshot and the
+   * engine re-resolves the source at run time (TTL-gated, see {@link resolvedAt}).
+   */
+  docSource: DocumentSourceKind | null
+  docExternalId: string | null
+  /** When the document-backed body was last resolved from the source; null otherwise. */
+  resolvedAt: number | null
   createdAt: number
   updatedAt: number
   /** Tombstone: suppresses an inherited fragment, or marks one removed upstream. */

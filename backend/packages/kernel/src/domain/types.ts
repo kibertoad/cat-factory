@@ -33,6 +33,7 @@ export type {
   FragmentOwnerKind,
   FragmentTier,
   CreatePromptFragmentInput,
+  CreateDocumentFragmentInput,
   UpdatePromptFragmentInput,
   FragmentSource,
   LinkFragmentSourceInput,

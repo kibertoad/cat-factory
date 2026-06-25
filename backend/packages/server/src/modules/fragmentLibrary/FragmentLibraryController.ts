@@ -1,9 +1,10 @@
 import {
+  createDocumentFragmentSchema,
   createPromptFragmentSchema,
   linkFragmentSourceSchema,
   updatePromptFragmentSchema,
 } from '@cat-factory/contracts'
-import type { FragmentOwnerKind } from '@cat-factory/kernel'
+import { ValidationError, type FragmentOwnerKind } from '@cat-factory/kernel'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { FragmentLibraryModule } from '@cat-factory/orchestration'
@@ -35,6 +36,18 @@ const sourcesUnavailable = (c: Context<AppEnv>) =>
     503,
   )
 
+const documentsUnavailable = (c: Context<AppEnv>) =>
+  c.json(
+    {
+      error: {
+        code: 'unavailable',
+        message:
+          'Document-backed fragments require the document-source integration to be configured',
+      },
+    },
+    503,
+  )
+
 /**
  * The prompt-fragment library API (ADR 0006 §8), mounted twice — once under
  * `/accounts/:accountId` and once under `/workspaces/:workspaceId` — so a tier's
@@ -55,6 +68,7 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
   if (scope === 'account') {
     app.use('/prompt-fragments', accountGuard)
     app.use('/prompt-fragments/*', accountGuard)
+    app.use('/document-fragments', accountGuard)
     app.use('/fragment-sources', accountGuard)
     app.use('/fragment-sources/*', accountGuard)
   }
@@ -95,6 +109,54 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
     if (!lib) return unavailable(c)
     await lib.libraryService.remove(ownerKind, ownerId(c), param(c, 'fragmentId'))
     return c.body(null, 204)
+  })
+
+  // ---- document-backed fragments (living source of truth) -----------------
+
+  // Link an external document (Confluence/Notion page or GitHub file) as a
+  // fragment whose body is re-resolved from the source at run time. The fetch
+  // uses the addressed workspace's connection at the workspace scope, or the
+  // body's `viaWorkspaceId` at the account scope (credentials are per-workspace).
+  app.post('/document-fragments', jsonBody(createDocumentFragmentSchema), async (c) => {
+    const lib = requireLibrary(c)
+    if (!lib) return unavailable(c)
+    if (!c.get('container').documents) return documentsUnavailable(c)
+    const input = c.req.valid('json')
+    const viaWorkspaceId =
+      scope === 'workspace' ? param(c, 'workspaceId') : (input.viaWorkspaceId ?? '')
+    if (!viaWorkspaceId) {
+      throw new ValidationError(
+        'An account-tier document fragment needs `viaWorkspaceId` (the workspace whose connection to fetch through)',
+      )
+    }
+    const fragment = await lib.libraryService.createFromDocument(
+      ownerKind,
+      ownerId(c),
+      input,
+      viaWorkspaceId,
+    )
+    return c.json(fragment, 201)
+  })
+
+  // Force an immediate live re-resolve of a document-backed fragment.
+  app.post('/prompt-fragments/:fragmentId{.+}/refresh', async (c) => {
+    const lib = requireLibrary(c)
+    if (!lib) return unavailable(c)
+    if (!c.get('container').documents) return documentsUnavailable(c)
+    const viaWorkspaceId =
+      scope === 'workspace' ? param(c, 'workspaceId') : (c.req.query('viaWorkspaceId') ?? '')
+    if (!viaWorkspaceId) {
+      throw new ValidationError(
+        'An account-tier refresh needs a `viaWorkspaceId` query param (the workspace whose connection to fetch through)',
+      )
+    }
+    const fragment = await lib.libraryService.refresh(
+      ownerKind,
+      ownerId(c),
+      param(c, 'fragmentId'),
+      viaWorkspaceId,
+    )
+    return c.json(fragment)
   })
 
   // ---- repo sources -------------------------------------------------------

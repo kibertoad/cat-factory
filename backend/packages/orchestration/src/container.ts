@@ -33,7 +33,7 @@ import type {
   ModelRef,
   ProviderCapabilities,
 } from '@cat-factory/kernel'
-import type { DocumentSourceProvider } from '@cat-factory/kernel'
+import type { DocumentContentResolver, DocumentSourceProvider } from '@cat-factory/kernel'
 import type { DocumentConnectionRepository, DocumentRepository } from '@cat-factory/kernel'
 import type { TaskSourceProvider } from '@cat-factory/kernel'
 import type {
@@ -109,6 +109,7 @@ import {
   GitHubSyncService,
   WebhookService,
   DocumentConnectionService,
+  DocumentContentResolverService,
   DocumentImportService,
   DocumentPlannerService,
   DocumentLinkService,
@@ -431,6 +432,15 @@ export interface CoreDependencies {
   fragmentSourceRepository?: FragmentSourceRepository
   fragmentSelector?: FragmentSelector
   resolveFragmentInstallationId?: ResolveFragmentInstallationId
+  /**
+   * Live document reader for **document-backed** fragments (Confluence/Notion/
+   * GitHub files linked as living best-practice fragments). Wired by a facade
+   * from its document-source registry + connection service; absent → linking a
+   * document as a fragment is rejected and run resolution uses cached bodies.
+   */
+  documentContentResolver?: DocumentContentResolver
+  /** Freshness window for a document-backed fragment body; defaults to 5 min. */
+  documentFragmentTtlMs?: number
 
   // ---- Notifications + merge lifecycle (optional; wired when configured) ----
   // The notifications subsystem (the in-app inbox + the board's human-action
@@ -558,6 +568,8 @@ export interface DocumentsModule {
   importService: DocumentImportService
   plannerService: DocumentPlannerService
   linkService: DocumentLinkService
+  /** Live read seam for document-backed prompt fragments (re-resolved at run time). */
+  contentResolver: DocumentContentResolver
 }
 
 /** The task-source integration's services, present only when configured. */
@@ -857,7 +869,8 @@ function createDocumentsModule(
     blockRepository: deps.blockRepository,
     documentRepository,
   })
-  return { connectionService, importService, plannerService, linkService }
+  const contentResolver = new DocumentContentResolverService({ registry, connectionService })
+  return { connectionService, importService, plannerService, linkService, contentResolver }
 }
 
 /**
@@ -1148,7 +1161,10 @@ function createClarityModule(
  * falls back to deterministic matching. Returns undefined so the feature stays
  * cleanly opt-in (the engine then uses the block's manual fragmentIds).
  */
-function createFragmentLibraryModule(deps: CoreDependencies): FragmentLibraryModule | undefined {
+function createFragmentLibraryModule(
+  deps: CoreDependencies,
+  documentContentResolver: DocumentContentResolver | undefined,
+): FragmentLibraryModule | undefined {
   const { promptFragmentRepository } = deps
   if (!promptFragmentRepository) return undefined
 
@@ -1157,6 +1173,10 @@ function createFragmentLibraryModule(deps: CoreDependencies): FragmentLibraryMod
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
     selector: deps.fragmentSelector,
+    // An explicitly-injected resolver (tests/conformance) wins; otherwise use the
+    // one the document-source module built from this deployment's providers.
+    documentContentResolver: deps.documentContentResolver ?? documentContentResolver,
+    documentFragmentTtlMs: deps.documentFragmentTtlMs,
   })
 
   const sourceService =
@@ -1405,7 +1425,10 @@ export function createCore(dependencies: CoreDependencies): Core {
       })
     : undefined
   const environments = createEnvironmentsModule(dependencies)
-  const fragmentLibrary = createFragmentLibraryModule(dependencies)
+  // Built before the fragment library so a document-backed fragment can re-resolve
+  // its linked Confluence/Notion/GitHub page through the document module's reader.
+  const documents = createDocumentsModule(dependencies, boardService)
+  const fragmentLibrary = createFragmentLibraryModule(dependencies, documents?.contentResolver)
 
   // Reconciles a `blueprints` step's decomposition onto the board. Needs only the
   // board service + block repository (both always present), so it is wired
@@ -1436,6 +1459,10 @@ export function createCore(dependencies: CoreDependencies): Core {
     executionEventPublisher,
     boardService,
     spendService,
+    // Route runtime fragment-id resolution through the merged tenant catalog (so
+    // managed + document-backed fragments reach a run), present only when the
+    // library is configured; otherwise the engine falls back to the static pool.
+    fragmentResolver: fragmentLibrary?.libraryService,
     requirementReviewService: requirements?.service,
     clarityReviewService: clarity?.service,
     environmentProvisioning: environments?.provisioningService,
@@ -1462,7 +1489,6 @@ export function createCore(dependencies: CoreDependencies): Core {
   })
 
   const github = createGitHubModule(dependencies)
-  const documents = createDocumentsModule(dependencies, boardService)
   const tasks = createTasksModule(dependencies, boardService)
   const runners = createRunnersModule(dependencies)
   // After a bootstrap succeeds, map the new repo into a blueprint + the board by

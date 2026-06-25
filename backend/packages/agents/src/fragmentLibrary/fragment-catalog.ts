@@ -1,5 +1,5 @@
 import type { PromptFragment } from '@cat-factory/contracts'
-import type { AgentKind, BlockType, FragmentTier } from '@cat-factory/kernel'
+import type { AgentKind, BlockType, DocumentSourceKind, FragmentTier } from '@cat-factory/kernel'
 import type { FragmentSelectionContext, SelectableFragment } from '@cat-factory/kernel'
 import type { PromptFragmentRecord } from '@cat-factory/kernel'
 
@@ -18,6 +18,10 @@ export interface ResolvedCatalogEntry {
   appliesTo: { blockTypes?: BlockType[]; agentKinds?: AgentKind[] } | null
   tags: string[] | null
   source: { sourceId: string; path: string; sha: string } | null
+  /** Living document provenance (Confluence/Notion/GitHub), when document-backed. */
+  documentRef: { source: DocumentSourceKind; externalId: string } | null
+  /** When the document-backed body was last resolved (epoch ms); null otherwise. */
+  resolvedAt: number | null
   tier: FragmentTier
 }
 
@@ -33,6 +37,8 @@ function builtinToEntry(fragment: PromptFragment): ResolvedCatalogEntry {
     appliesTo: fragment.appliesTo ?? null,
     tags: fragment.tags ?? null,
     source: fragment.source ?? null,
+    documentRef: fragment.documentRef ?? null,
+    resolvedAt: fragment.resolvedAt ?? null,
     tier: 'builtin',
   }
 }
@@ -52,6 +58,11 @@ function recordToEntry(record: PromptFragmentRecord, tier: FragmentTier): Resolv
       record.sourceId && record.sourcePath !== null && record.sourceSha !== null
         ? { sourceId: record.sourceId, path: record.sourcePath, sha: record.sourceSha }
         : null,
+    documentRef:
+      record.docSource && record.docExternalId !== null
+        ? { source: record.docSource, externalId: record.docExternalId }
+        : null,
+    resolvedAt: record.resolvedAt,
     tier,
   }
 }
@@ -113,6 +124,8 @@ export function entryToFragment(entry: ResolvedCatalogEntry): PromptFragment {
   if (entry.appliesTo) fragment.appliesTo = entry.appliesTo
   if (entry.tags && entry.tags.length) fragment.tags = entry.tags
   if (entry.source) fragment.source = entry.source
+  if (entry.documentRef) fragment.documentRef = entry.documentRef
+  if (entry.resolvedAt !== null) fragment.resolvedAt = entry.resolvedAt
   return fragment
 }
 

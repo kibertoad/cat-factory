@@ -6,6 +6,7 @@ import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from 
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
 import { releaseSignalSchema } from './release.js'
 import { environmentStatusSchema } from './environments.js'
+import { documentSourceKindSchema } from './documents.js'
 import {
   agentKindSchema,
   agentStateSchema,
@@ -266,6 +267,23 @@ export const promptFragmentSchema = v.object({
       sha: v.string(),
     }),
   ),
+  /**
+   * Provenance for a fragment whose body is a **living** external document
+   * (a Confluence/Notion page or a GitHub file). Unlike a repo `source`, a
+   * document-backed fragment is NOT a one-time snapshot: at run time the engine
+   * re-resolves the page's current content from the linked source (TTL-gated,
+   * falling back to the last-resolved `body`). Absent for hand-authored, repo-
+   * sourced, and built-in fragments.
+   */
+  documentRef: v.optional(
+    v.object({
+      source: documentSourceKindSchema,
+      /** The source's stable id for the page/file (a valid import ref). */
+      externalId: v.string(),
+    }),
+  ),
+  /** When the document-backed body was last resolved from the source (epoch ms). */
+  resolvedAt: v.optional(v.number()),
 })
 export type PromptFragment = v.InferOutput<typeof promptFragmentSchema>
 
