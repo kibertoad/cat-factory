@@ -156,6 +156,7 @@ import { D1ServiceFragmentDefaultsRepository } from './repositories/D1ServiceFra
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). Importing
 // it registers the gates via the public seam; the facade wires each gate's provider below.
 import {
+  clearGateProviders,
   wireCiStatusProvider,
   wireMergeabilityProvider,
   wireReleaseHealthProvider,
@@ -1434,6 +1435,14 @@ export function buildContainer(
   const db = env.DB
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
+
+  // The built-in gates' providers are deployment-global module handles (in `@cat-factory/gates`),
+  // not per-container DI. Reset them up-front so each build re-wires from a clean slate and only
+  // the gates this env actually configures stay wired: `selectMergeLifecycleDeps` /
+  // `selectReleaseHealthDeps` wire their providers only inside their `enabled` branches and never
+  // clear, so without this reset a provider wired by an earlier (configured) build would leak into
+  // a later (unconfigured) build and make its gate probe a stale handle instead of passing through.
+  clearGateProviders()
 
   // The runner-backend factory is shared by every container-backed flow (the
   // implementation executor and the repo bootstrapper), so both dispatch through the

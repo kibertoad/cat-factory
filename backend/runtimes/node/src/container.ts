@@ -96,6 +96,7 @@ import {
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). Importing
 // it registers the gates via the public seam; the facade wires each gate's provider below.
 import {
+  clearGateProviders,
   wireCiStatusProvider,
   wireMergeabilityProvider,
   wireReleaseHealthProvider,
@@ -826,6 +827,15 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
   const repos = options.repos ?? createDrizzleRepositories(options.db, clock)
+
+  // The built-in gates' providers are deployment-global module handles (in `@cat-factory/gates`),
+  // not per-container DI. Reset them up-front so each build re-wires from a clean slate and only
+  // the gates this deployment actually configures stay wired: the GitHub + release-health wiring
+  // below runs only inside its `enabled`/`githubClient` branches and never clears, so without this
+  // reset a provider wired by an earlier (configured) build in the same process would leak into a
+  // later (unconfigured) build and make its gate probe a stale handle instead of passing through.
+  // Mirrors the Worker facade (keep the runtimes symmetric).
+  clearGateProviders()
 
   // Honour the workspace's model presets at run time (block-pinned > the task's
   // selected/default model preset > env routing), uniformly for inline and container
