@@ -1473,6 +1473,16 @@ export class ExecutionService {
    *    endpoint, so it costs the deployment nothing; detected off the resolved model id.
    * This is what makes a `0` budget mean "no PAID spend" without bricking a workspace that
    * deliberately runs only local models or subscriptions (see the spend-budget docs).
+   *
+   * Once the executor resolves the step's concrete model id, the metered/non-metered
+   * decision is delegated to the SAME {@link modelIdIsMetered} predicate the up-front
+   * {@link assertBudgetAllowsPipeline} gate uses, so the two gates can't classify a model
+   * differently (a divergence would let a run pass the start gate then immediately pause,
+   * or vice versa). The executor's `isQuotaBased` is still consulted first as the
+   * authoritative subscription-routing signal; the shared predicate covers local-runner +
+   * subscription-by-capability + Cloudflare classification identically to the start gate.
+   * Falls back to a bare local-id check when no capability resolver is wired.
+   *
    * Best-effort and side-effect-free: an executor without the capability, a missing block,
    * or any resolution error all report false (treated as budget-metered, the prior
    * behaviour). Only consulted on the over-budget path, so it never touches the happy path.
@@ -1498,7 +1508,14 @@ export class ExecutionService {
       }
       if (this.agentExecutor.resolveModel) {
         const modelId = await this.agentExecutor.resolveModel(context)
-        if (parseLocalModelId(modelId)) return true
+        // Classify the resolved id through the shared predicate (same as the start gate)
+        // when capabilities are wired; else fall back to the bare local-runner check.
+        if (this.resolveProviderCapabilities) {
+          const caps = await this.resolveProviderCapabilities(workspaceId, instance.initiatedBy)
+          if (!this.modelIdIsMetered(modelId, caps)) return true
+        } else if (parseLocalModelId(modelId)) {
+          return true
+        }
       }
       return false
     } catch {

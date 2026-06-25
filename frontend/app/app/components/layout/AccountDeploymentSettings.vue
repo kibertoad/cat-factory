@@ -64,8 +64,19 @@ async function saveSlack() {
 }
 
 async function clearSlack() {
-  await store.save(props.accountId, { secrets: { slackOAuth: null } })
-  toast.add({ title: 'Slack OAuth cleared', icon: 'i-lucide-check', color: 'success' })
+  savingSlack.value = true
+  try {
+    await store.save(props.accountId, { secrets: { slackOAuth: null } })
+    toast.add({ title: 'Slack OAuth cleared', icon: 'i-lucide-check', color: 'success' })
+  } catch (e) {
+    toast.add({
+      title: 'Could not clear Slack OAuth',
+      description: e instanceof Error ? e.message : String(e),
+      color: 'error',
+    })
+  } finally {
+    savingSlack.value = false
+  }
 }
 
 async function saveWeb() {
@@ -102,8 +113,19 @@ async function saveWeb() {
 }
 
 async function clearWeb() {
-  await store.save(props.accountId, { secrets: { webSearch: null } })
-  toast.add({ title: 'Web search keys cleared', icon: 'i-lucide-check', color: 'success' })
+  savingWeb.value = true
+  try {
+    await store.save(props.accountId, { secrets: { webSearch: null } })
+    toast.add({ title: 'Web search keys cleared', icon: 'i-lucide-check', color: 'success' })
+  } catch (e) {
+    toast.add({
+      title: 'Could not clear web search keys',
+      description: e instanceof Error ? e.message : String(e),
+      color: 'error',
+    })
+  } finally {
+    savingWeb.value = false
+  }
 }
 </script>
 
@@ -158,6 +180,7 @@ async function clearWeb() {
           color="neutral"
           variant="ghost"
           size="xs"
+          :loading="savingSlack"
           @click="clearSlack"
         >
           Clear
@@ -202,6 +225,7 @@ async function clearWeb() {
           color="neutral"
           variant="ghost"
           size="xs"
+          :loading="savingWeb"
           @click="clearWeb"
         >
           Clear
