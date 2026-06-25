@@ -1,15 +1,20 @@
 <script setup lang="ts">
-// Workspace settings: "OpenRouter models" — browse OpenRouter's 300+ gateway models and
-// enable a subset for this workspace. OpenRouter is reached via the workspace's API-key pool
-// (connect an OpenRouter key first under "Provider keys"); "Refresh" probes its live catalog
-// server-side, then tick the models to enable. Enabled models — with their context window and
-// price — appear automatically in the model picker and meter against the spend budget.
+// "OpenRouter" — the one-stop OpenRouter setup panel. OpenRouter is a single gateway to
+// 300+ models reached via the workspace's API-key pool, so this panel owns the whole flow:
+//  1. Connect an OpenRouter key inline (no need to detour through Vendors & keys).
+//  2. The live catalog auto-refreshes as soon as a key exists.
+//  3. Tick models (or one-click "Enable recommended") and Save.
+// Enabled models — with their context window and price — appear in the model picker and
+// meter against the spend budget. The Vendors & keys → Proxies tab remains a valid second
+// entry point for the key; this panel just makes OpenRouter self-sufficient.
 import { computed, ref, watch } from 'vue'
 import type { OpenRouterModelMeta } from '~/types/openrouter'
 
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
 const store = useOpenRouterStore()
+const apiKeys = useApiKeysStore()
+const models = useModelsStore()
 const toast = useToast()
 
 const open = computed({
@@ -17,16 +22,39 @@ const open = computed({
   set: (v: boolean) => (v ? ui.openOpenRouter() : ui.closeOpenRouter()),
 })
 
+// Popular slugs offered by "Enable recommended" — these mirror the curated `openrouter`
+// refs in the backend MODEL_CATALOG. Only the ones present in the live browse list are
+// ticked, so a recommendation never enables a slug OpenRouter doesn't actually serve.
+const RECOMMENDED_SLUGS = [
+  'anthropic/claude-opus-4.8',
+  'openai/gpt-5.5',
+  'google/gemini-3-pro',
+  'deepseek/deepseek-chat',
+]
+
+// Whether the workspace/user has an OpenRouter key connected at any reachable scope.
+const keyConnected = computed(() => apiKeys.configuredProviders.has('openrouter'))
+
 // The enabled slugs the user has ticked (seeded from the persisted catalog on open).
 const selected = ref<Set<string>>(new Set())
 const filter = ref('')
 const busy = ref(false)
 
-// Load the persisted catalog whenever the panel opens; seed the tick selection from it.
+// Inline key-entry form state (shown until an OpenRouter key is connected).
+const keyScope = ref<'workspace' | 'user'>('workspace')
+const keyLabel = ref('')
+const keyValue = ref('')
+const connectingKey = ref(false)
+
+// Load key state + persisted catalog whenever the panel opens; seed the tick selection,
+// then auto-refresh the live catalog if a key is already connected (no extra click).
 watch(open, (isOpen) => {
   if (!isOpen || !workspace.workspaceId) return
-  void store.load(workspace.workspaceId).then(() => {
+  const ws = workspace.workspaceId
+  void apiKeys.load(ws).catch(() => {})
+  void store.load(ws).then(() => {
     selected.value = new Set(store.enabled.map((m) => m.id))
+    if (keyConnected.value && store.browse.length === 0) void refresh()
   })
 })
 
@@ -45,6 +73,12 @@ const visible = computed(() => {
 
 const selectedCount = computed(() => selected.value.size)
 
+// Recommended slugs that are actually available in the current browse/enabled list.
+const recommendedAvailable = computed(() => {
+  const ids = new Set(source.value.map((m) => m.id))
+  return RECOMMENDED_SLUGS.filter((slug) => ids.has(slug))
+})
+
 function contextLabel(tokens: number | undefined): string {
   if (!tokens) return ''
   return tokens >= 1000 ? `${Math.round(tokens / 1000)}K ctx` : `${tokens} ctx`
@@ -61,13 +95,47 @@ function toggle(id: string, on: boolean) {
   selected.value = next
 }
 
+function enableRecommended() {
+  const next = new Set(selected.value)
+  for (const slug of recommendedAvailable.value) next.add(slug)
+  selected.value = next
+}
+
+async function connectKey() {
+  if (!keyValue.value.trim() || !workspace.workspaceId) return
+  connectingKey.value = true
+  try {
+    const input = {
+      provider: 'openrouter' as const,
+      label: keyLabel.value.trim() || 'openrouter key',
+      key: keyValue.value.trim(),
+    }
+    if (keyScope.value === 'workspace') await apiKeys.addWorkspaceKey(input)
+    else await apiKeys.addUserKey(input)
+    keyValue.value = ''
+    keyLabel.value = ''
+    toast.add({ title: 'OpenRouter key connected', icon: 'i-lucide-check', color: 'success' })
+    // Now that a key exists, load the live catalog automatically.
+    await refresh()
+  } catch (e) {
+    toast.add({
+      title: 'Could not connect key',
+      description: e instanceof Error ? e.message : String(e),
+      icon: 'i-lucide-triangle-alert',
+      color: 'error',
+    })
+  } finally {
+    connectingKey.value = false
+  }
+}
+
 async function refresh() {
   if (!workspace.workspaceId) return
   const result = await store.refresh(workspace.workspaceId)
   if (!result.reachable) {
     toast.add({
       title: 'Could not reach OpenRouter',
-      description: store.refreshError ?? 'Connect an OpenRouter key under Provider keys first.',
+      description: store.refreshError ?? 'Connect an OpenRouter key first.',
       icon: 'i-lucide-triangle-alert',
       color: 'error',
     })
@@ -80,10 +148,12 @@ async function save() {
   try {
     // Persist the ticked models, carrying the metadata from whichever list they came from.
     const byId = new Map(source.value.map((m) => [m.id, m]))
-    const models = [...selected.value]
+    const models2 = [...selected.value]
       .map((id) => byId.get(id))
       .filter((m): m is OpenRouterModelMeta => !!m)
-    await store.save(workspace.workspaceId, models)
+    await store.save(workspace.workspaceId, models2)
+    // Reflect newly-enabled models in the picker immediately.
+    await models.refresh(workspace.workspaceId)
     toast.add({ title: 'OpenRouter catalog saved', icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
     toast.add({
@@ -96,80 +166,171 @@ async function save() {
     busy.value = false
   }
 }
+
+function manageKeys() {
+  ui.closeOpenRouter()
+  ui.openVendorCredentials()
+}
 </script>
 
 <template>
-  <UModal v-model:open="open" title="OpenRouter models" :ui="{ content: 'max-w-2xl' }">
+  <UModal v-model:open="open" title="OpenRouter" :ui="{ content: 'max-w-2xl' }">
     <template #body>
       <div class="space-y-4">
         <p class="text-xs text-slate-400">
-          Reach <strong>300+ models</strong> through one gateway. Connect an OpenRouter key under
-          <span class="text-slate-300">Provider keys</span> first, then
-          <span class="text-slate-300">Refresh</span> to browse the live catalog and enable the
-          models you want. Enabled models appear in the model picker with their context window and
-          price, and meter against your spend budget.
+          Reach <strong>300+ models</strong> through one gateway. Add your OpenRouter key below,
+          then enable the models you want — they appear in the model picker with their context
+          window and price, and meter against your spend budget.
         </p>
 
-        <div class="flex items-center gap-2">
-          <UButton
-            color="neutral"
-            variant="soft"
-            size="sm"
-            icon="i-lucide-refresh-cw"
-            :loading="store.refreshing"
-            @click="refresh()"
-          >
-            Refresh catalog
-          </UButton>
-          <UInput
-            v-model="filter"
-            size="sm"
-            class="flex-1"
-            icon="i-lucide-search"
-            placeholder="Filter by name or slug…"
-          />
-        </div>
-
-        <p v-if="store.refreshError" class="text-xs text-rose-400">{{ store.refreshError }}</p>
-
-        <div v-if="visible.length" class="max-h-96 space-y-1 overflow-y-auto pr-1">
-          <label
-            v-for="m in visible"
-            :key="m.id"
-            class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/40 px-2.5 py-1.5 text-sm"
-          >
-            <UCheckbox
-              :model-value="selected.has(m.id)"
-              @update:model-value="(v: boolean | 'indeterminate') => toggle(m.id, v === true)"
+        <!-- Step 1: connect a key (inline) — hidden once a key is connected -->
+        <div
+          v-if="!keyConnected"
+          class="space-y-3 rounded-lg border border-slate-700 bg-slate-900/60 p-4"
+        >
+          <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Connect your OpenRouter key
+          </h4>
+          <ol class="list-decimal space-y-1 pl-5 text-sm text-slate-300">
+            <li>
+              Open
+              <a
+                href="https://openrouter.ai/keys"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-primary-400 underline"
+                >openrouter.ai → Keys ↗</a
+              >
+              and create an API key.
+            </li>
+            <li>
+              Copy the key (starts with <span class="font-mono">sk-or-…</span>) and paste it below.
+            </li>
+          </ol>
+          <div class="flex flex-wrap items-end gap-3">
+            <UFormField label="Scope">
+              <USelect
+                v-model="keyScope"
+                :items="[
+                  { label: 'This workspace', value: 'workspace' },
+                  { label: 'My keys (only me)', value: 'user' },
+                ]"
+                class="w-48"
+              />
+            </UFormField>
+            <UFormField label="Label (optional)" class="flex-1">
+              <UInput v-model="keyLabel" placeholder="e.g. team key" />
+            </UFormField>
+          </div>
+          <UFormField label="API key">
+            <UTextarea
+              v-model="keyValue"
+              :rows="2"
+              placeholder="paste your OpenRouter key (sk-or-…)"
+              class="font-mono"
             />
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-slate-200">{{ m.name }}</span>
-              <span class="block truncate font-mono text-[11px] text-slate-500">{{ m.id }}</span>
-            </span>
-            <span class="shrink-0 text-right text-[11px] text-slate-500">
-              <span v-if="m.contextLength" class="block">{{ contextLabel(m.contextLength) }}</span>
-              <span class="block">{{ priceLabel(m) }}</span>
-            </span>
-          </label>
+          </UFormField>
+          <div class="flex justify-end">
+            <UButton
+              :loading="connectingKey"
+              :disabled="!keyValue.trim()"
+              icon="i-lucide-plus"
+              @click="connectKey()"
+            >
+              Connect & browse
+            </UButton>
+          </div>
         </div>
-        <p v-else class="text-xs text-slate-500">
-          No models yet — hit <span class="text-slate-300">Refresh catalog</span> to load
-          OpenRouter's live list.
-        </p>
 
-        <div class="flex items-center justify-between">
-          <span class="text-xs text-slate-500">{{ selectedCount }} enabled</span>
-          <UButton
-            color="primary"
-            variant="soft"
-            size="sm"
-            icon="i-lucide-save"
-            :loading="busy"
-            @click="save()"
-          >
-            Save
+        <!-- Key connected status -->
+        <div
+          v-else
+          class="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm"
+        >
+          <span class="flex items-center gap-2 text-slate-300">
+            <UIcon name="i-lucide-check-circle" class="h-4 w-4 text-emerald-400" />
+            OpenRouter key connected
+          </span>
+          <UButton color="neutral" variant="ghost" size="xs" @click="manageKeys()">
+            Manage in Vendors & keys
           </UButton>
         </div>
+
+        <!-- Step 2: browse + enable models (only once a key exists) -->
+        <template v-if="keyConnected">
+          <div class="flex items-center gap-2">
+            <UButton
+              color="neutral"
+              variant="soft"
+              size="sm"
+              icon="i-lucide-refresh-cw"
+              :loading="store.refreshing"
+              @click="refresh()"
+            >
+              Refresh catalog
+            </UButton>
+            <UButton
+              v-if="recommendedAvailable.length"
+              color="primary"
+              variant="soft"
+              size="sm"
+              icon="i-lucide-sparkles"
+              @click="enableRecommended()"
+            >
+              Enable recommended
+            </UButton>
+            <UInput
+              v-model="filter"
+              size="sm"
+              class="flex-1"
+              icon="i-lucide-search"
+              placeholder="Filter by name or slug…"
+            />
+          </div>
+
+          <p v-if="store.refreshError" class="text-xs text-rose-400">{{ store.refreshError }}</p>
+
+          <div v-if="visible.length" class="max-h-96 space-y-1 overflow-y-auto pr-1">
+            <label
+              v-for="m in visible"
+              :key="m.id"
+              class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/40 px-2.5 py-1.5 text-sm"
+            >
+              <UCheckbox
+                :model-value="selected.has(m.id)"
+                @update:model-value="(v: boolean | 'indeterminate') => toggle(m.id, v === true)"
+              />
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-slate-200">{{ m.name }}</span>
+                <span class="block truncate font-mono text-[11px] text-slate-500">{{ m.id }}</span>
+              </span>
+              <span class="shrink-0 text-right text-[11px] text-slate-500">
+                <span v-if="m.contextLength" class="block">{{
+                  contextLabel(m.contextLength)
+                }}</span>
+                <span class="block">{{ priceLabel(m) }}</span>
+              </span>
+            </label>
+          </div>
+          <p v-else class="text-xs text-slate-500">
+            No models yet — hit <span class="text-slate-300">Refresh catalog</span> to load
+            OpenRouter's live list.
+          </p>
+
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-slate-500">{{ selectedCount }} enabled</span>
+            <UButton
+              color="primary"
+              variant="soft"
+              size="sm"
+              icon="i-lucide-save"
+              :loading="busy"
+              @click="save()"
+            >
+              Save
+            </UButton>
+          </div>
+        </template>
       </div>
     </template>
   </UModal>
