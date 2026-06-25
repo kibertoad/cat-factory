@@ -213,6 +213,11 @@ export type EnvironmentConnection = v.InferOutput<typeof environmentConnectionSc
  * actual per-tenant secret values here (write-only); they are encrypted and
  * stored in D1 and never returned. Every `secretRef.key` in the manifest must
  * have a matching entry in `secrets`.
+ *
+ * A native adapter is configured through the SAME manifest path (see
+ * `backend/docs/native-environment-adapter.md`): its non-secret per-workspace
+ * settings ride the manifest's opaque `providerConfig` bag and its secrets via
+ * the manifest `auth` scheme — there is deliberately no separate config channel.
  */
 export const registerEnvironmentProviderSchema = v.object({
   manifest: environmentManifestSchema,

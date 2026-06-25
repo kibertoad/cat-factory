@@ -34,6 +34,15 @@ export const providerConfigFieldSchema = v.object({
   type: v.optional(providerConfigFieldTypeSchema),
   /** Choices for a `select` field. */
   options: v.optional(v.array(v.object({ value: v.string(), label: v.string() }))),
+  /**
+   * The provider/manifest's default for this field. When present, the value is
+   * optional in practice: leaving the form field blank falls back to this default
+   * (so the UI shows an empty input with a "defaulted to …" hint, and clearing an
+   * override reverts to it). Never set for secrets — those have no default and must
+   * be supplied explicitly. A `required` field WITHOUT a default is what drives the
+   * unconfigured-provider banner (see {@link ProviderDescriptor.missingRequired}).
+   */
+  default: v.optional(v.string()),
 })
 export type ProviderConfigField = v.InferOutput<typeof providerConfigFieldSchema>
 
@@ -51,6 +60,35 @@ export const providerDescriptorSchema = v.object({
   configFields: v.array(providerConfigFieldSchema),
   /** Whether the provider implements a connection test the UI can call. */
   supportsTest: v.boolean(),
+  /**
+   * Keys of `configFields` that are `required`, have no `default`, and have no
+   * stored value for this workspace yet (e.g. an unset API token). Empty ⇒ the
+   * provider is fully configured. Non-empty while a provider is registered for the
+   * instance is exactly the "loud banner" signal: the org still has to supply these
+   * before the provider can be used. Computed server-side so the form, the banner,
+   * and the register-time validation all read one source of truth.
+   */
+  missingRequired: v.array(v.string()),
+  /**
+   * For a NATIVE provider: the base manifest the SPA overlays the flat `configFields`
+   * values onto before POSTing (so the connect form is flat fields but storage stays a
+   * single full manifest — see `backend/docs/native-environment-adapter.md`). A `secret`
+   * field → the secret bundle, a non-secret field → `providerConfig[key]` (a `baseUrl`
+   * field → `baseUrl`). Absent ⇒ a manifest-authored provider (the SPA edits the manifest
+   * directly). Provider-specific JSON (an EnvironmentManifest or RunnerPoolManifest shape)
+   * carrying NO secret values — only the shape + secret-ref keys.
+   */
+  manifestTemplate: v.optional(v.record(v.string(), v.unknown())),
+  /**
+   * The provider's CURRENT saved manifest, when a connection exists. Non-secret: the
+   * manifest only carries secret-ref key NAMES (the actual values live in the encrypted
+   * bundle and are never returned), so this is safe to expose. The native connect form
+   * overlays edited fields onto THIS (falling back to `manifestTemplate` on a first
+   * connect), so re-saving preserves previously-stored `providerConfig` — including nested
+   * values the flat form doesn't render — instead of silently dropping it. Absent ⇒ no
+   * connection yet.
+   */
+  savedManifest: v.optional(v.record(v.string(), v.unknown())),
 })
 export type ProviderDescriptor = v.InferOutput<typeof providerDescriptorSchema>
 

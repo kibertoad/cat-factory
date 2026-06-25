@@ -125,7 +125,9 @@ export type RunnerPoolConnection = v.InferOutput<typeof runnerPoolConnectionSche
  * Register (or replace) a workspace's runner pool. The org supplies the actual
  * per-tenant scheduler-API secret values here (write-only); they are encrypted
  * and stored in D1 and never returned. Every `secretRef.key` in the manifest
- * must have a matching entry in `secrets`.
+ * must have a matching entry in `secrets`. A native pool adapter is configured
+ * through the same manifest path (per-workspace settings on the manifest's
+ * `providerConfig` bag), mirroring the environment provider.
  */
 export const registerRunnerPoolSchema = v.object({
   manifest: runnerPoolManifestSchema,
