@@ -1,5 +1,27 @@
 # @cat-factory/server
 
+## 0.17.0
+
+### Minor Changes
+
+- 208c933: Pre-flight write access before a repo bootstrap. Bootstrapping ends in a force-push,
+  but a public target the GitHub App can _read_ (not in the App's selected-repos list,
+  or the App lacking `contents:write`) passes the existing existence/emptiness checks
+  and only fails deep inside the container with a `403` on `git push`. The bootstrapper
+  now verifies the installation actually has push access up front (new
+  `GitHubClient.canPush`, reading the token's effective `permissions.push`) and fails
+  fast with an actionable error — "grant the App write access to this repository, or use
+  a GitHub PAT" — before any board frame is created.
+
+### Patch Changes
+
+- Updated dependencies [208c933]
+  - @cat-factory/kernel@0.16.0
+  - @cat-factory/agents@0.11.11
+  - @cat-factory/integrations@0.12.2
+  - @cat-factory/orchestration@0.10.9
+  - @cat-factory/spend@0.8.13
+
 ## 0.16.1
 
 ### Patch Changes
