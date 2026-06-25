@@ -1,5 +1,44 @@
 # @cat-factory/server
 
+## 0.16.0
+
+### Minor Changes
+
+- 0ac64b8: Add a "Create task from issue" button on service frames, and scope issue search to
+  the service's repo.
+
+  A service frame header now carries a ticket button (shown when a tracker is offered)
+  that opens the tracker-issue modal pinned to that service: the new task is created in
+  that frame, and the issue search is scoped to the service's linked GitHub repository
+  instead of the whole installation. The same repo scoping applies to the
+  attach-an-issue-as-context picker in the add-task form.
+
+  Within a scoped GitHub search:
+
+  - a pasted issue URL (or `owner/repo#n` / `owner/repo/issues/n`) resolves to that exact
+    issue and is offered first instead of being fuzzy-matched — but only within the
+    searching workspace's own GitHub App installation, so a URL naming another account is
+    never fetched across tenants;
+  - a bare issue number (`11`) resolves against the service's repo and is offered first;
+  - free-text hits are restricted to the service's repo (`repo:owner/name`).
+
+  A service is always created from (or with) a repo, so a GitHub search scoped to a block
+  now REQUIRES that link: if the service isn't linked to a repo the search is refused with
+  a clear error rather than silently widening to the whole installation. The
+  block→service→repo resolver (`resolveRepoTarget`) is surfaced on the request container in
+  both runtime facades so the shared task-search controller can resolve the scope.
+
+### Patch Changes
+
+- Updated dependencies [0ac64b8]
+  - @cat-factory/kernel@0.15.0
+  - @cat-factory/contracts@0.16.0
+  - @cat-factory/integrations@0.12.0
+  - @cat-factory/agents@0.11.9
+  - @cat-factory/orchestration@0.10.7
+  - @cat-factory/spend@0.8.11
+  - @cat-factory/prompt-fragments@0.7.12
+
 ## 0.15.1
 
 ### Patch Changes
