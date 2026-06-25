@@ -119,6 +119,15 @@ export interface Block {
   taskType?: TaskType
   /** task-only: small per-type form fields (bug severity, spike timebox, …). */
   taskTypeFields?: TaskTypeFields | null
+  /**
+   * task-only: TECHNICAL label. `true` ⇒ a refactor / non-functional / internal change
+   * (the implementer treats the task definition as primary, specs as a regression
+   * reference; the spec-writer may produce no business specs). `false` ⇒ a business task.
+   * `null`/absent ⇒ not yet determined — the engine may infer it from the spec phase. A
+   * human-set value is authoritative and never overridden; the inspector toggle is
+   * tri-state (unset / technical / business) and sends `null` for "unset".
+   */
+  technical?: boolean | null
   /** ids of best-practice prompt fragments folded into this block's agent prompts. */
   fragmentIds?: string[]
   /**

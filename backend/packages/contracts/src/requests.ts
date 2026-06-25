@@ -95,6 +95,9 @@ export const addTaskSchema = v.object({
   pipelineId: v.optional(v.pipe(v.string(), v.maxLength(120))),
   // Task-level agent-contributed config values (e.g. the Tester's environment).
   agentConfig: v.optional(agentConfigValuesSchema),
+  // Whether this is a purely TECHNICAL task (creation checkbox). Omitted → not yet
+  // determined (the engine may infer it from the spec phase). A set value is authoritative.
+  technical: v.optional(v.boolean()),
 })
 export type AddTaskInput = v.InferOutput<typeof addTaskSchema>
 
@@ -142,6 +145,9 @@ export const updateBlockSchema = v.partial(
     // the workspace setting). 'on'/'off' force the behaviour for this task.
     trackerCommentOnPrOpen: v.nullable(writebackOverrideSchema),
     trackerResolveOnMerge: v.nullable(writebackOverrideSchema),
+    // Task-level TECHNICAL label (tri-state): true ⇒ technical, false ⇒ business, null ⇒
+    // "unset" (let the engine infer it). A human-set value is never overridden.
+    technical: v.nullable(v.boolean()),
   }),
 )
 export type UpdateBlockInput = v.InferOutput<typeof updateBlockSchema>

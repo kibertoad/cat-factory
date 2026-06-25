@@ -86,6 +86,8 @@ export interface BlockRow {
   task_type?: string | null
   /** Task-level: small per-type form fields (bug severity, spike timebox…), JSON object. */
   task_type_fields?: string | null
+  /** Task-level: 1 ⇒ technical task, 0 ⇒ business task, null ⇒ not yet determined. */
+  technical?: number | null
   /** Task-level: per-task issue-tracker writeback overrides ('on'/'off'); null ⇒ inherit. */
   tracker_comment_on_pr_open?: string | null
   tracker_resolve_on_merge?: string | null
@@ -132,6 +134,7 @@ export function rowToBlock(row: BlockRow): Block {
   if (row.task_type != null) block.taskType = row.task_type as TaskType
   if (row.task_type_fields != null)
     block.taskTypeFields = JSON.parse(row.task_type_fields) as TaskTypeFields
+  if (row.technical != null) block.technical = row.technical === 1
   if (row.tracker_comment_on_pr_open != null)
     block.trackerCommentOnPrOpen = row.tracker_comment_on_pr_open as WritebackOverride
   if (row.tracker_resolve_on_merge != null)
@@ -181,6 +184,7 @@ export function blockInsertValues(block: Block): Record<string, unknown> {
     estimate: block.estimate ? JSON.stringify(block.estimate) : null,
     task_type: block.taskType ?? null,
     task_type_fields: block.taskTypeFields ? JSON.stringify(block.taskTypeFields) : null,
+    technical: block.technical == null ? null : block.technical ? 1 : 0,
     tracker_comment_on_pr_open: block.trackerCommentOnPrOpen ?? null,
     tracker_resolve_on_merge: block.trackerResolveOnMerge ?? null,
   }
@@ -267,6 +271,12 @@ export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> 
   if (patch.taskType !== undefined) set.task_type = patch.taskType ?? null
   if (patch.taskTypeFields !== undefined) {
     set.task_type_fields = patch.taskTypeFields ? JSON.stringify(patch.taskTypeFields) : null
+  }
+  // Technical label: 1/0 column, null clears it back to "not yet determined" (so the
+  // engine may infer it). A human-set value is what reaches here via the inspector toggle;
+  // an explicit `null` is the tri-state "unset".
+  if (patch.technical !== undefined) {
+    set.technical = patch.technical == null ? null : patch.technical ? 1 : 0
   }
   // Per-task writeback overrides; an empty string clears it (back to inheriting the
   // workspace setting).

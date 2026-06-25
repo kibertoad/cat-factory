@@ -52,6 +52,18 @@ export interface FakeAgentOptions {
    */
   spec?: unknown
   /**
+   * When true the `spec-writer` step reports `noBusinessSpecs` (a purely technical task)
+   * instead of a spec doc, so the engine's "no new specs" path + the `technical` label
+   * inference can be exercised. Takes precedence over {@link spec}.
+   */
+  noBusinessSpecs?: boolean
+  /**
+   * The `technicalCorroborated` verdict the `spec-companion` includes in its assessment
+   * (the spec phase's business-vs-technical corroboration). Omitted ⇒ no opinion (the
+   * engine infers nothing). Drives the cross-runtime `technical`-label inference assertion.
+   */
+  technicalCorroborated?: boolean
+  /**
    * The triage a `task-estimator` step emits (as JSON output the engine parses onto
    * `block.estimate`). Omitted ⇒ a deterministic default, so the persistence round-trip
    * can be asserted identically across runtimes.
@@ -149,11 +161,22 @@ export class FakeAgentExecutor implements AgentExecutor {
     // Mimic the container spec-writer step returning the updated doc. It applies ONLY
     // the current task's requirements (the block description) as an increment onto the
     // baseline — there is no cross-task aggregation to surface.
-    if (context.agentKind === 'spec-writer' && this.options.spec !== undefined) {
-      return {
-        output: `[spec-writer] wrote spec increment for "${context.block.title}"`,
-        model: 'fake',
-        spec: this.options.spec,
+    if (context.agentKind === 'spec-writer') {
+      // A purely technical task: report "no business specs" (the engine leaves the
+      // baseline untouched and records the determination for the technical-label inference).
+      if (this.options.noBusinessSpecs) {
+        return {
+          output: `[spec-writer] no business specs for "${context.block.title}"`,
+          model: 'fake',
+          noBusinessSpecs: true,
+        }
+      }
+      if (this.options.spec !== undefined) {
+        return {
+          output: `[spec-writer] wrote spec increment for "${context.block.title}"`,
+          model: 'fake',
+          spec: this.options.spec,
+        }
       }
     }
 
@@ -183,11 +206,16 @@ export class FakeAgentExecutor implements AgentExecutor {
       // the verdict unparseable and the rating silently defaulted to a passing 1.
       const comments =
         rating < 1 ? [{ anchorId: `${context.agentKind}-1`, body: 'address this gap' }] : undefined
+      // The spec-companion corroborates the writer's business-vs-technical determination
+      // when configured, so the engine's `technical`-label inference can be exercised.
+      const corroborated =
+        context.agentKind === 'spec-companion' ? this.options.technicalCorroborated : undefined
       return {
         output: JSON.stringify({
           rating,
           summary: `[${context.agentKind}] rated ${(rating * 100).toFixed(0)}%`,
           ...(comments ? { comments } : {}),
+          ...(corroborated !== undefined ? { technicalCorroborated: corroborated } : {}),
         }),
         model: 'fake',
         usage: this.options.usage,

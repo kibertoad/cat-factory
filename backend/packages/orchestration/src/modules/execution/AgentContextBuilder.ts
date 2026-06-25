@@ -148,6 +148,9 @@ export class AgentContextBuilder {
         description,
         fragmentIds: block.fragmentIds,
         ...(resolved ? { resolvedFragments: resolved.fragments } : {}),
+        // A concrete technical label (true ⇒ task definition is primary, specs are a
+        // regression reference); omitted when unset/business so the prompt stays unchanged.
+        ...(block.technical === true ? { technical: true } : {}),
         modelId: block.modelId,
         ...(block.modelPresetId ? { modelPresetId: block.modelPresetId } : {}),
         ...(agentConfig ? { agentConfig } : {}),

@@ -194,6 +194,9 @@ export const blocks = pgTable(
     task_type: text('task_type'),
     // Task-level: small per-type form fields (bug severity, spike timebox…) as JSON.
     task_type_fields: text('task_type_fields'),
+    // Task-level: TECHNICAL label — 1 ⇒ technical, 0 ⇒ business, null ⇒ not yet determined
+    // (the engine may infer it). A human-set value is authoritative and never overridden.
+    technical: integer('technical'),
     // Task-level: per-task issue-tracker writeback overrides ('on'/'off'; null ⇒ inherit
     // the workspace's writeback_* settings). Comment-on-PR-open and resolve-on-merge.
     tracker_comment_on_pr_open: text('tracker_comment_on_pr_open'),

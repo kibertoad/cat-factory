@@ -91,6 +91,19 @@ export const blockSchema = v.object({
    */
   taskTypeFields: v.optional(v.nullable(taskTypeFieldsSchema)),
   /**
+   * Whether this task is purely TECHNICAL (a refactor / non-functional / internal change
+   * with no externally-observable behaviour). When `true` the implementer treats the task
+   * definition / incorporated requirements as the PRIMARY source of truth and the
+   * committed specs as a regression-spotting reference, not the authority; the spec-writer
+   * is free to produce no business specs. A human may set it explicitly (creation checkbox
+   * / inspector toggle) and that choice is NEVER overridden by the engine; left unset
+   * it is inferred from the spec phase (the writer's `noBusinessSpecs` + the spec-companion's
+   * corroboration). Only meaningful on `task`-level blocks. `null`/absent ⇒ not yet
+   * determined (the engine may infer it); a concrete `true`/`false` is authoritative. The
+   * inspector toggle is tri-state (unset / technical / business): "unset" sends `null`.
+   */
+  technical: v.optional(v.nullable(v.boolean())),
+  /**
    * Ids of curated best-practice prompt fragments selected for this block. Their
    * bodies are composed into the agent system prompt at run time. The catalog
    * itself lives in @cat-factory/prompt-fragments and is served separately.
@@ -879,6 +892,14 @@ export const pipelineStepSchema = v.object({
    * output; the UI renders it as "skipped (gated)". Absent ⇒ the step ran normally.
    */
   skipped: v.optional(v.boolean()),
+  /**
+   * Set `true` on a `spec-writer` step that determined the task is purely technical and
+   * produced no business specs (its result's `noBusinessSpecs`). Recorded on the step so
+   * the spec-companion's convergence — the one point both signals coexist — can combine it
+   * with the companion's `technicalCorroborated` verdict to infer the block's `technical`
+   * label. Absent for every other kind / a writer that produced specs.
+   */
+  noBusinessSpecs: v.optional(v.boolean()),
   /** Text the agent produced for this step (when LLM execution is enabled). */
   output: v.optional(v.string()),
   /**

@@ -25,6 +25,7 @@ import {
   parseOnCallAssessment,
   parseSpecDoc,
   DEFAULT_COMPANION_MAX_ATTEMPTS,
+  type CompanionAssessment,
   type OnCallAssessment,
 } from '@cat-factory/contracts'
 import {
@@ -87,6 +88,7 @@ import {
 } from './release.logic.js'
 import { AgentContextBuilder } from './AgentContextBuilder.js'
 import { CompanionController } from './CompanionController.js'
+import { inferTechnicalLabel } from './technical.logic.js'
 import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import { TesterController } from './TesterController.js'
@@ -597,6 +599,8 @@ export class ExecutionService {
       parkStepOnDecision: (ws, i, s, p) => this.parkStepOnDecision(ws, i, s, p),
       raiseDecisionRequired: (ws, i) => this.raiseDecisionRequired(ws, i),
       loopCompanionProducer: (i, ci, rw) => this.loopCompanionProducer(i, ci, rw),
+      inferTechnicalLabel: (ws, block, producer, assessment) =>
+        this.inferBlockTechnical(ws, block, producer, assessment),
     })
     this.testerController = new TesterController({
       blockRepository,
@@ -1621,6 +1625,28 @@ export class ExecutionService {
   }
 
   /**
+   * Infer + persist the block's `technical` label on spec-companion convergence (item 5):
+   * combine the spec-writer's `noBusinessSpecs` determination (recorded on the producer
+   * step) with the companion's `technicalCorroborated` verdict. A human-set value is
+   * authoritative and is NEVER overridden (the pure {@link inferTechnicalLabel} returns
+   * `undefined` then). Best-effort: a persistence hiccup must not wedge the run.
+   */
+  private async inferBlockTechnical(
+    workspaceId: string,
+    block: Block,
+    producerStep: PipelineStep,
+    assessment: CompanionAssessment,
+  ): Promise<void> {
+    const technical = inferTechnicalLabel(
+      block.technical,
+      producerStep.noBusinessSpecs === true,
+      assessment.technicalCorroborated,
+    )
+    if (technical === undefined) return
+    await this.blockRepository.update(workspaceId, block.id, { technical })
+  }
+
+  /**
    * Record a completed agent step's result and report what the driver should do
    * next: meter token usage, park on a raised decision, or persist the output
    * (and any opened PR) and either finish the run or advance to the next step.
@@ -1732,6 +1758,15 @@ export class ExecutionService {
     // must never be trusted), then nudge clients to refresh.
     if (result.spec !== undefined) {
       await this.ingestSpec(workspaceId, result.spec)
+    }
+
+    // Record the spec-writer's BUSINESS-vs-TECHNICAL determination on the step. "No
+    // business specs" (a purely technical task) is a valid outcome; the spec-companion's
+    // convergence — the one point both signals coexist — combines this with the
+    // companion's `technicalCorroborated` verdict to infer the block's `technical` label
+    // (see CompanionController). Recorded even when false so a re-run reflects the latest.
+    if (step.agentKind === SPEC_WRITER_AGENT_KIND) {
+      step.noBusinessSpecs = result.noBusinessSpecs === true
     }
 
     // A `task-estimator` step emits a JSON triage (complexity/risk/impact). Parse it

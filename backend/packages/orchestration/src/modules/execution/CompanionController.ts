@@ -80,6 +80,19 @@ export interface CompanionControllerDeps {
     companionIndex: number,
     rework: NonNullable<PipelineStep['rework']>,
   ) => void
+  /**
+   * Infer + persist the block's `technical` label from the spec phase when the
+   * spec-companion converges (the one point the spec-writer's `noBusinessSpecs` signal and
+   * the companion's `technicalCorroborated` verdict coexist). A no-op for non-spec
+   * companions and when a human has already set the label. Optional — unwired in tests /
+   * facades that don't pass it, so the companion loop is unchanged.
+   */
+  inferTechnicalLabel?: (
+    workspaceId: string,
+    block: Block,
+    producerStep: PipelineStep,
+    assessment: CompanionAssessment,
+  ) => Promise<void>
 }
 
 /**
@@ -202,6 +215,20 @@ export class CompanionController {
     if (passed) {
       this.deps.finishStep(step)
       step.progress = 1
+      // The spec-companion just corroborated the spec-writer's business-vs-technical
+      // determination: infer the block's `technical` label from the writer's
+      // `noBusinessSpecs` (recorded on the producer step) + this verdict's
+      // `technicalCorroborated`. Honours human authority (never overrides a set value).
+      // `assessment` is guaranteed present here when there is a producer to grade (an
+      // unparseable verdict against a real producer already returned above).
+      if (step.agentKind === 'spec-companion' && producerIndex >= 0 && assessment) {
+        await this.deps.inferTechnicalLabel?.(
+          workspaceId,
+          block,
+          instance.steps[producerIndex]!,
+          assessment,
+        )
+      }
       // A gated companion now raises the HUMAN approval gate on the producer's output
       // (the human reviews what the companion just cleared). Never on the final step.
       if (step.requiresApproval && !isFinalStep && step.approval?.status !== 'approved') {

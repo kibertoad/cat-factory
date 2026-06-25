@@ -612,6 +612,62 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(block.estimate!.rationale).toContain('fake estimate')
       })
 
+      describe('technical-label inference (spec phase)', () => {
+        // Drive a spec-writer → spec-companion pipeline and assert the engine infers the
+        // block's `technical` label from the writer's `noBusinessSpecs` + the companion's
+        // `technicalCorroborated`, honouring human authority — identically on both runtimes.
+        const runSpecPhase = async (
+          opts: { noBusinessSpecs?: boolean; spec?: unknown; technicalCorroborated?: boolean },
+          preset?: { technical?: boolean | null },
+        ) => {
+          const app = harness.makeApp(opts)
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+          if (preset) {
+            await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, preset)
+          }
+          const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Spec phase',
+            agentKinds: ['spec-writer', 'spec-companion'],
+          })
+          const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+            pipelineId: pipeline.body.id,
+          })
+          expect(start.status).toBe(201)
+          await app.drive(wsId)
+          const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+          return snapshot.body.blocks.find((b) => b.id === 'task_login')!
+        }
+
+        it('infers technical=true when the writer produced no business specs and the companion corroborates', async () => {
+          const block = await runSpecPhase({ noBusinessSpecs: true, technicalCorroborated: true })
+          expect(block.technical).toBe(true)
+        })
+
+        it('infers the symmetric business case (false) when specs were produced', async () => {
+          const block = await runSpecPhase({
+            spec: { service: 'Auth', summary: '', modules: [] },
+            technicalCorroborated: false,
+          })
+          expect(block.technical).toBe(false)
+        })
+
+        it('leaves the label undetermined when the companion gives no opinion', async () => {
+          const block = await runSpecPhase({ noBusinessSpecs: true })
+          expect(block.technical == null).toBe(true)
+        })
+
+        it('never overrides a human-set label', async () => {
+          // The human marked it BUSINESS up front; the spec phase would infer TECHNICAL,
+          // but human authority wins and the stored value is left untouched.
+          const block = await runSpecPhase(
+            { noBusinessSpecs: true, technicalCorroborated: true },
+            { technical: false },
+          )
+          expect(block.technical).toBe(false)
+        })
+      })
+
       it('persists a consensus config on a pipeline step, surfaced on the snapshot', async () => {
         const app = harness.makeApp()
         const { workspace } = await app.createWorkspace()

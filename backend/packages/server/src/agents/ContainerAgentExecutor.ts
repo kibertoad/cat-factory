@@ -284,7 +284,17 @@ const SPEC_WRITER_SYSTEM_PROMPT =
   'where the task changes their expected behaviour. Leave every other part of the ' +
   'baseline spec untouched. Translate ONLY what the task requirements state — do NOT ' +
   'invent requirements, fill gaps, or design beyond them (missing requirements are the ' +
-  'requirements step’s job, not yours). The spec is a two-level taxonomy: MODULES ' +
+  'requirements step’s job, not yours). ' +
+  'The spec captures ONLY BUSINESS requirements — externally-observable behaviour, ' +
+  'product rules and acceptance criteria. PURELY TECHNICAL work (a refactor, a ' +
+  'dependency bump, internal restructuring, build/infra or other non-functional change ' +
+  'that does NOT alter what the system does for its users) introduces no business ' +
+  'requirements, and "NO NEW SPECS" is a valid, correct outcome for it: do NOT invent ' +
+  'requirements to justify a change, and do NOT re-document technical/architecture ' +
+  'detail here. When this task is purely technical, leave the baseline spec untouched ' +
+  'and respond with ONLY {"noBusinessSpecs": true} (no other fields, no prose, no code ' +
+  'fences). Otherwise return the full document as below. ' +
+  'The spec is a two-level taxonomy: MODULES ' +
   '(domains, e.g. "Auth") each containing GROUPS (features, e.g. "Login"). Every ' +
   'requirement AND every domain rule lives inside a specific feature group: a group ' +
   'carries both its `requirements` and the `rules` scoped to it. There is NO catch-all — ' +
@@ -338,7 +348,9 @@ const SPEC_SHAPE_HINT =
   '"requirements": [{"id": string, "title": string, "statement": string, "kind": ' +
   'string, "priority": string, "sourceBlockIds": string[], "acceptance": [{"given": ' +
   'string, "when": string, "outcome": string}]}], "rules": [{"id": string, "rule": ' +
-  'string, "rationale": string, "sourceBlockIds": string[]}]}]}]}.'
+  'string, "rationale": string, "sourceBlockIds": string[]}]}]}]}. For a purely ' +
+  'technical task with no business requirements, the document is instead just ' +
+  '{"noBusinessSpecs": true}.'
 
 /** Compact shape hint fed to the structured-output repair call for the merger assessment. */
 const MERGE_ASSESSMENT_SHAPE_HINT =
@@ -1181,6 +1193,20 @@ function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResul
     // The doc must carry its OWN `service` name (no repo-name rescue — backwards-compat is a
     // non-goal); a nameless/garbage doc coerces to null ⇒ left unset (no ingest, no commit).
     if (agentKind === SPEC_WRITER_AGENT_KIND) {
+      // A purely TECHNICAL task has no business requirements to specify: the writer signals
+      // `noBusinessSpecs` and we leave the baseline spec untouched (NO `spec` channel, so
+      // `specPostOp` commits nothing). The engine reads the flag to infer the block's
+      // `technical` label (with the spec-companion's corroboration). Checked first so a
+      // model that returned both the flag and a stray baseline echo never commits over it.
+      const custom = result.custom as Record<string, unknown> | null
+      if (custom && typeof custom === 'object' && custom.noBusinessSpecs === true) {
+        return {
+          output:
+            result.summary?.trim() ||
+            'No business requirements to specify — this is a technical task.',
+          noBusinessSpecs: true,
+        }
+      }
       const spec = coerceSpecDoc(result.custom, '')
       return {
         output: result.summary?.trim() || 'Service specification updated.',
@@ -1426,13 +1452,17 @@ function specWriterUserPrompt(context: AgentRunContext): string {
       'If no spec exists yet, start one as a module (domain) → feature (group) taxonomy.',
     '',
     'Requirements for the ONE task to apply (its clarified description). Translate ONLY what ' +
-      'these state into prescriptive requirements with COMPLETE acceptance-scenario coverage — ' +
-      'do NOT invent requirements or fill gaps they leave:',
+      'these state into BUSINESS requirements (externally-observable behaviour, product rules, ' +
+      'acceptance criteria) with COMPLETE acceptance-scenario coverage — do NOT invent ' +
+      'requirements or fill gaps they leave:',
     '',
     `${header}\n\n${block.description?.trim() || '(no description)'}`,
     '',
-    'Return the COMPLETE updated document (baseline plus this task’s increment), not a diff. ' +
-      'Respond with ONLY the JSON object for the requirements document — no prose, no code fences.',
+    'If this task is purely TECHNICAL (a refactor / dependency bump / internal or ' +
+      'non-functional change that introduces NO new externally-observable behaviour), it has ' +
+      'no business requirements: respond with ONLY {"noBusinessSpecs": true} and change ' +
+      'nothing. Otherwise return the COMPLETE updated document (baseline plus this task’s ' +
+      'increment), not a diff. Respond with ONLY the JSON object — no prose, no code fences.',
   ].join('\n')
 }
 
