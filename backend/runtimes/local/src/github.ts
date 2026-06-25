@@ -4,6 +4,7 @@ import type {
   GitHubClient,
   GitHubRepo,
   IdGenerator,
+  InstallationPermissions,
   Paged,
   RateLimitRepository,
   RateLimitSnapshot,
@@ -57,6 +58,12 @@ export class StaticTokenAppRegistry implements AppTokenSource {
 
   installationToken(): Promise<string> {
     return Promise.resolve(this.token)
+  }
+
+  // A static PAT carries no App-granted permissions map; canPush then relies on the
+  // repo object's user-role `permissions.push`, which IS authoritative for a PAT.
+  installationPermissions(): Promise<InstallationPermissions> {
+    return Promise.resolve({})
   }
 }
 

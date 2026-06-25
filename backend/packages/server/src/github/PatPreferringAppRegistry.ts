@@ -1,4 +1,4 @@
-import type { ResolveUserGitHubToken } from '@cat-factory/kernel'
+import type { InstallationPermissions, ResolveUserGitHubToken } from '@cat-factory/kernel'
 import type { AppTokenSource } from './GitHubAppRegistry.js'
 import { currentInitiator } from './runInitiatorContext.js'
 
@@ -42,5 +42,15 @@ export class PatPreferringAppRegistry implements AppTokenSource {
       if (pat) return pat
     }
     return this.inner.installationToken(installationId, opts)
+  }
+
+  async installationPermissions(installationId: number): Promise<InstallationPermissions> {
+    // When the initiator's PAT is in play the call rides a user token, which has no
+    // App-granted permissions map — return empty so canPush falls back to the repo's
+    // user-role `permissions.push` (which IS authoritative for a PAT). Otherwise defer
+    // to the wrapped App source.
+    const initiatedBy = currentInitiator()
+    if (initiatedBy && (await this.resolveUserGitHubToken(initiatedBy))) return {}
+    return this.inner.installationPermissions(installationId)
   }
 }

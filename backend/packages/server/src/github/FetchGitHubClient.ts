@@ -229,7 +229,7 @@ export class FetchGitHubClient implements GitHubClient {
     return this.probePush(installationId, ref, true)
   }
 
-  /** One `permissions.push` read; `forceRefreshToken` mints a fresh token for it. */
+  /** One write-access probe; `forceRefreshToken` mints a fresh token for it. */
   private async probePush(
     installationId: number,
     ref: GitHubRepoRef,
@@ -240,11 +240,21 @@ export class FetchGitHubClient implements GitHubClient {
         installationId,
         forceRefreshToken,
       })
-      return (json as { permissions?: { push?: boolean } }).permissions?.push === true
+      // A user/OAuth/PAT token has a collaborator role, reported here — authoritative
+      // for those (e.g. local mode's PAT).
+      if ((json as { permissions?: { push?: boolean } }).permissions?.push === true) return true
     } catch (err) {
       if (err instanceof GitHubApiError && (err.status === 404 || err.status === 403)) return false
       throw err
     }
+    // A GitHub App installation token is not a repo collaborator, so the repo object's
+    // `permissions` is empty for it — `permissions.push` is never true no matter the
+    // grant. The authoritative source for an App is its granted `contents` scope from
+    // the token mint response. The repo read above already proved the repo is reachable
+    // (in the installation's selected set), and an App's permission set is
+    // installation-wide across its selected repos, so contents:write ⇒ pushable here.
+    const granted = await this.deps.registry.installationPermissions(installationId)
+    return granted.contents === 'write'
   }
 
   async listBranches(
