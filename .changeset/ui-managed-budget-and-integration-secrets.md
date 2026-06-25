@@ -1,14 +1,14 @@
 ---
-"@cat-factory/contracts": minor
-"@cat-factory/kernel": minor
-"@cat-factory/spend": minor
-"@cat-factory/integrations": minor
-"@cat-factory/orchestration": minor
-"@cat-factory/server": minor
-"@cat-factory/worker": minor
-"@cat-factory/node-server": minor
-"@cat-factory/local-server": minor
-"@cat-factory/app": minor
+'@cat-factory/contracts': minor
+'@cat-factory/kernel': minor
+'@cat-factory/spend': minor
+'@cat-factory/integrations': minor
+'@cat-factory/orchestration': minor
+'@cat-factory/server': minor
+'@cat-factory/worker': minor
+'@cat-factory/node-server': minor
+'@cat-factory/local-server': minor
+'@cat-factory/app': minor
 ---
 
 Move operator/integration config out of environment variables into encrypted, UI-editable
@@ -32,12 +32,13 @@ inline and container alike. The hot-path per-workspace rollup is indexed
 (`idx_token_usage_workspace` on `(workspace_id, created_at)`, both runtimes).
 
 **Per-workspace incident enrichment (service inspector → Post-release health).** PagerDuty
-+ incident.io credentials are sealed in a new per-workspace `incident_enrichment_connections`
-table (one grouped blob) and resolved/decrypted at enrichment time by a new
-`WorkspaceIncidentEnrichmentProvider`. Removes env: `PAGERDUTY_API_TOKEN`,
-`PAGERDUTY_FROM_EMAIL`, `INCIDENTIO_API_KEY`. The write API is three-state per provider
-group (omit ⇒ keep, `null` ⇒ clear, value ⇒ set) so one vendor can be removed without
-wiping the other.
+
+- incident.io credentials are sealed in a new per-workspace `incident_enrichment_connections`
+  table (one grouped blob) and resolved/decrypted at enrichment time by a new
+  `WorkspaceIncidentEnrichmentProvider`. Removes env: `PAGERDUTY_API_TOKEN`,
+  `PAGERDUTY_FROM_EMAIL`, `INCIDENTIO_API_KEY`. The write API is three-state per provider
+  group (omit ⇒ keep, `null` ⇒ clear, value ⇒ set) so one vendor can be removed without
+  wiping the other.
 
 **Per-account integration secrets (Account settings → Deployment integrations, admin only).**
 The Slack app OAuth credentials and the container web-search upstream keys (Brave /

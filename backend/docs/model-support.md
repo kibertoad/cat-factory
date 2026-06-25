@@ -222,7 +222,7 @@ runs that cost the deployment money. Two kinds of run incur **no** metered cost 
 
 - **Subscription** runs are **flat-rate quota** (a fixed-price plan), not billed per token.
   The picker marks them `quotaBased: true` (kernel `models.ts`); `ContainerAgentExecutor.
-  isQuotaBased` returns true iff the _effective_ ref carries a `claude-code`/`codex` harness
+isQuotaBased` returns true iff the _effective_ ref carries a `claude-code`/`codex` harness
   (shared with dispatch so the two agree).
 - **Local-runner** models (Ollama / LM Studio / llama.cpp / vLLM / custom) are **keyless**
   and run on the _user's own_ endpoint, so they cost the deployment nothing. Detected off
