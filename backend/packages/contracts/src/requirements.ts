@@ -35,10 +35,19 @@ export type ReviewItemSeverity = v.InferOutput<typeof reviewItemSeveritySchema>
 /**
  * Lifecycle of a single item: `open` until a human engages, `answered` once a
  * reply is recorded, `resolved` when accepted as done, `dismissed` when waved
- * off as not applicable. Both `resolved` and `dismissed` count as "settled" for
- * the purpose of gating incorporation.
+ * off as not applicable, `recommend_requested` when the human asked the Requirement
+ * Writer to suggest an answer instead of writing one. All of `answered`, `resolved`,
+ * `dismissed` and `recommend_requested` count as "settled" (not `open`) for gating
+ * incorporation — a finding awaiting a recommendation doesn't block the cycle, its
+ * recommendation simply lands for review and folds into a later pass once accepted.
  */
-export const reviewItemStatusSchema = v.picklist(['open', 'answered', 'resolved', 'dismissed'])
+export const reviewItemStatusSchema = v.picklist([
+  'open',
+  'answered',
+  'resolved',
+  'dismissed',
+  'recommend_requested',
+])
 export type ReviewItemStatus = v.InferOutput<typeof reviewItemStatusSchema>
 
 /** A single question / challenge the reviewer raised about the requirements. */
@@ -85,6 +94,44 @@ export const requirementReviewStatusSchema = v.picklist([
 ])
 export type RequirementReviewStatus = v.InferOutput<typeof requirementReviewStatusSchema>
 
+/**
+ * Lifecycle of a single Requirement-Writer recommendation:
+ * - `ready`: the Writer produced a suggested answer; the human hasn't decided yet.
+ * - `accepted`: the human took the suggestion — it becomes the source finding's answer
+ *   and folds into the NEXT incorporation pass.
+ * - `rejected`: the human declined it (they then dismiss / answer manually / re-request).
+ */
+export const recommendationStatusSchema = v.picklist(['ready', 'accepted', 'rejected'])
+export type RecommendationStatus = v.InferOutput<typeof recommendationStatusSchema>
+
+/**
+ * A Requirement-Writer suggestion for one finding. Recommendations are a first-class
+ * collection on the review (NOT on items) so they survive the item churn each re-review
+ * causes — the source finding is snapshotted by title/detail rather than referenced by a
+ * (volatile) item id. The Writer grounds the suggestion on the project's best-practice
+ * fragments first, then `spec/` + `tech-spec/`, then web search; when the answer comes
+ * straight from a best-practice fragment, {@link groundedInFragment} carries it so the UI
+ * can mark the option as the current team/org standard. Recommendations are NOT AI-reviewed.
+ */
+export const requirementRecommendationSchema = v.object({
+  id: v.string(),
+  /** Snapshot of the finding this recommends an answer for (item ids churn on re-review). */
+  sourceFinding: v.object({ title: v.string(), detail: v.string() }),
+  /** The suggested answer text. */
+  recommendedText: v.string(),
+  status: recommendationStatusSchema,
+  /** A "do it differently" note the human attached when re-requesting, else null. */
+  note: v.nullable(v.string()),
+  /**
+   * Set when the recommendation is taken directly from a best-practice fragment (the
+   * "current standard" signal), else null. Carries the fragment's id + title for the badge.
+   */
+  groundedInFragment: v.nullable(v.object({ id: v.string(), title: v.string() })),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+export type RequirementRecommendation = v.InferOutput<typeof requirementRecommendationSchema>
+
 /** A completed requirements review for one board block. */
 export const requirementReviewSchema = v.object({
   id: v.string(),
@@ -112,6 +159,11 @@ export const requirementReviewSchema = v.object({
    * it by one.
    */
   maxIterations: v.optional(v.number(), 1),
+  /**
+   * Requirement-Writer suggestions awaiting (or settled by) human accept/reject. Survives
+   * the re-review item churn — see {@link requirementRecommendationSchema}. Empty by default.
+   */
+  recommendations: v.optional(v.array(requirementRecommendationSchema), []),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
@@ -140,6 +192,24 @@ export const incorporateRequirementsSchema = v.object({
   feedback: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(4000))),
 })
 export type IncorporateRequirementsInput = v.InferOutput<typeof incorporateRequirementsSchema>
+
+/**
+ * Ask the Requirement Writer to recommend answers for a batch of findings (by item id).
+ * Sent when the human marks findings "recommend something" instead of answering them.
+ */
+export const requestRecommendationsSchema = v.object({
+  itemIds: v.pipe(v.array(v.string()), v.minLength(1)),
+})
+export type RequestRecommendationsInput = v.InferOutput<typeof requestRecommendationsSchema>
+
+/**
+ * Re-request a single recommendation with a "do it differently" note (the human rejected
+ * the first suggestion but wants another grounded attempt rather than answering manually).
+ */
+export const reRequestRecommendationSchema = v.object({
+  note: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(4000)),
+})
+export type ReRequestRecommendationInput = v.InferOutput<typeof reRequestRecommendationSchema>
 
 /**
  * How a human resolves a requirements review that hit its iteration cap with findings

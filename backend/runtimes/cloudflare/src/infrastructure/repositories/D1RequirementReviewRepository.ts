@@ -1,5 +1,9 @@
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
-import type { RequirementReview, RequirementReviewItem } from '@cat-factory/contracts'
+import type {
+  RequirementRecommendation,
+  RequirementReview,
+  RequirementReviewItem,
+} from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface RequirementReviewRow {
@@ -11,27 +15,32 @@ interface RequirementReviewRow {
   incorporated_requirements: string | null
   iteration: number
   max_iterations: number
+  recommendations: string | null
   created_at: number
   updated_at: number
 }
 
-function rowToReview(row: RequirementReviewRow): RequirementReview {
-  let items: RequirementReviewItem[] = []
+function parseJsonArray<T>(raw: string | null | undefined): T[] {
+  if (!raw) return []
   try {
-    const parsed = JSON.parse(row.items)
-    if (Array.isArray(parsed)) items = parsed as RequirementReviewItem[]
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as T[]) : []
   } catch {
-    items = []
+    return []
   }
+}
+
+function rowToReview(row: RequirementReviewRow): RequirementReview {
   return {
     id: row.id,
     blockId: row.block_id,
     status: row.status as RequirementReview['status'],
-    items,
+    items: parseJsonArray<RequirementReviewItem>(row.items),
     model: row.model,
     incorporatedRequirements: row.incorporated_requirements,
     iteration: row.iteration,
     maxIterations: row.max_iterations,
+    recommendations: parseJsonArray<RequirementRecommendation>(row.recommendations),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -75,8 +84,8 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
       .prepare(
         `INSERT INTO requirement_reviews
            (workspace_id, id, block_id, status, items, model, incorporated_requirements,
-            iteration, max_iterations, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            iteration, max_iterations, recommendations, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            block_id = excluded.block_id,
            status = excluded.status,
@@ -85,6 +94,7 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
            incorporated_requirements = excluded.incorporated_requirements,
            iteration = excluded.iteration,
            max_iterations = excluded.max_iterations,
+           recommendations = excluded.recommendations,
            updated_at = excluded.updated_at`,
       )
       .bind(
@@ -97,6 +107,7 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
         review.incorporatedRequirements,
         review.iteration ?? 1,
         review.maxIterations ?? 1,
+        JSON.stringify(review.recommendations ?? []),
         review.createdAt,
         review.updatedAt,
       )

@@ -105,6 +105,9 @@ const STATUS_COLOR = {
   answered: 'info',
   resolved: 'success',
   dismissed: 'neutral',
+  // Clarity review doesn't request Requirement-Writer recommendations, but the item-status
+  // type is shared with the requirements review, so the map must be exhaustive.
+  recommend_requested: 'primary',
 } as const satisfies Record<ReviewItemStatus, string>
 
 function notifyError(title: string, e: unknown) {

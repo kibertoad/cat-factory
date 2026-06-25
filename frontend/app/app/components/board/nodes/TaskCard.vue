@@ -117,7 +117,9 @@ const reviewStageLabel = computed(() =>
     ? 'Incorporating answers…'
     : reviewStage.value === 'reviewing'
       ? 'Re-reviewing…'
-      : null,
+      : reviewStage.value === 'recommending'
+        ? 'Recommending…'
+        : null,
 )
 const pendingApproval = computed(() => {
   const a = execution.openApprovals.find((a) => a.blockId === props.taskId)

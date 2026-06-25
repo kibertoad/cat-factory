@@ -29,6 +29,8 @@ export const useRequirementsStore = defineStore('requirements', () => {
   const reviewing = ref<Set<string>>(new Set())
   /** Review ids currently incorporating their answers. */
   const incorporating = ref<Set<string>>(new Set())
+  /** Block ids whose Requirement Writer is currently producing recommendations. */
+  const recommending = ref<Set<string>>(new Set())
   /** Block ids whose current review is being fetched (the initial `load`). */
   const loadingByBlock = ref<Set<string>>(new Set())
   /**
@@ -48,7 +50,8 @@ export const useRequirementsStore = defineStore('requirements', () => {
    * needed — so the board suppresses the "Approval needed" gate and shows this working state
    * instead, with copy that names which of the two stages is running.
    */
-  function backgroundStage(blockId: string): 'incorporating' | 'reviewing' | null {
+  function backgroundStage(blockId: string): 'incorporating' | 'reviewing' | 'recommending' | null {
+    if (recommending.value.has(blockId)) return 'recommending'
     const status = reviews.value[blockId]?.status
     return status === 'incorporating' || status === 'reviewing' ? status : null
   }
@@ -172,6 +175,47 @@ export const useRequirementsStore = defineStore('requirements', () => {
     return updated
   }
 
+  function isRecommending(blockId: string): boolean {
+    return recommending.value.has(blockId)
+  }
+
+  /**
+   * Ask the Requirement Writer to recommend answers for a batch of findings (by item id).
+   * Runs the Writer inline (grounded on best-practice fragments → spec/tech-spec → web) and
+   * returns the review with `ready` recommendations to accept/reject. Shows a `recommending`
+   * background stage on the board while it runs.
+   */
+  async function requestRecommendations(blockId: string, itemIds: string[]) {
+    withFlag(recommending, blockId, true)
+    try {
+      const updated = await api.requestRecommendations(workspace.requireId(), blockId, itemIds)
+      if (updated) store(updated)
+      return updated
+    } finally {
+      withFlag(recommending, blockId, false)
+    }
+  }
+
+  /** Accept a recommendation (becomes the finding's answer, folded into the next incorporation). */
+  async function acceptRecommendation(review: RequirementReview, recId: string) {
+    store(await api.acceptRecommendation(workspace.requireId(), review.id, recId))
+  }
+
+  /** Reject a recommendation (the human then dismisses / answers manually / re-requests). */
+  async function rejectRecommendation(review: RequirementReview, recId: string) {
+    store(await api.rejectRecommendation(workspace.requireId(), review.id, recId))
+  }
+
+  /** Re-request a recommendation with a "do it differently" note. */
+  async function reRequestRecommendation(review: RequirementReview, recId: string, note: string) {
+    withFlag(recommending, review.blockId, true)
+    try {
+      store(await api.reRequestRecommendation(workspace.requireId(), review.id, recId, note))
+    } finally {
+      withFlag(recommending, review.blockId, false)
+    }
+  }
+
   /** Resolve a capped review: extra-round / proceed / stop-reset. */
   async function resolveExceeded(
     blockId: string,
@@ -190,6 +234,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
     isReviewing,
     isLoading,
     isIncorporating,
+    isRecommending,
     openCount,
     answeredCount,
     allSettled,
@@ -202,6 +247,10 @@ export const useRequirementsStore = defineStore('requirements', () => {
     reReview,
     proceed,
     resolveExceeded,
+    requestRecommendations,
+    acceptRecommendation,
+    rejectRecommendation,
+    reRequestRecommendation,
     // Patch the cache from a live `requirements` stream event.
     upsert: store,
   }

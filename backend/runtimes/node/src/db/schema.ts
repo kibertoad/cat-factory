@@ -549,6 +549,8 @@ export const requirementReviews = pgTable(
     // review is iteration 1; an "extra round" choice bumps max_iterations).
     iteration: integer('iteration').notNull().default(1),
     max_iterations: integer('max_iterations').notNull().default(1),
+    // Requirement-Writer recommendations as a JSON array (text), mirror of D1 migration 0009.
+    recommendations: text('recommendations').notNull().default('[]'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },

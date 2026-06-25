@@ -1,10 +1,12 @@
 import type {
+  Block,
   BlockRepository,
   ExecutionRepository,
   PipelineRepository,
   ResolveRunRepoContext,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
+import { getFragment } from '@cat-factory/prompt-fragments'
 import type { AccountRepository, MembershipRepository } from '@cat-factory/kernel'
 import type {
   AccountInvitationRepository,
@@ -1029,6 +1031,41 @@ function createRequirementsModule(
       : undefined,
     documentRepository: deps.documentRepository,
     taskRepository: deps.taskRepository,
+    // The Requirement Writer (second companion) grounds recommendations on the run's repo
+    // (`spec/` + `tech-spec/` via the checkout-free RepoFiles) — wired in all three facades.
+    resolveRunRepoContext: deps.resolveRunRepoContext,
+    // …and on the block's best-practice fragments (team/org standards), checked FIRST. Walk
+    // the owning frame's service standards then union the block's own pins (same precedence
+    // as the agent context builder), resolved against the universal fragment pool.
+    resolveBlockFragments: async (workspaceId: string, blockId: string) => {
+      const block = await deps.blockRepository.get(workspaceId, blockId)
+      if (!block) return []
+      const ids: string[] = []
+      const seen = new Set<string>()
+      const add = (id: string) => {
+        if (!seen.has(id)) {
+          seen.add(id)
+          ids.push(id)
+        }
+      }
+      let current: Block | null = block
+      for (let i = 0; current && i < 8; i++) {
+        if (current.level === 'frame' || !current.parentId) {
+          for (const id of current.serviceFragmentIds ?? []) add(id)
+          break
+        }
+        current = await deps.blockRepository.get(workspaceId, current.parentId)
+      }
+      for (const id of block.fragmentIds ?? []) add(id)
+      const out: { id: string; title: string; body: string }[] = []
+      for (const id of ids) {
+        const fragment = getFragment(id)
+        if (fragment) out.push({ id, title: fragment.title, body: fragment.body })
+      }
+      return out
+    },
+    // `webSearch` (gateway-RAG) is wired by the web-search-connection workstream; until then
+    // the Writer still gets provider-hosted web search on Anthropic/OpenAI models.
   })
   return { service }
 }

@@ -233,6 +233,112 @@ export function buildReworkPrompt(
   return lines.join('\n')
 }
 
+/** A best-practice fragment (team/org standard) made available to the Requirement Writer. */
+export interface GroundingFragment {
+  id: string
+  title: string
+  body: string
+}
+
+/** A web-search result folded into the Writer prompt (gateway-RAG grounding). */
+export interface GroundingWebResult {
+  title: string
+  url: string
+  content: string
+}
+
+/** Everything the Requirement Writer grounds a recommendation on, in precedence order. */
+export interface RecommendationGrounding {
+  /** Team/org standards — checked FIRST; a match becomes the recommendation (current standard). */
+  fragments: GroundingFragment[]
+  /** Relevant in-repo `spec/` (business) + `tech-spec/` (technical) excerpts, pre-rendered. */
+  specExcerpts: string[]
+  /** Web-search snippets for what the project material leaves open (gateway-RAG path). */
+  webResults: GroundingWebResult[]
+}
+
+/**
+ * Build the Requirement Writer's user prompt: the findings to answer, then the grounding
+ * material in precedence order (best-practice fragments → in-repo spec/tech-spec excerpts →
+ * web-search snippets). The {@link WRITER_SYSTEM_PROMPT} (in `@cat-factory/agents`) defines
+ * the strict JSON output shape and the precedence rule. `note` is an optional human "do it
+ * differently" steer for a single re-requested recommendation.
+ */
+export function buildRecommendationPrompt(
+  ctx: RequirementsContext,
+  findings: RequirementReviewItem[],
+  grounding: RecommendationGrounding,
+  note?: string,
+): string {
+  const lines: string[] = [
+    'Recommend an answer for each of these requirements-review findings:',
+    '',
+  ]
+  for (const f of findings) {
+    lines.push(`- itemId: ${f.id}`)
+    lines.push(`  category: ${f.category} (severity ${f.severity})`)
+    lines.push(`  finding: ${f.title} — ${f.detail}`)
+  }
+  lines.push('', 'Context — the work under review:', '', renderRequirements(ctx))
+  if (grounding.fragments.length) {
+    lines.push(
+      '',
+      'BEST-PRACTICE STANDARDS (team/org standards — check these FIRST; if one settles a ' +
+        'finding, recommend exactly that and return its id as "fromStandard"):',
+      '',
+    )
+    for (const fr of grounding.fragments) lines.push(`### standard ${fr.id}: ${fr.title}`, fr.body, '')
+  }
+  if (grounding.specExcerpts.length) {
+    lines.push('', 'IN-REPO SPECIFICATIONS (business `spec/` + technical `tech-spec/`):', '')
+    for (const ex of grounding.specExcerpts) lines.push(ex, '')
+  }
+  if (grounding.webResults.length) {
+    lines.push('', 'WEB SEARCH RESULTS (for what the project material leaves open):', '')
+    for (const w of grounding.webResults) lines.push(`### ${w.title} (${w.url})`, w.content, '')
+  }
+  if (note?.trim()) {
+    lines.push(
+      '',
+      'The human REJECTED your previous suggestion for one finding and asked you to try ' +
+        'again with this steer — follow it closely:',
+      '',
+      note.trim(),
+    )
+  }
+  lines.push(
+    '',
+    'Return ONLY the JSON object described in your instructions (one entry per itemId above).',
+  )
+  return lines.join('\n')
+}
+
+/**
+ * Coerce the Requirement Writer's parsed JSON into a map of itemId → { recommendation,
+ * fromStandard }. Tolerant of a bare array or a `{recommendations:[...]}` wrapper; entries
+ * missing a recommendation string are dropped.
+ */
+export function coerceRecommendations(
+  raw: unknown,
+): Map<string, { recommendation: string; fromStandard: string | null }> {
+  const list = Array.isArray((raw as { recommendations?: unknown })?.recommendations)
+    ? ((raw as { recommendations: unknown[] }).recommendations as unknown[])
+    : Array.isArray(raw)
+      ? (raw as unknown[])
+      : []
+  const out = new Map<string, { recommendation: string; fromStandard: string | null }>()
+  for (const entry of list) {
+    if (!entry || typeof entry !== 'object') continue
+    const obj = entry as Record<string, unknown>
+    const itemId = asString(obj.itemId)
+    const recommendation = asString(obj.recommendation)
+    if (!itemId || !recommendation) continue
+    const fromStandard = asString(obj.fromStandard)
+    out.set(itemId, { recommendation, fromStandard: fromStandard || null })
+  }
+  return out
+}
+
 /**
  * Whether an incorporation pass has anything to fold in: at least one finding the human
  * answered/resolved with a non-empty reply, or a freeform "do it differently" feedback.

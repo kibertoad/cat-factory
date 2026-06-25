@@ -1,6 +1,8 @@
 import {
   incorporateRequirementsSchema,
+  reRequestRecommendationSchema,
   replyReviewItemSchema,
+  requestRecommendationsSchema,
   resolveRequirementsExceededSchema,
   updateReviewItemStatusSchema,
 } from '@cat-factory/contracts'
@@ -132,6 +134,69 @@ export function requirementReviewController(): Hono<AppEnv> {
       .executionService.proceedRequirements(param(c, 'workspaceId'), param(c, 'blockId'))
     return c.json(review)
   })
+
+  // Ask the Requirement Writer to recommend grounded answers for a batch of findings the
+  // human marked "recommend something". Runs the Writer inline (grounded on best-practice
+  // fragments → spec/tech-spec → web search) and returns the review with `ready`
+  // recommendations for the human to accept/reject. Block-scoped (the live review is resolved
+  // from the block); a no-op when no review exists.
+  app.post(
+    '/blocks/:blockId/requirement-review/recommend',
+    jsonBody(requestRecommendationsSchema),
+    async (c) => {
+      const requirements = requireRequirements(c)
+      if (!requirements) return unavailable(c)
+      const workspaceId = param(c, 'workspaceId')
+      const review = await requirements.service.getForBlock(workspaceId, param(c, 'blockId'))
+      if (!review) return c.json(null)
+      const updated = await requirements.service.recommend(
+        workspaceId,
+        review.id,
+        c.req.valid('json').itemIds,
+      )
+      return c.json(updated)
+    },
+  )
+
+  // Accept a recommendation (it becomes the finding's answer, folded into the next
+  // incorporation), reject it, or re-request it with a "do it differently" note.
+  app.post('/requirement-reviews/:reviewId/recommendations/:recId/accept', async (c) => {
+    const requirements = requireRequirements(c)
+    if (!requirements) return unavailable(c)
+    const review = await requirements.service.acceptRecommendation(
+      param(c, 'workspaceId'),
+      param(c, 'reviewId'),
+      param(c, 'recId'),
+    )
+    return c.json(review)
+  })
+
+  app.post('/requirement-reviews/:reviewId/recommendations/:recId/reject', async (c) => {
+    const requirements = requireRequirements(c)
+    if (!requirements) return unavailable(c)
+    const review = await requirements.service.rejectRecommendation(
+      param(c, 'workspaceId'),
+      param(c, 'reviewId'),
+      param(c, 'recId'),
+    )
+    return c.json(review)
+  })
+
+  app.post(
+    '/requirement-reviews/:reviewId/recommendations/:recId/re-request',
+    jsonBody(reRequestRecommendationSchema),
+    async (c) => {
+      const requirements = requireRequirements(c)
+      if (!requirements) return unavailable(c)
+      const review = await requirements.service.reRequestRecommendation(
+        param(c, 'workspaceId'),
+        param(c, 'reviewId'),
+        param(c, 'recId'),
+        c.req.valid('json').note,
+      )
+      return c.json(review)
+    },
+  )
 
   // Resolve a review that hit its iteration cap: one more round / proceed anyway / stop
   // and reset the task to phase zero. Returns the updated review.

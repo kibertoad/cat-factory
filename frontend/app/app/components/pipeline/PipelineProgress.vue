@@ -32,7 +32,9 @@ function reviewStageLabel(agentKind: string | undefined): string | null {
     ? 'Incorporating…'
     : stage === 'reviewing'
       ? 'Re-reviewing…'
-      : null
+      : stage === 'recommending'
+        ? 'Recommending…'
+        : null
 }
 
 // Clicking an agent opens its step-detail overlay — execution metadata (state,
