@@ -4,6 +4,7 @@ import type { DocumentSourceKind, TaskSourceKind, LodLevel } from '~/types/domai
 import type { PendingContext } from '~/composables/useContextLinking'
 import { zoomToLod, lodAtLeast } from '~/composables/useSemanticZoom'
 import { useExecutionStore } from '~/stores/execution'
+import { useFrameExpansionStore } from '~/stores/frameExpansion'
 import { agentKindMeta } from '~/utils/catalog'
 
 /** Values used to seed the add-task form when it is opened from another surface. */
@@ -159,9 +160,14 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   /** A frame shows its tasks when manually expanded OR once zoomed in to `close`
-   * or any deeper band (`steps`/`subtasks` drill further into those tasks). */
+   * or any deeper band (`steps`/`subtasks` drill further into those tasks). The
+   * zoom-driven branch is gated by the board's frame-expansion driver so only
+   * on-screen, centre-most frames open — a large off-centre or off-screen service
+   * no longer snaps out over the one the user is focused on. The gate degrades to
+   * "allowed" when no board driver is mounted (focus view / tests). */
   function isFrameExpanded(id: string) {
-    return expandedFrames.value.has(id) || lodAtLeast(lod.value, 'close')
+    if (expandedFrames.value.has(id)) return true
+    return lodAtLeast(lod.value, 'close') && useFrameExpansionStore().canExpand(id)
   }
 
   function select(id: string | null) {

@@ -9,6 +9,7 @@ import { STATUS_META } from '~/utils/catalog'
 import { readDndPayload, blockIdFromEvent } from '~/utils/dnd'
 import { BOARD_FLOW_ID } from '~/composables/useBoardFlow'
 import { useTaskExpansion } from '~/composables/useTaskExpansion'
+import { useFrameExpansion } from '~/composables/useFrameExpansion'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -21,8 +22,11 @@ const { onNodeDragStop, onViewportChange, screenToFlowCoordinate } = useVueFlow(
 
 // Gate which task cards expand their pipeline list on deep zoom: only on-screen
 // cards, and only the centre-most of any that would overlap (see useTaskExpansion).
+// The frame-level gate is the same idea one level up: which service frames may
+// auto-expand to their task canvas once zoomed in (see useFrameExpansion).
 const boardEl = ref<HTMLElement | null>(null)
 useTaskExpansion(boardEl)
+useFrameExpansion(boardEl)
 
 // Only frames are board nodes. Dependencies live on tasks (rendered inside the
 // frames), so there are no frame-to-frame edges on the canvas.
