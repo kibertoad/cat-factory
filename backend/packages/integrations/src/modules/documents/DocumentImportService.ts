@@ -2,7 +2,7 @@ import type { Clock } from '@cat-factory/kernel'
 import type { DocumentSourceRegistry } from '@cat-factory/kernel'
 import type { DocumentRecord, DocumentRepository } from '@cat-factory/kernel'
 import type { SourceDocument, DocumentSearchResult, DocumentSourceKind } from '@cat-factory/kernel'
-import { ValidationError } from '@cat-factory/kernel'
+import { contentHash, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import type { DocumentConnectionService } from './DocumentConnectionService.js'
@@ -61,6 +61,20 @@ export class DocumentImportService {
 
     // Preserve any existing block link across a re-import.
     const existing = await this.deps.documentRepository.get(workspaceId, source, content.externalId)
+    const hash = contentHash(content.body)
+    // Idempotent re-import: skip the write only when NOTHING that reaches an agent has
+    // changed — the body (by hash) AND the title/url metadata (which feed the prompt's
+    // summary index and the materialised file's `Source:` header). A renamed/moved page
+    // whose body is unchanged still re-projects so the stale title/url don't linger.
+    if (
+      existing &&
+      existing.deletedAt === null &&
+      existing.contentHash === hash &&
+      existing.title === content.title &&
+      existing.url === content.url
+    ) {
+      return toSourceDocument(existing)
+    }
     const record: DocumentRecord = {
       workspaceId,
       source,
@@ -69,6 +83,7 @@ export class DocumentImportService {
       url: content.url,
       excerpt: buildExcerpt(content.body),
       body: content.body,
+      contentHash: hash,
       linkedBlockId: existing?.linkedBlockId ?? null,
       syncedAt: this.deps.clock.now(),
       deletedAt: null,

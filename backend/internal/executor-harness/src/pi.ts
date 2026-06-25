@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { redactSecrets } from './git.js'
 
 // Drives the Pi coding-agent CLI. Pi is pointed at the Worker's OpenAI-compatible
@@ -133,7 +133,12 @@ behaviour and tests. Read only the modules/features relevant to your task.`
  */
 export async function writeAgentsContext(
   systemPrompt: string,
-  opts: { webSearch?: boolean; guidance?: string; serviceDirectory?: string } = {},
+  opts: {
+    webSearch?: boolean
+    guidance?: string
+    serviceDirectory?: string
+    contextFiles?: ContextFileInfo[]
+  } = {},
 ): Promise<void> {
   const dir = join(homedir(), '.pi', 'agent')
   await mkdir(dir, { recursive: true })
@@ -146,11 +151,87 @@ export async function writeAgentsContext(
   // its work (and its build/test commands) there. Only present when the dispatcher
   // resolved a monorepo service directory; the agent's cwd already points at it.
   const monorepo = opts.serviceDirectory ? monorepoGuidance(opts.serviceDirectory) : ''
+  // Point the agent at any linked context the backend materialised into the checkout
+  // (requirements / RFCs / PRDs / tracker issues) so it reads them on demand.
+  const context = contextGuidance(opts.contextFiles ?? [])
   await writeFile(
     join(dir, 'AGENTS.md'),
-    `${systemPrompt}${BLUEPRINT_GUIDANCE}${SPEC_GUIDANCE}${TODO_GUIDANCE}${monorepo}${webTools}`,
+    `${systemPrompt}${BLUEPRINT_GUIDANCE}${SPEC_GUIDANCE}${TODO_GUIDANCE}${monorepo}${webTools}${context}`,
     'utf8',
   )
+}
+
+/** Directory in the checkout where linked-context files are materialised (see CONTEXT_DIR in agents). */
+export const CONTEXT_DIR = '.cat-context'
+
+/** The metadata the AGENTS.md context block needs to point an agent at a materialised file. */
+export interface ContextFileInfo {
+  path: string
+  title: string
+  url: string
+  content: string
+}
+
+/** The AGENTS.md block enumerating the materialised linked-context files, or '' when none. */
+function contextGuidance(files: ContextFileInfo[]): string {
+  if (!files.length) return ''
+  const list = files
+    .map((f) => `- \`${CONTEXT_DIR}/${f.path}\` — ${f.title}${f.url ? ` (${f.url})` : ''}`)
+    .join('\n')
+  return `
+
+## Linked context (read on demand)
+Requirements / RFCs / PRDs / tracker issues relevant to this task are in the \`${CONTEXT_DIR}/\`
+directory of your checkout. Open a file when it is relevant. Do NOT attempt to reach external
+systems (Jira / Confluence / GitHub) — everything available has already been placed on disk:
+${list}`
+}
+
+/**
+ * Write the backend-prepared linked-context files into {@link CONTEXT_DIR} in the
+ * checkout so the agent can read them on demand, and add a LOCAL git exclude entry so
+ * even `git add -A` never commits them into the agent's PR. Best-effort on the exclude
+ * (a scaffold-from-scratch checkout has no `.git` yet — the files just stay untracked).
+ */
+export async function materializeContextFiles(
+  cwd: string,
+  files: ContextFileInfo[],
+): Promise<void> {
+  if (!files.length) return
+  const dir = join(cwd, CONTEXT_DIR)
+  await mkdir(dir, { recursive: true })
+  for (const f of files) await writeFile(join(dir, f.path), f.content, 'utf8')
+  // The exclude pattern has no leading slash, so it matches `.cat-context/` at any depth
+  // — covering the monorepo case where cwd is a service subdirectory below the repo root.
+  // Walk up to find the repo's `.git` (best-effort; a from-scratch scaffold has none).
+  const gitRoot = await findGitRoot(cwd)
+  if (!gitRoot) return
+  try {
+    await appendFile(join(gitRoot, '.git', 'info', 'exclude'), `\n${CONTEXT_DIR}/\n`, 'utf8')
+  } catch {
+    // No writable .git/info; the files simply stay untracked (still not auto-added on most flows).
+  }
+}
+
+/** Walk up from `dir` (bounded) to the directory containing a `.git` folder, or null. */
+async function findGitRoot(dir: string): Promise<string | null> {
+  let current = dir
+  for (let i = 0; i < 8; i++) {
+    if (await pathExists(join(current, '.git'))) return current
+    const parent = dirname(current)
+    if (parent === current) break
+    current = parent
+  }
+  return null
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /** The monorepo note appended to AGENTS.md when a run is scoped to a service subdirectory. */

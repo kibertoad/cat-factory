@@ -81,6 +81,7 @@ export {
 } from './modules/tracker/TicketTrackerService.js'
 export * as jiraCreateLogic from './modules/tracker/jira.create.logic.js'
 export * as jiraWritebackLogic from './modules/tracker/jira.writeback.logic.js'
+export { extractReferences, type ExtractedReferences } from './modules/corpus/references.logic.js'
 export {
   IssueWritebackService,
   type IssueWritebackServiceDependencies,

@@ -851,6 +851,7 @@ export const documents = pgTable(
     url: text('url').notNull(),
     excerpt: text('excerpt').notNull().default(''),
     body: text('body').notNull().default(''),
+    content_hash: text('content_hash').notNull().default(''),
     linked_block_id: text('linked_block_id'),
     synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
     deleted_at: bigint('deleted_at', { mode: 'number' }),

@@ -122,15 +122,25 @@ function withRevision(prompt: string, context: AgentRunContext): string {
   return lines.join('\n')
 }
 
-/** Build the user prompt from the block context and the run so far. */
-export function userPromptFor(context: AgentRunContext): string {
-  return withRevision(buildBaseUserPrompt(context), context)
+/**
+ * Build the user prompt from the block context and the run so far. `opts.materialized`
+ * (set by the container executor) renders linked context as a summary index pointing at
+ * the on-disk files; the default (inline executors) injects the bodies into the prompt.
+ */
+export function userPromptFor(
+  context: AgentRunContext,
+  opts: { materialized?: boolean } = {},
+): string {
+  return withRevision(buildBaseUserPrompt(context, opts), context)
 }
 
-function buildBaseUserPrompt(context: AgentRunContext): string {
+function buildBaseUserPrompt(
+  context: AgentRunContext,
+  opts: { materialized?: boolean } = {},
+): string {
   // Standard phases get their built-out, templated user prompt.
   const phase = phaseForKind(context.agentKind)
-  if (phase) return renderStandardUserPrompt(phase, context)
+  if (phase) return renderStandardUserPrompt(phase, context, opts)
 
   // A registered custom kind may supply its own user prompt; otherwise it falls through
   // to the generic block-context prompt below, like any other non-standard-phase kind.
@@ -147,7 +157,7 @@ function buildBaseUserPrompt(context: AgentRunContext): string {
   // model rates the right output rather than guessing among the prior-agent sections.
   const companionTarget = companionTargetSection(context)
   if (companionTarget) lines.push(companionTarget)
-  const linked = linkedContextSection(context)
+  const linked = linkedContextSection(context, opts)
   if (linked) lines.push(linked)
   const envSection = environmentSection(context)
   if (envSection) lines.push(envSection)

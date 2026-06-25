@@ -9,7 +9,8 @@ import type {
   TaskSourceSettingsRecord,
   TaskSourceSettingsRepository,
 } from '@cat-factory/kernel'
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { urlMatchCandidates } from '@cat-factory/kernel'
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { taskConnections, taskSourceSettings, tasks } from '../db/schema.js'
 
@@ -290,6 +291,22 @@ export class DrizzleTaskRepository implements TaskRepository {
       )
       .orderBy(desc(tasks.synced_at))
     return rows.map(rowToTask)
+  }
+
+  async getByUrl(workspaceId: string, url: string): Promise<TaskRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.workspace_id, workspaceId),
+          inArray(tasks.url, urlMatchCandidates(url)),
+          isNull(tasks.deleted_at),
+        ),
+      )
+      .orderBy(desc(tasks.synced_at))
+      .limit(1)
+    return rows[0] ? rowToTask(rows[0]) : null
   }
 
   async linkBlock(
