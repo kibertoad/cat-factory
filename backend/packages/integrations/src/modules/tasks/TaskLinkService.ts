@@ -176,23 +176,36 @@ export class TaskLinkService {
       tasks.push(block)
     }
 
-    // Seed dependency edges from the normalized links of every imported issue.
+    // Collect the dependency edges from the normalized links of every imported issue, keyed
+    // by direction so each is unique. A single blocking relationship is represented on BOTH
+    // endpoints (Jira surfaces it as the source's outward "blocks" AND the target's inward
+    // "is blocked by"; a GitHub body can reference both ways too), and both sides map to the
+    // SAME directed edge — so we MUST collapse them to one. `toggleDependency` is a toggle,
+    // so seeding the same edge twice would add it then cancel it back out (no edge at all).
+    const edges = new Map<string, { target: string; source: string }>()
     for (const [externalId, content] of contents) {
       const here = blockOf.get(externalId)
       if (!here) continue
       for (const link of content.links ?? []) {
+        if (link.type === 'relates') continue
         const there = blockOf.get(link.externalId)
         if (!there) continue // a link to an issue we didn't import — skip
         // blockedBy/dependsOn: THIS issue waits on the linked one (this dependsOn linked).
         // blocks: the linked issue waits on this one (linked dependsOn this).
-        const [target, sourceBlock] =
-          link.type === 'blocks' ? [there, here] : [here, there]
-        if (link.type === 'relates') continue
-        try {
-          await this.deps.boardService.toggleDependency(workspaceId, target, sourceBlock)
-        } catch {
-          // Cycle / already-linked / self — ignore; the rest of the graph still lands.
-        }
+        const [target, source] = link.type === 'blocks' ? [there, here] : [here, there]
+        if (target === source) continue
+        edges.set(`${target} ${source}`, { target, source })
+      }
+    }
+    for (const { target, source } of edges.values()) {
+      // Skip an edge that already exists so a pre-linked child (or a re-spawn) can't toggle
+      // an established dependency OFF — `toggleDependency` flips, it doesn't idempotently add.
+      const targetBlock = await this.deps.blockRepository.get(workspaceId, target)
+      if (targetBlock?.dependsOn.includes(source)) continue
+      try {
+        await this.deps.boardService.toggleDependency(workspaceId, target, source)
+      } catch {
+        // Cycle / already-linked / self — ignore; the rest of the graph still lands.
       }
     }
 
