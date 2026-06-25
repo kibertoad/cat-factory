@@ -37,6 +37,10 @@ export interface AgentRunSummary {
 export const useAgentRunsStore = defineStore('agentRuns', () => {
   const api = useApi()
   const execution = useExecutionStore()
+  // Same actionable-toast handling as the execution store: a retry refused with a tagged
+  // 409 (e.g. the run is no longer in a retryable state, or the model has no provider) is
+  // surfaced here so every retry surface (board card, inspector, task panel) is identical.
+  const runErrors = usePipelineErrorToast()
 
   /** Bootstrap runs for this workspace, newest-first. */
   const bootstrapJobs = ref<BootstrapJob[]>([])
@@ -99,10 +103,14 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
     const personal = usePersonalSubscriptionsStore()
     // A failed run on a Claude-pinned block needs the retrying user's personal password;
     // supplied from cache and prompted (then retried) on a 428, exactly like start.
-    await personal.withCredential(async (password) => {
-      await api.retryAgentRun(ws.requireId(), runId, password)
-      await ws.refresh()
-    })
+    try {
+      await personal.withCredential(async (password) => {
+        await api.retryAgentRun(ws.requireId(), runId, password)
+        await ws.refresh()
+      })
+    } catch (e) {
+      runErrors.present(e, 'Retry failed')
+    }
   }
 
   /**

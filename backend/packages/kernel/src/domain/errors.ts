@@ -35,10 +35,35 @@ export class ValidationError extends DomainError {
   }
 }
 
+/**
+ * A distinct, machine-readable code for a 409 conflict so a client can react to a
+ * SPECIFIC conflict precisely (e.g. open the AI-provider setup for
+ * `providers_unconfigured`) instead of string-matching the human message — the
+ * conflict analogue of {@link CredentialRequiredReason}. Surfaced on the wire under
+ * `error.details.reason`. Optional: a conflict with no client-specific handling can
+ * omit it and just carry its message.
+ */
+export type ConflictReason =
+  | 'providers_unconfigured'
+  | 'dependencies_unmet'
+  | 'task_limit_reached'
+  | 'tester_infra_unsupported'
+  | 'run_not_retryable'
+  | 'no_pr_to_merge'
+  | 'github_not_connected'
+  | 'bootstrap_not_retryable'
+  | 'bootstrap_reference_missing'
+
 /** Conflicts with current state (→ 409). */
 export class ConflictError extends DomainError {
-  constructor(message: string) {
-    super('conflict', message)
+  constructor(
+    message: string,
+    /** Machine-readable {@link ConflictReason} for the client (under `details.reason`). */
+    reason?: ConflictReason,
+    /** Extra machine-readable context merged alongside `reason` (e.g. the offending model ids). */
+    details?: Record<string, unknown>,
+  ) {
+    super('conflict', message, reason ? { reason, ...details } : details)
   }
 }
 
