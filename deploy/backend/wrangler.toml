@@ -308,10 +308,10 @@ DOCUMENT_SOURCES = "confluence,notion"
 DOCUMENT_PLANNER = "llm"
 
 # Task-source integration. ALWAYS ON — workspaces connect a tracker (Jira, …) through
-# the app to link individual issues to a board block as extra agent context.
-# Per-workspace credentials are stored ENCRYPTED in D1. REQUIRES the ENCRYPTION_KEY
-# above; the worker fails to boot without it.
-TASK_SOURCES = "jira"
+# the app to link individual issues to a board block as extra agent context, and toggle
+# each source (Jira / GitHub Issues) on or off per workspace in the UI (there is no
+# deployment-level source allow-list). Per-workspace credentials are stored ENCRYPTED in
+# D1. REQUIRES the ENCRYPTION_KEY above; the worker fails to boot without it.
 
 # Ephemeral environment provider integration. Off by default. Turn it on to let a
 # workspace register its own self-rolled environment management API so a

@@ -6,10 +6,12 @@ import type {
   TaskRecord,
   TaskRepository,
   TaskSourceKind,
+  TaskSourceSettingsRecord,
+  TaskSourceSettingsRepository,
 } from '@cat-factory/kernel'
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
-import { taskConnections, tasks } from '../db/schema.js'
+import { taskConnections, taskSourceSettings, tasks } from '../db/schema.js'
 
 // Drizzle/Postgres implementations of the task-source ports, mirroring the
 // Cloudflare facade's `D1TaskConnectionRepository` / `D1TaskRepository` (D1
@@ -127,6 +129,57 @@ export class DrizzleTaskConnectionRepository implements TaskConnectionRepository
           isNull(taskConnections.deleted_at),
         ),
       )
+  }
+}
+
+/**
+ * Per-workspace task-source toggle (mirrors the D1 `D1TaskSourceSettingsRepository`,
+ * migration 0008). No row ⇒ enabled (the default); an `enabled: 0` row opts out.
+ */
+export class DrizzleTaskSourceSettingsRepository implements TaskSourceSettingsRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  private rowToRecord(row: typeof taskSourceSettings.$inferSelect): TaskSourceSettingsRecord {
+    return {
+      workspaceId: row.workspace_id,
+      source: row.source as TaskSourceKind,
+      enabled: row.enabled !== 0,
+    }
+  }
+
+  async getByWorkspace(workspaceId: string): Promise<TaskSourceSettingsRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(taskSourceSettings)
+      .where(eq(taskSourceSettings.workspace_id, workspaceId))
+    return rows.map((row) => this.rowToRecord(row))
+  }
+
+  async get(workspaceId: string, source: TaskSourceKind): Promise<TaskSourceSettingsRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(taskSourceSettings)
+      .where(
+        and(
+          eq(taskSourceSettings.workspace_id, workspaceId),
+          eq(taskSourceSettings.source, source),
+        ),
+      )
+    return row ? this.rowToRecord(row) : null
+  }
+
+  async upsert(record: TaskSourceSettingsRecord): Promise<void> {
+    await this.db
+      .insert(taskSourceSettings)
+      .values({
+        workspace_id: record.workspaceId,
+        source: record.source,
+        enabled: record.enabled ? 1 : 0,
+      })
+      .onConflictDoUpdate({
+        target: [taskSourceSettings.workspace_id, taskSourceSettings.source],
+        set: { enabled: record.enabled ? 1 : 0 },
+      })
   }
 }
 

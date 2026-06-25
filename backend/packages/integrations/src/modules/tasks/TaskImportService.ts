@@ -1,8 +1,8 @@
 import type { Clock } from '@cat-factory/kernel'
-import type { TaskSourceRegistry } from '@cat-factory/kernel'
+import type { TaskCredentials, TaskSourceProvider, TaskSourceRegistry } from '@cat-factory/kernel'
 import type { TaskRecord, TaskRepository } from '@cat-factory/kernel'
 import type { SourceTask, TaskSearchResult, TaskSourceKind } from '@cat-factory/kernel'
-import { ValidationError } from '@cat-factory/kernel'
+import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import type { TaskConnectionService } from './TaskConnectionService.js'
@@ -51,6 +51,26 @@ export class TaskImportService {
     return provider
   }
 
+  /**
+   * Enforce the workspace's toggle and resolve the credentials to authenticate
+   * with. A disabled source is refused (it isn't offered, so neither import nor
+   * search may run against it). A credentialless source (GitHub Issues) needs no
+   * stored connection — it rides the workspace's installed GitHub App — so it
+   * authenticates with an empty bag; a credentialed source requires a connection.
+   */
+  private async resolveCredentials(
+    workspaceId: string,
+    source: TaskSourceKind,
+    provider: TaskSourceProvider,
+  ): Promise<TaskCredentials> {
+    if (!(await this.deps.connectionService.isEnabled(workspaceId, source))) {
+      throw new ConflictError(`The ${source} task source is disabled for this workspace`)
+    }
+    if (provider.descriptor.credentialFields.length === 0) return {}
+    const connection = await this.deps.connectionService.requireConnection(workspaceId, source)
+    return connection.credentials
+  }
+
   /** Fetch an issue (by key or URL) and upsert its projection; returns the issue. */
   async import(workspaceId: string, source: TaskSourceKind, ref: string): Promise<SourceTask> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
@@ -59,8 +79,8 @@ export class TaskImportService {
     if (!externalId) {
       throw new ValidationError(`Could not resolve a ${source} issue key from '${ref}'`)
     }
-    const connection = await this.deps.connectionService.requireConnection(workspaceId, source)
-    const content = await provider.fetchTask(connection.credentials, externalId)
+    const credentials = await this.resolveCredentials(workspaceId, source, provider)
+    const content = await provider.fetchTask(credentials, externalId)
 
     // Preserve any existing block link across a re-import.
     const existing = await this.deps.taskRepository.get(workspaceId, source, content.externalId)
@@ -102,8 +122,8 @@ export class TaskImportService {
     if (!provider.search) {
       throw new ValidationError(`The ${source} source does not support search`)
     }
-    const connection = await this.deps.connectionService.requireConnection(workspaceId, source)
-    return provider.search(connection.credentials, query, workspaceId)
+    const credentials = await this.resolveCredentials(workspaceId, source, provider)
+    return provider.search(credentials, query, workspaceId)
   }
 
   /** Every issue imported into the workspace, across sources, as wire shapes. */

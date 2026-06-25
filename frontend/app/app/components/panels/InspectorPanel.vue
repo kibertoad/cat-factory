@@ -386,7 +386,7 @@ const showOriginalDescription = ref(false)
           icon="i-lucide-ticket"
           @click="ui.openTaskImport()"
         >
-          {{ tasks.anyConnected ? 'Import Jira issue' : 'Connect Jira' }}
+          {{ tasks.anyOffered ? 'Import issue' : 'Connect a tracker' }}
         </UButton>
         <UButton
           v-if="isContainer && documents.available && documents.anyConnected"

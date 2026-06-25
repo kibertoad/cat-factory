@@ -26,6 +26,17 @@ export interface TaskSourceDescriptor {
   searchable?: boolean
 }
 
+/**
+ * A source's descriptor plus the workspace's live state: whether it's usable now
+ * (`available` — a credentialed source is connected; GitHub Issues' App is
+ * installed) and whether the workspace offers it (`enabled`, the per-workspace
+ * toggle, default true). `available && enabled` is what makes a source offered.
+ */
+export interface TaskSourceState extends TaskSourceDescriptor {
+  available: boolean
+  enabled: boolean
+}
+
 /** A workspace's connection to a task source (never carries credentials). */
 export interface TaskConnection {
   source: TaskSourceKind

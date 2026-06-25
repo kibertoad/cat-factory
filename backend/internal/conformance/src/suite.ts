@@ -8,6 +8,7 @@ import {
   type ScheduleRun,
   seedPipelines,
   type SourceTask,
+  type TaskSourceState,
   type SlackMemberMappingEntry,
   type SlackNotificationSettings,
   type TrackerSettings,
@@ -1085,6 +1086,50 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           containerId: frame.body.id,
         })
         expect(res.status).toBe(404)
+      })
+
+      it('toggles a source off per workspace, gating import, and persists the toggle', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace({ seed: false })
+        const ws = workspace.id
+
+        // A connected source starts available + enabled (offered).
+        await call('POST', `/workspaces/${ws}/task-sources/jira/connect`, {
+          credentials: {
+            baseUrl: 'https://acme.atlassian.net',
+            accountEmail: 'd@a.io',
+            apiToken: 't',
+          },
+        })
+        const before = await call<{ sources: TaskSourceState[] }>(
+          'GET',
+          `/workspaces/${ws}/task-sources`,
+        )
+        const jiraBefore = before.body.sources.find((s) => s.source === 'jira')
+        expect(jiraBefore?.available).toBe(true)
+        expect(jiraBefore?.enabled).toBe(true)
+
+        // Disabling it is refused-from-use and reflected on the source state (persisted).
+        const off = await call('PUT', `/workspaces/${ws}/task-sources/jira/enabled`, {
+          enabled: false,
+        })
+        expect(off.status).toBe(204)
+        const after = await call<{ sources: TaskSourceState[] }>(
+          'GET',
+          `/workspaces/${ws}/task-sources`,
+        )
+        expect(after.body.sources.find((s) => s.source === 'jira')?.enabled).toBe(false)
+        const blocked = await call('POST', `/workspaces/${ws}/task-sources/jira/import`, {
+          ref: 'PROJ-7',
+        })
+        expect(blocked.status).toBe(409)
+
+        // Re-enabling restores import.
+        await call('PUT', `/workspaces/${ws}/task-sources/jira/enabled`, { enabled: true })
+        const ok = await call('POST', `/workspaces/${ws}/task-sources/jira/import`, {
+          ref: 'PROJ-7',
+        })
+        expect(ok.status).toBe(201)
       })
     })
 

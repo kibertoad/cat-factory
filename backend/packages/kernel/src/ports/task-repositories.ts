@@ -34,6 +34,27 @@ export interface TaskConnectionRepository {
 }
 
 /**
+ * The per-workspace on/off toggle for a task source. The absence of a row means
+ * the default (enabled): a source is offered as soon as it is available, and the
+ * workspace explicitly opts out by persisting `enabled: false` (e.g. a workspace
+ * that uses GitHub repos but does not want its issues offered as a task source).
+ */
+export interface TaskSourceSettingsRecord {
+  workspaceId: string
+  source: TaskSourceKind
+  enabled: boolean
+}
+
+export interface TaskSourceSettingsRepository {
+  /** Every stored toggle for the workspace (no row ⇒ that source is at its default, enabled). */
+  getByWorkspace(workspaceId: string): Promise<TaskSourceSettingsRecord[]>
+  /** The stored toggle for one source, or null when at its default. */
+  get(workspaceId: string, source: TaskSourceKind): Promise<TaskSourceSettingsRecord | null>
+  /** Create or replace the toggle for a (workspace, source). */
+  upsert(record: TaskSourceSettingsRecord): Promise<void>
+}
+
+/**
  * An issue projected locally for a workspace as a structured record. The cached
  * fields back both the agent-context injection and the list/preview rendering;
  * `linkedBlockId` records the board block this issue is attached to, if any.

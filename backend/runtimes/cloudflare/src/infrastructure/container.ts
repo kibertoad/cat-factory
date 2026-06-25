@@ -157,6 +157,7 @@ import { FetchGitHubClient } from './github/FetchGitHubClient'
 import { FetchGitHubProvisioningClient } from './github/FetchGitHubProvisioningClient'
 import { WebCryptoWebhookVerifier } from './github/WebCryptoWebhookVerifier'
 import { D1TaskConnectionRepository } from './repositories/D1TaskConnectionRepository'
+import { D1TaskSourceSettingsRepository } from './repositories/D1TaskSourceSettingsRepository'
 import { D1TaskRepository } from './repositories/D1TaskRepository'
 import { D1PromptFragmentRepository } from './repositories/D1PromptFragmentRepository'
 import { D1FragmentSourceRepository } from './repositories/D1FragmentSourceRepository'
@@ -1143,12 +1144,13 @@ function selectTasksDeps(
   clock: Clock,
   idGenerator: IdGenerator,
 ): Partial<CoreDependencies> {
-  const providers: TaskSourceProvider[] = []
-  if (config.tasks.sources.includes('jira')) providers.push(new JiraProvider())
-  // GitHub issues reuse the workspace's installed GitHub App, so this provider
-  // is wired only when the GitHub integration is also configured — it has no
-  // credentials of its own and resolves the installation per issue.
-  if (config.tasks.sources.includes('github') && config.github.enabled) {
+  // Jira is always registered (its credentials are per-workspace, entered in the UI).
+  const providers: TaskSourceProvider[] = [new JiraProvider()]
+  // GitHub Issues reuse the workspace's installed GitHub App, so this provider is
+  // wired whenever the GitHub integration is configured — it has no credentials of
+  // its own and resolves the installation per issue. Whether a workspace OFFERS it
+  // is the per-workspace toggle (task_source_settings), not a deployment env gate.
+  if (config.github.enabled) {
     const registry = buildAppRegistry(env, config, db, clock)
     providers.push(
       new GitHubIssuesProvider({
@@ -1163,7 +1165,6 @@ function selectTasksDeps(
       }),
     )
   }
-  if (providers.length === 0) return {}
   return {
     taskSourceProviders: providers,
     taskConnectionRepository: new D1TaskConnectionRepository({
@@ -1175,6 +1176,7 @@ function selectTasksDeps(
         info: 'cat-factory:tasks',
       }),
     }),
+    taskSourceSettingsRepository: new D1TaskSourceSettingsRepository({ db }),
     taskRepository: new D1TaskRepository({ db }),
   }
 }

@@ -160,6 +160,8 @@ export type {
 export type {
   TaskConnectionRecord,
   TaskConnectionRepository,
+  TaskSourceSettingsRecord,
+  TaskSourceSettingsRepository,
   TaskRecord,
   TaskRepository,
 } from './task-repositories.js'

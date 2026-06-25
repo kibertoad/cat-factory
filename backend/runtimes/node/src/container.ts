@@ -141,7 +141,11 @@ import {
   DrizzleSlackMemberMappingRepository,
   DrizzleSlackSettingsRepository,
 } from './repositories/slack.js'
-import { DrizzleTaskConnectionRepository, DrizzleTaskRepository } from './repositories/tasks.js'
+import {
+  DrizzleTaskConnectionRepository,
+  DrizzleTaskRepository,
+  DrizzleTaskSourceSettingsRepository,
+} from './repositories/tasks.js'
 import { CryptoIdGenerator, SystemClock } from './runtime.js'
 
 // HKDF domain tag separating runner-pool scheduler secrets from any other use of
@@ -1366,16 +1370,17 @@ function selectNodeTasksDeps(
   installations: GitHubInstallationRepository,
 ): { deps: Partial<CoreDependencies>; taskConnectionRepository?: TaskConnectionRepository } {
   if (!config.tasks.enabled || !config.tasks.encryptionKey) return { deps: {} }
-  const providers: TaskSourceProvider[] = []
-  if (config.tasks.sources.includes('jira')) providers.push(new JiraProvider())
-  // GitHub issues reuse the workspace's installed GitHub App, so this provider is
-  // wired only when a GitHub client is available (the App is configured) — it has
-  // no credentials of its own and resolves the installation per issue. Mirrors the
+  // Jira is always registered (its credentials are per-workspace, entered in the UI).
+  const providers: TaskSourceProvider[] = [new JiraProvider()]
+  // GitHub Issues reuse the workspace's installed GitHub App, so this provider is
+  // wired whenever a GitHub client is available (the App is configured) — it has no
+  // credentials of its own and resolves the installation per issue. Mirrors the
   // Cloudflare facade's `config.github.enabled` gate (see CLAUDE.md parity rule).
-  if (config.tasks.sources.includes('github') && githubClient) {
+  // Whether a workspace OFFERS a source is the per-workspace toggle
+  // (task_source_settings), not a deployment env gate.
+  if (githubClient) {
     providers.push(new GitHubIssuesProvider({ githubClient, installations }))
   }
-  if (providers.length === 0) return { deps: {} }
 
   const taskConnectionRepository = new DrizzleTaskConnectionRepository(
     db,
@@ -1390,6 +1395,7 @@ function selectNodeTasksDeps(
     deps: {
       taskSourceProviders: providers,
       taskConnectionRepository,
+      taskSourceSettingsRepository: new DrizzleTaskSourceSettingsRepository(db),
       taskRepository: new DrizzleTaskRepository(db),
     },
     taskConnectionRepository,

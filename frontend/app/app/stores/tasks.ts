@@ -4,8 +4,8 @@ import type {
   SourceTask,
   TaskConnection,
   TaskSearchResult,
-  TaskSourceDescriptor,
   TaskSourceKind,
+  TaskSourceState,
 } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
 
@@ -27,9 +27,9 @@ export const useTasksStore = defineStore('tasks', () => {
 
   /** null = unknown (not probed yet), true/false = integration on/off. */
   const available = ref<boolean | null>(null)
-  /** The configured sources and their connect/import descriptors. */
-  const sources = ref<TaskSourceDescriptor[]>([])
-  /** Live connections, one per connected source. */
+  /** The configured sources, each with its descriptor + per-workspace state (available + enabled). */
+  const sources = ref<TaskSourceState[]>([])
+  /** Live connections, one per connected (credentialed) source. */
   const connections = ref<TaskConnection[]>([])
   const tasks = ref<SourceTask[]>([])
   const loading = ref(false)
@@ -40,8 +40,22 @@ export const useTasksStore = defineStore('tasks', () => {
   )
   const anyConnected = computed(() => connections.value.length > 0)
 
-  function descriptorFor(source: TaskSourceKind): TaskSourceDescriptor | undefined {
+  /** Sources offered for import: available (connected / App installed) AND enabled. */
+  const offeredSources = computed(() => sources.value.filter((s) => s.available && s.enabled))
+  const anyOffered = computed(() => offeredSources.value.length > 0)
+
+  function descriptorFor(source: TaskSourceKind): TaskSourceState | undefined {
     return sources.value.find((s) => s.source === source)
+  }
+
+  /** Whether a source is usable right now (connected, or GitHub App installed). */
+  function isAvailable(source: TaskSourceKind): boolean {
+    return descriptorFor(source)?.available ?? false
+  }
+
+  /** Whether the workspace has the source enabled (the per-workspace toggle; default true). */
+  function isEnabled(source: TaskSourceKind): boolean {
+    return descriptorFor(source)?.enabled ?? true
   }
 
   function connectionFor(source: TaskSourceKind): TaskConnection | undefined {
@@ -104,6 +118,13 @@ export const useTasksStore = defineStore('tasks', () => {
     connections.value = connections.value.filter((c) => c.source !== source)
   }
 
+  /** Enable or disable a source for the workspace (the per-workspace toggle). */
+  async function setEnabled(source: TaskSourceKind, enabled: boolean) {
+    await api.setTaskSourceEnabled(workspace.requireId(), source, enabled)
+    const i = sources.value.findIndex((s) => s.source === source)
+    if (i >= 0) sources.value[i] = { ...sources.value[i]!, enabled }
+  }
+
   /** Load the imported issues for the workspace (across sources). */
   async function loadTasks() {
     tasks.value = await api.listTasks(workspace.requireId())
@@ -160,13 +181,18 @@ export const useTasksStore = defineStore('tasks', () => {
     loading,
     connectedSources,
     anyConnected,
+    offeredSources,
+    anyOffered,
     descriptorFor,
     connectionFor,
     isConnected,
+    isAvailable,
+    isEnabled,
     tasksForBlock,
     probe,
     connect,
     disconnect,
+    setEnabled,
     loadTasks,
     importTask,
     search,
