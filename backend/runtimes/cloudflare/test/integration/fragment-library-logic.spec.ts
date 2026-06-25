@@ -26,6 +26,7 @@ function record(over: Partial<PromptFragmentRecord>): PromptFragmentRecord {
     sourceSha: null,
     docSource: null,
     docExternalId: null,
+    docViaWorkspaceId: null,
     resolvedAt: null,
     createdAt: 0,
     updatedAt: 0,

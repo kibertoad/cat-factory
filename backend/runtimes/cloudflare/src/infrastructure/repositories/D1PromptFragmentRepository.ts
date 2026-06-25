@@ -23,6 +23,7 @@ interface PromptFragmentRow {
   source_sha: string | null
   doc_source: string | null
   doc_external_id: string | null
+  doc_via_workspace_id: string | null
   resolved_at: number | null
   created_at: number
   updated_at: number
@@ -55,6 +56,7 @@ function rowToRecord(row: PromptFragmentRow): PromptFragmentRecord {
     sourceSha: row.source_sha,
     docSource: (row.doc_source as DocumentSourceKind | null) ?? null,
     docExternalId: row.doc_external_id,
+    docViaWorkspaceId: row.doc_via_workspace_id,
     resolvedAt: row.resolved_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -105,8 +107,9 @@ export class D1PromptFragmentRepository implements PromptFragmentRepository {
         `INSERT INTO prompt_fragments
           (fragment_id, owner_kind, owner_id, version, title, category, summary, body,
            applies_to, tags, source_id, source_path, source_sha,
-           doc_source, doc_external_id, resolved_at, created_at, updated_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           doc_source, doc_external_id, doc_via_workspace_id, resolved_at,
+           created_at, updated_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (owner_kind, owner_id, fragment_id) DO UPDATE SET
            version = excluded.version,
            title = excluded.title,
@@ -120,6 +123,7 @@ export class D1PromptFragmentRepository implements PromptFragmentRepository {
            source_sha = excluded.source_sha,
            doc_source = excluded.doc_source,
            doc_external_id = excluded.doc_external_id,
+           doc_via_workspace_id = excluded.doc_via_workspace_id,
            resolved_at = excluded.resolved_at,
            updated_at = excluded.updated_at,
            deleted_at = excluded.deleted_at`,
@@ -140,6 +144,7 @@ export class D1PromptFragmentRepository implements PromptFragmentRepository {
         record.sourceSha,
         record.docSource,
         record.docExternalId,
+        record.docViaWorkspaceId,
         record.resolvedAt,
         record.createdAt,
         record.updatedAt,

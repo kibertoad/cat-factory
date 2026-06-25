@@ -20,6 +20,8 @@ export interface ResolvedCatalogEntry {
   source: { sourceId: string; path: string; sha: string } | null
   /** Living document provenance (Confluence/Notion/GitHub), when document-backed. */
   documentRef: { source: DocumentSourceKind; externalId: string } | null
+  /** The workspace whose connection re-resolves a document-backed body at run time. */
+  docViaWorkspaceId: string | null
   /** When the document-backed body was last resolved (epoch ms); null otherwise. */
   resolvedAt: number | null
   tier: FragmentTier
@@ -38,6 +40,7 @@ function builtinToEntry(fragment: PromptFragment): ResolvedCatalogEntry {
     tags: fragment.tags ?? null,
     source: fragment.source ?? null,
     documentRef: fragment.documentRef ?? null,
+    docViaWorkspaceId: null,
     resolvedAt: fragment.resolvedAt ?? null,
     tier: 'builtin',
   }
@@ -62,6 +65,7 @@ function recordToEntry(record: PromptFragmentRecord, tier: FragmentTier): Resolv
       record.docSource && record.docExternalId !== null
         ? { source: record.docSource, externalId: record.docExternalId }
         : null,
+    docViaWorkspaceId: record.docViaWorkspaceId,
     resolvedAt: record.resolvedAt,
     tier,
   }

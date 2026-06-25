@@ -393,6 +393,7 @@ export const promptFragments = pgTable(
     source_sha: text('source_sha'),
     doc_source: text('doc_source'),
     doc_external_id: text('doc_external_id'),
+    doc_via_workspace_id: text('doc_via_workspace_id'),
     resolved_at: bigint('resolved_at', { mode: 'number' }),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),

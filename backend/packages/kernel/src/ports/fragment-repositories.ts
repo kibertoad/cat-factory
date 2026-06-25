@@ -46,6 +46,15 @@ export interface PromptFragmentRecord {
    */
   docSource: DocumentSourceKind | null
   docExternalId: string | null
+  /**
+   * The workspace whose stored document-source connection re-resolves this fragment
+   * at run time. For a workspace-tier link this is the owning workspace; for an
+   * account-tier link it is the workspace chosen at link time (credentials are
+   * per-workspace), so every consuming workspace re-reads through the same
+   * connection rather than its own. Null for non-document fragments (and pre-existing
+   * document rows, which fall back to the run's own workspace).
+   */
+  docViaWorkspaceId: string | null
   /** When the document-backed body was last resolved from the source; null otherwise. */
   resolvedAt: number | null
   createdAt: number

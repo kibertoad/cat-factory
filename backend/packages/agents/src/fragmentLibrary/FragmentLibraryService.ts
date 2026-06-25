@@ -106,6 +106,7 @@ export class FragmentLibraryService implements FragmentResolver {
       sourceSha: null,
       docSource: null,
       docExternalId: null,
+      docViaWorkspaceId: null,
       resolvedAt: null,
       createdAt: now,
       updatedAt: now,
@@ -154,6 +155,7 @@ export class FragmentLibraryService implements FragmentResolver {
       sourceSha: null,
       docSource: input.source,
       docExternalId: content.externalId,
+      docViaWorkspaceId: fetchViaWorkspaceId,
       resolvedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -196,6 +198,9 @@ export class FragmentLibraryService implements FragmentResolver {
       summary: buildExcerpt(content.body),
       body: content.body,
       docExternalId: content.externalId,
+      // Remember the connection this refresh succeeded through, so run-time
+      // re-resolution keeps using it (matters for an account-tier fragment).
+      docViaWorkspaceId: viaWorkspaceId,
       resolvedAt: now,
       updatedAt: now,
     }
@@ -232,6 +237,7 @@ export class FragmentLibraryService implements FragmentResolver {
       sourceSha: null,
       docSource: null,
       docExternalId: null,
+      docViaWorkspaceId: null,
       resolvedAt: null,
       createdAt: now,
       updatedAt: now,
@@ -284,6 +290,7 @@ export class FragmentLibraryService implements FragmentResolver {
       sourceSha: null,
       docSource: null,
       docExternalId: null,
+      docViaWorkspaceId: null,
       resolvedAt: null,
       createdAt: now,
       updatedAt: now,
@@ -400,8 +407,13 @@ export class FragmentLibraryService implements FragmentResolver {
     const ownerId =
       entry.tier === 'account' ? await this.workspaces.accountOf(workspaceId) : workspaceId
     if (!ownerId) return entry.body
+    // Re-read through the connection the fragment was linked/refreshed with — for an
+    // account-tier fragment that is a fixed workspace, not whichever workspace the run
+    // happens to be in (which may have no connection to this source). Pre-existing rows
+    // with no recorded workspace degrade to the run's own.
+    const viaWorkspaceId = entry.docViaWorkspaceId ?? workspaceId
     try {
-      const content = await this.documentResolver.fetch(workspaceId, ref.source, ref.externalId)
+      const content = await this.documentResolver.fetch(viaWorkspaceId, ref.source, ref.externalId)
       const existing = await this.repo.get(entry.tier, ownerId, entry.id)
       if (existing) {
         await this.repo.upsert({

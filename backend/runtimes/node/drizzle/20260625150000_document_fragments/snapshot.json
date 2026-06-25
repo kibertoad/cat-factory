@@ -4998,6 +4998,19 @@
       "table": "prompt_fragments"
     },
     {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "doc_via_workspace_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "prompt_fragments"
+    },
+    {
       "type": "bigint",
       "typeSchema": null,
       "notNull": false,

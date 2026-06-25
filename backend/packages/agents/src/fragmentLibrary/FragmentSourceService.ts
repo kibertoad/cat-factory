@@ -235,6 +235,7 @@ export class FragmentSourceService {
       sourceSha: file.sha,
       docSource: null,
       docExternalId: null,
+      docViaWorkspaceId: null,
       resolvedAt: null,
       createdAt: prior?.createdAt ?? now,
       updatedAt: now,

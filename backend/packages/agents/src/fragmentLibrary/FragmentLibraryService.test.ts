@@ -61,15 +61,17 @@ function fakeClock(start = 1_000_000): Clock & { set(n: number): void } {
 function fakeResolver(
   body: () => string,
   opts: { throws?: boolean } = {},
-): DocumentContentResolver & { calls: number } {
+): DocumentContentResolver & { calls: number; vias: string[] } {
   const r = {
     calls: 0,
+    vias: [] as string[],
     async fetch(
-      _ws: string,
+      ws: string,
       source: DocumentSourceKind,
       externalId: string,
     ): Promise<DocumentContent> {
       r.calls++
+      r.vias.push(ws)
       if (opts.throws) throw new Error('source unreachable')
       return { externalId, title: 'Doc', url: 'https://x/doc', body: body() }
     },
@@ -106,6 +108,41 @@ describe('FragmentLibraryService — document-backed fragments', () => {
     const stored = await repo.get('workspace', 'ws1', fragment.id)
     expect(stored?.docSource).toBe('notion')
     expect(stored?.docExternalId).toBe('page-123')
+    expect(stored?.docViaWorkspaceId).toBe('ws1')
+  })
+
+  it('re-resolves an account-tier fragment through its linked workspace, not the run workspace', async () => {
+    // An account-tier link is fetched through a chosen workspace's connection (doc
+    // credentials are per-workspace). At run time a DIFFERENT workspace in the same
+    // account must re-read through that SAME linked workspace — otherwise a run in a
+    // workspace with no connection to the source would wedge (then degrade to cache).
+    const resolver = fakeResolver(() => 'ACCOUNT-V2')
+    // Every workspace in this test belongs to the same account.
+    const accountWorkspaces = {
+      accountOf: async () => 'acct1',
+    } as unknown as WorkspaceRepository
+    const svc = new FragmentLibraryService({
+      promptFragmentRepository: repo,
+      workspaceRepository: accountWorkspaces,
+      clock,
+      documentContentResolver: resolver,
+    })
+    // Linked at the account tier, fetched through workspace 'wsA'.
+    const created = await svc.createFromDocument(
+      'account',
+      'acct1',
+      { source: 'confluence', ref: 'page-9' },
+      'wsA',
+    )
+    clock.set(clock.now() + DEFAULT_DOCUMENT_FRAGMENT_TTL_MS + 1)
+    resolver.calls = 0
+    resolver.vias = []
+
+    // A run in workspace 'wsB' (no connection of its own) resolves the fragment.
+    const bodies = await svc.resolveBodiesForRun('wsB', [created.id])
+    expect(bodies).toEqual([{ id: created.id, body: 'ACCOUNT-V2' }])
+    // Re-read through the linked 'wsA', NOT the run's 'wsB'.
+    expect(resolver.vias).toEqual(['wsA'])
   })
 
   it('re-resolves a stale body at run time and persists the refresh', async () => {

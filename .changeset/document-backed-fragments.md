@@ -20,7 +20,8 @@ version — no re-import. The body is cached on the fragment as a last-resolved
 snapshot and refreshed on a short TTL (default 5 min); if the source is unreachable
 the run falls back to the cached body, so resolution never blocks a run. Available
 at both the account and workspace tiers; an account-tier link fetches through a
-chosen workspace's connection.
+chosen workspace's connection — recorded on the fragment so every consuming
+workspace re-resolves through that same connection at run time, not its own.
 
 New surface: `POST /:scope/document-fragments` (link a document as a fragment) and
 `POST /:scope/prompt-fragments/:id/refresh` (force an immediate re-resolve), a
@@ -34,5 +35,5 @@ ids resolved at run time. Behaviour is unchanged when the prompt-fragment librar
 not configured.
 
 Persistence: `prompt_fragments` gains `doc_source` / `doc_external_id` /
-`resolved_at` columns on both runtimes (a D1 migration and a Drizzle migration);
-stale pre-existing rows simply carry nulls.
+`doc_via_workspace_id` / `resolved_at` columns on both runtimes (a D1 migration and
+a Drizzle migration); stale pre-existing rows simply carry nulls.
