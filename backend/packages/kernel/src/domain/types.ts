@@ -84,6 +84,7 @@ export type {
   // Task-source integration projections + I/O shapes.
   TaskSourceKind,
   TaskSourceDescriptor,
+  TaskSourceState,
   TaskConnection,
   TaskComment,
   SourceTask,

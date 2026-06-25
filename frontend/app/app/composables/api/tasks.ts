@@ -3,8 +3,8 @@ import type {
   SourceTask,
   TaskConnection,
   TaskSearchResult,
-  TaskSourceDescriptor,
   TaskSourceKind,
+  TaskSourceState,
 } from '~/types/domain'
 import type { PutTrackerSettingsInput, TrackerSettings } from '~/types/tracker'
 import type { ApiContext } from './context'
@@ -13,10 +13,17 @@ import type { ApiContext } from './context'
 export function tasksApi({ http, ws }: ApiContext) {
   return {
     // ---- task sources (Jira, …) ------------------------------------------
-    // The configured trackers + their connect/import metadata. A 503 means the
-    // integration is off (the store hides its UI on any error here).
+    // The configured trackers + their connect/import metadata + the workspace's
+    // per-source state (available + enabled). A 503 means the integration is off
+    // (the store hides its UI on any error here).
     listTaskSources: (workspaceId: string) =>
-      http<{ sources: TaskSourceDescriptor[] }>(`${ws(workspaceId)}/task-sources`),
+      http<{ sources: TaskSourceState[] }>(`${ws(workspaceId)}/task-sources`),
+
+    setTaskSourceEnabled: (workspaceId: string, source: TaskSourceKind, enabled: boolean) =>
+      http(`${ws(workspaceId)}/task-sources/${source}/enabled`, {
+        method: 'PUT',
+        body: { enabled },
+      }),
 
     listTaskConnections: (workspaceId: string) =>
       http<{ connections: TaskConnection[] }>(`${ws(workspaceId)}/task-sources/connections`),

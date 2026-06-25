@@ -293,13 +293,6 @@ export interface Env {
    */
   DOCUMENT_PLANNER?: string
 
-  // ---- Task-source integration (see config.ts; always on) -----------------
-  /**
-   * Comma-separated allow-list of sources to register (e.g. `jira`). Defaults to
-   * all known sources when unset.
-   */
-  TASK_SOURCES?: string
-
   // ---- Ephemeral environment integration (see config.ts; opt-in) ----------
   /**
    * Enables the environment provider integration ('true'). Per-workspace provider

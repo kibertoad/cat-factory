@@ -111,14 +111,14 @@ const commands = computed<Command[]>(() => {
     for (const src of tasks.sources) {
       list.push({
         id: `task-connect-${src.source}`,
-        label: tasks.isConnected(src.source) ? `Manage ${src.label}` : `Connect ${src.label}`,
+        label: src.available ? `Manage ${src.label}` : `Connect ${src.label}`,
         group: 'Integrations',
         icon: src.icon,
         keywords: 'task source tracker issues',
         run: () => ui.openTaskConnect(src.source),
       })
     }
-    if (tasks.anyConnected) {
+    if (tasks.anyOffered) {
       list.push({
         id: 'task-import',
         label: 'Import issues',

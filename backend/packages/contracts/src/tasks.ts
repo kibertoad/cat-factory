@@ -49,6 +49,21 @@ export const taskSourceDescriptorSchema = v.object({
 })
 export type TaskSourceDescriptor = v.InferOutput<typeof taskSourceDescriptorSchema>
 
+/**
+ * A source's descriptor plus the workspace's live state for it: whether it is
+ * usable right now (`available`) and whether the workspace offers it (`enabled`,
+ * the per-workspace toggle, default true). A credentialed source (Jira) is
+ * `available` once connected; GitHub Issues is `available` once the workspace's
+ * GitHub App is installed (it rides that App, so there is nothing to connect).
+ * `available && enabled` is what makes a source offered for import.
+ */
+export const taskSourceStateSchema = v.object({
+  ...taskSourceDescriptorSchema.entries,
+  available: v.boolean(),
+  enabled: v.boolean(),
+})
+export type TaskSourceState = v.InferOutput<typeof taskSourceStateSchema>
+
 // ---- Connection + task projections ----------------------------------------
 
 /** A workspace's connection to a task source, as exposed to clients (never the credentials). */
@@ -138,6 +153,12 @@ export const connectTaskSourceSchema = v.object({
   ),
 })
 export type ConnectTaskSourceInput = v.InferOutput<typeof connectTaskSourceSchema>
+
+/** Enable or disable a task source for the workspace (the per-workspace toggle). */
+export const setTaskSourceEnabledSchema = v.object({
+  enabled: v.boolean(),
+})
+export type SetTaskSourceEnabledInput = v.InferOutput<typeof setTaskSourceEnabledSchema>
 
 /** Import (fetch + persist) an issue by its key or a full issue URL. */
 export const importTaskSchema = v.object({

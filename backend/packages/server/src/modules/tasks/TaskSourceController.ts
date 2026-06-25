@@ -5,6 +5,7 @@ import {
   importTaskSchema,
   linkTaskSchema,
   searchTasksSchema,
+  setTaskSourceEnabledSchema,
   type TaskSourceKind,
 } from '@cat-factory/contracts'
 import * as v from 'valibot'
@@ -46,12 +47,29 @@ export function taskSourceController(): Hono<AppEnv> {
 
   // ---- source discovery ---------------------------------------------------
 
-  // The configured sources + their connect/import metadata (drives the UI). A
-  // 503 here is how the frontend learns the integration is off.
+  // The configured sources + their connect/import metadata AND the workspace's
+  // per-source state (available + enabled), which drives the settings + import UI.
+  // A 503 here is how the frontend learns the integration is off.
   app.get('/task-sources', async (c) => {
     const tasks = requireTasks(c)
     if (!tasks) return unavailable(c)
-    return c.json({ sources: tasks.connectionService.listSources() })
+    const sources = await tasks.connectionService.listSourceStates(param(c, 'workspaceId'))
+    return c.json({ sources })
+  })
+
+  // Enable or disable a source for the workspace (the per-workspace toggle). A
+  // credentialed source (Jira) must be connected first to be worth toggling; a
+  // credentialless one (GitHub Issues) is offered with the GitHub App and toggled
+  // off here when a workspace wants repos without issues.
+  app.put('/task-sources/:source/enabled', jsonBody(setTaskSourceEnabledSchema), async (c) => {
+    const tasks = requireTasks(c)
+    if (!tasks) return unavailable(c)
+    await tasks.connectionService.setEnabled(
+      param(c, 'workspaceId'),
+      sourceParam(c),
+      c.req.valid('json').enabled,
+    )
+    return c.body(null, 204)
   })
 
   // ---- connections --------------------------------------------------------

@@ -29,6 +29,7 @@ import { D1CheckRunProjectionRepository } from '../src/infrastructure/repositori
 import { D1DocumentConnectionRepository } from '../src/infrastructure/repositories/D1DocumentConnectionRepository'
 import { D1DocumentRepository } from '../src/infrastructure/repositories/D1DocumentRepository'
 import { D1TaskConnectionRepository } from '../src/infrastructure/repositories/D1TaskConnectionRepository'
+import { D1TaskSourceSettingsRepository } from '../src/infrastructure/repositories/D1TaskSourceSettingsRepository'
 import { D1TaskRepository } from '../src/infrastructure/repositories/D1TaskRepository'
 import { D1PromptFragmentRepository } from '../src/infrastructure/repositories/D1PromptFragmentRepository'
 import { D1FragmentSourceRepository } from '../src/infrastructure/repositories/D1FragmentSourceRepository'
@@ -227,6 +228,7 @@ export function tasksDeps(
         info: 'cat-factory:tasks',
       }),
     }),
+    taskSourceSettingsRepository: new D1TaskSourceSettingsRepository({ db }),
     taskRepository: new D1TaskRepository({ db }),
   }
 }

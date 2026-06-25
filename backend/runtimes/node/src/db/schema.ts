@@ -641,6 +641,20 @@ export const taskConnections = pgTable(
   (t) => [primaryKey({ columns: [t.workspace_id, t.source] })],
 )
 
+// Per-workspace task-source toggle (mirrors D1 migration 0008). No row ⇒ the
+// default (enabled), so a source is offered as soon as it's available; an
+// `enabled: false` row is an explicit opt-out. Replaces the TASK_SOURCES env gate.
+export const taskSourceSettings = pgTable(
+  'task_source_settings',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    source: text('source').notNull(),
+    // Integer 0/1 to match the D1 (SQLite) store, per this file's boolean convention.
+    enabled: integer('enabled').notNull().default(1),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.source] })],
+)
+
 export const tasks = pgTable(
   'tasks',
   {

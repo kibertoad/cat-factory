@@ -187,7 +187,7 @@ const pendingContext = ref<PendingContext[]>([])
 // always shown (ungated): when the relevant integration isn't connected the Attach
 // button is disabled with a tooltip rather than the section being hidden.
 const docsConnected = computed(() => documents.available && documents.anyConnected)
-const issuesConnected = computed(() => tasks.available && tasks.anyConnected)
+const issuesConnected = computed(() => tasks.available && tasks.anyOffered)
 const pendingDocs = computed(() => pendingContext.value.filter((c) => c.kind === 'document'))
 const pendingIssues = computed(() => pendingContext.value.filter((c) => c.kind === 'task'))
 

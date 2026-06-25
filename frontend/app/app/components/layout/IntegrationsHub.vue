@@ -114,11 +114,13 @@ const groups = computed<IntegrationGroup[]>(() => {
       icon: src.icon,
       label: src.label,
       description: `Link ${src.label} to import and reference tracker issues.`,
-      status: tasks.isConnected(src.source) ? 'Connected' : undefined,
-      connected: tasks.isConnected(src.source),
+      // Available + enabled ⇒ offered (green); available + off ⇒ "Disabled";
+      // not available ⇒ no badge (Jira needs connecting; GitHub needs its App).
+      status: src.available ? (src.enabled ? undefined : 'Disabled') : undefined,
+      connected: src.available && src.enabled,
       onClick: () => go(() => ui.openTaskConnect(src.source)),
     }))
-    if (tasks.anyConnected) {
+    if (tasks.anyOffered) {
       trackers.push({
         key: 'task:import',
         icon: 'i-lucide-file-down',
