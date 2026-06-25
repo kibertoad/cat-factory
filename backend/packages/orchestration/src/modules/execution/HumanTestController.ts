@@ -121,12 +121,26 @@ export class HumanTestController {
     if (ht?.pendingAction) {
       const action = ht.pendingAction
       ht.pendingAction = null
+      // Checkpoint the consumed action BEFORE doing any slow/side-effecting work (a helper
+      // dispatch is a real container). The driver runs `advance` inside a retriable durable
+      // step: if the slow work succeeds but its later persist throws, the closure retries —
+      // and unless the cleared `pendingAction` is already in storage it would re-consume the
+      // action and dispatch a SECOND helper. Persisting now makes the dispatch at-most-once
+      // (a crash between here and the dispatch merely drops the action; the human re-requests).
+      await this.deps.persistInstance(workspaceId, instance)
       return this.handleAction(workspaceId, instance, step, block, isFinalStep, action)
     }
     if (!ht) return this.begin(workspaceId, instance, step, block)
     // Replay / re-entry with no pending action: re-derive from the phase.
     if (ht.phase === 'provisioning') {
       return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
+    }
+    // A helper (fixer / conflict-resolver) is in flight: the step is `working` with a live
+    // job, NOT parked. Re-attach to its job instead of re-parking, so a re-drive through
+    // `advance` (the stale-run sweeper, or a durable replay that lost the `awaiting_job`
+    // position) keeps polling the job rather than abandoning it.
+    if ((ht.phase === 'fixing' || ht.phase === 'resolving_conflicts') && step.jobId) {
+      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
     }
     return this.deps.parkStepOnDecision(workspaceId, instance, step, this.proposal(ht))
   }
@@ -265,12 +279,21 @@ export class HumanTestController {
    * involvement, since nothing about the run's position changes.
    */
   async destroyEnvironment(workspaceId: string, blockId: string): Promise<ExecutionInstance> {
-    const { instance, step } = this.requireParked(
-      await this.findParked(workspaceId, blockId),
-    )
+    // Destroy is allowed both while parked (awaiting_human) AND while an env is still
+    // provisioning — a human must be able to cancel a slow/stuck provision without waiting
+    // for the poll budget to exhaust.
+    const { instance, step } = this.requireParked(await this.findActive(workspaceId, blockId))
     const ht = step.humanTest!
     await this.teardownCurrent(workspaceId, ht)
-    if (ht.environment) ht.environment = { ...ht.environment, status: 'torn_down' }
+    if (ht.phase === 'provisioning') {
+      // Cancelled mid-provision: drop the env so the driver's next `pollEnvironment` (which
+      // owns the phase transitions during provisioning) hits its `!ht.environment` guard and
+      // degrades to manual mode, parking the human. We don't flip the phase here ourselves —
+      // the durable poll loop is the single owner of that transition.
+      ht.environment = null
+    } else if (ht.environment) {
+      ht.environment = { ...ht.environment, status: 'torn_down' }
+    }
     await this.deps.persistInstance(workspaceId, instance)
     await this.deps.emitInstance(workspaceId, instance)
     return instance
@@ -429,6 +452,13 @@ export class HumanTestController {
     if (handle.model) step.model = handle.model
     step.startingContainer = true
     step.subtasks = undefined
+    // Leave the parked decision state: while the helper runs the step is `working` with a
+    // live job (like the Tester→Fixer loop), NOT `waiting_decision` on a stale approval. If
+    // it stayed parked, a re-drive through `advance` (sweeper / replay) would re-park on the
+    // old approval id and silently abandon the in-flight helper. The human re-parks on a
+    // fresh approval once the helper settles (`onHelperComplete` → `toAwaitingHuman`).
+    this.deps.startStep(step)
+    step.approval = null
     ht.phase = roundKind === 'fix' ? 'fixing' : 'resolving_conflicts'
     ht.attempts += 1
     ht.rounds = [
@@ -456,6 +486,11 @@ export class HumanTestController {
   ): Promise<AdvanceResult> {
     const ht = step.humanTest!
     await this.teardownCurrent(workspaceId, ht)
+    // The old env is gone — drop it immediately so that if the re-provision below fails (or
+    // no provider is wired) the gate degrades to a clean manual mode instead of surfacing a
+    // stale "ready" env + live URL pointing at the just-destroyed environment. The success
+    // path overwrites this with the fresh handle.
+    ht.environment = null
     if (!this.deps.provisionEnvironment) {
       return this.degrade(
         workspaceId,
@@ -552,7 +587,16 @@ export class HumanTestController {
     action: NonNullable<HumanTestStepState['pendingAction']>,
   ): Promise<ExecutionInstance> {
     const { instance, step } = this.requireParked(await this.findParked(workspaceId, blockId))
-    step.humanTest!.pendingAction = action
+    const ht = step.humanTest!
+    // Honour the resolved fix-attempt ceiling (the sibling Tester gate enforces the same
+    // `ciMaxAttempts`). The human stays in control of the other actions (confirm / pull main /
+    // recreate); only the findings-driven fix loop is capped, so it can't run away.
+    if (action.type === 'request-fix' && ht.attempts >= ht.maxAttempts) {
+      throw new ConflictError(
+        `This task has reached its fix-attempt limit (${ht.maxAttempts}); confirm the change, pull main, or recreate the environment instead.`,
+      )
+    }
+    ht.pendingAction = action
     if (instance.status === 'blocked') instance.status = 'running'
     await this.deps.persistInstance(workspaceId, instance)
     await this.deps.emitInstance(workspaceId, instance)
@@ -579,6 +623,27 @@ export class HumanTestController {
         s.agentKind === HUMAN_TEST_AGENT_KIND &&
         s.state === 'waiting_decision' &&
         s.approval?.status === 'pending',
+    )
+    return step ? { instance, step } : null
+  }
+
+  /**
+   * Locate the run + gate step for a block's ACTIVE human-test gate — parked for the human OR
+   * still provisioning an env (the two phases a human can destroy from). Unlike {@link
+   * findParked} it does not require a pending approval, so a provisioning env can be cancelled.
+   */
+  private async findActive(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<{ instance: ExecutionInstance; step: PipelineStep } | null> {
+    const block = await this.deps.blockRepository.get(workspaceId, blockId)
+    if (!block?.executionId) return null
+    const instance = await this.deps.executionRepository.get(workspaceId, block.executionId)
+    if (!instance) return null
+    const step = instance.steps.find(
+      (s) =>
+        s.agentKind === HUMAN_TEST_AGENT_KIND &&
+        (s.humanTest?.phase === 'awaiting_human' || s.humanTest?.phase === 'provisioning'),
     )
     return step ? { instance, step } : null
   }

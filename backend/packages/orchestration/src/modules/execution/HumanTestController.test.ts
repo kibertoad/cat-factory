@@ -58,7 +58,9 @@ function fakeDeps(over: Partial<HumanTestControllerDeps> = {}): HumanTestControl
     finishStep: vi.fn((s: PipelineStep) => {
       s.state = 'done'
     }),
-    startStep: vi.fn(),
+    startStep: vi.fn((s: PipelineStep) => {
+      s.state = 'working'
+    }),
     updateBlockProgress: vi.fn(async () => {}),
     finalizeBlock: vi.fn(async () => {}),
     stopRunContainer: vi.fn(async () => {}),
@@ -147,6 +149,104 @@ describe('HumanTestController', () => {
     expect(s.humanTest?.attempts).toBe(1)
     expect(s.humanTest?.rounds?.[0]).toMatchObject({ kind: 'fix', helperKind: 'fixer', findings: 'Button broken' })
     expect(s.humanTest?.pendingAction ?? null).toBeNull()
+    // While the helper runs the step leaves the parked decision state (working + no pending
+    // approval), so a re-drive through `advance` re-attaches to the job instead of re-parking
+    // on the stale approval and abandoning the helper.
+    expect(s.state).toBe('working')
+    expect(s.approval ?? null).toBeNull()
+  })
+
+  it('re-attaches to an in-flight helper job on replay (no pending action)', async () => {
+    const deps = fakeDeps()
+    const c = new HumanTestController(deps)
+    // A fixer is in flight: working, no pending action, a live jobId.
+    const s = step({
+      state: 'working',
+      jobId: 'job_42',
+      humanTest: {
+        phase: 'fixing',
+        environment: null,
+        attempts: 1,
+        maxAttempts: 10,
+        rounds: [{ kind: 'fix', findings: 'x', helperKind: 'fixer', jobId: 'job_42', outcome: null, at: 1 }],
+      },
+    })
+
+    const result = await c.evaluate('ws', instance([s]), s, BLOCK, true)
+
+    expect(result).toEqual({ kind: 'awaiting_job', jobId: 'job_42', stepIndex: 0 })
+    expect(deps.parkStepOnDecision).not.toHaveBeenCalled()
+  })
+
+  it('refuses request-fix once the fix-attempt ceiling is reached', async () => {
+    const s = step({
+      state: 'waiting_decision',
+      approval: { id: 'appr_1', status: 'pending', proposal: '' },
+      humanTest: { phase: 'awaiting_human', environment: null, attempts: 10, maxAttempts: 10, rounds: [] },
+    })
+    const inst = instance([s])
+    const deps = fakeDeps({
+      executionRepository: { get: vi.fn(async () => inst), upsert: vi.fn(async () => {}) } as never,
+    })
+    const c = new HumanTestController(deps)
+
+    await expect(c.requestFix('ws', 'blk_1', 'one more thing')).rejects.toThrow(/fix-attempt limit/)
+    // No action was recorded and the driver was not woken.
+    expect(s.humanTest?.pendingAction ?? null).toBeNull()
+    expect(deps.workRunner.signalDecision).not.toHaveBeenCalled()
+  })
+
+  it('drops the destroyed env when a re-provision fails (no stale URL survives)', async () => {
+    const teardownEnvironment = vi.fn(async () => {})
+    const provisionEnvironment = vi.fn(async () => {
+      throw new Error('provider exploded')
+    })
+    const deps = fakeDeps({ teardownEnvironment, provisionEnvironment: provisionEnvironment as never })
+    const c = new HumanTestController(deps)
+    const s = step({
+      state: 'waiting_decision',
+      humanTest: {
+        phase: 'awaiting_human',
+        environment: { id: 'env_1', url: 'https://old.example.com', status: 'ready' },
+        attempts: 0,
+        maxAttempts: 10,
+        rounds: [],
+        pendingAction: { type: 'recreate' },
+      },
+    })
+
+    await c.evaluate('ws', instance([s]), s, BLOCK, true)
+
+    expect(teardownEnvironment).toHaveBeenCalledWith('ws', 'env_1')
+    // The old (now torn-down) env must not linger — otherwise the window shows a live URL to
+    // a destroyed environment alongside the degraded-mode reason.
+    expect(s.humanTest?.environment ?? null).toBeNull()
+    expect(s.humanTest?.degradedReason).toBeTruthy()
+  })
+
+  it('destroys the env while still provisioning (drops it for the driver to degrade)', async () => {
+    const teardownEnvironment = vi.fn(async () => {})
+    const s = step({
+      state: 'working',
+      humanTest: {
+        phase: 'provisioning',
+        environment: { id: 'env_9', url: null, status: 'provisioning' },
+        attempts: 0,
+        maxAttempts: 10,
+        rounds: [],
+      },
+    })
+    const inst = instance([s])
+    const deps = fakeDeps({
+      teardownEnvironment,
+      executionRepository: { get: vi.fn(async () => inst), upsert: vi.fn(async () => {}) } as never,
+    })
+    const c = new HumanTestController(deps)
+
+    await c.destroyEnvironment('ws', 'blk_1')
+
+    expect(teardownEnvironment).toHaveBeenCalledWith('ws', 'env_9')
+    expect(s.humanTest?.environment ?? null).toBeNull()
   })
 
   it('advances the run (and tears the env down) on a confirm action', async () => {
