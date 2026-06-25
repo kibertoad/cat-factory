@@ -1,5 +1,81 @@
 # @cat-factory/integrations
 
+## 0.9.0
+
+### Minor Changes
+
+- 4de2f5f: Declutter settings/navbar and make post-release health a pluggable observability integration.
+
+  **Frontend**
+
+  - Workspace settings is now a single tabbed window: **Merge thresholds**, **Issue writeback**
+    and **Default service best practices** moved from standalone modals into tabs (their navbar/
+    command-bar entries now deep-link to the tab). Fixed the **Mode** select clipping its options.
+  - Removed the **Add a block** button and **all** "Add &lt;type&gt; block" command-bar commands
+    (services come from Bootstrap / Add-from-repo, tasks from the add-task flow); dropped the
+    unsupported `external` / `environment` block types.
+  - The new-task form now shows **Context documents** and **Context issues** sections (inspector-
+    style) **ungated** — the _Attach_ button is disabled with a tooltip until the relevant
+    integration is connected. (`ContextPicker.vue` removed.)
+  - Post-release health is no longer a Datadog-named window: the **connection** is an
+    **Observability** entry in the Integrations hub (`ObservabilityConnectionPanel`, provider
+    picker — Datadog today), and the per-service **monitor/SLO mapping** moved into the **service
+    inspector** (`ServiceReleaseHealthConfig`, keyed by the selected frame — no manual block-id
+    entry, disabled with a hint until a connection exists).
+
+  **Backend — pluggable observability (Datadog = one adapter)**
+
+  - The `ReleaseHealthProvider` is now served by `RegistryReleaseHealthProvider`, a registry of
+    per-vendor adapters; the Datadog logic became `DatadogObservabilityAdapter`. Adding a second
+    provider is a new registry entry — the gate, service, routes and persistence are vendor-neutral.
+
+  **Breaking (acceptable per pre-1.0 policy — no migration):**
+
+  - Persistence: the `datadog_connections` table is **dropped** and replaced by
+    `observability_connections` (`provider` discriminator + a single sealed `credentials` JSON blob
+    - a non-secret `summary`), mirrored D1 ⇄ Drizzle. Existing connections must be re-entered.
+  - Kernel: `DatadogConnectionRecord`/`DatadogConnectionRepository` →
+    `ObservabilityConnectionRecord`/`ObservabilityConnectionRepository` (+ `ObservabilityProviderKind`).
+  - Contracts: `upsertDatadogConnectionSchema` / `datadogConnectionViewSchema` →
+    `upsertObservabilityConnectionSchema` / `observabilityConnectionViewSchema` (now `{ provider,
+credentials }` / `{ connected, provider, summary }`), plus `observabilityConnectionSummary`.
+  - HTTP: `GET|PUT|DELETE /workspaces/:ws/datadog/connection` → `…/observability/connection`.
+  - Config/env: `DATADOG_ENABLED` → `OBSERVABILITY_ENABLED`; `AppConfig.datadog` → `AppConfig.releaseHealth`
+    (`DatadogConfig` → `ReleaseHealthConfig`); the sealed-secret domain tag `cat-factory:datadog` →
+    `cat-factory:observability`.
+
+  Note: the cross-runtime conformance suite does not yet cover the observability connection CRUD
+  (it never covered the Datadog connection either); both facades wire the same repos/cipher/provider
+  and ship mirrored D1 + Drizzle migrations.
+
+### Patch Changes
+
+- 4de2f5f: Review fixes for the declutter/observability pass:
+
+  - **Board no longer crashes on `external`/`environment` blocks.** Those types stay
+    user-uncreatable, but the backend still emits them (the seeded third-party service and
+    the environments integration), so they are restored to the frontend `BlockType` union +
+    `BLOCK_TYPE_META` for display parity with the contracts `blockTypeSchema`. `blockTypeMeta()`
+    adds a safe fallback so an unknown/legacy block type degrades instead of throwing on the board.
+  - **Integrations hub gates the Observability row on availability.** The `releaseHealth` store
+    now probes an `available` flag (mirroring the other integration stores); the hub hides the
+    "Post-release health" entry when `OBSERVABILITY_ENABLED` is off, instead of showing a dead
+    row that only 503s.
+  - **De-duplicated release-health loads.** `ensureLoaded()` coalesces repeated hub opens /
+    frame-inspector mounts so they reuse the resolved connection + configs rather than re-fetching
+    the whole configs list on every service selection.
+  - **Vendor-neutral gate message.** The post-release-health pipeline guard now says "Connect an
+    observability provider" instead of the leftover "Connect Datadog".
+  - **Validated credentials at the registry boundary.** `parseDatadogCredentials` validates the
+    decrypted blob in the observability registry, so a drifted/corrupted row fails with a clear
+    error instead of deep inside the Datadog client during a live probe.
+
+- Updated dependencies [128e12e]
+- Updated dependencies [4de2f5f]
+- Updated dependencies [4de2f5f]
+  - @cat-factory/kernel@0.12.0
+  - @cat-factory/contracts@0.12.0
+
 ## 0.8.3
 
 ### Patch Changes

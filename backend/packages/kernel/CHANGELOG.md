@@ -1,5 +1,88 @@
 # @cat-factory/kernel
 
+## 0.12.0
+
+### Minor Changes
+
+- 128e12e: Custom agents: live pre/post-op execution + data-driven palette + generic result view.
+
+  Registered custom agent kinds now run end to end. A kind's deterministic backend hooks
+  fire around its agent step: `ExecutionService` runs its `preOps` before dispatch and its
+  `postOps` after the result is recorded, over a per-run, checkout-free `RepoFiles` bound to
+  the run's repo. The binding is a new optional engine dependency `resolveRunRepoContext`
+  (`CoreDependencies` / `ExecutionServiceDependencies`), composed from a facade's wired
+  `GitHubClient` + the executor's `resolveRepoTarget` via the new
+  `makeResolveRunRepoContext` (`@cat-factory/server`) and wired symmetrically across ALL
+  three facades (Worker `selectGitHubDeps`, Node `githubGateDeps`, local via
+  `buildNodeContainer`). When GitHub isn't connected the hooks are skipped, so pipelines run
+  unchanged without the feature. `runRepoOps` moved to `@cat-factory/agents` so the
+  orchestration engine drives the hooks without importing the server HTTP layer. New kernel
+  ports: `RunRepoContext` + `ResolveRunRepoContext`. The cross-runtime conformance suite
+  asserts a registered kind's pre-op read + post-op commit on both D1 and Postgres.
+
+  Frontend: the workspace snapshot now carries `customAgentKinds` (kind + presentation +
+  container flag), which the SPA merges into its palette catalog
+  (`useAgentsStore().registerCustomKinds`) so a registered kind is a first-class palette
+  block + result view instead of the generic fallback. A `container-explore` structured
+  kind's `result.custom` JSON is recorded on the step (new `PipelineStep.custom`) and
+  rendered read-only by a new shared `generic-structured` result view — a custom agent gets
+  a usable result window with no bespoke UI.
+
+  The built-in agents are not yet migrated to this model (their rendering still lives in the
+  executor-harness); that strangler conversion is sequenced as follow-up work. See
+  `backend/docs/custom-agents.md` and the `@cat-factory/example-custom-agent` worked example.
+
+- 4de2f5f: Declutter settings/navbar and make post-release health a pluggable observability integration.
+
+  **Frontend**
+
+  - Workspace settings is now a single tabbed window: **Merge thresholds**, **Issue writeback**
+    and **Default service best practices** moved from standalone modals into tabs (their navbar/
+    command-bar entries now deep-link to the tab). Fixed the **Mode** select clipping its options.
+  - Removed the **Add a block** button and **all** "Add &lt;type&gt; block" command-bar commands
+    (services come from Bootstrap / Add-from-repo, tasks from the add-task flow); dropped the
+    unsupported `external` / `environment` block types.
+  - The new-task form now shows **Context documents** and **Context issues** sections (inspector-
+    style) **ungated** — the _Attach_ button is disabled with a tooltip until the relevant
+    integration is connected. (`ContextPicker.vue` removed.)
+  - Post-release health is no longer a Datadog-named window: the **connection** is an
+    **Observability** entry in the Integrations hub (`ObservabilityConnectionPanel`, provider
+    picker — Datadog today), and the per-service **monitor/SLO mapping** moved into the **service
+    inspector** (`ServiceReleaseHealthConfig`, keyed by the selected frame — no manual block-id
+    entry, disabled with a hint until a connection exists).
+
+  **Backend — pluggable observability (Datadog = one adapter)**
+
+  - The `ReleaseHealthProvider` is now served by `RegistryReleaseHealthProvider`, a registry of
+    per-vendor adapters; the Datadog logic became `DatadogObservabilityAdapter`. Adding a second
+    provider is a new registry entry — the gate, service, routes and persistence are vendor-neutral.
+
+  **Breaking (acceptable per pre-1.0 policy — no migration):**
+
+  - Persistence: the `datadog_connections` table is **dropped** and replaced by
+    `observability_connections` (`provider` discriminator + a single sealed `credentials` JSON blob
+    - a non-secret `summary`), mirrored D1 ⇄ Drizzle. Existing connections must be re-entered.
+  - Kernel: `DatadogConnectionRecord`/`DatadogConnectionRepository` →
+    `ObservabilityConnectionRecord`/`ObservabilityConnectionRepository` (+ `ObservabilityProviderKind`).
+  - Contracts: `upsertDatadogConnectionSchema` / `datadogConnectionViewSchema` →
+    `upsertObservabilityConnectionSchema` / `observabilityConnectionViewSchema` (now `{ provider,
+credentials }` / `{ connected, provider, summary }`), plus `observabilityConnectionSummary`.
+  - HTTP: `GET|PUT|DELETE /workspaces/:ws/datadog/connection` → `…/observability/connection`.
+  - Config/env: `DATADOG_ENABLED` → `OBSERVABILITY_ENABLED`; `AppConfig.datadog` → `AppConfig.releaseHealth`
+    (`DatadogConfig` → `ReleaseHealthConfig`); the sealed-secret domain tag `cat-factory:datadog` →
+    `cat-factory:observability`.
+
+  Note: the cross-runtime conformance suite does not yet cover the observability connection CRUD
+  (it never covered the Datadog connection either); both facades wire the same repos/cipher/provider
+  and ship mirrored D1 + Drizzle migrations.
+
+### Patch Changes
+
+- Updated dependencies [128e12e]
+- Updated dependencies [4de2f5f]
+- Updated dependencies [4de2f5f]
+  - @cat-factory/contracts@0.12.0
+
 ## 0.11.1
 
 ### Patch Changes
