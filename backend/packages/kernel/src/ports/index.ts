@@ -186,6 +186,7 @@ export type { SecretCipher } from './secret-cipher.js'
 export type { PersonalSecretCipher } from './personal-secret-cipher.js'
 export type {
   EnvironmentProvider,
+  EnvironmentConnectionTestRequest,
   ProvisionContext,
   ProvisionEnvironmentRequest,
   EnvironmentStatusRequest,
@@ -231,6 +232,7 @@ export type {
   RunnerDispatchRequest,
   RunnerPollRequest,
   RunnerPoolProvider,
+  RunnerPoolConnectionTestRequest,
 } from './runner-pool-provider.js'
 export type {
   RunnerPoolConnectionRecord,
@@ -258,6 +260,12 @@ export type {
   LocalModelEndpointRecord,
   LocalModelEndpointRepository,
 } from './local-model-repositories.js'
+export type {
+  UserSecretRecord,
+  UserSecretRepository,
+  ResolveUserGitHubToken,
+  RunInitiatorScope,
+} from './user-secret-repositories.js'
 export type {
   ProviderModelCatalogRecord,
   ProviderModelCatalogRepository,

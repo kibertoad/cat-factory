@@ -39,7 +39,7 @@ import {
   specPostOp,
   TASK_ESTIMATOR_AGENT_KIND,
 } from '@cat-factory/agents'
-import type { RepoOp } from '@cat-factory/kernel'
+import type { RepoOp, RunInitiatorScope } from '@cat-factory/kernel'
 import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
 import { validatePipelineShape } from '../pipelines/pipelineShape.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
@@ -377,6 +377,13 @@ export interface ExecutionServiceDependencies {
    */
   mergePresetRepository?: MergePresetRepository
   /**
+   * Optional: runs the gate-probe / merge GitHub reads under the run initiator's
+   * ambient context, so a per-user PAT (when set) is preferred over the deployment's
+   * App/env token (see `PatPreferringAppRegistry`). Absent → a pass-through
+   * (`(_, fn) => fn()`), so tests/conformance run unchanged.
+   */
+  runInitiatorScope?: RunInitiatorScope
+  /**
    * Optional: files a GitHub issue / Jira ticket for the `tracker` step (the
    * tech-debt recurring pipeline). Absent → the `tracker` step passes through
    * without filing anything, so the engine works unchanged when no tracker is wired.
@@ -434,6 +441,7 @@ export interface BlueprintReconciler {
  * deterministic fake and no timing/delays.
  */
 export class ExecutionService {
+  private readonly runInitiatorScope: RunInitiatorScope
   private readonly workspaceRepository: WorkspaceRepository
   private readonly blockRepository: BlockRepository
   private readonly pipelineRepository: PipelineRepository
@@ -538,7 +546,9 @@ export class ExecutionService {
     resolveProviderCapabilities,
     localTestInfraSupported,
     resolveRunRepoContext,
+    runInitiatorScope,
   }: ExecutionServiceDependencies) {
+    this.runInitiatorScope = runInitiatorScope ?? ((_initiatedBy, fn) => fn())
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
     this.pipelineRepository = pipelineRepository
@@ -2227,7 +2237,11 @@ export class ExecutionService {
         kind: MERGER_AGENT_KIND,
         applies: (result) => result.mergeAssessment !== undefined,
         resolve: async ({ workspaceId, instance, result }) => {
-          await this.mergeResolver.resolveMergerStep(workspaceId, instance, result.mergeAssessment)
+          // The real merge runs the engine GitHub client under the run initiator's
+          // ambient context, so a per-user PAT (when set) authors the merge.
+          await this.runInitiatorScope(instance.initiatedBy, () =>
+            this.mergeResolver.resolveMergerStep(workspaceId, instance, result.mergeAssessment),
+          )
           return { ownsTerminalStatus: true }
         },
       },
@@ -2463,7 +2477,13 @@ export class ExecutionService {
     // the CI/conflicts gates, which ignore it.
     if (step.gate.watchSince == null) step.gate.watchSince = this.clock.now()
 
-    const probe = await gate.probe(workspaceId, block.id, step.gate)
+    // Resolve the gate's GitHub reads (CI checks / mergeability) under the run
+    // initiator's ambient context, so a per-user PAT (when set) is preferred over the
+    // deployment's App/env token — see PatPreferringAppRegistry.
+    const gateState = step.gate
+    const probe = await this.runInitiatorScope(instance.initiatedBy, () =>
+      gate.probe(workspaceId, block.id, gateState),
+    )
     step.gate.headSha = probe.headSha
     // Persist the precheck outcome so the run-detail UI can surface why the gate is
     // looping (the failing checks / conflict reason) — detail that was previously fed

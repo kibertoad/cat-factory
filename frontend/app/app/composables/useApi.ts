@@ -17,6 +17,7 @@ import { reviewsApi } from './api/reviews'
 import { slackApi } from './api/slack'
 import { specApi } from './api/spec'
 import { tasksApi } from './api/tasks'
+import { userSecretsApi } from './api/userSecrets'
 import { workspacesApi } from './api/workspaces'
 
 /**
@@ -87,5 +88,6 @@ export function useApi() {
     ...githubApi(ctx),
     ...slackApi(ctx),
     ...bootstrapApi(ctx),
+    ...userSecretsApi(ctx),
   }
 }

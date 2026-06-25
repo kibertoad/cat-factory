@@ -1,9 +1,12 @@
 import type {
+  ConnectionTestResult,
+  ProviderConfigField,
   RunnerDispatchRequest,
   RunnerJobResult,
   RunnerJobView,
   RunnerPollRequest,
   RunnerPoolAuthScheme,
+  RunnerPoolConnectionTestRequest,
   RunnerPoolManifest,
   RunnerPoolProvider,
   RunnerPoolRequestTemplate,
@@ -85,6 +88,24 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
   async release(req: RunnerPollRequest): Promise<void> {
     if (!req.manifest.release) return
     await this.execute(req.manifest, req.manifest.release, this.scope(req.jobId), req.resolveSecret)
+  }
+
+  /** A manifest-driven pool: the config IS the manifest, so describe its secret keys. */
+  describeConfig(manifest?: RunnerPoolManifest): ProviderConfigField[] {
+    if (!manifest) return []
+    return environmentsLogic.configFieldsFromSecretKeys(runnersLogic.referencedSecretKeys(manifest))
+  }
+
+  /** Probe the scheduler API with the candidate manifest's auth (nothing dispatched). */
+  async testConnection(req: RunnerPoolConnectionTestRequest): Promise<ConnectionTestResult> {
+    if (!req.manifest) return { ok: false, message: 'No manifest supplied to test.' }
+    let headers: Record<string, string>
+    try {
+      headers = await this.authHeaders(req.manifest.auth, req.resolveSecret)
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+    }
+    return environmentsLogic.probeConnection(req.manifest.baseUrl, headers, this.urlPolicy)
   }
 
   // --- internals ----------------------------------------------------------

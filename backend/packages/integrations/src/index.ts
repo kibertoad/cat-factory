@@ -205,6 +205,17 @@ export {
 } from './modules/providers/LocalModelEndpointService.js'
 export { localRunnerUrlError } from './modules/providers/localModelUrl.js'
 export {
+  UserSecretService,
+  type UserSecretServiceDependencies,
+} from './modules/providers/UserSecretService.js'
+export {
+  registerUserSecretKind,
+  getUserSecretKind,
+  listUserSecretKinds,
+  type UserSecretKindHandler,
+  type UserSecretTestInput,
+} from './modules/providers/userSecretKinds.js'
+export {
   OpenRouterCatalogService,
   type OpenRouterCatalogServiceDependencies,
   OPENROUTER_BASE_URL,

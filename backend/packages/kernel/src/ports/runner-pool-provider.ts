@@ -1,4 +1,8 @@
-import type { RunnerPoolManifest } from '../domain/types.js'
+import type {
+  ConnectionTestResult,
+  ProviderConfigField,
+  RunnerPoolManifest,
+} from '../domain/types.js'
 import type { SecretResolver } from './environment-provider.js'
 import type { RunnerJobView } from './runner-transport.js'
 
@@ -24,6 +28,13 @@ export interface RunnerPollRequest {
   resolveSecret: SecretResolver
 }
 
+/** Test a pool connection before it is saved (mirrors the environment one). */
+export interface RunnerPoolConnectionTestRequest {
+  manifest?: RunnerPoolManifest
+  config: Record<string, string>
+  resolveSecret: SecretResolver
+}
+
 export interface RunnerPoolProvider {
   /** Start (or re-attach to) the job on the pool. Idempotent per `jobId`. */
   dispatch(req: RunnerDispatchRequest): Promise<void>
@@ -31,4 +42,8 @@ export interface RunnerPoolProvider {
   poll(req: RunnerPollRequest): Promise<RunnerJobView>
   /** Free the job/runner (only when the manifest declares a `release` template). */
   release(req: RunnerPollRequest): Promise<void>
+  /** Declare the config fields this pool provider expects (see EnvironmentProvider). */
+  describeConfig?(manifest?: RunnerPoolManifest): ProviderConfigField[]
+  /** Probe the connection without persisting. Optional — absent ⇒ "nothing to test". */
+  testConnection?(req: RunnerPoolConnectionTestRequest): Promise<ConnectionTestResult>
 }

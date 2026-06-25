@@ -4,6 +4,7 @@ import type {
   ExecutionRepository,
   PipelineRepository,
   ResolveRunRepoContext,
+  RunInitiatorScope,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { getFragment } from '@cat-factory/prompt-fragments'
@@ -40,7 +41,7 @@ import type {
   TaskRepository,
   TaskSourceSettingsRepository,
 } from '@cat-factory/kernel'
-import type { EnvironmentProvider, UrlSafetyPolicy } from '@cat-factory/kernel'
+import type { EnvironmentProvider, RunnerPoolProvider, UrlSafetyPolicy } from '@cat-factory/kernel'
 import type {
   EnvironmentConnectionRepository,
   EnvironmentRegistryRepository,
@@ -194,6 +195,13 @@ export interface CoreDependencies {
    * skips every kind's pre/post-ops, exactly as a built-in kind has none.
    */
   resolveRunRepoContext?: ResolveRunRepoContext
+  /**
+   * Optional: runs the engine's gate-probe / merge GitHub reads under the run
+   * initiator's ambient context so a per-user PAT is preferred (see
+   * `RunInitiatorScope`). A facade injects the server's `runWithInitiator`. Absent →
+   * pass-through (no per-user PAT preference; the deployment default is used).
+   */
+  runInitiatorScope?: RunInitiatorScope
   /** Ledger backing the spend safeguard (per-call token usage). */
   tokenUsageRepository: TokenUsageRepository
   /**
@@ -327,6 +335,13 @@ export interface CoreDependencies {
   environmentConnectionRepository?: EnvironmentConnectionRepository
   environmentRegistryRepository?: EnvironmentRegistryRepository
   secretCipher?: SecretCipher
+  // What the injected environment provider is, so its connection service can surface a
+  // correct descriptor: `native` (own auth, fully described by `describeConfig`) or the
+  // generic `manifest` HTTP provider. The facade that wires the provider sets it (absent
+  // ⇒ `manifest`). `…Id`/`…Label` override the descriptor identity for a native provider.
+  environmentProviderKind?: 'native' | 'manifest'
+  environmentProviderId?: string
+  environmentProviderLabel?: string
   // Operator-configured URL/host safety policy for the ENVIRONMENT-provisioning
   // integration (the manifest baseUrl + the returned env URL). Absent => strict
   // (https-only, no private/internal hosts). A trusted facade widens it so an in-house
@@ -344,6 +359,13 @@ export interface CoreDependencies {
   // domain, independent of the environment module's `secretCipher`).
   runnerPoolConnectionRepository?: RunnerPoolConnectionRepository
   runnerSecretCipher?: SecretCipher
+  // The pool provider instance + its kind, so the runners connection service can surface
+  // a descriptor + connection test (the generic HTTP pool, or a native one). Absent ⇒ no
+  // descriptor/test (the SPA falls back to the manifest editor with no test button).
+  runnerPoolProvider?: RunnerPoolProvider
+  runnerProviderKind?: 'native' | 'manifest'
+  runnerProviderId?: string
+  runnerProviderLabel?: string
   // URL/host safety policy for the RUNNER-POOL integration (the scheduler baseUrl).
   // Absent => strict. Scoped independently of `environmentUrlSafetyPolicy` so an
   // operator widening the env allow-list does not silently widen the pool's SSRF guard.
@@ -916,6 +938,10 @@ function createEnvironmentsModule(deps: CoreDependencies): EnvironmentsModule | 
     workspaceRepository: deps.workspaceRepository,
     secretCipher,
     clock: deps.clock,
+    environmentProvider,
+    providerKind: deps.environmentProviderKind ?? 'manifest',
+    ...(deps.environmentProviderId ? { providerId: deps.environmentProviderId } : {}),
+    ...(deps.environmentProviderLabel ? { providerLabel: deps.environmentProviderLabel } : {}),
     ...(deps.environmentUrlSafetyPolicy ? { urlPolicy: deps.environmentUrlSafetyPolicy } : {}),
   })
   const provisioningService = new EnvironmentProvisioningService({
@@ -951,6 +977,10 @@ function createRunnersModule(deps: CoreDependencies): RunnersModule | undefined 
     workspaceRepository: deps.workspaceRepository,
     secretCipher: runnerSecretCipher,
     clock: deps.clock,
+    ...(deps.runnerPoolProvider ? { runnerPoolProvider: deps.runnerPoolProvider } : {}),
+    providerKind: deps.runnerProviderKind ?? 'manifest',
+    ...(deps.runnerProviderId ? { providerId: deps.runnerProviderId } : {}),
+    ...(deps.runnerProviderLabel ? { providerLabel: deps.runnerProviderLabel } : {}),
     ...(deps.runnerUrlSafetyPolicy ? { urlPolicy: deps.runnerUrlSafetyPolicy } : {}),
   })
   return { connectionService }

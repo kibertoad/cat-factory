@@ -96,6 +96,17 @@ const harness: ConformanceHarness = {
           upsert: (workspaceId: string, input) => svc.upsert(workspaceId, input),
         }
       },
+      userSecrets: () => {
+        const svc = buildContainer(env, {
+          agentExecutor: new FakeAgentExecutor(),
+        }).userSecrets
+        if (!svc) return undefined
+        return {
+          store: (userId, kind, input) => svc.store(userId, kind as never, input),
+          resolve: (userId, kind) => svc.resolve(userId, kind as never),
+          describe: (kind) => svc.describe(kind as never),
+        }
+      },
       // The identity/onboarding services over the same local D1 (invitations are always
       // wired in the worker; email senders stay opt-in and out of the probe). A fake
       // executor override skips the strict container-executor selection (the identity

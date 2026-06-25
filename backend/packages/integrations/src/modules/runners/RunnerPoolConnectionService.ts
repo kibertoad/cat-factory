@@ -5,7 +5,14 @@ import type {
 } from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { SecretResolver, UrlSafetyPolicy } from '@cat-factory/kernel'
-import type { RunnerPoolConnection, RunnerPoolManifest } from '@cat-factory/kernel'
+import type {
+  ConnectionTestResult,
+  ProviderDescriptor,
+  RunnerPoolConnection,
+  RunnerPoolManifest,
+  RunnerPoolProvider,
+  TestRunnerPoolConnectionInput,
+} from '@cat-factory/kernel'
 import { ConflictError, STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
@@ -24,6 +31,12 @@ export interface RunnerPoolConnectionServiceDependencies {
   clock: Clock
   /** URL/host safety policy applied to a registered manifest. Defaults to strict. */
   urlPolicy?: UrlSafetyPolicy
+  /** The injected pool provider, so the service can surface describe/test to the UI. */
+  runnerPoolProvider?: RunnerPoolProvider
+  /** What the injected provider is (see EnvironmentConnectionService). Defaults `manifest`. */
+  providerKind?: 'native' | 'manifest'
+  providerId?: string
+  providerLabel?: string
 }
 
 export interface ResolvedRunnerPool {
@@ -78,6 +91,41 @@ export class RunnerPoolConnectionService {
     const updated: RunnerPoolConnectionRecord = { ...record, secretsCipher }
     await this.deps.runnerPoolConnectionRepository.upsert(updated)
     return this.toConnection(updated, Object.keys(secrets))
+  }
+
+  /** Describe the pool provider's config fields + test availability for the UI. */
+  async describeProvider(workspaceId: string): Promise<ProviderDescriptor> {
+    const provider = this.deps.runnerPoolConnectionRepository
+    const record = await provider.getByWorkspace(workspaceId)
+    const manifest = record ? (JSON.parse(record.manifestJson) as RunnerPoolManifest) : undefined
+    return {
+      providerId: this.deps.providerId ?? manifest?.providerId ?? 'http',
+      label: this.deps.providerLabel ?? manifest?.label ?? 'Custom HTTP pool',
+      kind: this.deps.providerKind ?? 'manifest',
+      configFields: this.deps.runnerPoolProvider?.describeConfig?.(manifest) ?? [],
+      supportsTest: typeof this.deps.runnerPoolProvider?.testConnection === 'function',
+    }
+  }
+
+  /** Probe a candidate pool connection before saving (nothing is persisted). */
+  async testConnection(
+    workspaceId: string,
+    input: TestRunnerPoolConnectionInput,
+  ): Promise<ConnectionTestResult> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const provider = this.deps.runnerPoolProvider
+    if (!provider?.testConnection) {
+      return { ok: true, message: 'This pool provider has no connection test.' }
+    }
+    if (input.manifest) {
+      assertManifestUrlsSafe(input.manifest, this.deps.urlPolicy ?? STRICT_URL_SAFETY_POLICY)
+    }
+    const secrets = input.secrets ?? {}
+    return provider.testConnection({
+      manifest: input.manifest,
+      config: input.config ?? {},
+      resolveSecret: (key) => secrets[key],
+    })
   }
 
   /** The workspace's current connection (safe metadata), or null. */

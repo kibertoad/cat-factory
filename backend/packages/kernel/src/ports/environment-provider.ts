@@ -1,7 +1,9 @@
 import type {
+  ConnectionTestResult,
   EnvironmentAccessHandle,
   EnvironmentManifest,
   EnvironmentStatus,
+  ProviderConfigField,
 } from '../domain/types.js'
 
 // Port for an ephemeral-environment provider: the thing that actually calls an
@@ -76,8 +78,28 @@ export interface ProvisionedEnvironment {
   fields: ProvisionFields
 }
 
+/**
+ * Test a provider connection before it is saved. A manifest-driven provider gets
+ * the candidate manifest; a native provider gets its non-secret `config`. Both get
+ * a `resolveSecret` over the supplied (unpersisted) secret values.
+ */
+export interface EnvironmentConnectionTestRequest {
+  manifest?: EnvironmentManifest
+  config: Record<string, string>
+  resolveSecret: SecretResolver
+}
+
 export interface EnvironmentProvider {
   provision(req: ProvisionEnvironmentRequest): Promise<ProvisionedEnvironment>
   status(req: EnvironmentStatusRequest): Promise<ProvisionedEnvironment>
   teardown(req: EnvironmentTeardownRequest): Promise<{ status: EnvironmentStatus }>
+  /**
+   * Declare the config fields this provider expects, so the UI can render a connect
+   * form. A native adapter returns its own fields; the generic manifest adapter returns
+   * the secret-key fields implied by a supplied manifest (or none). Optional — absent ⇒
+   * the SPA falls back to the manifest editor.
+   */
+  describeConfig?(manifest?: EnvironmentManifest): ProviderConfigField[]
+  /** Probe the connection without persisting. Optional — absent ⇒ "nothing to test". */
+  testConnection?(req: EnvironmentConnectionTestRequest): Promise<ConnectionTestResult>
 }

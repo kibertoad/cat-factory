@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { NotificationsModule } from '@cat-factory/orchestration'
 import { NotFoundError } from '@cat-factory/kernel'
+import { runWithInitiator } from '../../github/runInitiatorContext.js'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 
@@ -46,9 +47,12 @@ export function notificationController(): Hono<AppEnv> {
     switch (notification.type) {
       case 'merge_review':
       case 'pipeline_complete':
-        // Confirm + merge the PR for real (block is `pr_ready` → `done`).
+        // Confirm + merge the PR for real (block is `pr_ready` → `done`). Runs under
+        // the acting user's ambient context so their per-user PAT (when set) merges.
         if (notification.blockId) {
-          await container.executionService.mergePr(workspaceId, notification.blockId)
+          await runWithInitiator(c.get('user')?.id, () =>
+            container.executionService.mergePr(workspaceId, notification.blockId!),
+          )
         }
         break
       case 'ci_failed':

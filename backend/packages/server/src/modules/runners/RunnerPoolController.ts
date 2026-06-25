@@ -1,4 +1,8 @@
-import { registerRunnerPoolSchema, updateRunnerPoolSecretsSchema } from '@cat-factory/contracts'
+import {
+  registerRunnerPoolSchema,
+  testRunnerPoolConnectionSchema,
+  updateRunnerPoolSecretsSchema,
+} from '@cat-factory/contracts'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { RunnersModule } from '@cat-factory/orchestration'
@@ -59,6 +63,18 @@ export function runnerPoolController(): Hono<AppEnv> {
     if (!runners) return unavailable(c)
     await runners.connectionService.unregister(param(c, 'workspaceId'))
     return c.body(null, 204)
+  })
+
+  app.get('/runner-pool/provider', async (c) => {
+    const runners = requireRunners(c)
+    if (!runners) return unavailable(c)
+    return c.json(await runners.connectionService.describeProvider(param(c, 'workspaceId')))
+  })
+
+  app.post('/runner-pool/connection/test', jsonBody(testRunnerPoolConnectionSchema), async (c) => {
+    const runners = requireRunners(c)
+    if (!runners) return unavailable(c)
+    return c.json(await runners.connectionService.testConnection(param(c, 'workspaceId'), c.req.valid('json')))
   })
 
   return app
