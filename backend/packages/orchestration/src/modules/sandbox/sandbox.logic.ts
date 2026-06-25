@@ -5,6 +5,7 @@ import type {
   SandboxObjectiveResult,
 } from '@cat-factory/contracts'
 import type { ModelRef } from '@cat-factory/kernel'
+import { FINAL_ANSWER_IN_REPLY } from '@cat-factory/agents'
 import {
   type ExpectationScore,
   type Rubric,
@@ -86,7 +87,10 @@ export const JUDGE_SYSTEM_PROMPT = [
   'Judge ONLY against the task input and the candidate output you are given — never invent',
   'context. Be calibrated: reserve 5 for genuinely excellent work and 1 for output that',
   'fails the dimension outright. Your entire visible reply MUST be the requested JSON object',
-  'and nothing else (do not put the answer in a reasoning/thinking channel).',
+  'and nothing else.',
+  // The judge's deliverable IS its (parsed) final reply, so append the shared directive
+  // that keeps reasoning models from emitting the answer into a hidden thinking channel.
+  FINAL_ANSWER_IN_REPLY,
 ].join(' ')
 
 /** Build the judge user prompt for one cell: rubric + task input + candidate output + expectations. */

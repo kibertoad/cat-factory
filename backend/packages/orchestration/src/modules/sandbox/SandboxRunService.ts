@@ -20,6 +20,7 @@ import {
   ConflictError,
   inlineModelRef,
   requireWorkspace,
+  resolveScopedModelProvider,
   ValidationError,
 } from '@cat-factory/kernel'
 import { catFactoryObservability } from '@cat-factory/agents'
@@ -132,7 +133,12 @@ export class SandboxRunService {
     // for large matrices and the tracked follow-up.
     const budget = experiment.budgetTokens
     let spent = 0
-    let succeeded = 0
+    // The experiment is a SCORED comparison: a cell only counts toward a successful
+    // experiment once it is actually graded. A cell that produced candidate output but
+    // whose grading failed is kept inspectable (status `done` + an error), but it does
+    // NOT make the experiment look healthy — an experiment whose every grade failed
+    // settles `failed`, not `done` with a grid of unscored `—` cells.
+    let graded = 0
     try {
       for (const run of runs) {
         if (budget !== null && spent >= budget) {
@@ -190,8 +196,6 @@ export class SandboxRunService {
           await this.failRun(workspaceId, run, e instanceof Error ? e.message : String(e))
           continue
         }
-        // The candidate produced output: this cell is a real result even if grading fails.
-        succeeded++
 
         // Phase 2 — grade the cell (rubric + objective). A grading failure must NOT
         // discard the candidate output: keep the `done` run and record the grading error
@@ -234,6 +238,7 @@ export class SandboxRunService {
             createdAt: this.deps.clock.now(),
           }
           await this.deps.sandboxGradeRepository.upsert(workspaceId, grade)
+          graded++
         } catch (e) {
           await this.deps.sandboxRunRepository.upsert(workspaceId, {
             ...done,
@@ -242,12 +247,14 @@ export class SandboxRunService {
         }
       }
     } finally {
-      // Settle the terminal status from the outcomes: any successful cell → `done`,
-      // otherwise `failed`. This always runs, so the experiment is never left `running`.
+      // Settle the terminal status from the outcomes: any cell that was actually graded
+      // → `done`, otherwise `failed` (every candidate failed, OR every grade failed — the
+      // grid carries no usable scores either way). This always runs, so the experiment is
+      // never left `running`.
       await this.deps.sandboxExperimentRepository.setStatus(
         workspaceId,
         experimentId,
-        succeeded > 0 ? 'done' : 'failed',
+        graded > 0 ? 'done' : 'failed',
       )
     }
     return this.detail(workspaceId, experimentId)
@@ -311,9 +318,7 @@ export class SandboxRunService {
 
   /** The model provider for a workspace's scope (per-scope DB pool, else the static one). */
   private async providerFor(workspaceId: string): Promise<ModelProvider> {
-    const provider = this.deps.modelProviderResolver
-      ? await this.deps.modelProviderResolver.forScope({ workspaceId })
-      : this.deps.modelProvider
+    const provider = await resolveScopedModelProvider(workspaceId, this.deps)
     if (!provider) throw new ValidationError('No model provider is configured for the Sandbox')
     return provider
   }

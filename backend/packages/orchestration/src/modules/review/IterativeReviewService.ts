@@ -17,6 +17,7 @@ import {
   assertFound,
   DEFAULT_MAX_REQUIREMENT_ITERATIONS,
   inlineModelRef,
+  resolveScopedModelProvider,
   ValidationError,
 } from '@cat-factory/kernel'
 import { catFactoryObservability } from '@cat-factory/agents'
@@ -399,11 +400,8 @@ export abstract class IterativeReviewService<
   // ---- internals ----------------------------------------------------------
 
   /** The model provider for a workspace's scope (per-scope DB pool, else the static one). */
-  protected async providerFor(workspaceId: string): Promise<ModelProvider | undefined> {
-    if (this.deps.modelProviderResolver) {
-      return this.deps.modelProviderResolver.forScope({ workspaceId })
-    }
-    return this.deps.modelProvider
+  protected providerFor(workspaceId: string): Promise<ModelProvider | undefined> {
+    return resolveScopedModelProvider(workspaceId, this.deps)
   }
 
   /**

@@ -43,6 +43,13 @@ export const useSandboxStore = defineStore('sandbox', () => {
     experiments.value = [...overview.experiments].sort((a, b) => b.createdAt - a.createdAt)
   }
 
+  /** Patch one experiment into the list in place (newest-first), without a full reload. */
+  function upsertExperiment(experiment: SandboxExperiment) {
+    const next = experiments.value.filter((e) => e.id !== experiment.id)
+    next.push(experiment)
+    experiments.value = next.sort((a, b) => b.createdAt - a.createdAt)
+  }
+
   /** Load the overview + the workspace model catalog. The 503 (feature off) is surfaced. */
   async function load() {
     const ws = useWorkspaceStore()
@@ -125,9 +132,14 @@ export const useSandboxStore = defineStore('sandbox', () => {
     const ws = useWorkspaceStore()
     launching.value = true
     try {
-      detail.value = await api.launchSandboxExperiment(ws.requireId(), experimentId)
-      await load()
-      return detail.value
+      // `launch` returns the full graded grid AND the updated experiment, so patch both in
+      // place rather than calling `load()`: a transient failure in that follow-up fetch
+      // would otherwise set `error` and hide the freshly-returned result grid behind the
+      // error panel (and re-fetch the whole overview + model catalog for nothing).
+      const result = await api.launchSandboxExperiment(ws.requireId(), experimentId)
+      detail.value = result
+      upsertExperiment(result.experiment)
+      return result
     } finally {
       launching.value = false
     }

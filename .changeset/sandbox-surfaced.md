@@ -44,7 +44,8 @@ driver and are refused at launch; the builtin fixtures are all inline.
 Run-driver hardening: a relaunch clears the prior result grid first (new
 `SandboxRunRepository`/`SandboxGradeRepository.removeByExperiment`, mirrored on D1 +
 Drizzle) instead of accumulating duplicate cells; the experiment's terminal status is
-derived from the cell outcomes and always settled (`failed` when every cell failed, never
+derived from whether any cell was actually graded (`failed` when every candidate failed OR
+every grade failed — never a misleading `done` over a grid of unscored cells, and never
 left `running`); the token budget must be ≥ 1 (a `0` budget is rejected at create rather
 than silently failing every cell) and is documented as a soft cap enforced between cells;
 the judge model defaults to the deployment routing default (no hardcoded vendor) and
@@ -53,9 +54,14 @@ exposes a judge-model picker so a deployment with no default still has recourse)
 unparseable / empty / reasoning-only judge reply is now recorded as a grading **error** on
 the cell rather than silently flooring every dimension to the minimum (which read as a
 confident bottom-of-scale grade); the judge-reply JSON extractor — now the single robust
-`extractJson` promoted to `@cat-factory/kernel` and shared by the requirements reviewer and
-the document planner (replacing two weaker object-only copies) — is string-literal aware
-and falls back past a leading non-JSON code fence. The Sandbox window now surfaces a
+`extractJson` promoted to `@cat-factory/kernel` and shared by the requirements reviewer, the
+document planner and the Sandbox judge (replacing two weaker object-only copies) — is
+string-literal aware, scans forward past any leading bracket whose span isn't valid JSON
+(so prose like `I weighed [the auth flow]: {…}` no longer defeats extraction for the
+object-returning reviewers), and falls back past a leading non-JSON code fence. The judge
+prompt appends the shared `FINAL_ANSWER_IN_REPLY` directive like the other parsed-reply
+agents, and the provider-for-scope resolution the Sandbox shares with the reviewers is now
+one `resolveScopedModelProvider` kernel helper instead of two copies. The Sandbox window now surfaces a
 non-503 load failure (with a retry) instead of rendering an empty, healthy-looking panel.
 The fixture↔kind mapping the UI filters by now lives on the `@cat-factory/sandbox` catalog
 (`SandboxAgentKindMeta.fixtureKinds`) instead of a parallel frontend switch. NOTE: the
