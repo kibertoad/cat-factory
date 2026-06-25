@@ -1,9 +1,18 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { DocumentSourceKind, TaskSourceKind, LodLevel } from '~/types/domain'
+import type { PendingContext } from '~/composables/useContextLinking'
 import { zoomToLod, lodAtLeast } from '~/composables/useSemanticZoom'
 import { useExecutionStore } from '~/stores/execution'
 import { agentKindMeta } from '~/utils/catalog'
+
+/** Values used to seed the add-task form when it is opened from another surface. */
+export interface AddTaskPrefill {
+  title?: string
+  description?: string
+  /** Context items staged on the new task (e.g. the source issue), linked once created. */
+  context?: PendingContext[]
+}
 
 /** Transient UI state: selection, panels, zoom level. */
 export const useUiStore = defineStore('ui', () => {
@@ -42,6 +51,10 @@ export const useUiStore = defineStore('ui', () => {
   // added to, or null when closed. The user types the title + description; nothing
   // is launched until they explicitly start the created task.
   const addTaskContainerId = ref<string | null>(null)
+  // Optional values to seed the add-task form with when it is opened from another
+  // surface (e.g. "create task from issue" prefills the title + stages the issue as
+  // linked context). The user still confirms pipeline / preset before adding.
+  const addTaskPrefill = ref<AddTaskPrefill | null>(null)
 
   // Add-recurring-pipeline modal: the service frame a new recurring pipeline is
   // being added to, or null when closed (mirrors the add-task flow — a button on
@@ -246,11 +259,13 @@ export const useUiStore = defineStore('ui', () => {
   function closeTaskImport() {
     taskImport.value = null
   }
-  function openAddTask(containerId: string) {
+  function openAddTask(containerId: string, prefill: AddTaskPrefill | null = null) {
+    addTaskPrefill.value = prefill
     addTaskContainerId.value = containerId
   }
   function closeAddTask() {
     addTaskContainerId.value = null
+    addTaskPrefill.value = null
   }
   function openAddRecurring(frameId: string) {
     addRecurringFrameId.value = frameId
@@ -415,6 +430,7 @@ export const useUiStore = defineStore('ui', () => {
     taskConnect,
     taskImport,
     addTaskContainerId,
+    addTaskPrefill,
     addRecurringFrameId,
     bootstrapOpen,
     addServiceOpen,

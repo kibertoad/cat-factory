@@ -2,10 +2,12 @@
 // Import an issue from a connected task source (by key or URL) and review the
 // issues already imported into the workspace. An imported issue can be attached
 // to an existing task for context from the inspector (see TaskContextIssues.vue),
-// or turned directly into a new board task here — pick a container (service frame
-// or module) and "Create task", which seeds a leaf block from the issue and links
-// the issue to it for context.
-import type { Block, TaskSearchResult, TaskSourceKind } from '~/types/domain'
+// or turned into a new board task here: pick a container (service frame or module),
+// then click an issue to open the prefilled add-task form (title seeded, issue
+// staged as linked context) where the user confirms the pipeline / presets before
+// creating it. A separate icon button on each row opens the issue on GitHub.
+import type { TaskSearchResult, TaskSourceKind } from '~/types/domain'
+import type { AddTaskPrefill } from '~/stores/ui'
 
 const ui = useUiStore()
 const tasks = useTasksStore()
@@ -100,9 +102,6 @@ const containerItems = computed(() =>
       value: b.id,
     })),
 )
-// The issue currently being turned into a task (its row shows a spinner).
-const creatingId = ref<string | null>(null)
-
 watch(open, (isOpen) => {
   if (isOpen) {
     ref_.value = ''
@@ -113,32 +112,35 @@ watch(open, (isOpen) => {
     // Opened from a service frame → preselect it as the create-in target (and the
     // search's repo scope); otherwise fall back to the first container on the board.
     containerId.value = ui.taskImport?.containerId ?? containerItems.value[0]?.value
-    creatingId.value = null
     tasks.loadTasks().catch(() => {})
   }
 })
 
-// Create a board task from an issue, seeding its title/description from the issue
-// and linking it back for writeback. A search hit isn't projected locally yet, so
-// `needsImport` fetches + persists it first (create-block requires it imported).
-async function createTask(externalId: string, needsImport = false) {
+// Selecting an issue hands off to the add-task form, prefilled with the issue title
+// and the issue staged as linked context (so agents see its description + comments).
+// The user still confirms pipeline / preset there before the task is created — we do
+// NOT dump the issue body into the description; the link is enough.
+function selectIssue(
+  issue: { externalId: string; title: string; status?: string },
+  needsImport: boolean,
+) {
   if (!source.value || !containerId.value) return
-  creatingId.value = externalId
-  try {
-    if (needsImport) await tasks.importTask(source.value, externalId)
-    const { block } = await tasks.createTaskFromIssue(source.value, externalId, containerId.value)
-    board.upsert(block as Block)
-    toast.add({ title: `Created task "${block.title}"`, icon: 'i-lucide-square-check' })
-  } catch (e) {
-    toast.add({
-      title: 'Could not create task',
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
-  } finally {
-    creatingId.value = null
+  const prefill: AddTaskPrefill = {
+    title: issue.title,
+    context: [
+      {
+        kind: 'task',
+        source: source.value,
+        externalId: issue.externalId,
+        title: `${issue.externalId} · ${issue.title}`,
+        subtitle: issue.status || undefined,
+        icon: descriptor.value?.icon,
+        needsImport,
+      },
+    ],
   }
+  ui.closeTaskImport()
+  ui.openAddTask(containerId.value, prefill)
 }
 
 async function doImport() {
@@ -241,7 +243,8 @@ async function doImport() {
           Add a service frame to the board first to create tasks from issues.
         </p>
 
-        <!-- Search results (not yet imported): create a task directly from a hit. -->
+        <!-- Search results (not yet imported): click a hit to create a task from it
+             (opens the prefilled add-task form); the icon button views it on GitHub. -->
         <div v-if="searchError" class="text-[11px] text-amber-400">
           Search failed: {{ searchError }}
         </div>
@@ -252,38 +255,36 @@ async function doImport() {
           <div
             v-for="hit in freshHits"
             :key="`hit:${hit.source}:${hit.externalId}`"
-            class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
+            class="flex items-start justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3 transition-colors hover:border-primary-500/60 hover:bg-slate-900"
           >
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0">
-                <a
-                  :href="hit.url"
-                  target="_blank"
-                  rel="noopener"
-                  class="truncate text-sm font-medium text-white hover:underline"
-                >
-                  {{ hit.externalId }} · {{ hit.title }}
-                </a>
-                <p v-if="hit.excerpt" class="mt-0.5 line-clamp-2 text-xs text-slate-500">
-                  {{ hit.excerpt }}
-                </p>
-              </div>
-              <div class="flex shrink-0 items-center gap-2">
-                <UBadge v-if="hit.status" color="neutral" variant="soft" size="xs">
-                  {{ hit.status }}
-                </UBadge>
-                <UButton
-                  color="primary"
-                  variant="soft"
-                  size="xs"
-                  icon="i-lucide-square-check"
-                  :loading="creatingId === hit.externalId"
-                  :disabled="!containerId || creatingId !== null"
-                  @click="createTask(hit.externalId, true)"
-                >
-                  Create task
-                </UButton>
-              </div>
+            <button
+              type="button"
+              class="min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-60"
+              :disabled="!containerId"
+              :title="containerId ? 'Create a task from this issue' : 'Pick a container first'"
+              @click="selectIssue(hit, true)"
+            >
+              <span class="block truncate text-sm font-medium text-white">
+                {{ hit.externalId }} · {{ hit.title }}
+              </span>
+              <span v-if="hit.excerpt" class="mt-0.5 line-clamp-2 block text-xs text-slate-500">
+                {{ hit.excerpt }}
+              </span>
+            </button>
+            <div class="flex shrink-0 items-center gap-2">
+              <UBadge v-if="hit.status" color="neutral" variant="soft" size="xs">
+                {{ hit.status }}
+              </UBadge>
+              <UButton
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                icon="i-lucide-external-link"
+                :to="hit.url"
+                target="_blank"
+                rel="noopener"
+                :aria-label="`View ${hit.externalId} on GitHub`"
+              />
             </div>
           </div>
         </div>
@@ -296,36 +297,36 @@ async function doImport() {
           <div
             v-for="task in sourceTasks"
             :key="`${task.source}:${task.externalId}`"
-            class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
+            class="flex items-start justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3 transition-colors hover:border-primary-500/60 hover:bg-slate-900"
           >
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0">
-                <a
-                  :href="task.url"
-                  target="_blank"
-                  rel="noopener"
-                  class="truncate text-sm font-medium text-white hover:underline"
-                >
-                  {{ task.externalId }} · {{ task.title }}
-                </a>
-                <p class="mt-0.5 line-clamp-2 text-xs text-slate-500">{{ task.excerpt }}</p>
-              </div>
-              <div class="flex shrink-0 items-center gap-2">
-                <UBadge color="neutral" variant="soft" size="xs">
-                  {{ task.status }}
-                </UBadge>
-                <UButton
-                  color="primary"
-                  variant="soft"
-                  size="xs"
-                  icon="i-lucide-square-check"
-                  :loading="creatingId === task.externalId"
-                  :disabled="!containerId || creatingId !== null"
-                  @click="createTask(task.externalId)"
-                >
-                  Create task
-                </UButton>
-              </div>
+            <button
+              type="button"
+              class="min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-60"
+              :disabled="!containerId"
+              :title="containerId ? 'Create a task from this issue' : 'Pick a container first'"
+              @click="selectIssue(task, false)"
+            >
+              <span class="block truncate text-sm font-medium text-white">
+                {{ task.externalId }} · {{ task.title }}
+              </span>
+              <span class="mt-0.5 line-clamp-2 block text-xs text-slate-500">{{
+                task.excerpt
+              }}</span>
+            </button>
+            <div class="flex shrink-0 items-center gap-2">
+              <UBadge color="neutral" variant="soft" size="xs">
+                {{ task.status }}
+              </UBadge>
+              <UButton
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                icon="i-lucide-external-link"
+                :to="task.url"
+                target="_blank"
+                rel="noopener"
+                :aria-label="`View ${task.externalId} on GitHub`"
+              />
             </div>
           </div>
         </div>
