@@ -480,6 +480,88 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('built-in spec-writer post-op', () => {
+      // The migrated `spec-writer` kind dispatches the generic `agent` (read-only structured
+      // explore) and returns the complete spec doc; the deterministic SHARD + commit of the
+      // in-repo `spec/` artifact — which used to live in the executor-harness `/spec` handler —
+      // now runs as a BACKEND built-in post-op over the checkout-free RepoFiles, onto the
+      // per-block WORK branch (not the default branch — the spec merges WITH the feature). This
+      // asserts the engine runs that post-op + commits identically on every runtime.
+      it('shards + commits the spec/ artifact onto the work branch via RepoFiles', async () => {
+        const commits: { branch: string; files: { path: string; content: string }[] }[] = []
+        const repo: RepoFiles = {
+          getFile: async () => null,
+          listDirectory: async () => [],
+          headSha: async () => 'base-sha',
+          createBranch: async () => {},
+          commitFiles: async (input) => {
+            commits.push({ branch: input.branch, files: input.files })
+            return { sha: 'commit-sha' }
+          },
+          openPullRequest: async () => {
+            throw new Error('not exercised by this test')
+          },
+        }
+
+        const app = harness.makeApp(
+          {
+            spec: {
+              service: 'Widgets',
+              summary: 'A widget service.',
+              modules: [
+                {
+                  name: 'Auth',
+                  summary: 'Authentication',
+                  groups: [
+                    {
+                      name: 'Login',
+                      summary: 'Signing in',
+                      requirements: [
+                        {
+                          title: 'Password login',
+                          statement: 'The system SHALL authenticate by password.',
+                          kind: 'functional',
+                          priority: 'must',
+                          acceptance: [
+                            { given: 'a user', when: 'they sign in', outcome: 'a session opens' },
+                          ],
+                        },
+                      ],
+                      rules: [],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main' }) },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Write spec',
+          agentKinds: ['spec-writer'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+
+        // The post-op sharded the doc onto the per-block work branch (created from base when
+        // absent), identically on D1 and Postgres.
+        expect(commits).toHaveLength(1)
+        expect(commits[0]?.branch).toBe('cat-factory/task_login')
+        const paths = commits[0]?.files.map((f) => f.path) ?? []
+        expect(paths).toContain('spec/service.json')
+        expect(paths).toContain('spec/overview.md')
+        expect(paths).toContain('spec/modules/auth/login.json')
+        expect(paths).toContain('spec/features/auth/login.feature')
+      })
+    })
+
     describe('task estimator + consensus', () => {
       it('parses a task-estimator step output onto block.estimate, persisted identically', async () => {
         const app = harness.makeApp({

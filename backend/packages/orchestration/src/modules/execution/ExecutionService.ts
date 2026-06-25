@@ -36,6 +36,7 @@ import {
   registeredPreOps,
   registeredPostOps,
   runRepoOps,
+  specPostOp,
   TASK_ESTIMATOR_AGENT_KIND,
 } from '@cat-factory/agents'
 import type { RepoOp } from '@cat-factory/kernel'
@@ -76,6 +77,7 @@ import {
   ANALYSIS_AGENT_KIND,
   TESTER_AGENT_KIND,
   BLUEPRINTS_AGENT_KIND,
+  SPEC_WRITER_AGENT_KIND,
 } from './ci.logic.js'
 import {
   POST_RELEASE_HEALTH_AGENT_KIND,
@@ -2145,7 +2147,7 @@ export class ExecutionService {
     // exactly (see {@link builtInRepoOpBranch}), which differs from the generic clone
     // resolution for the no-PR case — so the post-op commits where the agent read.
     if (builtIn.length > 0) {
-      const branch = this.builtInRepoOpBranch(step.agentKind, block, runRepo)
+      const branch = await this.builtInRepoOpBranch(step.agentKind, block, runRepo)
       await runRepoOps(builtIn, { repo: runRepo.repo, context, branch, result })
     }
   }
@@ -2157,19 +2159,37 @@ export class ExecutionService {
    * into `customAgentKinds` / the SPA palette. Empty for every other kind.
    */
   private builtInPostOps(agentKind: string): RepoOp[] {
-    return agentKind === BLUEPRINTS_AGENT_KIND ? [blueprintPostOp] : []
+    if (agentKind === BLUEPRINTS_AGENT_KIND) return [blueprintPostOp]
+    if (agentKind === SPEC_WRITER_AGENT_KIND) return [specPostOp]
+    return []
   }
 
   /**
    * The branch a built-in kind's post-op reads/commits, resolved to MATCH the kind's
    * container dispatch (so the post-op commits onto exactly the branch the explore agent
-   * cloned). Blueprints clones the PR branch when one is open, else the repo's default
-   * branch — so the initial bootstrap map lands directly on the default branch, mirroring
-   * {@link ContainerAgentExecutor}'s `pr`-clone resolution (`prBranch ?? baseBranch`).
-   * Deliberately NOT {@link resolveRepoOpBranch}, whose `pr` case ensures a work branch for
-   * the no-PR case — correct for a committing CUSTOM kind, wrong for the blueprint.
+   * cloned).
+   *  - blueprints clones the PR branch when one is open, else the repo's default branch —
+   *    so the initial bootstrap map lands directly on the default branch, mirroring
+   *    {@link ContainerAgentExecutor}'s `pr`-clone resolution (`prBranch ?? baseBranch`).
+   *    Deliberately NOT {@link resolveRepoOpBranch}, whose `pr` case ensures a work branch
+   *    for the no-PR case — correct for a committing CUSTOM kind, wrong for the blueprint.
+   *  - spec-writer commits onto the per-block WORK branch (the coder's branch), created
+   *    from base when absent — exactly the generic `work` clone resolution, which matches
+   *    the spec-writer's container dispatch (it clones `work`, ensuring the branch as a
+   *    writer). It runs BEFORE the coder, so it seeds the branch the coder then resumes.
    */
-  private builtInRepoOpBranch(_agentKind: string, block: Block, runRepo: RunRepoContext): string {
+  private async builtInRepoOpBranch(
+    agentKind: string,
+    block: Block,
+    runRepo: RunRepoContext,
+  ): Promise<string> {
+    if (agentKind === SPEC_WRITER_AGENT_KIND) {
+      return this.resolveRepoOpBranch(
+        { surface: 'container-explore', clone: { branch: 'work' } },
+        block,
+        runRepo,
+      )
+    }
     return block.pullRequest?.branch ?? runRepo.baseBranch
   }
 

@@ -302,6 +302,64 @@ describe('ContainerAgentExecutor.pollJob (kind-aware result coercion)', () => {
     expect(update).toEqual({ state: 'done', result: { output: 'nothing usable' } })
   })
 
+  it('maps a spec-writer custom result into a coerced spec doc', async () => {
+    const executor = makeExecutorReturning({
+      summary: 'Wrote the spec.',
+      custom: {
+        service: 'Widgets',
+        summary: 'A widget service',
+        modules: [
+          {
+            name: 'Auth',
+            summary: 'Authentication',
+            groups: [
+              {
+                name: 'Login',
+                summary: 'Signing in',
+                requirements: [
+                  {
+                    id: 'req-login',
+                    title: 'Password login',
+                    statement: 'The system SHALL authenticate by password.',
+                    kind: 'functional',
+                    priority: 'must',
+                    sourceBlockIds: [],
+                    acceptance: [
+                      {
+                        id: 'ac-1',
+                        given: 'a user',
+                        when: 'they sign in',
+                        outcome: 'a session opens',
+                      },
+                    ],
+                  },
+                ],
+                rules: [],
+              },
+            ],
+          },
+        ],
+      },
+    })
+    const update = await executor.pollJob(handle('spec-writer'))
+    expect(update.state).toBe('done')
+    // The custom doc is coerced into the `spec` channel the engine strict-validates +
+    // the specPostOp shards/commits from (no raw `custom` left behind).
+    const result = update.state === 'done' ? update.result : undefined
+    expect(result?.output).toBe('Wrote the spec.')
+    expect(result && 'custom' in result).toBe(false)
+    expect(result?.spec).toMatchObject({
+      service: 'Widgets',
+      modules: [{ name: 'Auth', groups: [{ name: 'Login' }] }],
+    })
+  })
+
+  it('a nameless spec-writer doc coerces away (no spec), leaving plain output', async () => {
+    const executor = makeExecutorReturning({ summary: 'nothing usable', custom: { modules: [] } })
+    const update = await executor.pollJob(handle('spec-writer'))
+    expect(update).toEqual({ state: 'done', result: { output: 'nothing usable' } })
+  })
+
   it('without agentKind the coercion no-ops and the raw custom is surfaced', async () => {
     const executor = makeExecutorReturning({
       summary: 's',

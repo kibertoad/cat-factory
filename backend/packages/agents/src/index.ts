@@ -153,7 +153,7 @@ export { runRepoOps } from './repo-ops/run.js'
 // Built-in post-ops for migrated built-in kinds (blueprints/…): the deterministic render
 // + commit lifted out of the executor-harness, keyed by the engine's built-in op map (NOT
 // the registry, so they never leak into the custom-kind palette).
-export { blueprintPostOp } from './repo-ops/builtin.js'
+export { blueprintPostOp, specPostOp } from './repo-ops/builtin.js'
 
 // The generic AI provisioning facade: a mixable provider registry + the base,
 // runtime-neutral resolvers. Optional/heavier backends ship as their own packages
