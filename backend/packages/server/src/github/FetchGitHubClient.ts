@@ -195,6 +195,21 @@ export class FetchGitHubClient implements GitHubClient {
     return gp.toRepoProjection(json as gp.GhRepoPayload, installationId, this.deps.clock.now())
   }
 
+  async canPush(installationId: number, ref: GitHubRepoRef): Promise<boolean> {
+    // The repo payload carries the *token's* effective access in `permissions`. A
+    // public repo the installation can read but is not granted (not in the App's
+    // selected repos, or the App lacks contents:write) comes back with push:false —
+    // exactly the case that 403s on the bootstrap container's push. A 404 (the repo
+    // is private + not granted at all) means no access either; surface that as false.
+    try {
+      const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}`, { installationId })
+      return (json as { permissions?: { push?: boolean } }).permissions?.push === true
+    } catch (err) {
+      if (err instanceof GitHubApiError && (err.status === 404 || err.status === 403)) return false
+      throw err
+    }
+  }
+
   async listBranches(
     installationId: number,
     ref: GitHubRepoRef,

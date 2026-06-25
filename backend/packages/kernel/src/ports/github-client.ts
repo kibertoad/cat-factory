@@ -175,6 +175,16 @@ export interface GitHubClient {
 
   // ---- reads --------------------------------------------------------------
   getRepo(installationId: number, ref: GitHubRepoRef): Promise<GitHubRepo>
+  /**
+   * Whether the installation actually has **push (write)** access to a repo. GitHub
+   * returns the token's *effective* `permissions` on the repo payload, so a public
+   * repo the installation can READ but is not granted (not in the App's selected
+   * repositories, or the App lacks `contents:write`) reports `push:false` even though
+   * {@link getRepo}/{@link listRootEntries} succeed. Repo bootstrapping pre-flights this
+   * so that "the App can see the repo but can't push to it" case fails fast with a
+   * clear, actionable error instead of 403-ing deep inside the container's `git push`.
+   */
+  canPush(installationId: number, ref: GitHubRepoRef): Promise<boolean>
   listBranches(
     installationId: number,
     ref: GitHubRepoRef,
