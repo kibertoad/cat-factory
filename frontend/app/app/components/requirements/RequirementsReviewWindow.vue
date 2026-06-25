@@ -218,6 +218,17 @@ const recommending = computed(() =>
 const pendingRecommendations = computed<RequirementRecommendation[]>(() =>
   (review.value?.recommendations ?? []).filter((r) => r.status === 'ready'),
 )
+// Placeholders the Requirement Writer is still producing in the background (`pending`).
+const generatingRecommendations = computed<RequirementRecommendation[]>(() =>
+  (review.value?.recommendations ?? []).filter((r) => r.status === 'pending'),
+)
+// "ready / total" progress while a batch is in flight (null when nothing is generating).
+const recommendationProgress = computed(() => {
+  const generating = generatingRecommendations.value.length
+  if (generating === 0) return null
+  const ready = pendingRecommendations.value.length
+  return { ready, total: ready + generating }
+})
 function isMarkedForRecommend(item: RequirementReviewItem): boolean {
   return markedForRecommend.value.has(item.id)
 }
@@ -228,16 +239,20 @@ function toggleRecommend(item: RequirementReviewItem) {
   markedForRecommend.value = next
 }
 
-// Fire the Writer over the whole marked batch at once (grounded on the project's
-// best-practice standards, specs/tech-specs and web search).
+// Fire the Writer over the whole marked batch (grounded on the project's best-practice
+// standards, specs/tech-specs and web search). ASYNCHRONOUS: it returns at once with `pending`
+// placeholders that fill in live; the user can close the window and is notified when the batch
+// is ready. Flush any typed-but-unblurred answers first so nothing the human entered is lost.
 async function requestRecommendations() {
   if (!blockId.value || markedForRecommend.value.size === 0) return
   const ids = [...markedForRecommend.value]
   try {
+    await flushDrafts()
     await requirements.requestRecommendations(blockId.value, ids)
     markedForRecommend.value = new Set()
     toast.add({
-      title: `Requesting ${ids.length} recommendation${ids.length === 1 ? '' : 's'}…`,
+      title: `Preparing ${ids.length} recommendation${ids.length === 1 ? '' : 's'} in the background`,
+      description: "Your answers are saved — close this if you like; we'll notify you when they're ready.",
       icon: 'i-lucide-sparkles',
     })
   } catch (e) {
@@ -567,15 +582,44 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 </div>
               </div>
 
-              <!-- Requirement-Writer recommendations awaiting a human decision -->
+              <!-- Requirement-Writer recommendations: awaiting a human decision (`ready`) and/or
+                   still generating in the background (`pending`) -->
               <section
-                v-if="pendingRecommendations.length"
+                v-if="pendingRecommendations.length || generatingRecommendations.length"
                 class="mt-6 border-t border-slate-800 pt-5"
               >
-                <div class="mb-3 flex items-center gap-1.5 text-[11px] text-indigo-300">
+                <div class="mb-3 flex items-center gap-2 text-[11px] text-indigo-300">
                   <UIcon name="i-lucide-wand-2" class="h-3.5 w-3.5" />
                   <span class="font-semibold uppercase tracking-wide">Recommended answers</span>
+                  <span
+                    v-if="recommendationProgress"
+                    class="ml-auto flex items-center gap-1.5 normal-case text-indigo-300/80"
+                  >
+                    <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+                    {{ recommendationProgress.ready }} / {{ recommendationProgress.total }} ready
+                  </span>
                 </div>
+
+                <!-- still-generating placeholders (one per requested finding) -->
+                <div v-if="generatingRecommendations.length" class="mb-3 flex flex-col gap-3">
+                  <div
+                    v-for="rec in generatingRecommendations"
+                    :key="rec.id"
+                    class="flex items-start gap-2 rounded-lg border border-dashed border-indigo-900/50 bg-indigo-950/10 p-3"
+                  >
+                    <UIcon
+                      name="i-lucide-loader-circle"
+                      class="mt-0.5 h-4 w-4 shrink-0 animate-spin text-indigo-300"
+                    />
+                    <div class="min-w-0">
+                      <span class="text-sm font-medium text-white">{{
+                        rec.sourceFinding.title
+                      }}</span>
+                      <p class="text-xs text-indigo-300/70">Generating a grounded suggestion…</p>
+                    </div>
+                  </div>
+                </div>
+
                 <div class="flex flex-col gap-3">
                   <div
                     v-for="rec in pendingRecommendations"

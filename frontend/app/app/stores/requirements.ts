@@ -44,14 +44,21 @@ export const useRequirementsStore = defineStore('requirements', () => {
   function reviewFor(blockId: string): RequirementReview | null {
     return reviews.value[blockId] ?? null
   }
+  /** Whether the Requirement Writer is still producing recommendations for a block (a `pending`
+   * placeholder exists). Server-derived, so the "Recommending…" state survives the window closing
+   * and a page reload — the client-local `recommending` set only covers the request round-trip. */
+  function hasPendingRecommendations(blockId: string): boolean {
+    return (reviews.value[blockId]?.recommendations ?? []).some((r) => r.status === 'pending')
+  }
   /**
    * The async background stage a block's review is in, or null. While the driver folds the
-   * answers (`incorporating`) then re-reviews the document (`reviewing`), NO human action is
-   * needed — so the board suppresses the "Approval needed" gate and shows this working state
-   * instead, with copy that names which of the two stages is running.
+   * answers (`incorporating`) then re-reviews the document (`reviewing`), or the Requirement
+   * Writer is producing recommendations (`recommending`), NO human action is needed — so the
+   * board suppresses the "Approval needed" gate and shows this working state instead, with copy
+   * that names which stage is running.
    */
   function backgroundStage(blockId: string): 'incorporating' | 'reviewing' | 'recommending' | null {
-    if (recommending.value.has(blockId)) return 'recommending'
+    if (recommending.value.has(blockId) || hasPendingRecommendations(blockId)) return 'recommending'
     const status = reviews.value[blockId]?.status
     return status === 'incorporating' || status === 'reviewing' ? status : null
   }
@@ -176,19 +183,26 @@ export const useRequirementsStore = defineStore('requirements', () => {
   }
 
   function isRecommending(blockId: string): boolean {
-    return recommending.value.has(blockId)
+    return recommending.value.has(blockId) || hasPendingRecommendations(blockId)
   }
 
   /**
    * Ask the Requirement Writer to recommend answers for a batch of findings (by item id).
-   * Runs the Writer inline (grounded on best-practice fragments → spec/tech-spec → web) and
-   * returns the review with `ready` recommendations to accept/reject. Shows a `recommending`
-   * background stage on the board while it runs.
+   * ASYNCHRONOUS: returns at once with `pending` placeholder recommendations (the Writer runs
+   * per finding in the durable driver), which fill in (`ready`) via live `requirements` stream
+   * events; a notification calls the user back when the batch is ready. The board shows the
+   * `recommending` background stage while any placeholder is pending. Optional `note` steers the
+   * whole batch.
    */
-  async function requestRecommendations(blockId: string, itemIds: string[]) {
+  async function requestRecommendations(blockId: string, itemIds: string[], note?: string) {
     withFlag(recommending, blockId, true)
     try {
-      const updated = await api.requestRecommendations(workspace.requireId(), blockId, itemIds)
+      const updated = await api.requestRecommendations(
+        workspace.requireId(),
+        blockId,
+        itemIds,
+        note,
+      )
       if (updated) store(updated)
       return updated
     } finally {

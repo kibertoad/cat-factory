@@ -83,11 +83,17 @@ export function reviewsApi({ http, ws }: ApiContext) {
       ),
 
     // Ask the Requirement Writer to recommend grounded answers for a batch of findings (by
-    // item id). Returns the review with `ready` recommendations for the human to act on.
-    requestRecommendations: (workspaceId: string, blockId: string, itemIds: string[]) =>
+    // item id). Returns the review with `pending` placeholder recommendations; they fill in
+    // (`ready`) asynchronously via the `requirements` stream as the Writer produces each.
+    requestRecommendations: (
+      workspaceId: string,
+      blockId: string,
+      itemIds: string[],
+      note?: string,
+    ) =>
       http<RequirementReview | null>(
         `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review/recommend`,
-        { method: 'POST', body: { itemIds } },
+        { method: 'POST', body: { itemIds, ...(note ? { note } : {}) } },
       ),
 
     // Accept a recommendation (becomes the finding's answer), reject it, or re-request it

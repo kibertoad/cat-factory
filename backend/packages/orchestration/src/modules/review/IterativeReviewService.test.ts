@@ -117,6 +117,106 @@ describe('IterativeReviewService (via RequirementReviewService)', () => {
   })
 })
 
+describe('RequirementReviewService recommendations (Requirement Writer, async)', () => {
+  function makeService() {
+    const requirementReviewRepository = fakeRepo<{ id: string; blockId: string }>() as never
+    return new RequirementReviewService({ ...baseDeps(), requirementReviewRepository })
+  }
+
+  const TWO_FINDINGS = JSON.stringify({
+    items: [
+      { category: 'gap', severity: 'high', title: 'A', detail: 'a?' },
+      { category: 'risk', severity: 'high', title: 'B', detail: 'b?' },
+    ],
+  })
+
+  it('prepares pending placeholders, fills them async, and preserves a sibling answer', async () => {
+    const svc = makeService()
+    generateTextMock.mockResolvedValueOnce(llm(TWO_FINDINGS))
+    const review = await svc.review(WS, BLOCK.id, {})
+    const a = review.items[0]!
+    const b = review.items[1]!
+
+    // The human answers finding A explicitly, then asks the Writer to recommend for finding B.
+    await svc.replyToItem(WS, review.id, a.id, 'My explicit answer to A.')
+    const prepared = await svc.prepareRecommendations(WS, review.id, [b.id])
+    // A `pending` placeholder appears at once (the async story); B is marked recommend_requested.
+    expect(prepared.recommendations).toHaveLength(1)
+    expect(prepared.recommendations[0]!.status).toBe('pending')
+    expect(prepared.items.find((i) => i.id === b.id)!.status).toBe('recommend_requested')
+    // A's explicit answer is untouched by requesting a recommendation for B.
+    expect(prepared.items.find((i) => i.id === a.id)!.reply).toBe('My explicit answer to A.')
+
+    // The Writer fills the placeholder in the background (one call per finding); progress streams.
+    const progress: number[] = []
+    generateTextMock.mockResolvedValueOnce(
+      llm(JSON.stringify({ recommendations: [{ itemId: b.id, recommendation: 'Answer for B.' }] })),
+    )
+    const { produced } = await svc.fillPendingRecommendations(WS, review.id, {
+      onProgress: async (r) =>
+        progress.push(r.recommendations.filter((x) => x.status === 'ready').length),
+    })
+    expect(produced).toBe(1)
+    expect(progress).toEqual([1])
+
+    const after = await svc.getForBlock(WS, BLOCK.id)
+    expect(after!.recommendations[0]!.status).toBe('ready')
+    expect(after!.recommendations[0]!.recommendedText).toBe('Answer for B.')
+    // The human's explicit answer to A is STILL there after the async recommendation cycle.
+    expect(after!.items.find((i) => i.id === a.id)!.reply).toBe('My explicit answer to A.')
+  })
+
+  it('drops a failed placeholder and reopens its finding so the human can answer manually', async () => {
+    const svc = makeService()
+    generateTextMock.mockResolvedValueOnce(llm(TWO_FINDINGS))
+    const review = await svc.review(WS, BLOCK.id, {})
+    const b = review.items[1]!
+    await svc.prepareRecommendations(WS, review.id, [b.id])
+
+    generateTextMock.mockRejectedValueOnce(new Error('writer boom'))
+    const { produced } = await svc.fillPendingRecommendations(WS, review.id, {})
+    expect(produced).toBe(0)
+    const after = await svc.getForBlock(WS, BLOCK.id)
+    expect(after!.recommendations).toHaveLength(0) // dead placeholder dropped
+    expect(after!.items.find((i) => i.id === b.id)!.status).toBe('open') // reopened
+  })
+
+  it('accept folds the recommendation into the finding; reject reopens it', async () => {
+    const svc = makeService()
+    generateTextMock.mockResolvedValueOnce(llm(TWO_FINDINGS))
+    const review = await svc.review(WS, BLOCK.id, {})
+    const b = review.items[1]!
+    await svc.prepareRecommendations(WS, review.id, [b.id])
+    generateTextMock.mockResolvedValueOnce(
+      llm(JSON.stringify({ recommendations: [{ itemId: b.id, recommendation: 'Answer for B.' }] })),
+    )
+    await svc.fillPendingRecommendations(WS, review.id, {})
+    const recId = (await svc.getForBlock(WS, BLOCK.id))!.recommendations[0]!.id
+
+    const accepted = await svc.acceptRecommendation(WS, review.id, recId)
+    const item = accepted.items.find((i) => i.id === b.id)!
+    expect(item.status).toBe('answered')
+    expect(item.reply).toBe('Answer for B.')
+  })
+
+  it('reject reopens the source finding so it can be answered by hand', async () => {
+    const svc = makeService()
+    generateTextMock.mockResolvedValueOnce(llm(TWO_FINDINGS))
+    const review = await svc.review(WS, BLOCK.id, {})
+    const b = review.items[1]!
+    await svc.prepareRecommendations(WS, review.id, [b.id])
+    generateTextMock.mockResolvedValueOnce(
+      llm(JSON.stringify({ recommendations: [{ itemId: b.id, recommendation: 'Answer for B.' }] })),
+    )
+    await svc.fillPendingRecommendations(WS, review.id, {})
+    const recId = (await svc.getForBlock(WS, BLOCK.id))!.recommendations[0]!.id
+
+    const rejected = await svc.rejectRecommendation(WS, review.id, recId)
+    expect(rejected.recommendations[0]!.status).toBe('rejected')
+    expect(rejected.items.find((i) => i.id === b.id)!.status).toBe('open')
+  })
+})
+
 describe('IterativeReviewService (via ClarityReviewService)', () => {
   it('persists to its own document field (clarifiedReport) and threads the investigation', async () => {
     const clarityReviewRepository = fakeRepo<{ id: string; blockId: string }>() as never

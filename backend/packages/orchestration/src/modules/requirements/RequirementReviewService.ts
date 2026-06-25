@@ -1,5 +1,7 @@
 import type {
   Block,
+  ModelProvider,
+  ModelRef,
   RequirementRecommendation,
   RequirementReview,
   RequirementReviewItem,
@@ -145,129 +147,197 @@ export class RequirementReviewService extends IterativeReviewService<
   }
 
   /**
-   * Recommend grounded answers for a batch of findings the human marked "recommend something".
-   * Marks those items `recommend_requested`, then runs the Requirement Writer LLM — grounded on
-   * the block's best-practice fragments (FIRST), the in-repo `spec/`/`tech-spec/`, and web search
-   * — and appends one `ready` recommendation per finding. NOT AI-reviewed; the human decides.
-   * Runs in parallel with incorporation (the driver awaits both). Best-effort: a Writer failure
-   * still leaves the items `recommend_requested` so the human can answer manually.
+   * Prepare a recommendation batch SYNCHRONOUSLY: mark the targeted findings
+   * `recommend_requested` and append one `pending` placeholder recommendation per finding
+   * (snapshotting the source finding by title/detail). The slow Writer LLM does NOT run here —
+   * {@link fillPendingRecommendations} fills the placeholders later, in the durable driver, so
+   * the human is handed straight back to the board. Returns the review with the placeholders so
+   * the SPA shows the "generating…" state immediately. Idempotent per finding: a finding that
+   * already carries a `pending` placeholder is not duplicated.
    */
-  async recommend(
+  async prepareRecommendations(
     workspaceId: string,
     reviewId: string,
     itemIds: string[],
     note?: string,
   ): Promise<RequirementReview> {
     const targetIds = new Set(itemIds)
-    // Mark the targeted findings `recommend_requested` up front in a fresh read-modify-write, so
-    // the marks are durable even if the Writer LLM then fails (the human can still answer manually).
-    const marked = await this.markRecommendRequested(workspaceId, reviewId, targetIds)
-    const block = assertFound(
-      await this.deps.blockRepository.get(workspaceId, marked.blockId),
-      'Block',
-      marked.blockId,
-    )
-    const findings = marked.items.filter(
-      (i) => targetIds.has(i.id) && i.status === 'recommend_requested',
-    )
-    if (findings.length === 0) return marked
-
-    const { modelProvider, ref } = await this.resolveModel(workspaceId, block)
-    const context = await this.gatherContext(workspaceId, block)
-    const fragments = (await this.resolveBlockFragments?.(workspaceId, block.id)) ?? []
-    const grounding = await this.gatherGrounding(workspaceId, block, findings, fragments)
-
-    let suggestions: Map<string, { recommendation: string; fromStandard: string | null }>
-    try {
-      const model = modelProvider.resolve(ref)
-      const result = await generateText({
-        model,
-        system: WRITER_SYSTEM_PROMPT,
-        prompt: buildRecommendationPrompt(context, findings, grounding, note),
-        temperature: 0.2,
-        maxOutputTokens: 6000,
-        // Provider-hosted web search when the model supports it (Anthropic/OpenAI); the
-        // gateway-RAG `webResults` already folded into the prompt cover other providers.
-        ...(providerWebSearchTools(ref.provider)
-          ? { tools: providerWebSearchTools(ref.provider) }
-          : {}),
-        providerOptions: catFactoryObservability({ agentKind: 'requirements-writer', workspaceId }),
-      })
-      suggestions = coerceRecommendations(extractJson(result.text))
-    } catch (e) {
-      throw new ValidationError(
-        `The requirement writer (${ref.provider}:${ref.model}) failed: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
-      )
-    }
-
-    // Re-read fresh: the Writer call above can take several seconds, during which the human may
-    // have answered/dismissed other findings. Append our recommendations onto the LATEST review
-    // rather than upserting the pre-LLM snapshot (which would clobber those concurrent edits).
     const review = assertFound(
       await this.repository.get(workspaceId, reviewId),
       this.entityName,
       reviewId,
     )
     const now = this.deps.clock.now()
-    const fragmentById = new Map(fragments.map((f) => [f.id, f]))
+    const trimmedNote = note?.trim() || null
     const recommendations = [...review.recommendations]
-    for (const finding of findings) {
-      const suggestion = suggestions.get(finding.id)
-      if (!suggestion) continue
-      const standard = suggestion.fromStandard
-        ? fragmentById.get(suggestion.fromStandard)
-        : undefined
+    let changed = false
+    for (const item of review.items) {
+      if (!targetIds.has(item.id) || item.status === 'dismissed') continue
+      if (item.status !== 'recommend_requested') {
+        item.status = 'recommend_requested'
+        item.updatedAt = now
+        changed = true
+      }
+      // Don't queue a second placeholder for a finding the Writer is already working on.
+      const alreadyPending = recommendations.some(
+        (r) =>
+          r.status === 'pending' &&
+          r.sourceFinding.title === item.title &&
+          r.sourceFinding.detail === item.detail,
+      )
+      if (alreadyPending) continue
       recommendations.push({
         id: this.deps.idGenerator.next('rec'),
-        sourceFinding: { title: finding.title, detail: finding.detail },
-        recommendedText: suggestion.recommendation,
-        status: 'ready',
-        note: note?.trim() || null,
-        groundedInFragment: standard ? { id: standard.id, title: standard.title } : null,
+        sourceFinding: { title: item.title, detail: item.detail },
+        recommendedText: '',
+        status: 'pending',
+        note: trimmedNote,
+        groundedInFragment: null,
         createdAt: now,
         updatedAt: now,
       })
+      changed = true
     }
+    if (!changed) return review
     const updated: RequirementReview = { ...review, recommendations, updatedAt: now }
     await this.repository.upsert(workspaceId, updated)
     return updated
   }
 
   /**
-   * Mark the targeted, non-dismissed findings `recommend_requested` in a fresh read-modify-write.
-   * A standalone durable write (not folded into {@link recommend}'s trailing upsert) so the marks
-   * survive a subsequent Writer-LLM failure.
+   * Fill every `pending` recommendation on a review by running the Requirement Writer once per
+   * finding, so progress streams in as `ready / total`. Grounding shared across findings (the
+   * block's best-practice fragments + the in-repo `spec/`/`tech-spec/` excerpts) is gathered
+   * ONCE; only web search runs per finding. Each filled recommendation is persisted and
+   * `onProgress` is invoked with the fresh review, so an open window tracks the count live and
+   * the board's "Recommending…" badge clears the moment the last placeholder settles. A
+   * per-finding Writer failure drops that placeholder and reopens its finding (so the human can
+   * answer manually) rather than wedging the whole batch. Best-effort and re-entrant: a replay
+   * that re-runs it simply finds no `pending` placeholders and produces nothing. Returns the
+   * number of recommendations produced (for the completion notification).
    */
-  private async markRecommendRequested(
+  async fillPendingRecommendations(
     workspaceId: string,
     reviewId: string,
-    targetIds: Set<string>,
-  ): Promise<RequirementReview> {
-    const review = assertFound(
+    opts: { onProgress?: (review: RequirementReview) => Promise<void> } = {},
+  ): Promise<{ produced: number }> {
+    const initial = assertFound(
       await this.repository.get(workspaceId, reviewId),
       this.entityName,
       reviewId,
     )
-    const now = this.deps.clock.now()
-    let changed = false
-    for (const item of review.items) {
-      if (
-        targetIds.has(item.id) &&
-        item.status !== 'dismissed' &&
-        item.status !== 'recommend_requested'
-      ) {
-        item.status = 'recommend_requested'
-        item.updatedAt = now
-        changed = true
+    const pending = initial.recommendations.filter((r) => r.status === 'pending')
+    if (pending.length === 0) return { produced: 0 }
+
+    const block = assertFound(
+      await this.deps.blockRepository.get(workspaceId, initial.blockId),
+      'Block',
+      initial.blockId,
+    )
+    const { modelProvider, ref } = await this.resolveModel(workspaceId, block)
+    const model = modelProvider.resolve(ref)
+    const context = await this.gatherContext(workspaceId, block)
+    const fragments = (await this.resolveBlockFragments?.(workspaceId, block.id)) ?? []
+    const fragmentById = new Map(fragments.map((f) => [f.id, f]))
+    // Shared, per-finding-independent grounding gathered once (repo reads); web search per finding.
+    const sharedSpecExcerpts = await this.gatherSpecExcerpts(workspaceId, block)
+
+    let produced = 0
+    for (const placeholder of pending) {
+      // Re-anchor the placeholder to a LIVE finding (item ids churn across re-reviews; match by
+      // the snapshotted title/detail). Gone → there is nothing to recommend for.
+      const before = assertFound(
+        await this.repository.get(workspaceId, reviewId),
+        this.entityName,
+        reviewId,
+      )
+      const liveFinding = before.items.find(
+        (i) =>
+          i.title === placeholder.sourceFinding.title &&
+          i.detail === placeholder.sourceFinding.detail,
+      )
+      const suggestion = liveFinding
+        ? await this.runWriterForFinding(
+            workspaceId,
+            model,
+            ref,
+            context,
+            liveFinding,
+            placeholder.note ?? undefined,
+            fragments,
+            sharedSpecExcerpts,
+          )
+        : null
+      // Re-read fresh each iteration: the per-finding Writer calls take seconds, during which the
+      // human may have answered/dismissed other findings or accepted an earlier recommendation.
+      const review = assertFound(
+        await this.repository.get(workspaceId, reviewId),
+        this.entityName,
+        reviewId,
+      )
+      const rec = review.recommendations.find((r) => r.id === placeholder.id)
+      if (!rec || rec.status !== 'pending') continue // accepted/rejected/churned away meanwhile
+      const now = this.deps.clock.now()
+      if (suggestion) {
+        const standard = suggestion.fromStandard
+          ? fragmentById.get(suggestion.fromStandard)
+          : undefined
+        rec.recommendedText = suggestion.recommendation
+        rec.groundedInFragment = standard ? { id: standard.id, title: standard.title } : null
+        rec.status = 'ready'
+        rec.updatedAt = now
+        produced += 1
+      } else {
+        // The Writer failed for (or no longer matches) this finding: drop the dead placeholder
+        // and reopen its finding so the human can answer it by hand.
+        review.recommendations = review.recommendations.filter((r) => r.id !== placeholder.id)
+        const item = review.items.find(
+          (i) =>
+            i.title === placeholder.sourceFinding.title &&
+            i.detail === placeholder.sourceFinding.detail,
+        )
+        if (item && item.status === 'recommend_requested') {
+          item.status = 'open'
+          item.updatedAt = now
+        }
       }
-    }
-    if (changed) {
       review.updatedAt = now
       await this.repository.upsert(workspaceId, review)
+      await opts.onProgress?.(review)
     }
-    return review
+    if (produced > 0) await this.notifyRecommendationsReady(workspaceId, block, produced)
+    return { produced }
+  }
+
+  /**
+   * Flip a settled recommendation back to `pending` with a fresh "do it differently" note and
+   * re-mark its source finding `recommend_requested`. The (slow) Writer re-runs later via
+   * {@link fillPendingRecommendations} in the durable driver — the SAME async path as a fresh
+   * batch — so a re-request never blocks the request either. Returns the review (with the
+   * placeholder reset). The source finding for the recommendation must still exist.
+   */
+  async markRecommendationPending(
+    workspaceId: string,
+    reviewId: string,
+    recId: string,
+    note: string,
+  ): Promise<RequirementReview> {
+    return this.mutateRecommendation(workspaceId, reviewId, recId, (rec, review, now) => {
+      rec.status = 'pending'
+      rec.recommendedText = ''
+      rec.groundedInFragment = null
+      rec.note = note.trim() || null
+      const item = review.items.find(
+        (i) => i.title === rec.sourceFinding.title && i.detail === rec.sourceFinding.detail,
+      )
+      if (!item) {
+        throw new ValidationError('The finding this recommendation answers no longer exists')
+      }
+      if (item.status !== 'recommend_requested') {
+        item.status = 'recommend_requested'
+        item.updatedAt = now
+      }
+    })
   }
 
   /**
@@ -293,95 +363,65 @@ export class RequirementReviewService extends IterativeReviewService<
     })
   }
 
-  /** Reject a recommendation (the human will dismiss / answer manually / re-request). */
+  /**
+   * Reject a recommendation and reopen its source finding (status `open`) so the human can
+   * answer it manually — a `recommend_requested` finding hides its answer box, so leaving it
+   * marked would strand the finding with no way to settle it.
+   */
   async rejectRecommendation(
     workspaceId: string,
     reviewId: string,
     recId: string,
   ): Promise<RequirementReview> {
-    return this.mutateRecommendation(workspaceId, reviewId, recId, (rec) => {
+    return this.mutateRecommendation(workspaceId, reviewId, recId, (rec, review, now) => {
       rec.status = 'rejected'
+      const item = review.items.find(
+        (i) => i.title === rec.sourceFinding.title && i.detail === rec.sourceFinding.detail,
+      )
+      if (item && item.status === 'recommend_requested') {
+        item.status = 'open'
+        item.updatedAt = now
+      }
     })
   }
 
-  /**
-   * Re-request a single recommendation with a "do it differently" note: re-runs the Writer for
-   * just that finding and replaces the suggestion text (back to `ready`).
-   */
-  async reRequestRecommendation(
+  /** Run the Writer for one live finding; returns null when it fails (the caller reopens the finding). */
+  private async runWriterForFinding(
     workspaceId: string,
-    reviewId: string,
-    recId: string,
-    note: string,
-  ): Promise<RequirementReview> {
-    const initial = assertFound(
-      await this.repository.get(workspaceId, reviewId),
-      this.entityName,
-      reviewId,
-    )
-    const rec0 = initial.recommendations.find((r) => r.id === recId)
-    if (!rec0) throw new ValidationError(`Recommendation '${recId}' not found`)
-    const item = initial.items.find(
-      (i) => i.title === rec0.sourceFinding.title && i.detail === rec0.sourceFinding.detail,
-    )
-    if (!item) throw new ValidationError('The finding this recommendation answers no longer exists')
-
-    const block = assertFound(
-      await this.deps.blockRepository.get(workspaceId, initial.blockId),
-      'Block',
-      initial.blockId,
-    )
-    const { modelProvider, ref } = await this.resolveModel(workspaceId, block)
-    const context = await this.gatherContext(workspaceId, block)
-    const fragments = (await this.resolveBlockFragments?.(workspaceId, block.id)) ?? []
-    const grounding = await this.gatherGrounding(workspaceId, block, [item], fragments)
-    let suggestions: Map<string, { recommendation: string; fromStandard: string | null }>
+    model: ReturnType<ModelProvider['resolve']>,
+    ref: ModelRef,
+    context: RequirementsContext,
+    finding: RequirementReviewItem,
+    note: string | undefined,
+    fragments: GroundingFragment[],
+    sharedSpecExcerpts: string[],
+  ): Promise<{ recommendation: string; fromStandard: string | null } | null> {
+    const webResults = await this.gatherWebResults(workspaceId, [finding])
+    const grounding: RecommendationGrounding = {
+      fragments,
+      specExcerpts: sharedSpecExcerpts,
+      webResults,
+    }
     try {
-      const model = modelProvider.resolve(ref)
       const result = await generateText({
         model,
         system: WRITER_SYSTEM_PROMPT,
-        prompt: buildRecommendationPrompt(context, [item], grounding, note),
+        prompt: buildRecommendationPrompt(context, [finding], grounding, note),
         temperature: 0.2,
         maxOutputTokens: 6000,
+        // Provider-hosted web search when the model supports it (Anthropic/OpenAI); the
+        // gateway-RAG `webResults` already folded into the prompt cover other providers.
         ...(providerWebSearchTools(ref.provider)
           ? { tools: providerWebSearchTools(ref.provider) }
           : {}),
         providerOptions: catFactoryObservability({ agentKind: 'requirements-writer', workspaceId }),
       })
-      suggestions = coerceRecommendations(extractJson(result.text))
-    } catch (e) {
-      throw new ValidationError(
-        `The requirement writer (${ref.provider}:${ref.model}) failed: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
-      )
+      const suggestions = coerceRecommendations(extractJson(result.text))
+      return suggestions.get(finding.id) ?? null
+    } catch {
+      // Best-effort per finding — a failure drops just this placeholder (the caller reopens it).
+      return null
     }
-    const suggestion = suggestions.get(item.id)
-    // Re-read fresh so concurrent answer/dismiss edits made during the (multi-second) Writer call
-    // aren't clobbered — mutate only this recommendation on the LATEST review.
-    const review = assertFound(
-      await this.repository.get(workspaceId, reviewId),
-      this.entityName,
-      reviewId,
-    )
-    const rec = review.recommendations.find((r) => r.id === recId)
-    if (!rec) throw new ValidationError(`Recommendation '${recId}' not found`)
-    const now = this.deps.clock.now()
-    if (suggestion) {
-      const fragmentById = new Map(fragments.map((f) => [f.id, f]))
-      const standard = suggestion.fromStandard
-        ? fragmentById.get(suggestion.fromStandard)
-        : undefined
-      rec.recommendedText = suggestion.recommendation
-      rec.groundedInFragment = standard ? { id: standard.id, title: standard.title } : null
-    }
-    rec.status = 'ready'
-    rec.note = note.trim() || null
-    rec.updatedAt = now
-    review.updatedAt = now
-    await this.repository.upsert(workspaceId, review)
-    return review
   }
 
   private async mutateRecommendation(
@@ -406,16 +446,11 @@ export class RequirementReviewService extends IterativeReviewService<
   }
 
   /**
-   * Gather the Writer's grounding material: best-practice fragments (passed in), in-repo
-   * `spec/`/`tech-spec/` overviews (via RepoFiles when wired), and gateway-RAG web snippets
-   * (when wired). All best-effort — any source that errors or is unwired is simply omitted.
+   * Read the in-repo `spec/`/`tech-spec/` overviews (via RepoFiles when wired) the Writer
+   * grounds on. Gathered ONCE per batch (finding-independent) and reused across the per-finding
+   * Writer calls. Best-effort — unwired / errors → an empty list.
    */
-  private async gatherGrounding(
-    workspaceId: string,
-    block: Block,
-    findings: RequirementReviewItem[],
-    fragments: GroundingFragment[],
-  ): Promise<RecommendationGrounding> {
+  private async gatherSpecExcerpts(workspaceId: string, block: Block): Promise<string[]> {
     const specExcerpts: string[] = []
     try {
       const ctx = await this.resolveRunRepoContext?.(workspaceId, block.id)
@@ -428,16 +463,57 @@ export class RequirementReviewService extends IterativeReviewService<
     } catch {
       // best-effort grounding
     }
-    let webResults: GroundingWebResult[] = []
-    if (this.webSearch) {
-      try {
-        const query = findings.map((f) => f.title).join('; ')
-        webResults = await this.webSearch(workspaceId, query)
-      } catch {
-        webResults = []
-      }
+    return specExcerpts
+  }
+
+  /**
+   * Gateway-RAG web snippets for a finding (when web search is wired). Run per finding so the
+   * query is targeted. Best-effort — unwired / errors → an empty list.
+   */
+  private async gatherWebResults(
+    workspaceId: string,
+    findings: RequirementReviewItem[],
+  ): Promise<GroundingWebResult[]> {
+    if (!this.webSearch) return []
+    try {
+      const query = findings.map((f) => f.title).join('; ')
+      return await this.webSearch(workspaceId, query)
+    } catch {
+      return []
     }
-    return { fragments, specExcerpts, webResults }
+  }
+
+  /**
+   * Tell people the Requirement Writer finished a recommendation batch (so the human who walked
+   * away from the window is summoned back to accept/reject). Best-effort, mirrors
+   * {@link notifyFindings}; reuses the `requirement_review` notification type (the inbox routes it
+   * to the same review window).
+   */
+  private async notifyRecommendationsReady(
+    workspaceId: string,
+    block: Block,
+    count: number,
+  ): Promise<void> {
+    if (count <= 0 || !this.deps.notificationService) return
+    try {
+      await this.deps.notificationService.raise(workspaceId, {
+        type: 'requirement_review',
+        blockId: block.id,
+        executionId: null,
+        title: `Requirements recommendations: ${block.title}`,
+        body: `The requirement writer prepared ${count} recommendation${
+          count === 1 ? '' : 's'
+        } to review.`,
+        payload: {
+          findingCount: count,
+          ...(block.responsibleProductUserId
+            ? { targetUserId: block.responsibleProductUserId }
+            : {}),
+        },
+      })
+    } catch {
+      // Best-effort: the recommendations are already persisted.
+    }
   }
 
   /** Assemble the block's collected requirements + any linked docs/issues. */

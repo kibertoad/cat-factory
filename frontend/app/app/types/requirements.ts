@@ -50,8 +50,12 @@ export type RequirementReviewStatus =
 /** How a human resolves a review that hit its iteration cap. */
 export type ResolveRequirementsExceededChoice = 'extra-round' | 'proceed' | 'stop-reset'
 
-/** Lifecycle of a Requirement-Writer recommendation. */
-export type RecommendationStatus = 'ready' | 'accepted' | 'rejected'
+/**
+ * Lifecycle of a Requirement-Writer recommendation. `pending` is a placeholder created the
+ * moment the human requests it — the Writer is still producing the suggestion in the background
+ * (the async story); it fills in to `ready` via the `requirements` stream.
+ */
+export type RecommendationStatus = 'pending' | 'ready' | 'accepted' | 'rejected'
 
 /**
  * A Requirement-Writer suggestion for one finding. First-class on the review (survives the

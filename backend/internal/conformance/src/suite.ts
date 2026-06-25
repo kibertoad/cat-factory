@@ -2676,6 +2676,27 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(res.status).toBe(422)
       })
 
+      it('wires the async recommend endpoint and gates it on a configured reviewer', async () => {
+        // Requesting Requirement-Writer recommendations is asynchronous: the route appends
+        // `pending` placeholder recommendations and signals the durable driver to run the Writer
+        // per finding. The route must be mounted on EVERY facade and resolve through the same
+        // execution-service seam. With no live reviewer model wired (the conformance default),
+        // the request is gated with a 409 BEFORE any background work — a deterministic check that
+        // the endpoint is present and routed identically across runtimes (the full Writer loop is
+        // covered by the orchestration unit tests, which a fake model can drive).
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        await app.seedReadyReview(wsId, 'task_login')
+
+        const res = await app.call(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/requirement-review/recommend`,
+          { itemIds: ['rri_seed_task_login'] },
+        )
+        expect(res.status).toBe(409)
+      })
+
       it('passes a companion gate when the rating clears the threshold', async () => {
         // A companion step grades the prior producer; at/above its threshold the run
         // proceeds. `reviewer` is the coder's companion, so ['coder','reviewer'] runs the
