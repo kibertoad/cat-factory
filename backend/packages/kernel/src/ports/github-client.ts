@@ -119,6 +119,24 @@ export interface GitHubIssueDetail {
   body: string
   /** Comments oldest→newest. */
   comments: GitHubIssueComment[]
+  /**
+   * The parent issue this issue is a sub-issue of, as `owner/repo#number`, or null when
+   * it has no parent. Surfaced for the epic-import tree walk. Optional: an adapter that
+   * does not read the sub-issues relationship omits it (treated as null).
+   */
+  parentRef?: string | null
+}
+
+/** A child issue of a parent, from the GitHub sub-issues relationship. */
+export interface GitHubSubIssue {
+  owner: string
+  repo: string
+  number: number
+  title: string
+  /** Workflow state, e.g. `open` / `closed`. */
+  state: string
+  /** Canonical web URL (GitHub `html_url`). */
+  url: string
 }
 
 /** A single hit from searching issues across an installation's repos. */
@@ -243,6 +261,18 @@ export interface GitHubClient {
     ref: GitHubRepoRef,
     issueNumber: number,
   ): Promise<GitHubIssueDetail>
+  /**
+   * List an issue's GitHub-native **sub-issues** (the parent→child relationship),
+   * `GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues`. Returns `[]` when the
+   * issue has none. Used by the epic-import tree walk to pull a parent issue's children
+   * in as board tasks. Optional: a client/runtime that does not implement the sub-issues
+   * API omits it (the importer then treats the issue as having no children).
+   */
+  listSubIssues?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    issueNumber: number,
+  ): Promise<GitHubSubIssue[]>
   /**
    * Search issues visible to the installation by free text. `query` is the raw
    * GitHub search text; the adapter scopes it to issues (`is:issue`) and bounds

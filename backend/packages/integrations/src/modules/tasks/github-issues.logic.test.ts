@@ -5,7 +5,36 @@ import {
   githubIssueUrl,
   parseGitHubIssueExternalId,
   parseGitHubIssueRef,
+  parseIssueDependencyLinks,
 } from './github-issues.logic.js'
+
+describe('parseIssueDependencyLinks', () => {
+  it('parses bare refs against the issue own repo', () => {
+    const body = 'Blocked by #12 and #13\nDepends on #99'
+    expect(parseIssueDependencyLinks(body, 'octo', 'app')).toEqual([
+      { type: 'blockedBy', externalId: 'octo/app#12' },
+      { type: 'blockedBy', externalId: 'octo/app#13' },
+      { type: 'dependsOn', externalId: 'octo/app#99' },
+    ])
+  })
+
+  it('parses cross-repo refs and "blocks"', () => {
+    expect(parseIssueDependencyLinks('Blocks other/repo#7', 'octo', 'app')).toEqual([
+      { type: 'blocks', externalId: 'other/repo#7' },
+    ])
+  })
+
+  it('ignores lines without a recognised phrase and dedupes', () => {
+    const body = 'See #5 for context\nblocked by #5\nBlocked by #5'
+    expect(parseIssueDependencyLinks(body, 'o', 'r')).toEqual([
+      { type: 'blockedBy', externalId: 'o/r#5' },
+    ])
+  })
+
+  it('returns nothing for an empty body', () => {
+    expect(parseIssueDependencyLinks('', 'o', 'r')).toEqual([])
+  })
+})
 
 describe('parseGitHubIssueRef', () => {
   it('parses a full issue URL', () => {

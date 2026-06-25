@@ -162,6 +162,35 @@ async function doImport() {
     importing.value = false
   }
 }
+
+// Spawn the referenced issue as an EPIC: an epic node + a task per child issue (into the
+// chosen container), with dependency edges seeded from the issues' blocked-by/depends-on
+// links. Needs a container for the child tasks.
+async function doSpawnEpic() {
+  const value = ref_.value.trim()
+  if (!value || !source.value || !containerId.value) return
+  importing.value = true
+  try {
+    const { epic, tasks: spawned } = await tasks.spawnEpic(source.value, value, containerId.value)
+    ref_.value = ''
+    ui.closeTaskImport()
+    ui.select(epic.id)
+    toast.add({
+      title: `Spawned epic "${epic.title}"`,
+      description: `${spawned.length} child task(s) created`,
+      icon: 'i-lucide-layers',
+    })
+  } catch (e) {
+    toast.add({
+      title: 'Could not spawn epic',
+      description: e instanceof Error ? e.message : String(e),
+      icon: 'i-lucide-triangle-alert',
+      color: 'error',
+    })
+  } finally {
+    importing.value = false
+  }
+}
 </script>
 
 <template>
@@ -209,7 +238,37 @@ async function doImport() {
           >
             Import
           </UButton>
+          <UButton
+            color="primary"
+            variant="soft"
+            icon="i-lucide-layers"
+            :loading="importing"
+            :disabled="!ref_.trim() || !containerId"
+            :title="
+              containerId
+                ? 'Spawn this epic + its children as a linked task group'
+                : 'Pick a container for the child tasks first'
+            "
+            @click="doSpawnEpic"
+          >
+            As epic
+          </UButton>
         </div>
+
+        <!-- Container for epic children when spawning from a pasted ref (the shared
+             "Create tasks in" selector below covers the search-results case). -->
+        <UFormField
+          v-if="containerItems.length && !freshHits.length && !sourceTasks.length"
+          label="Epic children container"
+          class="w-72"
+        >
+          <USelect
+            v-model="containerId"
+            :items="containerItems"
+            placeholder="Pick a frame or module"
+            class="w-full"
+          />
+        </UFormField>
 
         <!-- Browse: search the tracker by title so an issue can be turned into a
              task without knowing its key. -->

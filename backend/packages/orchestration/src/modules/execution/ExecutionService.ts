@@ -132,7 +132,12 @@ import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import type { ClarityReviewRepository } from '@cat-factory/kernel'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
 import { isDeployStep } from '@cat-factory/integrations'
-import { descendantIds, serviceOf } from '../board/board.logic.js'
+import {
+  dependenciesMet,
+  descendantIds,
+  serviceOf,
+  unmetDependencies,
+} from '../board/board.logic.js'
 import type { BoardService } from '../board/BoardService.js'
 import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
@@ -830,6 +835,12 @@ export class ExecutionService {
     // actionable error before any side effects, so the human knows why the start was refused.
     await this.assertWithinTaskLimit(workspaceId, block)
 
+    // Hard dependency gate: a task cannot start while any block it `dependsOn` is unfinished
+    // (not yet `done`/merged). Enforced server-side so it holds for manual starts, recurring
+    // fires, auto-start propagation and direct API calls alike — the frontend's runnable
+    // check is only a hint. Before any side effects so nothing is torn down on a refusal.
+    await this.assertDependenciesMet(workspaceId, block)
+
     // Mint the activation next: if the credential can't be unlocked, fail before
     // tearing down the block's prior run or creating a new one.
     const executionId = this.idGenerator.next('exec')
@@ -923,6 +934,25 @@ export class ExecutionService {
    * shown as a toast) when the cap is reached. The starting block is excluded from the
    * count (its prior run is about to be replaced).
    */
+  /**
+   * Refuse a task start while any of its dependencies is unfinished. A task may only run
+   * once every block it `dependsOn` has reached `done` (its PR merged). No-ops for
+   * non-task blocks and for tasks with no dependencies. Throws a {@link ConflictError}
+   * (→ 409, shown as a toast) naming the unfinished blockers so the human knows why.
+   */
+  private async assertDependenciesMet(workspaceId: string, block: Block): Promise<void> {
+    if (block.level !== 'task' || block.dependsOn.length === 0) return
+    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    if (dependenciesMet(blocks, block.id)) return
+    const blockers = unmetDependencies(blocks, block.id)
+    const names = blockers.map((b) => `"${b.title}"`).join(', ')
+    throw new ConflictError(
+      `This task is blocked by ${blockers.length} unfinished dependenc${
+        blockers.length === 1 ? 'y' : 'ies'
+      }${names ? ` (${names})` : ''}. Finish them before starting this task.`,
+    )
+  }
+
   private async assertWithinTaskLimit(workspaceId: string, block: Block): Promise<void> {
     const settingsService = this.workspaceSettingsService
     if (!settingsService || block.level !== 'task') return
@@ -3317,7 +3347,59 @@ export class ExecutionService {
     }
     if ((block.level ?? 'frame') === 'task') {
       await this.applyModuleAssignment(workspaceId, blockId)
+      // Propagate to dependents: if this task opted into auto-start, launch every task
+      // that depends on it whose other dependencies are now also done. Best-effort — the
+      // merge already happened, so a dependent that fails to start must never roll it back.
+      if (block.autoStartDependents) {
+        await this.autoStartDependents(workspaceId, blockId).catch(() => {})
+      }
     }
+  }
+
+  /**
+   * After a task with `autoStartDependents` merges, start every task that `dependsOn` it
+   * and whose remaining dependencies are all now `done`. System-initiated (no human
+   * present), so a dependent on an individual-usage model — which needs its owner to
+   * unlock a personal credential per run — is SKIPPED rather than started (it would fault
+   * at dispatch); the human starts it manually. Each dependent is started independently so
+   * one failure (already running, no provider, …) never blocks the rest.
+   */
+  private async autoStartDependents(workspaceId: string, mergedBlockId: string): Promise<void> {
+    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    const dependents = blocks.filter(
+      (b) => b.level === 'task' && b.dependsOn.includes(mergedBlockId),
+    )
+    for (const dependent of dependents) {
+      // All of the dependent's blockers must now be satisfied (not just the one that merged).
+      if (!dependenciesMet(blocks, dependent.id)) continue
+      // Only auto-start a fresh task — never replace a run already in flight or a finished one.
+      if (dependent.status !== 'planned' && dependent.status !== 'ready') continue
+      const pipelineId = await this.resolveDefaultPipelineId(workspaceId, dependent)
+      if (!pipelineId) continue
+      // Skip dependents that would lease an individual-usage credential (can't unlock unattended).
+      const individual = await this.individualVendorsForBlock(workspaceId, dependent.id, pipelineId)
+      if (individual.length > 0) continue
+      try {
+        await this.start(workspaceId, dependent.id, pipelineId, null)
+      } catch {
+        // Already running, no usable provider, still-unmet dep racing, etc. — leave this
+        // dependent for a manual start; the others still get their chance.
+      }
+    }
+  }
+
+  /**
+   * The pipeline id a dependent task should auto-start with: its pinned `pipelineId` when
+   * set, else the workspace's first pipeline (mirrors the board's "Run" default). Null
+   * when no pipeline exists at all.
+   */
+  private async resolveDefaultPipelineId(
+    workspaceId: string,
+    block: Block,
+  ): Promise<string | null> {
+    if (block.pipelineId) return block.pipelineId
+    const pipelines = await this.pipelineRepository.listByWorkspace(workspaceId)
+    return pipelines[0]?.id ?? null
   }
 
   /**

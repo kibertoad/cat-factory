@@ -15,6 +15,9 @@ const svg = ref<SVGSVGElement | null>(null)
 
 type Seg = { id: string; x1: number; y1: number; x2: number; y2: number; done: boolean }
 const segments = ref<Seg[]>([])
+// Epic→member membership links (distinct style from dependency edges).
+type MemberSeg = { id: string; x1: number; y1: number; x2: number; y2: number }
+const memberSegments = ref<MemberSeg[]>([])
 
 // task → its dependencies, both ends being tasks
 const taskDeps = computed(() => {
@@ -24,6 +27,17 @@ const taskDeps = computed(() => {
       const dep = board.getBlock(depId)
       if (dep && dep.level === 'task')
         out.push({ id: `${depId}__${t.id}`, source: depId, target: t.id })
+    }
+  }
+  return out
+})
+
+// epic → each of its member tasks (membership, drawn as a soft violet link).
+const epicLinks = computed(() => {
+  const out: { id: string; source: string; target: string }[] = []
+  for (const e of board.epics) {
+    for (const m of board.epicMembers(e.id)) {
+      out.push({ id: `${e.id}__${m.id}`, source: e.id, target: m.id })
     }
   }
   return out
@@ -81,6 +95,23 @@ function recompute() {
     })
   }
   segments.value = next
+
+  const members: MemberSeg[] = []
+  for (const link of epicLinks.value) {
+    const a = anchorEl(link.source)
+    const b = anchorEl(link.target)
+    if (!a || !b || a === b) continue
+    const ra = a.getBoundingClientRect()
+    const rb = b.getBoundingClientRect()
+    const ax = ra.left + ra.width / 2 - origin.left
+    const ay = ra.top + ra.height / 2 - origin.top
+    const bx = rb.left + rb.width / 2 - origin.left
+    const by = rb.top + rb.height / 2 - origin.top
+    const start = border(ax, ay, ra.width / 2, ra.height / 2, bx, by)
+    const end = border(bx, by, rb.width / 2, rb.height / 2, ax, ay)
+    members.push({ id: link.id, x1: start.x, y1: start.y, x2: end.x, y2: end.y })
+  }
+  memberSegments.value = members
 }
 
 const { pause, resume } = useRafFn(recompute, { immediate: false })
@@ -114,6 +145,20 @@ onBeforeUnmount(pause)
         <path d="M0,0 L10,5 L0,10 z" fill="#64748b" />
       </marker>
     </defs>
+
+    <!-- epic → member membership links (soft violet, no arrowhead) -->
+    <line
+      v-for="s in memberSegments"
+      :key="s.id"
+      :x1="s.x1"
+      :y1="s.y1"
+      :x2="s.x2"
+      :y2="s.y2"
+      stroke="#8b5cf6"
+      :stroke-width="1.5"
+      stroke-dasharray="2 5"
+      :stroke-opacity="0.5"
+    />
 
     <line
       v-for="s in segments"

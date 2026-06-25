@@ -54,6 +54,9 @@ interface IssueResponse {
     priority?: { name?: string } | null
     labels?: string[]
     comment?: { comments?: JiraComment[] }
+    parent?: { key?: string } | null
+    subtasks?: { key?: string }[]
+    issuelinks?: unknown
   }
 }
 
@@ -84,7 +87,8 @@ export class JiraProvider implements TaskSourceProvider {
 
   async fetchTask(credentials: TaskCredentials, externalId: string): Promise<TaskContent> {
     const base = credentials.baseUrl!.replace(/\/+$/, '')
-    const fields = 'summary,description,status,issuetype,assignee,priority,labels,comment'
+    const fields =
+      'summary,description,status,issuetype,assignee,priority,labels,comment,parent,subtasks,issuelinks'
     const url = `${base}/rest/api/3/issue/${encodeURIComponent(externalId)}?fields=${fields}`
     const auth = btoa(`${credentials.accountEmail}:${credentials.apiToken}`)
 
@@ -114,6 +118,21 @@ export class JiraProvider implements TaskSourceProvider {
       body: jiraLogic.adfToMarkdown(c.body),
     }))
 
+    // Direct sub-tasks come back on the issue; an epic's children are a reverse relation,
+    // so fetch them by JQL when the issue is an epic. Best-effort — a failed children query
+    // never fails the import (the epic still lands, just without its children pre-linked).
+    const isEpic = jiraLogic.isJiraEpicType(f.issuetype?.name)
+    const childKeys = new Set<string>(
+      (Array.isArray(f.subtasks) ? f.subtasks : [])
+        .map((s) => s.key)
+        .filter((k): k is string => !!k),
+    )
+    if (isEpic) {
+      for (const k of await this.fetchChildKeys(credentials, json.key).catch(() => [])) {
+        childKeys.add(k)
+      }
+    }
+
     return {
       externalId: json.key,
       url: `${base}/browse/${json.key}`,
@@ -125,7 +144,31 @@ export class JiraProvider implements TaskSourceProvider {
       labels: Array.isArray(f.labels) ? f.labels : [],
       description: jiraLogic.adfToMarkdown(f.description),
       comments,
+      isEpic,
+      parentExternalId: f.parent?.key ?? null,
+      childExternalIds: [...childKeys],
+      links: jiraLogic.mapJiraIssueLinks(f.issuelinks),
     }
+  }
+
+  /** List an epic's / parent's child issue keys via JQL (used by the epic-import walk). */
+  private async fetchChildKeys(credentials: TaskCredentials, key: string): Promise<string[]> {
+    const base = credentials.baseUrl!.replace(/\/+$/, '')
+    atlassianLogic.assertSafeAtlassianBaseUrl(base)
+    const jql = encodeURIComponent(jiraLogic.buildJiraChildrenJql(key))
+    const url = `${base}/rest/api/3/search/jql?jql=${jql}&fields=summary&maxResults=100`
+    const auth = btoa(`${credentials.accountEmail}:${credentials.apiToken}`)
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        authorization: `Basic ${auth}`,
+        accept: 'application/json',
+        'user-agent': USER_AGENT,
+      },
+    })
+    if (!res.ok) return []
+    const json = (await res.json().catch(() => null)) as { issues?: { key?: string }[] } | null
+    return (json?.issues ?? []).map((i) => i.key).filter((k): k is string => !!k)
   }
 
   /**

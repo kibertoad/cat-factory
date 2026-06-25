@@ -52,5 +52,62 @@ export function descendantIds(blocks: Block[], rootId: string): Set<string> {
 export function canReparent(childLevel: BlockLevel, parent: Block): boolean {
   if (childLevel === 'task') return parent.level === 'frame' || parent.level === 'module'
   if (childLevel === 'module') return parent.level === 'frame'
+  // An epic may optionally be placed under a service/module (or live top-level); it is a
+  // grouping node, never a container, so nothing reparents INTO it.
+  if (childLevel === 'epic') return parent.level === 'frame' || parent.level === 'module'
   return false // frames are not nested
+}
+
+/** Tasks that belong to an epic via their `epicId` membership link. */
+export function epicMembers(blocks: Block[], epicId: string): Block[] {
+  return blocks.filter((b) => b.epicId === epicId)
+}
+
+/**
+ * Whether adding the edge "`targetId` dependsOn `sourceId`" would close a cycle in the
+ * dependency graph — i.e. `sourceId` already (transitively) depends on `targetId`. A DFS
+ * from the source over existing `dependsOn` edges that reaches the target means the new
+ * edge would make the graph cyclic, so the caller must reject it. Returns false for a
+ * self-edge (the caller rejects that separately with a clearer message).
+ */
+export function wouldCreateCycle(blocks: Block[], targetId: string, sourceId: string): boolean {
+  if (targetId === sourceId) return false
+  const byId = new Map(blocks.map((b) => [b.id, b]))
+  const seen = new Set<string>()
+  const stack = [sourceId]
+  while (stack.length) {
+    const id = stack.pop() as string
+    if (id === targetId) return true
+    if (seen.has(id)) continue
+    seen.add(id)
+    const node = byId.get(id)
+    if (node) stack.push(...node.dependsOn)
+  }
+  return false
+}
+
+/**
+ * Whether every dependency of `taskId` is satisfied (each `dependsOn` block is `done`).
+ * A missing dependency block (e.g. deleted out of band) is treated as satisfied — the
+ * engine never blocks forever on an edge it can't resolve. The block's own status is
+ * irrelevant; this asks only about its blockers.
+ */
+export function dependenciesMet(blocks: Block[], taskId: string): boolean {
+  const byId = new Map(blocks.map((b) => [b.id, b]))
+  const task = byId.get(taskId)
+  if (!task) return true
+  return task.dependsOn.every((depId) => {
+    const dep = byId.get(depId)
+    return !dep || dep.status === 'done'
+  })
+}
+
+/** The unfinished blockers of `taskId` (dependencies not yet `done`), for error messages. */
+export function unmetDependencies(blocks: Block[], taskId: string): Block[] {
+  const byId = new Map(blocks.map((b) => [b.id, b]))
+  const task = byId.get(taskId)
+  if (!task) return []
+  return task.dependsOn
+    .map((depId) => byId.get(depId))
+    .filter((b): b is Block => !!b && b.status !== 'done')
 }

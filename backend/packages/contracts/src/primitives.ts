@@ -26,7 +26,14 @@ export const blockStatusSchema = v.picklist([
 ])
 export type BlockStatus = v.InferOutput<typeof blockStatusSchema>
 
-export const blockLevelSchema = v.picklist(['frame', 'module', 'task'])
+/**
+ * A block's place in the board hierarchy. `frame`/`module`/`task` form the
+ * structural containment tree (`parentId`); `epic` is a NON-structural grouping
+ * node — it groups tasks (which may live under different modules/services) via
+ * their `epicId` membership link, not via `parentId`, so deleting an epic never
+ * deletes its member tasks.
+ */
+export const blockLevelSchema = v.picklist(['frame', 'module', 'task', 'epic'])
 export type BlockLevel = v.InferOutput<typeof blockLevelSchema>
 
 /**

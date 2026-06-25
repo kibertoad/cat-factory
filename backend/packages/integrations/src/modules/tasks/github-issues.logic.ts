@@ -1,4 +1,8 @@
-import type { TaskSearchRepoScope, TaskSourceDescriptor } from '@cat-factory/kernel'
+import type {
+  TaskDependencyLink,
+  TaskSearchRepoScope,
+  TaskSourceDescriptor,
+} from '@cat-factory/kernel'
 
 // GitHub-issues task-source pure logic, kept out of the worker so it is
 // unit-testable without a live API: parsing an issue reference out of user input
@@ -74,6 +78,53 @@ export function parseGitHubIssueExternalId(externalId: string): GitHubIssueExter
 /** The canonical web URL for an issue external id. */
 export function githubIssueUrl(id: GitHubIssueExternalId): string {
   return `https://github.com/${id.owner}/${id.repo}/issues/${id.number}`
+}
+
+// Dependency-reference phrases recognised in a GitHub issue body. GitHub has no native
+// "blocked by"/"depends on" field, so the convention is a line like `Blocked by #12` or
+// `Depends on owner/repo#34`. We map each phrase to a normalized link direction.
+const DEP_PHRASES: { re: RegExp; type: TaskDependencyLink['type'] }[] = [
+  { re: /\bblocked\s+by\b/i, type: 'blockedBy' },
+  { re: /\bdepends?\s+on\b/i, type: 'dependsOn' },
+  { re: /\bblocks\b/i, type: 'blocks' },
+]
+
+/**
+ * Parse dependency references out of a GitHub issue body. Scans line by line for a
+ * recognised phrase ("blocked by", "depends on", "blocks") followed by one or more issue
+ * references — a bare `#123` (resolved against the issue's own repo) or a cross-repo
+ * `owner/repo#123`. Returns normalized {@link TaskDependencyLink}s with canonical
+ * `owner/repo#number` external ids. Lenient by design: anything it doesn't recognise is
+ * simply skipped (GitHub bodies are free-form), and `relates` is never inferred here.
+ */
+export function parseIssueDependencyLinks(
+  body: string,
+  contextOwner: string,
+  contextRepo: string,
+): TaskDependencyLink[] {
+  if (!body) return []
+  const out: TaskDependencyLink[] = []
+  const seen = new Set<string>()
+  // Match `owner/repo#123` or a bare `#123`.
+  const refRe = new RegExp(`(?:(${SEG})/(${SEG}))?#(\\d+)`, 'g')
+  for (const rawLine of body.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line) continue
+    const phrase = DEP_PHRASES.find((p) => p.re.test(line))
+    if (!phrase) continue
+    refRe.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = refRe.exec(line)) !== null) {
+      const owner = m[1] ?? contextOwner
+      const repo = m[2] ?? contextRepo
+      const externalId = githubIssueExternalId({ owner, repo, number: Number(m[3]) })
+      const key = `${phrase.type}:${externalId}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ type: phrase.type, externalId })
+    }
+  }
+  return out
 }
 
 /**

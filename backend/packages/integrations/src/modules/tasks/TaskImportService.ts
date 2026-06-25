@@ -1,4 +1,4 @@
-import type { Clock, TaskSearchRepoScope } from '@cat-factory/kernel'
+import type { Clock, TaskContent, TaskSearchRepoScope } from '@cat-factory/kernel'
 import type { TaskCredentials, TaskSourceProvider, TaskSourceRegistry } from '@cat-factory/kernel'
 import type { TaskRecord, TaskRepository } from '@cat-factory/kernel'
 import type { SourceTask, TaskSearchResult, TaskSourceKind } from '@cat-factory/kernel'
@@ -73,6 +73,20 @@ export class TaskImportService {
 
   /** Fetch an issue (by key or URL) and upsert its projection; returns the issue. */
   async import(workspaceId: string, source: TaskSourceKind, ref: string): Promise<SourceTask> {
+    return (await this.importDetailed(workspaceId, source, ref)).task
+  }
+
+  /**
+   * As {@link import}, but also returns the provider's full {@link TaskContent} — including
+   * the transient hierarchy/dependency fields (isEpic / parent / children / links) that
+   * the projection drops. The epic-spawn import uses these to build the board graph; the
+   * persisted projection still backs agent-context + list rendering.
+   */
+  async importDetailed(
+    workspaceId: string,
+    source: TaskSourceKind,
+    ref: string,
+  ): Promise<{ task: SourceTask; content: TaskContent }> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     const provider = this.requireProvider(source)
     const externalId = provider.parseRef(ref)
@@ -103,7 +117,7 @@ export class TaskImportService {
       deletedAt: null,
     }
     await this.deps.taskRepository.upsert(record)
-    return toSourceTask(record)
+    return { task: toSourceTask(record), content }
   }
 
   /**
