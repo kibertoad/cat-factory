@@ -21,6 +21,7 @@ import {
 import { isLocalRunner, resolveInstanceTypeId } from '@cat-factory/contracts'
 import {
   type AgentRouting,
+  coerceBlueprintService,
   composeBlockSystemPrompt,
   FINAL_ANSWER_IN_REPLY,
   isReadOnlyAgentKind,
@@ -32,6 +33,7 @@ import {
 import type { AgentStepSpec } from '@cat-factory/kernel'
 import { ModelRouter } from './ModelRouter.js'
 import {
+  BLUEPRINTS_AGENT_KIND,
   CI_FIXER_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
   FIXER_AGENT_KIND,
@@ -307,6 +309,12 @@ const MERGER_SYSTEM_PROMPT =
   'if it does). Be conservative. Respond with ONLY a JSON object of shape ' +
   '{"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"} — no prose, no code fences. ' +
   FINAL_ANSWER_IN_REPLY
+
+/** Compact shape hint fed to the structured-output repair call for the blueprint tree. */
+const BLUEPRINT_SHAPE_HINT =
+  'Expected a service tree: {"type": string, "name": string, "summary": string, ' +
+  '"references": string[], "modules": [{"name": string, "summary": string, ' +
+  '"references": string[]}]}.'
 
 /** Compact shape hint fed to the structured-output repair call for the merger assessment. */
 const MERGE_ASSESSMENT_SHAPE_HINT =
@@ -800,24 +808,6 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     if (migrated) return migrated
 
     switch (context.agentKind) {
-      // The Blueprinter step commits the regenerated `blueprints/` folder onto an
-      // existing branch (the earlier `coder` step's PR branch when present, else the
-      // repo's default branch) — never a fresh branch / new PR. Its body targets the
-      // harness `/blueprint` endpoint and returns the decomposition tree.
-      case 'blueprints':
-        return {
-          kind: 'blueprint',
-          body: {
-            ...common,
-            systemPrompt: BLUEPRINT_SYSTEM_PROMPT,
-            instructions:
-              'Map (or update) this repository into the canonical service → modules ' +
-              'blueprint, anchored to real file/directory references.',
-            branch: prBranch ?? repo.baseBranch,
-            mode: prBranch ? 'update' : 'create',
-          },
-        }
-
       // The spec-writer commits the regenerated `spec/` folder onto the implementation
       // branch — the earlier `coder` step's PR branch when present, else the
       // deterministic `cat-factory/<blockId>` the coder WILL resume (created from base if
@@ -1071,6 +1061,25 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     const { repo } = parts
     const prBranch = context.block.pullRequest?.branch
     switch (context.agentKind) {
+      // The Blueprinter maps the repo into the service → modules tree. It now runs as a
+      // read-only structured explore (clone the PR branch when present, else the default
+      // branch — exactly its old `prBranch ?? baseBranch` clone), returning ONLY the tree
+      // as JSON; the deterministic render + commit of the `blueprints/` artifact that used
+      // to live in the harness `/blueprint` handler is the backend `blueprintPostOp` (run
+      // from ExecutionService), and `toRunResult` coerces the JSON into `blueprintService`
+      // for the board reconcile + that post-op.
+      case BLUEPRINTS_AGENT_KIND:
+        return this.buildRegisteredAgentBody(
+          context,
+          parts,
+          {
+            surface: 'container-explore',
+            clone: { branch: 'pr' },
+            output: { kind: 'structured', shapeHint: BLUEPRINT_SHAPE_HINT },
+          },
+          BLUEPRINT_SYSTEM_PROMPT,
+          blueprintUserPrompt(),
+        )
       // In-place fixers: clone the PR head branch, push fixes back onto it (no new PR);
       // a no-op run is a clean non-event (the gate/loop re-checks the real signal).
       case CI_FIXER_AGENT_KIND:
@@ -1173,6 +1182,18 @@ function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResul
   // Any other kind (a registered custom kind) surfaces the raw JSON as `custom` for its
   // post-op to coerce/render from.
   if (result.custom !== undefined) {
+    // The migrated Blueprinter returns its service tree as `custom`; coerce it into the
+    // `blueprintService` channel the engine reconciles onto the board and the
+    // `blueprintPostOp` renders + commits from (exactly what the harness `/blueprint`
+    // handler used to return). A nameless/garbage tree coerces to null ⇒ left unset (no
+    // board reconcile, no commit), same as the old conservative coercion.
+    if (agentKind === BLUEPRINTS_AGENT_KIND) {
+      const service = coerceBlueprintService(result.custom, '')
+      return {
+        output: result.summary?.trim() || 'Service blueprint updated.',
+        ...(service ? { blueprintService: service } : {}),
+      }
+    }
     if (agentKind === MERGER_AGENT_KIND) {
       return {
         output: result.summary?.trim() || 'Pull request assessed.',
@@ -1321,6 +1342,26 @@ function coerceOnCallAssessment(raw: unknown, summary: string | undefined): unkn
     rationale: coerceRationale(o.rationale, summary),
     evidence,
   }
+}
+
+/**
+ * The Blueprinter's task prompt. The agent now reads any existing blueprint from its own
+ * read-only checkout (the harness no longer pre-injects the baseline tree), so the prompt
+ * tells it to read `blueprints/` and update-or-create, then return the complete tree as
+ * JSON. The backend `blueprintPostOp` renders + commits the artifact from that tree.
+ */
+function blueprintUserPrompt(): string {
+  return [
+    'Map this repository into the canonical service → modules blueprint, anchored to real ' +
+      'file/directory references.',
+    '',
+    'If a blueprint already exists in the repository (read `blueprints/blueprint.json` and ' +
+      '`blueprints/overview.md`), UPDATE it to reflect the current code: keep accurate ' +
+      'modules, add new ones, and refine summaries + references. Otherwise create it from ' +
+      'scratch. Return the COMPLETE tree (not a diff).',
+    '',
+    'Respond with ONLY the JSON object for the service tree — no prose, no code fences.',
+  ].join('\n')
 }
 
 /**

@@ -28,6 +28,7 @@ import {
   type OnCallAssessment,
 } from '@cat-factory/contracts'
 import {
+  blueprintPostOp,
   companionFor,
   companionTargets,
   isCompanionKind,
@@ -37,6 +38,7 @@ import {
   runRepoOps,
   TASK_ESTIMATOR_AGENT_KIND,
 } from '@cat-factory/agents'
+import type { RepoOp } from '@cat-factory/kernel'
 import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
 import { validatePipelineShape } from '../pipelines/pipelineShape.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
@@ -73,6 +75,7 @@ import {
   TRACKER_AGENT_KIND,
   ANALYSIS_AGENT_KIND,
   TESTER_AGENT_KIND,
+  BLUEPRINTS_AGENT_KIND,
 } from './ci.logic.js'
 import {
   POST_RELEASE_HEALTH_AGENT_KIND,
@@ -2115,8 +2118,9 @@ export class ExecutionService {
     isFinalStep: boolean,
     result: AgentRunResult,
   ): Promise<void> {
-    const ops = registeredPostOps(step.agentKind)
-    if (ops.length === 0) return
+    const registered = registeredPostOps(step.agentKind)
+    const builtIn = this.builtInPostOps(step.agentKind)
+    if (registered.length === 0 && builtIn.length === 0) return
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return
     const runRepo = await this.resolveRunRepo(workspaceId, block.id)
@@ -2128,12 +2132,45 @@ export class ExecutionService {
       isFinalStep,
       block,
     )
-    const branch = await this.resolveRepoOpBranch(
-      registeredAgentStep(step.agentKind),
-      block,
-      runRepo,
-    )
-    await runRepoOps(ops, { repo: runRepo.repo, context, branch, result })
+    // Registered (custom) kinds resolve their branch from their declared clone target.
+    if (registered.length > 0) {
+      const branch = await this.resolveRepoOpBranch(
+        registeredAgentStep(step.agentKind),
+        block,
+        runRepo,
+      )
+      await runRepoOps(registered, { repo: runRepo.repo, context, branch, result })
+    }
+    // Built-in (migrated) kinds resolve their branch to MATCH their container dispatch
+    // exactly (see {@link builtInRepoOpBranch}), which differs from the generic clone
+    // resolution for the no-PR case — so the post-op commits where the agent read.
+    if (builtIn.length > 0) {
+      const branch = this.builtInRepoOpBranch(step.agentKind, block, runRepo)
+      await runRepoOps(builtIn, { repo: runRepo.repo, context, branch, result })
+    }
+  }
+
+  /**
+   * The BUILT-IN (non-registry) post-ops for a migrated built-in kind, keyed by agent
+   * kind — the deterministic render + commit lifted out of the executor-harness. Kept
+   * OUT of the agent-kind registry on purpose: registering the built-ins would leak them
+   * into `customAgentKinds` / the SPA palette. Empty for every other kind.
+   */
+  private builtInPostOps(agentKind: string): RepoOp[] {
+    return agentKind === BLUEPRINTS_AGENT_KIND ? [blueprintPostOp] : []
+  }
+
+  /**
+   * The branch a built-in kind's post-op reads/commits, resolved to MATCH the kind's
+   * container dispatch (so the post-op commits onto exactly the branch the explore agent
+   * cloned). Blueprints clones the PR branch when one is open, else the repo's default
+   * branch — so the initial bootstrap map lands directly on the default branch, mirroring
+   * {@link ContainerAgentExecutor}'s `pr`-clone resolution (`prBranch ?? baseBranch`).
+   * Deliberately NOT {@link resolveRepoOpBranch}, whose `pr` case ensures a work branch for
+   * the no-PR case — correct for a committing CUSTOM kind, wrong for the blueprint.
+   */
+  private builtInRepoOpBranch(_agentKind: string, block: Block, runRepo: RunRepoContext): string {
+    return block.pullRequest?.branch ?? runRepo.baseBranch
   }
 
   /**

@@ -2,7 +2,7 @@
 
 exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > blueprints 1`] = `
 {
-  "kind": "blueprint",
+  "kind": "agent",
   "ref": {
     "jobId": "ex_1-blueprints",
     "runId": "ex_1",
@@ -12,10 +12,13 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > blueprints
     "ghToken": "GH-TOKEN",
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
-    "instructions": "Map (or update) this repository into the canonical service → modules blueprint, anchored to real file/directory references.",
     "jobId": "ex_1-blueprints",
-    "mode": "create",
+    "mode": "explore",
     "model": "@cf/test/model",
+    "output": {
+      "kind": "structured",
+      "shapeHint": "Expected a service tree: {"type": string, "name": string, "summary": string, "references": string[], "modules": [{"name": string, "summary": string, "references": string[]}]}.",
+    },
     "proxyBaseUrl": "https://proxy.test/v1",
     "repo": {
       "baseBranch": "main",
@@ -25,6 +28,20 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > blueprints
     },
     "sessionToken": "SESSION-TOKEN",
     "systemPrompt": "You are a Domain-Driven Design architect mapping this repository. Decompose it into ONE top-level service and the modules inside it, where each module is a DOMAIN — a cohesive area of the BUSINESS, in the language of the problem space (a DDD bounded context / aggregate / subdomain). Name modules after business concepts, not technical layers. A module MUST represent a business capability or domain model (e.g. Billing, Catalog, Ordering, Identity), NOT a technical layer or shape: "api", "routes", "controllers", "utils", "helpers", "lib", "common", "config", "types", "models", "db" and the like are NOT domains and MUST NOT be modules. Group the genuinely non-business, technical/cross-cutting plumbing (persistence wiring, HTTP/transport, logging, configuration, auth middleware, build/deploy, shared utilities) into a SINGLE module named "infrastructure" rather than scattering it into many technical modules. Prefer organising code by domain (the ubiquitous language) over organising by file type. Anchor every node to the codebase with explicit repo-relative file/directory references. Keep names short and descriptive. Respond with ONLY a JSON object of shape {"type","name","summary","references":[],"modules":[{"name","summary","references":[]}]} — no prose, no code fences. Your deliverable is the text of your FINAL reply. Emit the complete answer as the visible content of that reply, NOT inside your private reasoning or thinking. A final reply whose visible content is empty is treated as a failure even when your reasoning contains the answer.",
+    "userPrompt": "Map this repository into the canonical service → modules blueprint, anchored to real file/directory references.
+
+If a blueprint already exists in the repository (read \`blueprints/blueprint.json\` and \`blueprints/overview.md\`), UPDATE it to reflect the current code: keep accurate modules, add new ones, and refine summaries + references. Otherwise create it from scratch. Return the COMPLETE tree (not a diff).
+
+Respond with ONLY the JSON object for the service tree — no prose, no code fences.",
+    "webSearch": true,
+    "webToolsGuidance": "
+
+## Web search (use sparingly)
+
+You have \`web_search\` (titled result snippets for a query) and \`web_fetch\` (read a URL as text). Use them mainly to verify a fact that genuinely changes — a library version, an API, a recent breaking change, a security advisory — when the repository itself can't answer it. Prefer first-party documentation, and
+cite the source URL when a decision rests on what you find. Do not search for anything
+already in the checkout or the context you were given, and don't let searching replace
+reading the code.",
   },
 }
 `;
