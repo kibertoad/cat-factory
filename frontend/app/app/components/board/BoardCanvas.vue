@@ -12,7 +12,7 @@ import { readDndPayload, blockIdFromEvent } from '~/utils/dnd'
 import { BOARD_FLOW_ID } from '~/composables/useBoardFlow'
 import { useTaskExpansion } from '~/composables/useTaskExpansion'
 import { useFrameExpansion } from '~/composables/useFrameExpansion'
-import { computeDisplacement } from '~/utils/boardDisplacement'
+import { computeDisplacement, type Offset } from '~/utils/boardDisplacement'
 import { lodAtLeast } from '~/composables/useSemanticZoom'
 
 const board = useBoardStore()
@@ -31,6 +31,17 @@ const { onNodeDragStop, onViewportChange, screenToFlowCoordinate, viewport, setV
 const boardEl = ref<HTMLElement | null>(null)
 useTaskExpansion(boardEl)
 useFrameExpansion(boardEl)
+
+// Last cursor position over the board (client coords), or null when the pointer is
+// off the board. Compensation anchors on the service under the cursor so zooming in
+// keeps you on the service you were hovering, not whichever one is nearest centre.
+let lastPointer: { x: number; y: number } | null = null
+function onPointerMove(e: PointerEvent) {
+  lastPointer = { x: e.clientX, y: e.clientY }
+}
+function onPointerLeave() {
+  lastPointer = null
+}
 
 // Only frames are board nodes. Dependencies live on tasks (rendered inside the
 // frames), so there are no frame-to-frame edges on the canvas.
@@ -166,6 +177,81 @@ watch(
   },
 )
 
+// The on-screen point compensation should hold steady, in flow units: the cursor
+// when it's over the board (so zoom-to-cursor keeps you on the hovered service),
+// else the viewport centre.
+function anchorFlowPoint(rect: DOMRect, vp: { x: number; y: number; zoom: number }) {
+  const rx = lastPointer ? lastPointer.x - rect.left : rect.width / 2
+  const ry = lastPointer ? lastPointer.y - rect.top : rect.height / 2
+  return { x: (rx - vp.x) / vp.zoom, y: (ry - vp.y) / vp.zoom }
+}
+
+// The frame nearest the anchor point, in the displaced layout described by `offsets`
+// (the rect containing the point, else the closest by centre distance).
+function frameAnchorId(offsets: Map<string, Offset>, cx: number, cy: number): string | null {
+  let anchorId: string | null = null
+  let best = Infinity
+  for (const b of board.frames) {
+    const o = offsets.get(b.id) ?? { dx: 0, dy: 0 }
+    const x = b.position.x + o.dx
+    const y = b.position.y + o.dy
+    let w = FRAME_COLLAPSED_W
+    let h = FRAME_COLLAPSED_H
+    if (frameExpanded(b.id)) {
+      const c = board.containerSize(b.id)
+      w = c.w + FRAME_CHROME_W
+      h = c.h + FRAME_CHROME_H
+    }
+    if (cx >= x && cx <= x + w && cy >= y && cy <= y + h) return b.id
+    const d = (x + w / 2 - cx) ** 2 + (y + h / 2 - cy) ** 2
+    if (d < best) {
+      best = d
+      anchorId = b.id
+    }
+  }
+  return anchorId
+}
+
+// Keep the service under the camera visually put when compressed space shifts it.
+// Sticky expansion (see useFrameExpansion) already stops the scroll-RIGHT snap: a
+// frame you've passed never collapses, so the room reserved to a navigated frame's
+// left can't vanish. This handles the mirror case (scrolling LEFT, a frame entering
+// from the left edge expands rightward and shoves the on-screen content right): we pan
+// the camera by the same displacement delta at the frame under the viewport centre,
+// so it stays put and the band shows zero on-screen snap. Sticky grants make this
+// oscillation-free: the compensating pan can only reveal frames further out (which
+// push their own right neighbours off-screen, never the anchor), never collapse one.
+let prevOffsets = new Map<string, Offset>()
+let prevWasClose = false
+watch(frameOffsets, (offsets) => {
+  const isClose = lodAtLeast(ui.lod, 'close')
+  // Only compensate for shifts WHILE staying in the expand band. The band-entry
+  // baseline (prevWasClose flips true here, no pan this tick) and the band-exit
+  // collapse (handled by the zoom-out recentre) are deliberately skipped.
+  if (!isClose || !prevWasClose) {
+    prevOffsets = offsets
+    prevWasClose = isClose
+    return
+  }
+  const el = boardEl.value
+  const vp = viewport.value
+  if (el && vp && board.frames.length && prevOffsets.size) {
+    const { x: cx, y: cy } = anchorFlowPoint(el.getBoundingClientRect(), vp)
+    const anchorId = frameAnchorId(prevOffsets, cx, cy)
+    if (anchorId) {
+      const prev = prevOffsets.get(anchorId) ?? { dx: 0, dy: 0 }
+      const next = offsets.get(anchorId) ?? { dx: 0, dy: 0 }
+      const ddx = next.dx - prev.dx
+      const ddy = next.dy - prev.dy
+      if (ddx !== 0 || ddy !== 0) {
+        void setViewport({ x: vp.x - ddx * vp.zoom, y: vp.y - ddy * vp.zoom, zoom: vp.zoom })
+      }
+    }
+  }
+  prevOffsets = offsets
+  prevWasClose = isClose
+})
+
 const nodes = computed(() => [
   ...board.frames.map((b) => {
     const o = offsetOf(b.id)
@@ -271,7 +357,14 @@ async function onDrop(event: DragEvent) {
 </script>
 
 <template>
-  <div ref="boardEl" class="relative h-full w-full" @drop="onDrop" @dragover="onDragOver">
+  <div
+    ref="boardEl"
+    class="relative h-full w-full"
+    @drop="onDrop"
+    @dragover="onDragOver"
+    @pointermove="onPointerMove"
+    @pointerleave="onPointerLeave"
+  >
     <VueFlow
       :id="BOARD_FLOW_ID"
       :nodes="nodes"

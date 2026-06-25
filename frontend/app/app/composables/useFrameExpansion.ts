@@ -30,11 +30,15 @@ function sameSet(a: Set<string>, b: Set<string>) {
  * across it: scrolling drifted its anchor off-centre, a neighbour won the greedy
  * pass, and the overlapping footprint denied the frame you were navigating.
  *
- * Testing visibility with the frame's *expanded* live rect (its full card while
- * granted) is what keeps it expanded while any part of it is still on screen, so
- * you can pan across the whole service without it collapsing. A frame's own
- * expansion never moves the frame (displacement excludes self), so granting every
- * visible frame can't oscillate.
+ * The grant is **sticky within the close band**: a frame that has expanded stays
+ * granted even after it scrolls off-screen, until you actually zoom back out (the
+ * clear below). Were it dropped the instant it left the viewport, the rightward room
+ * compressed space had reserved for it would vanish, and the service you'd scrolled
+ * *into* would snap left under the fixed camera — the very "thrown to the right" jump
+ * this gate exists to prevent. Sticky keeps the expanded set growing-only while
+ * zoomed in, so on-screen displacement never shrinks and grants never toggle (so the
+ * gate can't oscillate). A frame's own expansion never moves the frame (displacement
+ * excludes self).
  *
  * Writes the permitted id set into the `frameExpansion` store; `ui.isFrameExpanded`
  * reads it. Manually-expanded frames bypass this gate entirely (see the store).
@@ -58,9 +62,14 @@ export function useFrameExpansion(container: Ref<HTMLElement | null>) {
     const view = container.value?.getBoundingClientRect()
     if (!view) return
 
-    // Grant every frame whose card currently overlaps the board viewport. The
-    // canvas spaces the expanded frames apart, so there's no overlap to resolve.
+    // Grant every frame whose card currently overlaps the board viewport, and KEEP
+    // the ones already granted this zoom session (sticky — see the doc comment), so
+    // the reserved space to a navigated frame's left never collapses out from under
+    // the camera. The canvas spaces the expanded frames apart, so there's no overlap
+    // to resolve. Stale ids (deleted frames) are pruned so the set can't grow forever.
+    const ids = new Set(board.frames.map((f) => f.id))
     const next = new Set<string>()
+    for (const id of store.allowed) if (ids.has(id)) next.add(id)
     for (const f of board.frames) {
       const rect = rectOf(f.id)
       if (rect && intersects(rect, view)) next.add(f.id)
