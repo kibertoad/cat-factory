@@ -96,6 +96,9 @@ export const useUiStore = defineStore('ui', () => {
   // today, pluggable). NB: distinct from `observabilityInstanceId` below, which is the
   // LLM per-call observability panel.
   const observabilityConnectionOpen = ref(false)
+  // Infrastructure provider connect panels (ephemeral-environment provider + self-hosted
+  // runner pool). One panel renders whichever kind is open; null ⇒ closed.
+  const providerConnectionKind = ref<'environment' | 'runner-pool' | null>(null)
   const modelConfigOpen = ref(false)
   // LLM-vendor subscription credentials (the token pool powering the Claude Code
   // / Codex harnesses).
@@ -341,6 +344,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeObservabilityConnection() {
     observabilityConnectionOpen.value = false
   }
+  function openProviderConnection(kind: 'environment' | 'runner-pool') {
+    providerConnectionKind.value = kind
+  }
+  function closeProviderConnection() {
+    providerConnectionKind.value = null
+  }
   function openModelConfig() {
     modelConfigOpen.value = true
   }
@@ -455,6 +464,7 @@ export const useUiStore = defineStore('ui', () => {
     workspaceSettingsOpen,
     workspaceSettingsTab,
     observabilityConnectionOpen,
+    providerConnectionKind,
     modelConfigOpen,
     vendorCredentialsOpen,
     localModelsOpen,
@@ -514,6 +524,8 @@ export const useUiStore = defineStore('ui', () => {
     setWorkspaceSettingsTab,
     openObservabilityConnection,
     closeObservabilityConnection,
+    openProviderConnection,
+    closeProviderConnection,
     openModelConfig,
     closeModelConfig,
     openVendorCredentials,

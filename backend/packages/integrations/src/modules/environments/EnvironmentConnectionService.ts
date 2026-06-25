@@ -16,7 +16,7 @@ import type {
 import { ConflictError, STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
-import { assertSafeEnvironmentUrl } from './environments.logic.js'
+import { assertSafeEnvironmentUrl, missingRequiredConfigKeys } from './environments.logic.js'
 
 // EnvironmentConnectionService: owns the binding between a workspace and an
 // environment provider. Registration stores the validated manifest and an
@@ -141,12 +141,24 @@ export class EnvironmentConnectionService {
     const provider = this.deps.environmentProvider
     const record = await this.deps.environmentConnectionRepository.getByWorkspace(workspaceId)
     const manifest = record ? (JSON.parse(record.manifestJson) as EnvironmentManifest) : undefined
+    const configFields = provider?.describeConfig?.(manifest) ?? []
+    // Everything already supplied for this workspace: the stored secret-bundle keys plus a
+    // native adapter's manifest `providerConfig` keys (its non-secret per-workspace settings).
+    const storedKeys: string[] = []
+    if (record) {
+      storedKeys.push(...Object.keys(await this.decryptSecrets(record)))
+      if (manifest?.providerConfig) storedKeys.push(...Object.keys(manifest.providerConfig))
+    }
     return {
       providerId: this.deps.providerId ?? manifest?.providerId ?? 'http',
       label: this.deps.providerLabel ?? manifest?.label ?? 'Custom HTTP provider',
       kind: this.deps.providerKind ?? 'manifest',
-      configFields: provider?.describeConfig?.(manifest) ?? [],
+      configFields,
       supportsTest: typeof provider?.testConnection === 'function',
+      missingRequired: missingRequiredConfigKeys(configFields, storedKeys),
+      ...(provider?.describeManifestTemplate
+        ? { manifestTemplate: provider.describeManifestTemplate() as Record<string, unknown> }
+        : {}),
     }
   }
 

@@ -1,0 +1,136 @@
+import { defineStore } from 'pinia'
+import { computed, reactive, ref } from 'vue'
+import type {
+  ProviderConnection,
+  ProviderConnectionKind,
+  ProviderDescriptor,
+  RegisterProviderInput,
+  TestProviderInput,
+} from '~/types/providerConnections'
+import { useWorkspaceStore } from '~/stores/workspace'
+
+const KINDS: ProviderConnectionKind[] = ['environment', 'runner-pool']
+
+interface ProviderState {
+  /** null until first probed; false ⇒ integration disabled on the backend (hide it). */
+  available: boolean | null
+  descriptor: ProviderDescriptor | null
+  connection: ProviderConnection | null
+}
+
+function emptyState(): ProviderState {
+  return { available: null, descriptor: null, connection: null }
+}
+
+/**
+ * The two infrastructure providers configured through the generic connect form — the
+ * ephemeral-environment provider and the self-hosted runner pool. Each exposes a
+ * self-describing `ProviderDescriptor` (fields + defaults + the `missingRequired` keys the
+ * org still has to supply) plus the saved connection metadata (never secret values). Loaded
+ * on demand: the banner probes both eagerly so it can warn when a provider is wired for the
+ * instance but mandatory fields are missing; the panel re-loads its own kind on open.
+ */
+export const useProviderConnectionsStore = defineStore('providerConnections', () => {
+  const api = useApi()
+  const state = reactive<Record<ProviderConnectionKind, ProviderState>>({
+    environment: emptyState(),
+    'runner-pool': emptyState(),
+  })
+  const loaded = ref(false)
+  let inFlight: Promise<void> | null = null
+
+  async function loadKind(kind: ProviderConnectionKind) {
+    const ws = useWorkspaceStore()
+    const s = state[kind]
+    try {
+      const [descriptor, { connection }] = await Promise.all([
+        api.describeProvider(ws.requireId(), kind),
+        api.getProviderConnection(ws.requireId(), kind),
+      ])
+      s.descriptor = descriptor
+      s.connection = connection
+      s.available = true
+    } catch {
+      // 503 (integration disabled) or any error → hide this provider's UI entry points.
+      s.available = false
+      s.descriptor = null
+      s.connection = null
+    }
+  }
+
+  /** Refresh both providers (used by the banner + after a save/remove). */
+  async function load() {
+    await Promise.all(KINDS.map(loadKind))
+    loaded.value = true
+  }
+
+  /** Load once and share the result (coalescing concurrent callers). */
+  async function ensureLoaded() {
+    if (loaded.value) return
+    if (!inFlight) inFlight = load().finally(() => (inFlight = null))
+    return inFlight
+  }
+
+  function descriptorFor(kind: ProviderConnectionKind): ProviderDescriptor | null {
+    return state[kind].descriptor
+  }
+  function connectionFor(kind: ProviderConnectionKind): ProviderConnection | null {
+    return state[kind].connection
+  }
+  function isAvailable(kind: ProviderConnectionKind): boolean {
+    return state[kind].available === true
+  }
+
+  /**
+   * Providers that are wired for this instance but still missing mandatory config —
+   * exactly what the loud banner surfaces. A provider with no config fields at all (a
+   * stock manifest provider with nothing authored yet) is NOT flagged: there is nothing
+   * to nag about until someone introduces a provider that declares required fields.
+   */
+  const needingConfig = computed<ProviderConnectionKind[]>(() =>
+    KINDS.filter((kind) => {
+      const d = state[kind].descriptor
+      return state[kind].available === true && !!d && d.missingRequired.length > 0
+    }),
+  )
+
+  async function register(kind: ProviderConnectionKind, input: RegisterProviderInput) {
+    const ws = useWorkspaceStore()
+    state[kind].connection = await api.registerProviderConnection(ws.requireId(), kind, input)
+    await loadKind(kind) // refresh missingRequired/descriptor after the change
+  }
+
+  async function updateSecrets(kind: ProviderConnectionKind, secrets: Record<string, string>) {
+    const ws = useWorkspaceStore()
+    state[kind].connection = await api.updateProviderSecrets(ws.requireId(), kind, secrets)
+    await loadKind(kind)
+  }
+
+  async function test(kind: ProviderConnectionKind, input: TestProviderInput) {
+    const ws = useWorkspaceStore()
+    return api.testProviderConnection(ws.requireId(), kind, input)
+  }
+
+  async function remove(kind: ProviderConnectionKind) {
+    const ws = useWorkspaceStore()
+    await api.deleteProviderConnection(ws.requireId(), kind)
+    state[kind].connection = null
+    await loadKind(kind)
+  }
+
+  return {
+    state,
+    loaded,
+    load,
+    loadKind,
+    ensureLoaded,
+    descriptorFor,
+    connectionFor,
+    isAvailable,
+    needingConfig,
+    register,
+    updateSecrets,
+    test,
+    remove,
+  }
+})

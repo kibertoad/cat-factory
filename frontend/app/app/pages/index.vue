@@ -29,6 +29,8 @@ import CommandBar from '~/components/layout/CommandBar.vue'
 import IntegrationsHub from '~/components/layout/IntegrationsHub.vue'
 import WorkspaceSettingsPanel from '~/components/settings/WorkspaceSettingsPanel.vue'
 import ObservabilityConnectionPanel from '~/components/settings/ObservabilityConnectionPanel.vue'
+import ProviderConnectionPanel from '~/components/settings/ProviderConnectionPanel.vue'
+import ProviderConfigBanner from '~/components/layout/ProviderConfigBanner.vue'
 import ModelConfigurationPanel from '~/components/settings/ModelConfigurationPanel.vue'
 import LocalModelEndpointsPanel from '~/components/settings/LocalModelEndpointsPanel.vue'
 import UserSecretsSection from '~/components/settings/UserSecretsSection.vue'
@@ -138,6 +140,8 @@ watch(
     <GitHubPatBanner />
     <!-- AI-readiness prompt (no usable model source, or default preset uses unavailable models). -->
     <AiProvidersBanner v-if="workspace.ready && !needsGitHubInstall && !githubProbePending" />
+    <!-- Infrastructure provider prompt (env/runner-pool wired but missing mandatory config). -->
+    <ProviderConfigBanner v-if="workspace.ready && !needsGitHubInstall && !githubProbePending" />
 
     <!-- Resolving whether the GitHub App is installed, before we decide what to show. -->
     <div
@@ -182,6 +186,7 @@ watch(
       <IntegrationsHub />
       <WorkspaceSettingsPanel />
       <ObservabilityConnectionPanel />
+      <ProviderConnectionPanel />
       <ModelConfigurationPanel />
       <LocalModelEndpointsPanel />
       <UserSecretsSection />

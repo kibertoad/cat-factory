@@ -12,6 +12,7 @@ import { humanTestApi } from './api/humanTest'
 import { modelsApi } from './api/models'
 import { notificationsApi } from './api/notifications'
 import { presetsApi } from './api/presets'
+import { providerConnectionsApi } from './api/providerConnections'
 import { recurringApi } from './api/recurring'
 import { releaseHealthApi } from './api/releaseHealth'
 import { reviewsApi } from './api/reviews'
@@ -85,6 +86,7 @@ export function useApi() {
     ...specApi(ctx),
     ...notificationsApi(ctx),
     ...presetsApi(ctx),
+    ...providerConnectionsApi(ctx),
     ...releaseHealthApi(ctx),
     ...recurringApi(ctx),
     ...githubApi(ctx),
