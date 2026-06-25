@@ -114,7 +114,9 @@ function buildManifestPayload(): {
   const template = descriptor.value?.manifestTemplate
   if (!template) return null
   const base = descriptor.value?.savedManifest ?? template
-  const manifest: Record<string, unknown> = structuredClone(base)
+  // `base` is a Vue reactive proxy, which structuredClone refuses (DataCloneError). The
+  // manifest is plain JSON config, so a JSON round-trip both unwraps the proxy and deep-clones.
+  const manifest: Record<string, unknown> = JSON.parse(JSON.stringify(base))
   const providerConfig: Record<string, unknown> = {
     ...(manifest.providerConfig as Record<string, unknown> | undefined),
   }
