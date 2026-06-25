@@ -1,5 +1,18 @@
 # @cat-factory/orchestration
 
+## 0.10.5
+
+### Patch Changes
+
+- Updated dependencies [fde0437]
+  - @cat-factory/contracts@0.15.0
+  - @cat-factory/kernel@0.14.0
+  - @cat-factory/integrations@0.11.0
+  - @cat-factory/agents@0.11.7
+  - @cat-factory/prompt-fragments@0.7.11
+  - @cat-factory/spend@0.8.10
+  - @cat-factory/workspaces@0.7.16
+
 ## 0.10.4
 
 ### Patch Changes
