@@ -239,6 +239,13 @@ export const commitFilesSchema = v.object({
     ),
     v.minLength(1),
   ),
+  /**
+   * Repo-relative paths to DELETE in the same commit (e.g. a removed module's stale
+   * deep-dive file, an orphaned spec shard). Built into the tree as removed entries
+   * alongside the written `files`, so a deterministic render that drops a path also
+   * prunes it. Absent / empty ⇒ a pure add-or-update commit (the prior behaviour).
+   */
+  deletions: v.optional(v.array(v.pipe(v.string(), v.minLength(1)))),
   /** Parent commit to build on; defaults to the branch tip. */
   baseSha: v.optional(v.string()),
 })

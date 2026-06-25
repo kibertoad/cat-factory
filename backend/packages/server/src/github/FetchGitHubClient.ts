@@ -504,19 +504,25 @@ export class FetchGitHubClient implements GitHubClient {
       .json as { tree?: { sha?: string } }
     const baseTreeSha = baseCommit.tree?.sha
 
-    // 2. Create a blob per file, then a tree referencing them.
-    const tree = await Promise.all(
-      input.files.map(async (file) => {
-        const blob = (
-          await this.request(`${base}/blobs`, {
-            installationId,
-            method: 'POST',
-            body: { content: file.content, encoding: 'utf-8' },
-          })
-        ).json as { sha: string }
-        return { path: file.path, mode: '100644', type: 'blob', sha: blob.sha }
-      }),
-    )
+    // 2. Create a blob per file, then a tree referencing them. A deleted path is a tree
+    // entry with `sha: null` against the `base_tree`, which removes it (the Git Data API's
+    // delete encoding) — so a deterministic render that drops a path also prunes it.
+    const tree: Array<{ path: string; mode: string; type: string; sha: string | null }> =
+      await Promise.all(
+        input.files.map(async (file) => {
+          const blob = (
+            await this.request(`${base}/blobs`, {
+              installationId,
+              method: 'POST',
+              body: { content: file.content, encoding: 'utf-8' },
+            })
+          ).json as { sha: string }
+          return { path: file.path, mode: '100644', type: 'blob', sha: blob.sha }
+        }),
+      )
+    for (const path of input.deletions ?? []) {
+      tree.push({ path, mode: '100644', type: 'blob', sha: null })
+    }
     const newTree = (
       await this.request(`${base}/trees`, {
         installationId,

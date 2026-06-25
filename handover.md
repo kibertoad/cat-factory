@@ -89,25 +89,44 @@ section + `backend/docs/custom-agents.md` are the current source of truth for th
    clone-`work` (opens PR). `runCodingAgent` ALREADY does branch-resume + checkpoint, so the
    generic coding path is behaviour-equivalent to `/run` (server builds clean). `/run`/
    `handleRun` is deleted in the harness-cleanup step (→ image bump).
-4. ⬜ **blueprints / spec-writer** — `container-explore` structured (NO harness commit). The
-   render+commit moves to a BACKEND post-op using `@cat-factory/agents` `repo-ops/render.ts`
-   (`coerceBlueprintService`/`renderBlueprintFiles`/`renderBlueprintVersionFile`/
-   `nextBlueprintVersion`; `coerceSpecDoc`/`renderSpecFiles`/`renderSpecFeatureFiles`) +
-   `RepoFiles.commitFiles`. Bridge: make `toRunResult` map `custom`→`blueprintService`/`spec`
-   for these kinds (engine ingest unchanged). Adjust the BLUEPRINT/SPEC system prompts to say
-   "READ the spec/blueprint already committed in the repo" (explore agent reads the checkout)
-   since the harness no longer pre-injects the baseline. **BLOCKER:** spec sharding needs
-   ORPHAN PRUNING of removed canonical `modules/**` shards, but `CommitFilesInput`
-   (`contracts/src/github.ts`) only ADDS files — no deletions. Add `deletions?: string[]` to
-   `commitFilesSchema` + `RepoFiles.commitFiles` + BOTH `FetchGitHubClient.commitFiles`
-   impls (build a tree omitting deleted paths) + `FakeGitHubClient`. Seed-once Gherkin:
-   `listDirectory('spec/features/<m>')` and only commit a `.feature` that's absent. Version
-   manifest: read existing `blueprints/version.json` via `getFile`, `nextBlueprintVersion`,
-   skip commit when hash unchanged (idempotency — post-op runs before the run is persisted,
-   so a replay must not double-commit; mirror `renderReportPostOp` in example-custom-agent).
-   These post-ops are BUILT-IN (run from `ExecutionService.recordStepResult` via
-   `resolveRunRepoContext`), NOT registry entries (registering built-ins pollutes
-   `customAgentKinds`/the palette). Add a small built-in post-op map in ExecutionService.
+4a. ✅ **blueprints** — DONE this branch (`migrate-blueprints-spec-generic-kind`, PR pending).
+   `blueprints` dispatches `kind:'agent'` `mode:'explore'` structured (clone `pr` →
+   `prBranch ?? baseBranch`) via `buildMigratedBuiltInBody`; `toRunResult` coerces
+   `custom`→`blueprintService` (`coerceBlueprintService`). The render+commit is a BUILT-IN
+   backend post-op `blueprintPostOp` (`@cat-factory/agents` `repo-ops/builtin.ts`) over
+   `RepoFiles` — idempotent (version.json hash short-circuit, replay-safe) + orphan-prunes
+   removed module deep-dives via the new **deletions** channel. The post-op is keyed by a
+   small built-in map in `ExecutionService.builtInPostOps` (+ `builtInRepoOpBranch` =
+   `prBranch ?? baseBranch`, matching dispatch — NOT `resolveRepoOpBranch`'s `pr` case which
+   ensures a work branch and is wrong for the no-PR bootstrap blueprint). **deletions infra**:
+   `commitFilesSchema`/`CommitFilesInput` gained `deletions?: string[]`, wired through
+   `FetchGitHubClient.commitFiles` (tree entries with `sha:null`). NO image bump (handleAgent
+   explore-structured already serves it). Tests: `containerAgentJobBody.spec.ts` snapshot +
+   blueprints pollJob coercion; `agents` `repo-ops/builtin.test.ts` (render/idempotency/prune);
+   conformance assertion (post-op commits via RepoFiles, both runtimes). Changeset
+   `migrate-blueprints-generic-kind.md`. **The `FakeGitHubClient.commitFiles` impls capture
+   the whole input so `deletions` passes through transparently — no fake change needed.**
+
+4b. ⬜ **spec-writer** — NEXT. Same shape as blueprints but harder: `container-explore`
+   structured, clone `work` (always `cat-factory/<blockId>`; `resolveRepoOpBranch` default
+   already matches dispatch, so reuse the generic registered-kind branch path OR add to the
+   built-in map with clone `work`). `toRunResult` maps `custom`→`spec` (`coerceSpecDoc`).
+   The post-op (`specPostOp`, add to `repo-ops/builtin.ts` + the built-in map) SHARDS via
+   `renderSpecFiles`/`renderSpecFeatureFiles` + commits. Reproduce the harness `spec.ts`
+   reconcile: (a) ORPHAN-PRUNE removed canonical `modules/**` `.json`/`.md` shards (list via
+   `RepoFiles.listDirectory` recursively, delete those not in the desired set — the deletions
+   channel exists now); (b) SEED-ONCE Gherkin — only commit a `features/<m>/<g>.feature` that
+   is ABSENT (`getFile`/`listDirectory` check), never overwrite pass-2 polish; (c) drop the
+   legacy monolithic files (`spec/spec.json`/`rules.md`/`version.json` + flat
+   `features/*.feature`) on sight. Idempotency: spec has no version.json — compare each
+   rendered shard's bytes to the branch via `getFile` and skip the commit when ALL match and
+   there are no deletions (replay-safe). **Prompt redesign (needs a smoketest on a real
+   model — the designed gate, not a Windows step):** the explore agent must READ the baseline
+   from its own checkout (`spec/overview.md` + the `modules/**` shards) since the harness no
+   longer pre-injects it. Update `SPEC_WRITER_SYSTEM_PROMPT` ("READ the specification already
+   committed under `spec/`…") and add a `specWriterUserPrompt(context)` (mergerUserPrompt-style)
+   carrying the task increment + the read-the-baseline + reuse-the-taxonomy guidance that
+   `spec.ts` `buildUserPrompt`/`renderTaxonomyInventory` used to inject. No image bump.
 5. ⬜ **tester** — `container-explore` structured + INFRA stand-up. Grow the harness AgentJob
    with `infra?: {environment, noInfraDependencies?, composePath?, environmentUrl?}` and have
    `runExploreMode` run `standUpInfra`/`tearDownInfra` (lift from `tester.ts`) + fold the

@@ -268,6 +268,40 @@ describe('ContainerAgentExecutor.pollJob (kind-aware result coercion)', () => {
     })
   })
 
+  it('maps a blueprints custom result into a coerced blueprintService', async () => {
+    const executor = makeExecutorReturning({
+      summary: 'Mapped the service.',
+      custom: {
+        name: 'Widgets',
+        summary: 'A widget service',
+        // `references` malformed (number dropped), an unknown type falls back to 'service'.
+        type: 'banana',
+        references: ['src/index.ts', 7],
+        modules: [{ name: 'Billing', summary: 'Invoices', references: [] }],
+      },
+    })
+    const update = await executor.pollJob(handle('blueprints'))
+    expect(update).toEqual({
+      state: 'done',
+      result: {
+        output: 'Mapped the service.',
+        blueprintService: {
+          type: 'service',
+          name: 'Widgets',
+          summary: 'A widget service',
+          references: ['src/index.ts'],
+          modules: [{ name: 'Billing', summary: 'Invoices', references: [] }],
+        },
+      },
+    })
+  })
+
+  it('a nameless blueprints tree coerces away (no blueprintService), leaving plain output', async () => {
+    const executor = makeExecutorReturning({ summary: 'nothing usable', custom: { modules: [] } })
+    const update = await executor.pollJob(handle('blueprints'))
+    expect(update).toEqual({ state: 'done', result: { output: 'nothing usable' } })
+  })
+
   it('without agentKind the coercion no-ops and the raw custom is surfaced', async () => {
     const executor = makeExecutorReturning({
       summary: 's',
