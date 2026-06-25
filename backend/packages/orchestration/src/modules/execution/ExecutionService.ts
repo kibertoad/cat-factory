@@ -742,7 +742,9 @@ export class ExecutionService {
       hasEnvironmentProvider: this.environmentProvisioning !== undefined,
     })
     if (decision.ok) return
-    throw new ConflictError(TESTER_INFRA_MESSAGES[decision.reason])
+    throw new ConflictError(TESTER_INFRA_MESSAGES[decision.reason], 'tester_infra_unsupported', {
+      infraReason: decision.reason,
+    })
   }
 
   /**
@@ -780,6 +782,8 @@ export class ExecutionService {
         `This pipeline uses models with no configured provider: ${[...unconfigured].join(', ')}. ` +
           'Add an API key for the provider, connect a subscription, or enable Cloudflare AI ' +
           'before starting.',
+        'providers_unconfigured',
+        { models: [...unconfigured] },
       )
     }
   }
@@ -952,6 +956,8 @@ export class ExecutionService {
       `This task is blocked by ${blockers.length} unfinished dependenc${
         blockers.length === 1 ? 'y' : 'ies'
       }${names ? ` (${names})` : ''}. Finish them before starting this task.`,
+      'dependencies_unmet',
+      { count: blockers.length, blockers: blockers.map((b) => b.title) },
     )
   }
 
@@ -1016,6 +1022,8 @@ export class ExecutionService {
         throw new ConflictError(
           `"${frame.title}" is already running ${running} of ${limit} allowed task(s). ` +
             `Wait for one to finish before starting another.`,
+          'task_limit_reached',
+          { frame: frame.title, limit, running },
         )
       }
       return
@@ -1033,6 +1041,8 @@ export class ExecutionService {
       throw new ConflictError(
         `"${frame.title}" is already running ${running} of ${limit} allowed ${type} task(s). ` +
           `Wait for one to finish before starting another ${type} task.`,
+        'task_limit_reached',
+        { frame: frame.title, limit, running, taskType: type },
       )
     }
   }
@@ -3703,7 +3713,7 @@ export class ExecutionService {
     await this.requireWorkspace(workspaceId)
     const block = await this.requireBlock(workspaceId, blockId)
     if (block.status !== 'pr_ready') {
-      throw new ConflictError(`Block '${blockId}' has no PR awaiting merge`)
+      throw new ConflictError(`Block '${blockId}' has no PR awaiting merge`, 'no_pr_to_merge')
     }
     await this.finalizeMerge(workspaceId, blockId)
     return this.requireBlock(workspaceId, blockId)
@@ -3789,7 +3799,11 @@ export class ExecutionService {
       executionId,
     )
     if (previous.status !== 'failed') {
-      throw new ConflictError(`Only a failed run can be retried (run is '${previous.status}').`)
+      throw new ConflictError(
+        `Only a failed run can be retried (run is '${previous.status}').`,
+        'run_not_retryable',
+        { status: previous.status },
+      )
     }
     await this.requireBlock(workspaceId, previous.blockId)
 

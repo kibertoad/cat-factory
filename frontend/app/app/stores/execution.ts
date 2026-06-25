@@ -18,6 +18,11 @@ import { useWorkspaceStore } from '~/stores/workspace'
  */
 export const useExecutionStore = defineStore('execution', () => {
   const api = useApi()
+  // Centralised actionable toasts for run-control failures: a 409 with no configured
+  // provider opens the AI setup; the other tagged conflicts get worded titles. Living
+  // in the store means every caller (board card, drag-drop, menus, restart controls)
+  // gets identical handling, including the fire-and-forget ones that never caught.
+  const runErrors = usePipelineErrorToast()
   const instances = ref<ExecutionInstance[]>([])
 
   /** Replace the cached executions with a server snapshot. */
@@ -109,12 +114,18 @@ export const useExecutionStore = defineStore('execution', () => {
   async function start(blockId: string, pipeline: Pipeline): Promise<boolean> {
     const ws = useWorkspaceStore()
     const personal = usePersonalSubscriptionsStore()
-    // Returns false when the user cancels the personal-password prompt (the run never
-    // started), so an optimistic caller can revert its "Starting…" state.
-    return personal.withCredential(async (password) => {
-      await api.startExecution(ws.requireId(), blockId, { pipelineId: pipeline.id }, password)
-      await ws.refresh()
-    })
+    // Returns false when the user cancels the personal-password prompt OR the start was
+    // refused (a 409 conflict, surfaced as an actionable toast here), so an optimistic
+    // caller can revert its "Starting…" state without its own error handling.
+    try {
+      return await personal.withCredential(async (password) => {
+        await api.startExecution(ws.requireId(), blockId, { pipelineId: pipeline.id }, password)
+        await ws.refresh()
+      })
+    } catch (e) {
+      runErrors.present(e, 'Failed to start')
+      return false
+    }
   }
 
   // Interacting with a running individual-usage run (resolve/approve/request-changes) rides
@@ -207,8 +218,12 @@ export const useExecutionStore = defineStore('execution', () => {
   /** Merge an open PR (a task in `pr_ready`) — the server completes the task. */
   async function mergePr(blockId: string) {
     const ws = useWorkspaceStore()
-    await api.mergeBlock(ws.requireId(), blockId)
-    await ws.refresh()
+    try {
+      await api.mergeBlock(ws.requireId(), blockId)
+      await ws.refresh()
+    } catch (e) {
+      runErrors.present(e, 'Failed to merge')
+    }
   }
 
   /**
@@ -222,10 +237,15 @@ export const useExecutionStore = defineStore('execution', () => {
   async function restartFromStep(instanceId: string, stepIndex: number): Promise<boolean> {
     const ws = useWorkspaceStore()
     const personal = usePersonalSubscriptionsStore()
-    return personal.withCredential(async (password) => {
-      await api.restartFromStep(ws.requireId(), instanceId, stepIndex, password)
-      await ws.refresh()
-    })
+    try {
+      return await personal.withCredential(async (password) => {
+        await api.restartFromStep(ws.requireId(), instanceId, stepIndex, password)
+        await ws.refresh()
+      })
+    } catch (e) {
+      runErrors.present(e, 'Failed to restart')
+      return false
+    }
   }
 
   /** Cancel the execution running against a block and reset it to planned. */

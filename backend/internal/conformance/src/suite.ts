@@ -1417,10 +1417,17 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
 
         // Pin the seeded task to qwen; with Cloudflare off and no key it has no provider.
         await call('PATCH', `/workspaces/${wsId}/blocks/task_login`, { modelId: 'qwen' })
-        const blocked = await call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+        const blocked = await call<{
+          error: { code: string; details?: { reason?: string; models?: string[] } }
+        }>('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
           pipelineId: 'pl_quick',
         })
         expect(blocked.status).toBe(409)
+        // The conflict carries a distinct machine-readable reason (+ the offending model
+        // ids) so the SPA can react precisely (open AI setup) instead of string-matching.
+        expect(blocked.body.error.code).toBe('conflict')
+        expect(blocked.body.error.details?.reason).toBe('providers_unconfigured')
+        expect(blocked.body.error.details?.models).toContain('qwen')
 
         // Configure a qwen key → the guard passes and the run starts.
         await call('POST', `/workspaces/${wsId}/api-keys`, KEY)

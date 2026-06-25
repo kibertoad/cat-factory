@@ -12,6 +12,7 @@ export {
   getErrorMessage,
   type DomainErrorCode,
   type CredentialRequiredReason,
+  type ConflictReason,
 } from './domain/errors.js'
 export { sameSubtasks, sameSubtaskItems } from './domain/subtasks.logic.js'
 export { resolveWritebackFlag } from './domain/writeback.js'
