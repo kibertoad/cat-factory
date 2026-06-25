@@ -82,11 +82,16 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>) {
         top: rect.top,
         bottom: rect.top + height,
       }
-      // Stable anchor: the card's top-centre. It doesn't move as the card grows
-      // downward, so the ordering can't oscillate as cards expand / collapse.
-      const ax = rect.left + rect.width / 2
-      const ay = rect.top
-      const dist = (ax - cx) ** 2 + (ay - cy) ** 2
+      // Rank by the screen centre's distance to the card's projected footprint — 0
+      // whenever the centre sits over the card. So a tall card the viewport is parked
+      // inside wins over a shorter neighbour whose top edge merely happens to be nearer
+      // the centre line (the old top-centre anchor penalised a card you'd scrolled into
+      // once its top scrolled above the viewport). The footprint is the stable expanded
+      // extent — its top doesn't move and its bottom uses the cached expanded height —
+      // so the ranking can't oscillate as cards expand / collapse.
+      const ddx = Math.max(footprint.left - cx, 0, cx - footprint.right)
+      const ddy = Math.max(footprint.top - cy, 0, cy - footprint.bottom)
+      const dist = ddx * ddx + ddy * ddy
       candidates.push({ id: t.id, rect: footprint, dist })
     }
     // Drop cached heights for cards that are gone, so the map can't grow unbounded.
