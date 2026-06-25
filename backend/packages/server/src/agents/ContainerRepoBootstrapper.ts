@@ -176,10 +176,27 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
         }
       : undefined
 
+    const targetSpec = { owner, name: repoName, cloneUrl: targetCloneUrl, defaultBranch }
+    // The generic agent `repo` is the clone source: the reference when adapting one, or the
+    // (uncloned) target placeholder when scaffolding from scratch. The real push destination
+    // is always `bootstrap.target`, which the harness force-pushes a fresh history to.
+    const repoSpec = reference
+      ? {
+          owner: reference.owner,
+          name: reference.name,
+          baseBranch: reference.baseBranch,
+          cloneUrl: reference.cloneUrl,
+        }
+      : { owner, name: repoName, baseBranch: defaultBranch, cloneUrl: targetCloneUrl }
+
+    // Bootstrap dispatches the generic, manifest-driven `agent` kind in `coding` mode with a
+    // `bootstrap` spec (the divergent force-push to a separate target repo) — the SAME path
+    // every other built-in coding agent takes, with NO bespoke `/bootstrap` harness handler.
     const body = {
       jobId: request.jobId,
+      mode: 'coding',
       systemPrompt: reference ? ADAPT_SYSTEM_PROMPT : SCAFFOLD_SYSTEM_PROMPT,
-      instructions:
+      userPrompt:
         request.instructions ||
         (reference
           ? 'Adapt the reference architecture for the new service.'
@@ -193,18 +210,20 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       proxyBaseUrl: this.deps.proxyBaseUrl,
       sessionToken,
       ghToken,
-      ...(reference ? { reference } : {}),
-      target: {
-        owner,
-        name: repoName,
-        cloneUrl: targetCloneUrl,
-        defaultBranch,
+      repo: repoSpec,
+      branch: repoSpec.baseBranch,
+      // Bootstrap always resets history to a single commit and force-pushes (the fresh
+      // history shares no ancestor with the target repo's boilerplate); that is implicit
+      // in the bootstrap flow, so no per-job flags are needed.
+      bootstrap: {
+        target: targetSpec,
+        ...(reference ? {} : { fromScratch: true }),
       },
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
     }
 
     // Dispatch through the shared transport (keyed by job id), exactly like the
-    // implementation executor: it hits the harness `/bootstrap` endpoint, starts the
+    // implementation executor: it hits the harness `POST /jobs` (kind `agent`), starts the
     // background job and returns once accepted; we then poll via the same transport.
     // Idempotent per job id — a replayed dispatch re-attaches rather than duplicating.
     log.info(
@@ -217,7 +236,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       request.workspaceId,
       { runId: request.jobId, jobId: request.jobId },
       body,
-      'bootstrap',
+      'agent',
     )
     log.info('bootstrap: container accepted job')
     return { workspaceId: request.workspaceId, jobId: request.jobId }

@@ -1,38 +1,9 @@
 import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import {
-  parseBlueprintJob,
-  parseBootstrapJob,
-  parseCiFixerJob,
-  parseConflictResolverJob,
-  parseMergerJob,
-  parseOnCallJob,
-  parseSpecJob,
-  parseExploreJob,
-  parseTesterJob,
-  parseFixerJob,
-  parseAgentJob,
-  parseJob,
-} from './job.js'
+import { parseAgentJob } from './job.js'
 import { handleAgent } from './agent.js'
-import { handleBootstrap } from './bootstrap.js'
-import { handleBlueprint } from './blueprint.js'
-import { handleSpec } from './spec.js'
-import { handleExplore } from './explore.js'
-import { handleCiFixer } from './ci-fixer.js'
-import { handleConflictResolver } from './conflict-resolver.js'
-import { handleMerger } from './merger.js'
-import { handleOnCall } from './on-call.js'
-import { handleTester } from './tester.js'
-import { handleFixer } from './fixer.js'
 import { redactSecrets } from './git.js'
-import {
-  JobRegistry,
-  loadRunnerLimits,
-  handleRun,
-  type JobResultBase,
-  type RunOptions,
-} from './runner.js'
+import { JobRegistry, loadRunnerLimits, type JobResultBase, type RunOptions } from './runner.js'
 import { log } from './logger.js'
 
 // The container's HTTP entry point. The Worker addresses one instance per run and
@@ -89,32 +60,17 @@ function defineKind<TJob extends { jobId: string }, TResult extends JobResultBas
   } as unknown as KindEntry
 }
 
-// The dispatch table: one entry per harness job kind. A `POST /jobs` reads the
-// body's `kind` to pick the entry; `GET /jobs/{id}` checks every registry (job ids
-// never collide across kinds). The keys mirror kernel's `RunnerDispatchKind`
-// (backend/packages/kernel/src/ports/runner-transport.ts) — the harness keeps its
-// own copy because it carries no runtime deps (the image stays lean). A new kind is
-// one entry here, not a new endpoint + registry global + poll-chain line.
+// The dispatch table. The harness now serves a SINGLE, manifest-driven kind: the
+// generic `agent` (the job body's `mode` — explore | coding — and its data select the
+// flow; WHAT the agent does is decided entirely by the backend). The per-kind bespoke
+// handlers (run/blueprint/spec/explore/merge/test/…) were strangled onto this one kind
+// and removed. A `POST /jobs` reads the body's `kind` to pick the entry; `GET /jobs/{id}`
+// checks every registry (job ids never collide across kinds). `kind` mirrors kernel's
+// `RunnerDispatchKind` (now also just `'agent'`); the harness keeps its own copy so the
+// image carries no runtime deps.
 const KINDS: Record<string, KindEntry> = {
-  // The generic, manifest-driven kind: `mode` (explore | coding) in the body selects
-  // the flow. The bespoke kinds below are being migrated onto it (and will be removed).
   agent: defineKind(parseAgentJob, handleAgent),
-  run: defineKind(parseJob, handleRun),
-  bootstrap: defineKind(parseBootstrapJob, handleBootstrap),
-  blueprint: defineKind(parseBlueprintJob, handleBlueprint),
-  spec: defineKind(parseSpecJob, handleSpec),
-  explore: defineKind(parseExploreJob, handleExplore),
-  'ci-fix': defineKind(parseCiFixerJob, handleCiFixer),
-  'resolve-conflicts': defineKind(parseConflictResolverJob, handleConflictResolver),
-  merge: defineKind(parseMergerJob, handleMerger),
-  'on-call': defineKind(parseOnCallJob, handleOnCall),
-  test: defineKind(parseTesterJob, handleTester),
-  'fix-tests': defineKind(parseFixerJob, handleFixer),
 }
-
-// Re-exported so the acceptance suite (and any direct caller) can run a job
-// synchronously without going through the async job API.
-export { handleRun }
 
 async function readBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = []

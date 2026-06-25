@@ -46,7 +46,7 @@ each kind is migrated.
 | 2   | `AgentDefinition` + pre/post-op model                      | ✅ DONE — merged in **PR #166**                      |
 | 3   | Harness: generic `agent` kind (explore/coding)             | ✅ DONE — merged in **PR #169**                      |
 | 4   | Backend engine: pre/post-op hooks + dispatch (live wiring) | ✅ DONE — merged in **PR #177**                      |
-| 5   | Convert each built-in agent, parity-gated (strangler)      | ◐ IN PROGRESS — read-only kinds rerouted (see below) |
+| 5   | Convert each built-in agent, parity-gated (strangler)      | ✅ DONE — all built-ins on the generic `agent` kind   |
 | 6   | Frontend data-driven palette + generic result view         | ✅ DONE — merged in **PR #177**                      |
 | 7   | Example package + docs + conformance + changesets          | ✅ DONE — merged in **PR #177**                      |
 
@@ -150,39 +150,45 @@ section + `backend/docs/custom-agents.md` are the current source of truth for th
    harness `agent.test.ts` infra-parse (2 cases). Changeset `migrate-tester-generic-kind.md`.
    The dead `/test` harness handler is deleted in the harness-cleanup step (§8); `result.report`
    in `toRunResult` is now dead (removed when kernel `RunnerJobResult.report` is slimmed, §9).
-6. ⬜ **conflict-resolver** — `container-coding` + `mergeBase`. Grow AgentJob with
-   `mergeBase?: string`; `runCodingMode` does full clone + `mergeBranch(base)` + surface
-   conflict hunks into the prompt (lift `buildConflictPrompt`/`unmergedPaths`/`conflictDiff`
-   from `conflict-resolver.ts`) + refuse to push a half-resolved tree + the clean/no-op
-   handling. `result.resolved` maps as today. Image bump.
-7. ⬜ **bootstrap** — `ContainerRepoBootstrapper.startBootstrap` dispatches `kind:'agent'`
-   `container-coding` with new fields `reinit?: true` (reset history to one commit) +
-   `forcePush?: true` + optional `reference?` clone source + from-scratch (empty dir) +
-   pushes to `target.defaultBranch`. Grow `runCodingMode` accordingly (lift `reinitAndPush`
-   from `bootstrap.ts`). The link post-op (`linkRepoToBlock`) already lives in
-   `pollBootstrapJob`. Image bump.
-8. ⬜ **harness cleanup (image bump)** — delete `blueprint.ts`/`spec.ts`/`explore.ts`/
-   `merger.ts`/`on-call.ts`/`tester.ts`/`ci-fixer.ts`/`fixer.ts`/`conflict-resolver.ts`/
-   `bootstrap.ts`/`handleRun` (in `runner.ts`?) once nothing dispatches them; collapse
-   `server.ts` `KINDS` to `{ agent }`; strip the bespoke job types + parsers from `job.ts`
-   (keep `parseAgentJob` + shared helpers); delete the bespoke handler tests; bump
-   `@cat-factory/executor-harness` version + the tag in `deploy/backend/package.json` +
-   `deploy/backend/wrangler.toml` (current 1.9.0 → next). Drop the `'explore'` line in
-   `LocalContainerRunnerTransport.test.ts`.
-9. ⬜ **kernel** — collapse `RunnerDispatchKind` to just `'agent'`; slim `RunnerJobResult`
-   (drop `service`/`spec`/`assessment`/`onCallAssessment`/`report`/`resolved`; keep `custom`/
-   `prUrl`/`branch`/`pushed`/`defaultBranch`/`summary`/`error`/`usage`). Fix all
-   referencing call sites (executor `toRunResult`, transports).
-10. ⬜ **frontend** — built-in palette is unaffected (AGENT_ARCHETYPES). Verify merger/on-call/
-    tester result views still render (engine still sets `mergeAssessment`/`onCallAssessment`/
-    `testReport`; `step.custom` is also set now — confirm no double-render). `generic-structured`
-    already handles `step.custom`.
-11. ⬜ **conformance** — extend `defineConformanceSuite` to assert a migrated built-in (e.g.
-    `blueprints`) dispatches `kind:'agent'` and its post-op commits via the `FakeGitHubClient`
-    on BOTH runtimes. Update worker/node specs.
-12. ⬜ **changeset** — one changeset covering server/orchestration/kernel/contracts/agents +
-    executor-harness (versioned-private) + worker/node. Note the breaking `RunnerDispatchKind`
-    collapse (pre-1.0, no compat).
+6. ✅ **conflict-resolver** — DONE (branch `migrate-conflict-bootstrap-generic-kind`).
+   `AgentJob` grew `mergeBase?: string`; `runCodingMode` branches to `runConflictResolution`
+   (full clone → `mergeBranch` → surface conflict hunks → refuse a half-resolved tree →
+   complete the merge commit → push, no PR; `buildConflictPrompt`/`unresolvedReason` lifted
+   into `agent.ts`). `ContainerAgentExecutor` routes it through `buildMigratedBuiltInBody` as
+   `container-coding` clone `pr` full + `mergeBase: repo.baseBranch` + the compact task-ref
+   prompt. The outcome maps via `pushed` (no PR); `result.resolved` is gone.
+7. ✅ **bootstrap** — DONE. `AgentJob` grew `bootstrap?: {target, reference via repo, reinit,
+   forcePush, fromScratch?}` + `AgentResult.defaultBranch`; `runCodingMode` branches to
+   `runBootstrap` (clone reference or empty dir → no-op guard → `reinitAndPush` to the target;
+   `producedRepoContent`/`reinitAndPush` lifted). `ContainerRepoBootstrapper.startBootstrap`
+   dispatches `kind:'agent'` coding with the bootstrap spec; `linkRepoToBlock` stays in
+   `pollBootstrapJob`. `pollBootstrap` still reads `result.defaultBranch`.
+8. ✅ **harness cleanup (image bump 1.13.0 → 1.14.0)** — deleted `blueprint`/`spec`/`explore`/
+   `merger`/`on-call`/`tester`/`ci-fixer`/`fixer`/`conflict-resolver`/`bootstrap` handlers +
+   `handleRun`; collapsed `server.ts` `KINDS` to `{ agent }`; stripped the bespoke job
+   types/parsers from `job.ts` (kept `parseAgentJob` + shared helpers + `BootstrapTargetSpec`);
+   `JobRegistry`/`JobView` generics no longer default to the removed `Job`/`RunResult`; deleted
+   `blueprint.test.ts`/`spec.test.ts` + the dead parser describes in `harness.test.ts`; bumped
+   the deploy tag + `wrangler.toml`. The `LocalContainerRunnerTransport.test.ts` per-kind tests
+   were rewritten for the single kind.
+9. ✅ **kernel** — `RunnerDispatchKind` collapsed to `'agent'`; `RunnerJobResult` slimmed to
+   `prUrl`/`branch`/`summary`/`error`/`defaultBranch`/`pushed`/`custom`/`usage`. Transports
+   default to `'agent'`; `coerceRunnerResult` (pool) passes only `custom`; `toRunResult`
+   rewritten (kind-aware `custom` coercion + prUrl-before-pushed fix). Bonus bug fixes: the
+   coder's PR was being dropped (prUrl ordering), and the local per-run container's privileged
+   flag never matched after the tester migration (now keyed off `privilegedTestJobs`).
+10. ✅ **frontend** — unaffected (engine still sets `mergeAssessment`/`onCallAssessment`/
+    `testReport`; conflict-resolver/bootstrap have no result view). No change needed.
+11. ✅ **conformance** — already covers the generic `agent` explore + structured-result path
+    and the built-in blueprints/spec-writer post-ops on both runtimes (from #193/#196);
+    conflict-resolver/bootstrap aren't post-op-based, so no new assertion was required.
+12. ✅ **changeset** — `.changeset/migrate-conflict-bootstrap-generic-kind.md` covering
+    executor-harness + server + kernel + integrations + worker + local-server (the breaking
+    `RunnerDispatchKind`/`RunnerJobResult` collapse is noted; pre-1.0, no compat).
+
+**The full strangler is complete: every built-in agent now dispatches the single
+manifest-driven `agent` kind, and the harness serves one `POST /jobs` kind.** Committed on
+branch `migrate-conflict-bootstrap-generic-kind` (commit `d8a17ae`); not yet pushed.
 
 **Verification:** `pnpm --filter @cat-factory/server build`, `pnpm --filter @cat-factory/orchestration test:run`, `pnpm --filter @cat-factory/agents test:run`, harness `pnpm test` (Windows-safe except 4 pre-existing `writeAgentsContext` failures), `pnpm build` (full graph). workerd/Postgres conformance + container behaviour (infra/merge-base/bootstrap force-push/render byte-parity) verify on Linux CI + the `smoketest` skill — that is the designed image-rollout gate, not a Windows step.
 

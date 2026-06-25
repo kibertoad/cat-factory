@@ -1,19 +1,14 @@
-import type { Job, RunResult } from './job.js'
-import { openPullRequest, redactSecrets } from './git.js'
+import { redactSecrets } from './git.js'
 import type { TodoProgress, ToolSpan } from './pi.js'
-import { noChangesReason, runCodingAgent } from './coding-agent.js'
 import { log } from './logger.js'
 
-// Async job execution for the implementation container. A coding run can take
-// many minutes, so the Worker no longer holds a single synchronous request open:
-// it POSTs /run (which starts a background job and returns immediately) and then
-// polls GET /jobs/{id}. Two watchdogs bound every job so a container can never
-// run forever — an inactivity timer (kills Pi when it stops producing output)
-// and an overall max-duration cap.
-//
-// The repo/Pi/push mechanics are shared with the CI-fixer in {@link runCodingAgent};
-// this file's `handleRun` only adds what is specific to implementation: a fresh
-// work branch and opening a pull request when the run produced changes.
+// The async job lifecycle for the container. A coding/explore run can take many
+// minutes, so the backend does not hold a single synchronous request open: it POSTs
+// /jobs (which starts a background job and returns immediately) and then polls
+// GET /jobs/{id}. Two watchdogs bound every job so a container can never run forever —
+// an inactivity timer (kills the agent when it stops producing output) and an overall
+// max-duration cap. The work itself is the generic `agent` handler (see agent.ts); this
+// file owns only the registry + watchdogs that drive any job to completion.
 
 /** Options threaded into the long-running git/Pi work so a watchdog can cancel it. */
 export interface RunOptions {
@@ -25,78 +20,20 @@ export interface RunOptions {
   onSpan?: (span: ToolSpan) => void
 }
 
-/** Run one implementation job end to end: clone → Pi implements → push → PR. */
-export async function handleRun(job: Job, opts: RunOptions = {}): Promise<RunResult> {
-  const { summary, stats, stderrTail, pushed, resumed, usage } = await runCodingAgent(
-    {
-      kind: 'impl',
-      jobId: job.jobId,
-      repo: job.repo,
-      // Branch off the repo's base branch onto a fresh work branch for the PR.
-      cloneBranch: job.repo.baseBranch,
-      newBranch: job.headBranch,
-      pushBranch: job.headBranch,
-      ghToken: job.ghToken,
-      systemPrompt: job.systemPrompt,
-      userPrompt: job.userPrompt,
-      model: job.model,
-      harness: job.harness,
-      subscriptionToken: job.subscriptionToken,
-      subscriptionBaseUrl: job.subscriptionBaseUrl,
-      proxyBaseUrl: job.proxyBaseUrl,
-      sessionToken: job.sessionToken,
-      commitMessage: job.pr.title,
-      webToolsGuidance: job.webToolsGuidance,
-      webSearchProxy: job.webSearch,
-    },
-    opts,
-  )
-
-  // Whether this run continued an evicted/failed earlier run's branch is the key
-  // triage signal for "why does this PR already have commits I didn't see produced",
-  // so record it on the job (not just buried in runCodingAgent's debug logs).
-  if (resumed) {
-    log.info('run: resumed an existing work branch', { jobId: job.jobId, branch: job.headBranch })
-  }
-
-  // A no-op (nothing changed across the whole run) is an implementation failure.
-  if (!pushed) {
-    return {
-      summary,
-      stats,
-      branch: job.headBranch,
-      error: noChangesReason('Pi produced no file changes', stats, stderrTail),
-    }
-  }
-
-  // Changes are on the branch: open the pull request for them.
-  const prUrl = await openPullRequest({
-    owner: job.repo.owner,
-    name: job.repo.name,
-    ghToken: job.ghToken,
-    head: job.headBranch,
-    base: job.repo.baseBranch,
-    pr: job.pr,
-    apiBase: job.githubApiBase,
-    signal: opts.signal,
-  })
-  return { prUrl, branch: job.headBranch, summary, stats, ...(usage ? { usage } : {}) }
-}
-
 export type JobState = 'running' | 'done' | 'failed'
 
 /**
  * The minimum a job result must expose: a structured `error` marks a job-level
- * failure even when the HTTP run itself succeeded. Both {@link RunResult} (the
- * `/run` path) and the bootstrap result satisfy this, so {@link JobRegistry} is
- * generic over the result it tracks while reusing one watchdog/lifecycle.
+ * failure even when the HTTP run itself succeeded. Every agent result (explore /
+ * coding / bootstrap / conflict) satisfies this, so {@link JobRegistry} is generic
+ * over the result it tracks while reusing one watchdog/lifecycle.
  */
 export interface JobResultBase {
   error?: string
 }
 
 /** The job view returned by GET /jobs/{id}, generic over the orchestration's result. */
-export interface JobView<TResult extends JobResultBase = RunResult> {
+export interface JobView<TResult extends JobResultBase = JobResultBase> {
   id: string
   state: JobState
   startedAt: number
@@ -158,29 +95,20 @@ function toView<TResult extends JobResultBase>(entry: JobEntry<TResult>): JobVie
 }
 
 /**
- * Tracks background jobs by id. Keyed by the Worker-supplied job id (the
- * execution id for `/run`, the bootstrap job id for `/bootstrap`) so a
- * re-dispatched start re-attaches to the running job rather than starting a
- * duplicate — which keeps the durable driver's retries idempotent and avoids
- * redoing already-running work. Generic over the job/result shape so the same
- * lifecycle + inactivity/max-duration watchdogs drive both implementation and
- * bootstrap runs.
+ * Tracks background jobs by id. Keyed by the backend-supplied job id (the per-step
+ * job id) so a re-dispatched start re-attaches to the running job rather than starting
+ * a duplicate — which keeps the durable driver's retries idempotent and avoids redoing
+ * already-running work. Generic over the job/result shape so the same lifecycle +
+ * inactivity/max-duration watchdogs drive every agent run.
  */
-export class JobRegistry<TJob = Job, TResult extends JobResultBase = RunResult> {
+export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResultBase> {
   private readonly jobs = new Map<string, JobEntry<TResult>>()
 
   constructor(
     private readonly limits: RunnerLimits,
-    // The unit of work; defaults to the real implementation orchestration.
-    // Injectable so tests (and the bootstrap path) can drive the registry's
-    // lifecycle/watchdog logic with a different runner.
-    private readonly run: (
-      job: TJob,
-      opts: RunOptions,
-    ) => Promise<TResult> = handleRun as unknown as (
-      job: TJob,
-      opts: RunOptions,
-    ) => Promise<TResult>,
+    // The unit of work (the `agent` handler). Injectable so tests can drive the
+    // registry's lifecycle/watchdog logic with a different runner.
+    private readonly run: (job: TJob, opts: RunOptions) => Promise<TResult>,
   ) {}
 
   /** Start the job for `id`, or return the existing one (idempotent re-attach). */

@@ -33,31 +33,16 @@ export interface RunnerJobResult {
   branch?: string
   summary?: string
   error?: string
-  /** A Blueprinter job's decomposition tree (the `/blueprint` endpoint's product). */
-  service?: unknown
-  /** A spec-writer job's prescriptive specification doc (the `/spec` endpoint's product). */
-  spec?: unknown
-  /** A bootstrap job's pushed default branch (the `/bootstrap` endpoint's product). */
+  /** A repo-bootstrap job's pushed default branch (the bootstrap coding flow's product). */
   defaultBranch?: string
-  /** A `merger` job's PR assessment (the `/merge` endpoint's product). */
-  assessment?: unknown
-  /** An `on-call` job's release-regression assessment (the `/on-call` endpoint's product). */
-  onCallAssessment?: unknown
-  /** A `ci-fixer` job's outcome: whether it pushed a fix to the PR branch. */
+  /** A coding job's outcome: whether it pushed a change (the in-place fixers / conflict-resolver). */
   pushed?: boolean
   /**
-   * A conflict-resolver job's outcome: whether the PR branch is now mergeable (the
-   * `/resolve-conflicts` endpoint's product). `false` means conflicts remain.
-   */
-  resolved?: boolean
-  /** A `tester` job's structured test report (the `/test` endpoint's product). */
-  report?: unknown
-  /**
    * A generic `agent` (explore, structured-output) job's parsed JSON result. The
-   * backend's post-op coerces/validates + renders artifact files from it. The
-   * well-known result keys above (`service`/`spec`/`assessment`/…) stay for the bespoke
-   * kinds during migration; `custom` is the channel a manifest-driven structured agent
-   * uses.
+   * backend's post-op / `toRunResult` coerces, validates + renders artifact files from
+   * it — this is the single channel every structured agent (built-in or custom) uses
+   * (the migrated blueprints/spec-writer/merger/on-call/tester all return their JSON here,
+   * coerced into the well-known engine field kind-aware in the executor's `toRunResult`).
    */
   custom?: unknown
   /**
@@ -71,40 +56,16 @@ export interface RunnerJobResult {
 }
 
 /**
- * Which harness agent a dispatch targets (a coding run, a blueprint run, a
- * read-only repo exploration, a repo-bootstrap run, a CI fix, a merge-conflict
- * resolution, or a merge assessment). All are dispatched + polled identically
- * through this transport; `kind` travels in the job body to the harness's single
- * `POST /jobs` endpoint, which reads it to pick the right agent. The Cloudflare
- * backend serves all of them, and so does a self-hosted pool: it runs the same
- * executor-harness image, and runtime parity is the default (the "keep the runtimes
- * symmetric" guideline), so a pool serves every kind with no opt-in allow-list — a
- * new harness kind reaches it automatically, never silently diverging from Cloudflare.
+ * Which harness agent a dispatch targets. The strangler is complete: every built-in
+ * agent (coder, blueprints, spec-writer, the read-only design agents, the fixers, merger,
+ * on-call, tester, conflict-resolver, bootstrap) is now expressed as the SINGLE,
+ * manifest-driven `agent` kind — the job body's `mode` (explore | coding) and its data
+ * select the flow. `kind` travels in the job body to the harness's single `POST /jobs`
+ * endpoint. The Cloudflare backend and a self-hosted runner pool both serve it from the
+ * same executor-harness image, so runtime parity is automatic. Kept as a (now single-member)
+ * type so the transport seam stays explicit and a future second kind has a home.
  */
-export type RunnerDispatchKind =
-  // The generic, manifest-driven kind: the job body's `mode` (explore | coding) selects
-  // the flow. The bespoke kinds below are being migrated onto it; once every built-in
-  // kind dispatches `agent`, they are removed.
-  | 'agent'
-  | 'run'
-  | 'blueprint'
-  | 'spec'
-  // Read-only exploration (architect / analysis): clone + explore + return prose;
-  // no work branch, no commit, no PR, and an edit-free run is not a failure.
-  | 'explore'
-  | 'bootstrap'
-  | 'ci-fix'
-  | 'resolve-conflicts'
-  | 'merge'
-  // Investigate a post-release regression (read the released PR diff + Datadog evidence)
-  // and return a JSON assessment; makes no commits, like `merge`.
-  | 'on-call'
-  // Run the project's tests (against an ephemeral env or local docker-compose infra)
-  // and return a structured report; makes no commits, like `merge`.
-  | 'test'
-  // Apply fixes from a Tester's report to the PR branch and push them back (no new
-  // PR), like `ci-fix`.
-  | 'fix-tests'
+export type RunnerDispatchKind = 'agent'
 
 /**
  * Optional, transport-level provisioning hints resolved per-service at dispatch.
@@ -158,10 +119,9 @@ export interface RunnerTransport {
   /**
    * Start the job `ref.jobId` (in run `ref.runId`) with the harness job `spec`, or
    * re-attach to one already running for that ref. Must be idempotent per ref so a
-   * replayed dispatch never starts a duplicate. `kind` selects which harness agent
-   * runs (`run` by default, `blueprint` for a Blueprinter job, `bootstrap` for a
-   * repo-bootstrap job, …) and is carried in the job body; all are polled identically
-   * via {@link poll}.
+   * replayed dispatch never starts a duplicate. `kind` is the single manifest-driven
+   * `agent` kind (carried in the job body; the body's `mode` + data select the flow);
+   * the job is polled via {@link poll}.
    */
   dispatch(
     ref: RunnerJobRef,

@@ -437,6 +437,38 @@ describe('ContainerAgentExecutor.pollJob (kind-aware result coercion)', () => {
     expect(update).toEqual({ state: 'done', result: { output: 'nothing usable' } })
   })
 
+  it('surfaces the PR for a coding result that reports BOTH pushed and prUrl', async () => {
+    // The generic coding flow returns `pushed:true` AND `prUrl` (the coder). `prUrl` must
+    // win over the in-place-fixer `pushed` branch, else the structured PR is silently lost.
+    const executor = makeExecutorReturning({
+      summary: 'Implemented the widget.',
+      pushed: true,
+      prUrl: 'https://github.com/acme/widgets/pull/9',
+      branch: 'cat-factory/blk_1',
+    })
+    const update = await executor.pollJob(handle('coder'))
+    expect(update).toEqual({
+      state: 'done',
+      result: {
+        output: 'Implemented the widget.\n\nPR: https://github.com/acme/widgets/pull/9',
+        pullRequest: {
+          url: 'https://github.com/acme/widgets/pull/9',
+          number: 9,
+          branch: 'cat-factory/blk_1',
+        },
+      },
+    })
+  })
+
+  it('maps an in-place fixer result (pushed, no prUrl) to a plain pushed output', async () => {
+    const executor = makeExecutorReturning({ summary: 'Fixed the failing build.', pushed: true })
+    const update = await executor.pollJob(handle('ci-fixer'))
+    expect(update).toEqual({
+      state: 'done',
+      result: { output: 'Fixed the failing build.' },
+    })
+  })
+
   it('without agentKind the coercion no-ops and the raw custom is surfaced', async () => {
     const executor = makeExecutorReturning({
       summary: 's',

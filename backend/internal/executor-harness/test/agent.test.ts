@@ -106,6 +106,83 @@ describe('parseAgentJob', () => {
     expect(job.full).toBe(true)
   })
 
+  it('carries the conflict-resolver merge base through (coding mode)', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      branch: 'cat-factory/blk_1',
+      full: true,
+      mergeBase: 'main',
+      noChangesIsError: false,
+    })
+    // The handler keys off `mergeBase` to run the conflict-resolution flow (merge the base
+    // in, resolve, complete the merge commit + push) instead of the ordinary coding flow.
+    expect(job.mergeBase).toBe('main')
+  })
+
+  it('drops an empty mergeBase', () => {
+    const job = parseAgentJob({ ...base, mode: 'coding', mergeBase: '' })
+    expect(job.mergeBase).toBeUndefined()
+  })
+
+  it('carries the bootstrap spec through (clone + adapt a reference)', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      bootstrap: {
+        target: {
+          owner: 'acme',
+          name: 'new-svc',
+          cloneUrl: 'https://github.com/acme/new-svc.git',
+          defaultBranch: 'main',
+        },
+      },
+    })
+    // The handler keys off `bootstrap` to force-push a fresh history to the target repo.
+    expect(job.bootstrap).toEqual({
+      target: {
+        owner: 'acme',
+        name: 'new-svc',
+        cloneUrl: 'https://github.com/acme/new-svc.git',
+        defaultBranch: 'main',
+      },
+    })
+  })
+
+  it('carries the from-scratch bootstrap flag through', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      bootstrap: {
+        target: {
+          owner: 'acme',
+          name: 'new-svc',
+          cloneUrl: 'https://github.com/acme/new-svc.git',
+          defaultBranch: 'main',
+        },
+        fromScratch: true,
+      },
+    })
+    expect(job.bootstrap?.fromScratch).toBe(true)
+  })
+
+  it('rejects a bootstrap target clone URL pointing at a non-GitHub host', () => {
+    expect(() =>
+      parseAgentJob({
+        ...base,
+        mode: 'coding',
+        bootstrap: {
+          target: {
+            owner: 'acme',
+            name: 'new-svc',
+            cloneUrl: 'https://evil.example/acme/new-svc.git',
+            defaultBranch: 'main',
+          },
+        },
+      }),
+    ).toThrow(/not an allowed GitHub host/)
+  })
+
   it('rejects a missing / invalid mode', () => {
     expect(() => parseAgentJob({ ...base })).toThrow(/mode/)
     expect(() => parseAgentJob({ ...base, mode: 'nonsense' })).toThrow(/mode/)
@@ -124,5 +201,28 @@ describe('parseAgentJob', () => {
   it('rejects a missing branch', () => {
     const { branch: _branch, ...rest } = base
     expect(() => parseAgentJob({ ...rest, mode: 'explore' })).toThrow(/branch/)
+  })
+
+  it('omits a monorepo serviceDirectory when absent (whole-repo run)', () => {
+    expect(parseAgentJob({ ...base, mode: 'explore' }).repo.serviceDirectory).toBeUndefined()
+  })
+
+  it('normalises a monorepo serviceDirectory to a clean relative path', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      repo: { ...base.repo, serviceDirectory: '/packages/api/' },
+    })
+    expect(job.repo.serviceDirectory).toBe('packages/api')
+  })
+
+  it('rejects a serviceDirectory that escapes the checkout', () => {
+    expect(() =>
+      parseAgentJob({
+        ...base,
+        mode: 'coding',
+        repo: { ...base.repo, serviceDirectory: '../secrets' },
+      }),
+    ).toThrow(/serviceDirectory/)
   })
 })

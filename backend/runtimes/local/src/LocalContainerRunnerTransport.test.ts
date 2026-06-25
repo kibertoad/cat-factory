@@ -56,7 +56,7 @@ describe('LocalContainerRunnerTransport', () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
 
-    await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, { hello: 'world' }, 'run')
+    await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, { hello: 'world' }, 'agent')
 
     const runCall = calls.find((c) => c[0] === 'run')!
     expect(runCall).toContain('--label')
@@ -71,7 +71,7 @@ describe('LocalContainerRunnerTransport', () => {
     expect(init.method).toBe('POST')
     expect((init.headers as Record<string, string>)['x-harness-secret']).toBe('sek')
     // The kind travels in the body alongside the job spec.
-    expect(init.body).toBe('{"hello":"world","kind":"run"}')
+    expect(init.body).toBe('{"hello":"world","kind":"agent"}')
   })
 
   it('re-attaches to an existing container (idempotent dispatch) without a second docker run', async () => {
@@ -87,14 +87,14 @@ describe('LocalContainerRunnerTransport', () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
 
-    await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, {}, 'merge')
-    await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, {}, 'merge')
+    await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, {}, 'agent')
+    await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, {}, 'agent')
 
     expect(calls.filter((c) => c[0] === 'run')).toHaveLength(1)
-    // Both dispatches POST to /jobs, each carrying the merge kind in the body.
+    // Both dispatches POST to /jobs, each carrying the `agent` kind in the body.
     const posts = fetchImpl.mock.calls.filter(([u]) => String(u).endsWith('/jobs'))
     expect(posts).toHaveLength(2)
-    expect(posts.every(([, init]) => JSON.parse(String(init?.body)).kind === 'merge')).toBe(true)
+    expect(posts.every(([, init]) => JSON.parse(String(init?.body)).kind === 'agent')).toBe(true)
   })
 
   it('shares one per-run container across steps, keyed by run id and polled by job id', async () => {
@@ -119,8 +119,8 @@ describe('LocalContainerRunnerTransport', () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
 
-    await transport.dispatch({ runId: 'run-1', jobId: 'run-1-spec' }, {}, 'spec')
-    await transport.dispatch({ runId: 'run-1', jobId: 'run-1-architect' }, {}, 'explore')
+    await transport.dispatch({ runId: 'run-1', jobId: 'run-1-spec' }, {}, 'agent')
+    await transport.dispatch({ runId: 'run-1', jobId: 'run-1-architect' }, {}, 'agent')
     // The second step re-attaches to the run's container — only one `docker run`.
     expect(calls.filter((c) => c[0] === 'run')).toHaveLength(1)
     expect(calls.find((c) => c[0] === 'run')!).toContain('cat-factory.runId=run-1')
@@ -129,7 +129,7 @@ describe('LocalContainerRunnerTransport', () => {
     expect(jobPaths).toContain('/jobs/run-1-architect')
   })
 
-  it('sends every dispatch kind to /jobs with the kind in the body', async () => {
+  it('posts the single manifest-driven `agent` kind to /jobs in the body', async () => {
     const { exec } = fakeDocker()
     const posted: { path: string; kind: unknown }[] = []
     const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -146,17 +146,20 @@ describe('LocalContainerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await transport.dispatch({ runId: 'a', jobId: 'a' }, {}, 'blueprint')
-    await transport.dispatch({ runId: 'b', jobId: 'b' }, {}, 'ci-fix')
-    await transport.dispatch({ runId: 'c', jobId: 'c' }, {}, 'resolve-conflicts')
+    // Every built-in agent now dispatches the single `agent` kind (the body's `mode` +
+    // data select the flow), so each POST carries `kind:'agent'`.
+    await transport.dispatch({ runId: 'a', jobId: 'a' }, {}, 'agent')
+    await transport.dispatch({ runId: 'b', jobId: 'b' }, {}, 'agent')
     expect(posted).toEqual([
-      { path: '/jobs', kind: 'blueprint' },
-      { path: '/jobs', kind: 'ci-fix' },
-      { path: '/jobs', kind: 'resolve-conflicts' },
+      { path: '/jobs', kind: 'agent' },
+      { path: '/jobs', kind: 'agent' },
     ])
   })
 
-  it('runs the tester job privileged (Docker-in-Docker) but no other kind', async () => {
+  it('runs the per-run container privileged (Docker-in-Docker) when DinD test jobs are enabled', async () => {
+    // The container is per-RUN and shared across steps; a run may include a Tester step
+    // that stands its infra up via Docker-in-Docker, so the whole run's container runs
+    // privileged whenever `privilegedTestJobs` is on (the default).
     const { exec, calls } = fakeDocker()
     const fetchImpl = vi.fn(async (input: string | URL | Request) => {
       if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
@@ -167,15 +170,11 @@ describe('LocalContainerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await transport.dispatch({ runId: 't', jobId: 't' }, {}, 'test')
-    await transport.dispatch({ runId: 'r', jobId: 'r' }, {}, 'run')
-    const testRun = calls.find((c) => c[0] === 'run' && c.includes('cat-factory.runId=t'))!
-    const codeRun = calls.find((c) => c[0] === 'run' && c.includes('cat-factory.runId=r'))!
-    expect(testRun).toContain('--privileged')
-    expect(codeRun).not.toContain('--privileged')
+    await transport.dispatch({ runId: 't', jobId: 't' }, {}, 'agent')
+    expect(calls.find((c) => c[0] === 'run')!).toContain('--privileged')
   })
 
-  it('omits --privileged for the tester when privilegedTestJobs is disabled', async () => {
+  it('omits --privileged when privilegedTestJobs is disabled (no local DinD)', async () => {
     const { exec, calls } = fakeDocker()
     const fetchImpl = vi.fn(async (input: string | URL | Request) => {
       if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
@@ -187,7 +186,7 @@ describe('LocalContainerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await transport.dispatch({ runId: 't', jobId: 't' }, {}, 'test')
+    await transport.dispatch({ runId: 't', jobId: 't' }, {}, 'agent')
     expect(calls.find((c) => c[0] === 'run')!).not.toContain('--privileged')
   })
 
@@ -202,7 +201,7 @@ describe('LocalContainerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await transport.dispatch({ runId: 'big', jobId: 'big' }, {}, 'run', { instanceSize: 'large' })
+    await transport.dispatch({ runId: 'big', jobId: 'big' }, {}, 'agent', { instanceSize: 'large' })
     const run = calls.find((c) => c[0] === 'run')!
     expect(run.join(' ')).toContain('--memory 4g')
     expect(run.join(' ')).toContain('--cpus 4')
@@ -223,7 +222,7 @@ describe('LocalContainerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await transport.dispatch({ runId: 'job-9', jobId: 'job-9' }, {}, 'run')
+    await transport.dispatch({ runId: 'job-9', jobId: 'job-9' }, {}, 'agent')
     const view = await transport.poll({ runId: 'job-9', jobId: 'job-9' })
     expect(view.state).toBe('done')
     expect(view.result?.prUrl).toBe('https://x/pr/1')
@@ -257,7 +256,7 @@ describe('LocalContainerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await transport.dispatch({ runId: 'job-x', jobId: 'job-x' }, {}, 'run')
+    await transport.dispatch({ runId: 'job-x', jobId: 'job-x' }, {}, 'agent')
     const view = await transport.poll({ runId: 'job-x', jobId: 'job-x' })
     expect(view.state).toBe('failed')
     expect(view.error).toMatch(/container evicted or crashed/)
@@ -274,7 +273,7 @@ describe('LocalContainerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await transport.dispatch({ runId: 'job-r', jobId: 'job-r' }, {}, 'run')
+    await transport.dispatch({ runId: 'job-r', jobId: 'job-r' }, {}, 'agent')
     await transport.release({ runId: 'job-r', jobId: 'job-r' })
     expect(calls.some((c) => c[0] === 'rm' && c.includes('container-abc'))).toBe(true)
 
@@ -297,7 +296,7 @@ describe('LocalContainerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await transport.dispatch({ runId: 'job-404', jobId: 'job-404' }, {}, 'run')
+    await transport.dispatch({ runId: 'job-404', jobId: 'job-404' }, {}, 'agent')
     const view = await transport.poll({ runId: 'job-404', jobId: 'job-404' })
     expect(view.state).toBe('failed')
     expect(view.error).toMatch(/container evicted or crashed/)
@@ -316,7 +315,7 @@ describe('LocalContainerRunnerTransport', () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
     await expect(
-      transport.dispatch({ runId: 'job-500', jobId: 'job-500' }, {}, 'run'),
+      transport.dispatch({ runId: 'job-500', jobId: 'job-500' }, {}, 'agent'),
     ).rejects.toThrow(/HTTP 500/)
   })
 
@@ -350,7 +349,7 @@ describe('LocalContainerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await transport.dispatch({ runId: 'job-stale', jobId: 'job-stale' }, {}, 'run')
+    await transport.dispatch({ runId: 'job-stale', jobId: 'job-stale' }, {}, 'agent')
     // The stale container was force-removed, then a fresh one was started.
     expect(calls.some((c) => c[0] === 'rm' && c.includes('stale-container'))).toBe(true)
     expect(calls.some((c) => c[0] === 'run')).toBe(true)

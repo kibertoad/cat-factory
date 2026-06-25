@@ -63,7 +63,7 @@ describe('RunnerPoolTransport', () => {
     const transport = new RunnerPoolTransport(provider, manifest, (k) =>
       k === 'API_TOKEN' ? 't' : undefined,
     )
-    await transport.dispatch({ runId: 'run-1', jobId: 'run-1-coder' }, { hello: 'world' }, 'run')
+    await transport.dispatch({ runId: 'run-1', jobId: 'run-1-coder' }, { hello: 'world' }, 'agent')
     await transport.poll({ runId: 'run-1', jobId: 'run-1-coder' })
     await transport.release({ runId: 'run-1', jobId: 'run-1-coder' })
     expect(calls.dispatch).toHaveLength(1)
@@ -76,34 +76,24 @@ describe('RunnerPoolTransport', () => {
     expect((calls.release[0] as { jobId: string }).jobId).toBe('run-1-coder')
   })
 
-  it('serves repo bootstrap (the harness /bootstrap route needs no Cloudflare primitive)', async () => {
+  it('stamps the dispatch spec with the single generic agent kind', async () => {
     const { provider, calls } = fakeProvider()
     const transport = new RunnerPoolTransport(provider, manifest, () => 't')
-    await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, { repoName: 'svc' }, 'bootstrap')
+    await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, { repoName: 'svc' }, 'agent')
     expect(calls.dispatch).toHaveLength(1)
     const req = calls.dispatch[0] as { spec: Record<string, unknown> }
-    expect(req.spec.kind).toBe('bootstrap')
+    expect(req.spec.kind).toBe('agent')
   })
 
-  // Runtime parity is the default: a pool runs the same harness image, so it serves
-  // every kind with no opt-in allow-list — none are gated or rejected.
-  it('serves every harness route (blueprint/spec/merge/… run on the same image)', async () => {
+  // The harness is a generic LLM-over-a-checkout runner with ONE route: WHAT each agent
+  // does (bootstrap, conflict resolution, blueprint, merge, …) is carried as job data, not
+  // a separate dispatch kind. A pool runs the same image, so dispatch defaults to `agent`.
+  it('defaults the dispatch kind to the generic agent route', async () => {
     const { provider, calls } = fakeProvider()
     const transport = new RunnerPoolTransport(provider, manifest, () => 't')
-    for (const kind of [
-      'blueprint',
-      'spec',
-      'explore',
-      'ci-fix',
-      'resolve-conflicts',
-      'merge',
-      'test',
-      'fix-tests',
-    ] as const) {
-      await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, {}, kind)
-    }
-    expect(calls.dispatch).toHaveLength(8)
-    expect((calls.dispatch.at(-1) as { spec: Record<string, unknown> }).spec.kind).toBe('fix-tests')
+    await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, {})
+    expect(calls.dispatch).toHaveLength(1)
+    expect((calls.dispatch[0] as { spec: Record<string, unknown> }).spec.kind).toBe('agent')
   })
 })
 
@@ -180,20 +170,22 @@ describe('HttpRunnerPoolProvider', () => {
     expect(view.result?.prUrl).toBe('https://github.com/o/r/pull/9')
   })
 
-  it('forwards the whole structured result envelope via resultPath (test report, etc.)', async () => {
-    const report = {
-      greenlight: false,
-      summary: 'two checks failed',
-      tested: ['login'],
-      outcomes: [{ name: 'login', status: 'failed' }],
-      concerns: [{ title: 'bug', detail: 'x', severity: 'high' }],
-    }
+  it('forwards the slimmed result scalars via resultPath and drops legacy structured fields', async () => {
+    // The bespoke per-kind result channels (`report`/`service`/`assessment`/`resolved`/…)
+    // were removed when every built-in agent migrated onto the single `agent` kind — its
+    // structured doc now rides `custom` (covered below). A pool that still returns an old
+    // `report` field has it dropped (not a known channel); the scalars pass through.
     vi.stubGlobal('fetch', () =>
       Promise.resolve(
         new Response(
           JSON.stringify({
             state: 'succeeded',
-            result: { report, summary: 'tested', usage: { inputTokens: 10, outputTokens: 5 } },
+            result: {
+              report: { greenlight: false },
+              pushed: true,
+              summary: 'tested',
+              usage: { inputTokens: 10, outputTokens: 5 },
+            },
           }),
           { status: 200 },
         ),
@@ -210,10 +202,11 @@ describe('HttpRunnerPoolProvider', () => {
       resolveSecret: () => 't',
     })
     expect(view.state).toBe('done')
-    // The structured test report reaches the engine intact (previously dropped).
-    expect(view.result?.report).toEqual(report)
-    expect(view.result?.usage).toEqual({ inputTokens: 10, outputTokens: 5 })
     expect(view.result?.summary).toBe('tested')
+    expect(view.result?.pushed).toBe(true)
+    expect(view.result?.usage).toEqual({ inputTokens: 10, outputTokens: 5 })
+    // The legacy `report` channel no longer exists on the result, so it is dropped.
+    expect((view.result as Record<string, unknown>).report).toBeUndefined()
   })
 
   it('forwards the generic `custom` structured channel (migrated agent kinds)', async () => {

@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/executor-harness",
-  "version": "1.13.1",
+  "version": "1.14.0",
   "private": true,
   "description": "Container payload: a thin TypeScript wrapper that runs the Pi coding agent against a cloned repo and opens a PR. Runs in the Cloudflare Container; carries no secrets.",
   "type": "module",
