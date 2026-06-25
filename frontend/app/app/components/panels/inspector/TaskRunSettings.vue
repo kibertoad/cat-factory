@@ -13,7 +13,7 @@ const pipelines = usePipelinesStore()
 const accounts = useAccountsStore()
 const tracker = useTrackerStore()
 const ui = useUiStore()
-const { unavailableInPreset } = useAiReadiness()
+const { ready, unavailableInPreset } = useAiReadiness()
 
 // ---- responsible product person --------------------------------------------
 // The account member (a `product` role-holder) accountable for this task; they are
@@ -79,8 +79,13 @@ const selectedModelPreset = computed(() => modelPresets.resolve(props.block.mode
 
 // Model ids in the chosen preset that aren't usable under the current configuration — the
 // task would fail when a step dispatches onto one. Labelled for the inline warning below.
+// Gated on `ready`: until the per-workspace catalog has loaded, `isUsableId` reports every
+// model unusable, which would surface a spurious "this task would fail" warning (e.g. while
+// the catalog fetch is in flight, or if it failed) — so only flag once the catalog is known.
 const unavailablePresetModels = computed(() =>
-  unavailableInPreset(selectedModelPreset.value).map((id) => models.getModel(id)?.label ?? id),
+  ready.value
+    ? unavailableInPreset(selectedModelPreset.value).map((id) => models.labelForId(id))
+    : [],
 )
 const modelPresetMenu = computed(() => [
   [

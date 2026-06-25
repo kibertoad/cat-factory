@@ -22,7 +22,7 @@ const presetName = computed(() => modelPresets.defaultPreset?.name ?? 'default p
 
 /** Readable labels for the unavailable model ids (catalog label, else the raw id). */
 const unavailableLabels = computed(() =>
-  defaultPresetUnavailable.value.map((id) => models.getModel(id)?.label ?? id),
+  defaultPresetUnavailable.value.map((id) => models.labelForId(id)),
 )
 
 function go(action: () => void) {

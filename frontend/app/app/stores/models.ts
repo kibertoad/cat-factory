@@ -116,6 +116,11 @@ export const useModelsStore = defineStore('models', () => {
     return id ? byId.value.get(id) : undefined
   }
 
+  /** Readable label for a catalog model id: the catalog label, else the raw id. */
+  function labelForId(id: string): string {
+    return byId.value.get(id)?.label ?? id
+  }
+
   /**
    * Whether the workspace has at least one usable AI model source right now. The
    * per-workspace catalog already resolves `available` from the configured keys /
@@ -155,6 +160,7 @@ export const useModelsStore = defineStore('models', () => {
     refresh,
     byId,
     getModel,
+    labelForId,
     hasUsableModel,
     isUsableId,
     labelForRef,

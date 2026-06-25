@@ -46,14 +46,27 @@ const aiReadiness = useAiReadiness()
 // Load the board from the backend before rendering it.
 onMounted(() => workspace.init())
 
+// Per-session guards so each AI-onboarding dialog auto-opens at most once (later opens are
+// user-driven from the banner). Reset on workspace switch by the catalog watcher below.
+const autoOpenedSetup = ref(false)
+const autoOpenedPreset = ref(false)
+
 // Load the per-workspace model catalog as soon as a board is active (re-loaded per board —
 // availability reflects that workspace's keys/subscriptions). This populates the AI-readiness
 // signals regardless of which lazy picker happens to mount, so the onboarding prompts below
 // can fire. Credential edits re-fetch via `models.refresh()` in the provider panels.
 watch(
   () => workspace.workspaceId,
-  (id) => {
+  (id, prev) => {
     if (id) void models.ensureLoaded(id)
+    // Switching workspaces resets the per-session AI-onboarding state: dismissals and the
+    // auto-open guards are scoped to one workspace, so a prompt dismissed in workspace A must
+    // not suppress the (independent) prompt for workspace B that also lacks a usable source.
+    if (prev !== undefined && id !== prev) {
+      autoOpenedSetup.value = false
+      autoOpenedPreset.value = false
+      ui.resetAiOnboarding()
+    }
   },
   { immediate: true },
 )
@@ -62,8 +75,6 @@ watch(
 // precedence over the preset-mismatch prompt. Honour the per-session dismissed flags so a
 // user who closed the banner isn't re-interrupted, and only auto-open once each (later opens
 // are user-driven from the banner). The prompts clear themselves once the gap is closed.
-const autoOpenedSetup = ref(false)
-const autoOpenedPreset = ref(false)
 watch(
   () => [
     aiReadiness.ready.value,

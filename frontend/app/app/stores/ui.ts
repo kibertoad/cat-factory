@@ -363,6 +363,16 @@ export const useUiStore = defineStore('ui', () => {
     aiPresetMismatchOpen.value = false
     aiPresetDismissed.value = true
   }
+  // Clear the per-session AI-onboarding state (open dialogs + dismissed flags). Called on
+  // workspace switch: dismissals are per-session-per-workspace, so a prompt dismissed in one
+  // workspace must not suppress the (independent) prompt for another workspace that also
+  // lacks a usable AI source / has a broken default preset.
+  function resetAiOnboarding() {
+    aiProviderSetupOpen.value = false
+    aiPresetMismatchOpen.value = false
+    aiSetupDismissed.value = false
+    aiPresetDismissed.value = false
+  }
   function openRequirementReview(blockId: string) {
     resultView.value = { view: 'requirements-review', blockId, instanceId: null, stepIndex: null }
   }
@@ -485,6 +495,7 @@ export const useUiStore = defineStore('ui', () => {
     closeAiPresetMismatch,
     dismissAiSetup,
     dismissAiPresetMismatch,
+    resetAiOnboarding,
     openRequirementReview,
     openClarityReview,
     openServiceSpec,
