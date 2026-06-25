@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   BraveWebSearchUpstream,
   SearxngWebSearchUpstream,
-  createWebSearchUpstreamFromEnv,
+  createWebSearchUpstream,
 } from '../src/modules/webSearch/upstreams.js'
 
 // The container web-search upstreams: pure `fetch` + payload mapping into the
@@ -87,21 +87,21 @@ describe('SearxngWebSearchUpstream', () => {
   })
 })
 
-describe('createWebSearchUpstreamFromEnv', () => {
+describe('createWebSearchUpstream', () => {
   it('is undefined when nothing is configured', () => {
-    expect(createWebSearchUpstreamFromEnv({})).toBeUndefined()
+    expect(createWebSearchUpstream({})).toBeUndefined()
   })
 
   it('prefers Brave when its key is set', () => {
-    const up = createWebSearchUpstreamFromEnv({
-      WEB_SEARCH_BRAVE_API_KEY: 'k',
-      WEB_SEARCH_SEARXNG_URL: 'https://searx.local',
+    const up = createWebSearchUpstream({
+      braveApiKey: 'k',
+      searxngUrl: 'https://searx.local',
     })
     expect(up).toBeInstanceOf(BraveWebSearchUpstream)
   })
 
   it('falls back to a self-hosted SearXNG', () => {
-    const up = createWebSearchUpstreamFromEnv({ WEB_SEARCH_SEARXNG_URL: 'https://searx.local' })
+    const up = createWebSearchUpstream({ searxngUrl: 'https://searx.local' })
     expect(up).toBeInstanceOf(SearxngWebSearchUpstream)
   })
 })

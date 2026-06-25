@@ -28,7 +28,7 @@ export function webSearchProxyController(): Hono<AppEnv> {
   // SearXNG's search endpoint shape: `/search?q=...&format=json`. We always answer
   // JSON regardless of the `format` param (the container only ever asks for json).
   app.get('/v1/web-search/search', async (c) => {
-    const { config, gateways, spendService, accountSettings } = c.get('container')
+    const { config, spendService, accountSettings } = c.get('container')
 
     const secret = config.auth.sessionSecret
     if (!secret) {
@@ -45,17 +45,19 @@ export function webSearchProxyController(): Hono<AppEnv> {
       return c.json({ error: { message: 'Invalid or expired session token' } }, 401)
     }
 
-    // Resolve the search upstream from the run's account settings (web-search keys moved
-    // out of env into the per-account store). A legacy gateway upstream still serves as a
-    // fallback when the settings store isn't wired. None ⇒ container web search is off.
+    // Resolve the search upstream from the run's account settings (web-search keys live in
+    // the per-account store). None configured ⇒ degrade gracefully with an empty result set
+    // (a 200, like a search that found nothing) rather than hard-erroring mid-run — and the
+    // executor only advertises `web_search` when the account has keys, so a well-formed run
+    // rarely reaches this branch.
     const upstream =
-      (accountSettings && session.accountId
+      accountSettings && session.accountId
         ? createWebSearchUpstream(
             (await accountSettings.service.resolve(session.accountId)).webSearch ?? {},
           )
-        : undefined) ?? gateways.webSearch
+        : undefined
     if (!upstream) {
-      return c.json({ error: { message: 'Web search is not configured' } }, 503)
+      return c.json({ query: '', number_of_results: 0, results: [] })
     }
 
     // Budget gate: a run that has exhausted its workspace's spend budget can't keep

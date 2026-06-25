@@ -352,7 +352,13 @@ export const tokenUsage = pgTable(
     cost_estimate: doublePrecision('cost_estimate').notNull().default(0),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
-  (t) => [index('idx_token_usage_created').on(t.created_at)],
+  (t) => [
+    index('idx_token_usage_created').on(t.created_at),
+    // Per-workspace spend rollup (`totalsSinceForWorkspace`) runs on every metered
+    // LLM-proxy call + web-search + step gate; index (workspace_id, created_at) so it
+    // doesn't scan the whole ledger and filter workspace_id row-by-row.
+    index('idx_token_usage_workspace').on(t.workspace_id, t.created_at),
+  ],
 )
 
 // Per-workspace model presets (mirror of D1 migration 0006's `model_presets`). A

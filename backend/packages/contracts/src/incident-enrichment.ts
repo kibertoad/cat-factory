@@ -44,8 +44,16 @@ export function parseIncidentEnrichmentCredentials(raw: unknown): IncidentEnrich
   return v.parse(incidentEnrichmentCredentialsSchema, raw)
 }
 
-/** Set/replace a workspace's incident-enrichment credentials (write-only). */
-export const upsertIncidentEnrichmentSchema = incidentEnrichmentCredentialsSchema
+/**
+ * Set a workspace's incident-enrichment credentials (write-only). Each provider group is
+ * three-state so an operator can edit one vendor without disturbing the other AND can
+ * remove just one: OMITTED ⇒ leave the stored group unchanged, `null` ⇒ clear it, a value
+ * ⇒ set it. (A full wipe of both is `DELETE`.) Mirrors the account-settings secrets merge.
+ */
+export const upsertIncidentEnrichmentSchema = v.object({
+  pagerDuty: v.optional(v.nullable(pagerDutyCredentialsSchema)),
+  incidentIo: v.optional(v.nullable(incidentIoCredentialsSchema)),
+})
 export type UpsertIncidentEnrichmentInput = v.InferOutput<typeof upsertIncidentEnrichmentSchema>
 
 /** Non-secret presence flags persisted alongside the sealed blob, for the UI badge. */

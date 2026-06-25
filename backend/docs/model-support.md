@@ -214,17 +214,39 @@ The full model, the safeguards, and the request flow are documented in
 
 ---
 
-## 7. Spend budget vs flat-rate quota
+## 7. Spend budget vs non-metered runs (subscription + local)
 
-Subscription runs are **flat-rate quota** (a fixed-price plan), not billed per token,
-so they must not be blocked by an exhausted **monetary** spend budget:
+The per-workspace **monetary** spend budget (Workspace settings → Budget) meters and gates
+runs that cost the deployment money. Two kinds of run incur **no** metered cost and so are
+**never** blocked by it:
 
-- The picker marks subscription flavours `quotaBased: true` (kernel `models.ts`).
-- `ContainerAgentExecutor.isQuotaBased` returns true iff the _effective_ ref carries a
-  `claude-code`/`codex` harness — shared with dispatch so the two agree.
-- The spend gate (`ExecutionService`) pauses an over-budget run **only when the step
-  is not quota-based**; a subscription step keeps running. Direct/Cloudflare (Pi) runs
-  are metered against the budget as usual (`SPEND_MONTHLY_LIMIT`, `SPEND_MODEL_PRICES`).
+- **Subscription** runs are **flat-rate quota** (a fixed-price plan), not billed per token.
+  The picker marks them `quotaBased: true` (kernel `models.ts`); `ContainerAgentExecutor.
+  isQuotaBased` returns true iff the _effective_ ref carries a `claude-code`/`codex` harness
+  (shared with dispatch so the two agree).
+- **Local-runner** models (Ollama / LM Studio / llama.cpp / vLLM / custom) are **keyless**
+  and run on the _user's own_ endpoint, so they cost the deployment nothing. Detected off
+  the resolved model id (`parseLocalModelId`).
+
+Direct API keys and Cloudflare Workers AI ARE metered against the budget as usual.
+
+How the gate behaves (`ExecutionService`):
+
+- **Mid-run:** `currentStepIsNonMetered` exempts subscription **and** local steps, so an
+  over-budget run pauses **only** on a metered step; a non-metered step keeps running.
+- **Up-front:** `assertBudgetAllowsPipeline` refuses `start()`/`retry()` with a clear
+  `409` when the budget is reached **and** the pipeline has a metered step — rather than a
+  silent mid-run pause. A pipeline whose every step is local/subscription starts normally.
+
+### A `0` budget is intentional ("local-/subscription-only")
+
+`spendMonthlyLimit: 0` is a **valid, deliberate** setting, not a footgun: it means "no PAID
+spend". A workspace at `0` refuses metered runs (clear up-front error) but **keeps running
+local-runner models and connected subscriptions**, since those incur no metered cost. It is
+reversible from the UI and safer than an unbounded "unlimited" that can run up a real bill.
+(Web search costs money on metered providers, so a `0` budget also blocks paid searches —
+the local model itself still runs.) The budget lives on the `workspace_settings` row; there
+are no longer `SPEND_MONTHLY_LIMIT` / `SPEND_MODEL_PRICES` env vars.
 
 ---
 

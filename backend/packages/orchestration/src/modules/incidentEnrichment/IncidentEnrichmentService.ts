@@ -4,7 +4,7 @@ import type {
   SecretCipher,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { requireWorkspace } from '@cat-factory/kernel'
+import { ConflictError, requireWorkspace } from '@cat-factory/kernel'
 import type {
   IncidentEnrichmentCredentials,
   IncidentEnrichmentView,
@@ -59,12 +59,17 @@ export class IncidentEnrichmentService {
     await requireWorkspace(this.workspaceRepository, workspaceId)
     const now = this.clock.now()
     const existing = await this.connections.get(workspaceId)
+    // Decrypt the stored blob STRICTLY before re-sealing: if it can't be opened (e.g. the
+    // encryption key changed), refuse rather than silently dropping the un-edited group on
+    // the next partial write. The operator clears + re-enters to reset.
     const current = existing ? await this.openCredentials(existing.credentials) : {}
-    // Provided groups overlay the stored ones; omitted groups are preserved.
-    const merged: IncidentEnrichmentCredentials = {
-      ...current,
-      ...(input.pagerDuty ? { pagerDuty: input.pagerDuty } : {}),
-      ...(input.incidentIo ? { incidentIo: input.incidentIo } : {}),
+    // Three-state merge per provider group: omitted ⇒ preserve, null ⇒ clear, value ⇒ set.
+    const merged: IncidentEnrichmentCredentials = { ...current }
+    for (const key of ['pagerDuty', 'incidentIo'] as const) {
+      const patch = input[key]
+      if (patch === undefined) continue
+      if (patch === null) delete merged[key]
+      else merged[key] = patch as never
     }
     const summary = incidentEnrichmentSummary(merged)
     const credentials = await this.cipher.encrypt(JSON.stringify(merged))
@@ -83,11 +88,19 @@ export class IncidentEnrichmentService {
     await this.connections.delete(workspaceId)
   }
 
+  /**
+   * Decrypt + parse the stored credentials blob for a re-seal. Throws (as a clear
+   * {@link ConflictError}) when the blob can't be opened, so {@link setConnection} refuses
+   * to overwrite rather than wiping the un-edited provider group — see the call site.
+   */
   private async openCredentials(sealed: string): Promise<IncidentEnrichmentCredentials> {
     try {
       return parseIncidentEnrichmentCredentials(JSON.parse(await this.cipher.decrypt(sealed)))
     } catch {
-      return {}
+      throw new ConflictError(
+        'The stored incident-enrichment credentials could not be decrypted (the encryption ' +
+          'key may have changed). Delete the connection and re-enter the credentials to reset.',
+      )
     }
   }
 }

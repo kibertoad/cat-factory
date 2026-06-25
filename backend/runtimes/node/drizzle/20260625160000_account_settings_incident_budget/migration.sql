@@ -20,3 +20,5 @@ CREATE TABLE "account_settings" (
 	"created_at" bigint NOT NULL,
 	"updated_at" bigint NOT NULL
 );
+--> statement-breakpoint
+CREATE INDEX "idx_token_usage_workspace" ON "token_usage" USING btree ("workspace_id","created_at");

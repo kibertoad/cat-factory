@@ -111,31 +111,14 @@ export class SearxngWebSearchUpstream implements WebSearchUpstream {
 }
 
 /**
- * Build the container web-search upstream from a deployment's environment, or
- * undefined when none is configured (⇒ container web search stays off; the proxy
- * route replies 503). Brave wins when its key is set (the recommended path — one
- * backend key, nothing in the sandbox); else a self-hosted SearXNG the backend
- * reverse-proxies. These env vars live on the BACKEND (next to the model keys), not
- * in the container — distinct from the harness's own `BRAVE_SEARCH_API_KEY` /
- * `SEARXNG_URL` autodetect, which only applies to self-hosted runner-pool containers.
- */
-export function createWebSearchUpstreamFromEnv(env: {
-  WEB_SEARCH_BRAVE_API_KEY?: string
-  WEB_SEARCH_SEARXNG_URL?: string
-  WEB_SEARCH_SEARXNG_API_KEY?: string
-}): WebSearchUpstream | undefined {
-  return createWebSearchUpstream({
-    braveApiKey: env.WEB_SEARCH_BRAVE_API_KEY,
-    searxngUrl: env.WEB_SEARCH_SEARXNG_URL,
-    searxngApiKey: env.WEB_SEARCH_SEARXNG_API_KEY,
-  })
-}
-
-/**
  * Build the container web-search upstream from a resolved key config (the per-account
- * settings store), or undefined when none is configured. Brave wins when its key is set,
- * else a self-hosted SearXNG. The pure builder behind {@link createWebSearchUpstreamFromEnv}
- * — used by the proxy to resolve the run's account upstream dynamically.
+ * settings store), or undefined when none is configured (⇒ container web search stays off
+ * for that account). Brave wins when its key is set (the recommended path — one backend
+ * key, nothing in the sandbox); else a self-hosted SearXNG the backend reverse-proxies.
+ * The keys live in the per-account settings store, not in the container — distinct from the
+ * harness's own `BRAVE_SEARCH_API_KEY` / `SEARXNG_URL` autodetect, which only applies to
+ * self-hosted runner-pool containers. Used by the proxy to resolve the run's account
+ * upstream dynamically.
  */
 export function createWebSearchUpstream(cfg: {
   braveApiKey?: string

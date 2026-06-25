@@ -75,7 +75,17 @@ export const workspaceSettingsSchema = v.object({
   taskLimitPerType: v.nullable(taskLimitPerTypeSchema),
   /** Spend budget currency (ISO 4217). Null ⇒ the built-in default (`EUR`). */
   spendCurrency: v.nullable(spendCurrencySchema),
-  /** Monthly spend budget in {@link spendCurrency}. Null ⇒ the built-in default. */
+  /**
+   * Monthly spend budget in {@link spendCurrency}. Null ⇒ the built-in default
+   * (~100 EUR). `0` is intentional and valid — it means "no PAID spend": runs on
+   * metered models (direct API keys / Cloudflare Workers AI) are refused at start and
+   * paused mid-run, while LOCAL-runner models (keyless) and connected SUBSCRIPTIONS
+   * (Claude Code / Codex, flat-rate quota) keep running, since they incur no metered
+   * cost. So `0` is the "local-/subscription-only" setting, not a footgun — it's
+   * reversible from the UI and clearer than an unbounded "unlimited" that can run up a
+   * bill. The gate is per-workspace (see the spend safeguard); web search still costs
+   * money, so a `0` budget also blocks paid web searches.
+   */
   spendMonthlyLimit: v.nullable(v.pipe(v.number(), v.minValue(0))),
   /** Per-model price overrides overlaid on the base table. Null ⇒ no overrides. */
   spendModelPrices: v.nullable(spendModelPricesSchema),

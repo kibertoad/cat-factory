@@ -9,8 +9,8 @@ import type { OpenRouterModelMeta, WorkspaceSettings } from '@cat-factory/contra
 // Prices are per 1,000,000 tokens, in the configured `currency`. The defaults
 // below are approximate published list prices converted to EUR (~0.92 EUR/USD)
 // and are deliberately operator-overridable: an accurate budget only needs the
-// prices to be in the right ballpark, and rates change. Override per deployment
-// via the SPEND_MODEL_PRICES env var (see the worker's config).
+// prices to be in the right ballpark, and rates change. Override PER WORKSPACE in
+// the UI (the `workspace_settings.spend_model_prices` overrides, overlaid here).
 
 /** Price per 1M input/output tokens for one model. */
 export interface ModelPrice {
@@ -50,7 +50,7 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   'workers-ai': { inputPerMillion: 0.1, outputPerMillion: 0.1 },
   // DeepSeek V4 Pro runs on Workers AI but is a partner model billed at provider
   // rates (served via Fireworks), not the near-free neuron rate above, so it needs
-  // its own entry. Approximate (USD→EUR ~0.92); tune via SPEND_MODEL_PRICES.
+  // its own entry. Approximate (USD→EUR ~0.92); tune via the per-workspace price overrides.
   'workers-ai:deepseek/deepseek-v4-pro': { inputPerMillion: 0.5, outputPerMillion: 2 },
   // Kimi K2.5 / K2.6 / K2.7 likewise run on Workers AI as partner models billed at Workers
   // AI's published per-token rate, NOT the near-free `workers-ai` neuron rate — without
@@ -75,7 +75,7 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // OpenRouter — a passthrough gateway billed at the underlying provider's rates (no
   // per-token markup), so each curated model carries the upstream vendor's list price
   // (USD→EUR ~0.92). Keyed by the OpenRouter `vendor/model` slug. The bare `openrouter`
-  // fallback is a mid-range guess for any uncatalogued slug — tune via SPEND_MODEL_PRICES.
+  // fallback is a mid-range guess for any uncatalogued slug — tune via the per-workspace price overrides.
   'openrouter:anthropic/claude-opus-4.8': { inputPerMillion: 4.6, outputPerMillion: 23 },
   'openrouter:google/gemini-3-pro': { inputPerMillion: 1.84, outputPerMillion: 11.04 },
   'openrouter:openai/gpt-5.5': { inputPerMillion: 3.68, outputPerMillion: 22.08 },
@@ -83,7 +83,7 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   openrouter: { inputPerMillion: 1.84, outputPerMillion: 11.04 },
   // LiteLLM — an operator-hosted gateway whose true cost depends entirely on the backend
   // model it routes to, which we can't know here. Default to the generic fallback rate;
-  // operators should override per their routing via SPEND_MODEL_PRICES.
+  // operators should override per their routing via the per-workspace price overrides.
   litellm: { inputPerMillion: 0.14, outputPerMillion: 0.55 },
 }
 

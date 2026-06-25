@@ -2,7 +2,6 @@ import {
   type AgentExecutor,
   type Clock,
   CompositeNotificationChannel,
-  type IncidentEnrichmentProvider,
   type DocumentSourceProvider,
   type ExecutionEventPublisher,
   type FragmentOwnerKind,
@@ -1025,6 +1024,18 @@ function buildContainerExecutor(
     return registry.installationToken(installationId)
   }
 
+  // Web-search keys live per-account; advertise Pi's `web_search` tool to a run only when
+  // its account actually has a usable upstream (else the tool would just fail/return
+  // nothing). Resolved per run off the account-settings store (its own short-TTL cache).
+  const webSearchSettings = buildAccountSettings(env, db, clock)
+  const resolveWebSearchEnabled = webSearchSettings
+    ? async (workspaceId: string): Promise<boolean> => {
+        const accountId = await new D1WorkspaceRepository({ db }).accountOf(workspaceId)
+        if (!accountId) return false
+        return Boolean((await webSearchSettings.resolve(accountId)).webSearch)
+      }
+    : undefined
+
   return new ContainerAgentExecutor({
     resolveTransport,
     agentRouting: config.agents.routing,
@@ -1075,11 +1086,9 @@ function buildContainerExecutor(
         }
       : {}),
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
-    // Point container agents' web search at the backend search proxy (no provider key
-    // in the sandbox). Keys are per-account now (the proxy resolves them per run), so the
-    // tool is offered whenever the settings store is wired; the proxy 503s if the run's
-    // account has no keys.
-    webSearchProxyEnabled: Boolean(env.ENCRYPTION_KEY?.trim()),
+    // Point container agents' web search at the backend search proxy (no provider key in
+    // the sandbox), but only for a run whose account has keys (see resolver above).
+    ...(resolveWebSearchEnabled ? { resolveWebSearchEnabled } : {}),
     githubApiBase: config.github.apiBase,
     // Forward container tool spans to Langfuse (when configured) as child spans under
     // the run trace — the same sink the LLM proxy fans generations out to.

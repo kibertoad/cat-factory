@@ -64,7 +64,7 @@ function makeExecutor(): { executor: ContainerAgentExecutor; captured: Captured[
     sessionService,
     proxyBaseUrl: 'https://proxy.test/v1',
     githubApiBase: 'https://api.github.com',
-    webSearchProxyEnabled: true,
+    resolveWebSearchEnabled: async () => true,
     // Read-only agents only probe the work branch; return true so the read-only body
     // resolves to the shared work branch (the more interesting path).
     ensureWorkBranch: async () => true,
@@ -216,7 +216,7 @@ function makeExecutorReturning(result: RunnerJobResult): ContainerAgentExecutor 
     sessionService,
     proxyBaseUrl: 'https://proxy.test/v1',
     githubApiBase: 'https://api.github.com',
-    webSearchProxyEnabled: true,
+    resolveWebSearchEnabled: async () => true,
     ensureWorkBranch: async () => true,
   }
   return new ContainerAgentExecutor(deps)

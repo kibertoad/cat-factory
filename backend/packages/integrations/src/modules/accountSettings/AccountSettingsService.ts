@@ -1,4 +1,5 @@
 import type { AccountSettingsRepository, Clock, SecretCipher } from '@cat-factory/kernel'
+import { ConflictError } from '@cat-factory/kernel'
 import type {
   AccountSettingsConfig,
   AccountSettingsSecrets,
@@ -101,7 +102,11 @@ export class AccountSettingsService {
       : existing
         ? parseConfig(existing.config)
         : DEFAULT_ACCOUNT_SETTINGS_CONFIG
-    const current = existing?.secretsCipher ? await this.openSecrets(existing.secretsCipher) : {}
+    // Decrypt the stored blob STRICTLY before re-sealing: if it can't be opened (e.g. the
+    // encryption key changed) refuse rather than silently dropping the un-edited group(s) on
+    // this partial write. The operator clears + re-enters to reset. (resolve() stays tolerant
+    // — a corrupt blob disables features on read, but a write must never destroy secrets.)
+    const current = existing?.secretsCipher ? await this.decryptSecrets(existing.secretsCipher) : {}
     const merged: AccountSettingsSecrets = { ...current }
     if (input.secrets) {
       for (const key of ['slackOAuth', 'webSearch'] as const) {
@@ -125,9 +130,22 @@ export class AccountSettingsService {
     return { config, summary }
   }
 
-  private async openSecrets(sealed: string): Promise<AccountSettingsSecrets> {
+  /** Decrypt + parse the sealed secrets blob. Throws when it can't be opened/parsed. */
+  private async decryptSecrets(sealed: string): Promise<AccountSettingsSecrets> {
     try {
       return parseAccountSettingsSecrets(JSON.parse(await this.cipher.decrypt(sealed)))
+    } catch {
+      throw new ConflictError(
+        'The stored account settings secrets could not be decrypted (the encryption key may ' +
+          'have changed). Clear the deployment integrations and re-enter them to reset.',
+      )
+    }
+  }
+
+  /** Tolerant decrypt for the runtime read path: an unopenable blob ⇒ no secrets. */
+  private async openSecrets(sealed: string): Promise<AccountSettingsSecrets> {
+    try {
+      return await this.decryptSecrets(sealed)
     } catch {
       return {}
     }
