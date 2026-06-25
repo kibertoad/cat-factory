@@ -240,6 +240,13 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
           ...(usage ? { usage } : {}),
         }
       }
+      // Stamp the run's actual environment authoritatively onto the structured result when
+      // infra was managed (the tester): which env the suite ran in is decided by the job's
+      // infra spec, NOT the model, so the backend can echo it back to the UI deterministically
+      // even when the model omits it from its JSON (or a structured repair drops it).
+      if (infra && typeof custom === 'object') {
+        ;(custom as Record<string, unknown>).environment = infra.environment
+      }
       log.info('agent(explore): done (structured)', { ...trace, ...stats })
       return { summary, custom, stats, ...(usage ? { usage } : {}) }
     } finally {

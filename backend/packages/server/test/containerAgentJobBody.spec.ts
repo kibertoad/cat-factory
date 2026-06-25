@@ -75,6 +75,7 @@ function makeExecutor(): { executor: ContainerAgentExecutor; captured: Captured[
 function context(
   agentKind: string,
   overrides: Partial<AgentRunContext['block']> = {},
+  service?: AgentRunContext['service'],
 ): AgentRunContext {
   return {
     agentKind: agentKind as AgentRunContext['agentKind'],
@@ -90,6 +91,7 @@ function context(
       description: 'Implement the widget feature.',
       ...overrides,
     },
+    ...(service ? { service } : {}),
     priorOutputs: [],
     decisions: [],
   }
@@ -144,6 +146,27 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
       context('tester', { pullRequest: PR, agentConfig: { 'tester.environment': 'local' } }),
     )
     expect(captured[0]).toMatchSnapshot()
+  })
+
+  it('tester (local, no infra) gets the no-dependencies run-mode guidance', async () => {
+    // A service that declares no infra dependencies must be told nothing was stood up —
+    // not the default "your infra has been stood up on localhost" line (which would send
+    // the agent hunting for services that never started).
+    await executor.startJob(
+      context(
+        'tester',
+        { pullRequest: PR, agentConfig: { 'tester.environment': 'local' } },
+        { noInfraDependencies: true },
+      ),
+    )
+    const userPrompt = captured[0].spec.userPrompt as string
+    expect(userPrompt).toContain('Run mode: local, no infra dependencies')
+    expect(userPrompt).not.toContain('have been stood up on localhost')
+    // The infra spec still flags it so the harness spins nothing up.
+    expect(captured[0].spec.infra).toMatchObject({
+      environment: 'local',
+      noInfraDependencies: true,
+    })
   })
 
   it('fixer', async () => {
