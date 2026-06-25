@@ -562,18 +562,32 @@ export class BoardService {
     }
     await this.blockRepository.deleteMany(blockHome, ids)
     // Drop dependency + epic edges in the source workspace that now dangle to the moved subtree.
-    const moved = new Set(ids)
-    for (const b of srcBlocks) {
-      if (moved.has(b.id)) continue
+    await this.pruneDanglingEdges(blockHome, srcBlocks, new Set(ids))
+    return assertFound(await this.blockRepository.get(parentHome, id), 'Block', id)
+  }
+
+  /**
+   * After a set of blocks leaves `homeWorkspaceId` (deleted, or moved to another workspace),
+   * drop the now-dangling references on the surviving blocks in one pass: dependency edges
+   * pointing into `removed`, and epic membership whose epic was removed (the member task itself
+   * survives — epic grouping is non-structural, never cascaded). Shared by the delete and the
+   * reparent/detach paths so they can't drift.
+   */
+  private async pruneDanglingEdges(
+    homeWorkspaceId: string,
+    survivors: Block[],
+    removed: Set<string>,
+  ): Promise<void> {
+    for (const b of survivors) {
+      if (removed.has(b.id)) continue
       const patch: { dependsOn?: string[]; epicId?: string | null } = {}
-      const next = b.dependsOn.filter((d) => !moved.has(d))
+      const next = b.dependsOn.filter((d) => !removed.has(d))
       if (next.length !== b.dependsOn.length) patch.dependsOn = next
-      if (b.epicId && moved.has(b.epicId)) patch.epicId = null
+      if (b.epicId && removed.has(b.epicId)) patch.epicId = null
       if (Object.keys(patch).length) {
-        await this.blockRepository.update(blockHome, b.id, patch)
+        await this.blockRepository.update(homeWorkspaceId, b.id, patch)
       }
     }
-    return assertFound(await this.blockRepository.get(parentHome, id), 'Block', id)
   }
 
   /** Delete a block and all its descendants, dropping dangling dependencies. */
@@ -628,18 +642,7 @@ export class BoardService {
     }
     await this.blockRepository.deleteMany(homeWorkspaceId, [...doomed])
 
-    for (const b of blocks) {
-      if (doomed.has(b.id)) continue
-      const patch: { dependsOn?: string[]; epicId?: string | null } = {}
-      const next = b.dependsOn.filter((d) => !doomed.has(d))
-      if (next.length !== b.dependsOn.length) patch.dependsOn = next
-      // A member of a deleted epic loses its membership (the tasks themselves survive —
-      // epic grouping is non-structural, so it is never cascaded).
-      if (b.epicId && doomed.has(b.epicId)) patch.epicId = null
-      if (Object.keys(patch).length) {
-        await this.blockRepository.update(homeWorkspaceId, b.id, patch)
-      }
-    }
+    await this.pruneDanglingEdges(homeWorkspaceId, blocks, doomed)
   }
 
   /** Toggle a dependency edge: target dependsOn source. */
@@ -651,12 +654,17 @@ export class BoardService {
     const { homeWorkspaceId, block: target } = await this.resolveBlock(workspaceId, targetId)
     // The source need only be visible to this board (it may be homed elsewhere); the edge is
     // stored as an id on the target, which lives at `homeWorkspaceId`.
-    await this.resolveBlock(workspaceId, sourceId)
+    const { block: source } = await this.resolveBlock(workspaceId, sourceId)
     const i = target.dependsOn.indexOf(sourceId)
-    // Adding (not removing) the edge: reject it if it would close a cycle, so the engine's
-    // dependency gate + auto-start can never deadlock on a circular graph. Checked against
-    // the home workspace's blocks (where the edges live).
     if (i < 0) {
+      // Adding a NEW edge. Both endpoints must be tasks: only a task ever reaches `done`, so an
+      // edge onto a frame/module/epic (which never executes) would wedge the engine's start gate
+      // forever (`dependenciesMet` requires the blocker to be `done`). Reject it up front.
+      if (target.level !== 'task' || source.level !== 'task') {
+        throw new ValidationError('Only tasks can have dependency edges')
+      }
+      // Reject it if it would close a cycle, so the engine's dependency gate + auto-start can
+      // never deadlock on a circular graph. Checked against the home workspace's blocks.
       const blocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
       if (wouldCreateCycle(blocks, targetId, sourceId)) {
         throw new ValidationError('That dependency would create a cycle')
@@ -665,6 +673,16 @@ export class BoardService {
     const next =
       i >= 0 ? target.dependsOn.filter((d) => d !== sourceId) : [...target.dependsOn, sourceId]
     await this.blockRepository.update(homeWorkspaceId, targetId, { dependsOn: next })
+    // The cycle check above is read-then-write, so two concurrent adds could each pass against a
+    // pre-edge snapshot and together close a loop. Re-verify against the now-written graph and
+    // roll the edge back if a cycle slipped in — cheap and the only point where edges are added.
+    if (i < 0) {
+      const after = await this.blockRepository.listByWorkspace(homeWorkspaceId)
+      if (wouldCreateCycle(after, targetId, sourceId)) {
+        await this.blockRepository.update(homeWorkspaceId, targetId, { dependsOn: target.dependsOn })
+        throw new ValidationError('That dependency would create a cycle')
+      }
+    }
     return assertFound(await this.blockRepository.get(homeWorkspaceId, targetId), 'Block', targetId)
   }
 }

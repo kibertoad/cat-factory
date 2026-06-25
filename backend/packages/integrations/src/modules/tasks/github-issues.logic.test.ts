@@ -24,6 +24,13 @@ describe('parseIssueDependencyLinks', () => {
     ])
   })
 
+  it('attributes each ref on a mixed-direction line to its nearest preceding phrase', () => {
+    expect(parseIssueDependencyLinks('Depends on #5 but blocks #9', 'octo', 'app')).toEqual([
+      { type: 'dependsOn', externalId: 'octo/app#5' },
+      { type: 'blocks', externalId: 'octo/app#9' },
+    ])
+  })
+
   it('ignores lines without a recognised phrase and dedupes', () => {
     const body = 'See #5 for context\nblocked by #5\nBlocked by #5'
     expect(parseIssueDependencyLinks(body, 'o', 'r')).toEqual([

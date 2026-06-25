@@ -47,6 +47,16 @@ describe('mapJiraIssueLinks', () => {
     expect(mapJiraIssueLinks(links)).toEqual([{ type: 'blockedBy', externalId: 'P-9' }])
   })
 
+  it('maps an inward "is depended on by" link to blocks (the other waits on this)', () => {
+    const links = [
+      {
+        type: { name: 'Dependency', inward: 'is depended on by', outward: 'depends on' },
+        inwardIssue: { key: 'P-10' },
+      },
+    ]
+    expect(mapJiraIssueLinks(links)).toEqual([{ type: 'blocks', externalId: 'P-10' }])
+  })
+
   it('records an unrecognised relation as relates and tolerates junk', () => {
     expect(
       mapJiraIssueLinks([

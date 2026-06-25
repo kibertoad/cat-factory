@@ -420,25 +420,29 @@ export class FetchGitHubClient implements GitHubClient {
     ref: GitHubRepoRef,
     issueNumber: number,
   ): Promise<GitHubSubIssue[]> {
-    const { json } = await this.request(
+    // Follow `Link` pagination so an epic with >100 sub-issues imports its full child set
+    // (a single page would silently truncate the spawned board graph).
+    return this.paginate<GitHubSubIssue>(
       `/repos/${ref.owner}/${ref.repo}/issues/${issueNumber}/sub_issues?per_page=${PER_PAGE}`,
       { installationId },
+      (json) => {
+        const items = (Array.isArray(json) ? json : []) as GhSubIssueItem[]
+        const out: GitHubSubIssue[] = []
+        for (const item of items) {
+          const parts = parseIssueHtmlUrl(item.html_url ?? '')
+          if (!parts) continue
+          out.push({
+            owner: parts.owner,
+            repo: parts.repo,
+            number: item.number ?? parts.number,
+            title: item.title ?? '(untitled)',
+            state: item.state ?? '',
+            url: item.html_url ?? '',
+          })
+        }
+        return out
+      },
     )
-    const items = (Array.isArray(json) ? json : []) as GhSubIssueItem[]
-    const out: GitHubSubIssue[] = []
-    for (const item of items) {
-      const parts = parseIssueHtmlUrl(item.html_url ?? '')
-      if (!parts) continue
-      out.push({
-        owner: parts.owner,
-        repo: parts.repo,
-        number: item.number ?? parts.number,
-        title: item.title ?? '(untitled)',
-        state: item.state ?? '',
-        url: item.html_url ?? '',
-      })
-    }
-    return out
   }
 
   async searchIssues(

@@ -942,7 +942,10 @@ export class ExecutionService {
    */
   private async assertDependenciesMet(workspaceId: string, block: Block): Promise<void> {
     if (block.level !== 'task' || block.dependsOn.length === 0) return
-    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    const blocks = await this.augmentWithCrossWorkspaceDeps(
+      await this.blockRepository.listByWorkspace(workspaceId),
+      block.dependsOn,
+    )
     if (dependenciesMet(blocks, block.id)) return
     const blockers = unmetDependencies(blocks, block.id)
     const names = blockers.map((b) => `"${b.title}"`).join(', ')
@@ -951,6 +954,25 @@ export class ExecutionService {
         blockers.length === 1 ? 'y' : 'ies'
       }${names ? ` (${names})` : ''}. Finish them before starting this task.`,
     )
+  }
+
+  /**
+   * Augment a workspace's block list (in place) with any dependency blocks referenced by
+   * `depIds` that aren't already present — a `dependsOn` edge can point at a task homed in a
+   * DIFFERENT workspace (a shared/mounted service). Resolved via the cross-workspace
+   * {@link BlockRepository.findById}, so a shared-service blocker is evaluated by its real
+   * status instead of being silently treated as satisfied (missing ⇒ done). Returns the same
+   * (now-augmented) array for chaining.
+   */
+  private async augmentWithCrossWorkspaceDeps(blocks: Block[], depIds: string[]): Promise<Block[]> {
+    const have = new Set(blocks.map((b) => b.id))
+    for (const id of depIds) {
+      if (have.has(id)) continue
+      have.add(id)
+      const found = await this.blockRepository.findById(id)
+      if (found) blocks.push(found.block)
+    }
+    return blocks
   }
 
   private async assertWithinTaskLimit(workspaceId: string, block: Block): Promise<void> {
@@ -3369,6 +3391,9 @@ export class ExecutionService {
     const dependents = blocks.filter(
       (b) => b.level === 'task' && b.dependsOn.includes(mergedBlockId),
     )
+    // A dependent's OTHER blockers may live in another workspace (a shared service); resolve
+    // them so `dependenciesMet` doesn't treat a cross-workspace blocker as missing-⇒-satisfied.
+    await this.augmentWithCrossWorkspaceDeps(blocks, dependents.flatMap((d) => d.dependsOn))
     for (const dependent of dependents) {
       // All of the dependent's blockers must now be satisfied (not just the one that merged).
       if (!dependenciesMet(blocks, dependent.id)) continue

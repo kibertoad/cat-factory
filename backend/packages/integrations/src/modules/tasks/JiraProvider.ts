@@ -26,6 +26,9 @@ import * as jiraLogic from './jira.logic.js'
 
 const USER_AGENT = 'cat-factory'
 
+/** Max child-issue pages walked per epic (100/page) — a sanity bound on the import fan-out. */
+const CHILD_PAGE_CAP = 20
+
 /** Carries the HTTP status so callers can surface a meaningful error. */
 export class JiraApiError extends Error {
   constructor(
@@ -151,24 +154,41 @@ export class JiraProvider implements TaskSourceProvider {
     }
   }
 
-  /** List an epic's / parent's child issue keys via JQL (used by the epic-import walk). */
+  /**
+   * List an epic's / parent's child issue keys via JQL (used by the epic-import walk).
+   * Follows the enhanced-search `nextPageToken` cursor (bounded by {@link CHILD_PAGE_CAP})
+   * so an epic with >100 children imports its full child set rather than silently the first
+   * page. Any failed page returns what was gathered so far — best-effort, never fatal.
+   */
   private async fetchChildKeys(credentials: TaskCredentials, key: string): Promise<string[]> {
     const base = credentials.baseUrl!.replace(/\/+$/, '')
     atlassianLogic.assertSafeAtlassianBaseUrl(base)
     const jql = encodeURIComponent(jiraLogic.buildJiraChildrenJql(key))
-    const url = `${base}/rest/api/3/search/jql?jql=${jql}&fields=summary&maxResults=100`
     const auth = btoa(`${credentials.accountEmail}:${credentials.apiToken}`)
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: {
-        authorization: `Basic ${auth}`,
-        accept: 'application/json',
-        'user-agent': USER_AGENT,
-      },
-    })
-    if (!res.ok) return []
-    const json = (await res.json().catch(() => null)) as { issues?: { key?: string }[] } | null
-    return (json?.issues ?? []).map((i) => i.key).filter((k): k is string => !!k)
+    const keys: string[] = []
+    let nextPageToken: string | undefined
+    for (let page = 0; page < CHILD_PAGE_CAP; page++) {
+      const cursor = nextPageToken ? `&nextPageToken=${encodeURIComponent(nextPageToken)}` : ''
+      const url = `${base}/rest/api/3/search/jql?jql=${jql}&fields=summary&maxResults=100${cursor}`
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          authorization: `Basic ${auth}`,
+          accept: 'application/json',
+          'user-agent': USER_AGENT,
+        },
+      })
+      if (!res.ok) break
+      const json = (await res.json().catch(() => null)) as {
+        issues?: { key?: string }[]
+        nextPageToken?: string
+        isLast?: boolean
+      } | null
+      for (const i of json?.issues ?? []) if (i.key) keys.push(i.key)
+      nextPageToken = json?.nextPageToken
+      if (json?.isLast || !nextPageToken) break
+    }
+    return keys
   }
 
   /**

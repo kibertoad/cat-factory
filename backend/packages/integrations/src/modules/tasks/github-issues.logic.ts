@@ -90,10 +90,12 @@ const DEP_PHRASES: { re: RegExp; type: TaskDependencyLink['type'] }[] = [
 ]
 
 /**
- * Parse dependency references out of a GitHub issue body. Scans line by line for a
- * recognised phrase ("blocked by", "depends on", "blocks") followed by one or more issue
- * references — a bare `#123` (resolved against the issue's own repo) or a cross-repo
- * `owner/repo#123`. Returns normalized {@link TaskDependencyLink}s with canonical
+ * Parse dependency references out of a GitHub issue body. Scans line by line for the
+ * recognised phrases ("blocked by", "depends on", "blocks"), each governing the issue
+ * references that follow it — a bare `#123` (resolved against the issue's own repo) or a
+ * cross-repo `owner/repo#123`. Each reference is attributed to the NEAREST phrase that
+ * precedes it, so a mixed line like `Depends on #5 but blocks #9` classifies #5 and #9
+ * independently. Returns normalized {@link TaskDependencyLink}s with canonical
  * `owner/repo#number` external ids. Lenient by design: anything it doesn't recognise is
  * simply skipped (GitHub bodies are free-form), and `relates` is never inferred here.
  */
@@ -110,18 +112,36 @@ export function parseIssueDependencyLinks(
   for (const rawLine of body.split(/\r?\n/)) {
     const line = rawLine.trim()
     if (!line) continue
-    const phrase = DEP_PHRASES.find((p) => p.re.test(line))
-    if (!phrase) continue
+    // Locate every recognised phrase on the line with its position, so each reference can be
+    // attributed to the nearest phrase that precedes it (not just the first phrase on the line).
+    const phraseHits: { index: number; type: TaskDependencyLink['type'] }[] = []
+    for (const p of DEP_PHRASES) {
+      const g = new RegExp(p.re.source, 'gi')
+      let pm: RegExpExecArray | null
+      while ((pm = g.exec(line)) !== null) {
+        phraseHits.push({ index: pm.index, type: p.type })
+        if (pm.index === g.lastIndex) g.lastIndex++ // never spin on a zero-width match
+      }
+    }
+    if (!phraseHits.length) continue
+    phraseHits.sort((a, b) => a.index - b.index)
     refRe.lastIndex = 0
     let m: RegExpExecArray | null
     while ((m = refRe.exec(line)) !== null) {
+      // The governing phrase is the last one that starts before this reference.
+      let governing: TaskDependencyLink['type'] | undefined
+      for (const h of phraseHits) {
+        if (h.index < m.index) governing = h.type
+        else break
+      }
+      if (!governing) continue
       const owner = m[1] ?? contextOwner
       const repo = m[2] ?? contextRepo
       const externalId = githubIssueExternalId({ owner, repo, number: Number(m[3]) })
-      const key = `${phrase.type}:${externalId}`
+      const key = `${governing}:${externalId}`
       if (seen.has(key)) continue
       seen.add(key)
-      out.push({ type: phrase.type, externalId })
+      out.push({ type: governing, externalId })
     }
   }
   return out

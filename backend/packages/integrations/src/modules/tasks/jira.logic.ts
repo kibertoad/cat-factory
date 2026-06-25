@@ -121,9 +121,10 @@ export interface JiraIssueLink {
  * types are phrased from the perspective of the OTHER issue: an `inwardIssue` reached via
  * the type's `inward` phrase, an `outwardIssue` via the `outward` phrase. We classify by
  * the phrase text:
- *   - inward "is blocked by"   → this issue is `blockedBy` the inward issue
- *   - outward "blocks"         → this issue `blocks` the outward issue
- *   - inward "depends on"-ish  → `dependsOn`; its inverse → `blocks`-like is ignored
+ *   - inward "is blocked by"      → this issue is `blockedBy` the inward issue
+ *   - inward "is depended on by"  → the inward issue depends on this → this `blocks` it
+ *   - outward "blocks"            → this issue `blocks` the outward issue
+ *   - outward "depends on"        → this issue is `blockedBy` the outward issue
  * Anything we don't recognise as a blocking relation is recorded as `relates` (the
  * importer skips those for sequencing). Lenient: malformed entries are dropped.
  */
@@ -137,11 +138,13 @@ export function mapJiraIssueLinks(links: unknown): TaskDependencyLink[] {
     const inwardPhrase = (raw?.type?.inward ?? '').toLowerCase()
     const outwardPhrase = (raw?.type?.outward ?? '').toLowerCase()
     // The inward issue is reached via the inward phrase ("is blocked by" / "is depended on by").
+    // "is blocked by X" → this is blockedBy X; "is depended on by X" → X depends on this, so
+    // this BLOCKS X (NOT `dependsOn` — that direction is the exact reverse).
     if (inwardKey) {
       const type: TaskDependencyLink['type'] = /block/.test(inwardPhrase)
         ? 'blockedBy'
         : /depend/.test(inwardPhrase)
-          ? 'dependsOn'
+          ? 'blocks'
           : 'relates'
       pushLink(out, seen, type, inwardKey)
     }
