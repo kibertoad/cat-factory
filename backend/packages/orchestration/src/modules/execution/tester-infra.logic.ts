@@ -8,6 +8,22 @@
 /** The Tester's resolved environment choice (`ephemeral` is the default when unset). */
 export type TesterEnvironment = 'local' | 'ephemeral'
 
+/**
+ * Resolve a task's effective Tester environment from its own pinned choice, falling back
+ * to the service frame's default, then the built-in `ephemeral`. This is the inheritance
+ * the UI promises: the service sets the default a task is spawned with, the task's own
+ * `tester.environment` config (when set) overrides it. Pure so both the start-time gate
+ * and the agent-context materialisation agree on one answer.
+ */
+export function resolveTesterEnvironment(
+  taskValue: string | undefined,
+  serviceDefault: TesterEnvironment | undefined,
+): TesterEnvironment {
+  if (taskValue === 'local' || taskValue === 'ephemeral') return taskValue
+  if (serviceDefault === 'local' || serviceDefault === 'ephemeral') return serviceDefault
+  return 'ephemeral'
+}
+
 export interface TesterInfraInput {
   /** Whether the runtime can run local docker-compose infra via Docker-in-Docker. */
   localTestInfraSupported: boolean

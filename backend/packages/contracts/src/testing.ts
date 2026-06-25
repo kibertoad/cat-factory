@@ -14,6 +14,15 @@ import * as v from 'valibot'
 // structured report rather than GitHub check runs.
 // ---------------------------------------------------------------------------
 
+/**
+ * Where the Tester stands up the system under test: `local` runs the dependencies
+ * locally via the service's docker-compose file (or "no infra"), `ephemeral` runs
+ * against a provisioned ephemeral environment. Picked per-task (the Tester's
+ * `tester.environment` config), defaulting to the service frame's chosen default.
+ */
+export const testEnvironmentSchema = v.picklist(['local', 'ephemeral'])
+export type TestEnvironment = v.InferOutput<typeof testEnvironmentSchema>
+
 /** How serious a concern the Tester surfaced is. */
 export const testConcernSeveritySchema = v.picklist(['low', 'medium', 'high', 'critical'])
 export type TestConcernSeverity = v.InferOutput<typeof testConcernSeveritySchema>
@@ -63,7 +72,7 @@ export const testReportSchema = v.object({
    */
   concerns: v.array(testConcernSchema),
   /** Which environment the suite ran in, echoed back for the UI. */
-  environment: v.optional(v.picklist(['local', 'ephemeral'])),
+  environment: v.optional(testEnvironmentSchema),
 })
 export type TestReport = v.InferOutput<typeof testReportSchema>
 

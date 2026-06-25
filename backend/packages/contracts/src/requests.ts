@@ -3,6 +3,7 @@ import { agentConfigValuesSchema } from './agent-config.js'
 import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
 import { writebackOverrideSchema } from './entities.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
+import { testEnvironmentSchema } from './testing.js'
 import {
   agentKindSchema,
   blockTypeSchema,
@@ -130,6 +131,9 @@ export const updateBlockSchema = v.partial(
     testComposePath: v.pipe(v.string(), v.maxLength(400)),
     // Service-level (frame): the service has no infra dependencies to stand up.
     noInfraDependencies: v.boolean(),
+    // Service-level (frame): the default test environment tasks under this service
+    // are spawned with (local docker-compose vs ephemeral); each task can override.
+    defaultTestEnvironment: testEnvironmentSchema,
     // Service-level (frame): the cloud provider this service's jobs run on.
     cloudProvider: cloudProviderSchema,
     // Service-level (frame): the abstract instance size for this service's jobs.

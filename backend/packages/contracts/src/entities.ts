@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 import { subscriptionVendorSchema } from './vendor-credentials.js'
 import { agentConfigValuesSchema } from './agent-config.js'
-import { testReportSchema } from './testing.js'
+import { testReportSchema, testEnvironmentSchema } from './testing.js'
 import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from './consensus.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
 import { releaseSignalSchema } from './release.js'
@@ -132,6 +132,14 @@ export const blockSchema = v.object({
    * so the Tester spins nothing up. When true {@link testComposePath} is ignored.
    */
   noInfraDependencies: v.optional(v.boolean()),
+  /**
+   * Service-level (frame-only): the default test environment a task under this
+   * service is spawned with — `local` (the Tester stands the dependencies up via
+   * {@link testComposePath} / {@link noInfraDependencies}) or `ephemeral` (it runs
+   * against a provisioned environment). A task inherits this unless it overrides via
+   * its `tester.environment` agent-config value. Absent ⇒ the built-in `ephemeral`.
+   */
+  defaultTestEnvironment: v.optional(testEnvironmentSchema),
   /**
    * Service-level (frame-only): the cloud provider this service's container jobs
    * run on. Absent means the owning account's `defaultCloudProvider`.

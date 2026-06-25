@@ -143,6 +143,13 @@ export interface Block {
   testComposePath?: string
   /** service-only (frame): the service has no infra dependencies to stand up. */
   noInfraDependencies?: boolean
+  /**
+   * service-only (frame): the default test environment a task under this service is
+   * spawned with — `local` (docker-compose infra) or `ephemeral` (provisioned env).
+   * Tasks inherit it unless they override via their `tester.environment` config.
+   * absent = the built-in `ephemeral`.
+   */
+  defaultTestEnvironment?: 'local' | 'ephemeral'
   /** service-only (frame): cloud provider the service's jobs run on; absent = account default. */
   cloudProvider?: CloudProvider
   /** service-only (frame): abstract instance size for the service's jobs; absent = default. */

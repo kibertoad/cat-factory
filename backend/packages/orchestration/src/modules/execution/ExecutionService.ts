@@ -144,7 +144,11 @@ import {
   MAX_EVICTION_RECOVERIES,
   MAX_TRANSIENT_EVICTION_RECOVERIES,
 } from './job.logic.js'
-import { decideTesterInfra, TESTER_INFRA_MESSAGES } from './tester-infra.logic.js'
+import {
+  decideTesterInfra,
+  resolveTesterEnvironment,
+  TESTER_INFRA_MESSAGES,
+} from './tester-infra.logic.js'
 
 /**
  * Max `conflict-resolver` escalations before the conflicts gate gives up. Deliberately
@@ -718,14 +722,14 @@ export class ExecutionService {
    * {@link ConflictError} (surfaced as an actionable message) when neither is set.
    */
   private async assertTesterInfraConfigured(workspaceId: string, block: Block): Promise<void> {
-    const environment =
-      block.agentConfig?.['tester.environment'] === 'local' ? 'local' : 'ephemeral'
-    // The service's infra config is only needed for a `local` run; an ephemeral run is
-    // decided by the runtime capability + whether a provider is wired.
-    const service =
-      environment === 'local'
-        ? await this.contextBuilder.resolveServiceConfig(workspaceId, block)
-        : undefined
+    // Resolve the service config first: it carries the frame's default test environment,
+    // which the task inherits unless it pins its own `tester.environment` (the same
+    // resolution the agent-context materialisation applies, so the gate and the run agree).
+    const service = await this.contextBuilder.resolveServiceConfig(workspaceId, block)
+    const environment = resolveTesterEnvironment(
+      block.agentConfig?.['tester.environment'],
+      service?.defaultTestEnvironment,
+    )
     const decision = decideTesterInfra({
       localTestInfraSupported: this.localTestInfraSupported,
       environment,
