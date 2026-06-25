@@ -11,7 +11,7 @@ import type {
   PipelineStep,
   WorkRunner,
 } from '@cat-factory/kernel'
-import { assertFound, ConflictError, getErrorMessage, isAsyncAgentExecutor } from '@cat-factory/kernel'
+import { ConflictError, getErrorMessage, isAsyncAgentExecutor } from '@cat-factory/kernel'
 import {
   CONFLICT_RESOLVER_AGENT_KIND,
   FIXER_AGENT_KIND,
@@ -151,10 +151,7 @@ export class HumanTestController {
    * provisioning). Ready → park for the human; still provisioning → keep polling; failed →
    * degrade to manual mode and park so the human can recreate or test by hand.
    */
-  async pollEnvironment(
-    workspaceId: string,
-    instance: ExecutionInstance,
-  ): Promise<AdvanceResult> {
+  async pollEnvironment(workspaceId: string, instance: ExecutionInstance): Promise<AdvanceResult> {
     const step = instance.steps[instance.currentStep]
     if (!step || step.agentKind !== HUMAN_TEST_AGENT_KIND || !step.humanTest) {
       return { kind: 'continue' }
@@ -182,7 +179,11 @@ export class HumanTestController {
     if (handle.status === 'ready') {
       return this.toAwaitingHuman(workspaceId, instance, step, block)
     }
-    if (handle.status === 'failed' || handle.status === 'expired' || handle.status === 'torn_down') {
+    if (
+      handle.status === 'failed' ||
+      handle.status === 'expired' ||
+      handle.status === 'torn_down'
+    ) {
       return this.degrade(
         workspaceId,
         instance,
@@ -365,14 +366,7 @@ export class HumanTestController {
         return this.completeStep(workspaceId, instance, step, isFinalStep)
       }
       case 'request-fix':
-        return this.dispatchHelper(
-          workspaceId,
-          instance,
-          step,
-          block,
-          'fix',
-          action.findings ?? '',
-        )
+        return this.dispatchHelper(workspaceId, instance, step, block, 'fix', action.findings ?? '')
       case 'pull-main':
         return this.pullMainInDriver(workspaceId, instance, step, block)
       case 'recreate':
@@ -387,7 +381,6 @@ export class HumanTestController {
     step: PipelineStep,
     block: Block,
   ): Promise<AdvanceResult> {
-    const ht = step.humanTest!
     if (!this.deps.branchUpdater) {
       return this.toAwaitingHuman(workspaceId, instance, step, block)
     }
@@ -465,7 +458,8 @@ export class HumanTestController {
       ...(ht.rounds ?? []),
       {
         kind: roundKind,
-        findings: roundKind === 'fix' ? findings : 'Pulled latest main into the branch (conflicts).',
+        findings:
+          roundKind === 'fix' ? findings : 'Pulled latest main into the branch (conflicts).',
         helperKind,
         jobId: handle.jobId,
         outcome: null,
@@ -648,9 +642,10 @@ export class HumanTestController {
     return step ? { instance, step } : null
   }
 
-  private requireParked(
-    found: { instance: ExecutionInstance; step: PipelineStep } | null,
-  ): { instance: ExecutionInstance; step: PipelineStep } {
+  private requireParked(found: { instance: ExecutionInstance; step: PipelineStep } | null): {
+    instance: ExecutionInstance
+    step: PipelineStep
+  } {
     if (!found) throw new ConflictError('No human-test gate is currently awaiting input')
     return found
   }
@@ -677,7 +672,8 @@ export class HumanTestController {
   }
 
   private proposal(ht: HumanTestStepState): string {
-    if (ht.environment?.url) return `Test the change at ${ht.environment.url}, then confirm or request a fix.`
+    if (ht.environment?.url)
+      return `Test the change at ${ht.environment.url}, then confirm or request a fix.`
     return 'Test the change, then confirm or request a fix.'
   }
 

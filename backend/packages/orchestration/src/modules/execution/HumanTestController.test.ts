@@ -8,7 +8,12 @@ import { HumanTestController, type HumanTestControllerDeps } from './HumanTestCo
 // is intentionally omitted in most tests to drive the degraded (manual) mode.
 
 function step(over: Partial<PipelineStep> = {}): PipelineStep {
-  return { agentKind: 'human-test', state: 'running', progress: 0, ...over } as unknown as PipelineStep
+  return {
+    agentKind: 'human-test',
+    state: 'running',
+    progress: 0,
+    ...over,
+  } as unknown as PipelineStep
 }
 
 function instance(steps: PipelineStep[], over: Partial<ExecutionInstance> = {}): ExecutionInstance {
@@ -48,7 +53,9 @@ function fakeDeps(over: Partial<HumanTestControllerDeps> = {}): HumanTestControl
     executionRepository: { get: vi.fn(async () => null), upsert: vi.fn(async () => {}) } as never,
     workRunner: { signalDecision: vi.fn(async () => {}) } as never,
     agentExecutor: fakeExecutor(),
-    contextBuilder: { buildContext: vi.fn(async () => ({ agentKind: 'human-test', priorOutputs: [] })) } as never,
+    contextBuilder: {
+      buildContext: vi.fn(async () => ({ agentKind: 'human-test', priorOutputs: [] })),
+    } as never,
     resolveMergePreset: vi.fn(async () => ({ ciMaxAttempts: 10 })),
     parkStepOnDecision: vi.fn(async (_ws, _i, s: PipelineStep) => {
       s.approval = { id: 'appr_1', status: 'pending', proposal: '' }
@@ -141,13 +148,20 @@ describe('HumanTestController', () => {
 
     const result = await c.evaluate('ws', instance([s]), s, BLOCK, true)
 
-    expect((deps.agentExecutor as { startJob: ReturnType<typeof vi.fn> }).startJob).toHaveBeenCalled()
-    const ctx = (deps.agentExecutor as { startJob: ReturnType<typeof vi.fn> }).startJob.mock.calls[0]![0]
+    expect(
+      (deps.agentExecutor as { startJob: ReturnType<typeof vi.fn> }).startJob,
+    ).toHaveBeenCalled()
+    const ctx = (deps.agentExecutor as { startJob: ReturnType<typeof vi.fn> }).startJob.mock
+      .calls[0]![0]
     expect(ctx.agentKind).toBe('fixer')
     expect(result).toEqual({ kind: 'awaiting_job', jobId: 'job_1', stepIndex: 0 })
     expect(s.humanTest?.phase).toBe('fixing')
     expect(s.humanTest?.attempts).toBe(1)
-    expect(s.humanTest?.rounds?.[0]).toMatchObject({ kind: 'fix', helperKind: 'fixer', findings: 'Button broken' })
+    expect(s.humanTest?.rounds?.[0]).toMatchObject({
+      kind: 'fix',
+      helperKind: 'fixer',
+      findings: 'Button broken',
+    })
     expect(s.humanTest?.pendingAction ?? null).toBeNull()
     // While the helper runs the step leaves the parked decision state (working + no pending
     // approval), so a re-drive through `advance` re-attaches to the job instead of re-parking
@@ -168,7 +182,16 @@ describe('HumanTestController', () => {
         environment: null,
         attempts: 1,
         maxAttempts: 10,
-        rounds: [{ kind: 'fix', findings: 'x', helperKind: 'fixer', jobId: 'job_42', outcome: null, at: 1 }],
+        rounds: [
+          {
+            kind: 'fix',
+            findings: 'x',
+            helperKind: 'fixer',
+            jobId: 'job_42',
+            outcome: null,
+            at: 1,
+          },
+        ],
       },
     })
 
@@ -182,7 +205,13 @@ describe('HumanTestController', () => {
     const s = step({
       state: 'waiting_decision',
       approval: { id: 'appr_1', status: 'pending', proposal: '' },
-      humanTest: { phase: 'awaiting_human', environment: null, attempts: 10, maxAttempts: 10, rounds: [] },
+      humanTest: {
+        phase: 'awaiting_human',
+        environment: null,
+        attempts: 10,
+        maxAttempts: 10,
+        rounds: [],
+      },
     })
     const inst = instance([s])
     const deps = fakeDeps({
@@ -201,7 +230,10 @@ describe('HumanTestController', () => {
     const provisionEnvironment = vi.fn(async () => {
       throw new Error('provider exploded')
     })
-    const deps = fakeDeps({ teardownEnvironment, provisionEnvironment: provisionEnvironment as never })
+    const deps = fakeDeps({
+      teardownEnvironment,
+      provisionEnvironment: provisionEnvironment as never,
+    })
     const c = new HumanTestController(deps)
     const s = step({
       state: 'waiting_decision',
@@ -251,7 +283,10 @@ describe('HumanTestController', () => {
 
   it('advances the run (and tears the env down) on a confirm action', async () => {
     const teardownEnvironment = vi.fn(async () => {})
-    const deps = fakeDeps({ teardownEnvironment, notificationService: { listOpen: vi.fn(async () => []) } as never })
+    const deps = fakeDeps({
+      teardownEnvironment,
+      notificationService: { listOpen: vi.fn(async () => []) } as never,
+    })
     const c = new HumanTestController(deps)
     const s = step({
       state: 'waiting_decision',
@@ -277,7 +312,12 @@ describe('HumanTestController', () => {
   })
 
   it('dispatches the conflict-resolver when pull-main conflicts, else rebuilds the env', async () => {
-    const provisionEnvironment = vi.fn(async () => ({ id: 'env_2', url: null, status: 'provisioning', expiresAt: null }))
+    const provisionEnvironment = vi.fn(async () => ({
+      id: 'env_2',
+      url: null,
+      status: 'provisioning',
+      expiresAt: null,
+    }))
     // Conflict path: dispatch the resolver.
     const conflictDeps = fakeDeps({
       provisionEnvironment: provisionEnvironment as never,
@@ -286,10 +326,18 @@ describe('HumanTestController', () => {
     const c1 = new HumanTestController(conflictDeps)
     const s1 = step({
       state: 'waiting_decision',
-      humanTest: { phase: 'awaiting_human', environment: null, attempts: 0, maxAttempts: 10, rounds: [], pendingAction: { type: 'pull-main' } },
+      humanTest: {
+        phase: 'awaiting_human',
+        environment: null,
+        attempts: 0,
+        maxAttempts: 10,
+        rounds: [],
+        pendingAction: { type: 'pull-main' },
+      },
     })
     const r1 = await c1.evaluate('ws', instance([s1]), s1, BLOCK, true)
-    const ctx = (conflictDeps.agentExecutor as { startJob: ReturnType<typeof vi.fn> }).startJob.mock.calls[0]![0]
+    const ctx = (conflictDeps.agentExecutor as { startJob: ReturnType<typeof vi.fn> }).startJob.mock
+      .calls[0]![0]
     expect(ctx.agentKind).toBe('conflict-resolver')
     expect(r1).toEqual({ kind: 'awaiting_job', jobId: 'job_1', stepIndex: 0 })
     expect(s1.humanTest?.phase).toBe('resolving_conflicts')
@@ -302,10 +350,19 @@ describe('HumanTestController', () => {
     const c2 = new HumanTestController(cleanDeps)
     const s2 = step({
       state: 'waiting_decision',
-      humanTest: { phase: 'awaiting_human', environment: null, attempts: 0, maxAttempts: 10, rounds: [], pendingAction: { type: 'pull-main' } },
+      humanTest: {
+        phase: 'awaiting_human',
+        environment: null,
+        attempts: 0,
+        maxAttempts: 10,
+        rounds: [],
+        pendingAction: { type: 'pull-main' },
+      },
     })
     const r2 = await c2.evaluate('ws', instance([s2]), s2, BLOCK, true)
-    expect((cleanDeps.agentExecutor as { startJob: ReturnType<typeof vi.fn> }).startJob).not.toHaveBeenCalled()
+    expect(
+      (cleanDeps.agentExecutor as { startJob: ReturnType<typeof vi.fn> }).startJob,
+    ).not.toHaveBeenCalled()
     expect(r2).toEqual({ kind: 'awaiting_gate', stepIndex: 0 })
   })
 })

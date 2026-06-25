@@ -766,13 +766,7 @@ export type HumanTestRound = v.InferOutput<typeof humanTestRoundSchema>
  *   - `passed`             — the human confirmed; the env is torn down and the run advances.
  */
 export const humanTestStepStateSchema = v.object({
-  phase: v.picklist([
-    'provisioning',
-    'awaiting_human',
-    'fixing',
-    'resolving_conflicts',
-    'passed',
-  ]),
+  phase: v.picklist(['provisioning', 'awaiting_human', 'fixing', 'resolving_conflicts', 'passed']),
   /** The live ephemeral environment (null in degraded manual mode / after destroy). */
   environment: v.optional(v.nullable(humanTestEnvironmentSchema)),
   /**

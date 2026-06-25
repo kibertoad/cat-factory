@@ -137,7 +137,7 @@ import type {
   EnvironmentTeardownService,
 } from '@cat-factory/integrations'
 import { isDeployStep } from '@cat-factory/integrations'
-import type { BranchUpdater, EnvironmentHandle } from '@cat-factory/kernel'
+import type { BranchUpdater } from '@cat-factory/kernel'
 import { descendantIds, serviceOf } from '../board/board.logic.js'
 import type { BoardService } from '../board/BoardService.js'
 import type { SpendService } from '@cat-factory/spend'

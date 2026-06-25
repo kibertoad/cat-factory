@@ -42,6 +42,9 @@ export class GitHubBranchUpdater implements BranchUpdater {
       throw new ConflictError('The repository has no default branch to pull from')
     }
     // base = the PR branch (merge INTO); head = the default branch (merge IN).
-    return this.deps.githubClient.mergeBranch(target.installationId, ref, { base: branch, head: base })
+    return this.deps.githubClient.mergeBranch(target.installationId, ref, {
+      base: branch,
+      head: base,
+    })
   }
 }

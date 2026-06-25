@@ -32,7 +32,10 @@ const busy = computed(() => (blockId.value ? humanTest.isBusy(blockId.value) : f
 /** Whether the human can act right now (parked awaiting their input, not mid-helper/provision). */
 const awaitingHuman = computed(() => phase.value === 'awaiting_human')
 const working = computed(
-  () => phase.value === 'provisioning' || phase.value === 'fixing' || phase.value === 'resolving_conflicts',
+  () =>
+    phase.value === 'provisioning' ||
+    phase.value === 'fixing' ||
+    phase.value === 'resolving_conflicts',
 )
 
 const ENV_STATUS_META: Record<HumanTestEnvironmentStatus, { label: string; color: string }> = {
@@ -143,8 +146,14 @@ const canDestroy = computed(
               </h3>
               <div v-if="env" class="space-y-2">
                 <div class="flex items-center gap-2 text-[13px]">
-                  <UIcon name="i-lucide-circle-dot" class="h-3.5 w-3.5" :class="ENV_STATUS_META[env.status].color" />
-                  <span :class="ENV_STATUS_META[env.status].color">{{ ENV_STATUS_META[env.status].label }}</span>
+                  <UIcon
+                    name="i-lucide-circle-dot"
+                    class="h-3.5 w-3.5"
+                    :class="ENV_STATUS_META[env.status].color"
+                  />
+                  <span :class="ENV_STATUS_META[env.status].color">{{
+                    ENV_STATUS_META[env.status].label
+                  }}</span>
                 </div>
                 <a
                   v-if="env.url"
@@ -170,7 +179,15 @@ const canDestroy = computed(
 
               <!-- Env management -->
               <div class="mt-3 flex flex-wrap gap-2">
-                <UButton size="xs" variant="soft" color="neutral" icon="i-lucide-refresh-cw" :loading="busy" :disabled="busy || !canManageEnv" @click="recreate">
+                <UButton
+                  size="xs"
+                  variant="soft"
+                  color="neutral"
+                  icon="i-lucide-refresh-cw"
+                  :loading="busy"
+                  :disabled="busy || !canManageEnv"
+                  @click="recreate"
+                >
                   Recreate
                 </UButton>
                 <UButton
@@ -183,7 +200,15 @@ const canDestroy = computed(
                 >
                   Destroy
                 </UButton>
-                <UButton size="xs" variant="soft" color="neutral" icon="i-lucide-git-merge" :loading="busy" :disabled="busy || !canManageEnv" @click="pullMain">
+                <UButton
+                  size="xs"
+                  variant="soft"
+                  color="neutral"
+                  icon="i-lucide-git-merge"
+                  :loading="busy"
+                  :disabled="busy || !canManageEnv"
+                  @click="pullMain"
+                >
                   Pull main + redeploy
                 </UButton>
               </div>
@@ -199,7 +224,10 @@ const canDestroy = computed(
             </p>
 
             <!-- Findings / fix -->
-            <section v-if="awaitingHuman" class="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
+            <section
+              v-if="awaitingHuman"
+              class="rounded-lg border border-slate-800 bg-slate-900/60 p-4"
+            >
               <div class="flex items-center justify-between">
                 <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Found a problem?
@@ -232,22 +260,23 @@ const canDestroy = computed(
             </section>
 
             <!-- Rounds history -->
-            <section v-if="ht.rounds && ht.rounds.length" class="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
+            <section
+              v-if="ht.rounds && ht.rounds.length"
+              class="rounded-lg border border-slate-800 bg-slate-900/60 p-4"
+            >
               <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 History ({{ ht.attempts }} round{{ ht.attempts === 1 ? '' : 's' }})
               </h3>
               <ol class="space-y-2">
-                <li
-                  v-for="(r, i) in ht.rounds"
-                  :key="i"
-                  class="flex items-start gap-2 text-[12px]"
-                >
+                <li v-for="(r, i) in ht.rounds" :key="i" class="flex items-start gap-2 text-[12px]">
                   <UIcon
                     :name="r.kind === 'fix' ? 'i-lucide-wrench' : 'i-lucide-git-merge'"
                     class="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400"
                   />
                   <div class="min-w-0 flex-1">
-                    <span class="text-slate-200">{{ r.kind === 'fix' ? 'Fix requested' : 'Pulled main' }}</span>
+                    <span class="text-slate-200">{{
+                      r.kind === 'fix' ? 'Fix requested' : 'Pulled main'
+                    }}</span>
                     <span
                       class="ml-1.5 rounded px-1 text-[10px] uppercase"
                       :class="
