@@ -1260,11 +1260,29 @@ function isProxyableProvider(provider: string): boolean {
   )
 }
 
-/** Clamp a value to a 0..1 number, defaulting to `fallback` when not finite. */
+/**
+ * Clamp a value to a 0..1 number, defaulting to `fallback` for anything that is not a
+ * finite number (or a non-empty numeric string). Crucially, `null`, `''`, `false` and `[]`
+ * fall back rather than coercing to `0` — `Number()` turns all of them into a finite `0`,
+ * which would silently make a garbage merger score read as "trivial/safe" and defeat the
+ * conservative-on-garbage default that replaces the harness's old `diffExaminable` guard.
+ */
 function clamp01(value: unknown, fallback: number): number {
-  const n = typeof value === 'number' ? value : Number(value)
+  const n =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && value.trim() !== ''
+        ? Number(value)
+        : Number.NaN
   if (!Number.isFinite(n)) return fallback
   return Math.min(1, Math.max(0, n))
+}
+
+/** First non-empty of the agent's rationale or run summary (capped), else a stable default. */
+function coerceRationale(rationale: unknown, summary: string | undefined): string {
+  if (typeof rationale === 'string' && rationale.trim()) return rationale
+  if (summary?.trim()) return summary.slice(0, 2000)
+  return 'No rationale provided.'
 }
 
 /**
@@ -1281,8 +1299,7 @@ function coerceMergeAssessment(raw: unknown, summary: string | undefined): unkno
     complexity: clamp01(o.complexity, 1),
     risk: clamp01(o.risk, 1),
     impact: clamp01(o.impact, 1),
-    rationale:
-      typeof o.rationale === 'string' && o.rationale ? o.rationale : (summary ?? '').slice(0, 2000),
+    rationale: coerceRationale(o.rationale, summary),
   }
 }
 
@@ -1301,8 +1318,7 @@ function coerceOnCallAssessment(raw: unknown, summary: string | undefined): unkn
     culpritConfidence: clamp01(o.culpritConfidence, 0),
     recommendation:
       o.recommendation === 'revert' || o.recommendation === 'monitor' ? o.recommendation : 'hold',
-    rationale:
-      typeof o.rationale === 'string' && o.rationale ? o.rationale : (summary ?? '').slice(0, 2000),
+    rationale: coerceRationale(o.rationale, summary),
     evidence,
   }
 }

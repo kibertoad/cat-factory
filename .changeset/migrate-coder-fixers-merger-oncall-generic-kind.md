@@ -1,5 +1,7 @@
 ---
 '@cat-factory/server': patch
+'@cat-factory/orchestration': patch
+'@cat-factory/kernel': patch
 ---
 
 Migrate the next batch of built-in agents — `coder`, `ci-fixer`, `fixer`, `merger` and
@@ -33,3 +35,16 @@ conservative-on-garbage defaults (documented in `coerceMergeAssessment`).
 The now-dead `/run`, `/ci-fix`, `/fix-tests`, `/merge` and `/on-call` harness handlers are
 removed in a later step of the sweep (which bumps the executor image), once parity is
 confirmed on CI.
+
+Three correctness fixes to the kind-aware mapping itself:
+
+- The poll site (`ExecutionService.pollAgentJob`) now threads `step.agentKind` into the
+  `pollJob` handle. `toRunResult`'s kind-aware coercion keys off `handle.agentKind`, which
+  the engine previously never supplied at poll time — so the merger/on-call coercion was
+  dead code and `mergeAssessment` / `onCallAssessment` were never set, leaving the merge
+  gate and post-release-health gate with no assessment.
+- `clamp01` no longer coerces `null` / `''` / `false` / `[]` to a finite `0` (via `Number()`):
+  those now fall back to the conservative default (`1` for the merger → routes to human
+  review), so a garbage/null score can't silently read as "trivial/safe" and auto-merge.
+- The coerced `rationale` falls back to a stable `"No rationale provided."` when both the
+  agent rationale and the run summary are empty, instead of an empty string.

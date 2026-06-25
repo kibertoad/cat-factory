@@ -3,6 +3,7 @@ import type {
   ModelRef,
   RunnerDispatchKind,
   RunnerJobRef,
+  RunnerJobResult,
   RunnerTransport,
 } from '@cat-factory/kernel'
 import type { AgentRouting } from '@cat-factory/agents'
@@ -158,5 +159,124 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
   it('default (coder)', async () => {
     await executor.startJob(context('coder'))
     expect(captured[0]).toMatchSnapshot()
+  })
+})
+
+// The migrated merger/on-call dispatch the generic `agent` kind and return their JSON as
+// `result.custom`; `toRunResult` maps it KIND-AWARE into `mergeAssessment`/`onCallAssessment`
+// using the handle's `agentKind`. These tests pin that mapping (the poll site must supply
+// `agentKind`, else the coercion silently no-ops and the merge gate sees no assessment) plus
+// the conservative-on-garbage defaults that replace the harness's old `diffExaminable` guard.
+function makeExecutorReturning(result: RunnerJobResult): ContainerAgentExecutor {
+  const transport: RunnerTransport = {
+    async dispatch() {},
+    async poll() {
+      return { state: 'done', result }
+    },
+  }
+  const sessionService = {
+    async mint() {
+      return 'SESSION-TOKEN'
+    },
+  } as unknown as ContainerSessionService
+  const deps: ContainerAgentExecutorDependencies = {
+    resolveTransport: async () => transport,
+    agentRouting: routing,
+    resolveBlockModel: () => undefined,
+    resolveRepoTarget: async () => ({
+      installationId: 7,
+      owner: 'acme',
+      name: 'widgets',
+      baseBranch: 'main',
+    }),
+    mintInstallationToken: async () => 'GH-TOKEN',
+    sessionService,
+    proxyBaseUrl: 'https://proxy.test/v1',
+    githubApiBase: 'https://api.github.com',
+    webSearchProxyEnabled: true,
+    ensureWorkBranch: async () => true,
+  }
+  return new ContainerAgentExecutor(deps)
+}
+
+const handle = (agentKind?: string) => ({
+  jobId: 'ex_1-step',
+  runId: 'ex_1',
+  workspaceId: 'ws_1',
+  ...(agentKind ? { agentKind } : {}),
+})
+
+describe('ContainerAgentExecutor.pollJob (kind-aware result coercion)', () => {
+  it('maps a merger custom result into mergeAssessment', async () => {
+    const executor = makeExecutorReturning({
+      summary: 'Looks routine.',
+      custom: { complexity: 0.2, risk: 0.3, impact: 0.4, rationale: 'small, isolated change' },
+    })
+    const update = await executor.pollJob(handle('merger'))
+    expect(update).toEqual({
+      state: 'done',
+      result: {
+        output: 'Looks routine.',
+        mergeAssessment: {
+          complexity: 0.2,
+          risk: 0.3,
+          impact: 0.4,
+          rationale: 'small, isolated change',
+        },
+      },
+    })
+  })
+
+  it('maps an on-call custom result into onCallAssessment', async () => {
+    const executor = makeExecutorReturning({
+      summary: 'Likely unrelated.',
+      custom: {
+        culpritConfidence: 0.1,
+        recommendation: 'monitor',
+        rationale: 'no correlation with the diff',
+        evidence: ['latency flat', 42],
+      },
+    })
+    const update = await executor.pollJob(handle('on-call'))
+    expect(update).toEqual({
+      state: 'done',
+      result: {
+        output: 'Likely unrelated.',
+        onCallAssessment: {
+          culpritConfidence: 0.1,
+          recommendation: 'monitor',
+          rationale: 'no correlation with the diff',
+          evidence: ['latency flat'],
+        },
+      },
+    })
+  })
+
+  it('garbage/null merger scores default to 1 (severe → human review), not 0', async () => {
+    const executor = makeExecutorReturning({
+      summary: 'fallback summary',
+      // null / empty-string / boolean must NOT coerce to a finite 0.
+      custom: { complexity: null, risk: '', impact: false, rationale: '' },
+    })
+    const update = await executor.pollJob(handle('merger'))
+    expect(update).toEqual({
+      state: 'done',
+      result: {
+        output: 'fallback summary',
+        mergeAssessment: { complexity: 1, risk: 1, impact: 1, rationale: 'fallback summary' },
+      },
+    })
+  })
+
+  it('without agentKind the coercion no-ops and the raw custom is surfaced', async () => {
+    const executor = makeExecutorReturning({
+      summary: 's',
+      custom: { complexity: 0.2, risk: 0.3, impact: 0.4 },
+    })
+    const update = await executor.pollJob(handle())
+    expect(update).toEqual({
+      state: 'done',
+      result: { output: 's', custom: { complexity: 0.2, risk: 0.3, impact: 0.4 } },
+    })
   })
 })
