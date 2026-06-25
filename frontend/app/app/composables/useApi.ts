@@ -15,6 +15,7 @@ import { recurringApi } from './api/recurring'
 import { releaseHealthApi } from './api/releaseHealth'
 import { reviewsApi } from './api/reviews'
 import { slackApi } from './api/slack'
+import { specApi } from './api/spec'
 import { tasksApi } from './api/tasks'
 import { workspacesApi } from './api/workspaces'
 
@@ -78,6 +79,7 @@ export function useApi() {
     ...documentsApi(ctx),
     ...tasksApi(ctx),
     ...reviewsApi(ctx),
+    ...specApi(ctx),
     ...notificationsApi(ctx),
     ...presetsApi(ctx),
     ...releaseHealthApi(ctx),

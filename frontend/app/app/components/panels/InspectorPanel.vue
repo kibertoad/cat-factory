@@ -406,6 +406,20 @@ const showOriginalDescription = ref(false)
       <!-- task: context issues (tracker) -->
       <TaskContextIssues v-if="isTask" :block="block" />
 
+      <!-- service (frame): navigate the prescriptive spec tree (+ Gherkin scenarios when
+           the spec is on the repo's default branch) -->
+      <UButton
+        v-if="isFrame"
+        block
+        color="neutral"
+        variant="soft"
+        size="sm"
+        icon="i-lucide-scroll-text"
+        @click="ui.openServiceSpec(block.id)"
+      >
+        View Requirements
+      </UButton>
+
       <!-- service / module: tasks summary -->
       <ContainerSummary v-if="isContainer" :block="block" />
       <!-- service (frame): test infra + provisioning configuration -->

@@ -209,7 +209,7 @@ const groups = computed<IntegrationGroup[]>(() => {
               v-for="item in group.items"
               :key="item.key"
               type="button"
-              class="flex w-full items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-2.5 text-left transition hover:border-slate-500 hover:bg-slate-800"
+              class="flex w-full items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5 text-left transition hover:border-slate-700 hover:bg-slate-900"
               @click="item.onClick()"
             >
               <UIcon :name="item.icon" class="h-5 w-5 shrink-0 text-slate-300" />
