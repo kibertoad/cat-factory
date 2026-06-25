@@ -1279,7 +1279,16 @@ export class ExecutionService {
 
     // Re-supply the run id alongside the per-step job id so the executor can address
     // the same per-run container at the poll site (it only stored the per-step jobId).
-    const update = await executor.pollJob({ jobId: step.jobId, runId: executionId, workspaceId })
+    // The agent kind is supplied too: the container executor maps a migrated
+    // `merger`/`on-call`'s structured result into `mergeAssessment`/`onCallAssessment`
+    // KIND-AWARE in `toRunResult`, so without it that coercion no-ops and the merge gate /
+    // post-release-health gate would see no assessment.
+    const update = await executor.pollJob({
+      jobId: step.jobId,
+      runId: executionId,
+      workspaceId,
+      agentKind: step.agentKind,
+    })
     if (update.state === 'running') {
       // A successful poll proves the container is up, so the cold-boot phase is
       // over (defensive: a replay may have left the flag set). Surface live subtask

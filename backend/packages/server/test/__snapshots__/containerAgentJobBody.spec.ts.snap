@@ -31,7 +31,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > blueprints
 
 exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > ci-fixer 1`] = `
 {
-  "kind": "ci-fix",
+  "kind": "agent",
   "ref": {
     "jobId": "ex_1-ci-fixer",
     "runId": "ex_1",
@@ -42,8 +42,11 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > ci-fixer 1
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
     "jobId": "ex_1-ci-fixer",
+    "mode": "coding",
     "model": "@cf/test/model",
+    "noChangesIsError": false,
     "proxyBaseUrl": "https://proxy.test/v1",
+    "pushBranch": "cat-factory/blk_1",
     "repo": {
       "baseBranch": "main",
       "cloneUrl": "https://github.com/acme/widgets.git",
@@ -116,18 +119,20 @@ Implement the widget feature.",
 
 exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > default (coder) 1`] = `
 {
-  "kind": "run",
+  "kind": "agent",
   "ref": {
     "jobId": "ex_1-coder",
     "runId": "ex_1",
   },
   "spec": {
+    "branch": "main",
     "ghToken": "GH-TOKEN",
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
-    "headBranch": "cat-factory/blk_1",
     "jobId": "ex_1-coder",
+    "mode": "coding",
     "model": "@cf/test/model",
+    "newBranch": "cat-factory/blk_1",
     "pr": {
       "body": "Automated implementation for block **Add widget** (feature).
 
@@ -137,6 +142,7 @@ Pipeline: Standard build",
       "title": "Add widget (Standard build)",
     },
     "proxyBaseUrl": "https://proxy.test/v1",
+    "pushBranch": "cat-factory/blk_1",
     "repo": {
       "baseBranch": "main",
       "cloneUrl": "https://github.com/acme/widgets.git",
@@ -194,7 +200,7 @@ reading the code.",
 
 exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > fixer 1`] = `
 {
-  "kind": "fix-tests",
+  "kind": "agent",
   "ref": {
     "jobId": "ex_1-fixer",
     "runId": "ex_1",
@@ -205,8 +211,11 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > fixer 1`] 
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
     "jobId": "ex_1-fixer",
+    "mode": "coding",
     "model": "@cf/test/model",
+    "noChangesIsError": false,
     "proxyBaseUrl": "https://proxy.test/v1",
+    "pushBranch": "cat-factory/blk_1",
     "repo": {
       "baseBranch": "main",
       "cloneUrl": "https://github.com/acme/widgets.git",
@@ -252,20 +261,24 @@ reading the code.",
 
 exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > merger 1`] = `
 {
-  "kind": "merge",
+  "kind": "agent",
   "ref": {
     "jobId": "ex_1-merger",
     "runId": "ex_1",
   },
   "spec": {
     "branch": "cat-factory/blk_1",
+    "full": true,
     "ghToken": "GH-TOKEN",
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
-    "instructions": "Assess the pull request on the head branch against the base branch and return the complexity / risk / impact scores + rationale as JSON.",
     "jobId": "ex_1-merger",
+    "mode": "explore",
     "model": "@cf/test/model",
-    "prNumber": 9,
+    "output": {
+      "kind": "structured",
+      "shapeHint": "Expected a merge assessment: {"complexity": number 0..1, "risk": number 0..1, "impact": number 0..1, "rationale": string}.",
+    },
     "proxyBaseUrl": "https://proxy.test/v1",
     "repo": {
       "baseBranch": "main",
@@ -275,26 +288,44 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > merger 1`]
     },
     "sessionToken": "SESSION-TOKEN",
     "systemPrompt": "You are a release manager assessing a pull request before merge. Inspect the diff between the PR head branch and the base branch and judge three axes, each as a number from 0 (trivial/safe) to 1 (severe): complexity (how intricate the change is), risk (how likely it is to break something), and impact (blast radius if it does). Be conservative. Respond with ONLY a JSON object of shape {"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"} — no prose, no code fences. Your deliverable is the text of your FINAL reply. Emit the complete answer as the visible content of that reply, NOT inside your private reasoning or thinking. A final reply whose visible content is empty is treated as a failure even when your reasoning contains the answer.",
+    "userPrompt": "Assess the pull request on the head branch against the base branch and return the complexity / risk / impact scores + rationale as JSON.
+
+The pull request (PR #9) is on branch \`cat-factory/blk_1\`; the base branch is \`main\`. Inspect the change (e.g. \`git fetch origin main\` then \`git diff origin/main...HEAD\`) and score complexity, risk and impact.
+
+Respond with ONLY a JSON object {"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"}.",
+    "webSearch": true,
+    "webToolsGuidance": "
+
+## Web search (use sparingly)
+
+You have \`web_search\` (titled result snippets for a query) and \`web_fetch\` (read a URL as text). Use them mainly to verify a fact that genuinely changes — a library version, an API, a recent breaking change, a security advisory — when the repository itself can't answer it. Prefer first-party documentation, and
+cite the source URL when a decision rests on what you find. Do not search for anything
+already in the checkout or the context you were given, and don't let searching replace
+reading the code.",
   },
 }
 `;
 
 exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > on-call 1`] = `
 {
-  "kind": "on-call",
+  "kind": "agent",
   "ref": {
     "jobId": "ex_1-on-call",
     "runId": "ex_1",
   },
   "spec": {
     "branch": "main",
+    "full": true,
     "ghToken": "GH-TOKEN",
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
-    "headBranch": "cat-factory/blk_1",
     "jobId": "ex_1-on-call",
+    "mode": "explore",
     "model": "@cf/test/model",
-    "prNumber": 9,
+    "output": {
+      "kind": "structured",
+      "shapeHint": "Expected an on-call assessment: {"culpritConfidence": number 0..1, "recommendation": "revert"|"hold"|"monitor", "rationale": string, "evidence": string[]}.",
+    },
     "proxyBaseUrl": "https://proxy.test/v1",
     "repo": {
       "baseBranch": "main",
@@ -308,7 +339,20 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > on-call 1`
 Block: Add widget (feature)
 Description: Implement the widget feature.
 
-Produce your contribution. Be concise and concrete.",
+Produce your contribution. Be concise and concrete.
+
+You are on the base branch \`main\`, which already contains the released pull request #9. It merged as a commit referencing #9 — find it with \`git log --oneline -n 50\` (squash/merge commits include \`(#9)\`; a merge commit mentions \`#9\`), then inspect it with \`git show <sha>\`. Correlate that change with the regression evidence above. Beware correlation vs causation.
+
+Respond with ONLY a JSON object {"culpritConfidence":0.0,"recommendation":"revert"|"hold"|"monitor","rationale":"…","evidence":["…"]}.",
+    "webSearch": true,
+    "webToolsGuidance": "
+
+## Web search (use sparingly)
+
+You have \`web_search\` (titled result snippets for a query) and \`web_fetch\` (read a URL as text). Use them mainly to verify a fact that genuinely changes — a library version, an API, a recent breaking change, a security advisory — when the repository itself can't answer it. Prefer first-party documentation, and
+cite the source URL when a decision rests on what you find. Do not search for anything
+already in the checkout or the context you were given, and don't let searching replace
+reading the code.",
   },
 }
 `;

@@ -315,9 +315,12 @@ export interface AgentJobHandle {
    */
   subscriptionTokenId?: string
   /**
-   * The agent kind the job runs as (`coder`, `merger`, …). Carried so the poll site
-   * can label the job's tool spans when forwarding them to the observability trace
-   * sink. Optional — absent ⇒ spans are still grouped under the run, just unlabelled.
+   * The agent kind the job runs as (`coder`, `merger`, …). The poll site MUST supply it
+   * for any kind whose result is mapped kind-aware (e.g. a migrated `merger`/`on-call`,
+   * whose structured output is coerced into `mergeAssessment`/`onCallAssessment`); without
+   * it that coercion silently no-ops and the engine's gate sees no assessment. Also used to
+   * label the job's tool spans on the observability trace. Optional only because not every
+   * executor needs it — absent ⇒ no kind-aware mapping + spans grouped under the run unlabelled.
    */
   agentKind?: string
 }
