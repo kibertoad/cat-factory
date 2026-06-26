@@ -6,6 +6,10 @@ import {
   systemPromptFor,
   userPromptFor,
 } from '@cat-factory/agents'
+import {
+  collectRegistrationProblems,
+  validateRegistrations,
+} from './validation/validateRegistrations.js'
 import type { AgentRunContext } from '@cat-factory/kernel'
 import {
   clearRegisteredGates,
@@ -78,6 +82,40 @@ describe('agent-kind registry', () => {
     expect(registeredKindRequiresContainer('org-inline')).toBe(false)
     expect(registeredKindRequiresContainer('org-repo')).toBe(true)
     expect(registeredKindRequiresContainer('coder')).toBe(false) // built-in, not registered
+  })
+
+  it('applies surface-driven directives so an author need not reason about them', () => {
+    // container-explore: a read-only explore whose deliverable is its reply → BOTH the
+    // read-only guardrail AND final-answer-in-reply (this is the gap the consolidation closes —
+    // a registered explore kind used to miss the guardrail).
+    registerAgentKind({
+      kind: 'org-explore',
+      systemPrompt: 'You explore.',
+      agent: { surface: 'container-explore', clone: { branch: 'pr' } },
+    })
+    const explore = systemPromptFor('org-explore')
+    expect(explore).toContain('You explore.')
+    expect(explore).toContain('READ-ONLY exploration') // READ_ONLY_GUARDRAIL
+    expect(explore).toContain('visible content') // FINAL_ANSWER_IN_REPLY
+
+    // inline: deliverable is the reply → final-answer only, no read-only guardrail.
+    registerAgentKind({
+      kind: 'org-inline2',
+      systemPrompt: 'You reply.',
+      agent: { surface: 'inline' },
+    })
+    const inline = systemPromptFor('org-inline2')
+    expect(inline).toContain('visible content')
+    expect(inline).not.toContain('READ-ONLY exploration')
+
+    // container-coding: product is a pushed commit → neither directive.
+    registerAgentKind({
+      kind: 'org-coding',
+      systemPrompt: 'You code.',
+      agent: { surface: 'container-coding', clone: { branch: 'pr' } },
+    })
+    const coding = systemPromptFor('org-coding')
+    expect(coding).toBe('You code.')
   })
 })
 
@@ -163,6 +201,83 @@ describe('gate registry', () => {
     const registered = registeredGateFactories()
     expect(registered).toHaveLength(1)
     expect(registered[0]!.factory(stubGateContext()).helperKind).toBe('fixer-b')
+  })
+})
+
+describe('validateRegistrations', () => {
+  afterEach(() => {
+    clearRegisteredGates()
+    clearRegisteredAgentKinds()
+    clearRegisteredPipelines()
+  })
+
+  const goodGate = (helperKind: string) => () => ({
+    kind: 'license-check',
+    helperKind,
+    wired: () => true,
+    unwiredOutput: 'skipped',
+    probe: async () => ({ status: 'pass' as const, headSha: null }),
+    onExhausted: async () => ({ error: 'spent' }),
+  })
+
+  it('passes when a gate escalates to a registered container-capable helper', () => {
+    registerAgentKind({
+      kind: 'license-fixer',
+      systemPrompt: 'fix',
+      agent: { surface: 'container-coding', clone: { branch: 'pr' } },
+    })
+    registerGate('license-check', goodGate('license-fixer'))
+    expect(collectRegistrationProblems()).toEqual([])
+    expect(() => validateRegistrations()).not.toThrow()
+  })
+
+  it('accepts a built-in helper kind (ci-fixer) without a registered kind', () => {
+    registerGate('license-check', goodGate('ci-fixer'))
+    expect(collectRegistrationProblems().filter((p) => p.severity === 'error')).toEqual([])
+  })
+
+  it('throws when a gate helperKind resolves to nothing', () => {
+    registerGate('license-check', goodGate('does-not-exist'))
+    const problems = collectRegistrationProblems()
+    expect(problems.some((p) => p.code === 'gate_helper_unresolved')).toBe(true)
+    expect(() => validateRegistrations()).toThrow(/gate_helper_unresolved/)
+  })
+
+  it('rejects a helper that is registered but not container-capable', () => {
+    registerAgentKind({ kind: 'inline-helper', systemPrompt: 'x', agent: { surface: 'inline' } })
+    registerGate('license-check', goodGate('inline-helper'))
+    expect(collectRegistrationProblems().some((p) => p.code === 'gate_helper_unresolved')).toBe(
+      true,
+    )
+  })
+
+  it('errors on an unknown resultView (no silent prose fallback)', () => {
+    registerAgentKind({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore', clone: { branch: 'pr' } },
+      // @ts-expect-error — an unknown view id is exactly what the validator must catch.
+      presentation: {
+        label: 'Auditor',
+        icon: 'i',
+        color: '#fff',
+        description: 'd',
+        resultView: 'no-such-view',
+      },
+    })
+    expect(collectRegistrationProblems().some((p) => p.code === 'unknown_result_view')).toBe(true)
+  })
+
+  it('warns (does not throw) when postOps lack structured output', () => {
+    registerAgentKind({
+      kind: 'render-only',
+      systemPrompt: 'x',
+      agent: { surface: 'container-explore', clone: { branch: 'pr' } },
+      postOps: [async () => {}],
+    })
+    const problems = collectRegistrationProblems()
+    expect(problems.some((p) => p.code === 'postops_without_structured_output')).toBe(true)
+    expect(() => validateRegistrations()).not.toThrow()
   })
 })
 

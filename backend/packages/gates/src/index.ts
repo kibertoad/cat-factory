@@ -27,6 +27,10 @@ import { ciGate, conflictsGate, postReleaseHealthGate } from './gates.js'
 // ---------------------------------------------------------------------------
 
 export {
+  CI_STATUS_PROVIDER,
+  MERGEABILITY_PROVIDER,
+  RELEASE_HEALTH_PROVIDER,
+  INCIDENT_ENRICHMENT_PROVIDER,
   wireCiStatusProvider,
   wireMergeabilityProvider,
   wireReleaseHealthProvider,

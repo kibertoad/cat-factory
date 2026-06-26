@@ -17,6 +17,7 @@ import {
   describeFailingChecks,
   describeRegressedSignals,
   isCiGreen,
+  isProviderWired,
   listFailingChecks,
   ON_CALL_AGENT_KIND,
   POST_RELEASE_HEALTH_AGENT_KIND,
@@ -25,10 +26,10 @@ import {
 import type { OnCallAssessment } from '@cat-factory/contracts'
 import { parseOnCallAssessment } from '@cat-factory/contracts'
 import {
-  getCiStatusProvider,
-  getIncidentEnrichment,
-  getMergeabilityProvider,
-  getReleaseHealthProvider,
+  CI_STATUS_PROVIDER,
+  INCIDENT_ENRICHMENT_PROVIDER,
+  MERGEABILITY_PROVIDER,
+  RELEASE_HEALTH_PROVIDER,
 } from './providers.js'
 
 /**
@@ -52,10 +53,10 @@ function pct(score: number): string {
 export const ciGate = (ctx: GateContext): GateDefinition => ({
   kind: CI_AGENT_KIND,
   helperKind: CI_FIXER_AGENT_KIND,
-  wired: () => !!getCiStatusProvider(),
+  wired: () => isProviderWired(CI_STATUS_PROVIDER),
   unwiredOutput: 'CI gate skipped (no CI status provider configured).',
   probe: async (workspaceId, blockId): Promise<GateProbe> => {
-    const report = await getCiStatusProvider()!.getStatus(workspaceId, blockId)
+    const report = await ctx.requireProvider(CI_STATUS_PROVIDER).getStatus(workspaceId, blockId)
     const verdict = aggregateCi(report.checks)
     if (isCiGreen(verdict)) {
       return {
@@ -102,14 +103,16 @@ export const ciGate = (ctx: GateContext): GateDefinition => ({
  * Conflicts gate: check PR mergeability; escalate to a `conflict-resolver` on conflict. A
  * pass-through until {@link wireMergeabilityProvider} supplies a provider.
  */
-export const conflictsGate = (_ctx: GateContext): GateDefinition => ({
+export const conflictsGate = (ctx: GateContext): GateDefinition => ({
   kind: CONFLICTS_AGENT_KIND,
   helperKind: CONFLICT_RESOLVER_AGENT_KIND,
-  wired: () => !!getMergeabilityProvider(),
+  wired: () => isProviderWired(MERGEABILITY_PROVIDER),
   unwiredOutput: 'Conflict gate skipped (no mergeability provider configured).',
   attemptBudget: () => CONFLICT_RESOLVER_MAX_ATTEMPTS,
   probe: async (workspaceId, blockId): Promise<GateProbe> => {
-    const report = await getMergeabilityProvider()!.getMergeability(workspaceId, blockId)
+    const report = await ctx
+      .requireProvider(MERGEABILITY_PROVIDER)
+      .getMergeability(workspaceId, blockId)
     // No PR resolved, or it merges cleanly → nothing to do; advance.
     if (report.headSha === null || report.verdict === 'mergeable') {
       return {
@@ -170,13 +173,14 @@ async function raiseReleaseRegression(
  * paged. A no-op when no provider is wired or no matching incident exists.
  */
 async function enrichIncident(
+  ctx: GateContext,
   workspaceId: string,
   args: Pick<GateHelperCompletionArgs, 'block'>,
   assessment: OnCallAssessment | null,
   signals: ReleaseSignal[],
   since: number,
 ): Promise<void> {
-  const incidentEnrichment = getIncidentEnrichment()
+  const incidentEnrichment = ctx.getProvider(INCIDENT_ENRICHMENT_PROVIDER)
   if (!incidentEnrichment) return
   const { block } = args
   const update: IncidentUpdate = {
@@ -206,7 +210,7 @@ async function enrichIncident(
 export const postReleaseHealthGate = (ctx: GateContext): GateDefinition => ({
   kind: POST_RELEASE_HEALTH_AGENT_KIND,
   helperKind: ON_CALL_AGENT_KIND,
-  wired: () => !!getReleaseHealthProvider(),
+  wired: () => isProviderWired(RELEASE_HEALTH_PROVIDER),
   unwiredOutput: 'Post-release health gate skipped (no release-health provider configured).',
   attemptBudget: (preset) => preset.releaseMaxAttempts,
   // Running out of poll budget while still watching means the window outlasted the driver's
@@ -228,7 +232,9 @@ export const postReleaseHealthGate = (ctx: GateContext): GateDefinition => ({
       }
     }
     const since = gateState.watchSince ?? ctx.clock.now()
-    const report = await getReleaseHealthProvider()!.probe(workspaceId, blockId, since)
+    const report = await ctx
+      .requireProvider(RELEASE_HEALTH_PROVIDER)
+      .probe(workspaceId, blockId, since)
     // No signals configured for this block → nothing to watch; advance immediately (don't
     // park for the whole window on an unmapped release).
     if (report.signals.length === 0) {
@@ -264,7 +270,9 @@ export const postReleaseHealthGate = (ctx: GateContext): GateDefinition => ({
   // gathered fresh at dispatch.
   gatherHelperPriorOutputs: async (workspaceId, blockId, gateState) => {
     const since = gateState.watchSince ?? ctx.clock.now()
-    const evidence = await getReleaseHealthProvider()!.gatherEvidence(workspaceId, blockId, since)
+    const evidence = await ctx
+      .requireProvider(RELEASE_HEALTH_PROVIDER)
+      .gatherEvidence(workspaceId, blockId, since)
     // Stash the regressed signals on the gate state so the on-call COMPLETION handler
     // (resolveHelperCompletion) builds the notification + incident enrichment from the SAME
     // evidence the agent investigated — rather than re-reading Datadog a third time. The
@@ -310,7 +318,7 @@ export const postReleaseHealthGate = (ctx: GateContext): GateDefinition => ({
     // persisted (e.g. an older parked run).
     const since = step.gate?.watchSince ?? ctx.clock.now()
     let regressedSignals: ReleaseSignal[] = step.gate?.regressedSignals ?? []
-    const provider = getReleaseHealthProvider()
+    const provider = ctx.getProvider(RELEASE_HEALTH_PROVIDER)
     if (regressedSignals.length === 0 && provider) {
       try {
         const evidence = await provider.gatherEvidence(workspaceId, block.id, since)
@@ -331,7 +339,7 @@ export const postReleaseHealthGate = (ctx: GateContext): GateDefinition => ({
       regressedSignals,
       summary,
     )
-    await enrichIncident(workspaceId, { block }, assessment, regressedSignals, since)
+    await enrichIncident(ctx, workspaceId, { block }, assessment, regressedSignals, since)
     const output = assessment
       ? `On-call investigation: ${assessment.recommendation} (culprit confidence ${pct(assessment.culpritConfidence)}). ${assessment.rationale}`
       : investigationFailed

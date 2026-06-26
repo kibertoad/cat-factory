@@ -83,9 +83,11 @@ import type {
   StepCompletionResolver,
 } from '@cat-factory/kernel'
 import {
+  getProvider,
   recordGateAttempt,
   registeredGateFactories,
   registeredStepResolverFactories,
+  requireProvider,
 } from '@cat-factory/kernel'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { WorkspaceSettingsService } from '../settings/WorkspaceSettingsService.js'
@@ -2510,6 +2512,10 @@ export class ExecutionService {
       raiseNotification: async (workspaceId, input) => {
         await this.notificationService?.raise(workspaceId, input)
       },
+      // A gate reaches its deployment-wired provider through the typed registry rather than
+      // closing over a hand-authored module global; the engine just forwards to it.
+      getProvider,
+      requireProvider,
     }
   }
 

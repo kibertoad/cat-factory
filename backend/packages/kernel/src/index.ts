@@ -104,6 +104,19 @@ export {
   stubResolverContext,
 } from './domain/step-resolver-registry.js'
 
+// Typed provider registry: the deployment-supplied data sources a gate (or other
+// extension) probes, keyed by an opaque {@link ProviderToken}. Replaces the per-provider
+// module-global wire/get boilerplate. See `domain/provider-registry.ts`.
+export {
+  type ProviderToken,
+  defineProviderToken,
+  wireProvider,
+  getProvider,
+  isProviderWired,
+  requireProvider,
+  clearProviders,
+} from './domain/provider-registry.js'
+
 // Pure gate logic + gate/helper agent-kind constants, shared by the built-in gate suite
 // (`@cat-factory/gates`) and the engine. See `domain/gate-logic.ts`.
 export {

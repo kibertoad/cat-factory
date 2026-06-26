@@ -106,6 +106,9 @@ importers:
       '@cat-factory/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
+      valibot:
+        specifier: ^1.4.1
+        version: 1.4.1(typescript@7.0.1-rc)
     devDependencies:
       typescript:
         specifier: 7.0.1-rc
@@ -189,6 +192,9 @@ importers:
       handlebars:
         specifier: ^4.7.9
         version: 4.7.9
+      valibot:
+        specifier: ^1.4.1
+        version: 1.4.1(typescript@7.0.1-rc)
     devDependencies:
       typescript:
         specifier: 7.0.1-rc
