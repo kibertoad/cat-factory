@@ -1,4 +1,8 @@
-import { CredentialRequiredError, type SubscriptionVendor } from '@cat-factory/kernel'
+import {
+  CredentialRequiredError,
+  SUBSCRIPTION_VENDORS,
+  type SubscriptionVendor,
+} from '@cat-factory/kernel'
 import { PERSONAL_PASSWORD_HEADER } from '@cat-factory/contracts'
 import type { Context } from 'hono'
 import type { AppEnv, ServerContainer } from '../../http/env.js'
@@ -135,6 +139,25 @@ function gate(
   }
 }
 
+/**
+ * The individual-usage vendors that NATIVE local execution serves with the developer's
+ * own ambient CLI login — a native vendor (no Anthropic-compatible base URL of its own:
+ * `claude` / `codex`) whose harness is in the configured allow-list. These need no managed
+ * credential, so they are dropped from the gate's vendor set. A non-native vendor that
+ * merely REUSES the `claude-code` harness (GLM/Kimi/DeepSeek) is NOT here — it still leases
+ * normally, so it must still gate (matching `ContainerAgentExecutor`'s ambient decision).
+ */
+function ambientVendors(container: ServerContainer): Set<SubscriptionVendor> {
+  const allow = container.config.nativeAmbientAuth
+  if (!allow || allow.length === 0) return new Set()
+  return new Set(
+    (Object.keys(SUBSCRIPTION_VENDORS) as SubscriptionVendor[]).filter((v) => {
+      const cfg = SUBSCRIPTION_VENDORS[v]
+      return allow.includes(cfg.harness) && !cfg.baseUrl
+    }),
+  )
+}
+
 /** Gate for STARTING a run on a block with a given pipeline. */
 export async function personalGateForBlock(
   container: ServerContainer,
@@ -144,16 +167,22 @@ export async function personalGateForBlock(
   user: SessionPayload | undefined,
   password: string | undefined,
 ): Promise<PersonalCredentialGate> {
-  // Native local execution runs the developer's own CLI with its ambient login, so no
-  // leased/pooled/personal credential is involved — the individual-usage gate is moot.
-  if (container.config.nativeAmbientAuth) return { initiatedBy: user?.id ?? null }
   const vendors = await container.executionService.individualVendorsForBlock(
     workspaceId,
     blockId,
     pipelineId,
     await resolvePersonalVendorPredicate(container, user),
   )
-  return gate(container, vendors, user, password)
+  // Native local execution serves its OWN ambient vendors (Claude/Codex) with the
+  // developer's CLI login — no managed credential — so drop just those; a non-native
+  // vendor reusing the claude-code harness still leases and so still gates.
+  const ambient = ambientVendors(container)
+  return gate(
+    container,
+    vendors.filter((v) => !ambient.has(v)),
+    user,
+    password,
+  )
 }
 
 /** Gate for RETRYING a failed run. */
@@ -164,12 +193,17 @@ export async function personalGateForRun(
   user: SessionPayload | undefined,
   password: string | undefined,
 ): Promise<PersonalCredentialGate> {
-  // See personalGateForBlock: native ambient execution uses no managed credential.
-  if (container.config.nativeAmbientAuth) return { initiatedBy: user?.id ?? null }
   const vendors = await container.executionService.individualVendorsForRun(
     workspaceId,
     executionId,
     await resolvePersonalVendorPredicate(container, user),
   )
-  return gate(container, vendors, user, password)
+  // See personalGateForBlock: drop only the vendors native mode serves ambiently.
+  const ambient = ambientVendors(container)
+  return gate(
+    container,
+    vendors.filter((v) => !ambient.has(v)),
+    user,
+    password,
+  )
 }

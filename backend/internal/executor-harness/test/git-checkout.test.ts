@@ -156,4 +156,37 @@ describe('prepareExistingCheckout', () => {
       await rm(origin2, { recursive: true, force: true })
     }
   })
+
+  it('resumes a work branch (existing:true) at ITS tip, not the base tip, when base != branch', async () => {
+    // A work branch carrying a commit the base (main) does not have, cut off the base.
+    await g(origin, 'checkout', '-b', 'cat-factory/blk')
+    await writeFile(join(origin, 'work.txt'), 'resumed work\n', 'utf8')
+    await g(origin, 'add', '-A')
+    await g(origin, 'commit', '-m', 'work-commit')
+    const workTip = (
+      await exec('git', ['rev-parse', 'cat-factory/blk'], { cwd: origin })
+    ).stdout.trim()
+    const baseTip = (await exec('git', ['rev-parse', 'main'], { cwd: origin })).stdout.trim()
+    expect(workTip).not.toBe(baseTip)
+    await g(origin, 'checkout', 'main')
+
+    // Resume that branch with a DISTINCT base — the base is also fetched (for downstream
+    // diff/merge), which must NOT clobber the checkout target via FETCH_HEAD.
+    await prepareExistingCheckout({
+      dir: work,
+      repo: repo(origin),
+      ghToken: 't',
+      branch: 'cat-factory/blk',
+      baseBranch: 'main',
+      existing: true,
+    })
+    // Checked out the work branch at its OWN tip (resumed commits preserved), not base.
+    expect(await headCommit(work)).toBe(workTip)
+    expect(existsSync(join(work, 'work.txt'))).toBe(true)
+    // ...and origin/main was refreshed too, so downstream base diff/merge has it.
+    const originMain = (
+      await exec('git', ['rev-parse', 'refs/remotes/origin/main'], { cwd: work })
+    ).stdout.trim()
+    expect(originMain).toBe(baseTip)
+  })
 })

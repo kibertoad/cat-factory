@@ -65,6 +65,30 @@ const repoSpec = (owner: string, name: string) => ({ repo: { owner, name }, mode
 afterEach(() => vi.restoreAllMocks())
 
 describe('LocalContainerRunnerTransport (warm pool)', () => {
+  it('does not double-lease one idle member to two CONCURRENT runs', async () => {
+    const { exec, calls } = fakeDockerPool()
+    const transport = new LocalContainerRunnerTransport({
+      image: 'harness:test',
+      poolSize: 4,
+      exec,
+      fetchImpl: okFetch() as unknown as typeof fetch,
+    })
+    // Warm exactly one idle member.
+    await transport.dispatch({ runId: 'r0', jobId: 'j0' }, repoSpec('o', 'r'), 'agent')
+    await transport.release({ runId: 'r0', jobId: 'j0' })
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(1)
+
+    // Two leases raced concurrently: the member is CLAIMED synchronously before the health
+    // probe awaits, so the second run can't grab the same idle member — it starts a fresh
+    // container instead of two runs sharing one container + checkout. (Without the fix both
+    // would reuse the single warm member and `run` would still be 1.)
+    await Promise.all([
+      transport.dispatch({ runId: 'r1', jobId: 'j1' }, repoSpec('o', 'r'), 'agent'),
+      transport.dispatch({ runId: 'r2', jobId: 'j2' }, repoSpec('o', 'r'), 'agent'),
+    ])
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(2)
+  })
+
   it('leases a member once and reuses it for a later run (one docker run, persistentCheckout injected)', async () => {
     const { exec, calls } = fakeDockerPool()
     const fetchImpl = okFetch()

@@ -55,6 +55,7 @@ import {
   type TaskConnectionRepository,
   type TaskSourceProvider,
   CompositeNotificationChannel,
+  SUBSCRIPTION_VENDORS,
 } from '@cat-factory/kernel'
 import {
   AgentContextObservabilityService,
@@ -603,7 +604,21 @@ function buildNodeContainerExecutor(
       : {}),
     // Native local execution (local facade, opt-in): run subscription-harness agents with
     // the developer's OWN installed CLI + ambient login instead of leasing a credential.
-    ...(config.nativeAmbientAuth ? { nativeAmbientAuth: (h) => h !== 'pi' } : {}),
+    // Ambient auth applies ONLY when the resolved harness is in the allow-list AND the
+    // vendor is that CLI's NATIVE vendor (no Anthropic-compatible base URL of its own:
+    // `claude` / `codex`). A non-native vendor reusing the `claude-code` harness
+    // (GLM/Kimi/DeepSeek carries its own `baseUrl`) is leased normally — otherwise ambient
+    // auth would silently drop that base URL and run the step on the developer's own
+    // Anthropic login instead of the pinned vendor.
+    ...(config.nativeAmbientAuth && config.nativeAmbientAuth.length > 0
+      ? {
+          nativeAmbientAuth: (h, vendor) =>
+            config.nativeAmbientAuth!.includes(h) &&
+            vendor !== undefined &&
+            SUBSCRIPTION_VENDORS[vendor].harness === h &&
+            !SUBSCRIPTION_VENDORS[vendor].baseUrl,
+        }
+      : {}),
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
     // Point container agents' web search at the backend search proxy (no provider key in
     // the sandbox), but only for a run whose account has keys (resolved per run — see the

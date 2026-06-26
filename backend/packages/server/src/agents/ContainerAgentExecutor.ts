@@ -372,13 +372,17 @@ export interface ContainerAgentExecutorDependencies {
   recordSubscriptionUsage?: RecordSubscriptionUsage
   /**
    * NATIVE LOCAL EXECUTION (local facade only, opt-in via `LOCAL_NATIVE_AGENTS`): when this
-   * returns true for a resolved subscription harness, the job carries `ambientAuth: true`
-   * INSTEAD of a leased credential — the harness (run as a host process) drives the
-   * developer's OWN installed `claude` / `codex` CLI with its ambient login. No token is
-   * leased and no personal-credential gate applies. Default off everywhere else, so the
-   * Cloudflare/Node leasing paths are untouched.
+   * returns true for a resolved subscription harness + vendor, the job carries
+   * `ambientAuth: true` INSTEAD of a leased credential — the harness (run as a host process)
+   * drives the developer's OWN installed `claude` / `codex` CLI with its ambient login. No
+   * token is leased and no personal-credential gate applies. It is passed the resolved
+   * `vendor` precisely so it can refuse a non-native vendor that merely REUSES the
+   * `claude-code` harness (GLM/Kimi/DeepSeek): those carry an Anthropic-compatible
+   * `subscriptionBaseUrl`, which ambient auth would silently drop — running the step on the
+   * developer's own Anthropic login instead of the pinned vendor. Default off everywhere
+   * else, so the Cloudflare/Node leasing paths are untouched.
    */
-  nativeAmbientAuth?: (harness: HarnessKind) => boolean
+  nativeAmbientAuth?: (harness: HarnessKind, vendor: SubscriptionVendor | undefined) => boolean
   /**
    * Whether the workspace has a pooled token for a vendor. Drives "subscriptions
    * always win" for POOLABLE vendors: a step pinned to a dual-mode model (Kimi/DeepSeek
@@ -951,7 +955,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     }
     // Native local execution: the harness runs the developer's own CLI with its ambient
     // login, so we lease NOTHING and gate NOTHING — just flag ambient auth for the harness.
-    if (this.deps.nativeAmbientAuth?.(harness)) {
+    // Passed the vendor so it can refuse a non-native vendor reusing the `claude-code`
+    // harness (GLM/Kimi/DeepSeek), whose subscriptionBaseUrl ambient auth would drop.
+    if (this.deps.nativeAmbientAuth?.(harness, subscriptionVendor)) {
       return { auth: { harness, ambientAuth: true } }
     }
     if (!subscriptionVendor) {

@@ -1,6 +1,6 @@
 import type { AgentRouting } from '@cat-factory/agents'
 import type { ModelOption } from '@cat-factory/contracts'
-import type { DocumentSourceKind, ModelRef } from '@cat-factory/kernel'
+import type { DocumentSourceKind, HarnessKind, ModelRef } from '@cat-factory/kernel'
 import type { SpendPricing } from '@cat-factory/spend'
 
 // The resolved application configuration shape, shared by every facade. The values
@@ -296,10 +296,14 @@ export interface AppConfig {
    */
   localMode?: LocalModeConfig
   /**
-   * NATIVE LOCAL EXECUTION (local facade only, opt-in via `LOCAL_NATIVE_AGENTS`): agents
-   * run on the host with the developer's OWN installed `claude` / `codex` CLI and ambient
-   * login. When true the personal-credential gate is skipped (no leased/pooled credential
-   * is used) and the executor flags `ambientAuth`. Absent/false everywhere else.
+   * NATIVE LOCAL EXECUTION (local facade only, opt-in via `LOCAL_NATIVE_AGENTS`): the
+   * ALLOW-LIST of subscription harnesses that run on the host with the developer's OWN
+   * installed CLI + ambient login (parsed from the comma-separated env, e.g.
+   * `claude-code,codex`). Non-empty ⇒ native mode is on: the personal-credential gate is
+   * skipped (no leased/pooled credential is used) and the executor flags `ambientAuth` for
+   * a listed harness whose vendor is the native CLI's own vendor. Absent/empty everywhere
+   * else. Only `claude-code` / `codex` are meaningful here (a non-native vendor reusing the
+   * `claude-code` harness is still leased normally — see `ContainerAgentExecutor`).
    */
-  nativeAmbientAuth?: boolean
+  nativeAmbientAuth?: HarnessKind[]
 }

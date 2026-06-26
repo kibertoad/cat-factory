@@ -6,6 +6,8 @@ import {
 import type { NodeContainerOptions } from '@cat-factory/node-server'
 import type { AppConfig, ResolveRunnerTransport, ServerContainer } from '@cat-factory/server'
 import type { CoreDependencies } from '@cat-factory/orchestration'
+import type { HarnessKind, RunnerTransport } from '@cat-factory/kernel'
+import { NativeRoutingRunnerTransport } from './NativeRoutingRunnerTransport.js'
 import { applyLocalDefaults } from './config.js'
 import { createLocalGitHubClient, fetchPatAccount, githubPatCreationUrl } from './github.js'
 import { AutoProvisioningInstallationRepository, type PatAccount } from './installations.js'
@@ -44,14 +46,17 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // GitHub through the PAT-backed client, so the read/link endpoints (connection, available
   // repos, "add from existing repo") should be served the same way.
   // Native local execution (opt-in): run agents as a host process driving the developer's
-  // OWN installed `claude` / `codex` CLI (ambient login), bypassing Docker. When on, the
-  // executor flags `ambientAuth` and the personal-credential gate is skipped (no managed
-  // credential is used). Default off — the container path is unchanged.
-  const nativeAgents = env.LOCAL_NATIVE_AGENTS?.trim()
+  // OWN installed `claude` / `codex` CLI (ambient login), bypassing Docker. The env is the
+  // ALLOW-LIST of subscription harnesses to run natively (`claude-code,codex`); parsed into
+  // a harness set so the executor flags `ambientAuth` ONLY for a listed harness whose vendor
+  // is that CLI's native vendor (Claude/Codex), and the personal-credential gate skips just
+  // those vendors. Default off — the container path is unchanged.
+  const nativeHarnesses = parseNativeHarnesses(env.LOCAL_NATIVE_AGENTS)
+  const nativeAgents = nativeHarnesses.length > 0
   const config: AppConfig = {
     ...base,
     ...(pat ? { github: { ...base.github, enabled: true } } : {}),
-    ...(nativeAgents ? { nativeAmbientAuth: true } : {}),
+    ...(nativeAgents ? { nativeAmbientAuth: nativeHarnesses } : {}),
     localMode: {
       enabled: true,
       ...(pat ? {} : { githubPatSetupUrl: githubPatCreationUrl() }),
@@ -73,16 +78,32 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
         )
       : undefined
 
-  // The Docker transport is constructed LAZILY on first container-job dispatch, so the
-  // service still boots to serve the board (and inline kinds) when LOCAL_HARNESS_IMAGE
-  // is unset — only repo-operating kinds then fail, loudly and with a clear message,
-  // mirroring how the Node facade treats a missing runner backend.
-  let transport: LocalContainerRunnerTransport | LocalProcessRunnerTransport | undefined
+  // The runner transport(s) are constructed LAZILY on first dispatch, so the service still
+  // boots to serve the board (and inline kinds) when LOCAL_HARNESS_IMAGE is unset — only
+  // repo-operating container kinds then fail, loudly and with a clear message, mirroring how
+  // the Node facade treats a missing runner backend.
+  //
+  // Native mode does NOT blanket-route every dispatch to the host process: a host process
+  // has no sandbox, so only the steps that actually use the developer's ambient CLI login
+  // (flagged `ambientAuth` by the executor) run there. Everything else — a proxy/`pi` model,
+  // or a non-native vendor reusing the claude-code harness — still runs in a per-run
+  // container (built lazily, so a Claude/Codex-only native deployment never needs an image;
+  // a proxy step without one fails loudly there). See NativeRoutingRunnerTransport.
+  let container: LocalContainerRunnerTransport | undefined
+  const resolveContainerTransport = () => (container ??= createLocalContainerTransportFromEnv(env))
+  let routed: RunnerTransport | undefined
   const resolveTransport: ResolveRunnerTransport = () => {
-    transport ??= nativeAgents
-      ? createLocalProcessTransportFromEnv(env)
-      : createLocalContainerTransportFromEnv(env)
-    return Promise.resolve(transport)
+    if (nativeAgents) {
+      if (!routed) {
+        let proc: LocalProcessRunnerTransport | undefined
+        routed = new NativeRoutingRunnerTransport(
+          () => (proc ??= createLocalProcessTransportFromEnv(env)),
+          resolveContainerTransport,
+        )
+      }
+      return Promise.resolve(routed)
+    }
+    return Promise.resolve(resolveContainerTransport())
   }
 
   // The selected runtime decides whether the Tester's LOCAL docker-compose infra (run
@@ -103,8 +124,9 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     ...options,
     env,
     config,
-    // Always dispatch container jobs to the local Docker transport (a constant
-    // resolver, ignoring workspace — local mode has no per-workspace runner pools).
+    // Dispatch container jobs to the local Docker transport (ignoring workspace — local
+    // mode has no per-workspace runner pools), or, in native mode, to the per-job router
+    // that sends only ambient-CLI steps to the host process and the rest to a container.
     resolveTransport,
     // Authenticate git with the developer's PAT when present. Absent → the executor
     // falls back to the GitHub App path (and is null without it), so container kinds
@@ -128,4 +150,24 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       localTestInfraSupported,
     } satisfies Partial<CoreDependencies>,
   })
+}
+
+/**
+ * Parse `LOCAL_NATIVE_AGENTS` into the set of subscription harnesses to run natively. The
+ * documented form is a comma-separated list of harness ids (`claude-code,codex`); `claude`
+ * is accepted as an alias for `claude-code`. A set-but-unrecognised value (e.g. a bare
+ * `true` / `1`) is treated as "enable both native harnesses" so turning native mode on is
+ * forgiving; blank/unset ⇒ off (`[]`). Only `claude-code` / `codex` are ever native.
+ */
+function parseNativeHarnesses(raw: string | undefined): HarnessKind[] {
+  const trimmed = raw?.trim()
+  if (!trimmed) return []
+  const out = new Set<HarnessKind>()
+  for (const token of trimmed.split(',').map((s) => s.trim().toLowerCase())) {
+    if (token === 'claude-code' || token === 'claude') out.add('claude-code')
+    else if (token === 'codex') out.add('codex')
+  }
+  // Non-empty but nothing recognised → the operator clearly meant "on"; enable both.
+  if (out.size === 0) return ['claude-code', 'codex']
+  return [...out]
 }

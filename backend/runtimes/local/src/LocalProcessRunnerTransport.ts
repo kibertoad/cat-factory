@@ -180,8 +180,22 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
       stdio: 'ignore',
     })
     const handle = { child, port, exited: false }
+    // The harness child is long-lived and not detached, but Node does NOT auto-kill a
+    // child when the parent exits — without this, every dev restart orphans a `node
+    // <harness>` process still bound to its port (and possibly mid-run on the developer's
+    // live Claude/Codex login). `shutdown()` covers the graceful path; this `exit` hook is
+    // the backstop for SIGTERM/SIGINT/uncaught exits that reach `process.exit` directly.
+    const killOnParentExit = (): void => {
+      try {
+        child.kill()
+      } catch {
+        // best-effort
+      }
+    }
+    process.once('exit', killOnParentExit)
     child.on('exit', () => {
       handle.exited = true
+      process.removeListener('exit', killOnParentExit)
       if (this.proc === handle) this.proc = undefined
     })
     await this.waitForHealth(port, handle)

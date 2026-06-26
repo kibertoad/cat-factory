@@ -74,17 +74,19 @@ async function withDirLock<T>(dir: string, fn: () => Promise<T>): Promise<T> {
   const current = new Promise<void>((resolve) => {
     release = resolve
   })
-  dirLocks.set(
-    dir,
-    prev.then(() => current),
-  )
+  // Store the SAME promise we await on for cleanup-identity. (Storing `prev.then(...)`
+  // instead would make the tail check below — `=== tail` — never match, so the entry
+  // would never be deleted and the map would grow without bound.)
+  const tail = prev.then(() => current)
+  dirLocks.set(dir, tail)
   await prev.catch(() => {})
   try {
     return await fn()
   } finally {
     release()
-    // Drop the entry once we're the tail, so the map doesn't grow unbounded.
-    if (dirLocks.get(dir) === current) dirLocks.delete(dir)
+    // Drop the entry once we're the tail (no later caller has queued behind us), so the
+    // map doesn't grow unbounded across distinct repo dirs.
+    if (dirLocks.get(dir) === tail) dirLocks.delete(dir)
   }
 }
 

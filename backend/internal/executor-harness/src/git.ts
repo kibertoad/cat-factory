@@ -308,13 +308,24 @@ export async function prepareExistingCheckout(opts: {
   // Re-point origin in case the stored URL drifted (idempotent; carries no secret).
   await git(['remote', 'set-url', 'origin', cloneUrl], { cwd: dir, signal })
   const fetchRef = existing ? branch : baseBranch
-  await git(['fetch', 'origin', fetchRef], { cwd: dir, signal, env })
-  // Ensure `origin/<baseBranch>` exists for downstream diff/merge even when we checked out
-  // a different ref (best-effort; the base may legitimately equal the fetched ref).
-  if (baseBranch !== fetchRef) {
-    await git(['fetch', 'origin', baseBranch], { cwd: dir, signal, env }).catch(() => {})
-  }
-  await git(['checkout', '-B', branch, 'FETCH_HEAD'], { cwd: dir, signal })
+  // Fetch the target ref AND the base into their tracking refs in ONE command, with explicit
+  // destination refspecs. The checkout below then reads `origin/<fetchRef>` directly rather
+  // than FETCH_HEAD: FETCH_HEAD only ever holds the LAST fetched ref, so a second base fetch
+  // would clobber it and a resumed work branch (base != branch) would be reset to the BASE
+  // tip — silently discarding the resumed commits. Keeping `origin/<baseBranch>` fresh also
+  // matters for the downstream merger/diff; a missing base diverges from a fresh full clone,
+  // so this is NOT best-effort (a failure surfaces rather than leaving a stale base ref).
+  const refspecs = [`+${fetchRef}:refs/remotes/origin/${fetchRef}`]
+  if (baseBranch !== fetchRef) refspecs.push(`+${baseBranch}:refs/remotes/origin/${baseBranch}`)
+  await git(['fetch', 'origin', ...refspecs], { cwd: dir, signal, env })
+  // `-f`: the clean sweep deliberately PRESERVES dependency caches (node_modules/target/…)
+  // as untracked files; if one collides with a path the target branch TRACKS, a plain
+  // checkout aborts ("untracked working tree files would be overwritten"). Force overwrites
+  // only the in-the-way files, leaving the other kept caches intact.
+  await git(['checkout', '-f', '-B', branch, `refs/remotes/origin/${fetchRef}`], {
+    cwd: dir,
+    signal,
+  })
   await git(['config', 'user.name', GIT_AUTHOR], { cwd: dir, signal })
   await git(['config', 'user.email', GIT_EMAIL], { cwd: dir, signal })
 }

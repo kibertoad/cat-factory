@@ -326,11 +326,19 @@ cache is the residual risk — clear it by adding a tighter `HARNESS_CLEAN_KEEP`
 
 ## Native execution (use your installed Claude Code / Codex)
 
-Set `LOCAL_NATIVE_AGENTS=claude-code,codex` to run agents as a **host process** driving
-your OWN already-installed `claude` / `codex` CLI with its ambient login — no Docker, no
-`LOCAL_HARNESS_IMAGE`, no leased credential. Requires `LOCAL_HARNESS_ENTRY` (the path to
-the executor-harness server entry to run with `node`). Only steps pinned to a Claude /
-Codex model go native; proxy-only models still need the container path.
+Set `LOCAL_NATIVE_AGENTS=claude-code,codex` (a comma-separated **allow-list** of the
+subscription harnesses to run natively) to run those agents as a **host process** driving
+your OWN already-installed `claude` / `codex` CLI with its ambient login — no leased
+credential. Requires `LOCAL_HARNESS_ENTRY` (the path to the executor-harness server entry
+to run with `node`).
+
+Only a step whose model maps to a **listed harness's NATIVE vendor** goes native: that is
+Anthropic's own `claude` (for `claude-code`) and OpenAI's `codex`. A step pinned to a
+non-native vendor that merely reuses the `claude-code` harness (GLM / Kimi / DeepSeek), or
+to a proxy model, is **not** run natively — it still uses the sandboxed per-run container
+path (so it leases its real credential / base URL instead of silently running on your own
+Anthropic login). Those steps therefore still need `LOCAL_HARNESS_IMAGE`; if every step in
+your pipelines is Claude/Codex you can run native-only with no image.
 
 > ⚠️ **No sandbox.** The agent runs as a plain subprocess with your full shell + file
 > access and your personal subscription (no spend metering, no model-locking). This is

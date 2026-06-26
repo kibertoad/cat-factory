@@ -147,6 +147,13 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   /** Warm-pool members (only used when pooling is enabled). Leased in-process by run id. */
   private readonly members: PoolMember[] = []
 
+  /**
+   * Members whose container start is in flight (started but not yet pushed to `members`).
+   * Counted toward the cap so concurrent cold-starts can't all read a low `members.length`
+   * and overshoot `poolMax`.
+   */
+  private pendingStarts = 0
+
   constructor(options: LocalContainerRunnerTransportOptions) {
     this.adapter =
       options.adapter ??
@@ -372,19 +379,27 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         (repoKey ? this.members.find((m) => !m.leasedTo && m.repo === repoKey) : undefined) ??
         this.members.find((m) => !m.leasedTo)
       if (!idle) break
+      // CLAIM the member synchronously, BEFORE the `await` below, so a concurrent
+      // acquireMember can't `find` the same idle member and double-lease it (two runs
+      // sharing one container + checkout). If it turns out unhealthy we release the claim.
+      idle.leasedTo = runId
       this.clearIdleEviction(idle)
-      if (await this.isHealthy(idle)) {
-        idle.leasedTo = runId
-        return idle
-      }
+      if (await this.isHealthy(idle)) return idle
       // Unhealthy idle member → remove and try the next candidate.
       this.dropMember(idle)
       await this.adapter.remove(this.exec, idle.containerId)
     }
     // No idle member: start a new one. Within the cap it's a pooled member; beyond the cap
-    // it's a transient member torn down on release (so a burst never blocks).
-    const transient = this.members.length >= this.poolMax
-    const member = await this.startMember(transient)
+    // it's a transient member torn down on release (so a burst never blocks). Count in-flight
+    // starts toward the cap so concurrent cold-starts can't all see a low count and overshoot.
+    const transient = this.members.length + this.pendingStarts >= this.poolMax
+    this.pendingStarts++
+    let member: PoolMember
+    try {
+      member = await this.startMember(transient)
+    } finally {
+      this.pendingStarts--
+    }
     member.leasedTo = runId
     return member
   }
