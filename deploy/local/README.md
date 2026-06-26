@@ -299,3 +299,56 @@ to the per-job container's resource limits on your host daemon:
 New services inherit the active account's **default cloud provider** (set it once from
 the account menu — e.g. to `docker` for a local install); a service can still override
 it per-frame.
+
+## Warm container pool (faster startup)
+
+By default every run cold-starts its own harness container and clones the repo from
+scratch. Set a **pool size** > 0 to keep idle harness containers **warm** and re-lease one
+to each run — preferring a container that already holds the run's repo, so it does a
+`git fetch` + branch switch instead of a fresh clone.
+
+These knobs live in the **DB, not env** — configure them in the UI under **Integrations >
+"Local mode"** (they used to be the `LOCAL_POOL_*` / `HARNESS_*` env vars):
+
+| Setting                | Default                                         | Meaning                                                             |
+| ---------------------- | ----------------------------------------------- | ------------------------------------------------------------------- |
+| Pool size              | `0`                                             | Max warm idle containers kept ready (`0` = pooling off).            |
+| Pre-warm at boot       | `0`                                             | Containers pre-warmed when the service starts.                      |
+| Max containers         | `=pool size`                                    | Hard cap on total containers; a burst beyond it uses a one-off one. |
+| Idle timeout (minutes) | `10`                                            | How long an idle pooled container is kept before eviction.          |
+| Workspace root         | `/workspace`                                    | Where the reused per-repo checkout lives inside the container.      |
+| Keep on clean          | `node_modules,.venv,target,.gradle,.pnpm-store` | Dirs the between-run clean sweep PRESERVES (dependency caches).     |
+
+Saving resizes the warm pool **live** — no restart needed (idle members beyond the new size
+are reaped and the pool re-warms to the new minimum); in-flight runs keep the container they
+already hold, and the checkout config applies to containers started after the save. Between
+runs each reused checkout is **clean-swept** (`git reset --hard` + remove
+every untracked/ignored file _except_ the kept dependency caches) so a prior run's garbage
+never leaks into the next. **Trust boundary:** local mode is single-user, so a warm
+container is reused across that one developer's runs; different repos always get separate
+checkout directories (no cross-repo bleed). Pooling is supported on
+Docker/Podman/OrbStack/Colima; Apple `container` ignores the pool size and keeps the
+per-run path. A stale dependency cache is the residual risk — clear it by tightening the
+"Keep on clean" list.
+
+## Native execution (use your installed Claude Code / Codex)
+
+Set `LOCAL_NATIVE_AGENTS=claude-code,codex` (a comma-separated **allow-list** of the
+subscription harnesses to run natively) to run those agents as a **host process** driving
+your OWN already-installed `claude` / `codex` CLI with its ambient login — no leased
+credential. Requires `LOCAL_HARNESS_ENTRY` (the path to the executor-harness server entry
+to run with `node`).
+
+Only a step whose model maps to a **listed harness's NATIVE vendor** goes native: that is
+Anthropic's own `claude` (for `claude-code`) and OpenAI's `codex`. A step pinned to a
+non-native vendor that merely reuses the `claude-code` harness (GLM / Kimi / DeepSeek), or
+to a proxy model, is **not** run natively — it still uses the sandboxed per-run container
+path (so it leases its real credential / base URL instead of silently running on your own
+Anthropic login). Those steps therefore still need `LOCAL_HARNESS_IMAGE`; if every step in
+your pipelines is Claude/Codex you can run native-only with no image.
+
+> ⚠️ **No sandbox.** The agent runs as a plain subprocess with your full shell + file
+> access and your personal subscription (no spend metering, no model-locking). This is
+> acceptable ONLY because it's your own machine — it is opt-in and off by default. The
+> Tester's local docker-compose infra is unavailable in native mode for now (a follow-up
+> adds host-Docker compose with per-run project names + git-worktree isolation).

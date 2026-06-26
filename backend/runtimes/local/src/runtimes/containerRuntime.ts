@@ -30,10 +30,25 @@ export interface RuntimeCapabilities {
    * drives the engine's Tester "limited mode".
    */
   localDind: boolean
+  /**
+   * Whether this runtime supports the warm-container POOL: keeping idle harness
+   * containers around and re-leasing them to runs (with repo-affinity checkout reuse)
+   * instead of cold-starting one per run. True for the Docker-family adapters; false for
+   * Apple `container` (one-VM-per-container, where the deterministic-name identity makes
+   * re-leasing messy) — there the transport keeps the per-run path even when a pool size
+   * is configured.
+   */
+  pooling: boolean
 }
 
-/** A per-run container to start. */
+/** A container to start — per-run, or a reusable POOL member when `pool` is set. */
 export interface RunContainerSpec {
+  /**
+   * For a per-run container this is the run id (the container key + label). For a POOL
+   * member it is a synthetic member id used only for the container name — the member is
+   * NOT labelled with it (lease state lives in the transport), so a label lookup never
+   * finds it; the transport tracks `containerId → {repo, leasedTo}` in-process instead.
+   */
   runId: string
   image: string
   sharedSecret: string
@@ -45,6 +60,12 @@ export interface RunContainerSpec {
   env: Record<string, string>
   /** Host resource limits derived from the service's abstract instance size. */
   instanceSize?: { memory: string; cpus: string }
+  /**
+   * Start this as a warm-POOL member: label it `cat-factory.pool=1` (not the run id) so
+   * it can be re-leased to any run and enumerated by {@link ContainerRuntimeAdapter.listPoolMembers}.
+   * Absent ⇒ the classic per-run container (labelled by run id).
+   */
+  pool?: boolean
 }
 
 /**
@@ -74,6 +95,12 @@ export interface ContainerRuntimeAdapter {
   removeRun(exec: ContainerExec, runId: string): Promise<void>
   /** Reap exited managed containers left by crashes; resolves to the count removed. */
   reapExited(exec: ContainerExec): Promise<number>
+  /**
+   * The container ids of every managed POOL member (running or exited) this runtime
+   * holds. Used at boot to drain pool members orphaned by a previous process. Returns []
+   * on a runtime that doesn't support pooling.
+   */
+  listPoolMembers(exec: ContainerExec): Promise<string[]>
 }
 
 export type RuntimeId = 'docker' | 'podman' | 'orbstack' | 'colima' | 'apple'
@@ -89,6 +116,8 @@ export interface RuntimeProfile {
   addHostGateway: boolean
   /** Whether the Tester's local Docker-in-Docker infra can run on this runtime. */
   localDind: boolean
+  /** Whether the warm-container pool is supported on this runtime. */
+  pooling: boolean
   /** Which adapter implementation backs this runtime. */
   family: 'docker' | 'apple'
 }
@@ -102,6 +131,7 @@ const PROFILES: Record<RuntimeId, RuntimeProfile> = {
     hostAlias: 'host.docker.internal',
     addHostGateway: true,
     localDind: true,
+    pooling: true,
     family: 'docker',
   },
   // Podman speaks the same CLI; host.docker.internal:host-gateway works on v4+. Rootless
@@ -113,6 +143,7 @@ const PROFILES: Record<RuntimeId, RuntimeProfile> = {
     hostAlias: 'host.docker.internal',
     addHostGateway: true,
     localDind: true,
+    pooling: true,
     family: 'docker',
   },
   // OrbStack ships a drop-in `docker` CLI and resolves host.docker.internal natively;
@@ -123,6 +154,7 @@ const PROFILES: Record<RuntimeId, RuntimeProfile> = {
     hostAlias: 'host.docker.internal',
     addHostGateway: true,
     localDind: true,
+    pooling: true,
     family: 'docker',
   },
   // Colima runs dockerd in a Lima VM. Ports forward to the host loopback, but
@@ -136,6 +168,7 @@ const PROFILES: Record<RuntimeId, RuntimeProfile> = {
     hostAlias: 'host.lima.internal',
     addHostGateway: false,
     localDind: true,
+    pooling: true,
     family: 'docker',
   },
   // Apple `container` (macOS): one lightweight VM per container, each with its own IP.
@@ -149,6 +182,7 @@ const PROFILES: Record<RuntimeId, RuntimeProfile> = {
     hostAlias: '192.168.64.1',
     addHostGateway: false,
     localDind: false,
+    pooling: false,
     family: 'apple',
   },
 }

@@ -12,6 +12,7 @@ import { githubApi } from './api/github'
 import { humanReviewApi } from './api/humanReview'
 import { humanTestApi } from './api/humanTest'
 import { kaizenApi } from './api/kaizen'
+import { localSettingsApi } from './api/localSettings'
 import { modelsApi } from './api/models'
 import { notificationsApi } from './api/notifications'
 import { presetsApi } from './api/presets'
@@ -91,6 +92,7 @@ export function useApi() {
     ...humanTestApi(ctx),
     ...humanReviewApi(ctx),
     ...kaizenApi(ctx),
+    ...localSettingsApi(ctx),
     ...specApi(ctx),
     ...notificationsApi(ctx),
     ...presetsApi(ctx),

@@ -334,6 +334,7 @@ export type {
   AccountSettingsRecord,
   AccountSettingsRepository,
 } from './account-settings-repositories.js'
+export type { LocalSettingsRecord, LocalSettingsRepository } from './local-settings-repositories.js'
 export type {
   MergeabilityVerdict,
   MergeabilityReport,

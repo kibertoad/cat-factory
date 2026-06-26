@@ -33,8 +33,9 @@ export { createDbClient, type DbClient, type DrizzleDb } from './db/client.js'
 export { migrate } from './db/migrate.js'
 export {
   createDrizzleRepositories,
-  DrizzleWorkspaceSettingsRepository,
   type CoreRepositories,
+  DrizzleLocalSettingsRepository,
+  DrizzleWorkspaceSettingsRepository,
 } from './repositories/drizzle.js'
 export {
   DrizzleGitHubInstallationRepository,

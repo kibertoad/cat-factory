@@ -64,6 +64,7 @@ describe('DockerRuntimeAdapter', () => {
       hostAlias: 'host.docker.internal',
       addHostGateway: true,
       localDind: true,
+      pooling: true,
     })
     const { exec, calls } = fakeExec({ run: 'cid\n' })
     const id = await adapter.run(exec, {
@@ -87,6 +88,7 @@ describe('DockerRuntimeAdapter', () => {
       hostAlias: 'host.lima.internal',
       addHostGateway: false,
       localDind: true,
+      pooling: true,
     })
     const { exec, calls } = fakeExec({ run: 'cid\n' })
     await adapter.run(exec, {
@@ -106,6 +108,7 @@ describe('DockerRuntimeAdapter', () => {
       hostAlias: 'host.docker.internal',
       addHostGateway: true,
       localDind: true,
+      pooling: true,
     })
     const { exec } = fakeExec({ port: '127.0.0.1:49170\n' })
     expect(await adapter.endpoint(exec, 'cid')).toEqual({ host: '127.0.0.1', port: 49170 })

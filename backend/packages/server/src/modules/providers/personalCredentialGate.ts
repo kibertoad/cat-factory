@@ -1,4 +1,9 @@
-import { CredentialRequiredError, type SubscriptionVendor } from '@cat-factory/kernel'
+import {
+  ALL_SUBSCRIPTION_VENDORS,
+  CredentialRequiredError,
+  isAmbientNativeVendor,
+  type SubscriptionVendor,
+} from '@cat-factory/kernel'
 import { PERSONAL_PASSWORD_HEADER } from '@cat-factory/contracts'
 import type { Context } from 'hono'
 import type { AppEnv, ServerContainer } from '../../http/env.js'
@@ -135,6 +140,18 @@ function gate(
   }
 }
 
+/**
+ * The individual-usage vendors that NATIVE local execution serves with the developer's
+ * own ambient CLI login — these need no managed credential, so they are dropped from the
+ * gate's vendor set. Decided by the shared {@link isAmbientNativeVendor} predicate so the
+ * gate can never drift from `ContainerAgentExecutor`'s ambient decision (a non-native
+ * vendor reusing the `claude-code` harness still leases and so must still gate).
+ */
+function ambientVendors(container: ServerContainer): Set<SubscriptionVendor> {
+  const allow = container.config.nativeAmbientAuth
+  return new Set(ALL_SUBSCRIPTION_VENDORS.filter((v) => isAmbientNativeVendor(allow, v)))
+}
+
 /** Gate for STARTING a run on a block with a given pipeline. */
 export async function personalGateForBlock(
   container: ServerContainer,
@@ -150,7 +167,16 @@ export async function personalGateForBlock(
     pipelineId,
     await resolvePersonalVendorPredicate(container, user),
   )
-  return gate(container, vendors, user, password)
+  // Native local execution serves its OWN ambient vendors (Claude/Codex) with the
+  // developer's CLI login — no managed credential — so drop just those; a non-native
+  // vendor reusing the claude-code harness still leases and so still gates.
+  const ambient = ambientVendors(container)
+  return gate(
+    container,
+    vendors.filter((v) => !ambient.has(v)),
+    user,
+    password,
+  )
 }
 
 /** Gate for RETRYING a failed run. */
@@ -166,5 +192,12 @@ export async function personalGateForRun(
     executionId,
     await resolvePersonalVendorPredicate(container, user),
   )
-  return gate(container, vendors, user, password)
+  // See personalGateForBlock: drop only the vendors native mode serves ambiently.
+  const ambient = ambientVendors(container)
+  return gate(
+    container,
+    vendors.filter((v) => !ambient.has(v)),
+    user,
+    password,
+  )
 }

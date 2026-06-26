@@ -6,6 +6,7 @@ import type {
 import type {
   ApiKeyService,
   LocalModelEndpointService,
+  LocalSettingsService,
   OpenRouterCatalogService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
@@ -105,6 +106,15 @@ export interface ServerContainer extends Core {
    * OpenRouter entries, and the spend price overlay for those models.
    */
   openRouterCatalog?: OpenRouterCatalogService
+  /**
+   * The local-mode operational settings (warm-container-pool sizing + per-repo checkout
+   * reuse), a per-deployment singleton that replaced the `LOCAL_POOL_*` / `HARNESS_*` env
+   * vars. Present ONLY on the local-mode facade (where the Docker-family runner can pool);
+   * the dedicated local-mode settings panel reads/writes it through the local-settings
+   * controller, and the local runner transport resolves its pool config from it. Absent on
+   * the Worker / stock Node facades, so the controller 503s there.
+   */
+  localSettings?: { service: LocalSettingsService }
 }
 
 /** Hono generics shared by the cross-runtime controllers (Variables only — no Bindings). */

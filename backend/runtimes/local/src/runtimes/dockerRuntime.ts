@@ -16,6 +16,8 @@ import {
 /** Labels the per-run container by its run id (a run's steps share one container). */
 const LABEL_RUN = 'cat-factory.runId'
 const LABEL_MANAGED = 'cat-factory.managed=local-docker'
+/** Marks a reusable warm-pool member (not bound to any run id; leased in-process). */
+const LABEL_POOL = 'cat-factory.pool=1'
 
 export interface DockerRuntimeAdapterOptions {
   id: RuntimeId
@@ -24,13 +26,15 @@ export interface DockerRuntimeAdapterOptions {
   /** Add `--add-host=<hostAlias>:host-gateway` so the harness can reach the host. */
   addHostGateway: boolean
   localDind: boolean
+  /** Whether the warm-container pool is supported (Docker-family: true). */
+  pooling: boolean
 }
 
 export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
   readonly id: RuntimeId
   readonly binary: string
   readonly hostAlias: string
-  readonly capabilities: { localDind: boolean }
+  readonly capabilities: { localDind: boolean; pooling: boolean }
   private readonly addHostGateway: boolean
 
   constructor(options: DockerRuntimeAdapterOptions) {
@@ -38,15 +42,17 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
     this.binary = options.binary
     this.hostAlias = options.hostAlias
     this.addHostGateway = options.addHostGateway
-    this.capabilities = { localDind: options.localDind }
+    this.capabilities = { localDind: options.localDind, pooling: options.pooling }
   }
 
   async run(exec: ContainerExec, spec: RunContainerSpec): Promise<string> {
+    // A pool member is labelled `pool=1` and NOT bound to a run id (the transport leases
+    // it in-process); a classic per-run container is labelled by its run id.
     const args = [
       'run',
       '-d',
       '--label',
-      `${LABEL_RUN}=${spec.runId}`,
+      spec.pool ? LABEL_POOL : `${LABEL_RUN}=${spec.runId}`,
       '--label',
       LABEL_MANAGED,
       '-p',
@@ -137,5 +143,21 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
       .filter(Boolean)
     if (ids.length) await exec(['rm', '-f', ...ids]).catch(() => undefined)
     return ids.length
+  }
+
+  async listPoolMembers(exec: ContainerExec): Promise<string[]> {
+    const { stdout } = await exec([
+      'ps',
+      '-aq',
+      '--filter',
+      `label=${LABEL_MANAGED}`,
+      '--filter',
+      `label=${LABEL_POOL}`,
+    ])
+    return stdout
+      .trim()
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean)
   }
 }

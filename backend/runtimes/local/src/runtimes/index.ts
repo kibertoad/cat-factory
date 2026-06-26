@@ -38,5 +38,6 @@ export function createRuntimeAdapter(env: NodeJS.ProcessEnv): ContainerRuntimeAd
     hostAlias,
     addHostGateway,
     localDind: profile.localDind,
+    pooling: profile.pooling,
   })
 }

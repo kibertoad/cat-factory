@@ -295,6 +295,10 @@ export {
   type AccountSettingsServiceDependencies,
   type ResolvedAccountSettings,
 } from './modules/accountSettings/AccountSettingsService.js'
+export {
+  LocalSettingsService,
+  type LocalSettingsServiceDependencies,
+} from './modules/localSettings/LocalSettingsService.js'
 
 export {
   SendGridEmailSender,
