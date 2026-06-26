@@ -20,9 +20,11 @@ const PORT = Number(process.env.PORT ?? 8080)
 // request must present a matching `x-harness-secret` header (constant-time
 // compared). When it is unset the harness behaves as before (open), so local/dev
 // and the existing acceptance flow keep working without configuration.
-// TODO(worker): when a secret is configured, CloudflareContainerTransport should
-// send the same `x-harness-secret` header on its /jobs fetches. Left to the
-// worker-side change to avoid conflicting with parallel work on that package.
+// The direct callers send the matching header when the secret is configured: the
+// local Docker transport (LocalContainerRunnerTransport) and the Cloudflare
+// transport (CloudflareContainerTransport, which also injects the secret into the
+// container env). A self-hosted runner pool reaches the harness through its own
+// control plane, so its operator configures the secret pool-side.
 const SHARED_SECRET = process.env.HARNESS_SHARED_SECRET
 
 const HEADER = 'x-harness-secret'

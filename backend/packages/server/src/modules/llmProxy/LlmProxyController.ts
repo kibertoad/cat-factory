@@ -2,6 +2,7 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { cachedTokensFromUsage, promptCacheParams } from '@cat-factory/agents'
 import { isLocalRunner } from '@cat-factory/contracts'
+import { fetchLocalRunner } from '@cat-factory/integrations'
 import { type ApiKeyProvider, contextWindowFor } from '@cat-factory/kernel'
 import { ContainerSessionService } from '../../containers/ContainerSessionService.js'
 import type { AppEnv } from '../../http/env.js'
@@ -381,7 +382,8 @@ export function llmProxyController(): Hono<AppEnv> {
     //    DB-backed pool (workspace + account + initiator).
     let baseURL: string
     let apiKey: string
-    if (isLocalRunner(session.provider)) {
+    const localRunner = isLocalRunner(session.provider)
+    if (localRunner) {
       const resolved =
         session.userId && localModelEndpoints
           ? await localModelEndpoints.resolve(session.userId, session.provider)
@@ -476,14 +478,40 @@ export function llmProxyController(): Hono<AppEnv> {
     // Upstream-dispatch clock: the slice between here and the response is the model's
     // execution; the rest of the proxy's time is transport overhead.
     const dispatchAt = Date.now()
-    const upstreamRes = await fetch(`${baseURL}/chat/completions`, {
+    const upstreamUrl = `${baseURL}/chat/completions`
+    const upstreamInit: RequestInit = {
       method: 'POST',
       headers: {
         authorization: `Bearer ${apiKey}`,
         'content-type': 'application/json',
       },
       body: JSON.stringify(payload),
-    })
+    }
+    let upstreamRes: Response
+    if (localRunner) {
+      // The local-runner base URL is user-supplied and forwarded server-side, so follow
+      // redirects manually and re-validate every hop against the SSRF allow-list — a
+      // reachable runner must not 302 us into the cloud-metadata endpoint or a public
+      // host. Cloud providers use a trusted, hardcoded base URL, so they keep plain fetch.
+      try {
+        upstreamRes = await fetchLocalRunner(upstreamUrl, upstreamInit)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        log.error({ err: message }, 'llm proxy: local runner request blocked')
+        observe({
+          usage: null,
+          finishReason: null,
+          responseText: '',
+          ok: false,
+          httpStatus: 502,
+          errorMessage: message,
+          upstreamMs: Date.now() - dispatchAt,
+        })
+        return c.json({ error: { message } }, 502)
+      }
+    } else {
+      upstreamRes = await fetch(upstreamUrl, upstreamInit)
+    }
 
     // Non-2xx: pass the upstream error straight back, nothing to meter.
     if (!upstreamRes.ok || !upstreamRes.body) {

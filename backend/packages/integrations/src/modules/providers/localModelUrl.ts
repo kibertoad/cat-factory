@@ -51,6 +51,11 @@ export function localRunnerUrlError(rawUrl: string): string | null {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     return 'A runner URL must use http or https.'
   }
+  // Embedded credentials (`user:pass@host`) have no legitimate use for a local runner
+  // and are a classic way to smuggle an unexpected authority past a naive check.
+  if (url.username || url.password) {
+    return 'A runner URL must not contain credentials.'
+  }
   if (!isLoopbackOrPrivateHost(url.hostname)) {
     return (
       'A local runner must live on your own machine or LAN (localhost, *.local, or a ' +
@@ -58,4 +63,39 @@ export function localRunnerUrlError(rawUrl: string): string | null {
     )
   }
   return null
+}
+
+/** Max redirect hops the revalidating fetch will follow before giving up. */
+const MAX_LOCAL_RUNNER_REDIRECTS = 5
+
+/**
+ * Fetch a local-runner URL, re-validating the SSRF allow-list on EVERY redirect hop.
+ *
+ * The allow-list permits loopback/LAN hosts, but a permitted private runner can still
+ * `302` to a denied host — most dangerously the cloud-metadata endpoint
+ * (169.254.169.254) — and the platform `fetch` would follow it silently. So we drive
+ * redirects by hand (`redirect: 'manual'`) and run {@link localRunnerUrlError} against
+ * each `Location` before following it, mirroring the environment provider's `safeFetch`.
+ * Both server-side callers (the "Test connection" probe and the run-time LLM proxy
+ * forward) use this instead of a bare `fetch`. Throws when a hop fails validation or the
+ * redirect chain is too long.
+ */
+export async function fetchLocalRunner(
+  rawUrl: string,
+  init: RequestInit,
+  doFetch: typeof fetch = fetch,
+): Promise<Response> {
+  let current = rawUrl
+  for (let hop = 0; ; hop++) {
+    const err = localRunnerUrlError(current)
+    if (err) throw new Error(`Blocked local-runner request: ${err}`)
+    const res = await doFetch(current, { ...init, redirect: 'manual' })
+    if (res.status < 300 || res.status >= 400) return res
+    if (hop >= MAX_LOCAL_RUNNER_REDIRECTS) {
+      throw new Error('Local-runner request followed too many redirects.')
+    }
+    const location = res.headers.get('location')
+    if (!location) return res
+    current = new URL(location, current).toString()
+  }
 }

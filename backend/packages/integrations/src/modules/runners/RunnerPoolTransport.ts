@@ -22,6 +22,14 @@ import type {
 //
 // Runtime-neutral: both the Cloudflare Worker and the Node service resolve this
 // transport for a workspace whose self-hosted runner pool is registered.
+//
+// Harness inbound auth (HARNESS_SHARED_SECRET / the `x-harness-secret` header) is NOT
+// sent here, unlike the Cloudflare and local Docker transports. Those call the harness
+// HTTP server directly, so they issue the header; a pool instead hands the job to the
+// workspace's OWN control plane, which is what reaches the harness. The harness secret
+// is therefore configured pool-side by the operator (it provisions the runner env and
+// its dispatch). This is a genuine architectural difference, not a facade-parity gap:
+// the pool is BYO infra inside the workspace's trust domain.
 
 export class RunnerPoolTransport implements RunnerTransport {
   constructor(
