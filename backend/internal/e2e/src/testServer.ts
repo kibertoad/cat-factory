@@ -17,8 +17,17 @@
 //
 // Run directly via Node type stripping: `node src/testServer.ts` (Playwright's webServer
 // boots it). Reads `DATABASE_URL` (required) and a couple of optional knobs (below).
-import { FakeAgentExecutor, FakeRepoBootstrapper } from '@cat-factory/conformance'
+import {
+  AsyncFakeAgentExecutor,
+  FakeAgentExecutor,
+  FakeRepoBootstrapper,
+} from '@cat-factory/conformance'
 import { buildNodeContainer, start } from '@cat-factory/node-server'
+
+/** The options shape `AsyncFakeAgentExecutor`/`FakeAgentExecutor` accept (avoids importing
+ * the kernel `AgentKind` type, which isn't a dependency of this test-only package). */
+type FakeOptions = ConstructorParameters<typeof AsyncFakeAgentExecutor>[0]
+type FakeKind = NonNullable<NonNullable<FakeOptions>['asyncKinds']>[number]
 
 /**
  * Step indices (into the agent-executed steps of a run) at which the fake agent should
@@ -33,6 +42,37 @@ const decisionOnSteps = (process.env.E2E_DECISION_ON_STEPS ?? '0')
   .filter((s) => s.length > 0)
   .map((s) => Number(s))
   .filter((n) => Number.isInteger(n))
+
+/** Parse a comma-separated list of agent kinds from an env knob (empty ⇒ []). */
+const parseKinds = (raw: string | undefined): FakeKind[] =>
+  (raw ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0) as FakeKind[]
+
+// Agent kinds whose container dispatch should THROW (the runner never accepts the job),
+// and/or kinds the fake should drive as a POLLED async job. When either is set the suite
+// needs the ASYNC fake (so the engine's dispatch-failure / awaiting_job paths run); when
+// both are empty the default (inline) FakeAgentExecutor is used so the existing specs are
+// byte-identical. Used by the agent-failure spec via a dedicated webServer (see config).
+const dispatchThrowKinds = parseKinds(process.env.E2E_DISPATCH_THROW_KINDS)
+const asyncKinds = parseKinds(process.env.E2E_ASYNC_KINDS)
+
+// Confidence the fake reports on the final step (drives auto-merge vs PR-ready). Default
+// 1; lower it (e.g. for a merge-review flow) via E2E_CONFIDENCE.
+const confidence = process.env.E2E_CONFIDENCE ? Number(process.env.E2E_CONFIDENCE) : 1
+
+const agentExecutor =
+  dispatchThrowKinds.length > 0 || asyncKinds.length > 0
+    ? new AsyncFakeAgentExecutor({
+        confidence,
+        decisionOnSteps,
+        // A thrown dispatch is only meaningful for an async (polled) kind, so any
+        // dispatch-throw kind is implicitly async too.
+        asyncKinds: [...new Set([...asyncKinds, ...dispatchThrowKinds])],
+        dispatchThrowKinds,
+      })
+    : new FakeAgentExecutor({ confidence, decisionOnSteps })
 
 // A non-secret, fixed encryption key (32 zero bytes, base64). The always-on task-source
 // integration makes config load require ENCRYPTION_KEY; a fixed value keeps any encrypted
@@ -74,7 +114,7 @@ await start({
     buildNodeContainer({
       ...opts,
       overrides: {
-        agentExecutor: new FakeAgentExecutor({ confidence: 1, decisionOnSteps }),
+        agentExecutor,
         repoBootstrapper: new FakeRepoBootstrapper(),
       },
       // The built-in default model preset points every agent kind at a Cloudflare-served
