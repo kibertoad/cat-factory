@@ -1,6 +1,6 @@
 import type { RunnerPoolManifest, RunnerPoolProvider } from '@cat-factory/kernel'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { MockAgent, setGlobalDispatcher } from 'undici'
+import { getGlobalDispatcher, MockAgent, setGlobalDispatcher } from 'undici'
 import { HttpRunnerPoolProvider } from './HttpRunnerPoolProvider.js'
 import { RunnerPoolTransport } from './RunnerPoolTransport.js'
 
@@ -105,14 +105,17 @@ describe('HttpRunnerPoolProvider', () => {
   // makes any un-mocked request fail loudly.
   const POOL = 'https://pool.test'
   let agent: MockAgent
+  let previousDispatcher: ReturnType<typeof getGlobalDispatcher>
 
   beforeEach(() => {
+    previousDispatcher = getGlobalDispatcher()
     agent = new MockAgent()
     agent.disableNetConnect()
     setGlobalDispatcher(agent)
   })
 
   afterEach(async () => {
+    setGlobalDispatcher(previousDispatcher)
     await agent.close()
   })
 

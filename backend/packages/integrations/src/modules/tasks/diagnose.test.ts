@@ -1,6 +1,6 @@
 import type { GitHubClient, GitHubInstallationRepository } from '@cat-factory/kernel'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { MockAgent, setGlobalDispatcher } from 'undici'
+import { getGlobalDispatcher, MockAgent, setGlobalDispatcher } from 'undici'
 import { GitHubIssuesProvider } from './GitHubIssuesProvider.js'
 import { JiraProvider } from './JiraProvider.js'
 
@@ -121,14 +121,17 @@ describe('JiraProvider.diagnose', () => {
   // The probe authenticates against the real Jira `/myself` endpoint over the global `fetch`;
   // intercept that real fetch with undici's MockAgent rather than replacing `fetch` wholesale.
   let agent: MockAgent
+  let previousDispatcher: ReturnType<typeof getGlobalDispatcher>
 
   beforeEach(() => {
+    previousDispatcher = getGlobalDispatcher()
     agent = new MockAgent()
     agent.disableNetConnect()
     setGlobalDispatcher(agent)
   })
 
   afterEach(async () => {
+    setGlobalDispatcher(previousDispatcher)
     await agent.close()
   })
 

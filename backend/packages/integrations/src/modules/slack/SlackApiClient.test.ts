@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { MockAgent, setGlobalDispatcher } from 'undici'
+import { getGlobalDispatcher, MockAgent, setGlobalDispatcher } from 'undici'
 import { SlackApiClient } from './SlackApiClient.js'
 
 // The client speaks the real Slack Web API over the global `fetch`, so we intercept that real
@@ -10,14 +10,17 @@ import { SlackApiClient } from './SlackApiClient.js'
 const SLACK = 'https://slack.com'
 
 let agent: MockAgent
+let previousDispatcher: ReturnType<typeof getGlobalDispatcher>
 
 beforeEach(() => {
+  previousDispatcher = getGlobalDispatcher()
   agent = new MockAgent()
   agent.disableNetConnect()
   setGlobalDispatcher(agent)
 })
 
 afterEach(async () => {
+  setGlobalDispatcher(previousDispatcher)
   await agent.close()
 })
 

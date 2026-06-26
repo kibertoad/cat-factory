@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { MockAgent, setGlobalDispatcher } from 'undici'
+import { getGlobalDispatcher, MockAgent, setGlobalDispatcher } from 'undici'
 import { ensureWorkBranchViaRest } from '../src/github/ensureWorkBranch.js'
 
 // `ensureWorkBranchViaRest` is the one genuinely new piece of logic in the shared
@@ -25,14 +25,17 @@ const BASE_INPUT = {
 }
 
 let agent: MockAgent
+let previousDispatcher: ReturnType<typeof getGlobalDispatcher>
 
 beforeEach(() => {
+  previousDispatcher = getGlobalDispatcher()
   agent = new MockAgent()
   agent.disableNetConnect()
   setGlobalDispatcher(agent)
 })
 
 afterEach(async () => {
+  setGlobalDispatcher(previousDispatcher)
   await agent.close()
 })
 

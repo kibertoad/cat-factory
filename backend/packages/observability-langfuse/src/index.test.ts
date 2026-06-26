@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MockAgent, setGlobalDispatcher } from 'undici'
+import { getGlobalDispatcher, MockAgent, setGlobalDispatcher } from 'undici'
 import type { LlmGenerationEvent } from '@cat-factory/kernel'
 import { LangfuseTraceSink } from './index.js'
 
@@ -11,14 +11,17 @@ const CLOUD = 'https://cloud.langfuse.com'
 const INGEST = '/api/public/ingestion'
 
 let agent: MockAgent
+let previousDispatcher: ReturnType<typeof getGlobalDispatcher>
 
 beforeEach(() => {
+  previousDispatcher = getGlobalDispatcher()
   agent = new MockAgent()
   agent.disableNetConnect()
   setGlobalDispatcher(agent)
 })
 
 afterEach(async () => {
+  setGlobalDispatcher(previousDispatcher)
   await agent.close()
 })
 
