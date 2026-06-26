@@ -184,7 +184,10 @@ function buildAgentContextRecord(
     agentKind: context.agentKind,
     stepIndex: context.stepIndex,
     model,
-    harness: typeof body.harness === 'string' ? body.harness : 'pi',
+    // Record the harness the body actually carried; don't guess. A body without an
+    // explicit harness records `null` rather than mislabelling a codex / claude-code
+    // dispatch as `pi`.
+    harness: typeof body.harness === 'string' ? body.harness : null,
     systemPrompt: str(body.systemPrompt),
     userPrompt: str(body.userPrompt),
     fragments,

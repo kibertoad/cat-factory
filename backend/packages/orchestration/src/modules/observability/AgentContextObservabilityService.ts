@@ -17,9 +17,41 @@ import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
  */
 export const MAX_AGENT_CONTEXT_CHARS = 512 * 1024
 
+/**
+ * Aggregate ceiling (characters) across ALL bodies in one snapshot — both prompts plus
+ * every fragment and every injected file. The per-body {@link MAX_AGENT_CONTEXT_CHARS}
+ * cap bounds a single pathological value, but a dispatch that injects many large files
+ * could still assemble a multi-megabyte row. Recording is best-effort and swallowed at
+ * the call site, so an oversized row the store rejects would silently drop the WHOLE
+ * snapshot. This bounds the row instead. Bodies are filled in priority order (the
+ * prompts first), so the most useful context survives when the budget is reached.
+ */
+export const MAX_AGENT_CONTEXT_TOTAL_CHARS = 4 * 1024 * 1024
+
 function clamp(text: string): string {
   if (text.length <= MAX_AGENT_CONTEXT_CHARS) return text
   return `${text.slice(0, MAX_AGENT_CONTEXT_CHARS)}\n…[truncated ${text.length - MAX_AGENT_CONTEXT_CHARS} chars]`
+}
+
+/**
+ * A shared character budget for one snapshot. Each call first applies the per-body cap,
+ * then trims against the remaining aggregate budget — so the bodies passed earlier (the
+ * prompts) are preserved and later ones (trailing injected files) are truncated once the
+ * row would grow too large. The trailing marker can push a single body marginally past
+ * the budget; the cap is defensive, not exact.
+ */
+function makeBudget(total = MAX_AGENT_CONTEXT_TOTAL_CHARS): (text: string) => string {
+  let remaining = total
+  return (text: string): string => {
+    const capped = clamp(text)
+    if (capped.length <= remaining) {
+      remaining -= capped.length
+      return capped
+    }
+    const slice = capped.slice(0, Math.max(0, remaining))
+    remaining = 0
+    return `${slice}\n…[truncated: snapshot size budget reached]`
+  }
 }
 
 export interface AgentContextObservabilityServiceDependencies {
@@ -80,14 +112,17 @@ export class AgentContextObservabilityService implements AgentContextRecorder {
   async record(input: RecordAgentContextInput): Promise<void> {
     if (!this.recordPrompts) return
     if (!(await this.storeEnabled(input.workspaceId))) return
+    // One shared budget per snapshot, consumed prompts-first so the most useful context
+    // survives if a dispatch injects an unusual amount of file content.
+    const budget = makeBudget()
     const snapshot: AgentContextSnapshot = {
       ...input,
       id: this.idGenerator.next('ctx'),
       createdAt: this.clock.now(),
-      systemPrompt: clamp(input.systemPrompt),
-      userPrompt: clamp(input.userPrompt),
-      fragments: input.fragments.map((f) => ({ id: f.id, body: clamp(f.body) })),
-      contextFiles: input.contextFiles.map((f) => ({ ...f, content: clamp(f.content) })),
+      systemPrompt: budget(input.systemPrompt),
+      userPrompt: budget(input.userPrompt),
+      fragments: input.fragments.map((f) => ({ id: f.id, body: budget(f.body) })),
+      contextFiles: input.contextFiles.map((f) => ({ ...f, content: budget(f.content) })),
     }
     await this.repository.record(snapshot)
   }
