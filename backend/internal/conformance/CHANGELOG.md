@@ -1,5 +1,47 @@
 # @cat-factory/conformance
 
+## 0.8.0
+
+### Minor Changes
+
+- 9f7ee39: Add "Requirements brainstorm" and "Architecture brainstorm" agents — structured-dialogue
+  gates that PROPOSE options with explicit trade-offs and let a human converge on a direction,
+  rather than doing all the work themselves or expecting the work done upfront.
+
+  - One shared, stage-discriminated engine (`BrainstormService` over the existing
+    `IterativeReviewService`), driven through the generic `ReviewGateController`. Two agent kinds
+    (`requirements-brainstorm`, `architecture-brainstorm`) reuse it via a stage-bound repository
+    adapter.
+  - Persistence: a new `brainstorm_sessions` table keyed per (block, **stage**) — a block may hold
+    a live requirements AND a live architecture session at once — mirrored across both runtimes
+    (D1 + Drizzle/Postgres) with a cross-runtime conformance suite.
+  - Handoffs (DB session state → next stage's prompt): `requirements-brainstorm` → the
+    requirements review (its converged direction becomes the reviewed subject);
+    `architecture-brainstorm` → the architect (surfaced additively as a prior output).
+  - Pipelines: both steps are added to `pl_full` and `pl_fullstack` but **disabled by default**
+    (opt-in per pipeline) — existing runs are unchanged.
+  - Frontend: a shared brainstorm window (option cards with trade-offs → choose/steer/dismiss →
+    incorporate → re-run), wired through the result-view seam, the workspace stream, and the
+    palette catalog.
+
+  Breaking: adds a new required table on both runtimes (`brainstorm_sessions` D1 migration +
+  Drizzle migration) and a new optional `ExecutionEventPublisher.brainstormSessionChanged` event.
+  No data migration — pre-1.0, stale state is acceptable.
+
+  The brainstorm iteration cap reuses the merge preset's `maxRequirementIterations` /
+  `maxRequirementConcernAllowed` knobs (no new preset field).
+
+### Patch Changes
+
+- Updated dependencies [9f7ee39]
+- Updated dependencies [81b60d4]
+  - @cat-factory/kernel@0.34.0
+  - @cat-factory/agents@0.17.0
+  - @cat-factory/orchestration@0.26.0
+  - @cat-factory/integrations@0.21.6
+  - @cat-factory/gates@0.1.11
+  - @cat-factory/prompt-fragments@0.7.29
+
 ## 0.7.44
 
 ### Patch Changes

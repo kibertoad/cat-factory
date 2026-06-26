@@ -1,5 +1,64 @@
 # @cat-factory/app
 
+## 0.32.0
+
+### Minor Changes
+
+- 9f7ee39: Add "Requirements brainstorm" and "Architecture brainstorm" agents — structured-dialogue
+  gates that PROPOSE options with explicit trade-offs and let a human converge on a direction,
+  rather than doing all the work themselves or expecting the work done upfront.
+
+  - One shared, stage-discriminated engine (`BrainstormService` over the existing
+    `IterativeReviewService`), driven through the generic `ReviewGateController`. Two agent kinds
+    (`requirements-brainstorm`, `architecture-brainstorm`) reuse it via a stage-bound repository
+    adapter.
+  - Persistence: a new `brainstorm_sessions` table keyed per (block, **stage**) — a block may hold
+    a live requirements AND a live architecture session at once — mirrored across both runtimes
+    (D1 + Drizzle/Postgres) with a cross-runtime conformance suite.
+  - Handoffs (DB session state → next stage's prompt): `requirements-brainstorm` → the
+    requirements review (its converged direction becomes the reviewed subject);
+    `architecture-brainstorm` → the architect (surfaced additively as a prior output).
+  - Pipelines: both steps are added to `pl_full` and `pl_fullstack` but **disabled by default**
+    (opt-in per pipeline) — existing runs are unchanged.
+  - Frontend: a shared brainstorm window (option cards with trade-offs → choose/steer/dismiss →
+    incorporate → re-run), wired through the result-view seam, the workspace stream, and the
+    palette catalog.
+
+  Breaking: adds a new required table on both runtimes (`brainstorm_sessions` D1 migration +
+  Drizzle migration) and a new optional `ExecutionEventPublisher.brainstormSessionChanged` event.
+  No data migration — pre-1.0, stale state is acceptable.
+
+  The brainstorm iteration cap reuses the merge preset's `maxRequirementIterations` /
+  `maxRequirementConcernAllowed` knobs (no new preset field).
+
+- 81b60d4: Add the future-looking **Follow-up companion** to the Coder agent.
+
+  As the Coder works it now surfaces forward-looking items — genuine loose ends, useful
+  side-tasks it is deliberately not acting on, and clarifying questions — by appending them
+  to a `.cat-follow-ups.jsonl` sentinel file in its working directory. The executor-harness
+  tails that file and streams the items **out** on the job view (drain-on-read, like tool
+  spans), so a blinking **Follow-up companion** chip on the Coder step lights up the moment
+  the first item appears — while the container is still running.
+
+  A human triages each item at any point: file a follow-up as a tracker issue (GitHub Issues
+  / Jira, via the existing `TicketTrackerProvider`), send it back to the Coder to address
+  after delivering the key task, answer a question, or dismiss it. The pipeline's following
+  steps do not start until **every** item is decided: an undecided follow-up or unanswered
+  question parks the run at the Coder's completion (a new `followup_pending` notification).
+  Once all are decided the engine loops the Coder for the queued / answered items (within a
+  per-step budget) before advancing. The companion is enabled by default on Coder steps and
+  disableable per step in the pipeline builder.
+
+  This is pure engine + run-step state (no new table) so it is runtime-symmetric across the
+  Cloudflare and Node facades — the cross-runtime conformance suite asserts the park →
+  decide → loop → advance behaviour on both. Wire contracts (`followUpItem` /
+  `followUpsStepState`, the `followup_pending` notification, the `follow-ups` result view),
+  the `streamFollowUps` harness job flag + `RunnerJobView.followUps` channel (with an
+  optional pool-manifest `followUpsPath`), and the `FOLLOW_UP_GUIDANCE` Coder prompt fragment
+  are added across the stack.
+
+  Bumps the executor-harness image (new src) — publish + redeploy to roll it out.
+
 ## 0.31.0
 
 ### Minor Changes
