@@ -1,5 +1,62 @@
 # @cat-factory/node-server
 
+## 0.23.1
+
+### Patch Changes
+
+- Updated dependencies [4dd6e97]
+  - @cat-factory/agents@0.16.1
+  - @cat-factory/server@0.28.1
+  - @cat-factory/consensus@0.7.43
+  - @cat-factory/orchestration@0.25.1
+  - @cat-factory/provider-bedrock@0.7.43
+  - @cat-factory/provider-cloudflare@0.7.43
+
+## 0.23.0
+
+### Minor Changes
+
+- ea59e91: Add the Kaizen agent: a post-run, continuous-improvement reviewer (toggleable per
+  workspace, never a pipeline-builder step) that grades each completed agent step on how
+  smooth/efficient vs confused/chaotic the interaction was and recommends prompt/model
+  improvements.
+
+  - After a run completes, the engine schedules a grading per completed agent step
+    (skipping verified combos); a background sweep (Cloudflare cron / Node interval) runs
+    the inline LLM grade. The grader's model is configured in Model Configuration like
+    every other agent (the hidden-from-palette `kaizen` kind).
+  - A `(promptVersion, agentKind, model)` combo that grades strongly (>=4) with no
+    recommendations five times in a row is marked **verified** and is no longer graded.
+  - New persisted tables `kaizen_gradings` + `kaizen_verified_combos` (D1 ⇄ Drizzle parity,
+    asserted by a new cross-runtime conformance suite) and a per-workspace `kaizenEnabled`
+    setting (a new `workspace_settings.kaizen_enabled` column).
+  - New read API (`GET /workspaces/:ws/kaizen`, `GET /workspaces/:ws/executions/:id/kaizen`),
+    a `kaizen` real-time event, a Kaizen screen (grading history + verified combos), and
+    per-step grading status (scheduled/running/complete + results) inside the run window —
+    never on the board.
+  - A step with neither a provided-context snapshot nor any recorded LLM calls (e.g. prompt
+    recording is off deployment-wide) is settled `failed` rather than graded blind, so a
+    guessed grade can't advance a combo toward a bogus `verified`.
+  - The Worker Kaizen sweep gains an in-isolate re-entrancy guard (mirroring the Node
+    sweeper) so overlapping passes don't race the per-combo streak update.
+
+### Patch Changes
+
+- Updated dependencies [ea59e91]
+  - @cat-factory/contracts@0.30.0
+  - @cat-factory/kernel@0.33.0
+  - @cat-factory/agents@0.16.0
+  - @cat-factory/orchestration@0.25.0
+  - @cat-factory/server@0.28.0
+  - @cat-factory/consensus@0.7.42
+  - @cat-factory/gates@0.1.10
+  - @cat-factory/integrations@0.21.5
+  - @cat-factory/prompt-fragments@0.7.28
+  - @cat-factory/spend@0.10.1
+  - @cat-factory/observability-langfuse@0.7.40
+  - @cat-factory/provider-bedrock@0.7.42
+  - @cat-factory/provider-cloudflare@0.7.42
+
 ## 0.22.2
 
 ### Patch Changes

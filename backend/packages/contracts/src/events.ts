@@ -6,6 +6,7 @@ import type { RequirementReview } from './requirements.js'
 import type { ConsensusSession } from './consensus.js'
 import type { ClarityReview } from './clarity.js'
 import type { BrainstormSession } from './brainstorm.js'
+import type { KaizenGrading } from './kaizen.js'
 
 // Real-time events pushed from the per-workspace events hub to subscribed
 // browsers over WebSocket, replacing the old `tick` polling. The shape is shared
@@ -74,3 +75,9 @@ export type WorkspaceEvent =
    * inspector reflects the transition live without a refetch.
    */
   | { type: 'brainstorm'; session: BrainstormSession; at: number }
+  /**
+   * A Kaizen grading was scheduled, started, completed or failed. Carries the updated
+   * grading so an open run window reflects the scheduled→running→complete status live and
+   * the Kaizen screen folds in new history. Never surfaced on the board — run-details only.
+   */
+  | { type: 'kaizen'; grading: KaizenGrading; at: number }

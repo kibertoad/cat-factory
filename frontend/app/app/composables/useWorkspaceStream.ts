@@ -24,6 +24,7 @@ export function useWorkspaceStream() {
   const consensus = useConsensusStore()
   const clarity = useClarityStore()
   const brainstorm = useBrainstormStore()
+  const kaizen = useKaizenStore()
   const api = useApi()
   const apiBase = useRuntimeConfig().public.apiBase
 
@@ -92,6 +93,11 @@ export function useWorkspaceStream() {
       // The async incorporate + re-run cycle changed a brainstorm session's status — patch the
       // cache so an open brainstorm window / inspector reflects it live.
       brainstorm.upsert(event.session)
+    } else if (event.type === 'kaizen') {
+      // A post-run Kaizen grading was scheduled, started or completed — fold it into the
+      // run cache (so an open run window shows scheduled→running→complete live) and the
+      // Kaizen screen history. Never surfaced on the board.
+      kaizen.upsert(event.grading)
     }
   }
 

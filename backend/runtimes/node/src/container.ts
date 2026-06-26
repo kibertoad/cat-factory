@@ -1414,6 +1414,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // like a pipeline step: block-pin > workspace per-kind default > routing default
     // (which falls back to Cloudflare Workers AI unless a direct key is set).
     requirementReviewRepository: repos.requirementReviewRepository,
+    // Kaizen agent (post-run grading). Wired unconditionally, mirroring the Cloudflare
+    // facade, so the engine schedules gradings at run completion and the background sweep
+    // runs them. The grader resolves its model for the `kaizen` kind exactly like a step.
+    kaizenGradingRepository: repos.kaizenGradingRepository,
+    kaizenVerifiedComboRepository: repos.kaizenVerifiedComboRepository,
     clarityReviewRepository: repos.clarityReviewRepository,
     brainstormSessionRepository: repos.brainstormSessionRepository,
     // Merge threshold presets: the per-workspace auto-merge ceiling library a task's

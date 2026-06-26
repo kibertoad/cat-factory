@@ -205,6 +205,14 @@ function parseRepoFromPullUrl(url: string): { owner: string; repo: string } | un
   return { owner: match[1]!, repo: match[2]! }
 }
 
+/**
+ * Structural view of the Kaizen agent's scheduler the engine calls at run completion.
+ * Kept minimal so the execution engine doesn't depend on the concrete `KaizenService`.
+ */
+export interface KaizenScheduler {
+  scheduleForRun(workspaceId: string, instance: ExecutionInstance): Promise<void>
+}
+
 export interface ExecutionServiceDependencies {
   workspaceRepository: WorkspaceRepository
   blockRepository: BlockRepository
@@ -247,6 +255,12 @@ export interface ExecutionServiceDependencies {
    * through so pipelines run unchanged without the feature.
    */
   requirementReviewService?: RequirementReviewService
+  /**
+   * Optional: the Kaizen agent's scheduler. When wired, a run reaching a terminal state
+   * schedules a post-run grading for each completed agent step (skipping verified combos).
+   * Structural so the engine doesn't depend on the concrete service. Absent → no grading.
+   */
+  kaizenScheduler?: KaizenScheduler
   /**
    * Optional: persistence for the clarity-review (bug-report triage) feature. Read here
    * to substitute a converged clarified report as the downstream agent context (the
@@ -443,6 +457,7 @@ export class ExecutionService {
   private readonly board: BoardService
   private readonly spend: SpendService
   private readonly requirementReviewService?: RequirementReviewService
+  private readonly kaizenScheduler?: KaizenScheduler
   private readonly clarityReviewService?: ClarityReviewService
   private readonly brainstormServices?: Record<BrainstormStage, BrainstormService>
   private readonly environmentProvisioning?: EnvironmentProvisioningService
@@ -518,6 +533,7 @@ export class ExecutionService {
     taskRepository,
     requirementReviewRepository,
     requirementReviewService,
+    kaizenScheduler,
     clarityReviewRepository,
     clarityReviewService,
     brainstormServices,
@@ -555,6 +571,7 @@ export class ExecutionService {
     this.board = boardService
     this.spend = spendService
     this.requirementReviewService = requirementReviewService
+    this.kaizenScheduler = kaizenScheduler
     this.clarityReviewService = clarityReviewService
     this.brainstormServices = brainstormServices
     this.environmentProvisioning = environmentProvisioning
@@ -3600,6 +3617,18 @@ export class ExecutionService {
       this.blockRepository.get(workspaceId, instance.blockId),
     ])
     await this.events.executionChanged(workspaceId, instance, block)
+    // When a run reaches a terminal state, schedule a post-run Kaizen grading for each
+    // completed agent step (the scheduler skips verified combos + already-graded steps).
+    // Best-effort + idempotent: a failure here must never derail the emit, and a re-emit
+    // of an already-scheduled run is a no-op. The actual LLM grading runs later in the
+    // background sweep, so this only does cheap inserts.
+    if (this.kaizenScheduler && (instance.status === 'done' || instance.status === 'failed')) {
+      try {
+        await this.kaizenScheduler.scheduleForRun(workspaceId, instance)
+      } catch {
+        // Swallow — grading is an observability concern and must never break a run.
+      }
+    }
     // When a run reaches a terminal state, delete its per-run personal-credential
     // activation immediately (individual-usage subscriptions) so the system-encrypted
     // token copy doesn't linger to its TTL. Best-effort + idempotent — a missing repo or

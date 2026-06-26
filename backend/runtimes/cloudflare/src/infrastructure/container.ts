@@ -149,6 +149,8 @@ import { D1ReferenceArchitectureRepository } from './repositories/D1ReferenceArc
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
 import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
 import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
+import { D1KaizenGradingRepository } from './repositories/D1KaizenGradingRepository'
+import { D1KaizenVerifiedComboRepository } from './repositories/D1KaizenVerifiedComboRepository'
 import { D1ConsensusSessionRepository } from './repositories/D1ConsensusSessionRepository'
 import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/consensus'
 import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewRepository'
@@ -1378,6 +1380,8 @@ function selectRequirementsDeps(
 ): Partial<CoreDependencies> {
   return {
     requirementReviewRepository: new D1RequirementReviewRepository({ db }),
+    kaizenGradingRepository: new D1KaizenGradingRepository({ db }),
+    kaizenVerifiedComboRepository: new D1KaizenVerifiedComboRepository({ db }),
     clarityReviewRepository: new D1ClarityReviewRepository({ db }),
     brainstormSessionRepository: new D1BrainstormSessionRepository({ db }),
     modelProviderResolver: buildModelProviderResolver(env, db),

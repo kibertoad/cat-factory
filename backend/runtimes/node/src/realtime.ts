@@ -7,6 +7,7 @@ import type {
   ConsensusSession,
   ClarityReview,
   ExecutionInstance,
+  KaizenGrading,
   LlmCallActivity,
   Notification,
   RequirementReview,
@@ -145,6 +146,10 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
 
   async brainstormSessionChanged(workspaceId: string, session: BrainstormSession): Promise<void> {
     this.publish(workspaceId, { type: 'brainstorm', session, at: Date.now() })
+  }
+
+  async kaizenGradingChanged(workspaceId: string, grading: KaizenGrading): Promise<void> {
+    this.publish(workspaceId, { type: 'kaizen', grading, at: Date.now() })
   }
 
   private publish(workspaceId: string, event: WorkspaceEvent): void {

@@ -1,3 +1,5 @@
+import { isLocalRunner } from '@cat-factory/contracts'
+
 // The OpenAI-compatible chat endpoints behind the direct-provider flavours.
 // DashScope (Alibaba/Qwen), DeepSeek and Moonshot (Kimi) all expose the OpenAI
 // `/chat/completions` shape, so both the Vercel-AI model provider and the container
@@ -20,4 +22,27 @@ export const DEFAULT_OPENAI_COMPATIBLE_BASE_URLS: Readonly<Record<string, string
   moonshot: MOONSHOT_BASE_URL,
   openai: OPENAI_BASE_URL,
   openrouter: OPENROUTER_BASE_URL,
+}
+
+/**
+ * Providers the container LLM proxy can serve, so a container agent's locked model
+ * must resolve to one of them (see `LlmProxyController`):
+ *  - `workers-ai` — run in-Worker through the AI binding (no upstream, no key);
+ *  - every direct OpenAI-compatible upstream the proxy forwards to: the built-in
+ *    {@link DEFAULT_OPENAI_COMPATIBLE_BASE_URLS} entries (qwen / deepseek / moonshot /
+ *    openai / **openrouter**) plus the operator-hosted **litellm** gateway, which has
+ *    no public default and resolves only once `LITELLM_BASE_URL` is set;
+ *  - the per-user local runners (Ollama / LM Studio / …), forwarded to the run
+ *    initiator's own endpoint with no key lease.
+ *
+ * NOT the pooled-subscription harnesses (Claude Code / Codex), which talk to the
+ * vendor directly with a leased token and so never go through the proxy.
+ */
+export function isProxyableProvider(provider: string): boolean {
+  return (
+    provider === 'workers-ai' ||
+    provider === 'litellm' ||
+    Object.hasOwn(DEFAULT_OPENAI_COMPATIBLE_BASE_URLS, provider) ||
+    isLocalRunner(provider)
+  )
 }

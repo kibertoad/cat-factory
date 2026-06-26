@@ -5,6 +5,7 @@ import type {
   ConsensusSession,
   ClarityReview,
   ExecutionInstance,
+  KaizenGrading,
   LlmCallActivity,
   Notification,
   RequirementReview,
@@ -87,6 +88,13 @@ export interface ExecutionEventPublisher {
    * no real-time transport wired leaves it a no-op.
    */
   brainstormSessionChanged?(workspaceId: string, session: BrainstormSession): Promise<void>
+  /**
+   * A Kaizen grading was scheduled, started, completed or failed: push the updated
+   * grading so an open run window reflects the scheduled→running→complete status live
+   * and the Kaizen screen folds in new history. Optional; a runtime with no real-time
+   * transport wired leaves it a no-op. Never surfaced on the board — run-details only.
+   */
+  kaizenGradingChanged?(workspaceId: string, grading: KaizenGrading): Promise<void>
 }
 
 /**
@@ -104,4 +112,5 @@ export class NoopEventPublisher implements ExecutionEventPublisher {
   async consensusSessionChanged(): Promise<void> {}
   async clarityReviewChanged(): Promise<void> {}
   async brainstormSessionChanged(): Promise<void> {}
+  async kaizenGradingChanged(): Promise<void> {}
 }

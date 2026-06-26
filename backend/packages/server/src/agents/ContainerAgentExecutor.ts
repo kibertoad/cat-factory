@@ -24,13 +24,14 @@ import {
   SUBSCRIPTION_VENDORS,
   isIndividualVendor,
 } from '@cat-factory/kernel'
-import { isLocalRunner, resolveInstanceTypeId } from '@cat-factory/contracts'
+import { resolveInstanceTypeId } from '@cat-factory/contracts'
 import {
   type AgentRouting,
   coerceBlueprintService,
   coerceSpecDoc,
   composeBlockSystemPrompt,
   FINAL_ANSWER_IN_REPLY,
+  isProxyableProvider,
   isReadOnlyAgentKind,
   registeredAgentStep,
   systemPromptFor,
@@ -1477,24 +1478,6 @@ function prNumberFromUrl(url: string): number | undefined {
   if (!match) return undefined
   const n = Number(match[1])
   return Number.isFinite(n) ? n : undefined
-}
-
-/**
- * Providers the LLM proxy can serve: the direct OpenAI Chat Completions-compatible
- * upstreams it forwards to, plus `workers-ai`, which it runs in-Worker through the
- * AI binding (no provider key required), plus the local runners (Ollama / LM Studio /
- * llama.cpp / vLLM / custom), which the proxy forwards to the run initiator's own
- * OpenAI-compatible endpoint (no key lease).
- */
-function isProxyableProvider(provider: string): boolean {
-  return (
-    provider === 'workers-ai' ||
-    provider === 'qwen' ||
-    provider === 'deepseek' ||
-    provider === 'moonshot' ||
-    provider === 'openai' ||
-    isLocalRunner(provider)
-  )
 }
 
 /**

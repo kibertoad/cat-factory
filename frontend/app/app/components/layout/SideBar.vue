@@ -138,6 +138,18 @@ watch(
         >
           Sandbox
         </UButton>
+        <!-- The Kaizen screen: grading history + verified prompt/agent/model combos. -->
+        <UButton
+          block
+          color="primary"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-sparkles"
+          class="justify-start"
+          @click="ui.openKaizen()"
+        >
+          Kaizen
+        </UButton>
       </div>
     </section>
 

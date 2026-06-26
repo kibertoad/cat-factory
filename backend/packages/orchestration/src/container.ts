@@ -52,6 +52,7 @@ import type { BootstrapJobRepository, ReferenceArchitectureRepository } from '@c
 import type { RepoBootstrapper } from '@cat-factory/kernel'
 import type { BootstrapRunner } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
+import type { KaizenGradingRepository, KaizenVerifiedComboRepository } from '@cat-factory/kernel'
 import type { ClarityReviewRepository } from '@cat-factory/kernel'
 import type { BrainstormSessionRepository, BrainstormStage } from '@cat-factory/kernel'
 import type { SubscriptionActivationRepository } from '@cat-factory/kernel'
@@ -138,6 +139,7 @@ import {
 import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService.js'
+import { KaizenService } from './modules/kaizen/KaizenService.js'
 import { ClarityReviewService } from './modules/clarity/ClarityReviewService.js'
 import { BrainstormService } from './modules/brainstorm/BrainstormService.js'
 import { NotificationService } from './modules/notifications/NotificationService.js'
@@ -421,6 +423,14 @@ export interface CoreDependencies {
   // PRDs and tracker issues into the reviewed requirements.
   requirementReviewRepository?: RequirementReviewRepository
   /**
+   * Persistence for the Kaizen agent (post-run grading of agent steps + the verified-combo
+   * library). Both runtime facades wire both repos unconditionally. The Kaizen module
+   * assembles whenever they are present; the LLM grader resolves its model for the `kaizen`
+   * kind exactly like the requirements reviewer (block pin > workspace default > routing).
+   */
+  kaizenGradingRepository?: KaizenGradingRepository
+  kaizenVerifiedComboRepository?: KaizenVerifiedComboRepository
+  /**
    * Persistence for the clarity-review (bug-report triage) feature. Mirrors
    * `requirementReviewRepository`: both runtime facades wire it unconditionally. The
    * clarity service reuses the requirements reviewer's model config below.
@@ -659,6 +669,11 @@ export interface RequirementsModule {
   service: RequirementReviewService
 }
 
+/** The Kaizen feature's service, present only when its repositories are wired. */
+export interface KaizenModule {
+  service: KaizenService
+}
+
 /** The clarity-review feature's service, present only when its repository is wired. */
 export interface ClarityModule {
   service: ClarityReviewService
@@ -785,6 +800,8 @@ export interface Core {
   bootstrap?: BootstrapModule
   /** Present only when the requirements-review repository is wired (see CoreDependencies). */
   requirements?: RequirementsModule
+  /** Present only when the Kaizen repositories are wired (see CoreDependencies). */
+  kaizen?: KaizenModule
   /** Present only when the clarity-review repository is wired (see CoreDependencies). */
   clarity?: ClarityModule
   /** Present only when the brainstorm repository is wired (see CoreDependencies). */
@@ -1300,6 +1317,48 @@ function createBrainstormModule(
 }
 
 /**
+ * Assemble the Kaizen module when its repositories are wired (both runtime facades wire them
+ * unconditionally). The grader resolves its model for the `kaizen` kind the same way the
+ * requirements reviewer does — block pin > workspace per-kind default > routing default —
+ * so operators configure it in Model Configuration alongside every other agent. Needs the
+ * telemetry repos (LLM-call metrics + agent-context snapshots) to read what each step was
+ * given; absent → the module isn't built and no grading is scheduled.
+ */
+function createKaizenModule(deps: CoreDependencies): KaizenModule | undefined {
+  const { kaizenGradingRepository, kaizenVerifiedComboRepository } = deps
+  if (!kaizenGradingRepository || !kaizenVerifiedComboRepository) return undefined
+  if (!deps.llmCallMetricRepository || !deps.agentContextObservability) return undefined
+
+  const service = new KaizenService({
+    kaizenGradingRepository,
+    kaizenVerifiedComboRepository,
+    blockRepository: deps.blockRepository,
+    llmCallMetricRepository: deps.llmCallMetricRepository,
+    agentContextObservability: deps.agentContextObservability,
+    workspaceSettingsRepository: deps.workspaceSettingsRepository,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+    events: deps.executionEventPublisher,
+    modelProviderResolver: deps.modelProviderResolver,
+    modelProvider: deps.modelProvider,
+    // Reuse the reviewer's routing default ref + block-model resolver (the agents' default).
+    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
+    resolveBlockModel: deps.requirementReviewResolveModel,
+    // Resolve the workspace's per-kind default for `kaizen`, like a pipeline step.
+    resolveWorkspaceModelDefault: deps.modelPresetRepository
+      ? (workspaceId, agentKind, modelPresetId) =>
+          resolvePresetModelForKind(
+            deps.modelPresetRepository!,
+            workspaceId,
+            agentKind,
+            modelPresetId,
+          )
+      : undefined,
+  })
+  return { service }
+}
+
+/**
  * Assemble the clarity-review module when its repository is present (both runtime facades
  * wire it unconditionally). Mirrors {@link createRequirementsModule}: it reuses the
  * requirements reviewer's model config (the same routing default) since both reviewers
@@ -1716,6 +1775,9 @@ export function createCore(dependencies: CoreDependencies): Core {
   const requirements = createRequirementsModule(dependencies, notifications?.service)
   const clarity = createClarityModule(dependencies, notifications?.service)
   const brainstorm = createBrainstormModule(dependencies, notifications?.service)
+  // Built before the execution engine so the engine's terminal hook can schedule a
+  // post-run Kaizen grading for each completed agent step.
+  const kaizen = createKaizenModule(dependencies)
 
   const executionService = new ExecutionService({
     ...dependencies,
@@ -1730,6 +1792,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     requirementReviewService: requirements?.service,
     clarityReviewService: clarity?.service,
     brainstormServices: brainstorm?.services,
+    kaizenScheduler: kaizen?.service,
     environmentProvisioning: environments?.provisioningService,
     environmentTeardown: environments?.teardownService,
     branchUpdater: dependencies.branchUpdater,
@@ -1788,6 +1851,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(provisioningLogs ? { provisioningLogs } : {}),
     ...(bootstrap ? { bootstrap } : {}),
     ...(requirements ? { requirements } : {}),
+    ...(kaizen ? { kaizen } : {}),
     ...(clarity ? { clarity } : {}),
     ...(brainstorm ? { brainstorm } : {}),
     ...(notifications ? { notifications } : {}),

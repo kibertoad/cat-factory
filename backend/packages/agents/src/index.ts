@@ -100,7 +100,9 @@ export {
   PROMPT_VERSIONS,
   promptVersion,
   promptVersionLabel,
+  promptVersionForKind,
 } from './agents/kinds/versions.js'
+export { KAIZEN_SYSTEM_PROMPT } from './agents/prompts/kaizen.js'
 export {
   composeSystemPrompt,
   composeBlockSystemPrompt,
@@ -192,6 +194,7 @@ export {
   openAiResolver,
   DEEPSEEK_BASE_URL,
   DEFAULT_OPENAI_COMPATIBLE_BASE_URLS,
+  isProxyableProvider,
   MOONSHOT_BASE_URL,
   OPENAI_BASE_URL,
   OPENROUTER_BASE_URL,

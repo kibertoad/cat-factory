@@ -352,6 +352,17 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     color: '#a3e635',
     description: 'Scores the PR and auto-merges within the task thresholds, or asks for review.',
   },
+  // The Kaizen agent grades agent steps AFTER a run completes (continuous improvement).
+  // It is NOT a pipeline step (never in the palette — no `category`), but it runs an LLM,
+  // so it needs display metadata here and a per-workspace model in Model Configuration.
+  kaizen: {
+    kind: 'kaizen',
+    label: 'Kaizen',
+    icon: 'i-lucide-sparkles',
+    color: '#2dd4bf',
+    description:
+      'Grades each completed agent step (smooth vs chaotic) after a run and recommends prompt/model improvements.',
+  },
   // A polling gate (no model of its own) that watches the released PR's observability
   // signals after merge and escalates to the on-call agent on a regression. NOT in any
   // default pipeline and NOT a standing palette archetype — the palette surfaces it
@@ -387,9 +398,15 @@ export const OBSERVABILITY_GATE_ARCHETYPE: AgentArchetype =
  * default model would do nothing for them.
  */
 export const MODEL_CONFIGURABLE_SYSTEM_KINDS: AgentArchetype[] = [
-  ...['spec-writer', 'blueprints', 'conflict-resolver', 'ci-fixer', 'fixer', 'merger'].map(
-    (kind) => SYSTEM_AGENT_META[kind]!,
-  ),
+  ...[
+    'spec-writer',
+    'blueprints',
+    'conflict-resolver',
+    'ci-fixer',
+    'fixer',
+    'merger',
+    'kaizen',
+  ].map((kind) => SYSTEM_AGENT_META[kind]!),
   // Companions run LLMs but aren't palette-addable (they're producer toggles), so include
   // them here to keep their per-workspace default model pinnable in the Model Defaults panel.
   ...COMPANION_ARCHETYPES,
