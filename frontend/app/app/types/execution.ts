@@ -428,6 +428,8 @@ export interface GateStepState {
   lastApprovals?: number | null
   /** approvals GitHub requires before merge (human-review gate) */
   requiredApprovals?: number | null
+  /** raw branch-protection required count, cached after the first probe (human-review gate) */
+  requiredApprovingReviewCount?: number | null
   /** review threads handed to the fixer, pending resolve on its completion (human-review gate) */
   pendingThreadIds?: string[] | null
   /** the grace window (minutes) before the fixer addresses a comment batch (human-review gate) */

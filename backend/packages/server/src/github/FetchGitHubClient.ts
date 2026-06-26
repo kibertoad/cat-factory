@@ -672,6 +672,24 @@ export class FetchGitHubClient implements GitHubClient {
     }
   }
 
+  async getPullRequestBaseRef(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    try {
+      const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}/pulls/${number}`, {
+        installationId,
+      })
+      return (json as { base?: { ref?: string } }).base?.ref ?? null
+    } catch (error) {
+      // A deleted/missing PR (404) just means "no base to gate against" — fall back to the
+      // caller's default. Other errors propagate (the gate's probe maps them to "keep waiting").
+      if (error instanceof GitHubApiError && error.status === 404) return null
+      throw error
+    }
+  }
+
   async listReviewThreads(
     installationId: number,
     ref: GitHubRepoRef,

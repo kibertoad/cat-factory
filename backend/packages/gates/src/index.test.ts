@@ -141,7 +141,7 @@ describe('post-release-health gate on-call completion', () => {
       workspaceId: 'ws',
       instance: { id: 'ex', pipelineName: 'Build' } as ExecutionInstance,
       block: { id: 'b', title: 'Login' } as Block,
-      step: { gate: { regressedSignals: [] } } as PipelineStep,
+      step: { gate: { regressedSignals: [] } } as unknown as PipelineStep,
       result,
     })
     expect(raised[0]?.type).toBe('release_regression')

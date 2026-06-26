@@ -748,6 +748,14 @@ export const gateStepStateSchema = v.object({
   lastApprovals: v.optional(v.nullable(v.number())),
   requiredApprovals: v.optional(v.nullable(v.number())),
   /**
+   * The raw branch-protection required-approving-review count, cached after the FIRST probe
+   * resolves it so subsequent polls skip the static protection read (branch protection is repo
+   * config, not PR activity — re-reading it every poll over a multi-day review only burns GitHub
+   * rate budget). Distinct from {@link requiredApprovals}, which is the gate's effective floor
+   * (`max(1, …)`) for the UI. Absent for the other gates.
+   */
+  requiredApprovingReviewCount: v.optional(v.nullable(v.number())),
+  /**
    * The GraphQL ids of the review threads the gate just handed the `fixer`, stashed at
    * dispatch so the helper-completion hook can post a reply + RESOLVE exactly those threads
    * on GitHub before the next probe reads them. Absent for the other gates.

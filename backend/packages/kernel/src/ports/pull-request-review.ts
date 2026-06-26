@@ -17,7 +17,14 @@ export interface ReviewThread {
   path: string | null
   /** Line the thread is anchored to, or null. */
   line: number | null
-  /** Whether the thread's latest comment was authored by the cat-factory bot itself. */
+  /**
+   * Whether the thread's latest comment was authored by a GitHub App bot (`<slug>[bot]`). This
+   * gate gates HUMAN review, so bot-authored threads/comments/approvals are excluded from the
+   * outstanding/approval reductions (whether ours — the fixer's reply — or a third party's, e.g.
+   * a code-review bot). NOTE: this is NOT used to auto-resolve a thread; the gate only resolves
+   * threads it itself handed the fixer (tracked by id), so a third-party bot's thread is never
+   * silently closed.
+   */
   isBot: boolean
   /** Epoch ms of the newest comment in the thread (drives the grace window). */
   latestCommentAt: number
@@ -33,7 +40,7 @@ export interface PullRequestComment {
   body: string
   /** Epoch ms when the comment was created. */
   createdAt: number
-  /** Whether the comment was authored by the cat-factory bot itself. */
+  /** Whether the comment was authored by a GitHub App bot (`<slug>[bot]`); see {@link ReviewThread.isBot}. */
   isBot: boolean
 }
 
@@ -67,8 +74,20 @@ export interface PullRequestReviewProvider {
    * assigned reviewers, approval count, unresolved review threads + comments). Returns
    * `{ headSha: null, ... }` when the block has no resolvable PR yet (the engine treats this
    * as "nothing to gate" and the gate advances).
+   *
+   * `cachedRequiredApprovingReviewCount` lets the (indefinitely-polling) gate skip the static
+   * branch-protection read once it has resolved it: branch protection is repo config, not PR
+   * activity, so re-reading it on every poll over a multi-day review just burns GitHub rate
+   * budget. When a number is passed the provider reuses it (and skips the base-branch lookup
+   * the protection read needs); when null/omitted it reads it fresh. The other reads (reviews/
+   * threads/comments) always run — a human approving or commenting does NOT move the head sha,
+   * so they cannot be short-circuited.
    */
-  getReview(workspaceId: string, blockId: string): Promise<PullRequestReviewSnapshot>
+  getReview(
+    workspaceId: string,
+    blockId: string,
+    cachedRequiredApprovingReviewCount?: number | null,
+  ): Promise<PullRequestReviewSnapshot>
   /**
    * RESOLVE the given review threads on GitHub after a `fixer` round addressed them, so the
    * gate's next probe counts them as resolved. The resolve is performed BEFORE the (optional)

@@ -32,6 +32,23 @@ small generic engine seams: `pollExhaustion: 'rearm'`, a `GateDefinition.onHelpe
 hook, and a `pendingFix` manual-inject path. Adds a per-task `humanReviewGraceMinutes` merge-preset
 knob (D1 ⇄ Drizzle migration). The cross-runtime conformance suite asserts the gate on every runtime.
 
+Review hardening:
+
+- Branch-protection's required-approval count is read against the PR's **actual base branch**
+  (`pulls/{n}.base.ref`), not the repo default — so a PR into a stricter protected branch is gated
+  against its own rule instead of silently defaulting to 1.
+- A **stalled fixer** (no progress on an unchanged head while feedback is outstanding) now raises a
+  `human_review` notification instead of waiting silently/invisibly forever.
+- The awaiting-approval `human_review` card carries the run's `executionId`, so the inbox deep-links
+  into the gate window (the "request a fix here" affordance) instead of merely selecting the block.
+- The thread-resolve reconcile is scoped strictly to threads the gate itself handed the fixer
+  (retained until confirmed resolved) — a **third-party review bot's** open thread is never silently
+  closed, and its feedback isn't mistaken for the fixer's own.
+- `requestHumanReviewFix` rejects (409) when the gate has no review provider / async executor wired,
+  instead of accepting a request it would silently drop.
+- The static branch-protection read is cached on the gate state after the first probe, so an
+  indefinite wait no longer re-reads it every poll.
+
 **Breaking:** `FIXER_AGENT_KIND` moved from `@cat-factory/orchestration`'s `ci.logic` to
 `@cat-factory/kernel` (re-exported from `ci.logic` for existing call sites); the `merge_threshold_presets`
 table gains a non-null `human_review_grace_minutes` column.

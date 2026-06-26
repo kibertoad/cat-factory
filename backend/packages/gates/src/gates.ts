@@ -1,4 +1,5 @@
 import type {
+  Block,
   GateContext,
   GateDefinition,
   GateHelperCompletionArgs,
@@ -383,37 +384,68 @@ export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
   attemptBudget: () => Number.MAX_SAFE_INTEGER,
   probe: async (workspaceId, blockId, gateState): Promise<GateProbe> => {
     const provider = ctx.requireProvider(PULL_REQUEST_REVIEW_PROVIDER)
+    // Raise (or re-raise — `NotificationService.raise` dedups per block+type) the human_review
+    // card, carrying the run's `executionId` from the block so the inbox can deep-link straight
+    // into the gate window (where the human requests a freeform fix); the probe has no instance
+    // in scope, but `block.executionId` is the run currently parked on this gate.
+    const raiseHumanReviewCard = async (
+      build: (block: Block | null) => { title: string; body: string },
+    ): Promise<void> => {
+      const block = await ctx.getBlock(workspaceId, blockId)
+      const { title, body } = build(block)
+      await ctx.raiseNotification(workspaceId, {
+        type: 'human_review',
+        blockId,
+        executionId: block?.executionId ?? null,
+        title,
+        body,
+        payload: block?.pullRequest?.url ? { prUrl: block.pullRequest.url } : {},
+      })
+    }
     // A transient GitHub read failure must NEVER fail the run — this gate waits indefinitely
     // for a human, so a momentary 502 / rate-limit / GraphQL error is just "keep waiting", not
     // a verdict. (The driver's FIRST gate entry runs outside the fault-tolerant poll loop, so
     // without this catch a single blip would terminally fail an otherwise-healthy review wait.)
     let snapshot: PullRequestReviewSnapshot
     try {
-      snapshot = await provider.getReview(workspaceId, blockId)
+      snapshot = await provider.getReview(
+        workspaceId,
+        blockId,
+        gateState.requiredApprovingReviewCount ?? null,
+      )
     } catch {
       return { status: 'pending', headSha: gateState.headSha ?? null }
     }
-    // Reconcile threads addressed by a prior fixer round whose GitHub-side resolve didn't land
-    // (a transient failure in onHelperComplete, or a thread the fixer replied to itself): any
-    // STILL-unresolved thread whose latest comment is the bot's was addressed but not resolved,
-    // so re-resolve it (resolve-only, empty reply → no duplicate comment). Without this a
-    // bot-latest unresolved thread is excluded from the outstanding set forever — never re-fixed
-    // and never resolved. Best-effort: a failure here just retries next poll.
-    const botLatestUnresolved = snapshot.unresolvedThreads
-      .filter((t) => t.isBot)
-      .map((t) => t.threadId)
-    if (botLatestUnresolved.length > 0) {
-      try {
-        await provider.resolveThreads(workspaceId, blockId, botLatestUnresolved, '')
-      } catch {
-        // best-effort: the next poll re-attempts
+    // Reconcile threads a prior fixer round addressed but whose GitHub-side resolve didn't land
+    // (a transient failure in onHelperComplete). Those ids were RETAINED on the gate state
+    // (onHelperComplete clears them only on a successful resolve), so re-attempt the resolve for
+    // exactly those still open (resolve-only, empty reply → no duplicate comment), and keep any
+    // still open for the next retry. Scoping strictly to ids the gate itself handed the fixer —
+    // never "any bot-latest thread" — guarantees a THIRD-PARTY reviewer bot's (e.g. a code-review
+    // bot's) open thread is never silently closed. Best-effort: a failure here just retries.
+    const handed = gateState.pendingThreadIds ?? []
+    if (handed.length > 0) {
+      const stillOpen = handed.filter((id) =>
+        snapshot.unresolvedThreads.some((t) => t.threadId === id),
+      )
+      if (stillOpen.length > 0) {
+        try {
+          await provider.resolveThreads(workspaceId, blockId, stillOpen, '')
+        } catch {
+          // best-effort: retained below; the next poll re-attempts
+        }
       }
+      gateState.pendingThreadIds = stillOpen.length > 0 ? stillOpen : null
     }
     const graceMinutes =
       gateState.humanReviewGraceMinutes ?? DEFAULT_MERGE_PRESET.humanReviewGraceMinutes
-    // Surface the approval progress for the UI (persisted via the caller's `...step.gate` spread).
+    // Surface the approval progress for the UI (persisted via the caller's `...step.gate` spread),
+    // and cache the static branch-protection required count so later polls skip re-reading it.
     gateState.lastApprovals = snapshot.approvals
     gateState.requiredApprovals = snapshot.headSha === null ? null : requiredApprovals(snapshot)
+    if (snapshot.headSha !== null) {
+      gateState.requiredApprovingReviewCount = snapshot.requiredApprovingReviewCount
+    }
     const verdict = classifyHumanReview(snapshot, gateState, { graceMinutes, now: ctx.clock.now() })
     if (verdict.kind === 'advance') {
       return { status: 'pass', headSha: snapshot.headSha, passOutput: verdict.reason }
@@ -427,6 +459,15 @@ export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
       // the last entry of the attempt log.
       const lastAttempt = gateState.attemptLog?.[gateState.attemptLog.length - 1]
       if (lastAttempt && lastAttempt.headSha === snapshot.headSha) {
+        // The automated loop has stalled (the fixer made no progress on the same head) while
+        // feedback is still outstanding — surface a card so the human knows to intervene rather
+        // than letting the run wait silently and invisibly forever.
+        await raiseHumanReviewCard((block) => ({
+          title: `Review feedback needs attention on "${block?.title ?? 'this task'}"`,
+          body:
+            'The automated fixer could not make further progress on the review feedback ' +
+            '(no new commit since its last attempt). Review the PR on GitHub, or request a fix here.',
+        }))
         return { status: 'pending', headSha: snapshot.headSha }
       }
       // Stash the threads to resolve on the fixer's completion + advance the plain-comment
@@ -448,25 +489,22 @@ export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
       outstandingComments(snapshot, gateState.lastAddressedCommentAt).length === 0 &&
       !isApproved(snapshot)
     if (awaitingApproval) {
-      const block = await ctx.getBlock(workspaceId, blockId)
-      const title = block?.title ?? 'this task'
-      // "No reviewer" only when nobody is assigned AND nobody has approved yet — a reviewer who
-      // approves is removed from the requested-reviewer list, so `assignedReviewers` alone would
-      // wrongly tell the user to assign a reviewer who already signed off (e.g. 1 of 2 approvals
-      // in). With an approval on record the real state is "needs more approvals", not "unassigned".
-      const noReviewer = snapshot.assignedReviewers.length === 0 && snapshot.approvals === 0
-      await ctx.raiseNotification(workspaceId, {
-        type: 'human_review',
-        blockId,
-        executionId: null,
-        title: noReviewer
-          ? `Assign a reviewer for "${title}"`
-          : `"${title}" is awaiting code review`,
-        body: noReviewer
-          ? 'The PR has no assigned reviewer. Request a reviewer on GitHub to continue, or request a fix here.'
-          : `Awaiting ${requiredApprovals(snapshot)} approval(s) on the PR ` +
-            `(have ${snapshot.approvals}). Review on GitHub, or request a fix here.`,
-        payload: block?.pullRequest?.url ? { prUrl: block.pullRequest.url } : {},
+      await raiseHumanReviewCard((block) => {
+        const title = block?.title ?? 'this task'
+        // "No reviewer" only when nobody is assigned AND nobody has approved yet — a reviewer who
+        // approves is removed from the requested-reviewer list, so `assignedReviewers` alone would
+        // wrongly tell the user to assign a reviewer who already signed off (e.g. 1 of 2 approvals
+        // in). With an approval on record the real state is "needs more approvals", not "unassigned".
+        const noReviewer = snapshot.assignedReviewers.length === 0 && snapshot.approvals === 0
+        return {
+          title: noReviewer
+            ? `Assign a reviewer for "${title}"`
+            : `"${title}" is awaiting code review`,
+          body: noReviewer
+            ? 'The PR has no assigned reviewer. Request a reviewer on GitHub to continue, or request a fix here.'
+            : `Awaiting ${requiredApprovals(snapshot)} approval(s) on the PR ` +
+              `(have ${snapshot.approvals}). Review on GitHub, or request a fix here.`,
+        }
       })
     }
     return { status: 'pending', headSha: snapshot.headSha }
@@ -477,25 +515,28 @@ export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
   // immediately following re-probe counts them as addressed. A FAILED fixer addressed nothing,
   // so its threads are left open (resolving them would post a misleading "addressed" reply and
   // hide unfixed feedback from the gate) — the negative state makes the next probe re-dispatch.
-  // Best-effort; clears the stash either way.
+  // Best-effort: on a SUCCESS whose GitHub-side resolve threw transiently, the handed ids are
+  // RETAINED (not cleared) so the probe's reconcile re-attempts exactly those — that retention is
+  // what keeps the reconcile precise (it touches only gate-handed threads, never any bot thread).
   onHelperComplete: async ({ workspaceId, block, step, result }) => {
     const threadIds = step.gate?.pendingThreadIds ?? []
-    if (result.state === 'done' && threadIds.length > 0) {
-      const provider = ctx.getProvider(PULL_REQUEST_REVIEW_PROVIDER)
-      if (provider) {
-        try {
-          await provider.resolveThreads(
-            workspaceId,
-            block.id,
-            threadIds,
-            REVIEW_THREAD_RESOLVED_REPLY,
-          )
-        } catch {
-          // best-effort: a failed resolve just leaves the thread open; the reviewer can re-engage
-        }
-      }
+    // A failed fixer (or nothing handed): drop the stash without resolving anything.
+    if (result.state !== 'done' || threadIds.length === 0) {
+      if (step.gate) step.gate.pendingThreadIds = null
+      return
     }
-    if (step.gate) step.gate.pendingThreadIds = null
+    const provider = ctx.getProvider(PULL_REQUEST_REVIEW_PROVIDER)
+    if (!provider) {
+      if (step.gate) step.gate.pendingThreadIds = null
+      return
+    }
+    try {
+      await provider.resolveThreads(workspaceId, block.id, threadIds, REVIEW_THREAD_RESOLVED_REPLY)
+      if (step.gate) step.gate.pendingThreadIds = null
+    } catch {
+      // Resolve threw — RETAIN the handed ids so the next probe's reconcile retries the resolve
+      // (scoped to exactly these gate-handed threads); leaving them set is deliberate.
+    }
   },
   // Never reached (the attempt budget is effectively unbounded), but raise a card defensively so
   // a misconfiguration surfaces rather than silently failing the run.

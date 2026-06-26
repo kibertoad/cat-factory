@@ -76,6 +76,19 @@ describe('FetchGitHubClient PR-review reads', () => {
     expect(reviews[0]!.submittedAt).toBe(Date.parse('2026-01-02T03:04:05Z'))
   })
 
+  it('reads the PR base ref (the branch protection should be read against)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json({ base: { ref: 'release/2026' }, head: { sha: 'h' } })),
+    )
+    await expect(makeClient().getPullRequestBaseRef(1, ref, 7)).resolves.toBe('release/2026')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json({ message: 'Not Found' }, 404)),
+    )
+    await expect(makeClient().getPullRequestBaseRef(1, ref, 7)).resolves.toBeNull()
+  })
+
   it('reads required_approving_review_count, defaulting to 1 on 404', async () => {
     vi.stubGlobal(
       'fetch',

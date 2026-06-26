@@ -3495,6 +3495,16 @@ export class ExecutionService {
     if (!instance || !step || step.agentKind !== HUMAN_REVIEW_AGENT_KIND || !step.gate) {
       throw new ConflictError('No human-review gate is currently awaiting input')
     }
+    // The fix is consumed by evaluateGate's pendingFix branch, which dispatches the fixer ONLY
+    // when the gate's provider is wired AND there is an async executor to escalate to. Reject up
+    // front when neither holds, instead of silently parking a pendingFix the gate would discard
+    // on its pass-through (an unwired gate advances) — the caller must see the failure, not a 200.
+    const gate = this.gateFor(step.agentKind)
+    if (!gate?.wired() || !isAsyncAgentExecutor(this.agentExecutor)) {
+      throw new ConflictError(
+        'The human-review gate cannot dispatch a fix on this deployment (no review provider or async executor configured)',
+      )
+    }
     step.gate.pendingFix = { instructions, at: this.clock.now() }
     // Re-arm a decision-parked run so the re-driven loop polls instead of no-oping; a spend-
     // paused run stays paused.

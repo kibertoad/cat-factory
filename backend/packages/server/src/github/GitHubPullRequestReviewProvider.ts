@@ -83,7 +83,11 @@ function toReviewThread(t: {
 export class GitHubPullRequestReviewProvider implements PullRequestReviewProvider {
   constructor(private readonly deps: GitHubPullRequestReviewProviderDependencies) {}
 
-  async getReview(workspaceId: string, blockId: string): Promise<PullRequestReviewSnapshot> {
+  async getReview(
+    workspaceId: string,
+    blockId: string,
+    cachedRequiredApprovingReviewCount?: number | null,
+  ): Promise<PullRequestReviewSnapshot> {
     const block = await this.deps.blockRepository.get(workspaceId, blockId)
     const branch = block?.pullRequest?.branch
     const number = block?.pullRequest?.number
@@ -100,9 +104,18 @@ export class GitHubPullRequestReviewProvider implements PullRequestReviewProvide
     const headSha = await gh.branchHeadSha(target.installationId, ref, branch)
     if (!headSha) return EMPTY
 
-    const [requiredCount, assignedReviewers, reviews, threads, comments] = await Promise.all([
-      gh.getRequiredApprovingReviewCount?.(target.installationId, ref, target.baseBranch) ??
-        Promise.resolve(1),
+    // The required-approval count is static repo config (branch protection), so the gate caches
+    // it after the first probe and passes it back here — skip BOTH the base-branch lookup and the
+    // protection read on every subsequent poll. On the first probe (no cache) read protection
+    // against the PR's ACTUAL base branch (`pulls/{n}.base.ref`), not the repo default: a PR into
+    // a stricter protected branch (e.g. a release branch requiring 2 approvals) must be gated
+    // against its own rule. Fall back to the resolved repo default when the base ref is unreadable.
+    const requiredCount =
+      cachedRequiredApprovingReviewCount != null
+        ? cachedRequiredApprovingReviewCount
+        : await this.resolveRequiredApprovingReviewCount(target, ref, number)
+
+    const [assignedReviewers, reviews, threads, comments] = await Promise.all([
       gh.listRequestedReviewers?.(target.installationId, ref, number) ?? Promise.resolve([]),
       gh.listPullRequestReviews?.(target.installationId, ref, number) ?? Promise.resolve([]),
       gh.listReviewThreads?.(target.installationId, ref, number) ?? Promise.resolve([]),
@@ -123,6 +136,19 @@ export class GitHubPullRequestReviewProvider implements PullRequestReviewProvide
         isBot: isBotLogin(c.author),
       })),
     }
+  }
+
+  /** Read branch-protection's required-approval count against the PR's actual base branch. */
+  private async resolveRequiredApprovingReviewCount(
+    target: { installationId: number; baseBranch: string },
+    ref: { owner: string; repo: string },
+    number: number,
+  ): Promise<number> {
+    const gh = this.deps.githubClient
+    if (!gh.getRequiredApprovingReviewCount) return 1
+    const baseRef =
+      (await gh.getPullRequestBaseRef?.(target.installationId, ref, number)) ?? target.baseBranch
+    return gh.getRequiredApprovingReviewCount(target.installationId, ref, baseRef)
   }
 
   async resolveThreads(

@@ -278,7 +278,7 @@ SDK. Base URLs are the single source of truth in
 | `BEDROCK_REGION`                                                                                           | Registers the opt-in Bedrock resolver (see below).                                                                                           |
 | `BEDROCK_MODELS` (comma-separated)                                                                         | The Bedrock **allow-list**.                                                                                                                  |
 | `ENCRYPTION_KEY` (base64, ≥32 bytes)                                                                       | Master key sealing the subscription token pool (and other integration credentials). Without it the vendor-credential endpoints return `503`. |
-| Workspace budget (UI → Workspace settings → Budget)                                                       | Monetary budget gate (per workspace; does not apply to quota runs).                                                                          |
+| Workspace budget (UI → Workspace settings → Budget)                                                        | Monetary budget gate (per workspace; does not apply to quota runs).                                                                          |
 
 ### AWS Bedrock (opt-in)
 

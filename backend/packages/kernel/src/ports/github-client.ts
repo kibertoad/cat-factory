@@ -390,6 +390,18 @@ export interface GitHubClient {
     branch: string,
   ): Promise<number>
   /**
+   * The branch a PR actually targets (`pulls/{n}.base.ref`), or null when the PR can't be
+   * read. The `human-review` gate reads branch protection against THIS branch — not the repo
+   * default — so a PR into a stricter protected branch (e.g. a release branch requiring 2
+   * approvals) is gated against its own rule rather than the default branch's. Optional (see
+   * {@link listRequestedReviewers}).
+   */
+  getPullRequestBaseRef?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string | null>
+  /**
    * List a PR's review threads via GraphQL (`pullRequest.reviewThreads`), with each thread's
    * resolved state, anchor and comments — the precise "addressed?" signal the REST review-
    * comment reads can't give. Optional (see {@link listRequestedReviewers}).
