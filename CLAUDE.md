@@ -5,6 +5,15 @@ Orientation for working in this repo. High-level product docs live in
 `backend/docs/`. This file captures the **runtime flows** that are spread across
 many files and are otherwise slow to re-derive.
 
+## Review-fix workflow
+
+When you are asked to review a PR and then address (fix) the findings, **always
+commit and push those fixes to the PR's own original branch** — never to a separate
+"review" branch — and **push them immediately after fixing**, as soon as each round
+of fixes is committed. Do not stage the fixes on a side branch, and do not batch them
+up to push later: the PR branch is the single source of truth the reviewer and CI act
+on, so the fixes have to land there right away.
+
 ## Backwards compatibility is NOT a goal
 
 This project is pre-1.0 and under active development with **no external consumers to

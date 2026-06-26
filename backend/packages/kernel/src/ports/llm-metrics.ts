@@ -143,11 +143,14 @@ export interface LlmCallMetricRepository {
    * Calls recorded for a run, newest first (full prompt/response included). `limit`
    * caps the rows returned (the bodies are heavy) — newest `limit` calls; omit for
    * all. Callers pass a bound so a long run can't produce an unbounded payload.
+   * `agentKind` narrows to one step kind's calls IN SQL, so the `limit` is spent on
+   * that kind's newest calls rather than on the run's other kinds crowding them out.
    */
   listByExecution(
     workspaceId: string,
     executionId: string,
     limit?: number,
+    agentKind?: string,
   ): Promise<LlmCallMetric[]>
   /**
    * Per-agent-kind aggregates for a run, for the board rollups. Aggregates in SQL

@@ -11,6 +11,7 @@ import DecisionModal from '~/components/panels/DecisionModal.vue'
 import AgentStepDetail from '~/components/panels/AgentStepDetail.vue'
 import StepResultViewHost from '~/components/panels/StepResultViewHost.vue'
 import ObservabilityPanel from '~/components/panels/ObservabilityPanel.vue'
+import KaizenPanel from '~/components/kaizen/KaizenPanel.vue'
 import BlockFocusView from '~/components/focus/BlockFocusView.vue'
 import DocumentSourceConnectModal from '~/components/documents/DocumentSourceConnectModal.vue'
 import DocumentImportModal from '~/components/documents/DocumentImportModal.vue'
@@ -171,6 +172,7 @@ watch(
       <AgentStepDetail />
       <StepResultViewHost />
       <ObservabilityPanel />
+      <KaizenPanel />
       <DocumentSourceConnectModal />
       <DocumentImportModal />
       <SpawnPreviewModal />
