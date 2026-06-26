@@ -149,11 +149,47 @@ function stepJobId(executionId: string, agentKind: string): string {
 }
 
 /**
+ * Strip any embedded `user:pass@` userinfo from a URL before it is stored in an
+ * observability snapshot. The allow-list promises "never a credential-bearing URL", but
+ * the injected-doc URLs and a tester's ephemeral `environmentUrl` are operator-supplied
+ * and could carry credentials in their userinfo, so defang them here. Non-URL strings
+ * (and URLs with no userinfo) pass through unchanged.
+ */
+export function stripUrlCredentials(value: string): string {
+  if (!value) return value
+  try {
+    const url = new URL(value)
+    if (!url.username && !url.password) return value
+    url.username = ''
+    url.password = ''
+    return url.toString()
+  } catch {
+    return value
+  }
+}
+
+/**
+ * Redact credential-bearing URLs from the tester's `infra` spec before it is stored.
+ * An `ephemeral` run carries the provisioned `environmentUrl`; the env's access
+ * credentials live on a separate field that is never copied, but the URL itself is
+ * operator-mapped and could embed userinfo, so strip it. Returns the value untouched
+ * when it is not an `infra` object.
+ */
+function redactInfra(infra: unknown): unknown {
+  if (!infra || typeof infra !== 'object' || Array.isArray(infra)) return infra
+  const copy = { ...(infra as Record<string, unknown>) }
+  if (typeof copy.environmentUrl === 'string') {
+    copy.environmentUrl = stripUrlCredentials(copy.environmentUrl)
+  }
+  return copy
+}
+
+/**
  * Build the redacted agent-context snapshot from a dispatched job body + run context.
  * Deliberately an ALLOW-LIST: it copies the composed prompts, the folded-in fragment
  * bodies and the injected context files, plus a handful of structural fields — and
  * NEVER any credential (the GitHub token, the proxy session token, a leased
- * subscription token, or the clone URL that embeds them).
+ * subscription token, or the clone/environment URL that embeds them).
  */
 function buildAgentContextRecord(
   context: AgentRunContext,
@@ -169,7 +205,7 @@ function buildAgentContextRecord(
         return {
           path: str(file.path),
           title: str(file.title),
-          url: str(file.url),
+          url: stripUrlCredentials(str(file.url)),
           content: str(file.content),
         }
       })
@@ -199,7 +235,7 @@ function buildAgentContextRecord(
       branch: body.branch,
       serviceDirectory: repo.serviceDirectory,
       webSearch: body.webSearch ?? false,
-      infra: body.infra,
+      infra: redactInfra(body.infra),
       decisions: context.decisions,
       ...(context.revision
         ? { revision: { feedback: context.revision.feedback, hadPriorProposal: true } }

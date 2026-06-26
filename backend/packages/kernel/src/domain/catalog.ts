@@ -16,7 +16,6 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   storeAgentContext: true,
   spendCurrency: null,
   spendMonthlyLimit: null,
-  spendModelPrices: null,
 }
 
 /**

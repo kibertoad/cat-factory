@@ -368,6 +368,7 @@ const ITEM_ICON: Record<string, string> = {
             }}</UBadge>
             <UButton
               class="nodrag"
+              data-testid="frame-add-task"
               size="xs"
               variant="ghost"
               color="neutral"
@@ -425,6 +426,7 @@ const ITEM_ICON: Record<string, string> = {
           <button
             v-if="!hasTasks"
             type="button"
+            data-testid="frame-add-task"
             class="absolute inset-4 flex items-center justify-center gap-1 rounded-lg border border-dashed border-slate-700 text-[11px] text-slate-500 hover:border-slate-500 hover:text-slate-300"
             @click.stop="addTask"
           >

@@ -138,8 +138,8 @@ workspace snapshot, and the frontend shows a large warning and a "Resume anyway"
 automatically once the period rolls over.
 
 Configured **per workspace in the UI** (Workspace settings → Budget; the `workspace_settings`
-row): a monthly limit (default ~100), currency (default `EUR`), and per-model price overrides
-(per 1M tokens). The budget is **per-workspace** — `SpendService` resolves each workspace's
+row): a monthly limit (default ~100) and currency (default `EUR`). The built-in per-model
+price table is fixed (not operator-overridable). The budget is **per-workspace** — `SpendService` resolves each workspace's
 effective pricing and gates on its OWN usage. A limit of `0` is the deliberate "no PAID spend"
 setting: metered runs are refused (a clear error up front, not a silent pause), but local-runner
 models and connected subscriptions — which incur no metered cost — keep running. The container

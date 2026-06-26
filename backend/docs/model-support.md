@@ -246,7 +246,7 @@ local-runner models and connected subscriptions**, since those incur no metered 
 reversible from the UI and safer than an unbounded "unlimited" that can run up a real bill.
 (Web search costs money on metered providers, so a `0` budget also blocks paid searches —
 the local model itself still runs.) The budget lives on the `workspace_settings` row; there
-are no longer `SPEND_MONTHLY_LIMIT` / `SPEND_MODEL_PRICES` env vars.
+are no longer `SPEND_MONTHLY_LIMIT` / `SPEND_CURRENCY` env vars.
 
 ---
 
@@ -278,7 +278,7 @@ SDK. Base URLs are the single source of truth in
 | `BEDROCK_REGION`                                                                                           | Registers the opt-in Bedrock resolver (see below).                                                                                           |
 | `BEDROCK_MODELS` (comma-separated)                                                                         | The Bedrock **allow-list**.                                                                                                                  |
 | `ENCRYPTION_KEY` (base64, ≥32 bytes)                                                                       | Master key sealing the subscription token pool (and other integration credentials). Without it the vendor-credential endpoints return `503`. |
-| `SPEND_MONTHLY_LIMIT`, `SPEND_CURRENCY`, `SPEND_MODEL_PRICES`                                              | Monetary budget gate (does not apply to quota runs).                                                                                         |
+| Workspace budget (UI → Workspace settings → Budget)                                                       | Monetary budget gate (per workspace; does not apply to quota runs).                                                                          |
 
 ### AWS Bedrock (opt-in)
 

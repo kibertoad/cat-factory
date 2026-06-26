@@ -175,6 +175,7 @@ async function copyOutput() {
     <Transition name="reader-fade">
       <div
         v-if="open && step && agent"
+        data-testid="step-detail"
         class="fixed inset-0 z-50 flex bg-slate-950/96 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
@@ -552,6 +553,7 @@ async function copyOutput() {
           <div v-else class="space-y-2 border-t border-slate-800 px-4 py-3">
             <UButton
               color="primary"
+              data-testid="step-approve"
               size="sm"
               icon="i-lucide-check"
               block

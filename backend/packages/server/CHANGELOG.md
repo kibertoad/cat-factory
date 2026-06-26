@@ -1,5 +1,29 @@
 # @cat-factory/server
 
+## 0.27.1
+
+### Patch Changes
+
+- 4849c66: Two follow-ups to the agent-context observability feature:
+
+  - **Worker:** the daily retention `scheduled` handler now fails fast with the same clear
+    "TELEMETRY_DB binding is required" error as the request-path container build (via a
+    shared `requireTelemetryDb` helper) instead of producing an opaque NPE deep in a
+    telemetry repo when the binding is unbound.
+  - **Server:** the agent-context snapshot now strips any embedded `user:pass@` userinfo
+    from the stored injected-doc URLs and the tester's ephemeral `environmentUrl`, upholding
+    the allow-list's "never a credential-bearing URL" promise even when an operator's
+    environment-provider mapping populates a credentialed URL.
+
+- Updated dependencies [b82304e]
+  - @cat-factory/contracts@0.29.0
+  - @cat-factory/kernel@0.32.0
+  - @cat-factory/spend@0.10.0
+  - @cat-factory/orchestration@0.24.1
+  - @cat-factory/agents@0.15.2
+  - @cat-factory/integrations@0.21.3
+  - @cat-factory/prompt-fragments@0.7.27
+
 ## 0.27.0
 
 ### Minor Changes

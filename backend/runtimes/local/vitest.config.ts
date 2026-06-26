@@ -9,9 +9,10 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     include: ['test/**/*.spec.ts', 'src/**/*.test.ts'],
-    // The conformance spec shares one Postgres; run serially so workspace-creating
-    // specs don't contend, mirroring the Node pool.
-    fileParallelism: false,
+    // File parallelism is safe: each vitest worker gets its OWN Postgres database
+    // (`setupTestDb` → `deriveWorkerDatabase`, labelled `local` so it never collides with
+    // the Node suite's), so concurrent spec files on different workers don't contend. The
+    // pure transport/runtime-adapter unit tests touch no database at all.
     testTimeout: 30_000,
   },
 })
