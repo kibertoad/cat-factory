@@ -5,18 +5,12 @@ export type { SlackConfig }
 
 export function loadSlackConfig(env: Env): SlackConfig {
   // Opt-in via the enable flag; the per-account bot token is sealed with the shared
-  // ENCRYPTION_KEY (under a slack-scoped HKDF info). OAuth credentials are optional
-  // (manual bot-token onboarding works without them); when all three are present the
-  // "Add to Slack" flow is offered.
+  // ENCRYPTION_KEY (under a slack-scoped HKDF info). The Slack app OAuth credentials moved
+  // out of env into per-account settings (sealed), resolved dynamically at connect time —
+  // see AccountSettingsService / `/accounts/:id/settings`.
   const encryptionKey = env.ENCRYPTION_KEY?.trim()
-  const clientId = env.SLACK_CLIENT_ID?.trim()
-  const clientSecret = env.SLACK_CLIENT_SECRET?.trim()
-  const redirectUrl = env.SLACK_REDIRECT_URL?.trim()
-  const oauth =
-    clientId && clientSecret && redirectUrl ? { clientId, clientSecret, redirectUrl } : undefined
   return {
     enabled: env.SLACK_ENABLED === 'true' && !!encryptionKey,
     encryptionKey,
-    ...(oauth ? { oauth } : {}),
   }
 }

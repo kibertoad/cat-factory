@@ -7,6 +7,7 @@ import {
   setMemberRolesSchema,
   testEmailSchema,
   updateAccountSchema,
+  updateAccountSettingsSchema,
 } from '@cat-factory/contracts'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
@@ -225,6 +226,39 @@ export function accountController(): Hono<AppEnv> {
     await c.get('container').accountService.requireAdmin(param(c, 'accountId'), user.id)
     await container.email.sendTest(param(c, 'accountId'), c.req.valid('json').to)
     return c.json({ ok: true })
+  })
+
+  // ---- Deployment settings (per-account, admin-only) ----------------------
+  // The integration secrets (Slack OAuth / web-search / Langfuse) + tuning (retention,
+  // inline web search) moved out of env onto a per-account row. Secrets are write-only:
+  // GET returns only the non-secret config + presence summary. Available only when the
+  // settings store is wired (ENCRYPTION_KEY). Admin-gated for BOTH read and write —
+  // these are sensitive deployment knobs.
+
+  const settingsUnavailable = (c: Context<AppEnv>) =>
+    c.json(
+      { error: { code: 'unavailable', message: 'Account settings storage is not configured' } },
+      503,
+    )
+
+  app.get('/accounts/:accountId/settings', async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.accountSettings) return settingsUnavailable(c)
+    await container.accountService.requireAdmin(param(c, 'accountId'), user.id)
+    return c.json(await container.accountSettings.service.read(param(c, 'accountId')))
+  })
+
+  app.put('/accounts/:accountId/settings', jsonBody(updateAccountSettingsSchema), async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.accountSettings) return settingsUnavailable(c)
+    await container.accountService.requireAdmin(param(c, 'accountId'), user.id)
+    return c.json(
+      await container.accountSettings.service.write(param(c, 'accountId'), c.req.valid('json')),
+    )
   })
 
   return app

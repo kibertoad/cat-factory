@@ -51,7 +51,7 @@ export type {
   ModelRef,
   ModelScope,
 } from './model-provider.js'
-export { inlineModelRef } from './model-provider.js'
+export { inlineModelRef, resolveScopedModelProvider } from './model-provider.js'
 export type { TokenUsageRecord, TokenUsageRepository, TokenUsageTotals } from './token-usage.js'
 export type {
   LlmCallMetric,
@@ -298,6 +298,14 @@ export type {
   ReleaseHealthConfigRecord,
   ReleaseHealthConfigRepository,
 } from './release-health-repositories.js'
+export type {
+  IncidentEnrichmentConnectionRecord,
+  IncidentEnrichmentConnectionRepository,
+} from './incident-enrichment-repositories.js'
+export type {
+  AccountSettingsRecord,
+  AccountSettingsRepository,
+} from './account-settings-repositories.js'
 export type {
   MergeabilityVerdict,
   MergeabilityReport,

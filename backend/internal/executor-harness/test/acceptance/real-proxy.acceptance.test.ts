@@ -50,6 +50,7 @@ async function startRealProxy() {
         ledger.push(row)
       },
       totalsSince: async () => ({ inputTokens: 0, outputTokens: 0, costEstimate: 0 }),
+      totalsSinceForWorkspace: async () => ({ inputTokens: 0, outputTokens: 0, costEstimate: 0 }),
     },
     idGenerator: { next: (p: string) => `${p}-${ledger.length}` },
     clock: { now: () => Date.now() },
@@ -179,6 +180,11 @@ describe('real proxy (in-process LlmProxyController)', () => {
       tokenUsageRepository: {
         record: async () => {},
         totalsSince: async () => ({ inputTokens: 0, outputTokens: 0, costEstimate: 999 }),
+        totalsSinceForWorkspace: async () => ({
+          inputTokens: 0,
+          outputTokens: 0,
+          costEstimate: 999,
+        }),
       },
       idGenerator: { next: (p: string) => p },
       clock: { now: () => Date.now() },

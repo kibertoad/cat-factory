@@ -25,6 +25,14 @@ binding = "DB"
 database_name = "cat_factory"
 migrations_dir = "migrations"
 
+# Dedicated D1 for the Sandbox (parallel prompt/model testing), its own migrations
+# lineage. Opt-in in production; declared here so the integration/conformance suite can
+# exercise the feature (test/apply-migrations.ts applies sandbox-migrations to it).
+[[d1_databases]]
+binding = "SANDBOX_DB"
+database_name = "cat_factory_sandbox"
+migrations_dir = "sandbox-migrations"
+
 # Workers AI binding. Tests inject a FakeAgentExecutor and never touch env.AI
 # (vitest.config.ts sets remoteBindings:false); declared so the binding shape
 # matches production.

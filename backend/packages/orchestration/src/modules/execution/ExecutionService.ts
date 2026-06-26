@@ -17,6 +17,7 @@ import {
   parseBlueprintService,
   parseSpecDoc,
   DEFAULT_COMPANION_MAX_ATTEMPTS,
+  isLocalRunner,
 } from '@cat-factory/contracts'
 import {
   blueprintPostOp,
@@ -45,8 +46,11 @@ import {
   getErrorMessage,
   isModelUsable,
   NotFoundError,
+  parseLocalModelId,
   type ProviderCapabilities,
+  resolveModelRef,
   sameSubtasks,
+  subscriptionOptionFor,
   ValidationError,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
@@ -788,6 +792,60 @@ export class ExecutionService {
     }
   }
 
+  /**
+   * Refuse to START / RETRY a run when the workspace has reached its spend budget AND the
+   * pipeline has at least one budget-METERED step. A `0` (or exhausted) budget is a
+   * deliberate "no paid spend" setting, but it must surface as a clear, up-front error here
+   * rather than a silent mid-run pause. Steps that incur no metered cost — a connected
+   * subscription model, or a keyless local-runner model — are exempt, so a workspace that
+   * runs ONLY local/subscription models starts normally even at a `0` budget. Best-effort:
+   * with no capability resolver wired (tests/unconfigured) it is skipped and the mid-run
+   * gate still guards. Before any side effects, matching the other start guards.
+   */
+  private async assertBudgetAllowsPipeline(
+    workspaceId: string,
+    block: Block,
+    pipeline: Pipeline,
+    initiatedBy: string | null | undefined,
+  ): Promise<void> {
+    if (!(await this.spend.isOverBudget(workspaceId))) return
+    if (!this.resolveProviderCapabilities) return
+    const caps = await this.resolveProviderCapabilities(workspaceId, initiatedBy)
+    const ids: (string | undefined)[] = []
+    if (block.modelId) {
+      ids.push(block.modelId)
+    } else if (this.resolveWorkspaceModelDefault) {
+      for (const kind of pipeline.agentKinds) {
+        ids.push(await this.resolveWorkspaceModelDefault(workspaceId, kind, block.modelPresetId))
+      }
+    } else {
+      ids.push(undefined)
+    }
+    if (!ids.some((id) => this.modelIdIsMetered(id, caps))) return
+    const status = await this.spend.status(workspaceId)
+    throw new ConflictError(
+      `This workspace has reached its spend budget (${status.costSpent.toFixed(2)}/` +
+        `${status.costLimit.toFixed(2)} ${status.currency}). New runs on metered models are ` +
+        'paused until the budget is raised (Workspace settings → Budget) or the billing period ' +
+        'resets. A task pinned to a local model or a connected subscription still runs.',
+    )
+  }
+
+  /**
+   * Whether a model id will incur metered monetary cost for THIS workspace. Non-metered:
+   * a subscription model whose vendor is connected ("subscriptions always win"), or a
+   * local-runner model (keyless, on the user's own endpoint). Everything else — including
+   * env-default routing (an absent id) and Cloudflare Workers AI — is treated as metered.
+   */
+  private modelIdIsMetered(id: string | undefined, caps: ProviderCapabilities): boolean {
+    const sub = subscriptionOptionFor(id)
+    if (sub && caps.subscriptionVendors.has(sub.vendor)) return false
+    const ref = resolveModelRef(id, caps)
+    if (!ref) return true
+    if (ref.harness === 'claude-code' || ref.harness === 'codex') return false
+    return !isLocalRunner(ref.provider)
+  }
+
   /** Start a pipeline against a block, replacing any prior run on it. */
   async start(
     workspaceId: string,
@@ -837,6 +895,10 @@ export class ExecutionService {
     // Enforce the workspace's per-service running-task limit (off by default) — a clear,
     // actionable error before any side effects, so the human knows why the start was refused.
     await this.assertWithinTaskLimit(workspaceId, block)
+
+    // Refuse a metered run once the spend budget is reached (a clear error rather than a
+    // silent mid-run pause). A local/subscription-only pipeline is exempt and starts.
+    await this.assertBudgetAllowsPipeline(workspaceId, block, pipeline, initiatedBy)
 
     // Hard dependency gate: a task cannot start while any block it `dependsOn` is unfinished
     // (not yet `done`/merged). Enforced server-side so it holds for manual starts, recurring
@@ -1091,11 +1153,13 @@ export class ExecutionService {
     // Spend gate: don't incur monetary LLM cost once the budget is exhausted. Pause
     // the run (so the frontend can flag it) and stop here. A previously-paused run
     // that finds the budget has freed up resumes and proceeds. EXEMPTION: a step that
-    // runs on a flat-rate subscription (quota) model — Claude Code / Codex on a pooled
-    // token — incurs no metered monetary cost and never contributes to the budget, so
-    // it must not be held hostage by a budget other (metered) models exhausted.
-    if (await this.spend.isOverBudget()) {
-      if (!(await this.currentStepIsQuotaBased(workspaceId, instance, step))) {
+    // incurs no metered monetary cost — a flat-rate subscription (Claude Code / Codex)
+    // OR a local-runner model (keyless, on the user's own endpoint) — never contributes
+    // to the budget, so it must not be held hostage by a budget other (metered) models
+    // exhausted. This is what lets a deliberately local-only / subscription-only workspace
+    // keep running at a `0` budget (see the spend-budget docs).
+    if (await this.spend.isOverBudget(workspaceId)) {
+      if (!(await this.currentStepIsNonMetered(workspaceId, instance, step))) {
         if (instance.status !== 'paused') {
           instance.status = 'paused'
           await this.executionRepository.upsert(workspaceId, instance)
@@ -1311,20 +1375,33 @@ export class ExecutionService {
   }
 
   /**
-   * Whether the current step will run on a flat-rate subscription (quota) model, so
-   * the spend gate can let it proceed even when the monetary budget is exhausted.
-   * Resolved through the executor (the authority on the "subscriptions always win"
-   * routing) off a full step context. Best-effort and side-effect-free: an executor
-   * without the capability, a missing block, or any resolution error all report false
-   * (the step is treated as budget-metered, the prior behaviour). Only consulted on
-   * the over-budget path, so the extra context build never touches the happy path.
+   * Whether the current step incurs NO metered monetary LLM cost, so the spend gate can
+   * let it proceed even when the budget is exhausted. Two non-metered cases:
+   *  - a flat-rate SUBSCRIPTION (quota) model — Claude Code / Codex on a pooled token;
+   *    resolved through the executor (the authority on "subscriptions always win").
+   *  - a LOCAL-runner model (Ollama / LM Studio / …) — keyless, runs on the user's own
+   *    endpoint, so it costs the deployment nothing; detected off the resolved model id.
+   * This is what makes a `0` budget mean "no PAID spend" without bricking a workspace that
+   * deliberately runs only local models or subscriptions (see the spend-budget docs).
+   *
+   * Once the executor resolves the step's concrete model id, the metered/non-metered
+   * decision is delegated to the SAME {@link modelIdIsMetered} predicate the up-front
+   * {@link assertBudgetAllowsPipeline} gate uses, so the two gates can't classify a model
+   * differently (a divergence would let a run pass the start gate then immediately pause,
+   * or vice versa). The executor's `isQuotaBased` is still consulted first as the
+   * authoritative subscription-routing signal; the shared predicate covers local-runner +
+   * subscription-by-capability + Cloudflare classification identically to the start gate.
+   * Falls back to a bare local-id check when no capability resolver is wired.
+   *
+   * Best-effort and side-effect-free: an executor without the capability, a missing block,
+   * or any resolution error all report false (treated as budget-metered, the prior
+   * behaviour). Only consulted on the over-budget path, so it never touches the happy path.
    */
-  private async currentStepIsQuotaBased(
+  private async currentStepIsNonMetered(
     workspaceId: string,
     instance: ExecutionInstance,
     step: ExecutionInstance['steps'][number],
   ): Promise<boolean> {
-    if (!this.agentExecutor.isQuotaBased) return false
     try {
       const block = await this.blockRepository.get(workspaceId, instance.blockId)
       if (!block) return false
@@ -1336,7 +1413,21 @@ export class ExecutionService {
         isFinalStep,
         block,
       )
-      return await this.agentExecutor.isQuotaBased(context)
+      if (this.agentExecutor.isQuotaBased && (await this.agentExecutor.isQuotaBased(context))) {
+        return true
+      }
+      if (this.agentExecutor.resolveModel) {
+        const modelId = await this.agentExecutor.resolveModel(context)
+        // Classify the resolved id through the shared predicate (same as the start gate)
+        // when capabilities are wired; else fall back to the bare local-runner check.
+        if (this.resolveProviderCapabilities) {
+          const caps = await this.resolveProviderCapabilities(workspaceId, instance.initiatedBy)
+          if (!this.modelIdIsMetered(modelId, caps)) return true
+        } else if (parseLocalModelId(modelId)) {
+          return true
+        }
+      }
+      return false
     } catch {
       return false
     }
@@ -3863,7 +3954,19 @@ export class ExecutionService {
         { status: previous.status },
       )
     }
-    await this.requireBlock(workspaceId, previous.blockId)
+    const block = await this.requireBlock(workspaceId, previous.blockId)
+
+    // Same up-front budget gate as start(): refuse a metered retry once the budget is
+    // reached (local/subscription-only pipelines still retry). Before any side effects.
+    const pipeline = await this.pipelineRepository.get(workspaceId, previous.pipelineId)
+    if (pipeline) {
+      await this.assertBudgetAllowsPipeline(
+        workspaceId,
+        block,
+        pipeline,
+        initiatedBy ?? previous.initiatedBy,
+      )
+    }
 
     const { steps, currentStep } = planResumedSteps(previous)
     // Mint the activation before replacing the failed run, so a bad password aborts

@@ -103,7 +103,7 @@ export function workspaceController(): Hono<AppEnv> {
     }
 
     const snapshot = await container.workspaceService.create(body, user?.id ?? null, accountId)
-    const spend = await container.spendService.status()
+    const spend = await container.spendService.status(snapshot.workspace.id)
     const customAgentKinds = snapshotCustomAgentKinds()
     return c.json(
       {
@@ -121,7 +121,7 @@ export function workspaceController(): Hono<AppEnv> {
     const container = c.get('container')
     const workspaceId = param(c, 'workspaceId')
     const snapshot = await container.workspaceService.snapshot(workspaceId)
-    const spend = await container.spendService.status()
+    const spend = await container.spendService.status(workspaceId)
     // Carry bootstrap runs in the snapshot so the board renders a bootstrap's live
     // progress / failure + retry the moment it loads (no separate, independently
     // failing fetch). No-op when the bootstrap module isn't configured.

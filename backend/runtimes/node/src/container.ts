@@ -31,8 +31,10 @@ import {
   OBSERVABILITY_CIPHER_INFO,
   RegistryReleaseHealthProvider,
   defaultObservabilityRegistry,
-  PagerDutyEnrichmentProvider,
-  IncidentIoEnrichmentProvider,
+  WorkspaceIncidentEnrichmentProvider,
+  INCIDENT_ENRICHMENT_CIPHER_INFO,
+  AccountSettingsService,
+  ACCOUNT_SETTINGS_CIPHER_INFO,
 } from '@cat-factory/integrations'
 import {
   type AgentExecutor,
@@ -42,7 +44,6 @@ import {
   type FragmentOwnerKind,
   type GitHubClient,
   type GitHubInstallationRepository,
-  type IncidentEnrichmentProvider,
   type ModelProviderResolver,
   type NotificationChannel,
   type RateLimitRepository,
@@ -51,7 +52,6 @@ import {
   type TaskConnectionRepository,
   type TaskSourceProvider,
   CompositeNotificationChannel,
-  CompositeIncidentEnrichmentProvider,
 } from '@cat-factory/kernel'
 import {
   type CoreDependencies,
@@ -87,7 +87,6 @@ import {
   WebCryptoWebhookVerifier,
   buildResolveRepoTarget,
   makeResolveRunRepoContext,
-  createWebSearchUpstreamFromEnv,
   ensureWorkBranchViaRest,
   logger,
   resolveUrlSafetyPolicy,
@@ -136,7 +135,7 @@ import {
 import { DrizzleLocalModelEndpointRepository } from './repositories/localModelEndpoint.js'
 import { DrizzleUserSecretRepository } from './repositories/userSecret.js'
 import { DrizzleProviderModelCatalogRepository } from './repositories/providerModelCatalog.js'
-import { createDrizzleRepositories } from './repositories/drizzle.js'
+import { createDrizzleRepositories, createDrizzleSandboxDeps } from './repositories/drizzle.js'
 import {
   DrizzleBootstrapJobRepository,
   DrizzleReferenceArchitectureRepository,
@@ -262,7 +261,6 @@ function selectNodeSlackDeps(
     slackSettingsRepository,
     slackMemberMappingRepository,
     slackSecretCipher: secretCipher,
-    ...(config.slack.oauth ? { slackOAuth: config.slack.oauth } : {}),
   }
 }
 
@@ -500,6 +498,7 @@ function buildNodeContainerExecutor(
   personalSubscriptions?: PersonalSubscriptionService,
   resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>,
   resolveUserGitHubToken?: ResolveUserGitHubToken,
+  resolveWebSearchEnabled?: (workspaceId: string) => Promise<boolean>,
 ): AgentExecutor | null {
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
   // is this service's externally reachable base (the runner pool / local container
@@ -572,9 +571,10 @@ function buildNodeContainerExecutor(
         }
       : {}),
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
-    // Point container agents' web search at the backend search proxy (no provider key
-    // in the sandbox) whenever an upstream is configured for this deployment.
-    webSearchProxyEnabled: Boolean(createWebSearchUpstreamFromEnv(env)),
+    // Point container agents' web search at the backend search proxy (no provider key in
+    // the sandbox), but only for a run whose account has keys (resolved per run — see the
+    // call site), so the tool is never advertised to a run where it would just fail.
+    ...(resolveWebSearchEnabled ? { resolveWebSearchEnabled } : {}),
     githubApiBase: config.github.apiBase,
     // Forward container tool spans to Langfuse (when configured) as child spans under
     // the run trace — the same sink the LLM proxy fans generations out to.
@@ -962,6 +962,27 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     idGenerator,
     clock,
   )
+  // Web-search keys live per-account; advertise Pi's `web_search` tool to a run only when
+  // its account actually has a usable upstream (else the tool would just fail/return
+  // nothing). Resolved per run off a dedicated account-settings instance (short-TTL cache).
+  const webSearchAccountKey = env.ENCRYPTION_KEY?.trim()
+  const webSearchAccountSettings = webSearchAccountKey
+    ? new AccountSettingsService({
+        accountSettingsRepository: repos.accountSettingsRepository,
+        secretCipher: new WebCryptoSecretCipher({
+          masterKeyBase64: webSearchAccountKey,
+          info: ACCOUNT_SETTINGS_CIPHER_INFO,
+        }),
+        clock,
+      })
+    : undefined
+  const resolveWebSearchEnabled = webSearchAccountSettings
+    ? async (workspaceId: string): Promise<boolean> => {
+        const accountId = await repos.workspaceRepository.accountOf(workspaceId)
+        if (!accountId) return false
+        return Boolean((await webSearchAccountSettings.resolve(accountId)).webSearch)
+      }
+    : undefined
   const container = buildNodeContainerExecutor(
     env,
     config,
@@ -974,6 +995,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     personalSubscriptions,
     (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
     resolveUserGitHubToken,
+    resolveWebSearchEnabled,
   )
 
   // Always a composite: inline kinds run as one-shot LLM calls; repo-operating kinds
@@ -1240,17 +1262,44 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         registry: defaultObservabilityRegistry,
       }),
     )
-    const enrichers: IncidentEnrichmentProvider[] = []
-    if (config.incidentEnrichment.pagerDuty) {
-      enrichers.push(new PagerDutyEnrichmentProvider(config.incidentEnrichment.pagerDuty))
-    }
-    if (config.incidentEnrichment.incidentIo) {
-      enrichers.push(new IncidentIoEnrichmentProvider(config.incidentEnrichment.incidentIo))
-    }
-    if (enrichers.length > 0) {
-      wireIncidentEnrichment(new CompositeIncidentEnrichmentProvider(enrichers))
-    }
   }
+
+  // Per-workspace incident-enrichment (PagerDuty + incident.io): credentials moved out of
+  // env into a sealed per-workspace row, resolved + decrypted at enrichment time. Wired
+  // whenever the shared ENCRYPTION_KEY is present (independent of the release-health gate).
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  const incidentEnrichmentDeps: Partial<CoreDependencies> = {}
+  if (encryptionKey) {
+    const incidentEnrichmentSecretCipher = new WebCryptoSecretCipher({
+      masterKeyBase64: encryptionKey,
+      info: INCIDENT_ENRICHMENT_CIPHER_INFO,
+    })
+    incidentEnrichmentDeps.incidentEnrichmentConnectionRepository =
+      repos.incidentEnrichmentConnectionRepository
+    incidentEnrichmentDeps.incidentEnrichmentSecretCipher = incidentEnrichmentSecretCipher
+    // The on-call enrichment provider now lives in `@cat-factory/gates`; wire the
+    // workspace-backed provider into the gate suite. The connection repo + cipher above
+    // stay on CoreDependencies to power the management API.
+    wireIncidentEnrichment(
+      new WorkspaceIncidentEnrichmentProvider({
+        incidentEnrichmentConnectionRepository: repos.incidentEnrichmentConnectionRepository,
+        secretCipher: incidentEnrichmentSecretCipher,
+      }),
+    )
+  }
+
+  // Per-account deployment settings (Slack OAuth + web-search keys), built once so the
+  // service's short-TTL cache spans requests; the Slack OAuth resolver derives from it.
+  const accountSettings = encryptionKey
+    ? new AccountSettingsService({
+        accountSettingsRepository: repos.accountSettingsRepository,
+        secretCipher: new WebCryptoSecretCipher({
+          masterKeyBase64: encryptionKey,
+          info: ACCOUNT_SETTINGS_CIPHER_INFO,
+        }),
+        clock,
+      })
+    : undefined
 
   // Runner-pool URL/host guard, scoped to its own config (independent of the environment
   // allow-list); absent => strict public-https.
@@ -1264,6 +1313,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
 
   const dependencies: CoreDependencies = {
     ...releaseHealthDeps,
+    ...incidentEnrichmentDeps,
+    ...(accountSettings ? { accountSettings } : {}),
     workspaceRepository: repos.workspaceRepository,
     accountRepository: repos.accountRepository,
     membershipRepository: repos.membershipRepository,
@@ -1303,6 +1354,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
     // preset CRUD API + the merger step's threshold resolution work identically.
     mergePresetRepository: repos.mergePresetRepository,
+    // Sandbox (parallel prompt/model testing) — contributed as one sandbox-owned mixin,
+    // symmetric with the Worker's `...selectSandboxDeps(db)`; the run-driver reuses the
+    // reviewer model config below. The container body never enumerates the five repos.
+    ...createDrizzleSandboxDeps(options.db),
     // Per-workspace runtime settings (human-wait escalation threshold + per-service task
     // limit). Wired unconditionally so the settings API + the limit enforcement + the
     // escalation sweep work identically to the Worker.

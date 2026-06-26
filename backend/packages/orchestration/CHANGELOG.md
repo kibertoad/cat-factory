@@ -1,5 +1,167 @@
 # @cat-factory/orchestration
 
+## 0.21.0
+
+### Minor Changes
+
+- 69d2270: Surface the Sandbox (the parallel prompt/model testing surface) end to end. Previously
+  only the domain logic (`@cat-factory/sandbox`), wire contracts and kernel ports existed,
+  with no way to use the feature; this wires the full stack:
+
+  - **Services** (`@cat-factory/orchestration`): `SandboxService` (prompt-version lineage,
+    fixture library with lazy builtin seeding, experiment definitions) + `SandboxRunService`
+    (the run-driver + judge — expands an experiment matrix into cells, runs each inline
+    candidate against the prompt-version's system text + the fixture input, grades it with a
+    judge model against the task rubric, and records the deterministic objective findings
+    score). Assembled as the `sandbox` core module when its repositories are wired.
+  - **HTTP API** (`@cat-factory/server`): `SandboxController` mounts the prompt/fixture/
+    experiment CRUD + `POST /sandbox/experiments/:id/launch`. 503 when unconfigured.
+  - **Persistence**: the Sandbox gets its **own database** per runtime for blast-radius
+    isolation — a dedicated `SANDBOX_DB` D1 database on the Cloudflare Worker (its own
+    `sandbox-migrations/` lineage) and a dedicated `sandbox` Postgres schema on Node
+    (Drizzle). Both runtimes contribute the repositories via a single sandbox-owned
+    `Partial<CoreDependencies>` mixin, so neither facade enumerates them. Cross-runtime
+    conformance asserts parity.
+  - **Frontend** (`@cat-factory/app`): a Sandbox window (opened from the sidebar +
+    command palette) to clone/version prompts, browse graded fixtures, and define + run
+    experiments with a scored results grid.
+
+  BREAKING (deployment): the Cloudflare Worker reads an optional new `SANDBOX_DB` binding;
+  without it the Sandbox API answers 503 (the rest of the product is unaffected). To enable
+  it, provision a second D1 database and point the binding + its `migrations_dir` at the
+  package's `sandbox-migrations/` (see `deploy/backend/wrangler.toml`). On Node the
+  `sandbox` schema is created automatically by the boot migrator.
+
+  Container/repo fixtures (a real checkout) are not yet supported by the in-product run
+  driver and are refused at launch; the builtin fixtures are all inline.
+
+  Run-driver hardening: a relaunch clears the prior result grid first (new
+  `SandboxRunRepository`/`SandboxGradeRepository.removeByExperiment`, mirrored on D1 +
+  Drizzle) instead of accumulating duplicate cells; the experiment's terminal status is
+  derived from whether any cell was actually graded (`failed` when every candidate failed OR
+  every grade failed — never a misleading `done` over a grid of unscored cells, and never
+  left `running`); the token budget must be ≥ 1 (a `0` budget is rejected at create rather
+  than silently failing every cell) and is documented as a soft cap enforced between cells;
+  the judge model defaults to the deployment routing default (no hardcoded vendor) and
+  requires an explicit `judgeModel` when none is configured (the experiment builder now
+  exposes a judge-model picker so a deployment with no default still has recourse); an
+  unparseable / empty / reasoning-only judge reply is now recorded as a grading **error** on
+  the cell rather than silently flooring every dimension to the minimum (which read as a
+  confident bottom-of-scale grade); the judge-reply JSON extractor — now the single robust
+  `extractJson` promoted to `@cat-factory/kernel` and shared by the requirements reviewer, the
+  document planner and the Sandbox judge (replacing two weaker object-only copies) — is
+  string-literal aware, scans forward past any leading bracket whose span isn't valid JSON
+  (so prose like `I weighed [the auth flow]: {…}` no longer defeats extraction for the
+  object-returning reviewers), and falls back past a leading non-JSON code fence. The judge
+  prompt appends the shared `FINAL_ANSWER_IN_REPLY` directive like the other parsed-reply
+  agents, and the provider-for-scope resolution the Sandbox shares with the reviewers is now
+  one `resolveScopedModelProvider` kernel helper instead of two copies. The Sandbox window now surfaces a
+  non-503 load failure (with a retry) instead of rendering an empty, healthy-looking panel.
+  The fixture↔kind mapping the UI filters by now lives on the `@cat-factory/sandbox` catalog
+  (`SandboxAgentKindMeta.fixtureKinds`) instead of a parallel frontend switch. Concurrent
+  launches of the same experiment are now serialised by an atomic
+  `SandboxExperimentRepository.claimForRun` (a conditional transition to `running`, mirrored on
+  D1 + Drizzle): only the winner clears + re-expands the result grid, so two simultaneous
+  launches can't duplicate the grid or race the grid-clearing deletes, and the grid setup runs
+  inside the terminal-status `finally` so a failure there can't strand the experiment
+  `running`. The matrix cell cap is surfaced on the overview (`maxCells`) so the builder gates
+  on the SAME limit instead of re-encoding the literal. NOTE: the run-driver still executes the
+  matrix inline in the launch request (bounded by the cell cap + token budget); a durable
+  fan-out (Workflows / pg-boss) for large matrices remains a follow-up.
+
+### Patch Changes
+
+- Updated dependencies [69d2270]
+  - @cat-factory/contracts@0.25.0
+  - @cat-factory/kernel@0.28.0
+  - @cat-factory/integrations@0.20.0
+  - @cat-factory/sandbox@0.8.0
+  - @cat-factory/agents@0.14.7
+  - @cat-factory/prompt-fragments@0.7.22
+  - @cat-factory/spend@0.9.1
+  - @cat-factory/workspaces@0.7.34
+
+## 0.20.0
+
+### Minor Changes
+
+- 3546e3d: Move operator/integration config out of environment variables into encrypted, UI-editable
+  DB settings. DB is now the source of truth — the moved env vars are **removed** (no
+  fallback), so the listed vars below no longer have any effect.
+
+  **Per-workspace budget (Workspace settings → Budget).** A workspace's spend currency,
+  monthly limit, and per-model price overrides now live on the `workspace_settings` row.
+  The spend safeguard resolves each workspace's effective pricing (base table + overrides)
+  behind a short-TTL cache, scoping the budget gate to the workspace's own usage
+  (`SpendService.status`/`isOverBudget` now take a `workspaceId`; new
+  `TokenUsageRepository.totalsSinceForWorkspace`). **Behaviour change:** spend is metered +
+  gated per workspace, not deployment-wide; a workspace with no budget inherits the built-in
+  default (~100 EUR/month). Removes env: `SPEND_MONTHLY_LIMIT`, `SPEND_CURRENCY`,
+  `SPEND_MODEL_PRICES`. A budget of `0` is intentional ("no PAID spend"): metered runs are
+  refused **up front** at start/retry with a clear `409` (not just a silent mid-run pause),
+  while LOCAL-runner models (keyless) and connected SUBSCRIPTIONS (flat-rate quota) keep
+  running since they incur no metered cost — so `0` is the "local-/subscription-only" setting.
+  The over-budget exemption (previously subscription-only) now also covers local-runner steps,
+  inline and container alike. The hot-path per-workspace rollup is indexed
+  (`idx_token_usage_workspace` on `(workspace_id, created_at)`, both runtimes).
+
+  **Per-workspace incident enrichment (service inspector → Post-release health).** PagerDuty
+
+  - incident.io credentials are sealed in a new per-workspace `incident_enrichment_connections`
+    table (one grouped blob) and resolved/decrypted at enrichment time by a new
+    `WorkspaceIncidentEnrichmentProvider`. Removes env: `PAGERDUTY_API_TOKEN`,
+    `PAGERDUTY_FROM_EMAIL`, `INCIDENTIO_API_KEY`. The write API is three-state per provider
+    group (omit ⇒ keep, `null` ⇒ clear, value ⇒ set) so one vendor can be removed without
+    wiping the other.
+
+  **Per-account integration secrets (Account settings → Deployment integrations, admin only).**
+  The Slack app OAuth credentials and the container web-search upstream keys (Brave /
+  SearXNG) now live in a new per-account `account_settings` table (one sealed secrets blob,
+  HKDF tag `cat-factory:account-settings`), behind an admin-gated
+  `GET|PUT /accounts/:id/settings`. Resolved dynamically: Slack OAuth at connect time, the
+  web-search upstream per run (off the container session's account id). The executor now
+  advertises the container `web_search` tool to a run **only when its account actually has
+  keys** (so an agent is never handed a tool that always fails); a run with no upstream gets
+  an empty result set rather than a hard `503`. Removes env:
+  `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_REDIRECT_URL`, `WEB_SEARCH_BRAVE_API_KEY`,
+  `WEB_SEARCH_SEARXNG_URL`, `WEB_SEARCH_SEARXNG_API_KEY` (the env-built upstream + its
+  `createWebSearchUpstreamFromEnv`/`gateways.webSearch` fallback are deleted, not just
+  unwired). (`SLACK_ENABLED` still gates Slack module assembly; the new tables/services
+  assemble whenever `ENCRYPTION_KEY` is set.)
+
+  **Hardening.** Re-sealing a partial settings/credentials write now **refuses** (clear `409`)
+  when the stored blob can't be decrypted (e.g. after an encryption-key change) instead of
+  silently dropping the un-edited secret group on the re-seal.
+
+  New tables mirror across both runtimes (D1 migrations 0012–0014 ⇄ Drizzle schema +
+  generated migration) with cross-runtime conformance assertions for the budget +
+  incident-enrichment round-trips. `ENCRYPTION_KEY`, `AUTH_SESSION_SECRET`, and the GitHub
+  App/OAuth secrets stay in env (bootstrap/auth). Retention windows, inline-web-search
+  toggles, Langfuse keys, and execution timeouts intentionally remain env-configured.
+
+### Patch Changes
+
+- Updated dependencies [3546e3d]
+  - @cat-factory/contracts@0.24.0
+  - @cat-factory/kernel@0.27.0
+  - @cat-factory/spend@0.9.0
+  - @cat-factory/integrations@0.19.0
+  - @cat-factory/agents@0.14.6
+  - @cat-factory/prompt-fragments@0.7.21
+  - @cat-factory/workspaces@0.7.33
+
+## 0.19.2
+
+### Patch Changes
+
+- a62044d: Tag 409 conflicts with a distinct, machine-readable `reason` (kernel `ConflictReason`, surfaced under `error.details`) so the SPA can tell run-control conflicts apart. The "no configured provider" start refusal now shows an actionable toast naming the model(s) with a "Configure AI" jump (same remedy as the no-AI startup banner); the other run/bootstrap conflicts get worded toasts. The toast handling is centralised in the execution/agentRuns stores, so every start/restart/retry/merge surface (including the fire-and-forget board menus) gets it.
+- Updated dependencies [a62044d]
+  - @cat-factory/kernel@0.26.1
+  - @cat-factory/agents@0.14.5
+  - @cat-factory/integrations@0.18.3
+  - @cat-factory/spend@0.8.26
+  - @cat-factory/workspaces@0.7.32
+
 ## 0.19.1
 
 ### Patch Changes

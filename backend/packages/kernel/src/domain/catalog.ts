@@ -13,6 +13,9 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   taskLimitMode: 'off',
   taskLimitShared: null,
   taskLimitPerType: null,
+  spendCurrency: null,
+  spendMonthlyLimit: null,
+  spendModelPrices: null,
 }
 
 /**

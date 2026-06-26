@@ -25,6 +25,12 @@ const provider = ref<ObservabilityProviderKind>('datadog')
 const datadog = reactive({ site: 'datadoghq.com', apiKey: '', appKey: '' })
 const busy = ref(false)
 
+// Incident enrichment (PagerDuty + incident.io) — write-only secrets; blank leaves the
+// stored value unchanged. Paired with observability since it acts on the same regression.
+const pagerDuty = reactive({ apiToken: '', fromEmail: '' })
+const incidentIo = reactive({ apiKey: '' })
+const incidentBusy = ref(false)
+
 function notifyError(title: string, e: unknown) {
   toast.add({
     title,
@@ -41,10 +47,49 @@ watch(open, async (isOpen) => {
     if (store.connection.provider) provider.value = store.connection.provider
     const site = store.connection.summary?.site
     if (site) datadog.site = site
+    await store.loadIncident()
   } catch (e) {
     notifyError('Could not load observability settings', e)
   }
 })
+
+async function saveIncident() {
+  incidentBusy.value = true
+  try {
+    const input: Parameters<typeof store.saveIncident>[0] = {}
+    if (pagerDuty.apiToken.trim() && pagerDuty.fromEmail.trim()) {
+      input.pagerDuty = {
+        apiToken: pagerDuty.apiToken.trim(),
+        fromEmail: pagerDuty.fromEmail.trim(),
+      }
+    }
+    if (incidentIo.apiKey.trim()) input.incidentIo = { apiKey: incidentIo.apiKey.trim() }
+    if (!input.pagerDuty && !input.incidentIo) {
+      toast.add({ title: 'Enter PagerDuty or incident.io credentials', color: 'error' })
+      return
+    }
+    await store.saveIncident(input)
+    pagerDuty.apiToken = ''
+    pagerDuty.fromEmail = ''
+    incidentIo.apiKey = ''
+    toast.add({ title: 'Incident enrichment saved', icon: 'i-lucide-check', color: 'success' })
+  } catch (e) {
+    notifyError('Could not save incident enrichment', e)
+  } finally {
+    incidentBusy.value = false
+  }
+}
+
+async function disconnectIncident() {
+  incidentBusy.value = true
+  try {
+    await store.removeIncident()
+  } catch (e) {
+    notifyError('Could not disconnect incident enrichment', e)
+  } finally {
+    incidentBusy.value = false
+  }
+}
 
 async function saveConnection() {
   busy.value = true
@@ -142,6 +187,53 @@ const connectedLabel = computed(() => {
               @click="disconnect"
             >
               Disconnect
+            </UButton>
+          </div>
+        </section>
+
+        <!-- Incident enrichment (optional): annotate an incident PagerDuty / incident.io
+             already opened from the same monitors/SLOs. -->
+        <section
+          v-if="store.incidentAvailable !== false"
+          class="space-y-3 rounded-lg border border-slate-700 p-3"
+        >
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-semibold">Incident enrichment</h3>
+            <UBadge :color="store.incident.connected ? 'success' : 'neutral'" variant="soft">
+              {{ store.incident.connected ? 'Configured' : 'Not set' }}
+            </UBadge>
+          </div>
+          <p class="text-[11px] text-slate-400">
+            Optional. On a regression, the on-call investigation is posted onto an incident these
+            systems ALREADY opened from the same signals (annotate, never re-alert). Secrets are
+            write-only — blank leaves a stored value unchanged.
+          </p>
+
+          <UFormField label="PagerDuty API token">
+            <UInput v-model="pagerDuty.apiToken" type="password" class="w-full" />
+          </UFormField>
+          <UFormField label="PagerDuty From email">
+            <UInput
+              v-model="pagerDuty.fromEmail"
+              type="email"
+              placeholder="oncall@example.com"
+              class="w-full"
+            />
+          </UFormField>
+          <UFormField label="incident.io API key">
+            <UInput v-model="incidentIo.apiKey" type="password" class="w-full" />
+          </UFormField>
+
+          <div class="flex gap-2">
+            <UButton :loading="incidentBusy" @click="saveIncident">Save</UButton>
+            <UButton
+              v-if="store.incident.connected"
+              color="error"
+              variant="soft"
+              :loading="incidentBusy"
+              @click="disconnectIncident"
+            >
+              Clear
             </UButton>
           </div>
         </section>
