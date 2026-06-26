@@ -464,6 +464,22 @@ export interface GateStepState {
   failingChecks?: GateFailingCheck[] | null
   /** history of the helper-agent attempts this gate dispatched, newest last */
   attemptLog?: GateAttempt[] | null
+  // ---- human-review gate only ----
+  /** approvals the PR had at the last probe (human-review gate) */
+  lastApprovals?: number | null
+  /**
+   * raw branch-protection required count, cached after the first probe (human-review gate).
+   * The displayed "required" count is `max(1, this)` — the gate's effective floor.
+   */
+  requiredApprovingReviewCount?: number | null
+  /** review threads handed to the fixer, pending resolve on its completion (human-review gate) */
+  pendingThreadIds?: string[] | null
+  /** the grace window (minutes) before the fixer addresses a comment batch (human-review gate) */
+  humanReviewGraceMinutes?: number | null
+  /** newest plain PR comment already handed to the fixer (human-review gate) */
+  lastAddressedCommentAt?: number | null
+  /** a human-initiated freeform fix parked on the gate, consumed on the next poll (human-review gate) */
+  pendingFix?: { instructions: string; at: number } | null
 }
 
 /** Live state of a `tester` step's Tester→Fixer loop (mirrors `testerStepStateSchema`). */

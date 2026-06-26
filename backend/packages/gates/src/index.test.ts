@@ -62,13 +62,13 @@ describe('typed provider registry (the gate wiring seam)', () => {
 })
 
 describe('@cat-factory/gates registration', () => {
-  it('registers ci / conflicts / post-release-health through the public registry', () => {
+  it('registers ci / conflicts / post-release-health / human-review through the public registry', () => {
     clearRegisteredGates()
     registerBuiltinGates()
     const kinds = registeredGateFactories()
       .map((g) => g.kind)
       .sort()
-    expect(kinds).toEqual(['ci', 'conflicts', 'post-release-health'])
+    expect(kinds).toEqual(['ci', 'conflicts', 'human-review', 'post-release-health'])
   })
 })
 
@@ -141,7 +141,7 @@ describe('post-release-health gate on-call completion', () => {
       workspaceId: 'ws',
       instance: { id: 'ex', pipelineName: 'Build' } as ExecutionInstance,
       block: { id: 'b', title: 'Login' } as Block,
-      step: { gate: { regressedSignals: [] } } as PipelineStep,
+      step: { gate: { regressedSignals: [] } } as unknown as PipelineStep,
       result,
     })
     expect(raised[0]?.type).toBe('release_regression')

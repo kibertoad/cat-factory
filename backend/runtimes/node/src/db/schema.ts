@@ -988,6 +988,7 @@ export const mergeThresholdPresets = pgTable(
       .default('none'),
     release_watch_window_minutes: integer('release_watch_window_minutes').notNull().default(30),
     release_max_attempts: integer('release_max_attempts').notNull().default(1),
+    human_review_grace_minutes: integer('human_review_grace_minutes').notNull().default(10),
     is_default: integer('is_default').notNull().default(0),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },

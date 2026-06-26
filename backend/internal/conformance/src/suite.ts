@@ -29,7 +29,13 @@ import { clearRegisteredAgentKinds, registerAgentKind } from '@cat-factory/agent
 // dogfood). The suite imports it so the runtime-neutral assertions run with the SAME gates a
 // real deployment ships, and so a test that clears the registry can restore them.
 import { clearGateProviders, registerBuiltinGates } from '@cat-factory/gates'
-import type { CiStatusProvider, GateProbe, RepoFiles } from '@cat-factory/kernel'
+import type {
+  CiStatusProvider,
+  GateProbe,
+  PullRequestReviewProvider,
+  PullRequestReviewSnapshot,
+  RepoFiles,
+} from '@cat-factory/kernel'
 import {
   clearRegisteredGates,
   clearRegisteredStepResolvers,
@@ -1082,6 +1088,112 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         expect(step.state).toBe('done')
         expect(step.gate?.attempts).toBe(1)
         expect(step.gate?.attemptLog?.[0]?.outcome).toBe('completed')
+      })
+    })
+
+    describe('built-in human-review gate (externalized to @cat-factory/gates)', () => {
+      // The `human-review` gate watches the PR for a human code review and loops the `fixer` to
+      // address review threads, advancing once approved with no unresolved threads. Driving it
+      // over a faked PullRequestReviewProvider proves the externalized gate + its wire-handle +
+      // each facade's import behave identically: the gate dispatches the fixer, resolves the
+      // handed thread on the helper's completion, then advances — or a drift fails here.
+      afterEach(() => clearGateProviders())
+
+      const APPROVED_CLEAN: PullRequestReviewSnapshot = {
+        headSha: 'sha',
+        requiredApprovingReviewCount: 1,
+        assignedReviewers: [],
+        approvals: 1,
+        unresolvedThreads: [],
+        comments: [],
+      }
+
+      it('passes through when approved with no unresolved threads', async () => {
+        const app = harness.makeApp(
+          { asyncKinds: ['coder', 'fixer'] },
+          {
+            gateProviders: {
+              prReview: { getReview: async () => APPROVED_CLEAN, resolveThreads: async () => {} },
+            },
+          },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + review',
+          agentKinds: ['coder', 'human-review'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const step = exec.steps.find((s) => s.agentKind === 'human-review')!
+        expect(step.state).toBe('done')
+        expect(step.gate?.attempts ?? 0).toBe(0)
+      })
+
+      it('loops the fixer on an unresolved thread, resolves it, then advances', async () => {
+        // Approved (so dispatch is immediate, no grace/clock dependence) WITH one unresolved
+        // thread → dispatch the fixer; onHelperComplete resolves the thread; the re-probe then
+        // sees it clean and advances.
+        const resolvedThreads: string[] = []
+        let resolved = false
+        // The gate only resolves a fixer round's threads once the fixer actually pushed a commit
+        // (the PR head advanced). Model that: the head is `sha1` on the dispatch probe and
+        // advances to `sha2` afterwards, so onHelperComplete confirms progress and resolves.
+        let reviews = 0
+        const provider: PullRequestReviewProvider = {
+          getReview: async () => {
+            reviews += 1
+            const headSha = reviews >= 2 ? 'sha2' : 'sha'
+            return resolved
+              ? { ...APPROVED_CLEAN, headSha }
+              : {
+                  ...APPROVED_CLEAN,
+                  headSha,
+                  unresolvedThreads: [
+                    {
+                      threadId: 'T1',
+                      author: 'alice',
+                      bodyExcerpt: 'rename this',
+                      path: 'src/a.ts',
+                      line: 1,
+                      isBot: false,
+                      latestCommentAt: 0,
+                    },
+                  ],
+                }
+          },
+          resolveThreads: async (_ws, _b, ids) => {
+            resolvedThreads.push(...ids)
+            resolved = true
+          },
+        }
+        const app = harness.makeApp(
+          {
+            asyncKinds: ['coder', 'fixer'],
+            pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
+          },
+          { gateProviders: { prReview: provider } },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + review',
+          agentKinds: ['coder', 'human-review'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const step = exec.steps.find((s) => s.agentKind === 'human-review')!
+        expect(step.state).toBe('done')
+        expect(step.gate?.attempts).toBe(1)
+        expect(resolvedThreads).toEqual(['T1'])
       })
     })
 

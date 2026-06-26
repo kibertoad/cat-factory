@@ -49,6 +49,27 @@ export const POST_RELEASE_HEALTH_AGENT_KIND = 'post-release-health'
  */
 export const ON_CALL_AGENT_KIND = 'on-call'
 
+/**
+ * The agent kind of the special `human-review` gate step: a polling gate that watches a
+ * task's PR for a HUMAN code review on GitHub. Like `ci`/`conflicts` it is NOT an LLM/
+ * container agent of its own — it polls a {@link PullRequestReviewProvider} (approval +
+ * unresolved review threads) and only escalates to the `fixer` helper on outstanding
+ * feedback. It advances when the PR meets GitHub's required approvals with no unresolved
+ * threads, and otherwise waits indefinitely for the human (re-arming, never auto-failing).
+ * A pass-through when no review provider is wired.
+ */
+export const HUMAN_REVIEW_AGENT_KIND = 'human-review'
+
+/**
+ * The agent kind of the container agent that applies fixes to the PR head branch and pushes
+ * them back (no new PR). It is the helper for both the `tester` loop (fixing a withheld
+ * greenlight) and the `human-review` gate (addressing a reviewer's comments / a human's
+ * freeform instructions). Defined here (alongside the other gate/helper kinds) so the
+ * built-in gate suite (`@cat-factory/gates`) can reference it without importing orchestration;
+ * orchestration's `ci.logic.ts` re-exports it for the engine's existing call sites.
+ */
+export const FIXER_AGENT_KIND = 'fixer'
+
 // --- CI verdict logic -----------------------------------------------------------------
 
 /**

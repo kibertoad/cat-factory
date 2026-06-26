@@ -393,6 +393,28 @@ export function seedPipelines(): Pipeline[] {
       name: 'Build & human-test',
       agentKinds: ['coder', 'reviewer', 'human-test', 'conflicts', 'ci', 'merger'],
     },
+    // A human-code-review build: the full implement → review → map → test tail, then a
+    // `human-review` gate that watches the PR for a human reviewer on GitHub before `merger`
+    // ships it. The gate advances once the PR meets GitHub's required approvals with no
+    // unresolved review threads; otherwise it loops the `fixer` to address the reviewer's
+    // comments (after a grace period when not yet approved) and waits indefinitely for the
+    // human. Opt-in — it requires a real reviewer (and a wired PR-review provider), so it is
+    // NOT folded into the always-on default pipelines; it is a pass-through when unwired.
+    {
+      id: 'pl_pr_review',
+      name: 'Build & PR review',
+      agentKinds: [
+        'coder',
+        'reviewer',
+        'blueprints',
+        'mocker',
+        'tester',
+        'conflicts',
+        'ci',
+        'human-review',
+        'merger',
+      ],
+    },
     // Recurring-pipeline presets. "Dependency updates" is a plain implement →
     // review → merge run; "Tech debt" first runs a read-only `analysis` agent and
     // a special `tracker` step (files a GitHub issue / Jira ticket from the

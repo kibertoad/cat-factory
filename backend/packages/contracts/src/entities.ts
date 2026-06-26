@@ -750,6 +750,56 @@ export const gateStepStateSchema = v.object({
    * Absent for the post-release-health gate (its on-call helper is resolved specially).
    */
   attemptLog: v.optional(v.nullable(v.array(gateAttemptSchema))),
+  // ---- human-review gate only (absent for the CI/conflicts/post-release-health gates) ----
+  /**
+   * The number of approving reviews the PR had at the last probe, so the UI can show
+   * "1 / N approvals". The "required" side is derived from {@link requiredApprovingReviewCount}
+   * via the same `max(1, …)` floor the gate applies (see review.logic.ts) rather than persisted
+   * a second time. Absent for the other gates.
+   */
+  lastApprovals: v.optional(v.nullable(v.number())),
+  /**
+   * The raw branch-protection required-approving-review count, cached after the FIRST probe
+   * resolves it so subsequent polls skip the static protection read (branch protection is repo
+   * config, not PR activity — re-reading it every poll over a multi-day review only burns GitHub
+   * rate budget). The UI's displayed "required" count is `max(1, this)` (the gate's effective
+   * floor). Absent for the other gates.
+   */
+  requiredApprovingReviewCount: v.optional(v.nullable(v.number())),
+  /**
+   * The GraphQL ids of the review threads the gate just handed the `fixer`, stashed at
+   * dispatch so the helper-completion hook can post a reply + RESOLVE exactly those threads
+   * on GitHub before the next probe reads them. Absent for the other gates.
+   */
+  pendingThreadIds: v.optional(v.nullable(v.array(v.string()))),
+  /**
+   * Epoch ms of the newest plain PR comment the gate has already handed the `fixer`. Plain
+   * conversation comments (unlike review threads) can't be "resolved" on GitHub, so they are
+   * tracked by timestamp: a comment newer than this is outstanding; the dispatch advances it to
+   * the batch max. A reviewer's later comment (newer timestamp) re-opens the work. Absent for
+   * the other gates.
+   */
+  lastAddressedCommentAt: v.optional(v.nullable(v.number())),
+  /**
+   * The grace window (minutes) the human-review gate waits after the latest review comment
+   * before dispatching the fixer, resolved from the task's merge preset ONCE on first entry
+   * (alongside `maxAttempts`) so the probe doesn't re-resolve the preset every poll. Absent
+   * for the other gates.
+   */
+  humanReviewGraceMinutes: v.optional(v.nullable(v.number())),
+  /**
+   * A human-initiated freeform fix request parked on the gate (an in-app prompt). Consumed at
+   * the top of the next `evaluateGate` pass, which dispatches the fixer with these instructions
+   * folded in — bypassing the grace window. Absent for the other gates.
+   */
+  pendingFix: v.optional(
+    v.nullable(
+      v.object({
+        instructions: v.string(),
+        at: v.number(),
+      }),
+    ),
+  ),
 })
 export type GateStepState = v.InferOutput<typeof gateStepStateSchema>
 

@@ -2624,6 +2624,7 @@ function rowToMergePreset(row: MergePresetRow): MergeThresholdPreset {
       row.max_requirement_concern_allowed as MergeThresholdPreset['maxRequirementConcernAllowed'],
     releaseWatchWindowMinutes: row.release_watch_window_minutes,
     releaseMaxAttempts: row.release_max_attempts,
+    humanReviewGraceMinutes: row.human_review_grace_minutes,
     isDefault: row.is_default === 1,
     createdAt: row.created_at,
   }
@@ -2688,6 +2689,7 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
       max_requirement_concern_allowed: preset.maxRequirementConcernAllowed,
       release_watch_window_minutes: preset.releaseWatchWindowMinutes,
       release_max_attempts: preset.releaseMaxAttempts,
+      human_review_grace_minutes: preset.humanReviewGraceMinutes,
       is_default: preset.isDefault ? 1 : 0,
       created_at: preset.createdAt,
     }
@@ -2721,6 +2723,7 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
             max_requirement_concern_allowed: values.max_requirement_concern_allowed,
             release_watch_window_minutes: values.release_watch_window_minutes,
             release_max_attempts: values.release_max_attempts,
+            human_review_grace_minutes: values.human_review_grace_minutes,
             is_default: values.is_default,
           },
         })

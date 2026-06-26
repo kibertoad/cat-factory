@@ -184,7 +184,9 @@ import {
   wireMergeabilityProvider,
   wireReleaseHealthProvider,
   wireIncidentEnrichment,
+  wirePullRequestReviewProvider,
 } from '@cat-factory/gates'
+import { GitHubPullRequestReviewProvider } from '@cat-factory/server'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
 import { GitHubBranchUpdater } from './github/GitHubBranchUpdater'
@@ -596,6 +598,9 @@ function selectMergeLifecycleDeps(
     )
     wireMergeabilityProvider(
       new GitHubMergeabilityProvider({ githubClient, resolveRepoTarget, blockRepository }),
+    )
+    wirePullRequestReviewProvider(
+      new GitHubPullRequestReviewProvider({ githubClient, resolveRepoTarget, blockRepository }),
     )
     deps.branchUpdater = new GitHubBranchUpdater({
       githubClient,

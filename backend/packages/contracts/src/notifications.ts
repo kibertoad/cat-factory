@@ -27,6 +27,11 @@ import { onCallAssessmentSchema, releaseSignalSchema } from './release.js'
 //                          regression after deploy and the `on-call` agent investigated;
 //                          a human decides whether to revert the PR or acknowledge. Carries
 //                          the on-call assessment + the regressed signals in its payload.
+//   - `human_review`     — the `human-review` gate is waiting on a human code reviewer on
+//                          the PR (no reviewer assigned, or assigned but not yet approved).
+//                          Informational + a deep-link to the parked task (where the human
+//                          can also request a freeform fix); the gate waits indefinitely and
+//                          the severity sweep escalates the card the longer it waits.
 //   - `decision_required`— an iterative gate parked on a human decision after spending
 //                          its automatic budget (a quality companion at its rework cap,
 //                          or the requirements reviewer at its iteration cap). Without
@@ -54,6 +59,7 @@ export const notificationTypeSchema = v.picklist([
   'release_regression',
   'decision_required',
   'human_test_ready',
+  'human_review',
   'followup_pending',
 ])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>

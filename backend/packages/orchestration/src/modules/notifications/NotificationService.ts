@@ -50,6 +50,12 @@ export class NotificationService {
    * Raise (or refresh) a notification. To avoid stacking identical cards when a
    * run is re-driven, an existing OPEN notification of the same `type` on the same
    * block is replaced in place (its id is reused) rather than duplicated.
+   *
+   * Delivery to the channel only fires on a NEW card or one whose user-visible content
+   * (title/body/severity/status/payload) actually CHANGED. An indefinitely-polling gate
+   * (e.g. `human-review`) re-raises the same card every poll; re-pushing an unchanged card
+   * each time would flicker/re-toast the inbox for the whole wait, so an identical re-raise
+   * is persisted (it keeps `updatedAt` fresh) but NOT re-delivered.
    */
   async raise(workspaceId: string, input: RaiseNotificationInput): Promise<Notification> {
     const existing = input.blockId
@@ -72,8 +78,26 @@ export class NotificationService {
       resolvedAt: null,
     }
     await this.notifications.upsert(workspaceId, notification)
-    await this.deliver(workspaceId, notification)
+    if (!existing || this.contentChanged(existing, notification)) {
+      await this.deliver(workspaceId, notification)
+    }
     return notification
+  }
+
+  /** Whether a re-raised notification's user-visible content differs from the open one. */
+  private contentChanged(prev: Notification, next: Notification): boolean {
+    return (
+      prev.title !== next.title ||
+      prev.body !== next.body ||
+      prev.severity !== next.severity ||
+      prev.status !== next.status ||
+      // The execution the card deep-links to: a block retried under a NEW run can re-raise a
+      // content-identical card (same title/body/payload) pointing at a different executionId.
+      // The client acts/reveals via `executionId`, so a changed one must be re-delivered or the
+      // inbox keeps targeting the stale (terminal) run.
+      prev.executionId !== next.executionId ||
+      JSON.stringify(prev.payload ?? null) !== JSON.stringify(next.payload ?? null)
+    )
   }
 
   /** Resolve a notification (the human acted on it or dismissed it). Idempotent. */

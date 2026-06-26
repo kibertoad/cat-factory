@@ -352,6 +352,18 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     color: '#a3e635',
     description: 'Scores the PR and auto-merges within the task thresholds, or asks for review.',
   },
+  'human-review': {
+    kind: 'human-review',
+    label: 'Human Review Gate',
+    icon: 'i-lucide-users',
+    color: '#c084fc',
+    category: 'gates',
+    description:
+      'Waits for a human code review on the PR, looping the fixer to address comments; advances once approved with no unresolved threads.',
+    // Opens the dedicated gate window (approval progress, the feedback being fixed, and a
+    // freeform "request a fix" box) like the other gates.
+    resultView: 'gate',
+  },
   // The Kaizen agent grades agent steps AFTER a run completes (continuous improvement).
   // It is NOT a pipeline step (never in the palette — no `category`), but it runs an LLM,
   // so it needs display metadata here and a per-workspace model in Model Configuration.

@@ -33,6 +33,14 @@ export interface DriveOptions {
 export interface DriveOutcome {
   /** Set when the run parked awaiting a human decision/approval with this id. */
   parkedDecisionId?: string
+  /**
+   * Set when the drive released an unbounded-wait gate (`pollExhaustion: 'rearm'`, e.g.
+   * `human-review`) after spending one in-process poll budget. The run stays `running`, so the
+   * stale-run sweeper re-enqueues a fresh advance for the next poll cycle — the drive returns
+   * rather than looping in-process so a single durable advance job never outlives its expire
+   * cap (which would let a second worker double-drive the run).
+   */
+  rearmedGate?: boolean
 }
 
 const instantSleep = (): Promise<void> => Promise.resolve()
@@ -142,6 +150,15 @@ export async function driveExecution(
           () => exec.resolveGatePollExhaustion(workspaceId, executionId),
         )
         if (!next) return {}
+        // An unbounded-wait gate (human-review) re-arms by returning `awaiting_gate` from
+        // resolveGatePollExhaustion when its in-process poll budget is spent. RELEASE the drive
+        // here instead of looping in-process: holding one durable advance job open for a
+        // multi-day human review would outlive its expire cap (pg-boss caps it, unrefreshed by
+        // heartbeats) and let a second worker double-drive. The run stays `running`, so the
+        // stale-run sweeper re-enqueues a fresh advance for the next poll cycle — bounding every
+        // advance job to one poll budget. (Cloudflare's ExecutionWorkflow drives with durable
+        // sleeps, not this loop, so it keeps polling in place.)
+        if (next.kind === 'awaiting_gate') return { rearmedGate: true }
         result = next
         continue
       }

@@ -137,9 +137,13 @@ export interface GateDefinition {
    *   - `pass` — for a time-windowed watch gate (post-release-health), running out of
    *     polls just means the watch window outlasted the budget with NO regression seen,
    *     which is a healthy pass — not a timeout failure.
+   *   - `rearm` — for an unbounded human-wait gate (`human-review`): there is no deadline
+   *     for a human reviewer, so running out of polls is NOT a verdict. Always re-arm
+   *     another poll cycle (never pass, never fail); the waiting is surfaced via the gate's
+   *     notification (which the severity sweep escalates), not by killing the run.
    * Resolved by {@link ExecutionService.resolveGatePollExhaustion}.
    */
-  pollExhaustion?: 'pass' | 'fail'
+  pollExhaustion?: 'pass' | 'fail' | 'rearm'
   /**
    * Run the precheck against the provider and classify it. Receives the live gate
    * state so a time-windowed gate (post-release-health) can read its `watchSince`.
@@ -183,6 +187,16 @@ export interface GateDefinition {
    * complete for a human to act out-of-band. Absent → the default re-probe loop.
    */
   resolveHelperCompletion?(args: GateHelperCompletionArgs): Promise<{ output: string }>
+  /**
+   * Optional SIDE-EFFECT hook run when this gate's helper job finishes, BEFORE the default
+   * re-probe — distinct from {@link resolveHelperCompletion} (which replaces the re-probe and
+   * finishes the step). Use it when the helper's deterministic GitHub-side bookkeeping must
+   * land before the next precheck reads it: the `human-review` gate uses it to post a reply and
+   * RESOLVE on GitHub each review thread it handed the `fixer`, so the immediately-following
+   * re-probe sees those threads resolved (advance) vs. still open (keep waiting). The engine
+   * still re-probes after this returns. Absent → straight to the default re-probe.
+   */
+  onHelperComplete?(args: GateHelperCompletionArgs): Promise<void>
 }
 
 /**

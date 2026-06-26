@@ -83,6 +83,7 @@ import {
   GitHubAppRegistry,
   GitHubCiStatusProvider,
   GitHubMergeabilityProvider,
+  GitHubPullRequestReviewProvider,
   GitHubBranchUpdater,
   GitHubPullRequestMerger,
   InAppNotificationChannel,
@@ -109,6 +110,7 @@ import {
   wireMergeabilityProvider,
   wireReleaseHealthProvider,
   wireIncidentEnrichment,
+  wirePullRequestReviewProvider,
 } from '@cat-factory/gates'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
@@ -1224,6 +1226,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     )
     wireMergeabilityProvider(
       new GitHubMergeabilityProvider({
+        githubClient,
+        resolveRepoTarget,
+        blockRepository: repos.blockRepository,
+      }),
+    )
+    wirePullRequestReviewProvider(
+      new GitHubPullRequestReviewProvider({
         githubClient,
         resolveRepoTarget,
         blockRepository: repos.blockRepository,

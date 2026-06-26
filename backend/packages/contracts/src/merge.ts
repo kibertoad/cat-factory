@@ -91,6 +91,13 @@ export const mergeThresholdPresetSchema = v.object({
    * rather than fixing prod, so 1 is the sensible default.
    */
   releaseMaxAttempts: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /**
+   * How long (minutes) the `human-review` gate waits after the latest review comment before
+   * dispatching the `fixer` to address the batch — a grace window so a reviewer leaving a
+   * series of comments isn't churned mid-stream. Only the unapproved path waits; an approved
+   * PR's outstanding comments are addressed immediately.
+   */
+  humanReviewGraceMinutes: v.pipe(v.number(), v.integer(), v.minValue(0)),
   /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
   isDefault: v.boolean(),
   createdAt: v.number(),
@@ -105,6 +112,7 @@ const attemptsSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue
 const iterationsSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(20))
 const releaseWindowSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(720))
 const releaseAttemptsSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(10))
+const graceMinutesSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(1440))
 
 /** Create a new merge threshold preset in a workspace. */
 export const createMergePresetSchema = v.object({
@@ -117,6 +125,7 @@ export const createMergePresetSchema = v.object({
   maxRequirementConcernAllowed: requirementConcernLevelSchema,
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema, 30),
   releaseMaxAttempts: v.optional(releaseAttemptsSchema, 1),
+  humanReviewGraceMinutes: v.optional(graceMinutesSchema, 10),
   /** Make this the workspace default (demotes the previous default). */
   isDefault: v.optional(v.boolean(), false),
 })
@@ -133,6 +142,7 @@ export const updateMergePresetSchema = v.object({
   maxRequirementConcernAllowed: v.optional(requirementConcernLevelSchema),
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema),
   releaseMaxAttempts: v.optional(releaseAttemptsSchema),
+  humanReviewGraceMinutes: v.optional(graceMinutesSchema),
   isDefault: v.optional(v.boolean()),
 })
 export type UpdateMergePresetInput = v.InferOutput<typeof updateMergePresetSchema>

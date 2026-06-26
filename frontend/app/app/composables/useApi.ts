@@ -9,6 +9,7 @@ import { executionApi } from './api/execution'
 import { followUpsApi } from './api/followUps'
 import { fragmentsApi } from './api/fragments'
 import { githubApi } from './api/github'
+import { humanReviewApi } from './api/humanReview'
 import { humanTestApi } from './api/humanTest'
 import { kaizenApi } from './api/kaizen'
 import { localSettingsApi } from './api/localSettings'
@@ -89,6 +90,7 @@ export function useApi() {
     ...reviewsApi(ctx),
     ...followUpsApi(ctx),
     ...humanTestApi(ctx),
+    ...humanReviewApi(ctx),
     ...kaizenApi(ctx),
     ...localSettingsApi(ctx),
     ...specApi(ctx),

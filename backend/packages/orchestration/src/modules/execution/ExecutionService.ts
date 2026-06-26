@@ -70,6 +70,7 @@ import {
   ANALYSIS_AGENT_KIND,
   TESTER_AGENT_KIND,
   HUMAN_TEST_AGENT_KIND,
+  HUMAN_REVIEW_AGENT_KIND,
   BLUEPRINTS_AGENT_KIND,
   SPEC_WRITER_AGENT_KIND,
 } from './ci.logic.js'
@@ -1729,7 +1730,30 @@ export class ExecutionService {
     // `checking`, and re-run the precheck (the helper's push triggers a fresh CI run /
     // updates mergeability). A helper that failed without pushing leaves the precheck
     // negative, so the next check re-dispatches (until the attempt budget is spent).
-    if (this.gateFor(step.agentKind)) {
+    const reprobeGate = this.gateFor(step.agentKind)
+    if (reprobeGate) {
+      // A gate may need deterministic GitHub-side bookkeeping to land BEFORE the re-probe
+      // reads it (the human-review gate replies to + RESOLVES the threads it handed the
+      // fixer, so the next probe counts them addressed). Run that side-effect hook first;
+      // it does NOT replace the re-probe (unlike resolveHelperCompletion).
+      if (reprobeGate.onHelperComplete && step.gate) {
+        const block = await this.blockRepository.get(workspaceId, instance.blockId)
+        if (block) {
+          const jobResult: GateHelperJobResult =
+            update.state === 'done'
+              ? { state: 'done', result: update.result }
+              : { state: 'failed', error: update.error ?? null }
+          await this.runInitiatorScope(instance.initiatedBy, () =>
+            reprobeGate.onHelperComplete!({
+              workspaceId,
+              instance,
+              block,
+              step,
+              result: jobResult,
+            }),
+          )
+        }
+      }
       // Record the just-finished helper attempt before re-probing. The gate's next
       // precheck stays the source of truth for pass/fail, but the helper's own account
       // (what it did, and for the conflict-resolver which files it left conflicting) is
@@ -1902,6 +1926,15 @@ export class ExecutionService {
     }
     const gate = step ? this.gateFor(step.agentKind) : undefined
     const timeoutError = 'Gate precheck did not settle within its polling budget'
+    // An unbounded human-wait gate (human-review, `pollExhaustion: 'rearm'`) has no deadline:
+    // running out of polls is never a verdict. Always re-arm another poll cycle — the waiting
+    // is surfaced via the gate's notification (escalated by the severity sweep), not by killing
+    // the run.
+    if (step && gate && gate.pollExhaustion === 'rearm') {
+      if (step.gate) step.gate.phase = 'checking'
+      await this.executionRepository.upsert(workspaceId, instance)
+      return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
+    }
     if (!step || !gate || gate.pollExhaustion !== 'pass') {
       return { kind: 'job_failed', error: timeoutError, failureKind: 'timeout' }
     }
@@ -2813,7 +2846,30 @@ export class ExecutionService {
         // Stash the watch window once (read on every poll by a time-windowed gate's
         // probe; harmless/unused for the CI/conflicts gates).
         watchWindowMinutes: preset.releaseWatchWindowMinutes,
+        // Stash the human-review grace window once (read by the human-review gate's probe;
+        // harmless/unused for the other gates).
+        humanReviewGraceMinutes: preset.humanReviewGraceMinutes,
       }
+    }
+
+    // A human-initiated fix request (an in-app freeform prompt, or a GitHub-comment
+    // instruction) parked on the gate is dispatched immediately — bypassing the precheck +
+    // grace window. Consume it at-most-once: clear + persist BEFORE the (side-effecting)
+    // dispatch so a retried driver step can't re-dispatch a second fixer. Falls through to
+    // the normal probe when there is no async executor to escalate to.
+    if (step.gate.pendingFix && isAsyncAgentExecutor(this.agentExecutor)) {
+      const fix = step.gate.pendingFix
+      step.gate.pendingFix = null
+      await this.executionRepository.upsert(workspaceId, instance)
+      return this.dispatchGateHelper(
+        workspaceId,
+        instance,
+        step,
+        block,
+        isFinalStep,
+        gate,
+        fix.instructions,
+      )
     }
     // A time-windowed gate (post-release-health) marks when it began watching, on first
     // entry, so its probe knows whether the monitoring window has elapsed. Harmless for
@@ -4014,6 +4070,56 @@ export class ExecutionService {
   }
 
   /**
+   * Dispatch the `fixer` against the human-review gate's PR branch from a human's freeform
+   * instructions — bypassing the precheck + grace window. Parks a `pendingFix` on the gate step,
+   * consumed on the gate's next poll (see {@link evaluateGate}) which dispatches the fixer with
+   * the instructions folded in. A second request before the first is consumed simply replaces the
+   * pending instructions. Throws when no human-review gate is currently parked.
+   *
+   * The run is re-driven via `workRunner.startRun` so the pending fix is picked up promptly even
+   * when the driver had died (e.g. its durable advance job expired/was evicted before the stale-
+   * run sweeper re-drove it) — `startRun` is idempotent for a live run (the exclusive advance
+   * queue no-ops a duplicate send), so this only has an effect when no driver is currently
+   * polling. A spend-paused run is left paused (it resumes through its own path).
+   */
+  async requestHumanReviewFix(
+    workspaceId: string,
+    blockId: string,
+    instructions: string,
+  ): Promise<ExecutionInstance> {
+    const block = await this.blockRepository.get(workspaceId, blockId)
+    if (!block?.executionId) {
+      throw new ConflictError('No human-review gate is currently awaiting input')
+    }
+    const instance = await this.executionRepository.get(workspaceId, block.executionId)
+    const step = instance?.steps[instance.currentStep]
+    if (!instance || !step || step.agentKind !== HUMAN_REVIEW_AGENT_KIND || !step.gate) {
+      throw new ConflictError('No human-review gate is currently awaiting input')
+    }
+    // The fix is consumed by evaluateGate's pendingFix branch, which dispatches the fixer ONLY
+    // when the gate's provider is wired AND there is an async executor to escalate to. Reject up
+    // front when neither holds, instead of silently parking a pendingFix the gate would discard
+    // on its pass-through (an unwired gate advances) — the caller must see the failure, not a 200.
+    const gate = this.gateFor(step.agentKind)
+    if (!gate?.wired() || !isAsyncAgentExecutor(this.agentExecutor)) {
+      throw new ConflictError(
+        'The human-review gate cannot dispatch a fix on this deployment (no review provider or async executor configured)',
+      )
+    }
+    step.gate.pendingFix = { instructions, at: this.clock.now() }
+    // Re-arm a decision-parked run so the re-driven loop polls instead of no-oping; a spend-
+    // paused run stays paused.
+    if (instance.status === 'blocked') instance.status = 'running'
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.emitInstance(workspaceId, instance)
+    // Ensure a driver is active to consume the pending fix (idempotent for a live run).
+    if (instance.status === 'running') {
+      await this.workRunner.startRun(workspaceId, instance.id)
+    }
+    return instance
+  }
+
+  /**
    * Push the run's latest state to subscribed clients, alongside its rolled-up
    * block so the board updates without a refetch. Best-effort: the publisher
    * swallows its own errors, and the persisted run remains the source of truth.
@@ -4284,6 +4390,7 @@ export class ExecutionService {
     maxRequirementConcernAllowed: RequirementConcernLevel
     releaseWatchWindowMinutes: number
     releaseMaxAttempts: number
+    humanReviewGraceMinutes: number
   }> {
     if (this.mergePresetRepository) {
       if (block.mergePresetId) {

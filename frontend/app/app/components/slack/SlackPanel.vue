@@ -45,6 +45,7 @@ const routes = reactive<Record<NotificationType, SlackRoute>>({
   // In-app only (not in ROUTABLE), but the map is exhaustive over the type.
   decision_required: { enabled: false, channel: '' },
   human_test_ready: { enabled: false, channel: '' },
+  human_review: { enabled: false, channel: '' },
   followup_pending: { enabled: false, channel: '' },
 })
 const mentionsEnabled = ref(false)
