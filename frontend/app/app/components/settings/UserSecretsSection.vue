@@ -6,6 +6,7 @@
 // access); the secret is write-only server-side and never shown again.
 import { computed, ref, watch } from 'vue'
 import type { ProviderConfigField, UserSecretKind } from '~/types/userSecrets'
+import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const ui = useUiStore()
 const store = useUserSecretsStore()
@@ -123,6 +124,15 @@ async function remove() {
 
 <template>
   <UModal v-model:open="open" title="My GitHub token" :ui="{ content: 'max-w-xl' }">
+    <template #title>
+      <IntegrationBackTitle
+        title="My GitHub token"
+        @back="
+          open = false
+          ui.openIntegrations()
+        "
+      />
+    </template>
     <template #body>
       <div class="space-y-4">
         <p class="text-xs text-slate-400">
