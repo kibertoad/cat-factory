@@ -12,10 +12,7 @@ function requireProvisioningLogs(c: Context<AppEnv>): ProvisioningLogsModule | n
 }
 
 const unavailable = (c: Context<AppEnv>) =>
-  c.json(
-    { error: { code: 'unavailable', message: 'Provisioning log is not configured' } },
-    503,
-  )
+  c.json({ error: { code: 'unavailable', message: 'Provisioning log is not configured' } }, 503)
 
 /** Drop undefined query params so valibot's optionals don't see empty strings. */
 function presentQuery(c: Context<AppEnv>): Record<string, string> {

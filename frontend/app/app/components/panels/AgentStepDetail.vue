@@ -7,6 +7,7 @@ import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import StepMetadataCard from '~/components/panels/StepMetadataCard.vue'
 import StepTestReport from '~/components/panels/StepTestReport.vue'
 import EnvironmentStatusPanel from '~/components/environments/EnvironmentStatusPanel.vue'
+import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import { useStepTimer } from '~/composables/useStepTimer'
 import { useStepProse } from '~/composables/useStepProse'
 import { useStepApproval } from '~/composables/useStepApproval'
@@ -54,6 +55,12 @@ const testPhase = computed(() => step.value?.test ?? null)
 // The ephemeral environment this step runs against (deployer provisions it; tester/
 // coder consume it), so the panel shows its spinning-up/running/shutdown/errored state.
 const stepEnvironment = computed(() => step.value?.environment ?? null)
+
+// The run's infrastructure attempts (container/runner/env spin-up + tear-down), behind
+// a toggle. This is the surface that makes the per-run `container` log rows + the
+// executionId filter visible — most useful when the run failed to start a container.
+const showProvisioning = ref(false)
+const executionId = computed(() => instance.value?.id ?? null)
 
 // A failed run is no longer executing: a step left mid-flight (state still
 // `working`, no `finishedAt`) must stop looking live — no ticking clock, no
@@ -318,6 +325,27 @@ async function copyOutput() {
               <!-- ephemeral environment lifecycle (spinning up / running / shut down /
                    errored + the exact error), when this step runs against one -->
               <EnvironmentStatusPanel v-if="stepEnvironment" :environment="stepEnvironment" />
+
+              <!-- this run's infrastructure attempts (container/runner/env spin-up +
+                   tear-down): the surface for the per-run container log rows + the exact
+                   provider error, behind a toggle (most useful on a failed-to-start run) -->
+              <div v-if="executionId">
+                <UButton
+                  :icon="showProvisioning ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
+                  variant="ghost"
+                  size="xs"
+                  @click="showProvisioning = !showProvisioning"
+                >
+                  {{
+                    showProvisioning ? 'Hide infrastructure attempts' : 'Infrastructure attempts'
+                  }}
+                </UButton>
+                <ProvisioningLogsDrawer
+                  v-if="showProvisioning"
+                  class="mt-2"
+                  :execution-id="executionId"
+                />
+              </div>
 
               <!-- tester report: what was tested, the per-area outcomes, the concerns
                    it raised and the greenlight verdict; plus the fixer-loop phase -->

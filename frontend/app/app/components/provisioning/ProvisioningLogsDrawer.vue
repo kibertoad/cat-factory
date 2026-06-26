@@ -1,17 +1,28 @@
 <script setup lang="ts">
-// The "View logs" surface for a provisioning subsystem: every attempt to spin up /
-// tear down infrastructure (environment provider, or runner-pool/container), with its
-// outcome and — for failures — the verbatim provider/runtime error. Loaded on mount
-// (and re-loadable) from the unified provisioning event log.
+// The "View logs" surface for the unified provisioning event log: every attempt to
+// spin up / tear down infrastructure (environment provider, runner-pool, or per-run
+// container), with its outcome and — for failures — the verbatim provider/runtime
+// error. Two modes, mutually exclusive: pass `subsystem` for the provider config
+// panels' drawer, or `executionId` for a run's "Infrastructure attempts" drawer (which
+// surfaces that run's container/runner/env attempts). Loaded on mount + re-loadable.
 import { onMounted } from 'vue'
 import type { ProvisioningOperation, ProvisioningSubsystem } from '~/types/provisioningLogs'
 
-const props = defineProps<{ subsystem: ProvisioningSubsystem }>()
+const props = defineProps<{ subsystem?: ProvisioningSubsystem; executionId?: string }>()
 
 const store = useProvisioningLogsStore()
-const state = computed(() => store.bySubsystem[props.subsystem])
+const state = computed(() =>
+  props.executionId
+    ? (store.byExecution[props.executionId] ?? { entries: [], loading: false, error: null })
+    : store.bySubsystem[props.subsystem ?? 'environment'],
+)
 
-onMounted(() => store.load(props.subsystem))
+function reload() {
+  if (props.executionId) void store.loadForExecution(props.executionId)
+  else if (props.subsystem) void store.load(props.subsystem)
+}
+
+onMounted(reload)
 
 const OPERATION_LABEL: Record<ProvisioningOperation, string> = {
   provision: 'Spin up',
@@ -38,7 +49,7 @@ function when(epochMs: number): string {
         variant="ghost"
         size="xs"
         :loading="state.loading"
-        @click="store.load(props.subsystem)"
+        @click="reload"
       >
         Refresh
       </UButton>

@@ -3,28 +3,33 @@ import { reactive } from 'vue'
 import type { ProvisioningLogEntry, ProvisioningSubsystem } from '~/types/provisioningLogs'
 import { useWorkspaceStore } from '~/stores/workspace'
 
-interface SubsystemState {
+interface LogState {
   entries: ProvisioningLogEntry[]
   loading: boolean
   error: string | null
 }
 
-function emptyState(): SubsystemState {
+function emptyState(): LogState {
   return { entries: [], loading: false, error: null }
 }
 
 /**
- * The unified provisioning event log, loaded per subsystem on demand for the "View
- * logs" drawers in the environment-provider and runner-pool config panels. Each
- * drawer shows every spin-up/tear-down attempt with its outcome + the exact error.
+ * The unified provisioning event log, loaded on demand for two surfaces:
+ *   - per SUBSYSTEM, for the "View logs" drawers in the environment-provider and
+ *     self-hosted runner-pool config panels;
+ *   - per EXECUTION (run), for the "Infrastructure attempts" drawer in a run's step
+ *     details — this is the surface that makes the `container` rows (per-run container
+ *     dispatch/release/poll-failure) and the `executionId` filter visible.
+ * Each shows every spin-up/tear-down attempt with its outcome + the exact error.
  */
 export const useProvisioningLogsStore = defineStore('provisioningLogs', () => {
   const api = useApi()
-  const bySubsystem = reactive<Record<ProvisioningSubsystem, SubsystemState>>({
+  const bySubsystem = reactive<Record<ProvisioningSubsystem, LogState>>({
     environment: emptyState(),
     'runner-pool': emptyState(),
     container: emptyState(),
   })
+  const byExecution = reactive<Record<string, LogState>>({})
 
   async function load(subsystem: ProvisioningSubsystem) {
     const ws = useWorkspaceStore()
@@ -42,5 +47,24 @@ export const useProvisioningLogsStore = defineStore('provisioningLogs', () => {
     }
   }
 
-  return { bySubsystem, load }
+  async function loadForExecution(executionId: string) {
+    const ws = useWorkspaceStore()
+    const s = (byExecution[executionId] ??= emptyState())
+    s.loading = true
+    s.error = null
+    try {
+      const { entries } = await api.listProvisioningLogs(ws.requireId(), {
+        executionId,
+        limit: 200,
+      })
+      s.entries = entries
+    } catch (err) {
+      s.error = err instanceof Error ? err.message : 'Failed to load logs'
+      s.entries = []
+    } finally {
+      s.loading = false
+    }
+  }
+
+  return { bySubsystem, byExecution, load, loadForExecution }
 })

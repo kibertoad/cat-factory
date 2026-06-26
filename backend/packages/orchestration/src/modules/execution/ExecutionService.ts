@@ -179,6 +179,14 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
 }
 
 /**
+ * Step kinds whose run details surface the ephemeral-environment lifecycle: the
+ * `deployer` provisions it and the `tester`/`playwright` exercise it. Used to gate
+ * the per-poll env projection so the `getByBlock` read never hits the hot path for
+ * the many container steps that have no env to show (see attachEnvironmentProjection).
+ */
+const ENV_PROJECTION_KINDS = new Set<string>(['deployer', 'tester', 'playwright'])
+
+/**
  * Parse `owner`/`repo` from a GitHub pull-request URL (`https://github.com/o/r/pull/42`).
  * Returns undefined for any URL that doesn't carry both segments. Host-agnostic on
  * purpose (GitHub Enterprise hosts work too); only the `/owner/repo/...` shape matters.
@@ -1783,6 +1791,11 @@ export class ExecutionService {
     step: PipelineStep,
   ): Promise<boolean> {
     if (!this.environmentProvisioning) return false
+    // Only the env-aware kinds run against an ephemeral environment (the `deployer`
+    // provisions it; the `tester`/`playwright` exercise it). Gating here keeps the
+    // per-poll `getByBlock` read off the hot path for the many container steps
+    // (coder/merger/ci-fixer/…) that never have an env to surface.
+    if (!ENV_PROJECTION_KINDS.has(step.agentKind)) return false
     try {
       const handle = await this.environmentProvisioning.getHandleForBlock(workspaceId, blockId)
       const next = handle

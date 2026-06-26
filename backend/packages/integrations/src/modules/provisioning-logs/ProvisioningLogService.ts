@@ -5,6 +5,7 @@ import type {
   ProvisioningLogRecord,
   ProvisioningLogRepository,
 } from '@cat-factory/kernel'
+import { redactSecrets } from './redact.js'
 
 // The provisioning event log has two seams:
 //   - ProvisioningLogRecorder (WRITE) — the single, best-effort entry point every
@@ -44,6 +45,12 @@ export class ProvisioningLogRecorder {
     try {
       await this.deps.repository.append({
         ...event,
+        // Scrub credentials from the verbatim provider error + structured detail before
+        // they are persisted/served — these strings routinely carry tokens, auth
+        // headers, or credentialed URLs (see redact.ts). The choke point is here so
+        // every emitting site (env, runner, container) is covered identically.
+        error: redactSecrets(event.error),
+        detail: redactSecrets(event.detail),
         id: this.deps.idGenerator.next('plog'),
         createdAt: this.deps.clock.now(),
       })
@@ -62,7 +69,10 @@ export class ProvisioningLogService {
   constructor(private readonly deps: ProvisioningLogServiceDependencies) {}
 
   /** Rows for a workspace matching the query, newest first (limit clamped). */
-  async list(workspaceId: string, query: ProvisioningLogQuery = {}): Promise<ProvisioningLogRecord[]> {
+  async list(
+    workspaceId: string,
+    query: ProvisioningLogQuery = {},
+  ): Promise<ProvisioningLogRecord[]> {
     const limit = Math.min(query.limit ?? PROVISIONING_LOG_MAX_LIMIT, PROVISIONING_LOG_MAX_LIMIT)
     return this.deps.repository.list(workspaceId, { ...query, limit })
   }

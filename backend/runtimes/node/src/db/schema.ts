@@ -516,8 +516,10 @@ export const llmCallMetrics = pgTable(
 // rather than `public`, isolating its high write churn from the main tables (the
 // Cloudflare analogue is a separate D1 binding). One row per spin-up/down attempt
 // across the environment + runner-pool/container subsystems; pruned to a retention
-// window. `CREATE SCHEMA "provisioning"` is emitted ahead of the table by the
-// generated migration and bootstrapped idempotently by migrate() on boot.
+// window. `CREATE SCHEMA IF NOT EXISTS "provisioning"` is emitted ahead of the table by
+// the generated migration (mirrors the `sandbox` schema) and bootstrapped idempotently
+// by migrate() on boot — the DB role needs CREATE on the database, same as the app
+// already requires to create its `public` tables.
 export const provisioning = pgSchema('provisioning')
 export const provisioningLog = provisioning.table(
   'provisioning_log',

@@ -484,6 +484,9 @@ function withProvisioningLog(
   subsystem: ProvisioningSubsystem,
 ): ResolveRunnerTransport | null {
   if (!resolve) return null
+  // Closure-owned so it survives each (per-resolution) wrapper: a terminal `failed`
+  // job re-polled by a replay/re-drive logs its poll-failure only once.
+  const loggedPollFailures = new Set<string>()
   return async (workspaceId) => {
     const inner = await resolve(workspaceId)
     return new LoggingRunnerTransport({
@@ -491,6 +494,7 @@ function withProvisioningLog(
       recorder,
       workspaceId: workspaceId ?? '',
       subsystem,
+      loggedPollFailures,
     })
   }
 }

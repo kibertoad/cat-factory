@@ -420,6 +420,8 @@ function buildResolveTransport(
   // Wrap a resolved transport so every dispatch/release/poll-failure appends a
   // provisioning-log event tagged with the right subsystem (a self-hosted pool vs a
   // per-run Cloudflare container). No-op when the separate log store isn't wired.
+  // The dedup set is closure-owned so it outlives each (per-resolution) wrapper.
+  const loggedPollFailures = new Set<string>()
   const log = (
     inner: RunnerTransport,
     subsystem: ProvisioningSubsystem,
@@ -433,6 +435,7 @@ function buildResolveTransport(
           workspaceId: workspaceId ?? '',
           subsystem,
           providerId,
+          loggedPollFailures,
         })
       : inner
 

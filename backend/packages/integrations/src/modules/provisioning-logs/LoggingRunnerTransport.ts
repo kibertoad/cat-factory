@@ -27,6 +27,14 @@ export interface LoggingRunnerTransportOptions {
   subsystem: ProvisioningSubsystem
   /** The pool's manifest provider id, when the wrapped transport is a runner pool. */
   providerId?: string | null
+  /**
+   * Shared set of job ids whose `poll-failure` has already been logged, so a job
+   * that is re-polled in its terminal `failed` state (a Workflows replay / sweeper
+   * re-drive) records ONE row, not one per poll. Owned by the per-facade transport
+   * factory closure so it survives this (stateless, per-resolution) wrapper being
+   * rebuilt. Absent ⇒ no dedup (every failed poll logs).
+   */
+  loggedPollFailures?: Set<string>
 }
 
 export class LoggingRunnerTransport implements RunnerTransport {
@@ -53,7 +61,13 @@ export class LoggingRunnerTransport implements RunnerTransport {
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
     const view = await this.opts.inner.poll(ref)
     if (view.state === 'failed') {
-      await this.log('poll-failure', ref, 'failure', view.error ?? null, null)
+      // De-dupe: a terminal `failed` job re-polled by a replay/re-drive must log its
+      // poll-failure only once (see loggedPollFailures).
+      const seen = this.opts.loggedPollFailures
+      if (!seen || !seen.has(ref.jobId)) {
+        seen?.add(ref.jobId)
+        await this.log('poll-failure', ref, 'failure', view.error ?? null, null)
+      }
     }
     return view
   }

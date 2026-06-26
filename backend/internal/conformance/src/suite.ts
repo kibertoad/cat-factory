@@ -3033,6 +3033,39 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(companionStep.state).not.toBe('done')
       })
 
+      it('classifies a container-start (dispatch) failure as `dispatch`, not a generic run failure', async () => {
+        // When the container/runner never accepts the job (startJob throws), the engine
+        // must classify it as a `dispatch` failure ("Container failed to start") and carry
+        // the verbatim provider error as the detail — identically on both runtimes — rather
+        // than a generic "Run failed" with a misleading "inspect the container logs" hint.
+        const app = harness.makeApp({
+          asyncKinds: ['coder'],
+          dispatchThrowKinds: ['coder'],
+          dispatchThrowMessage: 'Container dispatch failed (HTTP 503): no capacity',
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build only',
+          agentKinds: ['coder'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('failed')
+        expect(exec.failure?.kind).toBe('dispatch')
+        // The verbatim provider/runtime response is preserved as the detail for triage.
+        expect(exec.failure?.detail).toContain('HTTP 503')
+        // The step did not falsely complete; the cold-boot flag was cleared.
+        const coderStep = exec.steps.find((s) => s.agentKind === 'coder')!
+        expect(coderStep.state).not.toBe('done')
+        expect(coderStep.startingContainer ?? false).toBe(false)
+      })
+
       it('routes a merger PR to human review when the assessment is unexplained (empty rationale)', async () => {
         // Engine guard: auto-merge only on a CREDIBLE within-threshold assessment. Scores
         // within every ceiling but an EMPTY rationale (the shape a merger that failed to

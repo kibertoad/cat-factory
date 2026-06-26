@@ -162,6 +162,7 @@ export {
   LoggingRunnerTransport,
   type LoggingRunnerTransportOptions,
 } from './modules/provisioning-logs/LoggingRunnerTransport.js'
+export { redactSecrets } from './modules/provisioning-logs/redact.js'
 
 // Slack: an additional delivery transport for the existing notification mechanism
 // (the `SlackNotificationChannel` implements the same `NotificationChannel` port),

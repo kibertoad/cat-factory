@@ -24,8 +24,13 @@ export interface RetentionPolicy {
   rateLimitMs: number
   commitMs: number
   llmCallMetricsMs: number
-  /** High-churn provisioning event log (separate D1 db). Optional — absent ⇒ no prune. */
-  provisioningLogMs?: number
+  /**
+   * High-churn provisioning event log (separate D1 db). Always set by the config loader
+   * (mirrors Node + the shared {@link RetentionConfig}); the prune is still skipped when
+   * the `provisioningLogRepository` is absent (no PROVISIONING_DB binding) or the window
+   * is non-positive.
+   */
+  provisioningLogMs: number
 }
 
 export interface RetentionDeps {
@@ -91,11 +96,10 @@ export async function sweepRetention({
           pipelineScheduleRepository.pruneRunsBefore(c),
         )
       : 0,
-    provisioningLog:
-      provisioningLogRepository && policy.provisioningLogMs != null
-        ? await prune(policy.provisioningLogMs, now, (c) =>
-            provisioningLogRepository.deleteOlderThan(c),
-          )
-        : 0,
+    provisioningLog: provisioningLogRepository
+      ? await prune(policy.provisioningLogMs, now, (c) =>
+          provisioningLogRepository.deleteOlderThan(c),
+        )
+      : 0,
   }
 }
