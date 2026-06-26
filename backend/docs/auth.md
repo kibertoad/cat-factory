@@ -101,13 +101,13 @@ Optional vars:
 GitHub is not the only sign-in. Two more providers activate when configured, each
 sharing the same `AUTH_SESSION_SECRET`:
 
-| Var                          | Purpose                                                            | Default                |
-| ---------------------------- | ----------------------------------------------------------------- | ---------------------- |
-| `GOOGLE_OAUTH_CLIENT_ID`     | Enables "Login with Google" (with the secret below)               | unset (Google off)     |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth client secret                                        | unset                  |
-| `GOOGLE_OAUTH_REDIRECT_URL`  | Override `redirect_uri` for Google                                | `<origin>/auth/google/callback` |
-| `AUTH_PASSWORD_ENABLED`      | `true` enables email/password signup + login                      | unset (password off)   |
-| `AUTH_ALLOWED_EMAIL_DOMAINS` | Comma-separated email domains allowed to self-signup (Google/password) | none (invite-only) |
+| Var                          | Purpose                                                                | Default                         |
+| ---------------------------- | ---------------------------------------------------------------------- | ------------------------------- |
+| `GOOGLE_OAUTH_CLIENT_ID`     | Enables "Login with Google" (with the secret below)                    | unset (Google off)              |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth client secret                                             | unset                           |
+| `GOOGLE_OAUTH_REDIRECT_URL`  | Override `redirect_uri` for Google                                     | `<origin>/auth/google/callback` |
+| `AUTH_PASSWORD_ENABLED`      | `true` enables email/password signup + login                           | unset (password off)            |
+| `AUTH_ALLOWED_EMAIL_DOMAINS` | Comma-separated email domains allowed to self-signup (Google/password) | none (invite-only)              |
 
 `/auth/config` reports which providers are live (`providers.github` /
 `providers.password` / `providers.google`) so the SPA shows only the controls it
@@ -126,11 +126,11 @@ allowlist governs Google and password self-signup only. There is no single setti
 that applies to all three providers at once, and the criteria do not combine across
 methods (no "must be in org X _and_ have a @company.com email" mode).
 
-| Login method   | Gated on…                                          | By                                                | When                |
-| -------------- | -------------------------------------------------- | ------------------------------------------------- | ------------------- |
-| GitHub OAuth   | `AUTH_ALLOWED_LOGINS` OR `AUTH_ALLOWED_ORGS`       | GitHub login or org membership                    | every sign-in       |
-| Google OAuth   | `AUTH_ALLOWED_EMAIL_DOMAINS`                       | the verified email's domain                       | new-user signup only |
-| Email/password | `AUTH_ALLOWED_EMAIL_DOMAINS`                       | the email's domain                                | new-user signup only |
+| Login method   | Gated on…                                    | By                             | When                 |
+| -------------- | -------------------------------------------- | ------------------------------ | -------------------- |
+| GitHub OAuth   | `AUTH_ALLOWED_LOGINS` OR `AUTH_ALLOWED_ORGS` | GitHub login or org membership | every sign-in        |
+| Google OAuth   | `AUTH_ALLOWED_EMAIL_DOMAINS`                 | the verified email's domain    | new-user signup only |
+| Email/password | `AUTH_ALLOWED_EMAIL_DOMAINS`                 | the email's domain             | new-user signup only |
 
 A matching **invitation** (see below) admits a user under any method, bypassing
 that method's allowlist. Anyone who matches neither an allowlist nor an invite

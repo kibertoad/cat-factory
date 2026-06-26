@@ -93,7 +93,9 @@ describe('buildNodeResolveTransport native runner-adapter seam', () => {
   })
 
   it('throws the clean "register a pool" error when the workspace has none', async () => {
-    const emptyRepo = { getByWorkspace: () => Promise.resolve(null) } as unknown as typeof connectionRepo
+    const emptyRepo = {
+      getByWorkspace: () => Promise.resolve(null),
+    } as unknown as typeof connectionRepo
     const resolve = buildNodeResolveTransport(config, emptyRepo, workspaceRepo, clock)
     await expect(resolve!('ws-1')).rejects.toThrow(/No runner backend available/)
   })
