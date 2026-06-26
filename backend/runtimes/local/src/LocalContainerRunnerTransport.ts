@@ -489,13 +489,17 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   }
 
   /**
-   * Pre-warm idle members up to `poolMinWarm`. The missing members are started
-   * CONCURRENTLY — starting them one at a time would stack each container's full
-   * boot+health latency, delaying pool readiness by ~deficit×. Best-effort: a member that
-   * fails to start is skipped (the pool then fills the rest on demand).
+   * Pre-warm IDLE members up to `poolMinWarm`. The deficit counts only currently-idle
+   * members (plus in-flight starts), NOT leased ones: counting leased members would
+   * under-warm the idle floor whenever this runs while runs are in flight (e.g. a live
+   * `applySettings`/`reconcilePool` mid-run), leaving the next runs to cold-start. The
+   * missing members are started CONCURRENTLY — one at a time would stack each container's
+   * full boot+health latency, delaying pool readiness by ~deficit×. Best-effort: a member
+   * that fails to start is skipped (the pool then fills the rest on demand).
    */
   private async prewarmPool(): Promise<void> {
-    const deficit = this.poolMinWarm - this.members.length
+    const idle = this.members.filter((m) => !m.leasedTo).length
+    const deficit = this.poolMinWarm - idle - this.pendingStarts
     if (deficit <= 0) return
     await Promise.all(
       Array.from({ length: deficit }, async () => {

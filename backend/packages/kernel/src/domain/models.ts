@@ -585,6 +585,27 @@ export function isIndividualVendor(vendor: SubscriptionVendor): boolean {
   return SUBSCRIPTION_VENDORS[vendor].individualOnly === true
 }
 
+/**
+ * Whether NATIVE local execution serves `vendor` with the developer's own ambient CLI login
+ * (no leased credential, no personal-credential gate) given the configured allow-list of
+ * harnesses (`AppConfig.nativeAmbientAuth`). True ONLY for a native vendor — one whose CLI
+ * harness is in the allow-list AND that has no Anthropic-compatible `baseUrl` of its own
+ * (`claude` / `codex`). A non-native vendor that merely REUSES the `claude-code` harness
+ * (GLM/Kimi/DeepSeek carries its own `baseUrl`) is leased normally, so it is NOT ambient —
+ * otherwise ambient auth would silently drop that base URL and run the step on the
+ * developer's own Anthropic login instead of the pinned vendor. Single source of truth
+ * shared by the personal-credential gate and the container executor so the two halves of
+ * the ambient decision can't drift.
+ */
+export function isAmbientNativeVendor(
+  allow: readonly HarnessKind[] | undefined,
+  vendor: SubscriptionVendor,
+): boolean {
+  if (!allow || allow.length === 0) return false
+  const cfg = SUBSCRIPTION_VENDORS[vendor]
+  return allow.includes(cfg.harness) && !cfg.baseUrl
+}
+
 /** Every vendor flagged individual-usage only — the single source of truth for the
  *  per-user personal-subscription flow (e.g. activation refresh) so it never drifts
  *  from {@link SUBSCRIPTION_VENDORS}. */

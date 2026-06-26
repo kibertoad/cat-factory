@@ -57,6 +57,7 @@ import {
   type TaskSourceProvider,
   CompositeNotificationChannel,
   SUBSCRIPTION_VENDORS,
+  isAmbientNativeVendor,
 } from '@cat-factory/kernel'
 import {
   AgentContextObservabilityService,
@@ -637,11 +638,13 @@ function buildNodeContainerExecutor(
     // Anthropic login instead of the pinned vendor.
     ...(config.nativeAmbientAuth && config.nativeAmbientAuth.length > 0
       ? {
+          // The allow-list + no-`baseUrl` check is the shared `isAmbientNativeVendor`
+          // predicate (so this can't drift from the personal-credential gate); the extra
+          // `harness === h` guard ensures the RESOLVED harness matches the vendor's own.
           nativeAmbientAuth: (h, vendor) =>
-            config.nativeAmbientAuth!.includes(h) &&
             vendor !== undefined &&
             SUBSCRIPTION_VENDORS[vendor].harness === h &&
-            !SUBSCRIPTION_VENDORS[vendor].baseUrl,
+            isAmbientNativeVendor(config.nativeAmbientAuth, vendor),
         }
       : {}),
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,

@@ -1,6 +1,7 @@
 import {
+  ALL_SUBSCRIPTION_VENDORS,
   CredentialRequiredError,
-  SUBSCRIPTION_VENDORS,
+  isAmbientNativeVendor,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
 import { PERSONAL_PASSWORD_HEADER } from '@cat-factory/contracts'
@@ -141,21 +142,14 @@ function gate(
 
 /**
  * The individual-usage vendors that NATIVE local execution serves with the developer's
- * own ambient CLI login — a native vendor (no Anthropic-compatible base URL of its own:
- * `claude` / `codex`) whose harness is in the configured allow-list. These need no managed
- * credential, so they are dropped from the gate's vendor set. A non-native vendor that
- * merely REUSES the `claude-code` harness (GLM/Kimi/DeepSeek) is NOT here — it still leases
- * normally, so it must still gate (matching `ContainerAgentExecutor`'s ambient decision).
+ * own ambient CLI login — these need no managed credential, so they are dropped from the
+ * gate's vendor set. Decided by the shared {@link isAmbientNativeVendor} predicate so the
+ * gate can never drift from `ContainerAgentExecutor`'s ambient decision (a non-native
+ * vendor reusing the `claude-code` harness still leases and so must still gate).
  */
 function ambientVendors(container: ServerContainer): Set<SubscriptionVendor> {
   const allow = container.config.nativeAmbientAuth
-  if (!allow || allow.length === 0) return new Set()
-  return new Set(
-    (Object.keys(SUBSCRIPTION_VENDORS) as SubscriptionVendor[]).filter((v) => {
-      const cfg = SUBSCRIPTION_VENDORS[v]
-      return allow.includes(cfg.harness) && !cfg.baseUrl
-    }),
-  )
+  return new Set(ALL_SUBSCRIPTION_VENDORS.filter((v) => isAmbientNativeVendor(allow, v)))
 }
 
 /** Gate for STARTING a run on a block with a given pipeline. */
