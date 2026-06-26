@@ -1,5 +1,32 @@
 # @cat-factory/orchestration
 
+## 0.21.1
+
+### Patch Changes
+
+- ed3a673: Requesting Requirement-Writer recommendations is now asynchronous, like every other
+  requirements-review operation. The request returns at once with `pending` placeholder
+  recommendations and the user is handed back to the board; the Writer runs per finding in
+  the durable driver (signalled through the parked requirements gate, mirroring the
+  incorporate flow), filling each placeholder (`pending` → `ready`) with live progress and
+  raising a notification when the batch is ready. The review window shows "N / M ready" plus
+  per-finding "generating…" placeholders, and the board's "Recommending…" badge is now driven
+  by server state (a `pending` recommendation), so it survives closing the window. A finding's
+  typed answers are flushed before the request and preserved across the async cycle, so the
+  user's explicit answers are still there when they return to confirm recommendations.
+  Re-requesting a single recommendation rides the same async path; rejecting one now reopens
+  its source finding so it can be answered manually. No schema migration (recommendation
+  status lives in the existing JSON column) and no prompt/image change.
+- Updated dependencies [ed3a673]
+  - @cat-factory/contracts@0.25.1
+  - @cat-factory/agents@0.14.8
+  - @cat-factory/integrations@0.20.1
+  - @cat-factory/kernel@0.28.1
+  - @cat-factory/prompt-fragments@0.7.23
+  - @cat-factory/sandbox@0.8.1
+  - @cat-factory/spend@0.9.2
+  - @cat-factory/workspaces@0.7.35
+
 ## 0.21.0
 
 ### Minor Changes
