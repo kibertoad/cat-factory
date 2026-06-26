@@ -2,8 +2,12 @@ import type { Ref } from 'vue'
 import { onMounted, onBeforeUnmount } from 'vue'
 import { useRafFn } from '@vueuse/core'
 import { lodAtLeast } from '~/composables/useSemanticZoom'
-
-type Rect = { left: number; right: number; top: number; bottom: number }
+import {
+  centreOwnership,
+  compareOwnership,
+  type Ownership,
+  type Rect,
+} from '~/utils/taskExpansionRanking'
 
 function intersects(a: Rect, b: Rect) {
   return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
@@ -21,9 +25,10 @@ function sameSet(a: Set<string>, b: Set<string>) {
  * frame against live DOM rects so they follow pan / zoom / drag / resize:
  *
  *  - visibility: a task expands only while its card overlaps the board viewport.
- *  - overlap: walking the visible candidates nearest-to-screen-centre first, a task
- *    expands only if its footprint doesn't collide with one already granted, so the
- *    centre-most task wins an overlap and the rest stay compact.
+ *  - overlap: walking the visible candidates centre-owner-first (the card whose band
+ *    holds the screen centre, then nearest), a task expands only if its footprint
+ *    doesn't collide with one already granted, so the card you're looking at wins an
+ *    overlap and the rest stay compact.
  *
  * Writes the permitted id set into the `taskExpansion` store; `TaskPipelineMini` reads it.
  * Only tasks with a running pipeline (steps to show) are candidates — a task that
@@ -60,7 +65,7 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>) {
     const cx = view.left + view.width / 2
     const cy = view.top + view.height / 2
 
-    const candidates: { id: string; rect: Rect; dist: number }[] = []
+    const candidates: ({ id: string; rect: Rect } & Ownership)[] = []
     const liveIds = new Set<string>()
     for (const t of board.allTasks) {
       // Only tasks whose run actually has steps would expand a pipeline list.
@@ -82,21 +87,15 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>) {
         top: rect.top,
         bottom: rect.top + height,
       }
-      // Rank by the screen centre's distance to the card's projected footprint — 0
-      // whenever the centre sits over the card. So a tall card the viewport is parked
-      // inside wins over a shorter neighbour whose top edge merely happens to be nearer
-      // the centre line (the old top-centre anchor penalised a card you'd scrolled into
-      // once its top scrolled above the viewport). The footprint is the stable expanded
-      // extent — its top doesn't move and its bottom uses the cached expanded height —
-      // so the ranking can't oscillate as cards expand / collapse.
-      const ddx = Math.max(footprint.left - cx, 0, cx - footprint.right)
-      const ddy = Math.max(footprint.top - cy, 0, cy - footprint.bottom)
-      const dist = ddx * ddx + ddy * ddy
-      candidates.push({ id: t.id, rect: footprint, dist })
+      // Rank by which card "owns" the screen centre (centreOwnership): the card whose
+      // band the centre sits in wins, so a stacked neighbour bleeding down from above
+      // can't steal the grant just by being earlier in document order, and a card you've
+      // scrolled into keeps it. See utils/taskExpansionRanking.ts.
+      candidates.push({ id: t.id, rect: footprint, ...centreOwnership(footprint, cx, cy) })
     }
     // Drop cached heights for cards that are gone, so the map can't grow unbounded.
     for (const id of expandedHeight.keys()) if (!liveIds.has(id)) expandedHeight.delete(id)
-    candidates.sort((a, b) => a.dist - b.dist)
+    candidates.sort(compareOwnership)
 
     // Greedy by distance to centre: a candidate is granted only if its projected
     // footprint clears every footprint already granted, so the centre-most card

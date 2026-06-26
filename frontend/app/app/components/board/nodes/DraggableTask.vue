@@ -22,7 +22,7 @@ function onHandle(e: PointerEvent) {
     <!-- in-flight task → draggable work card (merged tasks render nothing) -->
     <div
       v-if="!merged"
-      class="absolute w-[180px]"
+      class="absolute w-[210px]"
       :style="{
         left: task.position.x + 'px',
         top: task.position.y + 'px',

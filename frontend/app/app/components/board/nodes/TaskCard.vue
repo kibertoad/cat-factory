@@ -183,15 +183,24 @@ function selectTask() {
     @click.stop="selectTask"
   >
     <!-- header row -->
-    <div class="flex items-center gap-1.5">
-      <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: statusMeta.color }" />
+    <div class="flex items-start gap-1.5">
+      <span
+        class="mt-1 h-2 w-2 shrink-0 rounded-full"
+        :style="{ backgroundColor: statusMeta.color }"
+      />
       <UIcon
         v-if="schedule"
         name="i-lucide-repeat"
-        class="h-3 w-3 shrink-0 text-indigo-400"
+        class="mt-0.5 h-3 w-3 shrink-0 text-indigo-400"
         :title="schedule.enabled ? 'Recurring pipeline' : 'Recurring pipeline (paused)'"
       />
-      <span class="truncate text-[11px] font-semibold text-slate-100">{{ task.title }}</span>
+      <!-- Long titles wrap to two lines rather than truncating to an unreadable stub;
+           the full text stays available on hover. -->
+      <span
+        class="line-clamp-2 min-w-0 flex-1 break-words text-[11px] font-semibold leading-snug text-slate-100"
+        :title="task.title"
+        >{{ task.title }}</span
+      >
       <!-- drag-to-connect handle: drag onto another task to make it depend on this one -->
       <button
         type="button"
