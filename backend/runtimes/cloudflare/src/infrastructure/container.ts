@@ -81,6 +81,7 @@ import { type AppConfig, loadConfig } from './config'
 import { loadLangfuseConfig } from './config/langfuse'
 import { loadObservabilityConfig } from './config/observability'
 import type { Env } from './env'
+import { requireTelemetryDb } from './env'
 import { baseUrlFor } from './ai/providerEndpoints'
 import { resolveExtraRegistries } from './ai/registries'
 import { DoRealtimeGateway } from './gateways/DoRealtimeGateway'
@@ -1562,13 +1563,7 @@ export function buildContainer(
   // Telemetry (llm_call_metrics + agent_context_snapshots) lives in its own D1 database
   // — append-heavy/high-volume/short-retention, unlike the transactional domain. The
   // binding is required: fail fast here rather than NPE deep in a repo on first write.
-  const telemetryDb = env.TELEMETRY_DB
-  if (!telemetryDb) {
-    throw new Error(
-      'TELEMETRY_DB binding is required (the dedicated telemetry D1 database). ' +
-        'Add a [[d1_databases]] entry with binding = "TELEMETRY_DB" to wrangler.toml.',
-    )
-  }
+  const telemetryDb = requireTelemetryDb(env)
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
 
