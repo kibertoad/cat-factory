@@ -2989,22 +2989,39 @@ export class ExecutionService {
     })
   }
 
-  /** The run's Coder step carrying live follow-up state (there is at most one), with its index. */
-  private followUpStep(
+  /**
+   * The run's "active" follow-up companion step for a read with no item context (the GET /
+   * the inbox-card open). A pipeline may carry MORE THAN ONE follow-up-enabled Coder step,
+   * so this must not blindly pick the first: prefer the step the run is currently on (a Coder
+   * parked on its follow-up gate), else the latest enabled step that has surfaced items, else
+   * the first enabled one.
+   */
+  private activeFollowUpStep(
     instance: ExecutionInstance,
   ): { step: PipelineStep; index: number } | undefined {
+    const current = instance.steps[instance.currentStep]
+    if (current?.followUps?.enabled) return { step: current, index: instance.currentStep }
+    for (let i = instance.steps.length - 1; i >= 0; i--) {
+      const s = instance.steps[i]!
+      if (s.followUps?.enabled && s.followUps.items.length > 0) return { step: s, index: i }
+    }
     const index = instance.steps.findIndex((s) => s.followUps?.enabled)
     return index >= 0 ? { step: instance.steps[index]!, index } : undefined
   }
 
-  /** Read a run's live follow-up companion state (the Coder step's items), or null. */
+  /** Read a run's live follow-up companion state (the active Coder step's items), or null. */
   async getFollowUps(workspaceId: string, executionId: string): Promise<FollowUpsStepState | null> {
     const instance = await this.executionRepository.get(workspaceId, executionId)
     if (!instance) throw new NotFoundError('Execution', executionId)
-    return this.followUpStep(instance)?.step.followUps ?? null
+    return this.activeFollowUpStep(instance)?.step.followUps ?? null
   }
 
-  /** Locate the run + the Coder step + the addressed item, throwing 404 when absent. */
+  /**
+   * Locate the run + the Coder step that OWNS the addressed item + the item, throwing 404
+   * when absent. Routes by item id (not "the first enabled step") so a pipeline carrying more
+   * than one follow-up-enabled Coder step decides each item on the step that surfaced it —
+   * otherwise a later Coder's items 404 and its gate can never be cleared.
+   */
   private async loadFollowUpItem(
     workspaceId: string,
     executionId: string,
@@ -3017,11 +3034,13 @@ export class ExecutionService {
   }> {
     const instance = await this.executionRepository.get(workspaceId, executionId)
     if (!instance) throw new NotFoundError('Execution', executionId)
-    const found = this.followUpStep(instance)
-    if (!found) throw new NotFoundError('Follow-up companion', executionId)
-    const item = found.step.followUps!.items.find((i) => i.id === itemId)
-    if (!item) throw new NotFoundError('Follow-up item', itemId)
-    return { instance, step: found.step, index: found.index, item }
+    const index = instance.steps.findIndex(
+      (s) => s.followUps?.enabled && s.followUps.items.some((i) => i.id === itemId),
+    )
+    if (index < 0) throw new NotFoundError('Follow-up item', itemId)
+    const step = instance.steps[index]!
+    const item = step.followUps!.items.find((i) => i.id === itemId)!
+    return { instance, step, index, item }
   }
 
   /** File a `follow_up` item as a tracker issue (GitHub / Jira), recording the ticket ref. */
@@ -3159,6 +3178,22 @@ export class ExecutionService {
       await this.updateBlockProgress(workspaceId, instance, 'in_progress')
       await this.executionRepository.upsert(workspaceId, instance)
       await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, 'approved')
+      await this.emitInstance(workspaceId, instance)
+      return
+    }
+    // The follow-up gate is settled and we won't loop. If this step ALSO carries a human
+    // approval gate, hand off to it now instead of advancing — the follow-up park reused
+    // `step.approval`, so advancing here would silently SKIP the approval. Keep the same
+    // parked decision id (the durable driver is already waiting on it), refresh the proposal
+    // to the step output, and re-raise the standard "waiting for input" card (we just cleared
+    // the follow-up one). The human then resolves it through the normal approve / request-
+    // changes path. The follow-up gate already ran BEFORE the approval gate in
+    // recordStepResult, so this preserves that exact ordering across the park.
+    const isFinalStep = index === instance.steps.length - 1
+    if (step.requiresApproval && !isFinalStep && step.approval?.status === 'pending') {
+      step.approval = { ...step.approval, proposal: step.output ?? '' }
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.ensureWaitingNotification(workspaceId, instance)
       await this.emitInstance(workspaceId, instance)
       return
     }
