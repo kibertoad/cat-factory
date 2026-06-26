@@ -62,10 +62,9 @@ export function renderBrainstormSubject(ctx: BrainstormContext): string {
       ctx.refinedRequirements.trim(),
     )
   } else {
+    // For the architecture stage with no refined requirements threaded in, the raw description
+    // is the seed — the same fallback as the requirements stage.
     lines.push('## Rough idea', ctx.block.description?.trim() || '(no description provided)')
-    if (ctx.stage === 'architecture' && ctx.block.description?.trim()) {
-      // No refined requirements were threaded in — fall back to the raw description as the seed.
-    }
   }
   return lines.join('\n')
 }

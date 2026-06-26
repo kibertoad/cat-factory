@@ -19,6 +19,7 @@ import type {
 
 const board = useBoardStore()
 const brainstorm = useBrainstormStore()
+const ui = useUiStore()
 const toast = useToast()
 
 const drafts = ref<Record<string, string>>({})
@@ -26,11 +27,15 @@ const redoComment = ref('')
 const showRedo = ref(false)
 
 const { open, blockId, stage, close } = useResultView('brainstorm', {
+  // `onOpen` fires synchronously from `useResultView`'s immediate watch, BEFORE the `stage`
+  // const below is initialised — so read the stage straight off the store here (referencing
+  // `stage.value` would hit its temporal dead zone and throw on every open).
   onOpen: (id) => {
     drafts.value = {}
     redoComment.value = ''
     showRedo.value = false
-    if (stage.value) void brainstorm.load(id, stage.value)
+    const openStage = ui.resultView?.stage
+    if (openStage) void brainstorm.load(id, openStage)
   },
 })
 const activeStage = computed<BrainstormStage>(() => stage.value ?? 'requirements')
