@@ -6,6 +6,10 @@ platform and without rebuilding the executor-harness image**. This document is t
 
 - the seams. The worked reference is `backend/internal/example-custom-agent`.
 
+> For the ergonomics layered on these seams — provider tokens, schema-driven structured
+> output, boot-time registration validation, and the surface-driven prompt/`resultView`
+> wiring — see [`custom-agent-gate-ergonomics.md`](./custom-agent-gate-ergonomics.md).
+
 ## The governing principle
 
 > **Zero `switch(agentKind)` in the container.** The harness is a generic

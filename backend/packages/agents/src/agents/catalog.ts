@@ -38,14 +38,47 @@ import {
 
 export function systemPromptFor(kind: AgentKind): string {
   const base = baseSystemPromptFor(kind)
-  // Read-only kinds (architect, analysis) explore a real checkout but must never edit
-  // it; append the shared guardrail so the harness `/explore` run stays edit-free.
-  const withGuardrail = isReadOnlyAgentKind(kind) ? `${base}\n\n${READ_ONLY_GUARDRAIL}` : base
+  // Append the surface-driven directives (read-only guardrail + final-answer-in-reply) — see
+  // {@link applySurfaceDirectives}. This is the single place that decision lives, so a
+  // registered kind gets the SAME treatment a built-in does from its declared `agent.surface`.
+  const withDirectives = applySurfaceDirectives(base, kind)
   // Fold in any guidance contributed by the kind's traits (e.g. the spec-aware kinds get
   // the in-repo-spec reading guidance). Marker traits like `code-aware` add nothing here —
   // their effect (folding the service's fragments) is applied by the execution engine.
   const guidance = traitGuidanceFor(kind)
-  return guidance.length ? `${withGuardrail}\n\n${guidance.join('\n\n')}` : withGuardrail
+  return guidance.length ? `${withDirectives}\n\n${guidance.join('\n\n')}` : withDirectives
+}
+
+/**
+ * Append the surface-driven prompt directives, derived ONCE from the kind's `agent.surface`
+ * so a registered (custom) kind gets exactly what a built-in does without the author reasoning
+ * about either directive:
+ *   - READ_ONLY_GUARDRAIL — a built-in read-only kind (architect/analysis/…) OR any registered
+ *     `container-explore` kind (it clones read-only and returns a report; it must never edit).
+ *   - FINAL_ANSWER_IN_REPLY — a registered `inline`/`container-explore` kind, whose deliverable
+ *     IS its visible reply (a report / structured JSON the platform parses), so a reasoning
+ *     model can't lose the answer to its hidden channel. Built-in kinds already get this from
+ *     their own track prompts, so it's scoped to kinds whose prompt actually CAME from the
+ *     registry to avoid double-append. A `container-coding` kind (product is a pushed commit)
+ *     and a no-`agent` kind get neither.
+ *
+ * `base` is the resolved base prompt: when a registered id collides with a built-in track (e.g.
+ * a deployment registers `architect`), `baseSystemPromptFor` returns the TRACK prompt (which
+ * already carries FINAL_ANSWER_IN_REPLY), not the registered one — so we gate `needsFinalAnswer`
+ * on the base actually being the registered prompt, not merely on the kind being in the registry.
+ */
+function applySurfaceDirectives(prompt: string, kind: AgentKind): string {
+  const surface = registeredAgentStep(kind)?.surface
+  // True only when the base prompt is the one from the registry — i.e. no built-in track claimed
+  // this kind. A built-in-track-owned id (even if also registered) already got the directive.
+  const usedRegisteredPrompt = prompt === registeredSystemPrompt(kind)
+  const needsGuardrail = isReadOnlyAgentKind(kind) || surface === 'container-explore'
+  const needsFinalAnswer =
+    usedRegisteredPrompt && (surface === 'inline' || surface === 'container-explore')
+  let result = prompt
+  if (needsGuardrail) result = `${result}\n\n${READ_ONLY_GUARDRAIL}`
+  if (needsFinalAnswer) result = `${result}\n\n${FINAL_ANSWER_IN_REPLY}`
+  return result
 }
 
 function baseSystemPromptFor(kind: AgentKind): string {
@@ -66,21 +99,12 @@ function baseSystemPromptFor(kind: AgentKind): string {
   const businessLogic = businessLogicSystemPrompt(kind)
   if (businessLogic) return businessLogic
   // Custom kinds registered by a deployment (e.g. a proprietary org package) win over
-  // the generic fallback below, but never shadow the built-in tracks above. A registered
-  // prompt is authored by the deployment and never flows through `roleSystemPrompt`, so
-  // append the shared FINAL_ANSWER_IN_REPLY directive HERE for the surfaces whose
-  // deliverable IS the reply — an `inline` or `container-explore` kind returning a report /
-  // structured JSON the platform parses into `result.custom` — otherwise that answer can
-  // be silently lost to a reasoning model's hidden channel. NOT appended for
-  // `container-coding` (its product is a pushed commit, a side effect, like
-  // roleSystemPrompt's SIDE_EFFECT kinds) nor for a kind with no LLM `agent` step at all
-  // (the prompt is never used).
+  // the generic fallback below, but never shadow the built-in tracks above. The
+  // surface-driven directives (FINAL_ANSWER_IN_REPLY / read-only guardrail) are applied
+  // centrally in `systemPromptFor` via `applySurfaceDirectives`, so the raw registered
+  // prompt is returned here as-is.
   const registered = registeredSystemPrompt(kind)
-  if (registered !== undefined) {
-    const surface = registeredAgentStep(kind)?.surface
-    const producesFinalReply = surface === 'inline' || surface === 'container-explore'
-    return producesFinalReply ? `${registered}\n\n${FINAL_ANSWER_IN_REPLY}` : registered
-  }
+  if (registered !== undefined) return registered
   return roleSystemPrompt(kind)
 }
 

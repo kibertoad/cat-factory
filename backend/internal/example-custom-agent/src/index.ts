@@ -1,7 +1,15 @@
 import type { AgentKindDefinition } from '@cat-factory/agents'
-import { registerAgentKinds } from '@cat-factory/agents'
+import { defineStructuredOutput, registerAgentKinds } from '@cat-factory/agents'
 import type { GateProbe, RepoOp, StepCompletionResolver } from '@cat-factory/kernel'
-import { registerGate, registerPipeline, registerStepResolver } from '@cat-factory/kernel'
+import {
+  defineProviderToken,
+  isProviderWired,
+  registerGate,
+  registerPipeline,
+  registerStepResolver,
+  wireProvider,
+} from '@cat-factory/kernel'
+import * as v from 'valibot'
 
 // ---------------------------------------------------------------------------
 // A WORKED EXAMPLE of a company-authored agent package.
@@ -38,41 +46,56 @@ const REPORT_PATH = 'compliance/REPORT.md'
 
 /**
  * The structured assessment the {@link SECURITY_AUDITOR_KIND} agent returns (its
- * `container-explore` structured output, surfaced by the engine as `result.custom`). The
- * post-op coerces leniently — a model may omit fields — then renders + commits the report.
+ * `container-explore` structured output, surfaced by the engine as `result.custom`).
+ *
+ * ONE valibot schema is the whole story: {@link defineStructuredOutput} derives the engine
+ * `agent.output` spec (the `shapeHint` the harness's repair call sees) AND a typed
+ * `parse`/`safeParse`. There is no hand-written `SecurityAssessment` interface, no `shapeHint`
+ * string, and no lenient `coerceAssessment` coercer to keep in sync — `v.fallback`/`v.optional`
+ * make `safeParse` degrade gracefully (a model may omit fields) exactly like the old coercer.
  */
-export interface SecurityAssessment {
-  /** Overall risk rating, 0..1 (higher = riskier). */
-  risk?: number
-  /** One-paragraph summary of the security posture of the change. */
-  summary?: string
-  /** Individual findings, each a short title + optional detail + severity. */
-  findings?: { title: string; detail?: string; severity?: 'low' | 'medium' | 'high' | 'critical' }[]
-}
+const securityAssessment = defineStructuredOutput(
+  v.object({
+    // Each constrained field is wrapped in `v.fallback` so ONE noisy field degrades to its
+    // default instead of failing the whole parse — the old hand-written coercer never threw, and
+    // `safeParse` must match that (a model that reports `risk` on a 0..100 scale, or `findings` as
+    // a stray string, would otherwise drop an entire valid assessment and commit no report).
+    // `fallback(optional(…), undefined)` keeps the `0..1` (etc.) constraint but degrades a
+    // present-but-invalid value to `undefined` instead of failing the whole object — `optional`
+    // alone only handles an ABSENT key, so the fallback is what makes `safeParse` non-throwing on
+    // a noisy field, matching the old coercer (`optional` is inside so `undefined` is a legal output).
+    /** Overall risk rating, 0..1 (higher = riskier); out-of-range/non-numeric ⇒ omitted. */
+    risk: v.fallback(v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(1))), undefined),
+    /** One-paragraph summary of the security posture of the change. */
+    summary: v.fallback(v.optional(v.string()), undefined),
+    /** Individual findings, each a short title + optional detail + severity. */
+    findings: v.optional(
+      // Outer fallback: a non-array `findings` (e.g. a stray string) ⇒ `[]`. Inner per-item
+      // fallback: one malformed entry degrades to an "Untitled finding" placeholder instead of
+      // failing the whole array — so a single bad item can't discard the good findings beside it.
+      v.fallback(
+        v.array(
+          v.fallback(
+            v.object({
+              title: v.fallback(v.string(), 'Untitled finding'),
+              detail: v.fallback(v.optional(v.string()), undefined),
+              severity: v.fallback(
+                v.optional(v.picklist(['low', 'medium', 'high', 'critical'])),
+                undefined,
+              ),
+            }),
+            { title: 'Untitled finding' },
+          ),
+        ),
+        [],
+      ),
+      [],
+    ),
+  }),
+)
 
-const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
-type Severity = (typeof SEVERITIES)[number]
-const isSeverity = (v: unknown): v is Severity => SEVERITIES.includes(v as Severity)
-
-/** Coerce the model's free-form JSON into a {@link SecurityAssessment} (never throws). */
-function coerceAssessment(value: unknown): SecurityAssessment {
-  const obj = (value ?? {}) as Record<string, unknown>
-  const findings: NonNullable<SecurityAssessment['findings']> = Array.isArray(obj.findings)
-    ? obj.findings.map((f) => {
-        const o = (f ?? {}) as Record<string, unknown>
-        return {
-          title: typeof o.title === 'string' ? o.title : 'Untitled finding',
-          ...(typeof o.detail === 'string' ? { detail: o.detail } : {}),
-          ...(isSeverity(o.severity) ? { severity: o.severity } : {}),
-        }
-      })
-    : []
-  return {
-    ...(typeof obj.risk === 'number' ? { risk: obj.risk } : {}),
-    ...(typeof obj.summary === 'string' ? { summary: obj.summary } : {}),
-    findings,
-  }
-}
+/** The inferred assessment type — flows straight from the schema, no duplicate interface. */
+export type SecurityAssessment = ReturnType<typeof securityAssessment.parse>
 
 /** Render the assessment to deterministic Markdown — pure (same input → same bytes). */
 export function renderComplianceReport(assessment: SecurityAssessment): string {
@@ -108,8 +131,10 @@ export function renderComplianceReport(assessment: SecurityAssessment): string {
  * push a duplicate commit. The template every deployment copies should model this guard.
  */
 const renderReportPostOp: RepoOp = async (ctx) => {
-  if (ctx.result?.custom === undefined) return
-  const content = renderComplianceReport(coerceAssessment(ctx.result.custom))
+  // safeParse returns undefined on a malformed reply → the no-op guard holds (no empty report).
+  const assessment = securityAssessment.safeParse(ctx.result?.custom)
+  if (!assessment) return
+  const content = renderComplianceReport(assessment)
   const existing = await ctx.repo.getFile(REPORT_PATH, ctx.branch)
   if (existing?.content === content) return
   await ctx.repo.commitFiles({
@@ -149,16 +174,13 @@ export const EXAMPLE_AGENT_KINDS: AgentKindDefinition[] = [
       'You are a security auditor. Explore the repository (read-only) and assess the security ' +
       'posture of the current change. Return ONLY a JSON object: { "risk": 0..1, "summary": ' +
       '"…", "findings": [{ "title": "…", "detail": "…", "severity": "low|medium|high|critical" }] }.',
+    // `agent.output` is auto-derived from `structuredOutput.spec` by `registerAgentKind` — the
+    // schema below is the single source for both the shapeHint and the post-op's parser.
     agent: {
       surface: 'container-explore',
-      output: {
-        kind: 'structured',
-        shapeHint:
-          '{ "risk": number 0..1, "summary": string, "findings": [{ "title": string, ' +
-          '"detail": string, "severity": "low"|"medium"|"high"|"critical" }] }',
-      },
       clone: { branch: 'pr' },
     },
+    structuredOutput: securityAssessment,
     postOps: [renderReportPostOp],
     presentation: {
       label: 'Security Auditor',
@@ -223,13 +245,15 @@ export interface LicenseProvider {
   check(workspaceId: string, blockId: string): Promise<LicenseCheckReport>
 }
 
-// The provider is a module-level handle the facade wires at startup; the gate factory
-// closes over it. Unwired ⇒ the gate passes through (see `wired()` below).
-let licenseProvider: LicenseProvider | undefined
+// The provider is wired into the typed kernel provider registry at startup; the gate reads it
+// back through its `GateContext` (no hand-authored module global). Unwired ⇒ the gate passes
+// through (see `wired()` below). Defining a token + a one-line `wireX` is the WHOLE plumbing —
+// the old `let provider; getProvider()!` pattern (and its unsafe non-null assertion) is gone.
+export const LICENSE_PROVIDER = defineProviderToken<LicenseProvider>('license')
 
 /** Wire (or clear) the license checker the {@link LICENSE_CHECK_KIND} gate probes. */
 export function wireLicenseProvider(provider: LicenseProvider | undefined): void {
-  licenseProvider = provider
+  wireProvider(LICENSE_PROVIDER, provider)
 }
 
 /**
@@ -243,7 +267,8 @@ const auditorSummaryResolver: StepCompletionResolver = {
   kind: SECURITY_AUDITOR_KIND,
   applies: (result) => result.custom !== undefined,
   resolve: async ({ result }) => {
-    const assessment = coerceAssessment(result.custom)
+    const assessment = securityAssessment.safeParse(result.custom)
+    if (!assessment) return { output: 'Security audit complete: result was not parseable.' }
     const count = assessment.findings?.length ?? 0
     const risk =
       assessment.risk !== undefined ? ` (risk ${(assessment.risk * 100).toFixed(0)}%)` : ''
@@ -268,10 +293,11 @@ export function registerExampleCustomAgents(): void {
   registerGate(LICENSE_CHECK_KIND, (ctx) => ({
     kind: LICENSE_CHECK_KIND,
     helperKind: LICENSE_FIXER_KIND,
-    wired: () => licenseProvider !== undefined,
+    wired: () => isProviderWired(LICENSE_PROVIDER),
     unwiredOutput: 'License gate skipped (no license provider configured).',
     probe: async (workspaceId, blockId): Promise<GateProbe> => {
-      const report = await licenseProvider!.check(workspaceId, blockId)
+      // requireProvider is safe here: the engine only probes a gate whose wired() is true.
+      const report = await ctx.requireProvider(LICENSE_PROVIDER).check(workspaceId, blockId)
       if (report.clean) {
         return {
           status: 'pass',

@@ -22,6 +22,7 @@ import { WorkflowsLookup, sweepStuckRuns } from './infrastructure/workflows/swee
 import { handleGitHubSyncBatch, reconcileStaleRepos } from './infrastructure/github/sync-consumer'
 import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 import { logger } from './infrastructure/observability/logger'
+import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 
 // Cloudflare Worker entry. In addition to the Hono `fetch` handler, we expose a
 // `scheduled` handler (the cron sweeper, now also reconciling GitHub
@@ -84,7 +85,16 @@ const GITHUB_SYNC_QUEUE_NAME = 'cat-factory-github-sync'
 const RETENTION_CRON = '0 3 * * *'
 
 export default {
-  fetch: app.fetch,
+  // Validate the registered extensions (gates / agent kinds) ONCE, on the first request —
+  // by which point every `register*` import side effect has run. A typo'd gate helperKind or
+  // an unknown resultView then fails loudly at boot instead of mid-run. The once-guard keeps
+  // it off the hot path (the Worker rebuilds its container per request, but this never re-runs).
+  fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    validateRegistrationsOnce({
+      onWarn: (problem) => logger.warn({ code: problem.code }, problem.message),
+    })
+    return app.fetch(request, env, ctx)
+  },
 
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     const clock = new SystemClock()

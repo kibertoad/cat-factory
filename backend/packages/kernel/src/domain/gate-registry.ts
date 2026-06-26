@@ -10,6 +10,11 @@ import type { AgentRunResult } from '../ports/agent-executor.js'
 import type { RaiseNotificationInput } from '../ports/notification-channel.js'
 import type { Clock } from '../ports/runtime.js'
 import type { RunInitiatorScope } from '../ports/user-secret-repositories.js'
+import {
+  getProvider as registryGetProvider,
+  requireProvider as registryRequireProvider,
+  type ProviderToken,
+} from './provider-registry.js'
 
 // The polling-gate abstraction. A "gate" step (today `ci`, `conflicts`,
 // `post-release-health`) is NOT a container/inline LLM agent: it runs a programmatic
@@ -184,8 +189,10 @@ export interface GateDefinition {
  * The shared engine seams a registered (custom) gate legitimately needs, handed to its
  * factory at registry-build time. Deliberately minimal + runtime-neutral: the engine
  * keeps owning dispatch, budget resolution, persistence and the state machine. A custom
- * gate reaches its OWN provider (the source for `wired()`/`probe()`) by closing over a
- * module-level handle its facade wires at startup — NOT through this context.
+ * gate reaches its OWN provider (the source for `wired()`/`probe()`) through the typed
+ * provider registry via {@link GateContext.getProvider} / {@link GateContext.requireProvider} —
+ * the facade wires the impl against a {@link ProviderToken} at startup, so the gate no
+ * longer closes over a hand-authored module-level handle.
  */
 export interface GateContext {
   /** The engine clock (monotonic-ish ms), for time-windowed gates. */
@@ -196,6 +203,14 @@ export interface GateContext {
   runInitiatorScope: RunInitiatorScope
   /** Raise (or re-raise) a human-actionable notification, e.g. from `onExhausted`. */
   raiseNotification(workspaceId: string, input: RaiseNotificationInput): Promise<void>
+  /** The wired impl for a provider token, or `undefined` (drives a gate's `wired()`). */
+  getProvider<T>(token: ProviderToken<T>): T | undefined
+  /**
+   * The wired impl for a provider token, or throw. SAFE inside `probe()` — the engine only
+   * probes a gate whose `wired()` returned true, and a gate's `wired()` should be
+   * `isProviderWired(token)` — so this replaces the old `getFoo()!` assertion with a guard.
+   */
+  requireProvider<T>(token: ProviderToken<T>): T
 }
 
 /**
@@ -245,6 +260,10 @@ export function stubGateContext(overrides: Partial<GateContext> = {}): GateConte
     getBlock: async () => null,
     runInitiatorScope: (_initiatedBy, fn) => fn(),
     raiseNotification: async () => {},
+    // Default to the real process-wide registry so a gate test that wires a provider sees
+    // it, and `requireProvider` on an unwired token throws exactly as it would in prod.
+    getProvider: registryGetProvider,
+    requireProvider: registryRequireProvider,
     ...overrides,
   }
 }

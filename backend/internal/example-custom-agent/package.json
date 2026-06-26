@@ -21,7 +21,8 @@
   },
   "dependencies": {
     "@cat-factory/agents": "workspace:*",
-    "@cat-factory/kernel": "workspace:*"
+    "@cat-factory/kernel": "workspace:*",
+    "valibot": "^1.4.1"
   },
   "devDependencies": {
     "typescript": "7.0.1-rc",

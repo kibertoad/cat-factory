@@ -1,5 +1,17 @@
 // Public surface of the delivery-workflow engine.
 
+// Boot-time validation of a deployment's registered extensions (gates / agent kinds /
+// pipelines). A facade calls `validateRegistrationsOnce()` after all `register*` imports +
+// provider wiring, before serving.
+export {
+  type RegistrationProblem,
+  type ValidateRegistrationsOptions,
+  collectRegistrationProblems,
+  validateRegistrations,
+  validateRegistrationsOnce,
+  resetRegistrationValidationGuard,
+} from './validation/validateRegistrations.js'
+
 export { BoardService, type BoardServiceDependencies } from './modules/board/BoardService.js'
 export * as boardLogic from './modules/board/board.logic.js'
 
