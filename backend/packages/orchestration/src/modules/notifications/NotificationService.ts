@@ -91,6 +91,11 @@ export class NotificationService {
       prev.body !== next.body ||
       prev.severity !== next.severity ||
       prev.status !== next.status ||
+      // The execution the card deep-links to: a block retried under a NEW run can re-raise a
+      // content-identical card (same title/body/payload) pointing at a different executionId.
+      // The client acts/reveals via `executionId`, so a changed one must be re-delivered or the
+      // inbox keeps targeting the stale (terminal) run.
+      prev.executionId !== next.executionId ||
       JSON.stringify(prev.payload ?? null) !== JSON.stringify(next.payload ?? null)
     )
   }

@@ -435,7 +435,7 @@ export interface GateStepState {
   /** newest plain PR comment already handed to the fixer (human-review gate) */
   lastAddressedCommentAt?: number | null
   /** a human-initiated freeform fix parked on the gate, consumed on the next poll (human-review gate) */
-  pendingFix?: { instructions: string; source: 'app' | 'github'; at: number } | null
+  pendingFix?: { instructions: string; at: number } | null
 }
 
 /** Live state of a `tester` step's Tester→Fixer loop (mirrors `testerStepStateSchema`). */

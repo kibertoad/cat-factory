@@ -3495,7 +3495,7 @@ export class ExecutionService {
     if (!instance || !step || step.agentKind !== HUMAN_REVIEW_AGENT_KIND || !step.gate) {
       throw new ConflictError('No human-review gate is currently awaiting input')
     }
-    step.gate.pendingFix = { instructions, source: 'app', at: this.clock.now() }
+    step.gate.pendingFix = { instructions, at: this.clock.now() }
     // Re-arm a decision-parked run so the re-driven loop polls instead of no-oping; a spend-
     // paused run stays paused.
     if (instance.status === 'blocked') instance.status = 'running'

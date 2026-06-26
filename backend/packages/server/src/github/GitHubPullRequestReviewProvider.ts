@@ -94,9 +94,10 @@ export class GitHubPullRequestReviewProvider implements PullRequestReviewProvide
     const ref = { owner: target.owner, repo: target.name }
     const gh = this.deps.githubClient
 
-    // Head commit of the PR branch (the latest commit on the ref), for the GateProbe.
-    const commits = await gh.listCommits(target.installationId, ref, { sha: branch })
-    const headSha = commits.items[0]?.sha ?? null
+    // Head commit of the PR branch (the latest commit on the ref), for the GateProbe. This gate
+    // polls indefinitely, so use the exact single-ref lookup (one API call, correctly 404→null on
+    // a deleted branch) rather than paginating the whole branch history just to read its tip.
+    const headSha = await gh.branchHeadSha(target.installationId, ref, branch)
     if (!headSha) return EMPTY
 
     const [requiredCount, assignedReviewers, reviews, threads, comments] = await Promise.all([

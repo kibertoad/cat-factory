@@ -40,6 +40,7 @@ import {
   isApproved,
   outstandingComments,
   outstandingThreads,
+  requiredApprovals,
 } from './review.logic.js'
 
 /**
@@ -412,13 +413,22 @@ export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
       gateState.humanReviewGraceMinutes ?? DEFAULT_MERGE_PRESET.humanReviewGraceMinutes
     // Surface the approval progress for the UI (persisted via the caller's `...step.gate` spread).
     gateState.lastApprovals = snapshot.approvals
-    gateState.requiredApprovals =
-      snapshot.headSha === null ? null : Math.max(1, snapshot.requiredApprovingReviewCount)
+    gateState.requiredApprovals = snapshot.headSha === null ? null : requiredApprovals(snapshot)
     const verdict = classifyHumanReview(snapshot, gateState, { graceMinutes, now: ctx.clock.now() })
     if (verdict.kind === 'advance') {
       return { status: 'pass', headSha: snapshot.headSha, passOutput: verdict.reason }
     }
     if (verdict.kind === 'dispatch') {
+      // Backoff: the fixer addresses feedback by pushing a commit to the PR branch, so a fixer
+      // round that left the head sha unchanged made no progress (it failed, or pushed nothing).
+      // Re-dispatching a fresh fixer on every poll for the same unchanged head would hot-loop a
+      // container indefinitely (the budget is effectively unbounded). Wait instead until the head
+      // advances (a new fixer commit) or the human re-engages. The prior attempt's gated head is
+      // the last entry of the attempt log.
+      const lastAttempt = gateState.attemptLog?.[gateState.attemptLog.length - 1]
+      if (lastAttempt && lastAttempt.headSha === snapshot.headSha) {
+        return { status: 'pending', headSha: snapshot.headSha }
+      }
       // Stash the threads to resolve on the fixer's completion + advance the plain-comment
       // cursor so the same comments don't re-trigger. Both persist via the caller's spread.
       gateState.pendingThreadIds = verdict.threadIds
@@ -440,7 +450,11 @@ export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
     if (awaitingApproval) {
       const block = await ctx.getBlock(workspaceId, blockId)
       const title = block?.title ?? 'this task'
-      const noReviewer = snapshot.assignedReviewers.length === 0
+      // "No reviewer" only when nobody is assigned AND nobody has approved yet — a reviewer who
+      // approves is removed from the requested-reviewer list, so `assignedReviewers` alone would
+      // wrongly tell the user to assign a reviewer who already signed off (e.g. 1 of 2 approvals
+      // in). With an approval on record the real state is "needs more approvals", not "unassigned".
+      const noReviewer = snapshot.assignedReviewers.length === 0 && snapshot.approvals === 0
       await ctx.raiseNotification(workspaceId, {
         type: 'human_review',
         blockId,
@@ -450,7 +464,7 @@ export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
           : `"${title}" is awaiting code review`,
         body: noReviewer
           ? 'The PR has no assigned reviewer. Request a reviewer on GitHub to continue, or request a fix here.'
-          : `Awaiting ${Math.max(1, snapshot.requiredApprovingReviewCount)} approval(s) on the PR ` +
+          : `Awaiting ${requiredApprovals(snapshot)} approval(s) on the PR ` +
             `(have ${snapshot.approvals}). Review on GitHub, or request a fix here.`,
         payload: block?.pullRequest?.url ? { prUrl: block.pullRequest.url } : {},
       })
@@ -459,11 +473,14 @@ export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
   },
   // Fold the reviewer's feedback into the fixer's prompt.
   helperPriorOutput: (summary) => ({ agentKind: HUMAN_REVIEW_AGENT_KIND, output: summary }),
-  // After the fixer round, reply to + RESOLVE the threads it was handed, so the immediately
-  // following re-probe counts them as addressed. Best-effort; clears the stash either way.
-  onHelperComplete: async ({ workspaceId, block, step }) => {
+  // After a SUCCESSFUL fixer round, reply to + RESOLVE the threads it was handed, so the
+  // immediately following re-probe counts them as addressed. A FAILED fixer addressed nothing,
+  // so its threads are left open (resolving them would post a misleading "addressed" reply and
+  // hide unfixed feedback from the gate) — the negative state makes the next probe re-dispatch.
+  // Best-effort; clears the stash either way.
+  onHelperComplete: async ({ workspaceId, block, step, result }) => {
     const threadIds = step.gate?.pendingThreadIds ?? []
-    if (threadIds.length > 0) {
+    if (result.state === 'done' && threadIds.length > 0) {
       const provider = ctx.getProvider(PULL_REQUEST_REVIEW_PROVIDER)
       if (provider) {
         try {

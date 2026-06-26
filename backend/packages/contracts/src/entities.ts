@@ -769,16 +769,14 @@ export const gateStepStateSchema = v.object({
    */
   humanReviewGraceMinutes: v.optional(v.nullable(v.number())),
   /**
-   * A human-initiated fix request parked on the gate (an in-app freeform prompt, or a direct
-   * GitHub comment instruction). Consumed at the top of the next `evaluateGate` pass, which
-   * dispatches the fixer with these instructions folded in — bypassing the grace window.
-   * Absent for the other gates.
+   * A human-initiated freeform fix request parked on the gate (an in-app prompt). Consumed at
+   * the top of the next `evaluateGate` pass, which dispatches the fixer with these instructions
+   * folded in — bypassing the grace window. Absent for the other gates.
    */
   pendingFix: v.optional(
     v.nullable(
       v.object({
         instructions: v.string(),
-        source: v.picklist(['app', 'github']),
         at: v.number(),
       }),
     ),
