@@ -42,6 +42,12 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     // alias routes back to this service on the host. The docker-family transport
     // publishes that alias on Linux via `--add-host=<alias>:host-gateway`.
     PUBLIC_URL: env.PUBLIC_URL?.trim() || `http://${hostAlias}:${port}`,
+    // Assemble the ephemeral-environment module by default so the Tester's "delegate test
+    // environments to a provider" opt-in works once a developer registers a provider — the
+    // module is inert (and the local default stays host DinD) until they connect one AND
+    // flip the toggle, so defaulting it on has no behavioural cost. Set ENVIRONMENTS_ENABLED
+    // explicitly to override.
+    ENVIRONMENTS_ENABLED: env.ENVIRONMENTS_ENABLED?.trim() || 'true',
   }
 }
 

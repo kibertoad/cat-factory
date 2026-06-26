@@ -99,6 +99,7 @@ import type {
 } from '@cat-factory/kernel'
 import { BoardService } from './modules/board/BoardService.js'
 import { ExecutionService } from './modules/execution/ExecutionService.js'
+import type { TesterEnvironment } from './modules/execution/tester-infra.logic.js'
 import { PipelineService } from './modules/pipelines/PipelineService.js'
 import { WorkspaceService } from '@cat-factory/workspaces'
 import { AccountService } from '@cat-factory/workspaces'
@@ -601,6 +602,25 @@ export interface CoreDependencies {
    * can't stand its dependencies up.
    */
   localTestInfraSupported?: boolean
+  /**
+   * Optional: the deployment's default Tester environment when neither the task nor its
+   * service frame pins one (the floor of `resolveTesterEnvironment`). Absent → `ephemeral`
+   * (Cloudflare/Node). The local facade wires it to `local` (host Docker / DinD) by
+   * default, flipping to `ephemeral` when the workspace opts into its environment provider.
+   */
+  resolveTesterFallbackDefault?: (workspaceId: string) => Promise<TesterEnvironment>
+  /**
+   * Optional: whether the workspace requires its environment provider for the Tester (the
+   * local-mode "delegate test environments" opt-in). When true, an `ephemeral` Tester run
+   * with no provider connected is refused at start. Absent → false (Cloudflare/Node).
+   */
+  resolveRequireEnvironmentProvider?: (workspaceId: string) => Promise<boolean>
+  /**
+   * Optional: assert the workspace has a usable container-agent backend before a run
+   * starts (local mode delegating agents to an unregistered runner pool throws here).
+   * Absent → no start-time check (Cloudflare/Node have a fixed backend).
+   */
+  assertAgentBackendConfigured?: (workspaceId: string) => Promise<void>
 }
 
 /** The GitHub integration's services, present only when the app is configured. */

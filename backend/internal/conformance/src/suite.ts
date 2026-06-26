@@ -259,6 +259,42 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(after.body.currency).toBe('USD')
       })
 
+      it('round-trips the local-mode delegation toggles (D1 ⇄ Postgres)', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        type Settings = {
+          delegateAgentsToRunnerPool: boolean
+          delegateTestEnvToProvider: boolean
+        }
+        // Default off on a fresh workspace (local-everything is the default).
+        const initial = await call<Settings>('GET', `/workspaces/${wsId}/settings`)
+        expect(initial.status).toBe(200)
+        expect(initial.body.delegateAgentsToRunnerPool).toBe(false)
+        expect(initial.body.delegateTestEnvToProvider).toBe(false)
+
+        // Both flip and persist identically through the new workspace_settings columns.
+        const put = await call<Settings>('PUT', `/workspaces/${wsId}/settings`, {
+          delegateAgentsToRunnerPool: true,
+          delegateTestEnvToProvider: true,
+        })
+        expect(put.status).toBe(200)
+        expect(put.body.delegateAgentsToRunnerPool).toBe(true)
+        expect(put.body.delegateTestEnvToProvider).toBe(true)
+
+        const reread = await call<Settings>('GET', `/workspaces/${wsId}/settings`)
+        expect(reread.body.delegateAgentsToRunnerPool).toBe(true)
+        expect(reread.body.delegateTestEnvToProvider).toBe(true)
+
+        // A partial patch leaves the untouched flag intact (per-field merge).
+        const partial = await call<Settings>('PUT', `/workspaces/${wsId}/settings`, {
+          delegateAgentsToRunnerPool: false,
+        })
+        expect(partial.body.delegateAgentsToRunnerPool).toBe(false)
+        expect(partial.body.delegateTestEnvToProvider).toBe(true)
+      })
+
       it('round-trips incident-enrichment credentials, redacted + sealed (D1 ⇄ Postgres)', async () => {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
