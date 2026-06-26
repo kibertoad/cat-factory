@@ -36,10 +36,12 @@ describe('comboKeyFor', () => {
 })
 
 describe('isHighGrade', () => {
-  it('is true only for top grade with no recommendations', () => {
+  it('is true for a strong grade (>=4) with no recommendations', () => {
     expect(isHighGrade(5, [])).toBe(true)
+    expect(isHighGrade(4, [])).toBe(true)
     expect(isHighGrade(5, ['tweak the prompt'])).toBe(false)
-    expect(isHighGrade(4, [])).toBe(false)
+    expect(isHighGrade(4, ['tweak the prompt'])).toBe(false)
+    expect(isHighGrade(3, [])).toBe(false)
     expect(isHighGrade(null, [])).toBe(false)
   })
 })

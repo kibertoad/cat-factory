@@ -1069,6 +1069,7 @@ class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
     workspaceId: string,
     executionId: string,
     limit?: number,
+    agentKind?: string,
   ): Promise<LlmCallMetric[]> {
     const base = this.db
       .select()
@@ -1077,6 +1078,7 @@ class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
         and(
           eq(llmCallMetrics.workspace_id, workspaceId),
           eq(llmCallMetrics.execution_id, executionId),
+          ...(agentKind == null ? [] : [eq(llmCallMetrics.agent_kind, agentKind)]),
         ),
       )
       .orderBy(desc(llmCallMetrics.created_at), desc(llmCallMetrics.id))
@@ -2169,6 +2171,26 @@ export class DrizzleKaizenGradingRepository implements KaizenGradingRepository {
       .orderBy(kaizenGradings.updated_at)
       .limit(limit)
     return rows.map((row) => ({ workspaceId: row.workspace_id, grading: rowToKaizenGrading(row) }))
+  }
+
+  async claim(workspaceId: string, id: string, staleBefore: number, now: number): Promise<boolean> {
+    // Conditional flip to `running`: succeeds only if the row is still claimable (the same
+    // predicate listPending selects on), so concurrent sweep passes can't both win it.
+    const claimed = await this.db
+      .update(kaizenGradings)
+      .set({ status: 'running', updated_at: now })
+      .where(
+        and(
+          eq(kaizenGradings.workspace_id, workspaceId),
+          eq(kaizenGradings.id, id),
+          or(
+            eq(kaizenGradings.status, 'scheduled'),
+            and(eq(kaizenGradings.status, 'running'), lt(kaizenGradings.updated_at, staleBefore)),
+          ),
+        ),
+      )
+      .returning({ id: kaizenGradings.id })
+    return claimed.length > 0
   }
 }
 

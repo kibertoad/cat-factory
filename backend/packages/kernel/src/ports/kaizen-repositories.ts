@@ -16,7 +16,7 @@ export interface KaizenGradingRepository {
     executionId: string,
     stepIndex: number,
   ): Promise<KaizenGrading | null>
-  /** All gradings for a run, newest first — the run-window status surface. */
+  /** All gradings for a run, ordered by step index ascending — the run-window status surface. */
   listByExecution(workspaceId: string, executionId: string): Promise<KaizenGrading[]>
   /** Recent gradings for a workspace, newest first — the Kaizen screen history (bounded). */
   listByWorkspace(workspaceId: string, limit?: number): Promise<KaizenGrading[]>
@@ -30,6 +30,16 @@ export interface KaizenGradingRepository {
     staleBefore: number,
     limit: number,
   ): Promise<{ workspaceId: string; grading: KaizenGrading }[]>
+  /**
+   * Atomically claim a pending grading for processing: flip it to `running` ONLY if it is
+   * still `scheduled` (or a `running` row last touched before `staleBefore`, i.e. orphaned).
+   * Returns whether THIS caller won the claim. The sweep is best-effort and can overlap
+   * (a slow batch outlasts the poll interval; a runtime may fire concurrent passes), so
+   * {@link listPending} alone would let two passes grade the same row — double-spending an
+   * LLM call and double-incrementing a combo's streak. Winning the claim here makes a row
+   * grade at most once per attempt.
+   */
+  claim(workspaceId: string, id: string, staleBefore: number, now: number): Promise<boolean>
 }
 
 export interface KaizenVerifiedComboRepository {

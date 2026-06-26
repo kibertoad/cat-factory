@@ -19,6 +19,7 @@ import type {
 } from '@cat-factory/kernel'
 import {
   DEFAULT_WORKSPACE_SETTINGS,
+  extractJson,
   inlineModelRef,
   resolveScopedModelProvider,
 } from '@cat-factory/kernel'
@@ -93,6 +94,9 @@ export class KaizenService {
    * engine's emit (the caller wraps it), and re-driving the same run is idempotent.
    */
   async scheduleForRun(workspaceId: string, instance: ExecutionInstance): Promise<void> {
+    // No grader model wired ⇒ every scheduled row could only ever settle `failed`, so don't
+    // flood the table (and the run-window event stream) with rows for a disabled grader.
+    if (!this.enabled) return
     if (!(await this.kaizenEnabled(workspaceId))) return
     for (let stepIndex = 0; stepIndex < instance.steps.length; stepIndex++) {
       const step = instance.steps[stepIndex]
@@ -142,6 +146,15 @@ export class KaizenService {
     const pending = await this.deps.kaizenGradingRepository.listPending(staleBefore, limit)
     let processed = 0
     for (const { workspaceId, grading } of pending) {
+      // Atomically claim before working it: a concurrent/overlapping sweep pass that listed
+      // the same row loses the claim and skips it, so a grading is processed at most once.
+      const claimed = await this.deps.kaizenGradingRepository.claim(
+        workspaceId,
+        grading.id,
+        staleBefore,
+        this.deps.clock.now(),
+      )
+      if (!claimed) continue
       try {
         await this.runGrading(workspaceId, grading)
         processed++
@@ -168,15 +181,20 @@ export class KaizenService {
     }
 
     try {
-      const [snapshot, calls] = await Promise.all([
+      // Fetch only THIS step kind's calls (filtered in SQL) so the cap is spent on the
+      // graded kind rather than being crowded out by a long run's other kinds. The metric
+      // store keys calls by (execution, agentKind) — there is no per-step discriminator —
+      // so if a run ran the SAME kind in two steps their calls are merged here; the
+      // provided-context snapshot below is still matched precisely by stepIndex.
+      const [snapshot, stepCalls] = await Promise.all([
         this.snapshotForStep(workspaceId, grading),
         this.deps.llmCallMetricRepository.listByExecution(
           workspaceId,
           grading.executionId,
           MAX_CALLS_DIGESTED,
+          grading.agentKind,
         ),
       ])
-      const stepCalls = calls.filter((c) => c.agentKind === grading.agentKind)
       const { ref, provider } = await this.resolveModel(workspaceId, grading.blockId)
       const model = provider.resolve(ref)
       const result = await generateText({
@@ -320,7 +338,13 @@ interface KaizenVerdict {
 
 /** Pull the first JSON object out of the grader's reply and coerce it to a verdict. */
 function parseVerdict(text: string): KaizenVerdict {
-  const json = extractJsonObject(text)
+  // Use the shared, string-literal-aware extractor (handles prose/braces around the
+  // object and fenced code blocks) rather than a naive first-`{`/last-`}` slice.
+  const parsed = extractJson(text)
+  const json =
+    parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null
   if (!json) throw new Error('Kaizen grader returned no parseable JSON verdict')
   const rawGrade = typeof json.grade === 'number' ? json.grade : Number(json.grade)
   if (!Number.isFinite(rawGrade)) throw new Error('Kaizen grader returned no numeric grade')
@@ -330,18 +354,6 @@ function parseVerdict(text: string): KaizenVerdict {
     ? json.recommendations.filter((r): r is string => typeof r === 'string' && r.trim().length > 0)
     : []
   return { grade, summary, recommendations }
-}
-
-function extractJsonObject(text: string): Record<string, unknown> | null {
-  const start = text.indexOf('{')
-  const end = text.lastIndexOf('}')
-  if (start === -1 || end <= start) return null
-  try {
-    const parsed = JSON.parse(text.slice(start, end + 1))
-    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
-  } catch {
-    return null
-  }
 }
 
 /** Build the grader's user prompt: the provided context + an interaction-telemetry digest. */

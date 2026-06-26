@@ -4,7 +4,7 @@ import type { KaizenGrading, KaizenVerifiedCombo } from '@cat-factory/contracts'
 // service so the streak/verification rules are unit-testable in isolation.
 
 /** The grade (on the 1..5 scale) at or above which a grading counts as "high". */
-export const HIGH_GRADE = 5
+export const HIGH_GRADE = 4
 
 /** Consecutive high-grade-with-no-recommendations gradings needed to verify a combo. */
 export const VERIFICATION_STREAK = 5
@@ -15,9 +15,12 @@ export function comboKeyFor(agentKind: string, model: string, promptVersion: num
 }
 
 /**
- * Whether a completed grading is a "high grade": top score AND no recommendations.
- * Both conditions are required — a 5 with a recommendation still means there's
- * something to improve, so it does not advance the verification streak.
+ * Whether a completed grading is a "high grade": a strong score AND no recommendations.
+ * The no-recommendations gate is the real quality signal — the grader found nothing to
+ * improve — so a grading with ANY recommendation does not advance the streak regardless of
+ * its number. Requiring a *flawless* 5 every time made the streak almost never converge
+ * (so the "stop grading a verified combo" optimization never engaged and good combos were
+ * re-graded on every run forever); a 4-or-5 with nothing to improve is the intended bar.
  */
 export function isHighGrade(grade: number | null, recommendations: readonly string[]): boolean {
   return grade != null && grade >= HIGH_GRADE && recommendations.length === 0

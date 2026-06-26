@@ -168,4 +168,18 @@ export class D1KaizenGradingRepository implements KaizenGradingRepository {
       grading: rowToGrading(row),
     }))
   }
+
+  async claim(workspaceId: string, id: string, staleBefore: number, now: number): Promise<boolean> {
+    // Conditional flip to `running`: succeeds only if the row is still claimable (the same
+    // predicate listPending selects on), so concurrent sweep passes can't both win it.
+    const { meta } = await this.db
+      .prepare(
+        `UPDATE kaizen_gradings SET status = 'running', updated_at = ?
+           WHERE workspace_id = ? AND id = ?
+             AND (status = 'scheduled' OR (status = 'running' AND updated_at < ?))`,
+      )
+      .bind(now, workspaceId, id, staleBefore)
+      .run()
+    return (meta.changes ?? 0) > 0
+  }
 }

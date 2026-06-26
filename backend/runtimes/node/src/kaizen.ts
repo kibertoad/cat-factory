@@ -6,8 +6,8 @@ import type { Logger, ServerContainer } from '@cat-factory/server'
 // `scheduled` rows at run completion, so this timer does the actual LLM grading (and
 // re-drives `running` rows orphaned by a crashed sweep). No-op when Kaizen isn't wired.
 
-/** How often the Node service runs pending Kaizen gradings. */
-export const KAIZEN_SWEEP_INTERVAL_MS = 60 * 1000
+/** How often the Node service runs pending Kaizen gradings (matches the Worker's cron). */
+export const KAIZEN_SWEEP_INTERVAL_MS = 2 * 60 * 1000
 /** A `running` grading older than this is re-driven (its sweep crashed mid-flight). */
 export const KAIZEN_STALE_MS = 10 * 60 * 1000
 /** Max gradings to run per pass (each is an LLM call; keep the batch small). */
@@ -25,7 +25,12 @@ export function startKaizenSweeper(
 ): () => void {
   const kaizen = container.kaizen
   if (!kaizen) return () => {}
+  let running = false
   const tick = async () => {
+    // Skip if the previous pass is still in flight: a batch of LLM gradings can outlast the
+    // interval, and setInterval would otherwise stack overlapping passes against the same rows.
+    if (running) return
+    running = true
     try {
       const processed = await kaizen.service.runPending(
         clock.now() - KAIZEN_STALE_MS,
@@ -37,6 +42,8 @@ export function startKaizenSweeper(
         { err: error instanceof Error ? error.message : String(error) },
         'kaizen sweep failed',
       )
+    } finally {
+      running = false
     }
   }
   void tick()

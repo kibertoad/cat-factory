@@ -22,10 +22,21 @@ class MemoryRepo implements LlmCallMetricRepository {
   async record(metric: LlmCallMetric): Promise<void> {
     this.recorded.push(metric)
   }
-  async listByExecution(workspaceId: string, executionId: string): Promise<LlmCallMetric[]> {
-    return this.recorded
-      .filter((m) => m.workspaceId === workspaceId && m.executionId === executionId)
+  async listByExecution(
+    workspaceId: string,
+    executionId: string,
+    limit?: number,
+    agentKind?: string,
+  ): Promise<LlmCallMetric[]> {
+    const rows = this.recorded
+      .filter(
+        (m) =>
+          m.workspaceId === workspaceId &&
+          m.executionId === executionId &&
+          (agentKind == null || m.agentKind === agentKind),
+      )
       .sort((a, b) => b.createdAt - a.createdAt)
+    return limit == null ? rows : rows.slice(0, limit)
   }
   async latestChainTip(
     workspaceId: string,

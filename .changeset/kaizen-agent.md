@@ -19,8 +19,8 @@ improvements.
   (skipping verified combos); a background sweep (Cloudflare cron / Node interval) runs
   the inline LLM grade. The grader's model is configured in Model Configuration like
   every other agent (the hidden-from-palette `kaizen` kind).
-- A `(promptVersion, agentKind, model)` combo that grades 5/5 with no recommendations
-  five times in a row is marked **verified** and is no longer graded.
+- A `(promptVersion, agentKind, model)` combo that grades strongly (>=4) with no
+  recommendations five times in a row is marked **verified** and is no longer graded.
 - New persisted tables `kaizen_gradings` + `kaizen_verified_combos` (D1 ⇄ Drizzle parity,
   asserted by a new cross-runtime conformance suite) and a per-workspace `kaizenEnabled`
   setting (a new `workspace_settings.kaizen_enabled` column).

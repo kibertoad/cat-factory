@@ -165,6 +165,50 @@ export function defineKaizenSuite(
       expect(pending.find((p) => p.grading.id === `${ws}-sched`)?.workspaceId).toBe(ws)
     })
 
+    it('claims atomically: a scheduled or stale-running row is won once, a fresh running row is not', async () => {
+      const repo = makeGradingRepo()
+      const { ws, e1 } = ids()
+      await repo.upsert(
+        ws,
+        grading({
+          id: `${ws}-sc`,
+          executionId: e1,
+          stepIndex: 0,
+          status: 'scheduled',
+          updatedAt: 100,
+        }),
+      )
+      await repo.upsert(
+        ws,
+        grading({
+          id: `${ws}-fr`,
+          executionId: e1,
+          stepIndex: 1,
+          status: 'running',
+          updatedAt: 1000,
+        }),
+      )
+      await repo.upsert(
+        ws,
+        grading({
+          id: `${ws}-st`,
+          executionId: e1,
+          stepIndex: 2,
+          status: 'running',
+          updatedAt: 10,
+        }),
+      )
+
+      // A scheduled row is won exactly once: the second claim (now `running` and fresh) loses.
+      expect(await repo.claim(ws, `${ws}-sc`, 50, 2000)).toBe(true)
+      expect((await repo.get(ws, `${ws}-sc`))?.status).toBe('running')
+      expect(await repo.claim(ws, `${ws}-sc`, 50, 2001)).toBe(false)
+      // A fresh running row (updatedAt past the stale cutoff) cannot be claimed.
+      expect(await repo.claim(ws, `${ws}-fr`, 50, 2000)).toBe(false)
+      // A stale running row (updatedAt before the cutoff) is re-claimable.
+      expect(await repo.claim(ws, `${ws}-st`, 50, 2000)).toBe(true)
+    })
+
     it('keeps verified-combo streak/verified state per key', async () => {
       const repo = makeComboRepo()
       const { ws } = ids()
