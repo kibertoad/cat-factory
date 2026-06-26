@@ -7,9 +7,10 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     include: ['test/**/*.spec.ts'],
-    // Real Postgres is the single shared datastore; run serially so specs that
-    // create workspaces don't contend, mirroring the Worker pool's singleWorker.
-    fileParallelism: false,
+    // File parallelism is safe: each vitest worker gets its OWN Postgres database
+    // (`setupTestDb` → `deriveWorkerDatabase`), so concurrent spec files on different
+    // workers never contend on shared tables. Files sharing a worker still run
+    // sequentially against that worker's database, isolated by per-test workspace ids.
     testTimeout: 30_000,
   },
 })

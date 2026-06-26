@@ -51,7 +51,14 @@ import type { ConformanceHarness } from './harness.js'
 // integration-specific behaviour (GitHub, documents, durable runners, real-time
 // upgrade) stays in each runtime's own suite.
 
-export function defineConformanceSuite(harness: ConformanceHarness): void {
+// The suite is split into contiguous GROUP functions (core / agents / integration /
+// execution / misc) so the Postgres-backed runtimes can run each group as its own spec
+// file in parallel (vitest parallelises across files, not within one). `defineConformanceSuite`
+// below re-composes them into the single aggregate the Worker runs. Each group emits its
+// describes directly; when called standalone they are top-level, when called from the
+// aggregate they nest under one `[name] conformance` block. They share this module's
+// imports and hold no cross-group state (every register/clear is scoped to its own describe).
+export function defineCoreConformance(harness: ConformanceHarness): void {
   describe(`[${harness.name}] conformance`, () => {
     describe('workspaces', () => {
       it('creates a seeded board and returns a full snapshot', async () => {
@@ -418,7 +425,11 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect((snapshot.body.modelPresets ?? []).some((p) => p.name === 'Mixed')).toBe(true)
       })
     })
+  })
+}
 
+export function defineAgentConformance(harness: ConformanceHarness): void {
+  describe(`[${harness.name}] conformance`, () => {
     describe('sandbox (prompt/model testing surface)', () => {
       it('lists baselines, clones+versions prompts, seeds fixtures and defines experiments', async () => {
         const { call, createWorkspace } = harness.makeApp()
@@ -1414,7 +1425,11 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(afterDelete.body).toEqual([])
       })
     })
+  })
+}
 
+export function defineIntegrationConformance(harness: ConformanceHarness): void {
+  describe(`[${harness.name}] conformance`, () => {
     describe('vendor credentials (subscription token pool)', () => {
       it('adds, lists (secret-free), and removes pooled subscription tokens', async () => {
         const { call, createWorkspace } = harness.makeApp()
@@ -2339,7 +2354,11 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(unknown.status).toBe(204)
       })
     })
+  })
+}
 
+export function defineExecutionConformance(harness: ConformanceHarness): void {
+  describe(`[${harness.name}] conformance`, () => {
     describe('execution engine', () => {
       it('runs a task pipeline to auto-merge and materialises its module', async () => {
         const app = harness.makeApp({ confidence: 1 })
@@ -3636,7 +3655,11 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(task.status).toBe('blocked')
       })
     })
+  })
+}
 
+export function defineMiscConformance(harness: ConformanceHarness): void {
+  describe(`[${harness.name}] conformance`, () => {
     describe('recurring pipelines', () => {
       const recurrence = {
         intervalHours: 24,
@@ -4005,4 +4028,16 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
   })
+}
+
+// The aggregate the Cloudflare Worker runs (one file → one D1, `singleWorker`): every
+// group, each self-wrapping in its own `[name] conformance` describe block. The Postgres
+// runtimes instead call the individual group functions from separate spec files so they
+// parallelise across vitest workers.
+export function defineConformanceSuite(harness: ConformanceHarness): void {
+  defineCoreConformance(harness)
+  defineAgentConformance(harness)
+  defineIntegrationConformance(harness)
+  defineExecutionConformance(harness)
+  defineMiscConformance(harness)
 }

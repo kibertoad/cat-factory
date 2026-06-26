@@ -6,6 +6,7 @@ import {
   FakeRepoBootstrapper,
   FakeTaskSourceProvider,
   RecordingEventPublisher,
+  deriveWorkerDatabase,
   driveWorkspace,
   makeIncorporatedClarityReview,
   makeIncorporatedReview,
@@ -56,19 +57,45 @@ const TEST_ENV: NodeJS.ProcessEnv = {
 }
 
 /**
- * Connect to the test Postgres (`DATABASE_URL`) and ensure the schema. Idempotent
- * (`CREATE TABLE IF NOT EXISTS`), so each spec file may call it. Returns the shared
- * Drizzle client every app in the file is built over — exactly as the Worker pool
- * shares one local D1.
+ * Connect to the test Postgres and ensure the schema. Each vitest worker gets its OWN
+ * database (`<base>_node_<workerId>`, created on demand) so the spec files can run with
+ * file parallelism without racing on shared tables; the migrator is idempotent, so a
+ * worker reusing its database across files just finds nothing to apply. Falls back to the
+ * base `DATABASE_URL` when not under a vitest worker. Returns the Drizzle client every app
+ * in the file is built over — exactly as the Worker pool shares one local D1.
  */
 export async function setupTestDb(): Promise<DrizzleDb> {
   const url = process.env.DATABASE_URL
   if (!url) {
     throw new Error('DATABASE_URL is required to run the Node conformance/integration tests')
   }
-  const { db, pool } = createDbClient(url)
+  const worker = deriveWorkerDatabase(url, 'node', process.env.VITEST_WORKER_ID)
+  if (worker) await ensureDatabase(url, worker.dbName)
+  const { db, pool } = createDbClient(worker?.url ?? url)
   await migrate(db, pool)
   return db
+}
+
+/**
+ * Create `dbName` if it does not already exist, over an admin connection to the base
+ * `DATABASE_URL` (`CREATE DATABASE` cannot run inside a transaction, so this uses the
+ * pool's autocommit path). Tolerates the duplicate-database race (error `42P04`) when two
+ * workers create their databases at once.
+ */
+async function ensureDatabase(adminUrl: string, dbName: string): Promise<void> {
+  const { pool } = createDbClient(adminUrl)
+  try {
+    const existing = await pool.query('SELECT 1 FROM pg_database WHERE datname = $1', [dbName])
+    if (existing.rowCount === 0) {
+      try {
+        await pool.query(`CREATE DATABASE "${dbName}"`)
+      } catch (err) {
+        if ((err as { code?: string }).code !== '42P04') throw err
+      }
+    }
+  } finally {
+    await pool.end()
+  }
 }
 
 /**
