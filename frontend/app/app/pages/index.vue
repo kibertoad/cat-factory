@@ -29,6 +29,7 @@ import FragmentLibraryPanel from '~/components/fragments/FragmentLibraryPanel.vu
 import CommandBar from '~/components/layout/CommandBar.vue'
 import IntegrationsHub from '~/components/layout/IntegrationsHub.vue'
 import WorkspaceSettingsPanel from '~/components/settings/WorkspaceSettingsPanel.vue'
+import AccountSettingsPanel from '~/components/settings/AccountSettingsPanel.vue'
 import ObservabilityConnectionPanel from '~/components/settings/ObservabilityConnectionPanel.vue'
 import ProviderConnectionPanel from '~/components/settings/ProviderConnectionPanel.vue'
 import ProviderConfigBanner from '~/components/layout/ProviderConfigBanner.vue'
@@ -189,6 +190,7 @@ watch(
       <CommandBar />
       <IntegrationsHub />
       <WorkspaceSettingsPanel />
+      <AccountSettingsPanel />
       <ObservabilityConnectionPanel />
       <ProviderConnectionPanel />
       <ModelConfigurationPanel />

@@ -1,5 +1,17 @@
 # @cat-factory/conformance
 
+## 0.8.1
+
+### Patch Changes
+
+- Updated dependencies [eb48652]
+  - @cat-factory/kernel@0.35.0
+  - @cat-factory/orchestration@0.27.0
+  - @cat-factory/agents@0.17.1
+  - @cat-factory/gates@0.1.12
+  - @cat-factory/integrations@0.21.7
+  - @cat-factory/prompt-fragments@0.7.30
+
 ## 0.8.0
 
 ### Minor Changes

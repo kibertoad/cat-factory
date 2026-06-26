@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import type {
   CreateDocumentFragmentInput,
   CreatePromptFragmentInput,
+  FragmentOwnerKind,
   FragmentSource,
   LinkFragmentSourceInput,
   PromptFragment,
@@ -12,40 +13,62 @@ import type {
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
- * Prompt-fragment library state (ADR 0006), scoped to the active board. Holds the
- * board's own (workspace-tier) fragments, its linked guideline repos, and the
- * merged catalog an agent actually sees (built-in ∪ account ∪ workspace). The
- * management surface targets the workspace tier; the resolved read is what every
- * agent run is selected from. `available` mirrors the backend's opt-in gate: a
- * 503 from the resolve probe means the feature is off and the UI hides its entry.
+ * Prompt-fragment library state (ADR 0006), scoped to a single owner — a board
+ * (`workspace`) or an account. Holds that owner's own (raw) tier fragments, its
+ * linked guideline repos, and — for the **workspace** tier only — the merged
+ * catalog an agent actually sees (built-in ∪ account ∪ workspace). `available`
+ * mirrors the backend's opt-in gate: a 503 from the probe means the feature is off
+ * and the UI hides its entry.
+ *
+ * Two entry points share this setup: `useFragmentLibraryStore` (the workspace
+ * singleton that follows the active board, used by the navbar + the board modal)
+ * and `useFragmentLibrary(kind, ownerId)` (an owner-keyed store, used for the
+ * account tier). The account tier has no resolved/merged catalog and, for
+ * document-backed fragments, needs a `viaWorkspaceId` (document-source credentials
+ * are per-workspace).
  */
-export const useFragmentLibraryStore = defineStore('fragmentLibrary', () => {
+function fragmentLibrarySetup(kind: FragmentOwnerKind, resolveOwnerId: () => string | null) {
   const api = useApi()
-  const workspace = useWorkspaceStore()
+
+  /** The merged/resolved catalog only exists at the workspace tier. */
+  const hasResolved = kind === 'workspace'
 
   /** null = not probed yet; true/false = library on/off. */
   const available = ref<boolean | null>(null)
-  /** This board's hand-authored + sourced fragments (workspace tier, raw). */
+  /** This owner's hand-authored + sourced fragments (its own tier, raw). */
   const fragments = ref<PromptFragment[]>([])
-  /** The merged catalog an agent sees (with each entry's winning tier). */
+  /** The merged catalog an agent sees (workspace tier only; empty otherwise). */
   const resolved = ref<ResolvedFragment[]>([])
-  /** Linked guideline repos for this board. */
+  /** Linked guideline repos for this owner. */
   const sources = ref<FragmentSource[]>([])
   /** Per-source "changes available" counts from the last status check. */
   const sourceChanges = ref<Record<string, number>>({})
   const loading = ref(false)
+  /**
+   * Account-tier document fragments only: the workspace whose stored
+   * document-source connection is used to fetch/refresh the page (credentials are
+   * per-workspace). Set by the caller; ignored at the workspace scope (the owner
+   * board is used directly).
+   */
+  const viaWorkspaceId = ref<string | undefined>(undefined)
 
   const builtinCount = computed(() => resolved.value.filter((f) => f.tier === 'builtin').length)
 
-  /** Probe the feature + load this board's tier, sources and resolved catalog. */
+  function requireOwnerId(): string {
+    const id = resolveOwnerId()
+    if (!id) throw new Error('No fragment-library owner')
+    return id
+  }
+
+  /** Probe the feature + load this owner's tier, sources and (ws) resolved catalog. */
   async function probe() {
-    if (!workspace.workspaceId) return
-    const id = workspace.requireId()
+    const id = resolveOwnerId()
+    if (!id) return
     try {
       const [tier, srcs, merged] = await Promise.all([
-        api.listFragments('workspace', id),
-        api.listFragmentSources('workspace', id).catch(() => [] as FragmentSource[]),
-        api.getResolvedFragments(id),
+        api.listFragments(kind, id),
+        api.listFragmentSources(kind, id).catch(() => [] as FragmentSource[]),
+        hasResolved ? api.getResolvedFragments(id) : Promise.resolve([] as ResolvedFragment[]),
       ])
       fragments.value = tier
       sources.value = srcs
@@ -60,13 +83,14 @@ export const useFragmentLibraryStore = defineStore('fragmentLibrary', () => {
   }
 
   async function refreshResolved() {
-    resolved.value = await api.getResolvedFragments(workspace.requireId())
+    if (!hasResolved) return
+    resolved.value = await api.getResolvedFragments(requireOwnerId())
   }
 
   async function create(input: CreatePromptFragmentInput) {
     loading.value = true
     try {
-      await api.createFragment('workspace', workspace.requireId(), input)
+      await api.createFragment(kind, requireOwnerId(), input)
       await Promise.all([reloadTier(), refreshResolved()])
     } finally {
       loading.value = false
@@ -74,7 +98,7 @@ export const useFragmentLibraryStore = defineStore('fragmentLibrary', () => {
   }
 
   async function update(fragmentId: string, patch: UpdatePromptFragmentInput) {
-    await api.updateFragment('workspace', workspace.requireId(), fragmentId, patch)
+    await api.updateFragment(kind, requireOwnerId(), fragmentId, patch)
     await Promise.all([reloadTier(), refreshResolved()])
   }
 
@@ -82,7 +106,10 @@ export const useFragmentLibraryStore = defineStore('fragmentLibrary', () => {
   async function createDocumentFragment(input: CreateDocumentFragmentInput) {
     loading.value = true
     try {
-      await api.createDocumentFragment('workspace', workspace.requireId(), input)
+      await api.createDocumentFragment(kind, requireOwnerId(), {
+        ...input,
+        ...(viaWorkspaceId.value ? { viaWorkspaceId: viaWorkspaceId.value } : {}),
+      })
       await Promise.all([reloadTier(), refreshResolved()])
     } finally {
       loading.value = false
@@ -93,31 +120,31 @@ export const useFragmentLibraryStore = defineStore('fragmentLibrary', () => {
   async function refreshDocumentFragment(fragmentId: string) {
     loading.value = true
     try {
-      await api.refreshFragment('workspace', workspace.requireId(), fragmentId)
+      await api.refreshFragment(kind, requireOwnerId(), fragmentId, viaWorkspaceId.value)
       await Promise.all([reloadTier(), refreshResolved()])
     } finally {
       loading.value = false
     }
   }
 
-  /** Tombstone a fragment at the workspace tier (suppresses an inherited one). */
+  /** Tombstone a fragment at this tier (suppresses an inherited one). */
   async function remove(fragmentId: string) {
-    await api.deleteFragment('workspace', workspace.requireId(), fragmentId)
+    await api.deleteFragment(kind, requireOwnerId(), fragmentId)
     await Promise.all([reloadTier(), refreshResolved()])
   }
 
   async function reloadTier() {
-    fragments.value = await api.listFragments('workspace', workspace.requireId())
+    fragments.value = await api.listFragments(kind, requireOwnerId())
   }
 
   async function linkSource(input: LinkFragmentSourceInput) {
-    const source = await api.linkFragmentSource('workspace', workspace.requireId(), input)
+    const source = await api.linkFragmentSource(kind, requireOwnerId(), input)
     sources.value = [source, ...sources.value]
     return source
   }
 
   async function unlinkSource(sourceId: string) {
-    await api.unlinkFragmentSource('workspace', workspace.requireId(), sourceId)
+    await api.unlinkFragmentSource(kind, requireOwnerId(), sourceId)
     sources.value = sources.value.filter((s) => s.id !== sourceId)
     await refreshResolved()
   }
@@ -126,7 +153,7 @@ export const useFragmentLibraryStore = defineStore('fragmentLibrary', () => {
   async function syncSource(sourceId: string) {
     loading.value = true
     try {
-      const result = await api.syncFragmentSource('workspace', workspace.requireId(), sourceId)
+      const result = await api.syncFragmentSource(kind, requireOwnerId(), sourceId)
       delete sourceChanges.value[sourceId]
       await Promise.all([reloadSources(), refreshResolved()])
       return result
@@ -137,7 +164,7 @@ export const useFragmentLibraryStore = defineStore('fragmentLibrary', () => {
 
   /** Cheap "check for changes" for a source; caches the changed count. */
   async function checkSource(sourceId: string) {
-    const status = await api.fragmentSourceStatus('workspace', workspace.requireId(), sourceId)
+    const status = await api.fragmentSourceStatus(kind, requireOwnerId(), sourceId)
     sourceChanges.value = {
       ...sourceChanges.value,
       [sourceId]: status.changed ? status.changedCount : 0,
@@ -146,16 +173,19 @@ export const useFragmentLibraryStore = defineStore('fragmentLibrary', () => {
   }
 
   async function reloadSources() {
-    sources.value = await api.listFragmentSources('workspace', workspace.requireId())
+    sources.value = await api.listFragmentSources(kind, requireOwnerId())
   }
 
   return {
+    kind,
+    hasResolved,
     available,
     fragments,
     resolved,
     sources,
     sourceChanges,
     loading,
+    viaWorkspaceId,
     builtinCount,
     probe,
     refreshResolved,
@@ -169,4 +199,23 @@ export const useFragmentLibraryStore = defineStore('fragmentLibrary', () => {
     syncSource,
     checkSource,
   }
-})
+}
+
+/**
+ * The workspace-tier library for the **active** board — a singleton that resolves
+ * the owner lazily, so it follows board switches and is shared by the navbar
+ * (SideBar/CommandBar probes) and the board fragment modal.
+ */
+export const useFragmentLibraryStore = defineStore('fragmentLibrary', () =>
+  fragmentLibrarySetup('workspace', () => useWorkspaceStore().workspaceId),
+)
+
+/**
+ * An owner-keyed library store, used for the **account** tier (and reusable for any
+ * explicit owner). Keyed by `(kind, ownerId)` so each account gets isolated state.
+ */
+export function useFragmentLibrary(kind: FragmentOwnerKind, ownerId: string) {
+  return defineStore(`fragmentLibrary:${kind}:${ownerId}`, () =>
+    fragmentLibrarySetup(kind, () => ownerId),
+  )()
+}
