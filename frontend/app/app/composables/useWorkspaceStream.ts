@@ -23,6 +23,7 @@ export function useWorkspaceStream() {
   const requirements = useRequirementsStore()
   const consensus = useConsensusStore()
   const clarity = useClarityStore()
+  const kaizen = useKaizenStore()
   const api = useApi()
   const apiBase = useRuntimeConfig().public.apiBase
 
@@ -87,6 +88,11 @@ export function useWorkspaceStream() {
       // cache so an open review window / inspector reflects it live ("incorporating…" → the
       // next cycle / converged). The summons back, when needed, arrives as a `notification`.
       clarity.upsert(event.review)
+    } else if (event.type === 'kaizen') {
+      // A post-run Kaizen grading was scheduled, started or completed — fold it into the
+      // run cache (so an open run window shows scheduled→running→complete live) and the
+      // Kaizen screen history. Never surfaced on the board.
+      kaizen.upsert(event.grading)
     }
   }
 

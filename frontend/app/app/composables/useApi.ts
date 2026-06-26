@@ -9,6 +9,7 @@ import { executionApi } from './api/execution'
 import { fragmentsApi } from './api/fragments'
 import { githubApi } from './api/github'
 import { humanTestApi } from './api/humanTest'
+import { kaizenApi } from './api/kaizen'
 import { modelsApi } from './api/models'
 import { notificationsApi } from './api/notifications'
 import { presetsApi } from './api/presets'
@@ -85,6 +86,7 @@ export function useApi() {
     ...tasksApi(ctx),
     ...reviewsApi(ctx),
     ...humanTestApi(ctx),
+    ...kaizenApi(ctx),
     ...specApi(ctx),
     ...notificationsApi(ctx),
     ...presetsApi(ctx),

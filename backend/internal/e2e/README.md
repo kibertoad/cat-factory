@@ -28,15 +28,16 @@ Every spec follows the same signature pattern: **seed/trigger over REST, then as
 LIVE pushed UI updates** (no reloads, no fragile canvas drag/zoom). Shared setup lives in
 [`tests/fixtures.ts`](./tests/fixtures.ts): a `seededBoard` fixture (seed → pin → open) and an
 **auto** `pageErrors` fixture that fails any test on an uncaught SPA exception. Common helpers
-+ named timeouts are in [`tests/helpers.ts`](./tests/helpers.ts).
 
-| Spec | Covers |
-| ---- | ------ |
-| `boot.spec.ts` | The product boots: the real SPA renders a seeded board from the real backend, no login gate. |
-| `run.spec.ts` | Flagship: start a run → it parks on a decision live → resolve it in the UI → it reaches a terminal state, all over the WebSocket. |
+- named timeouts are in [`tests/helpers.ts`](./tests/helpers.ts).
+
+| Spec                    | Covers                                                                                                                                                                                                                           |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `boot.spec.ts`          | The product boots: the real SPA renders a seeded board from the real backend, no login gate.                                                                                                                                     |
+| `run.spec.ts`           | Flagship: start a run → it parks on a decision live → resolve it in the UI → it reaches a terminal state, all over the WebSocket.                                                                                                |
 | `notifications.spec.ts` | A merger-less run raises a `pipeline_complete` notification live; the inbox bell + item render and acting / dismissing resolves it. (The real PR merge needs GitHub and is covered by the backend conformance suites, not here.) |
-| `create-task.spec.ts` | Create a task through the real add-task modal → the new card appears on the board. |
-| `approval-gate.spec.ts` | A per-step human **approval** gate parks the run; Approve in the full-screen step-detail rail and it advances. (Distinct from the agent-raised decision in `run.spec`.) |
+| `create-task.spec.ts`   | Create a task through the real add-task modal → the new card appears on the board.                                                                                                                                               |
+| `approval-gate.spec.ts` | A per-step human **approval** gate parks the run; Approve in the full-screen step-detail rail and it advances. (Distinct from the agent-raised decision in `run.spec`.)                                                          |
 
 ## Mocking other externals (when a spec needs a real outbound call)
 
@@ -88,7 +89,7 @@ add a `globalSetup` that truncates rather than relying on ordering.
 - `E2E_CONFIDENCE` (default `1`) — the confidence the fake reports on the final step (drives
   auto-merge vs PR-ready).
 - `E2E_CHROMIUM_PATH` — opt-in: launch Chromium from this path instead of a `playwright
-  install` download. For sandboxes that ship a preinstalled browser and block the download
+install` download. For sandboxes that ship a preinstalled browser and block the download
   (e.g. `E2E_CHROMIUM_PATH=/opt/pw-browsers/chromium`). Unset in CI.
 - `PORT` (default `8787`), `E2E_FRONTEND_PORT` (default `3000`), `E2E_BACKEND_URL`.
 

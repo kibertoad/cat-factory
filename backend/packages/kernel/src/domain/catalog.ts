@@ -14,6 +14,7 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   taskLimitShared: null,
   taskLimitPerType: null,
   storeAgentContext: true,
+  kaizenEnabled: true,
   spendCurrency: null,
   spendMonthlyLimit: null,
 }
