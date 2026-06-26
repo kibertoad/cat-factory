@@ -336,6 +336,7 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
       webToolsGuidance: job.webToolsGuidance,
       webSearchProxy: job.webSearch,
       ...(job.persistentCheckout ? { persistentCheckout: true } : {}),
+      ...(job.streamFollowUps ? { streamFollowUps: true } : {}),
     },
     opts,
   )

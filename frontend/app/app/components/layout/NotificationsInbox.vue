@@ -36,6 +36,9 @@ const META: Record<Notification['type'], { icon: string; color: Accent; action: 
   // Clicking the title opens the human-testing window for the task (see `reveal`); "act" just
   // marks it read (the gate is resolved in that window — confirm / request a fix — not here).
   human_test_ready: { icon: 'i-lucide-user-check', color: 'primary', action: 'Mark read' },
+  // Clicking the title opens the Follow-up companion window for the run (see `reveal`); "act"
+  // just marks it read (items are decided in that window — file / send back / answer — not here).
+  followup_pending: { icon: 'i-lucide-compass', color: 'warning', action: 'Mark read' },
 }
 
 /** A notification the escalation sweep has flagged as overdue (waited past the threshold). */
@@ -81,7 +84,17 @@ function reveal(n: Notification) {
   else if (n.type === 'clarity_review') ui.openClarityReview(n.blockId)
   else if (n.type === 'decision_required') revealDecision(n)
   else if (n.type === 'human_test_ready') revealHumanTest(n)
+  else if (n.type === 'followup_pending') revealFollowUps(n)
   else ui.select(n.blockId)
+}
+
+/**
+ * Open the Follow-up companion window for a run whose Coder parked on undecided items.
+ * Falls back to focusing the block when the run isn't loaded.
+ */
+function revealFollowUps(n: Notification) {
+  if (n.executionId && execution.getInstance(n.executionId)) ui.openFollowUps(n.executionId)
+  else if (n.blockId) ui.select(n.blockId)
 }
 
 /**

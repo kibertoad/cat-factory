@@ -52,6 +52,7 @@ import {
   type RateLimitRepository,
   type RateLimitSnapshot,
   type ResolveUserGitHubToken,
+  type RunnerPoolProvider,
   type TaskConnectionRepository,
   type TaskSourceProvider,
   CompositeNotificationChannel,
@@ -432,6 +433,25 @@ export interface NodeContainerOptions {
    * still required for the module to assemble. Undefined → the default HTTP provider.
    */
   environmentProvider?: EnvironmentProvider
+  /**
+   * Override the self-hosted runner-pool provider. When provided it REPLACES the default
+   * manifest-driven `HttpRunnerPoolProvider` for BOTH the dispatch transport (so jobs
+   * actually run through it) AND the connection-management UI (`describeConfig` /
+   * `testConnection`) — fully symmetric with {@link NodeContainerOptions.environmentProvider}.
+   * A trusted in-house adapter (one implementing `RunnerPoolProvider` for an internal
+   * orchestration platform, e.g. Kargo) thus serves agents without forking the facade. The
+   * per-workspace runner-pool connection (manifest + secrets) still configures it.
+   * Undefined → the default HTTP provider.
+   */
+  runnerPoolProvider?: RunnerPoolProvider
+  /**
+   * Skip wrapping the resolved transport with the provisioning-log decorator. A sibling
+   * facade that pre-wraps each transport branch with its OWN subsystem tag (local mode
+   * tags the per-run container vs the runner pool separately) sets this so
+   * {@link buildNodeContainer} doesn't double-wrap. Undefined/false → the default
+   * single-subsystem wrap below.
+   */
+  skipProvisioningLogWrap?: boolean
 }
 
 /**
@@ -442,11 +462,15 @@ export interface NodeContainerOptions {
  * when runner pools are not enabled. Mirrors the Worker's `buildResolveTransport`,
  * minus the Cloudflare-container path.
  */
-function buildNodeResolveTransport(
+export function buildNodeResolveTransport(
   config: AppConfig,
   runnerPoolConnectionRepository: DrizzleRunnerPoolConnectionRepository,
   workspaceRepository: CoreDependencies['workspaceRepository'],
   clock: Clock,
+  // An injected native pool adapter (e.g. a Kargo runner adapter implementing
+  // `RunnerPoolProvider`) drives the actual dispatch when supplied — symmetric with the
+  // `environmentProvider` seam. Absent → the generic manifest-driven HTTP provider.
+  injectedPoolProvider?: RunnerPoolProvider,
 ): ResolveRunnerTransport | null {
   if (!config.runners.enabled || !config.runners.encryptionKey) return null
   const runnerService = new RunnerPoolConnectionService({
@@ -459,7 +483,8 @@ function buildNodeResolveTransport(
     clock,
   })
   const urlPolicy = resolveUrlSafetyPolicy(config.runners)
-  const poolProvider = new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {})
+  const poolProvider =
+    injectedPoolProvider ?? new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {})
   return async (workspaceId) => {
     if (workspaceId) {
       const resolved = await runnerService.resolve(workspaceId)
@@ -480,7 +505,7 @@ function buildNodeResolveTransport(
  * provisioning-log event. A no-op when there's no resolver. `subsystem` tags the
  * rows (a self-hosted pool vs a per-run container) so the logs drawer can filter.
  */
-function withProvisioningLog(
+export function withProvisioningLog(
   resolve: ResolveRunnerTransport | null,
   recorder: ProvisioningLogRecorder,
   subsystem: ProvisioningSubsystem,
@@ -995,10 +1020,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   })
 
   // A sibling facade (local mode) may inject its own transport — even `null` — which
-  // replaces the default self-hosted-pool resolution; undefined keeps Node's default.
+  // replaces the default self-hosted-pool resolution; undefined keeps Node's default
+  // (a self-hosted pool, optionally driven by an injected native `runnerPoolProvider`).
   // The injected transport is a per-run container (local mode), the default is a
   // self-hosted pool — tag each accordingly so the logs drawer can filter by subsystem.
-  const resolveTransport = withProvisioningLog(
+  // A facade that pre-wraps its branches with their own subsystem tags (local mode) sets
+  // `skipProvisioningLogWrap` so we don't double-wrap.
+  const baseResolveTransport =
     options.resolveTransport !== undefined
       ? options.resolveTransport
       : buildNodeResolveTransport(
@@ -1006,10 +1034,15 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           runnerPoolConnectionRepository,
           repos.workspaceRepository,
           clock,
-        ),
-    provisioningLogRecorder,
-    options.resolveTransport !== undefined ? 'container' : 'runner-pool',
-  )
+          options.runnerPoolProvider,
+        )
+  const resolveTransport = options.skipProvisioningLogWrap
+    ? baseResolveTransport
+    : withProvisioningLog(
+        baseResolveTransport,
+        provisioningLogRecorder,
+        options.resolveTransport !== undefined ? 'container' : 'runner-pool',
+      )
   // The subscription-token pool (Claude Code / Codex credentials), shared by the
   // container executor (lease + usage feedback) and the vendor-credential controller.
   const subscriptions = buildNodeSubscriptionService(
@@ -1438,6 +1471,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     kaizenGradingRepository: repos.kaizenGradingRepository,
     kaizenVerifiedComboRepository: repos.kaizenVerifiedComboRepository,
     clarityReviewRepository: repos.clarityReviewRepository,
+    brainstormSessionRepository: repos.brainstormSessionRepository,
     // Merge threshold presets: the per-workspace auto-merge ceiling library a task's
     // merge gate resolves (block-pinned preset > workspace default). Wired
     // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
@@ -1502,13 +1536,15 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
             masterKeyBase64: config.runners.encryptionKey,
             info: RUNNERS_CIPHER_INFO,
           }),
-          // The generic pool provider instance backs the connection service's
-          // describeProvider + testConnection (the manifest editor's secret-key form + a
-          // pre-save probe). Same SSRF policy as the dispatch transport.
-          runnerPoolProvider: new HttpRunnerPoolProvider(
-            runnerUrlPolicy ? { urlPolicy: runnerUrlPolicy } : {},
-          ),
-          runnerProviderKind: 'manifest',
+          // The pool provider instance backs the connection service's describeProvider +
+          // testConnection (the manifest editor's secret-key form + a pre-save probe). An
+          // injected native adapter wins here too (same instance that drives dispatch), so
+          // its describeConfig/testConnection render — else the generic manifest provider
+          // (same SSRF policy as the dispatch transport).
+          runnerPoolProvider:
+            options.runnerPoolProvider ??
+            new HttpRunnerPoolProvider(runnerUrlPolicy ? { urlPolicy: runnerUrlPolicy } : {}),
+          runnerProviderKind: options.runnerPoolProvider ? 'native' : 'manifest',
           ...(runnerUrlPolicy ? { runnerUrlSafetyPolicy: runnerUrlPolicy } : {}),
         }
       : {}),

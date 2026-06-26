@@ -138,6 +138,10 @@ export const useUiStore = defineStore('ui', () => {
     blockId: string
     instanceId: string | null
     stepIndex: number | null
+    // The brainstorm dialogue stage, set only when `view === 'brainstorm'` (its two agent
+    // kinds share one window). Derived from the step's agent kind on the pipeline path, or
+    // passed explicitly on an off-path open.
+    stage?: 'requirements' | 'architecture'
   } | null>(null)
 
   // Agent step-detail overlay: which pipeline step (a run instance + step index)
@@ -236,7 +240,20 @@ export const useUiStore = defineStore('ui', () => {
         ? agentKindMeta(step.agentKind).resultView
         : undefined
     if (view && instance) {
-      resultView.value = { view, blockId: instance.blockId, instanceId, stepIndex }
+      // The brainstorm window is shared by both stages; carry which one from the step's kind.
+      const stage =
+        view === 'brainstorm'
+          ? step?.agentKind === 'architecture-brainstorm'
+            ? 'architecture'
+            : 'requirements'
+          : undefined
+      resultView.value = {
+        view,
+        blockId: instance.blockId,
+        instanceId,
+        stepIndex,
+        ...(stage ? { stage } : {}),
+      }
       return
     }
     stepDetail.value = { instanceId, stepIndex }
@@ -466,9 +483,40 @@ export const useUiStore = defineStore('ui', () => {
   function openClarityReview(blockId: string) {
     resultView.value = { view: 'clarity-review', blockId, instanceId: null, stepIndex: null }
   }
+  function openBrainstorm(blockId: string, stage: 'requirements' | 'architecture') {
+    resultView.value = { view: 'brainstorm', blockId, instanceId: null, stepIndex: null, stage }
+  }
   // Open the service-spec window for a service frame (the inspector's "View Requirements").
   function openServiceSpec(blockId: string) {
     resultView.value = { view: 'service-spec', blockId, instanceId: null, stepIndex: null }
+  }
+  // Open the Follow-up companion window for a run's Coder step (the blinking chip + the
+  // `followup_pending` notification). Resolves the Coder step index from the run when not
+  // given, so callers that only know the run can still open it.
+  function openFollowUps(instanceId: string, stepIndex: number | null = null) {
+    const execution = useExecutionStore()
+    const instance = execution.getInstance(instanceId)
+    if (!instance) return
+    // A pipeline may carry more than one follow-up-enabled Coder step, so don't blindly pick
+    // the first when no index is given: prefer the step that still has undecided items (the
+    // one the run is parked on), else the current step, else the first enabled one.
+    const resolveIdx = () => {
+      const pending = instance.steps.findIndex(
+        (s) => s.followUps?.enabled && s.followUps.items.some((i) => i.status === 'pending'),
+      )
+      if (pending >= 0) return pending
+      const current = instance.steps[instance.currentStep]
+      if (current?.followUps?.enabled) return instance.currentStep
+      return instance.steps.findIndex((s) => s.followUps?.enabled)
+    }
+    const idx = stepIndex ?? resolveIdx()
+    if (idx < 0) return
+    resultView.value = {
+      view: 'follow-ups',
+      blockId: instance.blockId,
+      instanceId,
+      stepIndex: idx,
+    }
   }
   function closeResultView() {
     resultView.value = null
@@ -607,7 +655,9 @@ export const useUiStore = defineStore('ui', () => {
     resetAiOnboarding,
     openRequirementReview,
     openClarityReview,
+    openBrainstorm,
     openServiceSpec,
+    openFollowUps,
     closeRequirementReview,
     openStepDetail,
     closeStepDetail,

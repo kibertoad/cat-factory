@@ -327,6 +327,13 @@ export interface AgentJob extends HarnessAuthFields {
    * multi-branch state) always run ephemeral regardless.
    */
   persistentCheckout?: boolean
+  /**
+   * Coding mode (implementer): tail the Coder's follow-up sentinel file and stream the
+   * forward-looking items it surfaces (loose ends / side-tasks / questions) out on the job
+   * view, so the backend lifts them onto the run's step (the Follow-up companion). Set only
+   * for the `coder` dispatch when the companion is enabled. Absent ⇒ no follow-up streaming.
+   */
+  streamFollowUps?: boolean
 }
 
 /** The generic agent response. `custom` carries a structured explore result. */
@@ -480,6 +487,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     ...(pr ? { pr } : {}),
     ...(o.noChangesIsError === false ? { noChangesIsError: false } : {}),
     ...(o.persistentCheckout === true ? { persistentCheckout: true } : {}),
+    ...(o.streamFollowUps === true ? { streamFollowUps: true } : {}),
   }
   assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
   if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')

@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/app",
-  "version": "0.31.0",
+  "version": "0.32.2",
   "description": "Reusable Nuxt layer for the Agent Architecture Board SPA (components, stores, composables, pages). Consume it from a thin deployment app via `extends: ['@cat-factory/app']` and point it at your backend with NUXT_PUBLIC_API_BASE. See deploy/frontend for an example.",
   "repository": {
     "type": "git",
@@ -26,7 +26,6 @@
     "@nuxt/ui": "^4.9.0",
     "@pinia/nuxt": "^0.11.3",
     "@vue-flow/background": "^1.3.2",
-    "@vue-flow/controls": "^1.1.3",
     "@vue-flow/core": "^1.48.2",
     "@vue-flow/minimap": "^1.5.4",
     "@vue-flow/node-resizer": "^1.5.1",

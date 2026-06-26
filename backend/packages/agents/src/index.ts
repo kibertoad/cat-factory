@@ -87,6 +87,13 @@ export {
   CLARITY_REVIEW_SYSTEM_PROMPT,
   CLARITY_REWORK_SYSTEM_PROMPT,
 } from './agents/prompts/clarity.js'
+// Brainstorm (structured-dialogue) prompt text.
+export {
+  REQUIREMENTS_BRAINSTORM_SYSTEM_PROMPT,
+  ARCHITECTURE_BRAINSTORM_SYSTEM_PROMPT,
+  REQUIREMENTS_BRAINSTORM_REWORK_SYSTEM_PROMPT,
+  ARCHITECTURE_BRAINSTORM_REWORK_SYSTEM_PROMPT,
+} from './agents/prompts/brainstorm.js'
 export {
   type VersionedPrompt,
   type PromptId,
@@ -141,7 +148,11 @@ export {
   businessLogicSystemPrompt,
 } from './agents/prompts/business-logic.js'
 export { PLATFORM_DELIVERY_CONTRACT } from './agents/prompts/delivery-contract.js'
-export { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './agents/prompts/shared.js'
+export {
+  FINAL_ANSWER_IN_REPLY,
+  FOLLOW_UP_GUIDANCE,
+  STANDARDS_FOOTER,
+} from './agents/prompts/shared.js'
 
 // Deterministic, container-free rendering + lenient coercion of the in-repo
 // `blueprints/`/`spec/` artifacts (lifted out of the executor-harness image). Invoked
@@ -187,6 +198,7 @@ export {
   openAiResolver,
   DEEPSEEK_BASE_URL,
   DEFAULT_OPENAI_COMPATIBLE_BASE_URLS,
+  isProxyableProvider,
   MOONSHOT_BASE_URL,
   OPENAI_BASE_URL,
   OPENROUTER_BASE_URL,

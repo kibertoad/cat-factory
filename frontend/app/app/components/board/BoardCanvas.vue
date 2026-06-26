@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { VueFlow, useVueFlow, type NodeMouseEvent } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
-import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
 import BlockNode from './nodes/BlockNode.vue'
 import EpicNode from './nodes/EpicNode.vue'
@@ -177,7 +176,6 @@ async function onDrop(event: DragEvent) {
     >
       <Background pattern-color="#1e293b" :gap="22" :size="1.4" />
       <MiniMap pannable zoomable :node-color="minimapColor" class="!bg-slate-900/80" />
-      <Controls position="bottom-left" />
 
       <template #node-block="props">
         <BlockNode :id="props.id" />

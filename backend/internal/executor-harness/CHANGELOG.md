@@ -1,5 +1,67 @@
 # @cat-factory/executor-harness
 
+## 1.17.0
+
+### Minor Changes
+
+- 81b60d4: Add the future-looking **Follow-up companion** to the Coder agent.
+
+  As the Coder works it now surfaces forward-looking items — genuine loose ends, useful
+  side-tasks it is deliberately not acting on, and clarifying questions — by appending them
+  to a `.cat-follow-ups.jsonl` sentinel file in its working directory. The executor-harness
+  tails that file and streams the items **out** on the job view (drain-on-read, like tool
+  spans), so a blinking **Follow-up companion** chip on the Coder step lights up the moment
+  the first item appears — while the container is still running.
+
+  A human triages each item at any point: file a follow-up as a tracker issue (GitHub Issues
+  / Jira, via the existing `TicketTrackerProvider`), send it back to the Coder to address
+  after delivering the key task, answer a question, or dismiss it. The pipeline's following
+  steps do not start until **every** item is decided: an undecided follow-up or unanswered
+  question parks the run at the Coder's completion (a new `followup_pending` notification).
+  Once all are decided the engine loops the Coder for the queued / answered items (within a
+  per-step budget) before advancing. The companion is enabled by default on Coder steps and
+  disableable per step in the pipeline builder.
+
+  This is pure engine + run-step state (no new table) so it is runtime-symmetric across the
+  Cloudflare and Node facades — the cross-runtime conformance suite asserts the park →
+  decide → loop → advance behaviour on both. Wire contracts (`followUpItem` /
+  `followUpsStepState`, the `followup_pending` notification, the `follow-ups` result view),
+  the `streamFollowUps` harness job flag + `RunnerJobView.followUps` channel (with an
+  optional pool-manifest `followUpsPath`), and the `FOLLOW_UP_GUIDANCE` Coder prompt fragment
+  are added across the stack.
+
+  Bumps the executor-harness image (new src) — publish + redeploy to roll it out.
+
+## 1.15.4
+
+### Patch Changes
+
+- 7cfab01: Harden the executor-harness image + runner (image bump 1.15.2 -> 1.15.3):
+
+  - **Pin the base image by digest.** Both Dockerfile stages now pin
+    `node:26-trixie-slim` to its multi-arch index digest
+    (`sha256:a1d9d671…`) instead of the mutable tag, so two builds of the same
+    Dockerfile always resolve the identical base (supply-chain / reproducibility).
+    The human-readable tag is kept in the line for context; bump both stages
+    together via `docker buildx imagetools inspect node:26-trixie-slim`.
+  - **Consolidate credential redaction into one module (`src/redact.ts`).**
+    Previously the git/runner paths applied only the pattern-based scrub (URL
+    userinfo + GitHub token shapes) and the subscription paths applied only the
+    value-based scrub (the leased token + harvested JSON leaves), on disjoint error
+    paths — so a secret only one rule caught could leak on the other. The single
+    `redact(text, knownSecrets?)` now applies BOTH rules in one pass everywhere.
+  - **Watchdog headroom.** Derive the per-git-command timeout (`GIT_TIMEOUT_MS`) from
+    the configured inactivity watchdog — a fixed 3-min margin below it, floored — instead
+    of a constant racing it. Git emits no activity events while it runs, so an equal
+    threshold made a slow clone/push fail with the misleading "no agent activity … likely
+    hung" reason; git now always loses the race and surfaces its own accurate "git timed
+    out". Deriving it (rather than hardcoding 7 min against the 10-min default) keeps the
+    invariant intact even when an operator lowers `JOB_INACTIVITY_MS`. The invariant is
+    documented on both constants.
+  - **Shared `killChildProcess` helper (`src/process.ts`).** Extract the identical
+    SIGTERM→(5s)→SIGKILL escalation that the Pi and subscription CLI runners each
+    re-implemented, so the kill strategy has a single source of truth.
+
 ## 1.15.2
 
 ### Patch Changes

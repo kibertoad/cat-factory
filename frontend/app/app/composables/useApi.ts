@@ -6,6 +6,7 @@ import { bootstrapApi } from './api/bootstrap'
 import { boardApi } from './api/board'
 import { documentsApi } from './api/documents'
 import { executionApi } from './api/execution'
+import { followUpsApi } from './api/followUps'
 import { fragmentsApi } from './api/fragments'
 import { githubApi } from './api/github'
 import { humanTestApi } from './api/humanTest'
@@ -86,6 +87,7 @@ export function useApi() {
     ...documentsApi(ctx),
     ...tasksApi(ctx),
     ...reviewsApi(ctx),
+    ...followUpsApi(ctx),
     ...humanTestApi(ctx),
     ...kaizenApi(ctx),
     ...localSettingsApi(ctx),

@@ -20,6 +20,7 @@ import type { Notification } from './notifications'
 import type { RequirementReview } from './requirements'
 import type { ConsensusSession, ConsensusStepConfig, StepGating, TaskEstimate } from './consensus'
 import type { ClarityReview } from './clarity'
+import type { BrainstormSession } from './brainstorm'
 import type { MergeThresholdPreset } from './merge'
 import type { ModelPreset } from './model-presets'
 import type { PipelineSchedule } from './recurring'
@@ -256,6 +257,11 @@ export interface TestReport {
 /** The kinds of agents available in the agent palette. */
 export type AgentKind =
   | 'requirements-review'
+  // Brainstorm (structured-dialogue) gates: propose options with trade-offs and let the human
+  // converge. `requirements-brainstorm` runs before the requirements review; `architecture-
+  // brainstorm` before the architect. Both open the shared brainstorm window.
+  | 'requirements-brainstorm'
+  | 'architecture-brainstorm'
   | 'architect'
   | 'researcher'
   | 'coder'
@@ -390,6 +396,12 @@ export interface Pipeline {
    * always run. Used to make a companion conditional on the task estimate.
    */
   gating?: (StepGating | null)[]
+  /**
+   * Per-step Follow-up companion toggle, parallel to `agentKinds`: governs whether a `coder`
+   * step runs the future-looking Follow-up companion. `followUps[i] === false` disables it;
+   * `null`/`true`/absent ⇒ enabled (a Coder step gets it by default). Ignored on non-coder steps.
+   */
+  followUps?: (boolean | null)[]
   /** Free-form organizational labels for the library (filter/search). */
   labels?: string[]
   /** True when archived: kept but hidden from the default library view. */
@@ -500,6 +512,10 @@ export interface WorkspaceSettings {
   storeAgentContext: boolean
   /** Whether the Kaizen agent grades agent steps after each run. On by default. */
   kaizenEnabled: boolean
+  /** Local mode only: dispatch container agents to the runner pool instead of host Docker. */
+  delegateAgentsToRunnerPool: boolean
+  /** Local mode only: provision Tester environments via the env provider instead of DinD. */
+  delegateTestEnvToProvider: boolean
   /** Spend budget currency (ISO 4217). Null ⇒ the built-in default (`EUR`). */
   spendCurrency: string | null
   /** Monthly spend budget in `spendCurrency`. Null ⇒ the built-in default. */
@@ -514,6 +530,8 @@ export interface UpdateWorkspaceSettingsInput {
   taskLimitPerType?: Partial<Record<CreateTaskType, number>> | null
   storeAgentContext?: boolean
   kaizenEnabled?: boolean
+  delegateAgentsToRunnerPool?: boolean
+  delegateTestEnvToProvider?: boolean
   spendCurrency?: string | null
   spendMonthlyLimit?: number | null
 }
@@ -583,6 +601,7 @@ export type WorkspaceEvent =
   | { type: 'requirements'; review: RequirementReview; at: number }
   | { type: 'consensus'; session: ConsensusSession; at: number }
   | { type: 'clarity'; review: ClarityReview; at: number }
+  | { type: 'brainstorm'; session: BrainstormSession; at: number }
   | { type: 'kaizen'; grading: KaizenGrading; at: number }
 
 /** Level-of-detail buckets driven by the canvas zoom level. Shallow → deep:

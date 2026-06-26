@@ -3,6 +3,8 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { PiRunOutcome, PiRunStats, TodoProgress } from './pi.js'
+import { killChildProcess } from './process.js'
+import { redact, secretsToRedact } from './redact.js'
 
 // The alternate (subscription) harness runners. The Pi harness reaches models
 // through the LLM proxy with a model-locked session token; the Claude Code and
@@ -62,52 +64,6 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-/** Redact every known secret value from text before it is logged/returned. */
-export function redactAll(text: string, secrets: string[]): string {
-  let out = text
-  for (const secret of secrets) {
-    // Guard against scrubbing trivially-short values that would mangle output.
-    if (secret.length >= 6) out = out.split(secret).join('***')
-  }
-  return out
-}
-
-// Only harvest token-like JSON leaves: real OAuth access/refresh tokens and ids are
-// long, while short values (`auth_mode: "chatgpt"`, `type: "oauth"`, …) are non-secret
-// words that would over-redact legitimate error text if scrubbed. 12 chars is a safe
-// floor below which a value is not a credential.
-const MIN_HARVEST_LEN = 12
-
-/** Recursively harvest token-like string leaves from a parsed JSON value. */
-function collectStrings(value: unknown, out: Set<string>): void {
-  if (typeof value === 'string') {
-    if (value.length >= MIN_HARVEST_LEN) out.add(value)
-  } else if (Array.isArray(value)) {
-    for (const v of value) collectStrings(v, out)
-  } else if (value && typeof value === 'object') {
-    for (const v of Object.values(value)) collectStrings(v, out)
-  }
-}
-
-/**
- * The set of secret strings to scrub from a run's stderr/output. For Claude (and the
- * Anthropic-compatible vendors GLM/Kimi/DeepSeek) the credential IS the token string,
- * so the whole-string entry covers it. For Codex the credential is a whole `auth.json`
- * blob, so we ALSO scrub every string value parsed out of it (access/refresh tokens,
- * ids): a token echoed on its OWN — not as part of the whole blob — would otherwise
- * slip past a whole-blob-only match and leak into an error message.
- */
-export function secretsToRedact(subscriptionToken: string): string[] {
-  const secrets = new Set<string>()
-  if (subscriptionToken) secrets.add(subscriptionToken)
-  try {
-    collectStrings(JSON.parse(subscriptionToken), secrets)
-  } catch {
-    // Not JSON (a Claude OAuth token / API key) — the whole-string entry covers it.
-  }
-  return [...secrets]
-}
-
 /**
  * Drive one CLI subprocess to completion, streaming LF-framed JSONL from stdout
  * through `onEvent`. Mirrors `runPi`'s lifecycle: prompt over stdin (out-of-band,
@@ -145,12 +101,7 @@ function streamCli(
     let aborted = false
     let lineBuffer = ''
 
-    const killChild = (): void => {
-      child.kill('SIGTERM')
-      setTimeout(() => {
-        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
-      }, 5_000).unref()
-    }
+    const killChild = (): void => killChildProcess(child)
 
     const processLine = (line: string): void => {
       if (!line.startsWith('{')) return
@@ -201,7 +152,7 @@ function streamCli(
     child.on('close', (code) => {
       opts.signal?.removeEventListener('abort', onAbort)
       if (lineBuffer.trim()) processLine(lineBuffer.trim())
-      const stderrTail = redactAll(stderr, secrets).slice(-700)
+      const stderrTail = redact(stderr, secrets).slice(-700)
       if (aborted) {
         reject(new Error('agent run aborted by watchdog'))
         return

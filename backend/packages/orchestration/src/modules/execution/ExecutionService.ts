@@ -4,11 +4,14 @@ import type {
   Block,
   BlueprintService,
   ExecutionInstance,
+  FollowUpItem,
+  FollowUpsStepState,
   MergePresetRepository,
   Pipeline,
   PipelineStep,
   PullRequestMerger,
   StepReviewComment,
+  StreamedFollowUp,
   SubscriptionActivationRepository,
   TicketTrackerProvider,
   IssueWritebackProvider,
@@ -60,6 +63,8 @@ import {
   MERGER_AGENT_KIND,
   REQUIREMENTS_REVIEW_AGENT_KIND,
   CLARITY_REVIEW_AGENT_KIND,
+  REQUIREMENTS_BRAINSTORM_AGENT_KIND,
+  ARCHITECTURE_BRAINSTORM_AGENT_KIND,
   BUG_INVESTIGATOR_AGENT_KIND,
   TRACKER_AGENT_KIND,
   ANALYSIS_AGENT_KIND,
@@ -68,6 +73,14 @@ import {
   BLUEPRINTS_AGENT_KIND,
   SPEC_WRITER_AGENT_KIND,
 } from './ci.logic.js'
+import {
+  DEFAULT_FOLLOW_UP_MAX_LOOPS,
+  FOLLOW_UP_PRODUCER_KIND,
+  followUpsToSendBack,
+  hasPendingFollowUps,
+  renderFollowUpRework,
+  shouldLoopCoder,
+} from './followUp.logic.js'
 import { AgentContextBuilder, type FragmentBodyResolver } from './AgentContextBuilder.js'
 import { CompanionController } from './CompanionController.js'
 import { inferTechnicalLabel } from './technical.logic.js'
@@ -93,11 +106,14 @@ import type { NotificationService } from '../notifications/NotificationService.j
 import type { WorkspaceSettingsService } from '../settings/WorkspaceSettingsService.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
 import type { ClarityReviewService } from '../clarity/ClarityReviewService.js'
+import type { BrainstormService } from '../brainstorm/BrainstormService.js'
 import type {
   IterationCapChoice,
   RequirementConcernLevel,
   RequirementReview,
   ClarityReview,
+  BrainstormSession,
+  BrainstormStage,
   ResolveRequirementsExceededChoice,
 } from '@cat-factory/kernel'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
@@ -127,6 +143,7 @@ import type { DocumentRepository } from '@cat-factory/kernel'
 import type { TaskRepository } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import type { ClarityReviewRepository } from '@cat-factory/kernel'
+import type { BrainstormSessionRepository } from '@cat-factory/kernel'
 import type {
   EnvironmentProvisioningService,
   EnvironmentTeardownService,
@@ -154,6 +171,7 @@ import {
   decideTesterInfra,
   resolveTesterEnvironment,
   TESTER_INFRA_MESSAGES,
+  type TesterEnvironment,
 } from './tester-infra.logic.js'
 
 /**
@@ -267,6 +285,19 @@ export interface ExecutionServiceDependencies {
    * answer → incorporate → re-review loop). Absent → the gate step passes through.
    */
   clarityReviewService?: ClarityReviewService
+  /**
+   * Optional: the brainstorm (structured-dialogue) feature's services, one per stage, present
+   * when the brainstorm module is wired. Drive the special `requirements-brainstorm` /
+   * `architecture-brainstorm` gate steps (inline option-generator + the iterative propose →
+   * pick → incorporate → re-run loop). Absent → the gate steps pass through.
+   */
+  brainstormServices?: Record<BrainstormStage, BrainstormService>
+  /**
+   * Optional: persistence for the brainstorm feature. Read by the agent-context builder to
+   * surface a converged `architecture-brainstorm` direction to the architect (the mirror of
+   * `requirementReviewRepository`). Absent → no substitution.
+   */
+  brainstormSessionRepository?: BrainstormSessionRepository
   /**
    * Optional: resolves fragment ids against the merged tenant catalog (managed +
    * document-backed fragments), live-resolving linked Confluence/Notion/GitHub
@@ -403,6 +434,29 @@ export interface ExecutionServiceDependencies {
    * Absent (tests / GitHub not connected) → pre/post-ops are skipped.
    */
   resolveRunRepoContext?: ResolveRunRepoContext
+  /**
+   * Optional: the deployment's default Tester environment when neither the task nor its
+   * service frame pins one — the floor of {@link resolveTesterEnvironment}. Absent →
+   * `ephemeral` (Cloudflare/Node, where there is no host runtime to test on). The local
+   * facade wires it to `local` (host Docker / DinD) by default, flipping to `ephemeral`
+   * when the workspace opts into its environment provider (`delegateTestEnvToProvider`).
+   * Used identically by the start gate and the agent-context materialisation so they agree.
+   */
+  resolveTesterFallbackDefault?: (workspaceId: string) => Promise<TesterEnvironment>
+  /**
+   * Optional: whether the workspace REQUIRES its environment provider for the Tester (the
+   * local-mode "delegate test environments" opt-in). When it resolves true, an `ephemeral`
+   * Tester run with no provider connected is refused at start instead of failing later at
+   * provision time. Absent → false (Cloudflare/Node).
+   */
+  resolveRequireEnvironmentProvider?: (workspaceId: string) => Promise<boolean>
+  /**
+   * Optional: assert the workspace has a usable container-agent backend before a run
+   * starts (local mode delegating agents to a runner pool that isn't registered throws a
+   * clean {@link ConflictError} here). Absent → no start-time check (Cloudflare/Node have
+   * a fixed backend; a missing local pool still fails loudly at dispatch).
+   */
+  assertAgentBackendConfigured?: (workspaceId: string) => Promise<void>
 }
 
 /** Reconciles a Blueprinter step's tree onto the board in place (BoardScanService). */
@@ -440,6 +494,7 @@ export class ExecutionService {
   private readonly requirementReviewService?: RequirementReviewService
   private readonly kaizenScheduler?: KaizenScheduler
   private readonly clarityReviewService?: ClarityReviewService
+  private readonly brainstormServices?: Record<BrainstormStage, BrainstormService>
   private readonly environmentProvisioning?: EnvironmentProvisioningService
   private readonly environmentTeardown?: EnvironmentTeardownService
   private readonly branchUpdater?: BranchUpdater
@@ -459,6 +514,9 @@ export class ExecutionService {
   private readonly requirementsKind: ReviewKind<RequirementReview>
   /** The clarity (bug-report triage) subject for {@link reviewGate}. */
   private readonly clarityKind: ReviewKind<ClarityReview>
+  /** The two brainstorm (structured-dialogue) subjects for {@link reviewGate}, by stage. */
+  private readonly requirementsBrainstormKind: ReviewKind<BrainstormSession>
+  private readonly architectureBrainstormKind: ReviewKind<BrainstormSession>
   private readonly blueprintReconciler?: BlueprintReconciler
   private readonly notificationService?: NotificationService
   private readonly workspaceSettingsService?: WorkspaceSettingsService
@@ -485,6 +543,14 @@ export class ExecutionService {
    * without a checkout. Absent (tests / GitHub not connected) → pre/post-ops are skipped.
    */
   private readonly resolveRunRepoContext?: ResolveRunRepoContext
+  /** Local-mode floor for the Tester environment (default `ephemeral`). See deps doc. */
+  private readonly resolveTesterFallbackDefault?: (
+    workspaceId: string,
+  ) => Promise<TesterEnvironment>
+  /** Whether the workspace requires its env provider for the Tester (local-mode opt-in). */
+  private readonly resolveRequireEnvironmentProvider?: (workspaceId: string) => Promise<boolean>
+  /** Start-time assertion that a container-agent backend is configured (local-mode pool). */
+  private readonly assertAgentBackendConfigured?: (workspaceId: string) => Promise<void>
   /** Lazily-built polling-gate registry, keyed by `agentKind`. See {@link gateFor}. */
   private gateRegistryCache?: Map<string, GateDefinition>
   /**
@@ -513,6 +579,8 @@ export class ExecutionService {
     kaizenScheduler,
     clarityReviewRepository,
     clarityReviewService,
+    brainstormServices,
+    brainstormSessionRepository,
     fragmentResolver,
     environmentProvisioning,
     environmentTeardown,
@@ -530,6 +598,9 @@ export class ExecutionService {
     resolveProviderCapabilities,
     localTestInfraSupported,
     resolveRunRepoContext,
+    resolveTesterFallbackDefault,
+    resolveRequireEnvironmentProvider,
+    assertAgentBackendConfigured,
     runInitiatorScope,
   }: ExecutionServiceDependencies) {
     this.runInitiatorScope = runInitiatorScope ?? ((_initiatedBy, fn) => fn())
@@ -548,6 +619,7 @@ export class ExecutionService {
     this.requirementReviewService = requirementReviewService
     this.kaizenScheduler = kaizenScheduler
     this.clarityReviewService = clarityReviewService
+    this.brainstormServices = brainstormServices
     this.environmentProvisioning = environmentProvisioning
     this.environmentTeardown = environmentTeardown
     this.branchUpdater = branchUpdater
@@ -559,8 +631,10 @@ export class ExecutionService {
       tasks: taskRepository,
       requirementReviews: requirementReviewRepository,
       clarityReviews: clarityReviewRepository,
+      brainstormSessions: brainstormSessionRepository,
       environmentProvisioning,
       fragmentResolver,
+      resolveTesterFallbackDefault,
     })
     this.mergeResolver = new MergeResolver({
       blockRepository,
@@ -660,6 +734,14 @@ export class ExecutionService {
     })
     this.requirementsKind = this.buildRequirementsKind()
     this.clarityKind = this.buildClarityKind()
+    this.requirementsBrainstormKind = this.buildBrainstormKind(
+      'requirements',
+      REQUIREMENTS_BRAINSTORM_AGENT_KIND,
+    )
+    this.architectureBrainstormKind = this.buildBrainstormKind(
+      'architecture',
+      ARCHITECTURE_BRAINSTORM_AGENT_KIND,
+    )
     this.blueprintReconciler = blueprintReconciler
     this.notificationService = notificationService
     this.workspaceSettingsService = workspaceSettingsService
@@ -673,6 +755,9 @@ export class ExecutionService {
     this.resolveProviderCapabilities = resolveProviderCapabilities
     this.localTestInfraSupported = localTestInfraSupported ?? true
     this.resolveRunRepoContext = resolveRunRepoContext
+    this.resolveTesterFallbackDefault = resolveTesterFallbackDefault
+    this.resolveRequireEnvironmentProvider = resolveRequireEnvironmentProvider
+    this.assertAgentBackendConfigured = assertAgentBackendConfigured
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -764,9 +849,11 @@ export class ExecutionService {
     // which the task inherits unless it pins its own `tester.environment` (the same
     // resolution the agent-context materialisation applies, so the gate and the run agree).
     const service = await this.contextBuilder.resolveServiceConfig(workspaceId, block)
+    const fallbackDefault = await this.resolveTesterFallbackDefault?.(workspaceId)
     const environment = resolveTesterEnvironment(
       block.agentConfig?.['tester.environment'],
       service?.defaultTestEnvironment,
+      fallbackDefault,
     )
     const decision = decideTesterInfra({
       localTestInfraSupported: this.localTestInfraSupported,
@@ -774,6 +861,8 @@ export class ExecutionService {
       noInfraDependencies: service?.noInfraDependencies === true,
       hasComposePath: !!service?.testComposePath,
       hasEnvironmentProvider: this.environmentProvisioning !== undefined,
+      requireEnvironmentProvider:
+        (await this.resolveRequireEnvironmentProvider?.(workspaceId)) === true,
     })
     if (decision.ok) return
     throw new ConflictError(TESTER_INFRA_MESSAGES[decision.reason], 'tester_infra_unsupported', {
@@ -918,6 +1007,11 @@ export class ExecutionService {
       await this.assertTesterInfraConfigured(workspaceId, block)
     }
 
+    // Block the start when the workspace delegates container agents to a runner pool that
+    // isn't registered (local mode opt-in). No-op on Cloudflare/Node (fixed backend) and
+    // when delegation is off; a missing local pool still also fails loudly at dispatch.
+    await this.assertAgentBackendConfigured?.(workspaceId)
+
     // Block the start when a step's canonical model has no usable provider (no direct
     // key, no subscription, no Cloudflare) — before any side effects.
     await this.assertProvidersConfiguredForPipeline(workspaceId, block, pipeline, initiatedBy)
@@ -988,6 +1082,19 @@ export class ExecutionService {
                   maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,
                   attempts: 0,
                   verdicts: [],
+                },
+              }
+            : {}),
+          // The Follow-up companion is on by default for a `coder` step; the pipeline's
+          // per-step `followUps[i] === false` toggle disables it. Seeded empty here; the
+          // harness streams items in as the Coder surfaces them (see pollAgentJob).
+          ...(kind === FOLLOW_UP_PRODUCER_KIND && pipeline.followUps?.[i] !== false
+            ? {
+                followUps: {
+                  enabled: true,
+                  items: [],
+                  loops: 0,
+                  maxLoops: DEFAULT_FOLLOW_UP_MAX_LOOPS,
                 },
               }
             : {}),
@@ -1210,7 +1317,9 @@ export class ExecutionService {
       // gate with nothing pending) re-parks on its durable decision id.
       const reentrantRequirements =
         (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND ||
-          step.agentKind === CLARITY_REVIEW_AGENT_KIND) &&
+          step.agentKind === CLARITY_REVIEW_AGENT_KIND ||
+          step.agentKind === REQUIREMENTS_BRAINSTORM_AGENT_KIND ||
+          step.agentKind === ARCHITECTURE_BRAINSTORM_AGENT_KIND) &&
         (!!step.pendingIncorporation || !!step.pendingRecommendation)
       // The human-testing gate is likewise re-entrant: a human action (confirm / request a
       // fix / pull main / recreate) records a `pendingAction` on the parked step and wakes
@@ -1285,6 +1394,30 @@ export class ExecutionService {
     if (step.agentKind === CLARITY_REVIEW_AGENT_KIND) {
       return this.reviewGate.evaluate(
         this.clarityKind,
+        workspaceId,
+        instance,
+        step,
+        block,
+        isFinalStep,
+      )
+    }
+
+    // The two brainstorm (structured-dialogue) gates run the inline option-generator and park
+    // for the dedicated brainstorm window, driving the same iterative loop as the requirements
+    // gate. NOT container/prose agents. Pass-through when the brainstorm module isn't wired.
+    if (step.agentKind === REQUIREMENTS_BRAINSTORM_AGENT_KIND) {
+      return this.reviewGate.evaluate(
+        this.requirementsBrainstormKind,
+        workspaceId,
+        instance,
+        step,
+        block,
+        isFinalStep,
+      )
+    }
+    if (step.agentKind === ARCHITECTURE_BRAINSTORM_AGENT_KIND) {
+      return this.reviewGate.evaluate(
+        this.architectureBrainstormKind,
         workspaceId,
         instance,
         step,
@@ -1537,6 +1670,9 @@ export class ExecutionService {
           update.subtasks.total > 0 ? update.subtasks.completed / update.subtasks.total : 0
         changed = true
       }
+      // Append any forward-looking items the Coder streamed since the last poll so the
+      // Follow-up companion lights up + accrues items LIVE while the container still runs.
+      if (this.appendStreamedFollowUps(step, update.followUps)) changed = true
       // Refresh the env projection so its status transitions (provisioning→ready→
       // expired/torn_down) and any error stay live in the run details during the run.
       if (await this.attachEnvironmentProjection(workspaceId, instance.blockId, step)) {
@@ -1698,6 +1834,10 @@ export class ExecutionService {
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
+    // Capture any final burst of follow-up items the harness drained on the SAME poll that
+    // observed completion (the tailer is flushed before the job is marked done), so the
+    // completion gate below sees the last items — notably a question that must hold the run.
+    this.appendStreamedFollowUps(step, update.followUps)
     // Clear the handle before recording so a replay re-attaches to nothing.
     step.jobId = undefined
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, update.result)
@@ -2090,6 +2230,16 @@ export class ExecutionService {
     // future, which is why this is keyed off the artifact, not a specific agentKind.
     const reviewable = reviewableArtifactOutput(result)
     if (reviewable !== undefined) step.output = reviewable
+
+    // Follow-up companion gate: the future-looking Coder surfaced forward-looking items.
+    // Hold the pipeline until every item is decided (an undecided follow-up or an unanswered
+    // question parks the run), then loop the Coder for the items the human queued / answered
+    // (within the loop budget) before the following steps may start. Runs BEFORE the approval
+    // gate so the Coder's follow-ups settle first. A no-op when nothing was surfaced.
+    if (step.followUps?.enabled) {
+      const gated = await this.evaluateFollowUpGate(workspaceId, instance, step)
+      if (gated) return gated
+    }
 
     // Human approval gate: a step the pipeline marked `requiresApproval` pauses
     // here once its proposal is ready, so a human can review (and edit) it before
@@ -2858,6 +3008,324 @@ export class ExecutionService {
     await svc.clearWaitingDecision(workspaceId, instance.blockId)
   }
 
+  // ---- Follow-up companion (future-looking Coder) -------------------------
+  // The Coder streams forward-looking items (loose ends / side-tasks / questions) which
+  // accrue on its `step.followUps` live (see pollAgentJob). At the Coder's completion the
+  // run parks while any item is undecided, then loops the Coder for the items the human
+  // queued / answered (within the loop budget) before the following steps may start.
+
+  /**
+   * Append the items the harness streamed since the last poll onto the Coder step's
+   * follow-up state as fresh `pending` items. A no-op when the companion is off or nothing
+   * was streamed. Returns whether anything was added (so the poller persists + emits).
+   */
+  private appendStreamedFollowUps(
+    step: PipelineStep,
+    streamed: StreamedFollowUp[] | undefined,
+  ): boolean {
+    if (!step.followUps?.enabled || !streamed || streamed.length === 0) return false
+    const now = this.clock.now()
+    for (const s of streamed) {
+      const title = (s.title ?? '').trim()
+      if (!title) continue
+      step.followUps.items.push({
+        id: this.idGenerator.next('fu'),
+        kind: s.kind === 'question' ? 'question' : 'follow_up',
+        title,
+        detail: s.detail ?? '',
+        ...(s.suggestedAction ? { suggestedAction: s.suggestedAction } : {}),
+        status: 'pending',
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
+    return true
+  }
+
+  /**
+   * The Follow-up companion gate, evaluated when the Coder step completes: park the run on
+   * a durable decision while any item is undecided; else loop the Coder for the queued /
+   * answered items (within the budget); else fall through (return undefined) so the normal
+   * advance/finish logic runs. Returns an {@link AdvanceResult} only when it parks or loops.
+   */
+  private async evaluateFollowUpGate(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+  ): Promise<AdvanceResult | undefined> {
+    const state = step.followUps
+    if (!state?.enabled) return undefined
+    if (hasPendingFollowUps(state)) {
+      await this.raiseFollowUpPending(workspaceId, instance, state)
+      return this.parkStepOnDecision(workspaceId, instance, step)
+    }
+    if (shouldLoopCoder(state)) {
+      this.loopCoderForFollowUps(instance, step)
+      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
+      return { kind: 'continue' }
+    }
+    return undefined
+  }
+
+  /**
+   * Reset the Coder step and fold the human's queued follow-ups / answered questions into
+   * its rework so the next pass extends the prior work. Marks those items `sentToCoder` so
+   * a later completion doesn't re-loop them, and counts the loop against the budget. Shared
+   * by the at-completion path ({@link evaluateFollowUpGate}) and the parked-resume path.
+   */
+  private loopCoderForFollowUps(instance: ExecutionInstance, step: PipelineStep): void {
+    const state = step.followUps!
+    const sending = followUpsToSendBack(state)
+    const feedback = renderFollowUpRework(sending)
+    for (const item of sending) {
+      item.sentToCoder = true
+      item.updatedAt = this.clock.now()
+    }
+    state.loops = (state.loops ?? 0) + 1
+    // Reset the step for a fresh dispatch; `step.followUps` is intentionally preserved
+    // (resetStepForRerun doesn't touch it) so the surfaced items survive the loop.
+    this.resetStepForRerun(step)
+    step.rework = { previousProposal: '', feedback }
+    this.startStep(step)
+    if (instance.status === 'blocked') instance.status = 'running'
+  }
+
+  /** Raise the "follow-ups need decisions" inbox card when the Coder parks on undecided items. */
+  private async raiseFollowUpPending(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    state: FollowUpsStepState,
+  ): Promise<void> {
+    if (!this.notificationService) return
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    if (!block) return
+    const pending = state.items.filter((i) => i.status === 'pending').length
+    await this.notificationService.raise(workspaceId, {
+      type: 'followup_pending',
+      blockId: block.id,
+      executionId: instance.id,
+      title: `"${block.title}" surfaced ${pending} follow-up${pending === 1 ? '' : 's'} to decide`,
+      body:
+        'The Coder flagged forward-looking follow-ups / questions. Open the task to file ' +
+        'each as an issue, send it back to the Coder, answer it, or dismiss it — the ' +
+        'pipeline continues once every item is decided.',
+      payload: { pipelineName: instance.pipelineName, findingCount: pending },
+    })
+  }
+
+  /**
+   * The run's "active" follow-up companion step for a read with no item context (the GET /
+   * the inbox-card open). A pipeline may carry MORE THAN ONE follow-up-enabled Coder step,
+   * so this must not blindly pick the first: prefer the step the run is currently on (a Coder
+   * parked on its follow-up gate), else the latest enabled step that has surfaced items, else
+   * the first enabled one.
+   */
+  private activeFollowUpStep(
+    instance: ExecutionInstance,
+  ): { step: PipelineStep; index: number } | undefined {
+    const current = instance.steps[instance.currentStep]
+    if (current?.followUps?.enabled) return { step: current, index: instance.currentStep }
+    for (let i = instance.steps.length - 1; i >= 0; i--) {
+      const s = instance.steps[i]!
+      if (s.followUps?.enabled && s.followUps.items.length > 0) return { step: s, index: i }
+    }
+    const index = instance.steps.findIndex((s) => s.followUps?.enabled)
+    return index >= 0 ? { step: instance.steps[index]!, index } : undefined
+  }
+
+  /** Read a run's live follow-up companion state (the active Coder step's items), or null. */
+  async getFollowUps(workspaceId: string, executionId: string): Promise<FollowUpsStepState | null> {
+    const instance = await this.executionRepository.get(workspaceId, executionId)
+    if (!instance) throw new NotFoundError('Execution', executionId)
+    return this.activeFollowUpStep(instance)?.step.followUps ?? null
+  }
+
+  /**
+   * Locate the run + the Coder step that OWNS the addressed item + the item, throwing 404
+   * when absent. Routes by item id (not "the first enabled step") so a pipeline carrying more
+   * than one follow-up-enabled Coder step decides each item on the step that surfaced it —
+   * otherwise a later Coder's items 404 and its gate can never be cleared.
+   */
+  private async loadFollowUpItem(
+    workspaceId: string,
+    executionId: string,
+    itemId: string,
+  ): Promise<{
+    instance: ExecutionInstance
+    step: PipelineStep
+    index: number
+    item: FollowUpItem
+  }> {
+    const instance = await this.executionRepository.get(workspaceId, executionId)
+    if (!instance) throw new NotFoundError('Execution', executionId)
+    const index = instance.steps.findIndex(
+      (s) => s.followUps?.enabled && s.followUps.items.some((i) => i.id === itemId),
+    )
+    if (index < 0) throw new NotFoundError('Follow-up item', itemId)
+    const step = instance.steps[index]!
+    const item = step.followUps!.items.find((i) => i.id === itemId)!
+    return { instance, step, index, item }
+  }
+
+  /** File a `follow_up` item as a tracker issue (GitHub / Jira), recording the ticket ref. */
+  async fileFollowUp(
+    workspaceId: string,
+    executionId: string,
+    itemId: string,
+  ): Promise<FollowUpsStepState> {
+    const { instance, step, index, item } = await this.loadFollowUpItem(
+      workspaceId,
+      executionId,
+      itemId,
+    )
+    if (item.kind !== 'follow_up') {
+      throw new ConflictError('Only follow-up items can be filed as issues')
+    }
+    if (!this.ticketTrackerProvider) {
+      throw new ConflictError('No issue tracker is configured for this workspace')
+    }
+    const frameId =
+      (await this.contextBuilder.resolveServiceFrameId(workspaceId, instance.blockId)) ??
+      instance.blockId
+    const body = [
+      item.detail,
+      item.suggestedAction ? `\n\nSuggested approach: ${item.suggestedAction}` : '',
+    ]
+      .join('')
+      .trim()
+    const ticket = await this.ticketTrackerProvider.createTicket({
+      workspaceId,
+      frameId,
+      title: item.title,
+      body: body || item.title,
+    })
+    if (!ticket) {
+      throw new ConflictError('No issue tracker is configured for this workspace')
+    }
+    item.status = 'filed'
+    item.ticketExternalId = ticket.externalId
+    item.ticketUrl = ticket.url
+    item.updatedAt = this.clock.now()
+    await this.driveFollowUpsAfterDecision(workspaceId, instance, step, index)
+    return step.followUps!
+  }
+
+  /** Queue a `follow_up` item to send back to the Coder on its next pass. */
+  async queueFollowUp(
+    workspaceId: string,
+    executionId: string,
+    itemId: string,
+  ): Promise<FollowUpsStepState> {
+    const { instance, step, index, item } = await this.loadFollowUpItem(
+      workspaceId,
+      executionId,
+      itemId,
+    )
+    if (item.kind !== 'follow_up') {
+      throw new ConflictError('Only follow-up items can be sent back to the Coder')
+    }
+    item.status = 'queued'
+    item.sentToCoder = false
+    item.updatedAt = this.clock.now()
+    await this.driveFollowUpsAfterDecision(workspaceId, instance, step, index)
+    return step.followUps!
+  }
+
+  /** Answer a `question` item; the answer is folded into the Coder's next pass. */
+  async answerFollowUp(
+    workspaceId: string,
+    executionId: string,
+    itemId: string,
+    answer: string,
+  ): Promise<FollowUpsStepState> {
+    const { instance, step, index, item } = await this.loadFollowUpItem(
+      workspaceId,
+      executionId,
+      itemId,
+    )
+    if (item.kind !== 'question') {
+      throw new ConflictError('Only question items can be answered')
+    }
+    item.status = 'answered'
+    item.answer = answer
+    item.sentToCoder = false
+    item.updatedAt = this.clock.now()
+    await this.driveFollowUpsAfterDecision(workspaceId, instance, step, index)
+    return step.followUps!
+  }
+
+  /** Dismiss a follow-up / question item without acting on it. */
+  async dismissFollowUp(
+    workspaceId: string,
+    executionId: string,
+    itemId: string,
+  ): Promise<FollowUpsStepState> {
+    const { instance, step, index, item } = await this.loadFollowUpItem(
+      workspaceId,
+      executionId,
+      itemId,
+    )
+    item.status = 'dismissed'
+    item.updatedAt = this.clock.now()
+    await this.driveFollowUpsAfterDecision(workspaceId, instance, step, index)
+    return step.followUps!
+  }
+
+  /**
+   * Persist an item decision and, when the run is PARKED on this step's follow-up gate and
+   * every item is now decided, drive it forward: loop the Coder for the queued / answered
+   * items (within the budget), else advance past the gate. When the run is not parked (the
+   * Coder is still running, or it already moved on) this only persists + emits the change.
+   */
+  private async driveFollowUpsAfterDecision(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    index: number,
+  ): Promise<void> {
+    const parkedHere =
+      instance.status === 'blocked' &&
+      step.approval?.status === 'pending' &&
+      instance.currentStep === index
+    if (!parkedHere || hasPendingFollowUps(step.followUps!)) {
+      // Still collecting decisions (or the run isn't parked on this gate): just record it.
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
+      return
+    }
+    // Every item is decided and the run is parked here: clear the waiting card and either
+    // loop the Coder for the send-back items or advance past the gate.
+    await this.clearWaitingNotification(workspaceId, instance)
+    if (shouldLoopCoder(step.followUps!)) {
+      const decisionId = step.approval!.id
+      this.loopCoderForFollowUps(instance, step)
+      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, 'approved')
+      await this.emitInstance(workspaceId, instance)
+      return
+    }
+    // The follow-up gate is settled and we won't loop. If this step ALSO carries a human
+    // approval gate, hand off to it now instead of advancing — the follow-up park reused
+    // `step.approval`, so advancing here would silently SKIP the approval. Keep the same
+    // parked decision id (the durable driver is already waiting on it), refresh the proposal
+    // to the step output, and re-raise the standard "waiting for input" card (we just cleared
+    // the follow-up one). The human then resolves it through the normal approve / request-
+    // changes path. The follow-up gate already ran BEFORE the approval gate in
+    // recordStepResult, so this preserves that exact ordering across the park.
+    const isFinalStep = index === instance.steps.length - 1
+    if (step.requiresApproval && !isFinalStep && step.approval?.status === 'pending') {
+      step.approval = { ...step.approval, proposal: step.output ?? '' }
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.ensureWaitingNotification(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
+      return
+    }
+    await this.advancePastResolvedGate(workspaceId, instance, index)
+  }
+
   /** Provision inputs (`{{input.*}}`) derived from the block under deployment. */
   private deployInputs(block: Block): Record<string, string> {
     const inputs: Record<string, string> = {
@@ -3014,6 +3482,14 @@ export class ExecutionService {
         'Resolve the clarity review through its review window, not the approval gate',
       )
     }
+    if (
+      step.agentKind === REQUIREMENTS_BRAINSTORM_AGENT_KIND ||
+      step.agentKind === ARCHITECTURE_BRAINSTORM_AGENT_KIND
+    ) {
+      throw new ConflictError(
+        'Resolve the brainstorm through its brainstorm window, not the approval gate',
+      )
+    }
     if (step.agentKind === HUMAN_TEST_AGENT_KIND) {
       throw new ConflictError(
         'Resolve the human-testing gate through its window (confirm / request a fix), not the approval gate',
@@ -3022,6 +3498,11 @@ export class ExecutionService {
     if (step.companion?.exceeded) {
       throw new ConflictError(
         'Resolve this companion review through its iteration-cap prompt, not the approval gate',
+      )
+    }
+    if (step.followUps?.enabled && step.followUps.items.some((i) => i.status === 'pending')) {
+      throw new ConflictError(
+        'Resolve the follow-up companion through its window (file / send back / answer / dismiss), not the approval gate',
       )
     }
   }
@@ -3112,6 +3593,109 @@ export class ExecutionService {
       grantExtraRound: (ws, reviewId) => require().grantExtraRound(ws, reviewId),
       emit: (ws, review) => this.events.clarityReviewChanged?.(ws, review) ?? Promise.resolve(),
     }
+  }
+
+  /**
+   * A brainstorm (structured-dialogue) subject for {@link reviewGate}, parameterised by stage.
+   * Otherwise identical to the requirements kind — the service handles its own upstream context
+   * (the architecture stage seeds from the refined requirements). The brainstorm services
+   * resolve their model exactly like the requirements reviewer, so the cap knobs are reused.
+   */
+  private buildBrainstormKind(
+    stage: BrainstormStage,
+    agentKind: string,
+  ): ReviewKind<BrainstormSession> {
+    const require = (): BrainstormService => {
+      const svc = this.brainstormServices?.[stage]
+      if (!svc?.enabled) throw new ConflictError('The brainstorm agent is not configured')
+      return svc
+    }
+    return {
+      agentKind,
+      entityName: 'Brainstorm session',
+      enabled: () => !!this.brainstormServices?.[stage]?.enabled,
+      getForBlock: (ws, blockId) => require().getForBlock(ws, blockId),
+      review: (ws, block, preset) =>
+        require().review(ws, block.id, {
+          maxIterations: preset.maxRequirementIterations,
+          concernThreshold: preset.maxRequirementConcernAllowed,
+        }),
+      reReview: (ws, reviewId, preset) =>
+        require().reReview(ws, reviewId, { concernThreshold: preset.maxRequirementConcernAllowed }),
+      incorporate: async (ws, _blockId, reviewId, feedback) => {
+        await require().incorporate(ws, reviewId, { feedback })
+      },
+      markIncorporated: (ws, reviewId) => require().markIncorporated(ws, reviewId),
+      markReReviewing: (ws, reviewId) => require().markReReviewing(ws, reviewId),
+      markIncorporating: (ws, reviewId) => require().markIncorporating(ws, reviewId),
+      grantExtraRound: (ws, reviewId) => require().grantExtraRound(ws, reviewId),
+      emit: (ws, session) =>
+        this.events.brainstormSessionChanged?.(ws, session) ?? Promise.resolve(),
+    }
+  }
+
+  /** Pick the brainstorm kind for a stage (the dedicated window drives both via the same loop). */
+  private brainstormKindFor(stage: BrainstormStage): ReviewKind<BrainstormSession> {
+    return stage === 'architecture'
+      ? this.architectureBrainstormKind
+      : this.requirementsBrainstormKind
+  }
+
+  /** Run a fresh brainstorm pass over a block + stage (off-path inspector / window surface). */
+  reviewBrainstorm(
+    workspaceId: string,
+    blockId: string,
+    stage: BrainstormStage,
+  ): Promise<BrainstormSession> {
+    return this.reviewGate.review(this.brainstormKindFor(stage), workspaceId, blockId)
+  }
+
+  /** Incorporate the human's picks ASYNCHRONOUSLY (the brainstorm mirror of {@link incorporateRequirements}). */
+  incorporateBrainstorm(
+    workspaceId: string,
+    blockId: string,
+    stage: BrainstormStage,
+    feedback?: string,
+  ): Promise<BrainstormSession> {
+    return this.reviewGate.incorporate(
+      this.brainstormKindFor(stage),
+      workspaceId,
+      blockId,
+      feedback,
+    )
+  }
+
+  /** Re-run the brainstorm against the converged direction (one more pass). */
+  reReviewBrainstorm(
+    workspaceId: string,
+    blockId: string,
+    stage: BrainstormStage,
+  ): Promise<BrainstormSession> {
+    return this.reviewGate.reReview(this.brainstormKindFor(stage), workspaceId, blockId)
+  }
+
+  /** Proceed: settle the brainstorm (last converged direction wins downstream) and advance. */
+  proceedBrainstorm(
+    workspaceId: string,
+    blockId: string,
+    stage: BrainstormStage,
+  ): Promise<BrainstormSession> {
+    return this.reviewGate.proceed(this.brainstormKindFor(stage), workspaceId, blockId)
+  }
+
+  /** Resolve a brainstorm that hit its iteration cap (extra-round / proceed / stop-reset). */
+  resolveBrainstormExceeded(
+    workspaceId: string,
+    blockId: string,
+    stage: BrainstormStage,
+    choice: ResolveRequirementsExceededChoice,
+  ): Promise<BrainstormSession> {
+    return this.reviewGate.resolveExceeded(
+      this.brainstormKindFor(stage),
+      workspaceId,
+      blockId,
+      choice,
+    )
   }
 
   /**

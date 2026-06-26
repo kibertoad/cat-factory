@@ -7,6 +7,7 @@ import {
   cloneRepo,
   commitTrackedEdits,
   createBranch,
+  excludeFromGit,
   headCommit,
   listUntrackedFiles,
   prepareExistingCheckout,
@@ -14,6 +15,7 @@ import {
   refreshFromBaseIfClean,
   remoteBranchExists,
 } from './git.js'
+import { FOLLOW_UPS_FILENAME, FollowUpTailer } from './follow-ups.js'
 import type { PiRunStats } from './pi.js'
 import {
   acquireRepoCheckout,
@@ -64,6 +66,12 @@ export interface CodingAgentSpec extends HarnessAuthFields {
    * (its containers are reused across runs); absent everywhere else.
    */
   persistentCheckout?: boolean
+  /**
+   * Tail the Coder's follow-up sentinel file ({@link FOLLOW_UPS_FILENAME}) and stream the
+   * forward-looking items it surfaces out on the job view (the Follow-up companion). Set
+   * only for the implementer (`coder`) dispatch; absent ⇒ no tailing (e.g. the CI-fixer).
+   */
+  streamFollowUps?: boolean
 }
 
 /** The outcome of a coding agent run, before each caller maps it to its own result shape. */
@@ -88,6 +96,16 @@ export interface CodingAgentOutcome {
 function checkpointIntervalMs(): number {
   const n = Number(process.env.JOB_CHECKPOINT_INTERVAL_MS)
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 60_000
+}
+
+/**
+ * How often the harness tails the Coder's follow-up sentinel file to surface new items.
+ * Short (a few seconds) so the Follow-up companion lights up promptly while the Coder is
+ * still running. Overridable via env for tests.
+ */
+function followUpPollIntervalMs(): number {
+  const n = Number(process.env.JOB_FOLLOWUP_POLL_INTERVAL_MS)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 3_000
 }
 
 /**
@@ -254,6 +272,23 @@ export async function runCodingAgent(
       const workDir = serviceDirectory ? join(dir, serviceDirectory) : dir
       if (serviceDirectory) await mkdir(workDir, { recursive: true })
 
+      // Follow-up companion: tail the Coder's sentinel file and stream new items out on the
+      // job view. Locally exclude it from git first so the agent's own `git add` can never
+      // stage it and it never surfaces as an untracked leftover or in the PR. The sentinel
+      // lives in the agent's working directory (its cwd), where the prompt tells it to write.
+      const followUpTailer =
+        spec.streamFollowUps && opts.onFollowUp
+          ? new FollowUpTailer(join(workDir, FOLLOW_UPS_FILENAME), opts.onFollowUp)
+          : undefined
+      let followUpTick: ReturnType<typeof setInterval> | undefined
+      if (followUpTailer) {
+        await excludeFromGit(dir, FOLLOW_UPS_FILENAME, signal)
+        followUpTick = setInterval(() => {
+          void followUpTailer.poll()
+        }, followUpPollIntervalMs())
+        followUpTick.unref?.()
+      }
+
       let outcome: CodingAgentOutcome
       try {
         log.info('coding-agent: running agent', { ...trace, serviceDirectory })
@@ -275,6 +310,11 @@ export async function runCodingAgent(
           },
           opts,
         )
+
+        // Stop tailing the follow-up sentinel and flush any items written after the last
+        // tick, so a fast final burst still reaches the job view before the run is recorded.
+        if (followUpTick) clearInterval(followUpTick)
+        if (followUpTailer) await followUpTailer.poll().catch(() => {})
 
         // Safety net for forgotten edits: commit changes to TRACKED files only (never
         // untracked scratch files/artifacts — the agent owns committing new files).
@@ -324,8 +364,9 @@ export async function runCodingAgent(
           }
         }
       } finally {
-        // Safety net for the throw path (the happy path already cleared it above).
+        // Safety net for the throw path (the happy path already cleared these above).
         clearInterval(checkpoint)
+        if (followUpTick) clearInterval(followUpTick)
       }
       return outcome
     },

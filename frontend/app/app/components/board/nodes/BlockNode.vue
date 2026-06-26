@@ -354,80 +354,90 @@ const ITEM_ICON: Record<string, string> = {
       <div v-else-if="runFailed && run" class="p-3">
         <AgentFailureCard :run="run" variant="expanded" />
       </div>
-      <div class="space-y-3 p-4">
-        <!-- frame header: the whole bar is the drag handle for the expanded frame.
-             `nopan` stops Vue Flow's pane from panning on a left-drag that starts here
-             (it pans via d3-zoom's mousedown, which our pointerdown stopPropagation
-             can't intercept), so the grab drives the frame move. The action buttons
-             on the right opt out via `.nodrag` (onFrameHandle ignores them). -->
+      <div class="p-4">
+        <!-- frame header: the whole header (the title row AND the stats line below it)
+             is the drag handle for the expanded frame. `nopan` stops Vue Flow's pane
+             from panning on a left-drag that starts here (it pans via d3-zoom's
+             mousedown, which our pointerdown stopPropagation can't intercept), so the
+             grab drives the frame move. The action buttons on the right opt out via
+             `.nodrag` (onFrameHandle ignores them). `pb-3` provides the gap down to the
+             drop zone AND makes that gap part of the grab surface, so no header edge
+             falls through to the pane (the parent drops `space-y-3` to avoid doubling
+             the gap). -->
         <div
-          class="nopan flex cursor-grab items-start justify-between gap-2 active:cursor-grabbing"
+          class="nopan cursor-grab space-y-3 pb-3 active:cursor-grabbing"
           title="Drag service"
           @pointerdown="onFrameHandle"
         >
-          <div class="flex items-center gap-2">
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-lg"
-              :style="{ backgroundColor: typeMeta!.accent + '22' }"
-            >
-              <UIcon :name="typeMeta!.icon" class="h-5 w-5" :style="{ color: typeMeta!.accent }" />
+          <div class="flex items-start justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <div
+                class="flex h-8 w-8 items-center justify-center rounded-lg"
+                :style="{ backgroundColor: typeMeta!.accent + '22' }"
+              >
+                <UIcon
+                  :name="typeMeta!.icon"
+                  class="h-5 w-5"
+                  :style="{ color: typeMeta!.accent }"
+                />
+              </div>
+              <div>
+                <div class="text-sm font-semibold text-white">{{ block.title }}</div>
+                <div class="text-[11px] text-slate-400">{{ typeMeta!.label }}</div>
+              </div>
             </div>
-            <div>
-              <div class="text-sm font-semibold text-white">{{ block.title }}</div>
-              <div class="text-[11px] text-slate-400">{{ typeMeta!.label }}</div>
+            <div class="flex items-center gap-1">
+              <UBadge :color="statusMeta.chip as any" variant="subtle" size="sm">{{
+                statusLabel
+              }}</UBadge>
+              <UButton
+                class="nodrag"
+                data-testid="frame-add-task"
+                size="xs"
+                variant="ghost"
+                color="neutral"
+                icon="i-lucide-plus"
+                title="Add task"
+                @click.stop="addTask"
+              />
+              <UButton
+                v-if="tasks.anyOffered"
+                class="nodrag"
+                size="xs"
+                variant="ghost"
+                color="neutral"
+                icon="i-lucide-ticket"
+                title="Create task from issue"
+                @click.stop="createTaskFromIssue"
+              />
+              <UButton
+                class="nodrag"
+                size="xs"
+                variant="ghost"
+                color="neutral"
+                icon="i-lucide-repeat"
+                title="Add recurring pipeline"
+                @click.stop="addRecurring"
+              />
+              <UButton
+                class="nodrag"
+                size="xs"
+                variant="ghost"
+                color="neutral"
+                icon="i-lucide-chevron-up"
+                title="Collapse"
+                @click.stop="toggleExpand"
+              />
             </div>
           </div>
-          <div class="flex items-center gap-1">
-            <UBadge :color="statusMeta.chip as any" variant="subtle" size="sm">{{
-              statusLabel
-            }}</UBadge>
-            <UButton
-              class="nodrag"
-              data-testid="frame-add-task"
-              size="xs"
-              variant="ghost"
-              color="neutral"
-              icon="i-lucide-plus"
-              title="Add task"
-              @click.stop="addTask"
-            />
-            <UButton
-              v-if="tasks.anyOffered"
-              class="nodrag"
-              size="xs"
-              variant="ghost"
-              color="neutral"
-              icon="i-lucide-ticket"
-              title="Create task from issue"
-              @click.stop="createTaskFromIssue"
-            />
-            <UButton
-              class="nodrag"
-              size="xs"
-              variant="ghost"
-              color="neutral"
-              icon="i-lucide-repeat"
-              title="Add recurring pipeline"
-              @click.stop="addRecurring"
-            />
-            <UButton
-              class="nodrag"
-              size="xs"
-              variant="ghost"
-              color="neutral"
-              icon="i-lucide-chevron-up"
-              title="Collapse"
-              @click.stop="toggleExpand"
-            />
-          </div>
-        </div>
 
-        <div class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-slate-500">
-          <span>{{ mergedTasks }}/{{ taskCount }} implemented</span>
-          <span v-if="modules.length"
-            >· {{ modules.length }} module{{ modules.length === 1 ? '' : 's' }}</span
-          >
-          <span v-if="prTasks" class="text-emerald-400">· {{ prTasks }} PR ready</span>
+          <div class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-slate-500">
+            <span>{{ mergedTasks }}/{{ taskCount }} implemented</span>
+            <span v-if="modules.length"
+              >· {{ modules.length }} module{{ modules.length === 1 ? '' : 's' }}</span
+            >
+            <span v-if="prTasks" class="text-emerald-400">· {{ prTasks }} PR ready</span>
+          </div>
         </div>
 
         <!-- the 2D drop zone: modules and loose tasks live here, draggable -->

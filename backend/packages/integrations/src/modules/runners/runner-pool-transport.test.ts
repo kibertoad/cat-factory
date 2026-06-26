@@ -1,5 +1,6 @@
 import type { RunnerPoolManifest, RunnerPoolProvider } from '@cat-factory/kernel'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { getGlobalDispatcher, MockAgent, setGlobalDispatcher } from 'undici'
 import { HttpRunnerPoolProvider } from './HttpRunnerPoolProvider.js'
 import { RunnerPoolTransport } from './RunnerPoolTransport.js'
 
@@ -98,14 +99,51 @@ describe('RunnerPoolTransport', () => {
 })
 
 describe('HttpRunnerPoolProvider', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  // The provider drives the org's scheduler over the global `fetch`; intercept that real fetch
+  // with undici's MockAgent (instead of replacing `fetch` wholesale via `vi.stubGlobal`), so the
+  // real URL building, header casing and Response parsing are exercised. `disableNetConnect`
+  // makes any un-mocked request fail loudly.
+  const POOL = 'https://pool.test'
+  let agent: MockAgent
+  let previousDispatcher: ReturnType<typeof getGlobalDispatcher>
+
+  beforeEach(() => {
+    previousDispatcher = getGlobalDispatcher()
+    agent = new MockAgent()
+    agent.disableNetConnect()
+    setGlobalDispatcher(agent)
+  })
+
+  afterEach(async () => {
+    setGlobalDispatcher(previousDispatcher)
+    await agent.close()
+  })
+
+  interface SeenRequest {
+    url: string
+    headers: Record<string, string>
+    body: string
+  }
+
+  /** Record requests matching path+method (reconstructing the full URL), replying with `json`. */
+  function capture(path: string, method: string, json: unknown, status = 200): SeenRequest[] {
+    const seen: SeenRequest[] = []
+    agent
+      .get(POOL)
+      .intercept({ path, method })
+      .reply(status, (opts) => {
+        seen.push({
+          url: `${POOL}${opts.path}`,
+          headers: opts.headers as Record<string, string>,
+          body: opts.body ? String(opts.body) : '',
+        })
+        return typeof json === 'string' ? json : JSON.stringify(json)
+      })
+    return seen
+  }
 
   it('interpolates the dispatch body + bearer auth and forwards the job spec', async () => {
-    const seen: { url: string; init: RequestInit }[] = []
-    vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
-      seen.push({ url, init })
-      return Promise.resolve(new Response('{}', { status: 202 }))
-    })
+    const seen = capture('/api/jobs', 'POST', {}, 202)
     const provider = new HttpRunnerPoolProvider()
     await provider.dispatch({
       manifest,
@@ -115,18 +153,12 @@ describe('HttpRunnerPoolProvider', () => {
     })
     expect(seen).toHaveLength(1)
     expect(seen[0]!.url).toBe('https://pool.test/api/jobs')
-    expect((seen[0]!.init.headers as Record<string, string>).authorization).toBe(
-      'Bearer secret-token',
-    )
-    expect(seen[0]!.init.body).toBe('{"id":"job-7","job":{"model":"qwen"}}')
+    expect(seen[0]!.headers.authorization).toBe('Bearer secret-token')
+    expect(seen[0]!.body).toBe('{"id":"job-7","job":{"model":"qwen"}}')
   })
 
   it('exposes kind + provisioning hints as first-class template variables', async () => {
-    const seen: { url: string; init: RequestInit }[] = []
-    vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
-      seen.push({ url, init })
-      return Promise.resolve(new Response('{}', { status: 202 }))
-    })
+    const seen = capture('/api/merge', 'POST', {}, 202)
     // A manifest that routes straight to a per-kind harness endpoint and forwards the
     // sizing hints, all without parsing the embedded `{{input.job}}` JSON.
     const routed: RunnerPoolManifest = {
@@ -147,22 +179,15 @@ describe('HttpRunnerPoolProvider', () => {
     })
     expect(seen).toHaveLength(1)
     expect(seen[0]!.url).toBe('https://pool.test/api/merge')
-    expect(seen[0]!.init.body).toBe('{"id":"job-7","size":"c7g.large"}')
+    expect(seen[0]!.body).toBe('{"id":"job-7","size":"c7g.large"}')
   })
 
   it('maps the scheduler status response onto the canonical job view', async () => {
-    vi.stubGlobal('fetch', () =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify({
-            state: 'succeeded',
-            progress: { completed: 3, total: 5 },
-            result: { pr_url: 'https://github.com/o/r/pull/9', summary: 'done' },
-          }),
-          { status: 200 },
-        ),
-      ),
-    )
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'succeeded',
+      progress: { completed: 3, total: 5 },
+      result: { pr_url: 'https://github.com/o/r/pull/9', summary: 'done' },
+    })
     const provider = new HttpRunnerPoolProvider()
     const view = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
     expect(view.state).toBe('done')
@@ -175,22 +200,15 @@ describe('HttpRunnerPoolProvider', () => {
     // were removed when every built-in agent migrated onto the single `agent` kind — its
     // structured doc now rides `custom` (covered below). A pool that still returns an old
     // `report` field has it dropped (not a known channel); the scalars pass through.
-    vi.stubGlobal('fetch', () =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify({
-            state: 'succeeded',
-            result: {
-              report: { greenlight: false },
-              pushed: true,
-              summary: 'tested',
-              usage: { inputTokens: 10, outputTokens: 5 },
-            },
-          }),
-          { status: 200 },
-        ),
-      ),
-    )
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'succeeded',
+      result: {
+        report: { greenlight: false },
+        pushed: true,
+        summary: 'tested',
+        usage: { inputTokens: 10, outputTokens: 5 },
+      },
+    })
     const provider = new HttpRunnerPoolProvider()
     const withResult: RunnerPoolManifest = {
       ...manifest,
@@ -216,14 +234,10 @@ describe('HttpRunnerPoolProvider', () => {
     // the pool provider MUST pass `custom` through too — dropping it silently lost the
     // doc on a runner-pool backend (a facade-parity divergence).
     const custom = { service: 'Widgets', summary: 'A widget service.', modules: [] }
-    vi.stubGlobal('fetch', () =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify({ state: 'succeeded', result: { custom, summary: 'wrote the spec' } }),
-          { status: 200 },
-        ),
-      ),
-    )
+    capture('/api/jobs/job-8', 'GET', {
+      state: 'succeeded',
+      result: { custom, summary: 'wrote the spec' },
+    })
     const provider = new HttpRunnerPoolProvider()
     const withResult: RunnerPoolManifest = {
       ...manifest,

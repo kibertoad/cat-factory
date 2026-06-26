@@ -310,6 +310,12 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     const progress = this.mapProgress(manifest, json)
     if (progress) view.progress = progress
 
+    // Forward-looking follow-up items the Coder streamed since the last poll (drain-on-read),
+    // when the manifest maps them. Surfaced on every poll (running or done) so a fast final
+    // burst isn't lost. Best-effort: a malformed entry is dropped.
+    const followUps = this.mapFollowUps(manifest, json)
+    if (followUps && followUps.length > 0) view.followUps = followUps
+
     if (state === 'failed') {
       view.error = error ?? 'Runner pool reported the job failed'
       return view
@@ -359,6 +365,31 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     const total = num(r.progressTotalPath)
     if (completed === undefined && inProgress === undefined && total === undefined) return undefined
     return { completed: completed ?? 0, inProgress: inProgress ?? 0, total: total ?? 0 }
+  }
+
+  /** Coerce the manifest-mapped follow-up array into the canonical shape (best-effort). */
+  private mapFollowUps(
+    manifest: RunnerPoolManifest,
+    json: unknown,
+  ): RunnerJobView['followUps'] | undefined {
+    const path = manifest.response.followUpsPath
+    if (!path) return undefined
+    const raw = environmentsLogic.extractByPath(json, path)
+    if (!Array.isArray(raw)) return undefined
+    const items: NonNullable<RunnerJobView['followUps']> = []
+    for (const entry of raw) {
+      if (typeof entry !== 'object' || entry === null) continue
+      const e = entry as Record<string, unknown>
+      const title = typeof e.title === 'string' ? e.title.trim() : ''
+      if (!title) continue
+      items.push({
+        kind: e.kind === 'question' ? 'question' : 'follow_up',
+        title,
+        ...(typeof e.detail === 'string' ? { detail: e.detail } : {}),
+        ...(typeof e.suggestedAction === 'string' ? { suggestedAction: e.suggestedAction } : {}),
+      })
+    }
+    return items
   }
 }
 

@@ -9,6 +9,7 @@ import type {
   InstanceSize,
   PullRequestRef,
   StepSubtasks,
+  StreamedFollowUp,
   TaskEstimate,
 } from '../domain/types.js'
 
@@ -45,6 +46,13 @@ export interface AgentRunContext {
   stepIndex: number
   /** Whether this is the pipeline's last step (drives task finalisation). */
   isFinalStep: boolean
+  /**
+   * Whether the future-looking Follow-up companion is enabled for this step (a `coder`
+   * step with the companion on). The container executor reads it to (a) append the
+   * follow-up guidance to the Coder's system prompt and (b) set the harness job's
+   * `streamFollowUps` so it tails the Coder's sentinel file. Absent/false ⇒ no streaming.
+   */
+  followUpCompanion?: boolean
   /**
    * Consensus configuration for this step, when it is consensus-enabled in the
    * pipeline (copied from the pipeline's `consensus` array onto the run's step).
@@ -368,11 +376,19 @@ export type AgentJobUpdate =
    * Still working — the durable driver should keep polling. `subtasks`, when
    * present, carries the job's latest subtask counts (the container agent reads
    * these from the coding tool's todo list) so the driver can surface live
-   * "N/M done" progress on the step between polls.
+   * "N/M done" progress on the step between polls. `followUps`, when present,
+   * carries the forward-looking items the Coder streamed since the last poll
+   * (drain-on-read) so the engine can append them to the run's step live (the
+   * Follow-up companion).
    */
-  | { state: 'running'; subtasks?: StepSubtasks }
-  /** Finished successfully; `result` carries the work product. */
-  | { state: 'done'; result: AgentRunResult }
+  | { state: 'running'; subtasks?: StepSubtasks; followUps?: StreamedFollowUp[] }
+  /**
+   * Finished successfully; `result` carries the work product. `followUps`, when present,
+   * carries any final burst of streamed items the harness drained on the SAME poll that
+   * observed completion (the tailer is flushed before the job is marked done), so the
+   * engine never loses the last items — notably a question that must hold the gate.
+   */
+  | { state: 'done'; result: AgentRunResult; followUps?: StreamedFollowUp[] }
   /** Finished with a failure (agent error, inactivity/max-duration watchdog, …). */
   | { state: 'failed'; error: string }
 

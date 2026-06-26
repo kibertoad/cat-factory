@@ -54,6 +54,7 @@ import type { BootstrapRunner } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import type { KaizenGradingRepository, KaizenVerifiedComboRepository } from '@cat-factory/kernel'
 import type { ClarityReviewRepository } from '@cat-factory/kernel'
+import type { BrainstormSessionRepository, BrainstormStage } from '@cat-factory/kernel'
 import type { SubscriptionActivationRepository } from '@cat-factory/kernel'
 import type {
   SandboxPromptVersionRepository,
@@ -99,6 +100,7 @@ import type {
 } from '@cat-factory/kernel'
 import { BoardService } from './modules/board/BoardService.js'
 import { ExecutionService } from './modules/execution/ExecutionService.js'
+import type { TesterEnvironment } from './modules/execution/tester-infra.logic.js'
 import { PipelineService } from './modules/pipelines/PipelineService.js'
 import { WorkspaceService } from '@cat-factory/workspaces'
 import { AccountService } from '@cat-factory/workspaces'
@@ -140,6 +142,7 @@ import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService.js'
 import { KaizenService } from './modules/kaizen/KaizenService.js'
 import { ClarityReviewService } from './modules/clarity/ClarityReviewService.js'
+import { BrainstormService } from './modules/brainstorm/BrainstormService.js'
 import { NotificationService } from './modules/notifications/NotificationService.js'
 import { MergePresetService } from './modules/merge/MergePresetService.js'
 import { SandboxService } from './modules/sandbox/SandboxService.js'
@@ -435,6 +438,12 @@ export interface CoreDependencies {
    */
   clarityReviewRepository?: ClarityReviewRepository
   /**
+   * Persistence for the brainstorm (structured-dialogue) feature. Mirrors
+   * `requirementReviewRepository`: both runtime facades wire it unconditionally. The two
+   * brainstorm services (one per stage) reuse the requirements reviewer's model config below.
+   */
+  brainstormSessionRepository?: BrainstormSessionRepository
+  /**
    * Optional: per-run personal-credential activations (individual-usage subscriptions).
    * Passed through to the ExecutionService so a finished run's activation is cleared
    * promptly. Both runtime facades wire it when ENCRYPTION_KEY is present.
@@ -601,6 +610,25 @@ export interface CoreDependencies {
    * can't stand its dependencies up.
    */
   localTestInfraSupported?: boolean
+  /**
+   * Optional: the deployment's default Tester environment when neither the task nor its
+   * service frame pins one (the floor of `resolveTesterEnvironment`). Absent → `ephemeral`
+   * (Cloudflare/Node). The local facade wires it to `local` (host Docker / DinD) by
+   * default, flipping to `ephemeral` when the workspace opts into its environment provider.
+   */
+  resolveTesterFallbackDefault?: (workspaceId: string) => Promise<TesterEnvironment>
+  /**
+   * Optional: whether the workspace requires its environment provider for the Tester (the
+   * local-mode "delegate test environments" opt-in). When true, an `ephemeral` Tester run
+   * with no provider connected is refused at start. Absent → false (Cloudflare/Node).
+   */
+  resolveRequireEnvironmentProvider?: (workspaceId: string) => Promise<boolean>
+  /**
+   * Optional: assert the workspace has a usable container-agent backend before a run
+   * starts (local mode delegating agents to an unregistered runner pool throws here).
+   * Absent → no start-time check (Cloudflare/Node have a fixed backend).
+   */
+  assertAgentBackendConfigured?: (workspaceId: string) => Promise<void>
 }
 
 /** The GitHub integration's services, present only when the app is configured. */
@@ -669,6 +697,11 @@ export interface KaizenModule {
 /** The clarity-review feature's service, present only when its repository is wired. */
 export interface ClarityModule {
   service: ClarityReviewService
+}
+
+/** The brainstorm feature's per-stage services, present only when its repository is wired. */
+export interface BrainstormModule {
+  services: Record<BrainstormStage, BrainstormService>
 }
 
 /** The notifications feature's service, present only when its repository is wired. */
@@ -791,6 +824,8 @@ export interface Core {
   kaizen?: KaizenModule
   /** Present only when the clarity-review repository is wired (see CoreDependencies). */
   clarity?: ClarityModule
+  /** Present only when the brainstorm repository is wired (see CoreDependencies). */
+  brainstorm?: BrainstormModule
   /** Present only when the notifications repository is wired (see CoreDependencies). */
   notifications?: NotificationsModule
   /** Present only when the Datadog connection + release-health config repos + cipher are wired. */
@@ -1213,8 +1248,92 @@ function createRequirementsModule(
     },
     // `webSearch` (gateway-RAG) is wired by the web-search-connection workstream; until then
     // the Writer still gets provider-hosted web search on Anthropic/OpenAI models.
+    // When an upstream `requirements-brainstorm` dialogue settled a converged direction, the
+    // reviewer critiques THAT (the refined requirements) instead of the raw description.
+    resolveBrainstormDirection: deps.brainstormSessionRepository
+      ? async (workspaceId: string, blockId: string) => {
+          const session = await deps.brainstormSessionRepository!.getByBlockStage(
+            workspaceId,
+            blockId,
+            'requirements',
+          )
+          return session?.status === 'incorporated' && session.convergedDirection
+            ? session.convergedDirection
+            : undefined
+        }
+      : undefined,
   })
   return { service }
+}
+
+/**
+ * Assemble the brainstorm (structured-dialogue) module when its repository is present (both
+ * runtime facades wire it unconditionally). Mirrors {@link createClarityModule}: it builds ONE
+ * {@link BrainstormService} per stage (sharing the repository) and reuses the requirements
+ * reviewer's model config since all the inline reviewers resolve their model identically. The
+ * architecture stage seeds from the refined requirements (a requirements review's incorporated
+ * doc, else the requirements-brainstorm's converged direction).
+ */
+function createBrainstormModule(
+  deps: CoreDependencies,
+  notificationService?: NotificationService,
+): BrainstormModule | undefined {
+  const { brainstormSessionRepository } = deps
+  if (!brainstormSessionRepository) return undefined
+
+  const resolveWorkspaceModelDefault = deps.modelPresetRepository
+    ? (workspaceId: string, agentKind: string, modelPresetId?: string) =>
+        resolvePresetModelForKind(
+          deps.modelPresetRepository!,
+          workspaceId,
+          agentKind,
+          modelPresetId,
+        )
+    : undefined
+
+  // The architecture stage's seed: the most refined requirements available — a settled
+  // requirements review's incorporated doc, else the requirements-brainstorm's direction.
+  const resolveRefinedRequirements = async (
+    workspaceId: string,
+    blockId: string,
+  ): Promise<string | undefined> => {
+    const review = await deps.requirementReviewRepository?.getByBlock(workspaceId, blockId)
+    if (review?.status === 'incorporated' && review.incorporatedRequirements) {
+      return review.incorporatedRequirements
+    }
+    const session = await brainstormSessionRepository.getByBlockStage(
+      workspaceId,
+      blockId,
+      'requirements',
+    )
+    return session?.status === 'incorporated' && session.convergedDirection
+      ? session.convergedDirection
+      : undefined
+  }
+
+  const common = {
+    brainstormSessionRepository,
+    blockRepository: deps.blockRepository,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+    notificationService,
+    modelProviderResolver: deps.modelProviderResolver,
+    modelProvider: deps.modelProvider,
+    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
+    resolveBlockModel: deps.requirementReviewResolveModel,
+    resolveWorkspaceModelDefault,
+  }
+
+  return {
+    services: {
+      requirements: new BrainstormService({ ...common, stage: 'requirements' }),
+      architecture: new BrainstormService({
+        ...common,
+        stage: 'architecture',
+        resolveRefinedRequirements,
+      }),
+    },
+  }
 }
 
 /**
@@ -1675,6 +1794,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   // drive the inline reviewer + the iterative answer → incorporate → re-review loop.
   const requirements = createRequirementsModule(dependencies, notifications?.service)
   const clarity = createClarityModule(dependencies, notifications?.service)
+  const brainstorm = createBrainstormModule(dependencies, notifications?.service)
   // Built before the execution engine so the engine's terminal hook can schedule a
   // post-run Kaizen grading for each completed agent step.
   const kaizen = createKaizenModule(dependencies)
@@ -1691,6 +1811,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     fragmentResolver: fragmentLibrary?.libraryService,
     requirementReviewService: requirements?.service,
     clarityReviewService: clarity?.service,
+    brainstormServices: brainstorm?.services,
     kaizenScheduler: kaizen?.service,
     environmentProvisioning: environments?.provisioningService,
     environmentTeardown: environments?.teardownService,
@@ -1752,6 +1873,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(requirements ? { requirements } : {}),
     ...(kaizen ? { kaizen } : {}),
     ...(clarity ? { clarity } : {}),
+    ...(brainstorm ? { brainstorm } : {}),
     ...(notifications ? { notifications } : {}),
     ...(slack ? { slack } : {}),
     ...(mergePresets ? { mergePresets } : {}),

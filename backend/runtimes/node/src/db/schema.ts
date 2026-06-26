@@ -787,6 +787,32 @@ export const clarityReviews = pgTable(
   ],
 )
 
+// Brainstorm (structured-dialogue) sessions (mirror of D1 migration 0016_brainstorm_sessions).
+// The brainstorm analogue of `clarity_reviews`, but keyed per (block, STAGE): a block may have
+// one live `requirements` session and one live `architecture` session at once.
+// `converged_direction` holds the standard-format direction the dialogue settled on.
+export const brainstormSessions = pgTable(
+  'brainstorm_sessions',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    block_id: text('block_id').notNull(),
+    stage: text('stage').notNull(),
+    status: text('status').notNull(),
+    items: text('items').notNull().default('[]'),
+    model: text('model'),
+    converged_direction: text('converged_direction'),
+    iteration: integer('iteration').notNull().default(1),
+    max_iterations: integer('max_iterations').notNull().default(1),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    index('idx_brainstorm_sessions_block_stage').on(t.workspace_id, t.block_id, t.stage),
+  ],
+)
+
 // A workspace's issue-tracker selection (mirror of D1 migration 0029).
 export const trackerSettings = pgTable('tracker_settings', {
   workspace_id: text('workspace_id').primaryKey(),
@@ -929,6 +955,12 @@ export const workspaceSettings = pgTable('workspace_settings', {
   // Per-workspace toggle for the Kaizen agent (post-run grading). On by default; integer
   // 0/1 to match the SQLite store.
   kaizen_enabled: integer('kaizen_enabled').notNull().default(1),
+  // LOCAL MODE ONLY toggles (inert on Cloudflare/Node): delegate container agents to the
+  // workspace's runner pool, and/or the Tester's ephemeral environments to the registered
+  // environment provider, instead of the host container runtime / in-container DinD. Off by
+  // default; integer 0/1 to match the SQLite store.
+  delegate_agents_to_runner_pool: integer('delegate_agents_to_runner_pool').notNull().default(0),
+  delegate_test_env_to_provider: integer('delegate_test_env_to_provider').notNull().default(0),
   // Per-workspace spend budget (moved out of env). Both nullable; null ⇒ the built-in
   // DEFAULT_SPEND_PRICING base table.
   spend_currency: text('spend_currency'),

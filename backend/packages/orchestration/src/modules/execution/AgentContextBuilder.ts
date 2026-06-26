@@ -3,6 +3,7 @@ import type {
   AgentRunContext,
   Block,
   BlockRepository,
+  BrainstormSessionRepository,
   ClarityReviewRepository,
   CloudProvider,
   DocumentRecord,
@@ -19,6 +20,7 @@ import { CODE_AWARE_TRAIT, hasTrait } from '@cat-factory/agents'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { extractReferences } from '@cat-factory/integrations'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
+import { resolveTesterEnvironment, type TesterEnvironment } from './tester-infra.logic.js'
 
 /**
  * The `revision` slice of an agent context when a step is being re-run with feedback
@@ -82,6 +84,7 @@ export interface AgentContextBuilderDeps {
   tasks?: TaskRepository
   requirementReviews?: RequirementReviewRepository
   clarityReviews?: ClarityReviewRepository
+  brainstormSessions?: BrainstormSessionRepository
   environmentProvisioning?: EnvironmentProvisioningService
   /**
    * Optional: resolves fragment ids against the merged tenant catalog (managed +
@@ -89,6 +92,13 @@ export interface AgentContextBuilderDeps {
    * pool, so curated and living-document fragments actually reach a run.
    */
   fragmentResolver?: FragmentBodyResolver
+  /**
+   * Optional: the deployment's default Tester environment when neither the task nor its
+   * service frame pins one (the floor of {@link resolveTesterEnvironment}). Absent →
+   * `ephemeral`. MUST match the resolver `ExecutionService` uses for its start-time infra
+   * gate, so the materialised value the job runs with agrees with what the gate checked.
+   */
+  resolveTesterFallbackDefault?: (workspaceId: string) => Promise<TesterEnvironment>
 }
 
 /**
@@ -144,14 +154,36 @@ export class AgentContextBuilder {
     // agentConfig so the Tester job body, the prompt fragment and the start-time infra
     // gate all read the same value — the stored block is left untouched (the per-task
     // override stays explicit).
-    const agentConfig =
-      service?.defaultTestEnvironment && !block.agentConfig?.['tester.environment']
-        ? { ...block.agentConfig, 'tester.environment': service.defaultTestEnvironment }
-        : block.agentConfig
-    const priorOutputs = instance.steps
-      .slice(0, instance.currentStep)
-      .filter((s) => s.output)
-      .map((s) => ({ agentKind: s.agentKind, output: s.output! }))
+    // Resolve the effective environment (task pin > service default > deployment fallback)
+    // and materialise it when the task hasn't pinned its own, so the Tester job body, the
+    // prompt fragment and the start-time infra gate all read the SAME value. The fallback
+    // (local mode: `local` by default, `ephemeral` when delegating to a provider) is the
+    // same resolver the gate uses, so the run can't disagree with what was checked at start.
+    const agentConfig = block.agentConfig?.['tester.environment']
+      ? block.agentConfig
+      : {
+          ...block.agentConfig,
+          'tester.environment': resolveTesterEnvironment(
+            undefined,
+            service?.defaultTestEnvironment,
+            await this.deps.resolveTesterFallbackDefault?.(workspaceId),
+          ),
+        }
+    // A finalized architecture-brainstorm direction is surfaced ADDITIVELY (it does not
+    // replace the description) as a synthetic prior output so the architect and downstream
+    // agents read it as context — the brainstorm session's converged direction feeding the
+    // next stage's prompt (reviews are task-scoped, so frames/modules skip the lookup).
+    const architectureDirection =
+      block.level === 'task' ? await this.resolveBrainstormDirection(workspaceId, block.id) : null
+    const priorOutputs = [
+      ...(architectureDirection
+        ? [{ agentKind: 'architecture-brainstorm', output: architectureDirection }]
+        : []),
+      ...instance.steps
+        .slice(0, instance.currentStep)
+        .filter((s) => s.output)
+        .map((s) => ({ agentKind: s.agentKind, output: s.output! })),
+    ]
     // Resolve the best-practice fragments to inject for this step. `code-aware` kinds
     // get the running service's selected fragments unioned with the block's own pins;
     // other kinds keep only their block pins. Recorded on the step for observability.
@@ -166,6 +198,9 @@ export class AgentContextBuilder {
       ...(instance.initiatedBy != null ? { initiatedByUserId: instance.initiatedBy } : {}),
       stepIndex: instance.currentStep,
       isFinalStep,
+      // The future-looking Follow-up companion is enabled for this (coder) step: the
+      // container executor appends the follow-up guidance + sets the harness to stream items.
+      ...(step.followUps?.enabled ? { followUpCompanion: true } : {}),
       // Consensus config for this step (copied onto the step at run start). Read only
       // by the optional consensus executor, which decides — possibly gated on the
       // block estimate below — whether to run the multi-model process. Absent ⇒ standard.
@@ -301,6 +336,29 @@ export class AgentContextBuilder {
     const review = await this.deps.clarityReviews.getByBlock(workspaceId, blockId)
     if (review?.status === 'incorporated' && review.clarifiedReport) {
       return review.clarifiedReport
+    }
+    return null
+  }
+
+  /**
+   * The converged architecture direction for a block — the document the
+   * `architecture-brainstorm` dialogue settled on — or `null` when the feature is unwired or
+   * the block has no settled architecture session. Surfaced additively as a prior output (it
+   * augments, never replaces, the description), the brainstorm analogue of
+   * {@link resolveReworkedRequirements}.
+   */
+  private async resolveBrainstormDirection(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<string | null> {
+    if (!this.deps.brainstormSessions) return null
+    const session = await this.deps.brainstormSessions.getByBlockStage(
+      workspaceId,
+      blockId,
+      'architecture',
+    )
+    if (session?.status === 'incorporated' && session.convergedDirection) {
+      return session.convergedDirection
     }
     return null
   }

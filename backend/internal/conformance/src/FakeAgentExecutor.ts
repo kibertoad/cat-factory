@@ -119,6 +119,13 @@ export interface FakeAgentOptions {
    * without a real container. Omitted ⇒ a deterministic `{ ok: true }`.
    */
   customResult?: unknown
+  /**
+   * Forward-looking follow-up / question items the async `coder` streams on its FIRST
+   * running poll (the deterministic analogue of the harness tailing the sentinel file), so
+   * the conformance suite can exercise the Follow-up companion gate (park until decided →
+   * loop / advance) without a real container. Emitted once per fresh job. Omitted ⇒ none.
+   */
+  followUps?: { kind: 'follow_up' | 'question'; title: string; detail?: string }[]
 }
 
 /**
@@ -349,6 +356,7 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
   private readonly asyncPolls: number
   private readonly dispatchThrowKinds: ReadonlySet<AgentKind>
   private readonly dispatchThrowMessage: string
+  protected readonly followUpItems: FakeAgentOptions['followUps']
 
   constructor(options: FakeAgentOptions = {}) {
     super(options)
@@ -357,6 +365,7 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     this.dispatchThrowKinds = new Set(options.dispatchThrowKinds ?? [])
     this.dispatchThrowMessage =
       options.dispatchThrowMessage ?? 'Container dispatch failed (HTTP 503): no capacity'
+    this.followUpItems = options.followUps
   }
 
   runsAsync(context: AgentRunContext): boolean {
@@ -398,12 +407,27 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     // finished work; the engine clears the handle once a result lands, so it won't re-poll.
     if (!job) return { state: 'done', result: { output: '[async] done', model: 'fake' } }
     job.polled += 1
+    // Stream the configured follow-up items on the FIRST running poll of a `coder` job —
+    // the deterministic analogue of the harness tailing the Coder's sentinel file — so the
+    // engine appends them to the step live and the Follow-up companion gate is exercised.
+    const followUps =
+      job.polled === 1 &&
+      job.context.agentKind === 'coder' &&
+      this.followUpItems &&
+      this.followUpItems.length > 0
+        ? this.followUpItems.map((f) => ({ kind: f.kind, title: f.title, detail: f.detail ?? '' }))
+        : undefined
     if (job.polled < this.asyncPolls) {
       return {
         state: 'running',
         subtasks: { completed: job.polled, inProgress: 1, total: this.asyncPolls },
+        ...(followUps ? { followUps } : {}),
       }
     }
-    return { state: 'done', result: await this.run(job.context) }
+    return {
+      state: 'done',
+      result: await this.run(job.context),
+      ...(followUps ? { followUps } : {}),
+    }
   }
 }

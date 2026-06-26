@@ -1,16 +1,53 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Block } from '@cat-factory/kernel'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { MockLanguageModelV3 } from 'ai/test'
+import type { Block, ModelProvider } from '@cat-factory/kernel'
 import { RequirementReviewService } from '../requirements/RequirementReviewService.js'
 import { ClarityReviewService } from '../clarity/ClarityReviewService.js'
 
-// The review services call `generateText` from the `ai` SDK directly; mock it so the test
-// drives the real loop (review → reply → incorporate → re-review → converge) without an LLM.
-const { generateTextMock } = vi.hoisted(() => ({ generateTextMock: vi.fn() }))
-vi.mock('ai', () => ({ generateText: generateTextMock }))
+// The review services run a real `generateText` over the model the `ModelProvider` resolves;
+// inject a deterministic `MockLanguageModelV3` (the AI SDK's own test double) so the suite
+// drives the real loop (review → reply → incorporate → re-review → converge) through the real
+// SDK call path — no `vi.mock('ai')` coupling to the SDK's export shape. The model is scripted
+// with one response per successive `generateText` call (the analogue of `mockResolvedValueOnce`),
+// each either a `{ text, finishReason }` or an error to throw, and it captures every prompt.
+type Scripted = { text: string; finishReason?: 'stop' | 'length' } | { throw: Error }
 
-function llm(text: string, finishReason: 'stop' | 'length' = 'stop') {
-  return { text, finishReason }
+function scriptedModel() {
+  const queue: Scripted[] = []
+  const calls: string[] = []
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      // The full prompt (system + user messages) the SDK hands the model, serialized so a
+      // test can assert which context was fed in (the analogue of inspecting the mock's args).
+      calls.push(JSON.stringify(options.prompt))
+      const next = queue.shift()
+      if (!next) throw new Error('scriptedModel: no scripted response left')
+      if ('throw' in next) throw next.throw
+      // AI SDK v6 expects the unified/raw finish-reason object from `doGenerate`; the public
+      // `generateText` result surfaces it back as the plain `finishReason` string the service reads.
+      const reason = next.finishReason ?? 'stop'
+      return {
+        content: [{ type: 'text', text: next.text }],
+        finishReason: { unified: reason, raw: reason },
+        usage: {
+          inputTokens: { total: 100, noCache: 100, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 40, text: 40, reasoning: 0 },
+        },
+        warnings: [],
+      }
+    },
+  })
+  return {
+    model,
+    calls,
+    /** Queue the next `generateText` outcome (text, a length-truncation, or a throw). */
+    push(s: Scripted) {
+      queue.push(s)
+    },
+  }
 }
+
+let script: ReturnType<typeof scriptedModel>
 
 const ITEMS_ONE_HIGH = JSON.stringify({
   items: [
@@ -57,7 +94,8 @@ function baseDeps() {
     blockRepository: { get: async () => BLOCK } as never,
     idGenerator: { next: (prefix = 'id') => `${prefix}_${++n}` },
     clock: { now: () => 1_000 },
-    modelProvider: { resolve: () => ({}) as never },
+    // Late-bound so each test's freshly-scripted model (set in beforeEach) is the one resolved.
+    modelProvider: { resolve: () => script.model } satisfies ModelProvider,
     modelRef: { provider: 'fake', model: 'm' },
   }
 }
@@ -65,7 +103,7 @@ function baseDeps() {
 const WS = 'ws_1'
 
 beforeEach(() => {
-  generateTextMock.mockReset()
+  script = scriptedModel()
 })
 
 describe('IterativeReviewService (via RequirementReviewService)', () => {
@@ -78,7 +116,7 @@ describe('IterativeReviewService (via RequirementReviewService)', () => {
   it('runs the full loop: review → reply → incorporate → re-review → converge', async () => {
     const { svc } = makeService()
 
-    generateTextMock.mockResolvedValueOnce(llm(ITEMS_ONE_HIGH))
+    script.push({ text: ITEMS_ONE_HIGH })
     const review = await svc.review(WS, BLOCK.id, {})
     expect(review.status).toBe('ready') // a high finding above the 'none' threshold parks
     expect(review.items).toHaveLength(1)
@@ -87,12 +125,12 @@ describe('IterativeReviewService (via RequirementReviewService)', () => {
 
     await svc.replyToItem(WS, review.id, review.items[0]!.id, 'It returns an empty file.')
 
-    generateTextMock.mockResolvedValueOnce(llm('# Standardized requirements\n...'))
+    script.push({ text: '# Standardized requirements\n...' })
     const { review: merged } = await svc.incorporate(WS, review.id, {})
     expect(merged.status).toBe('merged')
     expect(merged.incorporatedRequirements).toBe('# Standardized requirements\n...')
 
-    generateTextMock.mockResolvedValueOnce(llm(JSON.stringify({ items: [] })))
+    script.push({ text: JSON.stringify({ items: [] }) })
     const reReviewed = await svc.reReview(WS, review.id, {})
     expect(reReviewed.status).toBe('incorporated') // no findings → auto-pass → advance
     expect(reReviewed.iteration).toBe(2)
@@ -101,17 +139,17 @@ describe('IterativeReviewService (via RequirementReviewService)', () => {
 
   it('rejects a length-truncated rework rather than persisting a half-written document', async () => {
     const { svc } = makeService()
-    generateTextMock.mockResolvedValueOnce(llm(ITEMS_ONE_HIGH))
+    script.push({ text: ITEMS_ONE_HIGH })
     const review = await svc.review(WS, BLOCK.id, {})
     await svc.replyToItem(WS, review.id, review.items[0]!.id, 'answer')
 
-    generateTextMock.mockResolvedValueOnce(llm('truncated...', 'length'))
+    script.push({ text: 'truncated...', finishReason: 'length' })
     await expect(svc.incorporate(WS, review.id, {})).rejects.toThrow(/cut off before completion/)
   })
 
   it('blocks incorporation while findings are still open', async () => {
     const { svc } = makeService()
-    generateTextMock.mockResolvedValueOnce(llm(ITEMS_ONE_HIGH))
+    script.push({ text: ITEMS_ONE_HIGH })
     const review = await svc.review(WS, BLOCK.id, {})
     await expect(svc.incorporate(WS, review.id, {})).rejects.toThrow(/before incorporating/)
   })
@@ -132,7 +170,7 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
 
   it('prepares pending placeholders, fills them async, and preserves a sibling answer', async () => {
     const svc = makeService()
-    generateTextMock.mockResolvedValueOnce(llm(TWO_FINDINGS))
+    script.push({ text: TWO_FINDINGS })
     const review = await svc.review(WS, BLOCK.id, {})
     const a = review.items[0]!
     const b = review.items[1]!
@@ -149,12 +187,15 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
 
     // The Writer fills the placeholder in the background (one call per finding); progress streams.
     const progress: number[] = []
-    generateTextMock.mockResolvedValueOnce(
-      llm(JSON.stringify({ recommendations: [{ itemId: b.id, recommendation: 'Answer for B.' }] })),
-    )
+    script.push({
+      text: JSON.stringify({
+        recommendations: [{ itemId: b.id, recommendation: 'Answer for B.' }],
+      }),
+    })
     const { produced } = await svc.fillPendingRecommendations(WS, review.id, {
-      onProgress: async (r) =>
-        progress.push(r.recommendations.filter((x) => x.status === 'ready').length),
+      onProgress: async (r) => {
+        progress.push(r.recommendations.filter((x) => x.status === 'ready').length)
+      },
     })
     expect(produced).toBe(1)
     expect(progress).toEqual([1])
@@ -168,12 +209,12 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
 
   it('drops a failed placeholder and reopens its finding so the human can answer manually', async () => {
     const svc = makeService()
-    generateTextMock.mockResolvedValueOnce(llm(TWO_FINDINGS))
+    script.push({ text: TWO_FINDINGS })
     const review = await svc.review(WS, BLOCK.id, {})
     const b = review.items[1]!
     await svc.prepareRecommendations(WS, review.id, [b.id])
 
-    generateTextMock.mockRejectedValueOnce(new Error('writer boom'))
+    script.push({ throw: new Error('writer boom') })
     const { produced } = await svc.fillPendingRecommendations(WS, review.id, {})
     expect(produced).toBe(0)
     const after = await svc.getForBlock(WS, BLOCK.id)
@@ -183,13 +224,15 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
 
   it('accept folds the recommendation into the finding; reject reopens it', async () => {
     const svc = makeService()
-    generateTextMock.mockResolvedValueOnce(llm(TWO_FINDINGS))
+    script.push({ text: TWO_FINDINGS })
     const review = await svc.review(WS, BLOCK.id, {})
     const b = review.items[1]!
     await svc.prepareRecommendations(WS, review.id, [b.id])
-    generateTextMock.mockResolvedValueOnce(
-      llm(JSON.stringify({ recommendations: [{ itemId: b.id, recommendation: 'Answer for B.' }] })),
-    )
+    script.push({
+      text: JSON.stringify({
+        recommendations: [{ itemId: b.id, recommendation: 'Answer for B.' }],
+      }),
+    })
     await svc.fillPendingRecommendations(WS, review.id, {})
     const recId = (await svc.getForBlock(WS, BLOCK.id))!.recommendations[0]!.id
 
@@ -201,13 +244,15 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
 
   it('reject reopens the source finding so it can be answered by hand', async () => {
     const svc = makeService()
-    generateTextMock.mockResolvedValueOnce(llm(TWO_FINDINGS))
+    script.push({ text: TWO_FINDINGS })
     const review = await svc.review(WS, BLOCK.id, {})
     const b = review.items[1]!
     await svc.prepareRecommendations(WS, review.id, [b.id])
-    generateTextMock.mockResolvedValueOnce(
-      llm(JSON.stringify({ recommendations: [{ itemId: b.id, recommendation: 'Answer for B.' }] })),
-    )
+    script.push({
+      text: JSON.stringify({
+        recommendations: [{ itemId: b.id, recommendation: 'Answer for B.' }],
+      }),
+    })
     await svc.fillPendingRecommendations(WS, review.id, {})
     const recId = (await svc.getForBlock(WS, BLOCK.id))!.recommendations[0]!.id
 
@@ -226,7 +271,7 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
         { category: 'gap', severity: 'high', title: 'Same', detail: 'same?' },
       ],
     })
-    generateTextMock.mockResolvedValueOnce(llm(DUP_FINDINGS))
+    script.push({ text: DUP_FINDINGS })
     const review = await svc.review(WS, BLOCK.id, {})
     const [x, y] = review.items
     expect(review.items).toHaveLength(2)
@@ -238,12 +283,12 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
       [x!.id, y!.id].sort(),
     )
 
-    generateTextMock.mockResolvedValueOnce(
-      llm(JSON.stringify({ recommendations: [{ itemId: x!.id, recommendation: 'For X.' }] })),
-    )
-    generateTextMock.mockResolvedValueOnce(
-      llm(JSON.stringify({ recommendations: [{ itemId: y!.id, recommendation: 'For Y.' }] })),
-    )
+    script.push({
+      text: JSON.stringify({ recommendations: [{ itemId: x!.id, recommendation: 'For X.' }] }),
+    })
+    script.push({
+      text: JSON.stringify({ recommendations: [{ itemId: y!.id, recommendation: 'For Y.' }] }),
+    })
     const { produced } = await svc.fillPendingRecommendations(WS, review.id, {})
     expect(produced).toBe(2)
     const after = await svc.getForBlock(WS, BLOCK.id)
@@ -255,16 +300,16 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
 
   it('keeps a valid suggestion even when the Writer omits the echoed itemId', async () => {
     const svc = makeService()
-    generateTextMock.mockResolvedValueOnce(llm(TWO_FINDINGS))
+    script.push({ text: TWO_FINDINGS })
     const review = await svc.review(WS, BLOCK.id, {})
     const b = review.items[1]!
     await svc.prepareRecommendations(WS, review.id, [b.id])
 
     // Single-finding call: the model returns a recommendation but drops the echoed itemId
     // (common for one-item prompts). It must still be applied, not discarded as a failure.
-    generateTextMock.mockResolvedValueOnce(
-      llm(JSON.stringify({ recommendations: [{ recommendation: 'Answer for B.' }] })),
-    )
+    script.push({
+      text: JSON.stringify({ recommendations: [{ recommendation: 'Answer for B.' }] }),
+    })
     const { produced } = await svc.fillPendingRecommendations(WS, review.id, {})
     expect(produced).toBe(1)
     const after = await svc.getForBlock(WS, BLOCK.id)
@@ -280,16 +325,16 @@ describe('IterativeReviewService (via ClarityReviewService)', () => {
     const clarityReviewRepository = fakeRepo<{ id: string; blockId: string }>() as never
     const svc = new ClarityReviewService({ ...baseDeps(), clarityReviewRepository })
 
-    generateTextMock.mockResolvedValueOnce(llm(ITEMS_ONE_HIGH))
+    script.push({ text: ITEMS_ONE_HIGH })
     const review = await svc.review(WS, BLOCK.id, {
       investigation: 'Stack trace points at parser.ts',
     })
     expect(review.status).toBe('ready')
     // The investigation flows through gatherContext into the reviewer prompt.
-    expect(generateTextMock.mock.calls[0]![0].prompt).toContain('Stack trace points at parser.ts')
+    expect(script.calls[0]!).toContain('Stack trace points at parser.ts')
 
     await svc.replyToItem(WS, review.id, review.items[0]!.id, 'answer')
-    generateTextMock.mockResolvedValueOnce(llm('# Clarified bug report'))
+    script.push({ text: '# Clarified bug report' })
     const { review: merged } = await svc.incorporate(WS, review.id, {})
     expect(merged.status).toBe('merged')
     expect(merged.clarifiedReport).toBe('# Clarified bug report')

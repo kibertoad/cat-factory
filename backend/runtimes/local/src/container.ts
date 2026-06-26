@@ -1,10 +1,19 @@
 import {
+  CryptoIdGenerator,
   DrizzleGitHubInstallationRepository,
   DrizzleLocalSettingsRepository,
+  DrizzleRunnerPoolConnectionRepository,
+  ProvisioningLogRecorder,
+  SystemClock,
   buildNodeContainer,
+  buildNodeResolveTransport,
+  createDrizzleRepositories,
   loadNodeConfig,
+  withProvisioningLog,
 } from '@cat-factory/node-server'
 import type { NodeContainerOptions } from '@cat-factory/node-server'
+import { ConflictError } from '@cat-factory/kernel'
+import { WorkspaceSettingsService } from '@cat-factory/orchestration'
 import { logger } from '@cat-factory/server'
 import type { AppConfig, ResolveRunnerTransport, ServerContainer } from '@cat-factory/server'
 import type { CoreDependencies } from '@cat-factory/orchestration'
@@ -26,10 +35,20 @@ import { createRuntimeAdapter } from './runtimes/index.js'
 
 // The local-mode composition root. It is intentionally thin: the ENTIRE Drizzle/
 // Postgres persistence, pg-boss durable execution, gateways and model provisioning
-// come from `buildNodeContainer` unchanged. Local mode only swaps the two
-// differentiators behind the seams `buildNodeContainer` exposes:
-//   - the runner backend → a per-run local container (LocalContainerRunnerTransport,
-//     Docker/Podman/OrbStack/Colima/Apple `container`) instead of a self-hosted pool;
+// come from `buildNodeContainer` unchanged. Local mode only swaps the differentiators
+// behind the seams `buildNodeContainer` exposes:
+//   - the runner backend → host Docker by default (a per-run local container,
+//     LocalContainerRunnerTransport, Docker/Podman/OrbStack/Colima/Apple `container`,
+//     with the warm pool + per-repo checkout reuse configured from the DB local-mode
+//     settings), but PER WORKSPACE it can be delegated to the workspace's registered
+//     self-hosted runner pool (the `delegateAgentsToRunnerPool` setting) — the
+//     local-vs-external opt-in. The Tester's environment is the symmetric opt-in
+//     (`delegateTestEnvToProvider`, wired below as the tester fallback default), so a
+//     developer runs everything locally by default but can flip either concern to an
+//     external service from the UI;
+//   - optional NATIVE execution: run agents as a host process driving the developer's own
+//     installed `claude` / `codex` CLI (ambient login), bypassing Docker for the steps that
+//     use that login (`LOCAL_NATIVE_AGENTS`); everything else still runs in a container;
 //   - the push/clone token → a static GitHub PAT (`GITHUB_PAT`) instead of a GitHub
 //     App installation token.
 // Repo resolution is unchanged: the executor still resolves a block's repo from the
@@ -81,10 +100,21 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
         )
       : undefined
 
-  // The runner transport(s) are constructed LAZILY on first dispatch, so the service still
-  // boots to serve the board (and inline kinds) when LOCAL_HARNESS_IMAGE is unset — only
-  // repo-operating container kinds then fail, loudly and with a clear message, mirroring how
-  // the Node facade treats a missing runner backend.
+  // One shared persistence set + clock/idGenerator, reused by the per-workspace transport
+  // chooser below AND threaded into `buildNodeContainer` (which would otherwise build its
+  // own) so the chooser reads the same workspace settings the rest of the engine does.
+  const clock = new SystemClock()
+  const idGenerator = new CryptoIdGenerator()
+  const repos = options.repos ?? createDrizzleRepositories(options.db, clock)
+  const wsSettings = new WorkspaceSettingsService({
+    workspaceSettingsRepository: repos.workspaceSettingsRepository,
+    workspaceRepository: repos.workspaceRepository,
+  })
+
+  // The local container transport is constructed LAZILY on first dispatch, so the service
+  // still boots to serve the board (and inline kinds) when LOCAL_HARNESS_IMAGE is unset —
+  // only repo-operating container kinds then fail, loudly and with a clear message,
+  // mirroring how the Node facade treats a missing runner backend.
   //
   // Native mode does NOT blanket-route every dispatch to the host process: a host process
   // has no sandbox, so only the steps that actually use the developer's ambient CLI login
@@ -149,8 +179,11 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     return containerTransport
   }
 
+  // The local-agents resolver: in native mode the per-job router (only ambient-CLI steps go
+  // to the host process, the rest to a container), otherwise the warm-pool container
+  // transport directly.
   let routed: RunnerTransport | undefined
-  const resolveTransport: ResolveRunnerTransport = () => {
+  const localAgentsResolve: ResolveRunnerTransport = () => {
     if (nativeAgents) {
       if (!routed) {
         let proc: LocalProcessRunnerTransport | undefined
@@ -170,6 +203,81 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // kinds fail, loudly). Fire-and-forget: dispatch reuses the same cached promise.
   if (env.LOCAL_HARNESS_IMAGE?.trim()) void resolveContainerTransport().catch(() => {})
 
+  // The runner-pool resolver (the external opt-in target). In local mode `runners` is
+  // enabled (it keys off ENCRYPTION_KEY, which `applyLocalDefaults` always sets), so this
+  // is non-null and a workspace can register a pool via the API; a native adapter injected
+  // through `options.runnerPoolProvider` drives the actual dispatch. The connection repo is
+  // also held for the start-time guard's cheap "is a pool registered?" existence check.
+  const runnerPoolConnectionRepository = new DrizzleRunnerPoolConnectionRepository(options.db)
+  const poolResolve = buildNodeResolveTransport(
+    config,
+    runnerPoolConnectionRepository,
+    repos.workspaceRepository,
+    clock,
+    options.runnerPoolProvider,
+  )
+
+  // Per-branch provisioning-log tagging: the per-run local container logs under the
+  // `container` subsystem, the runner pool under `runner-pool`, so the logs drawer filters
+  // each correctly. We wrap each branch here and tell `buildNodeContainer` not to re-wrap
+  // (its single-subsystem wrap can't tell which branch a per-workspace chooser took).
+  const recorder = new ProvisioningLogRecorder({
+    repository: repos.provisioningLogRepository,
+    idGenerator,
+    clock,
+  })
+  const wrappedLocal = withProvisioningLog(localAgentsResolve, recorder, 'container')!
+  const wrappedPool = poolResolve ? withProvisioningLog(poolResolve, recorder, 'runner-pool') : null
+
+  // The local-vs-external agents opt-in: dispatch to the registered runner pool when the
+  // workspace opts in (and one is wrapped), else to host Docker (the warm-pool / native
+  // local backend). The pool branch's own throw surfaces a clean "register a pool" message
+  // when delegation is on but none exists.
+  const resolveTransport: ResolveRunnerTransport = async (workspaceId) => {
+    const delegate = !!workspaceId && (await wsSettings.get(workspaceId)).delegateAgentsToRunnerPool
+    if (delegate && wrappedPool) return wrappedPool(workspaceId)
+    return wrappedLocal(workspaceId)
+  }
+
+  // Start-time guard: refuse a run up front when the workspace delegates agents to a pool
+  // that isn't registered, so the human gets a clean 409 (an actionable message) instead of
+  // a mid-run dispatch failure. No-op when delegation is off. We throw a ConflictError for
+  // BOTH negative cases — the integration being disabled AND no pool registered for the
+  // workspace — rather than letting the pool resolver's plain Error escape (the error
+  // handler maps a non-DomainError to an opaque 500 with the message suppressed). The
+  // existence check uses `getByWorkspace` directly, so it neither decrypts the pool secrets
+  // nor builds a transport that the actual dispatch resolve would only build again.
+  const assertAgentBackendConfigured = async (workspaceId: string): Promise<void> => {
+    if (!(await wsSettings.get(workspaceId)).delegateAgentsToRunnerPool) return
+    if (!wrappedPool) {
+      throw new ConflictError(
+        'This workspace delegates container agents to a self-hosted runner pool, but the ' +
+          'runner-pool integration is not enabled on this deployment.',
+        'agent_backend_unconfigured',
+      )
+    }
+    if (!(await runnerPoolConnectionRepository.getByWorkspace(workspaceId))) {
+      throw new ConflictError(
+        'This workspace delegates container agents to a self-hosted runner pool, but none ' +
+          'is registered. Register one (Settings → Self-hosted runner pool) or turn ' +
+          'delegation off to run agents on host Docker, before starting.',
+        'agent_backend_unconfigured',
+      )
+    }
+  }
+
+  // The two tester-environment resolvers (used identically by the start gate and the
+  // agent-context materialisation): the local-mode default is `local` (host Docker / DinD),
+  // flipping to `ephemeral` only when the workspace opts into its environment provider; and
+  // when it opts in, the provider becomes REQUIRED so an `ephemeral` run with none connected
+  // is refused at start.
+  const resolveTesterFallbackDefault = async (
+    workspaceId: string,
+  ): Promise<'local' | 'ephemeral'> =>
+    (await wsSettings.get(workspaceId)).delegateTestEnvToProvider ? 'ephemeral' : 'local'
+  const resolveRequireEnvironmentProvider = async (workspaceId: string): Promise<boolean> =>
+    (await wsSettings.get(workspaceId)).delegateTestEnvToProvider
+
   // The selected runtime decides whether the Tester's LOCAL docker-compose infra (run
   // via Docker-in-Docker) is possible: Docker/Podman/OrbStack/Colima can nest a daemon,
   // Apple `container` (one VM per container) cannot. Surface that capability to the
@@ -188,10 +296,12 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     ...options,
     env,
     config,
-    // Dispatch container jobs to the local Docker transport (ignoring workspace — local
-    // mode has no per-workspace runner pools), or, in native mode, to the per-job router
-    // that sends only ambient-CLI steps to the host process and the rest to a container.
+    repos,
+    // The per-workspace chooser (host Docker / native local vs the runner pool). Pre-wrapped
+    // with the correct provisioning-log subsystem per branch, so tell buildNodeContainer not
+    // to re-wrap with a single subsystem tag.
     resolveTransport,
+    skipProvisioningLogWrap: true,
     // Authenticate git with the developer's PAT when present. Absent → the executor
     // falls back to the GitHub App path (and is null without it), so container kinds
     // fail loudly rather than silently mis-running.
@@ -205,12 +315,21 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     // connected with no manual connect step.
     ...(githubInstallationRepository ? { githubInstallationRepository } : {}),
     overrides: {
+      // The local-mode infrastructure-delegation opt-ins (per workspace). Listed BEFORE
+      // `...options.overrides` so a caller (the cross-runtime conformance harness) can pin
+      // the facade-NEUTRAL `ephemeral` tester default for the shared assertions — the local
+      // `local` default is a facade-specific behavior covered by its own tests.
+      resolveTesterFallbackDefault,
+      resolveRequireEnvironmentProvider,
+      assertAgentBackendConfigured,
       ...options.overrides,
       // The local PAT carries `workflow` scope (the creation URL pre-selects it), so the
       // connection isn't missing workflows: write — report it granted to suppress the
       // advisory banner. (The App-permissions probe this normally uses needs an app JWT.)
       ...(pat ? ({ workflowsGranted: async () => true } satisfies Partial<CoreDependencies>) : {}),
-      // Gate the Tester's local-infra mode on the runtime's Docker-in-Docker support.
+      // Gate the Tester's local-infra mode on the runtime's Docker-in-Docker support
+      // (local-authoritative — after the overrides so a deployment can't accidentally
+      // claim DinD support the runtime doesn't have).
       localTestInfraSupported,
     } satisfies Partial<CoreDependencies>,
   })

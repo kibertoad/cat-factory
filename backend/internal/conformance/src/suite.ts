@@ -259,6 +259,42 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(after.body.currency).toBe('USD')
       })
 
+      it('round-trips the local-mode delegation toggles (D1 ⇄ Postgres)', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        type Settings = {
+          delegateAgentsToRunnerPool: boolean
+          delegateTestEnvToProvider: boolean
+        }
+        // Default off on a fresh workspace (local-everything is the default).
+        const initial = await call<Settings>('GET', `/workspaces/${wsId}/settings`)
+        expect(initial.status).toBe(200)
+        expect(initial.body.delegateAgentsToRunnerPool).toBe(false)
+        expect(initial.body.delegateTestEnvToProvider).toBe(false)
+
+        // Both flip and persist identically through the new workspace_settings columns.
+        const put = await call<Settings>('PUT', `/workspaces/${wsId}/settings`, {
+          delegateAgentsToRunnerPool: true,
+          delegateTestEnvToProvider: true,
+        })
+        expect(put.status).toBe(200)
+        expect(put.body.delegateAgentsToRunnerPool).toBe(true)
+        expect(put.body.delegateTestEnvToProvider).toBe(true)
+
+        const reread = await call<Settings>('GET', `/workspaces/${wsId}/settings`)
+        expect(reread.body.delegateAgentsToRunnerPool).toBe(true)
+        expect(reread.body.delegateTestEnvToProvider).toBe(true)
+
+        // A partial patch leaves the untouched flag intact (per-field merge).
+        const partial = await call<Settings>('PUT', `/workspaces/${wsId}/settings`, {
+          delegateAgentsToRunnerPool: false,
+        })
+        expect(partial.body.delegateAgentsToRunnerPool).toBe(false)
+        expect(partial.body.delegateTestEnvToProvider).toBe(true)
+      })
+
       it('round-trips incident-enrichment credentials, redacted + sealed (D1 ⇄ Postgres)', async () => {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
@@ -3527,6 +3563,66 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
         ).body.blocks.find((b) => b.id === 'task_login')!
         expect(task.status).toBe('done')
+      })
+
+      it('parks on undecided follow-ups, then decides + loops the Coder (Follow-up companion)', async () => {
+        // The async `coder` streams two forward-looking items (a follow-up + a question).
+        // The engine appends them to the step live and the Follow-up companion gate holds the
+        // pipeline at the Coder's completion until every item is decided — then loops the
+        // Coder for the answered question before advancing. Asserted identically on both
+        // runtimes (pure engine + step state — no new table, no facade-specific wiring).
+        const app = harness.makeApp({
+          confidence: 1,
+          asyncKinds: ['coder'],
+          followUps: [
+            { kind: 'follow_up', title: 'Dedupe the retry helper', detail: 'two copies exist' },
+            { kind: 'question', title: 'Which timeout?', detail: '30s or 60s?' },
+          ],
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: 'pl_quick',
+        })
+
+        // The run parks at the Coder's completion: both items surfaced + pending, the run
+        // blocked, and the NEXT step (blueprints) NOT started.
+        const parked = await app.drive(wsId)
+        const exec = parked.find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('blocked')
+        const coder = exec.steps.find((s) => s.agentKind === 'coder')!
+        expect(coder.followUps?.enabled).toBe(true)
+        expect(coder.followUps?.items.map((i) => i.status)).toEqual(['pending', 'pending'])
+        expect(exec.steps.find((s) => s.agentKind === 'blueprints')!.state).toBe('pending')
+
+        // GET surfaces the same live state.
+        const got = await app.call('GET', `/workspaces/${wsId}/executions/${exec.id}/follow-ups`)
+        expect(got.status).toBe(200)
+
+        const followUp = coder.followUps!.items.find((i) => i.kind === 'follow_up')!
+        const question = coder.followUps!.items.find((i) => i.kind === 'question')!
+
+        // Dismiss the follow-up, then answer the question → every item decided.
+        await app.call(
+          'POST',
+          `/workspaces/${wsId}/executions/${exec.id}/follow-ups/${followUp.id}/dismiss`,
+        )
+        const answered = await app.call(
+          'POST',
+          `/workspaces/${wsId}/executions/${exec.id}/follow-ups/${question.id}/answer`,
+          { answer: '30s' },
+        )
+        expect(answered.status).toBe(200)
+
+        // The answered question loops the Coder once, then the run advances to completion.
+        const done = await app.drive(wsId)
+        const final = done.find((e) => e.blockId === 'task_login')!
+        expect(final.status).toBe('done')
+        const finalCoder = final.steps.find((s) => s.agentKind === 'coder')!
+        expect(finalCoder.followUps?.loops ?? 0).toBeGreaterThanOrEqual(1)
+        expect(finalCoder.followUps?.items.find((i) => i.id === question.id)?.status).toBe(
+          'answered',
+        )
       })
 
       it('opens a PR when confidence is below threshold, then merges on demand', async () => {
