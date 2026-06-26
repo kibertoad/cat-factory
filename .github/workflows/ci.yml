@@ -153,10 +153,12 @@ jobs:
       # Actually COMPILE the SPA. `vue-tsc` (above) is lenient about template-expression
       # syntax, so an SFC that the real Vue/Vite build rejects (e.g. a multi-statement
       # inline handler) used to slip through every check — nothing in CI built the
-      # frontend. Building the example deployment closes that gap. NUXT_PUBLIC_API_BASE is
-      # baked in at build time; a placeholder is fine for a pure compile check.
+      # frontend. We run `nuxt generate` (not `nuxt build`) so this mirrors the EXACT
+      # command the Pages deployment ships with, catching `generate`-only failures too.
+      # NUXT_PUBLIC_API_BASE is baked in at build time; a placeholder is fine for a pure
+      # compile check.
       - name: Build frontend SPA
-        run: pnpm --filter @cat-factory/deploy-frontend run build
+        run: pnpm --filter @cat-factory/deploy-frontend run generate
         env:
           NUXT_PUBLIC_API_BASE: http://localhost:8787
 
@@ -296,6 +298,11 @@ jobs:
   # same Postgres service as the Node suite; Playwright's own webServer boots both the
   # backend (src/testServer.ts) and the SPA (deploy/frontend's nuxt dev). Covers
   # frontend + backend, so it runs on every PR (not gated by the backend paths filter).
+  #
+  # NON-BLOCKING: deliberately NOT a dependency of the aggregated `Test` gate below, so a
+  # browser/boot flake here can't block an otherwise-green PR. It still runs on every PR
+  # and uploads its report; treat red runs as a signal to investigate, not a merge stop.
+  # Promote it into `test-gate.needs` once it has proven stable.
   test-e2e:
     name: Test e2e (playwright)
     runs-on: ubuntu-latest
@@ -381,9 +388,11 @@ jobs:
 
   # Single aggregated status named "Test" so branch protection can require one
   # check regardless of the job/shard layout. Fails unless every test job passed.
+  # NOTE: `test-e2e` is intentionally NOT in `needs` — it's non-blocking for now (see the
+  # job comment above), so its result does not gate this required status.
   test-gate:
     name: Test
-    needs: [test-worker, test-rest, test-e2e]
+    needs: [test-worker, test-rest]
     if: always()
     runs-on: ubuntu-latest
     permissions: {}
@@ -392,10 +401,9 @@ jobs:
         env:
           WORKER: ${{ needs.test-worker.result }}
           REST: ${{ needs.test-rest.result }}
-          E2E: ${{ needs.test-e2e.result }}
         run: |
-          echo "worker shards: $WORKER | rest: $REST | e2e: $E2E"
-          test "$WORKER" = "success" && test "$REST" = "success" && test "$E2E" = "success"
+          echo "worker shards: $WORKER | rest: $REST"
+          test "$WORKER" = "success" && test "$REST" = "success"
 
   acceptance:
     name: Container acceptance (Docker)

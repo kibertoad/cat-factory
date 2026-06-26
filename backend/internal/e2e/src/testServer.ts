@@ -49,8 +49,12 @@ const env: NodeJS.ProcessEnv = {
   PORT: process.env.PORT ?? '8787',
   // The SPA is served from a different origin (the Nuxt dev server), so the browser's
   // cross-origin REST calls need this allow-listed. The WebSocket upgrade is authorised
-  // by ticket, not CORS.
-  CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS ?? 'http://localhost:3000',
+  // by ticket, not CORS. Playwright passes the SPA's exact origin (derived from
+  // E2E_FRONTEND_PORT); the fallback below derives the same default so a standalone
+  // `pnpm serve` stays consistent with the frontend's port.
+  CORS_ALLOWED_ORIGINS:
+    process.env.CORS_ALLOWED_ORIGINS ??
+    `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`,
 }
 
 if (!env.DATABASE_URL) {

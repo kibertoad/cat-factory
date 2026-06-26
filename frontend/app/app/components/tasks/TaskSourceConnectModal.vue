@@ -32,6 +32,7 @@ const open = computed({
     if (!v) ui.closeTaskConnect()
   },
 })
+const back = useIntegrationBack(open)
 
 /** One value per credential field, reset whenever the modal (re)opens. */
 const values = ref<Record<string, string>>({})
@@ -107,10 +108,7 @@ async function toggleEnabled(enabled: boolean) {
 <template>
   <UModal v-model:open="open" :title="descriptor?.label ?? 'Task source'">
     <template #title>
-      <IntegrationBackTitle
-        :title="descriptor?.label ?? 'Task source'"
-        @back="((open = false), ui.openIntegrations())"
-      />
+      <IntegrationBackTitle :title="descriptor?.label ?? 'Task source'" @back="back" />
     </template>
     <template #body>
       <div v-if="descriptor" class="space-y-4">

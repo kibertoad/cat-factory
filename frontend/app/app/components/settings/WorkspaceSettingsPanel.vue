@@ -22,6 +22,7 @@ const open = computed({
   get: () => ui.workspaceSettingsOpen,
   set: (v: boolean) => (v ? ui.openWorkspaceSettings() : ui.closeWorkspaceSettings()),
 })
+const back = useIntegrationBack(open)
 
 // Which tab is shown — driven by the ui store so other surfaces (command bar,
 // integrations) can deep-link straight to a tab.
@@ -162,10 +163,7 @@ async function saveBudget() {
 <template>
   <UModal v-model:open="open" title="Workspace settings" :ui="{ content: 'max-w-3xl' }">
     <template #title>
-      <IntegrationBackTitle
-        title="Workspace settings"
-        @back="((open = false), ui.openIntegrations())"
-      />
+      <IntegrationBackTitle title="Workspace settings" @back="back" />
     </template>
     <template #body>
       <UTabs

@@ -25,8 +25,6 @@ export default defineConfig({
   timeout: 60_000,
   use: {
     baseURL: FRONTEND_URL,
-    // The backend origin, exposed to specs that seed/trigger state over REST (auth is open).
-    extraHTTPHeaders: {},
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -41,7 +39,10 @@ export default defineConfig({
       timeout: 120_000,
       stdout: 'pipe',
       stderr: 'pipe',
-      env: { PORT: String(BACKEND_PORT) },
+      // Allow-list the SPA's actual origin for CORS — derived from the SAME port var the
+      // frontend server binds, so overriding E2E_FRONTEND_PORT can't desync them and
+      // silently break every in-browser REST call.
+      env: { PORT: String(BACKEND_PORT), CORS_ALLOWED_ORIGINS: FRONTEND_URL },
     },
     {
       // The SPA (the @cat-factory/app layer via the deploy/frontend consumer), pointed at

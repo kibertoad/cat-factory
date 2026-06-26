@@ -46,6 +46,18 @@ Playwright's `webServer` boots both the backend (`src/testServer.ts`) and the SP
 (`deploy/frontend`'s `nuxt dev`, pointed at the backend via `NUXT_PUBLIC_API_BASE`).
 Use `test:e2e:ui` for the interactive runner. The suite is **not** part of the unit
 `test:run` lane — it runs in its own CI job (`.github/workflows/ci.yml` → `Test e2e`).
+That job is **non-blocking**: it isn't wired into the aggregated `Test` gate, so a
+browser/boot flake can't block an otherwise-green PR. Promote it into `test-gate.needs`
+once it has proven stable.
+
+### Test isolation
+
+Specs share one Postgres datastore (`workers: 1`, `fullyParallel: false`), but each spec
+**seeds its own workspace** and pins it client-side (`pinWorkspace`), so concurrent
+workspaces never collide and no per-test DB teardown is needed. CI runs against a fresh,
+ephemeral Postgres service per run, so accumulated rows are discarded with the container;
+a retried spec simply seeds a new workspace. If a future spec needs a clean global state,
+add a `globalSetup` that truncates rather than relying on ordering.
 
 ### Knobs
 

@@ -37,6 +37,7 @@ const open = computed({
     if (!v) ui.closeProviderConnection()
   },
 })
+const back = useIntegrationBack(open)
 
 const meta = computed(() => (kind.value ? META[kind.value] : null))
 const descriptor = computed(() => (kind.value ? store.descriptorFor(kind.value) : null))
@@ -215,10 +216,7 @@ function fieldHelp(key: string): string | undefined {
 <template>
   <UModal v-model:open="open" :title="meta?.title ?? 'Provider'" :ui="{ content: 'max-w-xl' }">
     <template #title>
-      <IntegrationBackTitle
-        :title="meta?.title ?? 'Provider'"
-        @back="((open = false), ui.openIntegrations())"
-      />
+      <IntegrationBackTitle :title="meta?.title ?? 'Provider'" @back="back" />
     </template>
     <template #body>
       <div v-if="descriptor" class="space-y-4">

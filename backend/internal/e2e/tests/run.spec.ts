@@ -25,6 +25,11 @@ test.describe('live pipeline run', () => {
     const workspaceId = snapshot.workspace.id
     const pipeline = await createSimplePipeline(request, workspaceId)
 
+    // Fail on uncaught exceptions in the app — a live-pushed event that breaks a
+    // component would otherwise pass silently as long as the status text still settled.
+    const pageErrors: string[] = []
+    page.on('pageerror', (err) => pageErrors.push(err.message))
+
     await pinWorkspace(page, workspaceId)
     await openBoard(page)
 
@@ -51,5 +56,7 @@ test.describe('live pipeline run', () => {
     await expect
       .poll(async () => await card.getAttribute('data-status'), { timeout: 45_000 })
       .toMatch(/^(pr_ready|done)$/)
+
+    expect(pageErrors, `uncaught page errors:\n${pageErrors.join('\n')}`).toEqual([])
   })
 })
