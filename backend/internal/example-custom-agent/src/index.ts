@@ -56,18 +56,38 @@ const REPORT_PATH = 'compliance/REPORT.md'
  */
 const securityAssessment = defineStructuredOutput(
   v.object({
-    /** Overall risk rating, 0..1 (higher = riskier). */
-    risk: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(1))),
+    // Each constrained field is wrapped in `v.fallback` so ONE noisy field degrades to its
+    // default instead of failing the whole parse — the old hand-written coercer never threw, and
+    // `safeParse` must match that (a model that reports `risk` on a 0..100 scale, or `findings` as
+    // a stray string, would otherwise drop an entire valid assessment and commit no report).
+    // `fallback(optional(…), undefined)` keeps the `0..1` (etc.) constraint but degrades a
+    // present-but-invalid value to `undefined` instead of failing the whole object — `optional`
+    // alone only handles an ABSENT key, so the fallback is what makes `safeParse` non-throwing on
+    // a noisy field, matching the old coercer (`optional` is inside so `undefined` is a legal output).
+    /** Overall risk rating, 0..1 (higher = riskier); out-of-range/non-numeric ⇒ omitted. */
+    risk: v.fallback(v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(1))), undefined),
     /** One-paragraph summary of the security posture of the change. */
-    summary: v.optional(v.string()),
+    summary: v.fallback(v.optional(v.string()), undefined),
     /** Individual findings, each a short title + optional detail + severity. */
     findings: v.optional(
-      v.array(
-        v.object({
-          title: v.fallback(v.string(), 'Untitled finding'),
-          detail: v.optional(v.string()),
-          severity: v.optional(v.picklist(['low', 'medium', 'high', 'critical'])),
-        }),
+      // Outer fallback: a non-array `findings` (e.g. a stray string) ⇒ `[]`. Inner per-item
+      // fallback: one malformed entry degrades to an "Untitled finding" placeholder instead of
+      // failing the whole array — so a single bad item can't discard the good findings beside it.
+      v.fallback(
+        v.array(
+          v.fallback(
+            v.object({
+              title: v.fallback(v.string(), 'Untitled finding'),
+              detail: v.fallback(v.optional(v.string()), undefined),
+              severity: v.fallback(
+                v.optional(v.picklist(['low', 'medium', 'high', 'critical'])),
+                undefined,
+              ),
+            }),
+            { title: 'Untitled finding' },
+          ),
+        ),
+        [],
       ),
       [],
     ),

@@ -194,8 +194,13 @@ let validated = false
 /** Run {@link validateRegistrations} at most once per process. Safe to call from a per-request build. */
 export function validateRegistrationsOnce(opts: ValidateRegistrationsOptions = {}): void {
   if (validated) return
-  validated = true
+  // Flip the guard only AFTER a clean validation. Setting it first would poison the guard on a
+  // throw: on the Worker (where this runs inside `fetch` on the first request) a misconfigured
+  // deployment would 500 exactly once, then — the module flag now `true` for the isolate's life —
+  // serve the broken config silently on every later request. Validating until it passes keeps the
+  // failure loud (every request re-throws) until the deployment is fixed, matching the boot intent.
   validateRegistrations(opts)
+  validated = true
 }
 
 /** Reset the once-guard. Intended for tests that exercise the boot path repeatedly. */

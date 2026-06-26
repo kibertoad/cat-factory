@@ -58,14 +58,23 @@ export function systemPromptFor(kind: AgentKind): string {
  *   - FINAL_ANSWER_IN_REPLY — a registered `inline`/`container-explore` kind, whose deliverable
  *     IS its visible reply (a report / structured JSON the platform parses), so a reasoning
  *     model can't lose the answer to its hidden channel. Built-in kinds already get this from
- *     their own track prompts, so it's scoped to registered kinds here to avoid double-append.
- *     A `container-coding` kind (product is a pushed commit) and a no-`agent` kind get neither.
+ *     their own track prompts, so it's scoped to kinds whose prompt actually CAME from the
+ *     registry to avoid double-append. A `container-coding` kind (product is a pushed commit)
+ *     and a no-`agent` kind get neither.
+ *
+ * `base` is the resolved base prompt: when a registered id collides with a built-in track (e.g.
+ * a deployment registers `architect`), `baseSystemPromptFor` returns the TRACK prompt (which
+ * already carries FINAL_ANSWER_IN_REPLY), not the registered one — so we gate `needsFinalAnswer`
+ * on the base actually being the registered prompt, not merely on the kind being in the registry.
  */
 function applySurfaceDirectives(prompt: string, kind: AgentKind): string {
   const surface = registeredAgentStep(kind)?.surface
-  const isRegistered = registeredSystemPrompt(kind) !== undefined
+  // True only when the base prompt is the one from the registry — i.e. no built-in track claimed
+  // this kind. A built-in-track-owned id (even if also registered) already got the directive.
+  const usedRegisteredPrompt = prompt === registeredSystemPrompt(kind)
   const needsGuardrail = isReadOnlyAgentKind(kind) || surface === 'container-explore'
-  const needsFinalAnswer = isRegistered && (surface === 'inline' || surface === 'container-explore')
+  const needsFinalAnswer =
+    usedRegisteredPrompt && (surface === 'inline' || surface === 'container-explore')
   let result = prompt
   if (needsGuardrail) result = `${result}\n\n${READ_ONLY_GUARDRAIL}`
   if (needsFinalAnswer) result = `${result}\n\n${FINAL_ANSWER_IN_REPLY}`

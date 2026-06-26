@@ -117,6 +117,22 @@ describe('agent-kind registry', () => {
     const coding = systemPromptFor('org-coding')
     expect(coding).toBe('You code.')
   })
+
+  it('does not double-append FINAL_ANSWER_IN_REPLY when a registered id collides with a built-in track', () => {
+    // Registering an id that shadows a built-in track (architect = design phase) is allowed; the
+    // track prompt wins and already carries FINAL_ANSWER_IN_REPLY. The surface-driven directive
+    // logic must NOT re-append it just because the kind is also in the registry → exactly one copy.
+    registerAgentKind({
+      kind: 'architect',
+      systemPrompt: 'Custom architect prompt.',
+      agent: { surface: 'container-explore', clone: { branch: 'pr' } },
+    })
+    const prompt = systemPromptFor('architect')
+    // A once-per-copy phrase from FINAL_ANSWER_IN_REPLY (the directive text repeats "visible
+    // content" internally, so that substring is not a per-copy counter).
+    const marker = 'Your deliverable is the text of your FINAL reply'
+    expect(prompt.split(marker).length - 1).toBe(1)
+  })
 })
 
 describe('pipeline registry', () => {
