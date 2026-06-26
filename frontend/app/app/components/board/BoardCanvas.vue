@@ -11,7 +11,8 @@ import { STATUS_META } from '~/utils/catalog'
 import { readDndPayload, blockIdFromEvent } from '~/utils/dnd'
 import { BOARD_FLOW_ID } from '~/composables/useBoardFlow'
 import { useTaskExpansion } from '~/composables/useTaskExpansion'
-import { computeDisplacement } from '~/utils/boardDisplacement'
+import { useBlockDrag } from '~/composables/useBlockDrag'
+import { useFrameStacking } from '~/composables/useFrameStacking'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -21,10 +22,12 @@ const github = useGitHubStore()
 const toast = useToast()
 
 const { onNodeDragStop, onViewportChange, screenToFlowCoordinate } = useVueFlow(BOARD_FLOW_ID)
+const { draggingId } = useBlockDrag()
+const { hoveredFrameId } = useFrameStacking()
 
 // Gate which task cards expand their pipeline list on deep zoom: on-screen, and the
 // centre-most of any that would overlap (see useTaskExpansion). Service frames have no
-// such gate — they are always expanded to their task canvas (see frameOffsets below).
+// such gate — they are always expanded to their task canvas.
 const boardEl = ref<HTMLElement | null>(null)
 useTaskExpansion(boardEl)
 
@@ -36,83 +39,41 @@ useTaskExpansion(boardEl)
 // and fill much of the viewport, so leaving them draggable would turn the whole canvas
 // into a dead zone. We therefore make every frame non-draggable (the pane pans straight
 // through it) and move it via its header handle instead.
-
-// Services are always expanded to their full task canvas. An expanded card grows
-// rightward / downward from its stored (chip-sized) top-left and would overlap its
-// neighbours, so compressed space pushes the neighbours away by that growth: the
-// footprint never overlaps a neighbour it wasn't already overlapping. Because the
-// expanded set never changes, the layout is fixed — panning never shifts it and there
-// is no expand/collapse transition to snap on. Render-only; stored positions untouched.
-const FRAME_COLLAPSED_W = 224 // the stored chip footprint (`w-56`) the layout reserves
-const FRAME_COLLAPSED_H = 150
-const FRAME_CHROME_W = 40 // border + padding around the inner task canvas
-const FRAME_CHROME_H = 120 // top bar + header row + paddings above the canvas
-
-const frameOffsets = computed(() => {
-  const boxes = [
-    ...board.frames.map((b) => {
-      const c = board.containerSize(b.id)
-      return {
-        id: b.id,
-        x: b.position.x,
-        y: b.position.y,
-        w: FRAME_COLLAPSED_W,
-        h: FRAME_COLLAPSED_H,
-        growX: Math.max(0, c.w + FRAME_CHROME_W - FRAME_COLLAPSED_W),
-        growY: Math.max(0, c.h + FRAME_CHROME_H - FRAME_COLLAPSED_H),
-      }
-    }),
-    // Epics never expand, but they're pushed aside like any other box so an expanded
-    // frame doesn't end up rendered on top of one.
-    ...board.epics.map((b) => ({
-      id: b.id,
-      x: b.position.x,
-      y: b.position.y,
-      w: FRAME_COLLAPSED_W,
-      h: FRAME_COLLAPSED_H,
-      growX: 0,
-      growY: 0,
-    })),
-  ]
-  return computeDisplacement(boxes)
-})
-
-function offsetOf(id: string) {
-  return frameOffsets.value.get(id) ?? { dx: 0, dy: 0 }
+//
+// Frames are rendered exactly at their stored position and may overlap freely —
+// moving one never shifts another. The frame being dragged is lifted to the top,
+// then the hovered frame (the un-obscured one under the pointer), so overlapping
+// services can always be reached and reordered. See useFrameStacking.
+function frameZIndex(id: string) {
+  if (draggingId.value === id) return 1000
+  if (hoveredFrameId.value === id) return 100
+  return 1
 }
 
 const nodes = computed(() => [
-  ...board.frames.map((b) => {
-    const o = offsetOf(b.id)
-    return {
-      id: b.id,
-      type: 'block',
-      position: { x: b.position.x + o.dx, y: b.position.y + o.dy },
-      // Always-expanded frames fill the viewport; keep them non-draggable so the pane
-      // pans through them (they move via their header handle, see BlockNode).
-      draggable: false,
-      data: {},
-    }
-  }),
+  ...board.frames.map((b) => ({
+    id: b.id,
+    type: 'block',
+    position: { x: b.position.x, y: b.position.y },
+    // Always-expanded frames fill the viewport; keep them non-draggable so the pane
+    // pans through them (they move via their header handle, see BlockNode).
+    draggable: false,
+    zIndex: frameZIndex(b.id),
+    data: {},
+  })),
   // Epics are top-level grouping nodes (non-structural), drawn alongside frames and
   // linked to their member tasks by the dependency-edge overlay.
-  ...board.epics.map((b) => {
-    const o = offsetOf(b.id)
-    return {
-      id: b.id,
-      type: 'epic',
-      position: { x: b.position.x + o.dx, y: b.position.y + o.dy },
-      draggable: true,
-      data: {},
-    }
-  }),
+  ...board.epics.map((b) => ({
+    id: b.id,
+    type: 'epic',
+    position: { x: b.position.x, y: b.position.y },
+    draggable: true,
+    data: {},
+  })),
 ])
 
 onNodeDragStop(({ node }) => {
-  // node.position carries the render offset (compressed space can have pushed this node
-  // aside); subtract it so we persist the un-displaced position.
-  const o = offsetOf(node.id)
-  board.moveBlock(node.id, { x: node.position.x - o.dx, y: node.position.y - o.dy })
+  board.moveBlock(node.id, node.position)
 })
 
 onViewportChange((vp) => {

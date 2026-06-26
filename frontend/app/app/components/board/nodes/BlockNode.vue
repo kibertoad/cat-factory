@@ -8,6 +8,7 @@ import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameResize } from '~/composables/useFrameResize'
+import { useFrameStacking } from '~/composables/useFrameStacking'
 
 // Vue Flow passes the node's `id` and `data` as props to custom node components.
 // Only frames are rendered as board nodes; their tasks live inside the card.
@@ -91,12 +92,19 @@ function toggleExpand() {
 }
 
 // Expanded frames are not Vue Flow-draggable (so the pane can pan through them),
-// so they're repositioned by grabbing the header handle instead. Frames live in
-// free-floating flow space, hence `clamp: false`.
+// so they're repositioned by grabbing the header instead. The whole header bar is
+// the grab surface — only the action buttons (marked `.nodrag`) opt out, so a press
+// on them clicks rather than starts a drag. Frames live in free-floating flow space,
+// hence `clamp: false`.
 const { startDrag } = useBlockDrag()
 function onFrameHandle(e: PointerEvent) {
+  if ((e.target as HTMLElement).closest('.nodrag')) return
   if (block.value) startDrag(block.value, e, { clamp: false })
 }
+
+// Lift this frame above any overlapping neighbours while the pointer is over it
+// (see useFrameStacking + BoardCanvas's frameZIndex).
+const { enter: enterFrame, leave: leaveFrame } = useFrameStacking()
 
 // Miro-style frame resizing: drag the right / bottom edges or the corner. Handles
 // live on the expanded card's drop zone (see template); the composable clamps to
@@ -158,7 +166,13 @@ const ITEM_ICON: Record<string, string> = {
 </script>
 
 <template>
-  <div v-if="block" class="relative" :data-block-id="block.id">
+  <div
+    v-if="block"
+    class="relative"
+    :data-block-id="block.id"
+    @pointerenter="enterFrame(block.id)"
+    @pointerleave="leaveFrame(block.id)"
+  >
     <!-- decision / approval indicator floats above the card at all zoom levels -->
     <div
       v-if="blockDecisions.length || blockApprovals.length"
@@ -341,16 +355,17 @@ const ITEM_ICON: Record<string, string> = {
         <AgentFailureCard :run="run" variant="expanded" />
       </div>
       <div class="space-y-3 p-4">
-        <!-- frame header (doubles as the drag handle for the expanded frame) -->
-        <div class="flex items-start justify-between gap-2">
-          <!-- `nopan` stops Vue Flow's pane from panning on a left-drag that starts on
-               this handle (it pans via d3-zoom's mousedown, which our pointerdown
-               stopPropagation can't intercept), so the grab drives the frame move. -->
-          <div
-            class="nopan flex cursor-grab items-center gap-2 active:cursor-grabbing"
-            title="Drag service"
-            @pointerdown="onFrameHandle"
-          >
+        <!-- frame header: the whole bar is the drag handle for the expanded frame.
+             `nopan` stops Vue Flow's pane from panning on a left-drag that starts here
+             (it pans via d3-zoom's mousedown, which our pointerdown stopPropagation
+             can't intercept), so the grab drives the frame move. The action buttons
+             on the right opt out via `.nodrag` (onFrameHandle ignores them). -->
+        <div
+          class="nopan flex cursor-grab items-start justify-between gap-2 active:cursor-grabbing"
+          title="Drag service"
+          @pointerdown="onFrameHandle"
+        >
+          <div class="flex items-center gap-2">
             <div
               class="flex h-8 w-8 items-center justify-center rounded-lg"
               :style="{ backgroundColor: typeMeta!.accent + '22' }"

@@ -1,17 +1,23 @@
 import { ref } from 'vue'
 import type { Block } from '~/types/domain'
 
+// Only one block is ever dragged at a time, so the dragged id is a module-level
+// singleton: the component that starts the drag and a sibling that needs to react
+// to it (e.g. BoardCanvas elevating the dragged service frame's z-index) read the
+// same ref instead of separate per-call copies.
+const draggingId = ref<string | null>(null)
+
 /**
  * Pointer-driven dragging for blocks positioned inside a container's 2D canvas
- * (tasks inside services/modules, modules inside services). Movement is divided
- * by the board zoom so the block tracks the cursor. When `reparent` is set, the
- * drop point is hit-tested against `[data-drop-zone]` ancestors so a task can be
- * dragged from a service into a module (or back out).
+ * (tasks inside services/modules, modules inside services) and for free-floating
+ * service frames (via their header handle). Movement is divided by the board zoom
+ * so the block tracks the cursor. When `reparent` is set, the drop point is
+ * hit-tested against `[data-drop-zone]` ancestors so a task can be dragged from a
+ * service into a module (or back out).
  */
 export function useBlockDrag() {
   const board = useBoardStore()
   const ui = useUiStore()
-  const draggingId = ref<string | null>(null)
 
   function startDrag(
     block: Block,
