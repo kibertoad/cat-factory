@@ -34,13 +34,14 @@ export function deriveWorkerDatabase(
 ): WorkerDatabase | null {
   if (!workerId) return null
   const parsed = new URL(baseUrl)
-  const baseName = parsed.pathname.replace(/^\//, '') || 'postgres'
-  // Postgres identifiers are case-folded and have a 63-byte limit; normalise to a safe,
-  // deterministic name. The label + worker id keep distinct workers (and runtimes) apart.
-  const dbName = `${baseName}_${label}_${workerId}`
-    .toLowerCase()
-    .replace(/[^a-z0-9_]/g, '_')
-    .slice(0, 63)
+  const sanitize = (s: string): string => s.toLowerCase().replace(/[^a-z0-9_]/g, '_')
+  const baseName = sanitize(parsed.pathname.replace(/^\//, '') || 'postgres')
+  // Postgres identifiers are case-folded and have a 63-byte limit. The `_${label}_${workerId}`
+  // suffix is what keeps distinct workers (and runtimes) apart, so truncate the BASE NAME to
+  // fit and always append the full suffix — truncating the whole string instead would chop
+  // off the disambiguator and let long base names collide distinct workers onto one database.
+  const suffix = `_${sanitize(label)}_${sanitize(workerId)}`
+  const dbName = `${baseName.slice(0, Math.max(0, 63 - suffix.length))}${suffix}`
   parsed.pathname = `/${dbName}`
   return { dbName, url: parsed.toString() }
 }
