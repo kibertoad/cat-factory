@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/conformance",
-  "version": "0.7.38",
+  "version": "0.7.39",
   "private": true,
   "description": "Runtime-neutral conformance suite: the key cross-runtime behaviour (workspaces, board, execution) asserted identically against every deployment facade (Cloudflare Worker over D1, Node service over Postgres) to mandate feature parity. Also the canonical deterministic FakeAgentExecutor shared by both runtimes.",
   "type": "module",
