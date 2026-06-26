@@ -17,12 +17,14 @@
 export const RESULT_VIEW_IDS = [
   'requirements-review',
   'clarity-review',
+  'brainstorm',
   'tester',
   'human-test',
   'gate',
   'consensus-session',
   'generic-structured',
   'service-spec',
+  'follow-ups',
 ] as const
 
 export type ResultViewId = (typeof RESULT_VIEW_IDS)[number]

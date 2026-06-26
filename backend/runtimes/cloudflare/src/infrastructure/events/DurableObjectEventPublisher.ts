@@ -1,9 +1,11 @@
 import type {
+  BrainstormSession,
   Block,
   BootstrapJob,
   ConsensusSession,
   ClarityReview,
   ExecutionInstance,
+  KaizenGrading,
   LlmCallActivity,
   Notification,
   RequirementReview,
@@ -73,6 +75,14 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
 
   async clarityReviewChanged(workspaceId: string, review: ClarityReview): Promise<void> {
     await this.publish(workspaceId, { type: 'clarity', review, at: Date.now() })
+  }
+
+  async brainstormSessionChanged(workspaceId: string, session: BrainstormSession): Promise<void> {
+    await this.publish(workspaceId, { type: 'brainstorm', session, at: Date.now() })
+  }
+
+  async kaizenGradingChanged(workspaceId: string, grading: KaizenGrading): Promise<void> {
+    await this.publish(workspaceId, { type: 'kaizen', grading, at: Date.now() })
   }
 
   private async publish(workspaceId: string, event: WorkspaceEvent): Promise<void> {

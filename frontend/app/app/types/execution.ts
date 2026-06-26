@@ -382,6 +382,47 @@ export interface PipelineStep {
    * Mirrors `runEnvironmentSchema`.
    */
   environment?: RunEnvironment | null
+  /**
+   * Live Follow-up companion state when this (coder) step has the future-looking companion
+   * enabled: the forward-looking items the Coder streamed (loose ends / side-tasks /
+   * questions) and the send-back loop budget. The chip blinks while any item is `pending`;
+   * the gate holds the pipeline until every item is decided. Mirrors `followUpsStepStateSchema`.
+   */
+  followUps?: FollowUpsStepState | null
+}
+
+/** What a streamed item is: a forward-looking follow-up or a clarifying question. */
+export type FollowUpItemKind = 'follow_up' | 'question'
+
+/** Lifecycle of a single follow-up / question item (mirrors `followUpItemStatusSchema`). */
+export type FollowUpItemStatus = 'pending' | 'filed' | 'queued' | 'answered' | 'dismissed'
+
+/** One forward-looking item the Coder surfaced (mirrors `followUpItemSchema`). */
+export interface FollowUpItem {
+  id: string
+  kind: FollowUpItemKind
+  title: string
+  detail: string
+  suggestedAction?: string | null
+  status: FollowUpItemStatus
+  /** The human's answer to a `question` item, or null while unanswered / not a question. */
+  answer?: string | null
+  /** Canonical external id of the filed ticket (e.g. "owner/repo#123"), when `filed`. */
+  ticketExternalId?: string | null
+  /** URL of the filed ticket, when `filed`. */
+  ticketUrl?: string | null
+  /** True once a queued / answered item was folded into a Coder loop-back. */
+  sentToCoder?: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+/** Live Follow-up companion state on the Coder step (mirrors `followUpsStepStateSchema`). */
+export interface FollowUpsStepState {
+  enabled: boolean
+  items: FollowUpItem[]
+  loops?: number
+  maxLoops?: number
 }
 
 /** One failing CI check the gate's precheck saw (mirrors `gateFailingCheckSchema`). */

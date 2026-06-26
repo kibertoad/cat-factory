@@ -44,6 +44,41 @@ const meta = computed(() => (kind.value ? META[kind.value] : null))
 const descriptor = computed(() => (kind.value ? store.descriptorFor(kind.value) : null))
 const connection = computed(() => (kind.value ? store.connectionFor(kind.value) : null))
 
+// --- Local-mode infrastructure delegation -------------------------------------------
+// In local mode this same screen is where a developer chooses, per workspace, whether to
+// run on this machine (host Docker for agents, in-container docker-compose for the Tester)
+// or delegate to an external service. The two opt-ins live here together to make the
+// cross-cutting nature explicit: the environment provider you configure on this screen is
+// one half; the runner pool (its own screen) is the other. Each toggle is enabled only
+// once its provider is registered. Shown only in local mode and only on the environment
+// kind (so it appears once, alongside the env provider it relates to).
+const auth = useAuthStore()
+const settings = useWorkspaceSettingsStore()
+const isLocal = computed(() => auth.localMode?.enabled === true)
+const showLocalDelegation = computed(() => isLocal.value && kind.value === 'environment')
+// Gating: a toggle's external option is selectable only when its provider is registered.
+const runnerPoolRegistered = computed(() => !!store.connectionFor('runner-pool'))
+const envRegistered = computed(() => !!store.connectionFor('environment'))
+const savingDelegation = ref(false)
+
+async function setDelegation(patch: {
+  delegateAgentsToRunnerPool?: boolean
+  delegateTestEnvToProvider?: boolean
+}) {
+  savingDelegation.value = true
+  try {
+    await settings.update(patch)
+  } catch (e) {
+    notifyError('Could not update delegation', e)
+  } finally {
+    savingDelegation.value = false
+  }
+}
+
+function openRunnerPoolPanel() {
+  ui.openProviderConnection('runner-pool')
+}
+
 // "View logs": the provisioning event history for this provider's subsystem — every
 // spin-up / tear-down attempt with its outcome and the exact error. The panel kind
 // maps 1:1 to the log subsystem ('environment' / 'runner-pool').
@@ -82,6 +117,9 @@ watch(
   kind,
   (k) => {
     if (k) void store.loadKind(k).then(resetDraft)
+    // In local mode the env panel also gates the agents toggle on a registered runner
+    // pool, so load that provider's connection state too (the env kind already loads above).
+    if (k === 'environment' && isLocal.value) void store.loadKind('runner-pool')
   },
   { immediate: true },
 )
@@ -228,6 +266,85 @@ function fieldHelp(key: string): string | undefined {
       <IntegrationBackTitle :title="meta?.title ?? 'Provider'" @back="back" />
     </template>
     <template #body>
+      <!-- Local-mode infrastructure delegation: the local-vs-external choice for BOTH
+           container agents AND the Tester's ephemeral environments, made once here. -->
+      <section
+        v-if="showLocalDelegation"
+        class="mb-4 space-y-3 rounded-lg border border-slate-700 bg-slate-900/40 p-3"
+      >
+        <div>
+          <h3 class="text-sm font-semibold text-slate-200">Local delegation</h3>
+          <p class="mt-1 text-[11px] text-slate-400">
+            By default this machine runs everything locally — container agents on host Docker, the
+            Tester's infrastructure via in-container docker-compose. Opt in below to delegate either
+            concern to an external service instead. Applies only in local mode.
+          </p>
+        </div>
+
+        <!-- Container agents → self-hosted runner pool -->
+        <div class="space-y-1">
+          <label class="flex items-center gap-2">
+            <USwitch
+              size="sm"
+              :model-value="settings.settings.delegateAgentsToRunnerPool"
+              :disabled="savingDelegation || !runnerPoolRegistered"
+              @update:model-value="(v) => setDelegation({ delegateAgentsToRunnerPool: v })"
+            />
+            <span class="text-sm text-slate-200">Run container agents on the runner pool</span>
+          </label>
+          <p class="pl-9 text-[11px] text-slate-400">
+            Dispatch every container agent (coder, tester, merger, bootstrap, …) to this workspace's
+            self-hosted runner pool instead of host Docker.
+            <template v-if="!runnerPoolRegistered">
+              <button
+                type="button"
+                class="text-sky-400 underline underline-offset-2 hover:text-sky-300"
+                @click="openRunnerPoolPanel"
+              >
+                Register a runner pool
+              </button>
+              first to enable this.
+            </template>
+          </p>
+        </div>
+
+        <!-- Tester environments → environment provider -->
+        <div class="space-y-1">
+          <label class="flex items-center gap-2">
+            <USwitch
+              size="sm"
+              :model-value="settings.settings.delegateTestEnvToProvider"
+              :disabled="savingDelegation || !envRegistered"
+              @update:model-value="(v) => setDelegation({ delegateTestEnvToProvider: v })"
+            />
+            <span class="text-sm text-slate-200">
+              Provision Tester environments via the provider
+            </span>
+          </label>
+          <p class="pl-9 text-[11px] text-slate-400">
+            Stand the Tester's preview environment up through the environment provider configured
+            below instead of in-container docker-compose. Connect a provider first to enable this.
+          </p>
+        </div>
+      </section>
+
+      <!-- In local mode the local-vs-external toggle for agents lives on the Ephemeral
+           environments screen (alongside the env toggle), so they're configured together. -->
+      <p
+        v-if="isLocal && kind === 'runner-pool'"
+        class="mb-4 rounded-md border border-slate-700 bg-slate-900/40 px-3 py-2 text-[11px] text-slate-400"
+      >
+        Register your pool here, then enable "Run container agents on the runner pool" on the
+        <button
+          type="button"
+          class="text-sky-400 underline underline-offset-2 hover:text-sky-300"
+          @click="ui.openProviderConnection('environment')"
+        >
+          Ephemeral environments
+        </button>
+        screen to route this workspace's agents to it.
+      </p>
+
       <div v-if="descriptor" class="space-y-4">
         <div class="flex items-start justify-between gap-3">
           <p class="text-xs text-slate-400">{{ meta?.blurb }}</p>

@@ -46,6 +46,7 @@ const routes = reactive<Record<NotificationType, SlackRoute>>({
   decision_required: { enabled: false, channel: '' },
   human_test_ready: { enabled: false, channel: '' },
   human_review: { enabled: false, channel: '' },
+  followup_pending: { enabled: false, channel: '' },
 })
 const mentionsEnabled = ref(false)
 const mapping = ref<SlackMemberMappingEntry[]>([])

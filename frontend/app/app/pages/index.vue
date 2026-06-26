@@ -11,6 +11,7 @@ import DecisionModal from '~/components/panels/DecisionModal.vue'
 import AgentStepDetail from '~/components/panels/AgentStepDetail.vue'
 import StepResultViewHost from '~/components/panels/StepResultViewHost.vue'
 import ObservabilityPanel from '~/components/panels/ObservabilityPanel.vue'
+import KaizenPanel from '~/components/kaizen/KaizenPanel.vue'
 import BlockFocusView from '~/components/focus/BlockFocusView.vue'
 import DocumentSourceConnectModal from '~/components/documents/DocumentSourceConnectModal.vue'
 import DocumentImportModal from '~/components/documents/DocumentImportModal.vue'
@@ -28,6 +29,7 @@ import FragmentLibraryPanel from '~/components/fragments/FragmentLibraryPanel.vu
 import CommandBar from '~/components/layout/CommandBar.vue'
 import IntegrationsHub from '~/components/layout/IntegrationsHub.vue'
 import WorkspaceSettingsPanel from '~/components/settings/WorkspaceSettingsPanel.vue'
+import AccountSettingsPanel from '~/components/settings/AccountSettingsPanel.vue'
 import ObservabilityConnectionPanel from '~/components/settings/ObservabilityConnectionPanel.vue'
 import ProviderConnectionPanel from '~/components/settings/ProviderConnectionPanel.vue'
 import ProviderConfigBanner from '~/components/layout/ProviderConfigBanner.vue'
@@ -171,6 +173,7 @@ watch(
       <AgentStepDetail />
       <StepResultViewHost />
       <ObservabilityPanel />
+      <KaizenPanel />
       <DocumentSourceConnectModal />
       <DocumentImportModal />
       <SpawnPreviewModal />
@@ -186,6 +189,7 @@ watch(
       <CommandBar />
       <IntegrationsHub />
       <WorkspaceSettingsPanel />
+      <AccountSettingsPanel />
       <ObservabilityConnectionPanel />
       <ProviderConnectionPanel />
       <ModelConfigurationPanel />

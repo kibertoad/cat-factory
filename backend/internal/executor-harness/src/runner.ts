@@ -1,4 +1,5 @@
-import { redactSecrets } from './git.js'
+import { redactSecrets } from './redact.js'
+import type { FollowUpLine } from './follow-ups.js'
 import type { TodoProgress, ToolSpan } from './pi.js'
 import { log } from './logger.js'
 
@@ -18,6 +19,8 @@ export interface RunOptions {
   onProgress?: (progress: TodoProgress) => void
   /** Receives one compact {@link ToolSpan} per completed tool call (observability). */
   onSpan?: (span: ToolSpan) => void
+  /** Receives the forward-looking follow-up / question items the Coder streamed since the last poll. */
+  onFollowUp?: (items: FollowUpLine[]) => void
 }
 
 export type JobState = 'running' | 'done' | 'failed'
@@ -56,6 +59,14 @@ export interface JobView<TResult extends JobResultBase = JobResultBase> {
    * — a dropped poll response loses at most one window. Absent until a tool runs.
    */
   spans?: ToolSpan[]
+  /**
+   * Forward-looking follow-up / question items the Coder streamed SINCE THE LAST POLL
+   * (drain-on-read, exactly like {@link spans}): the GET /jobs/{id} handler returns the
+   * items buffered since the previous poll and clears the buffer. The backend appends them
+   * to the run's step so the Follow-up companion surfaces them live. Absent until the Coder
+   * surfaces the first one (and only on a follow-ups-enabled coding run).
+   */
+  followUps?: FollowUpLine[]
 }
 
 interface JobEntry<TResult extends JobResultBase> extends JobView<TResult> {
@@ -63,6 +74,8 @@ interface JobEntry<TResult extends JobResultBase> extends JobView<TResult> {
   promise: Promise<void>
   /** Spans buffered since the last drain (see {@link JobView.spans}). */
   spanBuffer: ToolSpan[]
+  /** Follow-up items buffered since the last drain (see {@link JobView.followUps}). */
+  followUpBuffer: FollowUpLine[]
 }
 
 /** Watchdog windows that bound every job. Tunable via the container's env. */
@@ -84,13 +97,22 @@ export function loadRunnerLimits(env: NodeJS.ProcessEnv = process.env): RunnerLi
     // still bounding a runaway container.
     maxDurationMs: intEnv(env.JOB_MAX_DURATION_MS, 60 * 60_000),
     // 10 minutes of zero output is treated as hung (a single long LLM/tool call
-    // is far shorter; Pi streams events as it works).
+    // is far shorter; Pi streams events as it works). The per-git command ceiling
+    // (`GIT_TIMEOUT_MS` in git.ts) is DERIVED from this value — a fixed margin below
+    // it — so a slow clone/push (which emits no activity events) always times out
+    // with git's own clear reason rather than this watchdog's "likely hung" message,
+    // for any configured window. See the invariant note in git.ts.
     inactivityMs: intEnv(env.JOB_INACTIVITY_MS, 10 * 60_000),
   }
 }
 
 function toView<TResult extends JobResultBase>(entry: JobEntry<TResult>): JobView<TResult> {
-  const { promise: _promise, spanBuffer: _spanBuffer, ...view } = entry
+  const {
+    promise: _promise,
+    spanBuffer: _spanBuffer,
+    followUpBuffer: _followUpBuffer,
+    ...view
+  } = entry
   return { ...view }
 }
 
@@ -124,6 +146,7 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
       heartbeatAt: now,
       promise: Promise.resolve(),
       spanBuffer: [],
+      followUpBuffer: [],
     }
     this.jobs.set(id, entry)
     entry.promise = this.drive(entry, job)
@@ -142,6 +165,10 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
     if (entry.spanBuffer.length > 0) {
       view.spans = entry.spanBuffer
       entry.spanBuffer = []
+    }
+    if (entry.followUpBuffer.length > 0) {
+      view.followUps = entry.followUpBuffer
+      entry.followUpBuffer = []
     }
     return view
   }
@@ -180,6 +207,9 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
         },
         onSpan: (span) => {
           entry.spanBuffer.push(span)
+        },
+        onFollowUp: (items) => {
+          entry.followUpBuffer.push(...items)
         },
       })
       entry.state = 'done'

@@ -174,6 +174,15 @@ const commands = computed<Command[]>(() => {
     run: () => ui.openWorkspaceSettings('fragments'),
   })
   list.push({
+    id: 'account-settings',
+    label: 'Account settings',
+    group: 'Account',
+    icon: 'i-lucide-settings',
+    keywords:
+      'account team members roles invitations email api keys fragment best practice library context organization personal',
+    run: () => ui.openAccountSettings(),
+  })
+  list.push({
     id: 'local-models',
     label: 'My local runners',
     group: 'Workspace',

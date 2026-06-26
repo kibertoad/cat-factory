@@ -273,17 +273,18 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
         }
       }),
     },
-    email:
-      env.EMAIL_ENABLED?.trim() === 'true' && env.ENCRYPTION_KEY?.trim()
-        ? {
-            enabled: true,
-            encryptionKey: env.ENCRYPTION_KEY.trim(),
-            appBaseUrl: env.APP_BASE_URL?.trim() || env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
-          }
-        : {
-            enabled: false,
-            appBaseUrl: env.APP_BASE_URL?.trim() || env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
-          },
+    // Email is available whenever an encryption key exists — there is no separate opt-in
+    // flag. The per-account provider API key is sealed with that key.
+    email: env.ENCRYPTION_KEY?.trim()
+      ? {
+          enabled: true,
+          encryptionKey: env.ENCRYPTION_KEY.trim(),
+          appBaseUrl: env.APP_BASE_URL?.trim() || env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
+        }
+      : {
+          enabled: false,
+          appBaseUrl: env.APP_BASE_URL?.trim() || env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
+        },
     // Document-source integration: the providers (Confluence/Notion/GitHub-docs) are
     // the shared `@cat-factory/integrations` fetch shells, wired in the container
     // exactly like the Worker's `selectDocumentsDeps`. Always on (the shared

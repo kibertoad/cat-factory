@@ -1,5 +1,168 @@
 # @cat-factory/worker
 
+## 0.25.0
+
+### Minor Changes
+
+- eb48652: Local-mode infrastructure delegation + native runner-adapter seam.
+
+  Local mode now lets a workspace opt, independently, into delegating its container agents
+  and/or its Tester ephemeral environments to an external service instead of running
+  everything on the host container runtime. Two new per-workspace settings drive it
+  (`delegateAgentsToRunnerPool`, `delegateTestEnvToProvider`, both default off), surfaced as
+  toggles on the Ephemeral environments screen (local mode only) and enabled only once the
+  respective provider — a self-hosted runner pool / an environment provider — is registered.
+
+  - **Agents**: when delegated, container jobs dispatch to the workspace's registered runner
+    pool instead of host Docker (a clean 409 at start, and the existing dispatch error, when
+    delegated with no pool registered).
+  - **Environments**: the toggle sets the local-mode default Tester environment — `local`
+    (host Docker / DinD) by default, `ephemeral` (the provider) when on; per-service / per-task
+    choices still win. An `ephemeral` run is refused at start when delegated with no provider
+    connected.
+  - **Native runner-adapter seam**: an injected `runnerPoolProvider` now drives the actual
+    dispatch transport on both the Cloudflare and Node facades (falling back to the generic
+    `HttpRunnerPoolProvider`), fully symmetric with `environmentProvider`. A wrapper can thus
+    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. Kargo) to
+    serve both concerns with native code on every runtime.
+
+  BREAKING (pre-1.0, internal): an un-pinned Tester task in local mode now defaults to the
+  `local` (DinD) environment instead of `ephemeral`. New `workspace_settings` columns are
+  added on both runtimes (D1 migration + Drizzle migration); local mode now defaults
+  `ENVIRONMENTS_ENABLED=true` so the env module assembles for the opt-in.
+
+- 518aff7: Surface account & team management in the UI
+
+  The existing per-account management features (members + roles, email invitations, and the
+  transactional email sender) are now reachable from a dedicated **Account settings** entry
+  in the SideBar Configuration section (and the account switcher), instead of being buried in
+  an org-only "Manage team…" dropdown item. On a personal account the panel prompts the user
+  to create an organization, since members/roles/invitations are org-scoped.
+
+  Email provider configuration no longer requires the `EMAIL_ENABLED` env var: the email
+  module is available whenever an encryption key is set (`ENCRYPTION_KEY`, used to seal the
+  per-account provider API key). **Breaking:** the `EMAIL_ENABLED` flag is removed — deployments
+  that set it can drop it; email becomes available based on `ENCRYPTION_KEY` presence alone.
+
+### Patch Changes
+
+- Updated dependencies [eb48652]
+  - @cat-factory/contracts@0.32.0
+  - @cat-factory/kernel@0.35.0
+  - @cat-factory/orchestration@0.27.0
+  - @cat-factory/agents@0.17.1
+  - @cat-factory/consensus@0.7.45
+  - @cat-factory/gates@0.1.12
+  - @cat-factory/integrations@0.21.7
+  - @cat-factory/prompt-fragments@0.7.30
+  - @cat-factory/server@0.29.1
+  - @cat-factory/spend@0.10.3
+  - @cat-factory/observability-langfuse@0.7.42
+  - @cat-factory/provider-cloudflare@0.7.45
+
+## 0.24.0
+
+### Minor Changes
+
+- 9f7ee39: Add "Requirements brainstorm" and "Architecture brainstorm" agents — structured-dialogue
+  gates that PROPOSE options with explicit trade-offs and let a human converge on a direction,
+  rather than doing all the work themselves or expecting the work done upfront.
+
+  - One shared, stage-discriminated engine (`BrainstormService` over the existing
+    `IterativeReviewService`), driven through the generic `ReviewGateController`. Two agent kinds
+    (`requirements-brainstorm`, `architecture-brainstorm`) reuse it via a stage-bound repository
+    adapter.
+  - Persistence: a new `brainstorm_sessions` table keyed per (block, **stage**) — a block may hold
+    a live requirements AND a live architecture session at once — mirrored across both runtimes
+    (D1 + Drizzle/Postgres) with a cross-runtime conformance suite.
+  - Handoffs (DB session state → next stage's prompt): `requirements-brainstorm` → the
+    requirements review (its converged direction becomes the reviewed subject);
+    `architecture-brainstorm` → the architect (surfaced additively as a prior output).
+  - Pipelines: both steps are added to `pl_full` and `pl_fullstack` but **disabled by default**
+    (opt-in per pipeline) — existing runs are unchanged.
+  - Frontend: a shared brainstorm window (option cards with trade-offs → choose/steer/dismiss →
+    incorporate → re-run), wired through the result-view seam, the workspace stream, and the
+    palette catalog.
+
+  Breaking: adds a new required table on both runtimes (`brainstorm_sessions` D1 migration +
+  Drizzle migration) and a new optional `ExecutionEventPublisher.brainstormSessionChanged` event.
+  No data migration — pre-1.0, stale state is acceptable.
+
+  The brainstorm iteration cap reuses the merge preset's `maxRequirementIterations` /
+  `maxRequirementConcernAllowed` knobs (no new preset field).
+
+### Patch Changes
+
+- Updated dependencies [9f7ee39]
+- Updated dependencies [81b60d4]
+  - @cat-factory/contracts@0.31.0
+  - @cat-factory/kernel@0.34.0
+  - @cat-factory/agents@0.17.0
+  - @cat-factory/orchestration@0.26.0
+  - @cat-factory/server@0.29.0
+  - @cat-factory/integrations@0.21.6
+  - @cat-factory/consensus@0.7.44
+  - @cat-factory/gates@0.1.11
+  - @cat-factory/prompt-fragments@0.7.29
+  - @cat-factory/spend@0.10.2
+  - @cat-factory/observability-langfuse@0.7.41
+  - @cat-factory/provider-cloudflare@0.7.44
+
+## 0.23.1
+
+### Patch Changes
+
+- Updated dependencies [4dd6e97]
+  - @cat-factory/agents@0.16.1
+  - @cat-factory/server@0.28.1
+  - @cat-factory/consensus@0.7.43
+  - @cat-factory/orchestration@0.25.1
+  - @cat-factory/provider-cloudflare@0.7.43
+
+## 0.23.0
+
+### Minor Changes
+
+- ea59e91: Add the Kaizen agent: a post-run, continuous-improvement reviewer (toggleable per
+  workspace, never a pipeline-builder step) that grades each completed agent step on how
+  smooth/efficient vs confused/chaotic the interaction was and recommends prompt/model
+  improvements.
+
+  - After a run completes, the engine schedules a grading per completed agent step
+    (skipping verified combos); a background sweep (Cloudflare cron / Node interval) runs
+    the inline LLM grade. The grader's model is configured in Model Configuration like
+    every other agent (the hidden-from-palette `kaizen` kind).
+  - A `(promptVersion, agentKind, model)` combo that grades strongly (>=4) with no
+    recommendations five times in a row is marked **verified** and is no longer graded.
+  - New persisted tables `kaizen_gradings` + `kaizen_verified_combos` (D1 ⇄ Drizzle parity,
+    asserted by a new cross-runtime conformance suite) and a per-workspace `kaizenEnabled`
+    setting (a new `workspace_settings.kaizen_enabled` column).
+  - New read API (`GET /workspaces/:ws/kaizen`, `GET /workspaces/:ws/executions/:id/kaizen`),
+    a `kaizen` real-time event, a Kaizen screen (grading history + verified combos), and
+    per-step grading status (scheduled/running/complete + results) inside the run window —
+    never on the board.
+  - A step with neither a provided-context snapshot nor any recorded LLM calls (e.g. prompt
+    recording is off deployment-wide) is settled `failed` rather than graded blind, so a
+    guessed grade can't advance a combo toward a bogus `verified`.
+  - The Worker Kaizen sweep gains an in-isolate re-entrancy guard (mirroring the Node
+    sweeper) so overlapping passes don't race the per-combo streak update.
+
+### Patch Changes
+
+- Updated dependencies [ea59e91]
+  - @cat-factory/contracts@0.30.0
+  - @cat-factory/kernel@0.33.0
+  - @cat-factory/agents@0.16.0
+  - @cat-factory/orchestration@0.25.0
+  - @cat-factory/server@0.28.0
+  - @cat-factory/consensus@0.7.42
+  - @cat-factory/gates@0.1.10
+  - @cat-factory/integrations@0.21.5
+  - @cat-factory/prompt-fragments@0.7.28
+  - @cat-factory/spend@0.10.1
+  - @cat-factory/observability-langfuse@0.7.40
+  - @cat-factory/provider-cloudflare@0.7.42
+
 ## 0.22.2
 
 ### Patch Changes

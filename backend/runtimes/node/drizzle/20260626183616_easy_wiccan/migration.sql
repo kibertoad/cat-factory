@@ -1,0 +1,2 @@
+ALTER TABLE "workspace_settings" ADD COLUMN "delegate_agents_to_runner_pool" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "workspace_settings" ADD COLUMN "delegate_test_env_to_provider" integer DEFAULT 0 NOT NULL;

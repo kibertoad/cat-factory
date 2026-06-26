@@ -10,6 +10,9 @@ const DEFAULTS: WorkspaceSettings = {
   taskLimitShared: null,
   taskLimitPerType: null,
   storeAgentContext: true,
+  kaizenEnabled: true,
+  delegateAgentsToRunnerPool: false,
+  delegateTestEnvToProvider: false,
   spendCurrency: null,
   spendMonthlyLimit: null,
 }

@@ -86,6 +86,15 @@ export const runnerPoolResponseMappingSchema = v.object({
    * above still apply (and override) for schedulers that surface them out-of-envelope.
    */
   resultPath: v.optional(v.string()),
+  /**
+   * Dot-path to the array of forward-looking follow-up / question items the Coder streamed
+   * since the last poll (the harness `followUps` drain-on-read channel). A pool that proxies
+   * the cat-factory executor-harness verbatim should set this to `followUps` so the
+   * Follow-up companion lights up live on a pool-backed coder run too (otherwise it simply
+   * never streams — the engine still gates on whatever items did arrive). Each entry is
+   * coerced to `{ kind, title, detail?, suggestedAction? }`.
+   */
+  followUpsPath: v.optional(v.string()),
   /** Dot-path to a job-level error message (a failed job, or a structured error). */
   errorPath: v.optional(v.string()),
 })

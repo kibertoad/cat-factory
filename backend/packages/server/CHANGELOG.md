@@ -1,5 +1,145 @@
 # @cat-factory/server
 
+## 0.29.1
+
+### Patch Changes
+
+- Updated dependencies [eb48652]
+  - @cat-factory/contracts@0.32.0
+  - @cat-factory/kernel@0.35.0
+  - @cat-factory/orchestration@0.27.0
+  - @cat-factory/agents@0.17.1
+  - @cat-factory/integrations@0.21.7
+  - @cat-factory/prompt-fragments@0.7.30
+  - @cat-factory/spend@0.10.3
+
+## 0.29.0
+
+### Minor Changes
+
+- 9f7ee39: Add "Requirements brainstorm" and "Architecture brainstorm" agents — structured-dialogue
+  gates that PROPOSE options with explicit trade-offs and let a human converge on a direction,
+  rather than doing all the work themselves or expecting the work done upfront.
+
+  - One shared, stage-discriminated engine (`BrainstormService` over the existing
+    `IterativeReviewService`), driven through the generic `ReviewGateController`. Two agent kinds
+    (`requirements-brainstorm`, `architecture-brainstorm`) reuse it via a stage-bound repository
+    adapter.
+  - Persistence: a new `brainstorm_sessions` table keyed per (block, **stage**) — a block may hold
+    a live requirements AND a live architecture session at once — mirrored across both runtimes
+    (D1 + Drizzle/Postgres) with a cross-runtime conformance suite.
+  - Handoffs (DB session state → next stage's prompt): `requirements-brainstorm` → the
+    requirements review (its converged direction becomes the reviewed subject);
+    `architecture-brainstorm` → the architect (surfaced additively as a prior output).
+  - Pipelines: both steps are added to `pl_full` and `pl_fullstack` but **disabled by default**
+    (opt-in per pipeline) — existing runs are unchanged.
+  - Frontend: a shared brainstorm window (option cards with trade-offs → choose/steer/dismiss →
+    incorporate → re-run), wired through the result-view seam, the workspace stream, and the
+    palette catalog.
+
+  Breaking: adds a new required table on both runtimes (`brainstorm_sessions` D1 migration +
+  Drizzle migration) and a new optional `ExecutionEventPublisher.brainstormSessionChanged` event.
+  No data migration — pre-1.0, stale state is acceptable.
+
+  The brainstorm iteration cap reuses the merge preset's `maxRequirementIterations` /
+  `maxRequirementConcernAllowed` knobs (no new preset field).
+
+- 81b60d4: Add the future-looking **Follow-up companion** to the Coder agent.
+
+  As the Coder works it now surfaces forward-looking items — genuine loose ends, useful
+  side-tasks it is deliberately not acting on, and clarifying questions — by appending them
+  to a `.cat-follow-ups.jsonl` sentinel file in its working directory. The executor-harness
+  tails that file and streams the items **out** on the job view (drain-on-read, like tool
+  spans), so a blinking **Follow-up companion** chip on the Coder step lights up the moment
+  the first item appears — while the container is still running.
+
+  A human triages each item at any point: file a follow-up as a tracker issue (GitHub Issues
+  / Jira, via the existing `TicketTrackerProvider`), send it back to the Coder to address
+  after delivering the key task, answer a question, or dismiss it. The pipeline's following
+  steps do not start until **every** item is decided: an undecided follow-up or unanswered
+  question parks the run at the Coder's completion (a new `followup_pending` notification).
+  Once all are decided the engine loops the Coder for the queued / answered items (within a
+  per-step budget) before advancing. The companion is enabled by default on Coder steps and
+  disableable per step in the pipeline builder.
+
+  This is pure engine + run-step state (no new table) so it is runtime-symmetric across the
+  Cloudflare and Node facades — the cross-runtime conformance suite asserts the park →
+  decide → loop → advance behaviour on both. Wire contracts (`followUpItem` /
+  `followUpsStepState`, the `followup_pending` notification, the `follow-ups` result view),
+  the `streamFollowUps` harness job flag + `RunnerJobView.followUps` channel (with an
+  optional pool-manifest `followUpsPath`), and the `FOLLOW_UP_GUIDANCE` Coder prompt fragment
+  are added across the stack.
+
+  Bumps the executor-harness image (new src) — publish + redeploy to roll it out.
+
+### Patch Changes
+
+- Updated dependencies [9f7ee39]
+- Updated dependencies [81b60d4]
+  - @cat-factory/contracts@0.31.0
+  - @cat-factory/kernel@0.34.0
+  - @cat-factory/agents@0.17.0
+  - @cat-factory/orchestration@0.26.0
+  - @cat-factory/integrations@0.21.6
+  - @cat-factory/prompt-fragments@0.7.29
+  - @cat-factory/spend@0.10.2
+
+## 0.28.1
+
+### Patch Changes
+
+- 4dd6e97: Fix: container agent (and repo-bootstrap) runs on **OpenRouter** and **LiteLLM** models
+  were rejected at start with `'openrouter' is not supported` even though the LLM proxy
+  already forwards both (their base URLs resolve in `resolveOpenAiCompatibleUpstream`). The
+  proxyability guard hardcoded only `qwen`/`deepseek`/`moonshot`/`openai`/`workers-ai` and
+  was duplicated (out of step) across `ContainerAgentExecutor` and `ContainerRepoBootstrapper`.
+  Replaced both copies with a single shared `isProxyableProvider` in `@cat-factory/agents`,
+  derived from `DEFAULT_OPENAI_COMPATIBLE_BASE_URLS` (so every OpenAI-compatible direct
+  provider — including OpenRouter) plus the operator-hosted `litellm` gateway and the per-user
+  local runners, so the start guard and the proxy can no longer disagree.
+- Updated dependencies [4dd6e97]
+  - @cat-factory/agents@0.16.1
+  - @cat-factory/orchestration@0.25.1
+
+## 0.28.0
+
+### Minor Changes
+
+- ea59e91: Add the Kaizen agent: a post-run, continuous-improvement reviewer (toggleable per
+  workspace, never a pipeline-builder step) that grades each completed agent step on how
+  smooth/efficient vs confused/chaotic the interaction was and recommends prompt/model
+  improvements.
+
+  - After a run completes, the engine schedules a grading per completed agent step
+    (skipping verified combos); a background sweep (Cloudflare cron / Node interval) runs
+    the inline LLM grade. The grader's model is configured in Model Configuration like
+    every other agent (the hidden-from-palette `kaizen` kind).
+  - A `(promptVersion, agentKind, model)` combo that grades strongly (>=4) with no
+    recommendations five times in a row is marked **verified** and is no longer graded.
+  - New persisted tables `kaizen_gradings` + `kaizen_verified_combos` (D1 ⇄ Drizzle parity,
+    asserted by a new cross-runtime conformance suite) and a per-workspace `kaizenEnabled`
+    setting (a new `workspace_settings.kaizen_enabled` column).
+  - New read API (`GET /workspaces/:ws/kaizen`, `GET /workspaces/:ws/executions/:id/kaizen`),
+    a `kaizen` real-time event, a Kaizen screen (grading history + verified combos), and
+    per-step grading status (scheduled/running/complete + results) inside the run window —
+    never on the board.
+  - A step with neither a provided-context snapshot nor any recorded LLM calls (e.g. prompt
+    recording is off deployment-wide) is settled `failed` rather than graded blind, so a
+    guessed grade can't advance a combo toward a bogus `verified`.
+  - The Worker Kaizen sweep gains an in-isolate re-entrancy guard (mirroring the Node
+    sweeper) so overlapping passes don't race the per-combo streak update.
+
+### Patch Changes
+
+- Updated dependencies [ea59e91]
+  - @cat-factory/contracts@0.30.0
+  - @cat-factory/kernel@0.33.0
+  - @cat-factory/agents@0.16.0
+  - @cat-factory/orchestration@0.25.0
+  - @cat-factory/integrations@0.21.5
+  - @cat-factory/prompt-fragments@0.7.28
+  - @cat-factory/spend@0.10.1
+
 ## 0.27.2
 
 ### Patch Changes

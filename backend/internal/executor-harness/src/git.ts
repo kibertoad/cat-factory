@@ -1,9 +1,15 @@
 import { execFile } from 'node:child_process'
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { appendFile, chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import type { BootstrapTargetSpec, PrSpec, RepoSpec } from './job.js'
+import { redactSecrets } from './redact.js'
+import { loadRunnerLimits } from './runner.js'
+
+// Re-exported so existing importers that pull `redactSecrets` from this module keep
+// working; the single source of truth now lives in ./redact.js.
+export { redactSecrets } from './redact.js'
 
 const exec = promisify(execFile)
 
@@ -20,20 +26,25 @@ const GIT_EMAIL = 'cat-factory[bot]@users.noreply.github.com'
 // Per-git-command wall-clock ceiling. A single git op (clone/push over a flaky
 // network) must not hang the job indefinitely; the job's overall watchdog
 // (see runner.ts) is the outer bound, this stops one wedged command first.
-const GIT_TIMEOUT_MS = 10 * 60_000
-
-/**
- * Strip credentials out of any string before it is logged or stored. Removes
- * URL userinfo (`https://user:pass@host`) and `x-access-token:<token>` patterns,
- * plus bare GitHub token shapes (`ghs_`/`ghp_`/`github_pat_`), so a leaked clone
- * URL or git error can never surface the installation token. Idempotent.
- */
-export function redactSecrets(input: string): string {
-  return input
-    .replace(/(https?:\/\/)[^@\s/]*@/gi, '$1***@')
-    .replace(/x-access-token:[^@\s]+/gi, 'x-access-token:***')
-    .replace(/\b(gh[pso]_|github_pat_)[A-Za-z0-9_]+/g, '$1***')
-}
+//
+// INVARIANT: this MUST stay STRICTLY BELOW the inactivity watchdog
+// (`RunnerLimits.inactivityMs`). Git emits no Pi activity events while it runs, so a
+// slow clone/push races both timers; if they were equal the job could fail with the
+// misleading "no agent activity … likely hung" instead of a clear "git timed out".
+// Staying under that window means git always loses the race and surfaces its own
+// accurate reason.
+//
+// Rather than hardcode a constant against the *default* watchdog (which silently
+// breaks the invariant when an operator lowers `JOB_INACTIVITY_MS`), we DERIVE the
+// ceiling from the actually-configured window: a fixed margin below it, floored so a
+// tiny window can't yield a non-positive timeout. At the 10-min default this resolves
+// to the same 7 min as before; at a lowered 5-min window it tracks down to 2 min.
+const GIT_TIMEOUT_MARGIN_MS = 3 * 60_000
+const GIT_TIMEOUT_FLOOR_MS = 60_000
+const GIT_TIMEOUT_MS = Math.max(
+  GIT_TIMEOUT_FLOOR_MS,
+  loadRunnerLimits().inactivityMs - GIT_TIMEOUT_MARGIN_MS,
+)
 
 /** Wrap an error so its message/stack carry no credentials. */
 function redactError(err: unknown): Error {
@@ -216,6 +227,27 @@ export async function listUntrackedFiles(dir: string, signal?: AbortSignal): Pro
     .split('\n')
     .map((line) => line.replace(/\r$/, '').trim())
     .filter((path) => path !== '')
+}
+
+/**
+ * Locally exclude `pattern` from this checkout via `.git/info/exclude` — a per-clone
+ * ignore that never lands in the repo (unlike a `.gitignore`). Used for the harness's
+ * follow-up sentinel file so the agent's own `git add` can never stage it and it never
+ * surfaces as an untracked-leftover warning or in the PR. Best-effort: a failure here
+ * just means the sentinel might show as untracked (logged, not pushed), never fatal.
+ */
+export async function excludeFromGit(
+  dir: string,
+  pattern: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  try {
+    const excludePath = join(dir, '.git', 'info', 'exclude')
+    await appendFile(excludePath, `\n${pattern}\n`, 'utf8')
+  } catch {
+    // A missing .git/info/exclude (worktree layout) or write error is non-fatal.
+    void signal
+  }
 }
 
 /** Whether the branch advanced past `baseSha` via commits (the agent's own + any safety-net commit). */

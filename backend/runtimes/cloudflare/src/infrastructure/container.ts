@@ -12,6 +12,7 @@ import {
   NoopWorkRunner,
   type ProvisioningSubsystem,
   type ResolveUserGitHubToken,
+  type RunnerPoolProvider,
   type RunnerTransport,
   type TaskSourceProvider,
   type WorkRunner,
@@ -149,9 +150,12 @@ import { D1ReferenceArchitectureRepository } from './repositories/D1ReferenceArc
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
 import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
 import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
+import { D1KaizenGradingRepository } from './repositories/D1KaizenGradingRepository'
+import { D1KaizenVerifiedComboRepository } from './repositories/D1KaizenVerifiedComboRepository'
 import { D1ConsensusSessionRepository } from './repositories/D1ConsensusSessionRepository'
 import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/consensus'
 import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewRepository'
+import { D1BrainstormSessionRepository } from './repositories/D1BrainstormSessionRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
 import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
 import {
@@ -389,6 +393,10 @@ function buildResolveTransport(
   db: D1Database,
   clock: Clock,
   provisioningLog?: ProvisioningLogRecorder,
+  // An injected native pool adapter (e.g. a Kargo runner adapter implementing
+  // `RunnerPoolProvider`) drives the actual dispatch when supplied — symmetric with the
+  // `environmentProvider` override. Absent → the generic manifest-driven HTTP provider.
+  injectedPoolProvider?: RunnerPoolProvider,
 ): ResolveRunnerTransport | null {
   // The Cloudflare backend folds in instance-level reaping: the registry records
   // each dispatched container in the live inventory and clears it on release, so the
@@ -409,7 +417,7 @@ function buildResolveTransport(
   // The self-hosted pool path: one stateless manifest interpreter (its OAuth cache
   // shared) plus a connection service to resolve each workspace's manifest+secrets.
   let runnerService: RunnerPoolConnectionService | undefined
-  let poolProvider: HttpRunnerPoolProvider | undefined
+  let poolProvider: RunnerPoolProvider | undefined
   if (config.runners.enabled) {
     runnerService = new RunnerPoolConnectionService({
       runnerPoolConnectionRepository: new D1RunnerPoolConnectionRepository({ db }),
@@ -421,7 +429,8 @@ function buildResolveTransport(
       clock,
     })
     const urlPolicy = resolveUrlSafetyPolicy(config.runners)
-    poolProvider = new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {})
+    poolProvider =
+      injectedPoolProvider ?? new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {})
   }
 
   if (!cloudflare && !runnerService) return null
@@ -1382,7 +1391,10 @@ function selectRequirementsDeps(
 ): Partial<CoreDependencies> {
   return {
     requirementReviewRepository: new D1RequirementReviewRepository({ db }),
+    kaizenGradingRepository: new D1KaizenGradingRepository({ db }),
+    kaizenVerifiedComboRepository: new D1KaizenVerifiedComboRepository({ db }),
     clarityReviewRepository: new D1ClarityReviewRepository({ db }),
+    brainstormSessionRepository: new D1BrainstormSessionRepository({ db }),
     modelProviderResolver: buildModelProviderResolver(env, db),
     // The routing default already resolves to Cloudflare Workers AI unless a
     // direct provider key is set, so the reviewer runs on Cloudflare by default.
@@ -1600,7 +1612,18 @@ export function buildContainer(
   // implementation executor and the repo bootstrapper), so both dispatch through the
   // same Cloudflare/self-hosted seam — and the bootstrapper rides the reaping-aware
   // Cloudflare transport for free. Null when no backend is configured.
-  const resolveTransport = buildResolveTransport(env, config, db, clock, provisioningLogRecorder)
+  // A native runner-pool adapter (e.g. Kargo) is injected via `overrides.runnerPoolProvider`
+  // — the same `overrides` seam the native environment adapter uses. The `...overrides` spread
+  // (last, below) already routes it to the connection-management UI; thread it here so it ALSO
+  // drives the actual dispatch transport, fully symmetric with `environmentProvider`.
+  const resolveTransport = buildResolveTransport(
+    env,
+    config,
+    db,
+    clock,
+    provisioningLogRecorder,
+    overrides.runnerPoolProvider,
+  )
 
   // The subscription-token pool (Claude Code / Codex credentials) — built once and
   // shared by the container executor (lease + usage feedback) and the

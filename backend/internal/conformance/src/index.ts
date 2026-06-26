@@ -34,5 +34,7 @@ export {
 export { deriveWorkerDatabase, type WorkerDatabase } from './test-db.js'
 export { defineLlmMetricsSuite } from './llm-metrics-suite.js'
 export { defineAgentContextSuite } from './agent-context-suite.js'
+export { defineBrainstormSuite } from './brainstorm-suite.js'
+export { defineKaizenSuite } from './kaizen-suite.js'
 export { defineProvisioningLogSuite } from './provisioning-log-suite.js'
 export { CONFORMANCE_DRIVE_CONFIG, driveWorkspace } from './drive.js'

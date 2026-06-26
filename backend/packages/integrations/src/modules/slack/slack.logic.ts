@@ -61,6 +61,9 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   human_test_ready: { roles: ['product'], includeCreator: true },
   // The human-review gate waits on a human code reviewer: tell the engineers + the creator.
   human_review: { roles: ['engineering'], includeCreator: true },
+  // The Coder surfaced follow-ups/questions to triage: tell the task's creator (who decides
+  // file / send back / answer / dismiss).
+  followup_pending: { roles: [], includeCreator: true },
 }
 
 /** The mention audience for a notification type. */
@@ -143,6 +146,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   decision_required: ':vertical_traffic_light: Decision needed',
   human_test_ready: ':test_tube: Ready for human testing',
   human_review: ':bust_in_silhouette: Awaiting code review',
+  followup_pending: ':compass: Follow-ups to decide',
 }
 
 /** Format a percentage from a 0..1 score for the assessment context line. */

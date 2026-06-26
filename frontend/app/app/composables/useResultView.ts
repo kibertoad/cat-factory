@@ -22,6 +22,8 @@ export function useResultView(viewId: string, opts?: { onOpen?: (blockId: string
   const blockId = computed(() => (open.value ? ui.resultView!.blockId : null))
   const instanceId = computed(() => (open.value ? ui.resultView!.instanceId : null))
   const stepIndex = computed(() => (open.value ? ui.resultView!.stepIndex : null))
+  // Set only for the brainstorm window (its two stages share one view id).
+  const stage = computed(() => (open.value ? (ui.resultView!.stage ?? null) : null))
 
   function close() {
     ui.closeResultView()
@@ -44,5 +46,5 @@ export function useResultView(viewId: string, opts?: { onOpen?: (blockId: string
     )
   }
 
-  return { open, blockId, instanceId, stepIndex, close }
+  return { open, blockId, instanceId, stepIndex, stage, close }
 }

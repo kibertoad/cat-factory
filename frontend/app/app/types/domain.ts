@@ -20,6 +20,7 @@ import type { Notification } from './notifications'
 import type { RequirementReview } from './requirements'
 import type { ConsensusSession, ConsensusStepConfig, StepGating, TaskEstimate } from './consensus'
 import type { ClarityReview } from './clarity'
+import type { BrainstormSession } from './brainstorm'
 import type { MergeThresholdPreset } from './merge'
 import type { ModelPreset } from './model-presets'
 import type { PipelineSchedule } from './recurring'
@@ -256,6 +257,11 @@ export interface TestReport {
 /** The kinds of agents available in the agent palette. */
 export type AgentKind =
   | 'requirements-review'
+  // Brainstorm (structured-dialogue) gates: propose options with trade-offs and let the human
+  // converge. `requirements-brainstorm` runs before the requirements review; `architecture-
+  // brainstorm` before the architect. Both open the shared brainstorm window.
+  | 'requirements-brainstorm'
+  | 'architecture-brainstorm'
   | 'architect'
   | 'researcher'
   | 'coder'
@@ -313,6 +319,9 @@ export type AgentKind =
   // `fixer` to address review comments and advancing once approved with no unresolved threads.
   // Opens the shared gate window (with a freeform "request a fix" box).
   | 'human-review'
+  // The Kaizen agent: post-run grader (NOT a pipeline step / palette archetype). Surfaced
+  // only in Model Configuration (its model is pinnable like any agent) and run details.
+  | 'kaizen'
 
 /** A draggable agent definition shown in the agent palette. */
 /** Palette grouping for the agent archetypes (collapsible sections in the builder). */
@@ -391,6 +400,12 @@ export interface Pipeline {
    * always run. Used to make a companion conditional on the task estimate.
    */
   gating?: (StepGating | null)[]
+  /**
+   * Per-step Follow-up companion toggle, parallel to `agentKinds`: governs whether a `coder`
+   * step runs the future-looking Follow-up companion. `followUps[i] === false` disables it;
+   * `null`/`true`/absent ⇒ enabled (a Coder step gets it by default). Ignored on non-coder steps.
+   */
+  followUps?: (boolean | null)[]
   /** Free-form organizational labels for the library (filter/search). */
   labels?: string[]
   /** True when archived: kept but hidden from the default library view. */
@@ -499,6 +514,12 @@ export interface WorkspaceSettings {
   taskLimitPerType: Partial<Record<CreateTaskType, number>> | null
   /** Whether to store the complete provided-context snapshot for each container agent. */
   storeAgentContext: boolean
+  /** Whether the Kaizen agent grades agent steps after each run. On by default. */
+  kaizenEnabled: boolean
+  /** Local mode only: dispatch container agents to the runner pool instead of host Docker. */
+  delegateAgentsToRunnerPool: boolean
+  /** Local mode only: provision Tester environments via the env provider instead of DinD. */
+  delegateTestEnvToProvider: boolean
   /** Spend budget currency (ISO 4217). Null ⇒ the built-in default (`EUR`). */
   spendCurrency: string | null
   /** Monthly spend budget in `spendCurrency`. Null ⇒ the built-in default. */
@@ -512,6 +533,9 @@ export interface UpdateWorkspaceSettingsInput {
   taskLimitShared?: number | null
   taskLimitPerType?: Partial<Record<CreateTaskType, number>> | null
   storeAgentContext?: boolean
+  kaizenEnabled?: boolean
+  delegateAgentsToRunnerPool?: boolean
+  delegateTestEnvToProvider?: boolean
   spendCurrency?: string | null
   spendMonthlyLimit?: number | null
 }
@@ -522,6 +546,50 @@ export interface UpdateWorkspaceSettingsInput {
  */
 export interface ServiceFragmentDefaults {
   fragmentIds: string[]
+}
+
+/** Lifecycle of a Kaizen grading. Mirrors `@cat-factory/contracts`. */
+export type KaizenGradingStatus = 'scheduled' | 'running' | 'complete' | 'failed'
+
+/**
+ * A Kaizen grading of one completed agent step (how smooth/efficient the interaction
+ * was, 1..5, plus recommendations). Mirrors `@cat-factory/contracts`.
+ */
+export interface KaizenGrading {
+  id: string
+  executionId: string
+  blockId: string
+  stepIndex: number
+  agentKind: string
+  model: string
+  promptVersion: number
+  comboKey: string
+  status: KaizenGradingStatus
+  grade: number | null
+  summary: string
+  recommendations: string[]
+  graderModel: string | null
+  error: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+/** A `(promptVersion, agentKind, model)` combo's verification progress. */
+export interface KaizenVerifiedCombo {
+  comboKey: string
+  agentKind: string
+  model: string
+  promptVersion: number
+  consecutiveHighGrades: number
+  verified: boolean
+  verifiedAt: number | null
+  updatedAt: number
+}
+
+/** The Kaizen screen payload: recent grading history + the verified-combo library. */
+export interface KaizenOverview {
+  gradings: KaizenGrading[]
+  verified: KaizenVerifiedCombo[]
 }
 
 /**
@@ -537,6 +605,8 @@ export type WorkspaceEvent =
   | { type: 'requirements'; review: RequirementReview; at: number }
   | { type: 'consensus'; session: ConsensusSession; at: number }
   | { type: 'clarity'; review: ClarityReview; at: number }
+  | { type: 'brainstorm'; session: BrainstormSession; at: number }
+  | { type: 'kaizen'; grading: KaizenGrading; at: number }
 
 /** Level-of-detail buckets driven by the canvas zoom level. Shallow → deep:
  * `far`/`mid`/`close` govern a service frame (chip → card → opened with tasks);

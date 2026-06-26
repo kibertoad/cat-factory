@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/observability-langfuse",
-  "version": "0.7.39",
+  "version": "0.7.42",
   "description": "Opt-in Langfuse trace sink for the Agent Architecture Board. A fetch-based LlmTraceSink that streams LLM generations (and container tool spans) to Langfuse's ingestion API — runs unchanged on both the Cloudflare Worker (workerd) and Node facades.",
   "repository": {
     "type": "git",
@@ -33,6 +33,7 @@
   },
   "devDependencies": {
     "typescript": "7.0.1-rc",
+    "undici": "^7.16.0",
     "vitest": "^4.1.9"
   }
 }

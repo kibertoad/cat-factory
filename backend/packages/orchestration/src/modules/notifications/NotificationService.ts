@@ -125,28 +125,27 @@ export class NotificationService {
   }
 
   /**
-   * Resolve the auto-raised "waiting for a human decision" card on a block once its run
-   * has advanced past the decision (the human responded, or it auto-passed). Only the
-   * `decision_required` type is dismissed — the human-actionable cards a stopped run
-   * leaves behind (`merge_review`, `pipeline_complete`, `requirement_review`, …) are
-   * resolved by the human acting on them, not here. Without this the card would linger
-   * open and the escalation sweep would later flip it red ("Overdue") for a decision that
-   * was already made. Idempotent + best-effort: a no-op when no such card is open.
+   * Resolve the auto-raised "waiting for a human decision" cards on a block once its run
+   * has advanced past the gate (the human responded, or it auto-passed). Dismisses the
+   * gate-driven cards the run clears for itself — the generic `decision_required` card and
+   * the Follow-up companion's `followup_pending` card — but NOT the human-actionable cards a
+   * stopped run leaves behind (`merge_review`, `pipeline_complete`, `requirement_review`, …),
+   * which the human resolves by acting on them. Without this the card would linger open and
+   * the escalation sweep would later flip it red ("Overdue") for a decision already made.
+   * Idempotent + best-effort: a no-op when no such card is open.
    */
   async clearWaitingDecision(workspaceId: string, blockId: string): Promise<void> {
-    const existing = await this.notifications.findOpenByBlock(
-      workspaceId,
-      blockId,
-      'decision_required',
-    )
-    if (!existing) return
-    const resolved: Notification = {
-      ...existing,
-      status: 'dismissed',
-      resolvedAt: this.clock.now(),
+    for (const type of ['decision_required', 'followup_pending'] as const) {
+      const existing = await this.notifications.findOpenByBlock(workspaceId, blockId, type)
+      if (!existing) continue
+      const resolved: Notification = {
+        ...existing,
+        status: 'dismissed',
+        resolvedAt: this.clock.now(),
+      }
+      await this.notifications.upsert(workspaceId, resolved)
+      await this.deliver(workspaceId, resolved)
     }
-    await this.notifications.upsert(workspaceId, resolved)
-    await this.deliver(workspaceId, resolved)
   }
 
   /**

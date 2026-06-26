@@ -1,4 +1,9 @@
 import type { ClarityReview, ResolveClarityExceededChoice } from '~/types/clarity'
+import type {
+  BrainstormSession,
+  BrainstormStage,
+  ResolveBrainstormExceededChoice,
+} from '~/types/brainstorm'
 import type { ConsensusSession } from '~/types/consensus'
 import type {
   RequirementReview,
@@ -174,6 +179,69 @@ export function reviewsApi({ http, ws }: ApiContext) {
     ) =>
       http<ClarityReview>(
         `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/clarity-review/resolve-exceeded`,
+        { method: 'POST', body: { choice } },
+      ),
+
+    // ---- brainstorm (structured-dialogue agent, stage-scoped) ------------
+    // The current session for a block + stage (null when none has been run). A 503 means
+    // the feature is unconfigured (the panel hides on any error here).
+    getBrainstorm: (workspaceId: string, blockId: string, stage: BrainstormStage) =>
+      http<BrainstormSession | null>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/brainstorm/${stage}`,
+      ),
+
+    replyBrainstormItem: (workspaceId: string, sessionId: string, itemId: string, reply: string) =>
+      http<BrainstormSession>(
+        `${ws(workspaceId)}/brainstorm-sessions/${encodeURIComponent(sessionId)}/items/${encodeURIComponent(itemId)}/reply`,
+        { method: 'POST', body: { reply } },
+      ),
+
+    setBrainstormItemStatus: (
+      workspaceId: string,
+      sessionId: string,
+      itemId: string,
+      status: ReviewItemStatus,
+    ) =>
+      http<BrainstormSession>(
+        `${ws(workspaceId)}/brainstorm-sessions/${encodeURIComponent(sessionId)}/items/${encodeURIComponent(itemId)}`,
+        { method: 'PATCH', body: { status } },
+      ),
+
+    // Incorporate the picks ASYNCHRONOUSLY (the durable driver folds + re-runs).
+    incorporateBrainstorm: (
+      workspaceId: string,
+      blockId: string,
+      stage: BrainstormStage,
+      feedback?: string,
+    ) =>
+      http<BrainstormSession>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/brainstorm/${stage}/incorporate`,
+        { method: 'POST', body: feedback ? { feedback } : {} },
+      ),
+
+    // Re-run the brainstorm against the converged direction (one more pass).
+    reReviewBrainstorm: (workspaceId: string, blockId: string, stage: BrainstormStage) =>
+      http<BrainstormSession>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/brainstorm/${stage}/re-review`,
+        { method: 'POST' },
+      ),
+
+    // Proceed: settle the brainstorm and advance the parked run (all options dismissed).
+    proceedBrainstorm: (workspaceId: string, blockId: string, stage: BrainstormStage) =>
+      http<BrainstormSession>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/brainstorm/${stage}/proceed`,
+        { method: 'POST' },
+      ),
+
+    // Resolve a session that hit its iteration cap: extra-round / proceed / stop-reset.
+    resolveBrainstormExceeded: (
+      workspaceId: string,
+      blockId: string,
+      stage: BrainstormStage,
+      choice: ResolveBrainstormExceededChoice,
+    ) =>
+      http<BrainstormSession>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/brainstorm/${stage}/resolve-exceeded`,
         { method: 'POST', body: { choice } },
       ),
   }

@@ -6,10 +6,12 @@ import { bootstrapApi } from './api/bootstrap'
 import { boardApi } from './api/board'
 import { documentsApi } from './api/documents'
 import { executionApi } from './api/execution'
+import { followUpsApi } from './api/followUps'
 import { fragmentsApi } from './api/fragments'
 import { githubApi } from './api/github'
-import { humanTestApi } from './api/humanTest'
 import { humanReviewApi } from './api/humanReview'
+import { humanTestApi } from './api/humanTest'
+import { kaizenApi } from './api/kaizen'
 import { modelsApi } from './api/models'
 import { notificationsApi } from './api/notifications'
 import { presetsApi } from './api/presets'
@@ -85,8 +87,10 @@ export function useApi() {
     ...documentsApi(ctx),
     ...tasksApi(ctx),
     ...reviewsApi(ctx),
+    ...followUpsApi(ctx),
     ...humanTestApi(ctx),
     ...humanReviewApi(ctx),
+    ...kaizenApi(ctx),
     ...specApi(ctx),
     ...notificationsApi(ctx),
     ...presetsApi(ctx),

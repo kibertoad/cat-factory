@@ -1,5 +1,108 @@
 # @cat-factory/local-server
 
+## 0.15.0
+
+### Minor Changes
+
+- eb48652: Local-mode infrastructure delegation + native runner-adapter seam.
+
+  Local mode now lets a workspace opt, independently, into delegating its container agents
+  and/or its Tester ephemeral environments to an external service instead of running
+  everything on the host container runtime. Two new per-workspace settings drive it
+  (`delegateAgentsToRunnerPool`, `delegateTestEnvToProvider`, both default off), surfaced as
+  toggles on the Ephemeral environments screen (local mode only) and enabled only once the
+  respective provider — a self-hosted runner pool / an environment provider — is registered.
+
+  - **Agents**: when delegated, container jobs dispatch to the workspace's registered runner
+    pool instead of host Docker (a clean 409 at start, and the existing dispatch error, when
+    delegated with no pool registered).
+  - **Environments**: the toggle sets the local-mode default Tester environment — `local`
+    (host Docker / DinD) by default, `ephemeral` (the provider) when on; per-service / per-task
+    choices still win. An `ephemeral` run is refused at start when delegated with no provider
+    connected.
+  - **Native runner-adapter seam**: an injected `runnerPoolProvider` now drives the actual
+    dispatch transport on both the Cloudflare and Node facades (falling back to the generic
+    `HttpRunnerPoolProvider`), fully symmetric with `environmentProvider`. A wrapper can thus
+    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. Kargo) to
+    serve both concerns with native code on every runtime.
+
+  BREAKING (pre-1.0, internal): an un-pinned Tester task in local mode now defaults to the
+  `local` (DinD) environment instead of `ephemeral`. New `workspace_settings` columns are
+  added on both runtimes (D1 migration + Drizzle migration); local mode now defaults
+  `ENVIRONMENTS_ENABLED=true` so the env module assembles for the opt-in.
+
+### Patch Changes
+
+- Updated dependencies [eb48652]
+- Updated dependencies [518aff7]
+  - @cat-factory/contracts@0.32.0
+  - @cat-factory/kernel@0.35.0
+  - @cat-factory/orchestration@0.27.0
+  - @cat-factory/node-server@0.25.0
+  - @cat-factory/agents@0.17.1
+  - @cat-factory/server@0.29.1
+
+## 0.14.2
+
+### Patch Changes
+
+- Updated dependencies [9f7ee39]
+- Updated dependencies [81b60d4]
+  - @cat-factory/contracts@0.31.0
+  - @cat-factory/kernel@0.34.0
+  - @cat-factory/agents@0.17.0
+  - @cat-factory/orchestration@0.26.0
+  - @cat-factory/server@0.29.0
+  - @cat-factory/node-server@0.24.0
+
+## 0.14.1
+
+### Patch Changes
+
+- Updated dependencies [4dd6e97]
+  - @cat-factory/agents@0.16.1
+  - @cat-factory/server@0.28.1
+  - @cat-factory/orchestration@0.25.1
+  - @cat-factory/node-server@0.23.1
+
+## 0.14.0
+
+### Minor Changes
+
+- ea59e91: Add the Kaizen agent: a post-run, continuous-improvement reviewer (toggleable per
+  workspace, never a pipeline-builder step) that grades each completed agent step on how
+  smooth/efficient vs confused/chaotic the interaction was and recommends prompt/model
+  improvements.
+
+  - After a run completes, the engine schedules a grading per completed agent step
+    (skipping verified combos); a background sweep (Cloudflare cron / Node interval) runs
+    the inline LLM grade. The grader's model is configured in Model Configuration like
+    every other agent (the hidden-from-palette `kaizen` kind).
+  - A `(promptVersion, agentKind, model)` combo that grades strongly (>=4) with no
+    recommendations five times in a row is marked **verified** and is no longer graded.
+  - New persisted tables `kaizen_gradings` + `kaizen_verified_combos` (D1 ⇄ Drizzle parity,
+    asserted by a new cross-runtime conformance suite) and a per-workspace `kaizenEnabled`
+    setting (a new `workspace_settings.kaizen_enabled` column).
+  - New read API (`GET /workspaces/:ws/kaizen`, `GET /workspaces/:ws/executions/:id/kaizen`),
+    a `kaizen` real-time event, a Kaizen screen (grading history + verified combos), and
+    per-step grading status (scheduled/running/complete + results) inside the run window —
+    never on the board.
+  - A step with neither a provided-context snapshot nor any recorded LLM calls (e.g. prompt
+    recording is off deployment-wide) is settled `failed` rather than graded blind, so a
+    guessed grade can't advance a combo toward a bogus `verified`.
+  - The Worker Kaizen sweep gains an in-isolate re-entrancy guard (mirroring the Node
+    sweeper) so overlapping passes don't race the per-combo streak update.
+
+### Patch Changes
+
+- Updated dependencies [ea59e91]
+  - @cat-factory/contracts@0.30.0
+  - @cat-factory/kernel@0.33.0
+  - @cat-factory/agents@0.16.0
+  - @cat-factory/orchestration@0.25.0
+  - @cat-factory/server@0.28.0
+  - @cat-factory/node-server@0.23.0
+
 ## 0.13.4
 
 ### Patch Changes

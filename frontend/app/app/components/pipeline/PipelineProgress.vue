@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AgentState, ExecutionInstance } from '~/types/domain'
-import { agentKindMeta } from '~/utils/catalog'
+import type { PipelineStep } from '~/types/execution'
+import { agentKindMeta, FOLLOW_UP_COMPANION_META } from '~/utils/catalog'
 import {
   subtaskIconClass,
   gateCompanionFor,
@@ -41,6 +42,18 @@ function reviewStageLabel(agentKind: string | undefined): string | null {
 // timing, model, subtasks) plus the full prose output when the agent produced one.
 function openStep(i: number) {
   ui.openStepDetail(props.instance.id, i)
+}
+
+// Follow-up companion (the future-looking Coder): how many surfaced items still need a
+// decision, and the chip's roll-up label. The chip blinks while any item is pending.
+function followUpPending(step: PipelineStep): number {
+  return (step.followUps?.items ?? []).filter((it) => it.status === 'pending').length
+}
+function followUpLabel(step: PipelineStep): string {
+  const items = step.followUps?.items ?? []
+  if (items.length === 0) return 'Watching…'
+  const pending = followUpPending(step)
+  return pending > 0 ? `${pending} to decide` : 'All decided'
 }
 
 // --- restart from a step -----------------------------------------------------
@@ -420,6 +433,37 @@ const ITEM_ICON: Record<string, string> = {
             </span>
           </div>
 
+          <!-- Follow-up companion (future-looking Coder): a blinking chip that lights up the
+               moment the Coder streams an item; click to triage. Blinks while any item is
+               undecided (the gate holds the pipeline until they're all decided). -->
+          <button
+            v-if="s.followUps?.enabled"
+            type="button"
+            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-2.5 py-1.5 text-left transition hover:border-pink-400/60"
+            :class="
+              followUpPending(s) > 0
+                ? 'border-pink-500/50 bg-pink-500/10 followup-blink'
+                : 'border-slate-700/70 bg-slate-900/40'
+            "
+            @click="ui.openFollowUps(instance.id, i)"
+          >
+            <span
+              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-pink-500/40 bg-pink-500/15"
+            >
+              <UIcon :name="FOLLOW_UP_COMPANION_META.icon" class="h-3 w-3 text-pink-300" />
+            </span>
+            <span class="min-w-0 flex-1 truncate text-[12px] text-slate-300">
+              {{ FOLLOW_UP_COMPANION_META.label }}
+              <span class="text-slate-500">(companion)</span>
+            </span>
+            <span
+              class="shrink-0 text-[11px] font-medium"
+              :class="followUpPending(s) > 0 ? 'text-pink-300' : 'text-slate-400'"
+            >
+              {{ followUpLabel(s) }}
+            </span>
+          </button>
+
           <!-- reviewer gate folding/re-reviewing in the background: a working indicator,
                NOT a "Review & approve" gate (the human is summoned only if needed) -->
           <div
@@ -482,5 +526,19 @@ const ITEM_ICON: Record<string, string> = {
 }
 .step-active {
   animation: step-pulse 1.6s ease-in-out infinite;
+}
+/* The Follow-up companion chip blinks (pink) while it has undecided items, drawing the eye
+   to forward-looking work surfaced mid-run. */
+@keyframes followup-blink {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(244, 114, 182, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(244, 114, 182, 0);
+  }
+}
+.followup-blink {
+  animation: followup-blink 1.4s ease-in-out infinite;
 }
 </style>

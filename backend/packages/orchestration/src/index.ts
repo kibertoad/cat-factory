@@ -179,11 +179,20 @@ export {
 } from './modules/requirements/RequirementReviewService.js'
 export * as requirementsLogic from './modules/requirements/requirements.logic.js'
 
+export { KaizenService, type KaizenServiceDependencies } from './modules/kaizen/KaizenService.js'
+export * as kaizenLogic from './modules/kaizen/kaizen.logic.js'
+
 export {
   ClarityReviewService,
   type ClarityReviewServiceDependencies,
 } from './modules/clarity/ClarityReviewService.js'
 export * as clarityLogic from './modules/clarity/clarity.logic.js'
+
+export {
+  BrainstormService,
+  type BrainstormServiceDependencies,
+} from './modules/brainstorm/BrainstormService.js'
+export * as brainstormLogic from './modules/brainstorm/brainstorm.logic.js'
 
 export {
   type Core,
@@ -196,7 +205,9 @@ export {
   type ProvisioningLogsModule,
   type BootstrapModule,
   type RequirementsModule,
+  type KaizenModule,
   type ClarityModule,
+  type BrainstormModule,
   type NotificationsModule,
   type ReleaseHealthModule,
   type IncidentEnrichmentModule,

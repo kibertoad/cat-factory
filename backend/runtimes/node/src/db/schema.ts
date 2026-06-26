@@ -668,6 +668,57 @@ export const requirementReviews = pgTable(
   ],
 )
 
+// Kaizen gradings (mirror of D1 migration 0015): one row per (run, step) recording the
+// post-run grade + recommendations the Kaizen agent produced. Recommendations are a JSON
+// array column. The unique (execution_id, step_index) index keeps scheduling idempotent.
+export const kaizenGradings = pgTable(
+  'kaizen_gradings',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    execution_id: text('execution_id').notNull(),
+    block_id: text('block_id').notNull(),
+    step_index: integer('step_index').notNull(),
+    agent_kind: text('agent_kind').notNull(),
+    model: text('model').notNull(),
+    prompt_version: integer('prompt_version').notNull(),
+    combo_key: text('combo_key').notNull(),
+    status: text('status').notNull(),
+    grade: integer('grade'),
+    summary: text('summary').notNull().default(''),
+    recommendations: text('recommendations').notNull().default('[]'),
+    grader_model: text('grader_model'),
+    error: text('error'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    uniqueIndex('idx_kaizen_gradings_step').on(t.workspace_id, t.execution_id, t.step_index),
+    index('idx_kaizen_gradings_status').on(t.status, t.updated_at),
+    index('idx_kaizen_gradings_execution').on(t.workspace_id, t.execution_id),
+  ],
+)
+
+// Kaizen verified-combo progress (mirror of D1 migration 0015): one row per
+// (workspace, comboKey) tracking the streak of high grades and whether the combo has
+// crossed the verification threshold (after which the engine stops grading it).
+export const kaizenVerifiedCombos = pgTable(
+  'kaizen_verified_combos',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    combo_key: text('combo_key').notNull(),
+    agent_kind: text('agent_kind').notNull(),
+    model: text('model').notNull(),
+    prompt_version: integer('prompt_version').notNull(),
+    consecutive_high_grades: integer('consecutive_high_grades').notNull().default(0),
+    verified: integer('verified').notNull().default(0),
+    verified_at: bigint('verified_at', { mode: 'number' }),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.combo_key] })],
+)
+
 // Consensus session transcripts (mirror of D1 migration 0002): one row per
 // (execution, step) recording the multi-model process — participants, round-by-round
 // contributions/votes, and the synthesized result. The observability surface the
@@ -720,6 +771,32 @@ export const clarityReviews = pgTable(
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
     index('idx_clarity_reviews_block').on(t.workspace_id, t.block_id),
+  ],
+)
+
+// Brainstorm (structured-dialogue) sessions (mirror of D1 migration 0016_brainstorm_sessions).
+// The brainstorm analogue of `clarity_reviews`, but keyed per (block, STAGE): a block may have
+// one live `requirements` session and one live `architecture` session at once.
+// `converged_direction` holds the standard-format direction the dialogue settled on.
+export const brainstormSessions = pgTable(
+  'brainstorm_sessions',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    block_id: text('block_id').notNull(),
+    stage: text('stage').notNull(),
+    status: text('status').notNull(),
+    items: text('items').notNull().default('[]'),
+    model: text('model'),
+    converged_direction: text('converged_direction'),
+    iteration: integer('iteration').notNull().default(1),
+    max_iterations: integer('max_iterations').notNull().default(1),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    index('idx_brainstorm_sessions_block_stage').on(t.workspace_id, t.block_id, t.stage),
   ],
 )
 
@@ -862,6 +939,15 @@ export const workspaceSettings = pgTable('workspace_settings', {
   // Whether to store the full provided-context snapshot for each container agent
   // (the observability feature). On by default; integer 0/1 to match the SQLite store.
   store_agent_context: integer('store_agent_context').notNull().default(1),
+  // Per-workspace toggle for the Kaizen agent (post-run grading). On by default; integer
+  // 0/1 to match the SQLite store.
+  kaizen_enabled: integer('kaizen_enabled').notNull().default(1),
+  // LOCAL MODE ONLY toggles (inert on Cloudflare/Node): delegate container agents to the
+  // workspace's runner pool, and/or the Tester's ephemeral environments to the registered
+  // environment provider, instead of the host container runtime / in-container DinD. Off by
+  // default; integer 0/1 to match the SQLite store.
+  delegate_agents_to_runner_pool: integer('delegate_agents_to_runner_pool').notNull().default(0),
+  delegate_test_env_to_provider: integer('delegate_test_env_to_provider').notNull().default(0),
   // Per-workspace spend budget (moved out of env). Both nullable; null ⇒ the built-in
   // DEFAULT_SPEND_PRICING base table.
   spend_currency: text('spend_currency'),

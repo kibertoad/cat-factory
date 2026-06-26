@@ -264,8 +264,7 @@ export interface Env {
   GOOGLE_OAUTH_CLIENT_SECRET?: string
   /** Explicit Google redirect_uri; derived from the request origin when unset. */
   GOOGLE_OAUTH_REDIRECT_URL?: string
-  /** Transactional email (invitations): opt-in flag + master key for the per-account API key. */
-  EMAIL_ENABLED?: string
+  /** Optional dedicated master key for the per-account email API key (falls back to ENCRYPTION_KEY). */
   EMAIL_ENCRYPTION_KEY?: string
   /** Public SPA base URL the invite-accept link points at. */
   APP_BASE_URL?: string

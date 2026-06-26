@@ -3,6 +3,7 @@ import { subscriptionVendorSchema } from './vendor-credentials.js'
 import { agentConfigValuesSchema } from './agent-config.js'
 import { testReportSchema, testEnvironmentSchema } from './testing.js'
 import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from './consensus.js'
+import { followUpsStepStateSchema } from './followUp.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
 import { releaseSignalSchema } from './release.js'
 import { environmentStatusSchema } from './environments.js'
@@ -436,6 +437,15 @@ export const pipelineSchema = v.object({
    * `task-estimator` step earlier in the chain. See {@link stepGatingSchema}.
    */
   gating: v.optional(v.array(v.nullable(stepGatingSchema))),
+  /**
+   * Per-step Follow-up companion toggle, parallel to {@link agentKinds}: governs whether a
+   * `coder` step runs the future-looking Follow-up companion (the Coder surfaces loose ends /
+   * side-tasks / questions, and the run parks at the step's completion until every item is
+   * decided). `followUps[i] === false` disables it on that step; `null`/`true`/absent means
+   * "enabled" — so a Coder step gets the companion by default. Ignored on non-`coder` steps.
+   * Copied onto the run's step (`followUps.enabled`) at start, like {@link gates}.
+   */
+  followUps: v.optional(v.array(v.nullable(v.boolean()))),
   /**
    * Free-form organizational labels for the saved-pipeline library (filter/search).
    * Absent ⇒ no labels. Applies to built-in and custom pipelines alike.
@@ -1054,6 +1064,15 @@ export const pipelineStepSchema = v.object({
       }),
     ),
   ),
+  /**
+   * Live Follow-up companion state while a `coder` step runs/parks: the items the Coder
+   * streamed (loose ends / side-tasks / questions), whether the companion is enabled, and
+   * the send-back loop budget. Items accrue live as the harness streams them (the blinking
+   * companion); at the step's completion the engine parks the run while any item is
+   * `pending`, then loops the Coder for any `queued` follow-up / `answered` question. See
+   * {@link followUpsStepStateSchema}. Absent for non-`coder` steps / when the companion is off.
+   */
+  followUps: v.optional(v.nullable(followUpsStepStateSchema)),
   /**
    * Transient rework feedback carried on a PRODUCER step while it is being re-run by
    * a downstream companion (the analogue of an approval's `changes_requested`
