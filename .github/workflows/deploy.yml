@@ -18,11 +18,21 @@ name: Deploy (production / Cloudflare)
 # (see ci.yml) — this workflow assumes a merged, already-tested commit, mirroring
 # how release.yml and docker-publish.yml fire directly on push to main.
 #
+# Production credentials live behind a protected GitHub `environment: production`
+# (Settings -> Environments), NOT as bare repository secrets, so only the deploy
+# jobs below can read them and an environment branch policy ("Deployment branches:
+# main only") + any required reviewers apply. As defence in depth the workflow also
+# refuses to run from any ref other than main, so a `workflow_dispatch` against an
+# unreviewed feature branch cannot ship that branch's code to production.
+#
 # Required configuration (repository Settings):
-#   secrets.CLOUDFLARE_API_TOKEN   — token with Workers, D1, Pages & Containers edit
-#   secrets.CLOUDFLARE_ACCOUNT_ID  — the deployment's Cloudflare account id
-#   vars.NUXT_PUBLIC_API_BASE      — backend origin baked into the SPA at build time
-#                                    (e.g. https://catfactory-api.kiberion.com)
+#   environment "production":
+#     secrets.CLOUDFLARE_API_TOKEN   — token scoped to ONLY this account's Workers,
+#                                      D1, Pages & Containers edit (no broader scope)
+#     secrets.CLOUDFLARE_ACCOUNT_ID  — the deployment's Cloudflare account id
+#     (recommended) Deployment branches: main only; required reviewers as desired
+#   vars.NUXT_PUBLIC_API_BASE        — backend origin baked into the SPA at build time
+#                                      (e.g. https://catfactory-api.kiberion.com)
 
 on:
   push:
@@ -61,7 +71,13 @@ jobs:
   # on a manual dispatch it is the per-surface checkbox inputs.
   changes:
     name: Detect changes
+    # Hard ref guard: only ever deploy from main. `push` is already branch-filtered,
+    # but `workflow_dispatch` can be fired against ANY ref (incl. an unreviewed
+    # feature branch) via the API/UI; refusing here skips every downstream deploy
+    # job, so unreviewed code can never reach production through a manual dispatch.
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     outputs:
@@ -142,6 +158,9 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.image == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Scopes CLOUDFLARE_* to this protected environment + applies its branch policy.
+    environment: production
     permissions:
       contents: read
     steps:
@@ -175,6 +194,8 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.migrations == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
     permissions:
       contents: read
     steps:
@@ -216,6 +237,8 @@ jobs:
       && needs.migrate.result != 'failure'
       && needs.migrate.result != 'cancelled' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
     permissions:
       contents: read
     steps:
@@ -251,6 +274,8 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.frontend == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
     permissions:
       contents: read
     steps:
