@@ -48,6 +48,37 @@ describe('LocalSettingsService', () => {
     expect((await service.resolve()).pool.minWarm).toBe(1)
   })
 
+  it('invokes onChange with the new config after a write (live apply, no restart)', async () => {
+    const { repo } = fakeRepo()
+    const seen: number[] = []
+    const service = new LocalSettingsService({
+      localSettingsRepository: repo,
+      clock: { now: () => 0 },
+      onChange: (s) => {
+        seen.push(s.pool.size)
+      },
+    })
+    await service.write({
+      pool: { size: 4, minWarm: 2, max: null, idleTtlMs: 60_000 },
+      checkout: DEFAULT_LOCAL_SETTINGS.checkout,
+    })
+    expect(seen).toEqual([4])
+  })
+
+  it('does not fail the write when onChange throws (live apply is best-effort)', async () => {
+    const { repo } = fakeRepo()
+    const service = new LocalSettingsService({
+      localSettingsRepository: repo,
+      clock: { now: () => 0 },
+      onChange: () => {
+        throw new Error('transport build still failing')
+      },
+    })
+    await expect(service.write(DEFAULT_LOCAL_SETTINGS)).resolves.toMatchObject({
+      pool: { size: 0 },
+    })
+  })
+
   it('caches resolve() within the TTL, then reloads after a write', async () => {
     const { repo, reads } = fakeRepo()
     let t = 0

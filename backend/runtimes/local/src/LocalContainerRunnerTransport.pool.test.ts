@@ -1,9 +1,13 @@
+import { parseLocalSettings } from '@cat-factory/contracts'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   type ContainerExec,
   LocalContainerRunnerTransport,
 } from './LocalContainerRunnerTransport.js'
 import type { RunContainerSpec } from './runtimes/index.js'
+
+/** Let a fire-and-forget reconcile (trim/pre-warm) settle before asserting. */
+const flush = () => new Promise((resolve) => setTimeout(resolve, 10))
 
 // Coverage for the WARM POOL path (pool size > 0): idle harness containers are kept
 // ready and LEASED to a run, then RETURNED to the pool rather than torn down — with the
@@ -223,6 +227,60 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
     expect(calls.some((c) => c[0] === 'rm' && c.includes('orphan-2'))).toBe(true)
     // ...and the minimum warm members were pre-started.
     expect(calls.filter((c) => c[0] === 'run')).toHaveLength(2)
+  })
+
+  it('clamps the pre-warm count to poolSize (never warms beyond the kept idle set)', async () => {
+    // minWarm > poolSize with a larger poolMax used to pre-warm 5 only for trimIdle to reap
+    // 3 on the first release — silently violating the warm floor. minWarm is now clamped to
+    // poolSize, so exactly poolSize members are pre-warmed.
+    const { exec, calls } = fakeDockerPool()
+    const transport = new LocalContainerRunnerTransport({
+      image: 'harness:test',
+      poolSize: 2,
+      poolMax: 10,
+      poolMinWarm: 5,
+      exec,
+      fetchImpl: okFetch() as unknown as typeof fetch,
+    })
+    await transport.reapExited()
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(2)
+  })
+
+  it('applySettings resizes the warm pool live, trimming idle members beyond the new size', async () => {
+    const { exec, calls } = fakeDockerPool()
+    const transport = new LocalContainerRunnerTransport({
+      image: 'harness:test',
+      poolSize: 3,
+      poolMinWarm: 3,
+      exec,
+      fetchImpl: okFetch() as unknown as typeof fetch,
+    })
+    await transport.reapExited() // pre-warm 3 idle members
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(3)
+
+    // Shrink to 1 via the settings panel: the two excess idle members are reaped LIVE — no
+    // restart — so the warm set converges on the new size.
+    transport.applySettings(parseLocalSettings({ pool: { size: 1 } }))
+    await flush()
+    expect(calls.filter((c) => c[0] === 'rm')).toHaveLength(2)
+  })
+
+  it('keeps an in-flight per-run run on its own container after pooling is enabled live', async () => {
+    // Pooling starts OFF (per-run containers). A run is dispatched, then the operator turns
+    // pooling ON mid-flight. The in-flight run must keep polling its per-run container, not
+    // the (empty) pool — otherwise it would be spuriously evicted.
+    const { exec } = fakeDockerPool()
+    const transport = new LocalContainerRunnerTransport({
+      image: 'harness:test',
+      poolSize: 0,
+      exec,
+      fetchImpl: okFetch() as unknown as typeof fetch,
+    })
+    await transport.dispatch({ runId: 'r1', jobId: 'j1' }, repoSpec('o', 'r'), 'agent')
+    transport.applySettings(parseLocalSettings({ pool: { size: 2 } }))
+    await flush()
+    const view = await transport.poll({ runId: 'r1', jobId: 'j1' })
+    expect(view.state).toBe('running')
   })
 
   it('falls back to the per-run path when the runtime does not support pooling', async () => {

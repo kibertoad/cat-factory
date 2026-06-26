@@ -319,8 +319,10 @@ These knobs live in the **DB, not env** — configure them in the UI under **Int
 | Workspace root         | `/workspace`                                    | Where the reused per-repo checkout lives inside the container.      |
 | Keep on clean          | `node_modules,.venv,target,.gradle,.pnpm-store` | Dirs the between-run clean sweep PRESERVES (dependency caches).     |
 
-Changes apply to runs started after saving; restart the service to resize an already-warm
-pool. Between runs each reused checkout is **clean-swept** (`git reset --hard` + remove
+Saving resizes the warm pool **live** — no restart needed (idle members beyond the new size
+are reaped and the pool re-warms to the new minimum); in-flight runs keep the container they
+already hold, and the checkout config applies to containers started after the save. Between
+runs each reused checkout is **clean-swept** (`git reset --hard` + remove
 every untracked/ignored file _except_ the kept dependency caches) so a prior run's garbage
 never leaks into the next. **Trust boundary:** local mode is single-user, so a warm
 container is reused across that one developer's runs; different repos always get separate

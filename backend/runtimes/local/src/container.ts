@@ -97,17 +97,31 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // panel — they REPLACED the old LOCAL_POOL_* / HARNESS_* env vars. Built here so the
   // serving transport resolves its pool config from it and the local-settings controller
   // can read/write it. Requires the Drizzle db (always present for the local service).
+  // The serving container transport is built once, lazily, reading its pool + checkout
+  // config from the DB settings (not env). The promise is cached so every dispatch — and
+  // the native router's container leg — reuses the same instance (and its in-process pool).
+  // A settings edit is applied LIVE to this instance (see the service's `onChange` below),
+  // so the panel takes effect without a restart.
+  let containerTransport: Promise<LocalContainerRunnerTransport> | undefined
+
   const localSettingsService = options.db
     ? new LocalSettingsService({
         localSettingsRepository: new DrizzleLocalSettingsRepository(options.db),
         clock: { now: () => Date.now() },
+        // Apply an edit to the already-built serving transport so the warm-pool + checkout
+        // config takes effect WITHOUT a restart. No-op until the transport is built (the
+        // next build reads the fresh settings anyway); a still-failing build is swallowed
+        // (a later dispatch surfaces the real problem with a clearer message).
+        onChange: async (settings) => {
+          if (!containerTransport) return
+          try {
+            ;(await containerTransport).applySettings(settings)
+          } catch {
+            // transport build is still failing — nothing to reconfigure yet
+          }
+        },
       })
     : undefined
-
-  // The serving container transport is built once, lazily, reading its pool + checkout
-  // config from the DB settings (not env). The promise is cached so every dispatch — and
-  // the native router's container leg — reuses the same instance (and its in-process pool).
-  let containerTransport: Promise<LocalContainerRunnerTransport> | undefined
   const buildServingTransport = async (): Promise<LocalContainerRunnerTransport> => {
     const settings = await localSettingsService?.resolve()
     const transport = createLocalContainerTransportFromEnv(env, settings)
@@ -209,22 +223,34 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     : container
 }
 
+/** Values that explicitly DISABLE native mode (so `LOCAL_NATIVE_AGENTS=false` means off). */
+const NATIVE_OFF_VALUES = new Set(['false', '0', 'off', 'no', 'none', 'disabled'])
+/** Affirmative values that enable BOTH native harnesses without naming one. */
+const NATIVE_ALL_VALUES = new Set(['true', '1', 'on', 'yes', 'all', 'both'])
+
 /**
  * Parse `LOCAL_NATIVE_AGENTS` into the set of subscription harnesses to run natively. The
  * documented form is a comma-separated list of harness ids (`claude-code,codex`); `claude`
- * is accepted as an alias for `claude-code`. A set-but-unrecognised value (e.g. a bare
- * `true` / `1`) is treated as "enable both native harnesses" so turning native mode on is
- * forgiving; blank/unset ⇒ off (`[]`). Only `claude-code` / `codex` are ever native.
+ * is accepted as an alias for `claude-code`. Blank/unset OR an explicit off value
+ * (`false`/`0`/`off`/`no`/`none`/`disabled`) ⇒ off (`[]`) — so disabling native mode never
+ * accidentally enables it. An affirmative value naming no harness (`true`/`1`/`on`/…) ⇒ BOTH
+ * native harnesses. Only `claude-code` / `codex` are ever native; any other unrecognised
+ * token is ignored. A value with neither a recognised harness nor an affirmative keyword
+ * (e.g. a typo) ⇒ off, so an unintelligible setting fails safe rather than enabling an
+ * unsandboxed, unmetered mode.
  */
-function parseNativeHarnesses(raw: string | undefined): HarnessKind[] {
-  const trimmed = raw?.trim()
-  if (!trimmed) return []
+export function parseNativeHarnesses(raw: string | undefined): HarnessKind[] {
+  const trimmed = raw?.trim().toLowerCase()
+  if (!trimmed || NATIVE_OFF_VALUES.has(trimmed)) return []
   const out = new Set<HarnessKind>()
-  for (const token of trimmed.split(',').map((s) => s.trim().toLowerCase())) {
+  let affirmative = false
+  for (const token of trimmed.split(',').map((s) => s.trim())) {
     if (token === 'claude-code' || token === 'claude') out.add('claude-code')
     else if (token === 'codex') out.add('codex')
+    else if (NATIVE_ALL_VALUES.has(token)) affirmative = true
   }
-  // Non-empty but nothing recognised → the operator clearly meant "on"; enable both.
-  if (out.size === 0) return ['claude-code', 'codex']
-  return [...out]
+  if (out.size > 0) return [...out]
+  // No harness named: enable both ONLY for an explicit affirmative keyword; anything else
+  // unrecognised stays off (fail-safe — see the doc comment).
+  return affirmative ? ['claude-code', 'codex'] : []
 }

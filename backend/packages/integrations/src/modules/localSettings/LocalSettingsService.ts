@@ -8,6 +8,12 @@ const CACHE_TTL_MS = 5_000
 export interface LocalSettingsServiceDependencies {
   localSettingsRepository: LocalSettingsRepository
   clock: Clock
+  /**
+   * Invoked after a successful {@link LocalSettingsService.write} with the new config, so a
+   * facade can apply it LIVE (e.g. reconfigure the runner transport's warm pool) without a
+   * restart. Optional; failures are swallowed so a live-apply hiccup never fails the write.
+   */
+  onChange?: (settings: LocalSettings) => void | Promise<void>
 }
 
 /**
@@ -22,11 +28,13 @@ export interface LocalSettingsServiceDependencies {
 export class LocalSettingsService {
   private readonly repo: LocalSettingsRepository
   private readonly clock: Clock
+  private readonly onChange?: (settings: LocalSettings) => void | Promise<void>
   private cache: { value: LocalSettings; expiresAt: number } | undefined
 
   constructor(deps: LocalSettingsServiceDependencies) {
     this.repo = deps.localSettingsRepository
     this.clock = deps.clock
+    this.onChange = deps.onChange
   }
 
   /** The resolved settings, cache-first. Defaults when no row persisted yet. */
@@ -56,6 +64,13 @@ export class LocalSettingsService {
       updatedAt: now,
     })
     this.cache = undefined
+    // Apply the edit live (best-effort): the runner transport is built once and cached, so
+    // without this a pool/checkout change would only take effect on the next restart.
+    try {
+      await this.onChange?.(config)
+    } catch {
+      // a live-apply failure must not fail the persisted write
+    }
     return config
   }
 }

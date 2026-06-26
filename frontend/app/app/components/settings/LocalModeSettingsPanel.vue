@@ -3,9 +3,10 @@
 // a per-DEPLOYMENT singleton stored in the DB (they replaced the LOCAL_POOL_* / HARNESS_*
 // env vars), so a developer tunes them here instead of editing .env. The warm pool keeps
 // idle harness containers ready and re-leases one (preferring repo affinity) to each run —
-// far faster startup than a cold container per run. Changes apply to runs started after
-// saving; in-flight runs and an already-built pool keep their current sizing until the
-// service restarts.
+// far faster startup than a cold container per run. Saving applies the new sizing to the
+// running service immediately (the pool is resized live — no restart needed); in-flight
+// runs keep the container they already hold, and the checkout config applies to containers
+// started after the save.
 import { reactive, ref, watch } from 'vue'
 
 const ui = useUiStore()
@@ -83,8 +84,8 @@ async function save() {
       <div class="space-y-6">
         <p class="text-xs text-slate-400">
           Tuning for the local container runner — stored on this machine's deployment (it replaced
-          the <code>LOCAL_POOL_*</code> / <code>HARNESS_*</code> env vars). Changes apply to runs
-          started after saving; restart the service to resize an already-warm pool.
+          the <code>LOCAL_POOL_*</code> / <code>HARNESS_*</code> env vars). Saving resizes the warm
+          pool live — no restart needed; in-flight runs keep the container they already hold.
         </p>
 
         <!-- Warm container pool -->

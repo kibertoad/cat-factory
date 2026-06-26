@@ -7,6 +7,13 @@ import type {
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
+import {
+  EVICTION_ERROR,
+  type HarnessEndpoint,
+  pollHarnessJob,
+  postHarnessJob,
+  waitForHarnessHealth,
+} from './harnessHttp.js'
 
 // The NATIVE local runner backend (opt-in via `LOCAL_NATIVE_AGENTS`): instead of a Docker
 // container per run, it runs the SAME executor-harness as a long-lived HOST PROCESS on
@@ -22,8 +29,8 @@ import type {
 // model-locking. Acceptable ONLY because local mode is the developer's own machine; it is
 // therefore opt-in (default off) and reachable only from `buildLocalContainer`.
 
-const EVICTION_ERROR = 'Job not found (container evicted or crashed)'
-const SECRET_HEADER = 'x-harness-secret'
+/** The harness is always on loopback for the native host-process transport. */
+const endpointFor = (port: number): HarnessEndpoint => ({ host: '127.0.0.1', port })
 
 export interface LocalProcessRunnerTransportOptions {
   /**
@@ -50,8 +57,6 @@ export interface LocalProcessRunnerTransportOptions {
   /** Per-HTTP-call timeout. Default 30s. */
   requestTimeoutMs?: number
 }
-
-const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 /** An ephemeral free localhost port (best-effort; a tiny TOCTOU window is fine for dev). */
 function ephemeralPort(): Promise<number> {
@@ -103,37 +108,29 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
     const proc = await this.ensureProcess()
     // The harness keys jobs by the per-step `ref.jobId` in the body; a re-dispatch
     // (durable-driver replay) re-POSTs, which the JobRegistry treats as a re-attach.
-    const res = await this.fetchImpl(this.url(proc.port, '/jobs'), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', [SECRET_HEADER]: this.sharedSecret },
-      body: JSON.stringify({ ...spec, kind }),
-      signal: AbortSignal.timeout(this.requestTimeoutMs),
+    await postHarnessJob({
+      fetchImpl: this.fetchImpl,
+      endpoint: endpointFor(proc.port),
+      secret: this.sharedSecret,
+      body: { ...spec, kind },
+      timeoutMs: this.requestTimeoutMs,
+      label: 'Native harness',
     })
-    if (!res.ok) {
-      throw new Error(`Native harness dispatch failed (HTTP ${res.status}): ${await safeText(res)}`)
-    }
   }
 
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
     const proc = this.proc
     // The process died (or was never started) → report an eviction so the run can recover.
     if (!proc || proc.exited) return { state: 'failed', error: EVICTION_ERROR }
-    let res: Response
-    try {
-      res = await this.fetchImpl(this.url(proc.port, `/jobs/${encodeURIComponent(ref.jobId)}`), {
-        method: 'GET',
-        headers: { [SECRET_HEADER]: this.sharedSecret },
-        signal: AbortSignal.timeout(this.requestTimeoutMs),
-      })
-    } catch (err) {
-      if (proc.exited) return { state: 'failed', error: EVICTION_ERROR }
-      throw err
-    }
-    if (res.status === 404) return { state: 'failed', error: EVICTION_ERROR }
-    if (!res.ok) {
-      throw new Error(`Native harness job poll failed (HTTP ${res.status}): ${await safeText(res)}`)
-    }
-    return (await res.json()) as RunnerJobView
+    return pollHarnessJob({
+      fetchImpl: this.fetchImpl,
+      endpoint: endpointFor(proc.port),
+      jobId: ref.jobId,
+      secret: this.sharedSecret,
+      timeoutMs: this.requestTimeoutMs,
+      label: 'Native harness',
+      isDead: () => proc.exited,
+    })
   }
 
   /**
@@ -202,39 +199,17 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
     return handle
   }
 
-  private async waitForHealth(port: number, handle: { exited: boolean }): Promise<void> {
-    const deadline = Date.now() + this.readyTimeoutMs
-    for (;;) {
-      if (handle.exited)
-        throw new Error('the native harness process exited before becoming healthy')
-      try {
-        const res = await this.fetchImpl(this.url(port, '/health'), {
-          method: 'GET',
-          signal: AbortSignal.timeout(Math.min(this.requestTimeoutMs, 5_000)),
-        })
-        if (res.ok) return
-      } catch {
-        // not up yet
-      }
-      if (Date.now() >= deadline) {
-        throw new Error(
-          `Timed out waiting for the native harness on 127.0.0.1:${port} to become healthy`,
-        )
-      }
-      await delay(200)
-    }
-  }
-
-  private url(port: number, path: string): string {
-    return `http://127.0.0.1:${port}${path}`
-  }
-}
-
-async function safeText(res: Response): Promise<string> {
-  try {
-    return (await res.text()).slice(0, 500)
-  } catch {
-    return '(no body)'
+  private waitForHealth(port: number, handle: { exited: boolean }): Promise<void> {
+    return waitForHarnessHealth({
+      fetchImpl: this.fetchImpl,
+      endpoint: endpointFor(port),
+      readyTimeoutMs: this.readyTimeoutMs,
+      requestTimeoutMs: this.requestTimeoutMs,
+      intervalMs: 200,
+      isDead: () => handle.exited,
+      deadError: 'the native harness process exited before becoming healthy',
+      timeoutError: `Timed out waiting for the native harness on 127.0.0.1:${port} to become healthy`,
+    })
   }
 }
 
