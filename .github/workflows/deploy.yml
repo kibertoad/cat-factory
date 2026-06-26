@@ -14,6 +14,19 @@ name: Deploy (production / Cloudflare)
 # BEFORE the Worker deploys, because the Worker pins the image by tag and its new
 # code may rely on the new schema. The frontend is fully independent.
 #
+# Change detection is INCREMENTAL-SINCE-LAST-DEPLOY, not per-push. The path diff is
+# taken against the `prod-deployed` git tag — a moving marker this workflow advances
+# (the final `record` job) only after a fully-successful deploy — NOT against the
+# single pushed commit (`github.event.before`). This matters because the workflow is
+# serialized by `concurrency` with `cancel-in-progress: false`: when merges land
+# faster than a deploy runs, GitHub cancels the *pending* run of every intermediate
+# merge and only the newest queued run survives. A per-commit diff would then never
+# see the cancelled merges' changes, silently skipping a surface that did change;
+# diffing against the last *deployed* commit instead folds in every commit since the
+# last successful deploy, so no change is dropped. A failed deploy leaves the marker
+# unmoved, so the next push retries that surface. First run (no marker yet) deploys
+# every surface.
+#
 # What reaches main is gated by branch protection / required CI checks on the PR
 # (see ci.yml) — this workflow assumes a merged, already-tested commit, mirroring
 # how release.yml and docker-publish.yml fire directly on push to main.
@@ -85,15 +98,46 @@ jobs:
       image: ${{ steps.decide.outputs.image }}
       backend: ${{ steps.decide.outputs.backend }}
       frontend: ${{ steps.decide.outputs.frontend }}
+      # The commit the path diff was taken against (the `prod-deployed` marker, or
+      # empty on the first-ever deploy). deploy-image reads it to enforce a tag bump.
+      base_sha: ${{ steps.base.outputs.sha }}
     steps:
+      # Full history + tags so we can diff against the `prod-deployed` marker (an
+      # arbitrarily old ancestor of HEAD), not just the pushed commit range.
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
+          fetch-depth: 0
+          fetch-tags: true
+
+      # Resolve the base commit for the path diff: the `prod-deployed` marker tag if
+      # it exists AND is an ancestor of HEAD (else history diverged / first run, and
+      # we leave it empty so the diff falls back to deploying every surface). On a
+      # manual dispatch the diff is unused (the inputs decide), so skip the lookup.
+      - id: base
+        if: github.event_name == 'push'
+        run: |
+          if git rev-parse -q --verify refs/tags/prod-deployed >/dev/null 2>&1; then
+            sha="$(git rev-parse refs/tags/prod-deployed^{commit})"
+            if git merge-base --is-ancestor "$sha" HEAD; then
+              echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+            else
+              echo "prod-deployed marker ${sha} is not an ancestor of HEAD; deploying all surfaces."
+            fi
+          else
+            echo "No prod-deployed marker yet; deploying all surfaces."
+          fi
 
       - id: filter
-        if: github.event_name == 'push'
+        # Only diff when we have a marker to diff against; without one we force a
+        # full deploy in `decide` below (so paths-filter's per-push fallback, which
+        # would under-deploy, is never used).
+        if: github.event_name == 'push' && steps.base.outputs.sha != ''
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         with:
+          # Diff the cumulative change since the last successful deploy. `base` is an
+          # ancestor of HEAD, so paths-filter's merge-base reduces to base..HEAD.
+          base: ${{ steps.base.outputs.sha }}
           filters: |
             migrations:
               - 'backend/runtimes/cloudflare/migrations/**'
@@ -122,6 +166,7 @@ jobs:
         # template-injection — zizmor[template-injection].
         env:
           EVENT: ${{ github.event_name }}
+          HAS_BASE: ${{ steps.base.outputs.sha != '' }}
           F_MIGRATIONS: ${{ steps.filter.outputs.migrations }}
           F_IMAGE: ${{ steps.filter.outputs.image }}
           F_BACKEND: ${{ steps.filter.outputs.backend }}
@@ -138,6 +183,15 @@ jobs:
               echo "backend=${IN_BACKEND}"
               echo "frontend=${IN_FRONTEND}"
             } >> "$GITHUB_OUTPUT"
+          elif [ "$HAS_BASE" != "true" ]; then
+            # No prior-deploy marker — we can't compute an incremental diff, so deploy
+            # every surface to guarantee prod matches main (the filter step was skipped).
+            {
+              echo "migrations=true"
+              echo "image=true"
+              echo "backend=true"
+              echo "frontend=true"
+            } >> "$GITHUB_OUTPUT"
           else
             {
               echo "migrations=${F_MIGRATIONS}"
@@ -152,7 +206,9 @@ jobs:
   # actually pulls. GHCR/Docker Hub are published separately (docker-publish.yml)
   # and are NOT a valid Cloudflare pull source. A rollout only happens when the
   # pinned tag changed (a same-tag rebuild is a no-op for the Worker), so bump the
-  # tag in deploy/backend (package.json + wrangler.toml) when the image changes.
+  # tag in deploy/backend (package.json + wrangler.toml) when the image changes —
+  # the guard step below FAILS the deploy if you forgot, rather than silently
+  # publishing over the live tag and leaving new containers on stale code.
   deploy-image:
     name: Publish runner image
     needs: changes
@@ -164,9 +220,37 @@ jobs:
     permissions:
       contents: read
     steps:
+      # Full history so the guard can read the previously-deployed wrangler.toml.
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
+          fetch-depth: 0
+
+      # The Worker pulls the image BY TAG, and wrangler diffs the container app by
+      # the tag STRING: re-pushing the same tag is a no-op rollout, so new per-run
+      # containers keep running the OLD code (later surfacing as a 404 dispatch). If
+      # an image-affecting file changed since the last deploy, the pinned tag in
+      # wrangler.toml MUST change too — fail loudly here if it didn't. Skipped on the
+      # first deploy (no marker) and on manual dispatch (no base_sha, an explicit
+      # re-publish where reusing the tag may be intentional).
+      - name: Guard runner image tag was bumped
+        if: ${{ needs.changes.outputs.base_sha != '' }}
+        env:
+          BASE_SHA: ${{ needs.changes.outputs.base_sha }}
+        run: |
+          extract() { grep -oE 'cat-factory-executor:[^"'\'' ]+' | head -n1; }
+          current="$(extract < deploy/backend/wrangler.toml)"
+          previous="$(git show "${BASE_SHA}:deploy/backend/wrangler.toml" 2>/dev/null | extract || true)"
+          echo "previously-deployed image tag: ${previous:-<none>}"
+          echo "current image tag:             ${current:-<none>}"
+          if [ -z "$current" ]; then
+            echo "::error::Could not read the runner image tag from deploy/backend/wrangler.toml."
+            exit 1
+          fi
+          if [ -n "$previous" ] && [ "$current" = "$previous" ]; then
+            echo "::error::Runner image sources changed but the pinned tag (${current}) was not bumped. Bump it in deploy/backend/package.json (image:publish) AND deploy/backend/wrangler.toml ([[containers]] image), or wrangler will publish over the live tag without rolling out a new digest."
+            exit 1
+          fi
 
       - name: Install pnpm
         uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
@@ -229,8 +313,11 @@ jobs:
   deploy-backend:
     name: Deploy backend Worker
     needs: [changes, deploy-image, migrate]
+    # `!cancelled()` (not `always()`) so a cancelled run can't still ship the Worker;
+    # the deploy still proceeds when deploy-image/migrate were SKIPPED (their surface
+    # didn't change) because skipped is neither failure nor cancelled.
     if: >-
-      ${{ always()
+      ${{ !cancelled()
       && needs.changes.outputs.backend == 'true'
       && needs.deploy-image.result != 'failure'
       && needs.deploy-image.result != 'cancelled'
@@ -308,3 +395,36 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm --filter @cat-factory/deploy-frontend exec wrangler pages deploy --branch=main
+
+  # Advance the `prod-deployed` marker tag to this commit — the base the NEXT push's
+  # change detection diffs against (see the header). Only runs on push, and only when
+  # the `changes` job succeeded and NO surface deploy failed or was cancelled (skipped
+  # surfaces are fine). Leaving the marker unmoved on any failure means the next push
+  # re-evaluates the diff from the last *successful* deploy, so the failed surface is
+  # retried instead of being skipped. Force-pushing a tag does not match the
+  # `push.branches: [main]` trigger, so this never re-triggers the workflow.
+  record:
+    name: Record deployed commit
+    needs: [changes, deploy-image, migrate, deploy-backend, deploy-frontend]
+    if: >-
+      ${{ !cancelled()
+      && github.event_name == 'push'
+      && needs.changes.result == 'success'
+      && needs.deploy-image.result != 'failure' && needs.deploy-image.result != 'cancelled'
+      && needs.migrate.result != 'failure' && needs.migrate.result != 'cancelled'
+      && needs.deploy-backend.result != 'failure' && needs.deploy-backend.result != 'cancelled'
+      && needs.deploy-frontend.result != 'failure' && needs.deploy-frontend.result != 'cancelled' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Needs write access to move the marker tag (the only job that writes to the repo).
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Advance prod-deployed marker
+        env:
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          git tag -f prod-deployed "$HEAD_SHA"
+          git push --force origin refs/tags/prod-deployed
