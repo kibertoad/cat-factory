@@ -117,7 +117,7 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
   function contentSize(id: string): { w: number; h: number } {
     const b = getBlock(id)
     const isModule = b?.level === 'module'
-    const TASK_W = 180
+    const TASK_W = 210
     const TASK_H = 160
     const headerH = isModule ? 30 : 0
     let w = isModule ? 200 : 360

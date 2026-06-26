@@ -173,7 +173,7 @@ describe('board store read getters', () => {
       ])
       // module inner width/height fit the task, plus the 30px module header.
       const size = store.containerSize('m1')
-      expect(size.w).toBe(300 + 180 + 12)
+      expect(size.w).toBe(300 + 210 + 12)
       expect(size.h).toBe(200 + 160 + 12 + 30)
     })
 
