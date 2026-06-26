@@ -35,6 +35,15 @@ database_name = "cat_factory"
 database_id = "30748a59-c500-4f31-804f-e48f1588d4ac"
 migrations_dir = "node_modules/@cat-factory/worker/migrations"
 
+# Dedicated telemetry database (llm_call_metrics + agent_context_snapshots) — required.
+# Provision it once with `wrangler d1 create cat_factory_telemetry` and paste its id here.
+# Its schema ships with the worker package under telemetry-migrations/.
+[[d1_databases]]
+binding = "TELEMETRY_DB"
+database_name = "cat_factory_telemetry"
+database_id = "REPLACE_WITH_TELEMETRY_D1_ID"
+migrations_dir = "node_modules/@cat-factory/worker/telemetry-migrations"
+
 # OPTIONAL: dedicated D1 for the Sandbox (the parallel prompt/model testing surface).
 # It has its OWN migrations lineage (the package's sandbox-migrations/), kept separate
 # from the main DB above for blast-radius isolation. Omit this binding to run without the
@@ -47,6 +56,18 @@ migrations_dir = "node_modules/@cat-factory/worker/migrations"
 # database_name = "cat_factory_sandbox"
 # database_id = "REPLACE_WITH_YOUR_SANDBOX_D1_ID"
 # migrations_dir = "node_modules/@cat-factory/worker/sandbox-migrations"
+
+# OPTIONAL: SEPARATE D1 database for the high-churn provisioning event log (its own binding
+# + migrations dir, shipped with the library). Omit this binding to run with the
+# provisioning-log feature OFF (env/runner/container attempts aren't recorded). To enable:
+# create it once (`wrangler d1 create cat_factory_provisioning`), paste the returned id
+# below, uncomment this block, and apply its migrations. Keeping it in its own database
+# isolates the log's write churn from the main application data.
+# [[d1_databases]]
+# binding = "PROVISIONING_DB"
+# database_name = "cat_factory_provisioning"
+# database_id = "REPLACE_WITH_cat_factory_provisioning_DATABASE_ID"
+# migrations_dir = "node_modules/@cat-factory/worker/migrations-provisioning"
 
 # Cloudflare Workers AI binding — one of the providers the agent executor can
 # route to. Optional: leave agents disabled and this is unused.

@@ -42,7 +42,18 @@ const STEP_RESULT_VIEWS: Record<string, Component> = {
 
 const active = computed<Component | null>(() => {
   const view = ui.resultView?.view
-  return view ? (STEP_RESULT_VIEWS[view] ?? null) : null
+  if (!view) return null
+  const component = STEP_RESULT_VIEWS[view] ?? null
+  // An archetype declared a `resultView` id with no registered component — this used to
+  // silently fall back to the prose panel. The backend now validates `resultView` against the
+  // canonical id set, so this should only fire mid-development of a new view; make it loud.
+  if (!component && import.meta.dev) {
+    console.warn(
+      `[StepResultViewHost] no component registered for resultView "${view}". ` +
+        `Add it to STEP_RESULT_VIEWS (and to RESULT_VIEW_IDS in @cat-factory/contracts).`,
+    )
+  }
+  return component
 })
 </script>
 

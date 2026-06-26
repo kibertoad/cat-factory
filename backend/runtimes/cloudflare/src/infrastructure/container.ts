@@ -1,4 +1,5 @@
 import {
+  type AgentContextRecorder,
   type AgentExecutor,
   type Clock,
   CompositeNotificationChannel,
@@ -9,7 +10,9 @@ import {
   type ModelProviderResolver,
   type NotificationChannel,
   NoopWorkRunner,
+  type ProvisioningSubsystem,
   type ResolveUserGitHubToken,
+  type RunnerTransport,
   type TaskSourceProvider,
   type WorkRunner,
 } from '@cat-factory/kernel'
@@ -35,6 +38,8 @@ import {
   PersonalSubscriptionService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
+  ProvisioningLogRecorder,
+  LoggingRunnerTransport,
   SLACK_CIPHER_INFO,
   SlackNotificationChannel,
   TicketTrackerService,
@@ -49,6 +54,7 @@ import {
   ACCOUNT_SETTINGS_CIPHER_INFO,
 } from '@cat-factory/integrations'
 import {
+  AgentContextObservabilityService,
   type CoreDependencies,
   createCore,
   resolvePresetModelForKind,
@@ -113,6 +119,8 @@ import { D1ServiceRepository } from './repositories/D1ServiceRepository'
 import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepository'
 import { D1TokenUsageRepository } from './repositories/D1TokenUsageRepository'
 import { D1LlmCallMetricRepository } from './repositories/D1LlmCallMetricRepository'
+import { D1AgentContextSnapshotRepository } from './repositories/D1AgentContextSnapshotRepository'
+import { D1ProvisioningLogRepository } from './repositories/D1ProvisioningLogRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
 import {
   D1SlackConnectionRepository,
@@ -289,6 +297,7 @@ function selectAgentExecutor(
   resolveTransport: ResolveRunnerTransport | null,
   subscriptions?: ProviderSubscriptionService,
   personalSubscriptions?: PersonalSubscriptionService,
+  agentContextObservability?: AgentContextRecorder,
 ): AgentExecutor {
   const inline = new AiAgentExecutor({
     modelProviderResolver: buildModelProviderResolver(env, db),
@@ -316,6 +325,7 @@ function selectAgentExecutor(
     resolveTransport,
     subscriptions,
     personalSubscriptions,
+    agentContextObservability,
   )
   if (!container) {
     throw new Error(
@@ -375,6 +385,7 @@ function buildResolveTransport(
   config: AppConfig,
   db: D1Database,
   clock: Clock,
+  provisioningLog?: ProvisioningLogRecorder,
 ): ResolveRunnerTransport | null {
   // The Cloudflare backend folds in instance-level reaping: the registry records
   // each dispatched container in the live inventory and clears it on release, so the
@@ -411,14 +422,41 @@ function buildResolveTransport(
 
   if (!cloudflare && !runnerService) return null
 
+  // Wrap a resolved transport so every dispatch/release/poll-failure appends a
+  // provisioning-log event tagged with the right subsystem (a self-hosted pool vs a
+  // per-run Cloudflare container). No-op when the separate log store isn't wired.
+  // The dedup set is closure-owned so it outlives each (per-resolution) wrapper.
+  const loggedPollFailures = new Set<string>()
+  const log = (
+    inner: RunnerTransport,
+    subsystem: ProvisioningSubsystem,
+    workspaceId: string | undefined,
+    providerId?: string | null,
+  ): RunnerTransport =>
+    provisioningLog
+      ? new LoggingRunnerTransport({
+          inner,
+          recorder: provisioningLog,
+          workspaceId: workspaceId ?? '',
+          subsystem,
+          providerId,
+          loggedPollFailures,
+        })
+      : inner
+
   return async (workspaceId) => {
     if (runnerService && poolProvider && workspaceId) {
       const resolved = await runnerService.resolve(workspaceId)
       if (resolved) {
-        return new RunnerPoolTransport(poolProvider, resolved.manifest, resolved.resolveSecret)
+        return log(
+          new RunnerPoolTransport(poolProvider, resolved.manifest, resolved.resolveSecret),
+          'runner-pool',
+          workspaceId,
+          resolved.manifest.providerId,
+        )
       }
     }
-    if (cloudflare) return cloudflare
+    if (cloudflare) return log(cloudflare, 'container', workspaceId)
     throw new Error(
       `No runner backend available for workspace '${workspaceId ?? '(unknown)'}': ` +
         `register a runner pool or enable Cloudflare Containers`,
@@ -1025,6 +1063,7 @@ function buildContainerExecutor(
   resolveTransport: ResolveRunnerTransport | null,
   subscriptions?: ProviderSubscriptionService,
   personalSubscriptions?: PersonalSubscriptionService,
+  agentContextObservability?: AgentContextRecorder,
 ): AgentExecutor | null {
   if (
     !config.github.enabled ||
@@ -1119,6 +1158,8 @@ function buildContainerExecutor(
     // Forward container tool spans to Langfuse (when configured) as child spans under
     // the run trace — the same sink the LLM proxy fans generations out to.
     llmTraceSink: buildLangfuseSink(config),
+    // Record the complete provided context per dispatch (best-effort, gated in the sink).
+    ...(agentContextObservability ? { agentContextObservability } : {}),
   })
 }
 
@@ -1518,6 +1559,16 @@ export function buildContainer(
 ): Container {
   const config = loadConfig(env)
   const db = env.DB
+  // Telemetry (llm_call_metrics + agent_context_snapshots) lives in its own D1 database
+  // — append-heavy/high-volume/short-retention, unlike the transactional domain. The
+  // binding is required: fail fast here rather than NPE deep in a repo on first write.
+  const telemetryDb = env.TELEMETRY_DB
+  if (!telemetryDb) {
+    throw new Error(
+      'TELEMETRY_DB binding is required (the dedicated telemetry D1 database). ' +
+        'Add a [[d1_databases]] entry with binding = "TELEMETRY_DB" to wrangler.toml.',
+    )
+  }
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
 
@@ -1533,11 +1584,22 @@ export function buildContainer(
   // can't clobber the test's. Gates read their provider lazily at probe time, so the last write wins.
   clearGateProviders()
 
+  // The unified provisioning event log lives in a SEPARATE D1 database (its own
+  // binding + migrations) to isolate its high write churn. When wired, build the
+  // repo + a best-effort recorder shared by the env services (via createCore) and
+  // the runner/container transport decorator below.
+  const provisioningLogRepository = env.PROVISIONING_DB
+    ? new D1ProvisioningLogRepository({ db: env.PROVISIONING_DB })
+    : undefined
+  const provisioningLogRecorder = provisioningLogRepository
+    ? new ProvisioningLogRecorder({ repository: provisioningLogRepository, idGenerator, clock })
+    : undefined
+
   // The runner-backend factory is shared by every container-backed flow (the
   // implementation executor and the repo bootstrapper), so both dispatch through the
   // same Cloudflare/self-hosted seam — and the bootstrapper rides the reaping-aware
   // Cloudflare transport for free. Null when no backend is configured.
-  const resolveTransport = buildResolveTransport(env, config, db, clock)
+  const resolveTransport = buildResolveTransport(env, config, db, clock, provisioningLogRecorder)
 
   // The subscription-token pool (Claude Code / Codex credentials) — built once and
   // shared by the container executor (lease + usage feedback) and the
@@ -1579,6 +1641,19 @@ export function buildContainer(
   // consensus transcript pushes ride the same hub as run/board events).
   const eventPublisher = selectEventPublisher(env, db)
 
+  // Agent-context observability sink: records the complete, redacted context provided
+  // to each container agent (composed prompts + folded-in fragments + injected files).
+  // Gated by the deployment prompt-recording switch + the workspace storeAgentContext
+  // setting. Wired into the executor (write) AND createCore (read). Telemetry rows live
+  // in the dedicated TELEMETRY_DB database.
+  const agentContextObservability = new AgentContextObservabilityService({
+    agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({ db: telemetryDb }),
+    workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
+    idGenerator,
+    clock,
+    recordPrompts: config.observability.recordPrompts,
+  })
+
   // Per-account deployment settings (Slack OAuth + web-search keys). Built once so the
   // service's short-TTL cache is shared across requests; the Slack OAuth resolver is
   // derived from it in the domain composition root.
@@ -1598,8 +1673,16 @@ export function buildContainer(
     serviceRepository: new D1ServiceRepository({ db }),
     workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
-    llmCallMetricRepository: new D1LlmCallMetricRepository({ db }),
+    // Telemetry lives in the dedicated TELEMETRY_DB database.
+    llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
+    // Unified provisioning event log (separate D1 binding). Threads the recorder into
+    // the env services and exposes the read service for the logs controller; undefined
+    // when PROVISIONING_DB isn't bound.
+    ...(provisioningLogRepository ? { provisioningLogRepository } : {}),
     recordLlmPrompts: config.observability.recordPrompts,
+    // Re-exposed on the core for the agent-context read endpoint; the same instance is
+    // injected into the container executor below for the write path.
+    agentContextObservability,
     idGenerator,
     clock,
     // When a caller injects its own agentExecutor (tests pass a FakeAgentExecutor)
@@ -1617,6 +1700,7 @@ export function buildContainer(
           resolveTransport,
           subscriptions,
           personalSubscriptions,
+          agentContextObservability,
         ),
         env,
         config,

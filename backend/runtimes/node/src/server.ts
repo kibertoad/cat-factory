@@ -10,6 +10,7 @@ import {
 } from '@cat-factory/server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import { PgBoss } from 'pg-boss'
 import { type NodeContainerOptions, buildNodeContainer } from './container.js'
 import { createDbClient } from './db/client.js'
@@ -117,6 +118,13 @@ export async function start(
   const realtimeHub = new NodeRealtimeHub()
   const container = buildContainer({ db, boss, env, repos, realtimeHub })
 
+  // Validate the registered extensions (gates / agent kinds) once, before serving — every
+  // `register*` import side effect has run by now. A typo'd gate helperKind or an unknown
+  // resultView fails loudly here instead of mid-run. Mirrors the Worker's first-request guard.
+  validateRegistrationsOnce({
+    onWarn: (problem) => logger.warn({ code: problem.code }, problem.message),
+  })
+
   const runtime = executionRuntime(container.config, env)
   // A parked run waits for a human indefinitely (no decision timeout); the escalating
   // notification — not a killed run — signals that a human is overdue.
@@ -136,8 +144,10 @@ export async function start(
     {
       tokenUsageRepository: repos.tokenUsageRepository,
       llmCallMetricRepository: repos.llmCallMetricRepository,
+      agentContextSnapshotRepository: repos.agentContextSnapshotRepository,
       pipelineScheduleRepository: repos.pipelineScheduleRepository,
       subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(db),
+      provisioningLogRepository: repos.provisioningLogRepository,
     },
     container.config.retention,
     clock,

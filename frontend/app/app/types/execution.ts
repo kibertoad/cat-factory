@@ -229,6 +229,42 @@ export type LlmCallActivity = Omit<
   'promptText' | 'responseText' | 'reasoningText' | 'promptPrefixCount' | 'promptHash'
 >
 
+/** One best-practice fragment folded into an agent's system prompt. */
+export interface AgentContextFragment {
+  id: string
+  body: string
+}
+
+/** One file injected into the agent's container as context, with its full body. */
+export interface AgentContextFile {
+  path: string
+  title: string
+  url: string
+  content: string
+}
+
+/**
+ * The complete, redacted context provided to one container-agent dispatch: the composed
+ * system + user prompts, the fragment bodies folded in, and the full content of the files
+ * injected into the container. Loaded on demand for the observability view. Mirrors the
+ * backend `AgentContextSnapshot` (it never carries any credential).
+ */
+export interface AgentContextSnapshot {
+  id: string
+  workspaceId: string
+  executionId: string
+  agentKind: string
+  stepIndex: number
+  createdAt: number
+  model: string | null
+  harness: string | null
+  systemPrompt: string
+  userPrompt: string
+  fragments: AgentContextFragment[]
+  contextFiles: AgentContextFile[]
+  extras: Record<string, unknown>
+}
+
 /** One per-agent-kind insight in the LLM-friendly export (rollup + derived ratios). */
 export interface LlmExportInsight extends StepMetrics {
   agentKind: string
@@ -339,6 +375,13 @@ export interface PipelineStep {
    * Absent on non-human-test steps. Mirrors `humanTestStepStateSchema`.
    */
   humanTest?: HumanTestStepState | null
+  /**
+   * The ephemeral environment this step runs against (when its block has one), so a
+   * run's details show its lifecycle state + the exact error. Populated by the engine
+   * for container/deployer steps; the `human-test` gate uses `humanTest.environment`.
+   * Mirrors `runEnvironmentSchema`.
+   */
+  environment?: RunEnvironment | null
 }
 
 /** One failing CI check the gate's precheck saw (mirrors `gateFailingCheckSchema`). */
@@ -408,6 +451,20 @@ export interface HumanTestEnvironment {
   url: string | null
   status: HumanTestEnvironmentStatus
   expiresAt?: number | null
+}
+
+/**
+ * The ephemeral environment a run's step is associated with — surfaced in run details
+ * so its spinning-up / running / shut-down / errored state + the exact error show next
+ * to the consuming step (tester/coder). Mirrors `runEnvironmentSchema`.
+ */
+export interface RunEnvironment {
+  id: string
+  url: string | null
+  status: HumanTestEnvironmentStatus
+  expiresAt?: number | null
+  /** The verbatim provider error when the environment failed/expired, else null. */
+  lastError?: string | null
 }
 
 /** One fix / pull-main round on a `human-test` gate (mirrors `humanTestRoundSchema`). */

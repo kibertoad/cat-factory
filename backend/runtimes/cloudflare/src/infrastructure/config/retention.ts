@@ -15,5 +15,7 @@ export function loadRetentionConfig(env: Env): RetentionConfig {
     // Heavy (full per-call prompt/response) and only useful for recent debugging,
     // so pruned aggressively — default 3 days.
     llmCallMetricsMs: retentionMs(env.LLM_CALL_METRICS_RETENTION_DAYS, 3),
+    // High-churn provisioning event log (separate D1 db); aggressive default of 14 days.
+    provisioningLogMs: retentionMs(env.PROVISIONING_LOG_RETENTION_DAYS, 14),
   }
 }

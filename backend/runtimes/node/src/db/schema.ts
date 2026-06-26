@@ -12,6 +12,14 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
 
+// Telemetry has a very different write profile from the transactional domain
+// (append-heavy, high-volume, write-and-rarely-read, short retention), so it lives in
+// its own `telemetry` Postgres schema rather than `public`. This is the Node analogue
+// of the Cloudflare worker's separate TELEMETRY_DB D1 database. The schema is purely a
+// namespace served by the same connection/pool; `migrate()` creates it on boot. The
+// `llm_call_metrics` table and `agent_context_snapshots` table live here.
+export const telemetry = pgSchema('telemetry')
+
 // Postgres schema mirroring the Cloudflare D1 tables column-for-column (snake_case
 // field names = column names) so the shared row<->domain mappers in
 // @cat-factory/server work unchanged against either store. JSON-shaped columns are
@@ -470,7 +478,7 @@ export const fragmentSources = pgTable(
 // container-agent model call: full prompt/response, output-limit headroom and the
 // transport-vs-execution latency split. Pruned aggressively by retention (the full
 // bodies make it heavy); booleans are integer 0/1 to match the SQLite store.
-export const llmCallMetrics = pgTable(
+export const llmCallMetrics = telemetry.table(
   'llm_call_metrics',
   {
     id: text('id').primaryKey(),
@@ -509,6 +517,71 @@ export const llmCallMetrics = pgTable(
   (t) => [
     index('idx_llm_call_metrics_execution').on(t.workspace_id, t.execution_id, t.created_at),
     index('idx_llm_call_metrics_created').on(t.created_at),
+  ],
+)
+
+// The complete, redacted context provided to one container-agent dispatch (per step
+// attempt): the fully fragment-composed system + user prompts, the fragment bodies
+// folded in, and the full content of the files injected into the container. Captures
+// what proxy telemetry can't (the injected `.cat-context/*` files the agent reads via
+// tools). JSON-shaped columns are text; pruned on the same retention window as
+// llm_call_metrics. Mirrors the D1 agent_context_snapshots table column-for-column.
+export const agentContextSnapshots = telemetry.table(
+  'agent_context_snapshots',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    execution_id: text('execution_id').notNull(),
+    agent_kind: text('agent_kind').notNull(),
+    step_index: integer('step_index').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    model: text('model'),
+    harness: text('harness'),
+    system_prompt: text('system_prompt').notNull().default(''),
+    user_prompt: text('user_prompt').notNull().default(''),
+    // JSON arrays: [{id, body}] and [{path, title, url, content}].
+    fragments: text('fragments').notNull().default('[]'),
+    context_files: text('context_files').notNull().default('[]'),
+    // Redacted structural bits (repo/branch, webSearch, infra, decisions, revision).
+    extras: text('extras').notNull().default('{}'),
+  },
+  (t) => [
+    index('idx_agent_context_snapshots_execution').on(t.workspace_id, t.execution_id, t.created_at),
+    index('idx_agent_context_snapshots_created').on(t.created_at),
+  ],
+)
+
+// The unified provisioning event log lives in its OWN Postgres schema (`provisioning`)
+// rather than `public`, isolating its high write churn from the main tables (the
+// Cloudflare analogue is a separate D1 binding). One row per spin-up/down attempt
+// across the environment + runner-pool/container subsystems; pruned to a retention
+// window. `CREATE SCHEMA IF NOT EXISTS "provisioning"` is emitted ahead of the table by
+// the generated migration (mirrors the `sandbox` schema) and bootstrapped idempotently
+// by migrate() on boot — the DB role needs CREATE on the database, same as the app
+// already requires to create its `public` tables.
+export const provisioning = pgSchema('provisioning')
+export const provisioningLog = provisioning.table(
+  'provisioning_log',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    subsystem: text('subsystem').notNull(),
+    operation: text('operation').notNull(),
+    target_id: text('target_id'),
+    provider_id: text('provider_id'),
+    block_id: text('block_id'),
+    execution_id: text('execution_id'),
+    outcome: text('outcome').notNull(),
+    error: text('error'),
+    detail: text('detail'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    index('idx_provisioning_log_workspace').on(t.workspace_id, t.created_at),
+    index('idx_provisioning_log_subsystem').on(t.workspace_id, t.subsystem, t.created_at),
+    index('idx_provisioning_log_execution').on(t.workspace_id, t.execution_id, t.created_at),
+    index('idx_provisioning_log_target').on(t.workspace_id, t.target_id),
+    index('idx_provisioning_log_created').on(t.created_at),
   ],
 )
 
@@ -786,6 +859,9 @@ export const workspaceSettings = pgTable('workspace_settings', {
   task_limit_shared: integer('task_limit_shared'),
   // JSON object of per-type caps when task_limit_mode = 'per_type'; null otherwise.
   task_limit_per_type: text('task_limit_per_type'),
+  // Whether to store the full provided-context snapshot for each container agent
+  // (the observability feature). On by default; integer 0/1 to match the SQLite store.
+  store_agent_context: integer('store_agent_context').notNull().default(1),
   // Per-workspace spend budget (moved out of env). All nullable; null ⇒ the built-in
   // DEFAULT_SPEND_PRICING base table. spend_model_prices is a JSON object of overrides.
   spend_currency: text('spend_currency'),

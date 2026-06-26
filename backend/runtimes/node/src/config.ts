@@ -330,6 +330,8 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       commitMs: (num(env.GITHUB_COMMIT_RETENTION_DAYS) ?? 90) * 24 * 60 * 60 * 1000,
       // Heavy full per-call prompt/response; pruned aggressively (default 3 days).
       llmCallMetricsMs: (num(env.LLM_CALL_METRICS_RETENTION_DAYS) ?? 3) * 24 * 60 * 60 * 1000,
+      // High-churn provisioning event log; pruned aggressively (default 14 days).
+      provisioningLogMs: (num(env.PROVISIONING_LOG_RETENTION_DAYS) ?? 14) * 24 * 60 * 60 * 1000,
     },
     // Prompt-fragment library (ADR 0006): opt-in (`PROMPT_LIBRARY_ENABLED=true`),
     // needs no encryption key (fragments are not secrets). Mirrors the Worker's

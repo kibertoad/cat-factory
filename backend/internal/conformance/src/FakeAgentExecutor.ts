@@ -24,6 +24,15 @@ export interface FakeAgentOptions {
   asyncKinds?: AgentKind[]
   /** Number of `running` polls an async job reports before `done`. Default 2. */
   asyncPolls?: number
+  /**
+   * Agent kinds whose `startJob` should THROW (the container/runner never accepts the
+   * job), so the conformance suite can assert the engine's dispatch-failure
+   * classification — the run fails with `failureKind: 'dispatch'` ("Container failed to
+   * start") identically on both runtimes. Only meaningful for {@link asyncKinds}.
+   */
+  dispatchThrowKinds?: AgentKind[]
+  /** The verbatim error a {@link dispatchThrowKinds} dispatch throws. Default a generic 503. */
+  dispatchThrowMessage?: string
   /** Token usage reported per call, so the spend safeguard can be exercised. */
   usage?: { inputTokens: number; outputTokens: number }
   /**
@@ -338,11 +347,16 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
   private readonly jobs = new Map<string, { polled: number; context: AgentRunContext }>()
   private readonly asyncKinds: ReadonlySet<AgentKind>
   private readonly asyncPolls: number
+  private readonly dispatchThrowKinds: ReadonlySet<AgentKind>
+  private readonly dispatchThrowMessage: string
 
   constructor(options: FakeAgentOptions = {}) {
     super(options)
     this.asyncKinds = new Set(options.asyncKinds ?? [])
     this.asyncPolls = Math.max(1, options.asyncPolls ?? 2)
+    this.dispatchThrowKinds = new Set(options.dispatchThrowKinds ?? [])
+    this.dispatchThrowMessage =
+      options.dispatchThrowMessage ?? 'Container dispatch failed (HTTP 503): no capacity'
   }
 
   runsAsync(context: AgentRunContext): boolean {
@@ -356,6 +370,11 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
   }
 
   async startJob(context: AgentRunContext): Promise<AgentJobHandle> {
+    // Simulate a container/runner that never accepts the job, so the engine's
+    // dispatch-failure classification (failureKind 'dispatch') is exercised.
+    if (this.dispatchThrowKinds.has(context.agentKind)) {
+      throw new Error(this.dispatchThrowMessage)
+    }
     const jobId = this.jobIdFor(context)
     if (!this.jobs.has(jobId)) this.jobs.set(jobId, { polled: 0, context })
     return { jobId, model: 'fake', workspaceId: context.workspaceId }

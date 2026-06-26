@@ -21,6 +21,7 @@ import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import type { TokenUsageRepository } from '@cat-factory/kernel'
 import type { LlmCallMetricRepository } from '@cat-factory/kernel'
+import type { ProvisioningLogRepository } from '@cat-factory/kernel'
 import type { LlmTraceSink } from '@cat-factory/kernel'
 import { type WorkRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import { type ExecutionEventPublisher, NoopEventPublisher } from '@cat-factory/kernel'
@@ -106,6 +107,7 @@ import { EmailConnectionService } from '@cat-factory/integrations'
 import { SpendService, DEFAULT_SPEND_PRICING, type SpendPricing } from '@cat-factory/spend'
 import type { OpenRouterModelMeta } from '@cat-factory/contracts'
 import { LlmObservabilityService } from './modules/observability/LlmObservabilityService.js'
+import { AgentContextObservabilityService } from './modules/observability/AgentContextObservabilityService.js'
 import {
   GitHubInstallationService,
   RepoProvisioningService,
@@ -126,6 +128,8 @@ import {
   EnvironmentProvisioningService,
   EnvironmentTeardownService,
   RunnerPoolConnectionService,
+  ProvisioningLogRecorder,
+  ProvisioningLogService,
   SlackConnectionService,
   SlackSettingsService,
   SlackMemberMappingService,
@@ -229,6 +233,13 @@ export interface CoreDependencies {
    * `llmCallMetricRepository` is wired.
    */
   recordLlmPrompts?: boolean
+  /**
+   * Agent-context observability sink, built by the facade (it needs the same
+   * snapshot repository the executor records through). When present the engine
+   * re-exposes it for the read endpoint; the facade also injects it into the
+   * container-agent executor for the write path. Absent → no agent context is stored.
+   */
+  agentContextObservability?: AgentContextObservabilityService
   /**
    * Optional external LLM trace sink (e.g. Langfuse). When wired, the observability
    * service fans every recorded call out to it as a generation. Opt-in and default-off;
@@ -345,6 +356,12 @@ export interface CoreDependencies {
   environmentConnectionRepository?: EnvironmentConnectionRepository
   environmentRegistryRepository?: EnvironmentRegistryRepository
   secretCipher?: SecretCipher
+  // ---- Unified provisioning event log (optional; high-churn separate store) --
+  // When wired, the env provision/teardown services record their attempts here and
+  // the read service backs the "View logs" drawers + the run-details env surface.
+  // Absent ⇒ provisioning is entirely unchanged. The repository lives in a
+  // physically separate store (its own Postgres schema / D1 binding) per facade.
+  provisioningLogRepository?: ProvisioningLogRepository
   // What the injected environment provider is, so its connection service can surface a
   // correct descriptor: `native` (own auth, fully described by `describeConfig`) or the
   // generic `manifest` HTTP provider. The facade that wires the provider sets it (absent
@@ -619,6 +636,11 @@ export interface RunnersModule {
   connectionService: RunnerPoolConnectionService
 }
 
+/** The provisioning event-log read service, present only when its store is wired. */
+export interface ProvisioningLogsModule {
+  service: ProvisioningLogService
+}
+
 /** The repo-bootstrap feature's service, present only when its repositories exist. */
 export interface BootstrapModule {
   service: BootstrapService
@@ -732,6 +754,8 @@ export interface Core {
   executionEventPublisher: ExecutionEventPublisher
   /** Present only when the LLM-metric repository is wired (see CoreDependencies). */
   llmObservability?: LlmObservabilityService
+  /** Present only when the agent-context snapshot repository is wired (see CoreDependencies). */
+  agentContextObservability?: AgentContextObservabilityService
   /** Present only when the GitHub integration is configured (see CoreDependencies). */
   github?: GitHubModule
   /** Present only when the document-source integration is configured (see CoreDependencies). */
@@ -742,6 +766,8 @@ export interface Core {
   environments?: EnvironmentsModule
   /** Present only when the self-hosted runner-pool integration is configured. */
   runners?: RunnersModule
+  /** Present only when the provisioning event-log store is wired (see CoreDependencies). */
+  provisioningLogs?: ProvisioningLogsModule
   /** Present only when the repo-bootstrap repositories are wired (see CoreDependencies). */
   bootstrap?: BootstrapModule
   /** Present only when the requirements-review repository is wired (see CoreDependencies). */
@@ -986,7 +1012,10 @@ function createTasksModule(
  * cleanly opt-in (the deterministic deployer and env discovery in the engine are
  * gated on the provisioning service being wired).
  */
-function createEnvironmentsModule(deps: CoreDependencies): EnvironmentsModule | undefined {
+function createEnvironmentsModule(
+  deps: CoreDependencies,
+  provisioningLog: ProvisioningLogRecorder | undefined,
+): EnvironmentsModule | undefined {
   const {
     environmentProvider,
     environmentConnectionRepository,
@@ -1021,6 +1050,7 @@ function createEnvironmentsModule(deps: CoreDependencies): EnvironmentsModule | 
     idGenerator: deps.idGenerator,
     clock: deps.clock,
     ...(deps.environmentUrlSafetyPolicy ? { urlPolicy: deps.environmentUrlSafetyPolicy } : {}),
+    ...(provisioningLog ? { provisioningLog } : {}),
   })
   const teardownService = new EnvironmentTeardownService({
     connectionService,
@@ -1028,6 +1058,7 @@ function createEnvironmentsModule(deps: CoreDependencies): EnvironmentsModule | 
     environmentRegistryRepository,
     secretCipher,
     clock: deps.clock,
+    ...(provisioningLog ? { provisioningLog } : {}),
   })
   return { connectionService, provisioningService, teardownService }
 }
@@ -1539,7 +1570,23 @@ export function createCore(dependencies: CoreDependencies): Core {
         traceSink: dependencies.llmTraceSink,
       })
     : undefined
-  const environments = createEnvironmentsModule(dependencies)
+  // The provisioning event log lives in a separate high-churn store. When its
+  // repository is wired, build a best-effort recorder (threaded into the env
+  // services) + the read service (exposed for the logs controller). The container
+  // transports are wrapped with their own recorder in each facade's resolveTransport.
+  const provisioningLogRecorder = dependencies.provisioningLogRepository
+    ? new ProvisioningLogRecorder({
+        repository: dependencies.provisioningLogRepository,
+        idGenerator: dependencies.idGenerator,
+        clock: dependencies.clock,
+      })
+    : undefined
+  const provisioningLogs = dependencies.provisioningLogRepository
+    ? {
+        service: new ProvisioningLogService({ repository: dependencies.provisioningLogRepository }),
+      }
+    : undefined
+  const environments = createEnvironmentsModule(dependencies, provisioningLogRecorder)
   // Built before the fragment library so a document-backed fragment can re-resolve
   // its linked Confluence/Notion/GitHub page through the document module's reader.
   const documents = createDocumentsModule(dependencies, boardService)
@@ -1629,11 +1676,15 @@ export function createCore(dependencies: CoreDependencies): Core {
     spendService,
     executionEventPublisher,
     ...(llmObservability ? { llmObservability } : {}),
+    ...(dependencies.agentContextObservability
+      ? { agentContextObservability: dependencies.agentContextObservability }
+      : {}),
     ...(github ? { github } : {}),
     ...(documents ? { documents } : {}),
     ...(tasks ? { tasks } : {}),
     ...(environments ? { environments } : {}),
     ...(runners ? { runners } : {}),
+    ...(provisioningLogs ? { provisioningLogs } : {}),
     ...(bootstrap ? { bootstrap } : {}),
     ...(requirements ? { requirements } : {}),
     ...(clarity ? { clarity } : {}),

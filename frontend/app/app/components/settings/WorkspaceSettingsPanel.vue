@@ -67,6 +67,7 @@ const draft = reactive({
   taskLimitMode: 'off' as TaskLimitMode,
   taskLimitShared: 5 as number,
   perType: {} as Record<CreateTaskType, number>,
+  storeAgentContext: true,
   // Budget: empty string ⇒ "use the built-in default" (null on the wire).
   spendCurrency: '',
   spendMonthlyLimit: '',
@@ -80,6 +81,7 @@ function hydrate() {
   draft.taskLimitShared = s.taskLimitShared ?? 5
   const pt = s.taskLimitPerType ?? {}
   for (const t of TASK_TYPES) draft.perType[t] = pt[t] ?? 3
+  draft.storeAgentContext = s.storeAgentContext
   draft.spendCurrency = s.spendCurrency ?? ''
   draft.spendMonthlyLimit = s.spendMonthlyLimit == null ? '' : String(s.spendMonthlyLimit)
   draft.spendModelPrices = s.spendModelPrices ? JSON.stringify(s.spendModelPrices, null, 2) : ''
@@ -106,6 +108,7 @@ async function save() {
               {} as Record<CreateTaskType, number>,
             )
           : null,
+      storeAgentContext: draft.storeAgentContext,
     })
     toast.add({ title: 'Settings saved', icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
@@ -231,6 +234,22 @@ async function saveBudget() {
                   <UInput v-model.number="draft.perType[t]" type="number" :min="1" size="sm" />
                 </label>
               </div>
+            </section>
+
+            <!-- Agent observability -->
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-slate-200">Agent observability</h3>
+              <p class="text-[11px] text-slate-400">
+                Store the complete context provided to each agent — the composed prompts, the
+                best-practice fragments folded in, and the full content of the files injected into
+                its container — so it can be inspected later in the observability view. The bodies
+                are kept for the same window as the per-call LLM telemetry. Turn off to stop storing
+                it (existing snapshots are pruned by retention).
+              </p>
+              <label class="flex items-center gap-2">
+                <USwitch v-model="draft.storeAgentContext" size="sm" />
+                <span class="text-sm text-slate-200">Store full agent context</span>
+              </label>
             </section>
 
             <div class="flex justify-end">

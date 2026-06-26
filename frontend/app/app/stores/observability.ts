@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { LlmCallActivity, LlmCallMetric } from '~/types/execution'
+import type { AgentContextSnapshot, LlmCallActivity, LlmCallMetric } from '~/types/execution'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -19,6 +19,10 @@ export const useObservabilityStore = defineStore('observability', () => {
 
   /** Per-execution-id call list (newest first). */
   const callsByExecution = ref<Record<string, LlmCallMetric[]>>({})
+  /** Per-execution-id provided-context snapshot list (newest first). */
+  const contextByExecution = ref<Record<string, AgentContextSnapshot[]>>({})
+  /** Execution ids whose context is currently loading. */
+  const contextLoading = ref<Set<string>>(new Set())
   /** Execution ids currently loading. */
   const loading = ref<Set<string>>(new Set())
   /** Execution ids currently exporting. */
@@ -109,6 +113,27 @@ export const useObservabilityStore = defineStore('observability', () => {
     callsByExecution.value = { ...callsByExecution.value, [executionId]: [row, ...existing] }
   }
 
+  function contextFor(executionId: string): AgentContextSnapshot[] {
+    return contextByExecution.value[executionId] ?? []
+  }
+  function isContextLoading(executionId: string): boolean {
+    return contextLoading.value.has(executionId)
+  }
+
+  /** Load (or refresh) the per-dispatch provided-context snapshots for a run. */
+  async function loadContext(executionId: string) {
+    if (!workspace.workspaceId) return
+    withFlag(contextLoading, executionId, true)
+    try {
+      const { snapshots } = await api.getAgentContext(workspace.requireId(), executionId)
+      contextByExecution.value = { ...contextByExecution.value, [executionId]: snapshots }
+    } catch {
+      // Best-effort: the panel shows an empty state; nothing is persisted client-side.
+    } finally {
+      withFlag(contextLoading, executionId, false)
+    }
+  }
+
   /**
    * Fetch the LLM-friendly export bundle and trigger a client-side download. The
    * events socket auths via a Bearer header (a plain `<a download>` can't), so we
@@ -140,5 +165,9 @@ export const useObservabilityStore = defineStore('observability', () => {
     load,
     appendCall,
     downloadExport,
+    contextByExecution,
+    contextFor,
+    isContextLoading,
+    loadContext,
   }
 })

@@ -61,6 +61,14 @@ export type {
 } from './llm-metrics.js'
 export { LLM_WARNING_FINISH_REASONS } from './llm-metrics.js'
 export type {
+  AgentContextFile,
+  AgentContextFragment,
+  AgentContextRecorder,
+  AgentContextSnapshot,
+  AgentContextSnapshotRepository,
+  RecordAgentContextInput,
+} from './agent-context.js'
+export type {
   LlmGenerationEvent,
   LlmToolSpan,
   LlmToolSpanContext,
@@ -205,6 +213,11 @@ export type {
   EnvironmentRecordPatch,
   EnvironmentRegistryRepository,
 } from './environment-repositories.js'
+export type {
+  ProvisioningLogRecord,
+  ProvisioningLogQuery,
+  ProvisioningLogRepository,
+} from './provisioning-log-repositories.js'
 export type {
   BootstrapJobRecord,
   BootstrapJobRecordPatch,
