@@ -149,6 +149,10 @@ export const useUiStore = defineStore('ui', () => {
   // per-call detail from the observability store on open.
   const observabilityInstanceId = ref<string | null>(null)
 
+  // The Kaizen screen (grading history + verified-combo library), a full-panel overlay
+  // opened from the sidebar. Distinct from the per-run grading status shown in run details.
+  const kaizenScreenOpen = ref(false)
+
   /** Current canvas zoom (driven by Vue Flow viewport). */
   const zoom = ref(1)
 
@@ -501,6 +505,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeObservability() {
     observabilityInstanceId.value = null
   }
+  function openKaizen() {
+    kaizenScreenOpen.value = true
+  }
+  function closeKaizen() {
+    kaizenScreenOpen.value = false
+  }
 
   return {
     selectedBlockId,
@@ -541,6 +551,7 @@ export const useUiStore = defineStore('ui', () => {
     closeResultView,
     stepDetail,
     observabilityInstanceId,
+    kaizenScreenOpen,
     zoom,
     lod,
     expandedFrames,
@@ -618,5 +629,7 @@ export const useUiStore = defineStore('ui', () => {
     closeStepDetail,
     openObservability,
     closeObservability,
+    openKaizen,
+    closeKaizen,
   }
 })

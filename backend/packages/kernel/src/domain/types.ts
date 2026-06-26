@@ -154,6 +154,12 @@ export type {
   RequirementReviewItem,
   RequirementReviewStatus,
   RequirementReview,
+  // Kaizen (post-run grading agent) shapes.
+  KaizenGradingStatus,
+  KaizenGrading,
+  KaizenVerifiedCombo,
+  KaizenOverview,
+  KaizenRunGradings,
   RecommendationStatus,
   RequirementRecommendation,
   ReplyReviewItemInput,

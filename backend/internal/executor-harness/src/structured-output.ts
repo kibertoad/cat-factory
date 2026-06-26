@@ -1,5 +1,4 @@
-import { redactSecrets } from './git.js'
-import { redactAll, secretsToRedact } from './agent-runner.js'
+import { redact, redactSecrets, secretsToRedact } from './redact.js'
 import { log } from './logger.js'
 import { PI_MAX_OUTPUT_TOKENS } from './pi.js'
 
@@ -364,11 +363,11 @@ async function callSubscriptionRepair<T>(
     signal: access.signal,
   })
   if (!res.ok) {
-    // A vendor 4xx body can echo the API key/token back; `redactSecrets` only knows
-    // GitHub-shaped creds, so ALSO scrub the leased subscription credential (the raw
+    // A vendor 4xx body can echo the API key/token back; `redact` applies both the
+    // GitHub-shaped pattern rules AND scrubs the leased subscription credential (the raw
     // value, and — for a JSON auth bundle — its nested token leaves) before surfacing.
     const raw = (await res.text().catch(() => '')).slice(0, 300)
-    const detail = redactAll(redactSecrets(raw), secretsToRedact(access.subscriptionToken ?? ''))
+    const detail = redact(raw, secretsToRedact(access.subscriptionToken ?? ''))
     throw new Error(
       `subscription repair call failed: HTTP ${res.status}${detail ? ` — ${detail}` : ''}`,
     )

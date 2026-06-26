@@ -28,6 +28,7 @@ import { recurringPipelineController } from './modules/recurring/RecurringPipeli
 import { trackerSettingsController } from './modules/recurring/TrackerSettingsController.js'
 import { requirementReviewController } from './modules/requirements/RequirementReviewController.js'
 import { followUpController } from './modules/followUp/FollowUpController.js'
+import { kaizenController } from './modules/kaizen/KaizenController.js'
 import { humanTestController } from './modules/humanTest/HumanTestController.js'
 import { consensusController } from './modules/consensus/ConsensusController.js'
 import { clarityReviewController } from './modules/clarity/ClarityReviewController.js'
@@ -98,6 +99,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', agentRunController())
   app.route('/workspaces/:workspaceId', requirementReviewController())
   app.route('/workspaces/:workspaceId', followUpController())
+  app.route('/workspaces/:workspaceId', kaizenController())
   app.route('/workspaces/:workspaceId', humanTestController())
   app.route('/workspaces/:workspaceId', consensusController())
   app.route('/workspaces/:workspaceId', clarityReviewController())

@@ -1,5 +1,61 @@
 # @cat-factory/server
 
+## 0.28.1
+
+### Patch Changes
+
+- 4dd6e97: Fix: container agent (and repo-bootstrap) runs on **OpenRouter** and **LiteLLM** models
+  were rejected at start with `'openrouter' is not supported` even though the LLM proxy
+  already forwards both (their base URLs resolve in `resolveOpenAiCompatibleUpstream`). The
+  proxyability guard hardcoded only `qwen`/`deepseek`/`moonshot`/`openai`/`workers-ai` and
+  was duplicated (out of step) across `ContainerAgentExecutor` and `ContainerRepoBootstrapper`.
+  Replaced both copies with a single shared `isProxyableProvider` in `@cat-factory/agents`,
+  derived from `DEFAULT_OPENAI_COMPATIBLE_BASE_URLS` (so every OpenAI-compatible direct
+  provider — including OpenRouter) plus the operator-hosted `litellm` gateway and the per-user
+  local runners, so the start guard and the proxy can no longer disagree.
+- Updated dependencies [4dd6e97]
+  - @cat-factory/agents@0.16.1
+  - @cat-factory/orchestration@0.25.1
+
+## 0.28.0
+
+### Minor Changes
+
+- ea59e91: Add the Kaizen agent: a post-run, continuous-improvement reviewer (toggleable per
+  workspace, never a pipeline-builder step) that grades each completed agent step on how
+  smooth/efficient vs confused/chaotic the interaction was and recommends prompt/model
+  improvements.
+
+  - After a run completes, the engine schedules a grading per completed agent step
+    (skipping verified combos); a background sweep (Cloudflare cron / Node interval) runs
+    the inline LLM grade. The grader's model is configured in Model Configuration like
+    every other agent (the hidden-from-palette `kaizen` kind).
+  - A `(promptVersion, agentKind, model)` combo that grades strongly (>=4) with no
+    recommendations five times in a row is marked **verified** and is no longer graded.
+  - New persisted tables `kaizen_gradings` + `kaizen_verified_combos` (D1 ⇄ Drizzle parity,
+    asserted by a new cross-runtime conformance suite) and a per-workspace `kaizenEnabled`
+    setting (a new `workspace_settings.kaizen_enabled` column).
+  - New read API (`GET /workspaces/:ws/kaizen`, `GET /workspaces/:ws/executions/:id/kaizen`),
+    a `kaizen` real-time event, a Kaizen screen (grading history + verified combos), and
+    per-step grading status (scheduled/running/complete + results) inside the run window —
+    never on the board.
+  - A step with neither a provided-context snapshot nor any recorded LLM calls (e.g. prompt
+    recording is off deployment-wide) is settled `failed` rather than graded blind, so a
+    guessed grade can't advance a combo toward a bogus `verified`.
+  - The Worker Kaizen sweep gains an in-isolate re-entrancy guard (mirroring the Node
+    sweeper) so overlapping passes don't race the per-combo streak update.
+
+### Patch Changes
+
+- Updated dependencies [ea59e91]
+  - @cat-factory/contracts@0.30.0
+  - @cat-factory/kernel@0.33.0
+  - @cat-factory/agents@0.16.0
+  - @cat-factory/orchestration@0.25.0
+  - @cat-factory/integrations@0.21.5
+  - @cat-factory/prompt-fragments@0.7.28
+  - @cat-factory/spend@0.10.1
+
 ## 0.27.2
 
 ### Patch Changes

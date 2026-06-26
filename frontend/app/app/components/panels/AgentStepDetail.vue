@@ -313,6 +313,12 @@ async function copyOutput() {
                 />
               </section>
 
+              <!-- post-run Kaizen grading status + results for this step (run-details only) -->
+              <KaizenStepStatus
+                :instance-id="ctx?.instanceId ?? null"
+                :step-index="ctx?.stepIndex ?? null"
+              />
+
               <!-- companion rework budget spent: the shared iteration-cap decision
                    (one more round / proceed with the current output / stop & reset) -->
               <IterationCapPrompt

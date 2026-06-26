@@ -64,6 +64,12 @@ export const workspaceSettingsSchema = v.object({
    * suppressed when the deployment disables prompt recording (`LLM_RECORD_PROMPTS`).
    */
   storeAgentContext: v.boolean(),
+  /**
+   * Whether the Kaizen agent grades agent steps after each run completes and
+   * recommends prompt/model improvements. On by default. When off, no gradings are
+   * scheduled (existing history + verified combos are retained, just not extended).
+   */
+  kaizenEnabled: v.boolean(),
   /** Spend budget currency (ISO 4217). Null ⇒ the built-in default (`EUR`). */
   spendCurrency: v.nullable(spendCurrencySchema),
   /**
@@ -90,6 +96,7 @@ export const updateWorkspaceSettingsSchema = v.object({
   taskLimitShared: v.optional(v.nullable(limitSchema)),
   taskLimitPerType: v.optional(v.nullable(taskLimitPerTypeSchema)),
   storeAgentContext: v.optional(v.boolean()),
+  kaizenEnabled: v.optional(v.boolean()),
   spendCurrency: v.optional(v.nullable(spendCurrencySchema)),
   spendMonthlyLimit: v.optional(v.nullable(v.pipe(v.number(), v.minValue(0)))),
 })

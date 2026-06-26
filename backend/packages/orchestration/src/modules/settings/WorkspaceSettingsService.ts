@@ -47,6 +47,7 @@ export class WorkspaceSettingsService {
       taskLimitPerType:
         patch.taskLimitPerType !== undefined ? patch.taskLimitPerType : current.taskLimitPerType,
       storeAgentContext: patch.storeAgentContext ?? current.storeAgentContext,
+      kaizenEnabled: patch.kaizenEnabled ?? current.kaizenEnabled,
       spendCurrency:
         patch.spendCurrency !== undefined ? patch.spendCurrency : current.spendCurrency,
       spendMonthlyLimit:
