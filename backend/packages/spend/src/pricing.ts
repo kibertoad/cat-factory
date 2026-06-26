@@ -7,10 +7,9 @@ import type { OpenRouterModelMeta, WorkspaceSettings } from '@cat-factory/contra
 // regardless of which provider/model a given agent routes to.
 //
 // Prices are per 1,000,000 tokens, in the configured `currency`. The defaults
-// below are approximate published list prices converted to EUR (~0.92 EUR/USD)
-// and are deliberately operator-overridable: an accurate budget only needs the
-// prices to be in the right ballpark, and rates change. Override PER WORKSPACE in
-// the UI (the `workspace_settings.spend_model_prices` overrides, overlaid here).
+// below are approximate published list prices converted to EUR (~0.92 EUR/USD):
+// an accurate budget only needs the prices to be in the right ballpark, and a
+// workspace's effective budget (currency + monthly limit) is tunable in the UI.
 
 /** Price per 1M input/output tokens for one model. */
 export interface ModelPrice {
@@ -50,7 +49,7 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   'workers-ai': { inputPerMillion: 0.1, outputPerMillion: 0.1 },
   // DeepSeek V4 Pro runs on Workers AI but is a partner model billed at provider
   // rates (served via Fireworks), not the near-free neuron rate above, so it needs
-  // its own entry. Approximate (USD→EUR ~0.92); tune via the per-workspace price overrides.
+  // its own entry. Approximate (USD→EUR ~0.92).
   'workers-ai:deepseek/deepseek-v4-pro': { inputPerMillion: 0.5, outputPerMillion: 2 },
   // Kimi K2.5 / K2.6 / K2.7 likewise run on Workers AI as partner models billed at Workers
   // AI's published per-token rate, NOT the near-free `workers-ai` neuron rate — without
@@ -59,7 +58,7 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // older K2.5 at $0.60 in / $3.00 out per 1M (USD→EUR ~0.92); these are Cloudflare's
   // marked-up rates, above Moonshot's direct list (`moonshot:kimi-k2.6`). The spend table
   // has no cached-input tier, so we use the standard cache-miss input rate. See
-  // workers-ai/platform/pricing. Tune via SPEND_MODEL_PRICES.
+  // workers-ai/platform/pricing.
   'workers-ai:@cf/moonshotai/kimi-k2.5': { inputPerMillion: 0.55, outputPerMillion: 2.76 },
   'workers-ai:@cf/moonshotai/kimi-k2.6': { inputPerMillion: 0.87, outputPerMillion: 3.68 },
   'workers-ai:@cf/moonshotai/kimi-k2.7-code': { inputPerMillion: 0.87, outputPerMillion: 3.68 },
@@ -75,7 +74,7 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // OpenRouter — a passthrough gateway billed at the underlying provider's rates (no
   // per-token markup), so each curated model carries the upstream vendor's list price
   // (USD→EUR ~0.92). Keyed by the OpenRouter `vendor/model` slug. The bare `openrouter`
-  // fallback is a mid-range guess for any uncatalogued slug — tune via the per-workspace price overrides.
+  // fallback is a mid-range guess for any uncatalogued slug.
   'openrouter:anthropic/claude-opus-4.8': { inputPerMillion: 4.6, outputPerMillion: 23 },
   'openrouter:google/gemini-3-pro': { inputPerMillion: 1.84, outputPerMillion: 11.04 },
   'openrouter:openai/gpt-5.5': { inputPerMillion: 3.68, outputPerMillion: 22.08 },
@@ -83,8 +82,7 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   'openrouter:moonshotai/kimi-k2.7-code': { inputPerMillion: 0.55, outputPerMillion: 2.3 },
   openrouter: { inputPerMillion: 1.84, outputPerMillion: 11.04 },
   // LiteLLM — an operator-hosted gateway whose true cost depends entirely on the backend
-  // model it routes to, which we can't know here. Default to the generic fallback rate;
-  // operators should override per their routing via the per-workspace price overrides.
+  // model it routes to, which we can't know here. Default to the generic fallback rate.
   litellm: { inputPerMillion: 0.14, outputPerMillion: 0.55 },
 }
 
@@ -129,27 +127,19 @@ export function withDynamicPrices(
 
 /**
  * Resolve a workspace's effective pricing from the base table + its per-workspace
- * budget overrides (currency / monthly limit / per-model price overrides). A null
- * override falls back to the base value, so an unconfigured workspace gets the
- * built-in defaults unchanged. Per-model overrides are overlaid onto the base table
- * (most-specific-first resolution in {@link priceFor} is preserved). Returns a new
- * {@link SpendPricing}; the input is not mutated.
+ * budget overrides (currency / monthly limit). A null override falls back to the
+ * base value, so an unconfigured workspace gets the built-in defaults unchanged.
+ * Returns a new {@link SpendPricing}; the input is not mutated.
  */
 export function mergeSpendPricing(
   base: SpendPricing,
-  overrides: Pick<
-    WorkspaceSettings,
-    'spendCurrency' | 'spendMonthlyLimit' | 'spendModelPrices'
-  > | null,
+  overrides: Pick<WorkspaceSettings, 'spendCurrency' | 'spendMonthlyLimit'> | null,
 ): SpendPricing {
   if (!overrides) return base
-  const prices = overrides.spendModelPrices
-    ? { ...base.prices, ...overrides.spendModelPrices }
-    : base.prices
   return {
     currency: overrides.spendCurrency ?? base.currency,
     monthlyLimit: overrides.spendMonthlyLimit ?? base.monthlyLimit,
-    prices,
+    prices: base.prices,
     defaultPrice: base.defaultPrice,
   }
 }

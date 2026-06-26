@@ -8,7 +8,7 @@
 // The latter three are body-only section components rendered in tabs here (no longer
 // standalone modals).
 import { reactive, ref, watch } from 'vue'
-import type { CreateTaskType, TaskLimitMode, WorkspaceSettings } from '~/types/domain'
+import type { CreateTaskType, TaskLimitMode } from '~/types/domain'
 import MergeThresholdsPanel from '~/components/settings/MergeThresholdsPanel.vue'
 import IssueTrackerPanel from '~/components/settings/IssueTrackerPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
@@ -71,7 +71,6 @@ const draft = reactive({
   // Budget: empty string ⇒ "use the built-in default" (null on the wire).
   spendCurrency: '',
   spendMonthlyLimit: '',
-  spendModelPrices: '',
 })
 
 function hydrate() {
@@ -84,7 +83,6 @@ function hydrate() {
   draft.storeAgentContext = s.storeAgentContext
   draft.spendCurrency = s.spendCurrency ?? ''
   draft.spendMonthlyLimit = s.spendMonthlyLimit == null ? '' : String(s.spendMonthlyLimit)
-  draft.spendModelPrices = s.spendModelPrices ? JSON.stringify(s.spendModelPrices, null, 2) : ''
 }
 
 watch(() => store.settings, hydrate, { immediate: true, deep: true })
@@ -126,28 +124,15 @@ async function save() {
 const savingBudget = ref(false)
 
 async function saveBudget() {
-  // Parse the optional per-model price overrides JSON (blank ⇒ no overrides).
-  let prices: WorkspaceSettings['spendModelPrices'] = null
-  const raw = draft.spendModelPrices.trim()
-  if (raw) {
-    try {
-      prices = JSON.parse(raw)
-    } catch {
-      toast.add({
-        title: 'Per-model prices must be valid JSON',
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
-      return
-    }
-  }
   savingBudget.value = true
+  // The number input emits a raw number once edited but starts as a string from hydrate, so
+  // coerce through String() before trimming. Blank ⇒ "use the built-in default" (null on the wire).
+  const raw = String(draft.spendMonthlyLimit ?? '').trim()
+  const monthlyLimit = raw === '' ? null : Number(raw)
   try {
     await store.update({
       spendCurrency: draft.spendCurrency.trim() ? draft.spendCurrency.trim().toUpperCase() : null,
-      spendMonthlyLimit:
-        draft.spendMonthlyLimit.trim() === '' ? null : Number(draft.spendMonthlyLimit),
-      spendModelPrices: prices,
+      spendMonthlyLimit: monthlyLimit,
     })
     toast.add({ title: 'Budget saved', icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
@@ -302,22 +287,6 @@ async function saveBudget() {
                   />
                 </label>
               </div>
-            </section>
-
-            <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">Per-model price overrides</h3>
-              <p class="text-[11px] text-slate-400">
-                Optional. JSON object of <code>"provider:model"</code> (or a bare
-                <code>"provider"</code>) → <code>{ inputPerMillion, outputPerMillion }</code>,
-                overlaid on the built-in price table. Leave blank to use the defaults.
-              </p>
-              <UTextarea
-                v-model="draft.spendModelPrices"
-                :rows="6"
-                size="sm"
-                class="w-full font-mono text-[11px]"
-                placeholder='{"openai:gpt-4o":{"inputPerMillion":2.3,"outputPerMillion":9.2}}'
-              />
             </section>
 
             <div class="flex justify-end">
