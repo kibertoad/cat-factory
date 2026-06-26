@@ -86,7 +86,10 @@ export function sandboxController(): Hono<AppEnv> {
   app.post('/sandbox/fixtures', jsonBody(createSandboxFixtureSchema), async (c) => {
     const sandbox = requireSandbox(c)
     if (!sandbox) return unavailable(c)
-    const fixture = await sandbox.service.createFixture(param(c, 'workspaceId'), c.req.valid('json'))
+    const fixture = await sandbox.service.createFixture(
+      param(c, 'workspaceId'),
+      c.req.valid('json'),
+    )
     return c.json(fixture, 201)
   })
 

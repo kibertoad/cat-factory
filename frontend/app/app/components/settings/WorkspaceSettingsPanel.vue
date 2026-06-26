@@ -8,7 +8,7 @@
 // The latter three are body-only section components rendered in tabs here (no longer
 // standalone modals).
 import { reactive, ref, watch } from 'vue'
-import type { CreateTaskType, TaskLimitMode } from '~/types/domain'
+import type { CreateTaskType, TaskLimitMode, WorkspaceSettings } from '~/types/domain'
 import MergeThresholdsPanel from '~/components/settings/MergeThresholdsPanel.vue'
 import IssueTrackerPanel from '~/components/settings/IssueTrackerPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
@@ -36,6 +36,7 @@ const tabs = [
     icon: 'i-lucide-sliders-horizontal',
     slot: 'workspace',
   },
+  { value: 'budget', label: 'Budget', icon: 'i-lucide-wallet', slot: 'budget' },
   { value: 'merge', label: 'Merge thresholds', icon: 'i-lucide-git-merge', slot: 'merge' },
   {
     value: 'tracker',
@@ -64,6 +65,10 @@ const draft = reactive({
   taskLimitMode: 'off' as TaskLimitMode,
   taskLimitShared: 5 as number,
   perType: {} as Record<CreateTaskType, number>,
+  // Budget: empty string ⇒ "use the built-in default" (null on the wire).
+  spendCurrency: '',
+  spendMonthlyLimit: '',
+  spendModelPrices: '',
 })
 
 function hydrate() {
@@ -73,6 +78,9 @@ function hydrate() {
   draft.taskLimitShared = s.taskLimitShared ?? 5
   const pt = s.taskLimitPerType ?? {}
   for (const t of TASK_TYPES) draft.perType[t] = pt[t] ?? 3
+  draft.spendCurrency = s.spendCurrency ?? ''
+  draft.spendMonthlyLimit = s.spendMonthlyLimit == null ? '' : String(s.spendMonthlyLimit)
+  draft.spendModelPrices = s.spendModelPrices ? JSON.stringify(s.spendModelPrices, null, 2) : ''
 }
 
 watch(() => store.settings, hydrate, { immediate: true, deep: true })
@@ -107,6 +115,45 @@ async function save() {
     })
   } finally {
     saving.value = false
+  }
+}
+
+const savingBudget = ref(false)
+
+async function saveBudget() {
+  // Parse the optional per-model price overrides JSON (blank ⇒ no overrides).
+  let prices: WorkspaceSettings['spendModelPrices'] = null
+  const raw = draft.spendModelPrices.trim()
+  if (raw) {
+    try {
+      prices = JSON.parse(raw)
+    } catch {
+      toast.add({
+        title: 'Per-model prices must be valid JSON',
+        icon: 'i-lucide-triangle-alert',
+        color: 'error',
+      })
+      return
+    }
+  }
+  savingBudget.value = true
+  try {
+    await store.update({
+      spendCurrency: draft.spendCurrency.trim() ? draft.spendCurrency.trim().toUpperCase() : null,
+      spendMonthlyLimit:
+        draft.spendMonthlyLimit.trim() === '' ? null : Number(draft.spendMonthlyLimit),
+      spendModelPrices: prices,
+    })
+    toast.add({ title: 'Budget saved', icon: 'i-lucide-check', color: 'success' })
+  } catch (e) {
+    toast.add({
+      title: 'Could not save budget',
+      description: e instanceof Error ? e.message : String(e),
+      icon: 'i-lucide-triangle-alert',
+      color: 'error',
+    })
+  } finally {
+    savingBudget.value = false
   }
 }
 </script>
@@ -190,6 +237,74 @@ async function save() {
                 @click="save"
               >
                 Save
+              </UButton>
+            </div>
+          </div>
+        </template>
+
+        <!-- Budget -->
+        <template #budget>
+          <div class="space-y-6">
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-slate-200">Monthly spend budget</h3>
+              <p class="text-[11px] text-slate-400">
+                Token usage is metered per LLM call, priced, and gated by this budget — when
+                reached, runs in this workspace pause and the board shows a warning. Leave blank to
+                inherit the built-in default (~100&nbsp;EUR/month).
+              </p>
+              <div class="grid grid-cols-2 gap-3">
+                <label class="block">
+                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                    Monthly limit
+                  </span>
+                  <UInput
+                    v-model="draft.spendMonthlyLimit"
+                    type="number"
+                    :min="0"
+                    placeholder="Default"
+                    size="sm"
+                  />
+                </label>
+                <label class="block">
+                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                    Currency (ISO 4217)
+                  </span>
+                  <UInput
+                    v-model="draft.spendCurrency"
+                    placeholder="EUR"
+                    maxlength="3"
+                    size="sm"
+                    class="uppercase"
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-slate-200">Per-model price overrides</h3>
+              <p class="text-[11px] text-slate-400">
+                Optional. JSON object of <code>"provider:model"</code> (or a bare
+                <code>"provider"</code>) → <code>{ inputPerMillion, outputPerMillion }</code>,
+                overlaid on the built-in price table. Leave blank to use the defaults.
+              </p>
+              <UTextarea
+                v-model="draft.spendModelPrices"
+                :rows="6"
+                size="sm"
+                class="w-full font-mono text-[11px]"
+                placeholder='{"openai:gpt-4o":{"inputPerMillion":2.3,"outputPerMillion":9.2}}'
+              />
+            </section>
+
+            <div class="flex justify-end">
+              <UButton
+                color="primary"
+                icon="i-lucide-save"
+                size="sm"
+                :loading="savingBudget"
+                @click="saveBudget"
+              >
+                Save budget
               </UButton>
             </div>
           </div>

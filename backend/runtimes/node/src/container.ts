@@ -31,8 +31,10 @@ import {
   OBSERVABILITY_CIPHER_INFO,
   RegistryReleaseHealthProvider,
   defaultObservabilityRegistry,
-  PagerDutyEnrichmentProvider,
-  IncidentIoEnrichmentProvider,
+  WorkspaceIncidentEnrichmentProvider,
+  INCIDENT_ENRICHMENT_CIPHER_INFO,
+  AccountSettingsService,
+  ACCOUNT_SETTINGS_CIPHER_INFO,
 } from '@cat-factory/integrations'
 import {
   type AgentExecutor,
@@ -42,7 +44,6 @@ import {
   type FragmentOwnerKind,
   type GitHubClient,
   type GitHubInstallationRepository,
-  type IncidentEnrichmentProvider,
   type ModelProviderResolver,
   type NotificationChannel,
   type RateLimitRepository,
@@ -51,7 +52,6 @@ import {
   type TaskConnectionRepository,
   type TaskSourceProvider,
   CompositeNotificationChannel,
-  CompositeIncidentEnrichmentProvider,
 } from '@cat-factory/kernel'
 import {
   type CoreDependencies,
@@ -87,12 +87,22 @@ import {
   WebCryptoWebhookVerifier,
   buildResolveRepoTarget,
   makeResolveRunRepoContext,
-  createWebSearchUpstreamFromEnv,
   ensureWorkBranchViaRest,
   logger,
   resolveUrlSafetyPolicy,
   resolveWorkspaceCapabilities,
 } from '@cat-factory/server'
+// The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). Importing
+// it registers the gates via the public seam; the facade wires each gate's provider below.
+import {
+  type GateProviderOverrides,
+  applyGateProviders,
+  clearGateProviders,
+  wireCiStatusProvider,
+  wireMergeabilityProvider,
+  wireReleaseHealthProvider,
+  wireIncidentEnrichment,
+} from '@cat-factory/gates'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
@@ -251,7 +261,6 @@ function selectNodeSlackDeps(
     slackSettingsRepository,
     slackMemberMappingRepository,
     slackSecretCipher: secretCipher,
-    ...(config.slack.oauth ? { slackOAuth: config.slack.oauth } : {}),
   }
 }
 
@@ -394,6 +403,13 @@ export interface NodeContainerOptions {
    */
   cloudflareModelsEnabled?: boolean
   /**
+   * Explicit built-in gate providers, re-wired AFTER the build's `clearGateProviders()`
+   * reset. The cross-runtime conformance suite uses this to drive the externalized
+   * `@cat-factory/gates` CI gate over a faked verdict; production leaves it undefined and
+   * the config branches below wire the real providers.
+   */
+  gateProviders?: GateProviderOverrides
+  /**
    * The real-time subscriber registry. When provided, the container wires a
    * {@link NodeEventPublisher} (so the engine pushes execution/board/notification events
    * to subscribed browsers) and composes an in-app notification channel. `start()`
@@ -482,6 +498,7 @@ function buildNodeContainerExecutor(
   personalSubscriptions?: PersonalSubscriptionService,
   resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>,
   resolveUserGitHubToken?: ResolveUserGitHubToken,
+  resolveWebSearchEnabled?: (workspaceId: string) => Promise<boolean>,
 ): AgentExecutor | null {
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
   // is this service's externally reachable base (the runner pool / local container
@@ -554,9 +571,10 @@ function buildNodeContainerExecutor(
         }
       : {}),
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
-    // Point container agents' web search at the backend search proxy (no provider key
-    // in the sandbox) whenever an upstream is configured for this deployment.
-    webSearchProxyEnabled: Boolean(createWebSearchUpstreamFromEnv(env)),
+    // Point container agents' web search at the backend search proxy (no provider key in
+    // the sandbox), but only for a run whose account has keys (resolved per run — see the
+    // call site), so the tool is never advertised to a run where it would just fail.
+    ...(resolveWebSearchEnabled ? { resolveWebSearchEnabled } : {}),
     githubApiBase: config.github.apiBase,
     // Forward container tool spans to Langfuse (when configured) as child spans under
     // the run trace — the same sink the LLM proxy fans generations out to.
@@ -819,6 +837,18 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const idGenerator = new CryptoIdGenerator()
   const repos = options.repos ?? createDrizzleRepositories(options.db, clock)
 
+  // The built-in gates' providers are deployment-global module handles (in `@cat-factory/gates`),
+  // not per-container DI. Reset them up-front so each build re-wires from a clean slate and only
+  // the gates this deployment actually configures stay wired: the GitHub + release-health wiring
+  // below runs only inside its `enabled`/`githubClient` branches and never clears, so without this
+  // reset a provider wired by an earlier (configured) build in the same process would leak into a
+  // later (unconfigured) build and make its gate probe a stale handle instead of passing through.
+  // Mirrors the Worker facade (keep the runtimes symmetric). Any test-injected gate providers
+  // (`options.gateProviders`) are applied at the END of this build so they OVERRIDE the config
+  // wiring below (local mode wires a PAT-backed CI provider here that would otherwise clobber a
+  // faked one) — gates read their provider lazily at probe time, so the last write wins.
+  clearGateProviders()
+
   // Honour the workspace's model presets at run time (block-pinned > the task's
   // selected/default model preset > env routing), uniformly for inline and container
   // kinds. The built-in default preset points every agent kind at Kimi K2.7.
@@ -932,6 +962,27 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     idGenerator,
     clock,
   )
+  // Web-search keys live per-account; advertise Pi's `web_search` tool to a run only when
+  // its account actually has a usable upstream (else the tool would just fail/return
+  // nothing). Resolved per run off a dedicated account-settings instance (short-TTL cache).
+  const webSearchAccountKey = env.ENCRYPTION_KEY?.trim()
+  const webSearchAccountSettings = webSearchAccountKey
+    ? new AccountSettingsService({
+        accountSettingsRepository: repos.accountSettingsRepository,
+        secretCipher: new WebCryptoSecretCipher({
+          masterKeyBase64: webSearchAccountKey,
+          info: ACCOUNT_SETTINGS_CIPHER_INFO,
+        }),
+        clock,
+      })
+    : undefined
+  const resolveWebSearchEnabled = webSearchAccountSettings
+    ? async (workspaceId: string): Promise<boolean> => {
+        const accountId = await repos.workspaceRepository.accountOf(workspaceId)
+        if (!accountId) return false
+        return Boolean((await webSearchAccountSettings.resolve(accountId)).webSearch)
+      }
+    : undefined
   const container = buildNodeContainerExecutor(
     env,
     config,
@@ -944,6 +995,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     personalSubscriptions,
     (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
     resolveUserGitHubToken,
+    resolveWebSearchEnabled,
   )
 
   // Always a composite: inline kinds run as one-shot LLM calls; repo-operating kinds
@@ -1044,34 +1096,42 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       : {}),
   })
 
-  const githubGateDeps: Partial<CoreDependencies> = githubClient
-    ? {
-        // The engine binds a registered custom kind's pre/post-op hooks to a run's repo
-        // via this checkout-free RepoFiles resolver, composed from the same client +
-        // repo-target walk the gates/merger use — parity with the Worker.
-        resolveRunRepoContext: makeResolveRunRepoContext(githubClient, resolveRepoTarget),
-        ciStatusProvider: new GitHubCiStatusProvider({
-          githubClient,
-          resolveRepoTarget,
-          blockRepository: repos.blockRepository,
-        }),
-        mergeabilityProvider: new GitHubMergeabilityProvider({
-          githubClient,
-          resolveRepoTarget,
-          blockRepository: repos.blockRepository,
-        }),
-        branchUpdater: new GitHubBranchUpdater({
-          githubClient,
-          resolveRepoTarget,
-          blockRepository: repos.blockRepository,
-        }),
-        pullRequestMerger: new GitHubPullRequestMerger({
-          githubClient,
-          resolveRepoTarget,
-          blockRepository: repos.blockRepository,
-        }),
-      }
-    : {}
+  let githubGateDeps: Partial<CoreDependencies> = {}
+  if (githubClient) {
+    // The `ci` / `conflicts` gates now live in `@cat-factory/gates`; wire their providers into
+    // the gate suite instead of onto the engine's CoreDependencies (single-process startup, so
+    // the deployment-global handles are set once here). Parity with the Worker's selectGitHubDeps.
+    wireCiStatusProvider(
+      new GitHubCiStatusProvider({
+        githubClient,
+        resolveRepoTarget,
+        blockRepository: repos.blockRepository,
+      }),
+    )
+    wireMergeabilityProvider(
+      new GitHubMergeabilityProvider({
+        githubClient,
+        resolveRepoTarget,
+        blockRepository: repos.blockRepository,
+      }),
+    )
+    githubGateDeps = {
+      // The engine binds a registered custom kind's pre/post-op hooks to a run's repo
+      // via this checkout-free RepoFiles resolver, composed from the same client +
+      // repo-target walk the gates/merger use — parity with the Worker.
+      resolveRunRepoContext: makeResolveRunRepoContext(githubClient, resolveRepoTarget),
+      branchUpdater: new GitHubBranchUpdater({
+        githubClient,
+        resolveRepoTarget,
+        blockRepository: repos.blockRepository,
+      }),
+      pullRequestMerger: new GitHubPullRequestMerger({
+        githubClient,
+        resolveRepoTarget,
+        blockRepository: repos.blockRepository,
+      }),
+    }
+  }
 
   // GitHub installation + projections + sync/webhook module: wired when the App is
   // configured (a real githubClient), mirroring the Worker's selectGitHubDeps. This
@@ -1190,31 +1250,71 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     releaseHealthDeps.observabilityConnectionRepository = repos.observabilityConnectionRepository
     releaseHealthDeps.releaseHealthConfigRepository = repos.releaseHealthConfigRepository
     releaseHealthDeps.observabilitySecretCipher = observabilitySecretCipher
-    releaseHealthDeps.releaseHealthProvider = new RegistryReleaseHealthProvider({
-      observabilityConnectionRepository: repos.observabilityConnectionRepository,
-      releaseHealthConfigRepository: repos.releaseHealthConfigRepository,
-      blockRepository: repos.blockRepository,
-      secretCipher: observabilitySecretCipher,
-      registry: defaultObservabilityRegistry,
-    })
-    const enrichers: IncidentEnrichmentProvider[] = []
-    if (config.incidentEnrichment.pagerDuty) {
-      enrichers.push(new PagerDutyEnrichmentProvider(config.incidentEnrichment.pagerDuty))
-    }
-    if (config.incidentEnrichment.incidentIo) {
-      enrichers.push(new IncidentIoEnrichmentProvider(config.incidentEnrichment.incidentIo))
-    }
-    if (enrichers.length > 0) {
-      releaseHealthDeps.incidentEnrichment = new CompositeIncidentEnrichmentProvider(enrichers)
-    }
+    // The post-release-health gate + on-call escalation now live in `@cat-factory/gates`; wire
+    // their providers into the gate suite. The observability repos/cipher above stay on
+    // CoreDependencies — they power the management API (ReleaseHealthService), not the gate.
+    wireReleaseHealthProvider(
+      new RegistryReleaseHealthProvider({
+        observabilityConnectionRepository: repos.observabilityConnectionRepository,
+        releaseHealthConfigRepository: repos.releaseHealthConfigRepository,
+        blockRepository: repos.blockRepository,
+        secretCipher: observabilitySecretCipher,
+        registry: defaultObservabilityRegistry,
+      }),
+    )
   }
+
+  // Per-workspace incident-enrichment (PagerDuty + incident.io): credentials moved out of
+  // env into a sealed per-workspace row, resolved + decrypted at enrichment time. Wired
+  // whenever the shared ENCRYPTION_KEY is present (independent of the release-health gate).
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  const incidentEnrichmentDeps: Partial<CoreDependencies> = {}
+  if (encryptionKey) {
+    const incidentEnrichmentSecretCipher = new WebCryptoSecretCipher({
+      masterKeyBase64: encryptionKey,
+      info: INCIDENT_ENRICHMENT_CIPHER_INFO,
+    })
+    incidentEnrichmentDeps.incidentEnrichmentConnectionRepository =
+      repos.incidentEnrichmentConnectionRepository
+    incidentEnrichmentDeps.incidentEnrichmentSecretCipher = incidentEnrichmentSecretCipher
+    // The on-call enrichment provider now lives in `@cat-factory/gates`; wire the
+    // workspace-backed provider into the gate suite. The connection repo + cipher above
+    // stay on CoreDependencies to power the management API.
+    wireIncidentEnrichment(
+      new WorkspaceIncidentEnrichmentProvider({
+        incidentEnrichmentConnectionRepository: repos.incidentEnrichmentConnectionRepository,
+        secretCipher: incidentEnrichmentSecretCipher,
+      }),
+    )
+  }
+
+  // Per-account deployment settings (Slack OAuth + web-search keys), built once so the
+  // service's short-TTL cache spans requests; the Slack OAuth resolver derives from it.
+  const accountSettings = encryptionKey
+    ? new AccountSettingsService({
+        accountSettingsRepository: repos.accountSettingsRepository,
+        secretCipher: new WebCryptoSecretCipher({
+          masterKeyBase64: encryptionKey,
+          info: ACCOUNT_SETTINGS_CIPHER_INFO,
+        }),
+        clock,
+      })
+    : undefined
 
   // Runner-pool URL/host guard, scoped to its own config (independent of the environment
   // allow-list); absent => strict public-https.
   const runnerUrlPolicy = resolveUrlSafetyPolicy(config.runners)
 
+  // Apply any test-injected gate providers LAST, so they override the config wiring above (the
+  // cross-runtime conformance suite drives the externalized CI gate over a faked verdict; in
+  // local mode a PAT-backed CI provider is wired above and would otherwise win). Production
+  // leaves `gateProviders` undefined, so this is a no-op outside tests.
+  applyGateProviders(options.gateProviders)
+
   const dependencies: CoreDependencies = {
     ...releaseHealthDeps,
+    ...incidentEnrichmentDeps,
+    ...(accountSettings ? { accountSettings } : {}),
     workspaceRepository: repos.workspaceRepository,
     accountRepository: repos.accountRepository,
     membershipRepository: repos.membershipRepository,

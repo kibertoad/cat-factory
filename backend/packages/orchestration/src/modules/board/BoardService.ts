@@ -682,7 +682,9 @@ export class BoardService {
     if (i < 0) {
       const after = await this.blockRepository.listByWorkspace(homeWorkspaceId)
       if (wouldCreateCycle(after, targetId, sourceId)) {
-        await this.blockRepository.update(homeWorkspaceId, targetId, { dependsOn: target.dependsOn })
+        await this.blockRepository.update(homeWorkspaceId, targetId, {
+          dependsOn: target.dependsOn,
+        })
         throw new ValidationError('That dependency would create a cycle')
       }
     }

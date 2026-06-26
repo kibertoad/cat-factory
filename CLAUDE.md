@@ -108,6 +108,12 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
     opt-in AWS Bedrock resolver (`@ai-sdk/amazon-bedrock`) with a **supported-model
     allow-list** that throws `Unsupported Bedrock model` for anything outside it.
     Mixed into a facade's registry only when configured.
+  - `backend/packages/gates` — `@cat-factory/gates`, the **built-in polling-gate suite**
+    (`ci`, `conflicts`, `post-release-health` + the `on-call` escalation), authored entirely
+    through the public `registerGate` seam (kernel + contracts only, never the engine). A
+    facade imports it for side effect and wires each gate's provider via the exported
+    `wireCiStatusProvider` / `wireMergeabilityProvider` / `wireReleaseHealthProvider` /
+    `wireIncidentEnrichment` handles. See "Gates vs agents".
   - `backend/packages/spend` — the spend safeguard; `backend/packages/workspaces`
     — workspace + account services.
 - `backend/packages/server` — `@cat-factory/server`, the **runtime-neutral HTTP
@@ -553,22 +559,47 @@ keys off which bucket, so know them before adding a step:
 - **Agents** — a container or inline LLM does the work (`coder`, `architect`,
   `spec-writer`, `tester`, `merger`, the companions, …). Dispatched via the shared
   `CompositeAgentExecutor`; container kinds park on `awaiting_job`.
-- **Polling Gates** — `ci` and `conflicts`. A gate is NOT an agent: it runs a
-  **programmatic precheck** against a provider and only escalates to a helper container
-  agent (`ci-fixer` / `conflict-resolver`) on a negative verdict. The skip-unless-needed
-  contract is the whole point: a green CI / mergeable PR advances with **nothing spun
-  up**. One generic machine drives every gate — `ExecutionService.evaluateGate` /
-  `dispatchGateHelper` / `pollGate`, parking on the single `awaiting_gate` result while
-  the precheck is pending. A gate is a `GateDefinition` entry
-  (`modules/execution/gates.ts`) supplying only its differentiators: `wired()`, the
-  `probe()` (→ `pass` / `pending` / `fail`), the `helperKind`, and `onExhausted`. The
-  live loop state is `step.gate` (`GateStepState`: `phase` `checking`/`working`,
-  `attempts`, `maxAttempts`, `headSha`); the gate kind is `step.agentKind`, not stored
-  twice. **Adding a gate is a new registry entry, not a new copy of the machinery** —
-  do not hand-roll another `evaluateX`/`pollX`/`awaiting_x` triple.
+- **Polling Gates** — `ci`, `conflicts`, `post-release-health`. A gate is NOT an agent: it
+  runs a **programmatic precheck** against a provider and only escalates to a helper
+  container agent (`ci-fixer` / `conflict-resolver` / `on-call`) on a negative verdict. The
+  skip-unless-needed contract is the whole point: a green CI / mergeable PR advances with
+  **nothing spun up**. One generic machine drives every gate —
+  `ExecutionService.evaluateGate` / `dispatchGateHelper` / `pollGate`, parking on the single
+  `awaiting_gate` result while the precheck is pending. A gate is a `GateDefinition` supplying
+  only its differentiators: `wired()`, the `probe()` (→ `pass` / `pending` / `fail`), the
+  `helperKind`, and `onExhausted`. The live loop state is `step.gate` (`GateStepState`:
+  `phase` `checking`/`working`, `attempts`, `maxAttempts`, `headSha`); the gate kind is
+  `step.agentKind`, not stored twice. **Adding a gate is a new registry entry, not a new copy
+  of the machinery** — do not hand-roll another `evaluateX`/`pollX`/`awaiting_x` triple.
+  - **The built-in gates are NOT inline in the engine** — they ship as the
+    **`@cat-factory/gates`** package, registered through the SAME public `registerGate` seam
+    a deployment uses (the dogfood: the platform's own gates ARE an external package). The
+    engine builds its gate registry purely from `registeredGateFactories()`; a facade
+    `import`s `@cat-factory/gates` and wires each gate's provider via the package's
+    `wireCiStatusProvider` / `wireMergeabilityProvider` / `wireReleaseHealthProvider` /
+    `wireIncidentEnrichment` handles (deployment-global, set in `buildContainer` /
+    `buildNodeContainer`). A gate is a pass-through until its provider is wired. The pure gate
+    logic + the gate/helper agent-kind constants live in kernel (`domain/gate-logic.ts`) so a
+    gate package never depends on orchestration.
+  - **`resolveHelperCompletion`** is the gate seam for an INVESTIGATE-don't-fix helper: most
+    helpers FIX the gated condition so the engine re-probes after they finish, but `on-call`
+    only investigates (it never reverts), so the `post-release-health` gate supplies this hook
+    to settle the gate (raise `release_regression` + enrich the incident) WITHOUT re-probing.
+    Absent → the default re-probe loop.
 - **One-shot engine steps** — non-LLM steps with bespoke handling: `tracker` (files a
   ticket), `deployer` (provisions an env), `requirements-review` (inline reviewer + park
   loop). Not gates because they don't poll-or-escalate.
+- **The `merger` resolver is a privileged built-in, deliberately NOT externalized.** It is a
+  `StepCompletionResolver` (`buildStepResolverRegistry`) but a different archetype from the
+  light, externally-authorable resolvers (output reshaping / notification / repo follow-up,
+  e.g. the example auditor): it OWNS terminal block status (`ownsTerminalStatus`) and executes
+  a policy-gated real merge — the dual of a gate (agent verdict → engine policy-act, vs a
+  gate's provider precheck → escalate). So it keeps its engine-internal access (`MergeResolver`,
+  `resolveMergePreset`, the real merge) rather than the minimal public `ResolverContext`. The
+  public step-resolver seam is scoped to that light follow-up; `ownsTerminalStatus` is
+  built-in-only. (`requirements-review` auto-pass + `on-call` share the same "structured
+  assessment vs per-task threshold" shape — a latent "verdict gate" family, not promoted to an
+  abstraction until a second externally-authored member needs it.)
 
 The same "precheck, then skip the expensive work if it's unnecessary" idea applies to
 the inline requirements-incorporation companion: `hasNotesToIncorporate`

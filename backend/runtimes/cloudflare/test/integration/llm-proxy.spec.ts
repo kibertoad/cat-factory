@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { env } from 'cloudflare:test'
+import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
 import { RecordingEventPublisher } from '@cat-factory/conformance'
 import { createApp } from '../../src/app'
 import { buildContainer } from '../../src/infrastructure/container'
 import { ContainerSessionService } from '../../src/infrastructure/containers/ContainerSessionService'
+import { D1WorkspaceSettingsRepository } from '../../src/infrastructure/repositories/D1WorkspaceSettingsRepository'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
 
 // The LLM proxy is the seam that keeps provider keys out of containers and meters
@@ -17,11 +19,19 @@ function testEnv(overrides: Record<string, string> = {}) {
   return {
     ...env,
     AUTH_SESSION_SECRET: SECRET,
-    QWEN_API_KEY: 'sk-upstream',
-    SPEND_MONTHLY_LIMIT: '100',
-    SPEND_CURRENCY: 'EUR',
     ...overrides,
   }
+}
+
+/**
+ * Force a workspace over budget by pinning its monthly spend limit to 0 (the budget is
+ * per-workspace on `workspace_settings` now, no longer the `SPEND_MONTHLY_LIMIT` env).
+ */
+async function seedZeroBudget(workspaceId: string) {
+  await new D1WorkspaceSettingsRepository({ db: env.DB }).upsert(workspaceId, {
+    ...DEFAULT_WORKSPACE_SETTINGS,
+    spendMonthlyLimit: 0,
+  })
 }
 
 function chatRequest(token: string | null, model = 'whatever') {
@@ -68,9 +78,11 @@ describe('llm proxy /v1/chat/completions', () => {
   })
 
   it('returns 402 when the spend budget is exhausted', async () => {
+    const workspaceId = `ws-${crypto.randomUUID()}`
+    await seedZeroBudget(workspaceId)
     const app = createApp({ overrides: { agentExecutor: new FakeAgentExecutor() } })
-    const token = await mint()
-    const res = await app.fetch(chatRequest(token), testEnv({ SPEND_MONTHLY_LIMIT: '0' }))
+    const token = await mint({ workspaceId })
+    const res = await app.fetch(chatRequest(token), testEnv())
     expect(res.status).toBe(402)
   })
 

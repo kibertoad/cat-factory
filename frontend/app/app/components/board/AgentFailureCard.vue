@@ -12,7 +12,6 @@ const props = withDefaults(
 )
 
 const agentRuns = useAgentRunsStore()
-const toast = useToast()
 
 const compact = computed(() => props.variant === 'compact')
 const failure = computed(() => props.run.failure)
@@ -26,13 +25,9 @@ async function retry() {
   if (retrying.value) return
   retrying.value = true
   try {
+    // The store surfaces any failure as an actionable toast (incl. the no-provider 409),
+    // so we only need to clear the in-flight guard here.
     await agentRuns.retry(props.run.runId)
-  } catch (e) {
-    toast.add({
-      title: 'Retry failed',
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
   } finally {
     retrying.value = false
   }

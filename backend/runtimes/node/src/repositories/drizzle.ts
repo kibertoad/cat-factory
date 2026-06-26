@@ -21,6 +21,10 @@ import type {
   ExecutionRepository,
   Membership,
   MembershipRepository,
+  AccountSettingsRecord,
+  AccountSettingsRepository,
+  IncidentEnrichmentConnectionRecord,
+  IncidentEnrichmentConnectionRepository,
   MergePresetRepository,
   MergeThresholdPreset,
   ObservabilityConnectionRecord,
@@ -111,10 +115,12 @@ import { and, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from 'drizzle-or
 import type { DrizzleDb } from '../db/client.js'
 import {
   accountInvitations,
+  accountSettings,
   accounts,
   agentRuns,
   blocks,
   consensusSessions,
+  incidentEnrichmentConnections,
   observabilityConnections,
   emailConnections,
   llmCallMetrics,
@@ -915,6 +921,22 @@ class DrizzleTokenUsageRepository implements TokenUsageRepository {
       })
       .from(tokenUsage)
       .where(gte(tokenUsage.created_at, epochMs))
+    return {
+      inputTokens: Number(row?.input ?? 0),
+      outputTokens: Number(row?.output ?? 0),
+      costEstimate: row?.cost ?? 0,
+    }
+  }
+
+  async totalsSinceForWorkspace(workspaceId: string, epochMs: number): Promise<TokenUsageTotals> {
+    const [row] = await this.db
+      .select({
+        input: sql<string>`coalesce(sum(${tokenUsage.input_tokens}), 0)::bigint`,
+        output: sql<string>`coalesce(sum(${tokenUsage.output_tokens}), 0)::bigint`,
+        cost: sql<number>`coalesce(sum(${tokenUsage.cost_estimate}), 0)::float8`,
+      })
+      .from(tokenUsage)
+      .where(and(eq(tokenUsage.workspace_id, workspaceId), gte(tokenUsage.created_at, epochMs)))
     return {
       inputTokens: Number(row?.input ?? 0),
       outputTokens: Number(row?.output ?? 0),
@@ -2669,11 +2691,22 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
         perType = null
       }
     }
+    let modelPrices: WorkspaceSettings['spendModelPrices'] = null
+    if (row.spend_model_prices) {
+      try {
+        modelPrices = JSON.parse(row.spend_model_prices) as WorkspaceSettings['spendModelPrices']
+      } catch {
+        modelPrices = null
+      }
+    }
     return {
       waitingEscalationMinutes: row.waiting_escalation_minutes,
       taskLimitMode: row.task_limit_mode as WorkspaceSettings['taskLimitMode'],
       taskLimitShared: row.task_limit_shared,
       taskLimitPerType: perType,
+      spendCurrency: row.spend_currency,
+      spendMonthlyLimit: row.spend_monthly_limit,
+      spendModelPrices: modelPrices,
     }
   }
 
@@ -2686,6 +2719,11 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
       task_limit_per_type: settings.taskLimitPerType
         ? JSON.stringify(settings.taskLimitPerType)
         : null,
+      spend_currency: settings.spendCurrency,
+      spend_monthly_limit: settings.spendMonthlyLimit,
+      spend_model_prices: settings.spendModelPrices
+        ? JSON.stringify(settings.spendModelPrices)
+        : null,
     }
     await this.db
       .insert(workspaceSettings)
@@ -2697,6 +2735,9 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
           task_limit_mode: values.task_limit_mode,
           task_limit_shared: values.task_limit_shared,
           task_limit_per_type: values.task_limit_per_type,
+          spend_currency: values.spend_currency,
+          spend_monthly_limit: values.spend_monthly_limit,
+          spend_model_prices: values.spend_model_prices,
         },
       })
   }
@@ -2756,6 +2797,122 @@ export class DrizzleObservabilityConnectionRepository implements ObservabilityCo
     await this.db
       .delete(observabilityConnections)
       .where(eq(observabilityConnections.workspace_id, workspaceId))
+  }
+}
+
+/**
+ * A workspace's incident-enrichment connection over Postgres (the Drizzle mirror of the
+ * Worker's `D1IncidentEnrichmentConnectionRepository`, migration 0013). One row per
+ * workspace; both PagerDuty + incident.io credentials live in ONE sealed JSON blob
+ * (encrypted by the caller), with a non-secret `summary` presence blob.
+ */
+export class DrizzleIncidentEnrichmentConnectionRepository implements IncidentEnrichmentConnectionRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string): Promise<IncidentEnrichmentConnectionRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(incidentEnrichmentConnections)
+      .where(eq(incidentEnrichmentConnections.workspace_id, workspaceId))
+      .limit(1)
+    const row = rows[0]
+    if (!row) return null
+    return {
+      workspaceId: row.workspace_id,
+      credentials: row.credentials,
+      summary: row.summary,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }
+  }
+
+  async upsert(record: IncidentEnrichmentConnectionRecord): Promise<void> {
+    const values = {
+      workspace_id: record.workspaceId,
+      credentials: record.credentials,
+      summary: record.summary,
+      created_at: record.createdAt,
+      updated_at: record.updatedAt,
+    }
+    await this.db
+      .insert(incidentEnrichmentConnections)
+      .values(values)
+      .onConflictDoUpdate({
+        target: incidentEnrichmentConnections.workspace_id,
+        set: {
+          credentials: values.credentials,
+          summary: values.summary,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+
+  async delete(workspaceId: string): Promise<void> {
+    await this.db
+      .delete(incidentEnrichmentConnections)
+      .where(eq(incidentEnrichmentConnections.workspace_id, workspaceId))
+  }
+}
+
+/**
+ * Per-account (deployment-wide) settings over Postgres (the Drizzle mirror of the Worker's
+ * `D1AccountSettingsRepository`, migration 0014). One row per account; `config` + `summary`
+ * are non-secret JSON, the ONE sealed `secrets_cipher` blob is encrypted by the caller.
+ */
+export class DrizzleAccountSettingsRepository implements AccountSettingsRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async getByAccount(accountId: string): Promise<AccountSettingsRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(accountSettings)
+      .where(eq(accountSettings.account_id, accountId))
+      .limit(1)
+    const row = rows[0]
+    if (!row) return null
+    return {
+      accountId: row.account_id,
+      config: row.config,
+      secretsCipher: row.secrets_cipher,
+      summary: row.summary,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }
+  }
+
+  async upsert(record: AccountSettingsRecord): Promise<void> {
+    const values = {
+      account_id: record.accountId,
+      config: record.config,
+      secrets_cipher: record.secretsCipher,
+      summary: record.summary,
+      created_at: record.createdAt,
+      updated_at: record.updatedAt,
+    }
+    await this.db
+      .insert(accountSettings)
+      .values(values)
+      .onConflictDoUpdate({
+        target: accountSettings.account_id,
+        set: {
+          config: values.config,
+          secrets_cipher: values.secrets_cipher,
+          summary: values.summary,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+
+  async listAll(): Promise<AccountSettingsRecord[]> {
+    const rows = await this.db.select().from(accountSettings)
+    return rows.map((row) => ({
+      accountId: row.account_id,
+      config: row.config,
+      secretsCipher: row.secrets_cipher,
+      summary: row.summary,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }))
   }
 }
 
@@ -2876,6 +3033,8 @@ export interface CoreRepositories {
   mergePresetRepository: MergePresetRepository
   workspaceSettingsRepository: WorkspaceSettingsRepository
   observabilityConnectionRepository: ObservabilityConnectionRepository
+  incidentEnrichmentConnectionRepository: IncidentEnrichmentConnectionRepository
+  accountSettingsRepository: AccountSettingsRepository
   releaseHealthConfigRepository: ReleaseHealthConfigRepository
 }
 
@@ -2906,6 +3065,8 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     mergePresetRepository: new DrizzleMergePresetRepository(db),
     workspaceSettingsRepository: new DrizzleWorkspaceSettingsRepository(db),
     observabilityConnectionRepository: new DrizzleObservabilityConnectionRepository(db),
+    incidentEnrichmentConnectionRepository: new DrizzleIncidentEnrichmentConnectionRepository(db),
+    accountSettingsRepository: new DrizzleAccountSettingsRepository(db),
     releaseHealthConfigRepository: new DrizzleReleaseHealthConfigRepository(db),
   }
 }

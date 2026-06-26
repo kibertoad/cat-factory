@@ -16,7 +16,7 @@ import type {
 import { ConflictError, STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
-import { assertSafeEnvironmentUrl } from './environments.logic.js'
+import { assertSafeEnvironmentUrl, missingRequiredConfigKeys } from './environments.logic.js'
 
 // EnvironmentConnectionService: owns the binding between a workspace and an
 // environment provider. Registration stores the validated manifest and an
@@ -141,12 +141,33 @@ export class EnvironmentConnectionService {
     const provider = this.deps.environmentProvider
     const record = await this.deps.environmentConnectionRepository.getByWorkspace(workspaceId)
     const manifest = record ? (JSON.parse(record.manifestJson) as EnvironmentManifest) : undefined
+    const configFields = provider?.describeConfig?.(manifest) ?? []
+    // Everything already supplied for this workspace: the stored secret-bundle keys, a
+    // native adapter's manifest `providerConfig` keys (its non-secret per-workspace
+    // settings), and `baseUrl` when the manifest carries one. The last mirrors the connect
+    // form's write path (a field keyed `baseUrl` is persisted onto the manifest's `baseUrl`,
+    // NOT into providerConfig or the secret bundle) — without it a `required` baseUrl field
+    // would stay in `missingRequired` forever and the banner could never clear.
+    const storedKeys: string[] = []
+    if (record) {
+      storedKeys.push(...Object.keys(await this.decryptSecrets(record)))
+      if (manifest?.providerConfig) storedKeys.push(...Object.keys(manifest.providerConfig))
+      if (manifest?.baseUrl) storedKeys.push('baseUrl')
+    }
     return {
       providerId: this.deps.providerId ?? manifest?.providerId ?? 'http',
       label: this.deps.providerLabel ?? manifest?.label ?? 'Custom HTTP provider',
       kind: this.deps.providerKind ?? 'manifest',
-      configFields: provider?.describeConfig?.(manifest) ?? [],
+      configFields,
       supportsTest: typeof provider?.testConnection === 'function',
+      missingRequired: missingRequiredConfigKeys(configFields, storedKeys),
+      // The current saved manifest (non-secret — only secret-ref key names, never values),
+      // so the native connect form overlays edits onto the real stored manifest instead of
+      // the bare scaffold, preserving previously-saved providerConfig (incl. nested values).
+      ...(manifest ? { savedManifest: manifest as unknown as Record<string, unknown> } : {}),
+      ...(provider?.describeManifestTemplate
+        ? { manifestTemplate: provider.describeManifestTemplate() as Record<string, unknown> }
+        : {}),
     }
   }
 

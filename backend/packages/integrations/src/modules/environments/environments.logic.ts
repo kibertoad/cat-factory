@@ -178,6 +178,25 @@ export function configFieldsFromSecretKeys(keys: string[]): ProviderConfigField[
 }
 
 /**
+ * The config-field keys a provider still needs the org to supply: fields that are
+ * `required`, carry no `default` (so there's no fallback), and have no value stored
+ * yet. `storedKeys` is every key already persisted for the workspace — the secret
+ * bundle keys plus, for a native adapter, its manifest `providerConfig` keys. Empty
+ * ⇒ fully configured. This is the single source of truth behind
+ * `ProviderDescriptor.missingRequired` (the unconfigured-provider banner) and the
+ * shared `describeProvider` of both connection services.
+ */
+export function missingRequiredConfigKeys(
+  fields: ProviderConfigField[],
+  storedKeys: Iterable<string>,
+): string[] {
+  const present = new Set(storedKeys)
+  return fields
+    .filter((f) => f.required === true && f.default === undefined && !present.has(f.key))
+    .map((f) => f.key)
+}
+
+/**
  * A minimal, side-effect-free connection probe: an authed GET against the pool/env
  * management `baseUrl`. Any HTTP response means the host is reachable; a 401/403
  * means the credentials were rejected. Never throws — a network failure is reported

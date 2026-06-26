@@ -14,6 +14,7 @@ const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const tracker = useTrackerStore()
 const releaseHealth = useReleaseHealthStore()
+const providerConnections = useProviderConnectionsStore()
 const userSecrets = useUserSecretsStore()
 const apiKeys = useApiKeysStore()
 const workspace = useWorkspaceStore()
@@ -32,6 +33,7 @@ watch(
   (isOpen) => {
     if (isOpen) {
       void releaseHealth.ensureLoaded().catch(() => {})
+      void providerConnections.ensureLoaded().catch(() => {})
       void userSecrets.load().catch(() => {})
       // Drives the OpenRouter row's "Key connected" badge.
       if (workspace.workspaceId) void apiKeys.load(workspace.workspaceId).catch(() => {})
@@ -223,6 +225,37 @@ const groups = computed<IntegrationGroup[]>(() => {
       ],
     })
   }
+
+  // --- Infrastructure (ephemeral environments + self-hosted runner pool) -----
+  // Each gates on its own availability probe, so a backend with the integration off
+  // shows no dead row. The connected badge reflects a saved connection; the
+  // ProviderConfigBanner handles the louder "missing mandatory fields" warning.
+  const infra: IntegrationItem[] = []
+  if (providerConnections.isAvailable('environment')) {
+    const conn = providerConnections.connectionFor('environment')
+    infra.push({
+      key: 'environment',
+      icon: 'i-lucide-cloud',
+      label: 'Ephemeral environments',
+      description: 'Where the Tester agent runs against a live preview environment.',
+      status: conn ? 'Connected' : undefined,
+      connected: !!conn,
+      onClick: () => go(() => ui.openProviderConnection('environment')),
+    })
+  }
+  if (providerConnections.isAvailable('runner-pool')) {
+    const conn = providerConnections.connectionFor('runner-pool')
+    infra.push({
+      key: 'runner-pool',
+      icon: 'i-lucide-server-cog',
+      label: 'Self-hosted runner pool',
+      description: 'Where the coding agents run when not using Cloudflare Containers.',
+      status: conn ? 'Connected' : undefined,
+      connected: !!conn,
+      onClick: () => go(() => ui.openProviderConnection('runner-pool')),
+    })
+  }
+  if (infra.length) out.push({ title: 'Infrastructure', items: infra })
 
   return out
 })

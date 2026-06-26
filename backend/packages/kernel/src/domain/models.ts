@@ -154,11 +154,17 @@ export const MODEL_CATALOG: SelectableModel[] = [
     id: 'kimi-k2.7',
     label: 'Kimi K2.7',
     description:
-      "Moonshot AI's latest 1T-param agentic-coding model (structured outputs), 256K context.",
+      "Moonshot AI's latest 1T-param agentic-coding model (structured outputs), 256K context — " +
+      'on Cloudflare or pay-as-you-go through OpenRouter (billed at Moonshot rates).',
     cloudflare: {
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.7-code',
       contextTokens: 262_144,
+    },
+    openrouter: {
+      ref: { provider: 'openrouter', model: 'moonshotai/kimi-k2.7-code', contextTokens: 262_144 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
     },
   },
   {

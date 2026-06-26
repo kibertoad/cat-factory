@@ -182,12 +182,12 @@ crons = ["*/2 * * * *", "0 3 * * *"]
 # How long a run may park on a human decision before expiring:
 DECISION_TIMEOUT = "24 hours"
 
-# Web search (optional; off by default). Keys stay on the Worker — never in the
-# per-run container (which can't take injected env vars anyway): container agents
-# reach search through this Worker's proxy at ${WORKER_PUBLIC_URL}/v1/web-search with
-# their session token. Prefer `wrangler secret put` for the keys, not [vars].
-#  - Container agents (coder/ci-fixer/…): set ONE search upstream —
-#      WEB_SEARCH_BRAVE_API_KEY (recommended), or WEB_SEARCH_SEARXNG_URL [+ _API_KEY].
+# Web search (optional; off by default). Keys stay on the backend — never in the
+# per-run container: container agents reach search through this Worker's proxy at
+# ${WORKER_PUBLIC_URL}/v1/web-search with their session token.
+#  - Container agents (coder/ci-fixer/…): the search-upstream keys (Brave key, or a
+#    self-hosted SearXNG url [+ key]) are now configured PER ACCOUNT in the UI (account
+#    Deployment settings, admin only) and sealed in the DB — no longer via env.
 #  - Inline architect/researcher (Anthropic/OpenAI models only):
 # INLINE_WEB_SEARCH_ENABLED = "true"
 # INLINE_WEB_SEARCH_KINDS = "architect,researcher"
@@ -222,14 +222,11 @@ WORKER_PUBLIC_URL = "https://cat-factory-backend.iselwin.workers.dev"
 # can't reap live work (the longest legitimate lifetime is ~70 min).
 # CONTAINER_MAX_AGE_MINUTES = "90"
 
-# Spend safeguard. Token usage is metered per LLM call into a ledger, priced into
-# SPEND_CURRENCY, and gated by a monthly budget; when reached, runs pause and the
-# frontend shows a warning.
-SPEND_MONTHLY_LIMIT = "100"
-SPEND_CURRENCY = "EUR"
-# Optional per-model price overrides (per 1M tokens), merged over the built-in
-# defaults. Keys are "provider:model" or a bare "provider".
-# SPEND_MODEL_PRICES = '{"openai:gpt-4o":{"inputPerMillion":2.3,"outputPerMillion":9.2}}'
+# Spend safeguard. Token usage is metered per LLM call into a ledger, priced, and gated
+# by a monthly budget; when reached, runs pause and the frontend shows a warning. The
+# budget (currency, monthly limit, per-model price overrides) is now configured PER
+# WORKSPACE in the UI (Workspace settings → Budget) and persisted in the DB, not via env.
+# A workspace with no budget set inherits the built-in default (~100 EUR/month).
 
 # Per-block model picker. Every model runs on the Workers AI binding above by
 # default; setting a provider key below switches that model to its direct API
@@ -356,7 +353,7 @@ RUNNERS_ENABLED = "false"
 # monitors/SLOs after a release ships; on a regression an on-call agent investigates
 # (a human decides whether to revert). Per-workspace API/app keys are connected in the
 # UI and sealed with the shared ENCRYPTION_KEY above. Optional incident enrichment
-# (PagerDuty / incident.io) is set via the PAGERDUTY_* / INCIDENTIO_API_KEY secrets:
-# the on-call investigation is posted onto an incident those systems ALREADY opened
-# from the same monitors/SLOs (annotate, never re-alert).
+# (PagerDuty / incident.io) credentials are now configured PER WORKSPACE in the UI
+# (sealed in the DB), not via env: the on-call investigation is posted onto an incident
+# those systems ALREADY opened from the same monitors/SLOs (annotate, never re-alert).
 OBSERVABILITY_ENABLED = "false"

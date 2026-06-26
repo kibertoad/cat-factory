@@ -1,8 +1,11 @@
 {
   "dialect": "postgres",
-  "id": "8a3e9635-6af5-4084-90d4-9c99466928d1",
+  "id": "234cda33-9d0f-4e70-b057-2d9ac2eba196",
   "prevIds": [
-    "8ced04b1-9c3f-48a0-a4b5-1944b4886b54"
+    "1625fce9-62b3-4b16-8ba9-f7ca0ae38c6b",
+    "f1e2d3c4-b5a6-4978-9a0b-1c2d3e4f5a6b",
+    "c1a2b3d4-0001-4a2b-8c3d-000000000010",
+    "b9b329a2-56a4-4a1f-8af2-d9ca3c14ec54"
   ],
   "version": "8",
   "ddl": [
@@ -10695,6 +10698,248 @@
       "name": "workspaces_pkey",
       "schema": "public",
       "table": "workspaces",
+      "entityType": "pks"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "workspace_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_token_usage_workspace",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "token_usage"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "spend_currency",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_settings"
+    },
+    {
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "spend_monthly_limit",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_settings"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "spend_model_prices",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_settings"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "incident_enrichment_connections",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "workspace_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "incident_enrichment_connections"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "credentials",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "incident_enrichment_connections"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'{}'",
+      "generated": null,
+      "identity": null,
+      "name": "summary",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "incident_enrichment_connections"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "incident_enrichment_connections"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "incident_enrichment_connections"
+    },
+    {
+      "columns": [
+        "workspace_id"
+      ],
+      "nameExplicit": false,
+      "name": "incident_enrichment_connections_pkey",
+      "schema": "public",
+      "table": "incident_enrichment_connections",
+      "entityType": "pks"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "account_settings",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "account_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_settings"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "config",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_settings"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "secrets_cipher",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_settings"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'{}'",
+      "generated": null,
+      "identity": null,
+      "name": "summary",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_settings"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_settings"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_settings"
+    },
+    {
+      "columns": [
+        "account_id"
+      ],
+      "nameExplicit": false,
+      "name": "account_settings_pkey",
+      "schema": "public",
+      "table": "account_settings",
       "entityType": "pks"
     }
   ],

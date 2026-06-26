@@ -1,5 +1,157 @@
 # @cat-factory/app
 
+## 0.27.0
+
+### Minor Changes
+
+- 3546e3d: Move operator/integration config out of environment variables into encrypted, UI-editable
+  DB settings. DB is now the source of truth — the moved env vars are **removed** (no
+  fallback), so the listed vars below no longer have any effect.
+
+  **Per-workspace budget (Workspace settings → Budget).** A workspace's spend currency,
+  monthly limit, and per-model price overrides now live on the `workspace_settings` row.
+  The spend safeguard resolves each workspace's effective pricing (base table + overrides)
+  behind a short-TTL cache, scoping the budget gate to the workspace's own usage
+  (`SpendService.status`/`isOverBudget` now take a `workspaceId`; new
+  `TokenUsageRepository.totalsSinceForWorkspace`). **Behaviour change:** spend is metered +
+  gated per workspace, not deployment-wide; a workspace with no budget inherits the built-in
+  default (~100 EUR/month). Removes env: `SPEND_MONTHLY_LIMIT`, `SPEND_CURRENCY`,
+  `SPEND_MODEL_PRICES`. A budget of `0` is intentional ("no PAID spend"): metered runs are
+  refused **up front** at start/retry with a clear `409` (not just a silent mid-run pause),
+  while LOCAL-runner models (keyless) and connected SUBSCRIPTIONS (flat-rate quota) keep
+  running since they incur no metered cost — so `0` is the "local-/subscription-only" setting.
+  The over-budget exemption (previously subscription-only) now also covers local-runner steps,
+  inline and container alike. The hot-path per-workspace rollup is indexed
+  (`idx_token_usage_workspace` on `(workspace_id, created_at)`, both runtimes).
+
+  **Per-workspace incident enrichment (service inspector → Post-release health).** PagerDuty
+
+  - incident.io credentials are sealed in a new per-workspace `incident_enrichment_connections`
+    table (one grouped blob) and resolved/decrypted at enrichment time by a new
+    `WorkspaceIncidentEnrichmentProvider`. Removes env: `PAGERDUTY_API_TOKEN`,
+    `PAGERDUTY_FROM_EMAIL`, `INCIDENTIO_API_KEY`. The write API is three-state per provider
+    group (omit ⇒ keep, `null` ⇒ clear, value ⇒ set) so one vendor can be removed without
+    wiping the other.
+
+  **Per-account integration secrets (Account settings → Deployment integrations, admin only).**
+  The Slack app OAuth credentials and the container web-search upstream keys (Brave /
+  SearXNG) now live in a new per-account `account_settings` table (one sealed secrets blob,
+  HKDF tag `cat-factory:account-settings`), behind an admin-gated
+  `GET|PUT /accounts/:id/settings`. Resolved dynamically: Slack OAuth at connect time, the
+  web-search upstream per run (off the container session's account id). The executor now
+  advertises the container `web_search` tool to a run **only when its account actually has
+  keys** (so an agent is never handed a tool that always fails); a run with no upstream gets
+  an empty result set rather than a hard `503`. Removes env:
+  `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_REDIRECT_URL`, `WEB_SEARCH_BRAVE_API_KEY`,
+  `WEB_SEARCH_SEARXNG_URL`, `WEB_SEARCH_SEARXNG_API_KEY` (the env-built upstream + its
+  `createWebSearchUpstreamFromEnv`/`gateways.webSearch` fallback are deleted, not just
+  unwired). (`SLACK_ENABLED` still gates Slack module assembly; the new tables/services
+  assemble whenever `ENCRYPTION_KEY` is set.)
+
+  **Hardening.** Re-sealing a partial settings/credentials write now **refuses** (clear `409`)
+  when the stored blob can't be decrypted (e.g. after an encryption-key change) instead of
+  silently dropping the un-edited secret group on the re-seal.
+
+  New tables mirror across both runtimes (D1 migrations 0012–0014 ⇄ Drizzle schema +
+  generated migration) with cross-runtime conformance assertions for the budget +
+  incident-enrichment round-trips. `ENCRYPTION_KEY`, `AUTH_SESSION_SECRET`, and the GitHub
+  App/OAuth secrets stay in env (bootstrap/auth). Retention windows, inline-web-search
+  toggles, Langfuse keys, and execution timeouts intentionally remain env-configured.
+
+## 0.26.7
+
+### Patch Changes
+
+- a62044d: Tag 409 conflicts with a distinct, machine-readable `reason` (kernel `ConflictReason`, surfaced under `error.details`) so the SPA can tell run-control conflicts apart. The "no configured provider" start refusal now shows an actionable toast naming the model(s) with a "Configure AI" jump (same remedy as the no-AI startup banner); the other run/bootstrap conflicts get worded toasts. The toast handling is centralised in the execution/agentRuns stores, so every start/restart/retry/merge surface (including the fire-and-forget board menus) gets it.
+
+## 0.26.6
+
+### Patch Changes
+
+- ab4b9ab: fix: avoid DataCloneError when testing/saving an infrastructure provider connection
+
+  `buildManifestPayload` cloned the manifest base with `structuredClone`, but the base is a
+  Vue reactive proxy — `structuredClone` refuses proxies with a `DataCloneError`, so clicking
+  **Test connection** (or Save) in the ephemeral-environment / runner-pool provider window
+  threw immediately. Clone via a JSON round-trip instead, which unwraps the proxy and
+  deep-clones the plain-JSON manifest.
+
+## 0.26.5
+
+### Patch Changes
+
+- 3671fa2: Drop the "Imported issues" list from the task-import modal — it was irrelevant noise. The modal now focuses on searching/pasting an issue to create a task from it.
+
+## 0.26.4
+
+### Patch Changes
+
+- a0d5efc: Fix dragging services / modules / tasks on the board: grabbing a frame's header (or a
+  module/task handle, or a resize edge) panned the canvas instead of moving the block.
+  Vue Flow pans the pane on a left-drag via d3-zoom's `mousedown`, and the custom drag
+  handles only `stopPropagation` the `pointerdown` event, which can't suppress that
+  separate `mousedown`. The handles now carry Vue Flow's `nopan` class (its sanctioned
+  opt-out), so a left-drag from a handle drives the block move/resize while the rest of
+  the frame still pans the canvas.
+
+## 0.26.3
+
+### Patch Changes
+
+- 2aae8bc: Fix the OpenRouter key panel falsely reporting "connected" on a rejected key, and add Kimi K2.7 as a curated OpenRouter model.
+
+  - The OpenRouter setup panel (`OpenRouterCatalogPanel`) used to fire its "OpenRouter key connected" success toast — and flip the panel into the connected state — _before_ probing OpenRouter, since the save endpoint stores keys without validating them. A wrong/expired key therefore showed a 401 "could not reach OpenRouter" toast **and** a "connected" status simultaneously. `connectKey` now probes OpenRouter with the freshly stored key first, only announces success when it's reachable, and rolls the key back on rejection so the form stays for a retry. (The Vendors & keys → Proxies screen shares the same store-only save codepath; it never showed the bug because it doesn't probe OpenRouter after saving.)
+  - `kimi-k2.7` now carries an `openrouter` flavour (`moonshotai/kimi-k2.7-code`, 256K context per OpenRouter's catalog), so it routes through the OpenRouter gateway out of the box once an OpenRouter key is connected. It's added to the OpenRouter panel's "Enable recommended" slugs and the spend price table (billed at Moonshot's upstream rates).
+
+## 0.26.2
+
+### Patch Changes
+
+- 319c3d4: Board: make zoom navigation predictable. Service frames are now always expanded to
+  their task canvas at every zoom level, so the layout is fixed — panning never shifts
+  it and zooming has no expand/collapse transition, which removes the snap-back where
+  scrolling across one service or zooming in toward another would throw you onto a
+  neighbour. Frames are spaced apart with compressed space (an expanded frame pushes its
+  neighbours away by its growth) so they never overlap; the offset is render-only and
+  stored positions are untouched.
+
+  Task cards inside a service keep the older "centre-most wins" gating: when two expanded
+  pipeline lists would overlap, the card closest to the screen centre expands and the
+  other stays compact until you scroll it closer. The per-pan camera compensation, sticky
+  frame grants, and the on-screen frame-expansion driver are gone.
+
+## 0.26.1
+
+### Patch Changes
+
+- f4f954b: Drop an unnecessary empty-object fallback in a spread in `ProviderConnectionPanel`
+  (`...(x ?? {})` → `...x`); spreading a falsy value is already a no-op, so this is a
+  behaviour-neutral lint fix (oxlint `no-useless-fallback-in-spread`).
+
+## 0.26.0
+
+### Minor Changes
+
+- ce81233: Surface optional/default config values and unconfigured-provider warnings for the
+  ephemeral-environment and self-hosted runner-pool providers.
+
+  - `ProviderConfigField` gains an optional `default`; a field that has one is optional
+    (the connect form shows it blank with a "defaulted to …" hint and falls back to it).
+  - `ProviderDescriptor` gains `missingRequired` (required-without-default keys not yet
+    supplied — the loud-banner signal), an optional `manifestTemplate` scaffold, and the
+    current `savedManifest` (non-secret) so the native connect form overlays edits onto the
+    real stored manifest — preserving previously-saved `providerConfig` (incl. nested values
+    the flat form doesn't render) instead of silently dropping it on a re-save.
+  - A native `EnvironmentProvider` / `RunnerPoolProvider` may implement
+    `describeManifestTemplate()` so the SPA renders a flat `describeConfig` connect form yet
+    still persists a single full manifest (per `backend/docs/native-environment-adapter.md`).
+  - Both connection services compute `missingRequired` server-side from the saved secret
+    bundle + manifest `providerConfig` + manifest `baseUrl` (so a required `baseUrl` field,
+    which is stored on the manifest rather than in providerConfig/secrets, can clear).
+  - Frontend: a generic descriptor-driven connect panel for both providers (under
+    Settings ▸ Integrations) and a loud `ProviderConfigBanner` that fires when a provider is
+    wired for the instance but mandatory fields are missing.
+
 ## 0.25.0
 
 ### Minor Changes

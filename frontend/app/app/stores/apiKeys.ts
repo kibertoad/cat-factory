@@ -39,6 +39,7 @@ export const useApiKeysStore = defineStore('apiKeys', () => {
     if (!workspaceId.value) return
     const created = await api.addWorkspaceApiKey(workspaceId.value, input)
     workspaceKeys.value = [...workspaceKeys.value, created]
+    return created
   }
 
   async function removeWorkspaceKey(id: string) {
@@ -50,6 +51,7 @@ export const useApiKeysStore = defineStore('apiKeys', () => {
   async function addUserKey(input: AddApiKeyInput) {
     const created = await api.addMyApiKey(input)
     userKeys.value = [...userKeys.value, created]
+    return created
   }
 
   async function removeUserKey(id: string) {

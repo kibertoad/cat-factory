@@ -76,7 +76,9 @@ describe('ContainerRepoBootstrapper pre-flight', () => {
     const client = fakeClient({ canPush: vi.fn(async () => false) })
     const bootstrapper = makeBootstrapper(client, { dispatch } as unknown as RunnerTransport)
 
-    await expect(bootstrapper.startBootstrap(REQUEST)).rejects.toThrow(/does not have write access/i)
+    await expect(bootstrapper.startBootstrap(REQUEST)).rejects.toThrow(
+      /does not have write access/i,
+    )
     // The container is never dispatched on a write-access pre-flight failure.
     expect(dispatch).not.toHaveBeenCalled()
   })
@@ -88,7 +90,10 @@ describe('ContainerRepoBootstrapper pre-flight', () => {
 
     const handle = await bootstrapper.startBootstrap(REQUEST)
     expect(handle).toEqual({ workspaceId: 'ws_1', jobId: 'boot_1' })
-    expect(client.canPush).toHaveBeenCalledWith(99, { owner: 'kibertoad', repo: 'simpler-service3' })
+    expect(client.canPush).toHaveBeenCalledWith(99, {
+      owner: 'kibertoad',
+      repo: 'simpler-service3',
+    })
     expect(dispatch).toHaveBeenCalledTimes(1)
   })
 })

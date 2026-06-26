@@ -247,6 +247,7 @@ export class BootstrapService {
     if (!(await bootstrapper.isWorkspaceConnected(workspaceId))) {
       throw new ConflictError(
         'Workspace is not connected to GitHub. Install the GitHub App for this workspace before bootstrapping a repository.',
+        'github_not_connected',
       )
     }
 
@@ -360,6 +361,8 @@ export class BootstrapService {
     if (previous.status !== 'failed') {
       throw new ConflictError(
         `Only a failed bootstrap can be retried (job is '${previous.status}').`,
+        'bootstrap_not_retryable',
+        { status: previous.status },
       )
     }
 
@@ -375,6 +378,7 @@ export class BootstrapService {
       if (!reference) {
         throw new ConflictError(
           `The reference architecture this run was based on no longer exists; recreate it or start a new bootstrap.`,
+          'bootstrap_reference_missing',
         )
       }
       referenceRepo = { owner: reference.repoOwner, name: reference.repoName }

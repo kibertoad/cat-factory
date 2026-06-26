@@ -116,6 +116,10 @@ export {
   type ReleaseHealthServiceDependencies,
 } from './modules/releaseHealth/ReleaseHealthService.js'
 export {
+  IncidentEnrichmentService,
+  type IncidentEnrichmentServiceDependencies,
+} from './modules/incidentEnrichment/IncidentEnrichmentService.js'
+export {
   ModelPresetService,
   type ModelPresetServiceDependencies,
   resolvePresetModelForKind,
@@ -176,6 +180,7 @@ export {
   type ClarityModule,
   type NotificationsModule,
   type ReleaseHealthModule,
+  type IncidentEnrichmentModule,
   type SlackModule,
   type MergePresetsModule,
   type SandboxModule,

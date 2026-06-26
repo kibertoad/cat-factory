@@ -61,7 +61,6 @@ import type {
   SandboxGradeRepository,
 } from '@cat-factory/kernel'
 import type {
-  CiStatusProvider,
   MergePresetRepository,
   WorkspaceSettingsRepository,
   ModelPresetRepository,
@@ -70,11 +69,9 @@ import type {
   NotificationRepository,
   PipelineScheduleRepository,
   PullRequestMerger,
-  PullRequestMergeabilityProvider,
   BranchUpdater,
-  ReleaseHealthProvider,
-  IncidentEnrichmentProvider,
   ObservabilityConnectionRepository,
+  IncidentEnrichmentConnectionRepository,
   ReleaseHealthConfigRepository,
   TicketTrackerProvider,
   IssueWritebackProvider,
@@ -143,6 +140,8 @@ import { SandboxService } from './modules/sandbox/SandboxService.js'
 import { SandboxRunService } from './modules/sandbox/SandboxRunService.js'
 import { WorkspaceSettingsService } from './modules/settings/WorkspaceSettingsService.js'
 import { ReleaseHealthService } from './modules/releaseHealth/ReleaseHealthService.js'
+import { IncidentEnrichmentService } from './modules/incidentEnrichment/IncidentEnrichmentService.js'
+import type { AccountSettingsService } from '@cat-factory/integrations'
 import {
   ModelPresetService,
   resolvePresetModelForKind,
@@ -474,25 +473,32 @@ export interface CoreDependencies {
   slackSettingsRepository?: SlackSettingsRepository
   slackMemberMappingRepository?: SlackMemberMappingRepository
   slackSecretCipher?: SecretCipher
-  slackOAuth?: { clientId: string; clientSecret: string; redirectUrl: string }
-  /** Reads a block's PR CI checks so the `ci` step can gate on green CI. */
-  ciStatusProvider?: CiStatusProvider
-  /** Reads a block's PR mergeability so the `conflicts` step can gate on it. */
-  mergeabilityProvider?: PullRequestMergeabilityProvider
+  /**
+   * Per-account deployment settings (Slack OAuth / web-search / Langfuse creds + tuning).
+   * Built in the facade (it needs the repo + cipher, and the facade also wires the
+   * Langfuse sink + web-search proxy off it before Core is built). When present, Core
+   * exposes it for the admin controller and derives the Slack OAuth resolver from it.
+   */
+  accountSettings?: AccountSettingsService
+  // The `ci` / `conflicts` / `post-release-health` gates' providers (CI status,
+  // mergeability, release health) + the on-call incident enrichment are no longer engine
+  // dependencies: the gate suite ships as `@cat-factory/gates` and each facade wires those
+  // providers into it via the package's `wireX` handles. Only the merge collaborators below
+  // remain on the engine (the `merger` resolver stays a privileged built-in).
   /** Merges the repo default branch into a block's PR branch (human-test "pull main"). */
   branchUpdater?: BranchUpdater
   /** Performs the real GitHub merge so a task's `done` means "PR merged". */
   pullRequestMerger?: PullRequestMerger
-  /** Reads a release's Datadog monitors/SLOs so the `post-release-health` gate can watch. */
-  releaseHealthProvider?: ReleaseHealthProvider
-  /** Annotates an open PagerDuty/incident.io incident with the on-call investigation. */
-  incidentEnrichment?: IncidentEnrichmentProvider
   /** Stores a workspace's observability connection (provider + sealed credentials). */
   observabilityConnectionRepository?: ObservabilityConnectionRepository
   /** Stores per-block monitor/SLO mappings the post-release-health gate reads. */
   releaseHealthConfigRepository?: ReleaseHealthConfigRepository
   /** Seals observability credentials at rest (domain tag 'cat-factory:observability'). */
   observabilitySecretCipher?: SecretCipher
+  /** Stores a workspace's incident-enrichment connection (sealed PagerDuty + incident.io). */
+  incidentEnrichmentConnectionRepository?: IncidentEnrichmentConnectionRepository
+  /** Seals incident-enrichment creds at rest (domain tag 'cat-factory:incident-enrichment'). */
+  incidentEnrichmentSecretCipher?: SecretCipher
   /** Resolves a task's merge threshold preset (auto-merge ceilings + CI attempt budget). */
   mergePresetRepository?: MergePresetRepository
   // ---- Sandbox (parallel prompt/model testing surface; opt-in) --------------
@@ -638,6 +644,16 @@ export interface ReleaseHealthModule {
   service: ReleaseHealthService
 }
 
+/** The incident-enrichment (PagerDuty + incident.io) settings service, present only when wired. */
+export interface IncidentEnrichmentModule {
+  service: IncidentEnrichmentService
+}
+
+/** The per-account deployment-settings service, present only when wired (facade-built). */
+export interface AccountSettingsModule {
+  service: AccountSettingsService
+}
+
 /** The Slack integration's services, present only when its repositories are wired. */
 export interface SlackModule {
   connectionService: SlackConnectionService
@@ -736,6 +752,10 @@ export interface Core {
   notifications?: NotificationsModule
   /** Present only when the Datadog connection + release-health config repos + cipher are wired. */
   releaseHealth?: ReleaseHealthModule
+  /** Present only when the incident-enrichment connection repo + cipher are wired. */
+  incidentEnrichmentSettings?: IncidentEnrichmentModule
+  /** Present only when the per-account settings service is wired (facade-built). */
+  accountSettings?: AccountSettingsModule
   /** Present only when the Slack repositories + cipher are wired (see CoreDependencies). */
   slack?: SlackModule
   /** Present only when the merge-preset repository is wired (see CoreDependencies). */
@@ -1272,7 +1292,9 @@ function createSlackModule(deps: CoreDependencies): SlackModule | undefined {
       workspaceRepository: deps.workspaceRepository,
       secretCipher: slackSecretCipher,
       clock: deps.clock,
-      oauth: deps.slackOAuth,
+      resolveOAuth: deps.accountSettings
+        ? (accountKey) => deps.accountSettings!.resolve(accountKey).then((s) => s.slackOAuth)
+        : undefined,
     }),
     settingsService: new SlackSettingsService({
       slackSettingsRepository,
@@ -1378,6 +1400,21 @@ function createReleaseHealthModule(deps: CoreDependencies): ReleaseHealthModule 
     observabilitySecretCipher,
     workspaceRepository: deps.workspaceRepository,
     blockRepository: deps.blockRepository,
+    clock: deps.clock,
+  })
+  return { service }
+}
+
+/** Assemble the incident-enrichment settings module when its repo + cipher are present. */
+function createIncidentEnrichmentModule(
+  deps: CoreDependencies,
+): IncidentEnrichmentModule | undefined {
+  const { incidentEnrichmentConnectionRepository, incidentEnrichmentSecretCipher } = deps
+  if (!incidentEnrichmentConnectionRepository || !incidentEnrichmentSecretCipher) return undefined
+  const service = new IncidentEnrichmentService({
+    incidentEnrichmentConnectionRepository,
+    incidentEnrichmentSecretCipher,
+    workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
   })
   return { service }
@@ -1490,6 +1527,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     idGenerator: dependencies.idGenerator,
     clock: dependencies.clock,
     pricing: dependencies.spendPricing ?? DEFAULT_SPEND_PRICING,
+    workspaceSettingsRepository: dependencies.workspaceSettingsRepository,
     dynamicPricesFor: dependencies.dynamicModelPricesFor,
   })
   const llmObservability = dependencies.llmCallMetricRepository
@@ -1524,6 +1562,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   // enforced at start() (and the escalation sweep can read the waiting threshold).
   const settings = createWorkspaceSettingsModule(dependencies)
   const releaseHealth = createReleaseHealthModule(dependencies)
+  const incidentEnrichmentSettings = createIncidentEnrichmentModule(dependencies)
   const modelPresets = createModelPresetsModule(dependencies)
   const serviceFragmentDefaults = createServiceFragmentDefaultsModule(dependencies)
   // Built before the execution engine so the special `requirements-review` gate step can
@@ -1604,6 +1643,10 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(sandbox ? { sandbox } : {}),
     ...(settings ? { settings } : {}),
     ...(releaseHealth ? { releaseHealth } : {}),
+    ...(incidentEnrichmentSettings ? { incidentEnrichmentSettings } : {}),
+    ...(dependencies.accountSettings
+      ? { accountSettings: { service: dependencies.accountSettings } }
+      : {}),
     ...(modelPresets ? { modelPresets } : {}),
     ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),
     ...(fragmentLibrary ? { fragmentLibrary } : {}),

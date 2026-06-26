@@ -24,7 +24,11 @@ import {
   registerPromptFragment,
 } from '@cat-factory/prompt-fragments'
 import { clearRegisteredAgentKinds, registerAgentKind } from '@cat-factory/agents'
-import type { GateProbe, RepoFiles } from '@cat-factory/kernel'
+// The built-in gate suite lives in its own package and registers via the public seam (the
+// dogfood). The suite imports it so the runtime-neutral assertions run with the SAME gates a
+// real deployment ships, and so a test that clears the registry can restore them.
+import { clearGateProviders, registerBuiltinGates } from '@cat-factory/gates'
+import type { CiStatusProvider, GateProbe, RepoFiles } from '@cat-factory/kernel'
 import {
   clearRegisteredGates,
   clearRegisteredStepResolvers,
@@ -212,6 +216,75 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           { pipelineId: pipeline.body.id },
         )
         expect(allowed.status).toBe(201)
+      })
+    })
+
+    describe('per-workspace budget + incident-enrichment secrets', () => {
+      it('resolves a per-workspace budget set in settings, reflected in /spend (D1 ⇄ Postgres)', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        // No override ⇒ the built-in deployment default budget.
+        const before = await call<{ costLimit: number; currency: string }>(
+          'GET',
+          `/workspaces/${wsId}/spend`,
+        )
+        expect(before.status).toBe(200)
+        expect(before.body.costLimit).toBe(100)
+        expect(before.body.currency).toBe('EUR')
+
+        // Setting a per-workspace budget must take effect immediately (the spend service's
+        // pricing cache is invalidated on the settings write) and round-trip through the
+        // new workspace_settings columns identically on both stores.
+        const put = await call('PUT', `/workspaces/${wsId}/settings`, {
+          spendMonthlyLimit: 250,
+          spendCurrency: 'USD',
+        })
+        expect(put.status).toBe(200)
+
+        const after = await call<{ costLimit: number; currency: string }>(
+          'GET',
+          `/workspaces/${wsId}/spend`,
+        )
+        expect(after.body.costLimit).toBe(250)
+        expect(after.body.currency).toBe('USD')
+      })
+
+      it('round-trips incident-enrichment credentials, redacted + sealed (D1 ⇄ Postgres)', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        type View = {
+          connected: boolean
+          summary: { pagerDuty: boolean; incidentIo: boolean } | null
+        }
+        const initial = await call<View>('GET', `/workspaces/${wsId}/incident-enrichment`)
+        // Wired only when the facade has the shared encryption key; skip otherwise.
+        if (initial.status === 503) return
+        expect(initial.status).toBe(200)
+        expect(initial.body).toMatchObject({ connected: false, summary: null })
+
+        const put = await call<View>('PUT', `/workspaces/${wsId}/incident-enrichment`, {
+          pagerDuty: { apiToken: 'pd-secret-token', fromEmail: 'oncall@example.com' },
+        })
+        expect(put.status).toBe(200)
+        expect(put.body.summary).toEqual({ pagerDuty: true, incidentIo: false })
+        // The sealed token is NEVER surfaced on any read path.
+        expect(JSON.stringify(put.body)).not.toContain('pd-secret-token')
+
+        const view = await call<View>('GET', `/workspaces/${wsId}/incident-enrichment`)
+        expect(view.body).toMatchObject({
+          connected: true,
+          summary: { pagerDuty: true, incidentIo: false },
+        })
+        expect(JSON.stringify(view.body)).not.toContain('pd-secret-token')
+
+        const del = await call('DELETE', `/workspaces/${wsId}/incident-enrichment`)
+        expect(del.status).toBe(204)
+        const gone = await call<View>('GET', `/workspaces/${wsId}/incident-enrichment`)
+        expect(gone.body).toMatchObject({ connected: false, summary: null })
       })
     })
 
@@ -735,6 +808,10 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         clearRegisteredGates()
         clearRegisteredStepResolvers()
         clearRegisteredAgentKinds()
+        // The built-in gates (ci / conflicts / post-release-health) live in the SAME registry
+        // as the test's `license-check` gate, so clearing wipes them too — restore them so
+        // later assertions (and a real harness build) still see the platform's own gates.
+        registerBuiltinGates()
       })
 
       // A deployment-registered polling gate is the OTHER half of the extension story
@@ -867,6 +944,96 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(exec.status).toBe('done')
         const step = exec.steps.find((s) => s.agentKind === 'conformance-auditor')!
         expect(step.output).toBe('resolver-rewrote-this')
+      })
+    })
+
+    describe('built-in ci gate (externalized to @cat-factory/gates)', () => {
+      // The platform's OWN `ci` gate is now authored as an external package through the public
+      // `registerGate` seam — no longer inline in the engine. Driving it here over a faked
+      // CiStatusProvider proves the externalized built-in still passes-through on green CI and
+      // escalates to `ci-fixer` on red, identically on every runtime: if the gate package, the
+      // wire-handle, or a facade's import drifted, this fails instead of shipping.
+      afterEach(() => clearGateProviders())
+
+      // A fake CI provider whose check verdict is supplied per-probe (a queue; the last entry
+      // repeats), so a test can drive green / red→green like the registered-gate test does.
+      // It is injected THROUGH `makeApp` (`gateProviders`), not wired directly: a facade build
+      // resets the deployment-global gate providers up-front and the Worker rebuilds the
+      // container per request, so a directly-wired provider would be cleared before the gate
+      // probes. Threading it into the build re-wires it on every rebuild, on every runtime.
+      const makeFakeCi = (greens: boolean[]): CiStatusProvider => {
+        let i = 0
+        return {
+          getStatus: async () => {
+            const green = greens[Math.min(i, greens.length - 1)] ?? true
+            i += 1
+            return {
+              headSha: 'sha',
+              checks: [
+                {
+                  name: 'build',
+                  status: 'completed',
+                  conclusion: green ? 'success' : 'failure',
+                  url: null,
+                },
+              ],
+            }
+          },
+        }
+      }
+
+      it('passes through on green CI without spinning up ci-fixer', async () => {
+        const app = harness.makeApp(
+          { asyncKinds: ['coder', 'ci-fixer'] },
+          { gateProviders: { ciStatus: makeFakeCi([true]) } },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + CI',
+          agentKinds: ['coder', 'ci'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const step = exec.steps.find((s) => s.agentKind === 'ci')!
+        expect(step.state).toBe('done')
+        expect(step.gate?.attempts ?? 0).toBe(0)
+        expect(step.output).toContain('CI gate passed')
+      })
+
+      it('escalates to ci-fixer on red CI, then advances when it re-probes green', async () => {
+        const app = harness.makeApp(
+          {
+            asyncKinds: ['coder', 'ci-fixer'],
+            pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
+          },
+          // red first, green after the fixer ran
+          { gateProviders: { ciStatus: makeFakeCi([false, true]) } },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + CI',
+          agentKinds: ['coder', 'ci'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const step = exec.steps.find((s) => s.agentKind === 'ci')!
+        expect(step.state).toBe('done')
+        expect(step.gate?.attempts).toBe(1)
+        expect(step.gate?.attemptLog?.[0]?.outcome).toBe('completed')
       })
     })
 
@@ -1491,10 +1658,17 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
 
         // Pin the seeded task to qwen; with Cloudflare off and no key it has no provider.
         await call('PATCH', `/workspaces/${wsId}/blocks/task_login`, { modelId: 'qwen' })
-        const blocked = await call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+        const blocked = await call<{
+          error: { code: string; details?: { reason?: string; models?: string[] } }
+        }>('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
           pipelineId: 'pl_quick',
         })
         expect(blocked.status).toBe(409)
+        // The conflict carries a distinct machine-readable reason (+ the offending model
+        // ids) so the SPA can react precisely (open AI setup) instead of string-matching.
+        expect(blocked.body.error.code).toBe('conflict')
+        expect(blocked.body.error.details?.reason).toBe('providers_unconfigured')
+        expect(blocked.body.error.details?.models).toContain('qwen')
 
         // Configure a qwen key → the guard passes and the run starts.
         await call('POST', `/workspaces/${wsId}/api-keys`, KEY)
@@ -2012,6 +2186,51 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(del.status).toBe(204)
         const afterDelete = await call<{ connection: unknown }>('GET', `${base}/connection`)
         expect(afterDelete.body.connection).toBeNull()
+      })
+
+      it('describes the provider config + missingRequired identically on every facade', async () => {
+        // `GET /provider` self-describes the connect form (configFields) and reports which
+        // required-without-default fields the workspace still owes (`missingRequired`, the
+        // unconfigured-provider banner signal). The describe pipeline runs against the real
+        // store + cipher — describeConfig over the saved manifest, plus the decrypted secret
+        // bundle / manifest providerConfig as the "already supplied" set — so a repo that
+        // dropped the manifest or failed to decrypt the bundle would diverge here.
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/environments`
+
+        // No connection yet: the generic manifest provider has no manifest to read, so it
+        // declares no fields and owes nothing.
+        const before = await call<{ missingRequired: string[]; configFields: unknown[] }>(
+          'GET',
+          `${base}/provider`,
+        )
+        expect(before.status).toBe(200)
+        expect(before.body.missingRequired).toEqual([])
+
+        // After registering a manifest whose bearer auth references API_TOKEN — and
+        // supplying it — the field is described AND counts as satisfied, so nothing is
+        // missing (the secret bundle round-tripped through the store + cipher).
+        const manifest = {
+          providerId: 'acme-envs',
+          label: 'Acme Ephemeral Envs',
+          baseUrl: 'https://envs.test/api',
+          auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
+          provision: { method: 'POST', pathTemplate: '/environments' },
+          response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
+        }
+        await call('POST', `${base}/connection`, {
+          manifest,
+          secrets: { API_TOKEN: 'super-secret-env-token' },
+        })
+
+        const after = await call<{
+          missingRequired: string[]
+          configFields: { key: string }[]
+        }>('GET', `${base}/provider`)
+        expect(after.body.configFields.map((f) => f.key)).toContain('API_TOKEN')
+        expect(after.body.missingRequired).toEqual([])
+        expect(JSON.stringify(after.body)).not.toContain('super-secret-env-token')
       })
 
       it('rejects an internal management-API host under the strict URL policy', async () => {

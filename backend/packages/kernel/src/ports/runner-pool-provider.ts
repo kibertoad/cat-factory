@@ -44,6 +44,13 @@ export interface RunnerPoolProvider {
   release(req: RunnerPollRequest): Promise<void>
   /** Declare the config fields this pool provider expects (see EnvironmentProvider). */
   describeConfig?(manifest?: RunnerPoolManifest): ProviderConfigField[]
+  /**
+   * The base manifest a native pool adapter is configured through, so the SPA can render
+   * the flat `describeConfig` form yet persist a full manifest (mirrors
+   * `EnvironmentProvider.describeManifestTemplate`). Absent ⇒ a manifest-authored pool.
+   * The shipped generic `HttpRunnerPoolProvider` does not implement it.
+   */
+  describeManifestTemplate?(): RunnerPoolManifest
   /** Probe the connection without persisting. Optional — absent ⇒ "nothing to test". */
   testConnection?(req: RunnerPoolConnectionTestRequest): Promise<ConnectionTestResult>
 }

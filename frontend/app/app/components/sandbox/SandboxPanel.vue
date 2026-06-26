@@ -328,10 +328,7 @@ const fixtureName = (id: string) => store.fixtures.find((f) => f.id === id)?.nam
 
           <!-- history + results -->
           <div class="space-y-3">
-            <div
-              v-if="store.detail"
-              class="rounded-lg border border-slate-700 bg-slate-900/40 p-3"
-            >
+            <div v-if="store.detail" class="rounded-lg border border-slate-700 bg-slate-900/40 p-3">
               <div class="mb-2 flex items-center justify-between">
                 <p class="text-sm font-medium text-slate-200">
                   {{ store.detail.experiment.name }}
@@ -357,7 +354,9 @@ const fixtureName = (id: string) => store.fixtures.find((f) => f.id === id)?.nam
                       @click="selectedRun = run"
                     >
                       <td class="py-1 pr-2 text-slate-300">{{ run.promptLabel }}</td>
-                      <td class="py-1 pr-2 font-mono text-[11px] text-slate-400">{{ run.model }}</td>
+                      <td class="py-1 pr-2 font-mono text-[11px] text-slate-400">
+                        {{ run.model }}
+                      </td>
                       <td class="py-1 pr-2 text-slate-400">{{ fixtureName(run.fixtureId) }}</td>
                       <td class="py-1 pr-2">
                         <span
@@ -367,7 +366,9 @@ const fixtureName = (id: string) => store.fixtures.find((f) => f.id === id)?.nam
                         >
                           {{ gradeByRun.get(run.id)!.weightedTotal.toFixed(2) }}
                         </span>
-                        <span v-else-if="run.status === 'failed'" class="text-rose-400">failed</span>
+                        <span v-else-if="run.status === 'failed'" class="text-rose-400"
+                          >failed</span
+                        >
                         <span v-else class="text-slate-600">—</span>
                       </td>
                       <td class="py-1">
@@ -395,7 +396,9 @@ const fixtureName = (id: string) => store.fixtures.find((f) => f.id === id)?.nam
                 <p class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
                   {{ selectedRun.promptLabel }} · {{ selectedRun.model }}
                 </p>
-                <p v-if="selectedRun.error" class="text-xs text-rose-400">{{ selectedRun.error }}</p>
+                <p v-if="selectedRun.error" class="text-xs text-rose-400">
+                  {{ selectedRun.error }}
+                </p>
                 <pre
                   v-if="selectedRun.outputText"
                   class="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-slate-950/60 p-2 text-[11px] text-slate-300"
@@ -516,15 +519,16 @@ const fixtureName = (id: string) => store.fixtures.find((f) => f.id === id)?.nam
               <span class="text-slate-200">{{ f.name }}</span>
               <div class="flex items-center gap-1.5">
                 <UBadge variant="soft" size="xs">{{ f.kind }}</UBadge>
-                <UBadge :color="f.origin === 'builtin' ? 'neutral' : 'primary'" variant="soft" size="xs">
+                <UBadge
+                  :color="f.origin === 'builtin' ? 'neutral' : 'primary'"
+                  variant="soft"
+                  size="xs"
+                >
                   {{ f.origin }}
                 </UBadge>
               </div>
             </div>
-            <p
-              v-if="f.objective?.kind === 'findings'"
-              class="mt-0.5 text-[11px] text-slate-500"
-            >
+            <p v-if="f.objective?.kind === 'findings'" class="mt-0.5 text-[11px] text-slate-500">
               {{ f.objective.expectations.length }} graded expectation{{
                 f.objective.expectations.length === 1 ? '' : 's'
               }}

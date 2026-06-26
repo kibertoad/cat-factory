@@ -444,8 +444,8 @@ const technicalLabel = computed(() => {
         />
       </div>
       <div class="mt-1 text-[11px] text-slate-500">
-        When this task merges, automatically start the tasks that depend on it (once their
-        other dependencies are also done).
+        When this task merges, automatically start the tasks that depend on it (once their other
+        dependencies are also done).
       </div>
     </div>
   </div>

@@ -70,6 +70,12 @@ interface RequestOptions {
   appId?: string
   etag?: string
   body?: unknown
+  /**
+   * Mint a fresh installation token for this call instead of reusing the cached
+   * one. Used to recheck a permission after the user changed the App's access on
+   * GitHub (a cached token keeps its grant-at-mint scopes). Ignored for `auth: 'app'`.
+   */
+  forceRefreshToken?: boolean
 }
 
 interface GitHubResponse {
@@ -212,13 +218,43 @@ export class FetchGitHubClient implements GitHubClient {
     // selected repos, or the App lacks contents:write) comes back with push:false —
     // exactly the case that 403s on the bootstrap container's push. A 404 (the repo
     // is private + not granted at all) means no access either; surface that as false.
+    if (await this.probePush(installationId, ref, false)) return true
+    // A negative answer may just be stale. Installation tokens bake in their repo
+    // set + permission scopes at mint time and we cache them in-memory for ~1h, so a
+    // token minted before the user granted the App access keeps reporting the old
+    // (no-write) grant — which is exactly the "I just added the App, why does retry
+    // still say no?" case. Mint a fresh token and probe once more before concluding
+    // there's genuinely no write access. The fresh mint also replaces the cached
+    // entry the bootstrap push token reads, so a real grant fixes the push too.
+    return this.probePush(installationId, ref, true)
+  }
+
+  /** One write-access probe; `forceRefreshToken` mints a fresh token for it. */
+  private async probePush(
+    installationId: number,
+    ref: GitHubRepoRef,
+    forceRefreshToken: boolean,
+  ): Promise<boolean> {
     try {
-      const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}`, { installationId })
-      return (json as { permissions?: { push?: boolean } }).permissions?.push === true
+      const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}`, {
+        installationId,
+        forceRefreshToken,
+      })
+      // A user/OAuth/PAT token has a collaborator role, reported here — authoritative
+      // for those (e.g. local mode's PAT).
+      if ((json as { permissions?: { push?: boolean } }).permissions?.push === true) return true
     } catch (err) {
       if (err instanceof GitHubApiError && (err.status === 404 || err.status === 403)) return false
       throw err
     }
+    // A GitHub App installation token is not a repo collaborator, so the repo object's
+    // `permissions` is empty for it — `permissions.push` is never true no matter the
+    // grant. The authoritative source for an App is its granted `contents` scope from
+    // the token mint response. The repo read above already proved the repo is reachable
+    // (in the installation's selected set), and an App's permission set is
+    // installation-wide across its selected repos, so contents:write ⇒ pushable here.
+    const granted = await this.deps.registry.installationPermissions(installationId)
+    return granted.contents === 'write'
   }
 
   async listBranches(
@@ -775,7 +811,9 @@ export class FetchGitHubClient implements GitHubClient {
         ? await this.deps.registry
             .authForApp(opts.appId ?? this.deps.registry.defaultAppId)
             .appJwt()
-        : await this.deps.registry.installationToken(opts.installationId)
+        : await this.deps.registry.installationToken(opts.installationId, {
+            forceRefresh: opts.forceRefreshToken === true,
+          })
 
     const headers: Record<string, string> = {
       authorization: `Bearer ${token}`,

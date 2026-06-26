@@ -12,6 +12,7 @@ export {
   getErrorMessage,
   type DomainErrorCode,
   type CredentialRequiredReason,
+  type ConflictReason,
 } from './domain/errors.js'
 export { sameSubtasks, sameSubtaskItems } from './domain/subtasks.logic.js'
 export { resolveWritebackFlag } from './domain/writeback.js'
@@ -79,6 +80,8 @@ export {
 export {
   type GateProbe,
   type GateHelperOutcome,
+  type GateHelperJobResult,
+  type GateHelperCompletionArgs,
   type GateExhaustedArgs,
   type GateDefinition,
   type GateContext,
@@ -100,6 +103,26 @@ export {
   clearRegisteredStepResolvers,
   stubResolverContext,
 } from './domain/step-resolver-registry.js'
+
+// Pure gate logic + gate/helper agent-kind constants, shared by the built-in gate suite
+// (`@cat-factory/gates`) and the engine. See `domain/gate-logic.ts`.
+export {
+  CI_AGENT_KIND,
+  CI_FIXER_AGENT_KIND,
+  CONFLICTS_AGENT_KIND,
+  CONFLICT_RESOLVER_AGENT_KIND,
+  POST_RELEASE_HEALTH_AGENT_KIND,
+  ON_CALL_AGENT_KIND,
+  type CiVerdict,
+  type ReleaseGateVerdict,
+  aggregateCi,
+  isCiGreen,
+  listFailingChecks,
+  describeFailingChecks,
+  classifyReleaseHealth,
+  describeRegressedSignals,
+  renderReleaseEvidence,
+} from './domain/gate-logic.js'
 
 export * from './ports/index.js'
 
