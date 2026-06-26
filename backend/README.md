@@ -137,10 +137,14 @@ workspace snapshot, and the frontend shows a large warning and a "Resume anyway"
 (`POST /workspaces/:ws/spend/resume`) when the budget is exceeded. Paused runs also resume
 automatically once the period rolls over.
 
-Configured entirely through Worker vars (see `wrangler.toml`): `SPEND_MONTHLY_LIMIT`
-(default ~100), `SPEND_CURRENCY` (default `EUR`), and `SPEND_MODEL_PRICES` (JSON per-model price
-overrides per 1M tokens). The container executor reports no usage directly (its LLM proxy meters
-tokens itself, to avoid double-counting), and test fakes report none.
+Configured **per workspace in the UI** (Workspace settings → Budget; the `workspace_settings`
+row): a monthly limit (default ~100), currency (default `EUR`), and per-model price overrides
+(per 1M tokens). The budget is **per-workspace** — `SpendService` resolves each workspace's
+effective pricing and gates on its OWN usage. A limit of `0` is the deliberate "no PAID spend"
+setting: metered runs are refused (a clear error up front, not a silent pause), but local-runner
+models and connected subscriptions — which incur no metered cost — keep running. The container
+executor reports no usage directly (its LLM proxy meters tokens itself, to avoid double-counting),
+and test fakes report none.
 
 ## Accounts & tenancy
 
@@ -498,7 +502,7 @@ mistake:
 | `GITHUB_OAUTH_CLIENT_ID`, `AUTH_ALLOWED_LOGINS`/`AUTH_ALLOWED_ORGS`, `AUTH_SUCCESS_REDIRECT_URL`, `ENVIRONMENT`, `CORS_ALLOWED_ORIGINS` | `GITHUB_OAUTH_CLIENT_SECRET`, `AUTH_SESSION_SECRET`                                                                                                  |
 | `WORKER_PUBLIC_URL`, `RUNNERS_ENABLED`                                                                                                  | (container/runner path holds no key of its own — see below)                                                                                          |
 | `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_SETUP_REDIRECT_URL`, `GITHUB_PRIVILEGED_APP_ID`                                             | `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_PRIVILEGED_APP_PRIVATE_KEY`                                                               |
-| `SPEND_MONTHLY_LIMIT`, `SPEND_CURRENCY`, `SPEND_MODEL_PRICES`, `AGENT_DEFAULT_*`/`AGENT_MODELS`, `DECISION_TIMEOUT`                     | `QWEN_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`                                                        |
+| `AGENT_DEFAULT_*`/`AGENT_MODELS`, `DECISION_TIMEOUT` (the spend budget is per-workspace in the UI, not env)                             | `QWEN_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`                                                        |
 | `DOCUMENT_SOURCES`/`DOCUMENT_PLANNER`, `TASK_SOURCES`, `ENVIRONMENTS_ENABLED`, `PROMPT_LIBRARY_ENABLED`/`PROMPT_LIBRARY_SELECTOR`       | `ENCRYPTION_KEY` (shared master for every integration's credentials, **required** — the always-on document/task sources fail config load without it) |
 
 > `WORKER_PUBLIC_URL` is a **`[var]`, not a secret**, despite older notes that
@@ -625,15 +629,18 @@ Container agents (coder / ci-fixer / mocker / …) can use `web_search` / `web_f
 **no search key enters the container**. The Worker hosts a SearXNG-compatible **web-search proxy**
 at `${WORKER_PUBLIC_URL}/v1/web-search`; the container reaches it with the **same** model-locked
 session token it uses for the LLM proxy, and the Worker runs the search server-side under the
-deployment's own key (the `webSearch` runtime gateway). Enable it by setting **one** upstream on
-the Worker (not in the container):
+deployment's own key. Enable it **per account** in the UI (Account settings → Deployment
+integrations; the sealed `account_settings` secrets blob), by setting **one** upstream — never in
+the container:
 
-- `WEB_SEARCH_BRAVE_API_KEY` — Brave Search (recommended; what Claude Code uses), **or**
-- `WEB_SEARCH_SEARXNG_URL` (+ optional `WEB_SEARCH_SEARXNG_API_KEY`) — reverse-proxy to a
-  self-hosted SearXNG instance.
+- a **Brave Search** key (recommended; what Claude Code uses), **or**
+- a self-hosted **SearXNG** base URL (+ optional bearer key) the backend reverse-proxies to.
 
-Off by default: with neither set, `/v1/web-search` replies 503 and container runs behave exactly as
-before. When configured, `ContainerAgentExecutor` flags the coding/ci-fixer job and the harness
+The web-search upstream is resolved **per run** off the run's account, and the executor advertises
+the `web_search` tool to a run only when its account actually has a key configured.
+
+Off by default: with no keys configured, `/v1/web-search` returns an empty result set and container
+runs behave exactly as before. When configured, `ContainerAgentExecutor` flags the coding/ci-fixer job and the harness
 points the extension's SearXNG provider at the proxy (the session token as its bearer). The two web
 tools count as read-only exploration for the no-edit guard, but a dedicated cap
 (`JOB_MAX_CONSECUTIVE_WEB_CALLS`, default 25) stops a search rabbit-hole. Adding another search

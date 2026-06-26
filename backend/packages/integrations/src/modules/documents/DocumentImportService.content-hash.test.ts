@@ -27,6 +27,9 @@ function makeService(body: { value: string }) {
     async get(_ws, _source, externalId) {
       return store.get(externalId) ?? null
     },
+    async getByUrl() {
+      return null
+    },
     async listByWorkspace() {
       return [...store.values()]
     },

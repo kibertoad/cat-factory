@@ -265,7 +265,7 @@ export function llmProxyController(): Hono<AppEnv> {
 
     // Spend gate: refuse once the monthly budget is exhausted, mirroring the
     // engine's pre-step check so a container can't keep spending.
-    if (await spendService.isOverBudget()) {
+    if (await spendService.isOverBudget(session.workspaceId)) {
       logger.warn(
         { scope: 'llmProxy', workspaceId: session.workspaceId, executionId: session.executionId },
         'llm proxy: spend budget exhausted — refusing call',

@@ -165,10 +165,4 @@ export interface RuntimeGateways {
   githubBackfill: GitHubBackfillScheduler
   githubWebhook: GitHubWebhookIngest
   llmUpstream: LlmUpstream
-  /**
-   * Optional container web-search upstream. When present, the `/v1/web-search`
-   * proxy route is live and container agents get `web_search` with no provider key
-   * in the sandbox; absent ⇒ the route replies 503 and container web search is off.
-   */
-  webSearch?: WebSearchUpstream
 }

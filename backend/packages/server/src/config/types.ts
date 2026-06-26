@@ -180,16 +180,6 @@ export interface ReleaseHealthConfig {
   encryptionKey?: string
 }
 
-export interface IncidentEnrichmentConfig {
-  /**
-   * PagerDuty incident-enrichment, present only when configured. Annotates (never
-   * re-alerts) an incident PagerDuty already opened with the on-call investigation.
-   */
-  pagerDuty?: { apiToken: string; fromEmail: string }
-  /** incident.io incident-enrichment, present only when configured. */
-  incidentIo?: { apiKey: string }
-}
-
 export interface SlackConfig {
   /**
    * Opt-in flag. Requires an encryption key (the per-account bot token is sealed
@@ -199,11 +189,8 @@ export interface SlackConfig {
   enabled: boolean
   /** Service-level master key (base64) backing bot-token encryption at rest. */
   encryptionKey?: string
-  /**
-   * Slack app OAuth credentials, present only when a Slack app was registered.
-   * Absent → manual bot-token onboarding still works; OAuth routes aren't offered.
-   */
-  oauth?: { clientId: string; clientSecret: string; redirectUrl: string }
+  // Slack app OAuth credentials moved out of env into per-account settings (sealed),
+  // resolved dynamically at connect time. See AccountSettingsService / `/accounts/:id/settings`.
 }
 
 export interface RetentionConfig {
@@ -288,8 +275,6 @@ export interface AppConfig {
   slack: SlackConfig
   /** Observability post-release-health config; `enabled` is false unless opted in. */
   releaseHealth: ReleaseHealthConfig
-  /** Optional PagerDuty / incident.io incident-enrichment config (additive, opt-in). */
-  incidentEnrichment: IncidentEnrichmentConfig
   /** Transactional email config (invitations); `enabled` is false unless opted in. */
   email: EmailConfig
   /** Retention windows for the unbounded ledgers/projections (epoch-ms ages). */

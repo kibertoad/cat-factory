@@ -30,10 +30,17 @@ export interface TokenUsageRepository {
   /** Append a metered call. */
   record(usage: TokenUsageRecord): Promise<void>
   /**
-   * Sum usage across all workspaces since `epochMs` (inclusive). The budget is
-   * org-wide, so this deliberately spans every workspace.
+   * Sum usage across all workspaces since `epochMs` (inclusive). Retained for the
+   * deployment-wide rollup; the per-workspace budget gate uses
+   * {@link totalsSinceForWorkspace}.
    */
   totalsSince(epochMs: number): Promise<TokenUsageTotals>
+  /**
+   * Sum usage for a single workspace since `epochMs` (inclusive). Budgets are
+   * per-workspace, so the spend gate scopes its current-period rollup to the
+   * workspace whose run is about to execute.
+   */
+  totalsSinceForWorkspace(workspaceId: string, epochMs: number): Promise<TokenUsageTotals>
   /**
    * Retention: delete rows older than `epochMs` (exclusive), returning how many
    * were removed. The budget query only reads the current period, so pruning old

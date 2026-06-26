@@ -37,6 +37,7 @@ function fakeTasks(issues: TaskRecord[]): TaskRepository {
   return {
     upsert: async () => {},
     get: async () => null,
+    getByUrl: async () => null,
     listByWorkspace: async () => issues,
     listByBlock: async () => issues,
     linkBlock: async () => {},

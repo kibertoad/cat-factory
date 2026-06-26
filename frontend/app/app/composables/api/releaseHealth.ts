@@ -4,6 +4,10 @@ import type {
   UpsertObservabilityConnectionInput,
   UpsertReleaseHealthConfigInput,
 } from '~/types/releaseHealth'
+import type {
+  IncidentEnrichmentView,
+  UpsertIncidentEnrichmentInput,
+} from '~/types/incidentEnrichment'
 import type { ApiContext } from './context'
 
 /** Post-release-health: the observability connection + per-block monitor/SLO mapping. */
@@ -40,5 +44,18 @@ export function releaseHealthApi({ http, ws }: ApiContext) {
       http(`${ws(workspaceId)}/release-health-configs/${encodeURIComponent(blockId)}`, {
         method: 'DELETE',
       }),
+
+    // ---- Incident enrichment (PagerDuty + incident.io, write-only secrets) --
+    getIncidentEnrichment: (workspaceId: string) =>
+      http<IncidentEnrichmentView>(`${ws(workspaceId)}/incident-enrichment`),
+
+    setIncidentEnrichment: (workspaceId: string, body: UpsertIncidentEnrichmentInput) =>
+      http<IncidentEnrichmentView>(`${ws(workspaceId)}/incident-enrichment`, {
+        method: 'PUT',
+        body,
+      }),
+
+    deleteIncidentEnrichment: (workspaceId: string) =>
+      http(`${ws(workspaceId)}/incident-enrichment`, { method: 'DELETE' }),
   }
 }

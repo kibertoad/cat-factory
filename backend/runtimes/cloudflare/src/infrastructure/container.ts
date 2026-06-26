@@ -2,8 +2,6 @@ import {
   type AgentExecutor,
   type Clock,
   CompositeNotificationChannel,
-  CompositeIncidentEnrichmentProvider,
-  type IncidentEnrichmentProvider,
   type DocumentSourceProvider,
   type ExecutionEventPublisher,
   type FragmentOwnerKind,
@@ -45,8 +43,10 @@ import {
   OBSERVABILITY_CIPHER_INFO,
   RegistryReleaseHealthProvider,
   defaultObservabilityRegistry,
-  PagerDutyEnrichmentProvider,
-  IncidentIoEnrichmentProvider,
+  WorkspaceIncidentEnrichmentProvider,
+  INCIDENT_ENRICHMENT_CIPHER_INFO,
+  AccountSettingsService,
+  ACCOUNT_SETTINGS_CIPHER_INFO,
 } from '@cat-factory/integrations'
 import {
   type CoreDependencies,
@@ -64,7 +64,6 @@ import {
   runWithInitiator,
   WebCryptoPasswordHasher,
   WebCryptoPersonalSecretCipher,
-  createWebSearchUpstreamFromEnv,
   logger,
   createScopedModelProviderResolver,
   resolveUrlSafetyPolicy,
@@ -148,6 +147,8 @@ import { D1NotificationRepository } from './repositories/D1NotificationRepositor
 import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
 import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
 import { D1ObservabilityConnectionRepository } from './repositories/D1ObservabilityConnectionRepository'
+import { D1IncidentEnrichmentConnectionRepository } from './repositories/D1IncidentEnrichmentConnectionRepository'
+import { D1AccountSettingsRepository } from './repositories/D1AccountSettingsRepository'
 import { D1ReleaseHealthConfigRepository } from './repositories/D1ReleaseHealthConfigRepository'
 import { D1PipelineScheduleRepository } from './repositories/D1PipelineScheduleRepository'
 import { D1TrackerSettingsRepository } from './repositories/D1TrackerSettingsRepository'
@@ -586,21 +587,65 @@ function selectReleaseHealthDeps(
       registry: defaultObservabilityRegistry,
     }),
   )
-  const enrichers: IncidentEnrichmentProvider[] = []
-  if (config.incidentEnrichment.pagerDuty) {
-    enrichers.push(new PagerDutyEnrichmentProvider(config.incidentEnrichment.pagerDuty))
-  }
-  if (config.incidentEnrichment.incidentIo) {
-    enrichers.push(new IncidentIoEnrichmentProvider(config.incidentEnrichment.incidentIo))
-  }
-  if (enrichers.length > 0) {
-    wireIncidentEnrichment(new CompositeIncidentEnrichmentProvider(enrichers))
-  }
   return {
     observabilityConnectionRepository,
     releaseHealthConfigRepository,
     observabilitySecretCipher,
   }
+}
+
+/**
+ * Wire the per-workspace incident-enrichment integration (PagerDuty + incident.io). The
+ * credentials moved out of env into a sealed per-workspace row; the provider resolves +
+ * decrypts them at enrichment time. Wired whenever the shared encryption key is present
+ * (the cipher must exist to unseal); a workspace with no connection is a no-op. The
+ * on-call enrichment provider itself now lives in `@cat-factory/gates`, so the
+ * workspace-backed provider is wired into the gate suite via `wireIncidentEnrichment`;
+ * the connection repo + cipher stay on CoreDependencies to power the management API.
+ */
+function selectIncidentEnrichmentDeps(env: Env, db: D1Database): Partial<CoreDependencies> {
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) return {}
+  const incidentEnrichmentConnectionRepository = new D1IncidentEnrichmentConnectionRepository({
+    db,
+  })
+  const incidentEnrichmentSecretCipher = new WebCryptoSecretCipher({
+    masterKeyBase64: encryptionKey,
+    info: INCIDENT_ENRICHMENT_CIPHER_INFO,
+  })
+  wireIncidentEnrichment(
+    new WorkspaceIncidentEnrichmentProvider({
+      incidentEnrichmentConnectionRepository,
+      secretCipher: incidentEnrichmentSecretCipher,
+    }),
+  )
+  return {
+    incidentEnrichmentConnectionRepository,
+    incidentEnrichmentSecretCipher,
+  }
+}
+
+/**
+ * Build the per-account deployment-settings service (Slack OAuth + web-search keys,
+ * sealed) when the shared encryption key is present. A single instance is shared so its
+ * short-TTL cache spans requests; the facade also derives the Slack OAuth resolver +
+ * web-search proxy resolution from it.
+ */
+function buildAccountSettings(
+  env: Env,
+  db: D1Database,
+  clock: Clock,
+): AccountSettingsService | undefined {
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) return undefined
+  return new AccountSettingsService({
+    accountSettingsRepository: new D1AccountSettingsRepository({ db }),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: encryptionKey,
+      info: ACCOUNT_SETTINGS_CIPHER_INFO,
+    }),
+    clock,
+  })
 }
 
 /**
@@ -660,7 +705,6 @@ function selectSlackDeps(config: AppConfig, db: D1Database): Partial<CoreDepende
     slackSettingsRepository: infra.settingsRepository,
     slackMemberMappingRepository: infra.memberMappingRepository,
     slackSecretCipher: infra.cipher,
-    ...(config.slack.oauth ? { slackOAuth: config.slack.oauth } : {}),
   }
 }
 
@@ -999,6 +1043,18 @@ function buildContainerExecutor(
     return registry.installationToken(installationId)
   }
 
+  // Web-search keys live per-account; advertise Pi's `web_search` tool to a run only when
+  // its account actually has a usable upstream (else the tool would just fail/return
+  // nothing). Resolved per run off the account-settings store (its own short-TTL cache).
+  const webSearchSettings = buildAccountSettings(env, db, clock)
+  const resolveWebSearchEnabled = webSearchSettings
+    ? async (workspaceId: string): Promise<boolean> => {
+        const accountId = await new D1WorkspaceRepository({ db }).accountOf(workspaceId)
+        if (!accountId) return false
+        return Boolean((await webSearchSettings.resolve(accountId)).webSearch)
+      }
+    : undefined
+
   return new ContainerAgentExecutor({
     resolveTransport,
     agentRouting: config.agents.routing,
@@ -1049,9 +1105,9 @@ function buildContainerExecutor(
         }
       : {}),
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
-    // Point container agents' web search at the backend search proxy (no provider key
-    // in the sandbox) whenever an upstream is configured for this deployment.
-    webSearchProxyEnabled: Boolean(createWebSearchUpstreamFromEnv(env)),
+    // Point container agents' web search at the backend search proxy (no provider key in
+    // the sandbox), but only for a run whose account has keys (see resolver above).
+    ...(resolveWebSearchEnabled ? { resolveWebSearchEnabled } : {}),
     githubApiBase: config.github.apiBase,
     // Forward container tool spans to Langfuse (when configured) as child spans under
     // the run trace — the same sink the LLM proxy fans generations out to.
@@ -1496,6 +1552,11 @@ export function buildContainer(
   // consensus transcript pushes ride the same hub as run/board events).
   const eventPublisher = selectEventPublisher(env, db)
 
+  // Per-account deployment settings (Slack OAuth + web-search keys). Built once so the
+  // service's short-TTL cache is shared across requests; the Slack OAuth resolver is
+  // derived from it in the domain composition root.
+  const accountSettings = buildAccountSettings(env, db, clock)
+
   const dependencies: CoreDependencies = {
     workspaceRepository: new D1WorkspaceRepository({ db }),
     accountRepository: new D1AccountRepository({ db }),
@@ -1556,6 +1617,8 @@ export function buildContainer(
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
     ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
     ...selectReleaseHealthDeps(env, config, db),
+    ...selectIncidentEnrichmentDeps(env, db),
+    ...(accountSettings ? { accountSettings } : {}),
     ...selectSlackDeps(config, db),
     ...selectEmailInvitationDeps(config, db),
     ...selectLangfuseSink(config),
@@ -1636,9 +1699,9 @@ export function buildContainer(
       // LLM proxy upstream: OpenAI-compatible providers from env keys + the in-process
       // Workers AI binding path (the `workers-ai` provider).
       llmUpstream: new WorkersAiLlmUpstream(env),
-      // Container web-search proxy upstream (Brave, or a self-hosted SearXNG). Absent
-      // ⇒ the `/v1/web-search` route 503s and container web search stays off.
-      webSearch: createWebSearchUpstreamFromEnv(env),
+      // Container web-search upstream is resolved per-account by the proxy controller
+      // (keys moved out of env into the per-account settings store), so no boot-time
+      // gateway upstream is wired here.
     },
   }
 }

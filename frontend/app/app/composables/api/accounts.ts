@@ -7,6 +7,7 @@ import type {
   EmailConnection,
   UpdateAccountInput,
 } from '~/types/domain'
+import type { AccountSettingsView, UpdateAccountSettingsInput } from '~/types/accountSettings'
 import type { ApiContext } from './context'
 
 /** Account (tenancy) management: orgs, members, invitations + the email sender. */
@@ -76,6 +77,17 @@ export function accountsApi({ http }: ApiContext) {
       http<{ ok: boolean }>(`/accounts/${encodeURIComponent(accountId)}/email-connection/test`, {
         method: 'POST',
         body: { to },
+      }),
+
+    // Per-account deployment settings (admin only): integration secrets (Slack OAuth +
+    // web-search keys), sealed at rest. Read returns config + non-secret summary only.
+    getAccountSettings: (accountId: string) =>
+      http<AccountSettingsView>(`/accounts/${encodeURIComponent(accountId)}/settings`),
+
+    updateAccountSettings: (accountId: string, body: UpdateAccountSettingsInput) =>
+      http<AccountSettingsView>(`/accounts/${encodeURIComponent(accountId)}/settings`, {
+        method: 'PUT',
+        body,
       }),
   }
 }

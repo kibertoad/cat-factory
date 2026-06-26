@@ -299,6 +299,14 @@ export type {
   ReleaseHealthConfigRepository,
 } from './release-health-repositories.js'
 export type {
+  IncidentEnrichmentConnectionRecord,
+  IncidentEnrichmentConnectionRepository,
+} from './incident-enrichment-repositories.js'
+export type {
+  AccountSettingsRecord,
+  AccountSettingsRepository,
+} from './account-settings-repositories.js'
+export type {
   MergeabilityVerdict,
   MergeabilityReport,
   PullRequestMergeabilityProvider,

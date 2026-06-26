@@ -46,6 +46,12 @@ export class WorkspaceSettingsService {
         patch.taskLimitShared !== undefined ? patch.taskLimitShared : current.taskLimitShared,
       taskLimitPerType:
         patch.taskLimitPerType !== undefined ? patch.taskLimitPerType : current.taskLimitPerType,
+      spendCurrency:
+        patch.spendCurrency !== undefined ? patch.spendCurrency : current.spendCurrency,
+      spendMonthlyLimit:
+        patch.spendMonthlyLimit !== undefined ? patch.spendMonthlyLimit : current.spendMonthlyLimit,
+      spendModelPrices:
+        patch.spendModelPrices !== undefined ? patch.spendModelPrices : current.spendModelPrices,
     }
     // Keep the limit fields consistent with the mode so the enforcement logic + UI never
     // read a stale cap from an inactive mode.

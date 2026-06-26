@@ -16,12 +16,7 @@ import { type TasksConfig, loadTasksConfig } from './tasks'
 import { type EnvironmentsConfig, loadEnvironmentsConfig } from './environments'
 import { type RunnerPoolConfig, loadRunnerPoolConfig } from './runners'
 import { type SlackConfig, loadSlackConfig } from './slack'
-import {
-  type ReleaseHealthConfig,
-  type IncidentEnrichmentConfig,
-  loadReleaseHealthConfig,
-  loadIncidentEnrichmentConfig,
-} from './releaseHealth'
+import { type ReleaseHealthConfig, loadReleaseHealthConfig } from './releaseHealth'
 import { type EmailConfig, loadEmailConfig } from './email'
 import { type RetentionConfig, loadRetentionConfig } from './retention'
 import { type FragmentLibraryConfig, loadFragmentLibraryConfig } from './fragmentLibrary'
@@ -48,7 +43,6 @@ export type {
   RunnerPoolConfig,
   SlackConfig,
   ReleaseHealthConfig,
-  IncidentEnrichmentConfig,
   EmailConfig,
   RetentionConfig,
   FragmentLibraryConfig,
@@ -81,7 +75,6 @@ export function loadConfig(env: Env): AppConfig {
     runners: loadRunnerPoolConfig(env),
     slack: loadSlackConfig(env),
     releaseHealth: loadReleaseHealthConfig(env),
-    incidentEnrichment: loadIncidentEnrichmentConfig(env),
     email: loadEmailConfig(env),
     retention: loadRetentionConfig(env),
     fragmentLibrary: loadFragmentLibraryConfig(env),

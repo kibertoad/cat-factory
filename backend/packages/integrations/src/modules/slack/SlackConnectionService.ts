@@ -26,8 +26,21 @@ export interface SlackConnectionServiceDependencies {
   clock: Clock
   /** Slack Web API client; defaults to a fetch-backed one. */
   slackClient?: SlackApiClient
-  /** OAuth app credentials, when the deployment registered a Slack app. */
-  oauth?: { clientId: string; clientSecret: string; redirectUrl: string }
+  /**
+   * Resolve the Slack app OAuth credentials for an account (the install-scope key), or
+   * undefined when the account hasn't registered a Slack app. Replaces the old boot-time
+   * `oauth` config: the creds now live per-account in the DB (account settings), resolved
+   * dynamically so an admin can set/rotate them without a redeploy. Absent ⇒ OAuth
+   * onboarding isn't offered (manual bot-token paste still works).
+   */
+  resolveOAuth?: (accountKey: string) => Promise<SlackOAuthConfig | undefined>
+}
+
+/** Slack app OAuth credentials (the deployment's registered Slack app, per-account). */
+export interface SlackOAuthConfig {
+  clientId: string
+  clientSecret: string
+  redirectUrl: string
 }
 
 function toConnection(record: SlackConnectionRecord): SlackConnection {
@@ -57,21 +70,28 @@ export class SlackConnectionService {
     this.slack = deps.slackClient ?? new SlackApiClient()
   }
 
-  /** Whether OAuth onboarding is available (the app credentials were configured). */
-  get oauthEnabled(): boolean {
-    return Boolean(this.deps.oauth)
+  /** Whether OAuth onboarding is available for a workspace's account (creds configured). */
+  async oauthEnabled(workspaceId: string): Promise<boolean> {
+    return Boolean(await this.resolveOAuth(workspaceId))
   }
 
-  /** Build the "Add to Slack" authorize URL, embedding a signed `state`. */
-  buildInstallUrl(state: string, scopes: string[]): string {
-    if (!this.deps.oauth) throw new ConflictError('Slack OAuth is not configured')
+  /** Build the "Add to Slack" authorize URL for a workspace's account, embedding `state`. */
+  async buildInstallUrl(workspaceId: string, state: string, scopes: string[]): Promise<string> {
+    const oauth = await this.resolveOAuth(workspaceId)
+    if (!oauth) throw new ConflictError('Slack OAuth is not configured')
     const params = new URLSearchParams({
-      client_id: this.deps.oauth.clientId,
+      client_id: oauth.clientId,
       scope: scopes.join(','),
-      redirect_uri: this.deps.oauth.redirectUrl,
+      redirect_uri: oauth.redirectUrl,
       state,
     })
     return `https://slack.com/oauth/v2/authorize?${params.toString()}`
+  }
+
+  /** Resolve the OAuth creds for the workspace's account (the install-scope key). */
+  private async resolveOAuth(workspaceId: string): Promise<SlackOAuthConfig | undefined> {
+    if (!this.deps.resolveOAuth) return undefined
+    return this.deps.resolveOAuth(await this.resolveAccountKey(workspaceId))
   }
 
   /** Connect by pasting a bot token (the always-available path). */
@@ -90,13 +110,14 @@ export class SlackConnectionService {
 
   /** Connect by exchanging an OAuth authorization code for a bot token. */
   async connectViaOAuth(workspaceId: string, code: string): Promise<SlackConnection> {
-    if (!this.deps.oauth) throw new ConflictError('Slack OAuth is not configured')
+    const oauth = await this.resolveOAuth(workspaceId)
+    if (!oauth) throw new ConflictError('Slack OAuth is not configured')
     const accountKey = await this.resolveAccountKey(workspaceId)
     const result = await this.slack.oauthAccess({
-      clientId: this.deps.oauth.clientId,
-      clientSecret: this.deps.oauth.clientSecret,
+      clientId: oauth.clientId,
+      clientSecret: oauth.clientSecret,
       code,
-      redirectUri: this.deps.oauth.redirectUrl,
+      redirectUri: oauth.redirectUrl,
     })
     return this.store(accountKey, {
       teamId: result.teamId,

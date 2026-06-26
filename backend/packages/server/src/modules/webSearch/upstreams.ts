@@ -111,22 +111,23 @@ export class SearxngWebSearchUpstream implements WebSearchUpstream {
 }
 
 /**
- * Build the container web-search upstream from a deployment's environment, or
- * undefined when none is configured (⇒ container web search stays off; the proxy
- * route replies 503). Brave wins when its key is set (the recommended path — one
- * backend key, nothing in the sandbox); else a self-hosted SearXNG the backend
- * reverse-proxies. These env vars live on the BACKEND (next to the model keys), not
- * in the container — distinct from the harness's own `BRAVE_SEARCH_API_KEY` /
- * `SEARXNG_URL` autodetect, which only applies to self-hosted runner-pool containers.
+ * Build the container web-search upstream from a resolved key config (the per-account
+ * settings store), or undefined when none is configured (⇒ container web search stays off
+ * for that account). Brave wins when its key is set (the recommended path — one backend
+ * key, nothing in the sandbox); else a self-hosted SearXNG the backend reverse-proxies.
+ * The keys live in the per-account settings store, not in the container — distinct from the
+ * harness's own `BRAVE_SEARCH_API_KEY` / `SEARXNG_URL` autodetect, which only applies to
+ * self-hosted runner-pool containers. Used by the proxy to resolve the run's account
+ * upstream dynamically.
  */
-export function createWebSearchUpstreamFromEnv(env: {
-  WEB_SEARCH_BRAVE_API_KEY?: string
-  WEB_SEARCH_SEARXNG_URL?: string
-  WEB_SEARCH_SEARXNG_API_KEY?: string
+export function createWebSearchUpstream(cfg: {
+  braveApiKey?: string
+  searxngUrl?: string
+  searxngApiKey?: string
 }): WebSearchUpstream | undefined {
-  const brave = env.WEB_SEARCH_BRAVE_API_KEY?.trim()
+  const brave = cfg.braveApiKey?.trim()
   if (brave) return new BraveWebSearchUpstream(brave)
-  const searxng = env.WEB_SEARCH_SEARXNG_URL?.trim()
-  if (searxng) return new SearxngWebSearchUpstream(searxng, env.WEB_SEARCH_SEARXNG_API_KEY?.trim())
+  const searxng = cfg.searxngUrl?.trim()
+  if (searxng) return new SearxngWebSearchUpstream(searxng, cfg.searxngApiKey?.trim())
   return undefined
 }

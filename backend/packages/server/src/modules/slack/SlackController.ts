@@ -42,7 +42,8 @@ export function slackController(): Hono<AppEnv> {
     const slack = requireSlack(c)
     if (!slack) return unavailable(c)
     const connection = await slack.connectionService.getConnection(param(c, 'workspaceId'))
-    return c.json({ connection, oauthEnabled: slack.connectionService.oauthEnabled })
+    const oauthEnabled = await slack.connectionService.oauthEnabled(param(c, 'workspaceId'))
+    return c.json({ connection, oauthEnabled })
   })
 
   // The "Add to Slack" URL, carrying an HMAC-signed `state` that binds the install
@@ -51,7 +52,8 @@ export function slackController(): Hono<AppEnv> {
   app.get('/slack/install-url', async (c) => {
     const slack = requireSlack(c)
     if (!slack) return unavailable(c)
-    if (!slack.connectionService.oauthEnabled) {
+    const workspaceId = param(c, 'workspaceId')
+    if (!(await slack.connectionService.oauthEnabled(workspaceId))) {
       return c.json(
         { error: { code: 'unavailable', message: 'Slack OAuth is not configured' } },
         503,
@@ -59,11 +61,11 @@ export function slackController(): Hono<AppEnv> {
     }
     const signer = new StateSigner(c.get('container').config.auth.sessionSecret)
     const state = await signer.sign({
-      workspaceId: param(c, 'workspaceId'),
+      workspaceId,
       userId: c.get('user')?.id ?? null,
       exp: Date.now() + 10 * 60 * 1000,
     })
-    const url = slack.connectionService.buildInstallUrl(state, SLACK_BOT_SCOPES)
+    const url = await slack.connectionService.buildInstallUrl(workspaceId, state, SLACK_BOT_SCOPES)
     return c.json({ url })
   })
 
