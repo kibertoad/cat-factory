@@ -401,7 +401,7 @@ jobs:
   # the `changes` job succeeded and NO surface deploy failed or was cancelled (skipped
   # surfaces are fine). Leaving the marker unmoved on any failure means the next push
   # re-evaluates the diff from the last *successful* deploy, so the failed surface is
-  # retried instead of being skipped. Force-pushing a tag does not match the
+  # retried instead of being skipped. Updating a tag ref does not match the
   # `push.branches: [main]` trigger, so this never re-triggers the workflow.
   record:
     name: Record deployed commit
@@ -416,15 +416,20 @@ jobs:
       && needs.deploy-frontend.result != 'failure' && needs.deploy-frontend.result != 'cancelled' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Needs write access to move the marker tag (the only job that writes to the repo).
     permissions:
-      contents: write
+      contents: write # move the prod-deployed marker tag (the only repo write)
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
+      # Move the marker via the git refs API rather than a checkout + push, so no
+      # repo credentials are persisted to the runner's git config (zizmor[artipacked]).
+      # Inputs are routed through env, never inlined into the script (template-injection).
       - name: Advance prod-deployed marker
         env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.sha }}
         run: |
-          git tag -f prod-deployed "$HEAD_SHA"
-          git push --force origin refs/tags/prod-deployed
+          if gh api "repos/${REPO}/git/refs/tags/prod-deployed" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/${REPO}/git/refs/tags/prod-deployed" -f sha="${HEAD_SHA}" -F force=true
+          else
+            gh api -X POST "repos/${REPO}/git/refs" -f ref="refs/tags/prod-deployed" -f sha="${HEAD_SHA}"
+          fi
