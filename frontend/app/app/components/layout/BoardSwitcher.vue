@@ -8,6 +8,7 @@ import type { CloudProvider } from '~/types/domain'
 // board switcher over the single unscoped context.
 const accounts = useAccountsStore()
 const workspace = useWorkspaceStore()
+const ui = useUiStore()
 const toast = useToast()
 
 const busy = ref(false)
@@ -52,10 +53,13 @@ const accountItems = computed<DropdownMenuItem[][]>(() => [
   })),
   [
     { label: 'New organization…', icon: 'i-lucide-plus', onSelect: () => openPrompt('account') },
-    // Team management (members + invitations + email sender) for org accounts.
-    ...(accounts.activeAccount?.type === 'org'
-      ? [{ label: 'Manage team…', icon: 'i-lucide-users', onSelect: () => openSettings() }]
-      : []),
+    // Account & team settings (members + roles + invitations + email sender). The panel
+    // itself handles personal accounts (prompting to create an org), so this is not gated.
+    {
+      label: 'Account settings…',
+      icon: 'i-lucide-users',
+      onSelect: () => ui.openAccountSettings(),
+    },
     // Admins can set the account-wide default provider new services inherit.
     ...(accounts.activeAccount?.roles?.includes('admin')
       ? [
@@ -184,12 +188,6 @@ async function submitPrompt() {
     busy.value = false
   }
 }
-
-// ---- account settings modal (members / invitations / email) ----------------
-const settingsOpen = ref(false)
-function openSettings() {
-  settingsOpen.value = true
-}
 </script>
 
 <template>
@@ -264,16 +262,6 @@ function openSettings() {
             </UButton>
           </div>
         </form>
-      </template>
-    </UModal>
-
-    <!-- account team settings: members, invitations, email sender -->
-    <UModal v-model:open="settingsOpen" title="Team settings">
-      <template #body>
-        <AccountTeamSettings
-          v-if="accounts.activeAccountId"
-          :account-id="accounts.activeAccountId"
-        />
       </template>
     </UModal>
   </div>

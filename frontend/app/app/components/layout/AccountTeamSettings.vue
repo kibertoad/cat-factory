@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import type { AccountRole } from '~/types/domain'
 import AccountDeploymentSettings from '~/components/layout/AccountDeploymentSettings.vue'
 
@@ -21,6 +21,12 @@ const ROLE_ITEMS: { label: string; value: AccountRole }[] = [
 
 /** Whether the signed-in caller is an admin of this account (drives edit affordances). */
 const isAdmin = computed(() => accounts.activeAccount?.roles?.includes('admin') ?? false)
+/**
+ * Members / roles / invitations are org-scoped — the backend rejects membership on a
+ * personal account. For a personal account we show a "create an organization" CTA in
+ * their place; the email sender + account API keys remain available either way.
+ */
+const isOrg = computed(() => accounts.activeAccount?.type === 'org')
 
 async function updateMemberRoles(userId: string, roles: AccountRole[]) {
   try {
@@ -41,16 +47,44 @@ function notifyError(title: string, e: unknown) {
   })
 }
 
-onMounted(async () => {
+async function loadAll(accountId: string) {
   try {
-    await Promise.all([
-      accounts.loadRoster(props.accountId),
-      accounts.loadEmailConnection(props.accountId),
-    ])
+    const jobs: Promise<unknown>[] = [accounts.loadEmailConnection(accountId)]
+    // The roster only applies to org accounts.
+    if (isOrg.value) jobs.push(accounts.loadRoster(accountId))
+    await Promise.all(jobs)
   } catch (e) {
     notifyError('Could not load team settings', e)
   }
-})
+}
+
+onMounted(() => void loadAll(props.accountId))
+// Reload when the active account changes while the panel is open (e.g. after creating an
+// organization from the CTA below, which switches the active account to the new org).
+watch(
+  () => props.accountId,
+  (id) => {
+    if (id) void loadAll(id)
+  },
+)
+
+// ---- create organization (personal-account CTA) ---------------------------
+const newOrgName = ref('')
+
+async function createOrganization() {
+  const name = newOrgName.value.trim()
+  if (!name) return
+  busy.value = true
+  try {
+    await accounts.createOrg(name)
+    newOrgName.value = ''
+    toast.add({ title: 'Organization created', icon: 'i-lucide-check' })
+  } catch (e) {
+    notifyError('Could not create organization', e)
+  } finally {
+    busy.value = false
+  }
+}
 
 // ---- invitations ----------------------------------------------------------
 const inviteEmail = ref('')
@@ -125,8 +159,23 @@ async function disconnectEmail() {
 
 <template>
   <div class="space-y-6 text-sm">
+    <!-- personal-account CTA: members/roles/invitations need an organization -->
+    <section v-if="!isOrg" class="rounded-md border border-slate-800 bg-slate-800/40 p-4">
+      <h3 class="mb-1 font-semibold text-white">Invite teammates &amp; manage roles</h3>
+      <p class="mb-3 text-slate-400">
+        Members, roles and invitations live on an organization. Create one to invite teammates and
+        manage their roles — your personal boards stay as they are.
+      </p>
+      <form class="flex gap-2" @submit.prevent="createOrganization">
+        <UInput v-model="newOrgName" placeholder="Acme Inc." class="flex-1" />
+        <UButton type="submit" color="primary" :loading="busy" icon="i-lucide-plus">
+          Create organization
+        </UButton>
+      </form>
+    </section>
+
     <!-- members -->
-    <section>
+    <section v-if="isOrg">
       <h3 class="mb-2 font-semibold text-white">Members</h3>
       <ul class="space-y-1">
         <li
@@ -153,7 +202,7 @@ async function disconnectEmail() {
     </section>
 
     <!-- invitations -->
-    <section>
+    <section v-if="isOrg">
       <h3 class="mb-2 font-semibold text-white">Invite a teammate</h3>
       <form class="flex gap-2" @submit.prevent="sendInvite">
         <UInput
