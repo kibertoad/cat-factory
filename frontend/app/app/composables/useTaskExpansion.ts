@@ -2,12 +2,7 @@ import type { Ref } from 'vue'
 import { onMounted, onBeforeUnmount } from 'vue'
 import { useRafFn } from '@vueuse/core'
 import { lodAtLeast } from '~/composables/useSemanticZoom'
-import {
-  centreOwnership,
-  compareOwnership,
-  type Ownership,
-  type Rect,
-} from '~/utils/taskExpansionRanking'
+import { headerDistanceSq, type Rect } from '~/utils/taskExpansionRanking'
 
 function intersects(a: Rect, b: Rect) {
   return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
@@ -25,10 +20,13 @@ function sameSet(a: Set<string>, b: Set<string>) {
  * frame against live DOM rects so they follow pan / zoom / drag / resize:
  *
  *  - visibility: a task expands only while its card overlaps the board viewport.
- *  - overlap: walking the visible candidates centre-owner-first (the card whose band
- *    holds the screen centre, then nearest), a task expands only if its footprint
- *    doesn't collide with one already granted, so the card you're looking at wins an
- *    overlap and the rest stay compact.
+ *  - overlap: walking the visible candidates nearest-header-to-screen-centre first, a
+ *    task expands only if its footprint doesn't collide with one already granted, so the
+ *    card you're looking at wins an overlap and the rest stay compact.
+ *  - hover: the task directly under the pointer is granted first, so hovering any card
+ *    expands its pipeline regardless of its position on screen. "Under the pointer" is
+ *    the TOPMOST card at the cursor (document.elementFromPoint), so hovering a region
+ *    already covered by another open pipeline keeps that pipeline, not the card beneath.
  *
  * Writes the permitted id set into the `taskExpansion` store; `TaskPipelineMini` reads it.
  * Only tasks with a running pipeline (steps to show) are candidates — a task that
@@ -49,9 +47,28 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>) {
   // card is still tested at its expanded extent and stays denied. Stable.
   const expandedHeight = new Map<string, number>()
 
+  // Last pointer position over the board (viewport coords), or null when the pointer has
+  // left it. The card under the pointer is expanded on hover (see `hoveredTaskId`).
+  let pointer: { x: number; y: number } | null = null
+  function onPointerMove(e: PointerEvent) {
+    pointer = { x: e.clientX, y: e.clientY }
+  }
+  function onPointerLeave() {
+    pointer = null
+  }
+
   function rectOf(id: string): DOMRect | null {
     const el = document.querySelector(`[data-block-id="${id}"]`) as HTMLElement | null
     return el ? el.getBoundingClientRect() : null
+  }
+
+  // The task whose card is topmost at the pointer, or null. Using elementFromPoint (not a
+  // rect test) means an open pipeline stacked above a neighbour wins the hit, so hovering
+  // a region obscured by another pipeline doesn't switch to the card hidden beneath it.
+  function hoveredTaskId(): string | null {
+    if (!pointer) return null
+    const hit = document.elementFromPoint(pointer.x, pointer.y)
+    return hit?.closest('[data-block-id]')?.getAttribute('data-block-id') ?? null
   }
 
   function recompute() {
@@ -65,7 +82,7 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>) {
     const cx = view.left + view.width / 2
     const cy = view.top + view.height / 2
 
-    const candidates: ({ id: string; rect: Rect } & Ownership)[] = []
+    const candidates: { id: string; rect: Rect; dist: number }[] = []
     const liveIds = new Set<string>()
     for (const t of board.allTasks) {
       // Only tasks whose run actually has steps would expand a pipeline list.
@@ -87,22 +104,29 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>) {
         top: rect.top,
         bottom: rect.top + height,
       }
-      // Rank by which card "owns" the screen centre (centreOwnership): the card whose
-      // band the centre sits in wins, so a stacked neighbour bleeding down from above
-      // can't steal the grant just by being earlier in document order, and a card you've
-      // scrolled into keeps it. See utils/taskExpansionRanking.ts.
-      candidates.push({ id: t.id, rect: footprint, ...centreOwnership(footprint, cx, cy) })
+      // Rank by the screen centre's distance to the card's stable header (top edge),
+      // so the card you're looking at wins and a tall card's expanded body can't claim
+      // the centre just by covering it. See utils/taskExpansionRanking.ts.
+      candidates.push({ id: t.id, rect: footprint, dist: headerDistanceSq(footprint, cx, cy) })
     }
     // Drop cached heights for cards that are gone, so the map can't grow unbounded.
     for (const id of expandedHeight.keys()) if (!liveIds.has(id)) expandedHeight.delete(id)
-    candidates.sort(compareOwnership)
+    candidates.sort((a, b) => a.dist - b.dist)
 
-    // Greedy by distance to centre: a candidate is granted only if its projected
-    // footprint clears every footprint already granted, so the centre-most card
-    // wins any overlap.
+    // Greedy by header distance: a candidate is granted only if its projected footprint
+    // clears every footprint already granted, so the centre-most card wins any overlap.
+    // The hovered card is granted FIRST, so hovering a card expands it regardless of its
+    // distance from the centre (and a centre-most neighbour it overlaps yields to it).
+    const hovered = hoveredTaskId()
     const claimed: Rect[] = []
     const next = new Set<string>()
+    const hoveredCard = hovered ? candidates.find((c) => c.id === hovered) : undefined
+    if (hoveredCard) {
+      next.add(hoveredCard.id)
+      claimed.push(hoveredCard.rect)
+    }
     for (const c of candidates) {
+      if (c.id === hoveredCard?.id) continue
       if (claimed.some((r) => intersects(c.rect, r))) continue
       next.add(c.id)
       claimed.push(c.rect)
@@ -113,10 +137,16 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>) {
   const { pause, resume } = useRafFn(recompute, { immediate: false })
   onMounted(() => {
     store.setDriverActive(true)
+    const el = container.value
+    el?.addEventListener('pointermove', onPointerMove)
+    el?.addEventListener('pointerleave', onPointerLeave)
     resume()
   })
   onBeforeUnmount(() => {
     pause()
+    const el = container.value
+    el?.removeEventListener('pointermove', onPointerMove)
+    el?.removeEventListener('pointerleave', onPointerLeave)
     store.setDriverActive(false)
   })
 }

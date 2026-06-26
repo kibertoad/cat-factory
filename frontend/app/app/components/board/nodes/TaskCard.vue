@@ -182,37 +182,19 @@ function selectTask() {
     ]"
     @click.stop="selectTask"
   >
-    <!-- header row -->
-    <div class="flex items-start gap-1.5">
-      <span
-        class="mt-1 h-2 w-2 shrink-0 rounded-full"
-        :style="{ backgroundColor: statusMeta.color }"
-      />
+    <!-- meta row: status dot, recurring icon, status label + connect handle. The
+         status label is a fixed-width-ish stub ("APPROVAL NEEDED" etc.), so it sits
+         on its own row rather than stealing horizontal space from the title. -->
+    <div class="flex items-center gap-1.5">
+      <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: statusMeta.color }" />
       <UIcon
         v-if="schedule"
         name="i-lucide-repeat"
-        class="mt-0.5 h-3 w-3 shrink-0 text-indigo-400"
+        class="h-3 w-3 shrink-0 text-indigo-400"
         :title="schedule.enabled ? 'Recurring pipeline' : 'Recurring pipeline (paused)'"
       />
-      <!-- Long titles wrap to two lines rather than truncating to an unreadable stub;
-           the full text stays available on hover. -->
       <span
-        class="line-clamp-2 min-w-0 flex-1 break-words text-[11px] font-semibold leading-snug text-slate-100"
-        :title="task.title"
-        >{{ task.title }}</span
-      >
-      <!-- drag-to-connect handle: drag onto another task to make it depend on this one -->
-      <button
-        type="button"
-        class="nodrag ml-1 shrink-0 cursor-crosshair rounded-full p-0.5 text-slate-500 hover:bg-slate-800 hover:text-amber-400"
-        title="Drag onto another task to make it depend on this one"
-        @pointerdown.stop="startConnect(task.id, $event)"
-        @click.stop
-      >
-        <UIcon name="i-lucide-spline" class="h-3 w-3" />
-      </button>
-      <span
-        class="ml-auto shrink-0 text-[9px] uppercase tracking-wide"
+        class="ml-auto truncate text-[9px] uppercase tracking-wide"
         :class="
           runFailed
             ? 'text-rose-400'
@@ -225,6 +207,25 @@ function selectTask() {
       >
         {{ statusText }}
       </span>
+      <!-- drag-to-connect handle: drag onto another task to make it depend on this one -->
+      <button
+        type="button"
+        class="nodrag shrink-0 cursor-crosshair rounded-full p-0.5 text-slate-500 hover:bg-slate-800 hover:text-amber-400"
+        title="Drag onto another task to make it depend on this one"
+        @pointerdown.stop="startConnect(task.id, $event)"
+        @click.stop
+      >
+        <UIcon name="i-lucide-spline" class="h-3 w-3" />
+      </button>
+    </div>
+
+    <!-- title gets a full-width row so long titles wrap to two lines rather than
+         truncating to an unreadable stub; the full text stays available on hover. -->
+    <div
+      class="mt-1 line-clamp-2 break-words text-[11px] font-semibold leading-snug text-slate-100"
+      :title="task.title"
+    >
+      {{ task.title }}
     </div>
 
     <!-- a failed run: the shared failure banner + retry, never a stuck bar -->

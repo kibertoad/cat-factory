@@ -4,8 +4,13 @@ import { useBlockDrag } from '~/composables/useBlockDrag'
 
 const props = defineProps<{ taskId: string }>()
 const board = useBoardStore()
+const expansion = useTaskExpansionStore()
 const task = computed(() => board.getBlock(props.taskId))
 const { draggingId, startDrag } = useBlockDrag()
+
+// An expanded pipeline grows downward over its neighbours, so it must stack above the
+// other (compact) task cards — never let a neighbour render on top of the pipeline.
+const expanded = computed(() => expansion.allowed.has(props.taskId))
 
 // Once a task is merged it stops being a unit of work and becomes part of the
 // architecture: it no longer renders as a draggable card (arrows fall back to its
@@ -26,7 +31,7 @@ function onHandle(e: PointerEvent) {
       :style="{
         left: task.position.x + 'px',
         top: task.position.y + 'px',
-        zIndex: draggingId === taskId ? 60 : 10,
+        zIndex: draggingId === taskId ? 60 : expanded ? 20 : 10,
         // While this task is being dragged it must not capture hit-tests, so the
         // drop-zone (service or module) beneath the cursor can be resolved on
         // release — including the drag handle, which lives in this wrapper above

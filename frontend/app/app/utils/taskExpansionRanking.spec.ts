@@ -1,60 +1,51 @@
 import { describe, it, expect } from 'vitest'
-import {
-  centreOwnership,
-  compareOwnership,
-  type Rect,
-} from './taskExpansionRanking'
+import { headerDistanceSq, type Rect } from './taskExpansionRanking'
 
-/** Rank a set of footprints against a screen centre, best (would-expand) first. */
-function rank(footprints: Record<string, Rect>, cx: number, cy: number): string[] {
-  return Object.entries(footprints)
-    .map(([id, rect]) => ({ id, ...centreOwnership(rect, cx, cy) }))
-    .sort(compareOwnership)
+/** Rank a set of cards against a screen centre, best (would-expand) first. */
+function rank(cards: Record<string, Rect>, cx: number, cy: number): string[] {
+  return Object.entries(cards)
+    .map(([id, rect]) => ({ id, dist: headerDistanceSq(rect, cx, cy) }))
+    .sort((a, b) => a.dist - b.dist)
     .map((c) => c.id)
 }
 
-describe('centreOwnership', () => {
-  it('marks the centre as inside a footprint that contains it', () => {
-    const r: Rect = { left: 0, right: 100, top: 0, bottom: 100 }
-    expect(centreOwnership(r, 50, 50).inside).toBe(true)
-    expect(centreOwnership(r, 150, 50).inside).toBe(false)
+describe('headerDistanceSq', () => {
+  it('measures from the centre of the card top edge', () => {
+    const r: Rect = { left: 0, right: 100, top: 200, bottom: 600 }
+    // top-centre is (50, 200); centre (50, 240) → dy 40 → 40² = 1600
+    expect(headerDistanceSq(r, 50, 240)).toBe(1600)
+    // 30px to the right of the top-centre, level with the top → 30² = 900
+    expect(headerDistanceSq(r, 80, 200)).toBe(900)
   })
 
-  it('keys an owner by how shallowly the centre sits below its top', () => {
-    const r: Rect = { left: 0, right: 100, top: 20, bottom: 400 }
-    expect(centreOwnership(r, 50, 60).key).toBe(40) // cy - top
-  })
-
-  it('keys a non-owner by squared distance to the footprint', () => {
-    const r: Rect = { left: 0, right: 100, top: 0, bottom: 100 }
-    // centre 30px to the right, level with the box → 30² = 900
-    expect(centreOwnership(r, 130, 50).key).toBe(900)
+  it('ignores the expanded height — only the top edge counts', () => {
+    const short: Rect = { left: 0, right: 100, top: 200, bottom: 260 }
+    const tall: Rect = { left: 0, right: 100, top: 200, bottom: 2000 }
+    expect(headerDistanceSq(short, 50, 240)).toBe(headerDistanceSq(tall, 50, 240))
   })
 })
 
-describe('compareOwnership ranking', () => {
-  // The regression: a tall card stacked above bleeds its expanded footprint down over
-  // the card whose band actually holds the centre. Both contain the centre, so a plain
-  // "0 when inside" distance tied them and document order won. Ownership must pick the
-  // card the centre natively sits in (the larger top above the centre).
-  it('prefers the card whose band holds the centre over one bleeding down from above', () => {
-    const above: Rect = { left: 0, right: 200, top: -300, bottom: 400 } // tall, from above
-    const here: Rect = { left: 0, right: 200, top: 280, bottom: 700 } // band holds centre
-    expect(rank({ above, here }, 100, 320)).toEqual(['here', 'above'])
-    // ... and the document-order flip can't change the winner.
-    expect(rank({ here, above }, 100, 320)).toEqual(['here', 'above'])
+describe('ranking', () => {
+  // The regression from the screenshot: a tall card parked at the top of the screen
+  // expands its pipeline down past the centre, so its body covers the centre. A compact
+  // card whose header sits right at the centre must still win — the one you're looking at.
+  it('prefers the card whose header is at the centre over a tall card bleeding down from the top', () => {
+    const top: Rect = { left: 0, right: 200, top: 30, bottom: 700 } // header far up, body covers centre
+    const here: Rect = { left: 0, right: 200, top: 320, bottom: 520 } // header at the centre
+    expect(rank({ top, here }, 100, 340)).toEqual(['here', 'top'])
+    // document order can't flip the winner
+    expect(rank({ here, top }, 100, 340)).toEqual(['here', 'top'])
   })
 
-  it('keeps a tall card you have scrolled into expanded when its body still owns the centre', () => {
-    // Tall card whose top has scrolled above the viewport, neighbour entering from below.
-    const scrolledInto: Rect = { left: 0, right: 200, top: -200, bottom: 600 }
-    const entering: Rect = { left: 0, right: 200, top: 550, bottom: 900 }
-    expect(rank({ scrolledInto, entering }, 100, 300)).toEqual(['scrolledInto', 'entering'])
+  it('ranks by the header nearest the centre regardless of expansion state', () => {
+    const above: Rect = { left: 0, right: 200, top: 100, bottom: 800 }
+    const below: Rect = { left: 0, right: 200, top: 360, bottom: 420 }
+    expect(rank({ above, below }, 100, 320)).toEqual(['below', 'above'])
   })
 
-  it('falls back to nearest footprint when the centre sits over no card', () => {
-    const near: Rect = { left: 0, right: 100, top: 0, bottom: 100 }
-    const far: Rect = { left: 400, right: 500, top: 0, bottom: 100 }
-    expect(rank({ far, near }, 150, 50)).toEqual(['near', 'far'])
+  it('uses horizontal offset to break a vertical tie', () => {
+    const near: Rect = { left: 0, right: 100, top: 100, bottom: 200 }
+    const far: Rect = { left: 400, right: 500, top: 100, bottom: 200 }
+    expect(rank({ far, near }, 80, 100)).toEqual(['near', 'far'])
   })
 })
