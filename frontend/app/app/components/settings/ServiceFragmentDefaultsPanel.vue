@@ -8,6 +8,7 @@ import { onMounted, ref } from 'vue'
 
 const fragments = useFragmentsStore()
 const defaults = useServiceFragmentDefaultsStore()
+const ui = useUiStore()
 const toast = useToast()
 
 const busy = ref(false)
@@ -105,5 +106,25 @@ function remove(id: string) {
     <p v-else class="text-[11px] text-slate-500">
       None — new services start with no service-level fragments.
     </p>
+
+    <div class="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-800 pt-3 text-[11px]">
+      <span class="text-slate-500">
+        Need to add or edit the fragments themselves (hand-authored, linked docs, repos)?
+      </span>
+      <button
+        type="button"
+        class="font-medium text-primary-400 hover:underline"
+        @click="ui.openFragmentLibrary()"
+      >
+        Manage this board's fragment library →
+      </button>
+      <button
+        type="button"
+        class="font-medium text-primary-400 hover:underline"
+        @click="ui.openAccountSettings()"
+      >
+        Manage account fragments →
+      </button>
+    </div>
   </div>
 </template>

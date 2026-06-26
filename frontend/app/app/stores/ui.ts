@@ -77,6 +77,9 @@ export const useUiStore = defineStore('ui', () => {
   // linked guideline repos; ADR 0006).
   const fragmentLibraryOpen = ref(false)
 
+  // Account settings panel (account-tier fragment library; personal or org).
+  const accountSettingsOpen = ref(false)
+
   // Command bar (⌘K) — searchable launcher for every navbar action.
   const commandBarOpen = ref(false)
 
@@ -343,6 +346,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeFragmentLibrary() {
     fragmentLibraryOpen.value = false
   }
+  function openAccountSettings() {
+    accountSettingsOpen.value = true
+  }
+  function closeAccountSettings() {
+    accountSettingsOpen.value = false
+  }
   function openCommandBar() {
     commandBarOpen.value = true
   }
@@ -550,6 +559,7 @@ export const useUiStore = defineStore('ui', () => {
     githubOpen,
     slackOpen,
     fragmentLibraryOpen,
+    accountSettingsOpen,
     commandBarOpen,
     integrationsOpen,
     cameFromIntegrations,
@@ -608,6 +618,8 @@ export const useUiStore = defineStore('ui', () => {
     closeSlack,
     openFragmentLibrary,
     closeFragmentLibrary,
+    openAccountSettings,
+    closeAccountSettings,
     openCommandBar,
     closeCommandBar,
     toggleCommandBar,

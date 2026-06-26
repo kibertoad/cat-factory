@@ -53,10 +53,19 @@ export function fragmentsApi({ http, ws, scope }: ApiContext) {
       body: CreateDocumentFragmentInput,
     ) => http<PromptFragment>(`${scope(kind, id)}/document-fragments`, { method: 'POST', body }),
 
-    // Force an immediate live re-resolve of a document-backed fragment.
-    refreshFragment: (kind: FragmentOwnerKind, id: string, fragmentId: string) =>
+    // Force an immediate live re-resolve of a document-backed fragment. At the
+    // account scope the backend needs a `viaWorkspaceId` (the workspace whose
+    // document-source connection to fetch through); it is ignored at workspace scope.
+    refreshFragment: (
+      kind: FragmentOwnerKind,
+      id: string,
+      fragmentId: string,
+      viaWorkspaceId?: string,
+    ) =>
       http<PromptFragment>(
-        `${scope(kind, id)}/prompt-fragments/${encodeURIComponent(fragmentId)}/refresh`,
+        `${scope(kind, id)}/prompt-fragments/${encodeURIComponent(fragmentId)}/refresh${
+          viaWorkspaceId ? `?viaWorkspaceId=${encodeURIComponent(viaWorkspaceId)}` : ''
+        }`,
         { method: 'POST' },
       ),
 
