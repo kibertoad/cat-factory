@@ -11,6 +11,7 @@ import { fragmentsApi } from './api/fragments'
 import { githubApi } from './api/github'
 import { humanTestApi } from './api/humanTest'
 import { kaizenApi } from './api/kaizen'
+import { localSettingsApi } from './api/localSettings'
 import { modelsApi } from './api/models'
 import { notificationsApi } from './api/notifications'
 import { presetsApi } from './api/presets'
@@ -89,6 +90,7 @@ export function useApi() {
     ...followUpsApi(ctx),
     ...humanTestApi(ctx),
     ...kaizenApi(ctx),
+    ...localSettingsApi(ctx),
     ...specApi(ctx),
     ...notificationsApi(ctx),
     ...presetsApi(ctx),

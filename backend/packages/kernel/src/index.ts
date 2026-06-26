@@ -52,6 +52,7 @@ export {
   isModelUsable,
   subscriptionOptionFor,
   isIndividualVendor,
+  isAmbientNativeVendor,
   INDIVIDUAL_VENDORS,
   individualVendorForModelId,
   personalCredentialVendorForModelId,

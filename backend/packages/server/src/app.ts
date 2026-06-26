@@ -16,6 +16,7 @@ import { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
 import { mergePresetController } from './modules/merge/MergePresetController.js'
 import { sandboxController } from './modules/sandbox/SandboxController.js'
 import { workspaceSettingsController } from './modules/settings/WorkspaceSettingsController.js'
+import { localSettingsController } from './modules/localSettings/LocalSettingsController.js'
 import { releaseHealthController } from './modules/releaseHealth/ReleaseHealthController.js'
 import { incidentEnrichmentController } from './modules/incidentEnrichment/IncidentEnrichmentController.js'
 import { modelPresetController } from './modules/modelPresets/ModelPresetController.js'
@@ -79,6 +80,8 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/', userSecretController())
   app.route('/', openRouterCatalogController())
   app.route('/', userApiKeyController())
+  // Local-mode operational settings (warm pool + checkout reuse); 503 on non-local facades.
+  app.route('/', localSettingsController())
   app.route('/accounts/:accountId', fragmentLibraryController('account'))
   app.route('/', workspaceController())
   // Real-time WebSocket event stream (self-authenticates via ?ticket=; the facade's

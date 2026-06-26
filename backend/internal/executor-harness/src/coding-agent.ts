@@ -10,6 +10,7 @@ import {
   excludeFromGit,
   headCommit,
   listUntrackedFiles,
+  prepareExistingCheckout,
   pushBranch,
   refreshFromBaseIfClean,
   remoteBranchExists,
@@ -17,10 +18,10 @@ import {
 import { FOLLOW_UPS_FILENAME, FollowUpTailer } from './follow-ups.js'
 import type { PiRunStats } from './pi.js'
 import {
+  acquireRepoCheckout,
   agentNeverActed,
   agentOutputTail,
   runAgentInWorkspace,
-  withWorkspace,
 } from './pi-workspace.js'
 import type { RunOptions } from './runner.js'
 import { log } from './logger.js'
@@ -59,6 +60,12 @@ export interface CodingAgentSpec extends HarnessAuthFields {
   webToolsGuidance?: string
   /** Enable proxy-backed web search for this run (see {@link AgentRunSpec.webSearchProxy}). */
   webSearchProxy?: boolean
+  /**
+   * Reuse a stable per-repo checkout (clean-sweep + fetch + switch branch) instead of a
+   * fresh clone into a throwaway temp dir. Set only by the local warm-pool transport
+   * (its containers are reused across runs); absent everywhere else.
+   */
+  persistentCheckout?: boolean
   /**
    * Tail the Coder's follow-up sentinel file ({@link FOLLOW_UPS_FILENAME}) and stream the
    * forward-looking items it surfaces out on the job view (the Follow-up companion). Set
@@ -123,223 +130,247 @@ export async function runCodingAgent(
     repo: `${spec.repo.owner}/${spec.repo.name}`,
     branch: spec.pushBranch,
   }
-  return withWorkspace(spec.kind, async (dir) => {
-    // Resume an evicted earlier run when its work branch already exists on the
-    // remote: clone THAT branch and continue on its commits, rather than branching
-    // off base and redoing everything. Only the impl path (which creates a fresh
-    // `newBranch`) can resume; the ci-fix/conflict paths already clone the PR branch.
-    //
-    // Resume safety relies on two invariants the dispatcher (worker) upholds, since
-    // the harness can't see run/PR state from inside the container:
-    //  - At most ONE active run per block at a time. The work branch is deterministic
-    //    per block (`cat-factory/<blockId>`), so two concurrent runs would target the
-    //    same branch; their pushes race. A plain (non-forced) push fails safely on a
-    //    non-fast-forward rather than clobbering the other run's commits, so the worst
-    //    case is one run failing — never lost work — but the dispatcher should not
-    //    knowingly run two at once.
-    //  - Re-dispatch only NON-terminal runs (failed / evicted / stale-running), whose
-    //    branch is by definition unmerged. Resuming a branch whose PR already merged
-    //    could re-introduce merged work; that is avoided two ways: the platform deletes
-    //    the work branch when its PR merges (GitHubPullRequestMerger), so a re-run finds
-    //    no branch and starts fresh, and a `done` block is never re-dispatched anyway.
-    const resumed =
-      spec.newBranch != null &&
-      (await remoteBranchExists(spec.repo.cloneUrl, spec.newBranch, spec.ghToken, signal))
-    if (resumed) {
-      log.info('coding-agent: resuming existing branch', { ...trace, branch: spec.newBranch })
-      await cloneExistingBranch({
-        cloneUrl: spec.repo.cloneUrl,
-        branch: spec.newBranch!,
-        ghToken: spec.ghToken,
-        dir,
-        signal,
-      })
-    } else {
-      log.info('coding-agent: cloning', { ...trace, cloneBranch: spec.cloneBranch })
-      await cloneRepo({
-        repo: { ...spec.repo, baseBranch: spec.cloneBranch },
-        ghToken: spec.ghToken,
-        dir,
-        signal,
-      })
-      if (spec.newBranch) await createBranch(dir, spec.newBranch, signal)
-    }
-    // The branch tip before the agent runs this time. A FRESH run produced work iff
-    // the branch advances past it; a RESUMED run already carries prior work, so it is
-    // never a no-op regardless of what this pass adds. Captured BEFORE the resume base
-    // refresh below so that refresh's merge commit counts as advancement and is pushed.
-    const baseSha = await headCommit(dir, signal)
-
-    // A resumed branch was cut from an OLDER base; merge the latest base in when the
-    // two merge cleanly, so the agent works against current base and the PR stays
-    // current. On a conflict this is a no-op (the run continues on the stale base — the
-    // merge gate handles a conflicting PR downstream, as before), so it never blocks a
-    // resume. Best-effort: any error is treated as "continue without refreshing".
-    if (resumed) {
-      const refreshed = await refreshFromBaseIfClean(
-        dir,
-        spec.cloneBranch,
-        spec.ghToken,
-        signal,
-      ).catch(() => false)
-      if (!refreshed) {
-        log.info('coding-agent: resume base refresh skipped (conflict or error)', {
+  return acquireRepoCheckout(
+    { persistent: spec.persistentCheckout === true, prefix: spec.kind, repo: spec.repo },
+    async (dir) => {
+      // Resume an evicted earlier run when its work branch already exists on the
+      // remote: clone THAT branch and continue on its commits, rather than branching
+      // off base and redoing everything. Only the impl path (which creates a fresh
+      // `newBranch`) can resume; the ci-fix/conflict paths already clone the PR branch.
+      //
+      // Resume safety relies on two invariants the dispatcher (worker) upholds, since
+      // the harness can't see run/PR state from inside the container:
+      //  - At most ONE active run per block at a time. The work branch is deterministic
+      //    per block (`cat-factory/<blockId>`), so two concurrent runs would target the
+      //    same branch; their pushes race. A plain (non-forced) push fails safely on a
+      //    non-fast-forward rather than clobbering the other run's commits, so the worst
+      //    case is one run failing — never lost work — but the dispatcher should not
+      //    knowingly run two at once.
+      //  - Re-dispatch only NON-terminal runs (failed / evicted / stale-running), whose
+      //    branch is by definition unmerged. Resuming a branch whose PR already merged
+      //    could re-introduce merged work; that is avoided two ways: the platform deletes
+      //    the work branch when its PR merges (GitHubPullRequestMerger), so a re-run finds
+      //    no branch and starts fresh, and a `done` block is never re-dispatched anyway.
+      const resumed =
+        spec.newBranch != null &&
+        (await remoteBranchExists(spec.repo.cloneUrl, spec.newBranch, spec.ghToken, signal))
+      if (spec.persistentCheckout) {
+        // Reused checkout: clean-sweep + fetch + switch branch in place. A resumed branch
+        // (or a run without `newBranch`, working directly on `cloneBranch`) already exists
+        // on the remote, so check it out directly; otherwise (re)create `newBranch` off the
+        // base tip — the same resume-vs-fresh decision the clone paths below make.
+        const targetBranch = spec.newBranch ?? spec.cloneBranch
+        log.info('coding-agent: preparing reused checkout', {
           ...trace,
-          base: spec.cloneBranch,
-        })
-      }
-    }
-
-    // Serialize all pushes to the work branch through a single in-flight promise.
-    // A checkpoint tick and the final push (or two slow checkpoint ticks) must never
-    // run `git push` to the same branch concurrently: overlapping pushes race on the
-    // remote ref and can make a push fail with a ref-lock / non-fast-forward error —
-    // which, on the FINAL push, would fail the whole run even though the work is
-    // committed. `pushWorkOnce` coalesces concurrent callers onto one push and only
-    // pushes once the branch has advanced past `baseSha` (see below).
-    //
-    // Only push once the branch has advanced past its pre-run tip: pushing while it
-    // still sits at `baseSha` would create the work branch at the base commit (a
-    // zero-diff branch), which a later retry would see via `remoteBranchExists` and
-    // treat as resumable work — then fail to open a PR ("no commits between base and
-    // head"). So a run that never commits leaves NO branch behind, preserving the
-    // clean no-op outcome.
-    let pushInFlight: Promise<void> | null = null
-    const pushWorkOnce = (): Promise<void> => {
-      if (pushInFlight) return pushInFlight
-      pushInFlight = (async () => {
-        if (!(await branchHasCommitsSince(dir, baseSha, signal))) return
-        await pushBranch(dir, spec.pushBranch, spec.ghToken, signal)
-      })().finally(() => {
-        pushInFlight = null
-      })
-      return pushInFlight
-    }
-    // Read the in-flight push, if any. A function (with an explicit return type) so the
-    // value isn't subject to the caller's straight-line narrowing — `pushInFlight` is
-    // only ever assigned inside closures, which flow analysis can't observe.
-    const inFlightPush = (): Promise<void> | null => pushInFlight
-
-    // Checkpoint the agent's committed work to the branch periodically so an eviction
-    // mid-run doesn't lose it (a retry then resumes from the pushed commits). The
-    // agent commits its own work; this only PUSHES already-committed commits, so it
-    // never races the agent's staging. Best-effort: a failed checkpoint is skipped.
-    const checkpoint = setInterval(() => {
-      pushWorkOnce().catch((err) => {
-        log.info('coding-agent: checkpoint push skipped', {
-          ...trace,
-          reason: err instanceof Error ? err.message : String(err),
-        })
-      })
-    }, checkpointIntervalMs())
-    checkpoint.unref?.()
-
-    // In a monorepo the service lives in a subdirectory: run Pi with its cwd set to
-    // that subtree (git stays rooted at `dir` so commits/pushes still cover the whole
-    // checkout). Created if missing so a coder scaffolding a brand-new service into an
-    // existing monorepo has a cwd to start in. The agent is also TOLD it's in a
-    // monorepo (and where) via the AGENTS.md context below.
-    const serviceDirectory = spec.repo.serviceDirectory
-    const workDir = serviceDirectory ? join(dir, serviceDirectory) : dir
-    if (serviceDirectory) await mkdir(workDir, { recursive: true })
-
-    // Follow-up companion: tail the Coder's sentinel file and stream new items out on the
-    // job view. Locally exclude it from git first so the agent's own `git add` can never
-    // stage it and it never surfaces as an untracked leftover or in the PR. The sentinel
-    // lives in the agent's working directory (its cwd), where the prompt tells it to write.
-    const followUpTailer =
-      spec.streamFollowUps && opts.onFollowUp
-        ? new FollowUpTailer(join(workDir, FOLLOW_UPS_FILENAME), opts.onFollowUp)
-        : undefined
-    let followUpTick: ReturnType<typeof setInterval> | undefined
-    if (followUpTailer) {
-      await excludeFromGit(dir, FOLLOW_UPS_FILENAME, signal)
-      followUpTick = setInterval(() => {
-        void followUpTailer.poll()
-      }, followUpPollIntervalMs())
-      followUpTick.unref?.()
-    }
-
-    let outcome: CodingAgentOutcome
-    try {
-      log.info('coding-agent: running agent', { ...trace, serviceDirectory })
-      const { summary, stats, stderrTail, usage } = await runAgentInWorkspace(
-        {
-          dir: workDir,
-          systemPrompt: spec.systemPrompt,
-          userPrompt: spec.userPrompt,
-          model: spec.model,
-          harness: spec.harness,
-          subscriptionToken: spec.subscriptionToken,
-          subscriptionBaseUrl: spec.subscriptionBaseUrl,
-          proxyBaseUrl: spec.proxyBaseUrl,
-          sessionToken: spec.sessionToken,
-          serviceDirectory,
-          webToolsGuidance: spec.webToolsGuidance,
-          webSearchProxy: spec.webSearchProxy,
-        },
-        opts,
-      )
-
-      // Stop tailing the follow-up sentinel and flush any items written after the last
-      // tick, so a fast final burst still reaches the job view before the run is recorded.
-      if (followUpTick) clearInterval(followUpTick)
-      if (followUpTailer) await followUpTailer.poll().catch(() => {})
-
-      // Safety net for forgotten edits: commit changes to TRACKED files only (never
-      // untracked scratch files/artifacts — the agent owns committing new files).
-      await commitTrackedEdits(dir, spec.commitMessage, signal)
-
-      // Stop periodic checkpoints and let any in-flight one settle BEFORE the final
-      // push, so the two never run a concurrent `git push` to the same branch (the
-      // final push below is then a fresh attempt whose failure is the real signal).
-      clearInterval(checkpoint)
-      const inflight = inFlightPush()
-      if (inflight) await inflight.catch(() => {})
-
-      // Surface (don't fail on) untracked, non-ignored files the agent left behind:
-      // `commitTrackedEdits` only captures edits to ALREADY tracked files, so a NEW
-      // file the agent created but forgot to commit is silently dropped. Logging it
-      // makes that loss observable when a PR turns out to be missing a file.
-      const leftover = await listUntrackedFiles(dir, signal)
-      if (leftover.length > 0) {
-        log.warn('coding-agent: uncommitted new files left behind (not pushed)', {
-          ...trace,
-          count: leftover.length,
-          files: leftover.slice(0, 20),
-        })
-      }
-
-      const hasWork = resumed || (await branchHasCommitsSince(dir, baseSha, signal))
-      if (!hasWork) {
-        log.info('coding-agent: no changes produced', { ...trace, ...stats })
-        outcome = {
-          pushed: false,
+          branch: targetBranch,
           resumed,
-          summary,
-          stats,
-          ...(stderrTail ? { stderrTail } : {}),
-          ...(usage ? { usage } : {}),
-        }
+        })
+        await prepareExistingCheckout({
+          dir,
+          repo: spec.repo,
+          ghToken: spec.ghToken,
+          branch: targetBranch,
+          baseBranch: spec.cloneBranch,
+          existing: resumed || spec.newBranch == null,
+          signal,
+        })
+      } else if (resumed) {
+        log.info('coding-agent: resuming existing branch', { ...trace, branch: spec.newBranch })
+        await cloneExistingBranch({
+          cloneUrl: spec.repo.cloneUrl,
+          branch: spec.newBranch!,
+          ghToken: spec.ghToken,
+          dir,
+          signal,
+        })
       } else {
-        log.info('coding-agent: pushing', { ...trace, resumed, ...stats })
-        await pushWorkOnce()
-        outcome = {
-          pushed: true,
-          resumed,
-          summary,
-          stats,
-          ...(stderrTail ? { stderrTail } : {}),
-          ...(usage ? { usage } : {}),
+        log.info('coding-agent: cloning', { ...trace, cloneBranch: spec.cloneBranch })
+        await cloneRepo({
+          repo: { ...spec.repo, baseBranch: spec.cloneBranch },
+          ghToken: spec.ghToken,
+          dir,
+          signal,
+        })
+        if (spec.newBranch) await createBranch(dir, spec.newBranch, signal)
+      }
+      // The branch tip before the agent runs this time. A FRESH run produced work iff
+      // the branch advances past it; a RESUMED run already carries prior work, so it is
+      // never a no-op regardless of what this pass adds. Captured BEFORE the resume base
+      // refresh below so that refresh's merge commit counts as advancement and is pushed.
+      const baseSha = await headCommit(dir, signal)
+
+      // A resumed branch was cut from an OLDER base; merge the latest base in when the
+      // two merge cleanly, so the agent works against current base and the PR stays
+      // current. On a conflict this is a no-op (the run continues on the stale base — the
+      // merge gate handles a conflicting PR downstream, as before), so it never blocks a
+      // resume. Best-effort: any error is treated as "continue without refreshing".
+      if (resumed) {
+        const refreshed = await refreshFromBaseIfClean(
+          dir,
+          spec.cloneBranch,
+          spec.ghToken,
+          signal,
+        ).catch(() => false)
+        if (!refreshed) {
+          log.info('coding-agent: resume base refresh skipped (conflict or error)', {
+            ...trace,
+            base: spec.cloneBranch,
+          })
         }
       }
-    } finally {
-      // Safety net for the throw path (the happy path already cleared these above).
-      clearInterval(checkpoint)
-      if (followUpTick) clearInterval(followUpTick)
-    }
-    return outcome
-  })
+
+      // Serialize all pushes to the work branch through a single in-flight promise.
+      // A checkpoint tick and the final push (or two slow checkpoint ticks) must never
+      // run `git push` to the same branch concurrently: overlapping pushes race on the
+      // remote ref and can make a push fail with a ref-lock / non-fast-forward error —
+      // which, on the FINAL push, would fail the whole run even though the work is
+      // committed. `pushWorkOnce` coalesces concurrent callers onto one push and only
+      // pushes once the branch has advanced past `baseSha` (see below).
+      //
+      // Only push once the branch has advanced past its pre-run tip: pushing while it
+      // still sits at `baseSha` would create the work branch at the base commit (a
+      // zero-diff branch), which a later retry would see via `remoteBranchExists` and
+      // treat as resumable work — then fail to open a PR ("no commits between base and
+      // head"). So a run that never commits leaves NO branch behind, preserving the
+      // clean no-op outcome.
+      let pushInFlight: Promise<void> | null = null
+      const pushWorkOnce = (): Promise<void> => {
+        if (pushInFlight) return pushInFlight
+        pushInFlight = (async () => {
+          if (!(await branchHasCommitsSince(dir, baseSha, signal))) return
+          await pushBranch(dir, spec.pushBranch, spec.ghToken, signal)
+        })().finally(() => {
+          pushInFlight = null
+        })
+        return pushInFlight
+      }
+      // Read the in-flight push, if any. A function (with an explicit return type) so the
+      // value isn't subject to the caller's straight-line narrowing — `pushInFlight` is
+      // only ever assigned inside closures, which flow analysis can't observe.
+      const inFlightPush = (): Promise<void> | null => pushInFlight
+
+      // Checkpoint the agent's committed work to the branch periodically so an eviction
+      // mid-run doesn't lose it (a retry then resumes from the pushed commits). The
+      // agent commits its own work; this only PUSHES already-committed commits, so it
+      // never races the agent's staging. Best-effort: a failed checkpoint is skipped.
+      const checkpoint = setInterval(() => {
+        pushWorkOnce().catch((err) => {
+          log.info('coding-agent: checkpoint push skipped', {
+            ...trace,
+            reason: err instanceof Error ? err.message : String(err),
+          })
+        })
+      }, checkpointIntervalMs())
+      checkpoint.unref?.()
+
+      // In a monorepo the service lives in a subdirectory: run Pi with its cwd set to
+      // that subtree (git stays rooted at `dir` so commits/pushes still cover the whole
+      // checkout). Created if missing so a coder scaffolding a brand-new service into an
+      // existing monorepo has a cwd to start in. The agent is also TOLD it's in a
+      // monorepo (and where) via the AGENTS.md context below.
+      const serviceDirectory = spec.repo.serviceDirectory
+      const workDir = serviceDirectory ? join(dir, serviceDirectory) : dir
+      if (serviceDirectory) await mkdir(workDir, { recursive: true })
+
+      // Follow-up companion: tail the Coder's sentinel file and stream new items out on the
+      // job view. Locally exclude it from git first so the agent's own `git add` can never
+      // stage it and it never surfaces as an untracked leftover or in the PR. The sentinel
+      // lives in the agent's working directory (its cwd), where the prompt tells it to write.
+      const followUpTailer =
+        spec.streamFollowUps && opts.onFollowUp
+          ? new FollowUpTailer(join(workDir, FOLLOW_UPS_FILENAME), opts.onFollowUp)
+          : undefined
+      let followUpTick: ReturnType<typeof setInterval> | undefined
+      if (followUpTailer) {
+        await excludeFromGit(dir, FOLLOW_UPS_FILENAME, signal)
+        followUpTick = setInterval(() => {
+          void followUpTailer.poll()
+        }, followUpPollIntervalMs())
+        followUpTick.unref?.()
+      }
+
+      let outcome: CodingAgentOutcome
+      try {
+        log.info('coding-agent: running agent', { ...trace, serviceDirectory })
+        const { summary, stats, stderrTail, usage } = await runAgentInWorkspace(
+          {
+            dir: workDir,
+            systemPrompt: spec.systemPrompt,
+            userPrompt: spec.userPrompt,
+            model: spec.model,
+            harness: spec.harness,
+            subscriptionToken: spec.subscriptionToken,
+            subscriptionBaseUrl: spec.subscriptionBaseUrl,
+            ambientAuth: spec.ambientAuth,
+            proxyBaseUrl: spec.proxyBaseUrl,
+            sessionToken: spec.sessionToken,
+            serviceDirectory,
+            webToolsGuidance: spec.webToolsGuidance,
+            webSearchProxy: spec.webSearchProxy,
+          },
+          opts,
+        )
+
+        // Stop tailing the follow-up sentinel and flush any items written after the last
+        // tick, so a fast final burst still reaches the job view before the run is recorded.
+        if (followUpTick) clearInterval(followUpTick)
+        if (followUpTailer) await followUpTailer.poll().catch(() => {})
+
+        // Safety net for forgotten edits: commit changes to TRACKED files only (never
+        // untracked scratch files/artifacts — the agent owns committing new files).
+        await commitTrackedEdits(dir, spec.commitMessage, signal)
+
+        // Stop periodic checkpoints and let any in-flight one settle BEFORE the final
+        // push, so the two never run a concurrent `git push` to the same branch (the
+        // final push below is then a fresh attempt whose failure is the real signal).
+        clearInterval(checkpoint)
+        const inflight = inFlightPush()
+        if (inflight) await inflight.catch(() => {})
+
+        // Surface (don't fail on) untracked, non-ignored files the agent left behind:
+        // `commitTrackedEdits` only captures edits to ALREADY tracked files, so a NEW
+        // file the agent created but forgot to commit is silently dropped. Logging it
+        // makes that loss observable when a PR turns out to be missing a file.
+        const leftover = await listUntrackedFiles(dir, signal)
+        if (leftover.length > 0) {
+          log.warn('coding-agent: uncommitted new files left behind (not pushed)', {
+            ...trace,
+            count: leftover.length,
+            files: leftover.slice(0, 20),
+          })
+        }
+
+        const hasWork = resumed || (await branchHasCommitsSince(dir, baseSha, signal))
+        if (!hasWork) {
+          log.info('coding-agent: no changes produced', { ...trace, ...stats })
+          outcome = {
+            pushed: false,
+            resumed,
+            summary,
+            stats,
+            ...(stderrTail ? { stderrTail } : {}),
+            ...(usage ? { usage } : {}),
+          }
+        } else {
+          log.info('coding-agent: pushing', { ...trace, resumed, ...stats })
+          await pushWorkOnce()
+          outcome = {
+            pushed: true,
+            resumed,
+            summary,
+            stats,
+            ...(stderrTail ? { stderrTail } : {}),
+            ...(usage ? { usage } : {}),
+          }
+        }
+      } finally {
+        // Safety net for the throw path (the happy path already cleared these above).
+        clearInterval(checkpoint)
+        if (followUpTick) clearInterval(followUpTick)
+      }
+      return outcome
+    },
+  )
 }
 
 /**

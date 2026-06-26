@@ -1,6 +1,7 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { RepoSpec } from './job.js'
 import {
   type ContextFileInfo,
   type PiRunOutcome,
@@ -46,6 +47,81 @@ export async function withWorkspace<T>(
   }
 }
 
+/**
+ * The PERSISTENT-checkout root in a reused (pooled) container — a stable per-repo
+ * directory that survives across jobs so a new run can `git fetch` + switch branch
+ * instead of cloning from scratch. Only the local warm-pool transport activates this
+ * (by setting `persistentCheckout` on the job); every other runtime uses the ephemeral
+ * {@link withWorkspace} path, so this code is dormant there.
+ */
+function persistentWorkspaceRoot(): string {
+  return process.env.HARNESS_WORKSPACE_ROOT?.trim() || '/workspace'
+}
+
+/** Sanitise an owner/name path segment so a repo identity can never escape the root. */
+function safeSegment(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]/g, '-') || '_'
+}
+
+// A per-directory async mutex: two jobs that land in the same container share ONE
+// persistent checkout, so they must not mutate its working tree concurrently. The
+// engine runs a run's steps sequentially, so contention is rare — this is correctness
+// insurance (and keeps a stray concurrent dispatch from corrupting the tree).
+const dirLocks = new Map<string, Promise<void>>()
+async function withDirLock<T>(dir: string, fn: () => Promise<T>): Promise<T> {
+  const prev = dirLocks.get(dir) ?? Promise.resolve()
+  let release!: () => void
+  const current = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  // Store the SAME promise we await on for cleanup-identity. (Storing `prev.then(...)`
+  // instead would make the tail check below — `=== tail` — never match, so the entry
+  // would never be deleted and the map would grow without bound.)
+  const tail = prev.then(() => current)
+  dirLocks.set(dir, tail)
+  await prev.catch(() => {})
+  try {
+    return await fn()
+  } finally {
+    release()
+    // Drop the entry once we're the tail (no later caller has queued behind us), so the
+    // map doesn't grow unbounded across distinct repo dirs.
+    if (dirLocks.get(dir) === tail) dirLocks.delete(dir)
+  }
+}
+
+/**
+ * Run `fn` against a STABLE per-repo working directory (`<root>/<owner>/<repo>`) that is
+ * NOT removed afterwards — the persistent-checkout analogue of {@link withWorkspace}. The
+ * caller (via `prepareExistingCheckout`) clean-sweeps + fetches the dir into the right
+ * state before use; serialised per dir so concurrent jobs can't corrupt the shared tree.
+ */
+export async function withPersistentWorkspace<T>(
+  repo: RepoSpec,
+  fn: (dir: string) => Promise<T>,
+): Promise<T> {
+  const dir = join(persistentWorkspaceRoot(), safeSegment(repo.owner), safeSegment(repo.name))
+  return withDirLock(dir, async () => {
+    await mkdir(dir, { recursive: true })
+    return fn(dir)
+  })
+}
+
+/**
+ * Acquire a working directory for a run: a STABLE, reused per-repo checkout when the job
+ * opted into persistent checkout (the warm-pool path), else a fresh ephemeral temp dir
+ * (every other runtime). The two flows differ ONLY in dir lifecycle — the caller populates
+ * the dir (clone vs `prepareExistingCheckout`) itself, so it can keep its flow-specific
+ * resume / full-clone / branch logic.
+ */
+export async function acquireRepoCheckout<T>(
+  opts: { persistent: boolean; prefix: string; repo: RepoSpec },
+  fn: (dir: string) => Promise<T>,
+): Promise<T> {
+  if (opts.persistent) return withPersistentWorkspace(opts.repo, fn)
+  return withWorkspace(opts.prefix, fn)
+}
+
 /** What every agent needs to drive Pi against an already-prepared directory. */
 export interface AgentRunSpec {
   /** The prepared working directory (cloned/scaffolded by the caller). */
@@ -65,6 +141,12 @@ export interface AgentRunSpec {
   subscriptionToken?: string
   /** Anthropic-compatible base URL for a non-Anthropic Claude-Code vendor (GLM/Kimi). */
   subscriptionBaseUrl?: string
+  /**
+   * Native local execution: run the developer's installed `claude` / `codex` with its
+   * OWN ambient login instead of a leased credential. Set only by the local native
+   * transport; a no-op for the Pi harness.
+   */
+  ambientAuth?: boolean
   /** Pi proxy base URL (Pi harness only). */
   proxyBaseUrl?: string
   /** Pi proxy session token (Pi harness only). */
@@ -125,7 +207,9 @@ export async function runAgentInWorkspace(
   // system prompt is passed straight to the CLI; everything around this (clone,
   // push, watchdogs) is unchanged.
   if (spec.harness === 'claude-code' || spec.harness === 'codex') {
-    if (!spec.subscriptionToken) {
+    // Ambient (native) mode authenticates with the developer's own CLI login, so no
+    // leased token is required; otherwise the leased subscription token is mandatory.
+    if (!spec.ambientAuth && !spec.subscriptionToken) {
       throw new Error(`The ${spec.harness} harness requires a subscription token`)
     }
     return runSubscriptionHarness(spec.harness, {
@@ -133,8 +217,9 @@ export async function runAgentInWorkspace(
       model: spec.model,
       systemPrompt: subscriptionSystemPrompt(spec.systemPrompt, contextFiles),
       userPrompt: spec.userPrompt,
-      subscriptionToken: spec.subscriptionToken,
+      ...(spec.subscriptionToken ? { subscriptionToken: spec.subscriptionToken } : {}),
       subscriptionBaseUrl: spec.subscriptionBaseUrl,
+      ...(spec.ambientAuth ? { ambientAuth: true } : {}),
       signal: opts.signal,
       onActivity: opts.onActivity,
       onProgress: opts.onProgress,

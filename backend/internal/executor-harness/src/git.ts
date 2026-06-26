@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { appendFile, chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { appendFile, chmod, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -65,6 +65,11 @@ export function authenticatedCloneUrl(cloneUrl: string): string {
   // https://github.com/owner/name.git → https://x-access-token@github.com/...
   // (no secret in the URL). file:// and other local URLs are left untouched.
   return cloneUrl.replace(/^https:\/\//, 'https://x-access-token@')
+}
+
+/** Drop any `user[:pass]@` userinfo from a URL so two clone URLs can be compared by repo. */
+function withoutUserinfo(url: string): string {
+  return url.replace(/^([a-z]+:\/\/)[^@/]*@/i, '$1')
 }
 
 // A tiny askpass helper that prints the token git asks for. Created once per
@@ -191,6 +196,149 @@ export async function cloneExistingBranch(opts: {
   })
   await git(['config', 'user.name', GIT_AUTHOR], { cwd: opts.dir, signal: opts.signal })
   await git(['config', 'user.email', GIT_EMAIL], { cwd: opts.dir, signal: opts.signal })
+}
+
+/** Whether `path` exists (a file or directory). */
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The directory-name globs the clean sweep PRESERVES — dependency caches that are
+ * expensive to rebuild (node_modules, language toolchain caches). Keeping them is the
+ * whole point of reusing a checkout: a `git clean -ffdx` would otherwise wipe them and
+ * force a reinstall every run. Configurable via `HARNESS_CLEAN_KEEP` (comma-separated).
+ */
+export function cleanKeepPatterns(env: NodeJS.ProcessEnv = process.env): string[] {
+  const raw = env.HARNESS_CLEAN_KEEP ?? 'node_modules,.venv,target,.gradle,.pnpm-store'
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s !== '')
+}
+
+/**
+ * Reset a REUSED checkout to a pristine state before the next job runs in it: hard-reset
+ * tracked files and remove every untracked/ignored file EXCEPT the preserved dependency
+ * caches (see {@link cleanKeepPatterns}). This is what guarantees a prior run's garbage —
+ * stray scratch files, half-written edits, stale build output — never contaminates the
+ * next run that reuses the same persistent checkout. A fresh clone never needs it.
+ *
+ * Submodules: when `.gitmodules` is present we use a single `-f` (which makes `git clean`
+ * skip nested git repositories, i.e. the submodule worktrees) and reset/refresh the
+ * submodules explicitly; otherwise `-ff` also nukes any stray nested repo the agent left.
+ */
+export async function cleanSweep(
+  dir: string,
+  ghToken: string,
+  signal?: AbortSignal,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  await git(['reset', '--hard'], { cwd: dir, signal })
+  const hasSubmodules = await pathExists(join(dir, '.gitmodules'))
+  if (hasSubmodules) {
+    await git(['submodule', 'foreach', '--recursive', 'git reset --hard'], {
+      cwd: dir,
+      signal,
+    }).catch(() => {})
+  }
+  const keep = cleanKeepPatterns(env).flatMap((p) => ['-e', p])
+  // `-ffdx` (or `-fdx` with submodules) removes untracked + ignored files and dirs; the
+  // `-e` excludes keep the dependency caches. Tracked files were already hard-reset above.
+  await git(['clean', hasSubmodules ? '-fdx' : '-ffdx', ...keep], { cwd: dir, signal })
+  if (hasSubmodules) {
+    await git(['submodule', 'update', '--init', '--recursive'], {
+      cwd: dir,
+      signal,
+      env: await authEnv(ghToken),
+    }).catch(() => {})
+  }
+}
+
+/**
+ * The `origin` remote URL (without credentials) of the checkout at `dir`, or undefined
+ * when it isn't a git repo / has no origin. Used to detect a persistent checkout dir that
+ * somehow holds a DIFFERENT repo than the one we're about to prepare (it never should —
+ * the dir is keyed per repo — but a stale dir from a prior layout would be a silent
+ * cross-repo bleed, so we re-clone rather than reuse).
+ */
+export async function checkoutRemoteUrl(
+  dir: string,
+  signal?: AbortSignal,
+): Promise<string | undefined> {
+  try {
+    return (await git(['remote', 'get-url', 'origin'], { cwd: dir, signal })).trim() || undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Prepare a REUSED (persistent) checkout at `dir` so the agent runs against a clean tree
+ * on the right branch — the persistent-checkout analogue of {@link cloneRepo} +
+ * {@link cloneExistingBranch}. On the FIRST use of a per-repo dir there's no `.git` yet, so
+ * it clones once (full history, so a later merger/conflict step reusing the dir can diff
+ * against the base); afterwards it reuses the dir in place: clean sweep → re-point origin →
+ * fetch → check out `branch`. When `existing` is true `branch` is fetched and checked out
+ * directly (resume / base branch); otherwise `branch` is (re)created off `baseBranch`'s tip
+ * (a fresh work branch). Only the local transport sets `persistentCheckout`, so every other
+ * runtime keeps the fresh-clone path untouched.
+ */
+export async function prepareExistingCheckout(opts: {
+  dir: string
+  repo: RepoSpec
+  ghToken: string
+  /** The branch to end up checked out on. */
+  branch: string
+  /** Base branch to (re)create `branch` off when `existing` is false; also fetched for history. */
+  baseBranch: string
+  /** Whether `branch` already exists on the remote (resume / base) — checkout it directly. */
+  existing: boolean
+  signal?: AbortSignal
+}): Promise<void> {
+  const { dir, repo, ghToken, branch, baseBranch, existing, signal } = opts
+  const cloneUrl = authenticatedCloneUrl(repo.cloneUrl)
+
+  // First use of this per-repo dir, or a stale dir holding a DIFFERENT repo → clone fresh
+  // (full history, so a later merger/conflict step reusing the dir can diff against base).
+  const currentRemote = (await pathExists(join(dir, '.git')))
+    ? await checkoutRemoteUrl(dir, signal)
+    : undefined
+  if (!currentRemote || withoutUserinfo(currentRemote) !== withoutUserinfo(cloneUrl)) {
+    await rm(dir, { recursive: true, force: true })
+    await cloneRepo({ repo: { ...repo, baseBranch }, ghToken, dir, full: true, signal })
+  }
+
+  const env = await authEnv(ghToken)
+  await cleanSweep(dir, ghToken, signal)
+  // Re-point origin in case the stored URL drifted (idempotent; carries no secret).
+  await git(['remote', 'set-url', 'origin', cloneUrl], { cwd: dir, signal })
+  const fetchRef = existing ? branch : baseBranch
+  // Fetch the target ref AND the base into their tracking refs in ONE command, with explicit
+  // destination refspecs. The checkout below then reads `origin/<fetchRef>` directly rather
+  // than FETCH_HEAD: FETCH_HEAD only ever holds the LAST fetched ref, so a second base fetch
+  // would clobber it and a resumed work branch (base != branch) would be reset to the BASE
+  // tip — silently discarding the resumed commits. Keeping `origin/<baseBranch>` fresh also
+  // matters for the downstream merger/diff; a missing base diverges from a fresh full clone,
+  // so this is NOT best-effort (a failure surfaces rather than leaving a stale base ref).
+  const refspecs = [`+${fetchRef}:refs/remotes/origin/${fetchRef}`]
+  if (baseBranch !== fetchRef) refspecs.push(`+${baseBranch}:refs/remotes/origin/${baseBranch}`)
+  await git(['fetch', 'origin', ...refspecs], { cwd: dir, signal, env })
+  // `-f`: the clean sweep deliberately PRESERVES dependency caches (node_modules/target/…)
+  // as untracked files; if one collides with a path the target branch TRACKS, a plain
+  // checkout aborts ("untracked working tree files would be overwritten"). Force overwrites
+  // only the in-the-way files, leaving the other kept caches intact.
+  await git(['checkout', '-f', '-B', branch, `refs/remotes/origin/${fetchRef}`], {
+    cwd: dir,
+    signal,
+  })
+  await git(['config', 'user.name', GIT_AUTHOR], { cwd: dir, signal })
+  await git(['config', 'user.email', GIT_EMAIL], { cwd: dir, signal })
 }
 
 /**

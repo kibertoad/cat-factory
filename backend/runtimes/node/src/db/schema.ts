@@ -141,6 +141,19 @@ export const accountSettings = pgTable('account_settings', {
   updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
 })
 
+// Local-mode operational settings — a per-DEPLOYMENT SINGLETON (one developer's machine),
+// addressed by a fixed `id` ('local'). `config` is non-secret tuning JSON (warm-pool
+// sizing + per-repo checkout reuse) that replaced the `LOCAL_POOL_*` / `HARNESS_*` env
+// vars. LOCAL-MODE-ONLY: the warm pool is the local Docker-family runner's differentiator,
+// so this table has NO D1 mirror (the symmetry rule's runtime-specific carve-out). A
+// missing row means all defaults (pooling off).
+export const localSettings = pgTable('local_settings', {
+  id: text('id').primaryKey(),
+  config: text('config').notNull(),
+  created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
 // Email invitations into an org account. Only the token's hash is stored.
 export const accountInvitations = pgTable(
   'account_invitations',

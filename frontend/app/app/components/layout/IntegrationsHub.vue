@@ -8,6 +8,7 @@
 // Sections gate on the same `available` probes the navbar used, so a system that
 // the backend has turned off simply doesn't appear here.
 const ui = useUiStore()
+const auth = useAuthStore()
 const github = useGitHubStore()
 const slack = useSlackStore()
 const documents = useDocumentsStore()
@@ -254,6 +255,18 @@ const groups = computed<IntegrationGroup[]>(() => {
       status: conn ? 'Connected' : undefined,
       connected: !!conn,
       onClick: () => go(() => ui.openProviderConnection('runner-pool')),
+    })
+  }
+  // Local-mode-only: the warm-container pool + checkout reuse for the local runner. Shown
+  // only on the local-mode service (the controller 503s elsewhere, and `auth.localMode`
+  // is set from /auth/config).
+  if (auth.localMode?.enabled) {
+    infra.push({
+      key: 'local-mode',
+      icon: 'i-lucide-container',
+      label: 'Local mode',
+      description: 'Warm container pool + per-repo checkout reuse for the local runner.',
+      onClick: () => go(ui.openLocalModeSettings),
     })
   }
   if (infra.length) out.push({ title: 'Infrastructure', items: infra })
