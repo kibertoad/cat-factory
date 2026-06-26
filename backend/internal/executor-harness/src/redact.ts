@@ -1,0 +1,75 @@
+// Single source of truth for credential redaction. Two complementary rules run on
+// EVERY redaction so no error path can scrub one class of secret and leak the other:
+//
+//  - PATTERN-based: scrubs credential SHAPES (URL userinfo, `x-access-token:<tok>`,
+//    bare GitHub token prefixes) even when the exact value isn't known ahead of time
+//    — this is what catches a freshly-minted installation token in a git error.
+//  - VALUE-based: scrubs a list of KNOWN secret strings (the leased subscription
+//    token + any token-like JSON leaf harvested from a credential blob).
+//
+// Historically these lived in two modules (git.ts pattern-only, agent-runner.ts
+// value-only) and ran on disjoint paths, so a secret only one rule covered could leak
+// on the other. They are unified here.
+
+// Below this length a "known secret" is too short to scrub without mangling
+// legitimate output (it would replace common substrings).
+const MIN_REDACT_LEN = 6
+
+// Only harvest token-like JSON leaves: real OAuth access/refresh tokens and ids are
+// long, while short values (`auth_mode: "chatgpt"`, `type: "oauth"`, …) are non-secret
+// words that would over-redact legitimate error text if scrubbed. 12 chars is a safe
+// floor below which a value is not a credential.
+const MIN_HARVEST_LEN = 12
+
+/**
+ * Strip credentials out of any string before it is logged or stored. Applies the
+ * pattern rules (URL userinfo `https://user:pass@host`, `x-access-token:<token>`, bare
+ * `ghs_`/`ghp_`/`gho_`/`github_pat_` shapes) and then scrubs every supplied
+ * known-secret value. Idempotent — safe to call on already-redacted text.
+ */
+export function redact(input: string, knownSecrets: readonly string[] = []): string {
+  let out = input
+    .replace(/(https?:\/\/)[^@\s/]*@/gi, '$1***@')
+    .replace(/x-access-token:[^@\s]+/gi, 'x-access-token:***')
+    .replace(/\b(gh[pso]_|github_pat_)[A-Za-z0-9_]+/g, '$1***')
+  for (const secret of knownSecrets) {
+    // Guard against scrubbing trivially-short values that would mangle output.
+    if (secret.length >= MIN_REDACT_LEN) out = out.split(secret).join('***')
+  }
+  return out
+}
+
+/** Pattern-only redaction (no known values). Kept for callers without a secret list. */
+export function redactSecrets(input: string): string {
+  return redact(input)
+}
+
+/** Recursively harvest token-like string leaves from a parsed JSON value. */
+function collectStrings(value: unknown, out: Set<string>): void {
+  if (typeof value === 'string') {
+    if (value.length >= MIN_HARVEST_LEN) out.add(value)
+  } else if (Array.isArray(value)) {
+    for (const v of value) collectStrings(v, out)
+  } else if (value && typeof value === 'object') {
+    for (const v of Object.values(value)) collectStrings(v, out)
+  }
+}
+
+/**
+ * The set of secret strings to scrub from a run's stderr/output. For Claude (and the
+ * Anthropic-compatible vendors GLM/Kimi/DeepSeek) the credential IS the token string,
+ * so the whole-string entry covers it. For Codex the credential is a whole `auth.json`
+ * blob, so we ALSO scrub every string value parsed out of it (access/refresh tokens,
+ * ids): a token echoed on its OWN — not as part of the whole blob — would otherwise
+ * slip past a whole-blob-only match and leak into an error message.
+ */
+export function secretsToRedact(subscriptionToken: string): string[] {
+  const secrets = new Set<string>()
+  if (subscriptionToken) secrets.add(subscriptionToken)
+  try {
+    collectStrings(JSON.parse(subscriptionToken), secrets)
+  } catch {
+    // Not JSON (a Claude OAuth token / API key) — the whole-string entry covers it.
+  }
+  return [...secrets]
+}

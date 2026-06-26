@@ -2,7 +2,8 @@ import { spawn } from 'node:child_process'
 import { appendFile, mkdir, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { redactSecrets } from './git.js'
+import { killChildProcess } from './process.js'
+import { redactSecrets } from './redact.js'
 
 // Drives the Pi coding-agent CLI. Pi is pointed at the Worker's OpenAI-compatible
 // proxy via a custom provider in ~/.pi/agent/models.json, authenticated with the
@@ -832,12 +833,7 @@ export function runPi(opts: {
 
     // SIGTERM first, then SIGKILL if Pi ignores it. Shared by the watchdog abort
     // and the no-progress guard; the `close` handler turns it into a rejection.
-    const killChild = (): void => {
-      child.kill('SIGTERM')
-      setTimeout(() => {
-        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
-      }, 5_000).unref()
-    }
+    const killChild = (): void => killChildProcess(child)
 
     // Parse each complete JSONL record once, feeding both the todo-progress
     // emitter and the no-progress guard. A tripped guard kills Pi with a
