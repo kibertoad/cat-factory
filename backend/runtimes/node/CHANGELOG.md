@@ -1,5 +1,66 @@
 # @cat-factory/node-server
 
+## 0.25.0
+
+### Minor Changes
+
+- eb48652: Local-mode infrastructure delegation + native runner-adapter seam.
+
+  Local mode now lets a workspace opt, independently, into delegating its container agents
+  and/or its Tester ephemeral environments to an external service instead of running
+  everything on the host container runtime. Two new per-workspace settings drive it
+  (`delegateAgentsToRunnerPool`, `delegateTestEnvToProvider`, both default off), surfaced as
+  toggles on the Ephemeral environments screen (local mode only) and enabled only once the
+  respective provider — a self-hosted runner pool / an environment provider — is registered.
+
+  - **Agents**: when delegated, container jobs dispatch to the workspace's registered runner
+    pool instead of host Docker (a clean 409 at start, and the existing dispatch error, when
+    delegated with no pool registered).
+  - **Environments**: the toggle sets the local-mode default Tester environment — `local`
+    (host Docker / DinD) by default, `ephemeral` (the provider) when on; per-service / per-task
+    choices still win. An `ephemeral` run is refused at start when delegated with no provider
+    connected.
+  - **Native runner-adapter seam**: an injected `runnerPoolProvider` now drives the actual
+    dispatch transport on both the Cloudflare and Node facades (falling back to the generic
+    `HttpRunnerPoolProvider`), fully symmetric with `environmentProvider`. A wrapper can thus
+    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. Kargo) to
+    serve both concerns with native code on every runtime.
+
+  BREAKING (pre-1.0, internal): an un-pinned Tester task in local mode now defaults to the
+  `local` (DinD) environment instead of `ephemeral`. New `workspace_settings` columns are
+  added on both runtimes (D1 migration + Drizzle migration); local mode now defaults
+  `ENVIRONMENTS_ENABLED=true` so the env module assembles for the opt-in.
+
+- 518aff7: Surface account & team management in the UI
+
+  The existing per-account management features (members + roles, email invitations, and the
+  transactional email sender) are now reachable from a dedicated **Account settings** entry
+  in the SideBar Configuration section (and the account switcher), instead of being buried in
+  an org-only "Manage team…" dropdown item. On a personal account the panel prompts the user
+  to create an organization, since members/roles/invitations are org-scoped.
+
+  Email provider configuration no longer requires the `EMAIL_ENABLED` env var: the email
+  module is available whenever an encryption key is set (`ENCRYPTION_KEY`, used to seal the
+  per-account provider API key). **Breaking:** the `EMAIL_ENABLED` flag is removed — deployments
+  that set it can drop it; email becomes available based on `ENCRYPTION_KEY` presence alone.
+
+### Patch Changes
+
+- Updated dependencies [eb48652]
+  - @cat-factory/contracts@0.32.0
+  - @cat-factory/kernel@0.35.0
+  - @cat-factory/orchestration@0.27.0
+  - @cat-factory/agents@0.17.1
+  - @cat-factory/consensus@0.7.45
+  - @cat-factory/gates@0.1.12
+  - @cat-factory/integrations@0.21.7
+  - @cat-factory/prompt-fragments@0.7.30
+  - @cat-factory/server@0.29.1
+  - @cat-factory/spend@0.10.3
+  - @cat-factory/observability-langfuse@0.7.42
+  - @cat-factory/provider-bedrock@0.7.45
+  - @cat-factory/provider-cloudflare@0.7.45
+
 ## 0.24.0
 
 ### Minor Changes
