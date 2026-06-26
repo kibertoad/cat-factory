@@ -430,3 +430,20 @@ export interface Env {
    */
   PROVISIONING_LOG_RETENTION_DAYS?: string
 }
+
+/**
+ * Resolve the required telemetry database, throwing a clear, actionable error when the
+ * binding is absent. Telemetry (`llm_call_metrics` + `agent_context_snapshots`) lives in
+ * its own D1 database; every entry point that touches it (the per-request container build
+ * AND the daily retention sweep in the `scheduled` handler) goes through this so an
+ * unbound binding fails the same way instead of NPE-ing deep in a repo on first write.
+ */
+export function requireTelemetryDb(env: Env): D1Database {
+  if (!env.TELEMETRY_DB) {
+    throw new Error(
+      'TELEMETRY_DB binding is required (the dedicated telemetry D1 database). ' +
+        'Add a [[d1_databases]] entry with binding = "TELEMETRY_DB" to wrangler.toml.',
+    )
+  }
+  return env.TELEMETRY_DB
+}
