@@ -44,6 +44,11 @@ useTaskExpansion(boardEl)
 // moving one never shifts another. The frame being dragged is lifted to the top,
 // then the hovered frame (the un-obscured one under the pointer), so overlapping
 // services can always be reached and reordered. See useFrameStacking.
+//
+// `elevate-nodes-on-select` is turned OFF on <VueFlow> for this to work: Vue Flow's
+// default adds +1000 to a selected node's z-index, so a frame stayed pinned on top
+// after a click and no amount of hovering another frame could surface it. Stacking
+// is driven purely by hover/drag here; the selection highlight is the ring, not z.
 function frameZIndex(id: string) {
   if (draggingId.value === id) return 1000
   if (hoveredFrameId.value === id) return 100
@@ -163,6 +168,7 @@ async function onDrop(event: DragEvent) {
       :max-zoom="3"
       :default-viewport="{ x: 40, y: 20, zoom: 0.85 }"
       :pan-on-drag="[0, 2]"
+      :elevate-nodes-on-select="false"
       fit-view-on-init
       @node-click="onNodeClick"
       @node-double-click="onNodeDoubleClick"
