@@ -303,26 +303,31 @@ it per-frame.
 ## Warm container pool (faster startup)
 
 By default every run cold-starts its own harness container and clones the repo from
-scratch. Set `LOCAL_POOL_SIZE` > 0 to keep idle harness containers **warm** and re-lease
-one to each run — preferring a container that already holds the run's repo, so it does a
+scratch. Set a **pool size** > 0 to keep idle harness containers **warm** and re-lease one
+to each run — preferring a container that already holds the run's repo, so it does a
 `git fetch` + branch switch instead of a fresh clone.
 
-| Env                      | Default     | Meaning                                                              |
-| ------------------------ | ----------- | ------------------------------------------------------------------- |
-| `LOCAL_POOL_SIZE`        | `0`         | Max warm idle containers kept ready (`0` = pooling off).            |
-| `LOCAL_POOL_MIN_WARM`    | `0`         | Containers pre-warmed at boot.                                      |
-| `LOCAL_POOL_MAX`         | `=POOL_SIZE`| Hard cap on total containers; a burst beyond it uses a one-off one. |
-| `LOCAL_POOL_IDLE_TTL_MS` | `600000`    | How long an idle pooled container is kept before eviction.          |
-| `HARNESS_WORKSPACE_ROOT` | `/workspace`| Where the reused per-repo checkout lives inside the container.      |
-| `HARNESS_CLEAN_KEEP`     | `node_modules,.venv,target,.gradle,.pnpm-store` | Dir globs the between-run clean sweep PRESERVES (dependency caches). |
+These knobs live in the **DB, not env** — configure them in the UI under **Integrations >
+"Local mode"** (they used to be the `LOCAL_POOL_*` / `HARNESS_*` env vars):
 
-Between runs each reused checkout is **clean-swept** (`git reset --hard` + remove every
-untracked/ignored file *except* the kept dependency caches) so a prior run's garbage never
-leaks into the next. **Trust boundary:** local mode is single-user, so a warm container is
-reused across that one developer's runs; different repos always get separate checkout
-directories (no cross-repo bleed). Pooling is supported on Docker/Podman/OrbStack/Colima;
-Apple `container` ignores `LOCAL_POOL_SIZE` and keeps the per-run path. A stale dependency
-cache is the residual risk — clear it by adding a tighter `HARNESS_CLEAN_KEEP`.
+| Setting                | Default                                         | Meaning                                                             |
+| ---------------------- | ----------------------------------------------- | ------------------------------------------------------------------- |
+| Pool size              | `0`                                             | Max warm idle containers kept ready (`0` = pooling off).            |
+| Pre-warm at boot       | `0`                                             | Containers pre-warmed when the service starts.                      |
+| Max containers         | `=pool size`                                    | Hard cap on total containers; a burst beyond it uses a one-off one. |
+| Idle timeout (minutes) | `10`                                            | How long an idle pooled container is kept before eviction.          |
+| Workspace root         | `/workspace`                                    | Where the reused per-repo checkout lives inside the container.      |
+| Keep on clean          | `node_modules,.venv,target,.gradle,.pnpm-store` | Dirs the between-run clean sweep PRESERVES (dependency caches).     |
+
+Changes apply to runs started after saving; restart the service to resize an already-warm
+pool. Between runs each reused checkout is **clean-swept** (`git reset --hard` + remove
+every untracked/ignored file _except_ the kept dependency caches) so a prior run's garbage
+never leaks into the next. **Trust boundary:** local mode is single-user, so a warm
+container is reused across that one developer's runs; different repos always get separate
+checkout directories (no cross-repo bleed). Pooling is supported on
+Docker/Podman/OrbStack/Colima; Apple `container` ignores the pool size and keeps the
+per-run path. A stale dependency cache is the residual risk — clear it by tightening the
+"Keep on clean" list.
 
 ## Native execution (use your installed Claude Code / Codex)
 

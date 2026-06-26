@@ -1,23 +1,37 @@
 ---
-"@cat-factory/executor-harness": minor
-"@cat-factory/local-server": minor
-"@cat-factory/node-server": minor
-"@cat-factory/server": minor
+'@cat-factory/executor-harness': minor
+'@cat-factory/local-server': minor
+'@cat-factory/node-server': minor
+'@cat-factory/server': minor
+'@cat-factory/integrations': minor
+'@cat-factory/contracts': minor
+'@cat-factory/kernel': minor
+'@cat-factory/app': minor
 ---
 
 Local mode: warm container pool + checkout reuse, and optional native (host-process)
 execution of the developer's installed Claude Code / Codex CLI.
 
-**Warm pool + persistent checkout (`LOCAL_POOL_SIZE`, default 0 = unchanged):** the local
-runner transport can keep idle harness containers warm and lease one — preferring a member
-that already holds the run's repo — instead of cold-starting a container per run. A leased
-member reuses a stable per-repo checkout (`git reset --hard` + a keep-list clean sweep that
-preserves dependency caches like `node_modules`, then `fetch` + switch branch) rather than
-cloning from scratch. New harness job field `persistentCheckout` drives this; it is set only
-by the local pool transport, so every other runtime keeps the ephemeral fresh-clone path
-byte-for-byte. New env: `LOCAL_POOL_SIZE`, `LOCAL_POOL_MIN_WARM`, `LOCAL_POOL_MAX`,
-`LOCAL_POOL_IDLE_TTL_MS`, `HARNESS_WORKSPACE_ROOT`, `HARNESS_CLEAN_KEEP`. Pooling is
-Docker-family only (the new `capabilities.pooling`); Apple `container` keeps the per-run path.
+**Warm pool + persistent checkout (default off = unchanged):** the local runner transport
+can keep idle harness containers warm and lease one — preferring a member that already holds
+the run's repo — instead of cold-starting a container per run. A leased member reuses a
+stable per-repo checkout (`git reset --hard` + a keep-list clean sweep that preserves
+dependency caches like `node_modules`, then `fetch` + switch branch) rather than cloning from
+scratch. New harness job field `persistentCheckout` drives this; it is set only by the local
+pool transport, so every other runtime keeps the ephemeral fresh-clone path byte-for-byte.
+Pooling is Docker-family only (the new `capabilities.pooling`); Apple `container` keeps the
+per-run path.
+
+**Configured in the UI + DB, not env:** the warm-pool sizing (size / pre-warm / max / idle
+timeout) and the per-repo checkout-reuse knobs (workspace root + dep-cache keep list) are a
+new per-deployment singleton (`local_settings`, Postgres/Drizzle only — local-mode-only, so
+no D1 mirror) exposed through a dedicated **"Local mode"** settings panel
+(Integrations → Local mode), served by a new `GET|PUT /local-settings` controller wired only
+on the local facade (503 elsewhere). This REPLACES the env vars `LOCAL_POOL_SIZE`,
+`LOCAL_POOL_MIN_WARM`, `LOCAL_POOL_MAX`, `LOCAL_POOL_IDLE_TTL_MS`, `HARNESS_WORKSPACE_ROOT`,
+`HARNESS_CLEAN_KEEP` (no longer read). The container transport forwards the checkout knobs to
+the harness container as `HARNESS_*` env. Breaking: those env vars are dropped — set the
+values in the UI instead.
 
 **Native execution (`LOCAL_NATIVE_AGENTS`, default off):** an allow-list of subscription
 harnesses (`claude-code,codex`) to run as a host process (new `LocalProcessRunnerTransport`)

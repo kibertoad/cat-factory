@@ -25,6 +25,8 @@ import type {
   MembershipRepository,
   AccountSettingsRecord,
   AccountSettingsRepository,
+  LocalSettingsRecord,
+  LocalSettingsRepository,
   IncidentEnrichmentConnectionRecord,
   IncidentEnrichmentConnectionRepository,
   MergePresetRepository,
@@ -126,6 +128,7 @@ import type { DrizzleDb } from '../db/client.js'
 import {
   accountInvitations,
   accountSettings,
+  localSettings,
   accounts,
   agentContextSnapshots,
   agentRuns,
@@ -3295,6 +3298,45 @@ export class DrizzleAccountSettingsRepository implements AccountSettingsReposito
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }))
+  }
+}
+
+/** The fixed key for the local-mode settings singleton row (one developer's machine). */
+const LOCAL_SETTINGS_ID = 'local'
+
+/**
+ * The local-mode operational settings singleton (warm-pool sizing + per-repo checkout
+ * reuse), replacing the old `LOCAL_POOL_*` / `HARNESS_*` env vars. One row, addressed by a
+ * fixed id. Local-mode-only — there is no D1 mirror (the warm pool is the local Docker
+ * runner's differentiator).
+ */
+export class DrizzleLocalSettingsRepository implements LocalSettingsRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(): Promise<LocalSettingsRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(localSettings)
+      .where(eq(localSettings.id, LOCAL_SETTINGS_ID))
+      .limit(1)
+    const row = rows[0]
+    if (!row) return null
+    return { config: row.config, createdAt: row.created_at, updatedAt: row.updated_at }
+  }
+
+  async upsert(record: LocalSettingsRecord): Promise<void> {
+    await this.db
+      .insert(localSettings)
+      .values({
+        id: LOCAL_SETTINGS_ID,
+        config: record.config,
+        created_at: record.createdAt,
+        updated_at: record.updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: localSettings.id,
+        set: { config: record.config, updated_at: record.updatedAt },
+      })
   }
 }
 

@@ -109,6 +109,9 @@ export const useUiStore = defineStore('ui', () => {
   const vendorCredentialsOpen = ref(false)
   // Per-user settings panel: the signed-in user's own-machine local model runners.
   const localModelsOpen = ref(false)
+  // Local-mode-only settings panel: the warm-container pool sizing + per-repo checkout reuse
+  // (a per-deployment singleton that replaced the LOCAL_POOL_* / HARNESS_* env vars).
+  const localModeSettingsOpen = ref(false)
   // The Sandbox (parallel prompt/model testing) surface — an opt-in, on-demand window.
   const sandboxOpen = ref(false)
   const userSecretsOpen = ref(false)
@@ -397,6 +400,13 @@ export const useUiStore = defineStore('ui', () => {
   function closeLocalModels() {
     localModelsOpen.value = false
   }
+  function openLocalModeSettings() {
+    cameFromIntegrations.value = false
+    localModeSettingsOpen.value = true
+  }
+  function closeLocalModeSettings() {
+    localModeSettingsOpen.value = false
+  }
   function openSandbox() {
     sandboxOpen.value = true
   }
@@ -512,6 +522,7 @@ export const useUiStore = defineStore('ui', () => {
     modelConfigOpen,
     vendorCredentialsOpen,
     localModelsOpen,
+    localModeSettingsOpen,
     sandboxOpen,
     userSecretsOpen,
     openRouterOpen,
@@ -579,6 +590,8 @@ export const useUiStore = defineStore('ui', () => {
     closeVendorCredentials,
     openLocalModels,
     closeLocalModels,
+    openLocalModeSettings,
+    closeLocalModeSettings,
     openSandbox,
     closeSandbox,
     openUserSecrets,

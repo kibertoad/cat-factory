@@ -6,7 +6,6 @@ import { logger } from '@cat-factory/server'
 import { applyLocalDefaults } from './config.js'
 import { buildLocalContainer } from './container.js'
 import { githubPatCreationUrl } from './github.js'
-import { createLocalContainerTransportFromEnv } from './LocalContainerRunnerTransport.js'
 import { createRuntimeAdapter, resolveRuntimeId } from './runtimes/index.js'
 
 const execFileAsync = promisify(execFile)
@@ -47,20 +46,10 @@ export async function startLocal(
   // A misconfigured runtime then fails loud at boot rather than on the first dispatch.
   await preflightRuntime(localized)
 
-  // Best-effort: reap per-run containers a previous run orphaned (a crash or hard kill
-  // can leave exited managed containers behind, since their `release()` never ran).
-  // Skipped when no image is configured (nothing to reap).
-  if (localized.LOCAL_HARNESS_IMAGE?.trim()) {
-    try {
-      const reaped = await createLocalContainerTransportFromEnv(localized).reapExited()
-      if (reaped > 0) logger.info({ reaped }, 'reaped orphaned local job containers')
-    } catch (err) {
-      logger.warn(
-        { err: err instanceof Error ? err.message : String(err) },
-        'could not reap orphaned local job containers',
-      )
-    }
-  }
+  // NB: reaping per-run containers a previous run orphaned (a crash/hard kill leaves exited
+  // managed containers behind) + draining pool orphans + pre-warming is done on the SERVING
+  // transport, which `buildLocalContainer` builds (with the DB-stored pool config) and warms
+  // eagerly at boot when an image is configured — so it is not repeated here.
 
   // GitHub is reached via a PAT in local mode (there is no GitHub-App connect flow). Without
   // one the board still serves, but every repo-operating agent step — clone, push, open PR,

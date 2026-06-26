@@ -22,6 +22,10 @@ export {
 export { registerPipeline, registerPipelines, clearRegisteredPipelines } from '@cat-factory/kernel'
 export { createDbClient, type DbClient, type DrizzleDb } from './db/client.js'
 export { migrate } from './db/migrate.js'
-export { createDrizzleRepositories, type CoreRepositories } from './repositories/drizzle.js'
+export {
+  createDrizzleRepositories,
+  type CoreRepositories,
+  DrizzleLocalSettingsRepository,
+} from './repositories/drizzle.js'
 export { DrizzleGitHubInstallationRepository } from './repositories/containerExecution.js'
 export * as schema from './db/schema.js'

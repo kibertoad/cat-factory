@@ -378,4 +378,24 @@ describe('LocalContainerRunnerTransport', () => {
     expect(await transport.reapExited()).toBe(0)
     expect(calls.some((c) => c[0] === 'rm')).toBe(false)
   })
+
+  it('forwards the checkout-reuse settings into the container as -e env', async () => {
+    // The DB-stored checkout config (workspace root + clean-keep list) is consumed INSIDE
+    // the harness container, so the transport passes it as `-e HARNESS_*` on `docker run`.
+    const { exec, calls } = fakeDocker()
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = new LocalContainerRunnerTransport({
+      image: 'harness:test',
+      env: { HARNESS_WORKSPACE_ROOT: '/ws', HARNESS_CLEAN_KEEP: 'node_modules,.venv' },
+      exec,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+    await transport.dispatch({ runId: 'r1', jobId: 'j1' }, {}, 'agent')
+    const runCall = calls.find((c) => c[0] === 'run')!.join(' ')
+    expect(runCall).toContain('HARNESS_WORKSPACE_ROOT=/ws')
+    expect(runCall).toContain('HARNESS_CLEAN_KEEP=node_modules,.venv')
+  })
 })

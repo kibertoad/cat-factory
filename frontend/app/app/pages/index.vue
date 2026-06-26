@@ -34,6 +34,7 @@ import ProviderConnectionPanel from '~/components/settings/ProviderConnectionPan
 import ProviderConfigBanner from '~/components/layout/ProviderConfigBanner.vue'
 import ModelConfigurationPanel from '~/components/settings/ModelConfigurationPanel.vue'
 import LocalModelEndpointsPanel from '~/components/settings/LocalModelEndpointsPanel.vue'
+import LocalModeSettingsPanel from '~/components/settings/LocalModeSettingsPanel.vue'
 import SandboxPanel from '~/components/sandbox/SandboxPanel.vue'
 import UserSecretsSection from '~/components/settings/UserSecretsSection.vue'
 import OpenRouterCatalogPanel from '~/components/settings/OpenRouterCatalogPanel.vue'
@@ -192,6 +193,7 @@ watch(
       <ProviderConnectionPanel />
       <ModelConfigurationPanel />
       <LocalModelEndpointsPanel />
+      <LocalModeSettingsPanel />
       <SandboxPanel />
       <UserSecretsSection />
       <OpenRouterCatalogPanel />

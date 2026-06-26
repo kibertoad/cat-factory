@@ -9,6 +9,7 @@ import type {
   RunnerTransport,
 } from '@cat-factory/kernel'
 import { resolveDockerResources } from '@cat-factory/contracts'
+import type { LocalSettings } from '@cat-factory/contracts'
 import {
   type ContainerEndpoint,
   type ContainerExec,
@@ -35,7 +36,8 @@ const execFileAsync = promisify(execFile)
 // reap it. The harness reaches this service's LLM proxy at the runtime's host alias and
 // clones/pushes to github.com directly with the per-job token in the request body.
 //
-// WARM POOL (opt-in, `LOCAL_POOL_SIZE>0` on a pooling-capable runtime): instead of cold
+// WARM POOL (opt-in, pool size > 0 — configured in the DB-backed local-mode settings — on a
+// pooling-capable runtime): instead of cold
 // -starting a container per run, idle harness containers are kept ready and LEASED to a
 // run for its duration, then RETURNED to the pool. A leased member is preferentially one
 // that already holds a checkout of the run's repo, so the harness does a `git fetch` +
@@ -589,13 +591,16 @@ function repoKeyOf(spec: Record<string, unknown>): string | undefined {
 }
 
 /**
- * Build a {@link LocalContainerRunnerTransport} from the process environment. The image
- * ref (`LOCAL_HARNESS_IMAGE`) is required; the runtime adapter is selected by
- * `LOCAL_CONTAINER_RUNTIME` (docker | podman | orbstack | colima | apple); everything
- * else has sane local defaults.
+ * Build a {@link LocalContainerRunnerTransport} from the process environment plus the
+ * DB-stored local-mode {@link LocalSettings} (warm-pool sizing + per-repo checkout reuse —
+ * these REPLACED the old `LOCAL_POOL_*` / `HARNESS_*` env vars; edit them in the local-mode
+ * settings panel). The image ref (`LOCAL_HARNESS_IMAGE`) is required; the runtime adapter is
+ * selected by `LOCAL_CONTAINER_RUNTIME` (docker | podman | orbstack | colima | apple).
+ * `settings` omitted ⇒ pooling off + harness defaults (e.g. an early boot-reap call).
  */
 export function createLocalContainerTransportFromEnv(
   env: NodeJS.ProcessEnv,
+  settings?: LocalSettings,
 ): LocalContainerRunnerTransport {
   const image = env.LOCAL_HARNESS_IMAGE?.trim()
   if (!image) {
@@ -604,7 +609,15 @@ export function createLocalContainerTransportFromEnv(
         '(a GHCR pull or a tag built from backend/internal/executor-harness/Dockerfile).',
     )
   }
-  const poolSize = numberEnv(env.LOCAL_POOL_SIZE)
+  const pool = settings?.pool
+  const checkout = settings?.checkout
+  // Per-repo checkout reuse is consumed INSIDE the harness container, so forward it as `-e`
+  // env. Absent ⇒ the harness uses its built-in defaults (/workspace, the default keep set).
+  const extraEnv: Record<string, string> = {}
+  if (checkout?.workspaceRoot) extraEnv.HARNESS_WORKSPACE_ROOT = checkout.workspaceRoot
+  if (checkout?.cleanKeep && checkout.cleanKeep.length > 0) {
+    extraEnv.HARNESS_CLEAN_KEEP = checkout.cleanKeep.join(',')
+  }
   return new LocalContainerRunnerTransport({
     image,
     adapter: createRuntimeAdapter(env),
@@ -614,25 +627,16 @@ export function createLocalContainerTransportFromEnv(
     // which needs a privileged job container. Set to `false` for runtimes that run
     // nested containers without it (e.g. rootless Podman).
     privilegedTestJobs: env.LOCAL_DOCKER_PRIVILEGED_TEST_JOBS?.trim() !== 'false',
-    // Warm pool (opt-in): keep idle harness containers ready and re-lease them with
-    // repo-affinity checkout reuse. 0 (default) keeps the classic per-run behaviour.
-    ...(poolSize !== undefined ? { poolSize } : {}),
-    ...(numberEnv(env.LOCAL_POOL_MIN_WARM) !== undefined
-      ? { poolMinWarm: numberEnv(env.LOCAL_POOL_MIN_WARM) }
-      : {}),
-    ...(numberEnv(env.LOCAL_POOL_MAX) !== undefined
-      ? { poolMax: numberEnv(env.LOCAL_POOL_MAX) }
-      : {}),
-    ...(numberEnv(env.LOCAL_POOL_IDLE_TTL_MS) !== undefined
-      ? { poolIdleTtlMs: numberEnv(env.LOCAL_POOL_IDLE_TTL_MS) }
+    ...(Object.keys(extraEnv).length > 0 ? { env: extraEnv } : {}),
+    // Warm pool (opt-in via the settings panel): keep idle harness containers ready and
+    // re-lease them with repo-affinity checkout reuse. size 0 keeps the per-run behaviour.
+    ...(pool
+      ? {
+          poolSize: pool.size,
+          poolMinWarm: pool.minWarm,
+          ...(pool.max != null ? { poolMax: pool.max } : {}),
+          poolIdleTtlMs: pool.idleTtlMs,
+        }
       : {}),
   })
-}
-
-/** Parse a non-negative integer env var, or undefined when unset/blank/invalid. */
-function numberEnv(raw: string | undefined): number | undefined {
-  const trimmed = raw?.trim()
-  if (!trimmed) return undefined
-  const n = Number(trimmed)
-  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : undefined
 }

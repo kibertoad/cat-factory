@@ -36,6 +36,7 @@
   "dependencies": {
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
+    "@cat-factory/integrations": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/node-server": "workspace:*",
     "@cat-factory/orchestration": "workspace:*",

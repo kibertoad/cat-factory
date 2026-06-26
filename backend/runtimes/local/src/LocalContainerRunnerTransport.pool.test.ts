@@ -5,7 +5,7 @@ import {
 } from './LocalContainerRunnerTransport.js'
 import type { RunContainerSpec } from './runtimes/index.js'
 
-// Coverage for the WARM POOL path (LOCAL_POOL_SIZE>0): idle harness containers are kept
+// Coverage for the WARM POOL path (pool size > 0): idle harness containers are kept
 // ready and LEASED to a run, then RETURNED to the pool rather than torn down — with the
 // run-spec carrying `persistentCheckout: true` so the harness reuses its per-repo checkout.
 // The CLI + fetch are injected so it runs with no daemon. The pool-disabled path is the
@@ -226,7 +226,7 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
   })
 
   it('falls back to the per-run path when the runtime does not support pooling', async () => {
-    // A non-pooling adapter (e.g. Apple `container`) ignores LOCAL_POOL_SIZE: the run is
+    // A non-pooling adapter (e.g. Apple `container`) ignores the configured pool size: the run is
     // labelled by its id and release tears the container down, exactly as without a pool.
     const { exec } = fakeDockerPool()
     const adapter = {

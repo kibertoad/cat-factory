@@ -31,9 +31,10 @@ export class NativeRoutingRunnerTransport implements RunnerTransport {
 
   constructor(
     /** Host-process transport for ambient (native CLI) steps — built lazily, cached. */
-    private readonly ambient: () => RunnerTransport,
-    /** Per-run container transport for everything else — built lazily, cached. */
-    private readonly managed: () => RunnerTransport,
+    private readonly ambient: () => RunnerTransport | Promise<RunnerTransport>,
+    /** Per-run container transport for everything else — built lazily, cached (the
+     * container transport resolves its pool config from the DB, so this may be async). */
+    private readonly managed: () => RunnerTransport | Promise<RunnerTransport>,
   ) {}
 
   async dispatch(
@@ -42,7 +43,7 @@ export class NativeRoutingRunnerTransport implements RunnerTransport {
     kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
   ): Promise<void> {
-    const transport = spec.ambientAuth === true ? this.ambient() : this.managed()
+    const transport = await (spec.ambientAuth === true ? this.ambient() : this.managed())
     this.routed.set(refKey(ref), transport)
     await transport.dispatch(ref, spec, kind, options)
   }

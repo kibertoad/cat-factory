@@ -609,6 +609,9 @@ importers:
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@cat-factory/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
       '@cat-factory/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel

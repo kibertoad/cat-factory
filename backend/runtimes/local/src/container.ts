@@ -1,11 +1,14 @@
 import {
   DrizzleGitHubInstallationRepository,
+  DrizzleLocalSettingsRepository,
   buildNodeContainer,
   loadNodeConfig,
 } from '@cat-factory/node-server'
 import type { NodeContainerOptions } from '@cat-factory/node-server'
+import { logger } from '@cat-factory/server'
 import type { AppConfig, ResolveRunnerTransport, ServerContainer } from '@cat-factory/server'
 import type { CoreDependencies } from '@cat-factory/orchestration'
+import { LocalSettingsService } from '@cat-factory/integrations'
 import type { HarnessKind, RunnerTransport } from '@cat-factory/kernel'
 import { NativeRoutingRunnerTransport } from './NativeRoutingRunnerTransport.js'
 import { applyLocalDefaults } from './config.js'
@@ -89,8 +92,49 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // or a non-native vendor reusing the claude-code harness — still runs in a per-run
   // container (built lazily, so a Claude/Codex-only native deployment never needs an image;
   // a proxy step without one fails loudly there). See NativeRoutingRunnerTransport.
-  let container: LocalContainerRunnerTransport | undefined
-  const resolveContainerTransport = () => (container ??= createLocalContainerTransportFromEnv(env))
+  // Local-mode operational settings (warm-pool sizing + per-repo checkout reuse) live in
+  // the DB as a per-deployment singleton, edited through the dedicated local-mode settings
+  // panel — they REPLACED the old LOCAL_POOL_* / HARNESS_* env vars. Built here so the
+  // serving transport resolves its pool config from it and the local-settings controller
+  // can read/write it. Requires the Drizzle db (always present for the local service).
+  const localSettingsService = options.db
+    ? new LocalSettingsService({
+        localSettingsRepository: new DrizzleLocalSettingsRepository(options.db),
+        clock: { now: () => Date.now() },
+      })
+    : undefined
+
+  // The serving container transport is built once, lazily, reading its pool + checkout
+  // config from the DB settings (not env). The promise is cached so every dispatch — and
+  // the native router's container leg — reuses the same instance (and its in-process pool).
+  let containerTransport: Promise<LocalContainerRunnerTransport> | undefined
+  const buildServingTransport = async (): Promise<LocalContainerRunnerTransport> => {
+    const settings = await localSettingsService?.resolve()
+    const transport = createLocalContainerTransportFromEnv(env, settings)
+    // Boot housekeeping on the SERVING instance: reap exited per-run containers, drain
+    // pool members orphaned by a previous process, and pre-warm to poolMinWarm. Best
+    // -effort — if the container runtime is down this throws, but a later dispatch then
+    // fails loudly with a clearer message, so swallow it here.
+    await transport.reapExited().catch((err) => {
+      logger.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        'local mode: could not reap / pre-warm job containers at startup',
+      )
+    })
+    return transport
+  }
+  const resolveContainerTransport = (): Promise<LocalContainerRunnerTransport> => {
+    if (!containerTransport) {
+      containerTransport = buildServingTransport()
+      // Don't let a transient build failure (e.g. a DB blip resolving the settings) poison
+      // every future dispatch: drop the cached promise on rejection so the next call retries.
+      containerTransport.catch(() => {
+        containerTransport = undefined
+      })
+    }
+    return containerTransport
+  }
+
   let routed: RunnerTransport | undefined
   const resolveTransport: ResolveRunnerTransport = () => {
     if (nativeAgents) {
@@ -103,8 +147,14 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       }
       return Promise.resolve(routed)
     }
-    return Promise.resolve(resolveContainerTransport())
+    return resolveContainerTransport()
   }
+
+  // Eagerly kick off the serving transport's boot housekeeping (reap + pre-warm) when an
+  // image is configured, so a warm pool is ready before the first run rather than warming
+  // on first dispatch. Skipped without an image (the board still boots; only container
+  // kinds fail, loudly). Fire-and-forget: dispatch reuses the same cached promise.
+  if (env.LOCAL_HARNESS_IMAGE?.trim()) void resolveContainerTransport().catch(() => {})
 
   // The selected runtime decides whether the Tester's LOCAL docker-compose infra (run
   // via Docker-in-Docker) is possible: Docker/Podman/OrbStack/Colima can nest a daemon,
@@ -120,7 +170,7 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     ? false
     : createRuntimeAdapter(env).capabilities.localDind
 
-  return buildNodeContainer({
+  const container = buildNodeContainer({
     ...options,
     env,
     config,
@@ -150,6 +200,13 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       localTestInfraSupported,
     } satisfies Partial<CoreDependencies>,
   })
+
+  // Surface the local-mode settings service so the dedicated local-settings panel can
+  // read/write the warm-pool + checkout config (the controller 503s when this is absent,
+  // which is the case on every non-local facade).
+  return localSettingsService
+    ? { ...container, localSettings: { service: localSettingsService } }
+    : container
 }
 
 /**
