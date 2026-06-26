@@ -1,9 +1,12 @@
 <script setup lang="ts">
-// Account & team settings — a modal host for the per-account team panel (members +
-// roles, invitations, email sender, account-wide API keys). Account-scoped, distinct
-// from Workspace settings. Opened from the SideBar Configuration section and the
-// account switcher; bound to the `ui` store so any surface can open it.
+// Account settings — a single tabbed modal for the per-account configuration, distinct
+// from Workspace settings. Hosts the team panel (members + roles, invitations, email
+// sender, account-wide API keys; org-scoped, with a create-org CTA on a personal account)
+// and the account-tier prompt-fragment library (available for every account type).
+// Opened from the SideBar Configuration section, the account switcher and the command
+// bar; bound to the `ui` store so any surface can open it and deep-link to a tab.
 import AccountTeamSettings from '~/components/layout/AccountTeamSettings.vue'
+import AccountFragmentSettings from '~/components/layout/AccountFragmentSettings.vue'
 
 const ui = useUiStore()
 const accounts = useAccountsStore()
@@ -12,13 +15,43 @@ const open = computed({
   get: () => ui.accountSettingsOpen,
   set: (v: boolean) => (v ? ui.openAccountSettings() : ui.closeAccountSettings()),
 })
+
+// Driven by the ui store so other surfaces (command bar, the workspace-settings
+// cross-link) can deep-link straight to a tab.
+const activeTab = computed({
+  get: () => ui.accountSettingsTab,
+  set: (v: string) => ui.setAccountSettingsTab(v),
+})
+
+const tabs = [
+  { value: 'team', label: 'Team & access', icon: 'i-lucide-users', slot: 'team' },
+  {
+    value: 'fragments',
+    label: 'Context fragments',
+    icon: 'i-lucide-book-marked',
+    slot: 'fragments',
+  },
+]
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Account & team" :ui="{ content: 'max-w-3xl' }">
+  <UModal v-model:open="open" title="Account settings" :ui="{ content: 'max-w-3xl' }">
     <template #body>
-      <AccountTeamSettings v-if="accounts.activeAccountId" :account-id="accounts.activeAccountId" />
-      <p v-else class="text-sm text-slate-400">No account selected.</p>
+      <p v-if="!accounts.activeAccountId" class="text-sm text-slate-400">No account selected.</p>
+      <UTabs
+        v-else
+        v-model="activeTab"
+        :items="tabs"
+        variant="link"
+        :ui="{ root: 'gap-4', list: 'overflow-x-auto' }"
+      >
+        <template #team>
+          <AccountTeamSettings :account-id="accounts.activeAccountId" />
+        </template>
+        <template #fragments>
+          <AccountFragmentSettings :account-id="accounts.activeAccountId" />
+        </template>
+      </UTabs>
     </template>
   </UModal>
 </template>

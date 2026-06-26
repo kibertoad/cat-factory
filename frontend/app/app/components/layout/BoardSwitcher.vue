@@ -53,11 +53,12 @@ const accountItems = computed<DropdownMenuItem[][]>(() => [
   })),
   [
     { label: 'New organization…', icon: 'i-lucide-plus', onSelect: () => openPrompt('account') },
-    // Account & team settings (members + roles + invitations + email sender). The panel
-    // itself handles personal accounts (prompting to create an org), so this is not gated.
+    // Account settings: the unified per-account panel (team + roles + invitations + email
+    // sender + account-tier fragment library). The panel itself handles personal accounts
+    // (prompting to create an org for the team tab), so this is not gated.
     {
       label: 'Account settings…',
-      icon: 'i-lucide-users',
+      icon: 'i-lucide-settings',
       onSelect: () => ui.openAccountSettings(),
     },
     // Admins can set the account-wide default provider new services inherit.
