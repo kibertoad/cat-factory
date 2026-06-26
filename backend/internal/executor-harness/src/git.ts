@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import type { BootstrapTargetSpec, PrSpec, RepoSpec } from './job.js'
 import { redactSecrets } from './redact.js'
+import { loadRunnerLimits } from './runner.js'
 
 // Re-exported so existing importers that pull `redactSecrets` from this module keep
 // working; the single source of truth now lives in ./redact.js.
@@ -26,14 +27,24 @@ const GIT_EMAIL = 'cat-factory[bot]@users.noreply.github.com'
 // network) must not hang the job indefinitely; the job's overall watchdog
 // (see runner.ts) is the outer bound, this stops one wedged command first.
 //
-// INVARIANT: keep this STRICTLY BELOW the inactivity watchdog
-// (`RunnerLimits.inactivityMs`, default 10 min in runner.ts). Git emits no Pi
-// activity events while it runs, so a slow clone/push races both timers; if they
-// were equal the job could fail with the misleading "no agent activity … likely
-// hung" instead of a clear "git timed out". Staying under that window means git
-// always loses the race and surfaces its own accurate reason. If you raise the
-// inactivity default, this can rise with it (but must remain below it).
-const GIT_TIMEOUT_MS = 7 * 60_000
+// INVARIANT: this MUST stay STRICTLY BELOW the inactivity watchdog
+// (`RunnerLimits.inactivityMs`). Git emits no Pi activity events while it runs, so a
+// slow clone/push races both timers; if they were equal the job could fail with the
+// misleading "no agent activity … likely hung" instead of a clear "git timed out".
+// Staying under that window means git always loses the race and surfaces its own
+// accurate reason.
+//
+// Rather than hardcode a constant against the *default* watchdog (which silently
+// breaks the invariant when an operator lowers `JOB_INACTIVITY_MS`), we DERIVE the
+// ceiling from the actually-configured window: a fixed margin below it, floored so a
+// tiny window can't yield a non-positive timeout. At the 10-min default this resolves
+// to the same 7 min as before; at a lowered 5-min window it tracks down to 2 min.
+const GIT_TIMEOUT_MARGIN_MS = 3 * 60_000
+const GIT_TIMEOUT_FLOOR_MS = 60_000
+const GIT_TIMEOUT_MS = Math.max(
+  GIT_TIMEOUT_FLOOR_MS,
+  loadRunnerLimits().inactivityMs - GIT_TIMEOUT_MARGIN_MS,
+)
 
 /** Wrap an error so its message/stack carry no credentials. */
 function redactError(err: unknown): Error {

@@ -16,12 +16,14 @@ Harden the executor-harness image + runner (image bump 1.15.2 -> 1.15.3):
   value-based scrub (the leased token + harvested JSON leaves), on disjoint error
   paths — so a secret only one rule caught could leak on the other. The single
   `redact(text, knownSecrets?)` now applies BOTH rules in one pass everywhere.
-- **Watchdog headroom.** Lower the per-git-command timeout (`GIT_TIMEOUT_MS`) from
-  10 min to 7 min so it stays strictly below the inactivity watchdog (10 min).
-  Git emits no activity events while it runs, so an equal threshold made a slow
-  clone/push fail with the misleading "no agent activity … likely hung" reason;
-  git now always loses the race and surfaces its own accurate "git timed out".
-  The invariant is documented on both constants.
+- **Watchdog headroom.** Derive the per-git-command timeout (`GIT_TIMEOUT_MS`) from
+  the configured inactivity watchdog — a fixed 3-min margin below it, floored — instead
+  of a constant racing it. Git emits no activity events while it runs, so an equal
+  threshold made a slow clone/push fail with the misleading "no agent activity … likely
+  hung" reason; git now always loses the race and surfaces its own accurate "git timed
+  out". Deriving it (rather than hardcoding 7 min against the 10-min default) keeps the
+  invariant intact even when an operator lowers `JOB_INACTIVITY_MS`. The invariant is
+  documented on both constants.
 - **Shared `killChildProcess` helper (`src/process.ts`).** Extract the identical
   SIGTERM→(5s)→SIGKILL escalation that the Pi and subscription CLI runners each
   re-implemented, so the kill strategy has a single source of truth.

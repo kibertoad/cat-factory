@@ -1,4 +1,4 @@
-import { redactSecrets } from './git.js'
+import { redactSecrets } from './redact.js'
 import type { TodoProgress, ToolSpan } from './pi.js'
 import { log } from './logger.js'
 
@@ -84,10 +84,11 @@ export function loadRunnerLimits(env: NodeJS.ProcessEnv = process.env): RunnerLi
     // still bounding a runaway container.
     maxDurationMs: intEnv(env.JOB_MAX_DURATION_MS, 60 * 60_000),
     // 10 minutes of zero output is treated as hung (a single long LLM/tool call
-    // is far shorter; Pi streams events as it works). Must stay ABOVE the per-git
-    // command ceiling (`GIT_TIMEOUT_MS` in git.ts) so a slow clone/push — which
-    // emits no activity events — times out with git's own clear reason rather than
-    // this watchdog's "likely hung" message. See the invariant note in git.ts.
+    // is far shorter; Pi streams events as it works). The per-git command ceiling
+    // (`GIT_TIMEOUT_MS` in git.ts) is DERIVED from this value — a fixed margin below
+    // it — so a slow clone/push (which emits no activity events) always times out
+    // with git's own clear reason rather than this watchdog's "likely hung" message,
+    // for any configured window. See the invariant note in git.ts.
     inactivityMs: intEnv(env.JOB_INACTIVITY_MS, 10 * 60_000),
   }
 }
