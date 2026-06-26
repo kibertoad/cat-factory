@@ -354,15 +354,18 @@ const ITEM_ICON: Record<string, string> = {
       <div v-else-if="runFailed && run" class="p-3">
         <AgentFailureCard :run="run" variant="expanded" />
       </div>
-      <div class="space-y-3 p-4">
+      <div class="p-4">
         <!-- frame header: the whole header (the title row AND the stats line below it)
              is the drag handle for the expanded frame. `nopan` stops Vue Flow's pane
              from panning on a left-drag that starts here (it pans via d3-zoom's
              mousedown, which our pointerdown stopPropagation can't intercept), so the
              grab drives the frame move. The action buttons on the right opt out via
-             `.nodrag` (onFrameHandle ignores them). -->
+             `.nodrag` (onFrameHandle ignores them). `pb-3` provides the gap down to the
+             drop zone AND makes that gap part of the grab surface, so no header edge
+             falls through to the pane (the parent drops `space-y-3` to avoid doubling
+             the gap). -->
         <div
-          class="nopan cursor-grab space-y-3 active:cursor-grabbing"
+          class="nopan cursor-grab space-y-3 pb-3 active:cursor-grabbing"
           title="Drag service"
           @pointerdown="onFrameHandle"
         >
