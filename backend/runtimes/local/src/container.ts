@@ -100,11 +100,12 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // The runner-pool resolver (the external opt-in target). In local mode `runners` is
   // enabled (it keys off ENCRYPTION_KEY, which `applyLocalDefaults` always sets), so this
   // is non-null and a workspace can register a pool via the API; a native adapter injected
-  // through `options.runnerPoolProvider` drives the actual dispatch. Its own throw is the
-  // clean "register a pool" error when delegation is on but no pool is registered.
+  // through `options.runnerPoolProvider` drives the actual dispatch. The connection repo is
+  // also held for the start-time guard's cheap "is a pool registered?" existence check.
+  const runnerPoolConnectionRepository = new DrizzleRunnerPoolConnectionRepository(options.db)
   const poolResolve = buildNodeResolveTransport(
     config,
-    new DrizzleRunnerPoolConnectionRepository(options.db),
+    runnerPoolConnectionRepository,
     repos.workspaceRepository,
     clock,
     options.runnerPoolProvider,
@@ -132,8 +133,13 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   }
 
   // Start-time guard: refuse a run up front when the workspace delegates agents to a pool
-  // that isn't registered, so the human gets a clean 409 instead of a mid-run dispatch
-  // failure. No-op when delegation is off.
+  // that isn't registered, so the human gets a clean 409 (an actionable message) instead of
+  // a mid-run dispatch failure. No-op when delegation is off. We throw a ConflictError for
+  // BOTH negative cases — the integration being disabled AND no pool registered for the
+  // workspace — rather than letting the pool resolver's plain Error escape (the error
+  // handler maps a non-DomainError to an opaque 500 with the message suppressed). The
+  // existence check uses `getByWorkspace` directly, so it neither decrypts the pool secrets
+  // nor builds a transport that the actual dispatch resolve would only build again.
   const assertAgentBackendConfigured = async (workspaceId: string): Promise<void> => {
     if (!(await wsSettings.get(workspaceId)).delegateAgentsToRunnerPool) return
     if (!wrappedPool) {
@@ -143,9 +149,14 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
         'agent_backend_unconfigured',
       )
     }
-    // The pool resolver throws the clean "register one (POST /workspaces/:id/runner-pools)"
-    // message when no pool is registered for the workspace.
-    await wrappedPool(workspaceId)
+    if (!(await runnerPoolConnectionRepository.getByWorkspace(workspaceId))) {
+      throw new ConflictError(
+        'This workspace delegates container agents to a self-hosted runner pool, but none ' +
+          'is registered. Register one (Settings → Self-hosted runner pool) or turn ' +
+          'delegation off to run agents on host Docker, before starting.',
+        'agent_backend_unconfigured',
+      )
+    }
   }
 
   // The two tester-environment resolvers (used identically by the start gate and the
