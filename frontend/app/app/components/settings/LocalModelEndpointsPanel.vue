@@ -7,6 +7,7 @@
 // automatically in the per-workspace model picker. One endpoint per runner type.
 import { computed, ref, watch } from 'vue'
 import { LOCAL_RUNNER_DEFAULTS, LOCAL_RUNNER_LABELS, type LocalRunner } from '~/types/localModels'
+import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const ui = useUiStore()
 const store = useLocalModelsStore()
@@ -16,6 +17,7 @@ const open = computed({
   get: () => ui.localModelsOpen,
   set: (v: boolean) => (v ? ui.openLocalModels() : ui.closeLocalModels()),
 })
+const back = useIntegrationBack(open)
 
 // Load the user's endpoints whenever the panel opens (loaded independently of the
 // workspace snapshot, like personal subscriptions).
@@ -152,6 +154,9 @@ async function remove(p: LocalRunner) {
 
 <template>
   <UModal v-model:open="open" title="My local runners" :ui="{ content: 'max-w-2xl' }">
+    <template #title>
+      <IntegrationBackTitle title="My local runners" @back="back" />
+    </template>
     <template #body>
       <div class="space-y-4">
         <p class="text-xs text-slate-400">

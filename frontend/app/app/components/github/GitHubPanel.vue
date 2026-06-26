@@ -10,6 +10,7 @@ import type { GitHubPullRequest, GitHubRepo } from '~/types/domain'
 // tag, so it silently renders as an empty element. Importing it directly binds
 // the tag unambiguously.
 import GitHubConnect from './GitHubConnect.vue'
+import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const ui = useUiStore()
 const github = useGitHubStore()
@@ -21,6 +22,7 @@ const open = computed({
     if (!v) ui.closeGitHub()
   },
 })
+const back = useIntegrationBack(open)
 
 // On open: refresh projections when connected. The not-connected state renders
 // <GitHubConnect>, which discovers and links installations on its own.
@@ -199,6 +201,9 @@ async function merge(pr: GitHubPullRequest) {
 
 <template>
   <UModal v-model:open="open" title="GitHub" :ui="{ content: 'max-w-2xl' }">
+    <template #title>
+      <IntegrationBackTitle title="GitHub" @back="back" />
+    </template>
     <template #body>
       <div class="space-y-5">
         <!-- not connected: connect -->

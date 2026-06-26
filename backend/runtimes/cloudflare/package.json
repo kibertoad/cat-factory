@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/worker",
-  "version": "0.20.1",
+  "version": "0.22.0",
   "description": "Reusable Cloudflare Worker library (Hono + D1) exposing the Agent Architecture Board core: the `createApp()` Hono factory, the default fetch/scheduled/queue handler, and the Durable Object + Workflow classes. Deployments (see deploy/backend) supply the wrangler.toml + config and re-export these.",
   "repository": {
     "type": "git",
@@ -10,7 +10,9 @@
   "files": [
     "dist",
     "migrations",
-    "sandbox-migrations"
+    "telemetry-migrations",
+    "sandbox-migrations",
+    "migrations-provisioning"
   ],
   "type": "module",
   "main": "./dist/index.js",
@@ -35,7 +37,8 @@
     "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "db:migrate:local": "wrangler d1 migrations apply cat_factory --local"
+    "db:migrate:local": "wrangler d1 migrations apply cat_factory --local",
+    "db:migrate:provisioning:local": "wrangler d1 migrations apply cat_factory_provisioning --local"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.85",

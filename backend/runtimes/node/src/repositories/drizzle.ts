@@ -10,6 +10,8 @@ import type {
   EmailConnectionRepository,
   EmailProviderKind,
   AgentRunKind,
+  AgentContextSnapshot,
+  AgentContextSnapshotRepository,
   CloudProvider,
   AgentRunRef,
   AgentRunRepository,
@@ -39,6 +41,9 @@ import type {
   LlmCallMetricRepository,
   LlmCallMetricSummary,
   LlmPromptChainTip,
+  ProvisioningLogQuery,
+  ProvisioningLogRecord,
+  ProvisioningLogRepository,
   Pipeline,
   PipelineRepository,
   PipelineSchedule,
@@ -117,6 +122,7 @@ import {
   accountInvitations,
   accountSettings,
   accounts,
+  agentContextSnapshots,
   agentRuns,
   blocks,
   consensusSessions,
@@ -124,6 +130,7 @@ import {
   observabilityConnections,
   emailConnections,
   llmCallMetrics,
+  provisioningLog,
   memberships,
   mergeThresholdPresets,
   releaseHealthConfigs,
@@ -1125,6 +1132,147 @@ class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
       .delete(llmCallMetrics)
       .where(lt(llmCallMetrics.created_at, epochMs))
       .returning({ id: llmCallMetrics.id })
+    return deleted.length
+  }
+}
+
+type AgentContextSnapshotRow = typeof agentContextSnapshots.$inferSelect
+
+function rowToAgentContextSnapshot(row: AgentContextSnapshotRow): AgentContextSnapshot {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    executionId: row.execution_id,
+    agentKind: row.agent_kind,
+    stepIndex: row.step_index,
+    createdAt: row.created_at,
+    model: row.model,
+    harness: row.harness,
+    systemPrompt: row.system_prompt,
+    userPrompt: row.user_prompt,
+    fragments: parseJsonArray<AgentContextSnapshot['fragments'][number]>(row.fragments),
+    contextFiles: parseJsonArray<AgentContextSnapshot['contextFiles'][number]>(row.context_files),
+    extras: parseAgentContextExtras(row.extras),
+  }
+}
+
+/** Parse the extras JSON object column, degrading a malformed value to {}. */
+function parseAgentContextExtras(text: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(text) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+class DrizzleAgentContextSnapshotRepository implements AgentContextSnapshotRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async record(snapshot: AgentContextSnapshot): Promise<void> {
+    await this.db.insert(agentContextSnapshots).values({
+      id: snapshot.id,
+      workspace_id: snapshot.workspaceId,
+      execution_id: snapshot.executionId,
+      agent_kind: snapshot.agentKind,
+      step_index: snapshot.stepIndex,
+      created_at: snapshot.createdAt,
+      model: snapshot.model,
+      harness: snapshot.harness,
+      system_prompt: snapshot.systemPrompt,
+      user_prompt: snapshot.userPrompt,
+      fragments: JSON.stringify(snapshot.fragments),
+      context_files: JSON.stringify(snapshot.contextFiles),
+      extras: JSON.stringify(snapshot.extras),
+    })
+  }
+
+  async listByExecution(workspaceId: string, executionId: string): Promise<AgentContextSnapshot[]> {
+    const rows = await this.db
+      .select()
+      .from(agentContextSnapshots)
+      .where(
+        and(
+          eq(agentContextSnapshots.workspace_id, workspaceId),
+          eq(agentContextSnapshots.execution_id, executionId),
+        ),
+      )
+      .orderBy(desc(agentContextSnapshots.created_at), desc(agentContextSnapshots.id))
+    return rows.map(rowToAgentContextSnapshot)
+  }
+
+  async deleteOlderThan(epochMs: number): Promise<number> {
+    const deleted = await this.db
+      .delete(agentContextSnapshots)
+      .where(lt(agentContextSnapshots.created_at, epochMs))
+      .returning({ id: agentContextSnapshots.id })
+    return deleted.length
+  }
+}
+
+function rowToProvisioningLog(row: typeof provisioningLog.$inferSelect): ProvisioningLogRecord {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    subsystem: row.subsystem as ProvisioningLogRecord['subsystem'],
+    operation: row.operation as ProvisioningLogRecord['operation'],
+    targetId: row.target_id,
+    providerId: row.provider_id,
+    blockId: row.block_id,
+    executionId: row.execution_id,
+    outcome: row.outcome as ProvisioningLogRecord['outcome'],
+    error: row.error,
+    detail: row.detail,
+    createdAt: row.created_at,
+  }
+}
+
+/** Drizzle/Postgres provisioning-log sink, in its own `provisioning` schema. */
+class DrizzleProvisioningLogRepository implements ProvisioningLogRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async append(record: ProvisioningLogRecord): Promise<void> {
+    await this.db.insert(provisioningLog).values({
+      id: record.id,
+      workspace_id: record.workspaceId,
+      subsystem: record.subsystem,
+      operation: record.operation,
+      target_id: record.targetId,
+      provider_id: record.providerId,
+      block_id: record.blockId,
+      execution_id: record.executionId,
+      outcome: record.outcome,
+      error: record.error,
+      detail: record.detail,
+      created_at: record.createdAt,
+    })
+  }
+
+  async list(
+    workspaceId: string,
+    query: ProvisioningLogQuery = {},
+  ): Promise<ProvisioningLogRecord[]> {
+    const conditions = [eq(provisioningLog.workspace_id, workspaceId)]
+    if (query.subsystem) conditions.push(eq(provisioningLog.subsystem, query.subsystem))
+    if (query.executionId) conditions.push(eq(provisioningLog.execution_id, query.executionId))
+    if (query.targetId) conditions.push(eq(provisioningLog.target_id, query.targetId))
+    if (query.before != null) conditions.push(lt(provisioningLog.created_at, query.before))
+    const base = this.db
+      .select()
+      .from(provisioningLog)
+      .where(and(...conditions))
+      .orderBy(desc(provisioningLog.created_at), desc(provisioningLog.id))
+    const rows = await (query.limit == null ? base : base.limit(query.limit))
+    return rows.map(rowToProvisioningLog)
+  }
+
+  async deleteOlderThan(epochMs: number): Promise<number> {
+    const deleted = await this.db
+      .delete(provisioningLog)
+      .where(lt(provisioningLog.created_at, epochMs))
+      .returning({ id: provisioningLog.id })
     return deleted.length
   }
 }
@@ -2704,6 +2852,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
       taskLimitMode: row.task_limit_mode as WorkspaceSettings['taskLimitMode'],
       taskLimitShared: row.task_limit_shared,
       taskLimitPerType: perType,
+      storeAgentContext: row.store_agent_context === 1,
       spendCurrency: row.spend_currency,
       spendMonthlyLimit: row.spend_monthly_limit,
       spendModelPrices: modelPrices,
@@ -2719,6 +2868,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
       task_limit_per_type: settings.taskLimitPerType
         ? JSON.stringify(settings.taskLimitPerType)
         : null,
+      store_agent_context: settings.storeAgentContext ? 1 : 0,
       spend_currency: settings.spendCurrency,
       spend_monthly_limit: settings.spendMonthlyLimit,
       spend_model_prices: settings.spendModelPrices
@@ -2735,6 +2885,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
           task_limit_mode: values.task_limit_mode,
           task_limit_shared: values.task_limit_shared,
           task_limit_per_type: values.task_limit_per_type,
+          store_agent_context: values.store_agent_context,
           spend_currency: values.spend_currency,
           spend_monthly_limit: values.spend_monthly_limit,
           spend_model_prices: values.spend_model_prices,
@@ -3020,6 +3171,7 @@ export interface CoreRepositories {
   executionRepository: ExecutionRepository
   tokenUsageRepository: TokenUsageRepository
   llmCallMetricRepository: LlmCallMetricRepository
+  agentContextSnapshotRepository: AgentContextSnapshotRepository
   agentRunRepository: AgentRunRepository
   modelPresetRepository: ModelPresetRepository
   serviceFragmentDefaultsRepository: ServiceFragmentDefaultsRepository
@@ -3036,6 +3188,7 @@ export interface CoreRepositories {
   incidentEnrichmentConnectionRepository: IncidentEnrichmentConnectionRepository
   accountSettingsRepository: AccountSettingsRepository
   releaseHealthConfigRepository: ReleaseHealthConfigRepository
+  provisioningLogRepository: ProvisioningLogRepository
 }
 
 /** Build the Drizzle/Postgres-backed core repositories. */
@@ -3052,6 +3205,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     executionRepository: new DrizzleExecutionRepository(db, clock),
     tokenUsageRepository: new DrizzleTokenUsageRepository(db),
     llmCallMetricRepository: new DrizzleLlmCallMetricRepository(db),
+    agentContextSnapshotRepository: new DrizzleAgentContextSnapshotRepository(db),
     agentRunRepository: new DrizzleAgentRunRepository(db),
     modelPresetRepository: new DrizzleModelPresetRepository(db),
     serviceFragmentDefaultsRepository: new DrizzleServiceFragmentDefaultsRepository(db),
@@ -3068,5 +3222,6 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     incidentEnrichmentConnectionRepository: new DrizzleIncidentEnrichmentConnectionRepository(db),
     accountSettingsRepository: new DrizzleAccountSettingsRepository(db),
     releaseHealthConfigRepository: new DrizzleReleaseHealthConfigRepository(db),
+    provisioningLogRepository: new DrizzleProvisioningLogRepository(db),
   }
 }

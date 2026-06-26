@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { agentKindSchema } from './primitives.js'
+import { RESULT_VIEW_IDS } from './result-views.js'
 
 // ---------------------------------------------------------------------------
 // Presentation metadata for an agent kind — the display fields the SPA palette,
@@ -34,10 +35,11 @@ export const agentPresentationSchema = v.object({
   category: v.optional(agentCategorySchema),
   /**
    * Id of a dedicated result-view component to open instead of the generic prose panel
-   * (e.g. `generic-structured` for a custom structured agent). Omitted ⇒ the generic
-   * step-detail panel.
+   * (e.g. `generic-structured` for a custom structured agent). One of the canonical
+   * {@link RESULT_VIEW_IDS} — an unknown id fails validation here rather than silently
+   * falling back to prose. Omitted ⇒ the generic step-detail panel.
    */
-  resultView: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(80))),
+  resultView: v.optional(v.picklist(RESULT_VIEW_IDS)),
 })
 export type AgentPresentation = v.InferOutput<typeof agentPresentationSchema>
 

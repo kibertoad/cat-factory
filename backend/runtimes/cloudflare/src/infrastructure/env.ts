@@ -29,6 +29,15 @@ export interface Env {
   DB: D1Database
 
   /**
+   * Dedicated D1 database for telemetry (the `llm_call_metrics` + `agent_context_snapshots`
+   * tables). Telemetry is append-heavy, high-volume and short-retention, a very different
+   * write profile from the transactional domain, so it lives in its own database. Required:
+   * the worker fails fast at container build if it is unbound (see buildContainer). Its
+   * schema ships under `telemetry-migrations/` (a separate `migrations_dir` in wrangler.toml).
+   */
+  TELEMETRY_DB: D1Database
+
+  /**
    * Dedicated D1 database for the Sandbox (parallel prompt/model testing surface), with
    * its own migrations lineage (sandbox-migrations/). Optional + opt-in: absent ⇒ the
    * Sandbox module isn't assembled and its API answers 503. Kept separate from the main
@@ -36,6 +45,14 @@ export interface Env {
    * feature can be lifted out later.
    */
   SANDBOX_DB?: D1Database
+
+  /**
+   * SEPARATE D1 database for the unified provisioning event log (its own binding +
+   * migrations dir), isolating its high write churn from the main `DB`. When absent,
+   * the provisioning-log feature is off (env provision/teardown + the runner/container
+   * transports simply don't record). Mirrors the Node facade's separate Postgres schema.
+   */
+  PROVISIONING_DB?: D1Database
 
   /** Cloudflare Workers AI binding (optional; used when provider = workers-ai). */
   AI?: Ai
@@ -406,4 +423,10 @@ export interface Env {
    * aggressively. Default 3. 0 disables pruning.
    */
   LLM_CALL_METRICS_RETENTION_DAYS?: string
+  /**
+   * Days of `provisioning_log` (provisioning event log) history to keep. High-churn —
+   * one row per spin-up/down attempt — and only useful for recent debugging, so pruned
+   * aggressively. Default 14. 0 disables pruning.
+   */
+  PROVISIONING_LOG_RETENTION_DAYS?: string
 }

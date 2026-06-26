@@ -7,6 +7,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { AgentPresentation } from '@cat-factory/contracts'
 import type { AgentTrait } from './traits.js'
+import type { StructuredOutput } from './structured-output.js'
 
 // Installation-level extension point for custom agent kinds, mirroring the
 // model-provider registry seam (`registerModelRegistry` / `@cat-factory/provider-bedrock`).
@@ -73,6 +74,15 @@ export interface AgentKindDefinition {
    */
   agent?: AgentStepSpec
   /**
+   * Schema-driven structured output (see {@link defineStructuredOutput}). When present and the
+   * author didn't set `agent.output` by hand, `registerAgentKind` derives `agent.output` from
+   * `structuredOutput.spec` — so a structured kind declares ONE valibot schema instead of a
+   * hand-written `shapeHint` string PLUS a lenient coercer. The kind's post-ops / step-resolver
+   * read the typed parser back via {@link registeredStructuredOutput}. Omitted ⇒ no schema
+   * (a prose kind, or one that sets `agent.output.shapeHint` by hand).
+   */
+  structuredOutput?: StructuredOutput<unknown>
+  /**
    * Deterministic backend operations run BEFORE the agent step (over a checkout-free
    * {@link RepoOp} context): read a baseline artifact into the prompt, etc. Plain TS,
    * runs on the backend — never in the container. Omitted ⇒ no pre-op.
@@ -101,7 +111,18 @@ const registry = new Map<string, AgentKindDefinition>()
 
 /** Register a custom agent kind. A later registration of the same id replaces the earlier one. */
 export function registerAgentKind(definition: AgentKindDefinition): void {
-  registry.set(definition.kind, definition)
+  registry.set(definition.kind, withDerivedOutput(definition))
+}
+
+/**
+ * Derive `agent.output` from a `structuredOutput` schema when the author didn't set it by
+ * hand — so a structured kind declares ONE valibot schema and the engine spec falls out of
+ * it. An explicit `agent.output` always wins (the author overrode the derivation).
+ */
+function withDerivedOutput(definition: AgentKindDefinition): AgentKindDefinition {
+  const { structuredOutput, agent } = definition
+  if (!structuredOutput || !agent || agent.output) return definition
+  return { ...definition, agent: { ...agent, output: structuredOutput.spec } }
 }
 
 /** Register several custom agent kinds at once. */
@@ -179,4 +200,13 @@ export function registeredPostOps(kind: AgentKind): RepoOp[] {
 /** A registered kind's frontend presentation metadata, or undefined when not supplied. */
 export function registeredAgentPresentation(kind: AgentKind): AgentPresentation | undefined {
   return registry.get(kind)?.presentation
+}
+
+/**
+ * A registered kind's schema-driven structured output (its typed `parse`/`safeParse` + the
+ * derived spec), or undefined when the kind isn't registered / declared no schema. A post-op
+ * or step-resolver uses this to parse `result.custom` without hand-writing a coercer.
+ */
+export function registeredStructuredOutput(kind: AgentKind): StructuredOutput<unknown> | undefined {
+  return registry.get(kind)?.structuredOutput
 }

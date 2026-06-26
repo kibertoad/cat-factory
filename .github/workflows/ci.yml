@@ -150,6 +150,18 @@ jobs:
       - name: Typecheck frontend layer
         run: pnpm --filter @cat-factory/app run typecheck
 
+      # Actually COMPILE the SPA. `vue-tsc` (above) is lenient about template-expression
+      # syntax, so an SFC that the real Vue/Vite build rejects (e.g. a multi-statement
+      # inline handler) used to slip through every check — nothing in CI built the
+      # frontend. We run `nuxt generate` (not `nuxt build`) so this mirrors the EXACT
+      # command the Pages deployment ships with, catching `generate`-only failures too.
+      # NUXT_PUBLIC_API_BASE is baked in at build time; a placeholder is fine for a pure
+      # compile check.
+      - name: Build frontend SPA
+        run: pnpm --filter @cat-factory/deploy-frontend run generate
+        env:
+          NUXT_PUBLIC_API_BASE: http://localhost:8787
+
       # Verify the Node facade's Drizzle migration lineage stays consistent with
       # `schema.ts`: no forked/non-commutative history and no un-generated drift
       # (an edited schema without its `pnpm db:generate` migration). Offline — a
@@ -343,8 +355,103 @@ jobs:
       - name: Run Postgres-backed suites
         run: pnpm --filter @cat-factory/node-server --filter @cat-factory/local-server -r run test:run
 
+  # Playwright e2e: the real SPA against a real Node backend (real Postgres + real
+  # WebSocket) with only the external deps faked (see backend/internal/e2e). Needs the
+  # same Postgres service as the Node suite; Playwright's own webServer boots both the
+  # backend (src/testServer.ts) and the SPA (deploy/frontend's nuxt dev). Covers
+  # frontend + backend, so it runs on every PR (not gated by the backend paths filter).
+  #
+  # NON-BLOCKING: deliberately NOT a dependency of the aggregated `Test` gate below, so a
+  # browser/boot flake here can't block an otherwise-green PR. It still runs on every PR
+  # and uploads its report; treat red runs as a signal to investigate, not a merge stop.
+  # Promote it into `test-gate.needs` once it has proven stable.
+  test-e2e:
+    name: Test e2e (playwright)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cat_factory_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Cache node_modules
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            node_modules
+            backend/packages/*/node_modules
+            backend/runtimes/*/node_modules
+            backend/internal/*/node_modules
+            frontend/app/node_modules
+            frontend/app/.nuxt
+            deploy/backend/node_modules
+            deploy/frontend/node_modules
+            deploy/frontend/.nuxt
+            deploy/node/node_modules
+            deploy/local/node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The e2e backend imports the built `dist` of the workspace libraries.
+      - name: Build libraries
+        run: pnpm build
+
+      # Cache the downloaded browser between runs (keyed on the lockfile, which pins the
+      # @playwright/test version). Install (with OS deps) on a miss.
+      - name: Cache Playwright browser
+        id: pw-cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @cat-factory/e2e exec playwright install --with-deps chromium
+
+      - name: Run e2e suite
+        run: pnpm --filter @cat-factory/e2e run test:e2e
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: playwright-report
+          path: backend/internal/e2e/playwright-report
+          retention-days: 7
+          if-no-files-found: ignore
+
   # Single aggregated status named "Test" so branch protection can require one
   # check regardless of the job/shard layout. Fails unless every test job passed.
+  # NOTE: `test-e2e` is intentionally NOT in `needs` — it's non-blocking for now (see the
+  # job comment above), so its result does not gate this required status.
   test-gate:
     name: Test
     needs: [test-worker, test-units, test-db]

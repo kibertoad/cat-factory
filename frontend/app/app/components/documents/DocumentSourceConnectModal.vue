@@ -4,6 +4,8 @@
 // same modal serves Confluence, Notion and any future source. Secret credentials
 // are write-only — the backend never returns them, so on reload we show
 // "Connected" with empty fields.
+import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+
 const ui = useUiStore()
 const documents = useDocumentsStore()
 const toast = useToast()
@@ -23,6 +25,7 @@ const open = computed({
     if (!v) ui.closeDocumentConnect()
   },
 })
+const back = useIntegrationBack(open)
 
 /** One value per credential field, reset whenever the modal (re)opens. */
 const values = ref<Record<string, string>>({})
@@ -77,6 +80,9 @@ async function disconnect() {
 
 <template>
   <UModal v-model:open="open" :title="descriptor?.label ?? 'Connect source'">
+    <template #title>
+      <IntegrationBackTitle :title="descriptor?.label ?? 'Connect source'" @back="back" />
+    </template>
     <template #body>
       <div v-if="descriptor" class="space-y-4">
         <p class="text-sm text-slate-400">

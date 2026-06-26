@@ -108,7 +108,13 @@ const decisionItems = computed(() =>
 
     <!-- decisions queue -->
     <UDropdownMenu v-if="execution.pendingDecisionCount" :items="decisionItems">
-      <UButton color="warning" variant="soft" size="sm" icon="i-lucide-circle-help">
+      <UButton
+        color="warning"
+        variant="soft"
+        size="sm"
+        icon="i-lucide-circle-help"
+        data-testid="decision-badge"
+      >
         {{ execution.pendingDecisionCount }} decision{{
           execution.pendingDecisionCount === 1 ? '' : 's'
         }}

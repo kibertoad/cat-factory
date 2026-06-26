@@ -21,6 +21,8 @@ import {
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
   RunnerPoolTransport,
+  ProvisioningLogRecorder,
+  LoggingRunnerTransport,
   EMAIL_CIPHER_INFO,
   SLACK_CIPHER_INFO,
   SlackNotificationChannel,
@@ -46,6 +48,7 @@ import {
   type GitHubInstallationRepository,
   type ModelProviderResolver,
   type NotificationChannel,
+  type ProvisioningSubsystem,
   type RateLimitRepository,
   type RateLimitSnapshot,
   type ResolveUserGitHubToken,
@@ -54,6 +57,7 @@ import {
   CompositeNotificationChannel,
 } from '@cat-factory/kernel'
 import {
+  AgentContextObservabilityService,
   type CoreDependencies,
   createCore,
   resolvePresetModelForKind,
@@ -471,6 +475,32 @@ function buildNodeResolveTransport(
 }
 
 /**
+ * Wrap a transport resolver so every dispatch/release/poll-failure appends a
+ * provisioning-log event. A no-op when there's no resolver. `subsystem` tags the
+ * rows (a self-hosted pool vs a per-run container) so the logs drawer can filter.
+ */
+function withProvisioningLog(
+  resolve: ResolveRunnerTransport | null,
+  recorder: ProvisioningLogRecorder,
+  subsystem: ProvisioningSubsystem,
+): ResolveRunnerTransport | null {
+  if (!resolve) return null
+  // Closure-owned so it survives each (per-resolution) wrapper: a terminal `failed`
+  // job re-polled by a replay/re-drive logs its poll-failure only once.
+  const loggedPollFailures = new Set<string>()
+  return async (workspaceId) => {
+    const inner = await resolve(workspaceId)
+    return new LoggingRunnerTransport({
+      inner,
+      recorder,
+      workspaceId: workspaceId ?? '',
+      subsystem,
+      loggedPollFailures,
+    })
+  }
+}
+
+/**
  * Build the container agent executor (repo-operating steps: coder, mocker,
  * playwright, blueprints, ci-fixer, conflict-resolver, merger) when its
  * prerequisites are configured: a token source for the push/clone token, the public
@@ -498,6 +528,7 @@ function buildNodeContainerExecutor(
   personalSubscriptions?: PersonalSubscriptionService,
   resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>,
   resolveUserGitHubToken?: ResolveUserGitHubToken,
+  agentContextObservability?: AgentContextObservabilityService,
   resolveWebSearchEnabled?: (workspaceId: string) => Promise<boolean>,
 ): AgentExecutor | null {
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
@@ -579,6 +610,8 @@ function buildNodeContainerExecutor(
     // Forward container tool spans to Langfuse (when configured) as child spans under
     // the run trace — the same sink the LLM proxy fans generations out to.
     llmTraceSink: buildLangfuseSink(config),
+    // Record the complete provided context per dispatch (best-effort, gated in the sink).
+    ...(agentContextObservability ? { agentContextObservability } : {}),
   })
 }
 
@@ -934,9 +967,20 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     serviceRepository: new DrizzleServiceFrameRepository(options.db),
   })
 
+  // Best-effort recorder for the provisioning event log (its own Postgres schema).
+  // Shared by the env services (via createCore) and the runner/container transport
+  // decorator below, so every spin-up/down attempt is logged.
+  const provisioningLogRecorder = new ProvisioningLogRecorder({
+    repository: repos.provisioningLogRepository,
+    idGenerator,
+    clock,
+  })
+
   // A sibling facade (local mode) may inject its own transport — even `null` — which
   // replaces the default self-hosted-pool resolution; undefined keeps Node's default.
-  const resolveTransport =
+  // The injected transport is a per-run container (local mode), the default is a
+  // self-hosted pool — tag each accordingly so the logs drawer can filter by subsystem.
+  const resolveTransport = withProvisioningLog(
     options.resolveTransport !== undefined
       ? options.resolveTransport
       : buildNodeResolveTransport(
@@ -944,7 +988,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           runnerPoolConnectionRepository,
           repos.workspaceRepository,
           clock,
-        )
+        ),
+    provisioningLogRecorder,
+    options.resolveTransport !== undefined ? 'container' : 'runner-pool',
+  )
   // The subscription-token pool (Claude Code / Codex credentials), shared by the
   // container executor (lease + usage feedback) and the vendor-credential controller.
   const subscriptions = buildNodeSubscriptionService(
@@ -962,6 +1009,18 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     idGenerator,
     clock,
   )
+  // Agent-context observability sink: records the complete, redacted context provided
+  // to each container agent (composed prompts + folded-in fragments + injected files).
+  // Gated by the deployment prompt-recording switch + the workspace storeAgentContext
+  // setting. Wired into the executor (write) AND createCore (read). The telemetry rows
+  // live in the `telemetry` Postgres schema (see schema.ts).
+  const agentContextObservability = new AgentContextObservabilityService({
+    agentContextSnapshotRepository: repos.agentContextSnapshotRepository,
+    workspaceSettingsRepository: repos.workspaceSettingsRepository,
+    idGenerator,
+    clock,
+    recordPrompts: config.observability.recordPrompts,
+  })
   // Web-search keys live per-account; advertise Pi's `web_search` tool to a run only when
   // its account actually has a usable upstream (else the tool would just fail/return
   // nothing). Resolved per run off a dedicated account-settings instance (short-TTL cache).
@@ -995,6 +1054,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     personalSubscriptions,
     (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
     resolveUserGitHubToken,
+    agentContextObservability,
     resolveWebSearchEnabled,
   )
 
@@ -1334,7 +1394,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     workspaceMountRepository: repos.workspaceMountRepository,
     tokenUsageRepository: repos.tokenUsageRepository,
     llmCallMetricRepository: repos.llmCallMetricRepository,
+    // Unified provisioning event log (its own Postgres schema). Threads the recorder
+    // into the env services and exposes the read service for the logs controller.
+    provisioningLogRepository: repos.provisioningLogRepository,
     recordLlmPrompts: config.observability.recordPrompts,
+    // Re-exposed on the core for the agent-context read endpoint; the same instance
+    // is injected into the container executor above for the write path.
+    agentContextObservability,
     // Opt-in Langfuse trace sink (fans every recorded LLM call out as a generation).
     // Built only when configured; otherwise undefined and there is no external emission.
     llmTraceSink: buildLangfuseSink(config),

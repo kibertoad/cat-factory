@@ -9,6 +9,7 @@
   "updateInternalDependencies": "patch",
   "ignore": [
     "@cat-factory/benchmark-harness",
+    "@cat-factory/e2e",
     "@cat-factory/smoketest-harness",
     "@cat-factory/deploy-backend",
     "@cat-factory/deploy-frontend",

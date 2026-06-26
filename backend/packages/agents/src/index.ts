@@ -33,8 +33,16 @@ export {
   registeredPreOps,
   registeredPostOps,
   registeredAgentPresentation,
+  registeredStructuredOutput,
   clearRegisteredAgentKinds,
 } from './agents/kinds/registry.js'
+// Schema-driven structured output: derive a kind's `agent.output` spec + a typed parser from
+// one valibot schema instead of a hand-written shapeHint string + lenient coercer.
+export {
+  type StructuredOutput,
+  type StructuredOutputOptions,
+  defineStructuredOutput,
+} from './agents/kinds/structured-output.js'
 // Agent capability traits (standard + custom). `code-aware` gates the engine's folding
 // of the service's best-practice fragments; `spec-aware` appends the in-repo-spec guidance.
 export {

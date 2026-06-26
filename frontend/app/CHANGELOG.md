@@ -1,5 +1,129 @@
 # @cat-factory/app
 
+## 0.30.1
+
+### Patch Changes
+
+- df0d331: Fix a build-breaking Vue SFC error in 13 integration panels/modals: their
+  `IntegrationBackTitle` `@back` handler was written as two statements across newlines
+  (`open = false` ⏎ `ui.openIntegrations()`), which the Vue 3.5 / Vite SFC compiler rejects
+  (`Unexpected token, expected ","`) — both `nuxt dev` and `nuxt build` failed. Replaced the
+  duplicated inline handler with a shared `useIntegrationBack(open)` composable wired as a
+  named `@back="back"` handler in each panel; no behaviour change.
+
+  Also add `data-testid` / `data-status` test hooks to the board components (board canvas,
+  task card, decision badge + decision modal) so the new `@cat-factory/e2e` Playwright suite
+  can target stable selectors. Additive only.
+
+## 0.30.0
+
+### Minor Changes
+
+- 765cc42: Capture the complete context provided to each container agent as observability, in an
+  isolated telemetry store.
+
+  - New `agent_context_snapshots` table records, per container-agent dispatch, the fully
+    fragment-composed system + user prompts, the best-practice fragment bodies folded in,
+    and the full content of the files injected into the container (`.cat-context/*`) — the
+    gap the per-call LLM telemetry can't see (the agent reads those files via tools). The
+    snapshot is a redacted allow-list projection of the dispatched job (never any token or
+    credential-bearing URL). Recorded best-effort at dispatch by `ContainerAgentExecutor`
+    via the new `AgentContextObservabilityService`, gated by the deployment prompt-recording
+    switch (`LLM_RECORD_PROMPTS`) AND a new per-workspace `storeAgentContext` setting
+    (on by default; a toggle in Workspace settings). Surfaced on demand via
+    `GET /workspaces/:ws/executions/:executionId/agent-context` and a "Provided context"
+    view in the observability panel.
+  - Telemetry now lives in an isolated store, separate from the transactional domain
+    (append-heavy/high-volume/short-retention write profile). `llm_call_metrics` and the new
+    `agent_context_snapshots` table both move there: a dedicated `telemetry` Postgres schema
+    on Node (same connection) and a separate, **required** `TELEMETRY_DB` D1 database on
+    Cloudflare. Both ride the existing `LLM_CALL_METRICS_RETENTION_DAYS` retention window.
+
+  BREAKING (pre-1.0, no migration provided): the Cloudflare Worker now requires a
+  `TELEMETRY_DB` D1 binding (provision with `wrangler d1 create cat_factory_telemetry` and
+  add the `[[d1_databases]]` entry pointing `migrations_dir` at
+  `telemetry-migrations`). `llm_call_metrics` is dropped from the main D1 / `public` schema;
+  existing rows are not migrated.
+
+## 0.29.1
+
+### Patch Changes
+
+- 52d886a: Improve the ergonomics of authoring custom agent kinds and gates:
+
+  - **Typed provider registry** (`defineProviderToken`/`wireProvider`/`requireProvider`, kernel),
+    surfaced through `GateContext.getProvider`/`requireProvider`. A custom gate reaches its data
+    source through the context instead of a hand-authored module global + unsafe `!`. The built-in
+    `@cat-factory/gates` suite dogfoods it (public `wireX` signatures unchanged).
+    **Breaking:** `GateContext` gains required `getProvider`/`requireProvider` (use `stubGateContext`).
+  - **Schema-driven structured output** (`defineStructuredOutput`, agents): one valibot schema
+    derives both the `agent.output` spec and a typed `parse`/`safeParse`, replacing the hand-written
+    `shapeHint` string + lenient coercer. `registerAgentKind` auto-fills `agent.output` from a
+    `structuredOutput` schema.
+  - **Boot-time registration validation** (`validateRegistrations`/`validateRegistrationsOnce`,
+    orchestration): a facade validates registered gates/kinds/pipelines at startup (gate `helperKind`
+    resolves, `resultView` is known) and fails loudly instead of mid-run. Wired into both runtimes.
+  - **Prompt + resultView wiring** (agents/contracts): `FINAL_ANSWER_IN_REPLY` + the read-only
+    guardrail are applied to registered kinds from their `agent.surface` (fixing a registered
+    `container-explore` kind missing the guardrail); `resultView` is now a typed picklist of
+    `RESULT_VIEW_IDS` (unknown ids fail validation instead of silently falling back to prose).
+
+## 0.29.0
+
+### Minor Changes
+
+- a639189: Observability for ephemeral-environment and container provisioning.
+
+  - **Unified provisioning event log.** A new append-only log records every attempt to
+    spin up / tear down throwaway infrastructure — ephemeral environments
+    (provision/teardown/status) and the runner-pool / per-run containers
+    (dispatch/release/poll-failure) — with the outcome and the verbatim provider/runtime
+    error on failure. Surfaced via `GET /workspaces/:ws/provisioning-logs` and a "View
+    logs" button in the ephemeral-environment provider and self-hosted runner-pool config
+    panels.
+  - **Env lifecycle in run details.** An agent run's step now carries the ephemeral
+    environment it runs against (spinning up / running / shut down / errored + URL/expiry
+    - exact error), shown in the step detail (notably for the Tester).
+  - **Container-start failures.** When a container/runner never accepts the job, the run
+    details now say "Container failed to start" and show the exact provider/runtime error
+    (a `dispatch`-kind failure) instead of a generic "Run failed". A run's step detail also
+    has an "Infrastructure attempts" drawer (filtered by execution id) that surfaces that
+    run's container/runner/env spin-up + tear-down attempts.
+  - **Secret redaction.** The verbatim provider/runtime error and structured detail are
+    scrubbed at the single recorder choke point before they are persisted/served — bearer
+    tokens, `Authorization`/`x-api-key` header echoes, credentialed URLs, and recognisable
+    token shapes (`sk-`/`ghp_`/`AKIA`/JWT) are replaced with `[REDACTED]` while the
+    surrounding context (field name, URL host, token scheme) is kept for diagnosis.
+
+  **Breaking / operational:** the provisioning log lives in a PHYSICALLY SEPARATE store to
+  isolate its high write churn. The Cloudflare Worker needs a new `PROVISIONING_DB` D1
+  binding (its own `migrations-provisioning` dir — create the database and apply its
+  migrations); when absent, the feature is simply off. The Node service uses a dedicated
+  `provisioning` Postgres schema, created with `CREATE SCHEMA IF NOT EXISTS` by `migrate()`
+  on boot (the DB role needs `CREATE` on the database — the same privilege the app already
+  uses to create its `public` tables). Retention is governed by `PROVISIONING_LOG_RETENTION_DAYS`
+  (default 14). Catching a container dispatch error at the dispatch site means a transient
+  dispatch blip is now a terminal `dispatch` failure (retry from the failure card) rather
+  than relying on a Workflows step retry.
+
+## 0.28.2
+
+### Patch Changes
+
+- 7337d33: Add a "Back to Integrations" control to every integration sub-panel opened from the
+  Integrations hub. Picking a row used to close the hub and reveal that integration's own
+  panel (GitHub, Slack, vendors, OpenRouter, local runners, document/task sources, the
+  provider/observability connections, the tracker settings tab) with no way back: the only
+  exit was the close button, which dropped you to the board. Each panel's modal header now
+  renders a back arrow next to its title that closes the panel and reopens the hub.
+
+  The control only shows when the panel was actually reached from the hub. A new
+  `ui.cameFromIntegrations` flag is set by `ui.openFromIntegrations` (the hub's row handler)
+  and cleared by every direct `open*` action, so panels opened from the command bar,
+  sidebar, a banner or an inspector link don't grow a dead Back. The shared
+  `IntegrationBackTitle` component renders the title + optional back arrow in the modal's
+  `#title` slot.
+
 ## 0.28.1
 
 ### Patch Changes

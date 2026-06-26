@@ -7,6 +7,7 @@
 // (Claude, GLM, ChatGPT/Codex) are connected per-user in the Personal subscriptions section.
 import { computed, ref, watch } from 'vue'
 import type { SubscriptionVendor } from '~/types/domain'
+import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
@@ -17,6 +18,7 @@ const open = computed({
   get: () => ui.vendorCredentialsOpen,
   set: (v: boolean) => (v ? ui.openVendorCredentials() : ui.closeVendorCredentials()),
 })
+const back = useIntegrationBack(open)
 
 // Horizontal tabs replace the old long vertical scroll: each credential kind is its own
 // section (pooled subscriptions, direct vendor keys, proxy/gateway keys, personal subs).
@@ -116,6 +118,9 @@ function vendorLabel(v: SubscriptionVendor): string {
 
 <template>
   <UModal v-model:open="open" title="LLM Vendors" :ui="{ content: 'max-w-2xl' }">
+    <template #title>
+      <IntegrationBackTitle title="LLM Vendors" @back="back" />
+    </template>
     <template #body>
       <UTabs
         v-model="activeTab"

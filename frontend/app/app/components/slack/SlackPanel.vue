@@ -7,6 +7,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import type { NotificationType } from '~/types/notifications'
 import type { SlackMemberMappingEntry, SlackMemberRole, SlackRoute } from '~/types/slack'
+import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const ui = useUiStore()
 const slack = useSlackStore()
@@ -16,6 +17,7 @@ const open = computed({
   get: () => ui.slackOpen,
   set: (v: boolean) => (v ? ui.openSlack() : ui.closeSlack()),
 })
+const back = useIntegrationBack(open)
 
 const ROUTABLE: { type: NotificationType; label: string }[] = [
   { type: 'merge_review', label: 'Merge review' },
@@ -141,6 +143,9 @@ async function saveMapping() {
 
 <template>
   <UModal v-model:open="open" title="Slack notifications" :ui="{ content: 'max-w-2xl' }">
+    <template #title>
+      <IntegrationBackTitle title="Slack notifications" @back="back" />
+    </template>
     <template #body>
       <div class="space-y-5">
         <p class="text-xs text-slate-400">

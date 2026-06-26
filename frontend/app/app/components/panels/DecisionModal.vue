@@ -32,7 +32,7 @@ function choose(option: string) {
 <template>
   <UModal v-model:open="open" title="Decision required">
     <template #body>
-      <div v-if="decision && agent" class="space-y-4">
+      <div v-if="decision && agent" class="space-y-4" data-testid="decision-modal">
         <div class="flex items-center gap-2 text-sm text-slate-400">
           <div
             class="flex h-8 w-8 items-center justify-center rounded-lg"
@@ -56,6 +56,7 @@ function choose(option: string) {
             color="primary"
             variant="soft"
             block
+            data-testid="decision-option"
             class="justify-start"
             @click="choose(opt)"
           >

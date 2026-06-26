@@ -9,6 +9,7 @@
 // entry point for the key; this panel just makes OpenRouter self-sufficient.
 import { computed, ref, watch } from 'vue'
 import type { OpenRouterModelMeta } from '~/types/openrouter'
+import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
@@ -21,6 +22,7 @@ const open = computed({
   get: () => ui.openRouterOpen,
   set: (v: boolean) => (v ? ui.openOpenRouter() : ui.closeOpenRouter()),
 })
+const back = useIntegrationBack(open)
 
 // Popular slugs offered by "Enable recommended" — these mirror the curated `openrouter`
 // refs in the backend MODEL_CATALOG. Only the ones present in the live browse list are
@@ -193,6 +195,9 @@ function manageKeys() {
 
 <template>
   <UModal v-model:open="open" title="OpenRouter" :ui="{ content: 'max-w-2xl' }">
+    <template #title>
+      <IntegrationBackTitle title="OpenRouter" @back="back" />
+    </template>
     <template #body>
       <div class="space-y-4">
         <p class="text-xs text-slate-400">

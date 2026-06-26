@@ -83,9 +83,11 @@ import type {
   StepCompletionResolver,
 } from '@cat-factory/kernel'
 import {
+  getProvider,
   recordGateAttempt,
   registeredGateFactories,
   registeredStepResolverFactories,
+  requireProvider,
 } from '@cat-factory/kernel'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { WorkspaceSettingsService } from '../settings/WorkspaceSettingsService.js'
@@ -110,6 +112,7 @@ import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type { ProvisionContext } from '@cat-factory/kernel'
 import type {
   AgentExecutor,
+  AgentJobHandle,
   AgentRunContext,
   AgentRunResult,
   AgentStepSpec,
@@ -172,8 +175,18 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
   companion_rejected:
     'A companion agent could not return a usable quality assessment (its reply was truncated or malformed) even after a repair retry. Review the companion’s raw output on the run, then retry.',
   cancelled: 'You stopped this run; its container was killed. Retry to start it again.',
+  dispatch:
+    'The agent’s container could not be started — the run never began executing. The provider/runtime’s verbatim response is shown below. Most often this is transient (a capacity blip or a new-version rollout); retrying spins a fresh container. If it persists it points at a misconfigured container binding/image or runner pool. Retry to try again.',
   unknown: 'The run failed for an unclassified reason. Review the run, then retry.',
 }
+
+/**
+ * Step kinds whose run details surface the ephemeral-environment lifecycle: the
+ * `deployer` provisions it and the `tester`/`playwright` exercise it. Used to gate
+ * the per-poll env projection so the `getByBlock` read never hits the hot path for
+ * the many container steps that have no env to show (see attachEnvironmentProjection).
+ */
+const ENV_PROJECTION_KINDS = new Set<string>(['deployer', 'tester', 'playwright'])
 
 /**
  * Parse `owner`/`repo` from a GitHub pull-request URL (`https://github.com/o/r/pull/42`).
@@ -1329,10 +1342,33 @@ export class ExecutionService {
         // accepted the job, so emitting before it lets the board show the boot
         // instead of a blank "working" state.
         step.startingContainer = true
+        // Surface the block's ephemeral environment (if any) alongside the cold-boot
+        // phase, so a run's details show the env spinning up next to the container.
+        await this.attachEnvironmentProjection(workspaceId, instance.blockId, step)
         await this.executionRepository.upsert(workspaceId, instance)
         await this.emitInstance(workspaceId, instance)
 
-        const handle = await executor.startJob(context)
+        let handle: AgentJobHandle
+        try {
+          handle = await executor.startJob(context)
+        } catch (error) {
+          // The container/runner never accepted the job (a dispatch HTTP error, a
+          // missing backend, a capacity blip). Surface the EXACT provider/runtime
+          // response and classify it as a `dispatch` failure ("container failed to
+          // start") so the run details say the container never started — not a generic
+          // "run failed". A dispatch-time eviction still routes to the evicted framing.
+          step.startingContainer = false
+          await this.executionRepository.upsert(workspaceId, instance)
+          await this.emitInstance(workspaceId, instance)
+          const message = getErrorMessage(error)
+          const evicted = isContainerEvictionError(message)
+          return {
+            kind: 'job_failed',
+            error: evicted ? message : 'The container failed to start.',
+            failureKind: evicted ? 'evicted' : 'dispatch',
+            detail: message,
+          }
+        }
         step.jobId = handle.jobId
         // Record the model at dispatch — the poll site can't resolve it later.
         if (handle.model) step.model = handle.model
@@ -1482,6 +1518,11 @@ export class ExecutionService {
         step.subtasks = update.subtasks
         step.progress =
           update.subtasks.total > 0 ? update.subtasks.completed / update.subtasks.total : 0
+        changed = true
+      }
+      // Refresh the env projection so its status transitions (provisioning→ready→
+      // expired/torn_down) and any error stay live in the run details during the run.
+      if (await this.attachEnvironmentProjection(workspaceId, instance.blockId, step)) {
         changed = true
       }
       if (changed) {
@@ -1737,6 +1778,53 @@ export class ExecutionService {
    * explicit re-run clears `startedAt` first (see {@link requestStepChanges}) so
    * the fresh attempt is timed from scratch.
    */
+  /**
+   * Stamp `step.environment` from the block's live ephemeral environment so a run's
+   * details show its spinning-up / running / shut-down / errored state + the exact
+   * error. Best-effort: a no-op when the env integration isn't wired, and never
+   * throws (a projection failure must not break the run). Returns whether it changed,
+   * so the poll path can fold it into its single emit. The `human-test` gate keeps
+   * its own `humanTest.environment`, so this is for the other env-consuming steps
+   * (tester/coder/deployer).
+   */
+  private async attachEnvironmentProjection(
+    workspaceId: string,
+    blockId: string,
+    step: PipelineStep,
+  ): Promise<boolean> {
+    if (!this.environmentProvisioning) return false
+    // Only the env-aware kinds run against an ephemeral environment (the `deployer`
+    // provisions it; the `tester`/`playwright` exercise it). Gating here keeps the
+    // per-poll `getByBlock` read off the hot path for the many container steps
+    // (coder/merger/ci-fixer/…) that never have an env to surface.
+    if (!ENV_PROJECTION_KINDS.has(step.agentKind)) return false
+    try {
+      const handle = await this.environmentProvisioning.getHandleForBlock(workspaceId, blockId)
+      const next = handle
+        ? {
+            id: handle.id,
+            url: handle.url,
+            status: handle.status,
+            expiresAt: handle.expiresAt,
+            lastError: handle.lastError,
+          }
+        : null
+      const prev = step.environment ?? null
+      if (
+        prev?.id === next?.id &&
+        prev?.status === next?.status &&
+        prev?.url === next?.url &&
+        (prev?.lastError ?? null) === (next?.lastError ?? null)
+      ) {
+        return false
+      }
+      step.environment = next
+      return true
+    } catch {
+      return false
+    }
+  }
+
   private startStep(step: PipelineStep): void {
     step.state = 'working'
     if (step.startedAt == null) step.startedAt = this.clock.now()
@@ -2510,6 +2598,10 @@ export class ExecutionService {
       raiseNotification: async (workspaceId, input) => {
         await this.notificationService?.raise(workspaceId, input)
       },
+      // A gate reaches its deployment-wired provider through the typed registry rather than
+      // closing over a hand-authored module global; the engine just forwards to it.
+      getProvider,
+      requireProvider,
     }
   }
 

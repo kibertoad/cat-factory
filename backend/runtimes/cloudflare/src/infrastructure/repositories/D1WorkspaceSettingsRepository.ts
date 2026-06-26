@@ -12,6 +12,7 @@ interface WorkspaceSettingsRow {
   task_limit_mode: string
   task_limit_shared: number | null
   task_limit_per_type: string | null
+  store_agent_context: number
   spend_currency: string | null
   spend_monthly_limit: number | null
   spend_model_prices: string | null
@@ -32,6 +33,7 @@ function rowToSettings(row: WorkspaceSettingsRow): WorkspaceSettings {
     taskLimitMode: row.task_limit_mode as TaskLimitMode,
     taskLimitShared: row.task_limit_shared,
     taskLimitPerType: parseJson<TaskLimitPerType>(row.task_limit_per_type),
+    storeAgentContext: row.store_agent_context === 1,
     spendCurrency: row.spend_currency,
     spendMonthlyLimit: row.spend_monthly_limit,
     spendModelPrices: parseJson<SpendModelPrices>(row.spend_model_prices),
@@ -63,13 +65,15 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
       .prepare(
         `INSERT INTO workspace_settings
            (workspace_id, waiting_escalation_minutes, task_limit_mode, task_limit_shared,
-            task_limit_per_type, spend_currency, spend_monthly_limit, spend_model_prices)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            task_limit_per_type, store_agent_context, spend_currency, spend_monthly_limit,
+            spend_model_prices)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id) DO UPDATE SET
            waiting_escalation_minutes = excluded.waiting_escalation_minutes,
            task_limit_mode = excluded.task_limit_mode,
            task_limit_shared = excluded.task_limit_shared,
            task_limit_per_type = excluded.task_limit_per_type,
+           store_agent_context = excluded.store_agent_context,
            spend_currency = excluded.spend_currency,
            spend_monthly_limit = excluded.spend_monthly_limit,
            spend_model_prices = excluded.spend_model_prices`,
@@ -80,6 +84,7 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
         settings.taskLimitMode,
         settings.taskLimitShared,
         settings.taskLimitPerType ? JSON.stringify(settings.taskLimitPerType) : null,
+        settings.storeAgentContext ? 1 : 0,
         settings.spendCurrency,
         settings.spendMonthlyLimit,
         settings.spendModelPrices ? JSON.stringify(settings.spendModelPrices) : null,

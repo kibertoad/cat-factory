@@ -65,6 +65,51 @@ yet" is acceptable ONLY for behaviour that genuinely cannot exist on a runtime (
 Cloudflare-Container-only execution path), never for runtime-neutral domain behaviour
 that merely needs a repository wired.
 
+## Resolving conflicting Drizzle migrations (post-merge)
+
+The Node facade's Postgres migrations (`backend/runtimes/node/drizzle/`) use **drizzle-kit
+1.x, snapshot format v8**, which is a **content-addressed DAG**, NOT a linear journal:
+each `drizzle/<ts>_<name>/snapshot.json` has an `id` plus a `prevIds` array naming the
+snapshot(s) it was generated on top of. There is **no `meta/_journal.json`** — lineage is
+derived entirely from `prevIds`. The single source of truth for the schema is
+`src/db/schema.ts`; `pnpm db:generate` diffs it and emits the next `migration.sql` +
+`snapshot.json`. `migrate()` applies the folder in **timestamp/filename order** at boot
+(so `prevIds` does NOT affect apply order — only the consistency analysis below).
+
+**Why merges break them.** When two branches each add a migration and you merge, git keeps
+**both** folders with no textual conflict (different files). But the later branch's snapshot
+still points (`prevIds`) at the **pre-merge** lineage tip, so the two migrations look like
+divergent siblings off a common ancestor. CI's `pnpm --filter @cat-factory/node-server run
+db:check` (`drizzle-kit check`) then fails with **"Non-commutative migrations detected"** —
+both branches appear to "create" the same already-existing tables when diffed from that
+shared ancestor. (The D1 side in `backend/runtimes/cloudflare/migrations/` has no such DAG;
+duplicate numeric prefixes like two `0012_*.sql` are fine — they apply in lexical order.)
+
+**Do NOT** hand-merge snapshot JSON, and **do NOT** just rerun `pnpm db:generate`: a `SET
+SCHEMA`/table-move triggers an interactive rename prompt that **can't run in a non-TTY
+shell/CI** (`Interactive prompts require a TTY terminal`).
+
+**The fix — re-root the later migration onto the merged lineage tip:**
+
+1. Resolve the textual conflicts in `src/db/schema.ts` first (keep BOTH branches' columns/
+   tables) — it must be the correct, merged schema before anything else.
+2. From `backend/runtimes/node`, run the helper:
+   `node scripts/rebase-migration-snapshot.mjs <later-migration-folder-name>`.
+   It rewrites that folder's `snapshot.json` so its `ddl` reflects the current merged
+   `schema.ts` and its `prevIds` point at the **leaf snapshot(s) of every other migration**
+   (collapsing all current branch tips into this one — the proper merge node). It uses
+   drizzle-kit's non-interactive `generateDrizzleJson`, so no TTY prompt. It does **not**
+   touch `migration.sql`.
+3. Eyeball that folder's `migration.sql`: it must still encode the delta from the prior
+   state to the merged schema (usually it already does — it was the human-authored intent;
+   note a `ALTER TABLE … SET SCHEMA …` carries the table's indexes with it, so they need no
+   re-creation).
+4. Verify with `pnpm db:check` (expect "Everything's fine 🐶🔥"). The CI suite then applies
+   the lineage against real Postgres in the Node/conformance tests.
+
+Keep the symmetric D1 migration (a fresh numbered `*.sql` under
+`backend/runtimes/cloudflare/migrations/`) in step, per "Keep the runtimes symmetric".
+
 ## Layout
 
 One pnpm workspace (single root lockfile). Packages are sorted by visibility:
@@ -677,6 +722,36 @@ AgentRunController.ts`) resolves the kind via `getRef`, then calls
     `components/board/AgentFailureCard.vue` renders the rose banner + retry on the
     board card, the inspector, and `TaskExecution.vue`. A failed execution now leaves
     its block `blocked` (NOT the old success-looking `pr_ready`).
+
+## Telemetry & agent-context observability (isolated store)
+
+Two observability sinks capture what runs do, and both live in a **dedicated telemetry
+store** (separate from the transactional domain — append-heavy/high-volume/short-retention):
+a separate **required** `TELEMETRY_DB` D1 database on Cloudflare and a `telemetry` Postgres
+**schema** (`pgSchema('telemetry')`, same connection) on Node. Both tables are pruned to the
+same window (`LLM_CALL_METRICS_RETENTION_DAYS`, default 3 days) by the existing retention
+sweep.
+
+- **`llm_call_metrics`** — per proxied LLM call (prompt/response delta-stored, tokens,
+  timing). Recorded by the LLM proxy via `LlmObservabilityService`. This captures what the
+  model _received_ per call.
+- **`agent_context_snapshots`** — the complete context an agent was _provided_ per container
+  dispatch: the fully fragment-composed system + user prompts, the best-practice fragment
+  bodies folded in, and the **full content of the files injected into the container**
+  (`.cat-context/*` — which the agent reads via tools, so they never reach proxy telemetry).
+  Recorded best-effort by `ContainerAgentExecutor.startJob` (after dispatch) via
+  `AgentContextObservabilityService` (orchestration), built per-facade and injected into both
+  the executor (write) and `createCore` (read). The snapshot is a **redacted allow-list**
+  projection of the dispatched job — NEVER a token or credential-bearing URL.
+- **Gating**: storing requires BOTH the deployment prompt-recording switch
+  (`LLM_RECORD_PROMPTS`) AND the per-workspace `storeAgentContext` setting (on by default; a
+  toggle in `WorkspaceSettingsPanel.vue`).
+- **Surfacing**: `GET /workspaces/:ws/executions/:executionId/agent-context` →
+  `stores/observability.ts` → the "Provided context" view in `ObservabilityPanel.vue`
+  (alongside the existing "Model activity" call list).
+- **Parity**: the D1 repo (`D1AgentContextSnapshotRepository`) ⇄ Drizzle repo, asserted by
+  the cross-runtime `defineAgentContextSuite`. The Cloudflare facade fails fast at container
+  build if `TELEMETRY_DB` is unbound.
 
 ## Board / service / repo-linkage model
 

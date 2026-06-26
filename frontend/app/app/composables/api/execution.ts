@@ -1,5 +1,6 @@
 import type { Block, ExecutionInstance } from '~/types/domain'
 import type {
+  AgentContextSnapshot,
   IterationCapChoice,
   LlmCallMetric,
   LlmMetricsExport,
@@ -118,6 +119,13 @@ export function executionApi({ http, ws, pwHeaders }: ApiContext) {
     exportLlmMetrics: (workspaceId: string, executionId: string) =>
       http<LlmMetricsExport>(
         `${ws(workspaceId)}/executions/${encodeURIComponent(executionId)}/llm-metrics/export`,
+      ),
+
+    // The complete provided context per container-agent dispatch (composed prompts,
+    // folded-in fragments, injected files). Empty when not wired / storing is off.
+    getAgentContext: (workspaceId: string, executionId: string) =>
+      http<{ executionId: string; snapshots: AgentContextSnapshot[] }>(
+        `${ws(workspaceId)}/executions/${encodeURIComponent(executionId)}/agent-context`,
       ),
 
     // ---- spend safeguard --------------------------------------------------

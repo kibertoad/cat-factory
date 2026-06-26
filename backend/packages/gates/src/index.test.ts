@@ -1,7 +1,11 @@
 import {
   clearRegisteredGates,
+  defineProviderToken,
+  isProviderWired,
   registeredGateFactories,
+  requireProvider,
   stubGateContext,
+  wireProvider,
   type GateHelperJobResult,
 } from '@cat-factory/kernel'
 import type {
@@ -25,6 +29,37 @@ import { registerBuiltinGates } from './index.js'
 // the on-call helper-completion hook — the seam a facade depends on, so a drift fails here.
 
 afterEach(() => clearGateProviders())
+
+describe('typed provider registry (the gate wiring seam)', () => {
+  it('wires/clears an impl and flips isProviderWired', () => {
+    const token = defineProviderToken<{ ping: () => string }>('test-provider')
+    expect(isProviderWired(token)).toBe(false)
+    wireProvider(token, { ping: () => 'pong' })
+    expect(isProviderWired(token)).toBe(true)
+    expect(requireProvider(token).ping()).toBe('pong')
+    wireProvider(token, undefined)
+    expect(isProviderWired(token)).toBe(false)
+  })
+
+  it('requireProvider throws on an unwired token (the guard replacing the old `!`)', () => {
+    const token = defineProviderToken<unknown>('never-wired')
+    expect(() => requireProvider(token)).toThrow(/not wired/)
+  })
+
+  it('a gate reads its provider through ctx.requireProvider, not a module global', async () => {
+    wireCiStatusProvider({
+      getStatus: async () => ({
+        headSha: 'sha',
+        checks: [{ name: 'build', status: 'completed', conclusion: 'success', url: null }],
+      }),
+    })
+    // The stub context delegates getProvider/requireProvider to the real registry, so the
+    // gate resolves the impl the wireX handle stored — exactly as the engine's GateContext does.
+    const gate = ciGate(stubGateContext())
+    expect(gate.wired()).toBe(true)
+    expect((await gate.probe('ws', 'b', {} as PipelineStep['gate'] & {})).status).toBe('pass')
+  })
+})
 
 describe('@cat-factory/gates registration', () => {
   it('registers ci / conflicts / post-release-health through the public registry', () => {

@@ -2,6 +2,7 @@ import type { Clock } from '@cat-factory/kernel'
 import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { CryptoIdGenerator } from '../../src/infrastructure/runtime'
+import { D1AgentContextSnapshotRepository } from '../../src/infrastructure/repositories/D1AgentContextSnapshotRepository'
 import { D1CommitProjectionRepository } from '../../src/infrastructure/repositories/D1CommitProjectionRepository'
 import { D1LlmCallMetricRepository } from '../../src/infrastructure/repositories/D1LlmCallMetricRepository'
 import { D1RateLimitRepository } from '../../src/infrastructure/repositories/D1RateLimitRepository'
@@ -22,15 +23,20 @@ const POLICY = {
   rateLimitMs: 7 * DAY,
   commitMs: 90 * DAY,
   llmCallMetricsMs: 3 * DAY,
+  provisioningLogMs: 14 * DAY,
 }
 
 function deps() {
   const db = env.DB
+  // Telemetry (llm_call_metrics + agent_context_snapshots) lives in the dedicated
+  // TELEMETRY_DB database, not the main DB.
+  const telemetryDb = env.TELEMETRY_DB
   return {
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
     rateLimitRepository: new D1RateLimitRepository({ db, idGenerator: new CryptoIdGenerator() }),
     commitRepository: new D1CommitProjectionRepository({ db }),
-    llmCallMetricRepository: new D1LlmCallMetricRepository({ db }),
+    llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
+    agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({ db: telemetryDb }),
     clock,
     policy: POLICY,
   }
@@ -70,6 +76,18 @@ function llmMetric(id: string, createdAt: number, ws: string) {
 
 async function countRows(table: string, where: string, ...binds: unknown[]): Promise<number> {
   const row = await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${where}`)
+    .bind(...binds)
+    .first<{ n: number }>()
+  return row?.n ?? 0
+}
+
+// Telemetry tables live in the dedicated TELEMETRY_DB, so count against it.
+async function countTelemetryRows(
+  table: string,
+  where: string,
+  ...binds: unknown[]
+): Promise<number> {
+  const row = await env.TELEMETRY_DB.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${where}`)
     .bind(...binds)
     .first<{ n: number }>()
   return row?.n ?? 0
@@ -172,15 +190,15 @@ describe('storage retention sweep', () => {
 
   it('prunes llm_call_metrics past the 3-day window but keeps fresh ones', async () => {
     const ws = 'ws_retention_llm'
-    const repo = new D1LlmCallMetricRepository({ db: env.DB })
+    const repo = new D1LlmCallMetricRepository({ db: env.TELEMETRY_DB })
     await repo.record(llmMetric('llm_old', NOW - 10 * DAY, ws))
     await repo.record(llmMetric('llm_fresh', NOW - 1 * DAY, ws))
 
     const result = await sweepRetention(deps())
 
     expect(result.llmCallMetrics).toBeGreaterThanOrEqual(1)
-    expect(await countRows('llm_call_metrics', 'id = ?', 'llm_old')).toBe(0)
-    expect(await countRows('llm_call_metrics', 'id = ?', 'llm_fresh')).toBe(1)
+    expect(await countTelemetryRows('llm_call_metrics', 'id = ?', 'llm_old')).toBe(0)
+    expect(await countTelemetryRows('llm_call_metrics', 'id = ?', 'llm_fresh')).toBe(1)
   })
 
   it('treats a zero window as "disabled" and prunes nothing', async () => {
@@ -201,7 +219,13 @@ describe('storage retention sweep', () => {
 
     const result = await sweepRetention({
       ...deps(),
-      policy: { tokenUsageMs: 0, rateLimitMs: 0, commitMs: 0, llmCallMetricsMs: 0 },
+      policy: {
+        tokenUsageMs: 0,
+        rateLimitMs: 0,
+        commitMs: 0,
+        llmCallMetricsMs: 0,
+        provisioningLogMs: 0,
+      },
     })
 
     expect(result).toEqual({
@@ -209,7 +233,9 @@ describe('storage retention sweep', () => {
       rateLimits: 0,
       commits: 0,
       llmCallMetrics: 0,
+      agentContextSnapshots: 0,
       scheduleRuns: 0,
+      provisioningLog: 0,
     })
     expect(await countRows('token_usage', 'id = ?', 'tok_disabled')).toBe(1)
   })
