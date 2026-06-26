@@ -113,6 +113,14 @@ export interface Env {
    */
   EXEC_CONTAINER?: DurableObjectNamespace<ExecutionContainer>
   /**
+   * Optional shared secret authenticating the Worker → harness HTTP calls. When set,
+   * it is injected into each per-run container's env (so the harness requires it) and
+   * sent as the `x-harness-secret` header on every dispatch/poll. Unset ⇒ the harness
+   * stays open (relying on the container's DO-internal addressing) and no header is
+   * sent — the same default the local Docker transport applies, kept symmetric here.
+   */
+  HARNESS_SHARED_SECRET?: string
+  /**
    * Public origin of this Worker, e.g. https://cat-factory.example.workers.dev.
    * Handed to the container so Pi can reach the LLM proxy at `${url}/v1`.
    */

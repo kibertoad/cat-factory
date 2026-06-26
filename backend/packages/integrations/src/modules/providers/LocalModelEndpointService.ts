@@ -13,7 +13,7 @@ import type {
   UpsertLocalModelEndpointInput,
 } from '@cat-factory/contracts'
 import { LOCAL_RUNNER_LABELS } from '@cat-factory/contracts'
-import { localRunnerUrlError } from './localModelUrl.js'
+import { fetchLocalRunner, localRunnerUrlError } from './localModelUrl.js'
 
 // LocalModelEndpointService: owns each USER's locally-run model endpoints (Ollama / LM
 // Studio / llama.cpp / vLLM / a custom OpenAI-compatible server) — the per-user analogue
@@ -149,7 +149,13 @@ export class LocalModelEndpointService {
     try {
       const headers: Record<string, string> = {}
       if (input.apiKey) headers.authorization = `Bearer ${input.apiKey}`
-      const res = await doFetch(url, { headers, signal: AbortSignal.timeout(8000) })
+      // Re-validate on every redirect hop: a reachable runner that 302s to a denied
+      // host (e.g. the cloud-metadata endpoint) must not be followed.
+      const res = await fetchLocalRunner(
+        url,
+        { headers, signal: AbortSignal.timeout(8000) },
+        doFetch,
+      )
       if (!res.ok) {
         return { reachable: false, models: [], error: `Runner returned HTTP ${res.status}` }
       }

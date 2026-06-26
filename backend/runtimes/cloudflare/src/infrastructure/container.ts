@@ -400,6 +400,7 @@ function buildResolveTransport(
           new D1LiveContainerRepository({ db }),
           clock,
         ),
+        env.HARNESS_SHARED_SECRET?.trim() || undefined,
       )
     : null
 

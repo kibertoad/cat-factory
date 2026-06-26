@@ -223,7 +223,7 @@ export {
   type LocalModelEndpointServiceDependencies,
   type ResolvedLocalEndpoint,
 } from './modules/providers/LocalModelEndpointService.js'
-export { localRunnerUrlError } from './modules/providers/localModelUrl.js'
+export { fetchLocalRunner, localRunnerUrlError } from './modules/providers/localModelUrl.js'
 export {
   UserSecretService,
   type UserSecretServiceDependencies,

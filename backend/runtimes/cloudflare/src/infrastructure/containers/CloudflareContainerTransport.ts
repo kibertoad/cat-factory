@@ -42,12 +42,30 @@ const ROLLOUT_EVICTION_ERROR = `${EVICTION_ERROR} (${TRANSIENT_EVICTION_MARKER})
 const DISPATCH_TIMEOUT_MS = 30_000
 const POLL_TIMEOUT_MS = 30_000
 
+// Inbound-auth header the harness checks when HARNESS_SHARED_SECRET is configured
+// (matches the harness server + the local Docker transport). Sent on every harness
+// call so a container that requires the secret accepts the Worker's dispatch/poll.
+const HARNESS_SECRET_HEADER = 'x-harness-secret'
+
 export class CloudflareContainerTransport implements RunnerTransport {
   constructor(
     private readonly namespace: DurableObjectNamespace<ExecutionContainer>,
     /** Live-container inventory + reaper kill path; absent in tests (reaping off). */
     private readonly registry?: ContainerInstanceRegistry,
+    /**
+     * Optional inbound-auth shared secret. When set, it is also injected into the
+     * container's env (see ExecutionContainer) so the harness requires it; the same
+     * value is sent here as the `x-harness-secret` header. Unset ⇒ no header (the
+     * harness stays open, relying on DO-internal addressing) — kept symmetric with
+     * the local transport's behaviour.
+     */
+    private readonly sharedSecret?: string,
   ) {}
+
+  /** Header bag for a harness call: the shared secret when configured, else empty. */
+  private secretHeader(): Record<string, string> {
+    return this.sharedSecret ? { [HARNESS_SECRET_HEADER]: this.sharedSecret } : {}
+  }
 
   // NB: the `RunnerDispatchOptions` (provisioning hints) the port allows are
   // intentionally ignored here. A Cloudflare Container's instance type is fixed per
@@ -68,7 +86,7 @@ export class CloudflareContainerTransport implements RunnerTransport {
     // harness reads `kind` to pick the validator + registry; the rest is the job spec.
     const res = await stub.fetch('http://container/jobs', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...this.secretHeader() },
       body: JSON.stringify({ ...spec, kind }),
       signal: AbortSignal.timeout(DISPATCH_TIMEOUT_MS),
     })
@@ -88,6 +106,7 @@ export class CloudflareContainerTransport implements RunnerTransport {
     try {
       res = await stub.fetch(`http://container/jobs/${encodeURIComponent(ref.jobId)}`, {
         method: 'GET',
+        headers: this.secretHeader(),
         signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
       })
     } catch (err) {

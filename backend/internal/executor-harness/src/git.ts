@@ -451,7 +451,8 @@ export async function openPullRequest(opts: {
   signal?: AbortSignal
 }): Promise<string> {
   const apiBase = opts.apiBase ?? 'https://api.github.com'
-  const res = await fetch(`${apiBase}/repos/${opts.owner}/${opts.name}/pulls`, {
+  const path = `${encodeURIComponent(opts.owner)}/${encodeURIComponent(opts.name)}`
+  const res = await fetch(`${apiBase}/repos/${path}/pulls`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${opts.ghToken}`,
@@ -498,8 +499,15 @@ async function findOpenPullRequestUrl(opts: {
   signal?: AbortSignal
 }): Promise<string | undefined> {
   const apiBase = opts.apiBase ?? 'https://api.github.com'
-  const query = `head=${opts.owner}:${opts.head}&base=${opts.base}&state=open`
-  const res = await fetch(`${apiBase}/repos/${opts.owner}/${opts.name}/pulls?${query}`, {
+  // Encode the ref-derived query params: a branch/owner containing `&` or `#` would
+  // otherwise split the query string or inject an unintended parameter.
+  const query = new URLSearchParams({
+    head: `${opts.owner}:${opts.head}`,
+    base: opts.base,
+    state: 'open',
+  })
+  const path = `${encodeURIComponent(opts.owner)}/${encodeURIComponent(opts.name)}`
+  const res = await fetch(`${apiBase}/repos/${path}/pulls?${query}`, {
     headers: {
       authorization: `Bearer ${opts.ghToken}`,
       accept: 'application/vnd.github+json',

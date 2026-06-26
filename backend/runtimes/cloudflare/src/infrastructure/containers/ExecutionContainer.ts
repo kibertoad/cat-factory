@@ -26,12 +26,20 @@ export function isRolloutSignal(error: unknown): boolean {
 // coding-agent harness (see @cat-factory/executor-harness) listening on 8080;
 // the base `Container.fetch` proxies inbound requests there once it has booted.
 //
-// No secrets are configured here: the image carries none, and the per-job GitHub
-// token + LLM session token are passed in the `/run` request body at dispatch
-// time, never via image build args or class-level env vars.
+// No long-lived secrets are configured here: the image carries none, and the per-job
+// GitHub token + LLM session token are passed in the `/run` request body at dispatch
+// time, never via image build args or class-level env vars. The one exception is the
+// optional `HARNESS_SHARED_SECRET` below — an inbound-auth shared secret (not a tenant
+// credential), passed so the harness can require it on the Worker → harness calls.
 export class ExecutionContainer extends Container<Env> {
   // The harness HTTP server port (matches the Dockerfile ENTRYPOINT).
   override defaultPort = 8080
+  // When configured, hand the inbound-auth shared secret to the harness so it rejects
+  // any /jobs call that doesn't present the matching `x-harness-secret` header (which
+  // the transport sends). Omitted when unset, leaving the harness open as before.
+  override envVars: Record<string, string> = this.env.HARNESS_SHARED_SECRET
+    ? { HARNESS_SHARED_SECRET: this.env.HARNESS_SHARED_SECRET }
+    : {}
   // A run is dispatched, then polled every ~15s while its background job runs, so
   // the instance stays warm for the job's duration without holding a single
   // request open. This idle window only elapses once polling stops (the job has
