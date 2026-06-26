@@ -1,5 +1,55 @@
 # @cat-factory/orchestration
 
+## 0.22.0
+
+### Minor Changes
+
+- a639189: Observability for ephemeral-environment and container provisioning.
+
+  - **Unified provisioning event log.** A new append-only log records every attempt to
+    spin up / tear down throwaway infrastructure — ephemeral environments
+    (provision/teardown/status) and the runner-pool / per-run containers
+    (dispatch/release/poll-failure) — with the outcome and the verbatim provider/runtime
+    error on failure. Surfaced via `GET /workspaces/:ws/provisioning-logs` and a "View
+    logs" button in the ephemeral-environment provider and self-hosted runner-pool config
+    panels.
+  - **Env lifecycle in run details.** An agent run's step now carries the ephemeral
+    environment it runs against (spinning up / running / shut down / errored + URL/expiry
+    - exact error), shown in the step detail (notably for the Tester).
+  - **Container-start failures.** When a container/runner never accepts the job, the run
+    details now say "Container failed to start" and show the exact provider/runtime error
+    (a `dispatch`-kind failure) instead of a generic "Run failed". A run's step detail also
+    has an "Infrastructure attempts" drawer (filtered by execution id) that surfaces that
+    run's container/runner/env spin-up + tear-down attempts.
+  - **Secret redaction.** The verbatim provider/runtime error and structured detail are
+    scrubbed at the single recorder choke point before they are persisted/served — bearer
+    tokens, `Authorization`/`x-api-key` header echoes, credentialed URLs, and recognisable
+    token shapes (`sk-`/`ghp_`/`AKIA`/JWT) are replaced with `[REDACTED]` while the
+    surrounding context (field name, URL host, token scheme) is kept for diagnosis.
+
+  **Breaking / operational:** the provisioning log lives in a PHYSICALLY SEPARATE store to
+  isolate its high write churn. The Cloudflare Worker needs a new `PROVISIONING_DB` D1
+  binding (its own `migrations-provisioning` dir — create the database and apply its
+  migrations); when absent, the feature is simply off. The Node service uses a dedicated
+  `provisioning` Postgres schema, created with `CREATE SCHEMA IF NOT EXISTS` by `migrate()`
+  on boot (the DB role needs `CREATE` on the database — the same privilege the app already
+  uses to create its `public` tables). Retention is governed by `PROVISIONING_LOG_RETENTION_DAYS`
+  (default 14). Catching a container dispatch error at the dispatch site means a transient
+  dispatch blip is now a terminal `dispatch` failure (retry from the failure card) rather
+  than relying on a Workflows step retry.
+
+### Patch Changes
+
+- Updated dependencies [a639189]
+  - @cat-factory/kernel@0.29.0
+  - @cat-factory/contracts@0.26.0
+  - @cat-factory/integrations@0.21.0
+  - @cat-factory/agents@0.14.9
+  - @cat-factory/sandbox@0.8.2
+  - @cat-factory/spend@0.9.3
+  - @cat-factory/workspaces@0.7.36
+  - @cat-factory/prompt-fragments@0.7.24
+
 ## 0.21.1
 
 ### Patch Changes
