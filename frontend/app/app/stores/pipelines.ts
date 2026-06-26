@@ -48,6 +48,11 @@ export const usePipelinesStore = defineStore('pipelines', () => {
   const draftConsensus = ref<(ConsensusStepConfig | null)[]>([])
   /** Per-step estimate gating, kept index-aligned with `draft` (null ⇒ always run). */
   const draftGating = ref<(StepGating | null)[]>([])
+  /**
+   * Per-step Follow-up companion toggle, kept index-aligned with `draft`. Only meaningful on
+   * a `coder` step; `false` disables the companion there (default/true ⇒ enabled).
+   */
+  const draftFollowUps = ref<(boolean | null)[]>([])
   /** Organizational labels for the pipeline being assembled/edited. */
   const draftLabels = ref<string[]>([])
   const draftName = ref('New pipeline')
@@ -71,6 +76,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftThresholds.value.splice(index, 0, null)
     draftConsensus.value.splice(index, 0, null)
     draftGating.value.splice(index, 0, null)
+    draftFollowUps.value.splice(index, 0, null)
   }
 
   function addToDraft(kind: AgentKind) {
@@ -84,6 +90,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftThresholds.value.splice(index, 1)
     draftConsensus.value.splice(index, 1)
     draftGating.value.splice(index, 1)
+    draftFollowUps.value.splice(index, 1)
   }
 
   function moveInDraft(from: number, to: number) {
@@ -100,6 +107,8 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftConsensus.value.splice(to, 0, cons ?? null)
     const [gat] = draftGating.value.splice(from, 1)
     draftGating.value.splice(to, 0, gat ?? null)
+    const [fu] = draftFollowUps.value.splice(from, 1)
+    draftFollowUps.value.splice(to, 0, fu ?? null)
   }
 
   /** Whether the producer step at `index` currently has its companion attached after it. */
@@ -174,6 +183,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftThresholds.value = reorder(draftThresholds.value)
     draftConsensus.value = reorder(draftConsensus.value)
     draftGating.value = reorder(draftGating.value)
+    draftFollowUps.value = reorder(draftFollowUps.value)
   }
 
   /** Toggle the consensus mechanism on the draft step at `index` (default config / off). */
@@ -191,6 +201,12 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftGates.value[index] = !draftGates.value[index]
   }
 
+  /** Toggle the Follow-up companion on the draft (coder) step at `index` (default on → off). */
+  function toggleDraftFollowUps(index: number) {
+    // Default (null/true) is enabled, so the first toggle disables it (false); toggle back to null.
+    draftFollowUps.value[index] = draftFollowUps.value[index] === false ? null : false
+  }
+
   /** Enable/disable the draft step at `index` without removing it. */
   function toggleDraftEnabled(index: number) {
     draftEnabled.value[index] = draftEnabled.value[index] === false
@@ -203,6 +219,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftThresholds.value = []
     draftConsensus.value = []
     draftGating.value = []
+    draftFollowUps.value = []
     draftLabels.value = []
     draftName.value = 'New pipeline'
     editingId.value = null
@@ -216,6 +233,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftThresholds.value = pipeline.agentKinds.map((_, i) => pipeline.thresholds?.[i] ?? null)
     draftConsensus.value = pipeline.agentKinds.map((_, i) => pipeline.consensus?.[i] ?? null)
     draftGating.value = pipeline.agentKinds.map((_, i) => pipeline.gating?.[i] ?? null)
+    draftFollowUps.value = pipeline.agentKinds.map((_, i) => pipeline.followUps?.[i] ?? null)
     draftLabels.value = [...(pipeline.labels ?? [])]
     draftName.value = pipeline.name
     editingId.value = pipeline.id
@@ -240,6 +258,11 @@ export const usePipelinesStore = defineStore('pipelines', () => {
         : {}),
       // Only send gating when at least one step has gating enabled.
       ...(draftGating.value.some((g) => g?.enabled) ? { gating: [...draftGating.value] } : {}),
+      // Only send followUps when at least one step disables it (default is on, so only the
+      // explicit `false` opt-outs are worth persisting).
+      ...(draftFollowUps.value.some((f) => f === false)
+        ? { followUps: [...draftFollowUps.value] }
+        : {}),
       // Only send labels when there are any.
       ...(draftLabels.value.length ? { labels: [...draftLabels.value] } : {}),
     }
@@ -297,6 +320,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftThresholds,
     draftConsensus,
     draftGating,
+    draftFollowUps,
     draftLabels,
     draftName,
     editingId,
@@ -311,6 +335,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     toggleCompanion,
     toggleDraftGating,
     toggleDraftGate,
+    toggleDraftFollowUps,
     toggleDraftEnabled,
     toggleDraftConsensus,
     setDraftConsensus,

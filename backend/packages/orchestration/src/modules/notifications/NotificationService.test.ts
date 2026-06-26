@@ -84,10 +84,21 @@ describe('NotificationService', () => {
     expect(await service.listOpen(WS)).toHaveLength(0)
   })
 
-  it('clearWaitingDecision only touches decision_required, leaving other cards open', async () => {
+  it('clearWaitingDecision dismisses the follow-up companion gate card too', async () => {
+    const { service, rows } = makeService(() => time)
+    const raised = await service.raise(WS, raiseInput({ type: 'followup_pending' }))
+    expect(raised.status).toBe('open')
+
+    await service.clearWaitingDecision(WS, 'blk_1')
+    expect(rows.get(raised.id)?.status).toBe('dismissed')
+    expect(await service.listOpen(WS)).toHaveLength(0)
+  })
+
+  it('clearWaitingDecision only touches gate cards, leaving human-actionable ones open', async () => {
     const { service } = makeService(() => time)
     await service.raise(WS, raiseInput({ type: 'merge_review' }))
     await service.raise(WS, raiseInput({ type: 'decision_required' }))
+    await service.raise(WS, raiseInput({ type: 'followup_pending', blockId: 'blk_1' }))
 
     await service.clearWaitingDecision(WS, 'blk_1')
     const open = await service.listOpen(WS)
