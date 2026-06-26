@@ -135,12 +135,19 @@ export class GitHubPullRequestReviewProvider implements PullRequestReviewProvide
     if (!target) return
     const ref = { owner: target.owner, repo: target.name }
     const gh = this.deps.githubClient
+    const wantsReply = reply.trim().length > 0
     for (const threadId of threadIds) {
       try {
-        await gh.replyToReviewThread?.(target.installationId, ref, threadId, reply)
+        // RESOLVE first, then (only if a reply was requested) post the courtesy reply. Doing the
+        // state-changing resolve before the cosmetic reply guarantees we never leave a bot reply
+        // as a thread's latest comment while it is still unresolved — that combination would hide
+        // the thread from the gate's outstanding set (bot-latest is treated as "addressed") yet
+        // leave it open forever. An empty `reply` means "resolve only" (the probe's reconcile
+        // retry passes ''), so a retry never double-posts the reply.
         await gh.resolveReviewThread?.(target.installationId, ref, threadId)
+        if (wantsReply) await gh.replyToReviewThread?.(target.installationId, ref, threadId, reply)
       } catch {
-        // best-effort per thread: a failure leaves it open for the reviewer to re-engage
+        // best-effort per thread: a failure leaves it unresolved for the next probe to retry
       }
     }
   }

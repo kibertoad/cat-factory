@@ -120,6 +120,16 @@ describe('classifyHumanReview', () => {
     })
     expect(addressed.kind).toBe('wait')
   })
+
+  it('ignores plain comments once approved (no fixer churn on post-sign-off chatter)', () => {
+    // Approved PR + a fresh conversational comment ("thanks!"), no unresolved threads → advance,
+    // NOT a pointless fixer round. Only explicit review threads trigger a fix once approved.
+    const snap = snapshot({
+      approvals: 1,
+      comments: [{ id: 'c1', author: 'bob', body: 'thanks!', createdAt: NOW, isBot: false }],
+    })
+    expect(classifyHumanReview(snap, state(), { graceMinutes: 0, now: NOW }).kind).toBe('advance')
+  })
 })
 
 describe('humanReviewGate', () => {
@@ -168,5 +178,44 @@ describe('humanReviewGate', () => {
     })
     expect(resolved).toEqual(['T9'])
     expect(step.gate?.pendingThreadIds).toBeNull()
+  })
+
+  it('reconciles a bot-latest unresolved thread (resolve-only) so it cannot linger forever', async () => {
+    // A thread the fixer replied to but whose resolve lagged shows up unresolved + bot-latest.
+    // The probe must re-attempt the resolve with an EMPTY reply (resolve only, no duplicate
+    // comment), independent of any per-step stash.
+    const calls: { ids: string[]; reply: string }[] = []
+    wirePullRequestReviewProvider({
+      getReview: async () =>
+        snapshot({
+          approvals: 1,
+          unresolvedThreads: [thread({ threadId: 'T7', isBot: true, latestCommentAt: NOW })],
+        }),
+      resolveThreads: async (_ws, _b, ids, reply) => {
+        calls.push({ ids, reply })
+      },
+    })
+    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }))
+    const gs = { phase: 'checking', attempts: 0, maxAttempts: 1 } as GateStepState
+    const probe = await gate.probe('ws', 'b', gs)
+    // Bot-latest thread is excluded from outstanding, so with approval the gate advances…
+    expect(probe.status).toBe('pass')
+    // …but the reconcile still resolved it, with an empty reply (resolve-only).
+    expect(calls).toEqual([{ ids: ['T7'], reply: '' }])
+  })
+
+  it('keeps waiting (never fails the run) when the provider read throws', async () => {
+    // A transient GitHub error on a poll must not fail the indefinitely-waiting gate.
+    wirePullRequestReviewProvider({
+      getReview: async () => {
+        throw new Error('502 from GitHub')
+      },
+      resolveThreads: async () => {},
+    })
+    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }))
+    const gs = { phase: 'checking', attempts: 0, maxAttempts: 1, headSha: 'sha1' } as GateStepState
+    const probe = await gate.probe('ws', 'b', gs)
+    expect(probe.status).toBe('pending')
+    expect(probe.headSha).toBe('sha1')
   })
 })

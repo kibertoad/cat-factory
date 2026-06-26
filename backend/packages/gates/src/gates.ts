@@ -4,6 +4,7 @@ import type {
   GateHelperCompletionArgs,
   GateProbe,
   IncidentUpdate,
+  PullRequestReviewSnapshot,
   ReleaseSignal,
 } from '@cat-factory/kernel'
 import {
@@ -381,7 +382,32 @@ export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
   attemptBudget: () => Number.MAX_SAFE_INTEGER,
   probe: async (workspaceId, blockId, gateState): Promise<GateProbe> => {
     const provider = ctx.requireProvider(PULL_REQUEST_REVIEW_PROVIDER)
-    const snapshot = await provider.getReview(workspaceId, blockId)
+    // A transient GitHub read failure must NEVER fail the run — this gate waits indefinitely
+    // for a human, so a momentary 502 / rate-limit / GraphQL error is just "keep waiting", not
+    // a verdict. (The driver's FIRST gate entry runs outside the fault-tolerant poll loop, so
+    // without this catch a single blip would terminally fail an otherwise-healthy review wait.)
+    let snapshot: PullRequestReviewSnapshot
+    try {
+      snapshot = await provider.getReview(workspaceId, blockId)
+    } catch {
+      return { status: 'pending', headSha: gateState.headSha ?? null }
+    }
+    // Reconcile threads addressed by a prior fixer round whose GitHub-side resolve didn't land
+    // (a transient failure in onHelperComplete, or a thread the fixer replied to itself): any
+    // STILL-unresolved thread whose latest comment is the bot's was addressed but not resolved,
+    // so re-resolve it (resolve-only, empty reply → no duplicate comment). Without this a
+    // bot-latest unresolved thread is excluded from the outstanding set forever — never re-fixed
+    // and never resolved. Best-effort: a failure here just retries next poll.
+    const botLatestUnresolved = snapshot.unresolvedThreads
+      .filter((t) => t.isBot)
+      .map((t) => t.threadId)
+    if (botLatestUnresolved.length > 0) {
+      try {
+        await provider.resolveThreads(workspaceId, blockId, botLatestUnresolved, '')
+      } catch {
+        // best-effort: the next poll re-attempts
+      }
+    }
     const graceMinutes =
       gateState.humanReviewGraceMinutes ?? DEFAULT_MERGE_PRESET.humanReviewGraceMinutes
     // Surface the approval progress for the UI (persisted via the caller's `...step.gate` spread).

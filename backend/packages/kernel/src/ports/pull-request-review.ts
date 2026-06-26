@@ -70,9 +70,13 @@ export interface PullRequestReviewProvider {
    */
   getReview(workspaceId: string, blockId: string): Promise<PullRequestReviewSnapshot>
   /**
-   * Reply to and RESOLVE the given review threads on GitHub after a `fixer` round addressed
-   * them, so the gate's next probe counts them as resolved. `reply` is posted on each thread
-   * before it is resolved. Best-effort per thread; a failure on one thread must not throw.
+   * RESOLVE the given review threads on GitHub after a `fixer` round addressed them, so the
+   * gate's next probe counts them as resolved. The resolve is performed BEFORE the (optional)
+   * `reply` so a failed resolve never leaves a bot reply as the thread's latest comment (which
+   * would hide a still-unresolved thread from the gate's outstanding set). A non-empty `reply`
+   * is posted on each successfully-resolved thread; an EMPTY `reply` means "resolve only" (used
+   * by the gate's reconcile retry, which must not re-post the courtesy reply). Best-effort per
+   * thread; a failure on one thread must not throw.
    */
   resolveThreads(
     workspaceId: string,

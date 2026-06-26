@@ -405,9 +405,16 @@ const conflictVerdict = computed(() => {
                 {{ helperMeta.label }}
               </h4>
               <p class="text-[12px] text-slate-300">
-                {{ gate.attempts }}/{{ gate.maxAttempts }} attempt{{
-                  gate.maxAttempts === 1 ? '' : 's'
-                }}
+                <!-- The human-review gate's budget is effectively unbounded (it waits for a human
+                     indefinitely), so render a plain round count rather than "0/9007199254740991". -->
+                <template v-if="isHumanReview">
+                  {{ gate.attempts }} fix round{{ gate.attempts === 1 ? '' : 's' }}
+                </template>
+                <template v-else>
+                  {{ gate.attempts }}/{{ gate.maxAttempts }} attempt{{
+                    gate.maxAttempts === 1 ? '' : 's'
+                  }}
+                </template>
                 <template v-if="gate.phase === 'working'"> · running…</template>
                 <template v-else-if="gate.attempts === 0"> · not needed yet</template>
               </p>

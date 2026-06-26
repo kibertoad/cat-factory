@@ -3470,10 +3470,16 @@ export class ExecutionService {
 
   /**
    * Dispatch the `fixer` against the human-review gate's PR branch from a human's freeform
-   * instructions — immediately, bypassing the precheck + grace window. Parks a `pendingFix` on
-   * the gate step; the next gate poll consumes it (see {@link evaluateGate}) and dispatches the
-   * fixer with the instructions folded in. A second request before the first is consumed simply
-   * replaces the pending instructions. Throws when no human-review gate is currently parked.
+   * instructions — bypassing the precheck + grace window. Parks a `pendingFix` on the gate step,
+   * consumed on the gate's next poll (see {@link evaluateGate}) which dispatches the fixer with
+   * the instructions folded in. A second request before the first is consumed simply replaces the
+   * pending instructions. Throws when no human-review gate is currently parked.
+   *
+   * The run is re-driven via `workRunner.startRun` so the pending fix is picked up promptly even
+   * when the driver had died (e.g. its durable advance job expired/was evicted before the stale-
+   * run sweeper re-drove it) — `startRun` is idempotent for a live run (the exclusive advance
+   * queue no-ops a duplicate send), so this only has an effect when no driver is currently
+   * polling. A spend-paused run is left paused (it resumes through its own path).
    */
   async requestHumanReviewFix(
     workspaceId: string,
@@ -3490,10 +3496,15 @@ export class ExecutionService {
       throw new ConflictError('No human-review gate is currently awaiting input')
     }
     step.gate.pendingFix = { instructions, source: 'app', at: this.clock.now() }
-    // Re-arm a parked run so the woken poll loop advances instead of no-oping.
-    if (instance.status === 'blocked' || instance.status === 'paused') instance.status = 'running'
+    // Re-arm a decision-parked run so the re-driven loop polls instead of no-oping; a spend-
+    // paused run stays paused.
+    if (instance.status === 'blocked') instance.status = 'running'
     await this.executionRepository.upsert(workspaceId, instance)
     await this.emitInstance(workspaceId, instance)
+    // Ensure a driver is active to consume the pending fix (idempotent for a live run).
+    if (instance.status === 'running') {
+      await this.workRunner.startRun(workspaceId, instance.id)
+    }
     return instance
   }
 

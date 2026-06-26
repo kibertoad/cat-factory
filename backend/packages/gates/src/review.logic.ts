@@ -24,7 +24,13 @@ export type HumanReviewVerdict =
   /** Nothing actionable yet (awaiting the reviewer, or inside the grace window) — keep waiting. */
   | { kind: 'wait'; reason: string }
 
-/** How many approving reviews the PR needs: GitHub's required count, but never fewer than one. */
+/**
+ * How many approving reviews the PR needs. The `human-review` gate is OPT-IN — a team only adds
+ * it to a pipeline because they want a human to sign off — so it ALWAYS requires at least one
+ * approval, even when GitHub's branch protection requires fewer (a repo with `0` required reviews,
+ * or an unreadable protection rule that the provider defaults to `1`). Otherwise the gate would
+ * advance with no human approval at all, defeating its entire purpose.
+ */
 export function requiredApprovals(snapshot: PullRequestReviewSnapshot): number {
   return Math.max(1, snapshot.requiredApprovingReviewCount)
 }
@@ -97,6 +103,12 @@ export function renderReviewFeedbackForFixer(
  *     - not approved → dispatch once the grace window has elapsed since the latest comment;
  *       otherwise wait (let the reviewer finish a series of comments before churning the branch).
  *  4. Not approved + nothing outstanding → wait (the reviewer hasn't acted / hasn't approved).
+ *
+ * Plain conversation comments are LOW-signal, so they count as actionable only while the PR is
+ * NOT yet approved (the reviewer is still iterating and may drop an instruction in the thread).
+ * Once approved, only explicit unresolved review THREADS trigger a fix — a casual "lgtm"/"thanks"
+ * after sign-off must never churn the branch with a pointless fixer round. A human can always
+ * force a change post-approval via the freeform request-fix control.
  */
 export function classifyHumanReview(
   snapshot: PullRequestReviewSnapshot,
@@ -107,8 +119,8 @@ export function classifyHumanReview(
     return { kind: 'advance', reason: 'No open PR to review.' }
   }
   const threads = outstandingThreads(snapshot)
-  const comments = outstandingComments(snapshot, gateState.lastAddressedCommentAt)
   const approved = isApproved(snapshot)
+  const comments = approved ? [] : outstandingComments(snapshot, gateState.lastAddressedCommentAt)
   const hasOutstanding = threads.length > 0 || comments.length > 0
 
   if (!hasOutstanding) {

@@ -677,11 +677,16 @@ export class FetchGitHubClient implements GitHubClient {
     ref: GitHubRepoRef,
     number: number,
   ): Promise<GitHubReviewThread[]> {
+    // `comments(last:50)` reads the NEWEST 50 comments per thread (oldest→newest within the
+    // window), so the last node is the true latest — the caller derives the thread's
+    // isBot/latestCommentAt from it. `first:50` would misclassify a thread with >50 comments (a
+    // human re-open as comment #51+ would be invisible and a stale bot reply read as "latest"),
+    // wrongly dropping a re-opened long thread from the outstanding set.
     const query = `query($owner:String!,$repo:String!,$number:Int!,$cursor:String){
       repository(owner:$owner,name:$repo){
         pullRequest(number:$number){
           reviewThreads(first:100,after:$cursor){
-            nodes{ id isResolved path line comments(first:50){ nodes{ author{login} body createdAt } } }
+            nodes{ id isResolved path line comments(last:50){ nodes{ author{login} body createdAt } } }
             pageInfo{ hasNextPage endCursor }
           }
         }
