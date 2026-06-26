@@ -4,6 +4,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import type { BootstrapTargetSpec, PrSpec, RepoSpec } from './job.js'
+import { redactSecrets } from './redact.js'
+
+// Re-exported so existing importers that pull `redactSecrets` from this module keep
+// working; the single source of truth now lives in ./redact.js.
+export { redactSecrets } from './redact.js'
 
 const exec = promisify(execFile)
 
@@ -20,20 +25,15 @@ const GIT_EMAIL = 'cat-factory[bot]@users.noreply.github.com'
 // Per-git-command wall-clock ceiling. A single git op (clone/push over a flaky
 // network) must not hang the job indefinitely; the job's overall watchdog
 // (see runner.ts) is the outer bound, this stops one wedged command first.
-const GIT_TIMEOUT_MS = 10 * 60_000
-
-/**
- * Strip credentials out of any string before it is logged or stored. Removes
- * URL userinfo (`https://user:pass@host`) and `x-access-token:<token>` patterns,
- * plus bare GitHub token shapes (`ghs_`/`ghp_`/`github_pat_`), so a leaked clone
- * URL or git error can never surface the installation token. Idempotent.
- */
-export function redactSecrets(input: string): string {
-  return input
-    .replace(/(https?:\/\/)[^@\s/]*@/gi, '$1***@')
-    .replace(/x-access-token:[^@\s]+/gi, 'x-access-token:***')
-    .replace(/\b(gh[pso]_|github_pat_)[A-Za-z0-9_]+/g, '$1***')
-}
+//
+// INVARIANT: keep this STRICTLY BELOW the inactivity watchdog
+// (`RunnerLimits.inactivityMs`, default 10 min in runner.ts). Git emits no Pi
+// activity events while it runs, so a slow clone/push races both timers; if they
+// were equal the job could fail with the misleading "no agent activity … likely
+// hung" instead of a clear "git timed out". Staying under that window means git
+// always loses the race and surfaces its own accurate reason. If you raise the
+// inactivity default, this can rise with it (but must remain below it).
+const GIT_TIMEOUT_MS = 7 * 60_000
 
 /** Wrap an error so its message/stack carry no credentials. */
 function redactError(err: unknown): Error {

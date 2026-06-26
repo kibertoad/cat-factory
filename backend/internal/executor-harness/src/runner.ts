@@ -84,7 +84,10 @@ export function loadRunnerLimits(env: NodeJS.ProcessEnv = process.env): RunnerLi
     // still bounding a runaway container.
     maxDurationMs: intEnv(env.JOB_MAX_DURATION_MS, 60 * 60_000),
     // 10 minutes of zero output is treated as hung (a single long LLM/tool call
-    // is far shorter; Pi streams events as it works).
+    // is far shorter; Pi streams events as it works). Must stay ABOVE the per-git
+    // command ceiling (`GIT_TIMEOUT_MS` in git.ts) so a slow clone/push — which
+    // emits no activity events — times out with git's own clear reason rather than
+    // this watchdog's "likely hung" message. See the invariant note in git.ts.
     inactivityMs: intEnv(env.JOB_INACTIVITY_MS, 10 * 60_000),
   }
 }
