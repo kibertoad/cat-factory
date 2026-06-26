@@ -5,6 +5,7 @@ import {
   type ModelPreset,
   type Pipeline,
   type PipelineSchedule,
+  type RequirementReview,
   type ScheduleRun,
   seedPipelines,
   type SourceTask,
@@ -2676,28 +2677,32 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(res.status).toBe(422)
       })
 
-      it('wires the async recommend endpoint and gates it on a parked requirements run', async () => {
-        // Requesting Requirement-Writer recommendations is asynchronous: the route appends
-        // `pending` placeholder recommendations and signals the durable driver that owns the
-        // parked run to fill them per finding. The route must be mounted on EVERY facade and
-        // resolve through the same execution-service seam. With a `ready` review seeded but NO
-        // pipeline parked on it, there is no driver to fill the placeholders, so the request is
-        // rejected with a 409 BEFORE any placeholder is written or any model is touched — a
-        // deterministic, runtime-neutral check that the endpoint is present and routed identically
-        // across runtimes (the full Writer loop is covered by the orchestration unit tests, which a
-        // fake model can drive). Without this pre-LLM gate the inline fallback diverged: Node 500'd
-        // on a raw model-resolve throw while Cloudflare resolved its Workers-AI binding and 200'd.
+      it('wires the async recommend endpoint and degrades it identically when the Writer cannot run', async () => {
+        // Requesting Requirement-Writer recommendations appends `pending` placeholders and, on a
+        // parked run, lets the durable driver fill them per finding; off-path (a `ready` review
+        // seeded with no pipeline parked on it) the Writer runs inline. The route must be mounted
+        // on EVERY facade and resolve through the same execution-service seam. In the suite no
+        // reviewer model can actually run — Node's default ref resolves to an unregistered
+        // provider, Cloudflare's resolves its Workers-AI binding but the call can't run in tests —
+        // so the inline fill must DEGRADE GRACEFULLY and IDENTICALLY: drop the placeholder, reopen
+        // the finding for manual answering, and return 200 with the review (NOT 500 on the runtime
+        // whose resolve throws). The full happy-path Writer loop is covered by the orchestration
+        // unit tests, which a fake model can drive.
         const app = harness.makeApp()
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
         await app.seedReadyReview(wsId, 'task_login')
 
-        const res = await app.call(
+        const res = await app.call<RequirementReview>(
           'POST',
           `/workspaces/${wsId}/blocks/task_login/requirement-review/recommend`,
           { itemIds: ['rri_seed_task_login'] },
         )
-        expect(res.status).toBe(409)
+        expect(res.status).toBe(200)
+        // The Writer couldn't run, so no recommendation survives and the finding is back to `open`
+        // for the human to answer by hand — the same end state on both runtimes.
+        expect(res.body.recommendations).toEqual([])
+        expect(res.body.items.find((i) => i.id === 'rri_seed_task_login')?.status).toBe('open')
       })
 
       it('passes a companion gate when the rating clears the threshold', async () => {

@@ -214,20 +214,23 @@ async function setStatus(item: RequirementReviewItem, itemStatus: ReviewItemStat
 const recommending = computed(() =>
   blockId.value ? requirements.isRecommending(blockId.value) : false,
 )
-// Recommendations still awaiting a human decision (the ones to surface for review).
-const pendingRecommendations = computed<RequirementRecommendation[]>(() =>
+// Recommendations the Writer has produced that still await a human decision (`ready`).
+const readyRecommendations = computed<RequirementRecommendation[]>(() =>
   (review.value?.recommendations ?? []).filter((r) => r.status === 'ready'),
 )
 // Placeholders the Requirement Writer is still producing in the background (`pending`).
 const generatingRecommendations = computed<RequirementRecommendation[]>(() =>
   (review.value?.recommendations ?? []).filter((r) => r.status === 'pending'),
 )
-// "ready / total" progress while a batch is in flight (null when nothing is generating).
+// "ready / total" progress for the in-flight batch (null when nothing is generating). Scoped to
+// the current wave via `createdAt` (all placeholders in one request share the timestamp), so
+// stale `ready` recommendations the human hasn't acted on from an earlier batch don't inflate it.
 const recommendationProgress = computed(() => {
-  const generating = generatingRecommendations.value.length
-  if (generating === 0) return null
-  const ready = pendingRecommendations.value.length
-  return { ready, total: ready + generating }
+  const generating = generatingRecommendations.value
+  if (generating.length === 0) return null
+  const batchTimes = new Set(generating.map((r) => r.createdAt))
+  const ready = readyRecommendations.value.filter((r) => batchTimes.has(r.createdAt)).length
+  return { ready, total: ready + generating.length }
 })
 function isMarkedForRecommend(item: RequirementReviewItem): boolean {
   return markedForRecommend.value.has(item.id)
@@ -248,14 +251,28 @@ async function requestRecommendations() {
   const ids = [...markedForRecommend.value]
   try {
     await flushDrafts()
-    await requirements.requestRecommendations(blockId.value, ids)
+    const updated = await requirements.requestRecommendations(blockId.value, ids)
     markedForRecommend.value = new Set()
-    toast.add({
-      title: `Preparing ${ids.length} recommendation${ids.length === 1 ? '' : 's'} in the background`,
-      description:
-        "Your answers are saved — close this if you like; we'll notify you when they're ready.",
-      icon: 'i-lucide-sparkles',
-    })
+    const n = ids.length
+    const plural = n === 1 ? '' : 's'
+    // On a parked run the request returns at once with `pending` placeholders the durable driver
+    // fills in the background; off-path (no active pipeline) there is no driver, so the Writer
+    // ran inline and the recommendations are already settled. Tell the human which actually
+    // happened rather than always promising a background callback.
+    const stillGenerating = (updated?.recommendations ?? []).some((r) => r.status === 'pending')
+    toast.add(
+      stillGenerating
+        ? {
+            title: `Preparing ${n} recommendation${plural} in the background`,
+            description:
+              "Your answers are saved — close this if you like; we'll notify you when they're ready.",
+            icon: 'i-lucide-sparkles',
+          }
+        : {
+            title: `${n} recommendation${plural} ready`,
+            icon: 'i-lucide-sparkles',
+          },
+    )
   } catch (e) {
     notifyError('Could not request recommendations', e)
   }
@@ -586,7 +603,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               <!-- Requirement-Writer recommendations: awaiting a human decision (`ready`) and/or
                    still generating in the background (`pending`) -->
               <section
-                v-if="pendingRecommendations.length || generatingRecommendations.length"
+                v-if="readyRecommendations.length || generatingRecommendations.length"
                 class="mt-6 border-t border-slate-800 pt-5"
               >
                 <div class="mb-3 flex items-center gap-2 text-[11px] text-indigo-300">
@@ -623,7 +640,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
 
                 <div class="flex flex-col gap-3">
                   <div
-                    v-for="rec in pendingRecommendations"
+                    v-for="rec in readyRecommendations"
                     :key="rec.id"
                     class="rounded-lg border border-indigo-900/50 bg-indigo-950/20 p-3"
                   >

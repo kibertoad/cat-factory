@@ -32,8 +32,9 @@ import {
   buildRecommendationPrompt,
   buildReviewPrompt,
   buildReworkPrompt,
-  coerceRecommendations,
+  coerceSingleRecommendation,
   extractJson,
+  findSourceItem,
 } from './requirements.logic.js'
 
 export interface RequirementReviewServiceDependencies extends IterativeReviewDeps {
@@ -178,17 +179,16 @@ export class RequirementReviewService extends IterativeReviewService<
         item.updatedAt = now
         changed = true
       }
-      // Don't queue a second placeholder for a finding the Writer is already working on.
+      // Don't queue a second placeholder for a finding the Writer is already working on. Keyed
+      // on the finding id so two findings that share an identical title+detail still each get
+      // their own placeholder.
       const alreadyPending = recommendations.some(
-        (r) =>
-          r.status === 'pending' &&
-          r.sourceFinding.title === item.title &&
-          r.sourceFinding.detail === item.detail,
+        (r) => r.status === 'pending' && r.sourceFinding.itemId === item.id,
       )
       if (alreadyPending) continue
       recommendations.push({
         id: this.deps.idGenerator.next('rec'),
-        sourceFinding: { title: item.title, detail: item.detail },
+        sourceFinding: { title: item.title, detail: item.detail, itemId: item.id },
         recommendedText: '',
         status: 'pending',
         note: trimmedNote,
@@ -234,28 +234,43 @@ export class RequirementReviewService extends IterativeReviewService<
       'Block',
       initial.blockId,
     )
-    const { modelProvider, ref } = await this.resolveModel(workspaceId, block)
-    const model = modelProvider.resolve(ref)
+    let model: ReturnType<ModelProvider['resolve']>
+    let ref: ModelRef
+    try {
+      const resolved = await this.resolveModel(workspaceId, block)
+      ref = resolved.ref
+      model = resolved.modelProvider.resolve(ref)
+    } catch {
+      // The reviewer model can't be resolved for this deployment (no provider key / binding wired
+      // for the resolved ref). The Writer cannot run, so degrade gracefully exactly like a
+      // per-finding failure: drop every pending placeholder and reopen its finding for manual
+      // answering, rather than throwing. A raw throw here 500'd the off-path inline request on the
+      // runtime whose default resolves to an unregistered provider while the other resolved its
+      // binding and returned 200 — the cross-runtime divergence the conformance suite guards.
+      await this.dropPendingRecommendations(workspaceId, reviewId, opts.onProgress)
+      return { produced: 0 }
+    }
     const context = await this.gatherContext(workspaceId, block)
     const fragments = (await this.resolveBlockFragments?.(workspaceId, block.id)) ?? []
     const fragmentById = new Map(fragments.map((f) => [f.id, f]))
-    // Shared, per-finding-independent grounding gathered once (repo reads); web search per finding.
+    // Shared, finding-independent grounding gathered ONCE for the whole batch (repo reads + a
+    // single web search over the batch's finding titles), reused across the per-finding calls.
     const sharedSpecExcerpts = await this.gatherSpecExcerpts(workspaceId, block)
+    const sharedWebResults = await this.gatherWebResults(
+      workspaceId,
+      pending.map((p) => p.sourceFinding.title),
+    )
 
     let produced = 0
     for (const placeholder of pending) {
-      // Re-anchor the placeholder to a LIVE finding (item ids churn across re-reviews; match by
-      // the snapshotted title/detail). Gone → there is nothing to recommend for.
+      // Re-anchor the placeholder to a LIVE finding — prefer the snapshotted finding id, falling
+      // back to title/detail when ids churned across a re-review. Gone → nothing to recommend for.
       const before = assertFound(
         await this.repository.get(workspaceId, reviewId),
         this.entityName,
         reviewId,
       )
-      const liveFinding = before.items.find(
-        (i) =>
-          i.title === placeholder.sourceFinding.title &&
-          i.detail === placeholder.sourceFinding.detail,
-      )
+      const liveFinding = findSourceItem(before.items, placeholder.sourceFinding)
       const suggestion = liveFinding
         ? await this.runWriterForFinding(
             workspaceId,
@@ -266,6 +281,7 @@ export class RequirementReviewService extends IterativeReviewService<
             placeholder.note ?? undefined,
             fragments,
             sharedSpecExcerpts,
+            sharedWebResults,
           )
         : null
       // Re-read fresh each iteration: the per-finding Writer calls take seconds, during which the
@@ -291,11 +307,7 @@ export class RequirementReviewService extends IterativeReviewService<
         // The Writer failed for (or no longer matches) this finding: drop the dead placeholder
         // and reopen its finding so the human can answer it by hand.
         review.recommendations = review.recommendations.filter((r) => r.id !== placeholder.id)
-        const item = review.items.find(
-          (i) =>
-            i.title === placeholder.sourceFinding.title &&
-            i.detail === placeholder.sourceFinding.detail,
-        )
+        const item = findSourceItem(review.items, placeholder.sourceFinding)
         if (item && item.status === 'recommend_requested') {
           item.status = 'open'
           item.updatedAt = now
@@ -307,6 +319,35 @@ export class RequirementReviewService extends IterativeReviewService<
     }
     if (produced > 0) await this.notifyRecommendationsReady(workspaceId, block, produced)
     return { produced }
+  }
+
+  /**
+   * Drop every `pending` placeholder on a review and reopen its source finding (the same cleanup
+   * the per-finding failure path does, applied to the whole batch). Used when the Writer can't run
+   * at all — the reviewer model is unresolvable — so the human gets the findings back to answer by
+   * hand instead of a wedged "generating…" state. Best-effort: emits progress after the cleanup.
+   */
+  private async dropPendingRecommendations(
+    workspaceId: string,
+    reviewId: string,
+    onProgress?: (review: RequirementReview) => Promise<void>,
+  ): Promise<void> {
+    const review = await this.repository.get(workspaceId, reviewId)
+    if (!review) return
+    const pending = review.recommendations.filter((r) => r.status === 'pending')
+    if (pending.length === 0) return
+    const now = this.deps.clock.now()
+    review.recommendations = review.recommendations.filter((r) => r.status !== 'pending')
+    for (const placeholder of pending) {
+      const item = findSourceItem(review.items, placeholder.sourceFinding)
+      if (item && item.status === 'recommend_requested') {
+        item.status = 'open'
+        item.updatedAt = now
+      }
+    }
+    review.updatedAt = now
+    await this.repository.upsert(workspaceId, review)
+    await onProgress?.(review)
   }
 
   /**
@@ -327,9 +368,7 @@ export class RequirementReviewService extends IterativeReviewService<
       rec.recommendedText = ''
       rec.groundedInFragment = null
       rec.note = note.trim() || null
-      const item = review.items.find(
-        (i) => i.title === rec.sourceFinding.title && i.detail === rec.sourceFinding.detail,
-      )
+      const item = findSourceItem(review.items, rec.sourceFinding)
       if (!item) {
         throw new ValidationError('The finding this recommendation answers no longer exists')
       }
@@ -352,9 +391,7 @@ export class RequirementReviewService extends IterativeReviewService<
   ): Promise<RequirementReview> {
     return this.mutateRecommendation(workspaceId, reviewId, recId, (rec, review, now) => {
       rec.status = 'accepted'
-      const item = review.items.find(
-        (i) => i.title === rec.sourceFinding.title && i.detail === rec.sourceFinding.detail,
-      )
+      const item = findSourceItem(review.items, rec.sourceFinding)
       if (item) {
         item.reply = rec.recommendedText
         item.status = 'answered'
@@ -375,9 +412,7 @@ export class RequirementReviewService extends IterativeReviewService<
   ): Promise<RequirementReview> {
     return this.mutateRecommendation(workspaceId, reviewId, recId, (rec, review, now) => {
       rec.status = 'rejected'
-      const item = review.items.find(
-        (i) => i.title === rec.sourceFinding.title && i.detail === rec.sourceFinding.detail,
-      )
+      const item = findSourceItem(review.items, rec.sourceFinding)
       if (item && item.status === 'recommend_requested') {
         item.status = 'open'
         item.updatedAt = now
@@ -395,12 +430,12 @@ export class RequirementReviewService extends IterativeReviewService<
     note: string | undefined,
     fragments: GroundingFragment[],
     sharedSpecExcerpts: string[],
+    sharedWebResults: GroundingWebResult[],
   ): Promise<{ recommendation: string; fromStandard: string | null } | null> {
-    const webResults = await this.gatherWebResults(workspaceId, [finding])
     const grounding: RecommendationGrounding = {
       fragments,
       specExcerpts: sharedSpecExcerpts,
-      webResults,
+      webResults: sharedWebResults,
     }
     try {
       const result = await generateText({
@@ -416,8 +451,9 @@ export class RequirementReviewService extends IterativeReviewService<
           : {}),
         providerOptions: catFactoryObservability({ agentKind: 'requirements-writer', workspaceId }),
       })
-      const suggestions = coerceRecommendations(extractJson(result.text))
-      return suggestions.get(finding.id) ?? null
+      // Single-finding call: tolerate a missing/garbled echoed itemId rather than discarding a
+      // valid suggestion (which would force-reopen the finding as if the Writer had failed).
+      return coerceSingleRecommendation(extractJson(result.text), finding.id)
     } catch {
       // Best-effort per finding — a failure drops just this placeholder (the caller reopens it).
       return null
@@ -467,17 +503,18 @@ export class RequirementReviewService extends IterativeReviewService<
   }
 
   /**
-   * Gateway-RAG web snippets for a finding (when web search is wired). Run per finding so the
-   * query is targeted. Best-effort — unwired / errors → an empty list.
+   * Gateway-RAG web snippets for a recommendation batch (when web search is wired). Gathered
+   * ONCE over the batch's finding titles — like the spec excerpts and fragments — so a batch of
+   * N findings makes a single web-search call, not N. Best-effort — unwired / errors → an empty
+   * list.
    */
   private async gatherWebResults(
     workspaceId: string,
-    findings: RequirementReviewItem[],
+    findingTitles: string[],
   ): Promise<GroundingWebResult[]> {
-    if (!this.webSearch) return []
+    if (!this.webSearch || findingTitles.length === 0) return []
     try {
-      const query = findings.map((f) => f.title).join('; ')
-      return await this.webSearch(workspaceId, query)
+      return await this.webSearch(workspaceId, findingTitles.join('; '))
     } catch {
       return []
     }

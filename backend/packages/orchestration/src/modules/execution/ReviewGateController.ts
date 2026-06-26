@@ -385,22 +385,10 @@ export class ReviewGateController {
     if (!kind.prepareRecommendations || !kind.fillRecommendations) {
       throw new ConflictError('Recommendations are not supported for this review')
     }
-    // Recommendations are ASYNCHRONOUS: the placeholders are filled by the durable driver that
-    // owns the parked run (see {@link evaluate} re-entry), so a fresh batch only makes sense
-    // while a run is parked on this review gate. Reject it up front — BEFORE writing any
-    // `pending` placeholder — when nothing is parked, instead of running the Writer inline (which
-    // diverged across runtimes: a raw model-resolve throw 500'd on Node while Cloudflare resolved
-    // its binding and 200'd) or orphaning placeholders that no driver will ever fill.
-    const parked = await this.findParkedStep(kind, workspaceId, blockId)
-    if (!parked) {
-      throw new ConflictError(
-        'Recommendations can only be requested while this task is awaiting a requirements decision',
-      )
-    }
     const current = await this.currentReview(kind, workspaceId, blockId)
     const prepared = await kind.prepareRecommendations(workspaceId, current.id, itemIds, note)
     await kind.emit(workspaceId, prepared)
-    return this.offloadRecommendation(workspaceId, parked, itemIds, note, prepared)
+    return this.scheduleRecommendation(kind, workspaceId, blockId, itemIds, note, prepared)
   }
 
   /**
@@ -438,9 +426,11 @@ export class ReviewGateController {
   ): Promise<TReview> {
     const parked = await this.findParkedStep(kind, workspaceId, blockId)
     if (!parked) {
-      // Off-path: no pipeline parked on this review (e.g. re-requesting one recommendation on an
-      // off-path inspector review). Run the Writer inline (it cannot be offloaded to a driver that
-      // isn't running) and return the filled review.
+      // Off-path: no pipeline parked on this review (an inspector "Run review" with no active
+      // pipeline). There is no durable driver to offload to, so run the Writer inline and return
+      // the filled review. `fillRecommendations` degrades gracefully when the reviewer model is
+      // unavailable (it drops the placeholders and reopens the findings), so this stays a 200 on
+      // every runtime instead of faulting — the divergence the cross-runtime suite guards.
       return (await kind.fillRecommendations!(workspaceId, blockId)) ?? prepared
     }
     return this.offloadRecommendation(workspaceId, parked, itemIds, note, prepared)

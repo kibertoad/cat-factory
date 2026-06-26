@@ -64,7 +64,7 @@ export type RecommendationStatus = 'pending' | 'ready' | 'accepted' | 'rejected'
  */
 export interface RequirementRecommendation {
   id: string
-  sourceFinding: { title: string; detail: string }
+  sourceFinding: { title: string; detail: string; itemId?: string }
   recommendedText: string
   status: RecommendationStatus
   note: string | null
