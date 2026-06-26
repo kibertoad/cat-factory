@@ -57,6 +57,31 @@ export interface ReviewKind<TReview extends ReviewCommon> {
   markReReviewing(workspaceId: string, reviewId: string): Promise<TReview>
   markIncorporating(workspaceId: string, reviewId: string): Promise<TReview>
   grantExtraRound(workspaceId: string, reviewId: string): Promise<TReview>
+  /**
+   * Requirements-only (the Requirement Writer): append `pending` placeholder recommendations
+   * for a batch of findings so the SPA shows "generating…" at once. The slow Writer runs later
+   * via {@link fillRecommendations}. Optional — absent on the clarity kind (no Writer).
+   */
+  prepareRecommendations?(
+    workspaceId: string,
+    reviewId: string,
+    itemIds: string[],
+    note?: string,
+  ): Promise<TReview>
+  /** Requirements-only: reset a settled recommendation back to `pending` for a re-request. Optional. */
+  markRecommendationPending?(
+    workspaceId: string,
+    reviewId: string,
+    recId: string,
+    note: string,
+  ): Promise<TReview>
+  /**
+   * Requirements-only: run the Writer over the review's `pending` placeholders — filling them in
+   * one by one (emitting progress per finding) and notifying when the batch finishes. Returns the
+   * final review. Runs in the durable driver (see {@link ReviewGateController.evaluate} re-entry),
+   * or inline off-path. Optional.
+   */
+  fillRecommendations?(workspaceId: string, blockId: string): Promise<TReview>
   /** Push a live review-changed event so an open window/inspector reflects the new status. */
   emit(workspaceId: string, review: TReview): Promise<void>
 }
@@ -146,6 +171,18 @@ export class ReviewGateController {
   ): Promise<AdvanceResult> {
     if (!kind.enabled()) {
       return this.completeStep(workspaceId, instance, step, isFinalStep)
+    }
+
+    // Re-entry: the human asked the Requirement Writer to recommend answers for a batch of
+    // findings (or re-requested one). Run the Writer here in the durable driver — filling the
+    // `pending` placeholders one by one (progress streams to the window) and notifying when the
+    // batch finishes — then re-park. Recommendations NEVER advance the run: the human still has
+    // to accept/reject them and then incorporate, so this always returns to the decision wait.
+    const pendingRec = step.pendingRecommendation
+    if (pendingRec && kind.fillRecommendations) {
+      step.pendingRecommendation = null
+      await kind.fillRecommendations(workspaceId, block.id)
+      return this.deps.parkStepOnDecision(workspaceId, instance, step)
     }
 
     // Re-entry: the human answered the findings and asked to incorporate. Do the (slow)
@@ -329,6 +366,99 @@ export class ReviewGateController {
       'incorporate',
     )
     return updated
+  }
+
+  /**
+   * Request a batch of Requirement-Writer recommendations ASYNCHRONOUSLY. Appends `pending`
+   * placeholder recommendations at once (so the SPA shows "generating…" and the human is handed
+   * back to the board), then signals the durable driver to run the Writer per finding in the
+   * background (see {@link evaluate} re-entry) — filling the placeholders and notifying when done.
+   * Off-path (no parked run) the Writer runs inline. Returns the review with the placeholders.
+   */
+  async requestRecommendations<TReview extends ReviewCommon>(
+    kind: ReviewKind<TReview>,
+    workspaceId: string,
+    blockId: string,
+    itemIds: string[],
+    note?: string,
+  ): Promise<TReview> {
+    if (!kind.prepareRecommendations || !kind.fillRecommendations) {
+      throw new ConflictError('Recommendations are not supported for this review')
+    }
+    const current = await this.currentReview(kind, workspaceId, blockId)
+    const prepared = await kind.prepareRecommendations(workspaceId, current.id, itemIds, note)
+    await kind.emit(workspaceId, prepared)
+    return this.scheduleRecommendation(kind, workspaceId, blockId, itemIds, note, prepared)
+  }
+
+  /**
+   * Re-request a single recommendation with a "do it differently" note: resets it to `pending`
+   * and drives the Writer through the SAME async path as a fresh batch. Review-scoped (the
+   * re-request endpoint addresses the recommendation by review + id).
+   */
+  async reRequestRecommendation<TReview extends ReviewCommon>(
+    kind: ReviewKind<TReview>,
+    workspaceId: string,
+    reviewId: string,
+    recId: string,
+    note: string,
+  ): Promise<TReview> {
+    if (!kind.markRecommendationPending || !kind.fillRecommendations) {
+      throw new ConflictError('Recommendations are not supported for this review')
+    }
+    const prepared = await kind.markRecommendationPending(workspaceId, reviewId, recId, note)
+    await kind.emit(workspaceId, prepared)
+    return this.scheduleRecommendation(kind, workspaceId, prepared.blockId, [], note, prepared)
+  }
+
+  /**
+   * Offload a prepared recommendation batch to the durable driver (parked run) or run it inline
+   * (off-path). Mirrors {@link incorporate}'s signal-or-inline split. Returns the prepared review
+   * (parked) or the filled review (inline).
+   */
+  private async scheduleRecommendation<TReview extends ReviewCommon>(
+    kind: ReviewKind<TReview>,
+    workspaceId: string,
+    blockId: string,
+    itemIds: string[],
+    note: string | undefined,
+    prepared: TReview,
+  ): Promise<TReview> {
+    const parked = await this.findParkedStep(kind, workspaceId, blockId)
+    if (!parked) {
+      // Off-path: no pipeline parked on this review (an inspector "Run review" with no active
+      // pipeline). There is no durable driver to offload to, so run the Writer inline and return
+      // the filled review. `fillRecommendations` degrades gracefully when the reviewer model is
+      // unavailable (it drops the placeholders and reopens the findings), so this stays a 200 on
+      // every runtime instead of faulting — the divergence the cross-runtime suite guards.
+      return (await kind.fillRecommendations!(workspaceId, blockId)) ?? prepared
+    }
+    return this.offloadRecommendation(workspaceId, parked, itemIds, note, prepared)
+  }
+
+  /** Hand a prepared recommendation batch to the durable driver that owns the parked run. */
+  private async offloadRecommendation<TReview extends ReviewCommon>(
+    workspaceId: string,
+    parked: { instance: ExecutionInstance; step: PipelineStep },
+    itemIds: string[],
+    note: string | undefined,
+    prepared: TReview,
+  ): Promise<TReview> {
+    const { instance, step } = parked
+    step.pendingRecommendation = { itemIds, ...(note ? { note } : {}) }
+    // Re-arm the run BEFORE signalling (the park left it `blocked`; `advanceInstance` no-ops
+    // unless `running`/`paused`) so the woken driver actually re-enters the gate. Mirrors
+    // {@link incorporate}.
+    if (instance.status === 'blocked') instance.status = 'running'
+    await this.deps.persistInstance(workspaceId, instance)
+    await this.deps.emitInstance(workspaceId, instance)
+    await this.deps.workRunner.signalDecision(
+      workspaceId,
+      instance.id,
+      step.approval!.id,
+      'recommend',
+    )
+    return prepared
   }
 
   /** Locate the run + gate step a block's review is parked on (or null). */

@@ -70,6 +70,9 @@ function fakeKind() {
     markReReviewing: vi.fn(async () => current),
     markIncorporating: vi.fn(async () => ({ ...current, status: 'incorporating' as const })),
     grantExtraRound: vi.fn(async () => current),
+    prepareRecommendations: vi.fn(async () => current),
+    markRecommendationPending: vi.fn(async () => current),
+    fillRecommendations: vi.fn(async () => current),
     emit: vi.fn(async () => {}),
   } satisfies ReviewKind<FakeReview> & Record<string, unknown>
   return {
@@ -219,6 +222,23 @@ describe('ReviewGateController.evaluate', () => {
     expect(k.kind.reReview).not.toHaveBeenCalled()
     expect(result).toEqual({ kind: 'continue' })
   })
+
+  it('re-entry: a pending recommendation runs the Writer then re-parks (never advances)', async () => {
+    k.set(review({ status: 'ready' }))
+    const s = step({
+      state: 'waiting_decision',
+      approval: { id: 'appr_2', status: 'pending', proposal: '' },
+      pendingRecommendation: { itemIds: ['rri_1'] },
+    } as Partial<PipelineStep>)
+    const inst = instance([s, step({ agentKind: 'architect' })])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(s.pendingRecommendation).toBeNull()
+    expect(k.kind.fillRecommendations).toHaveBeenCalledWith('ws', 'blk_1')
+    // Recommendations never advance the run — it re-parks for the human to accept/reject.
+    expect(deps.parkStepOnDecision).toHaveBeenCalledWith('ws', inst, s)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(deps.finishStep).not.toHaveBeenCalled()
+  })
 })
 
 describe('ReviewGateController public surface', () => {
@@ -325,6 +345,83 @@ describe('ReviewGateController public surface', () => {
       'blk_1',
       'extra-round',
       expect.objectContaining({ extraRound: expect.any(Function), proceed: expect.any(Function) }),
+    )
+  })
+
+  it('requestRecommendations offloads to the durable driver when a run is parked', async () => {
+    k.set(review({ status: 'ready' }))
+    const parkedStep = step({
+      state: 'waiting_decision',
+      approval: { id: 'appr_7', status: 'pending', proposal: '' },
+    })
+    const inst = instance([parkedStep], { status: 'blocked' })
+    deps.executionRepository.get = vi.fn(async () => inst)
+    await ctrl.requestRecommendations(k.kind, 'ws', 'blk_1', ['rri_1', 'rri_2'], 'prefer X')
+    // Placeholders are created synchronously; the slow Writer is offloaded, not run inline.
+    expect(k.kind.prepareRecommendations).toHaveBeenCalledWith(
+      'ws',
+      'rrv_1',
+      ['rri_1', 'rri_2'],
+      'prefer X',
+    )
+    expect(parkedStep.pendingRecommendation).toEqual({
+      itemIds: ['rri_1', 'rri_2'],
+      note: 'prefer X',
+    })
+    expect(inst.status).toBe('running') // re-armed before signalling
+    expect(deps.workRunner.signalDecision).toHaveBeenCalledWith(
+      'ws',
+      'exec_1',
+      'appr_7',
+      'recommend',
+    )
+    expect(k.kind.fillRecommendations).not.toHaveBeenCalled()
+  })
+
+  it('requestRecommendations runs the Writer inline when no run is parked', async () => {
+    k.set(review({ status: 'ready' }))
+    deps.executionRepository.get = vi.fn(async () => null)
+    await ctrl.requestRecommendations(k.kind, 'ws', 'blk_1', ['rri_1'])
+    expect(k.kind.prepareRecommendations).toHaveBeenCalled()
+    expect(k.kind.fillRecommendations).toHaveBeenCalledWith('ws', 'blk_1')
+    expect(deps.workRunner.signalDecision).not.toHaveBeenCalled()
+  })
+
+  it('requestRecommendations rejects a kind without a Writer', async () => {
+    k.set(review({ status: 'ready' }))
+    const noWriter = {
+      ...k.kind,
+      prepareRecommendations: undefined,
+      fillRecommendations: undefined,
+    }
+    await expect(
+      ctrl.requestRecommendations(noWriter as unknown as ReviewKind<FakeReview>, 'ws', 'blk_1', [
+        'x',
+      ]),
+    ).rejects.toBeInstanceOf(ConflictError)
+  })
+
+  it('reRequestRecommendation resets the recommendation and offloads to the driver', async () => {
+    k.set(review({ status: 'ready' }))
+    const parkedStep = step({
+      state: 'waiting_decision',
+      approval: { id: 'appr_8', status: 'pending', proposal: '' },
+    })
+    const inst = instance([parkedStep], { status: 'blocked' })
+    deps.executionRepository.get = vi.fn(async () => inst)
+    await ctrl.reRequestRecommendation(k.kind, 'ws', 'rrv_1', 'rec_1', 'try again')
+    expect(k.kind.markRecommendationPending).toHaveBeenCalledWith(
+      'ws',
+      'rrv_1',
+      'rec_1',
+      'try again',
+    )
+    expect(parkedStep.pendingRecommendation).toEqual({ itemIds: [], note: 'try again' })
+    expect(deps.workRunner.signalDecision).toHaveBeenCalledWith(
+      'ws',
+      'exec_1',
+      'appr_8',
+      'recommend',
     )
   })
 })

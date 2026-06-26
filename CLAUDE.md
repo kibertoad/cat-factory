@@ -34,6 +34,12 @@ tokens with no data migration — that's acceptable, not a bug to fix.)
   absorbs the CRLF↔LF churn at commit time, so only the genuine formatting changes survive
   in the recorded diff. Do not revert the mass reformat or try to hand-pick the files CI
   named — run `pnpm exec oxfmt .`, stage everything, and let git collapse the noise.
+  **Never format (or lint-fix) a hand-picked subset of files**: when CI's `Lint & format`
+  flags formatting, run `pnpm lint:fix` (`oxlint --fix && oxfmt .`) over the ENTIRE project
+  rather than targeting just the named files. Do not be afraid of the excessive visible
+  churn this causes in the working tree — git's line-ending normalization absorbs the
+  irrelevant auto-converted EOL changes at commit time, so only the genuinely relevant
+  formatting fixes survive in the recorded diff.
 
 ## Keep the runtimes symmetric
 
