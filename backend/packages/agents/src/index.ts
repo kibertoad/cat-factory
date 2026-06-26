@@ -87,6 +87,13 @@ export {
   CLARITY_REVIEW_SYSTEM_PROMPT,
   CLARITY_REWORK_SYSTEM_PROMPT,
 } from './agents/prompts/clarity.js'
+// Brainstorm (structured-dialogue) prompt text.
+export {
+  REQUIREMENTS_BRAINSTORM_SYSTEM_PROMPT,
+  ARCHITECTURE_BRAINSTORM_SYSTEM_PROMPT,
+  REQUIREMENTS_BRAINSTORM_REWORK_SYSTEM_PROMPT,
+  ARCHITECTURE_BRAINSTORM_REWORK_SYSTEM_PROMPT,
+} from './agents/prompts/brainstorm.js'
 export {
   type VersionedPrompt,
   type PromptId,

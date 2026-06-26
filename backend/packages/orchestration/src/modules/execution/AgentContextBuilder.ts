@@ -3,6 +3,7 @@ import type {
   AgentRunContext,
   Block,
   BlockRepository,
+  BrainstormSessionRepository,
   ClarityReviewRepository,
   CloudProvider,
   DocumentRecord,
@@ -82,6 +83,7 @@ export interface AgentContextBuilderDeps {
   tasks?: TaskRepository
   requirementReviews?: RequirementReviewRepository
   clarityReviews?: ClarityReviewRepository
+  brainstormSessions?: BrainstormSessionRepository
   environmentProvisioning?: EnvironmentProvisioningService
   /**
    * Optional: resolves fragment ids against the merged tenant catalog (managed +
@@ -148,10 +150,21 @@ export class AgentContextBuilder {
       service?.defaultTestEnvironment && !block.agentConfig?.['tester.environment']
         ? { ...block.agentConfig, 'tester.environment': service.defaultTestEnvironment }
         : block.agentConfig
-    const priorOutputs = instance.steps
-      .slice(0, instance.currentStep)
-      .filter((s) => s.output)
-      .map((s) => ({ agentKind: s.agentKind, output: s.output! }))
+    // A finalized architecture-brainstorm direction is surfaced ADDITIVELY (it does not
+    // replace the description) as a synthetic prior output so the architect and downstream
+    // agents read it as context — the brainstorm session's converged direction feeding the
+    // next stage's prompt (reviews are task-scoped, so frames/modules skip the lookup).
+    const architectureDirection =
+      block.level === 'task' ? await this.resolveBrainstormDirection(workspaceId, block.id) : null
+    const priorOutputs = [
+      ...(architectureDirection
+        ? [{ agentKind: 'architecture-brainstorm', output: architectureDirection }]
+        : []),
+      ...instance.steps
+        .slice(0, instance.currentStep)
+        .filter((s) => s.output)
+        .map((s) => ({ agentKind: s.agentKind, output: s.output! })),
+    ]
     // Resolve the best-practice fragments to inject for this step. `code-aware` kinds
     // get the running service's selected fragments unioned with the block's own pins;
     // other kinds keep only their block pins. Recorded on the step for observability.
@@ -301,6 +314,29 @@ export class AgentContextBuilder {
     const review = await this.deps.clarityReviews.getByBlock(workspaceId, blockId)
     if (review?.status === 'incorporated' && review.clarifiedReport) {
       return review.clarifiedReport
+    }
+    return null
+  }
+
+  /**
+   * The converged architecture direction for a block — the document the
+   * `architecture-brainstorm` dialogue settled on — or `null` when the feature is unwired or
+   * the block has no settled architecture session. Surfaced additively as a prior output (it
+   * augments, never replaces, the description), the brainstorm analogue of
+   * {@link resolveReworkedRequirements}.
+   */
+  private async resolveBrainstormDirection(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<string | null> {
+    if (!this.deps.brainstormSessions) return null
+    const session = await this.deps.brainstormSessions.getByBlockStage(
+      workspaceId,
+      blockId,
+      'architecture',
+    )
+    if (session?.status === 'incorporated' && session.convergedDirection) {
+      return session.convergedDirection
     }
     return null
   }

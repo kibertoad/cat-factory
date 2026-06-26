@@ -72,6 +72,28 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
       'Triages the task after requirements are clarified — rates Complexity, Risk and Impact (0..1). Used to gate consensus and conditional companion steps, and shown as ratings on the task.',
   },
   {
+    kind: 'requirements-brainstorm',
+    label: 'Requirements Brainstorm',
+    icon: 'i-lucide-lightbulb',
+    color: '#f59e0b',
+    category: 'design',
+    description:
+      'A structured dialogue that turns a rough idea into crisp requirements — proposing options with explicit trade-offs and letting you choose, before the requirements review.',
+    // Opens the shared dedicated brainstorm window (propose options → choose → incorporate →
+    // re-run loop) instead of the generic prose step-detail panel.
+    resultView: 'brainstorm',
+  },
+  {
+    kind: 'architecture-brainstorm',
+    label: 'Architecture Brainstorm',
+    icon: 'i-lucide-compass',
+    color: '#a78bfa',
+    category: 'design',
+    description:
+      'A structured dialogue that explores and finalizes a technical approach from the refined requirements — proposing options with explicit trade-offs and letting you converge, before the architect.',
+    resultView: 'brainstorm',
+  },
+  {
     kind: 'architect',
     label: 'Architect',
     icon: 'i-lucide-drafting-compass',

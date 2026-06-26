@@ -60,6 +60,13 @@ export interface RequirementReviewServiceDependencies extends IterativeReviewDep
    * when the resolved model supports it.
    */
   webSearch?: (workspaceId: string, query: string) => Promise<GroundingWebResult[]>
+  /**
+   * Resolve the converged direction a prior `requirements-brainstorm` dialogue settled on for
+   * a block, used as the reviewed subject in place of the raw description (the brainstorm is the
+   * upstream stage that turns a vague idea into a crisp direction). Optional — unwired (no
+   * brainstorm session) ⇒ the reviewer reads the block description unchanged.
+   */
+  resolveBrainstormDirection?: (workspaceId: string, blockId: string) => Promise<string | undefined>
 }
 
 /**
@@ -82,6 +89,10 @@ export class RequirementReviewService extends IterativeReviewService<
     blockId: string,
   ) => Promise<GroundingFragment[]>
   private readonly webSearch?: (workspaceId: string, query: string) => Promise<GroundingWebResult[]>
+  private readonly resolveBrainstormDirection?: (
+    workspaceId: string,
+    blockId: string,
+  ) => Promise<string | undefined>
 
   constructor(deps: RequirementReviewServiceDependencies) {
     super(deps)
@@ -91,6 +102,7 @@ export class RequirementReviewService extends IterativeReviewService<
     this.resolveRunRepoContext = deps.resolveRunRepoContext
     this.resolveBlockFragments = deps.resolveBlockFragments
     this.webSearch = deps.webSearch
+    this.resolveBrainstormDirection = deps.resolveBrainstormDirection
   }
 
   protected readonly entityName = 'Requirement review'
@@ -571,8 +583,16 @@ export class RequirementReviewService extends IterativeReviewService<
           description: t.description,
         }))
       : []
+    // When an upstream `requirements-brainstorm` dialogue settled a converged direction, that
+    // direction (which already shaped the rough idea into crisp requirements) is the subject the
+    // reviewer critiques — not the raw description it superseded.
+    const brainstormDirection = await this.resolveBrainstormDirection?.(workspaceId, block.id)
     return {
-      block: { title: block.title, type: block.type, description: block.description },
+      block: {
+        title: block.title,
+        type: block.type,
+        description: brainstormDirection?.trim() || block.description,
+      },
       docs,
       tasks,
     }

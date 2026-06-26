@@ -3,6 +3,7 @@ import type { Duplex } from 'node:stream'
 import type {
   Block,
   BootstrapJob,
+  BrainstormSession,
   ConsensusSession,
   ClarityReview,
   ExecutionInstance,
@@ -140,6 +141,10 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
 
   async clarityReviewChanged(workspaceId: string, review: ClarityReview): Promise<void> {
     this.publish(workspaceId, { type: 'clarity', review, at: Date.now() })
+  }
+
+  async brainstormSessionChanged(workspaceId: string, session: BrainstormSession): Promise<void> {
+    this.publish(workspaceId, { type: 'brainstorm', session, at: Date.now() })
   }
 
   private publish(workspaceId: string, event: WorkspaceEvent): void {

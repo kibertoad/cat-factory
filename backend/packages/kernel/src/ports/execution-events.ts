@@ -1,6 +1,7 @@
 import type {
   Block,
   BootstrapJob,
+  BrainstormSession,
   ConsensusSession,
   ClarityReview,
   ExecutionInstance,
@@ -79,6 +80,13 @@ export interface ExecutionEventPublisher {
    * no real-time transport wired leaves it a no-op.
    */
   clarityReviewChanged?(workspaceId: string, review: ClarityReview): Promise<void>
+  /**
+   * A block's brainstorm (structured-dialogue) session changed status — the mirror of
+   * {@link requirementReviewChanged} for the brainstorm loop: push the updated session so an
+   * open brainstorm window / inspector reflects the transition live. Optional; a runtime with
+   * no real-time transport wired leaves it a no-op.
+   */
+  brainstormSessionChanged?(workspaceId: string, session: BrainstormSession): Promise<void>
 }
 
 /**
@@ -95,4 +103,5 @@ export class NoopEventPublisher implements ExecutionEventPublisher {
   async requirementReviewChanged(): Promise<void> {}
   async consensusSessionChanged(): Promise<void> {}
   async clarityReviewChanged(): Promise<void> {}
+  async brainstormSessionChanged(): Promise<void> {}
 }

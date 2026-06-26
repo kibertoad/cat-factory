@@ -43,6 +43,7 @@ export type { Clock, IdGenerator } from './runtime.js'
 export type { RequirementReviewRepository } from './requirement-review-repositories.js'
 export type { ConsensusSessionRepository } from './consensus-repositories.js'
 export type { ClarityReviewRepository } from './clarity-review-repositories.js'
+export type { BrainstormSessionRepository } from './brainstorm-repositories.js'
 export type { AgentRunRef, AgentRunRepository } from './agent-runs.js'
 export type {
   HarnessKind,

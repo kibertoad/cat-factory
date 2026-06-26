@@ -1,4 +1,5 @@
 import type {
+  BrainstormSession,
   Block,
   BootstrapJob,
   ConsensusSession,
@@ -73,6 +74,10 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
 
   async clarityReviewChanged(workspaceId: string, review: ClarityReview): Promise<void> {
     await this.publish(workspaceId, { type: 'clarity', review, at: Date.now() })
+  }
+
+  async brainstormSessionChanged(workspaceId: string, session: BrainstormSession): Promise<void> {
+    await this.publish(workspaceId, { type: 'brainstorm', session, at: Date.now() })
   }
 
   private async publish(workspaceId: string, event: WorkspaceEvent): Promise<void> {

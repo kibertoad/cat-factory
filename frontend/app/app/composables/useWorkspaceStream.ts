@@ -23,6 +23,7 @@ export function useWorkspaceStream() {
   const requirements = useRequirementsStore()
   const consensus = useConsensusStore()
   const clarity = useClarityStore()
+  const brainstorm = useBrainstormStore()
   const api = useApi()
   const apiBase = useRuntimeConfig().public.apiBase
 
@@ -87,6 +88,10 @@ export function useWorkspaceStream() {
       // cache so an open review window / inspector reflects it live ("incorporating…" → the
       // next cycle / converged). The summons back, when needed, arrives as a `notification`.
       clarity.upsert(event.review)
+    } else if (event.type === 'brainstorm') {
+      // The async incorporate + re-run cycle changed a brainstorm session's status — patch the
+      // cache so an open brainstorm window / inspector reflects it live.
+      brainstorm.upsert(event.session)
     }
   }
 

@@ -34,6 +34,19 @@ export const REQUIREMENTS_REVIEW_AGENT_KIND = 'requirements-review'
 export const CLARITY_REVIEW_AGENT_KIND = 'clarity-review'
 
 /**
+ * The agent kinds of the two brainstorm (structured-dialogue) gate steps. Like the
+ * requirements / clarity reviewers they are INLINE engine steps (not container/prose
+ * agents): the engine runs the inline brainstorm agent (via the brainstorm module), parks
+ * the run for the dedicated brainstorm window, and drives the iterative propose → pick →
+ * incorporate → re-run loop until it converges. `requirements-brainstorm` explores options
+ * from a vague description (before the requirements review); `architecture-brainstorm`
+ * explores approaches from the refined requirements (before the architect). Both pass
+ * through when the brainstorm module / model is not wired.
+ */
+export const REQUIREMENTS_BRAINSTORM_AGENT_KIND = 'requirements-brainstorm'
+export const ARCHITECTURE_BRAINSTORM_AGENT_KIND = 'architecture-brainstorm'
+
+/**
  * The agent kind of the read-only `bug-investigator` container agent. It clones the repo,
  * reads the codebase from the raw bug report, and returns a prose report: an enriched bug
  * report plus an OPTIONAL working hypothesis (omitted unless reasonably confident). It

@@ -152,6 +152,7 @@ import { D1RequirementReviewRepository } from './repositories/D1RequirementRevie
 import { D1ConsensusSessionRepository } from './repositories/D1ConsensusSessionRepository'
 import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/consensus'
 import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewRepository'
+import { D1BrainstormSessionRepository } from './repositories/D1BrainstormSessionRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
 import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
 import {
@@ -1378,6 +1379,7 @@ function selectRequirementsDeps(
   return {
     requirementReviewRepository: new D1RequirementReviewRepository({ db }),
     clarityReviewRepository: new D1ClarityReviewRepository({ db }),
+    brainstormSessionRepository: new D1BrainstormSessionRepository({ db }),
     modelProviderResolver: buildModelProviderResolver(env, db),
     // The routing default already resolves to Cloudflare Workers AI unless a
     // direct provider key is set, so the reviewer runs on Cloudflare by default.

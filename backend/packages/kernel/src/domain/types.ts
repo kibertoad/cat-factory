@@ -173,6 +173,17 @@ export type {
   IncorporateClarityInput,
   ResolveClarityExceededInput,
   ResolveClarityExceededChoice,
+  // Brainstorm (structured-dialogue agent) shapes — reuse the requirements review
+  // item/status shapes, differ in the `stage` discriminator + the converged-direction doc.
+  BrainstormStage,
+  BrainstormItem,
+  BrainstormStatus,
+  BrainstormSession,
+  ReplyBrainstormItemInput,
+  UpdateBrainstormItemStatusInput,
+  IncorporateBrainstormInput,
+  ResolveBrainstormExceededInput,
+  ResolveBrainstormExceededChoice,
   // Shared iterative-gate cap resolution (requirements reviewer + quality companions).
   IterationCapChoice,
   ResolveIterationCapInput,
