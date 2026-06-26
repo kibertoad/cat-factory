@@ -96,12 +96,17 @@ export type RequirementReviewStatus = v.InferOutput<typeof requirementReviewStat
 
 /**
  * Lifecycle of a single Requirement-Writer recommendation:
+ * - `pending`: a placeholder created the moment the human requested the recommendation;
+ *   the Writer is still producing the suggestion in the durable driver (the async story —
+ *   the human is back on the board, summoned by a notification when the batch finishes).
+ *   The placeholder snapshots its source finding so progress (`ready / total`) survives the
+ *   window closing; `recommendedText` is empty until the Writer fills it in.
  * - `ready`: the Writer produced a suggested answer; the human hasn't decided yet.
  * - `accepted`: the human took the suggestion — it becomes the source finding's answer
  *   and folds into the NEXT incorporation pass.
  * - `rejected`: the human declined it (they then dismiss / answer manually / re-request).
  */
-export const recommendationStatusSchema = v.picklist(['ready', 'accepted', 'rejected'])
+export const recommendationStatusSchema = v.picklist(['pending', 'ready', 'accepted', 'rejected'])
 export type RecommendationStatus = v.InferOutput<typeof recommendationStatusSchema>
 
 /**
@@ -115,8 +120,18 @@ export type RecommendationStatus = v.InferOutput<typeof recommendationStatusSche
  */
 export const requirementRecommendationSchema = v.object({
   id: v.string(),
-  /** Snapshot of the finding this recommends an answer for (item ids churn on re-review). */
-  sourceFinding: v.object({ title: v.string(), detail: v.string() }),
+  /**
+   * Snapshot of the finding this recommends an answer for. `itemId` is the finding's id at
+   * request time — the PRIMARY anchor, so two findings that happen to share an identical
+   * title+detail stay distinct. Item ids churn across re-reviews, so matching falls back to
+   * title+detail when the snapshotted id is no longer present (`itemId` is optional for that
+   * reason and absent on pre-existing rows).
+   */
+  sourceFinding: v.object({
+    title: v.string(),
+    detail: v.string(),
+    itemId: v.optional(v.string()),
+  }),
   /** The suggested answer text. */
   recommendedText: v.string(),
   status: recommendationStatusSchema,
@@ -195,10 +210,15 @@ export type IncorporateRequirementsInput = v.InferOutput<typeof incorporateRequi
 
 /**
  * Ask the Requirement Writer to recommend answers for a batch of findings (by item id).
- * Sent when the human marks findings "recommend something" instead of answering them.
+ * Sent when the human marks findings "recommend something" instead of answering them. The
+ * Writer runs ASYNCHRONOUSLY in the durable driver: the call returns at once with `pending`
+ * placeholder recommendations, which fill in (`ready`) one by one and raise a notification
+ * when the batch finishes. The optional `note` steers the whole batch ("prefer the existing
+ * library", etc.).
  */
 export const requestRecommendationsSchema = v.object({
   itemIds: v.pipe(v.array(v.string()), v.minLength(1)),
+  note: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(4000))),
 })
 export type RequestRecommendationsInput = v.InferOutput<typeof requestRecommendationsSchema>
 

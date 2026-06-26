@@ -8,6 +8,7 @@ import {
   type SandboxPromptVersion,
   type Pipeline,
   type PipelineSchedule,
+  type RequirementReview,
   type ScheduleRun,
   seedPipelines,
   type SourceTask,
@@ -2915,6 +2916,34 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         // The unanswered finding fails the guard (a `validation` domain error → 422) before
         // any model call or run signal — identically on both facades.
         expect(res.status).toBe(422)
+      })
+
+      it('wires the async recommend endpoint and degrades it identically when the Writer cannot run', async () => {
+        // Requesting Requirement-Writer recommendations appends `pending` placeholders and, on a
+        // parked run, lets the durable driver fill them per finding; off-path (a `ready` review
+        // seeded with no pipeline parked on it) the Writer runs inline. The route must be mounted
+        // on EVERY facade and resolve through the same execution-service seam. In the suite no
+        // reviewer model can actually run — Node's default ref resolves to an unregistered
+        // provider, Cloudflare's resolves its Workers-AI binding but the call can't run in tests —
+        // so the inline fill must DEGRADE GRACEFULLY and IDENTICALLY: drop the placeholder, reopen
+        // the finding for manual answering, and return 200 with the review (NOT 500 on the runtime
+        // whose resolve throws). The full happy-path Writer loop is covered by the orchestration
+        // unit tests, which a fake model can drive.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        await app.seedReadyReview(wsId, 'task_login')
+
+        const res = await app.call<RequirementReview>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/requirement-review/recommend`,
+          { itemIds: ['rri_seed_task_login'] },
+        )
+        expect(res.status).toBe(200)
+        // The Writer couldn't run, so no recommendation survives and the finding is back to `open`
+        // for the human to answer by hand — the same end state on both runtimes.
+        expect(res.body.recommendations).toEqual([])
+        expect(res.body.items.find((i) => i.id === 'rri_seed_task_login')?.status).toBe('open')
       })
 
       it('passes a companion gate when the rating clears the threshold', async () => {

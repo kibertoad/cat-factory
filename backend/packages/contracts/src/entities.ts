@@ -1003,6 +1003,18 @@ export const pipelineStepSchema = v.object({
    */
   pendingIncorporation: v.optional(v.nullable(v.object({ feedback: v.optional(v.string()) }))),
   /**
+   * Transient recommendation intent carried on a parked `requirements-review` gate step.
+   * Set when the human asks the Requirement Writer to suggest answers for a batch of findings
+   * (or re-requests one): the run is signalled to wake and the durable driver, on re-entering
+   * the gate, runs the Writer per finding — filling in the `pending` placeholder
+   * recommendations — then re-parks (recommendations never advance the run). Cleared once that
+   * async batch completes. `itemIds` are the findings to recommend for; `note` steers the
+   * whole batch. Absent when no recommendation batch is pending.
+   */
+  pendingRecommendation: v.optional(
+    v.nullable(v.object({ itemIds: v.array(v.string()), note: v.optional(v.string()) })),
+  ),
+  /**
    * Consensus configuration for this step, copied from the pipeline's `consensus`
    * array at run start. Present (with `enabled: true`) when this step should run
    * through the multi-model consensus mechanism; read by the consensus executor

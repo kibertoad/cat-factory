@@ -85,6 +85,11 @@ export const useUiStore = defineStore('ui', () => {
   // local runners, OpenRouter). Replaces the per-integration navbar buttons; each
   // row inside it opens that integration's own panel via the handlers below.
   const integrationsOpen = ref(false)
+  // True while an integration's own panel is showing AND it was reached from the hub
+  // (not the command bar, sidebar, a banner or an inspector link). Drives the "Back to
+  // Integrations" control those panels render: it only offers a return path when there
+  // is one. Every direct `open*` below resets it; `openFromIntegrations` sets it.
+  const cameFromIntegrations = ref(false)
 
   // Workspace-settings modal: a single tabbed window gathering the workspace-wide
   // config (workspace / merge thresholds / issue writeback / service best practices).
@@ -231,6 +236,7 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   function openDocumentConnect(source: DocumentSourceKind) {
+    cameFromIntegrations.value = false
     documentConnect.value = { source }
   }
   function closeDocumentConnect() {
@@ -240,6 +246,7 @@ export const useUiStore = defineStore('ui', () => {
     targetFrameId: string | null = null,
     source: DocumentSourceKind | null = null,
   ) {
+    cameFromIntegrations.value = false
     documentImport.value = { source, targetFrameId }
   }
   function closeDocumentImport() {
@@ -256,12 +263,14 @@ export const useUiStore = defineStore('ui', () => {
     spawnPreview.value = null
   }
   function openTaskConnect(source: TaskSourceKind) {
+    cameFromIntegrations.value = false
     taskConnect.value = { source }
   }
   function closeTaskConnect() {
     taskConnect.value = null
   }
   function openTaskImport(source: TaskSourceKind | null = null, containerId: string | null = null) {
+    cameFromIntegrations.value = false
     taskImport.value = { source, containerId }
   }
   function closeTaskImport() {
@@ -294,12 +303,14 @@ export const useUiStore = defineStore('ui', () => {
     addServiceOpen.value = false
   }
   function openGitHub() {
+    cameFromIntegrations.value = false
     githubOpen.value = true
   }
   function closeGitHub() {
     githubOpen.value = false
   }
   function openSlack() {
+    cameFromIntegrations.value = false
     slackOpen.value = true
   }
   function closeSlack() {
@@ -321,12 +332,24 @@ export const useUiStore = defineStore('ui', () => {
     commandBarOpen.value = !commandBarOpen.value
   }
   function openIntegrations() {
+    // Reaching the hub itself (fresh, or via a panel's Back control) clears the
+    // came-from marker — we're at the hub, not inside a hub-spawned panel.
+    cameFromIntegrations.value = false
     integrationsOpen.value = true
   }
   function closeIntegrations() {
     integrationsOpen.value = false
   }
+  // Open an integration's own panel FROM the hub: run its open handler (which resets
+  // `cameFromIntegrations`), then mark that we came from the hub and dismiss it. The
+  // panel reads `cameFromIntegrations` to show its Back control.
+  function openFromIntegrations(open: () => void) {
+    open()
+    cameFromIntegrations.value = true
+    integrationsOpen.value = false
+  }
   function openWorkspaceSettings(tab = 'workspace') {
+    cameFromIntegrations.value = false
     workspaceSettingsTab.value = tab
     workspaceSettingsOpen.value = true
   }
@@ -337,12 +360,14 @@ export const useUiStore = defineStore('ui', () => {
     workspaceSettingsTab.value = tab
   }
   function openObservabilityConnection() {
+    cameFromIntegrations.value = false
     observabilityConnectionOpen.value = true
   }
   function closeObservabilityConnection() {
     observabilityConnectionOpen.value = false
   }
   function openProviderConnection(kind: 'environment' | 'runner-pool') {
+    cameFromIntegrations.value = false
     providerConnectionKind.value = kind
   }
   function closeProviderConnection() {
@@ -355,12 +380,14 @@ export const useUiStore = defineStore('ui', () => {
     modelConfigOpen.value = false
   }
   function openVendorCredentials() {
+    cameFromIntegrations.value = false
     vendorCredentialsOpen.value = true
   }
   function closeVendorCredentials() {
     vendorCredentialsOpen.value = false
   }
   function openLocalModels() {
+    cameFromIntegrations.value = false
     localModelsOpen.value = true
   }
   function closeLocalModels() {
@@ -373,12 +400,14 @@ export const useUiStore = defineStore('ui', () => {
     sandboxOpen.value = false
   }
   function openUserSecrets() {
+    cameFromIntegrations.value = false
     userSecretsOpen.value = true
   }
   function closeUserSecrets() {
     userSecretsOpen.value = false
   }
   function openOpenRouter() {
+    cameFromIntegrations.value = false
     openRouterOpen.value = true
   }
   function closeOpenRouter() {
@@ -465,6 +494,7 @@ export const useUiStore = defineStore('ui', () => {
     fragmentLibraryOpen,
     commandBarOpen,
     integrationsOpen,
+    cameFromIntegrations,
     workspaceSettingsOpen,
     workspaceSettingsTab,
     observabilityConnectionOpen,
@@ -524,6 +554,7 @@ export const useUiStore = defineStore('ui', () => {
     toggleCommandBar,
     openIntegrations,
     closeIntegrations,
+    openFromIntegrations,
     openWorkspaceSettings,
     closeWorkspaceSettings,
     setWorkspaceSettingsTab,

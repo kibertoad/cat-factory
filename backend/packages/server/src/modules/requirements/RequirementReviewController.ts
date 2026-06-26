@@ -135,11 +135,13 @@ export function requirementReviewController(): Hono<AppEnv> {
     return c.json(review)
   })
 
-  // Ask the Requirement Writer to recommend grounded answers for a batch of findings the
-  // human marked "recommend something". Runs the Writer inline (grounded on best-practice
-  // fragments → spec/tech-spec → web search) and returns the review with `ready`
-  // recommendations for the human to accept/reject. Block-scoped (the live review is resolved
-  // from the block); a no-op when no review exists.
+  // Ask the Requirement Writer to recommend grounded answers for a batch of findings the human
+  // marked "recommend something". ASYNCHRONOUS: appends `pending` placeholder recommendations
+  // and signals the durable driver to run the Writer per finding in the background (grounded on
+  // best-practice fragments → spec/tech-spec → web search), returning at once with the
+  // placeholders so the user goes back to the board; a notification calls them back when the
+  // batch is ready. Block-scoped (the live review is resolved from the block); a no-op when no
+  // review exists.
   app.post(
     '/blocks/:blockId/requirement-review/recommend',
     jsonBody(requestRecommendationsSchema),
@@ -147,13 +149,13 @@ export function requirementReviewController(): Hono<AppEnv> {
       const requirements = requireRequirements(c)
       if (!requirements) return unavailable(c)
       const workspaceId = param(c, 'workspaceId')
-      const review = await requirements.service.getForBlock(workspaceId, param(c, 'blockId'))
+      const blockId = param(c, 'blockId')
+      const review = await requirements.service.getForBlock(workspaceId, blockId)
       if (!review) return c.json(null)
-      const updated = await requirements.service.recommend(
-        workspaceId,
-        review.id,
-        c.req.valid('json').itemIds,
-      )
+      const body = c.req.valid('json')
+      const updated = await c
+        .get('container')
+        .executionService.requestRecommendations(workspaceId, blockId, body.itemIds, body.note)
       return c.json(updated)
     },
   )
@@ -182,18 +184,22 @@ export function requirementReviewController(): Hono<AppEnv> {
     return c.json(review)
   })
 
+  // Re-request a recommendation with a "do it differently" note. ASYNCHRONOUS like the batch:
+  // resets the recommendation to `pending` and signals the driver to re-run the Writer.
   app.post(
     '/requirement-reviews/:reviewId/recommendations/:recId/re-request',
     jsonBody(reRequestRecommendationSchema),
     async (c) => {
       const requirements = requireRequirements(c)
       if (!requirements) return unavailable(c)
-      const review = await requirements.service.reRequestRecommendation(
-        param(c, 'workspaceId'),
-        param(c, 'reviewId'),
-        param(c, 'recId'),
-        c.req.valid('json').note,
-      )
+      const review = await c
+        .get('container')
+        .executionService.reRequestRecommendation(
+          param(c, 'workspaceId'),
+          param(c, 'reviewId'),
+          param(c, 'recId'),
+          c.req.valid('json').note,
+        )
       return c.json(review)
     },
   )

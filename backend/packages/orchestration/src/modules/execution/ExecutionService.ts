@@ -1171,16 +1171,17 @@ export class ExecutionService {
     if (instance.status === 'paused') instance.status = 'running'
 
     if (step.state === 'waiting_decision') {
-      // The requirements gate is re-entrant: when the human answers the findings and asks
-      // to incorporate, a `pendingIncorporation` marker is set on the parked step and the
-      // run is signalled to wake. Fall through so the gate re-evaluates — folding the
-      // answers and re-reviewing in the durable driver (the LLM work that used to block the
-      // HTTP request) — instead of immediately re-parking. Every other parked step (and a
-      // requirements gate with nothing pending) re-parks on its durable decision id.
+      // The requirements gate is re-entrant: when the human answers the findings and asks to
+      // incorporate (`pendingIncorporation`), or asks the Requirement Writer to recommend answers
+      // (`pendingRecommendation`), a marker is set on the parked step and the run is signalled to
+      // wake. Fall through so the gate re-evaluates — folding + re-reviewing, or running the
+      // Writer per finding, in the durable driver (the LLM work that used to block the HTTP
+      // request) — instead of immediately re-parking. Every other parked step (and a requirements
+      // gate with nothing pending) re-parks on its durable decision id.
       const reentrantRequirements =
         (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND ||
           step.agentKind === CLARITY_REVIEW_AGENT_KIND) &&
-        !!step.pendingIncorporation
+        (!!step.pendingIncorporation || !!step.pendingRecommendation)
       // The human-testing gate is likewise re-entrant: a human action (confirm / request a
       // fix / pull main / recreate) records a `pendingAction` on the parked step and wakes
       // the driver. Fall through so the gate re-evaluates and acts on it (dispatch a helper,
@@ -2947,6 +2948,22 @@ export class ExecutionService {
       markReReviewing: (ws, reviewId) => require().markReReviewing(ws, reviewId),
       markIncorporating: (ws, reviewId) => require().markIncorporating(ws, reviewId),
       grantExtraRound: (ws, reviewId) => require().grantExtraRound(ws, reviewId),
+      prepareRecommendations: (ws, reviewId, itemIds, note) =>
+        require().prepareRecommendations(ws, reviewId, itemIds, note),
+      markRecommendationPending: (ws, reviewId, recId, note) =>
+        require().markRecommendationPending(ws, reviewId, recId, note),
+      fillRecommendations: async (ws, blockId) => {
+        const svc = require()
+        const review = assertFound(
+          await svc.getForBlock(ws, blockId),
+          'Requirement review',
+          blockId,
+        )
+        await svc.fillPendingRecommendations(ws, review.id, {
+          onProgress: (r) => this.events.requirementReviewChanged?.(ws, r) ?? Promise.resolve(),
+        })
+        return assertFound(await svc.getForBlock(ws, blockId), 'Requirement review', blockId)
+      },
       emit: (ws, review) => this.events.requirementReviewChanged?.(ws, review) ?? Promise.resolve(),
     }
   }
@@ -3027,6 +3044,47 @@ export class ExecutionService {
    */
   proceedRequirements(workspaceId: string, blockId: string): Promise<RequirementReview> {
     return this.reviewGate.proceed(this.requirementsKind, workspaceId, blockId)
+  }
+
+  /**
+   * Ask the Requirement Writer to recommend answers for a batch of findings ASYNCHRONOUSLY:
+   * append `pending` placeholder recommendations at once and signal the durable driver to run
+   * the Writer per finding in the background (filling them in + notifying when done). Returns the
+   * review with the placeholders so the SPA shows "generating…" and hands the user back.
+   */
+  requestRecommendations(
+    workspaceId: string,
+    blockId: string,
+    itemIds: string[],
+    note?: string,
+  ): Promise<RequirementReview> {
+    return this.reviewGate.requestRecommendations(
+      this.requirementsKind,
+      workspaceId,
+      blockId,
+      itemIds,
+      note,
+    )
+  }
+
+  /**
+   * Re-request a single recommendation with a "do it differently" note — resets it to `pending`
+   * and drives the Writer through the same async path. Review-scoped (the re-request endpoint
+   * addresses the recommendation by review id).
+   */
+  reRequestRecommendation(
+    workspaceId: string,
+    reviewId: string,
+    recId: string,
+    note: string,
+  ): Promise<RequirementReview> {
+    return this.reviewGate.reRequestRecommendation(
+      this.requirementsKind,
+      workspaceId,
+      reviewId,
+      recId,
+      note,
+    )
   }
 
   /**

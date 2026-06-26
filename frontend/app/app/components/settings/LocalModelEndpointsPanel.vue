@@ -7,6 +7,7 @@
 // automatically in the per-workspace model picker. One endpoint per runner type.
 import { computed, ref, watch } from 'vue'
 import { LOCAL_RUNNER_DEFAULTS, LOCAL_RUNNER_LABELS, type LocalRunner } from '~/types/localModels'
+import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const ui = useUiStore()
 const store = useLocalModelsStore()
@@ -152,6 +153,15 @@ async function remove(p: LocalRunner) {
 
 <template>
   <UModal v-model:open="open" title="My local runners" :ui="{ content: 'max-w-2xl' }">
+    <template #title>
+      <IntegrationBackTitle
+        title="My local runners"
+        @back="
+          open = false
+          ui.openIntegrations()
+        "
+      />
+    </template>
     <template #body>
       <div class="space-y-4">
         <p class="text-xs text-slate-400">

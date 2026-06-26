@@ -10,6 +10,7 @@ import type { GitHubPullRequest, GitHubRepo } from '~/types/domain'
 // tag, so it silently renders as an empty element. Importing it directly binds
 // the tag unambiguously.
 import GitHubConnect from './GitHubConnect.vue'
+import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const ui = useUiStore()
 const github = useGitHubStore()
@@ -199,6 +200,15 @@ async function merge(pr: GitHubPullRequest) {
 
 <template>
   <UModal v-model:open="open" title="GitHub" :ui="{ content: 'max-w-2xl' }">
+    <template #title>
+      <IntegrationBackTitle
+        title="GitHub"
+        @back="
+          open = false
+          ui.openIntegrations()
+        "
+      />
+    </template>
     <template #body>
       <div class="space-y-5">
         <!-- not connected: connect -->

@@ -8,6 +8,7 @@
 // each row opens the issue on GitHub.
 import type { TaskSearchResult, TaskSourceKind } from '~/types/domain'
 import type { AddTaskPrefill } from '~/stores/ui'
+import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const ui = useUiStore()
 const tasks = useTasksStore()
@@ -195,6 +196,15 @@ async function doSpawnEpic() {
 
 <template>
   <UModal v-model:open="open" :title="title">
+    <template #title>
+      <IntegrationBackTitle
+        :title="title"
+        @back="
+          open = false
+          ui.openIntegrations()
+        "
+      />
+    </template>
     <template #body>
       <!-- Empty state: no source offered (none connected/installed, or all disabled) -->
       <div v-if="!tasks.anyOffered" class="space-y-3 text-center">
