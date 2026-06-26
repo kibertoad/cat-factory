@@ -93,7 +93,9 @@ export {
   PROMPT_VERSIONS,
   promptVersion,
   promptVersionLabel,
+  promptVersionForKind,
 } from './agents/kinds/versions.js'
+export { KAIZEN_SYSTEM_PROMPT } from './agents/prompts/kaizen.js'
 export {
   composeSystemPrompt,
   composeBlockSystemPrompt,

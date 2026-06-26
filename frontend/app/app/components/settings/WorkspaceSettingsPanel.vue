@@ -68,6 +68,7 @@ const draft = reactive({
   taskLimitShared: 5 as number,
   perType: {} as Record<CreateTaskType, number>,
   storeAgentContext: true,
+  kaizenEnabled: true,
   // Budget: empty string ⇒ "use the built-in default" (null on the wire).
   spendCurrency: '',
   spendMonthlyLimit: '',
@@ -82,6 +83,7 @@ function hydrate() {
   const pt = s.taskLimitPerType ?? {}
   for (const t of TASK_TYPES) draft.perType[t] = pt[t] ?? 3
   draft.storeAgentContext = s.storeAgentContext
+  draft.kaizenEnabled = s.kaizenEnabled
   draft.spendCurrency = s.spendCurrency ?? ''
   draft.spendMonthlyLimit = s.spendMonthlyLimit == null ? '' : String(s.spendMonthlyLimit)
   draft.spendModelPrices = s.spendModelPrices ? JSON.stringify(s.spendModelPrices, null, 2) : ''
@@ -109,6 +111,7 @@ async function save() {
             )
           : null,
       storeAgentContext: draft.storeAgentContext,
+      kaizenEnabled: draft.kaizenEnabled,
     })
     toast.add({ title: 'Settings saved', icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
@@ -249,6 +252,23 @@ async function saveBudget() {
               <label class="flex items-center gap-2">
                 <USwitch v-model="draft.storeAgentContext" size="sm" />
                 <span class="text-sm text-slate-200">Store full agent context</span>
+              </label>
+            </section>
+
+            <!-- Kaizen agent -->
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-slate-200">Kaizen agent</h3>
+              <p class="text-[11px] text-slate-400">
+                After each run completes, the Kaizen agent grades how every agent step went — smooth
+                and efficient vs confused and chaotic — and recommends prompt/model improvements. A
+                prompt + agent + model combination that grades highly with no recommendations five
+                times in a row is marked verified and is no longer graded. Grading runs in the
+                background and is shown inside run details and the Kaizen screen. Set the grader's
+                model in Model Configuration (the “Kaizen” agent).
+              </p>
+              <label class="flex items-center gap-2">
+                <USwitch v-model="draft.kaizenEnabled" size="sm" />
+                <span class="text-sm text-slate-200">Grade agent runs with Kaizen</span>
               </label>
             </section>
 

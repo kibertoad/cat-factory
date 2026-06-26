@@ -73,6 +73,10 @@ function errInfo(error: unknown): { message: string; stack?: string } {
 const SWEEP_LEASE_MS = 5 * 60 * 1000
 /** A GitHub projection is reconciled if it hasn't synced within this window. */
 const GITHUB_RECONCILE_STALE_MS = 30 * 60 * 1000
+/** A `running` Kaizen grading older than this is re-driven (its sweep crashed mid-flight). */
+const KAIZEN_STALE_MS = 10 * 60 * 1000
+/** Max Kaizen gradings to run per scheduled pass (each is an LLM call; keep the batch small). */
+const KAIZEN_SWEEP_BATCH = 5
 
 /** Queue name for GitHub webhook deliveries / resync jobs (see wrangler.toml). */
 const GITHUB_SYNC_QUEUE_NAME = 'cat-factory-github-sync'
@@ -284,6 +288,27 @@ export default {
             { cron: 'recurring-pipelines', err: errInfo(error) },
             'recurring-pipeline sweep failed',
           ),
+        ),
+    )
+
+    // Run any pending Kaizen gradings (every 2 min): the engine only inserts `scheduled`
+    // rows at run completion, so this background pass does the actual LLM grading (and
+    // re-drives `running` rows orphaned by a crashed sweep). Bounded per pass to stay
+    // within the cron budget; no-op when the Kaizen feature isn't wired. The grader's
+    // model is resolved per-workspace (Model Configuration), so this is workspace-wide.
+    ctx.waitUntil(
+      Promise.resolve(
+        buildContainer(env).kaizen?.service.runPending(
+          clock.now() - KAIZEN_STALE_MS,
+          KAIZEN_SWEEP_BATCH,
+        ),
+      )
+        .then((processed) => {
+          if (processed && processed > 0)
+            logger.info({ cron: 'kaizen-sweeper', processed }, 'ran pending kaizen gradings')
+        })
+        .catch((error) =>
+          logger.error({ cron: 'kaizen-sweeper', err: errInfo(error) }, 'kaizen sweep failed'),
         ),
     )
 

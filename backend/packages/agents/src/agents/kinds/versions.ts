@@ -5,6 +5,7 @@ import {
   WRITER_SYSTEM_PROMPT,
 } from '../prompts/requirements.js'
 import { CLARITY_REVIEW_SYSTEM_PROMPT, CLARITY_REWORK_SYSTEM_PROMPT } from '../prompts/clarity.js'
+import { KAIZEN_SYSTEM_PROMPT } from '../prompts/kaizen.js'
 
 // Versioned registry of the built-in agent system prompts. The goal is simple
 // change management: every prompt the product ships is identified as
@@ -33,10 +34,36 @@ export const PROMPT_VERSIONS = {
   'clarity-rework': { id: 'clarity-rework', version: 1, text: CLARITY_REWORK_SYSTEM_PROMPT },
   build: { id: 'build', version: 3, text: standardSystemPrompt('build') },
   review: { id: 'review', version: 2, text: standardSystemPrompt('review') },
+  kaizen: { id: 'kaizen', version: 1, text: KAIZEN_SYSTEM_PROMPT },
 } as const satisfies Record<string, VersionedPrompt>
 
 /** Ids of the prompts currently under version control. */
 export type PromptId = keyof typeof PROMPT_VERSIONS
+
+/**
+ * Best-effort map from an agent KIND to the versioned prompt id that drives it, for
+ * the kinds whose prompt is under version control. Kinds absent here have no numbered
+ * prompt yet and resolve to version 1 (see {@link promptVersionForKind}).
+ */
+const KIND_PROMPT_IDS: Record<string, PromptId> = {
+  coder: 'build',
+  build: 'build',
+  reviewer: 'review',
+  review: 'review',
+  'requirements-review': 'requirement-review',
+  clarity: 'clarity-review',
+}
+
+/**
+ * The prompt version for a step's agent kind, used as the "prompt" dimension of a
+ * Kaizen `(prompt, agent, model)` combo. Bumping a kind's numbered prompt (in
+ * {@link PROMPT_VERSIONS}) changes the combo key, so a previously-verified combo is
+ * re-graded against the new prompt. Kinds without a numbered prompt resolve to 1.
+ */
+export function promptVersionForKind(kind: string): number {
+  const id = KIND_PROMPT_IDS[kind]
+  return id ? PROMPT_VERSIONS[id].version : 1
+}
 
 /** The current versioned prompt for an id. */
 export function promptVersion(id: PromptId): VersionedPrompt {

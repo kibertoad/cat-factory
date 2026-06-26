@@ -10,6 +10,7 @@ const DEFAULTS: WorkspaceSettings = {
   taskLimitShared: null,
   taskLimitPerType: null,
   storeAgentContext: true,
+  kaizenEnabled: true,
   spendCurrency: null,
   spendMonthlyLimit: null,
   spendModelPrices: null,

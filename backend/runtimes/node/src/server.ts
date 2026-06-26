@@ -20,6 +20,7 @@ import { startExecutionWorker, startStaleRunSweeper } from './execution/pgBossRu
 import { startBootstrapWorker } from './execution/bootstrapRunner.js'
 import { startEnvironmentSweeper } from './environments.js'
 import { startScheduleSweeper } from './recurring.js'
+import { startKaizenSweeper } from './kaizen.js'
 import { startNotificationEscalationSweeper } from './notifications.js'
 import { NodeRealtimeHub, attachRealtime } from './realtime.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
@@ -161,6 +162,9 @@ export async function start(
   // Escalate long-waiting notifications yellow → red (the Worker uses cron); the
   // overdue-human signal now that runs never time out waiting for input.
   const stopNotificationEscalation = startNotificationEscalationSweeper(container, clock, logger)
+  // Run pending Kaizen gradings on a one-minute timer (the Worker uses cron); no-op
+  // unless the Kaizen feature is wired.
+  const stopKaizenSweeper = startKaizenSweeper(container, clock, logger)
 
   const app = createApp(container, env)
   const port = Number(env.PORT ?? 8787)
@@ -185,6 +189,7 @@ export async function start(
     stopScheduleSweeper()
     stopEnvironmentSweeper()
     stopNotificationEscalation()
+    stopKaizenSweeper()
     stopRealtime()
     await new Promise<void>((resolve) => server.close(() => resolve()))
     try {

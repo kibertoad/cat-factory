@@ -309,6 +309,9 @@ export type AgentKind =
   // validate the change in a live URL, dispatching the Tester's `fixer` (from findings) or
   // the `conflict-resolver` (on a conflicting pull-main) on demand. Opens its own window.
   | 'human-test'
+  // The Kaizen agent: post-run grader (NOT a pipeline step / palette archetype). Surfaced
+  // only in Model Configuration (its model is pinnable like any agent) and run details.
+  | 'kaizen'
 
 /** A draggable agent definition shown in the agent palette. */
 /** Palette grouping for the agent archetypes (collapsible sections in the builder). */
@@ -495,6 +498,8 @@ export interface WorkspaceSettings {
   taskLimitPerType: Partial<Record<CreateTaskType, number>> | null
   /** Whether to store the complete provided-context snapshot for each container agent. */
   storeAgentContext: boolean
+  /** Whether the Kaizen agent grades agent steps after each run. On by default. */
+  kaizenEnabled: boolean
   /** Spend budget currency (ISO 4217). Null ⇒ the built-in default (`EUR`). */
   spendCurrency: string | null
   /** Monthly spend budget in `spendCurrency`. Null ⇒ the built-in default. */
@@ -510,6 +515,7 @@ export interface UpdateWorkspaceSettingsInput {
   taskLimitShared?: number | null
   taskLimitPerType?: Partial<Record<CreateTaskType, number>> | null
   storeAgentContext?: boolean
+  kaizenEnabled?: boolean
   spendCurrency?: string | null
   spendMonthlyLimit?: number | null
   spendModelPrices?: Record<string, { inputPerMillion: number; outputPerMillion: number }> | null
@@ -521,6 +527,50 @@ export interface UpdateWorkspaceSettingsInput {
  */
 export interface ServiceFragmentDefaults {
   fragmentIds: string[]
+}
+
+/** Lifecycle of a Kaizen grading. Mirrors `@cat-factory/contracts`. */
+export type KaizenGradingStatus = 'scheduled' | 'running' | 'complete' | 'failed'
+
+/**
+ * A Kaizen grading of one completed agent step (how smooth/efficient the interaction
+ * was, 1..5, plus recommendations). Mirrors `@cat-factory/contracts`.
+ */
+export interface KaizenGrading {
+  id: string
+  executionId: string
+  blockId: string
+  stepIndex: number
+  agentKind: string
+  model: string
+  promptVersion: number
+  comboKey: string
+  status: KaizenGradingStatus
+  grade: number | null
+  summary: string
+  recommendations: string[]
+  graderModel: string | null
+  error: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+/** A `(promptVersion, agentKind, model)` combo's verification progress. */
+export interface KaizenVerifiedCombo {
+  comboKey: string
+  agentKind: string
+  model: string
+  promptVersion: number
+  consecutiveHighGrades: number
+  verified: boolean
+  verifiedAt: number | null
+  updatedAt: number
+}
+
+/** The Kaizen screen payload: recent grading history + the verified-combo library. */
+export interface KaizenOverview {
+  gradings: KaizenGrading[]
+  verified: KaizenVerifiedCombo[]
 }
 
 /**
@@ -536,6 +586,7 @@ export type WorkspaceEvent =
   | { type: 'requirements'; review: RequirementReview; at: number }
   | { type: 'consensus'; session: ConsensusSession; at: number }
   | { type: 'clarity'; review: ClarityReview; at: number }
+  | { type: 'kaizen'; grading: KaizenGrading; at: number }
 
 /** Level-of-detail buckets driven by the canvas zoom level. Shallow → deep:
  * `far`/`mid`/`close` govern a service frame (chip → card → opened with tasks);
