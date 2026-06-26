@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { decideTesterInfra, type TesterInfraInput } from './tester-infra.logic.js'
+import {
+  decideTesterInfra,
+  resolveTesterEnvironment,
+  type TesterInfraInput,
+} from './tester-infra.logic.js'
 
 const base: TesterInfraInput = {
   localTestInfraSupported: true,
@@ -7,6 +11,7 @@ const base: TesterInfraInput = {
   noInfraDependencies: false,
   hasComposePath: false,
   hasEnvironmentProvider: false,
+  requireEnvironmentProvider: false,
 }
 
 describe('decideTesterInfra', () => {
@@ -32,6 +37,30 @@ describe('decideTesterInfra', () => {
         ok: false,
         reason: 'local-unconfigured',
       })
+    })
+
+    it('passes an ephemeral task that requires a provider when one is connected', () => {
+      expect(
+        decideTesterInfra({
+          ...base,
+          environment: 'ephemeral',
+          requireEnvironmentProvider: true,
+          hasEnvironmentProvider: true,
+        }),
+      ).toEqual({ ok: true })
+    })
+
+    it('refuses an ephemeral task that requires a provider when none is connected', () => {
+      // The local-mode "delegate test environments" opt-in: a capable runtime would
+      // otherwise pass ephemeral and fail later at provision time.
+      expect(
+        decideTesterInfra({
+          ...base,
+          environment: 'ephemeral',
+          requireEnvironmentProvider: true,
+          hasEnvironmentProvider: false,
+        }),
+      ).toEqual({ ok: false, reason: 'ephemeral-no-provider' })
     })
   })
 
@@ -62,5 +91,32 @@ describe('decideTesterInfra', () => {
         reason: 'limited-ephemeral-no-provider',
       })
     })
+  })
+})
+
+describe('resolveTesterEnvironment', () => {
+  it('honours a task pin over everything', () => {
+    expect(resolveTesterEnvironment('local', 'ephemeral', 'ephemeral')).toBe('local')
+    expect(resolveTesterEnvironment('ephemeral', 'local', 'local')).toBe('ephemeral')
+  })
+
+  it('falls back to the service default when the task has no pin', () => {
+    expect(resolveTesterEnvironment(undefined, 'local', 'ephemeral')).toBe('local')
+    expect(resolveTesterEnvironment(undefined, 'ephemeral', 'local')).toBe('ephemeral')
+  })
+
+  it('falls back to the deployment fallback when neither task nor service pins', () => {
+    // Local mode passes `local` (host Docker / DinD) by default…
+    expect(resolveTesterEnvironment(undefined, undefined, 'local')).toBe('local')
+    // …flipping to `ephemeral` when the workspace opts into its provider.
+    expect(resolveTesterEnvironment(undefined, undefined, 'ephemeral')).toBe('ephemeral')
+  })
+
+  it('defaults the fallback to `ephemeral` (Cloudflare/Node) when omitted', () => {
+    expect(resolveTesterEnvironment(undefined, undefined)).toBe('ephemeral')
+  })
+
+  it('ignores an unrecognised task value and falls through', () => {
+    expect(resolveTesterEnvironment('garbage', undefined, 'local')).toBe('local')
   })
 })

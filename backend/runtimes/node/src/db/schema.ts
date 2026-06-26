@@ -942,6 +942,12 @@ export const workspaceSettings = pgTable('workspace_settings', {
   // Per-workspace toggle for the Kaizen agent (post-run grading). On by default; integer
   // 0/1 to match the SQLite store.
   kaizen_enabled: integer('kaizen_enabled').notNull().default(1),
+  // LOCAL MODE ONLY toggles (inert on Cloudflare/Node): delegate container agents to the
+  // workspace's runner pool, and/or the Tester's ephemeral environments to the registered
+  // environment provider, instead of the host container runtime / in-container DinD. Off by
+  // default; integer 0/1 to match the SQLite store.
+  delegate_agents_to_runner_pool: integer('delegate_agents_to_runner_pool').notNull().default(0),
+  delegate_test_env_to_provider: integer('delegate_test_env_to_provider').notNull().default(0),
   // Per-workspace spend budget (moved out of env). Both nullable; null ⇒ the built-in
   // DEFAULT_SPEND_PRICING base table.
   spend_currency: text('spend_currency'),

@@ -3207,6 +3207,8 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
       taskLimitPerType: perType,
       storeAgentContext: row.store_agent_context === 1,
       kaizenEnabled: row.kaizen_enabled === 1,
+      delegateAgentsToRunnerPool: row.delegate_agents_to_runner_pool === 1,
+      delegateTestEnvToProvider: row.delegate_test_env_to_provider === 1,
       spendCurrency: row.spend_currency,
       spendMonthlyLimit: row.spend_monthly_limit,
     }
@@ -3223,6 +3225,8 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
         : null,
       store_agent_context: settings.storeAgentContext ? 1 : 0,
       kaizen_enabled: settings.kaizenEnabled ? 1 : 0,
+      delegate_agents_to_runner_pool: settings.delegateAgentsToRunnerPool ? 1 : 0,
+      delegate_test_env_to_provider: settings.delegateTestEnvToProvider ? 1 : 0,
       spend_currency: settings.spendCurrency,
       spend_monthly_limit: settings.spendMonthlyLimit,
     }
@@ -3238,6 +3242,8 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
           task_limit_per_type: values.task_limit_per_type,
           store_agent_context: values.store_agent_context,
           kaizen_enabled: values.kaizen_enabled,
+          delegate_agents_to_runner_pool: values.delegate_agents_to_runner_pool,
+          delegate_test_env_to_provider: values.delegate_test_env_to_provider,
           spend_currency: values.spend_currency,
           spend_monthly_limit: values.spend_monthly_limit,
         },

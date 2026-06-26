@@ -512,6 +512,10 @@ export interface WorkspaceSettings {
   storeAgentContext: boolean
   /** Whether the Kaizen agent grades agent steps after each run. On by default. */
   kaizenEnabled: boolean
+  /** Local mode only: dispatch container agents to the runner pool instead of host Docker. */
+  delegateAgentsToRunnerPool: boolean
+  /** Local mode only: provision Tester environments via the env provider instead of DinD. */
+  delegateTestEnvToProvider: boolean
   /** Spend budget currency (ISO 4217). Null ⇒ the built-in default (`EUR`). */
   spendCurrency: string | null
   /** Monthly spend budget in `spendCurrency`. Null ⇒ the built-in default. */
@@ -526,6 +530,8 @@ export interface UpdateWorkspaceSettingsInput {
   taskLimitPerType?: Partial<Record<CreateTaskType, number>> | null
   storeAgentContext?: boolean
   kaizenEnabled?: boolean
+  delegateAgentsToRunnerPool?: boolean
+  delegateTestEnvToProvider?: boolean
   spendCurrency?: string | null
   spendMonthlyLimit?: number | null
 }

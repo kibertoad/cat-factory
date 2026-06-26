@@ -171,6 +171,7 @@ import {
   decideTesterInfra,
   resolveTesterEnvironment,
   TESTER_INFRA_MESSAGES,
+  type TesterEnvironment,
 } from './tester-infra.logic.js'
 
 /**
@@ -433,6 +434,29 @@ export interface ExecutionServiceDependencies {
    * Absent (tests / GitHub not connected) → pre/post-ops are skipped.
    */
   resolveRunRepoContext?: ResolveRunRepoContext
+  /**
+   * Optional: the deployment's default Tester environment when neither the task nor its
+   * service frame pins one — the floor of {@link resolveTesterEnvironment}. Absent →
+   * `ephemeral` (Cloudflare/Node, where there is no host runtime to test on). The local
+   * facade wires it to `local` (host Docker / DinD) by default, flipping to `ephemeral`
+   * when the workspace opts into its environment provider (`delegateTestEnvToProvider`).
+   * Used identically by the start gate and the agent-context materialisation so they agree.
+   */
+  resolveTesterFallbackDefault?: (workspaceId: string) => Promise<TesterEnvironment>
+  /**
+   * Optional: whether the workspace REQUIRES its environment provider for the Tester (the
+   * local-mode "delegate test environments" opt-in). When it resolves true, an `ephemeral`
+   * Tester run with no provider connected is refused at start instead of failing later at
+   * provision time. Absent → false (Cloudflare/Node).
+   */
+  resolveRequireEnvironmentProvider?: (workspaceId: string) => Promise<boolean>
+  /**
+   * Optional: assert the workspace has a usable container-agent backend before a run
+   * starts (local mode delegating agents to a runner pool that isn't registered throws a
+   * clean {@link ConflictError} here). Absent → no start-time check (Cloudflare/Node have
+   * a fixed backend; a missing local pool still fails loudly at dispatch).
+   */
+  assertAgentBackendConfigured?: (workspaceId: string) => Promise<void>
 }
 
 /** Reconciles a Blueprinter step's tree onto the board in place (BoardScanService). */
@@ -519,6 +543,14 @@ export class ExecutionService {
    * without a checkout. Absent (tests / GitHub not connected) → pre/post-ops are skipped.
    */
   private readonly resolveRunRepoContext?: ResolveRunRepoContext
+  /** Local-mode floor for the Tester environment (default `ephemeral`). See deps doc. */
+  private readonly resolveTesterFallbackDefault?: (
+    workspaceId: string,
+  ) => Promise<TesterEnvironment>
+  /** Whether the workspace requires its env provider for the Tester (local-mode opt-in). */
+  private readonly resolveRequireEnvironmentProvider?: (workspaceId: string) => Promise<boolean>
+  /** Start-time assertion that a container-agent backend is configured (local-mode pool). */
+  private readonly assertAgentBackendConfigured?: (workspaceId: string) => Promise<void>
   /** Lazily-built polling-gate registry, keyed by `agentKind`. See {@link gateFor}. */
   private gateRegistryCache?: Map<string, GateDefinition>
   /**
@@ -566,6 +598,9 @@ export class ExecutionService {
     resolveProviderCapabilities,
     localTestInfraSupported,
     resolveRunRepoContext,
+    resolveTesterFallbackDefault,
+    resolveRequireEnvironmentProvider,
+    assertAgentBackendConfigured,
     runInitiatorScope,
   }: ExecutionServiceDependencies) {
     this.runInitiatorScope = runInitiatorScope ?? ((_initiatedBy, fn) => fn())
@@ -599,6 +634,7 @@ export class ExecutionService {
       brainstormSessions: brainstormSessionRepository,
       environmentProvisioning,
       fragmentResolver,
+      resolveTesterFallbackDefault,
     })
     this.mergeResolver = new MergeResolver({
       blockRepository,
@@ -719,6 +755,9 @@ export class ExecutionService {
     this.resolveProviderCapabilities = resolveProviderCapabilities
     this.localTestInfraSupported = localTestInfraSupported ?? true
     this.resolveRunRepoContext = resolveRunRepoContext
+    this.resolveTesterFallbackDefault = resolveTesterFallbackDefault
+    this.resolveRequireEnvironmentProvider = resolveRequireEnvironmentProvider
+    this.assertAgentBackendConfigured = assertAgentBackendConfigured
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -810,9 +849,11 @@ export class ExecutionService {
     // which the task inherits unless it pins its own `tester.environment` (the same
     // resolution the agent-context materialisation applies, so the gate and the run agree).
     const service = await this.contextBuilder.resolveServiceConfig(workspaceId, block)
+    const fallbackDefault = await this.resolveTesterFallbackDefault?.(workspaceId)
     const environment = resolveTesterEnvironment(
       block.agentConfig?.['tester.environment'],
       service?.defaultTestEnvironment,
+      fallbackDefault,
     )
     const decision = decideTesterInfra({
       localTestInfraSupported: this.localTestInfraSupported,
@@ -820,6 +861,8 @@ export class ExecutionService {
       noInfraDependencies: service?.noInfraDependencies === true,
       hasComposePath: !!service?.testComposePath,
       hasEnvironmentProvider: this.environmentProvisioning !== undefined,
+      requireEnvironmentProvider:
+        (await this.resolveRequireEnvironmentProvider?.(workspaceId)) === true,
     })
     if (decision.ok) return
     throw new ConflictError(TESTER_INFRA_MESSAGES[decision.reason], 'tester_infra_unsupported', {
@@ -963,6 +1006,11 @@ export class ExecutionService {
     if (pipeline.agentKinds.includes(TESTER_AGENT_KIND)) {
       await this.assertTesterInfraConfigured(workspaceId, block)
     }
+
+    // Block the start when the workspace delegates container agents to a runner pool that
+    // isn't registered (local mode opt-in). No-op on Cloudflare/Node (fixed backend) and
+    // when delegation is off; a missing local pool still also fails loudly at dispatch.
+    await this.assertAgentBackendConfigured?.(workspaceId)
 
     // Block the start when a step's canonical model has no usable provider (no direct
     // key, no subscription, no Cloudflare) — before any side effects.

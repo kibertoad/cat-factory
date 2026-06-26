@@ -20,6 +20,7 @@ import { CODE_AWARE_TRAIT, hasTrait } from '@cat-factory/agents'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { extractReferences } from '@cat-factory/integrations'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
+import { resolveTesterEnvironment, type TesterEnvironment } from './tester-infra.logic.js'
 
 /**
  * The `revision` slice of an agent context when a step is being re-run with feedback
@@ -91,6 +92,13 @@ export interface AgentContextBuilderDeps {
    * pool, so curated and living-document fragments actually reach a run.
    */
   fragmentResolver?: FragmentBodyResolver
+  /**
+   * Optional: the deployment's default Tester environment when neither the task nor its
+   * service frame pins one (the floor of {@link resolveTesterEnvironment}). Absent →
+   * `ephemeral`. MUST match the resolver `ExecutionService` uses for its start-time infra
+   * gate, so the materialised value the job runs with agrees with what the gate checked.
+   */
+  resolveTesterFallbackDefault?: (workspaceId: string) => Promise<TesterEnvironment>
 }
 
 /**
@@ -146,10 +154,21 @@ export class AgentContextBuilder {
     // agentConfig so the Tester job body, the prompt fragment and the start-time infra
     // gate all read the same value — the stored block is left untouched (the per-task
     // override stays explicit).
-    const agentConfig =
-      service?.defaultTestEnvironment && !block.agentConfig?.['tester.environment']
-        ? { ...block.agentConfig, 'tester.environment': service.defaultTestEnvironment }
-        : block.agentConfig
+    // Resolve the effective environment (task pin > service default > deployment fallback)
+    // and materialise it when the task hasn't pinned its own, so the Tester job body, the
+    // prompt fragment and the start-time infra gate all read the SAME value. The fallback
+    // (local mode: `local` by default, `ephemeral` when delegating to a provider) is the
+    // same resolver the gate uses, so the run can't disagree with what was checked at start.
+    const agentConfig = block.agentConfig?.['tester.environment']
+      ? block.agentConfig
+      : {
+          ...block.agentConfig,
+          'tester.environment': resolveTesterEnvironment(
+            undefined,
+            service?.defaultTestEnvironment,
+            await this.deps.resolveTesterFallbackDefault?.(workspaceId),
+          ),
+        }
     // A finalized architecture-brainstorm direction is surfaced ADDITIVELY (it does not
     // replace the description) as a synthetic prior output so the architect and downstream
     // agents read it as context — the brainstorm session's converged direction feeding the

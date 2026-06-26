@@ -10,18 +10,22 @@ export type TesterEnvironment = 'local' | 'ephemeral'
 
 /**
  * Resolve a task's effective Tester environment from its own pinned choice, falling back
- * to the service frame's default, then the built-in `ephemeral`. This is the inheritance
- * the UI promises: the service sets the default a task is spawned with, the task's own
- * `tester.environment` config (when set) overrides it. Pure so both the start-time gate
- * and the agent-context materialisation agree on one answer.
+ * to the service frame's default, then a deployment-supplied `fallbackDefault` (built-in
+ * `ephemeral`). This is the inheritance the UI promises: the service sets the default a
+ * task is spawned with, the task's own `tester.environment` config (when set) overrides
+ * it. The fallback lets a facade choose the floor — local mode passes `local` (host
+ * Docker / DinD) by default, flipping to `ephemeral` only when the workspace opts into
+ * its environment provider. Pure so both the start-time gate and the agent-context
+ * materialisation agree on one answer.
  */
 export function resolveTesterEnvironment(
   taskValue: string | undefined,
   serviceDefault: TesterEnvironment | undefined,
+  fallbackDefault: TesterEnvironment = 'ephemeral',
 ): TesterEnvironment {
   if (taskValue === 'local' || taskValue === 'ephemeral') return taskValue
   if (serviceDefault === 'local' || serviceDefault === 'ephemeral') return serviceDefault
-  return 'ephemeral'
+  return fallbackDefault
 }
 
 export interface TesterInfraInput {
@@ -35,6 +39,13 @@ export interface TesterInfraInput {
   hasComposePath: boolean
   /** An ephemeral-environment provider is wired (so a deployed URL can be provisioned). */
   hasEnvironmentProvider: boolean
+  /**
+   * The workspace REQUIRES the ephemeral provider for the Tester (the local-mode
+   * "delegate test environments" opt-in). On a capable runtime an `ephemeral` run would
+   * otherwise pass even with no provider connected (and fail later at provision time);
+   * when this is set we refuse it up front instead. False on Cloudflare/Node.
+   */
+  requireEnvironmentProvider: boolean
 }
 
 export type TesterInfraDecision =
@@ -45,6 +56,8 @@ export type TesterInfraDecision =
   | { ok: false; reason: 'limited-ephemeral-no-provider' }
   // A capable runtime with a `local` task whose service has neither compose path nor no-infra.
   | { ok: false; reason: 'local-unconfigured' }
+  // The workspace delegates Tester envs to its provider, but none is connected.
+  | { ok: false; reason: 'ephemeral-no-provider' }
 
 /**
  * Decide whether a Tester pipeline may start.
@@ -66,7 +79,11 @@ export function decideTesterInfra(input: TesterInfraInput): TesterInfraDecision 
       : { ok: false, reason: 'limited-ephemeral-no-provider' }
   }
 
-  if (input.environment !== 'local') return { ok: true }
+  if (input.environment !== 'local') {
+    return !input.requireEnvironmentProvider || input.hasEnvironmentProvider
+      ? { ok: true }
+      : { ok: false, reason: 'ephemeral-no-provider' }
+  }
   return input.noInfraDependencies || input.hasComposePath
     ? { ok: true }
     : { ok: false, reason: 'local-unconfigured' }
@@ -91,4 +108,8 @@ export const TESTER_INFRA_MESSAGES: Record<
     "This task's pipeline runs the Tester locally, but its service has no test infra " +
     "configured. Set the service's docker-compose path, or mark it as having no infra " +
     'dependencies, before starting — or switch the Tester to the ephemeral environment.',
+  'ephemeral-no-provider':
+    'This workspace is set to run Tester environments on its registered environment ' +
+    'provider, but none is connected. Connect one (Settings → Ephemeral environments) or ' +
+    'turn delegation off to test locally, before starting.',
 }

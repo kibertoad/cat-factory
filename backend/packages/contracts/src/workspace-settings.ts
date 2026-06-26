@@ -70,6 +70,22 @@ export const workspaceSettingsSchema = v.object({
    * scheduled (existing history + verified combos are retained, just not extended).
    */
   kaizenEnabled: v.boolean(),
+  /**
+   * LOCAL MODE ONLY. Whether container agents dispatch to the workspace's registered
+   * self-hosted runner pool instead of the host container runtime (Docker/Podman/…).
+   * Off by default (local-everything is the default). Meaningful only in local mode —
+   * on the Cloudflare/Node facades agents always run on their fixed backend, so this is
+   * inert there. Enabling it with no runner pool registered fails the run loudly.
+   */
+  delegateAgentsToRunnerPool: v.boolean(),
+  /**
+   * LOCAL MODE ONLY. Whether the Tester provisions ephemeral environments via the
+   * workspace's registered environment provider instead of standing infra up locally
+   * with in-container docker-compose (DinD). Off by default. When on it sets the
+   * local-mode default Tester environment to `ephemeral` (per-service/per-task choices
+   * still win); a run is refused if no provider is connected. Inert outside local mode.
+   */
+  delegateTestEnvToProvider: v.boolean(),
   /** Spend budget currency (ISO 4217). Null ⇒ the built-in default (`EUR`). */
   spendCurrency: v.nullable(spendCurrencySchema),
   /**
@@ -97,6 +113,8 @@ export const updateWorkspaceSettingsSchema = v.object({
   taskLimitPerType: v.optional(v.nullable(taskLimitPerTypeSchema)),
   storeAgentContext: v.optional(v.boolean()),
   kaizenEnabled: v.optional(v.boolean()),
+  delegateAgentsToRunnerPool: v.optional(v.boolean()),
+  delegateTestEnvToProvider: v.optional(v.boolean()),
   spendCurrency: v.optional(v.nullable(spendCurrencySchema)),
   spendMonthlyLimit: v.optional(v.nullable(v.pipe(v.number(), v.minValue(0)))),
 })
