@@ -10,6 +10,7 @@
   "files": [
     "dist",
     "migrations",
+    "telemetry-migrations",
     "sandbox-migrations",
     "migrations-provisioning"
   ],

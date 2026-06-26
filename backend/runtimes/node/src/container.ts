@@ -57,6 +57,7 @@ import {
   CompositeNotificationChannel,
 } from '@cat-factory/kernel'
 import {
+  AgentContextObservabilityService,
   type CoreDependencies,
   createCore,
   resolvePresetModelForKind,
@@ -527,6 +528,7 @@ function buildNodeContainerExecutor(
   personalSubscriptions?: PersonalSubscriptionService,
   resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>,
   resolveUserGitHubToken?: ResolveUserGitHubToken,
+  agentContextObservability?: AgentContextObservabilityService,
   resolveWebSearchEnabled?: (workspaceId: string) => Promise<boolean>,
 ): AgentExecutor | null {
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
@@ -608,6 +610,8 @@ function buildNodeContainerExecutor(
     // Forward container tool spans to Langfuse (when configured) as child spans under
     // the run trace — the same sink the LLM proxy fans generations out to.
     llmTraceSink: buildLangfuseSink(config),
+    // Record the complete provided context per dispatch (best-effort, gated in the sink).
+    ...(agentContextObservability ? { agentContextObservability } : {}),
   })
 }
 
@@ -1005,6 +1009,18 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     idGenerator,
     clock,
   )
+  // Agent-context observability sink: records the complete, redacted context provided
+  // to each container agent (composed prompts + folded-in fragments + injected files).
+  // Gated by the deployment prompt-recording switch + the workspace storeAgentContext
+  // setting. Wired into the executor (write) AND createCore (read). The telemetry rows
+  // live in the `telemetry` Postgres schema (see schema.ts).
+  const agentContextObservability = new AgentContextObservabilityService({
+    agentContextSnapshotRepository: repos.agentContextSnapshotRepository,
+    workspaceSettingsRepository: repos.workspaceSettingsRepository,
+    idGenerator,
+    clock,
+    recordPrompts: config.observability.recordPrompts,
+  })
   // Web-search keys live per-account; advertise Pi's `web_search` tool to a run only when
   // its account actually has a usable upstream (else the tool would just fail/return
   // nothing). Resolved per run off a dedicated account-settings instance (short-TTL cache).
@@ -1038,6 +1054,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     personalSubscriptions,
     (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
     resolveUserGitHubToken,
+    agentContextObservability,
     resolveWebSearchEnabled,
   )
 
@@ -1381,6 +1398,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // into the env services and exposes the read service for the logs controller.
     provisioningLogRepository: repos.provisioningLogRepository,
     recordLlmPrompts: config.observability.recordPrompts,
+    // Re-exposed on the core for the agent-context read endpoint; the same instance
+    // is injected into the container executor above for the write path.
+    agentContextObservability,
     // Opt-in Langfuse trace sink (fans every recorded LLM call out as a generation).
     // Built only when configured; otherwise undefined and there is no external emission.
     llmTraceSink: buildLangfuseSink(config),

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
-import type { LlmCallMetric } from '~/types/execution'
+import type { AgentContextSnapshot, LlmCallMetric } from '~/types/execution'
 import { agentKindMeta } from '~/utils/catalog'
 import { formatMs, formatTokens, pct } from '~/utils/observability'
 
@@ -32,10 +32,37 @@ const error = computed(() =>
   executionId.value ? (observability.errors[executionId.value] ?? null) : null,
 )
 
-// Load (and refresh) whenever a different run's panel opens.
+// Which view is shown: the per-call model activity, or the complete provided context.
+const view = ref<'calls' | 'context'>('calls')
+
+const contextSnapshots = computed<AgentContextSnapshot[]>(() =>
+  executionId.value ? observability.contextFor(executionId.value) : [],
+)
+const contextLoading = computed(
+  () => !!executionId.value && observability.isContextLoading(executionId.value),
+)
+
+// Load (and refresh) whenever a different run's panel opens. Reset to the calls view
+// and load both the calls and the provided-context snapshots.
 watch(executionId, (id) => {
-  if (id) void observability.load(id)
+  if (id) {
+    view.value = 'calls'
+    void observability.load(id)
+    void observability.loadContext(id)
+  }
 })
+
+const expandedCtx = reactive<Record<string, boolean>>({})
+function toggleCtx(s: AgentContextSnapshot) {
+  expandedCtx[s.id] = !expandedCtx[s.id]
+}
+function prettyExtras(extras: Record<string, unknown>): string {
+  try {
+    return JSON.stringify(extras, null, 2)
+  } catch {
+    return String(extras)
+  }
+}
 
 // Run-level totals, derived from the loaded calls.
 const totals = computed(() => {
@@ -124,7 +151,32 @@ function exportJson() {
             </p>
           </div>
           <div class="ml-auto flex items-center gap-1.5">
+            <div class="mr-1 flex rounded-lg border border-slate-800 p-0.5 text-[12px]">
+              <button
+                class="rounded-md px-2.5 py-1 transition"
+                :class="
+                  view === 'calls'
+                    ? 'bg-slate-800 text-slate-100'
+                    : 'text-slate-400 hover:text-slate-200'
+                "
+                @click="view = 'calls'"
+              >
+                Model activity
+              </button>
+              <button
+                class="rounded-md px-2.5 py-1 transition"
+                :class="
+                  view === 'context'
+                    ? 'bg-slate-800 text-slate-100'
+                    : 'text-slate-400 hover:text-slate-200'
+                "
+                @click="view = 'context'"
+              >
+                Provided context
+              </button>
+            </div>
             <UButton
+              v-if="view === 'calls'"
               icon="i-lucide-download"
               color="neutral"
               variant="soft"
@@ -148,7 +200,7 @@ function exportJson() {
         </header>
 
         <div class="flex-1 overflow-auto px-6 py-6">
-          <div class="mx-auto max-w-4xl space-y-5">
+          <div v-if="view === 'calls'" class="mx-auto max-w-4xl space-y-5">
             <!-- run-level summary -->
             <section class="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
               <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-[13px] sm:grid-cols-4">
@@ -327,6 +379,126 @@ function exportJson() {
                     <pre
                       class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-400"
                       >{{ c.reasoningText }}</pre
+                    >
+                  </div>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Provided context: the complete context each container agent was given. -->
+          <div v-else class="mx-auto max-w-4xl space-y-5">
+            <p
+              v-if="contextLoading && !contextSnapshots.length"
+              class="flex items-center justify-center gap-2 py-8 text-center text-sm text-slate-500"
+            >
+              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" /> Loading provided
+              context…
+            </p>
+            <p
+              v-else-if="!contextSnapshots.length"
+              class="rounded-lg border border-dashed border-slate-800 py-8 text-center text-sm text-slate-500"
+            >
+              No agent context stored for this run. It is captured per dispatch when the workspace
+              has "Store full agent context" enabled.
+            </p>
+
+            <ul v-else class="space-y-2">
+              <li
+                v-for="s in contextSnapshots"
+                :key="s.id"
+                class="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40"
+              >
+                <button
+                  class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-slate-900/70"
+                  @click="toggleCtx(s)"
+                >
+                  <UIcon
+                    name="i-lucide-chevron-right"
+                    class="h-4 w-4 shrink-0 text-slate-500 transition-transform"
+                    :class="expandedCtx[s.id] ? 'rotate-90' : ''"
+                  />
+                  <UIcon
+                    :name="agentMeta(s.agentKind).icon"
+                    class="h-4 w-4 shrink-0"
+                    :style="{ color: agentMeta(s.agentKind).color }"
+                  />
+                  <span class="text-[13px] text-slate-200">{{ agentMeta(s.agentKind).label }}</span>
+                  <span v-if="s.model" class="hidden truncate text-[11px] text-slate-500 sm:inline">
+                    {{ s.model }}
+                  </span>
+                  <div
+                    class="ml-auto flex items-center gap-2.5 text-[11px] tabular-nums text-slate-400"
+                  >
+                    <span :title="'Injected context files'">{{ s.contextFiles.length }} files</span>
+                    <span :title="'Best-practice fragments'"
+                      >{{ s.fragments.length }} fragments</span
+                    >
+                    <span class="hidden text-slate-600 md:inline">{{ clock(s.createdAt) }}</span>
+                  </div>
+                </button>
+
+                <div v-if="expandedCtx[s.id]" class="border-t border-slate-800 px-4 py-3 space-y-3">
+                  <div>
+                    <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+                      System prompt
+                    </div>
+                    <pre
+                      class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
+                      >{{ s.systemPrompt || '—' }}</pre
+                    >
+                  </div>
+                  <div>
+                    <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+                      User prompt
+                    </div>
+                    <pre
+                      class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
+                      >{{ s.userPrompt || '—' }}</pre
+                    >
+                  </div>
+                  <div v-if="s.fragments.length">
+                    <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+                      Best-practice fragments
+                    </div>
+                    <div
+                      v-for="f in s.fragments"
+                      :key="f.id"
+                      class="mb-2 rounded-lg bg-slate-950/70 p-3"
+                    >
+                      <div class="mb-1 text-[11px] text-slate-400">{{ f.id }}</div>
+                      <pre
+                        class="max-h-48 overflow-auto text-[11px] leading-relaxed text-slate-300"
+                        >{{ f.body }}</pre
+                      >
+                    </div>
+                  </div>
+                  <div v-if="s.contextFiles.length">
+                    <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+                      Injected context files
+                    </div>
+                    <div
+                      v-for="file in s.contextFiles"
+                      :key="file.path"
+                      class="mb-2 rounded-lg bg-slate-950/70 p-3"
+                    >
+                      <div class="mb-1 text-[11px] text-slate-400">
+                        {{ file.title }}
+                        <span class="text-slate-600">· {{ file.path }}</span>
+                      </div>
+                      <pre
+                        class="max-h-72 overflow-auto text-[11px] leading-relaxed text-slate-300"
+                        >{{ file.content }}</pre
+                      >
+                    </div>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+                      Details
+                    </div>
+                    <pre
+                      class="max-h-48 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-400"
+                      >{{ prettyExtras(s.extras) }}</pre
                     >
                   </div>
                 </div>

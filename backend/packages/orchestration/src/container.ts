@@ -107,6 +107,7 @@ import { EmailConnectionService } from '@cat-factory/integrations'
 import { SpendService, DEFAULT_SPEND_PRICING, type SpendPricing } from '@cat-factory/spend'
 import type { OpenRouterModelMeta } from '@cat-factory/contracts'
 import { LlmObservabilityService } from './modules/observability/LlmObservabilityService.js'
+import { AgentContextObservabilityService } from './modules/observability/AgentContextObservabilityService.js'
 import {
   GitHubInstallationService,
   RepoProvisioningService,
@@ -232,6 +233,13 @@ export interface CoreDependencies {
    * `llmCallMetricRepository` is wired.
    */
   recordLlmPrompts?: boolean
+  /**
+   * Agent-context observability sink, built by the facade (it needs the same
+   * snapshot repository the executor records through). When present the engine
+   * re-exposes it for the read endpoint; the facade also injects it into the
+   * container-agent executor for the write path. Absent → no agent context is stored.
+   */
+  agentContextObservability?: AgentContextObservabilityService
   /**
    * Optional external LLM trace sink (e.g. Langfuse). When wired, the observability
    * service fans every recorded call out to it as a generation. Opt-in and default-off;
@@ -746,6 +754,8 @@ export interface Core {
   executionEventPublisher: ExecutionEventPublisher
   /** Present only when the LLM-metric repository is wired (see CoreDependencies). */
   llmObservability?: LlmObservabilityService
+  /** Present only when the agent-context snapshot repository is wired (see CoreDependencies). */
+  agentContextObservability?: AgentContextObservabilityService
   /** Present only when the GitHub integration is configured (see CoreDependencies). */
   github?: GitHubModule
   /** Present only when the document-source integration is configured (see CoreDependencies). */
@@ -1666,6 +1676,9 @@ export function createCore(dependencies: CoreDependencies): Core {
     spendService,
     executionEventPublisher,
     ...(llmObservability ? { llmObservability } : {}),
+    ...(dependencies.agentContextObservability
+      ? { agentContextObservability: dependencies.agentContextObservability }
+      : {}),
     ...(github ? { github } : {}),
     ...(documents ? { documents } : {}),
     ...(tasks ? { tasks } : {}),

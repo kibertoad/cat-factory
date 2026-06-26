@@ -61,6 +61,14 @@ export type {
 } from './llm-metrics.js'
 export { LLM_WARNING_FINISH_REASONS } from './llm-metrics.js'
 export type {
+  AgentContextFile,
+  AgentContextFragment,
+  AgentContextRecorder,
+  AgentContextSnapshot,
+  AgentContextSnapshotRepository,
+  RecordAgentContextInput,
+} from './agent-context.js'
+export type {
   LlmGenerationEvent,
   LlmToolSpan,
   LlmToolSpanContext,

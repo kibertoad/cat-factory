@@ -493,6 +493,8 @@ export interface WorkspaceSettings {
   taskLimitShared: number | null
   /** The per-type caps, when `taskLimitMode` is `per_type` (type → cap). */
   taskLimitPerType: Partial<Record<CreateTaskType, number>> | null
+  /** Whether to store the complete provided-context snapshot for each container agent. */
+  storeAgentContext: boolean
   /** Spend budget currency (ISO 4217). Null ⇒ the built-in default (`EUR`). */
   spendCurrency: string | null
   /** Monthly spend budget in `spendCurrency`. Null ⇒ the built-in default. */
@@ -507,6 +509,7 @@ export interface UpdateWorkspaceSettingsInput {
   taskLimitMode?: TaskLimitMode
   taskLimitShared?: number | null
   taskLimitPerType?: Partial<Record<CreateTaskType, number>> | null
+  storeAgentContext?: boolean
   spendCurrency?: string | null
   spendMonthlyLimit?: number | null
   spendModelPrices?: Record<string, { inputPerMillion: number; outputPerMillion: number }> | null

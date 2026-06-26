@@ -32,6 +32,12 @@ Edit `wrangler.toml`:
 
 - `name`, `[[d1_databases]].database_id` — your Worker name + D1 id
   (`wrangler d1 create cat_factory`).
+- The second `[[d1_databases]]` entry (`binding = "TELEMETRY_DB"`) — the **required**
+  dedicated telemetry database. Provision it with
+  `wrangler d1 create cat_factory_telemetry` and paste its id. Telemetry
+  (`llm_call_metrics`, `agent_context_snapshots`) is append-heavy/short-retention, so it
+  is kept off the main DB; its schema ships under
+  `node_modules/@cat-factory/worker/telemetry-migrations`.
 - `[[containers]].image` — the published runner image. Pin a version:
   `ghcr.io/<owner>/cat-factory-executor:<version>` (see the repo's
   `docker-publish` workflow; forks publish under their own owner).

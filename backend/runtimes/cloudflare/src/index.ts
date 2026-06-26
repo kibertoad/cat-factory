@@ -10,6 +10,7 @@ import { ContainerInstanceRegistry } from './infrastructure/containers/Container
 import { D1RateLimitRepository } from './infrastructure/repositories/D1RateLimitRepository'
 import { D1TokenUsageRepository } from './infrastructure/repositories/D1TokenUsageRepository'
 import { D1LlmCallMetricRepository } from './infrastructure/repositories/D1LlmCallMetricRepository'
+import { D1AgentContextSnapshotRepository } from './infrastructure/repositories/D1AgentContextSnapshotRepository'
 import { D1ProvisioningLogRepository } from './infrastructure/repositories/D1ProvisioningLogRepository'
 import { D1PipelineScheduleRepository } from './infrastructure/repositories/D1PipelineScheduleRepository'
 import { buildContainer } from './infrastructure/container'
@@ -111,7 +112,11 @@ export default {
             idGenerator: new CryptoIdGenerator(),
           }),
           commitRepository: new D1CommitProjectionRepository({ db: env.DB }),
-          llmCallMetricRepository: new D1LlmCallMetricRepository({ db: env.DB }),
+          // Telemetry tables live in the dedicated TELEMETRY_DB database.
+          llmCallMetricRepository: new D1LlmCallMetricRepository({ db: env.TELEMETRY_DB }),
+          agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({
+            db: env.TELEMETRY_DB,
+          }),
           pipelineScheduleRepository: new D1PipelineScheduleRepository({ db: env.DB }),
           // Prune the separate provisioning-log database when its binding is present.
           ...(env.PROVISIONING_DB

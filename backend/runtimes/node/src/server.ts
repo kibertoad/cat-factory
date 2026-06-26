@@ -144,6 +144,7 @@ export async function start(
     {
       tokenUsageRepository: repos.tokenUsageRepository,
       llmCallMetricRepository: repos.llmCallMetricRepository,
+      agentContextSnapshotRepository: repos.agentContextSnapshotRepository,
       pipelineScheduleRepository: repos.pipelineScheduleRepository,
       subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(db),
       provisioningLogRepository: repos.provisioningLogRepository,

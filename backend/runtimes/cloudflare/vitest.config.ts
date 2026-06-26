@@ -6,6 +6,8 @@ import { defineConfig } from 'vitest/config'
 // migrations are read here and applied per test file in test/apply-migrations.ts.
 export default defineConfig(async () => {
   const migrations = await readD1Migrations('./migrations')
+  // The dedicated telemetry database has its own migration lineage.
+  const telemetryMigrations = await readD1Migrations('./telemetry-migrations')
   const sandboxMigrations = await readD1Migrations('./sandbox-migrations')
   const provisioningMigrations = await readD1Migrations('./migrations-provisioning')
 
@@ -34,6 +36,7 @@ export default defineConfig(async () => {
           // and inject a FakeAgentExecutor, so no agent/provider env is needed.
           bindings: {
             TEST_MIGRATIONS: migrations,
+            TEST_TELEMETRY_MIGRATIONS: telemetryMigrations,
             // Sandbox D1 migrations, applied to the SANDBOX_DB binding per test file so
             // the Sandbox feature is exercised against its true schema.
             TEST_SANDBOX_MIGRATIONS: sandboxMigrations,

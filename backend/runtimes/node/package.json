@@ -32,6 +32,7 @@
     "dev": "node --watch dist/main.js",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
+    "db:rebase-snapshot": "node scripts/rebase-migration-snapshot.mjs",
     "test": "vitest run",
     "test:run": "vitest run"
   },

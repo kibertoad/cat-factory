@@ -15,12 +15,14 @@ function fakeRepos(): {
   cutoffs: {
     tokenUsage: number | null
     llmCallMetrics: number | null
+    agentContextSnapshots: number | null
     provisioningLog: number | null
   }
 } {
   const cutoffs = {
     tokenUsage: null as number | null,
     llmCallMetrics: null as number | null,
+    agentContextSnapshots: null as number | null,
     provisioningLog: null as number | null,
   }
   return {
@@ -36,6 +38,13 @@ function fakeRepos(): {
         deleteOlderThan: async (c) => {
           cutoffs.llmCallMetrics = c
           return 7
+        },
+      },
+      // Agent-context snapshots ride the same window as llmCallMetrics.
+      agentContextSnapshotRepository: {
+        deleteOlderThan: async (c) => {
+          cutoffs.agentContextSnapshots = c
+          return 5
         },
       },
       // Recurring-pipeline run history prune (fixed ~1-week window). Returns 0 here;
@@ -73,10 +82,12 @@ describe('sweepRetention', () => {
 
     expect(cutoffs.tokenUsage).toBe(now - 30 * DAY)
     expect(cutoffs.llmCallMetrics).toBe(now - 3 * DAY)
+    expect(cutoffs.agentContextSnapshots).toBe(now - 3 * DAY) // same window as llmCallMetrics
     expect(cutoffs.provisioningLog).toBe(now - 14 * DAY)
     expect(result).toEqual({
       tokenUsage: 3,
       llmCallMetrics: 7,
+      agentContextSnapshots: 5,
       scheduleRuns: 0,
       activations: 2,
       provisioningLog: 5,
@@ -89,9 +100,11 @@ describe('sweepRetention', () => {
 
     expect(cutoffs.tokenUsage).toBe(now - 30 * DAY) // still pruned
     expect(cutoffs.llmCallMetrics).toBeNull() // disabled → never called
+    expect(cutoffs.agentContextSnapshots).toBeNull() // same disabled window → never called
     expect(result).toEqual({
       tokenUsage: 3,
       llmCallMetrics: 0,
+      agentContextSnapshots: 0,
       scheduleRuns: 0,
       activations: 2,
       provisioningLog: 5,

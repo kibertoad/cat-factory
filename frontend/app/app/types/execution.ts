@@ -229,6 +229,42 @@ export type LlmCallActivity = Omit<
   'promptText' | 'responseText' | 'reasoningText' | 'promptPrefixCount' | 'promptHash'
 >
 
+/** One best-practice fragment folded into an agent's system prompt. */
+export interface AgentContextFragment {
+  id: string
+  body: string
+}
+
+/** One file injected into the agent's container as context, with its full body. */
+export interface AgentContextFile {
+  path: string
+  title: string
+  url: string
+  content: string
+}
+
+/**
+ * The complete, redacted context provided to one container-agent dispatch: the composed
+ * system + user prompts, the fragment bodies folded in, and the full content of the files
+ * injected into the container. Loaded on demand for the observability view. Mirrors the
+ * backend `AgentContextSnapshot` (it never carries any credential).
+ */
+export interface AgentContextSnapshot {
+  id: string
+  workspaceId: string
+  executionId: string
+  agentKind: string
+  stepIndex: number
+  createdAt: number
+  model: string | null
+  harness: string | null
+  systemPrompt: string
+  userPrompt: string
+  fragments: AgentContextFragment[]
+  contextFiles: AgentContextFile[]
+  extras: Record<string, unknown>
+}
+
 /** One per-agent-kind insight in the LLM-friendly export (rollup + derived ratios). */
 export interface LlmExportInsight extends StepMetrics {
   agentKind: string

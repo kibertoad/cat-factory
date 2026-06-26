@@ -46,6 +46,7 @@ export class WorkspaceSettingsService {
         patch.taskLimitShared !== undefined ? patch.taskLimitShared : current.taskLimitShared,
       taskLimitPerType:
         patch.taskLimitPerType !== undefined ? patch.taskLimitPerType : current.taskLimitPerType,
+      storeAgentContext: patch.storeAgentContext ?? current.storeAgentContext,
       spendCurrency:
         patch.spendCurrency !== undefined ? patch.spendCurrency : current.spendCurrency,
       spendMonthlyLimit:

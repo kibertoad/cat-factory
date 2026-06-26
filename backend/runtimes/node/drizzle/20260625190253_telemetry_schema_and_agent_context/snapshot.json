@@ -1,15 +1,12 @@
 {
   "dialect": "postgres",
-  "id": "14f719f0-531f-4b7c-a7aa-322962f6a23e",
+  "id": "adda9001-f7d3-449c-a049-2c0b7f966ad3",
   "prevIds": [
-    "adda9001-f7d3-449c-a049-2c0b7f966ad3"
+    "6e8ab9e7-ad52-4480-9cb4-903d9d0124f6",
+    "234cda33-9d0f-4e70-b057-2d9ac2eba196"
   ],
   "version": "8",
   "ddl": [
-    {
-      "name": "provisioning",
-      "entityType": "schemas"
-    },
     {
       "name": "sandbox",
       "entityType": "schemas"
@@ -245,12 +242,6 @@
       "name": "provider_subscription_tokens",
       "entityType": "tables",
       "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "provisioning_log",
-      "entityType": "tables",
-      "schema": "provisioning"
     },
     {
       "isRlsEnabled": false,
@@ -5982,162 +5973,6 @@
       "identity": null,
       "name": "id",
       "entityType": "columns",
-      "schema": "provisioning",
-      "table": "provisioning_log"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "workspace_id",
-      "entityType": "columns",
-      "schema": "provisioning",
-      "table": "provisioning_log"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "subsystem",
-      "entityType": "columns",
-      "schema": "provisioning",
-      "table": "provisioning_log"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "operation",
-      "entityType": "columns",
-      "schema": "provisioning",
-      "table": "provisioning_log"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "target_id",
-      "entityType": "columns",
-      "schema": "provisioning",
-      "table": "provisioning_log"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "provider_id",
-      "entityType": "columns",
-      "schema": "provisioning",
-      "table": "provisioning_log"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "block_id",
-      "entityType": "columns",
-      "schema": "provisioning",
-      "table": "provisioning_log"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "execution_id",
-      "entityType": "columns",
-      "schema": "provisioning",
-      "table": "provisioning_log"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "outcome",
-      "entityType": "columns",
-      "schema": "provisioning",
-      "table": "provisioning_log"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "error",
-      "entityType": "columns",
-      "schema": "provisioning",
-      "table": "provisioning_log"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "detail",
-      "entityType": "columns",
-      "schema": "provisioning",
-      "table": "provisioning_log"
-    },
-    {
-      "type": "bigint",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "provisioning",
-      "table": "provisioning_log"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
       "schema": "public",
       "table": "reference_architectures"
     },
@@ -10139,153 +9974,6 @@
           "asc": true,
           "nullsFirst": false,
           "opclass": null
-        },
-        {
-          "value": "created_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "idx_provisioning_log_workspace",
-      "entityType": "indexes",
-      "schema": "provisioning",
-      "table": "provisioning_log"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "workspace_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "subsystem",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "created_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "idx_provisioning_log_subsystem",
-      "entityType": "indexes",
-      "schema": "provisioning",
-      "table": "provisioning_log"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "workspace_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "execution_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "created_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "idx_provisioning_log_execution",
-      "entityType": "indexes",
-      "schema": "provisioning",
-      "table": "provisioning_log"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "workspace_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "target_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "idx_provisioning_log_target",
-      "entityType": "indexes",
-      "schema": "provisioning",
-      "table": "provisioning_log"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "created_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "idx_provisioning_log_created",
-      "entityType": "indexes",
-      "schema": "provisioning",
-      "table": "provisioning_log"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "workspace_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
         }
       ],
       "isUnique": false,
@@ -11388,16 +11076,6 @@
       "name": "provider_subscription_tokens_pkey",
       "schema": "public",
       "table": "provider_subscription_tokens",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "provisioning_log_pkey",
-      "schema": "provisioning",
-      "table": "provisioning_log",
       "entityType": "pks"
     },
     {

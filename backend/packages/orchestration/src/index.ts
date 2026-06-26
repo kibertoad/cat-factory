@@ -147,6 +147,12 @@ export {
   type RecordLlmCallInput,
 } from './modules/observability/LlmObservabilityService.js'
 export {
+  AgentContextObservabilityService,
+  type AgentContextObservabilityServiceDependencies,
+  MAX_AGENT_CONTEXT_CHARS,
+  MAX_AGENT_CONTEXT_TOTAL_CHARS,
+} from './modules/observability/AgentContextObservabilityService.js'
+export {
   classifyCall,
   isWarningFinishReason,
   outputHeadroomRatio,
