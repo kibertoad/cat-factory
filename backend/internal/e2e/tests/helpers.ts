@@ -1,10 +1,22 @@
-import { type APIRequestContext, type Page, expect } from '@playwright/test'
+import { type APIRequestContext, type Locator, type Page, expect } from '@playwright/test'
 
 // The backend origin the specs seed/trigger state against. The auth gate is open in the
 // e2e backend, so plain REST calls need no token. Override with E2E_BACKEND_URL if the
 // backend runs on a non-default port.
 export const BACKEND_URL =
   process.env.E2E_BACKEND_URL ?? `http://localhost:${process.env.PORT ?? 8787}`
+
+// Shared timeouts for LIVE (WebSocket-pushed) assertions. A live run advances through
+// several durable pg-boss steps, so web-first assertions need headroom over the default
+// 5s — but we still want NO fixed sleeps. Named here so every spec uses the same budget.
+/** A single live-pushed UI transition (a badge appears, a status flips). */
+export const LIVE_TIMEOUT = 30_000
+/** A run reaching a terminal status (drives through every step). */
+export const RUN_TERMINAL_TIMEOUT = 45_000
+/** First board paint. The very first navigation pays the Nuxt dev-server route compile,
+ * which can dwarf a normal mount, so the canvas gets a wider one-time budget than a live
+ * transition. (In a production build this is far quicker; the headroom only costs cold runs.) */
+export const BOOT_TIMEOUT = 60_000
 
 interface Workspace {
   id: string
@@ -16,7 +28,7 @@ interface Pipeline {
   id: string
 }
 // The full board read; only the fields the specs touch are typed.
-interface WorkspaceSnapshot {
+export interface WorkspaceSnapshot {
   workspace: Workspace
   blocks: Block[]
   pipelines: Pipeline[]
@@ -43,15 +55,20 @@ export async function createSeededWorkspace(
   )
 }
 
-/** Create a minimal, deterministic pipeline (no requirements-review / ci / merger gates). */
+/**
+ * Create a minimal, deterministic pipeline (no requirements-review / ci / merger gates).
+ * `gates` is the optional per-step human-approval array (parallel to `agentKinds`): a `true`
+ * at index `i` makes the run park for human approval after step `i` completes.
+ */
 export async function createSimplePipeline(
   request: APIRequestContext,
   workspaceId: string,
   agentKinds: string[] = ['architect', 'coder'],
+  gates?: boolean[],
 ): Promise<Pipeline> {
   return json<Pipeline>(
     await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/pipelines`, {
-      data: { name: 'E2E pipeline', agentKinds },
+      data: { name: 'E2E pipeline', agentKinds, ...(gates ? { gates } : {}) },
     }),
   )
 }
@@ -83,13 +100,30 @@ export async function pinWorkspace(page: Page, workspaceId: string): Promise<voi
 
 /** Navigate to the board and wait for it to finish bootstrapping (canvas mounted). The
  * canvas only mounts once auth + the workspace snapshot + the GitHub probe have settled,
- * so its visibility is the single readiness signal we need. */
+ * so its visibility is the single readiness signal we need. We then assert the seeded
+ * `task_login` card actually rendered, so a mis-pinned workspace (the snapshot loaded but
+ * for the wrong/empty workspace) fails loudly here instead of timing out deep in a spec. */
 export async function openBoard(page: Page): Promise<void> {
   await page.goto('/')
-  await expect(page.getByTestId('board-canvas')).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('board-canvas')).toBeVisible({ timeout: BOOT_TIMEOUT })
+  await expect(taskCard(page, 'task_login')).toBeVisible({ timeout: LIVE_TIMEOUT })
 }
 
 /** Locate a task card by its block id (the card root carries `data-block-id`). */
-export function taskCard(page: Page, blockId: string) {
+export function taskCard(page: Page, blockId: string): Locator {
   return page.locator(`[data-block-id="${blockId}"]`)
+}
+
+/**
+ * Resolve the one-shot human decision the fake agent parks (with `E2E_DECISION_ON_STEPS=0`,
+ * the default backend). Opens the card's Resolve affordance, picks the first option, and —
+ * crucially — asserts the modal actually CLOSED afterward (a modal that fails to dismiss is
+ * a real regression the original run.spec never caught). Shared by every run-driving spec.
+ */
+export async function resolveDecision(page: Page, card: Locator): Promise<void> {
+  await card.getByTestId('task-resolve').click()
+  const modal = page.getByTestId('decision-modal')
+  await expect(modal).toBeVisible()
+  await modal.getByTestId('decision-option').first().click()
+  await expect(modal).toBeHidden({ timeout: LIVE_TIMEOUT })
 }

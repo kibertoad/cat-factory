@@ -115,7 +115,13 @@ function revealDecision(n: Notification) {
 
 <template>
   <UPopover v-if="notifications.count" :content="{ align: 'end' }">
-    <UButton :color="hasUrgent ? 'error' : 'warning'" variant="soft" size="sm" icon="i-lucide-bell">
+    <UButton
+      data-testid="notifications-bell"
+      :color="hasUrgent ? 'error' : 'warning'"
+      variant="soft"
+      size="sm"
+      icon="i-lucide-bell"
+    >
       {{ notifications.count }}
     </UButton>
 
@@ -127,6 +133,8 @@ function revealDecision(n: Notification) {
         <div
           v-for="n in notifications.open"
           :key="n.id"
+          data-testid="notification-item"
+          :data-notification-type="n.type"
           class="rounded-lg border p-2.5 mt-1.5"
           :class="
             isUrgent(n)
@@ -167,6 +175,7 @@ function revealDecision(n: Notification) {
               </a>
               <div class="mt-2 flex items-center gap-1.5">
                 <UButton
+                  data-testid="notification-act"
                   :color="accent(n)"
                   variant="soft"
                   size="xs"
@@ -176,6 +185,7 @@ function revealDecision(n: Notification) {
                   {{ META[n.type].action }}
                 </UButton>
                 <UButton
+                  data-testid="notification-dismiss"
                   color="neutral"
                   variant="ghost"
                   size="xs"

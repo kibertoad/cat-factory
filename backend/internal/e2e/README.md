@@ -22,6 +22,22 @@ with a fake agent doing the "work".
 See [`src/testServer.ts`](./src/testServer.ts) for the backend wiring (it reuses the
 `buildContainer` seam of `@cat-factory/node-server`'s `start()`).
 
+## Specs
+
+Every spec follows the same signature pattern: **seed/trigger over REST, then assert only on
+LIVE pushed UI updates** (no reloads, no fragile canvas drag/zoom). Shared setup lives in
+[`tests/fixtures.ts`](./tests/fixtures.ts): a `seededBoard` fixture (seed → pin → open) and an
+**auto** `pageErrors` fixture that fails any test on an uncaught SPA exception. Common helpers
++ named timeouts are in [`tests/helpers.ts`](./tests/helpers.ts).
+
+| Spec | Covers |
+| ---- | ------ |
+| `boot.spec.ts` | The product boots: the real SPA renders a seeded board from the real backend, no login gate. |
+| `run.spec.ts` | Flagship: start a run → it parks on a decision live → resolve it in the UI → it reaches a terminal state, all over the WebSocket. |
+| `notifications.spec.ts` | A merger-less run raises a `pipeline_complete` notification live; the inbox bell + item render and acting / dismissing resolves it. (The real PR merge needs GitHub and is covered by the backend conformance suites, not here.) |
+| `create-task.spec.ts` | Create a task through the real add-task modal → the new card appears on the board. |
+| `approval-gate.spec.ts` | A per-step human **approval** gate parks the run; Approve in the full-screen step-detail rail and it advances. (Distinct from the agent-raised decision in `run.spec`.) |
+
 ## Mocking other externals (when a spec needs a real outbound call)
 
 The default suite needs no network mocks. If a future spec must exercise a real outbound
@@ -63,4 +79,27 @@ add a `globalSetup` that truncates rather than relying on ordering.
 
 - `E2E_DECISION_ON_STEPS` (default `0`) — agent-step indices where the fake agent raises a
   one-shot human decision, so the decision-gate flow can be exercised. Empty disables it.
+- `E2E_DISPATCH_THROW_KINDS` / `E2E_ASYNC_KINDS` — comma-separated agent kinds. When either is
+  set the backend builds the **async** fake (`AsyncFakeAgentExecutor`): `E2E_ASYNC_KINDS` drives
+  those kinds through the polled `awaiting_job` loop, and `E2E_DISPATCH_THROW_KINDS` makes their
+  container dispatch throw (so the engine's dispatch-failure path runs). Empty ⇒ the default
+  inline fake (the existing specs are byte-identical). Reserved for a future failure/retry spec
+  booted via its own `webServer`.
+- `E2E_CONFIDENCE` (default `1`) — the confidence the fake reports on the final step (drives
+  auto-merge vs PR-ready).
+- `E2E_CHROMIUM_PATH` — opt-in: launch Chromium from this path instead of a `playwright
+  install` download. For sandboxes that ship a preinstalled browser and block the download
+  (e.g. `E2E_CHROMIUM_PATH=/opt/pw-browsers/chromium`). Unset in CI.
 - `PORT` (default `8787`), `E2E_FRONTEND_PORT` (default `3000`), `E2E_BACKEND_URL`.
+
+### Promoting the e2e job to a required gate
+
+`test-e2e` is intentionally **non-blocking** today. Promote it into `test-gate.needs` (in
+`.github/workflows/ci.yml`) once it has earned trust:
+
+1. The suite has been green on `main` for ~10+ consecutive runs with **no** retries kicking in
+   (a retry that rescues a run still counts as a flake to investigate first).
+2. No spec relies on a fixed sleep — only web-first assertions (`toBeVisible` / `expect.poll`).
+3. The cold-start `BOOT_TIMEOUT` comfortably covers the CI runner's first board paint.
+
+Until then a browser/boot flake stays advisory and can't block an otherwise-green PR.
