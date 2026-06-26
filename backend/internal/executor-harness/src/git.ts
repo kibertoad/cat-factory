@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { appendFile, chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -216,6 +216,27 @@ export async function listUntrackedFiles(dir: string, signal?: AbortSignal): Pro
     .split('\n')
     .map((line) => line.replace(/\r$/, '').trim())
     .filter((path) => path !== '')
+}
+
+/**
+ * Locally exclude `pattern` from this checkout via `.git/info/exclude` — a per-clone
+ * ignore that never lands in the repo (unlike a `.gitignore`). Used for the harness's
+ * follow-up sentinel file so the agent's own `git add` can never stage it and it never
+ * surfaces as an untracked-leftover warning or in the PR. Best-effort: a failure here
+ * just means the sentinel might show as untracked (logged, not pushed), never fatal.
+ */
+export async function excludeFromGit(
+  dir: string,
+  pattern: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  try {
+    const excludePath = join(dir, '.git', 'info', 'exclude')
+    await appendFile(excludePath, `\n${pattern}\n`, 'utf8')
+  } catch {
+    // A missing .git/info/exclude (worktree layout) or write error is non-fatal.
+    void signal
+  }
 }
 
 /** Whether the branch advanced past `baseSha` via commits (the agent's own + any safety-net commit). */

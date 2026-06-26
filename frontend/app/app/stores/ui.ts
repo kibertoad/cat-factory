@@ -456,6 +456,23 @@ export const useUiStore = defineStore('ui', () => {
   function openServiceSpec(blockId: string) {
     resultView.value = { view: 'service-spec', blockId, instanceId: null, stepIndex: null }
   }
+  // Open the Follow-up companion window for a run's Coder step (the blinking chip + the
+  // `followup_pending` notification). Resolves the Coder step index from the run when not
+  // given, so callers that only know the run can still open it.
+  function openFollowUps(instanceId: string, stepIndex: number | null = null) {
+    const execution = useExecutionStore()
+    const instance = execution.getInstance(instanceId)
+    if (!instance) return
+    const idx =
+      stepIndex ?? instance.steps.findIndex((s) => s.followUps?.enabled)
+    if (idx < 0) return
+    resultView.value = {
+      view: 'follow-ups',
+      blockId: instance.blockId,
+      instanceId,
+      stepIndex: idx,
+    }
+  }
   function closeResultView() {
     resultView.value = null
   }
@@ -584,6 +601,7 @@ export const useUiStore = defineStore('ui', () => {
     openRequirementReview,
     openClarityReview,
     openServiceSpec,
+    openFollowUps,
     closeRequirementReview,
     openStepDetail,
     closeStepDetail,

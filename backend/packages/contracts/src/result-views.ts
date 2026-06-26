@@ -23,6 +23,7 @@ export const RESULT_VIEW_IDS = [
   'consensus-session',
   'generic-structured',
   'service-spec',
+  'follow-ups',
 ] as const
 
 export type ResultViewId = (typeof RESULT_VIEW_IDS)[number]

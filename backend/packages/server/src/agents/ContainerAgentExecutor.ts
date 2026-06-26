@@ -31,6 +31,7 @@ import {
   coerceSpecDoc,
   composeBlockSystemPrompt,
   FINAL_ANSWER_IN_REPLY,
+  FOLLOW_UP_GUIDANCE,
   isReadOnlyAgentKind,
   registeredAgentStep,
   systemPromptFor,
@@ -663,10 +664,22 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         // Swallowed: the sink logs its own errors; observability never breaks a run.
       }
     }
+    // Forward-looking items the Coder streamed since the last poll (drain-on-read): surfaced
+    // on both running and done so a final burst on the completion poll isn't lost. Normalise
+    // the transport's optional `detail` to the engine's `StreamedFollowUp` shape.
+    const streamedFollowUps = (view.followUps ?? []).map((f) => ({
+      kind: f.kind,
+      title: f.title,
+      detail: f.detail ?? '',
+      ...(f.suggestedAction ? { suggestedAction: f.suggestedAction } : {}),
+    }))
+    const followUps = streamedFollowUps.length > 0 ? { followUps: streamedFollowUps } : {}
     if (view.state === 'running') {
       // Forward the latest subtask counts (if any) so the engine can surface
       // live "N/M done" progress on the step; the shapes match field-for-field.
-      return view.progress ? { state: 'running', subtasks: view.progress } : { state: 'running' }
+      return view.progress
+        ? { state: 'running', subtasks: view.progress, ...followUps }
+        : { state: 'running', ...followUps }
     }
     if (view.state === 'failed') {
       return { state: 'failed', error: view.error ?? 'Implementation job failed' }
@@ -696,7 +709,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       if (this.recordedUsageJobs.size >= 10_000) this.recordedUsageJobs.clear()
       this.recordedUsageJobs.add(handle.jobId)
     }
-    return { state: 'done', result: toRunResult(result, handle.agentKind) }
+    return { state: 'done', result: toRunResult(result, handle.agentKind), ...followUps }
   }
 
   /**
@@ -1027,10 +1040,17 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
     // `parts` (common/webTools/workBranch/workBranchReady) is consumed by
     // `buildRegisteredAgentBody`/`buildMigratedBuiltInBody`, not directly here.
-    const roleSystemPrompt = composeBlockSystemPrompt(
+    const baseRoleSystemPrompt = composeBlockSystemPrompt(
       systemPromptFor(context.agentKind),
       context.block,
     )
+    // When the future-looking Follow-up companion is enabled for this (coder) step, append
+    // the guidance that tells the Coder to stream loose-ends / side-tasks / questions to the
+    // sentinel file the harness tails. Only when enabled, so a disabled companion (or any
+    // other kind) never writes the file.
+    const roleSystemPrompt = context.followUpCompanion
+      ? `${baseRoleSystemPrompt}\n\n${FOLLOW_UP_GUIDANCE}`
+      : baseRoleSystemPrompt
 
     // A registered (custom or migrated) kind that declares an `agent` step dispatches
     // through the generic, manifest-driven `agent` harness kind — no per-kind case here.
@@ -1154,6 +1174,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
                 },
               }),
           ...(step.clone?.full ? { full: true } : {}),
+          // The Coder (follow-up companion enabled) streams forward-looking items out via
+          // the sentinel file; tell the harness to tail it. Only on the implementer path.
+          ...(context.followUpCompanion && !onPr ? { streamFollowUps: true } : {}),
           ...webTools,
         },
       }

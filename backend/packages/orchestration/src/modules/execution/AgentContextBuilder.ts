@@ -166,6 +166,9 @@ export class AgentContextBuilder {
       ...(instance.initiatedBy != null ? { initiatedByUserId: instance.initiatedBy } : {}),
       stepIndex: instance.currentStep,
       isFinalStep,
+      // The future-looking Follow-up companion is enabled for this (coder) step: the
+      // container executor appends the follow-up guidance + sets the harness to stream items.
+      ...(step.followUps?.enabled ? { followUpCompanion: true } : {}),
       // Consensus config for this step (copied onto the step at run start). Read only
       // by the optional consensus executor, which decides — possibly gated on the
       // block estimate below — whether to run the multi-model process. Absent ⇒ standard.

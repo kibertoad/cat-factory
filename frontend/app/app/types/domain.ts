@@ -387,6 +387,12 @@ export interface Pipeline {
    * always run. Used to make a companion conditional on the task estimate.
    */
   gating?: (StepGating | null)[]
+  /**
+   * Per-step Follow-up companion toggle, parallel to `agentKinds`: governs whether a `coder`
+   * step runs the future-looking Follow-up companion. `followUps[i] === false` disables it;
+   * `null`/`true`/absent ⇒ enabled (a Coder step gets it by default). Ignored on non-coder steps.
+   */
+  followUps?: (boolean | null)[]
   /** Free-form organizational labels for the library (filter/search). */
   labels?: string[]
   /** True when archived: kept but hidden from the default library view. */

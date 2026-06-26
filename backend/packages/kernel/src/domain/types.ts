@@ -163,6 +163,14 @@ export type {
   ReRequestRecommendationInput,
   ResolveRequirementsExceededInput,
   ResolveRequirementsExceededChoice,
+  // Follow-up companion (future-looking Coder) shapes: surfaced loose-end / question items
+  // + the live step state the engine parks/loops on.
+  FollowUpItemKind,
+  FollowUpItemStatus,
+  FollowUpItem,
+  FollowUpsStepState,
+  AnswerFollowUpInput,
+  StreamedFollowUp,
   // Clarity-review (bug-report triage reviewer agent) shapes — reuse the requirements
   // review item/status shapes, differ only in subject + the persisted document field.
   ClarityReviewItem,

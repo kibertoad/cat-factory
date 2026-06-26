@@ -139,7 +139,11 @@ export {
   businessLogicSystemPrompt,
 } from './agents/prompts/business-logic.js'
 export { PLATFORM_DELIVERY_CONTRACT } from './agents/prompts/delivery-contract.js'
-export { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './agents/prompts/shared.js'
+export {
+  FINAL_ANSWER_IN_REPLY,
+  FOLLOW_UP_GUIDANCE,
+  STANDARDS_FOOTER,
+} from './agents/prompts/shared.js'
 
 // Deterministic, container-free rendering + lenient coercion of the in-repo
 // `blueprints/`/`spec/` artifacts (lifted out of the executor-harness image). Invoked
