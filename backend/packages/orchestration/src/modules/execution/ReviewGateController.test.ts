@@ -378,12 +378,18 @@ describe('ReviewGateController public surface', () => {
     expect(k.kind.fillRecommendations).not.toHaveBeenCalled()
   })
 
-  it('requestRecommendations runs the Writer inline when no run is parked', async () => {
+  it('requestRecommendations rejects a fresh batch when no run is parked', async () => {
+    // A batch request is async: the durable driver that owns the parked run fills the
+    // placeholders. With nothing parked there is no driver to fill them, so the request is
+    // rejected up front (no placeholders are written) rather than run inline — which diverged
+    // across runtimes (Node 500 on a raw model-resolve throw vs Cloudflare 200 on its binding).
     k.set(review({ status: 'ready' }))
     deps.executionRepository.get = vi.fn(async () => null)
-    await ctrl.requestRecommendations(k.kind, 'ws', 'blk_1', ['rri_1'])
-    expect(k.kind.prepareRecommendations).toHaveBeenCalled()
-    expect(k.kind.fillRecommendations).toHaveBeenCalledWith('ws', 'blk_1')
+    await expect(
+      ctrl.requestRecommendations(k.kind, 'ws', 'blk_1', ['rri_1']),
+    ).rejects.toBeInstanceOf(ConflictError)
+    expect(k.kind.prepareRecommendations).not.toHaveBeenCalled()
+    expect(k.kind.fillRecommendations).not.toHaveBeenCalled()
     expect(deps.workRunner.signalDecision).not.toHaveBeenCalled()
   })
 

@@ -1,8 +1,8 @@
 ---
-"@cat-factory/contracts": patch
-"@cat-factory/orchestration": patch
-"@cat-factory/server": patch
-"@cat-factory/app": patch
+'@cat-factory/contracts': patch
+'@cat-factory/orchestration': patch
+'@cat-factory/server': patch
+'@cat-factory/app': patch
 ---
 
 Requesting Requirement-Writer recommendations is now asynchronous, like every other

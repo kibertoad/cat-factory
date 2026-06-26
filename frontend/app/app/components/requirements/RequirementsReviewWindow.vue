@@ -252,7 +252,8 @@ async function requestRecommendations() {
     markedForRecommend.value = new Set()
     toast.add({
       title: `Preparing ${ids.length} recommendation${ids.length === 1 ? '' : 's'} in the background`,
-      description: "Your answers are saved — close this if you like; we'll notify you when they're ready.",
+      description:
+        "Your answers are saved — close this if you like; we'll notify you when they're ready.",
       icon: 'i-lucide-sparkles',
     })
   } catch (e) {

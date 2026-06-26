@@ -2676,14 +2676,17 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(res.status).toBe(422)
       })
 
-      it('wires the async recommend endpoint and gates it on a configured reviewer', async () => {
+      it('wires the async recommend endpoint and gates it on a parked requirements run', async () => {
         // Requesting Requirement-Writer recommendations is asynchronous: the route appends
-        // `pending` placeholder recommendations and signals the durable driver to run the Writer
-        // per finding. The route must be mounted on EVERY facade and resolve through the same
-        // execution-service seam. With no live reviewer model wired (the conformance default),
-        // the request is gated with a 409 BEFORE any background work — a deterministic check that
-        // the endpoint is present and routed identically across runtimes (the full Writer loop is
-        // covered by the orchestration unit tests, which a fake model can drive).
+        // `pending` placeholder recommendations and signals the durable driver that owns the
+        // parked run to fill them per finding. The route must be mounted on EVERY facade and
+        // resolve through the same execution-service seam. With a `ready` review seeded but NO
+        // pipeline parked on it, there is no driver to fill the placeholders, so the request is
+        // rejected with a 409 BEFORE any placeholder is written or any model is touched — a
+        // deterministic, runtime-neutral check that the endpoint is present and routed identically
+        // across runtimes (the full Writer loop is covered by the orchestration unit tests, which a
+        // fake model can drive). Without this pre-LLM gate the inline fallback diverged: Node 500'd
+        // on a raw model-resolve throw while Cloudflare resolved its Workers-AI binding and 200'd.
         const app = harness.makeApp()
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
