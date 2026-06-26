@@ -201,13 +201,7 @@ async function merge(pr: GitHubPullRequest) {
 <template>
   <UModal v-model:open="open" title="GitHub" :ui="{ content: 'max-w-2xl' }">
     <template #title>
-      <IntegrationBackTitle
-        title="GitHub"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
-      />
+      <IntegrationBackTitle title="GitHub" @back="((open = false), ui.openIntegrations())" />
     </template>
     <template #body>
       <div class="space-y-5">

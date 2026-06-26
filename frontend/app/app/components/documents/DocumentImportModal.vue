@@ -78,10 +78,7 @@ function preview(externalId: string) {
     <template #title>
       <IntegrationBackTitle
         title="Import from a document source"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
+        @back="((open = false), ui.openIntegrations())"
       />
     </template>
     <template #body>

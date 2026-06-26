@@ -127,10 +127,7 @@ async function remove() {
     <template #title>
       <IntegrationBackTitle
         title="My GitHub token"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
+        @back="((open = false), ui.openIntegrations())"
       />
     </template>
     <template #body>

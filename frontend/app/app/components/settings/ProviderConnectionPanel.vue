@@ -217,10 +217,7 @@ function fieldHelp(key: string): string | undefined {
     <template #title>
       <IntegrationBackTitle
         :title="meta?.title ?? 'Provider'"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
+        @back="((open = false), ui.openIntegrations())"
       />
     </template>
     <template #body>

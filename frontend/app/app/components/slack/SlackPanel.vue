@@ -145,10 +145,7 @@ async function saveMapping() {
     <template #title>
       <IntegrationBackTitle
         title="Slack notifications"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
+        @back="((open = false), ui.openIntegrations())"
       />
     </template>
     <template #body>

@@ -188,7 +188,13 @@ async function onDrop(event: DragEvent) {
 </script>
 
 <template>
-  <div ref="boardEl" class="relative h-full w-full" @drop="onDrop" @dragover="onDragOver">
+  <div
+    ref="boardEl"
+    data-testid="board-canvas"
+    class="relative h-full w-full"
+    @drop="onDrop"
+    @dragover="onDragOver"
+  >
     <VueFlow
       :id="BOARD_FLOW_ID"
       :nodes="nodes"

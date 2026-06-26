@@ -197,13 +197,7 @@ async function doSpawnEpic() {
 <template>
   <UModal v-model:open="open" :title="title">
     <template #title>
-      <IntegrationBackTitle
-        :title="title"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
-      />
+      <IntegrationBackTitle :title="title" @back="((open = false), ui.openIntegrations())" />
     </template>
     <template #body>
       <!-- Empty state: no source offered (none connected/installed, or all disabled) -->

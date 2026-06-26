@@ -109,10 +109,7 @@ async function toggleEnabled(enabled: boolean) {
     <template #title>
       <IntegrationBackTitle
         :title="descriptor?.label ?? 'Task source'"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
+        @back="((open = false), ui.openIntegrations())"
       />
     </template>
     <template #body>

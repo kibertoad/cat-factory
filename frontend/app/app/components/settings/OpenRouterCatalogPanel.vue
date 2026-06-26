@@ -195,13 +195,7 @@ function manageKeys() {
 <template>
   <UModal v-model:open="open" title="OpenRouter" :ui="{ content: 'max-w-2xl' }">
     <template #title>
-      <IntegrationBackTitle
-        title="OpenRouter"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
-      />
+      <IntegrationBackTitle title="OpenRouter" @back="((open = false), ui.openIntegrations())" />
     </template>
     <template #body>
       <div class="space-y-4">

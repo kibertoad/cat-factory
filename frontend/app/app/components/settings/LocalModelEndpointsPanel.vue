@@ -156,10 +156,7 @@ async function remove(p: LocalRunner) {
     <template #title>
       <IntegrationBackTitle
         title="My local runners"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
+        @back="((open = false), ui.openIntegrations())"
       />
     </template>
     <template #body>

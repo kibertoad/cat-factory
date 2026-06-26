@@ -82,10 +82,7 @@ async function disconnect() {
     <template #title>
       <IntegrationBackTitle
         :title="descriptor?.label ?? 'Connect source'"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
+        @back="((open = false), ui.openIntegrations())"
       />
     </template>
     <template #body>

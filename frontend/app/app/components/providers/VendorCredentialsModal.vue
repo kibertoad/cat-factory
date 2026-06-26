@@ -118,13 +118,7 @@ function vendorLabel(v: SubscriptionVendor): string {
 <template>
   <UModal v-model:open="open" title="LLM Vendors" :ui="{ content: 'max-w-2xl' }">
     <template #title>
-      <IntegrationBackTitle
-        title="LLM Vendors"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
-      />
+      <IntegrationBackTitle title="LLM Vendors" @back="((open = false), ui.openIntegrations())" />
     </template>
     <template #body>
       <UTabs

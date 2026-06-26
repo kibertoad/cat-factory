@@ -164,10 +164,7 @@ async function saveBudget() {
     <template #title>
       <IntegrationBackTitle
         title="Workspace settings"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
+        @back="((open = false), ui.openIntegrations())"
       />
     </template>
     <template #body>

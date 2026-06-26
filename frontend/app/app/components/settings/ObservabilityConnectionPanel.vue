@@ -132,10 +132,7 @@ const connectedLabel = computed(() => {
     <template #title>
       <IntegrationBackTitle
         title="Post-release health"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
+        @back="((open = false), ui.openIntegrations())"
       />
     </template>
     <template #body>
