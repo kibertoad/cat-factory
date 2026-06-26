@@ -13,7 +13,6 @@ const DEFAULTS: WorkspaceSettings = {
   kaizenEnabled: true,
   spendCurrency: null,
   spendMonthlyLimit: null,
-  spendModelPrices: null,
 }
 
 /**

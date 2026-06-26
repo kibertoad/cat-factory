@@ -2,6 +2,7 @@ import type { ExecutionContext, MessageBatch, ScheduledController } from '@cloud
 import { createApp } from './app'
 import { loadConfig } from './infrastructure/config'
 import type { Env, ExecutionStartMessage, GitHubSyncMessage } from './infrastructure/env'
+import { requireTelemetryDb } from './infrastructure/env'
 import { D1AgentRunRepository } from './infrastructure/repositories/D1AgentRunRepository'
 import { D1CommitProjectionRepository } from './infrastructure/repositories/D1CommitProjectionRepository'
 import { D1LiveContainerRepository } from './infrastructure/repositories/D1LiveContainerRepository'
@@ -108,6 +109,10 @@ export default {
     // windows. The tables exist regardless of whether GitHub/agents are
     // configured, so this runs unconditionally; an unused table reclaims nothing.
     if (controller.cron === RETENTION_CRON) {
+      // This branch never calls buildContainer (no request container is built for the
+      // sweep), so do the same fail-fast the build does: a clear error beats an opaque
+      // NPE deep in a telemetry repo when the binding is unbound.
+      const telemetryDb = requireTelemetryDb(env)
       ctx.waitUntil(
         sweepRetention({
           tokenUsageRepository: new D1TokenUsageRepository({ db: env.DB }),
@@ -117,9 +122,9 @@ export default {
           }),
           commitRepository: new D1CommitProjectionRepository({ db: env.DB }),
           // Telemetry tables live in the dedicated TELEMETRY_DB database.
-          llmCallMetricRepository: new D1LlmCallMetricRepository({ db: env.TELEMETRY_DB }),
+          llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
           agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({
-            db: env.TELEMETRY_DB,
+            db: telemetryDb,
           }),
           pipelineScheduleRepository: new D1PipelineScheduleRepository({ db: env.DB }),
           // Prune the separate provisioning-log database when its binding is present.

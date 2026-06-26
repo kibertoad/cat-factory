@@ -1,5 +1,30 @@
 # @cat-factory/orchestration
 
+## 0.24.1
+
+### Patch Changes
+
+- b82304e: Remove per-model price overrides from the workspace budget. A workspace's budget is
+  now just a currency + monthly limit overlaid on the built-in `DEFAULT_SPEND_PRICING`
+  table; the `spendModelPrices` setting, its contracts/schemas, and the
+  `workspace_settings.spend_model_prices` column (D1 + Postgres) are dropped. Also fixes
+  the budget save in the UI throwing `spendMonthlyLimit.trim is not a function` when the
+  number input emits a numeric value.
+
+  **Breaking:** the `spend_model_prices` column is dropped on both runtimes with no
+  migration of existing override data (pre-1.0); any stored overrides are discarded and
+  budgets fall back to the built-in price table.
+
+- Updated dependencies [b82304e]
+  - @cat-factory/contracts@0.29.0
+  - @cat-factory/kernel@0.32.0
+  - @cat-factory/spend@0.10.0
+  - @cat-factory/agents@0.15.2
+  - @cat-factory/integrations@0.21.3
+  - @cat-factory/prompt-fragments@0.7.27
+  - @cat-factory/sandbox@0.8.5
+  - @cat-factory/workspaces@0.7.39
+
 ## 0.24.0
 
 ### Minor Changes

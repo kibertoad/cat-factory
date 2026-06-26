@@ -1,5 +1,61 @@
 # @cat-factory/app
 
+## 0.30.5
+
+### Patch Changes
+
+- 3a304ce: Board: services are now freely draggable and overlap is managed by hover. The whole
+  service header bar is the drag handle (previously only the title cluster moved the
+  frame, which read as undraggable), with the action buttons opting out so they still
+  click. Moving a service no longer shifts any other service: the render-time
+  auto-displacement that pushed expanded frames apart is removed, so frames render at
+  their stored position, can overlap freely, and the dragged one tracks the cursor 1:1.
+  The frame under the pointer (the un-obscured one) is lifted above overlapping
+  neighbours via its Vue Flow node z-index, and the dragged frame sits above everything,
+  so overlapping services can always be reached and reordered.
+
+## 0.30.4
+
+### Patch Changes
+
+- 60fea92: Board: fix task-card expansion picking the wrong card, and stop task titles from being
+  cut off. The "centre-most task wins" expansion gate had regressed: ranking cards by
+  their distance to the projected footprint scored every footprint the screen centre fell
+  inside at 0 (a tall card bleeding its expanded extent down from above ties with the card
+  whose band actually holds the centre), so the tie broke by document order and a stacked
+  neighbour could expand instead of the card you were looking at. Ranking is now by centre
+  ownership — the card whose band holds the centre wins, and a card you've scrolled into
+  keeps its grant — extracted to a pure helper with unit tests so it can't silently
+  regress again.
+
+  Task titles now wrap to two lines instead of truncating to an unreadable stub (full text
+  still on hover), and task cards are a little wider to give titles more room.
+
+## 0.30.3
+
+### Patch Changes
+
+- 4d8439f: Add `data-testid` test hooks to more board surfaces so the `@cat-factory/e2e` Playwright
+  suite can target stable selectors: the notifications inbox (bell, item + `data-notification-type`,
+  act/dismiss), the add-task modal (modal, title, submit) + the frame "Add task" button, and the
+  agent step-detail approval rail (overlay + "Approve & proceed"). Additive only — inert attributes,
+  no behaviour change.
+
+## 0.30.2
+
+### Patch Changes
+
+- b82304e: Remove per-model price overrides from the workspace budget. A workspace's budget is
+  now just a currency + monthly limit overlaid on the built-in `DEFAULT_SPEND_PRICING`
+  table; the `spendModelPrices` setting, its contracts/schemas, and the
+  `workspace_settings.spend_model_prices` column (D1 + Postgres) are dropped. Also fixes
+  the budget save in the UI throwing `spendMonthlyLimit.trim is not a function` when the
+  number input emits a numeric value.
+
+  **Breaking:** the `spend_model_prices` column is dropped on both runtimes with no
+  migration of existing override data (pre-1.0); any stored overrides are discarded and
+  budgets fall back to the built-in price table.
+
 ## 0.30.1
 
 ### Patch Changes

@@ -17,7 +17,6 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   kaizenEnabled: true,
   spendCurrency: null,
   spendMonthlyLimit: null,
-  spendModelPrices: null,
 }
 
 /**

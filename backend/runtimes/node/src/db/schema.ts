@@ -916,11 +916,10 @@ export const workspaceSettings = pgTable('workspace_settings', {
   // Per-workspace toggle for the Kaizen agent (post-run grading). On by default; integer
   // 0/1 to match the SQLite store.
   kaizen_enabled: integer('kaizen_enabled').notNull().default(1),
-  // Per-workspace spend budget (moved out of env). All nullable; null ⇒ the built-in
-  // DEFAULT_SPEND_PRICING base table. spend_model_prices is a JSON object of overrides.
+  // Per-workspace spend budget (moved out of env). Both nullable; null ⇒ the built-in
+  // DEFAULT_SPEND_PRICING base table.
   spend_currency: text('spend_currency'),
   spend_monthly_limit: doublePrecision('spend_monthly_limit'),
-  spend_model_prices: text('spend_model_prices'),
 })
 
 // Per-workspace merge threshold presets (mirror of D1 migration 0024's

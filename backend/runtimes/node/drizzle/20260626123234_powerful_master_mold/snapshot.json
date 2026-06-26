@@ -1,10 +1,10 @@
 {
-  "version": "8",
   "dialect": "postgres",
-  "id": "712067c3-3246-45fa-ab78-da48c81ef7d1",
+  "id": "df174a1e-13e6-4049-b0f0-8755b92eb0e9",
   "prevIds": [
-    "14f719f0-531f-4b7c-a7aa-322962f6a23e"
+    "c3e74133-e391-4f1a-a12f-dfcc0d94a88e"
   ],
+  "version": "8",
   "ddl": [
     {
       "name": "provisioning",
@@ -9152,19 +9152,6 @@
       "generated": null,
       "identity": null,
       "name": "spend_monthly_limit",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_settings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "spend_model_prices",
       "entityType": "columns",
       "schema": "public",
       "table": "workspace_settings"

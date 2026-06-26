@@ -1,5 +1,46 @@
 # @cat-factory/worker
 
+## 0.22.1
+
+### Patch Changes
+
+- 4849c66: Two follow-ups to the agent-context observability feature:
+
+  - **Worker:** the daily retention `scheduled` handler now fails fast with the same clear
+    "TELEMETRY_DB binding is required" error as the request-path container build (via a
+    shared `requireTelemetryDb` helper) instead of producing an opaque NPE deep in a
+    telemetry repo when the binding is unbound.
+  - **Server:** the agent-context snapshot now strips any embedded `user:pass@` userinfo
+    from the stored injected-doc URLs and the tester's ephemeral `environmentUrl`, upholding
+    the allow-list's "never a credential-bearing URL" promise even when an operator's
+    environment-provider mapping populates a credentialed URL.
+
+- b82304e: Remove per-model price overrides from the workspace budget. A workspace's budget is
+  now just a currency + monthly limit overlaid on the built-in `DEFAULT_SPEND_PRICING`
+  table; the `spendModelPrices` setting, its contracts/schemas, and the
+  `workspace_settings.spend_model_prices` column (D1 + Postgres) are dropped. Also fixes
+  the budget save in the UI throwing `spendMonthlyLimit.trim is not a function` when the
+  number input emits a numeric value.
+
+  **Breaking:** the `spend_model_prices` column is dropped on both runtimes with no
+  migration of existing override data (pre-1.0); any stored overrides are discarded and
+  budgets fall back to the built-in price table.
+
+- Updated dependencies [4849c66]
+- Updated dependencies [b82304e]
+  - @cat-factory/server@0.27.1
+  - @cat-factory/contracts@0.29.0
+  - @cat-factory/kernel@0.32.0
+  - @cat-factory/spend@0.10.0
+  - @cat-factory/orchestration@0.24.1
+  - @cat-factory/agents@0.15.2
+  - @cat-factory/consensus@0.7.41
+  - @cat-factory/gates@0.1.9
+  - @cat-factory/integrations@0.21.3
+  - @cat-factory/prompt-fragments@0.7.27
+  - @cat-factory/observability-langfuse@0.7.39
+  - @cat-factory/provider-cloudflare@0.7.41
+
 ## 0.22.0
 
 ### Minor Changes

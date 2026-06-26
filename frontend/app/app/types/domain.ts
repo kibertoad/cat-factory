@@ -504,8 +504,6 @@ export interface WorkspaceSettings {
   spendCurrency: string | null
   /** Monthly spend budget in `spendCurrency`. Null ⇒ the built-in default. */
   spendMonthlyLimit: number | null
-  /** Per-model price overrides (`provider:model` → per-1M rates). Null ⇒ none. */
-  spendModelPrices: Record<string, { inputPerMillion: number; outputPerMillion: number }> | null
 }
 
 /** Patch a workspace's settings (only the supplied fields change). */
@@ -518,7 +516,6 @@ export interface UpdateWorkspaceSettingsInput {
   kaizenEnabled?: boolean
   spendCurrency?: string | null
   spendMonthlyLimit?: number | null
-  spendModelPrices?: Record<string, { inputPerMillion: number; outputPerMillion: number }> | null
 }
 
 /**

@@ -372,7 +372,7 @@ async function add() {
 <template>
   <UModal v-model:open="open" title="Add a task">
     <template #body>
-      <div class="space-y-4">
+      <div class="space-y-4" data-testid="add-task-modal">
         <p v-if="container" class="text-xs text-slate-400">
           New task in <span class="font-medium text-slate-200">{{ container.title }}</span>
         </p>
@@ -411,6 +411,7 @@ async function add() {
           <UFormField label="Title" required>
             <UInput
               v-model="title"
+              data-testid="add-task-title"
               placeholder="What needs to be done?"
               autofocus
               class="w-full"
@@ -746,6 +747,7 @@ async function add() {
         <UButton color="neutral" variant="ghost" @click="ui.closeAddTask()">Cancel</UButton>
         <UButton
           color="primary"
+          data-testid="add-task-submit"
           :icon="isRecurring ? 'i-lucide-arrow-right' : 'i-lucide-plus'"
           :loading="saving"
           :disabled="!canAdd"

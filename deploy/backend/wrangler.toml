@@ -41,21 +41,21 @@ migrations_dir = "node_modules/@cat-factory/worker/migrations"
 [[d1_databases]]
 binding = "TELEMETRY_DB"
 database_name = "cat_factory_telemetry"
-database_id = "REPLACE_WITH_TELEMETRY_D1_ID"
+database_id = "bd8a599d-04f0-4cdf-b9c6-5e27f78012c9"
 migrations_dir = "node_modules/@cat-factory/worker/telemetry-migrations"
 
 # OPTIONAL: dedicated D1 for the Sandbox (the parallel prompt/model testing surface).
 # It has its OWN migrations lineage (the package's sandbox-migrations/), kept separate
 # from the main DB above for blast-radius isolation. Omit this binding to run without the
 # Sandbox (its API then answers 503). To enable: create a second D1 database
-# (`wrangler d1 create cat-factory-sandbox`), paste its id below, and apply its migrations
-# (`wrangler d1 migrations apply cat-factory-sandbox`). Because wrangler applies one
+# (`wrangler d1 create cat_factory_sandbox`), paste its id below, and apply its migrations
+# (`wrangler d1 migrations apply cat_factory_sandbox`). Because wrangler applies one
 # migrations_dir per database, this points at the package's sandbox-migrations/ folder.
-# [[d1_databases]]
-# binding = "SANDBOX_DB"
-# database_name = "cat_factory_sandbox"
-# database_id = "REPLACE_WITH_YOUR_SANDBOX_D1_ID"
-# migrations_dir = "node_modules/@cat-factory/worker/sandbox-migrations"
+[[d1_databases]]
+binding = "SANDBOX_DB"
+database_name = "cat_factory_sandbox"
+database_id = "3f228c93-535e-4d30-a221-e73615cf0ad2"
+migrations_dir = "node_modules/@cat-factory/worker/sandbox-migrations"
 
 # OPTIONAL: SEPARATE D1 database for the high-churn provisioning event log (its own binding
 # + migrations dir, shipped with the library). Omit this binding to run with the

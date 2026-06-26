@@ -1,10 +1,5 @@
 import type { WorkspaceSettingsRepository } from '@cat-factory/kernel'
-import type {
-  SpendModelPrices,
-  TaskLimitMode,
-  TaskLimitPerType,
-  WorkspaceSettings,
-} from '@cat-factory/contracts'
+import type { TaskLimitMode, TaskLimitPerType, WorkspaceSettings } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface WorkspaceSettingsRow {
@@ -16,7 +11,6 @@ interface WorkspaceSettingsRow {
   kaizen_enabled: number
   spend_currency: string | null
   spend_monthly_limit: number | null
-  spend_model_prices: string | null
 }
 
 function parseJson<T>(raw: string | null): T | null {
@@ -38,7 +32,6 @@ function rowToSettings(row: WorkspaceSettingsRow): WorkspaceSettings {
     kaizenEnabled: row.kaizen_enabled === 1,
     spendCurrency: row.spend_currency,
     spendMonthlyLimit: row.spend_monthly_limit,
-    spendModelPrices: parseJson<SpendModelPrices>(row.spend_model_prices),
   }
 }
 
@@ -68,8 +61,8 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
         `INSERT INTO workspace_settings
            (workspace_id, waiting_escalation_minutes, task_limit_mode, task_limit_shared,
             task_limit_per_type, store_agent_context, kaizen_enabled, spend_currency,
-            spend_monthly_limit, spend_model_prices)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            spend_monthly_limit)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id) DO UPDATE SET
            waiting_escalation_minutes = excluded.waiting_escalation_minutes,
            task_limit_mode = excluded.task_limit_mode,
@@ -78,8 +71,7 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
            store_agent_context = excluded.store_agent_context,
            kaizen_enabled = excluded.kaizen_enabled,
            spend_currency = excluded.spend_currency,
-           spend_monthly_limit = excluded.spend_monthly_limit,
-           spend_model_prices = excluded.spend_model_prices`,
+           spend_monthly_limit = excluded.spend_monthly_limit`,
       )
       .bind(
         workspaceId,
@@ -91,7 +83,6 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
         settings.kaizenEnabled ? 1 : 0,
         settings.spendCurrency,
         settings.spendMonthlyLimit,
-        settings.spendModelPrices ? JSON.stringify(settings.spendModelPrices) : null,
       )
       .run()
   }

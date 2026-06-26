@@ -27,6 +27,15 @@ export default defineConfig({
     baseURL: FRONTEND_URL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    // A dropped WebSocket event or a card that never flips is far easier to diagnose from
+    // a recording than a single end-state screenshot; kept to failures so green runs are cheap.
+    video: 'retain-on-failure',
+    // Opt-in for environments that ship a preinstalled Chromium and block `playwright
+    // install` downloads (e.g. sandboxes): point at the binary instead of fetching one.
+    // Unset in CI, which installs the matching browser the normal way.
+    ...(process.env.E2E_CHROMIUM_PATH
+      ? { launchOptions: { executablePath: process.env.E2E_CHROMIUM_PATH } }
+      : {}),
   },
   metadata: { backendUrl: BACKEND_URL },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],

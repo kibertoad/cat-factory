@@ -3058,14 +3058,6 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
         perType = null
       }
     }
-    let modelPrices: WorkspaceSettings['spendModelPrices'] = null
-    if (row.spend_model_prices) {
-      try {
-        modelPrices = JSON.parse(row.spend_model_prices) as WorkspaceSettings['spendModelPrices']
-      } catch {
-        modelPrices = null
-      }
-    }
     return {
       waitingEscalationMinutes: row.waiting_escalation_minutes,
       taskLimitMode: row.task_limit_mode as WorkspaceSettings['taskLimitMode'],
@@ -3075,7 +3067,6 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
       kaizenEnabled: row.kaizen_enabled === 1,
       spendCurrency: row.spend_currency,
       spendMonthlyLimit: row.spend_monthly_limit,
-      spendModelPrices: modelPrices,
     }
   }
 
@@ -3092,9 +3083,6 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
       kaizen_enabled: settings.kaizenEnabled ? 1 : 0,
       spend_currency: settings.spendCurrency,
       spend_monthly_limit: settings.spendMonthlyLimit,
-      spend_model_prices: settings.spendModelPrices
-        ? JSON.stringify(settings.spendModelPrices)
-        : null,
     }
     await this.db
       .insert(workspaceSettings)
@@ -3110,7 +3098,6 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
           kaizen_enabled: values.kaizen_enabled,
           spend_currency: values.spend_currency,
           spend_monthly_limit: values.spend_monthly_limit,
-          spend_model_prices: values.spend_model_prices,
         },
       })
   }

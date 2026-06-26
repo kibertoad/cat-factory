@@ -23,7 +23,15 @@ export {
 } from './onboarding.js'
 export { makeIncorporatedReview, makeReadyReviewWithOpenItem } from './requirements-fixtures.js'
 export { makeIncorporatedClarityReview } from './clarity-fixtures.js'
-export { defineConformanceSuite } from './suite.js'
+export {
+  defineConformanceSuite,
+  defineCoreConformance,
+  defineAgentConformance,
+  defineIntegrationConformance,
+  defineExecutionConformance,
+  defineMiscConformance,
+} from './suite.js'
+export { deriveWorkerDatabase, type WorkerDatabase } from './test-db.js'
 export { defineLlmMetricsSuite } from './llm-metrics-suite.js'
 export { defineAgentContextSuite } from './agent-context-suite.js'
 export { defineKaizenSuite } from './kaizen-suite.js'
