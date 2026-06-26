@@ -20,9 +20,11 @@
 # copied: the image's runtime uses only Node built-ins + the global Pi CLI, and
 # the package's dev/test deps (incl. pnpm `workspace:*` entries npm can't parse)
 # are irrelevant here. typescript/@types/node are installed standalone.
-# TODO: pin by @sha256:<digest> (node:26-trixie-slim@sha256:...) instead of the
-# mutable tag once the digest can be resolved with registry access.
-FROM node:26-trixie-slim AS build
+# Pinned by digest (the multi-arch index digest, valid for amd64 + arm64 via buildx)
+# so two builds of this Dockerfile always pull the identical base — the mutable
+# `node:26-trixie-slim` tag is kept in the line only for human readability. To bump:
+# `docker buildx imagetools inspect node:26-trixie-slim` and update BOTH stages.
+FROM node:26-trixie-slim@sha256:a1d9d671994fc2d26e297ac56b4b1522a8bc7fa71c43b14cd1b1fe6c5116f7dc AS build
 WORKDIR /app
 # Install the TS toolchain BEFORE copying src so editing harness source doesn't
 # reinvalidate the dependency layer (helps local rebuilds; CI builds --no-cache).
@@ -36,9 +38,8 @@ RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     npx tsc -p tsconfig.json'
 
 # ---- runtime: git + the Pi CLI + the compiled wrapper --------------------
-# TODO: pin by @sha256:<digest> (node:26-trixie-slim@sha256:...) instead of the
-# mutable tag once the digest can be resolved with registry access.
-FROM node:26-trixie-slim AS runtime
+# Pinned to the SAME digest as the build stage above (see that note to bump).
+FROM node:26-trixie-slim@sha256:a1d9d671994fc2d26e297ac56b4b1522a8bc7fa71c43b14cd1b1fe6c5116f7dc AS runtime
 ENV NODE_ENV=production
 
 # Defense-in-depth: run as an unprivileged user, not root. Created up front so the

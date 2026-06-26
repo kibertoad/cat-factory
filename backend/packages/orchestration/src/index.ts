@@ -189,6 +189,12 @@ export {
 export * as clarityLogic from './modules/clarity/clarity.logic.js'
 
 export {
+  BrainstormService,
+  type BrainstormServiceDependencies,
+} from './modules/brainstorm/BrainstormService.js'
+export * as brainstormLogic from './modules/brainstorm/brainstorm.logic.js'
+
+export {
   type Core,
   type CoreDependencies,
   type GitHubModule,
@@ -201,6 +207,7 @@ export {
   type RequirementsModule,
   type KaizenModule,
   type ClarityModule,
+  type BrainstormModule,
   type NotificationsModule,
   type ReleaseHealthModule,
   type IncidentEnrichmentModule,

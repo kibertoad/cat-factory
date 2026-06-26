@@ -27,6 +27,18 @@ import type { LlmToolSpan } from './llm-trace-sink.js'
 /** Live subtask counts a running job reports (from the coding tool's todo list). */
 export type RunnerJobProgress = StepSubtasks
 
+/**
+ * One forward-looking item the Coder streamed (a loose end / side-task / question), as the
+ * harness reports it on a poll (drain-on-read). Structurally the harness's `FollowUpLine` /
+ * the contracts' `StreamedFollowUp`; kept as a local shape so this port stays schema-free.
+ */
+export interface RunnerJobFollowUp {
+  kind: 'follow_up' | 'question'
+  title: string
+  detail?: string
+  suggestedAction?: string
+}
+
 /** The structured work product a finished job records. */
 export interface RunnerJobResult {
   prUrl?: string
@@ -101,6 +113,12 @@ export interface RunnerJobView {
    * absent on most polls. Best-effort observability — never affects the job lifecycle.
    */
   spans?: LlmToolSpan[]
+  /**
+   * Forward-looking follow-up / question items the Coder streamed SINCE THE LAST POLL
+   * (drain-on-read). The executor forwards them to the engine, which appends them to the
+   * run's step (the Follow-up companion). Absent on most polls / non-coder jobs.
+   */
+  followUps?: RunnerJobFollowUp[]
 }
 
 /**

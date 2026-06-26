@@ -169,6 +169,14 @@ export type {
   ReRequestRecommendationInput,
   ResolveRequirementsExceededInput,
   ResolveRequirementsExceededChoice,
+  // Follow-up companion (future-looking Coder) shapes: surfaced loose-end / question items
+  // + the live step state the engine parks/loops on.
+  FollowUpItemKind,
+  FollowUpItemStatus,
+  FollowUpItem,
+  FollowUpsStepState,
+  AnswerFollowUpInput,
+  StreamedFollowUp,
   // Clarity-review (bug-report triage reviewer agent) shapes — reuse the requirements
   // review item/status shapes, differ only in subject + the persisted document field.
   ClarityReviewItem,
@@ -179,6 +187,17 @@ export type {
   IncorporateClarityInput,
   ResolveClarityExceededInput,
   ResolveClarityExceededChoice,
+  // Brainstorm (structured-dialogue agent) shapes — reuse the requirements review
+  // item/status shapes, differ in the `stage` discriminator + the converged-direction doc.
+  BrainstormStage,
+  BrainstormItem,
+  BrainstormStatus,
+  BrainstormSession,
+  ReplyBrainstormItemInput,
+  UpdateBrainstormItemStatusInput,
+  IncorporateBrainstormInput,
+  ResolveBrainstormExceededInput,
+  ResolveBrainstormExceededChoice,
   // Shared iterative-gate cap resolution (requirements reviewer + quality companions).
   IterationCapChoice,
   ResolveIterationCapInput,

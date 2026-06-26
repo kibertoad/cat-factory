@@ -72,6 +72,28 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
       'Triages the task after requirements are clarified — rates Complexity, Risk and Impact (0..1). Used to gate consensus and conditional companion steps, and shown as ratings on the task.',
   },
   {
+    kind: 'requirements-brainstorm',
+    label: 'Requirements Brainstorm',
+    icon: 'i-lucide-lightbulb',
+    color: '#f59e0b',
+    category: 'design',
+    description:
+      'A structured dialogue that turns a rough idea into crisp requirements — proposing options with explicit trade-offs and letting you choose, before the requirements review.',
+    // Opens the shared dedicated brainstorm window (propose options → choose → incorporate →
+    // re-run loop) instead of the generic prose step-detail panel.
+    resultView: 'brainstorm',
+  },
+  {
+    kind: 'architecture-brainstorm',
+    label: 'Architecture Brainstorm',
+    icon: 'i-lucide-compass',
+    color: '#a78bfa',
+    category: 'design',
+    description:
+      'A structured dialogue that explores and finalizes a technical approach from the refined requirements — proposing options with explicit trade-offs and letting you converge, before the architect.',
+    resultView: 'brainstorm',
+  },
+  {
     kind: 'architect',
     label: 'Architect',
     icon: 'i-lucide-drafting-compass',
@@ -496,3 +518,29 @@ export const STATUS_META: Record<
 
 /** Visual metadata for module sub-frames. */
 export const MODULE_META = { icon: 'i-lucide-package', color: '#a78bfa' }
+
+/**
+ * Display metadata for the future-looking Follow-up companion — a per-`coder`-step toggle
+ * (NOT a separate agent kind), so it isn't a palette archetype. It surfaces as a blinking
+ * chip on the Coder step (its blinking is driven by `step.followUps` pending items) and as
+ * the header of its dedicated window. The builder shows a toggle for it on Coder steps,
+ * persisted on the pipeline's per-step `followUps` array.
+ */
+export const FOLLOW_UP_COMPANION_META = {
+  label: 'Follow-up companion',
+  icon: 'i-lucide-compass',
+  color: '#f472b6',
+}
+
+/**
+ * Whether a Coder step has the Follow-up companion enabled, given the pipeline's per-step
+ * `followUps` toggle at index `i`. Enabled by default on a `coder` step (only `false`
+ * disables it); ignored on other kinds.
+ */
+export function followUpCompanionEnabled(
+  kind: string,
+  followUps: (boolean | null)[] | undefined,
+  i: number,
+): boolean {
+  return kind === 'coder' && followUps?.[i] !== false
+}

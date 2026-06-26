@@ -5,6 +5,12 @@ import {
   WRITER_SYSTEM_PROMPT,
 } from '../prompts/requirements.js'
 import { CLARITY_REVIEW_SYSTEM_PROMPT, CLARITY_REWORK_SYSTEM_PROMPT } from '../prompts/clarity.js'
+import {
+  ARCHITECTURE_BRAINSTORM_REWORK_SYSTEM_PROMPT,
+  ARCHITECTURE_BRAINSTORM_SYSTEM_PROMPT,
+  REQUIREMENTS_BRAINSTORM_REWORK_SYSTEM_PROMPT,
+  REQUIREMENTS_BRAINSTORM_SYSTEM_PROMPT,
+} from '../prompts/brainstorm.js'
 import { KAIZEN_SYSTEM_PROMPT } from '../prompts/kaizen.js'
 
 // Versioned registry of the built-in agent system prompts. The goal is simple
@@ -31,6 +37,26 @@ export const PROMPT_VERSIONS = {
   'requirement-writer': { id: 'requirement-writer', version: 1, text: WRITER_SYSTEM_PROMPT },
   'clarity-review': { id: 'clarity-review', version: 1, text: CLARITY_REVIEW_SYSTEM_PROMPT },
   'clarity-rework': { id: 'clarity-rework', version: 1, text: CLARITY_REWORK_SYSTEM_PROMPT },
+  'requirements-brainstorm': {
+    id: 'requirements-brainstorm',
+    version: 1,
+    text: REQUIREMENTS_BRAINSTORM_SYSTEM_PROMPT,
+  },
+  'requirements-brainstorm-rework': {
+    id: 'requirements-brainstorm-rework',
+    version: 1,
+    text: REQUIREMENTS_BRAINSTORM_REWORK_SYSTEM_PROMPT,
+  },
+  'architecture-brainstorm': {
+    id: 'architecture-brainstorm',
+    version: 1,
+    text: ARCHITECTURE_BRAINSTORM_SYSTEM_PROMPT,
+  },
+  'architecture-brainstorm-rework': {
+    id: 'architecture-brainstorm-rework',
+    version: 1,
+    text: ARCHITECTURE_BRAINSTORM_REWORK_SYSTEM_PROMPT,
+  },
   build: { id: 'build', version: 3, text: standardSystemPrompt('build') },
   review: { id: 'review', version: 2, text: standardSystemPrompt('review') },
   kaizen: { id: 'kaizen', version: 1, text: KAIZEN_SYSTEM_PROMPT },

@@ -774,6 +774,32 @@ export const clarityReviews = pgTable(
   ],
 )
 
+// Brainstorm (structured-dialogue) sessions (mirror of D1 migration 0016_brainstorm_sessions).
+// The brainstorm analogue of `clarity_reviews`, but keyed per (block, STAGE): a block may have
+// one live `requirements` session and one live `architecture` session at once.
+// `converged_direction` holds the standard-format direction the dialogue settled on.
+export const brainstormSessions = pgTable(
+  'brainstorm_sessions',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    block_id: text('block_id').notNull(),
+    stage: text('stage').notNull(),
+    status: text('status').notNull(),
+    items: text('items').notNull().default('[]'),
+    model: text('model'),
+    converged_direction: text('converged_direction'),
+    iteration: integer('iteration').notNull().default(1),
+    max_iterations: integer('max_iterations').notNull().default(1),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    index('idx_brainstorm_sessions_block_stage').on(t.workspace_id, t.block_id, t.stage),
+  ],
+)
+
 // A workspace's issue-tracker selection (mirror of D1 migration 0029).
 export const trackerSettings = pgTable('tracker_settings', {
   workspace_id: text('workspace_id').primaryKey(),

@@ -146,6 +146,10 @@ export function seedPipelines(): Pipeline[] {
       // failure — and `merger` runs last: it scores the PR and either auto-merges
       // (within the task's thresholds) or raises a review notification.
       agentKinds: [
+        // Structured-dialogue option exploration BEFORE the requirements review (opt-in:
+        // disabled by default in `enabled` below). Turns a vague description into a crisp
+        // requirements direction the review then critiques.
+        'requirements-brainstorm',
         'requirements-review',
         // The spec-writer applies THIS task's clarified requirements as an increment
         // onto the spec already committed at the branch's baseline (what's merged so
@@ -162,6 +166,10 @@ export function seedPipelines(): Pipeline[] {
         // loops the spec-writer back with the feedback folded in — replacing the
         // human review the spec used to require.
         'spec-companion',
+        // Structured-dialogue approach exploration BEFORE the architect (opt-in: disabled by
+        // default in `enabled` below). Starts from the refined requirements and finalizes an
+        // approach the architect designs against.
+        'architecture-brainstorm',
         'architect',
         'researcher',
         'coder',
@@ -179,15 +187,16 @@ export function seedPipelines(): Pipeline[] {
         'ci',
         'merger',
       ],
-      // Gate only the context requirements review (index 0) and the architecture
-      // proposal (`architect`, index 3). The spec is NO LONGER human-gated — its
-      // `spec-companion` (index 2) is the quality gate (rate + automatic rework). The
-      // `mocker` / `tester` / `conflicts` / `ci` / `merger` tail
-      // is never human-gated (it gates/decides itself), so those slots are false too.
+      // Human gates: the two opt-in brainstorm dialogues (indices 0 + 4), the context
+      // requirements review (index 1) and the architecture proposal (`architect`, index 5).
+      // The spec is NOT human-gated — its `spec-companion` (index 3) is the quality gate. The
+      // `mocker` / `tester` / `conflicts` / `ci` / `merger` tail gates/decides itself.
       gates: [
         true,
+        true,
         false,
         false,
+        true,
         true,
         false,
         false,
@@ -198,6 +207,27 @@ export function seedPipelines(): Pipeline[] {
         false,
         false,
         false,
+      ],
+      // The two brainstorm steps are opt-in: present in the preset but DISABLED by default
+      // (indices 0 = requirements-brainstorm, 4 = architecture-brainstorm), so they are
+      // skipped at run start unless a user toggles them on for the pipeline. Every other
+      // step is enabled.
+      enabled: [
+        false,
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
       ],
     },
     {
@@ -231,10 +261,14 @@ export function seedPipelines(): Pipeline[] {
       id: 'pl_fullstack',
       name: 'Complex fullstack feature',
       agentKinds: [
+        // Opt-in structured-dialogue option exploration (disabled by default in `enabled`).
+        'requirements-brainstorm',
         'requirements-review',
         'researcher',
         'spec-writer',
         'spec-companion',
+        // Opt-in structured-dialogue approach exploration (disabled by default in `enabled`).
+        'architecture-brainstorm',
         'architect',
         'architect-companion',
         'mocker',
@@ -249,17 +283,19 @@ export function seedPipelines(): Pipeline[] {
         'ci',
         'merger',
       ],
-      // Human gates: the context requirements review (index 0) and — after its
-      // companion has cleared the quality bar — the architecture (on `architect-
-      // companion`, index 5). The spec is NOT human-gated: its `spec-companion`
-      // (index 3) rates it and loops the spec-writer back automatically. Every other
-      // step (including the self-gating conflicts / ci / merger tail and the auto-only
+      // Human gates: the two opt-in brainstorm dialogues (indices 0 + 5), the context
+      // requirements review (index 1) and — after its companion has cleared the quality bar —
+      // the architecture (on `architect-companion`, index 7). The spec is NOT human-gated: its
+      // `spec-companion` (index 4) rates it and loops the spec-writer back automatically. Every
+      // other step (including the self-gating conflicts / ci / merger tail and the auto-only
       // `reviewer` companion) runs straight through.
       gates: [
         true,
+        true,
         false,
         false,
         false,
+        true,
         false,
         true,
         false,
@@ -273,6 +309,30 @@ export function seedPipelines(): Pipeline[] {
         false,
         false,
         false,
+      ],
+      // The two brainstorm steps are opt-in: present but DISABLED by default (indices 0 =
+      // requirements-brainstorm, 5 = architecture-brainstorm), skipped at run start unless a
+      // user toggles them on for the pipeline. Every other step is enabled.
+      enabled: [
+        false,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
       ],
     },
     {

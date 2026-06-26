@@ -64,6 +64,10 @@ import type {
   ClarityReview,
   ClarityReviewItem,
   ClarityReviewRepository,
+  BrainstormSession,
+  BrainstormItem,
+  BrainstormStage,
+  BrainstormSessionRepository,
   RunRef,
   SandboxExperiment,
   SandboxExperimentRepository,
@@ -146,6 +150,7 @@ import {
   kaizenGradings,
   kaizenVerifiedCombos,
   clarityReviews,
+  brainstormSessions,
   sandboxPromptVersions,
   sandboxFixtures,
   sandboxExperiments,
@@ -2486,6 +2491,121 @@ export class DrizzleClarityReviewRepository implements ClarityReviewRepository {
   }
 }
 
+type BrainstormSessionRow = typeof brainstormSessions.$inferSelect
+
+function rowToBrainstormSession(row: BrainstormSessionRow): BrainstormSession {
+  let items: BrainstormItem[] = []
+  try {
+    const parsed = JSON.parse(row.items)
+    if (Array.isArray(parsed)) items = parsed as BrainstormItem[]
+  } catch {
+    items = []
+  }
+  return {
+    id: row.id,
+    blockId: row.block_id,
+    stage: row.stage as BrainstormSession['stage'],
+    status: row.status as BrainstormSession['status'],
+    items,
+    model: row.model,
+    convergedDirection: row.converged_direction,
+    iteration: row.iteration,
+    maxIterations: row.max_iterations,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+/**
+ * Brainstorm (structured-dialogue) sessions over Postgres — the Drizzle mirror of the Worker's
+ * `D1BrainstormSessionRepository`. Behaviourally identical so the cross-runtime conformance
+ * suite asserts the same per-stage round-trip and brainstorm direction handoff against both
+ * stores. Keyed per (block, stage): a block may hold a live `requirements` AND `architecture`
+ * session at once.
+ */
+export class DrizzleBrainstormSessionRepository implements BrainstormSessionRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async getByBlockStage(
+    workspaceId: string,
+    blockId: string,
+    stage: BrainstormStage,
+  ): Promise<BrainstormSession | null> {
+    const rows = await this.db
+      .select()
+      .from(brainstormSessions)
+      .where(
+        and(
+          eq(brainstormSessions.workspace_id, workspaceId),
+          eq(brainstormSessions.block_id, blockId),
+          eq(brainstormSessions.stage, stage),
+        ),
+      )
+      .orderBy(desc(brainstormSessions.created_at))
+      .limit(1)
+    return rows[0] ? rowToBrainstormSession(rows[0]) : null
+  }
+
+  async get(workspaceId: string, id: string): Promise<BrainstormSession | null> {
+    const rows = await this.db
+      .select()
+      .from(brainstormSessions)
+      .where(and(eq(brainstormSessions.workspace_id, workspaceId), eq(brainstormSessions.id, id)))
+      .limit(1)
+    return rows[0] ? rowToBrainstormSession(rows[0]) : null
+  }
+
+  async upsert(workspaceId: string, session: BrainstormSession): Promise<void> {
+    const values = {
+      workspace_id: workspaceId,
+      id: session.id,
+      block_id: session.blockId,
+      stage: session.stage,
+      status: session.status,
+      items: JSON.stringify(session.items),
+      model: session.model,
+      converged_direction: session.convergedDirection,
+      iteration: session.iteration ?? 1,
+      max_iterations: session.maxIterations ?? 1,
+      created_at: session.createdAt,
+      updated_at: session.updatedAt,
+    }
+    await this.db
+      .insert(brainstormSessions)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [brainstormSessions.workspace_id, brainstormSessions.id],
+        set: {
+          block_id: values.block_id,
+          stage: values.stage,
+          status: values.status,
+          items: values.items,
+          model: values.model,
+          converged_direction: values.converged_direction,
+          iteration: values.iteration,
+          max_iterations: values.max_iterations,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+
+  async deleteByBlockStage(
+    workspaceId: string,
+    blockId: string,
+    stage: BrainstormStage,
+  ): Promise<void> {
+    await this.db
+      .delete(brainstormSessions)
+      .where(
+        and(
+          eq(brainstormSessions.workspace_id, workspaceId),
+          eq(brainstormSessions.block_id, blockId),
+          eq(brainstormSessions.stage, stage),
+        ),
+      )
+  }
+}
+
 type MergePresetRow = typeof mergeThresholdPresets.$inferSelect
 
 function rowToMergePreset(row: MergePresetRow): MergeThresholdPreset {
@@ -3421,6 +3541,7 @@ export interface CoreRepositories {
   kaizenVerifiedComboRepository: KaizenVerifiedComboRepository
   consensusSessionRepository: ConsensusSessionRepository
   clarityReviewRepository: ClarityReviewRepository
+  brainstormSessionRepository: BrainstormSessionRepository
   mergePresetRepository: MergePresetRepository
   workspaceSettingsRepository: WorkspaceSettingsRepository
   observabilityConnectionRepository: ObservabilityConnectionRepository
@@ -3457,6 +3578,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     kaizenVerifiedComboRepository: new DrizzleKaizenVerifiedComboRepository(db),
     consensusSessionRepository: new DrizzleConsensusSessionRepository(db),
     clarityReviewRepository: new DrizzleClarityReviewRepository(db),
+    brainstormSessionRepository: new DrizzleBrainstormSessionRepository(db),
     mergePresetRepository: new DrizzleMergePresetRepository(db),
     workspaceSettingsRepository: new DrizzleWorkspaceSettingsRepository(db),
     observabilityConnectionRepository: new DrizzleObservabilityConnectionRepository(db),

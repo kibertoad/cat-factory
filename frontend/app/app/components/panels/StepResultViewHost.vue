@@ -13,18 +13,22 @@
 import { computed, type Component } from 'vue'
 import RequirementsReviewWindow from '~/components/requirements/RequirementsReviewWindow.vue'
 import ClarityReviewWindow from '~/components/clarity/ClarityReviewWindow.vue'
+import BrainstormWindow from '~/components/brainstorm/BrainstormWindow.vue'
 import TestReportWindow from '~/components/testing/TestReportWindow.vue'
 import HumanTestWindow from '~/components/humanTest/HumanTestWindow.vue'
 import GateResultView from '~/components/gates/GateResultView.vue'
 import ConsensusSessionWindow from '~/components/consensus/ConsensusSessionWindow.vue'
 import GenericStructuredResultView from '~/components/panels/GenericStructuredResultView.vue'
 import ServiceSpecWindow from '~/components/spec/ServiceSpecWindow.vue'
+import FollowUpWindow from '~/components/followUp/FollowUpWindow.vue'
 
 const ui = useUiStore()
 
 const STEP_RESULT_VIEWS: Record<string, Component> = {
   'requirements-review': RequirementsReviewWindow,
   'clarity-review': ClarityReviewWindow,
+  // Shared by both brainstorm stages (requirements + architecture); the window reads the stage.
+  brainstorm: BrainstormWindow,
   tester: TestReportWindow,
   // The human-testing gate: env URL + confirm / request-fix / pull-main / recreate / destroy.
   'human-test': HumanTestWindow,
@@ -38,6 +42,9 @@ const STEP_RESULT_VIEWS: Record<string, Component> = {
   // The service's prescriptive spec tree (+ Gherkin), opened from the inspector's "View
   // Requirements" button. Not a pipeline-step view — opened directly via `ui.openServiceSpec`.
   'service-spec': ServiceSpecWindow,
+  // The future-looking Follow-up companion: the Coder's surfaced loose ends / questions.
+  // Opened directly via `ui.openFollowUps` (the blinking chip + the `followup_pending` card).
+  'follow-ups': FollowUpWindow,
 }
 
 const active = computed<Component | null>(() => {

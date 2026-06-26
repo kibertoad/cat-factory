@@ -313,6 +313,7 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
       commitMessage: job.commitMessage ?? job.pr?.title ?? 'Agent changes',
       webToolsGuidance: job.webToolsGuidance,
       webSearchProxy: job.webSearch,
+      ...(job.streamFollowUps ? { streamFollowUps: true } : {}),
     },
     opts,
   )

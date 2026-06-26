@@ -381,6 +381,27 @@ async function clone(p: Pipeline) {
                     "
                     @click="pipelines.toggleDraftConsensus(unit.index)"
                   />
+                  <!-- Follow-up companion: the future-looking Coder surfaces loose ends /
+                     side-tasks / questions mid-run (coder steps only). Enabled by default. -->
+                  <UButton
+                    v-if="unit.kind === 'coder'"
+                    :icon="
+                      pipelines.draftFollowUps[unit.index] === false
+                        ? 'i-lucide-circle-slash'
+                        : 'i-lucide-compass'
+                    "
+                    :color="
+                      pipelines.draftFollowUps[unit.index] === false ? 'neutral' : 'secondary'
+                    "
+                    variant="ghost"
+                    size="xs"
+                    :title="
+                      pipelines.draftFollowUps[unit.index] === false
+                        ? 'Follow-up companion disabled — click to enable (Coder surfaces loose ends / questions)'
+                        : 'Follow-up companion enabled — Coder surfaces loose ends / side-tasks / questions; click to disable'
+                    "
+                    @click="pipelines.toggleDraftFollowUps(unit.index)"
+                  />
                   <UButton
                     icon="i-lucide-chevron-up"
                     color="neutral"

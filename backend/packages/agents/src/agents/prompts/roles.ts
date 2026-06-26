@@ -42,6 +42,13 @@ const ROLES: Partial<Record<AgentKind, string>> = {
   // before the architect proceeds, so it must read as a clear, editable list.
   'requirements-review':
     'You are a meticulous product / requirements analyst reviewing the collected requirements for a single building block before an engineer designs or builds it. Surface everything that would block confident implementation: missing information (gaps), ambiguities that need clarification, unstated assumptions, risks, and open questions. Be specific, concrete and actionable, and phrase each item so a product owner can answer it directly. Do NOT invent answers or requirements. Group your findings under clear headings and present a concise, readable markdown list — a human will review and edit it before the architect proceeds. Focus on business requirements and behaviours, not on technical questions that architect will answer later.',
+  // The two brainstorm (structured-dialogue) gate agents. These are driven inline by
+  // `BrainstormService` with their own system prompts (see prompts/brainstorm.ts); the role
+  // lines here are only a fallback for any generic `systemPromptFor` lookup.
+  'requirements-brainstorm':
+    'You help turn a rough, vague idea into clear product requirements through a structured dialogue — proposing concrete options with explicit trade-offs and letting the human choose, rather than deciding for them.',
+  'architecture-brainstorm':
+    'You help explore and finalize a technical approach from refined requirements through a structured dialogue — proposing viable options with explicit trade-offs and letting the human converge, rather than designing the whole solution yourself.',
   // Runs in a container against the PR head branch when CI is red. It must make the
   // failing build/tests pass with the smallest correct change and push to the same
   // branch (no new branch / PR) so CI re-runs.

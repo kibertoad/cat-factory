@@ -12,6 +12,7 @@ import type {
   RepoEntry,
   RepoProjectionRepository,
 } from '@cat-factory/kernel'
+import { isProxyableProvider } from '@cat-factory/agents'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
 import { logger } from '../observability/logger.js'
@@ -377,17 +378,6 @@ function isBootstrapBoilerplate(entry: RepoEntry): boolean {
     name === 'licence' ||
     name.startsWith('licence.') ||
     name === 'agents.md'
-  )
-}
-
-/** Providers the LLM proxy can serve (mirrors ContainerAgentExecutor). */
-function isProxyableProvider(provider: string): boolean {
-  return (
-    provider === 'workers-ai' ||
-    provider === 'qwen' ||
-    provider === 'deepseek' ||
-    provider === 'moonshot' ||
-    provider === 'openai'
   )
 }
 
