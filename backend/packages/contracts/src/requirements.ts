@@ -120,8 +120,18 @@ export type RecommendationStatus = v.InferOutput<typeof recommendationStatusSche
  */
 export const requirementRecommendationSchema = v.object({
   id: v.string(),
-  /** Snapshot of the finding this recommends an answer for (item ids churn on re-review). */
-  sourceFinding: v.object({ title: v.string(), detail: v.string() }),
+  /**
+   * Snapshot of the finding this recommends an answer for. `itemId` is the finding's id at
+   * request time — the PRIMARY anchor, so two findings that happen to share an identical
+   * title+detail stay distinct. Item ids churn across re-reviews, so matching falls back to
+   * title+detail when the snapshotted id is no longer present (`itemId` is optional for that
+   * reason and absent on pre-existing rows).
+   */
+  sourceFinding: v.object({
+    title: v.string(),
+    detail: v.string(),
+    itemId: v.optional(v.string()),
+  }),
   /** The suggested answer text. */
   recommendedText: v.string(),
   status: recommendationStatusSchema,

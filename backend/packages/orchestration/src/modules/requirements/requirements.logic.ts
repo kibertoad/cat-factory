@@ -341,6 +341,57 @@ export function coerceRecommendations(
 }
 
 /**
+ * Coerce the Writer's JSON for a SINGLE-finding call. The per-finding recommendation flow
+ * prompts the Writer with exactly one finding, so it must tolerate a missing/garbled `itemId`:
+ * single-item prompts frequently omit the echoed id, and {@link coerceRecommendations} drops
+ * any entry without one — which would silently discard a perfectly good suggestion and
+ * force-reopen the finding. So: prefer the entry whose id matches, but when the model returns a
+ * lone entry with a recommendation string, take it regardless of the id. Returns null only when
+ * there is genuinely no usable recommendation.
+ */
+export function coerceSingleRecommendation(
+  raw: unknown,
+  itemId: string,
+): { recommendation: string; fromStandard: string | null } | null {
+  const list = Array.isArray((raw as { recommendations?: unknown })?.recommendations)
+    ? ((raw as { recommendations: unknown[] }).recommendations as unknown[])
+    : Array.isArray(raw)
+      ? (raw as unknown[])
+      : []
+  const entries = list
+    .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object')
+    .map((obj) => ({
+      itemId: asString(obj.itemId),
+      recommendation: asString(obj.recommendation),
+      fromStandard: asString(obj.fromStandard) || null,
+    }))
+    .filter((e) => e.recommendation)
+  if (entries.length === 0) return null
+  const chosen =
+    entries.find((e) => e.itemId === itemId) ?? (entries.length === 1 ? entries[0] : null)
+  return chosen
+    ? { recommendation: chosen.recommendation, fromStandard: chosen.fromStandard }
+    : null
+}
+
+/**
+ * Resolve the live review item a recommendation answers. Prefers the snapshotted `itemId` (the
+ * primary anchor, so two findings with identical title+detail stay distinct), then falls back to
+ * title+detail for recommendations created before the id was snapshotted or whose finding id
+ * churned across a re-review. Returns undefined when no finding matches.
+ */
+export function findSourceItem(
+  items: RequirementReviewItem[],
+  source: { title: string; detail: string; itemId?: string },
+): RequirementReviewItem | undefined {
+  if (source.itemId) {
+    const byId = items.find((i) => i.id === source.itemId)
+    if (byId) return byId
+  }
+  return items.find((i) => i.title === source.title && i.detail === source.detail)
+}
+
+/**
  * Whether an incorporation pass has anything to fold in: at least one finding the human
  * answered/resolved with a non-empty reply, or a freeform "do it differently" feedback.
  * When false, the rework + re-review LLM calls would add no new facts — the only thing

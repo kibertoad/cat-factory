@@ -215,6 +215,64 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
     expect(rejected.recommendations[0]!.status).toBe('rejected')
     expect(rejected.items.find((i) => i.id === b.id)!.status).toBe('open')
   })
+
+  it('keeps two findings with an identical title+detail distinct (one placeholder each)', async () => {
+    const svc = makeService()
+    // An LLM reviewer can raise two byte-identical findings; they must stay distinct so each
+    // gets its own recommendation rather than collapsing into one (which would strand the other).
+    const DUP_FINDINGS = JSON.stringify({
+      items: [
+        { category: 'gap', severity: 'high', title: 'Same', detail: 'same?' },
+        { category: 'gap', severity: 'high', title: 'Same', detail: 'same?' },
+      ],
+    })
+    generateTextMock.mockResolvedValueOnce(llm(DUP_FINDINGS))
+    const review = await svc.review(WS, BLOCK.id, {})
+    const [x, y] = review.items
+    expect(review.items).toHaveLength(2)
+
+    const prepared = await svc.prepareRecommendations(WS, review.id, [x!.id, y!.id])
+    // Two placeholders despite identical title+detail — keyed on the finding id, not the text.
+    expect(prepared.recommendations).toHaveLength(2)
+    expect(prepared.recommendations.map((r) => r.sourceFinding.itemId).sort()).toEqual(
+      [x!.id, y!.id].sort(),
+    )
+
+    generateTextMock.mockResolvedValueOnce(
+      llm(JSON.stringify({ recommendations: [{ itemId: x!.id, recommendation: 'For X.' }] })),
+    )
+    generateTextMock.mockResolvedValueOnce(
+      llm(JSON.stringify({ recommendations: [{ itemId: y!.id, recommendation: 'For Y.' }] })),
+    )
+    const { produced } = await svc.fillPendingRecommendations(WS, review.id, {})
+    expect(produced).toBe(2)
+    const after = await svc.getForBlock(WS, BLOCK.id)
+    expect(after!.recommendations.map((r) => r.recommendedText).sort()).toEqual([
+      'For X.',
+      'For Y.',
+    ])
+  })
+
+  it('keeps a valid suggestion even when the Writer omits the echoed itemId', async () => {
+    const svc = makeService()
+    generateTextMock.mockResolvedValueOnce(llm(TWO_FINDINGS))
+    const review = await svc.review(WS, BLOCK.id, {})
+    const b = review.items[1]!
+    await svc.prepareRecommendations(WS, review.id, [b.id])
+
+    // Single-finding call: the model returns a recommendation but drops the echoed itemId
+    // (common for one-item prompts). It must still be applied, not discarded as a failure.
+    generateTextMock.mockResolvedValueOnce(
+      llm(JSON.stringify({ recommendations: [{ recommendation: 'Answer for B.' }] })),
+    )
+    const { produced } = await svc.fillPendingRecommendations(WS, review.id, {})
+    expect(produced).toBe(1)
+    const after = await svc.getForBlock(WS, BLOCK.id)
+    expect(after!.recommendations[0]!.status).toBe('ready')
+    expect(after!.recommendations[0]!.recommendedText).toBe('Answer for B.')
+    // The finding is NOT reopened — the Writer succeeded.
+    expect(after!.items.find((i) => i.id === b.id)!.status).toBe('recommend_requested')
+  })
 })
 
 describe('IterativeReviewService (via ClarityReviewService)', () => {
