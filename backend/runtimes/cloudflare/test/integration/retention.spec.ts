@@ -22,6 +22,7 @@ const POLICY = {
   rateLimitMs: 7 * DAY,
   commitMs: 90 * DAY,
   llmCallMetricsMs: 3 * DAY,
+  provisioningLogMs: 14 * DAY,
 }
 
 function deps() {
@@ -201,7 +202,13 @@ describe('storage retention sweep', () => {
 
     const result = await sweepRetention({
       ...deps(),
-      policy: { tokenUsageMs: 0, rateLimitMs: 0, commitMs: 0, llmCallMetricsMs: 0 },
+      policy: {
+        tokenUsageMs: 0,
+        rateLimitMs: 0,
+        commitMs: 0,
+        llmCallMetricsMs: 0,
+        provisioningLogMs: 0,
+      },
     })
 
     expect(result).toEqual({
@@ -210,6 +217,7 @@ describe('storage retention sweep', () => {
       commits: 0,
       llmCallMetrics: 0,
       scheduleRuns: 0,
+      provisioningLog: 0,
     })
     expect(await countRows('token_usage', 'id = ?', 'tok_disabled')).toBe(1)
   })
