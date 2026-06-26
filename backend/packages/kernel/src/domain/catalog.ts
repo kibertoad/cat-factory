@@ -40,6 +40,11 @@ export const DEFAULT_MERGE_PRESET = {
   // rather than fixing prod, so 1 pass is the sensible default).
   releaseWatchWindowMinutes: 30,
   releaseMaxAttempts: 1,
+  // Human-review gate: how long (minutes) the gate waits after the latest review comment
+  // before dispatching the `fixer` to address the batch — a grace window so a reviewer
+  // leaving a series of comments isn't churned mid-stream. Only applies to the unapproved
+  // path (an approved PR's comments are addressed immediately).
+  humanReviewGraceMinutes: 10,
 } as const
 
 /** Fallback CI-fixer attempt budget when no preset resolves (defensive default). */

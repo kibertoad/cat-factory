@@ -740,6 +740,49 @@ export const gateStepStateSchema = v.object({
    * Absent for the post-release-health gate (its on-call helper is resolved specially).
    */
   attemptLog: v.optional(v.nullable(v.array(gateAttemptSchema))),
+  // ---- human-review gate only (absent for the CI/conflicts/post-release-health gates) ----
+  /**
+   * The number of approving reviews the PR had at the last probe vs. what GitHub requires,
+   * so the UI can show "1 / 2 approvals". Absent for the other gates.
+   */
+  lastApprovals: v.optional(v.nullable(v.number())),
+  requiredApprovals: v.optional(v.nullable(v.number())),
+  /**
+   * The GraphQL ids of the review threads the gate just handed the `fixer`, stashed at
+   * dispatch so the helper-completion hook can post a reply + RESOLVE exactly those threads
+   * on GitHub before the next probe reads them. Absent for the other gates.
+   */
+  pendingThreadIds: v.optional(v.nullable(v.array(v.string()))),
+  /**
+   * Epoch ms of the newest plain PR comment the gate has already handed the `fixer`. Plain
+   * conversation comments (unlike review threads) can't be "resolved" on GitHub, so they are
+   * tracked by timestamp: a comment newer than this is outstanding; the dispatch advances it to
+   * the batch max. A reviewer's later comment (newer timestamp) re-opens the work. Absent for
+   * the other gates.
+   */
+  lastAddressedCommentAt: v.optional(v.nullable(v.number())),
+  /**
+   * The grace window (minutes) the human-review gate waits after the latest review comment
+   * before dispatching the fixer, resolved from the task's merge preset ONCE on first entry
+   * (alongside `maxAttempts`) so the probe doesn't re-resolve the preset every poll. Absent
+   * for the other gates.
+   */
+  humanReviewGraceMinutes: v.optional(v.nullable(v.number())),
+  /**
+   * A human-initiated fix request parked on the gate (an in-app freeform prompt, or a direct
+   * GitHub comment instruction). Consumed at the top of the next `evaluateGate` pass, which
+   * dispatches the fixer with these instructions folded in — bypassing the grace window.
+   * Absent for the other gates.
+   */
+  pendingFix: v.optional(
+    v.nullable(
+      v.object({
+        instructions: v.string(),
+        source: v.picklist(['app', 'github']),
+        at: v.number(),
+      }),
+    ),
+  ),
 })
 export type GateStepState = v.InferOutput<typeof gateStepStateSchema>
 

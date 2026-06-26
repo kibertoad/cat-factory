@@ -6,6 +6,7 @@ import {
 import {
   CI_FIXER_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
+  FIXER_AGENT_KIND,
   ON_CALL_AGENT_KIND,
   registeredGateFactories,
   registeredPipelines,
@@ -33,6 +34,9 @@ const BUILT_IN_HELPER_KINDS: ReadonlySet<string> = new Set([
   CI_FIXER_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
   ON_CALL_AGENT_KIND,
+  // The human-review gate escalates to the `fixer` (a built-in container coding agent, also
+  // the Tester's helper) to address review comments.
+  FIXER_AGENT_KIND,
 ])
 
 /** A single problem found during validation. `error` aborts boot; `warn` is logged only. */

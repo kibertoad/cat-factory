@@ -6,6 +6,7 @@ import {
   type IncidentEnrichmentProvider,
   type ProviderToken,
   type PullRequestMergeabilityProvider,
+  type PullRequestReviewProvider,
   type ReleaseHealthProvider,
 } from '@cat-factory/kernel'
 
@@ -32,6 +33,9 @@ export const RELEASE_HEALTH_PROVIDER = defineProviderToken<ReleaseHealthProvider
 /** Token for the incident-enrichment source the on-call escalation annotates. */
 export const INCIDENT_ENRICHMENT_PROVIDER =
   defineProviderToken<IncidentEnrichmentProvider>('incident-enrichment')
+/** Token for the PR-review source the `human-review` gate probes (approval + threads). */
+export const PULL_REQUEST_REVIEW_PROVIDER =
+  defineProviderToken<PullRequestReviewProvider>('pr-review')
 
 /** Wire (or clear, with `undefined`) the CI check-runs source the `ci` gate probes. */
 export function wireCiStatusProvider(provider: CiStatusProvider | undefined): void {
@@ -55,6 +59,13 @@ export function wireIncidentEnrichment(provider: IncidentEnrichmentProvider | un
   wireProvider(INCIDENT_ENRICHMENT_PROVIDER, provider)
 }
 
+/** Wire (or clear) the PR-review source the `human-review` gate probes. */
+export function wirePullRequestReviewProvider(
+  provider: PullRequestReviewProvider | undefined,
+): void {
+  wireProvider(PULL_REQUEST_REVIEW_PROVIDER, provider)
+}
+
 /** Clear every built-in gate provider (the four tokens above). Intended for tests. */
 export function clearGateProviders(): void {
   for (const token of [
@@ -62,6 +73,7 @@ export function clearGateProviders(): void {
     MERGEABILITY_PROVIDER,
     RELEASE_HEALTH_PROVIDER,
     INCIDENT_ENRICHMENT_PROVIDER,
+    PULL_REQUEST_REVIEW_PROVIDER,
   ] as ProviderToken<unknown>[]) {
     wireProvider(token, undefined)
   }
@@ -76,6 +88,7 @@ export interface GateProviderOverrides {
   mergeability?: PullRequestMergeabilityProvider
   releaseHealth?: ReleaseHealthProvider
   incidentEnrichment?: IncidentEnrichmentProvider
+  prReview?: PullRequestReviewProvider
 }
 
 /**
@@ -91,4 +104,5 @@ export function applyGateProviders(overrides: GateProviderOverrides | undefined)
   if (overrides.mergeability) wireMergeabilityProvider(overrides.mergeability)
   if (overrides.releaseHealth) wireReleaseHealthProvider(overrides.releaseHealth)
   if (overrides.incidentEnrichment) wireIncidentEnrichment(overrides.incidentEnrichment)
+  if (overrides.prReview) wirePullRequestReviewProvider(overrides.prReview)
 }

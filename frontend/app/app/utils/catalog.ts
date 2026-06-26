@@ -330,6 +330,18 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     color: '#a3e635',
     description: 'Scores the PR and auto-merges within the task thresholds, or asks for review.',
   },
+  'human-review': {
+    kind: 'human-review',
+    label: 'Human Review Gate',
+    icon: 'i-lucide-users',
+    color: '#c084fc',
+    category: 'gates',
+    description:
+      'Waits for a human code review on the PR, looping the fixer to address comments; advances once approved with no unresolved threads.',
+    // Opens the dedicated gate window (approval progress, the feedback being fixed, and a
+    // freeform "request a fix" box) like the other gates.
+    resultView: 'gate',
+  },
   // A polling gate (no model of its own) that watches the released PR's observability
   // signals after merge and escalates to the on-call agent on a regression. NOT in any
   // default pipeline and NOT a standing palette archetype — the palette surfaces it

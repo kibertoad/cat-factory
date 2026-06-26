@@ -5,7 +5,7 @@
 // persists on `step.gate`: the precheck verdict, the helper attempt budget, the gated
 // commit, and — for CI — the failing checks behind the failure. One window serves both
 // gates; it branches on the step's `agentKind` for the copy and the failure detail.
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { agentKindMeta } from '~/utils/catalog'
 import type { GateStepState } from '~/types/execution'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
@@ -30,9 +30,32 @@ const step = computed(() => {
 const gate = computed<GateStepState | null>(() => step.value?.gate ?? null)
 
 const isCi = computed(() => step.value?.agentKind === 'ci')
+const isHumanReview = computed(() => step.value?.agentKind === 'human-review')
 const meta = computed(() => agentKindMeta(step.value?.agentKind ?? 'ci'))
-const helperKind = computed(() => (isCi.value ? 'ci-fixer' : 'conflict-resolver'))
+const helperKind = computed(() =>
+  isHumanReview.value ? 'fixer' : isCi.value ? 'ci-fixer' : 'conflict-resolver',
+)
 const helperMeta = computed(() => agentKindMeta(helperKind.value))
+
+const subtitle = computed(() =>
+  isHumanReview.value
+    ? 'Waits for a human code review on the PR, looping the fixer on comments'
+    : isCi.value
+      ? 'Gates the PR on green CI, looping the CI fixer on failure'
+      : 'Gates the PR on a clean merge, looping the resolver on conflicts',
+)
+
+// Human-review: approval progress + the freeform "request a fix" control.
+const humanReview = useHumanReviewStore()
+const fixInstructions = ref('')
+const fixBusy = computed(() => (blockId.value ? humanReview.isBusy(blockId.value) : false))
+async function submitFix() {
+  const id = blockId.value
+  const text = fixInstructions.value.trim()
+  if (!id || !text) return
+  await humanReview.requestFix(id, text)
+  fixInstructions.value = ''
+}
 
 const failingChecks = computed(() => gate.value?.failingChecks ?? [])
 const shortSha = computed(() => (gate.value?.headSha ? gate.value.headSha.slice(0, 7) : null))
@@ -130,13 +153,7 @@ const conflictVerdict = computed(() => {
             <h2 class="truncate text-sm font-semibold text-slate-100">
               {{ meta.label }}{{ block ? ` — ${block.title}` : '' }}
             </h2>
-            <p class="truncate text-[11px] text-slate-400">
-              {{
-                isCi
-                  ? 'Gates the PR on green CI, looping the CI fixer on failure'
-                  : 'Gates the PR on a clean merge, looping the resolver on conflicts'
-              }}
-            </p>
+            <p class="truncate text-[11px] text-slate-400">{{ subtitle }}</p>
           </div>
           <UBadge :color="STATUS_META[status].badge" variant="subtle" size="sm">
             {{ STATUS_META[status].label }}
@@ -185,6 +202,73 @@ const conflictVerdict = computed(() => {
                   }}
                 </p>
               </div>
+
+              <!-- Human review: approval progress, the feedback being fixed, freeform fix box -->
+              <template v-else-if="isHumanReview">
+                <div
+                  class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
+                >
+                  <UIcon name="i-lucide-users" class="h-4 w-4 shrink-0 text-violet-300" />
+                  <span class="text-[13px] text-slate-200">
+                    {{ gate.lastApprovals ?? 0 }} / {{ gate.requiredApprovals ?? 1 }} approval{{
+                      (gate.requiredApprovals ?? 1) === 1 ? '' : 's'
+                    }}
+                    <template v-if="status === 'fixing'"> · fixer addressing comments…</template>
+                    <template v-else-if="status === 'failing'">
+                      · review comments to address</template
+                    >
+                    <template v-else> · awaiting review</template>
+                  </span>
+                </div>
+                <p
+                  v-if="gate.lastFailureSummary"
+                  class="mt-2 whitespace-pre-wrap rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2 text-[12px] leading-relaxed text-slate-300"
+                >
+                  {{ gate.lastFailureSummary }}
+                </p>
+                <a
+                  v-if="prUrl"
+                  :href="prUrl"
+                  target="_blank"
+                  rel="noopener"
+                  class="mt-2 inline-flex items-center gap-1 text-[12px] text-sky-300 hover:text-sky-200 hover:underline"
+                >
+                  Review pull request on GitHub
+                  <UIcon name="i-lucide-external-link" class="h-3 w-3" />
+                </a>
+
+                <!-- Freeform fix request: dispatch the fixer now with these instructions. -->
+                <section v-if="status !== 'gave-up'" class="mt-4">
+                  <h3
+                    class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+                  >
+                    Request a fix
+                  </h3>
+                  <p class="mb-2 text-[11px] leading-relaxed text-slate-500">
+                    Describe a change for the fixer to make on the PR branch now (in addition to any
+                    review comments, which it addresses automatically).
+                  </p>
+                  <textarea
+                    v-model="fixInstructions"
+                    rows="3"
+                    :disabled="fixBusy"
+                    placeholder="e.g. rename the helper and add a unit test for the empty-input case"
+                    class="w-full resize-y rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-[13px] text-slate-200 placeholder:text-slate-600 focus:border-violet-500/60 focus:outline-none"
+                  />
+                  <div class="mt-2 flex justify-end">
+                    <UButton
+                      size="sm"
+                      color="primary"
+                      icon="i-lucide-wrench"
+                      :loading="fixBusy"
+                      :disabled="fixBusy || fixInstructions.trim().length === 0"
+                      @click="submitFix"
+                    >
+                      Request fix
+                    </UButton>
+                  </div>
+                </section>
+              </template>
 
               <!-- CI: failing checks -->
               <template v-else-if="isCi">

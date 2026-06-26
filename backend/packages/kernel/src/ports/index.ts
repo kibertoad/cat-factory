@@ -100,6 +100,10 @@ export type {
   GitHubIssueComment,
   GitHubIssueDetail,
   GitHubIssueSearchHit,
+  GitHubPullRequestReview,
+  GitHubReviewThread,
+  GitHubReviewThreadComment,
+  GitHubPullRequestComment,
   GitHubSubIssue,
   GitHubRepoRef,
   InstallationMeta,
@@ -288,6 +292,12 @@ export type {
 export type { BoardWritePort } from './board-operations.js'
 export type { PullRequestMerger } from './pr-merger.js'
 export type { CiCheck, CiStatusReport, CiStatusProvider } from './ci-status.js'
+export type {
+  ReviewThread,
+  PullRequestComment,
+  PullRequestReviewSnapshot,
+  PullRequestReviewProvider,
+} from './pull-request-review.js'
 export type {
   ReleaseSignal,
   ReleaseSignalKind,

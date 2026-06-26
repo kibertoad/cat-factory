@@ -13,6 +13,7 @@ interface MergePresetRow {
   max_requirement_concern_allowed: string
   release_watch_window_minutes: number
   release_max_attempts: number
+  human_review_grace_minutes: number
   is_default: number
   created_at: number
 }
@@ -29,6 +30,7 @@ function rowToPreset(row: MergePresetRow): MergeThresholdPreset {
     maxRequirementConcernAllowed: row.max_requirement_concern_allowed as RequirementConcernLevel,
     releaseWatchWindowMinutes: row.release_watch_window_minutes,
     releaseMaxAttempts: row.release_max_attempts,
+    humanReviewGraceMinutes: row.human_review_grace_minutes,
     isDefault: row.is_default === 1,
     createdAt: row.created_at,
   }
@@ -94,8 +96,9 @@ export class D1MergePresetRepository implements MergePresetRepository {
         `INSERT INTO merge_threshold_presets
            (workspace_id, id, name, max_complexity, max_risk, max_impact, ci_max_attempts,
             max_requirement_iterations, max_requirement_concern_allowed,
-            release_watch_window_minutes, release_max_attempts, is_default, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            release_watch_window_minutes, release_max_attempts, human_review_grace_minutes,
+            is_default, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            name = excluded.name,
            max_complexity = excluded.max_complexity,
@@ -106,6 +109,7 @@ export class D1MergePresetRepository implements MergePresetRepository {
            max_requirement_concern_allowed = excluded.max_requirement_concern_allowed,
            release_watch_window_minutes = excluded.release_watch_window_minutes,
            release_max_attempts = excluded.release_max_attempts,
+           human_review_grace_minutes = excluded.human_review_grace_minutes,
            is_default = excluded.is_default`,
       )
       .bind(
@@ -120,6 +124,7 @@ export class D1MergePresetRepository implements MergePresetRepository {
         preset.maxRequirementConcernAllowed,
         preset.releaseWatchWindowMinutes,
         preset.releaseMaxAttempts,
+        preset.humanReviewGraceMinutes,
         preset.isDefault ? 1 : 0,
         preset.createdAt,
       )

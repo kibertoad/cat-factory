@@ -126,6 +126,8 @@ export {
   CONFLICT_RESOLVER_AGENT_KIND,
   POST_RELEASE_HEALTH_AGENT_KIND,
   ON_CALL_AGENT_KIND,
+  HUMAN_REVIEW_AGENT_KIND,
+  FIXER_AGENT_KIND,
   type CiVerdict,
   type ReleaseGateVerdict,
   aggregateCi,

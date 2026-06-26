@@ -36,6 +36,9 @@ const META: Record<Notification['type'], { icon: string; color: Accent; action: 
   // Clicking the title opens the human-testing window for the task (see `reveal`); "act" just
   // marks it read (the gate is resolved in that window — confirm / request a fix — not here).
   human_test_ready: { icon: 'i-lucide-user-check', color: 'primary', action: 'Mark read' },
+  // Clicking the title opens the task's gate window (where the human can request a freeform
+  // fix); "act" just marks it read (approval happens on GitHub, not here).
+  human_review: { icon: 'i-lucide-users', color: 'primary', action: 'Mark read' },
 }
 
 /** A notification the escalation sweep has flagged as overdue (waited past the threshold). */
@@ -81,7 +84,20 @@ function reveal(n: Notification) {
   else if (n.type === 'clarity_review') ui.openClarityReview(n.blockId)
   else if (n.type === 'decision_required') revealDecision(n)
   else if (n.type === 'human_test_ready') revealHumanTest(n)
+  else if (n.type === 'human_review') revealHumanReview(n)
   else ui.select(n.blockId)
+}
+
+/**
+ * Open the gate window for a parked `human-review` gate: find the run's human-review step and
+ * open it through the universal step dispatch (its archetype declares the `gate` result view,
+ * where the human can request a freeform fix). Falls back to focusing the block.
+ */
+function revealHumanReview(n: Notification) {
+  const instance = n.executionId ? execution.getInstance(n.executionId) : undefined
+  const idx = instance?.steps.findIndex((s) => s.agentKind === 'human-review') ?? -1
+  if (instance && idx >= 0) ui.openStepDetail(instance.id, idx)
+  else if (n.blockId) ui.select(n.blockId)
 }
 
 /**

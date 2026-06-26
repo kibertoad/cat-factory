@@ -97,6 +97,54 @@ export interface GitHubIssueComment {
   body: string
 }
 
+/** A submitted review on a pull request (latest-per-author is reduced by the caller). */
+export interface GitHubPullRequestReview {
+  /** Reviewer login, or '' when unknown. */
+  author: string
+  /** Review verdict: 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING'. */
+  state: string
+  /** Epoch ms when the review was submitted (0 when unknown). */
+  submittedAt: number
+  /** The commit sha the review targeted, or null. */
+  commitId: string | null
+}
+
+/** One review thread (a review-comment conversation) read via GraphQL. */
+export interface GitHubReviewThread {
+  /** GraphQL node id — used to reply to and resolve the thread. */
+  id: string
+  /** Whether the thread is marked resolved on GitHub. */
+  isResolved: boolean
+  /** Repo-relative file path the thread is anchored to, or null. */
+  path: string | null
+  /** Line the thread is anchored to, or null. */
+  line: number | null
+  /** The thread's comments, oldest→newest. */
+  comments: GitHubReviewThreadComment[]
+}
+
+/** One comment within a {@link GitHubReviewThread}. */
+export interface GitHubReviewThreadComment {
+  /** Author login, or '' when unknown. */
+  author: string
+  /** Comment body (GitHub Markdown). */
+  body: string
+  /** Epoch ms when the comment was created (0 when unknown). */
+  createdAt: number
+}
+
+/** A general (conversation) comment on a pull request, from the issue-comments API. */
+export interface GitHubPullRequestComment {
+  /** GitHub comment id (as a string). */
+  id: string
+  /** Author login, or '' when unknown. */
+  author: string
+  /** Comment body (GitHub Markdown). */
+  body: string
+  /** Epoch ms when the comment was created (0 when unknown). */
+  createdAt: number
+}
+
 /**
  * One issue's full content — body + recent comments + metadata — for linking an
  * issue to a board block as agent context. Distinct from the lean
@@ -301,6 +349,73 @@ export interface GitHubClient {
     ref: GitHubRepoRef,
     sha: string,
   ): Promise<Paged<GitHubCheckRun>>
+  /**
+   * List the logins of a PR's currently-requested (assigned) reviewers
+   * (`GET /repos/{o}/{r}/pulls/{n}/requested_reviewers`). Optional: a client that does not
+   * implement the human-review reads omits it (the gate then treats the PR as having no
+   * assigned reviewer). Used by the `human-review` gate.
+   */
+  listRequestedReviewers?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string[]>
+  /**
+   * List a PR's submitted reviews (`GET /repos/{o}/{r}/pulls/{n}/reviews`), oldest→newest.
+   * The caller reduces to the latest review per author. Optional (see {@link listRequestedReviewers}).
+   */
+  listPullRequestReviews?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<GitHubPullRequestReview[]>
+  /**
+   * List a PR's general conversation comments (`GET /repos/{o}/{r}/issues/{n}/comments`),
+   * oldest→newest. Optional (see {@link listRequestedReviewers}).
+   */
+  listIssueComments?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<GitHubPullRequestComment[]>
+  /**
+   * Read the number of approving reviews GitHub's branch protection requires on `branch`
+   * (`required_pull_request_reviews.required_approving_review_count`). Returns 1 when the
+   * setting is unreadable (no protection rule, or the App lacks admin access — both common).
+   * Optional (see {@link listRequestedReviewers}).
+   */
+  getRequiredApprovingReviewCount?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    branch: string,
+  ): Promise<number>
+  /**
+   * List a PR's review threads via GraphQL (`pullRequest.reviewThreads`), with each thread's
+   * resolved state, anchor and comments — the precise "addressed?" signal the REST review-
+   * comment reads can't give. Optional (see {@link listRequestedReviewers}).
+   */
+  listReviewThreads?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<GitHubReviewThread[]>
+  /**
+   * Post a reply on a review thread (GraphQL `addPullRequestReviewThreadReply`). Optional
+   * (see {@link listRequestedReviewers}). Used by the `human-review` gate to acknowledge a
+   * thread before resolving it.
+   */
+  replyToReviewThread?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    threadId: string,
+    body: string,
+  ): Promise<void>
+  /**
+   * Resolve a review thread (GraphQL `resolveReviewThread`). Optional (see
+   * {@link listRequestedReviewers}). Used by the `human-review` gate after the `fixer`
+   * addressed the thread.
+   */
+  resolveReviewThread?(installationId: number, ref: GitHubRepoRef, threadId: string): Promise<void>
 
   // ---- writes -------------------------------------------------------------
   createBranch(

@@ -133,6 +133,10 @@ export {
   type GitHubCiStatusProviderDependencies,
 } from './github/GitHubCiStatusProvider.js'
 export {
+  GitHubPullRequestReviewProvider,
+  type GitHubPullRequestReviewProviderDependencies,
+} from './github/GitHubPullRequestReviewProvider.js'
+export {
   GitHubMergeabilityProvider,
   classifyMergeability,
   type GitHubMergeabilityProviderDependencies,

@@ -56,15 +56,20 @@ const TESTER_SYSTEM_PROMPT = [
 ].join('\n')
 
 const FIXER_SYSTEM_PROMPT = [
-  'You are a software engineer fixing problems a tester found on this pull-request branch.',
-  'The tester’s structured report (what was tested, the outcomes, and the concerns/bugs to fix) is provided in the run context below.',
+  'You are a software engineer fixing problems raised on this pull-request branch — either by a',
+  'tester (a structured report of failed outcomes and concerns) or by a human code reviewer (the',
+  'review threads and PR comments to address). The feedback to act on is provided in the run',
+  'context below.',
   '',
-  'Address every concern the tester raised:',
+  'Address every item raised:',
   '- Reproduce each issue, find the root cause, and make the minimal correct change to fix it.',
   '- Do not disable, skip or weaken tests to make them pass; fix the underlying behaviour.',
   '- Keep the project building and the existing tests green.',
+  '- When the context includes review threads, post a short reply on each thread you addressed',
+  '  noting how you resolved it, so the thread can be marked resolved.',
   '',
-  'Commit your fixes to the current branch (no new branch, no new PR) so the tester can re-run against them.',
+  'Commit your fixes to the current branch (no new branch, no new PR) so the tester / reviewer can',
+  're-check them.',
   '',
   STANDARDS_FOOTER,
 ].join('\n')

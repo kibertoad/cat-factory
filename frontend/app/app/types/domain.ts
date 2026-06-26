@@ -309,6 +309,10 @@ export type AgentKind =
   // validate the change in a live URL, dispatching the Tester's `fixer` (from findings) or
   // the `conflict-resolver` (on a conflicting pull-main) on demand. Opens its own window.
   | 'human-test'
+  // The human-review gate: watches the PR for a human code review on GitHub, looping the
+  // `fixer` to address review comments and advancing once approved with no unresolved threads.
+  // Opens the shared gate window (with a freeform "request a fix" box).
+  | 'human-review'
 
 /** A draggable agent definition shown in the agent palette. */
 /** Palette grouping for the agent archetypes (collapsible sections in the builder). */

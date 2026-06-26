@@ -1,0 +1,1 @@
+ALTER TABLE "merge_threshold_presets" ADD COLUMN "human_review_grace_minutes" integer DEFAULT 10 NOT NULL;

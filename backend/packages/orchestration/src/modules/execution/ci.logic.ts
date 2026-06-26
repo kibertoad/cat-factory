@@ -7,6 +7,8 @@ export {
   CI_FIXER_AGENT_KIND,
   CONFLICTS_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
+  FIXER_AGENT_KIND,
+  HUMAN_REVIEW_AGENT_KIND,
   type CiVerdict,
   aggregateCi,
   isCiGreen,
@@ -69,12 +71,6 @@ export const MERGER_AGENT_KIND = 'merger'
  * with the report and re-tests — mirroring the CI gate / ci-fixer loop.
  */
 export const TESTER_AGENT_KIND = 'tester'
-
-/**
- * The agent kind of the container agent that applies fixes from a Tester's report to
- * the PR head branch and pushes them back (no new PR), looping with the Tester.
- */
-export const FIXER_AGENT_KIND = 'fixer'
 
 /**
  * The agent kind of the read-only code-analysis agent that opens the tech-debt

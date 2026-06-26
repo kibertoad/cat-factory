@@ -63,6 +63,7 @@ export class MergePresetService {
       maxRequirementConcernAllowed: input.maxRequirementConcernAllowed,
       releaseWatchWindowMinutes: input.releaseWatchWindowMinutes,
       releaseMaxAttempts: input.releaseMaxAttempts,
+      humanReviewGraceMinutes: input.humanReviewGraceMinutes,
       // The very first preset must be the default; otherwise honour the request.
       isDefault: existing.length === 0 ? true : input.isDefault,
       createdAt: this.clock.now(),
@@ -101,6 +102,9 @@ export class MergePresetService {
       ...(patch.releaseMaxAttempts !== undefined
         ? { releaseMaxAttempts: patch.releaseMaxAttempts }
         : {}),
+      ...(patch.humanReviewGraceMinutes !== undefined
+        ? { humanReviewGraceMinutes: patch.humanReviewGraceMinutes }
+        : {}),
       ...(patch.isDefault !== undefined ? { isDefault: patch.isDefault } : {}),
     }
     await this.presets.upsert(workspaceId, updated)
@@ -132,6 +136,7 @@ export class MergePresetService {
       maxRequirementConcernAllowed: DEFAULT_MERGE_PRESET.maxRequirementConcernAllowed,
       releaseWatchWindowMinutes: DEFAULT_MERGE_PRESET.releaseWatchWindowMinutes,
       releaseMaxAttempts: DEFAULT_MERGE_PRESET.releaseMaxAttempts,
+      humanReviewGraceMinutes: DEFAULT_MERGE_PRESET.humanReviewGraceMinutes,
       isDefault: true,
       createdAt: this.clock.now(),
     })

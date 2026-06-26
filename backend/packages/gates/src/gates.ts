@@ -16,6 +16,8 @@ import {
   DEFAULT_MERGE_PRESET,
   describeFailingChecks,
   describeRegressedSignals,
+  FIXER_AGENT_KIND,
+  HUMAN_REVIEW_AGENT_KIND,
   isCiGreen,
   isProviderWired,
   listFailingChecks,
@@ -29,8 +31,15 @@ import {
   CI_STATUS_PROVIDER,
   INCIDENT_ENRICHMENT_PROVIDER,
   MERGEABILITY_PROVIDER,
+  PULL_REQUEST_REVIEW_PROVIDER,
   RELEASE_HEALTH_PROVIDER,
 } from './providers.js'
+import {
+  classifyHumanReview,
+  isApproved,
+  outstandingComments,
+  outstandingThreads,
+} from './review.logic.js'
 
 /**
  * Conflict-resolver attempt cap. Unlike CI (where each fixer round gets fresh red-check
@@ -346,5 +355,116 @@ export const postReleaseHealthGate = (ctx: GateContext): GateDefinition => ({
         ? 'On-call investigation did not complete; raised a release-regression notification for manual triage.'
         : 'On-call investigation completed; see the release-regression notification.'
     return { output }
+  },
+})
+
+/** The reply the fixer's round leaves on each review thread before it is resolved. */
+const REVIEW_THREAD_RESOLVED_REPLY =
+  'Addressed by the cat-factory fixer in the latest commit(s) on this branch.'
+
+/**
+ * Human-review gate: watch the PR for a human code review on GitHub. It advances once the PR
+ * meets GitHub's required approvals with no unresolved review threads; on outstanding feedback it
+ * loops the `fixer` (immediately when approved; after a grace window otherwise), resolving each
+ * handed thread on the helper's completion so the next probe sees it cleared. It waits
+ * indefinitely for the human — `pollExhaustion: 'rearm'` never times out and an effectively
+ * unbounded attempt budget means a long review is never auto-failed. A pass-through until
+ * {@link wirePullRequestReviewProvider} supplies a provider.
+ */
+export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
+  kind: HUMAN_REVIEW_AGENT_KIND,
+  helperKind: FIXER_AGENT_KIND,
+  wired: () => isProviderWired(PULL_REQUEST_REVIEW_PROVIDER),
+  unwiredOutput: 'Human review gate skipped (no PR-review provider configured).',
+  // A human review is unbounded: never time out the wait, and never give up on rounds.
+  pollExhaustion: 'rearm',
+  attemptBudget: () => Number.MAX_SAFE_INTEGER,
+  probe: async (workspaceId, blockId, gateState): Promise<GateProbe> => {
+    const provider = ctx.requireProvider(PULL_REQUEST_REVIEW_PROVIDER)
+    const snapshot = await provider.getReview(workspaceId, blockId)
+    const graceMinutes =
+      gateState.humanReviewGraceMinutes ?? DEFAULT_MERGE_PRESET.humanReviewGraceMinutes
+    // Surface the approval progress for the UI (persisted via the caller's `...step.gate` spread).
+    gateState.lastApprovals = snapshot.approvals
+    gateState.requiredApprovals =
+      snapshot.headSha === null ? null : Math.max(1, snapshot.requiredApprovingReviewCount)
+    const verdict = classifyHumanReview(snapshot, gateState, { graceMinutes, now: ctx.clock.now() })
+    if (verdict.kind === 'advance') {
+      return { status: 'pass', headSha: snapshot.headSha, passOutput: verdict.reason }
+    }
+    if (verdict.kind === 'dispatch') {
+      // Stash the threads to resolve on the fixer's completion + advance the plain-comment
+      // cursor so the same comments don't re-trigger. Both persist via the caller's spread.
+      gateState.pendingThreadIds = verdict.threadIds
+      if (verdict.latestCommentAt != null) {
+        gateState.lastAddressedCommentAt = Math.max(
+          gateState.lastAddressedCommentAt ?? 0,
+          verdict.latestCommentAt,
+        )
+      }
+      return { status: 'fail', headSha: snapshot.headSha, failureSummary: verdict.instructions }
+    }
+    // wait: keep polling. When we're waiting on a human APPROVAL (nothing outstanding to fix),
+    // surface a (deduped) notification so the reviewer is summoned and the severity sweep can
+    // escalate it the longer it waits. A grace-window wait (comments present) needs no card.
+    const awaitingApproval =
+      outstandingThreads(snapshot).length === 0 &&
+      outstandingComments(snapshot, gateState.lastAddressedCommentAt).length === 0 &&
+      !isApproved(snapshot)
+    if (awaitingApproval) {
+      const block = await ctx.getBlock(workspaceId, blockId)
+      const title = block?.title ?? 'this task'
+      const noReviewer = snapshot.assignedReviewers.length === 0
+      await ctx.raiseNotification(workspaceId, {
+        type: 'human_review',
+        blockId,
+        executionId: null,
+        title: noReviewer
+          ? `Assign a reviewer for "${title}"`
+          : `"${title}" is awaiting code review`,
+        body: noReviewer
+          ? 'The PR has no assigned reviewer. Request a reviewer on GitHub to continue, or request a fix here.'
+          : `Awaiting ${Math.max(1, snapshot.requiredApprovingReviewCount)} approval(s) on the PR ` +
+            `(have ${snapshot.approvals}). Review on GitHub, or request a fix here.`,
+        payload: block?.pullRequest?.url ? { prUrl: block.pullRequest.url } : {},
+      })
+    }
+    return { status: 'pending', headSha: snapshot.headSha }
+  },
+  // Fold the reviewer's feedback into the fixer's prompt.
+  helperPriorOutput: (summary) => ({ agentKind: HUMAN_REVIEW_AGENT_KIND, output: summary }),
+  // After the fixer round, reply to + RESOLVE the threads it was handed, so the immediately
+  // following re-probe counts them as addressed. Best-effort; clears the stash either way.
+  onHelperComplete: async ({ workspaceId, block, step }) => {
+    const threadIds = step.gate?.pendingThreadIds ?? []
+    if (threadIds.length > 0) {
+      const provider = ctx.getProvider(PULL_REQUEST_REVIEW_PROVIDER)
+      if (provider) {
+        try {
+          await provider.resolveThreads(
+            workspaceId,
+            block.id,
+            threadIds,
+            REVIEW_THREAD_RESOLVED_REPLY,
+          )
+        } catch {
+          // best-effort: a failed resolve just leaves the thread open; the reviewer can re-engage
+        }
+      }
+    }
+    if (step.gate) step.gate.pendingThreadIds = null
+  },
+  // Never reached (the attempt budget is effectively unbounded), but raise a card defensively so
+  // a misconfiguration surfaces rather than silently failing the run.
+  onExhausted: async ({ workspaceId, instance, block }) => {
+    await ctx.raiseNotification(workspaceId, {
+      type: 'human_review',
+      blockId: block.id,
+      executionId: instance.id,
+      title: `Human review needed for "${block.title}"`,
+      body: 'The human-review gate could not continue automatically. Review the PR on GitHub.',
+      payload: block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {},
+    })
+    return { error: 'Human review did not complete.' }
   },
 })

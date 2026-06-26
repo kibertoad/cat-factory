@@ -11,6 +11,9 @@ import {
   type GitHubIssueSearchHit,
   type GitHubSubIssue,
   type GitHubPullRequest,
+  type GitHubPullRequestReview,
+  type GitHubPullRequestComment,
+  type GitHubReviewThread,
   type GitHubRepo,
   type GitHubRepoRef,
   type IdGenerator,
@@ -37,6 +40,26 @@ import type { AppTokenSource } from './GitHubAppRegistry.js'
 // responses to projection entities with the shared pure mappers. Octokit is
 // deliberately avoided — Web Crypto + fetch cover everything we need without the
 // bundle weight (see backend/docs/adr/0001-github-app-integration.md).
+
+/** Shape of the `reviewThreads` GraphQL query response (one page). */
+interface ReviewThreadsQueryData {
+  repository?: {
+    pullRequest?: {
+      reviewThreads?: {
+        nodes?: {
+          id: string
+          isResolved: boolean
+          path: string | null
+          line: number | null
+          comments?: {
+            nodes?: { author?: { login?: string }; body?: string; createdAt?: string }[]
+          }
+        }[]
+        pageInfo?: { hasNextPage?: boolean; endCursor?: string | null }
+      }
+    }
+  }
+}
 
 const USER_AGENT = 'cat-factory'
 const API_VERSION = '2022-11-28'
@@ -568,6 +591,151 @@ export class FetchGitHubClient implements GitHubClient {
     return { items: runs.map((r) => gp.toCheckRunProjection(r, repoId, syncedAt)) }
   }
 
+  // ---- PR review reads (human-review gate) ---------------------------------
+
+  async listRequestedReviewers(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string[]> {
+    const { json } = await this.request(
+      `/repos/${ref.owner}/${ref.repo}/pulls/${number}/requested_reviewers`,
+      { installationId },
+    )
+    const users = (json as { users?: { login?: string }[] }).users ?? []
+    return users.map((u) => u.login ?? '').filter((l) => l !== '')
+  }
+
+  async listPullRequestReviews(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<GitHubPullRequestReview[]> {
+    return this.paginate<GitHubPullRequestReview>(
+      `/repos/${ref.owner}/${ref.repo}/pulls/${number}/reviews?per_page=${PER_PAGE}`,
+      { installationId },
+      (json) =>
+        (
+          json as {
+            user?: { login?: string }
+            state?: string
+            submitted_at?: string | null
+            commit_id?: string | null
+          }[]
+        ).map((r) => ({
+          author: r.user?.login ?? '',
+          state: r.state ?? '',
+          submittedAt: parseGitHubTime(r.submitted_at),
+          commitId: r.commit_id ?? null,
+        })),
+    )
+  }
+
+  async listIssueComments(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<GitHubPullRequestComment[]> {
+    return this.paginate<GitHubPullRequestComment>(
+      `/repos/${ref.owner}/${ref.repo}/issues/${number}/comments?per_page=${PER_PAGE}`,
+      { installationId },
+      (json) =>
+        (
+          json as { id?: number; user?: { login?: string }; body?: string; created_at?: string }[]
+        ).map((c) => ({
+          id: String(c.id ?? ''),
+          author: c.user?.login ?? '',
+          body: c.body ?? '',
+          createdAt: parseGitHubTime(c.created_at),
+        })),
+    )
+  }
+
+  async getRequiredApprovingReviewCount(
+    installationId: number,
+    ref: GitHubRepoRef,
+    branch: string,
+  ): Promise<number> {
+    try {
+      const { json } = await this.request(
+        `/repos/${ref.owner}/${ref.repo}/branches/${encodeURIComponent(branch)}/protection/required_pull_request_reviews`,
+        { installationId },
+      )
+      const count = (json as { required_approving_review_count?: number })
+        .required_approving_review_count
+      return typeof count === 'number' ? count : 1
+    } catch (error) {
+      // No protection rule, or the App lacks admin access to read it — both common. Default to 1.
+      if (error instanceof GitHubApiError && (error.status === 404 || error.status === 403))
+        return 1
+      throw error
+    }
+  }
+
+  async listReviewThreads(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<GitHubReviewThread[]> {
+    const query = `query($owner:String!,$repo:String!,$number:Int!,$cursor:String){
+      repository(owner:$owner,name:$repo){
+        pullRequest(number:$number){
+          reviewThreads(first:100,after:$cursor){
+            nodes{ id isResolved path line comments(first:50){ nodes{ author{login} body createdAt } } }
+            pageInfo{ hasNextPage endCursor }
+          }
+        }
+      }
+    }`
+    const threads: GitHubReviewThread[] = []
+    let cursor: string | null = null
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const data: ReviewThreadsQueryData = await this.graphql<ReviewThreadsQueryData>(
+        installationId,
+        query,
+        { owner: ref.owner, repo: ref.repo, number, cursor },
+      )
+      const conn = data.repository?.pullRequest?.reviewThreads
+      for (const node of conn?.nodes ?? []) {
+        threads.push({
+          id: node.id,
+          isResolved: node.isResolved,
+          path: node.path ?? null,
+          line: node.line ?? null,
+          comments: (node.comments?.nodes ?? []).map((c) => ({
+            author: c.author?.login ?? '',
+            body: c.body ?? '',
+            createdAt: parseGitHubTime(c.createdAt),
+          })),
+        })
+      }
+      if (!conn?.pageInfo?.hasNextPage || !conn.pageInfo.endCursor) break
+      cursor = conn.pageInfo.endCursor
+    }
+    return threads
+  }
+
+  async replyToReviewThread(
+    installationId: number,
+    _ref: GitHubRepoRef,
+    threadId: string,
+    body: string,
+  ): Promise<void> {
+    const mutation = `mutation($threadId:ID!,$body:String!){
+      addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$threadId,body:$body}){ comment{ id } }
+    }`
+    await this.graphql(installationId, mutation, { threadId, body })
+  }
+
+  async resolveReviewThread(
+    installationId: number,
+    _ref: GitHubRepoRef,
+    threadId: string,
+  ): Promise<void> {
+    const mutation = `mutation($threadId:ID!){ resolveReviewThread(input:{threadId:$threadId}){ thread{ id } } }`
+    await this.graphql(installationId, mutation, { threadId })
+  }
+
   // ---- writes -------------------------------------------------------------
 
   async createBranch(
@@ -778,6 +946,34 @@ export class FetchGitHubClient implements GitHubClient {
 
   // ---- internals ----------------------------------------------------------
 
+  /**
+   * POST a GraphQL query/mutation to the v4 endpoint with the installation token and return
+   * `data`, throwing on a GraphQL `errors` payload. Used for the review-thread reads/mutations
+   * the REST API can't express (thread resolution state, resolveReviewThread).
+   */
+  private async graphql<T>(
+    installationId: number,
+    query: string,
+    variables: Record<string, unknown>,
+  ): Promise<T> {
+    const { json } = await this.request(`/graphql`, {
+      installationId,
+      method: 'POST',
+      body: { query, variables },
+    })
+    const payload = json as { data?: T; errors?: { message?: string }[] }
+    if (payload.errors && payload.errors.length > 0) {
+      throw new GitHubApiError(
+        200,
+        `GitHub GraphQL error: ${payload.errors
+          .map((e) => e.message ?? '')
+          .join('; ')
+          .slice(0, 300)}`,
+      )
+    }
+    return (payload.data ?? ({} as T)) as T
+  }
+
   /** Lazily resolve a repo's numeric id (needed where the payload omits it). */
   private async repoId(installationId: number, ref: GitHubRepoRef): Promise<number> {
     const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}`, { installationId })
@@ -892,6 +1088,13 @@ function decodeBase64Utf8(value: string): string {
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
   return new TextDecoder().decode(bytes)
+}
+
+/** Parse a GitHub ISO-8601 timestamp to epoch ms, or 0 when absent/unparseable. */
+function parseGitHubTime(value: string | null | undefined): number {
+  if (!value) return 0
+  const ms = Date.parse(value)
+  return Number.isFinite(ms) ? ms : 0
 }
 
 function numHeader(res: Response, name: string): number | null {

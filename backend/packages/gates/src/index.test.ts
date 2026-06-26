@@ -62,13 +62,13 @@ describe('typed provider registry (the gate wiring seam)', () => {
 })
 
 describe('@cat-factory/gates registration', () => {
-  it('registers ci / conflicts / post-release-health through the public registry', () => {
+  it('registers ci / conflicts / post-release-health / human-review through the public registry', () => {
     clearRegisteredGates()
     registerBuiltinGates()
     const kinds = registeredGateFactories()
       .map((g) => g.kind)
       .sort()
-    expect(kinds).toEqual(['ci', 'conflicts', 'post-release-health'])
+    expect(kinds).toEqual(['ci', 'conflicts', 'human-review', 'post-release-health'])
   })
 })
 

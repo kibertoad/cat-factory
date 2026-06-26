@@ -59,6 +59,8 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   // The human-testing gate is a product-facing validation moment: tell the task's creator
   // (whoever owns driving it) and the product reviewers.
   human_test_ready: { roles: ['product'], includeCreator: true },
+  // The human-review gate waits on a human code reviewer: tell the engineers + the creator.
+  human_review: { roles: ['engineering'], includeCreator: true },
 }
 
 /** The mention audience for a notification type. */
@@ -140,6 +142,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   release_regression: ':rotating_light: Release regression',
   decision_required: ':vertical_traffic_light: Decision needed',
   human_test_ready: ':test_tube: Ready for human testing',
+  human_review: ':bust_in_silhouette: Awaiting code review',
 }
 
 /** Format a percentage from a 0..1 score for the assessment context line. */
