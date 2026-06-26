@@ -10,6 +10,7 @@
 import { computed, ref, watch } from 'vue'
 import type { ProviderConnectionKind } from '~/types/providerConnections'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 
 const ui = useUiStore()
 const store = useProviderConnectionsStore()
@@ -41,6 +42,14 @@ const open = computed({
 const meta = computed(() => (kind.value ? META[kind.value] : null))
 const descriptor = computed(() => (kind.value ? store.descriptorFor(kind.value) : null))
 const connection = computed(() => (kind.value ? store.connectionFor(kind.value) : null))
+
+// "View logs": the provisioning event history for this provider's subsystem — every
+// spin-up / tear-down attempt with its outcome and the exact error. The panel kind
+// maps 1:1 to the log subsystem ('environment' / 'runner-pool').
+const showLogs = ref(false)
+watch(kind, () => {
+  showLogs.value = false
+})
 
 // Per-field draft values, keyed by field key (blank ⇒ fall back to default/stored value).
 const values = ref<Record<string, string>>({})
@@ -225,7 +234,21 @@ function fieldHelp(key: string): string | undefined {
     </template>
     <template #body>
       <div v-if="descriptor" class="space-y-4">
-        <p class="text-xs text-slate-400">{{ meta?.blurb }}</p>
+        <div class="flex items-start justify-between gap-3">
+          <p class="text-xs text-slate-400">{{ meta?.blurb }}</p>
+          <UButton
+            :icon="showLogs ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
+            variant="ghost"
+            size="xs"
+            class="shrink-0"
+            @click="showLogs = !showLogs"
+          >
+            {{ showLogs ? 'Hide logs' : 'View logs' }}
+          </UButton>
+        </div>
+
+        <!-- Provisioning attempt history for this provider's subsystem. -->
+        <ProvisioningLogsDrawer v-if="showLogs && kind" :subsystem="kind" />
 
         <!-- Saved connection summary -->
         <div

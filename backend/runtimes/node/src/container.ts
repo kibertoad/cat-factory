@@ -21,6 +21,8 @@ import {
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
   RunnerPoolTransport,
+  ProvisioningLogRecorder,
+  LoggingRunnerTransport,
   EMAIL_CIPHER_INFO,
   SLACK_CIPHER_INFO,
   SlackNotificationChannel,
@@ -46,6 +48,7 @@ import {
   type GitHubInstallationRepository,
   type ModelProviderResolver,
   type NotificationChannel,
+  type ProvisioningSubsystem,
   type RateLimitRepository,
   type RateLimitSnapshot,
   type ResolveUserGitHubToken,
@@ -468,6 +471,32 @@ function buildNodeResolveTransport(
         `service runs repo-operating agents on a self-hosted runner pool — register one for ` +
         `this workspace (POST /workspaces/:id/runner-pools).`,
     )
+  }
+}
+
+/**
+ * Wrap a transport resolver so every dispatch/release/poll-failure appends a
+ * provisioning-log event. A no-op when there's no resolver. `subsystem` tags the
+ * rows (a self-hosted pool vs a per-run container) so the logs drawer can filter.
+ */
+function withProvisioningLog(
+  resolve: ResolveRunnerTransport | null,
+  recorder: ProvisioningLogRecorder,
+  subsystem: ProvisioningSubsystem,
+): ResolveRunnerTransport | null {
+  if (!resolve) return null
+  // Closure-owned so it survives each (per-resolution) wrapper: a terminal `failed`
+  // job re-polled by a replay/re-drive logs its poll-failure only once.
+  const loggedPollFailures = new Set<string>()
+  return async (workspaceId) => {
+    const inner = await resolve(workspaceId)
+    return new LoggingRunnerTransport({
+      inner,
+      recorder,
+      workspaceId: workspaceId ?? '',
+      subsystem,
+      loggedPollFailures,
+    })
   }
 }
 
@@ -938,9 +967,20 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     serviceRepository: new DrizzleServiceFrameRepository(options.db),
   })
 
+  // Best-effort recorder for the provisioning event log (its own Postgres schema).
+  // Shared by the env services (via createCore) and the runner/container transport
+  // decorator below, so every spin-up/down attempt is logged.
+  const provisioningLogRecorder = new ProvisioningLogRecorder({
+    repository: repos.provisioningLogRepository,
+    idGenerator,
+    clock,
+  })
+
   // A sibling facade (local mode) may inject its own transport — even `null` — which
   // replaces the default self-hosted-pool resolution; undefined keeps Node's default.
-  const resolveTransport =
+  // The injected transport is a per-run container (local mode), the default is a
+  // self-hosted pool — tag each accordingly so the logs drawer can filter by subsystem.
+  const resolveTransport = withProvisioningLog(
     options.resolveTransport !== undefined
       ? options.resolveTransport
       : buildNodeResolveTransport(
@@ -948,7 +988,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           runnerPoolConnectionRepository,
           repos.workspaceRepository,
           clock,
-        )
+        ),
+    provisioningLogRecorder,
+    options.resolveTransport !== undefined ? 'container' : 'runner-pool',
+  )
   // The subscription-token pool (Claude Code / Codex credentials), shared by the
   // container executor (lease + usage feedback) and the vendor-credential controller.
   const subscriptions = buildNodeSubscriptionService(
@@ -1351,6 +1394,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     workspaceMountRepository: repos.workspaceMountRepository,
     tokenUsageRepository: repos.tokenUsageRepository,
     llmCallMetricRepository: repos.llmCallMetricRepository,
+    // Unified provisioning event log (its own Postgres schema). Threads the recorder
+    // into the env services and exposes the read service for the logs controller.
+    provisioningLogRepository: repos.provisioningLogRepository,
     recordLlmPrompts: config.observability.recordPrompts,
     // Re-exposed on the core for the agent-context read endpoint; the same instance
     // is injected into the container executor above for the write path.

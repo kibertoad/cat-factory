@@ -11,6 +11,7 @@ import { D1RateLimitRepository } from './infrastructure/repositories/D1RateLimit
 import { D1TokenUsageRepository } from './infrastructure/repositories/D1TokenUsageRepository'
 import { D1LlmCallMetricRepository } from './infrastructure/repositories/D1LlmCallMetricRepository'
 import { D1AgentContextSnapshotRepository } from './infrastructure/repositories/D1AgentContextSnapshotRepository'
+import { D1ProvisioningLogRepository } from './infrastructure/repositories/D1ProvisioningLogRepository'
 import { D1PipelineScheduleRepository } from './infrastructure/repositories/D1PipelineScheduleRepository'
 import { buildContainer } from './infrastructure/container'
 import { escalateStaleNotifications } from '@cat-factory/server'
@@ -107,6 +108,14 @@ export default {
             db: env.TELEMETRY_DB,
           }),
           pipelineScheduleRepository: new D1PipelineScheduleRepository({ db: env.DB }),
+          // Prune the separate provisioning-log database when its binding is present.
+          ...(env.PROVISIONING_DB
+            ? {
+                provisioningLogRepository: new D1ProvisioningLogRepository({
+                  db: env.PROVISIONING_DB,
+                }),
+              }
+            : {}),
           clock,
           policy: loadConfig(env).retention,
         })

@@ -139,6 +139,7 @@ export async function start(
       agentContextSnapshotRepository: repos.agentContextSnapshotRepository,
       pipelineScheduleRepository: repos.pipelineScheduleRepository,
       subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(db),
+      provisioningLogRepository: repos.provisioningLogRepository,
     },
     container.config.retention,
     clock,

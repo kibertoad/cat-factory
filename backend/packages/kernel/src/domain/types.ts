@@ -118,6 +118,11 @@ export type {
   EnvironmentHandle,
   EnvironmentConnection,
   TestEnvironmentConnectionInput,
+  // Unified provisioning event-log shapes.
+  ProvisioningSubsystem,
+  ProvisioningOperation,
+  ProvisioningOutcome,
+  ProvisioningLogEntry,
   // Self-hosted runner-pool ("bring your own infra") shapes.
   RunnerPoolSecretRef,
   RunnerPoolAuthScheme,

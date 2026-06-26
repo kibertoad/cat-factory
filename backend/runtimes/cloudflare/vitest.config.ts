@@ -9,6 +9,7 @@ export default defineConfig(async () => {
   // The dedicated telemetry database has its own migration lineage.
   const telemetryMigrations = await readD1Migrations('./telemetry-migrations')
   const sandboxMigrations = await readD1Migrations('./sandbox-migrations')
+  const provisioningMigrations = await readD1Migrations('./migrations-provisioning')
 
   return {
     // vitest-pool-workers v4 wires the Workers pool through a Vite plugin
@@ -39,6 +40,7 @@ export default defineConfig(async () => {
             // Sandbox D1 migrations, applied to the SANDBOX_DB binding per test file so
             // the Sandbox feature is exercised against its true schema.
             TEST_SANDBOX_MIGRATIONS: sandboxMigrations,
+            TEST_MIGRATIONS_PROVISIONING: provisioningMigrations,
             // The auth gate fails closed when unconfigured; tests send no
             // credentials, so opt into the local/dev-open path (mirrors
             // `.dev.vars` for `wrangler dev`). Production never sets this.

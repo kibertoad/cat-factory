@@ -16,12 +16,14 @@ function fakeRepos(): {
     tokenUsage: number | null
     llmCallMetrics: number | null
     agentContextSnapshots: number | null
+    provisioningLog: number | null
   }
 } {
   const cutoffs = {
     tokenUsage: null as number | null,
     llmCallMetrics: null as number | null,
     agentContextSnapshots: null as number | null,
+    provisioningLog: null as number | null,
   }
   return {
     cutoffs,
@@ -50,6 +52,12 @@ function fakeRepos(): {
       pipelineScheduleRepository: { pruneRunsBefore: async () => 0 },
       // Expired personal-credential activations (deleted by `now`, not a window).
       subscriptionActivationRepository: { deleteExpired: async () => 2 },
+      provisioningLogRepository: {
+        deleteOlderThan: async (c) => {
+          cutoffs.provisioningLog = c
+          return 5
+        },
+      },
     },
   }
 }
@@ -60,6 +68,7 @@ function policy(overrides: Partial<RetentionConfig> = {}): RetentionConfig {
     rateLimitMs: 7 * DAY,
     commitMs: 90 * DAY,
     llmCallMetricsMs: 3 * DAY,
+    provisioningLogMs: 14 * DAY,
     ...overrides,
   }
 }
@@ -74,12 +83,14 @@ describe('sweepRetention', () => {
     expect(cutoffs.tokenUsage).toBe(now - 30 * DAY)
     expect(cutoffs.llmCallMetrics).toBe(now - 3 * DAY)
     expect(cutoffs.agentContextSnapshots).toBe(now - 3 * DAY) // same window as llmCallMetrics
+    expect(cutoffs.provisioningLog).toBe(now - 14 * DAY)
     expect(result).toEqual({
       tokenUsage: 3,
       llmCallMetrics: 7,
       agentContextSnapshots: 5,
       scheduleRuns: 0,
       activations: 2,
+      provisioningLog: 5,
     })
   })
 
@@ -96,6 +107,7 @@ describe('sweepRetention', () => {
       agentContextSnapshots: 0,
       scheduleRuns: 0,
       activations: 2,
+      provisioningLog: 5,
     })
   })
 })

@@ -41,6 +41,9 @@ import type {
   LlmCallMetricRepository,
   LlmCallMetricSummary,
   LlmPromptChainTip,
+  ProvisioningLogQuery,
+  ProvisioningLogRecord,
+  ProvisioningLogRepository,
   Pipeline,
   PipelineRepository,
   PipelineSchedule,
@@ -127,6 +130,7 @@ import {
   observabilityConnections,
   emailConnections,
   llmCallMetrics,
+  provisioningLog,
   memberships,
   mergeThresholdPresets,
   releaseHealthConfigs,
@@ -1204,6 +1208,71 @@ class DrizzleAgentContextSnapshotRepository implements AgentContextSnapshotRepos
       .delete(agentContextSnapshots)
       .where(lt(agentContextSnapshots.created_at, epochMs))
       .returning({ id: agentContextSnapshots.id })
+    return deleted.length
+  }
+}
+
+function rowToProvisioningLog(row: typeof provisioningLog.$inferSelect): ProvisioningLogRecord {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    subsystem: row.subsystem as ProvisioningLogRecord['subsystem'],
+    operation: row.operation as ProvisioningLogRecord['operation'],
+    targetId: row.target_id,
+    providerId: row.provider_id,
+    blockId: row.block_id,
+    executionId: row.execution_id,
+    outcome: row.outcome as ProvisioningLogRecord['outcome'],
+    error: row.error,
+    detail: row.detail,
+    createdAt: row.created_at,
+  }
+}
+
+/** Drizzle/Postgres provisioning-log sink, in its own `provisioning` schema. */
+class DrizzleProvisioningLogRepository implements ProvisioningLogRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async append(record: ProvisioningLogRecord): Promise<void> {
+    await this.db.insert(provisioningLog).values({
+      id: record.id,
+      workspace_id: record.workspaceId,
+      subsystem: record.subsystem,
+      operation: record.operation,
+      target_id: record.targetId,
+      provider_id: record.providerId,
+      block_id: record.blockId,
+      execution_id: record.executionId,
+      outcome: record.outcome,
+      error: record.error,
+      detail: record.detail,
+      created_at: record.createdAt,
+    })
+  }
+
+  async list(
+    workspaceId: string,
+    query: ProvisioningLogQuery = {},
+  ): Promise<ProvisioningLogRecord[]> {
+    const conditions = [eq(provisioningLog.workspace_id, workspaceId)]
+    if (query.subsystem) conditions.push(eq(provisioningLog.subsystem, query.subsystem))
+    if (query.executionId) conditions.push(eq(provisioningLog.execution_id, query.executionId))
+    if (query.targetId) conditions.push(eq(provisioningLog.target_id, query.targetId))
+    if (query.before != null) conditions.push(lt(provisioningLog.created_at, query.before))
+    const base = this.db
+      .select()
+      .from(provisioningLog)
+      .where(and(...conditions))
+      .orderBy(desc(provisioningLog.created_at), desc(provisioningLog.id))
+    const rows = await (query.limit == null ? base : base.limit(query.limit))
+    return rows.map(rowToProvisioningLog)
+  }
+
+  async deleteOlderThan(epochMs: number): Promise<number> {
+    const deleted = await this.db
+      .delete(provisioningLog)
+      .where(lt(provisioningLog.created_at, epochMs))
+      .returning({ id: provisioningLog.id })
     return deleted.length
   }
 }
@@ -3119,6 +3188,7 @@ export interface CoreRepositories {
   incidentEnrichmentConnectionRepository: IncidentEnrichmentConnectionRepository
   accountSettingsRepository: AccountSettingsRepository
   releaseHealthConfigRepository: ReleaseHealthConfigRepository
+  provisioningLogRepository: ProvisioningLogRepository
 }
 
 /** Build the Drizzle/Postgres-backed core repositories. */
@@ -3152,5 +3222,6 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     incidentEnrichmentConnectionRepository: new DrizzleIncidentEnrichmentConnectionRepository(db),
     accountSettingsRepository: new DrizzleAccountSettingsRepository(db),
     releaseHealthConfigRepository: new DrizzleReleaseHealthConfigRepository(db),
+    provisioningLogRepository: new DrizzleProvisioningLogRepository(db),
   }
 }

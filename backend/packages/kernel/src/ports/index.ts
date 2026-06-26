@@ -214,6 +214,11 @@ export type {
   EnvironmentRegistryRepository,
 } from './environment-repositories.js'
 export type {
+  ProvisioningLogRecord,
+  ProvisioningLogQuery,
+  ProvisioningLogRepository,
+} from './provisioning-log-repositories.js'
+export type {
   BootstrapJobRecord,
   BootstrapJobRecordPatch,
   BootstrapJobRepository,

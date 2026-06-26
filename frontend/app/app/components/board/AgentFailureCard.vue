@@ -15,7 +15,13 @@ const agentRuns = useAgentRunsStore()
 
 const compact = computed(() => props.variant === 'compact')
 const failure = computed(() => props.run.failure)
-const title = computed(() => (props.run.kind === 'bootstrap' ? 'Bootstrap failed' : 'Run failed'))
+const title = computed(() => {
+  // A `dispatch` failure means the container/runner never accepted the job — say so
+  // explicitly rather than the generic "Run failed", and show the verbatim provider
+  // error in the collapsible detail below.
+  if (failure.value?.kind === 'dispatch') return 'Container failed to start'
+  return props.run.kind === 'bootstrap' ? 'Bootstrap failed' : 'Run failed'
+})
 const retryLabel = computed(() =>
   props.run.kind === 'bootstrap' ? 'Retry bootstrap' : 'Retry run',
 )

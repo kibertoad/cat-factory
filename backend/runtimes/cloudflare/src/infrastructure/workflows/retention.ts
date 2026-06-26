@@ -4,6 +4,7 @@ import type {
   CommitProjectionRepository,
   LlmCallMetricRepository,
   PipelineScheduleRepository,
+  ProvisioningLogRepository,
   RateLimitRepository,
   TokenUsageRepository,
 } from '@cat-factory/kernel'
@@ -24,6 +25,13 @@ export interface RetentionPolicy {
   rateLimitMs: number
   commitMs: number
   llmCallMetricsMs: number
+  /**
+   * High-churn provisioning event log (separate D1 db). Always set by the config loader
+   * (mirrors Node + the shared {@link RetentionConfig}); the prune is still skipped when
+   * the `provisioningLogRepository` is absent (no PROVISIONING_DB binding) or the window
+   * is non-positive.
+   */
+  provisioningLogMs: number
 }
 
 export interface RetentionDeps {
@@ -35,6 +43,8 @@ export interface RetentionDeps {
   agentContextSnapshotRepository: AgentContextSnapshotRepository
   /** Optional: prunes recurring-pipeline run history to {@link SCHEDULE_RUN_RETENTION_MS}. */
   pipelineScheduleRepository?: PipelineScheduleRepository
+  /** Optional: the provisioning event log (only when the PROVISIONING_DB binding is present). */
+  provisioningLogRepository?: ProvisioningLogRepository
   clock: Clock
   policy: RetentionPolicy
 }
@@ -47,6 +57,7 @@ export interface RetentionResult {
   llmCallMetrics: number
   agentContextSnapshots: number
   scheduleRuns: number
+  provisioningLog: number
 }
 
 /** Delete rows older than `now - windowMs`, treating a non-positive window as "disabled". */
@@ -71,6 +82,7 @@ export async function sweepRetention({
   llmCallMetricRepository,
   agentContextSnapshotRepository,
   pipelineScheduleRepository,
+  provisioningLogRepository,
   clock,
   policy,
 }: RetentionDeps): Promise<RetentionResult> {
@@ -91,6 +103,11 @@ export async function sweepRetention({
     scheduleRuns: pipelineScheduleRepository
       ? await prune(SCHEDULE_RUN_RETENTION_MS, now, (c) =>
           pipelineScheduleRepository.pruneRunsBefore(c),
+        )
+      : 0,
+    provisioningLog: provisioningLogRepository
+      ? await prune(policy.provisioningLogMs, now, (c) =>
+          provisioningLogRepository.deleteOlderThan(c),
         )
       : 0,
   }
