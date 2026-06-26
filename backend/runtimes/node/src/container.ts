@@ -135,7 +135,7 @@ import {
 import { DrizzleLocalModelEndpointRepository } from './repositories/localModelEndpoint.js'
 import { DrizzleUserSecretRepository } from './repositories/userSecret.js'
 import { DrizzleProviderModelCatalogRepository } from './repositories/providerModelCatalog.js'
-import { createDrizzleRepositories } from './repositories/drizzle.js'
+import { createDrizzleRepositories, createDrizzleSandboxDeps } from './repositories/drizzle.js'
 import {
   DrizzleBootstrapJobRepository,
   DrizzleReferenceArchitectureRepository,
@@ -1354,6 +1354,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
     // preset CRUD API + the merger step's threshold resolution work identically.
     mergePresetRepository: repos.mergePresetRepository,
+    // Sandbox (parallel prompt/model testing) — contributed as one sandbox-owned mixin,
+    // symmetric with the Worker's `...selectSandboxDeps(db)`; the run-driver reuses the
+    // reviewer model config below. The container body never enumerates the five repos.
+    ...createDrizzleSandboxDeps(options.db),
     // Per-workspace runtime settings (human-wait escalation threshold + per-service task
     // limit). Wired unconditionally so the settings API + the limit enforcement + the
     // escalation sweep work identically to the Worker.

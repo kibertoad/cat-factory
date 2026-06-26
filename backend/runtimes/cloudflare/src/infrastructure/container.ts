@@ -145,6 +145,13 @@ import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/co
 import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
 import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
+import {
+  D1SandboxPromptVersionRepository,
+  D1SandboxFixtureRepository,
+  D1SandboxExperimentRepository,
+  D1SandboxRunRepository,
+  D1SandboxGradeRepository,
+} from './repositories/D1SandboxRepositories'
 import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
 import { D1ObservabilityConnectionRepository } from './repositories/D1ObservabilityConnectionRepository'
 import { D1IncidentEnrichmentConnectionRepository } from './repositories/D1IncidentEnrichmentConnectionRepository'
@@ -1339,6 +1346,26 @@ function selectRequirementsDeps(
 }
 
 /**
+ * The Sandbox (parallel prompt/model testing) persistence — five repos over the
+ * DEDICATED `SANDBOX_DB` D1 database. Opt-in: absent binding ⇒ `{}` (the module isn't
+ * assembled and the API answers 503), so a deployment that hasn't provisioned the
+ * sandbox database is unaffected. The inline reviewer model config from
+ * {@link selectRequirementsDeps} is reused by the run-driver (cells resolve their catalog
+ * id like a pipeline step). Mirrored by the Node facade's `createDrizzleSandboxDeps`
+ * (a Postgres `sandbox` schema).
+ */
+function selectSandboxDeps(sandboxDb: D1Database | undefined): Partial<CoreDependencies> {
+  if (!sandboxDb) return {}
+  return {
+    sandboxPromptVersionRepository: new D1SandboxPromptVersionRepository(sandboxDb),
+    sandboxFixtureRepository: new D1SandboxFixtureRepository(sandboxDb),
+    sandboxExperimentRepository: new D1SandboxExperimentRepository(sandboxDb),
+    sandboxRunRepository: new D1SandboxRunRepository(sandboxDb),
+    sandboxGradeRepository: new D1SandboxGradeRepository(sandboxDb),
+  }
+}
+
+/**
  * Build the ephemeral environment integration's concrete ports when opted in.
  * Requires the encryption key (the config gate already enforces this), so the
  * generic HTTP provider, the D1 repositories and the Web Crypto cipher are wired
@@ -1626,6 +1653,7 @@ export function buildContainer(
     ...selectDocumentsDeps(env, config, db, clock, idGenerator),
     ...selectTasksDeps(env, config, db, clock, idGenerator),
     ...selectRequirementsDeps(env, config, db),
+    ...selectSandboxDeps(env.SANDBOX_DB),
     ...selectEnvironmentsDeps(env, config, db),
     ...selectRunnersDeps(env, config, db),
     ...selectFragmentLibraryDeps(env, config, db),

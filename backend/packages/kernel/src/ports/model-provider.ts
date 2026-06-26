@@ -79,3 +79,20 @@ export interface ModelScope {
 export interface ModelProviderResolver {
   forScope(scope: ModelScope): Promise<ModelProvider>
 }
+
+/**
+ * Resolve the {@link ModelProvider} for a workspace's scope: the per-scope DB-backed key
+ * pool when a {@link ModelProviderResolver} is wired, else the static provider. The single
+ * seam every inline LLM call (the requirements/clarity reviewers, the Sandbox run-driver)
+ * shares, so the "prefer the scoped resolver over the static provider" precedence can't
+ * drift between callers. Returns `undefined` when neither is configured.
+ */
+export async function resolveScopedModelProvider(
+  workspaceId: string,
+  deps: { modelProviderResolver?: ModelProviderResolver; modelProvider?: ModelProvider },
+): Promise<ModelProvider | undefined> {
+  if (deps.modelProviderResolver) {
+    return deps.modelProviderResolver.forScope({ workspaceId })
+  }
+  return deps.modelProvider
+}

@@ -16,6 +16,7 @@ export {
 } from './domain/errors.js'
 export { sameSubtasks, sameSubtaskItems } from './domain/subtasks.logic.js'
 export { resolveWritebackFlag } from './domain/writeback.js'
+export { extractJson } from './domain/llm-output.js'
 export {
   BLOCK_TYPE_LABEL,
   DEFAULT_MERGE_PRESET,

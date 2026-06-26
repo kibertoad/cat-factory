@@ -28,6 +28,15 @@ export type GitHubSyncMessage =
 export interface Env {
   DB: D1Database
 
+  /**
+   * Dedicated D1 database for the Sandbox (parallel prompt/model testing surface), with
+   * its own migrations lineage (sandbox-migrations/). Optional + opt-in: absent ⇒ the
+   * Sandbox module isn't assembled and its API answers 503. Kept separate from the main
+   * `DB` for blast-radius isolation (Cloudflare's granular-DB guidance) and so the whole
+   * feature can be lifted out later.
+   */
+  SANDBOX_DB?: D1Database
+
   /** Cloudflare Workers AI binding (optional; used when provider = workers-ai). */
   AI?: Ai
 

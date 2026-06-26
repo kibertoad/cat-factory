@@ -3,6 +3,9 @@ import {
   type ExecutionInstance,
   type MergeThresholdPreset,
   type ModelPreset,
+  type SandboxExperiment,
+  type SandboxFixture,
+  type SandboxPromptVersion,
   type Pipeline,
   type PipelineSchedule,
   type ScheduleRun,
@@ -412,6 +415,175 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         // The library rides along on the workspace snapshot.
         const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
         expect((snapshot.body.modelPresets ?? []).some((p) => p.name === 'Mixed')).toBe(true)
+      })
+    })
+
+    describe('sandbox (prompt/model testing surface)', () => {
+      it('lists baselines, clones+versions prompts, seeds fixtures and defines experiments', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/sandbox`
+
+        // Overview seeds the builtin fixtures on first load and exposes the testable
+        // agent-kind catalog + the shipped baselines (synthetic, never persisted).
+        const overview = await call<{
+          agentKinds: { agentKind: string }[]
+          prompts: SandboxPromptVersion[]
+          fixtures: SandboxFixture[]
+          experiments: SandboxExperiment[]
+          maxCells: number
+        }>('GET', `${base}/overview`)
+        expect(overview.status).toBe(200)
+        expect(overview.body.agentKinds.some((k) => k.agentKind === 'requirements-review')).toBe(
+          true,
+        )
+        expect(overview.body.prompts.some((p) => p.origin === 'baseline')).toBe(true)
+        expect(overview.body.fixtures.length).toBeGreaterThan(0)
+        // The cell cap is surfaced so the UI gates on the SAME limit instead of re-encoding it.
+        expect(overview.body.maxCells).toBeGreaterThan(0)
+        const fixture = overview.body.fixtures.find((f) => f.kind === 'requirements')!
+        expect(fixture).toBeTruthy()
+
+        // Clone the requirements-review baseline into an editable candidate lineage (v1).
+        const cloned = await call<SandboxPromptVersion>('POST', `${base}/prompts/clone`, {
+          agentKind: 'requirements-review',
+          basePromptId: 'requirement-review',
+          name: 'My reviewer',
+        })
+        expect(cloned.status).toBe(201)
+        expect(cloned.body.origin).toBe('candidate')
+        expect(cloned.body.version).toBe(1)
+        expect(cloned.body.systemText.length).toBeGreaterThan(0)
+
+        // Append an edited version onto the lineage (v2 on the same lineage id).
+        const v2 = await call<SandboxPromptVersion>('POST', `${base}/prompts`, {
+          parentId: cloned.body.id,
+          systemText: `${cloned.body.systemText}\n\nAlways check authz.`,
+        })
+        expect(v2.status).toBe(201)
+        expect(v2.body.version).toBe(2)
+        expect(v2.body.lineageId).toBe(cloned.body.lineageId)
+
+        // Both candidate versions + the baselines come back from the prompt listing.
+        const prompts = await call<SandboxPromptVersion[]>('GET', `${base}/prompts`)
+        expect(prompts.body.filter((p) => p.lineageId === cloned.body.lineageId)).toHaveLength(2)
+
+        // Define a draft experiment over the baseline prompt × one model × the fixture.
+        const experiment = await call<SandboxExperiment>('POST', `${base}/experiments`, {
+          name: 'Reviewer shootout',
+          agentKind: 'requirements-review',
+          judgeModel: 'anthropic:claude-opus-4-8',
+          matrix: {
+            promptVersionIds: ['baseline:requirement-review'],
+            models: ['anthropic:claude-opus-4-8'],
+            fixtureIds: [fixture.id],
+          },
+        })
+        expect(experiment.status).toBe(201)
+        expect(experiment.body.status).toBe('draft')
+        expect(experiment.body.judgeModel.length).toBeGreaterThan(0)
+
+        // The experiment + its (still empty) result grid read back.
+        const detail = await call<{
+          experiment: SandboxExperiment
+          runs: unknown[]
+          grades: unknown[]
+        }>('GET', `${base}/experiments/${experiment.body.id}`)
+        expect(detail.status).toBe(200)
+        expect(detail.body.experiment.id).toBe(experiment.body.id)
+        expect(detail.body.runs).toHaveLength(0)
+        expect(detail.body.grades).toHaveLength(0)
+
+        // A non-runnable matrix is rejected at create time.
+        const empty = await call('POST', `${base}/experiments`, {
+          name: 'Bad',
+          agentKind: 'requirements-review',
+          matrix: { promptVersionIds: [], models: [], fixtureIds: [] },
+        })
+        expect(empty.status).toBeGreaterThanOrEqual(400)
+
+        // A zero token budget is rejected at create (it would otherwise fail every cell).
+        const zeroBudget = await call('POST', `${base}/experiments`, {
+          name: 'No budget',
+          agentKind: 'requirements-review',
+          judgeModel: 'anthropic:claude-opus-4-8',
+          matrix: {
+            promptVersionIds: ['baseline:requirement-review'],
+            models: ['anthropic:claude-opus-4-8'],
+            fixtureIds: [fixture.id],
+          },
+          budgetTokens: 0,
+        })
+        expect(zeroBudget.status).toBeGreaterThanOrEqual(400)
+      })
+
+      it('drives the run/grade lifecycle to a terminal grid identically across runtimes', async () => {
+        // Force the model provider ON for both runtimes (the Worker binds `AI`, Node has no
+        // binding) so `launch` reaches the run-driver identically rather than 503/400-ing at
+        // provider resolution on one facade only.
+        const { call, createWorkspace } = harness.makeApp(undefined, {
+          cloudflareModelsEnabled: true,
+        })
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/sandbox`
+
+        const overview = await call<{ fixtures: SandboxFixture[] }>('GET', `${base}/overview`)
+        const fixture = overview.body.fixtures.find((f) => f.kind === 'requirements')!
+
+        // Define a 2-cell experiment against a deliberately UNCONFIGURED provider: the
+        // run-driver resolves the model per cell and the resolve throws (no key wired in
+        // the suite), so every candidate fails WITHOUT any network call. This exercises the
+        // whole driver path — expand→persist→run→settle, plus the relaunch delete ordering
+        // (grades before runs) — identically on D1 and Postgres, which the CRUD-only block
+        // above never reached. A graded happy path needs a fake judge model and is a
+        // tracked follow-up.
+        const created = await call<SandboxExperiment>('POST', `${base}/experiments`, {
+          name: 'Driver parity',
+          agentKind: 'requirements-review',
+          judgeModel: 'no-such-vendor:none',
+          matrix: {
+            promptVersionIds: ['baseline:requirement-review'],
+            models: ['no-such-vendor:a', 'no-such-vendor:b'],
+            fixtureIds: [fixture.id],
+          },
+        })
+        expect(created.status).toBe(201)
+
+        const launched = await call<{
+          experiment: SandboxExperiment
+          runs: { status: string; error?: string }[]
+          grades: unknown[]
+        }>('POST', `${base}/experiments/${created.body.id}/launch`)
+        expect(launched.status).toBe(200)
+        // Every candidate failed → no cell graded → the experiment settles `failed`, never
+        // a misleading `done` with an unscored grid, and never stuck `running`.
+        expect(launched.body.experiment.status).toBe('failed')
+        expect(launched.body.runs).toHaveLength(2)
+        expect(launched.body.runs.every((r) => r.status === 'failed')).toBe(true)
+        expect(launched.body.grades).toHaveLength(0)
+
+        // A relaunch replaces the grid in place rather than accumulating cells.
+        const relaunched = await call<{ runs: unknown[] }>(
+          'POST',
+          `${base}/experiments/${created.body.id}/launch`,
+        )
+        expect(relaunched.status).toBe(200)
+        expect(relaunched.body.runs).toHaveLength(2)
+
+        // Two CONCURRENT launches must not duplicate the grid: the experiment's atomic claim
+        // (`claimForRun`) lets exactly one win the run at a time, so whichever interleaving the
+        // real store produces, the grid still settles to exactly 2 cells (never 4) — and at
+        // least one launch succeeds rather than both 409-ing.
+        const [first, second] = await Promise.all([
+          call('POST', `${base}/experiments/${created.body.id}/launch`),
+          call('POST', `${base}/experiments/${created.body.id}/launch`),
+        ])
+        expect([first.status, second.status].some((s) => s === 200)).toBe(true)
+        const afterRace = await call<{ runs: unknown[] }>(
+          'GET',
+          `${base}/experiments/${created.body.id}`,
+        )
+        expect(afterRace.body.runs).toHaveLength(2)
       })
     })
 

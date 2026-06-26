@@ -84,9 +84,9 @@ describe('FetchGitHubClient.canPush', () => {
       'fetch',
       vi.fn(async () => jsonResponse({ name: 'simpler-service3' })),
     )
-    await expect(makeClient(appRegistry({ contents: 'write', mints })).canPush(1, ref)).resolves.toBe(
-      true,
-    )
+    await expect(
+      makeClient(appRegistry({ contents: 'write', mints })).canPush(1, ref),
+    ).resolves.toBe(true)
     // Already writable on the first probe — no recheck mint.
     expect(mints).toEqual([{ forceRefresh: false }])
   })
@@ -110,9 +110,9 @@ describe('FetchGitHubClient.canPush', () => {
       'fetch',
       vi.fn(async () => jsonResponse({ name: 'simpler-service3' })),
     )
-    await expect(makeClient(appRegistry({ contents: 'read', mints })).canPush(1, ref)).resolves.toBe(
-      false,
-    )
+    await expect(
+      makeClient(appRegistry({ contents: 'read', mints })).canPush(1, ref),
+    ).resolves.toBe(false)
     expect(mints).toEqual([{ forceRefresh: false }, { forceRefresh: true }])
   })
 
