@@ -6,6 +6,7 @@
 // block-id entry here. Opened from the Integrations hub.
 import { computed, reactive, ref, watch } from 'vue'
 import type { ObservabilityProviderKind } from '~/types/releaseHealth'
+import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const ui = useUiStore()
 const store = useReleaseHealthStore()
@@ -128,6 +129,15 @@ const connectedLabel = computed(() => {
 
 <template>
   <UModal v-model:open="open" title="Post-release health" :ui="{ content: 'max-w-lg' }">
+    <template #title>
+      <IntegrationBackTitle
+        title="Post-release health"
+        @back="
+          open = false
+          ui.openIntegrations()
+        "
+      />
+    </template>
     <template #body>
       <div class="space-y-4">
         <p class="text-sm text-slate-400">

@@ -12,6 +12,7 @@ import type { CreateTaskType, TaskLimitMode, WorkspaceSettings } from '~/types/d
 import MergeThresholdsPanel from '~/components/settings/MergeThresholdsPanel.vue'
 import IssueTrackerPanel from '~/components/settings/IssueTrackerPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
+import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const ui = useUiStore()
 const store = useWorkspaceSettingsStore()
@@ -160,6 +161,15 @@ async function saveBudget() {
 
 <template>
   <UModal v-model:open="open" title="Workspace settings" :ui="{ content: 'max-w-3xl' }">
+    <template #title>
+      <IntegrationBackTitle
+        title="Workspace settings"
+        @back="
+          open = false
+          ui.openIntegrations()
+        "
+      />
+    </template>
     <template #body>
       <UTabs
         v-model="activeTab"

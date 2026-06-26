@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DocumentSourceKind } from '~/types/domain'
+import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 // Import pages from a connected document source and pick one to expand into
 // board structure. A source selector lets the user choose which connected source
@@ -74,6 +75,15 @@ function preview(externalId: string) {
 
 <template>
   <UModal v-model:open="open" title="Import from a document source">
+    <template #title>
+      <IntegrationBackTitle
+        title="Import from a document source"
+        @back="
+          open = false
+          ui.openIntegrations()
+        "
+      />
+    </template>
     <template #body>
       <div v-if="!documents.anyConnected" class="space-y-3 text-center">
         <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-slate-500" />

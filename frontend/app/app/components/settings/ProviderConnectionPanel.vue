@@ -9,6 +9,7 @@
 // with a `default` is optional — left blank it falls back to that default.
 import { computed, ref, watch } from 'vue'
 import type { ProviderConnectionKind } from '~/types/providerConnections'
+import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const ui = useUiStore()
 const store = useProviderConnectionsStore()
@@ -213,6 +214,15 @@ function fieldHelp(key: string): string | undefined {
 
 <template>
   <UModal v-model:open="open" :title="meta?.title ?? 'Provider'" :ui="{ content: 'max-w-xl' }">
+    <template #title>
+      <IntegrationBackTitle
+        :title="meta?.title ?? 'Provider'"
+        @back="
+          open = false
+          ui.openIntegrations()
+        "
+      />
+    </template>
     <template #body>
       <div v-if="descriptor" class="space-y-4">
         <p class="text-xs text-slate-400">{{ meta?.blurb }}</p>

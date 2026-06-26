@@ -64,9 +64,10 @@ interface IntegrationGroup {
 }
 
 // Run an integration's open handler, then dismiss the hub so its panel takes over.
+// `openFromIntegrations` also marks that the panel was reached from here, so the panel
+// renders a "Back to Integrations" control (see IntegrationBackTitle).
 function go(fn: () => void) {
-  fn()
-  ui.closeIntegrations()
+  ui.openFromIntegrations(fn)
 }
 
 const groups = computed<IntegrationGroup[]>(() => {
