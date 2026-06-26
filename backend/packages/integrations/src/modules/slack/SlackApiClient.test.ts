@@ -1,28 +1,52 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { MockAgent, setGlobalDispatcher } from 'undici'
 import { SlackApiClient } from './SlackApiClient.js'
 
-// Build a fetch stub that returns a JSON Slack response, optionally with headers,
-// and records every request URL + body so pagination/cursor flow can be asserted.
-function stubFetch(
-  responses: { body: Record<string, unknown>; headers?: Record<string, string> }[],
-) {
-  const calls: { url: string; body: unknown }[] = []
-  let i = 0
-  const fetchImpl = (async (url: string | URL, init?: RequestInit) => {
-    calls.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : null })
-    const next = responses[Math.min(i, responses.length - 1)]!
-    i++
-    return {
-      json: async () => next.body,
-      headers: new Headers(next.headers ?? {}),
-    } as Response
-  }) as unknown as typeof fetch
-  return { client: new SlackApiClient({ fetchImpl }), calls }
+// The client speaks the real Slack Web API over the global `fetch`, so we intercept that real
+// fetch with undici's MockAgent rather than a hand-stubbed `{ json, headers }` object — the
+// previous fake omitted `ok`/`status`/`text`, so it could silently diverge from a real
+// Response. MockAgent serves a real Response (real headers, real json()); `disableNetConnect`
+// makes any un-mocked request fail loudly.
+const SLACK = 'https://slack.com'
+
+let agent: MockAgent
+
+beforeEach(() => {
+  agent = new MockAgent()
+  agent.disableNetConnect()
+  setGlobalDispatcher(agent)
+})
+
+afterEach(async () => {
+  await agent.close()
+})
+
+/**
+ * Queue one reply per page for POSTs to a Slack method (consumed FIFO), capturing each
+ * request's JSON body so cursor/pagination flow can be asserted. Returns the captured bodies.
+ */
+function slackReplies(
+  method: string,
+  pages: { body: Record<string, unknown>; headers?: Record<string, string> }[],
+): unknown[] {
+  const bodies: unknown[] = []
+  const pool = agent.get(SLACK)
+  for (const page of pages) {
+    pool.intercept({ path: `/api/${method}`, method: 'POST' }).reply(
+      200,
+      (opts) => {
+        bodies.push(opts.body ? JSON.parse(String(opts.body)) : null)
+        return JSON.stringify(page.body)
+      },
+      { headers: page.headers },
+    )
+  }
+  return bodies
 }
 
 describe('SlackApiClient', () => {
   it('authTest reads granted scopes from the x-oauth-scopes header', async () => {
-    const { client } = stubFetch([
+    slackReplies('auth.test', [
       {
         body: {
           ok: true,
@@ -34,19 +58,19 @@ describe('SlackApiClient', () => {
         headers: { 'x-oauth-scopes': 'chat:write, chat:write.public ,channels:read' },
       },
     ])
-    const info = await client.authTest('tok')
+    const info = await new SlackApiClient().authTest('tok')
     expect(info.teamId).toBe('T1')
     // Trimmed + empties dropped, in order.
     expect(info.scopes).toEqual(['chat:write', 'chat:write.public', 'channels:read'])
   })
 
   it('authTest returns empty scopes when the header is absent', async () => {
-    const { client } = stubFetch([{ body: { ok: true, team_id: 'T1', team: 'Acme' } }])
-    expect((await client.authTest('tok')).scopes).toEqual([])
+    slackReplies('auth.test', [{ body: { ok: true, team_id: 'T1', team: 'Acme' } }])
+    expect((await new SlackApiClient().authTest('tok')).scopes).toEqual([])
   })
 
   it('conversationsList follows the next_cursor across pages', async () => {
-    const { client, calls } = stubFetch([
+    const bodies = slackReplies('conversations.list', [
       {
         body: {
           ok: true,
@@ -62,20 +86,20 @@ describe('SlackApiClient', () => {
         },
       },
     ])
-    const channels = await client.conversationsList('tok')
+    const channels = await new SlackApiClient().conversationsList('tok')
     expect(channels.map((c) => c.id)).toEqual(['C1', 'C2'])
     expect(channels[1]!.isPrivate).toBe(true)
     // Two requests: the second carried the cursor from the first page.
-    expect(calls).toHaveLength(2)
-    expect((calls[1]!.body as { cursor?: string }).cursor).toBe('CURSOR2')
+    expect(bodies).toHaveLength(2)
+    expect((bodies[1] as { cursor?: string }).cursor).toBe('CURSOR2')
   })
 
   it('conversationsList stops after a single page when there is no cursor', async () => {
-    const { client, calls } = stubFetch([
+    const bodies = slackReplies('conversations.list', [
       { body: { ok: true, channels: [{ id: 'C1', name: 'general', is_private: false }] } },
     ])
-    const channels = await client.conversationsList('tok')
+    const channels = await new SlackApiClient().conversationsList('tok')
     expect(channels).toHaveLength(1)
-    expect(calls).toHaveLength(1)
+    expect(bodies).toHaveLength(1)
   })
 })

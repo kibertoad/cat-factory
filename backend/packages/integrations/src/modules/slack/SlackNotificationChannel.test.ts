@@ -11,9 +11,45 @@ import type {
   SlackSettingsRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { MockAgent, setGlobalDispatcher } from 'undici'
 import { SlackApiClient } from './SlackApiClient.js'
 import { SlackNotificationChannel } from './SlackNotificationChannel.js'
+
+// The channel posts via SlackApiClient over the global `fetch`; intercept that real fetch with
+// undici's MockAgent rather than a hand-stubbed fetch (the old fake `{ json }` omitted
+// `ok`/`status`/`headers`). `disableNetConnect` makes an unexpected post fail loudly.
+const SLACK = 'https://slack.com'
+
+let agent: MockAgent
+
+beforeEach(() => {
+  agent = new MockAgent()
+  agent.disableNetConnect()
+  setGlobalDispatcher(agent)
+})
+
+afterEach(async () => {
+  await agent.close()
+})
+
+/** Record every chat.postMessage (token + parsed body); `calls` stays empty if none is sent. */
+function recordChatPost(): { token: string; body: unknown }[] {
+  const calls: { token: string; body: unknown }[] = []
+  agent
+    .get(SLACK)
+    .intercept({ path: '/api/chat.postMessage', method: 'POST' })
+    .reply(200, (opts) => {
+      const auth = (opts.headers as Record<string, string>).authorization ?? ''
+      calls.push({
+        token: auth.replace('Bearer ', ''),
+        body: opts.body ? JSON.parse(String(opts.body)) : null,
+      })
+      return JSON.stringify({ ok: true })
+    })
+    .persist()
+  return calls
+}
 
 // A SecretCipher whose ciphertext is just the plaintext reversed (deterministic,
 // no crypto needed) — enough to prove decrypt is invoked before posting.
@@ -84,24 +120,9 @@ const enabledRoute = (channel: string): SlackSettingsRecord => ({
   updatedAt: 0,
 })
 
-/** A SlackApiClient over a fetch stub that records the chat.postMessage call. */
-function recordingClient() {
-  const calls: { url: string; token: string; body: unknown }[] = []
-  const fetchImpl = (async (url: string | URL, init?: RequestInit) => {
-    const headers = (init?.headers ?? {}) as Record<string, string>
-    calls.push({
-      url: String(url),
-      token: (headers.authorization ?? '').replace('Bearer ', ''),
-      body: init?.body ? JSON.parse(String(init.body)) : null,
-    })
-    return { json: async () => ({ ok: true }) } as Response
-  }) as unknown as typeof fetch
-  return { client: new SlackApiClient({ fetchImpl }), calls }
-}
-
 describe('SlackNotificationChannel', () => {
   it('posts to the routed channel with the decrypted token', async () => {
-    const { client, calls } = recordingClient()
+    const calls = recordChatPost()
     const channel = new SlackNotificationChannel({
       workspaceRepository: workspaceRepo('acc_1'),
       slackConnectionRepository: connectionRepo(connection),
@@ -114,19 +135,19 @@ describe('SlackNotificationChannel', () => {
       slackMemberMappingRepository: mappingRepo([]),
       blockRepository: blockRepo(null),
       secretCipher: reversingCipher,
-      slackClient: client,
+      slackClient: new SlackApiClient(),
     })
 
     await channel.deliver('ws_1', notification)
 
+    // The interceptor path guarantees the call hit chat.postMessage.
     expect(calls).toHaveLength(1)
-    expect(calls[0]!.url).toContain('chat.postMessage')
     expect(calls[0]!.token).toBe('tokn-xxx')
     expect((calls[0]!.body as { channel: string }).channel).toBe('#releases')
   })
 
   it('does not post when the type is disabled or unrouted', async () => {
-    const { client, calls } = recordingClient()
+    const calls = recordChatPost()
     const channel = new SlackNotificationChannel({
       workspaceRepository: workspaceRepo('acc_1'),
       slackConnectionRepository: connectionRepo(connection),
@@ -139,7 +160,7 @@ describe('SlackNotificationChannel', () => {
       slackMemberMappingRepository: mappingRepo([]),
       blockRepository: blockRepo(null),
       secretCipher: reversingCipher,
-      slackClient: client,
+      slackClient: new SlackApiClient(),
     })
 
     await channel.deliver('ws_1', notification)
@@ -147,7 +168,7 @@ describe('SlackNotificationChannel', () => {
   })
 
   it('does not post when the account has no Slack connection', async () => {
-    const { client, calls } = recordingClient()
+    const calls = recordChatPost()
     const channel = new SlackNotificationChannel({
       workspaceRepository: workspaceRepo('acc_1'),
       slackConnectionRepository: connectionRepo(null),
@@ -155,7 +176,7 @@ describe('SlackNotificationChannel', () => {
       slackMemberMappingRepository: mappingRepo([]),
       blockRepository: blockRepo('usr_7'),
       secretCipher: reversingCipher,
-      slackClient: client,
+      slackClient: new SlackApiClient(),
     })
 
     await channel.deliver('ws_1', notification)
@@ -163,7 +184,7 @@ describe('SlackNotificationChannel', () => {
   })
 
   it('mentions ONLY the task creator on an engineering notification', async () => {
-    const { client, calls } = recordingClient()
+    const calls = recordChatPost()
     const channel = new SlackNotificationChannel({
       workspaceRepository: workspaceRepo('acc_1'),
       slackConnectionRepository: connectionRepo(connection),
@@ -174,7 +195,7 @@ describe('SlackNotificationChannel', () => {
       ]),
       blockRepository: blockRepo('usr_7'), // task created by github user 7
       secretCipher: reversingCipher,
-      slackClient: client,
+      slackClient: new SlackApiClient(),
     })
 
     await channel.deliver('ws_1', notification) // merge_review (engineering)
@@ -185,7 +206,7 @@ describe('SlackNotificationChannel', () => {
   })
 
   it('mentions product people AND the creator on a requirement review', async () => {
-    const { client, calls } = recordingClient()
+    const calls = recordChatPost()
     const channel = new SlackNotificationChannel({
       workspaceRepository: workspaceRepo('acc_1'),
       slackConnectionRepository: connectionRepo(connection),
@@ -197,7 +218,7 @@ describe('SlackNotificationChannel', () => {
       ]),
       blockRepository: blockRepo('usr_7'),
       secretCipher: reversingCipher,
-      slackClient: client,
+      slackClient: new SlackApiClient(),
     })
 
     await channel.deliver('ws_1', { ...notification, type: 'requirement_review' })
@@ -209,11 +230,11 @@ describe('SlackNotificationChannel', () => {
   })
 
   it('never throws on a delivery failure (best-effort) but surfaces it via onError', async () => {
-    const throwingClient = new SlackApiClient({
-      fetchImpl: (async () => {
-        throw new Error('network down')
-      }) as unknown as typeof fetch,
-    })
+    // The ingestion POST fails at the network layer; the channel must swallow it.
+    agent
+      .get(SLACK)
+      .intercept({ path: '/api/chat.postMessage', method: 'POST' })
+      .replyWithError(new Error('network down'))
     const errors: { error: unknown; context: Record<string, unknown> }[] = []
     const channel = new SlackNotificationChannel({
       workspaceRepository: workspaceRepo('acc_1'),
@@ -222,15 +243,19 @@ describe('SlackNotificationChannel', () => {
       slackMemberMappingRepository: mappingRepo([]),
       blockRepository: blockRepo(null),
       secretCipher: reversingCipher,
-      slackClient: throwingClient,
+      slackClient: new SlackApiClient(),
       onError: (error, context) => errors.push({ error, context }),
     })
 
     // Best-effort: the lifecycle is never broken...
     await expect(channel.deliver('ws_1', notification)).resolves.toBeUndefined()
-    // ...but the swallowed failure is observable, not silently dropped.
+    // ...but the swallowed failure is observable, not silently dropped. A network failure on
+    // the global fetch surfaces as a `TypeError: fetch failed` carrying the real cause — the
+    // exact shape production sees (the old injected-fake error never wrapped this way).
     expect(errors).toHaveLength(1)
-    expect((errors[0]!.error as Error).message).toBe('network down')
+    const surfaced = errors[0]!.error as Error
+    expect(surfaced.message).toBe('fetch failed')
+    expect((surfaced.cause as Error | undefined)?.message).toBe('network down')
     expect(errors[0]!.context).toEqual({
       workspaceId: 'ws_1',
       notificationId: 'ntf_1',

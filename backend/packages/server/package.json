@@ -44,6 +44,7 @@
   },
   "devDependencies": {
     "typescript": "7.0.1-rc",
+    "undici": "^7.16.0",
     "vitest": "^4.1.9"
   }
 }

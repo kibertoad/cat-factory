@@ -1,6 +1,57 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MockAgent, setGlobalDispatcher } from 'undici'
 import type { LlmGenerationEvent } from '@cat-factory/kernel'
 import { LangfuseTraceSink } from './index.js'
+
+// The sink POSTs to Langfuse's ingestion API over the global `fetch`. We intercept that real
+// fetch with undici's MockAgent (the same engine that backs Node's fetch) rather than injecting
+// a hand-stubbed `fetchImpl`, so the test exercises the actual fetch → Response path the sink
+// uses in production. `disableNetConnect` makes any un-mocked request fail loudly.
+const CLOUD = 'https://cloud.langfuse.com'
+const INGEST = '/api/public/ingestion'
+
+let agent: MockAgent
+
+beforeEach(() => {
+  agent = new MockAgent()
+  agent.disableNetConnect()
+  setGlobalDispatcher(agent)
+})
+
+afterEach(async () => {
+  await agent.close()
+})
+
+interface BatchEvent {
+  type: string
+  body: Record<string, unknown>
+}
+interface CapturedIngestion {
+  /** The request path (full, incl. any query) — asserts baseUrl normalisation. */
+  path: string
+  headers: Record<string, string>
+  batch: BatchEvent[]
+}
+
+/** Intercept the next ingestion POST to `origin` and capture its request for assertions. */
+function captureIngestion(origin: string): () => CapturedIngestion {
+  let captured: CapturedIngestion | undefined
+  agent
+    .get(origin)
+    .intercept({ path: INGEST, method: 'POST' })
+    .reply(200, (opts) => {
+      captured = {
+        path: String(opts.path),
+        headers: opts.headers as Record<string, string>,
+        batch: JSON.parse(String(opts.body)).batch as BatchEvent[],
+      }
+      return ''
+    })
+  return () => {
+    if (!captured) throw new Error('ingestion endpoint was not called')
+    return captured
+  }
+}
 
 function baseEvent(overrides: Partial<LlmGenerationEvent> = {}): LlmGenerationEvent {
   return {
@@ -23,39 +74,25 @@ function baseEvent(overrides: Partial<LlmGenerationEvent> = {}): LlmGenerationEv
   }
 }
 
-function okFetch() {
-  return vi.fn(async (..._args: Parameters<typeof fetch>) => new Response(null, { status: 200 }))
-}
-
-function parseBatch(fetchImpl: ReturnType<typeof okFetch>) {
-  const [, init] = fetchImpl.mock.calls[0]!
-  return JSON.parse(String(init!.body)).batch as Array<{
-    type: string
-    body: Record<string, unknown>
-  }>
-}
-
 describe('LangfuseTraceSink', () => {
   it('posts a trace + generation to the ingestion endpoint with Basic auth', async () => {
-    const fetchImpl = okFetch()
+    const captured = captureIngestion('https://lf.example.com')
     const sink = new LangfuseTraceSink({
       publicKey: 'pk',
       secretKey: 'sk',
       baseUrl: 'https://lf.example.com/',
-      fetchImpl: fetchImpl as unknown as typeof fetch,
     })
 
     await sink.recordGeneration(baseEvent())
 
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
-    const [url, init] = fetchImpl.mock.calls[0]!
-    // Trailing slash on baseUrl is normalised.
-    expect(url).toBe('https://lf.example.com/api/public/ingestion')
-    expect((init!.headers as Record<string, string>).authorization).toBe(`Basic ${btoa('pk:sk')}`)
+    const req = captured()
+    // Trailing slash on baseUrl is normalised (an un-normalised `//api/...` path would not
+    // match the interceptor and the disabled net connection would throw instead).
+    expect(req.path).toBe(INGEST)
+    expect(req.headers.authorization).toBe(`Basic ${btoa('pk:sk')}`)
 
-    const batch = parseBatch(fetchImpl)
-    const trace = batch.find((e) => e.type === 'trace-create')!
-    const gen = batch.find((e) => e.type === 'generation-create')!
+    const trace = req.batch.find((e) => e.type === 'trace-create')!
+    const gen = req.batch.find((e) => e.type === 'generation-create')!
     // The run id groups every call under one trace.
     expect(trace.body.id).toBe('exec1')
     expect(gen.body.traceId).toBe('exec1')
@@ -67,16 +104,12 @@ describe('LangfuseTraceSink', () => {
   })
 
   it('omits prompt/response bodies when they are empty (LLM_RECORD_PROMPTS=false)', async () => {
-    const fetchImpl = okFetch()
-    const sink = new LangfuseTraceSink({
-      publicKey: 'pk',
-      secretKey: 'sk',
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-    })
+    const captured = captureIngestion(CLOUD)
+    const sink = new LangfuseTraceSink({ publicKey: 'pk', secretKey: 'sk' })
 
     await sink.recordGeneration(baseEvent({ input: '', output: '' }))
 
-    const gen = parseBatch(fetchImpl).find((e) => e.type === 'generation-create')!
+    const gen = captured().batch.find((e) => e.type === 'generation-create')!
     expect(gen.body.input).toBeUndefined()
     expect(gen.body.output).toBeUndefined()
     // Usage/timing/metadata are still present.
@@ -84,19 +117,14 @@ describe('LangfuseTraceSink', () => {
   })
 
   it('marks failed calls as ERROR with a status message and a standalone trace when no run', async () => {
-    const fetchImpl = okFetch()
-    const sink = new LangfuseTraceSink({
-      publicKey: 'pk',
-      secretKey: 'sk',
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-    })
+    const captured = captureIngestion(CLOUD)
+    const sink = new LangfuseTraceSink({ publicKey: 'pk', secretKey: 'sk' })
 
     await sink.recordGeneration(
       baseEvent({ executionId: null, ok: false, errorMessage: 'boom', finishReason: null }),
     )
 
-    const batch = parseBatch(fetchImpl)
-    const gen = batch.find((e) => e.type === 'generation-create')!
+    const gen = captured().batch.find((e) => e.type === 'generation-create')!
     expect(gen.body.level).toBe('ERROR')
     expect(gen.body.statusMessage).toBe('boom')
     // No execution → a fresh standalone trace id (a uuid), not null.
@@ -105,40 +133,31 @@ describe('LangfuseTraceSink', () => {
   })
 
   it('never throws when the ingestion request fails', async () => {
-    const fetchImpl = vi.fn(async () => {
-      throw new Error('network down')
-    })
+    agent
+      .get(CLOUD)
+      .intercept({ path: INGEST, method: 'POST' })
+      .replyWithError(new Error('network down'))
     const warn = vi.fn()
-    const sink = new LangfuseTraceSink({
-      publicKey: 'pk',
-      secretKey: 'sk',
-      logger: { warn },
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-    })
+    const sink = new LangfuseTraceSink({ publicKey: 'pk', secretKey: 'sk', logger: { warn } })
 
     await expect(sink.recordGeneration(baseEvent())).resolves.toBeUndefined()
     expect(warn).toHaveBeenCalled()
   })
 
   it('emits one span-create per tool span under the run trace, skipping when no run', async () => {
-    const fetchImpl = okFetch()
-    const sink = new LangfuseTraceSink({
-      publicKey: 'pk',
-      secretKey: 'sk',
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-    })
+    const captured = captureIngestion(CLOUD)
+    const sink = new LangfuseTraceSink({ publicKey: 'pk', secretKey: 'sk' })
 
     await sink.recordToolSpans({ workspaceId: 'ws1', executionId: 'exec1', agentKind: 'coder' }, [
       { tool: 'edit_file', startedAt: 1, endedAt: 2, ok: true },
       { tool: 'run_command', startedAt: 3, endedAt: 4, ok: false },
     ])
-    // No execution id ⇒ nothing is sent.
+    // No execution id ⇒ nothing is sent (the interceptor stays unused, so only one POST lands).
     await sink.recordToolSpans({ workspaceId: 'ws1', executionId: null, agentKind: 'coder' }, [
       { tool: 'x', startedAt: 1, endedAt: 2, ok: true },
     ])
 
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
-    const batch = parseBatch(fetchImpl)
+    const batch = captured().batch
     expect(batch).toHaveLength(2)
     expect(batch.every((e) => e.type === 'span-create')).toBe(true)
     expect(batch[1]!.body.level).toBe('ERROR')
