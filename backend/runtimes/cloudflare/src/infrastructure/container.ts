@@ -3,8 +3,6 @@ import {
   type AgentExecutor,
   type Clock,
   CompositeNotificationChannel,
-  CompositeIncidentEnrichmentProvider,
-  type IncidentEnrichmentProvider,
   type DocumentSourceProvider,
   type ExecutionEventPublisher,
   type FragmentOwnerKind,
@@ -46,8 +44,10 @@ import {
   OBSERVABILITY_CIPHER_INFO,
   RegistryReleaseHealthProvider,
   defaultObservabilityRegistry,
-  PagerDutyEnrichmentProvider,
-  IncidentIoEnrichmentProvider,
+  WorkspaceIncidentEnrichmentProvider,
+  INCIDENT_ENRICHMENT_CIPHER_INFO,
+  AccountSettingsService,
+  ACCOUNT_SETTINGS_CIPHER_INFO,
 } from '@cat-factory/integrations'
 import {
   AgentContextObservabilityService,
@@ -66,7 +66,6 @@ import {
   runWithInitiator,
   WebCryptoPasswordHasher,
   WebCryptoPersonalSecretCipher,
-  createWebSearchUpstreamFromEnv,
   logger,
   createScopedModelProviderResolver,
   resolveUrlSafetyPolicy,
@@ -149,13 +148,33 @@ import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/co
 import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
 import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
+import {
+  D1SandboxPromptVersionRepository,
+  D1SandboxFixtureRepository,
+  D1SandboxExperimentRepository,
+  D1SandboxRunRepository,
+  D1SandboxGradeRepository,
+} from './repositories/D1SandboxRepositories'
 import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
 import { D1ObservabilityConnectionRepository } from './repositories/D1ObservabilityConnectionRepository'
+import { D1IncidentEnrichmentConnectionRepository } from './repositories/D1IncidentEnrichmentConnectionRepository'
+import { D1AccountSettingsRepository } from './repositories/D1AccountSettingsRepository'
 import { D1ReleaseHealthConfigRepository } from './repositories/D1ReleaseHealthConfigRepository'
 import { D1PipelineScheduleRepository } from './repositories/D1PipelineScheduleRepository'
 import { D1TrackerSettingsRepository } from './repositories/D1TrackerSettingsRepository'
 import { D1ModelPresetRepository } from './repositories/D1ModelPresetRepository'
 import { D1ServiceFragmentDefaultsRepository } from './repositories/D1ServiceFragmentDefaultsRepository'
+// The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). Importing
+// it registers the gates via the public seam; the facade wires each gate's provider below.
+import {
+  type GateProviderOverrides,
+  applyGateProviders,
+  clearGateProviders,
+  wireCiStatusProvider,
+  wireMergeabilityProvider,
+  wireReleaseHealthProvider,
+  wireIncidentEnrichment,
+} from '@cat-factory/gates'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
 import { GitHubBranchUpdater } from './github/GitHubBranchUpdater'
@@ -526,16 +545,14 @@ function selectMergeLifecycleDeps(
     })
     const resolveRepoTarget = buildResolveRepoTarget(db)
     const blockRepository = new D1BlockRepository({ db })
-    deps.ciStatusProvider = new GitHubCiStatusProvider({
-      githubClient,
-      resolveRepoTarget,
-      blockRepository,
-    })
-    deps.mergeabilityProvider = new GitHubMergeabilityProvider({
-      githubClient,
-      resolveRepoTarget,
-      blockRepository,
-    })
+    // The `ci` / `conflicts` gates now live in `@cat-factory/gates`; wire their providers into
+    // the gate suite (deployment-global handles) instead of onto the engine's CoreDependencies.
+    wireCiStatusProvider(
+      new GitHubCiStatusProvider({ githubClient, resolveRepoTarget, blockRepository }),
+    )
+    wireMergeabilityProvider(
+      new GitHubMergeabilityProvider({ githubClient, resolveRepoTarget, blockRepository }),
+    )
     deps.branchUpdater = new GitHubBranchUpdater({
       githubClient,
       resolveRepoTarget,
@@ -569,29 +586,78 @@ function selectReleaseHealthDeps(
     masterKeyBase64: config.releaseHealth.encryptionKey,
     info: OBSERVABILITY_CIPHER_INFO,
   })
-  const deps: Partial<CoreDependencies> = {
-    observabilityConnectionRepository,
-    releaseHealthConfigRepository,
-    observabilitySecretCipher,
-    releaseHealthProvider: new RegistryReleaseHealthProvider({
+  // The post-release-health gate + its on-call escalation now live in `@cat-factory/gates`;
+  // wire their providers into the gate suite (deployment-global handles). The observability
+  // connection/config repos + cipher stay on CoreDependencies — they power the management API
+  // (ReleaseHealthService), not the gate.
+  wireReleaseHealthProvider(
+    new RegistryReleaseHealthProvider({
       observabilityConnectionRepository,
       releaseHealthConfigRepository,
       blockRepository: new D1BlockRepository({ db }),
       secretCipher: observabilitySecretCipher,
       registry: defaultObservabilityRegistry,
     }),
+  )
+  return {
+    observabilityConnectionRepository,
+    releaseHealthConfigRepository,
+    observabilitySecretCipher,
   }
-  const enrichers: IncidentEnrichmentProvider[] = []
-  if (config.incidentEnrichment.pagerDuty) {
-    enrichers.push(new PagerDutyEnrichmentProvider(config.incidentEnrichment.pagerDuty))
+}
+
+/**
+ * Wire the per-workspace incident-enrichment integration (PagerDuty + incident.io). The
+ * credentials moved out of env into a sealed per-workspace row; the provider resolves +
+ * decrypts them at enrichment time. Wired whenever the shared encryption key is present
+ * (the cipher must exist to unseal); a workspace with no connection is a no-op. The
+ * on-call enrichment provider itself now lives in `@cat-factory/gates`, so the
+ * workspace-backed provider is wired into the gate suite via `wireIncidentEnrichment`;
+ * the connection repo + cipher stay on CoreDependencies to power the management API.
+ */
+function selectIncidentEnrichmentDeps(env: Env, db: D1Database): Partial<CoreDependencies> {
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) return {}
+  const incidentEnrichmentConnectionRepository = new D1IncidentEnrichmentConnectionRepository({
+    db,
+  })
+  const incidentEnrichmentSecretCipher = new WebCryptoSecretCipher({
+    masterKeyBase64: encryptionKey,
+    info: INCIDENT_ENRICHMENT_CIPHER_INFO,
+  })
+  wireIncidentEnrichment(
+    new WorkspaceIncidentEnrichmentProvider({
+      incidentEnrichmentConnectionRepository,
+      secretCipher: incidentEnrichmentSecretCipher,
+    }),
+  )
+  return {
+    incidentEnrichmentConnectionRepository,
+    incidentEnrichmentSecretCipher,
   }
-  if (config.incidentEnrichment.incidentIo) {
-    enrichers.push(new IncidentIoEnrichmentProvider(config.incidentEnrichment.incidentIo))
-  }
-  if (enrichers.length > 0) {
-    deps.incidentEnrichment = new CompositeIncidentEnrichmentProvider(enrichers)
-  }
-  return deps
+}
+
+/**
+ * Build the per-account deployment-settings service (Slack OAuth + web-search keys,
+ * sealed) when the shared encryption key is present. A single instance is shared so its
+ * short-TTL cache spans requests; the facade also derives the Slack OAuth resolver +
+ * web-search proxy resolution from it.
+ */
+function buildAccountSettings(
+  env: Env,
+  db: D1Database,
+  clock: Clock,
+): AccountSettingsService | undefined {
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) return undefined
+  return new AccountSettingsService({
+    accountSettingsRepository: new D1AccountSettingsRepository({ db }),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: encryptionKey,
+      info: ACCOUNT_SETTINGS_CIPHER_INFO,
+    }),
+    clock,
+  })
 }
 
 /**
@@ -651,7 +717,6 @@ function selectSlackDeps(config: AppConfig, db: D1Database): Partial<CoreDepende
     slackSettingsRepository: infra.settingsRepository,
     slackMemberMappingRepository: infra.memberMappingRepository,
     slackSecretCipher: infra.cipher,
-    ...(config.slack.oauth ? { slackOAuth: config.slack.oauth } : {}),
   }
 }
 
@@ -991,6 +1056,18 @@ function buildContainerExecutor(
     return registry.installationToken(installationId)
   }
 
+  // Web-search keys live per-account; advertise Pi's `web_search` tool to a run only when
+  // its account actually has a usable upstream (else the tool would just fail/return
+  // nothing). Resolved per run off the account-settings store (its own short-TTL cache).
+  const webSearchSettings = buildAccountSettings(env, db, clock)
+  const resolveWebSearchEnabled = webSearchSettings
+    ? async (workspaceId: string): Promise<boolean> => {
+        const accountId = await new D1WorkspaceRepository({ db }).accountOf(workspaceId)
+        if (!accountId) return false
+        return Boolean((await webSearchSettings.resolve(accountId)).webSearch)
+      }
+    : undefined
+
   return new ContainerAgentExecutor({
     resolveTransport,
     agentRouting: config.agents.routing,
@@ -1041,9 +1118,9 @@ function buildContainerExecutor(
         }
       : {}),
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
-    // Point container agents' web search at the backend search proxy (no provider key
-    // in the sandbox) whenever an upstream is configured for this deployment.
-    webSearchProxyEnabled: Boolean(createWebSearchUpstreamFromEnv(env)),
+    // Point container agents' web search at the backend search proxy (no provider key in
+    // the sandbox), but only for a run whose account has keys (see resolver above).
+    ...(resolveWebSearchEnabled ? { resolveWebSearchEnabled } : {}),
     githubApiBase: config.github.apiBase,
     // Forward container tool spans to Langfuse (when configured) as child spans under
     // the run trace — the same sink the LLM proxy fans generations out to.
@@ -1277,6 +1354,26 @@ function selectRequirementsDeps(
 }
 
 /**
+ * The Sandbox (parallel prompt/model testing) persistence — five repos over the
+ * DEDICATED `SANDBOX_DB` D1 database. Opt-in: absent binding ⇒ `{}` (the module isn't
+ * assembled and the API answers 503), so a deployment that hasn't provisioned the
+ * sandbox database is unaffected. The inline reviewer model config from
+ * {@link selectRequirementsDeps} is reused by the run-driver (cells resolve their catalog
+ * id like a pipeline step). Mirrored by the Node facade's `createDrizzleSandboxDeps`
+ * (a Postgres `sandbox` schema).
+ */
+function selectSandboxDeps(sandboxDb: D1Database | undefined): Partial<CoreDependencies> {
+  if (!sandboxDb) return {}
+  return {
+    sandboxPromptVersionRepository: new D1SandboxPromptVersionRepository(sandboxDb),
+    sandboxFixtureRepository: new D1SandboxFixtureRepository(sandboxDb),
+    sandboxExperimentRepository: new D1SandboxExperimentRepository(sandboxDb),
+    sandboxRunRepository: new D1SandboxRunRepository(sandboxDb),
+    sandboxGradeRepository: new D1SandboxGradeRepository(sandboxDb),
+  }
+}
+
+/**
  * Build the ephemeral environment integration's concrete ports when opted in.
  * Requires the encryption key (the config gate already enforces this), so the
  * generic HTTP provider, the D1 repositories and the Web Crypto cipher are wired
@@ -1425,7 +1522,7 @@ function selectFragmentLibraryDeps(
 export function buildContainer(
   env: Env,
   overrides: Partial<CoreDependencies> = {},
-  opts: { cloudflareModelsEnabled?: boolean } = {},
+  opts: { cloudflareModelsEnabled?: boolean; gateProviders?: GateProviderOverrides } = {},
 ): Container {
   const config = loadConfig(env)
   const db = env.DB
@@ -1441,6 +1538,18 @@ export function buildContainer(
   }
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
+
+  // The built-in gates' providers are deployment-global module handles (in `@cat-factory/gates`),
+  // not per-container DI. Reset them up-front so each build re-wires from a clean slate and only
+  // the gates this env actually configures stay wired: `selectMergeLifecycleDeps` /
+  // `selectReleaseHealthDeps` wire their providers only inside their `enabled` branches and never
+  // clear, so without this reset a provider wired by an earlier (configured) build would leak into
+  // a later (unconfigured) build and make its gate probe a stale handle instead of passing through.
+  // Any test-injected gate providers (`opts.gateProviders`) are applied at the END of this build
+  // (after the config wiring below) so they OVERRIDE it — the only way an externally-supplied
+  // provider survives the per-request rebuild, and so a deployment that ALSO wires a real provider
+  // can't clobber the test's. Gates read their provider lazily at probe time, so the last write wins.
+  clearGateProviders()
 
   // The runner-backend factory is shared by every container-backed flow (the
   // implementation executor and the repo bootstrapper), so both dispatch through the
@@ -1500,6 +1609,11 @@ export function buildContainer(
     clock,
     recordPrompts: config.observability.recordPrompts,
   })
+
+  // Per-account deployment settings (Slack OAuth + web-search keys). Built once so the
+  // service's short-TTL cache is shared across requests; the Slack OAuth resolver is
+  // derived from it in the domain composition root.
+  const accountSettings = buildAccountSettings(env, db, clock)
 
   const dependencies: CoreDependencies = {
     workspaceRepository: new D1WorkspaceRepository({ db }),
@@ -1565,6 +1679,8 @@ export function buildContainer(
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
     ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
     ...selectReleaseHealthDeps(env, config, db),
+    ...selectIncidentEnrichmentDeps(env, db),
+    ...(accountSettings ? { accountSettings } : {}),
     ...selectSlackDeps(config, db),
     ...selectEmailInvitationDeps(config, db),
     ...selectLangfuseSink(config),
@@ -1572,6 +1688,7 @@ export function buildContainer(
     ...selectDocumentsDeps(env, config, db, clock, idGenerator),
     ...selectTasksDeps(env, config, db, clock, idGenerator),
     ...selectRequirementsDeps(env, config, db),
+    ...selectSandboxDeps(env.SANDBOX_DB),
     ...selectEnvironmentsDeps(env, config, db),
     ...selectRunnersDeps(env, config, db),
     ...selectFragmentLibraryDeps(env, config, db),
@@ -1595,6 +1712,11 @@ export function buildContainer(
     runInitiatorScope: runWithInitiator,
     ...overrides,
   }
+
+  // Apply any test-injected gate providers LAST, so they override the config wiring done by the
+  // `select*Deps` spreads above (the conformance suite drives the externalized CI gate over a
+  // faked verdict). Production leaves `gateProviders` undefined, so this is a no-op outside tests.
+  applyGateProviders(opts.gateProviders)
 
   return {
     ...createCore(dependencies),
@@ -1640,9 +1762,9 @@ export function buildContainer(
       // LLM proxy upstream: OpenAI-compatible providers from env keys + the in-process
       // Workers AI binding path (the `workers-ai` provider).
       llmUpstream: new WorkersAiLlmUpstream(env),
-      // Container web-search proxy upstream (Brave, or a self-hosted SearXNG). Absent
-      // ⇒ the `/v1/web-search` route 503s and container web search stays off.
-      webSearch: createWebSearchUpstreamFromEnv(env),
+      // Container web-search upstream is resolved per-account by the proxy controller
+      // (keys moved out of env into the per-account settings store), so no boot-time
+      // gateway upstream is wired here.
     },
   }
 }

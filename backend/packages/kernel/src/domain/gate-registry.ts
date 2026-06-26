@@ -6,6 +6,7 @@ import type {
   MergeThresholdPreset,
   PipelineStep,
 } from './types.js'
+import type { AgentRunResult } from '../ports/agent-executor.js'
 import type { RaiseNotificationInput } from '../ports/notification-channel.js'
 import type { Clock } from '../ports/runtime.js'
 import type { RunInitiatorScope } from '../ports/user-secret-repositories.js'
@@ -81,6 +82,25 @@ export function recordGateAttempt(
   }
 }
 
+/**
+ * The settled outcome of a gate-helper job, handed to {@link GateDefinition.resolveHelperCompletion}.
+ * Carries the FULL agent result on success (an investigate-don't-fix helper like `on-call`
+ * needs its structured assessment, not just the output string).
+ */
+export type GateHelperJobResult =
+  | { state: 'done'; result: AgentRunResult }
+  | { state: 'failed'; error: string | null }
+
+/** Inputs to a gate's helper-completion hook ({@link GateDefinition.resolveHelperCompletion}). */
+export interface GateHelperCompletionArgs {
+  workspaceId: string
+  instance: ExecutionInstance
+  block: Block
+  step: PipelineStep
+  /** The helper job's settled outcome (done with its result, or failed). */
+  result: GateHelperJobResult
+}
+
 /** Inputs to a gate's exhaustion handler (budget spent / no executor to escalate to). */
 export interface GateExhaustedArgs {
   workspaceId: string
@@ -146,6 +166,18 @@ export interface GateDefinition {
    * to). May raise a notification; returns the message used to fail the run.
    */
   onExhausted(args: GateExhaustedArgs): Promise<{ error: string }>
+  /**
+   * Optional: handle this gate's helper job FINISHING (or failing) instead of the default
+   * "re-probe the precheck" behaviour. Most helpers FIX the gated condition (ci-fixer
+   * pushes a fix; conflict-resolver re-merges), so the engine re-runs the precheck after
+   * they finish — the gate's verdict stays the source of truth. But an INVESTIGATE-don't-fix
+   * helper (`on-call`) changes nothing the precheck would observe: re-probing would just
+   * regress again and burn the budget. When this hook is present the engine, on the helper's
+   * completion, calls it (instead of re-probing) and finishes the gate step with the returned
+   * output — letting the gate raise a notification / enrich an incident and let the run
+   * complete for a human to act out-of-band. Absent → the default re-probe loop.
+   */
+  resolveHelperCompletion?(args: GateHelperCompletionArgs): Promise<{ output: string }>
 }
 
 /**

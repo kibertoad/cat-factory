@@ -77,21 +77,11 @@ async function run() {
     return
   }
   starting.value = true
-  try {
-    // false ⇒ the user cancelled the personal-password prompt; revert quietly (the run
-    // never started). On success the button unmounts once the stream pushes in_progress.
-    const started = await execution.start(props.taskId, pipeline)
-    if (!started) starting.value = false
-  } catch (e) {
-    // Real confirmation came back as a failure — revert the optimistic state.
-    starting.value = false
-    toast.add({
-      title: 'Failed to start',
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-      icon: 'i-lucide-alert-triangle',
-    })
-  }
+  // false ⇒ the run never started (the user cancelled the personal-password prompt, or
+  // the start was refused — the store surfaces the actionable toast itself). Revert the
+  // optimistic state; on success the button unmounts once the stream pushes in_progress.
+  const started = await execution.start(props.taskId, pipeline)
+  if (!started) starting.value = false
 }
 
 function review() {

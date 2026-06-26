@@ -2,7 +2,7 @@ import { generateText } from 'ai'
 import type { ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
 import type { DocumentRecord } from '@cat-factory/kernel'
 import type { DocumentBoardPlan } from '@cat-factory/kernel'
-import { catFactoryObservability } from '@cat-factory/kernel'
+import { catFactoryObservability, extractJson } from '@cat-factory/kernel'
 import { coercePlan, markdownToText, planFromHeadings } from './documents.logic.js'
 
 // DocumentPlannerService: turns an imported document into a proposed board
@@ -55,18 +55,6 @@ function buildUserPrompt(title: string, body: string): string {
     '',
     'Group related work into modules; keep titles short and imperative. Output JSON only.',
   ].join('\n')
-}
-
-/** Pull the first JSON object out of a model response (tolerates code fences). */
-function extractJson(text: string): unknown {
-  const start = text.indexOf('{')
-  const end = text.lastIndexOf('}')
-  if (start === -1 || end <= start) return null
-  try {
-    return JSON.parse(text.slice(start, end + 1))
-  } catch {
-    return null
-  }
 }
 
 export class DocumentPlannerService {

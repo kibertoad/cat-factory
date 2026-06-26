@@ -20,7 +20,7 @@ export {
 export {
   BraveWebSearchUpstream,
   SearxngWebSearchUpstream,
-  createWebSearchUpstreamFromEnv,
+  createWebSearchUpstream,
   DEFAULT_WEB_SEARCH_COUNT,
 } from './modules/webSearch/upstreams.js'
 export { escalateStaleNotifications } from './runtime/escalateNotifications.js'
@@ -164,7 +164,6 @@ export type {
   AppConfig,
   AuthConfig,
   ReleaseHealthConfig,
-  IncidentEnrichmentConfig,
   DocumentsConfig,
   EmailConfig,
   EnvironmentsConfig,
@@ -185,3 +184,4 @@ export { resolveUrlSafetyPolicy } from './config/url-safety.js'
 // Row <-> domain mappers for the SQL persistence layer (shared by the D1 repos and
 // the Drizzle/Postgres repos — both use the same column shapes).
 export * from './persistence/mappers.js'
+export * from './persistence/sandbox-mappers.js'

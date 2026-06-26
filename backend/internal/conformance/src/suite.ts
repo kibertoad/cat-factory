@@ -3,6 +3,9 @@ import {
   type ExecutionInstance,
   type MergeThresholdPreset,
   type ModelPreset,
+  type SandboxExperiment,
+  type SandboxFixture,
+  type SandboxPromptVersion,
   type Pipeline,
   type PipelineSchedule,
   type ScheduleRun,
@@ -21,7 +24,11 @@ import {
   registerPromptFragment,
 } from '@cat-factory/prompt-fragments'
 import { clearRegisteredAgentKinds, registerAgentKind } from '@cat-factory/agents'
-import type { GateProbe, RepoFiles } from '@cat-factory/kernel'
+// The built-in gate suite lives in its own package and registers via the public seam (the
+// dogfood). The suite imports it so the runtime-neutral assertions run with the SAME gates a
+// real deployment ships, and so a test that clears the registry can restore them.
+import { clearGateProviders, registerBuiltinGates } from '@cat-factory/gates'
+import type { CiStatusProvider, GateProbe, RepoFiles } from '@cat-factory/kernel'
 import {
   clearRegisteredGates,
   clearRegisteredStepResolvers,
@@ -212,6 +219,75 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('per-workspace budget + incident-enrichment secrets', () => {
+      it('resolves a per-workspace budget set in settings, reflected in /spend (D1 ⇄ Postgres)', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        // No override ⇒ the built-in deployment default budget.
+        const before = await call<{ costLimit: number; currency: string }>(
+          'GET',
+          `/workspaces/${wsId}/spend`,
+        )
+        expect(before.status).toBe(200)
+        expect(before.body.costLimit).toBe(100)
+        expect(before.body.currency).toBe('EUR')
+
+        // Setting a per-workspace budget must take effect immediately (the spend service's
+        // pricing cache is invalidated on the settings write) and round-trip through the
+        // new workspace_settings columns identically on both stores.
+        const put = await call('PUT', `/workspaces/${wsId}/settings`, {
+          spendMonthlyLimit: 250,
+          spendCurrency: 'USD',
+        })
+        expect(put.status).toBe(200)
+
+        const after = await call<{ costLimit: number; currency: string }>(
+          'GET',
+          `/workspaces/${wsId}/spend`,
+        )
+        expect(after.body.costLimit).toBe(250)
+        expect(after.body.currency).toBe('USD')
+      })
+
+      it('round-trips incident-enrichment credentials, redacted + sealed (D1 ⇄ Postgres)', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        type View = {
+          connected: boolean
+          summary: { pagerDuty: boolean; incidentIo: boolean } | null
+        }
+        const initial = await call<View>('GET', `/workspaces/${wsId}/incident-enrichment`)
+        // Wired only when the facade has the shared encryption key; skip otherwise.
+        if (initial.status === 503) return
+        expect(initial.status).toBe(200)
+        expect(initial.body).toMatchObject({ connected: false, summary: null })
+
+        const put = await call<View>('PUT', `/workspaces/${wsId}/incident-enrichment`, {
+          pagerDuty: { apiToken: 'pd-secret-token', fromEmail: 'oncall@example.com' },
+        })
+        expect(put.status).toBe(200)
+        expect(put.body.summary).toEqual({ pagerDuty: true, incidentIo: false })
+        // The sealed token is NEVER surfaced on any read path.
+        expect(JSON.stringify(put.body)).not.toContain('pd-secret-token')
+
+        const view = await call<View>('GET', `/workspaces/${wsId}/incident-enrichment`)
+        expect(view.body).toMatchObject({
+          connected: true,
+          summary: { pagerDuty: true, incidentIo: false },
+        })
+        expect(JSON.stringify(view.body)).not.toContain('pd-secret-token')
+
+        const del = await call('DELETE', `/workspaces/${wsId}/incident-enrichment`)
+        expect(del.status).toBe(204)
+        const gone = await call<View>('GET', `/workspaces/${wsId}/incident-enrichment`)
+        expect(gone.body).toMatchObject({ connected: false, summary: null })
+      })
+    })
+
     describe('epics + dependency graph', () => {
       it('round-trips an epic node + a task’s epic membership identically on every store', async () => {
         const { call, createWorkspace } = harness.makeApp()
@@ -339,6 +415,175 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         // The library rides along on the workspace snapshot.
         const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
         expect((snapshot.body.modelPresets ?? []).some((p) => p.name === 'Mixed')).toBe(true)
+      })
+    })
+
+    describe('sandbox (prompt/model testing surface)', () => {
+      it('lists baselines, clones+versions prompts, seeds fixtures and defines experiments', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/sandbox`
+
+        // Overview seeds the builtin fixtures on first load and exposes the testable
+        // agent-kind catalog + the shipped baselines (synthetic, never persisted).
+        const overview = await call<{
+          agentKinds: { agentKind: string }[]
+          prompts: SandboxPromptVersion[]
+          fixtures: SandboxFixture[]
+          experiments: SandboxExperiment[]
+          maxCells: number
+        }>('GET', `${base}/overview`)
+        expect(overview.status).toBe(200)
+        expect(overview.body.agentKinds.some((k) => k.agentKind === 'requirements-review')).toBe(
+          true,
+        )
+        expect(overview.body.prompts.some((p) => p.origin === 'baseline')).toBe(true)
+        expect(overview.body.fixtures.length).toBeGreaterThan(0)
+        // The cell cap is surfaced so the UI gates on the SAME limit instead of re-encoding it.
+        expect(overview.body.maxCells).toBeGreaterThan(0)
+        const fixture = overview.body.fixtures.find((f) => f.kind === 'requirements')!
+        expect(fixture).toBeTruthy()
+
+        // Clone the requirements-review baseline into an editable candidate lineage (v1).
+        const cloned = await call<SandboxPromptVersion>('POST', `${base}/prompts/clone`, {
+          agentKind: 'requirements-review',
+          basePromptId: 'requirement-review',
+          name: 'My reviewer',
+        })
+        expect(cloned.status).toBe(201)
+        expect(cloned.body.origin).toBe('candidate')
+        expect(cloned.body.version).toBe(1)
+        expect(cloned.body.systemText.length).toBeGreaterThan(0)
+
+        // Append an edited version onto the lineage (v2 on the same lineage id).
+        const v2 = await call<SandboxPromptVersion>('POST', `${base}/prompts`, {
+          parentId: cloned.body.id,
+          systemText: `${cloned.body.systemText}\n\nAlways check authz.`,
+        })
+        expect(v2.status).toBe(201)
+        expect(v2.body.version).toBe(2)
+        expect(v2.body.lineageId).toBe(cloned.body.lineageId)
+
+        // Both candidate versions + the baselines come back from the prompt listing.
+        const prompts = await call<SandboxPromptVersion[]>('GET', `${base}/prompts`)
+        expect(prompts.body.filter((p) => p.lineageId === cloned.body.lineageId)).toHaveLength(2)
+
+        // Define a draft experiment over the baseline prompt × one model × the fixture.
+        const experiment = await call<SandboxExperiment>('POST', `${base}/experiments`, {
+          name: 'Reviewer shootout',
+          agentKind: 'requirements-review',
+          judgeModel: 'anthropic:claude-opus-4-8',
+          matrix: {
+            promptVersionIds: ['baseline:requirement-review'],
+            models: ['anthropic:claude-opus-4-8'],
+            fixtureIds: [fixture.id],
+          },
+        })
+        expect(experiment.status).toBe(201)
+        expect(experiment.body.status).toBe('draft')
+        expect(experiment.body.judgeModel.length).toBeGreaterThan(0)
+
+        // The experiment + its (still empty) result grid read back.
+        const detail = await call<{
+          experiment: SandboxExperiment
+          runs: unknown[]
+          grades: unknown[]
+        }>('GET', `${base}/experiments/${experiment.body.id}`)
+        expect(detail.status).toBe(200)
+        expect(detail.body.experiment.id).toBe(experiment.body.id)
+        expect(detail.body.runs).toHaveLength(0)
+        expect(detail.body.grades).toHaveLength(0)
+
+        // A non-runnable matrix is rejected at create time.
+        const empty = await call('POST', `${base}/experiments`, {
+          name: 'Bad',
+          agentKind: 'requirements-review',
+          matrix: { promptVersionIds: [], models: [], fixtureIds: [] },
+        })
+        expect(empty.status).toBeGreaterThanOrEqual(400)
+
+        // A zero token budget is rejected at create (it would otherwise fail every cell).
+        const zeroBudget = await call('POST', `${base}/experiments`, {
+          name: 'No budget',
+          agentKind: 'requirements-review',
+          judgeModel: 'anthropic:claude-opus-4-8',
+          matrix: {
+            promptVersionIds: ['baseline:requirement-review'],
+            models: ['anthropic:claude-opus-4-8'],
+            fixtureIds: [fixture.id],
+          },
+          budgetTokens: 0,
+        })
+        expect(zeroBudget.status).toBeGreaterThanOrEqual(400)
+      })
+
+      it('drives the run/grade lifecycle to a terminal grid identically across runtimes', async () => {
+        // Force the model provider ON for both runtimes (the Worker binds `AI`, Node has no
+        // binding) so `launch` reaches the run-driver identically rather than 503/400-ing at
+        // provider resolution on one facade only.
+        const { call, createWorkspace } = harness.makeApp(undefined, {
+          cloudflareModelsEnabled: true,
+        })
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/sandbox`
+
+        const overview = await call<{ fixtures: SandboxFixture[] }>('GET', `${base}/overview`)
+        const fixture = overview.body.fixtures.find((f) => f.kind === 'requirements')!
+
+        // Define a 2-cell experiment against a deliberately UNCONFIGURED provider: the
+        // run-driver resolves the model per cell and the resolve throws (no key wired in
+        // the suite), so every candidate fails WITHOUT any network call. This exercises the
+        // whole driver path — expand→persist→run→settle, plus the relaunch delete ordering
+        // (grades before runs) — identically on D1 and Postgres, which the CRUD-only block
+        // above never reached. A graded happy path needs a fake judge model and is a
+        // tracked follow-up.
+        const created = await call<SandboxExperiment>('POST', `${base}/experiments`, {
+          name: 'Driver parity',
+          agentKind: 'requirements-review',
+          judgeModel: 'no-such-vendor:none',
+          matrix: {
+            promptVersionIds: ['baseline:requirement-review'],
+            models: ['no-such-vendor:a', 'no-such-vendor:b'],
+            fixtureIds: [fixture.id],
+          },
+        })
+        expect(created.status).toBe(201)
+
+        const launched = await call<{
+          experiment: SandboxExperiment
+          runs: { status: string; error?: string }[]
+          grades: unknown[]
+        }>('POST', `${base}/experiments/${created.body.id}/launch`)
+        expect(launched.status).toBe(200)
+        // Every candidate failed → no cell graded → the experiment settles `failed`, never
+        // a misleading `done` with an unscored grid, and never stuck `running`.
+        expect(launched.body.experiment.status).toBe('failed')
+        expect(launched.body.runs).toHaveLength(2)
+        expect(launched.body.runs.every((r) => r.status === 'failed')).toBe(true)
+        expect(launched.body.grades).toHaveLength(0)
+
+        // A relaunch replaces the grid in place rather than accumulating cells.
+        const relaunched = await call<{ runs: unknown[] }>(
+          'POST',
+          `${base}/experiments/${created.body.id}/launch`,
+        )
+        expect(relaunched.status).toBe(200)
+        expect(relaunched.body.runs).toHaveLength(2)
+
+        // Two CONCURRENT launches must not duplicate the grid: the experiment's atomic claim
+        // (`claimForRun`) lets exactly one win the run at a time, so whichever interleaving the
+        // real store produces, the grid still settles to exactly 2 cells (never 4) — and at
+        // least one launch succeeds rather than both 409-ing.
+        const [first, second] = await Promise.all([
+          call('POST', `${base}/experiments/${created.body.id}/launch`),
+          call('POST', `${base}/experiments/${created.body.id}/launch`),
+        ])
+        expect([first.status, second.status].some((s) => s === 200)).toBe(true)
+        const afterRace = await call<{ runs: unknown[] }>(
+          'GET',
+          `${base}/experiments/${created.body.id}`,
+        )
+        expect(afterRace.body.runs).toHaveLength(2)
       })
     })
 
@@ -563,6 +808,10 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         clearRegisteredGates()
         clearRegisteredStepResolvers()
         clearRegisteredAgentKinds()
+        // The built-in gates (ci / conflicts / post-release-health) live in the SAME registry
+        // as the test's `license-check` gate, so clearing wipes them too — restore them so
+        // later assertions (and a real harness build) still see the platform's own gates.
+        registerBuiltinGates()
       })
 
       // A deployment-registered polling gate is the OTHER half of the extension story
@@ -695,6 +944,96 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(exec.status).toBe('done')
         const step = exec.steps.find((s) => s.agentKind === 'conformance-auditor')!
         expect(step.output).toBe('resolver-rewrote-this')
+      })
+    })
+
+    describe('built-in ci gate (externalized to @cat-factory/gates)', () => {
+      // The platform's OWN `ci` gate is now authored as an external package through the public
+      // `registerGate` seam — no longer inline in the engine. Driving it here over a faked
+      // CiStatusProvider proves the externalized built-in still passes-through on green CI and
+      // escalates to `ci-fixer` on red, identically on every runtime: if the gate package, the
+      // wire-handle, or a facade's import drifted, this fails instead of shipping.
+      afterEach(() => clearGateProviders())
+
+      // A fake CI provider whose check verdict is supplied per-probe (a queue; the last entry
+      // repeats), so a test can drive green / red→green like the registered-gate test does.
+      // It is injected THROUGH `makeApp` (`gateProviders`), not wired directly: a facade build
+      // resets the deployment-global gate providers up-front and the Worker rebuilds the
+      // container per request, so a directly-wired provider would be cleared before the gate
+      // probes. Threading it into the build re-wires it on every rebuild, on every runtime.
+      const makeFakeCi = (greens: boolean[]): CiStatusProvider => {
+        let i = 0
+        return {
+          getStatus: async () => {
+            const green = greens[Math.min(i, greens.length - 1)] ?? true
+            i += 1
+            return {
+              headSha: 'sha',
+              checks: [
+                {
+                  name: 'build',
+                  status: 'completed',
+                  conclusion: green ? 'success' : 'failure',
+                  url: null,
+                },
+              ],
+            }
+          },
+        }
+      }
+
+      it('passes through on green CI without spinning up ci-fixer', async () => {
+        const app = harness.makeApp(
+          { asyncKinds: ['coder', 'ci-fixer'] },
+          { gateProviders: { ciStatus: makeFakeCi([true]) } },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + CI',
+          agentKinds: ['coder', 'ci'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const step = exec.steps.find((s) => s.agentKind === 'ci')!
+        expect(step.state).toBe('done')
+        expect(step.gate?.attempts ?? 0).toBe(0)
+        expect(step.output).toContain('CI gate passed')
+      })
+
+      it('escalates to ci-fixer on red CI, then advances when it re-probes green', async () => {
+        const app = harness.makeApp(
+          {
+            asyncKinds: ['coder', 'ci-fixer'],
+            pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
+          },
+          // red first, green after the fixer ran
+          { gateProviders: { ciStatus: makeFakeCi([false, true]) } },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + CI',
+          agentKinds: ['coder', 'ci'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const step = exec.steps.find((s) => s.agentKind === 'ci')!
+        expect(step.state).toBe('done')
+        expect(step.gate?.attempts).toBe(1)
+        expect(step.gate?.attemptLog?.[0]?.outcome).toBe('completed')
       })
     })
 
@@ -1319,10 +1658,17 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
 
         // Pin the seeded task to qwen; with Cloudflare off and no key it has no provider.
         await call('PATCH', `/workspaces/${wsId}/blocks/task_login`, { modelId: 'qwen' })
-        const blocked = await call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+        const blocked = await call<{
+          error: { code: string; details?: { reason?: string; models?: string[] } }
+        }>('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
           pipelineId: 'pl_quick',
         })
         expect(blocked.status).toBe(409)
+        // The conflict carries a distinct machine-readable reason (+ the offending model
+        // ids) so the SPA can react precisely (open AI setup) instead of string-matching.
+        expect(blocked.body.error.code).toBe('conflict')
+        expect(blocked.body.error.details?.reason).toBe('providers_unconfigured')
+        expect(blocked.body.error.details?.models).toContain('qwen')
 
         // Configure a qwen key → the guard passes and the run starts.
         await call('POST', `/workspaces/${wsId}/api-keys`, KEY)

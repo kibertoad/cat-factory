@@ -38,6 +38,14 @@ export interface SandboxExperimentRepository {
   list(workspaceId: string): Promise<SandboxExperiment[]>
   upsert(workspaceId: string, experiment: SandboxExperiment): Promise<void>
   setStatus(workspaceId: string, id: string, status: SandboxExperimentStatus): Promise<void>
+  /**
+   * Atomically transition a NON-running experiment to `running`, returning whether THIS
+   * caller won the claim (a conditional `UPDATE … WHERE status != 'running'`). The run-driver
+   * uses it to serialise concurrent launches: only the winner clears + re-expands the result
+   * grid, so two simultaneous launches can't duplicate the grid or race the grid-clearing
+   * deletes. Returns false (a no-op) when the experiment is already running.
+   */
+  claimForRun(workspaceId: string, id: string): Promise<boolean>
 }
 
 export interface SandboxRunRepository {
@@ -48,10 +56,14 @@ export interface SandboxRunRepository {
   listQueued(workspaceId: string, experimentId: string): Promise<SandboxRun[]>
   upsert(workspaceId: string, run: SandboxRun): Promise<void>
   setStatus(workspaceId: string, id: string, status: SandboxRunStatus): Promise<void>
+  /** Drop every cell of an experiment (a relaunch clears the prior grid first). */
+  removeByExperiment(workspaceId: string, experimentId: string): Promise<void>
 }
 
 export interface SandboxGradeRepository {
   getByRun(workspaceId: string, runId: string): Promise<SandboxGrade | null>
   listByExperiment(workspaceId: string, experimentId: string): Promise<SandboxGrade[]>
   upsert(workspaceId: string, grade: SandboxGrade): Promise<void>
+  /** Drop every grade of an experiment's cells (a relaunch clears the prior grid first). */
+  removeByExperiment(workspaceId: string, experimentId: string): Promise<void>
 }

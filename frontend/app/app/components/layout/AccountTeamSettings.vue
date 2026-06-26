@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import type { AccountRole } from '~/types/domain'
+import AccountDeploymentSettings from '~/components/layout/AccountDeploymentSettings.vue'
 
 // Team settings for an org account: the member roster (with combinable admin /
 // developer / product roles), pending email invitations, and the per-account
@@ -235,6 +236,11 @@ async function disconnectEmail() {
       <div class="border-t border-slate-800 pt-6">
         <ProvidersApiKeysSection :account-id="accountId" category="proxy" />
       </div>
+    </section>
+
+    <!-- deployment integration secrets (admin-only): Slack OAuth app + web-search keys -->
+    <section v-if="isAdmin">
+      <AccountDeploymentSettings :account-id="accountId" />
     </section>
   </div>
 </template>

@@ -1,5 +1,201 @@
 # @cat-factory/node-server
 
+## 0.19.0
+
+### Minor Changes
+
+- 3546e3d: Move operator/integration config out of environment variables into encrypted, UI-editable
+  DB settings. DB is now the source of truth — the moved env vars are **removed** (no
+  fallback), so the listed vars below no longer have any effect.
+
+  **Per-workspace budget (Workspace settings → Budget).** A workspace's spend currency,
+  monthly limit, and per-model price overrides now live on the `workspace_settings` row.
+  The spend safeguard resolves each workspace's effective pricing (base table + overrides)
+  behind a short-TTL cache, scoping the budget gate to the workspace's own usage
+  (`SpendService.status`/`isOverBudget` now take a `workspaceId`; new
+  `TokenUsageRepository.totalsSinceForWorkspace`). **Behaviour change:** spend is metered +
+  gated per workspace, not deployment-wide; a workspace with no budget inherits the built-in
+  default (~100 EUR/month). Removes env: `SPEND_MONTHLY_LIMIT`, `SPEND_CURRENCY`,
+  `SPEND_MODEL_PRICES`. A budget of `0` is intentional ("no PAID spend"): metered runs are
+  refused **up front** at start/retry with a clear `409` (not just a silent mid-run pause),
+  while LOCAL-runner models (keyless) and connected SUBSCRIPTIONS (flat-rate quota) keep
+  running since they incur no metered cost — so `0` is the "local-/subscription-only" setting.
+  The over-budget exemption (previously subscription-only) now also covers local-runner steps,
+  inline and container alike. The hot-path per-workspace rollup is indexed
+  (`idx_token_usage_workspace` on `(workspace_id, created_at)`, both runtimes).
+
+  **Per-workspace incident enrichment (service inspector → Post-release health).** PagerDuty
+
+  - incident.io credentials are sealed in a new per-workspace `incident_enrichment_connections`
+    table (one grouped blob) and resolved/decrypted at enrichment time by a new
+    `WorkspaceIncidentEnrichmentProvider`. Removes env: `PAGERDUTY_API_TOKEN`,
+    `PAGERDUTY_FROM_EMAIL`, `INCIDENTIO_API_KEY`. The write API is three-state per provider
+    group (omit ⇒ keep, `null` ⇒ clear, value ⇒ set) so one vendor can be removed without
+    wiping the other.
+
+  **Per-account integration secrets (Account settings → Deployment integrations, admin only).**
+  The Slack app OAuth credentials and the container web-search upstream keys (Brave /
+  SearXNG) now live in a new per-account `account_settings` table (one sealed secrets blob,
+  HKDF tag `cat-factory:account-settings`), behind an admin-gated
+  `GET|PUT /accounts/:id/settings`. Resolved dynamically: Slack OAuth at connect time, the
+  web-search upstream per run (off the container session's account id). The executor now
+  advertises the container `web_search` tool to a run **only when its account actually has
+  keys** (so an agent is never handed a tool that always fails); a run with no upstream gets
+  an empty result set rather than a hard `503`. Removes env:
+  `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_REDIRECT_URL`, `WEB_SEARCH_BRAVE_API_KEY`,
+  `WEB_SEARCH_SEARXNG_URL`, `WEB_SEARCH_SEARXNG_API_KEY` (the env-built upstream + its
+  `createWebSearchUpstreamFromEnv`/`gateways.webSearch` fallback are deleted, not just
+  unwired). (`SLACK_ENABLED` still gates Slack module assembly; the new tables/services
+  assemble whenever `ENCRYPTION_KEY` is set.)
+
+  **Hardening.** Re-sealing a partial settings/credentials write now **refuses** (clear `409`)
+  when the stored blob can't be decrypted (e.g. after an encryption-key change) instead of
+  silently dropping the un-edited secret group on the re-seal.
+
+  New tables mirror across both runtimes (D1 migrations 0012–0014 ⇄ Drizzle schema +
+  generated migration) with cross-runtime conformance assertions for the budget +
+  incident-enrichment round-trips. `ENCRYPTION_KEY`, `AUTH_SESSION_SECRET`, and the GitHub
+  App/OAuth secrets stay in env (bootstrap/auth). Retention windows, inline-web-search
+  toggles, Langfuse keys, and execution timeouts intentionally remain env-configured.
+
+### Patch Changes
+
+- Updated dependencies [3546e3d]
+  - @cat-factory/contracts@0.24.0
+  - @cat-factory/kernel@0.27.0
+  - @cat-factory/spend@0.9.0
+  - @cat-factory/integrations@0.19.0
+  - @cat-factory/orchestration@0.20.0
+  - @cat-factory/server@0.24.0
+  - @cat-factory/agents@0.14.6
+  - @cat-factory/consensus@0.7.35
+  - @cat-factory/gates@0.1.3
+  - @cat-factory/prompt-fragments@0.7.21
+  - @cat-factory/observability-langfuse@0.7.33
+  - @cat-factory/provider-bedrock@0.7.35
+  - @cat-factory/provider-cloudflare@0.7.35
+
+## 0.18.6
+
+### Patch Changes
+
+- Updated dependencies [a62044d]
+  - @cat-factory/kernel@0.26.1
+  - @cat-factory/orchestration@0.19.2
+  - @cat-factory/agents@0.14.5
+  - @cat-factory/consensus@0.7.34
+  - @cat-factory/gates@0.1.2
+  - @cat-factory/integrations@0.18.3
+  - @cat-factory/observability-langfuse@0.7.32
+  - @cat-factory/provider-bedrock@0.7.34
+  - @cat-factory/provider-cloudflare@0.7.34
+  - @cat-factory/server@0.23.6
+  - @cat-factory/spend@0.8.26
+
+## 0.18.5
+
+### Patch Changes
+
+- Updated dependencies [a0d5efc]
+  - @cat-factory/server@0.23.5
+
+## 0.18.4
+
+### Patch Changes
+
+- Updated dependencies [2aae8bc]
+  - @cat-factory/kernel@0.26.0
+  - @cat-factory/spend@0.8.25
+  - @cat-factory/agents@0.14.4
+  - @cat-factory/consensus@0.7.33
+  - @cat-factory/gates@0.1.1
+  - @cat-factory/integrations@0.18.2
+  - @cat-factory/observability-langfuse@0.7.31
+  - @cat-factory/orchestration@0.19.1
+  - @cat-factory/provider-bedrock@0.7.33
+  - @cat-factory/provider-cloudflare@0.7.33
+  - @cat-factory/server@0.23.4
+
+## 0.18.3
+
+### Patch Changes
+
+- f4f954b: Dogfood the extensible-gates seam: the built-in polling-gate suite (`ci`, `conflicts`,
+  `post-release-health` + the `on-call` escalation) is no longer hard-coded in the engine —
+  it ships as a new **`@cat-factory/gates`** package authored ENTIRELY through the public
+  `registerGate` seam, depending only on kernel + contracts. If the platform's own gates can
+  be expressed as an external package, so can any deployment's.
+
+  **Breaking (pre-1.0, no migration):** the `ci` / `conflicts` / `post-release-health`
+  providers leave the engine. `ciStatusProvider`, `mergeabilityProvider`,
+  `releaseHealthProvider` and `incidentEnrichment` are removed from
+  `ExecutionServiceDependencies` / `CoreDependencies`; a deployment now wires them into the
+  gate suite via the exported `wireCiStatusProvider` / `wireMergeabilityProvider` /
+  `wireReleaseHealthProvider` / `wireIncidentEnrichment` handles after
+  `import '@cat-factory/gates'`. The merge collaborators (`pullRequestMerger`,
+  `branchUpdater`) stay on the engine.
+
+  - **gates (new)**: the three gate factories + the four provider wire-handles +
+    `registerBuiltinGates()`, registered as an import side effect. Each gate is a
+    pass-through until its provider is wired, so a bare import is always safe. Also exports
+    `applyGateProviders(overrides)` + the `GateProviderOverrides` bag: a facade build resets
+    the deployment-global providers up-front then re-wires from config, and this is the seam
+    that re-applies explicit/faked providers AFTER that wiring (so they survive the Worker's
+    per-request rebuild and override a config-wired provider) — used by the cross-runtime
+    conformance suite to drive the externalized `ci` gate over a controlled verdict.
+  - **kernel**: the pure gate logic (`aggregateCi`/`classifyReleaseHealth`/… +
+    `renderReleaseEvidence`) and the gate/helper agent-kind constants move into
+    `domain/gate-logic.ts` so a gate package can author a gate without depending on the
+    engine. New `GateDefinition.resolveHelperCompletion` hook (+ `GateHelperJobResult` /
+    `GateHelperCompletionArgs`): the seam an INVESTIGATE-don't-fix helper (`on-call`) needs
+    to settle a gate without re-probing — the real gap the dogfood surfaced.
+  - **orchestration**: the three inline gates + the bespoke `resolveOnCallStep` /
+    `raiseReleaseRegression` / `enrichIncident` / `raiseCiFailed` branches are deleted; the
+    engine builds its gate registry purely from what's registered, and drives an on-call-style
+    helper completion through the generic `resolveHelperCompletion` hook. The **`merger`**
+    step resolver stays a privileged built-in (reclassified): it owns terminal block status
+    and executes a policy-gated real merge — a different archetype from the light, externally
+    authorable resolvers, so it keeps its engine-internal access rather than the public seam.
+  - **worker / node-server**: each facade `import`s `@cat-factory/gates` and wires its
+    existing provider impls (`GitHubCiStatusProvider`, `RegistryReleaseHealthProvider`, …)
+    via the `wireX` handles instead of threading them through the engine. `local-server`
+    inherits this through `buildNodeContainer`.
+  - **conformance**: a new cross-runtime assertion drives the externalized built-in `ci`
+    gate (green pass-through, red → ci-fixer → re-probe) over a faked provider on both
+    runtimes; the registered-gate test now restores the built-ins after clearing the shared
+    registry.
+
+- Updated dependencies [f4f954b]
+  - @cat-factory/gates@0.1.0
+  - @cat-factory/kernel@0.25.0
+  - @cat-factory/orchestration@0.19.0
+  - @cat-factory/agents@0.14.3
+  - @cat-factory/consensus@0.7.32
+  - @cat-factory/integrations@0.18.1
+  - @cat-factory/observability-langfuse@0.7.30
+  - @cat-factory/provider-bedrock@0.7.32
+  - @cat-factory/provider-cloudflare@0.7.32
+  - @cat-factory/server@0.23.3
+  - @cat-factory/spend@0.8.24
+
+## 0.18.2
+
+### Patch Changes
+
+- Updated dependencies [ce81233]
+  - @cat-factory/contracts@0.23.0
+  - @cat-factory/kernel@0.24.0
+  - @cat-factory/integrations@0.18.0
+  - @cat-factory/agents@0.14.2
+  - @cat-factory/consensus@0.7.31
+  - @cat-factory/orchestration@0.18.1
+  - @cat-factory/prompt-fragments@0.7.20
+  - @cat-factory/server@0.23.2
+  - @cat-factory/spend@0.8.23
+  - @cat-factory/observability-langfuse@0.7.29
+  - @cat-factory/provider-bedrock@0.7.31
+  - @cat-factory/provider-cloudflare@0.7.31
+
 ## 0.18.1
 
 ### Patch Changes

@@ -2,9 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { DocumentSourceKind, TaskSourceKind, LodLevel } from '~/types/domain'
 import type { PendingContext } from '~/composables/useContextLinking'
-import { zoomToLod, lodAtLeast } from '~/composables/useSemanticZoom'
+import { zoomToLod } from '~/composables/useSemanticZoom'
 import { useExecutionStore } from '~/stores/execution'
-import { useFrameExpansionStore } from '~/stores/frameExpansion'
 import { agentKindMeta } from '~/utils/catalog'
 
 /** Values used to seed the add-task form when it is opened from another surface. */
@@ -105,6 +104,8 @@ export const useUiStore = defineStore('ui', () => {
   const vendorCredentialsOpen = ref(false)
   // Per-user settings panel: the signed-in user's own-machine local model runners.
   const localModelsOpen = ref(false)
+  // The Sandbox (parallel prompt/model testing) surface — an opt-in, on-demand window.
+  const sandboxOpen = ref(false)
   const userSecretsOpen = ref(false)
   // Per-workspace settings panel: the OpenRouter dynamic catalog (browse/enable gateway models).
   const openRouterOpen = ref(false)
@@ -163,15 +164,12 @@ export const useUiStore = defineStore('ui', () => {
     expandedFrames.value = new Set(expandedFrames.value).add(id)
   }
 
-  /** A frame shows its tasks when manually expanded OR once zoomed in to `close`
-   * or any deeper band (`steps`/`subtasks` drill further into those tasks). The
-   * zoom-driven branch is gated by the board's frame-expansion driver so only
-   * on-screen, centre-most frames open — a large off-centre or off-screen service
-   * no longer snaps out over the one the user is focused on. The gate degrades to
-   * "allowed" when no board driver is mounted (focus view / tests). */
-  function isFrameExpanded(id: string) {
-    if (expandedFrames.value.has(id)) return true
-    return lodAtLeast(lod.value, 'close') && useFrameExpansionStore().canExpand(id)
+  /** Services are always expanded to their task canvas, at every zoom level, so the
+   * board layout is fixed: panning never changes it and zooming has no expand/collapse
+   * transition to snap on. (`expandedFrames`/`toggleFrame` are retained for callers but
+   * no longer gate rendering.) */
+  function isFrameExpanded(_id: string) {
+    return true
   }
 
   function select(id: string | null) {
@@ -368,6 +366,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeLocalModels() {
     localModelsOpen.value = false
   }
+  function openSandbox() {
+    sandboxOpen.value = true
+  }
+  function closeSandbox() {
+    sandboxOpen.value = false
+  }
   function openUserSecrets() {
     userSecretsOpen.value = true
   }
@@ -468,6 +472,7 @@ export const useUiStore = defineStore('ui', () => {
     modelConfigOpen,
     vendorCredentialsOpen,
     localModelsOpen,
+    sandboxOpen,
     userSecretsOpen,
     openRouterOpen,
     aiProviderSetupOpen,
@@ -532,6 +537,8 @@ export const useUiStore = defineStore('ui', () => {
     closeVendorCredentials,
     openLocalModels,
     closeLocalModels,
+    openSandbox,
+    closeSandbox,
     openUserSecrets,
     closeUserSecrets,
     openOpenRouter,

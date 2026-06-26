@@ -53,9 +53,11 @@ const FRAME_LABEL: Record<BlockStatus, string> = {
 const statusLabel = computed(() => FRAME_LABEL[frameStatus.value])
 
 const selected = computed(() => ui.selectedBlockId === props.id)
-const expanded = computed(() => ui.isFrameExpanded(props.id))
-// At far zoom we only ever show the chip; otherwise an expanded frame shows tasks.
-const showExpanded = computed(() => expanded.value && lod.value !== 'far')
+// Services are always expanded to their task canvas, at every zoom level: there is no
+// chip/compact collapse, so panning is a fixed layout and zooming has no expand/collapse
+// transition to snap on. The far-chip and compact-summary branches in the template are
+// kept (gated off) so the prior behaviour is one edit away if we want chips back.
+const showExpanded = computed(() => true)
 
 // Surface a pending decision from this frame OR any of its tasks.
 const blockDecisions = computed(() =>
@@ -179,8 +181,10 @@ const ITEM_ICON: Record<string, string> = {
     </div>
 
     <!-- ===================== FAR: glanceable chip ===================== -->
+    <!-- Inert while services are always expanded (showExpanded is always true); the
+         compact branch below is reached via v-else-if and is likewise inert. -->
     <div
-      v-if="lod === 'far'"
+      v-if="!showExpanded && lod === 'far'"
       class="flex w-44 items-center gap-2 rounded-xl border-2 px-3 py-3 shadow-lg backdrop-blur"
       :class="[selected ? 'border-white' : '', pulseClass]"
       :style="{ borderColor: accent, backgroundColor: accent + '26' }"
@@ -339,8 +343,11 @@ const ITEM_ICON: Record<string, string> = {
       <div class="space-y-3 p-4">
         <!-- frame header (doubles as the drag handle for the expanded frame) -->
         <div class="flex items-start justify-between gap-2">
+          <!-- `nopan` stops Vue Flow's pane from panning on a left-drag that starts on
+               this handle (it pans via d3-zoom's mousedown, which our pointerdown
+               stopPropagation can't intercept), so the grab drives the frame move. -->
           <div
-            class="flex cursor-grab items-center gap-2 active:cursor-grabbing"
+            class="nopan flex cursor-grab items-center gap-2 active:cursor-grabbing"
             title="Drag service"
             @pointerdown="onFrameHandle"
           >
@@ -424,19 +431,21 @@ const ITEM_ICON: Record<string, string> = {
             <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" /> Add the first task
           </button>
 
-          <!-- resize handles (drag the borders to resize the service, Miro-style) -->
+          <!-- resize handles (drag the borders to resize the service, Miro-style).
+               `nopan` (alongside `nodrag`) so the pane doesn't pan while resizing —
+               same reason as the header handle above. -->
           <div
-            class="nodrag absolute right-0 top-0 h-full w-2 cursor-ew-resize hover:bg-sky-400/20"
+            class="nodrag nopan absolute right-0 top-0 h-full w-2 cursor-ew-resize hover:bg-sky-400/20"
             title="Drag to resize"
             @pointerdown="onResize($event, 'e')"
           />
           <div
-            class="nodrag absolute bottom-0 left-0 h-2 w-full cursor-ns-resize hover:bg-sky-400/20"
+            class="nodrag nopan absolute bottom-0 left-0 h-2 w-full cursor-ns-resize hover:bg-sky-400/20"
             title="Drag to resize"
             @pointerdown="onResize($event, 's')"
           />
           <div
-            class="nodrag absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize"
+            class="nodrag nopan absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize"
             title="Drag to resize"
             @pointerdown="onResize($event, 'se')"
           >

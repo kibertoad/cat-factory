@@ -15,6 +15,7 @@ import { presetsApi } from './api/presets'
 import { providerConnectionsApi } from './api/providerConnections'
 import { recurringApi } from './api/recurring'
 import { releaseHealthApi } from './api/releaseHealth'
+import { sandboxApi } from './api/sandbox'
 import { reviewsApi } from './api/reviews'
 import { slackApi } from './api/slack'
 import { specApi } from './api/spec'
@@ -89,6 +90,7 @@ export function useApi() {
     ...providerConnectionsApi(ctx),
     ...releaseHealthApi(ctx),
     ...recurringApi(ctx),
+    ...sandboxApi(ctx),
     ...githubApi(ctx),
     ...slackApi(ctx),
     ...bootstrapApi(ctx),

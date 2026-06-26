@@ -354,12 +354,15 @@ export interface ContainerAgentExecutorDependencies {
   /** GitHub REST base for opening the PR (GitHub Enterprise / api.github.com). */
   githubApiBase?: string
   /**
-   * Whether the facade wired a container web-search upstream (the `/v1/web-search`
-   * proxy). When true, coding/ci-fixer jobs are told to point Pi's `web_search` tool
-   * at `${proxyBaseUrl}/web-search` with their session token — so no provider key
-   * reaches the sandbox. Off ⇒ container web search stays disabled.
+   * Resolve whether THIS run's account actually has a usable container web-search
+   * upstream, so a coding/ci-fixer job is told to point Pi's `web_search` tool at
+   * `${proxyBaseUrl}/web-search` ONLY when a search will really work (keys are now
+   * per-account, resolved by the proxy off the run's account). This keeps the advertised
+   * tool coupled to real availability — we don't offer `web_search` to a run whose account
+   * has no keys (it would just fail/return nothing). Absent / resolves false ⇒ container
+   * web search stays disabled for the run.
    */
-  webSearchProxyEnabled?: boolean
+  resolveWebSearchEnabled?: (workspaceId: string) => Promise<boolean>
   /**
    * Optional observability trace sink (e.g. Langfuse). When wired, each poll forwards
    * the container's drained tool spans as child spans under the run's trace — the same
@@ -847,12 +850,14 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ? { ...context, block: { ...context.block, contextDocs: keptDocs, contextTasks: keptTasks } }
       : context
     // The proxy-backed web-tools nudge + switch, shared by the kinds that allow web
-    // access (coder/mocker/ci-fixer/fixer/tester/read-only). The harness surfaces the
-    // tools only when web search is configured in the container env. Per-kind hint
-    // (coder/mocker/analysis/… and any custom container kind resolves its own).
+    // access (coder/mocker/ci-fixer/fixer/tester/read-only). `web_search` is offered only
+    // when the run's account actually has a usable upstream (keys are per-account now), so
+    // the agent is never handed a tool that always fails. Per-kind hint (coder/mocker/
+    // analysis/… and any custom container kind resolves its own).
+    const webSearchEnabled = (await this.deps.resolveWebSearchEnabled?.(workspaceId)) ?? false
     const webTools = {
       webToolsGuidance: webResearchGuidanceFor(context.agentKind, { fetch: true }),
-      ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
+      ...(webSearchEnabled ? { webSearch: true } : {}),
     }
 
     const { body, kind } = this.buildKindBody(promptContext, {

@@ -128,6 +128,19 @@ export const emailConnections = pgTable('email_connections', {
   deleted_at: bigint('deleted_at', { mode: 'number' }),
 })
 
+// Per-account (deployment-wide) settings, moved out of env (mirror of D1 migration 0014's
+// `account_settings`). `config` is non-secret tuning JSON; `secrets_cipher` is ONE sealed
+// blob grouping every integration credential (domain tag 'cat-factory:account-settings');
+// `summary` is non-secret presence JSON. A missing row means all defaults.
+export const accountSettings = pgTable('account_settings', {
+  account_id: text('account_id').primaryKey(),
+  config: text('config').notNull(),
+  secrets_cipher: text('secrets_cipher'),
+  summary: text('summary').notNull().default('{}'),
+  created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
 // Email invitations into an org account. Only the token's hash is stored.
 export const accountInvitations = pgTable(
   'account_invitations',
@@ -348,7 +361,13 @@ export const tokenUsage = pgTable(
     cost_estimate: doublePrecision('cost_estimate').notNull().default(0),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
-  (t) => [index('idx_token_usage_created').on(t.created_at)],
+  (t) => [
+    index('idx_token_usage_created').on(t.created_at),
+    // Per-workspace spend rollup (`totalsSinceForWorkspace`) runs on every metered
+    // LLM-proxy call + web-search + step gate; index (workspace_id, created_at) so it
+    // doesn't scan the whole ledger and filter workspace_id row-by-row.
+    index('idx_token_usage_workspace').on(t.workspace_id, t.created_at),
+  ],
 )
 
 // Per-workspace model presets (mirror of D1 migration 0006's `model_presets`). A
@@ -809,6 +828,11 @@ export const workspaceSettings = pgTable('workspace_settings', {
   // Whether to store the full provided-context snapshot for each container agent
   // (the observability feature). On by default; integer 0/1 to match the SQLite store.
   store_agent_context: integer('store_agent_context').notNull().default(1),
+  // Per-workspace spend budget (moved out of env). All nullable; null ⇒ the built-in
+  // DEFAULT_SPEND_PRICING base table. spend_model_prices is a JSON object of overrides.
+  spend_currency: text('spend_currency'),
+  spend_monthly_limit: doublePrecision('spend_monthly_limit'),
+  spend_model_prices: text('spend_model_prices'),
 })
 
 // Per-workspace merge threshold presets (mirror of D1 migration 0024's
@@ -842,6 +866,121 @@ export const mergeThresholdPresets = pgTable(
   ],
 )
 
+// Sandbox (parallel prompt/model testing surface). Lives in a DEDICATED Postgres
+// `sandbox` schema (the analogue of the Worker's separate `SANDBOX_DB` D1 database), so
+// the tables are unprefixed (`sandbox.prompt_versions`, …) — the schema is the namespace.
+// Same connection/migrator as the main schema; the boot migrator creates the schema.
+// Shipped baselines are NOT stored (read live from `@cat-factory/agents`); only candidate
+// prompt versions are. JSON-shaped fields are text JSON. See backend/CLAUDE.md
+// "Keep the runtimes symmetric".
+export const sandboxSchema = pgSchema('sandbox')
+
+export const sandboxPromptVersions = sandboxSchema.table(
+  'prompt_versions',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    lineage_id: text('lineage_id').notNull(),
+    agent_kind: text('agent_kind').notNull(),
+    name: text('name').notNull(),
+    origin: text('origin').notNull(),
+    system_text: text('system_text').notNull(),
+    base_prompt_id: text('base_prompt_id'),
+    version: integer('version').notNull(),
+    parent_id: text('parent_id'),
+    labels: text('labels').notNull().default('[]'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    created_by: text('created_by'),
+    archived_at: bigint('archived_at', { mode: 'number' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    index('idx_sandbox_prompts_kind').on(t.workspace_id, t.agent_kind),
+  ],
+)
+
+export const sandboxFixtures = sandboxSchema.table(
+  'fixtures',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    kind: text('kind').notNull(),
+    name: text('name').notNull(),
+    payload: text('payload'),
+    repo_ref: text('repo_ref'),
+    objective: text('objective'),
+    origin: text('origin').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
+)
+
+export const sandboxExperiments = sandboxSchema.table(
+  'experiments',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    name: text('name').notNull(),
+    agent_kind: text('agent_kind').notNull(),
+    judge_model: text('judge_model').notNull(),
+    repeats: integer('repeats').notNull(),
+    status: text('status').notNull(),
+    matrix: text('matrix').notNull(),
+    budget_tokens: bigint('budget_tokens', { mode: 'number' }),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    created_by: text('created_by'),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
+)
+
+export const sandboxRuns = sandboxSchema.table(
+  'runs',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    experiment_id: text('experiment_id').notNull(),
+    prompt_version_id: text('prompt_version_id').notNull(),
+    model: text('model').notNull(),
+    fixture_id: text('fixture_id').notNull(),
+    repeat_index: integer('repeat_index').notNull(),
+    status: text('status').notNull(),
+    output_text: text('output_text'),
+    usage: text('usage'),
+    latency_ms: integer('latency_ms'),
+    branch: text('branch'),
+    pr_url: text('pr_url'),
+    diff: text('diff'),
+    error: text('error'),
+    seed_sha: text('seed_sha'),
+    prompt_label: text('prompt_label').notNull(),
+    started_at: bigint('started_at', { mode: 'number' }),
+    finished_at: bigint('finished_at', { mode: 'number' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    index('idx_sandbox_runs_experiment').on(t.workspace_id, t.experiment_id),
+    index('idx_sandbox_runs_queued').on(t.workspace_id, t.experiment_id, t.status),
+  ],
+)
+
+export const sandboxGrades = sandboxSchema.table(
+  'grades',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    run_id: text('run_id').notNull(),
+    judge_model: text('judge_model').notNull(),
+    scores: text('scores').notNull().default('[]'),
+    weighted_total: doublePrecision('weighted_total').notNull(),
+    objective: text('objective'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    index('idx_sandbox_grades_run').on(t.workspace_id, t.run_id),
+  ],
+)
+
 // Post-release-health gate (pluggable observability — Datadog today). One connection per
 // workspace (mirror of D1 migration 0007's `observability_connections`). `credentials` is a
 // sealed JSON blob of the provider-specific secret (domain tag 'cat-factory:observability');
@@ -849,6 +988,18 @@ export const mergeThresholdPresets = pgTable(
 export const observabilityConnections = pgTable('observability_connections', {
   workspace_id: text('workspace_id').primaryKey(),
   provider: text('provider').notNull(),
+  credentials: text('credentials').notNull(),
+  summary: text('summary').notNull().default('{}'),
+  created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
+// Per-workspace incident-enrichment connection (PagerDuty + incident.io), moved out of
+// env onto a sealed row (mirror of D1 migration 0013's `incident_enrichment_connections`).
+// `credentials` is ONE sealed JSON blob { pagerDuty?, incidentIo? } (domain tag
+// 'cat-factory:incident-enrichment'); `summary` is a non-secret presence blob.
+export const incidentEnrichmentConnections = pgTable('incident_enrichment_connections', {
+  workspace_id: text('workspace_id').primaryKey(),
   credentials: text('credentials').notNull(),
   summary: text('summary').notNull().default('{}'),
   created_at: bigint('created_at', { mode: 'number' }).notNull(),

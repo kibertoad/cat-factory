@@ -24,6 +24,42 @@ const limitSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(10
 export const taskLimitPerTypeSchema = v.record(createTaskTypeSchema, limitSchema)
 export type TaskLimitPerType = v.InferOutput<typeof taskLimitPerTypeSchema>
 
+// ---------------------------------------------------------------------------
+// Per-workspace spend budget. Moved out of the deployment-wide env vars
+// (`SPEND_MONTHLY_LIMIT` / `SPEND_CURRENCY` / `SPEND_MODEL_PRICES`) onto the
+// workspace settings row so an operator can tune a workspace's budget in the UI
+// without a redeploy. All three are nullable; null ⇒ fall back to the built-in
+// `DEFAULT_SPEND_PRICING` base table (the spend service resolves the effective
+// pricing per workspace, overlaying the OpenRouter catalog as before).
+// ---------------------------------------------------------------------------
+
+/** ISO 4217 currency code (3 letters), e.g. `EUR`. */
+const spendCurrencySchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.toUpperCase(),
+  v.length(3),
+  v.regex(/^[A-Z]{3}$/, 'currency must be a 3-letter ISO 4217 code'),
+)
+
+/** A single model's per-1M-token price override. */
+export const spendModelPriceSchema = v.object({
+  inputPerMillion: v.pipe(v.number(), v.minValue(0)),
+  outputPerMillion: v.pipe(v.number(), v.minValue(0)),
+})
+export type SpendModelPrice = v.InferOutput<typeof spendModelPriceSchema>
+
+/**
+ * Per-model price overrides, keyed by `provider:model` then bare `provider`
+ * (most-specific-first, exactly like the built-in table). Overlaid onto
+ * `DEFAULT_SPEND_PRICING.prices` when resolving a workspace's effective pricing.
+ */
+export const spendModelPricesSchema = v.record(
+  v.pipe(v.string(), v.trim(), v.minLength(1)),
+  spendModelPriceSchema,
+)
+export type SpendModelPrices = v.InferOutput<typeof spendModelPricesSchema>
+
 /** A workspace's runtime settings. */
 export const workspaceSettingsSchema = v.object({
   /**
@@ -46,6 +82,22 @@ export const workspaceSettingsSchema = v.object({
    * suppressed when the deployment disables prompt recording (`LLM_RECORD_PROMPTS`).
    */
   storeAgentContext: v.boolean(),
+  /** Spend budget currency (ISO 4217). Null ⇒ the built-in default (`EUR`). */
+  spendCurrency: v.nullable(spendCurrencySchema),
+  /**
+   * Monthly spend budget in {@link spendCurrency}. Null ⇒ the built-in default
+   * (~100 EUR). `0` is intentional and valid — it means "no PAID spend": runs on
+   * metered models (direct API keys / Cloudflare Workers AI) are refused at start and
+   * paused mid-run, while LOCAL-runner models (keyless) and connected SUBSCRIPTIONS
+   * (Claude Code / Codex, flat-rate quota) keep running, since they incur no metered
+   * cost. So `0` is the "local-/subscription-only" setting, not a footgun — it's
+   * reversible from the UI and clearer than an unbounded "unlimited" that can run up a
+   * bill. The gate is per-workspace (see the spend safeguard); web search still costs
+   * money, so a `0` budget also blocks paid web searches.
+   */
+  spendMonthlyLimit: v.nullable(v.pipe(v.number(), v.minValue(0))),
+  /** Per-model price overrides overlaid on the base table. Null ⇒ no overrides. */
+  spendModelPrices: v.nullable(spendModelPricesSchema),
 })
 export type WorkspaceSettings = v.InferOutput<typeof workspaceSettingsSchema>
 
@@ -58,5 +110,8 @@ export const updateWorkspaceSettingsSchema = v.object({
   taskLimitShared: v.optional(v.nullable(limitSchema)),
   taskLimitPerType: v.optional(v.nullable(taskLimitPerTypeSchema)),
   storeAgentContext: v.optional(v.boolean()),
+  spendCurrency: v.optional(v.nullable(spendCurrencySchema)),
+  spendMonthlyLimit: v.optional(v.nullable(v.pipe(v.number(), v.minValue(0)))),
+  spendModelPrices: v.optional(v.nullable(spendModelPricesSchema)),
 })
 export type UpdateWorkspaceSettingsInput = v.InferOutput<typeof updateWorkspaceSettingsSchema>

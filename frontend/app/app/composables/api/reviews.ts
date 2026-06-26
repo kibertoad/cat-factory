@@ -104,12 +104,7 @@ export function reviewsApi({ http, ws }: ApiContext) {
         { method: 'POST' },
       ),
 
-    reRequestRecommendation: (
-      workspaceId: string,
-      reviewId: string,
-      recId: string,
-      note: string,
-    ) =>
+    reRequestRecommendation: (workspaceId: string, reviewId: string, recId: string, note: string) =>
       http<RequirementReview>(
         `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/recommendations/${encodeURIComponent(recId)}/re-request`,
         { method: 'POST', body: { note } },

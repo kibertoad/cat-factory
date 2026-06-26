@@ -225,9 +225,14 @@ function epicDescription(epic: TaskContent): string {
   return body ? `${reference}\n\n${body}` : reference
 }
 
-
 /** The issue fields the title/description seeders read (satisfied by TaskRecord + TaskContent). */
-type IssueSeed = { externalId: string; title: string; url: string; description: string; excerpt?: string }
+type IssueSeed = {
+  externalId: string
+  title: string
+  url: string
+  description: string
+  excerpt?: string
+}
 
 /** Seed the new task's title from the issue (keyed for traceability). */
 function issueTaskTitle(issue: IssueSeed): string {

@@ -6,6 +6,10 @@ import type {
   UpsertObservabilityConnectionInput,
   UpsertReleaseHealthConfigInput,
 } from '~/types/releaseHealth'
+import type {
+  IncidentEnrichmentView,
+  UpsertIncidentEnrichmentInput,
+} from '~/types/incidentEnrichment'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -23,6 +27,10 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
     summary: null,
   })
   const configs = ref<ReleaseHealthConfig[]>([])
+  // Incident-enrichment (PagerDuty + incident.io) connection — write-only secrets, the
+  // store only ever holds the presence summary. Wired alongside observability.
+  const incident = ref<IncidentEnrichmentView>({ connected: false, summary: null })
+  const incidentAvailable = ref<boolean | null>(null)
   const loading = ref(false)
   // Mirrors the backend's opt-in gate (`OBSERVABILITY_ENABLED`): `null` until first
   // probed, then `true`/`false`. The hub + inspector hide their observability entry
@@ -95,9 +103,35 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
     configs.value = configs.value.filter((c) => c.blockId !== blockId)
   }
 
+  /** Load the incident-enrichment connection (separate opt-in gate from observability). */
+  async function loadIncident() {
+    const ws = useWorkspaceStore()
+    try {
+      incident.value = await api.getIncidentEnrichment(ws.requireId())
+      incidentAvailable.value = true
+    } catch {
+      incidentAvailable.value = false
+      incident.value = { connected: false, summary: null }
+    }
+  }
+
+  async function saveIncident(input: UpsertIncidentEnrichmentInput) {
+    const ws = useWorkspaceStore()
+    incident.value = await api.setIncidentEnrichment(ws.requireId(), input)
+    incidentAvailable.value = true
+  }
+
+  async function removeIncident() {
+    const ws = useWorkspaceStore()
+    await api.deleteIncidentEnrichment(ws.requireId())
+    incident.value = { connected: false, summary: null }
+  }
+
   return {
     connection,
     configs,
+    incident,
+    incidentAvailable,
     loading,
     available,
     load,
@@ -107,5 +141,8 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
     configForBlock,
     saveConfig,
     removeConfig,
+    loadIncident,
+    saveIncident,
+    removeIncident,
   }
 })

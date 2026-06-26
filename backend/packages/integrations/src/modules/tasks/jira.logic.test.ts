@@ -25,14 +25,20 @@ describe('buildJiraChildrenJql', () => {
 describe('mapJiraIssueLinks', () => {
   it('maps an inward "is blocked by" link to blockedBy', () => {
     const links = [
-      { type: { name: 'Blocks', inward: 'is blocked by', outward: 'blocks' }, inwardIssue: { key: 'P-2' } },
+      {
+        type: { name: 'Blocks', inward: 'is blocked by', outward: 'blocks' },
+        inwardIssue: { key: 'P-2' },
+      },
     ]
     expect(mapJiraIssueLinks(links)).toEqual([{ type: 'blockedBy', externalId: 'P-2' }])
   })
 
   it('maps an outward "blocks" link to blocks', () => {
     const links = [
-      { type: { name: 'Blocks', inward: 'is blocked by', outward: 'blocks' }, outwardIssue: { key: 'P-3' } },
+      {
+        type: { name: 'Blocks', inward: 'is blocked by', outward: 'blocks' },
+        outwardIssue: { key: 'P-3' },
+      },
     ]
     expect(mapJiraIssueLinks(links)).toEqual([{ type: 'blocks', externalId: 'P-3' }])
   })
@@ -60,7 +66,10 @@ describe('mapJiraIssueLinks', () => {
   it('records an unrecognised relation as relates and tolerates junk', () => {
     expect(
       mapJiraIssueLinks([
-        { type: { name: 'Relates', inward: 'relates to', outward: 'relates to' }, inwardIssue: { key: 'P-4' } },
+        {
+          type: { name: 'Relates', inward: 'relates to', outward: 'relates to' },
+          inwardIssue: { key: 'P-4' },
+        },
       ]),
     ).toEqual([{ type: 'relates', externalId: 'P-4' }])
     expect(mapJiraIssueLinks(null)).toEqual([])
