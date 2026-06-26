@@ -422,13 +422,20 @@ jobs:
       # Move the marker via the git refs API rather than a checkout + push, so no
       # repo credentials are persisted to the runner's git config (zizmor[artipacked]).
       # Inputs are routed through env, never inlined into the script (template-injection).
+      #
+      # The existence probe uses the SINGLE-reference endpoint (`git/ref/{ref}`,
+      # singular): it returns 200 only on an exact match and 404 otherwise. The plural
+      # `git/refs/{ref}` is the legacy "list matching refs" form, which can answer 200
+      # with an array for a mere prefix match (e.g. a `prod-deployed-foo` tag), so it
+      # is the wrong primitive for an exact-existence check. Create/update still use the
+      # plural endpoints, which is correct: POST `git/refs` and PATCH `git/refs/{ref}`.
       - name: Advance prod-deployed marker
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.sha }}
         run: |
-          if gh api "repos/${REPO}/git/refs/tags/prod-deployed" >/dev/null 2>&1; then
+          if gh api "repos/${REPO}/git/ref/tags/prod-deployed" >/dev/null 2>&1; then
             gh api -X PATCH "repos/${REPO}/git/refs/tags/prod-deployed" -f sha="${HEAD_SHA}" -F force=true
           else
             gh api -X POST "repos/${REPO}/git/refs" -f ref="refs/tags/prod-deployed" -f sha="${HEAD_SHA}"
