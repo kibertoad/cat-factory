@@ -63,6 +63,8 @@ import {
   MERGER_AGENT_KIND,
   REQUIREMENTS_REVIEW_AGENT_KIND,
   CLARITY_REVIEW_AGENT_KIND,
+  REQUIREMENTS_BRAINSTORM_AGENT_KIND,
+  ARCHITECTURE_BRAINSTORM_AGENT_KIND,
   BUG_INVESTIGATOR_AGENT_KIND,
   TRACKER_AGENT_KIND,
   ANALYSIS_AGENT_KIND,
@@ -104,11 +106,14 @@ import type { NotificationService } from '../notifications/NotificationService.j
 import type { WorkspaceSettingsService } from '../settings/WorkspaceSettingsService.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
 import type { ClarityReviewService } from '../clarity/ClarityReviewService.js'
+import type { BrainstormService } from '../brainstorm/BrainstormService.js'
 import type {
   IterationCapChoice,
   RequirementConcernLevel,
   RequirementReview,
   ClarityReview,
+  BrainstormSession,
+  BrainstormStage,
   ResolveRequirementsExceededChoice,
 } from '@cat-factory/kernel'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
@@ -138,6 +143,7 @@ import type { DocumentRepository } from '@cat-factory/kernel'
 import type { TaskRepository } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import type { ClarityReviewRepository } from '@cat-factory/kernel'
+import type { BrainstormSessionRepository } from '@cat-factory/kernel'
 import type {
   EnvironmentProvisioningService,
   EnvironmentTeardownService,
@@ -278,6 +284,19 @@ export interface ExecutionServiceDependencies {
    * answer → incorporate → re-review loop). Absent → the gate step passes through.
    */
   clarityReviewService?: ClarityReviewService
+  /**
+   * Optional: the brainstorm (structured-dialogue) feature's services, one per stage, present
+   * when the brainstorm module is wired. Drive the special `requirements-brainstorm` /
+   * `architecture-brainstorm` gate steps (inline option-generator + the iterative propose →
+   * pick → incorporate → re-run loop). Absent → the gate steps pass through.
+   */
+  brainstormServices?: Record<BrainstormStage, BrainstormService>
+  /**
+   * Optional: persistence for the brainstorm feature. Read by the agent-context builder to
+   * surface a converged `architecture-brainstorm` direction to the architect (the mirror of
+   * `requirementReviewRepository`). Absent → no substitution.
+   */
+  brainstormSessionRepository?: BrainstormSessionRepository
   /**
    * Optional: resolves fragment ids against the merged tenant catalog (managed +
    * document-backed fragments), live-resolving linked Confluence/Notion/GitHub
@@ -451,6 +470,7 @@ export class ExecutionService {
   private readonly requirementReviewService?: RequirementReviewService
   private readonly kaizenScheduler?: KaizenScheduler
   private readonly clarityReviewService?: ClarityReviewService
+  private readonly brainstormServices?: Record<BrainstormStage, BrainstormService>
   private readonly environmentProvisioning?: EnvironmentProvisioningService
   private readonly environmentTeardown?: EnvironmentTeardownService
   private readonly branchUpdater?: BranchUpdater
@@ -470,6 +490,9 @@ export class ExecutionService {
   private readonly requirementsKind: ReviewKind<RequirementReview>
   /** The clarity (bug-report triage) subject for {@link reviewGate}. */
   private readonly clarityKind: ReviewKind<ClarityReview>
+  /** The two brainstorm (structured-dialogue) subjects for {@link reviewGate}, by stage. */
+  private readonly requirementsBrainstormKind: ReviewKind<BrainstormSession>
+  private readonly architectureBrainstormKind: ReviewKind<BrainstormSession>
   private readonly blueprintReconciler?: BlueprintReconciler
   private readonly notificationService?: NotificationService
   private readonly workspaceSettingsService?: WorkspaceSettingsService
@@ -524,6 +547,8 @@ export class ExecutionService {
     kaizenScheduler,
     clarityReviewRepository,
     clarityReviewService,
+    brainstormServices,
+    brainstormSessionRepository,
     fragmentResolver,
     environmentProvisioning,
     environmentTeardown,
@@ -559,6 +584,7 @@ export class ExecutionService {
     this.requirementReviewService = requirementReviewService
     this.kaizenScheduler = kaizenScheduler
     this.clarityReviewService = clarityReviewService
+    this.brainstormServices = brainstormServices
     this.environmentProvisioning = environmentProvisioning
     this.environmentTeardown = environmentTeardown
     this.branchUpdater = branchUpdater
@@ -570,6 +596,7 @@ export class ExecutionService {
       tasks: taskRepository,
       requirementReviews: requirementReviewRepository,
       clarityReviews: clarityReviewRepository,
+      brainstormSessions: brainstormSessionRepository,
       environmentProvisioning,
       fragmentResolver,
     })
@@ -671,6 +698,14 @@ export class ExecutionService {
     })
     this.requirementsKind = this.buildRequirementsKind()
     this.clarityKind = this.buildClarityKind()
+    this.requirementsBrainstormKind = this.buildBrainstormKind(
+      'requirements',
+      REQUIREMENTS_BRAINSTORM_AGENT_KIND,
+    )
+    this.architectureBrainstormKind = this.buildBrainstormKind(
+      'architecture',
+      ARCHITECTURE_BRAINSTORM_AGENT_KIND,
+    )
     this.blueprintReconciler = blueprintReconciler
     this.notificationService = notificationService
     this.workspaceSettingsService = workspaceSettingsService
@@ -1234,7 +1269,9 @@ export class ExecutionService {
       // gate with nothing pending) re-parks on its durable decision id.
       const reentrantRequirements =
         (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND ||
-          step.agentKind === CLARITY_REVIEW_AGENT_KIND) &&
+          step.agentKind === CLARITY_REVIEW_AGENT_KIND ||
+          step.agentKind === REQUIREMENTS_BRAINSTORM_AGENT_KIND ||
+          step.agentKind === ARCHITECTURE_BRAINSTORM_AGENT_KIND) &&
         (!!step.pendingIncorporation || !!step.pendingRecommendation)
       // The human-testing gate is likewise re-entrant: a human action (confirm / request a
       // fix / pull main / recreate) records a `pendingAction` on the parked step and wakes
@@ -1309,6 +1346,30 @@ export class ExecutionService {
     if (step.agentKind === CLARITY_REVIEW_AGENT_KIND) {
       return this.reviewGate.evaluate(
         this.clarityKind,
+        workspaceId,
+        instance,
+        step,
+        block,
+        isFinalStep,
+      )
+    }
+
+    // The two brainstorm (structured-dialogue) gates run the inline option-generator and park
+    // for the dedicated brainstorm window, driving the same iterative loop as the requirements
+    // gate. NOT container/prose agents. Pass-through when the brainstorm module isn't wired.
+    if (step.agentKind === REQUIREMENTS_BRAINSTORM_AGENT_KIND) {
+      return this.reviewGate.evaluate(
+        this.requirementsBrainstormKind,
+        workspaceId,
+        instance,
+        step,
+        block,
+        isFinalStep,
+      )
+    }
+    if (step.agentKind === ARCHITECTURE_BRAINSTORM_AGENT_KIND) {
+      return this.reviewGate.evaluate(
+        this.architectureBrainstormKind,
         workspaceId,
         instance,
         step,
@@ -3373,6 +3434,14 @@ export class ExecutionService {
         'Resolve the clarity review through its review window, not the approval gate',
       )
     }
+    if (
+      step.agentKind === REQUIREMENTS_BRAINSTORM_AGENT_KIND ||
+      step.agentKind === ARCHITECTURE_BRAINSTORM_AGENT_KIND
+    ) {
+      throw new ConflictError(
+        'Resolve the brainstorm through its brainstorm window, not the approval gate',
+      )
+    }
     if (step.agentKind === HUMAN_TEST_AGENT_KIND) {
       throw new ConflictError(
         'Resolve the human-testing gate through its window (confirm / request a fix), not the approval gate',
@@ -3476,6 +3545,109 @@ export class ExecutionService {
       grantExtraRound: (ws, reviewId) => require().grantExtraRound(ws, reviewId),
       emit: (ws, review) => this.events.clarityReviewChanged?.(ws, review) ?? Promise.resolve(),
     }
+  }
+
+  /**
+   * A brainstorm (structured-dialogue) subject for {@link reviewGate}, parameterised by stage.
+   * Otherwise identical to the requirements kind — the service handles its own upstream context
+   * (the architecture stage seeds from the refined requirements). The brainstorm services
+   * resolve their model exactly like the requirements reviewer, so the cap knobs are reused.
+   */
+  private buildBrainstormKind(
+    stage: BrainstormStage,
+    agentKind: string,
+  ): ReviewKind<BrainstormSession> {
+    const require = (): BrainstormService => {
+      const svc = this.brainstormServices?.[stage]
+      if (!svc?.enabled) throw new ConflictError('The brainstorm agent is not configured')
+      return svc
+    }
+    return {
+      agentKind,
+      entityName: 'Brainstorm session',
+      enabled: () => !!this.brainstormServices?.[stage]?.enabled,
+      getForBlock: (ws, blockId) => require().getForBlock(ws, blockId),
+      review: (ws, block, preset) =>
+        require().review(ws, block.id, {
+          maxIterations: preset.maxRequirementIterations,
+          concernThreshold: preset.maxRequirementConcernAllowed,
+        }),
+      reReview: (ws, reviewId, preset) =>
+        require().reReview(ws, reviewId, { concernThreshold: preset.maxRequirementConcernAllowed }),
+      incorporate: async (ws, _blockId, reviewId, feedback) => {
+        await require().incorporate(ws, reviewId, { feedback })
+      },
+      markIncorporated: (ws, reviewId) => require().markIncorporated(ws, reviewId),
+      markReReviewing: (ws, reviewId) => require().markReReviewing(ws, reviewId),
+      markIncorporating: (ws, reviewId) => require().markIncorporating(ws, reviewId),
+      grantExtraRound: (ws, reviewId) => require().grantExtraRound(ws, reviewId),
+      emit: (ws, session) =>
+        this.events.brainstormSessionChanged?.(ws, session) ?? Promise.resolve(),
+    }
+  }
+
+  /** Pick the brainstorm kind for a stage (the dedicated window drives both via the same loop). */
+  private brainstormKindFor(stage: BrainstormStage): ReviewKind<BrainstormSession> {
+    return stage === 'architecture'
+      ? this.architectureBrainstormKind
+      : this.requirementsBrainstormKind
+  }
+
+  /** Run a fresh brainstorm pass over a block + stage (off-path inspector / window surface). */
+  reviewBrainstorm(
+    workspaceId: string,
+    blockId: string,
+    stage: BrainstormStage,
+  ): Promise<BrainstormSession> {
+    return this.reviewGate.review(this.brainstormKindFor(stage), workspaceId, blockId)
+  }
+
+  /** Incorporate the human's picks ASYNCHRONOUSLY (the brainstorm mirror of {@link incorporateRequirements}). */
+  incorporateBrainstorm(
+    workspaceId: string,
+    blockId: string,
+    stage: BrainstormStage,
+    feedback?: string,
+  ): Promise<BrainstormSession> {
+    return this.reviewGate.incorporate(
+      this.brainstormKindFor(stage),
+      workspaceId,
+      blockId,
+      feedback,
+    )
+  }
+
+  /** Re-run the brainstorm against the converged direction (one more pass). */
+  reReviewBrainstorm(
+    workspaceId: string,
+    blockId: string,
+    stage: BrainstormStage,
+  ): Promise<BrainstormSession> {
+    return this.reviewGate.reReview(this.brainstormKindFor(stage), workspaceId, blockId)
+  }
+
+  /** Proceed: settle the brainstorm (last converged direction wins downstream) and advance. */
+  proceedBrainstorm(
+    workspaceId: string,
+    blockId: string,
+    stage: BrainstormStage,
+  ): Promise<BrainstormSession> {
+    return this.reviewGate.proceed(this.brainstormKindFor(stage), workspaceId, blockId)
+  }
+
+  /** Resolve a brainstorm that hit its iteration cap (extra-round / proceed / stop-reset). */
+  resolveBrainstormExceeded(
+    workspaceId: string,
+    blockId: string,
+    stage: BrainstormStage,
+    choice: ResolveRequirementsExceededChoice,
+  ): Promise<BrainstormSession> {
+    return this.reviewGate.resolveExceeded(
+      this.brainstormKindFor(stage),
+      workspaceId,
+      blockId,
+      choice,
+    )
   }
 
   /**

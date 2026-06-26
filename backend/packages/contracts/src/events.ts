@@ -5,6 +5,7 @@ import type { LlmCallActivity } from './observability.js'
 import type { RequirementReview } from './requirements.js'
 import type { ConsensusSession } from './consensus.js'
 import type { ClarityReview } from './clarity.js'
+import type { BrainstormSession } from './brainstorm.js'
 import type { KaizenGrading } from './kaizen.js'
 
 // Real-time events pushed from the per-workspace events hub to subscribed
@@ -68,6 +69,12 @@ export type WorkspaceEvent =
    * inspector reflects the transition live without a refetch.
    */
   | { type: 'clarity'; review: ClarityReview; at: number }
+  /**
+   * A block's brainstorm (structured-dialogue) session changed status — the brainstorm mirror
+   * of the `requirements` event. Carries the updated session so an open brainstorm window /
+   * inspector reflects the transition live without a refetch.
+   */
+  | { type: 'brainstorm'; session: BrainstormSession; at: number }
   /**
    * A Kaizen grading was scheduled, started, completed or failed. Carries the updated
    * grading so an open run window reflects the scheduled→running→complete status live and

@@ -135,6 +135,10 @@ export const useUiStore = defineStore('ui', () => {
     blockId: string
     instanceId: string | null
     stepIndex: number | null
+    // The brainstorm dialogue stage, set only when `view === 'brainstorm'` (its two agent
+    // kinds share one window). Derived from the step's agent kind on the pipeline path, or
+    // passed explicitly on an off-path open.
+    stage?: 'requirements' | 'architecture'
   } | null>(null)
 
   // Agent step-detail overlay: which pipeline step (a run instance + step index)
@@ -233,7 +237,20 @@ export const useUiStore = defineStore('ui', () => {
         ? agentKindMeta(step.agentKind).resultView
         : undefined
     if (view && instance) {
-      resultView.value = { view, blockId: instance.blockId, instanceId, stepIndex }
+      // The brainstorm window is shared by both stages; carry which one from the step's kind.
+      const stage =
+        view === 'brainstorm'
+          ? step?.agentKind === 'architecture-brainstorm'
+            ? 'architecture'
+            : 'requirements'
+          : undefined
+      resultView.value = {
+        view,
+        blockId: instance.blockId,
+        instanceId,
+        stepIndex,
+        ...(stage ? { stage } : {}),
+      }
       return
     }
     stepDetail.value = { instanceId, stepIndex }
@@ -456,6 +473,9 @@ export const useUiStore = defineStore('ui', () => {
   function openClarityReview(blockId: string) {
     resultView.value = { view: 'clarity-review', blockId, instanceId: null, stepIndex: null }
   }
+  function openBrainstorm(blockId: string, stage: 'requirements' | 'architecture') {
+    resultView.value = { view: 'brainstorm', blockId, instanceId: null, stepIndex: null, stage }
+  }
   // Open the service-spec window for a service frame (the inspector's "View Requirements").
   function openServiceSpec(blockId: string) {
     resultView.value = { view: 'service-spec', blockId, instanceId: null, stepIndex: null }
@@ -622,6 +642,7 @@ export const useUiStore = defineStore('ui', () => {
     resetAiOnboarding,
     openRequirementReview,
     openClarityReview,
+    openBrainstorm,
     openServiceSpec,
     openFollowUps,
     closeRequirementReview,

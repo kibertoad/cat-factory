@@ -17,6 +17,7 @@
 export const RESULT_VIEW_IDS = [
   'requirements-review',
   'clarity-review',
+  'brainstorm',
   'tester',
   'human-test',
   'gate',
