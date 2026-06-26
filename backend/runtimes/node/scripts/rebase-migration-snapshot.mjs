@@ -44,7 +44,9 @@ const schemaPath = join(here, '..', 'src', 'db', 'schema.ts')
 const target = process.argv[2]
 if (!target) {
   console.error('error: pass the migration folder name to rebase, e.g.')
-  console.error('  node scripts/rebase-migration-snapshot.mjs 20260625190253_telemetry_schema_and_agent_context')
+  console.error(
+    '  node scripts/rebase-migration-snapshot.mjs 20260625190253_telemetry_schema_and_agent_context',
+  )
   process.exit(1)
 }
 
@@ -85,4 +87,4 @@ writeFileSync(targetSnapshot, JSON.stringify(snapshot, null, 2))
 console.log(`rebased ${target}`)
 console.log(`  id      = ${snapshot.id}`)
 console.log(`  prevIds = ${JSON.stringify(leafIds)}`)
-console.log('next: review the folder\'s migration.sql, then run `pnpm db:check`')
+console.log("next: review the folder's migration.sql, then run `pnpm db:check`")

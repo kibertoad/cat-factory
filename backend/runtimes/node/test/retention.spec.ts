@@ -12,9 +12,17 @@ const DAY = 24 * 60 * 60 * 1000
 /** A repo pair that records the cutoff each prune was asked for (or `null` if skipped). */
 function fakeRepos(): {
   repos: RetentionRepos
-  cutoffs: { tokenUsage: number | null; llmCallMetrics: number | null }
+  cutoffs: {
+    tokenUsage: number | null
+    llmCallMetrics: number | null
+    agentContextSnapshots: number | null
+  }
 } {
-  const cutoffs = { tokenUsage: null as number | null, llmCallMetrics: null as number | null }
+  const cutoffs = {
+    tokenUsage: null as number | null,
+    llmCallMetrics: null as number | null,
+    agentContextSnapshots: null as number | null,
+  }
   return {
     cutoffs,
     repos: {
@@ -28,6 +36,13 @@ function fakeRepos(): {
         deleteOlderThan: async (c) => {
           cutoffs.llmCallMetrics = c
           return 7
+        },
+      },
+      // Agent-context snapshots ride the same window as llmCallMetrics.
+      agentContextSnapshotRepository: {
+        deleteOlderThan: async (c) => {
+          cutoffs.agentContextSnapshots = c
+          return 5
         },
       },
       // Recurring-pipeline run history prune (fixed ~1-week window). Returns 0 here;
@@ -58,7 +73,14 @@ describe('sweepRetention', () => {
 
     expect(cutoffs.tokenUsage).toBe(now - 30 * DAY)
     expect(cutoffs.llmCallMetrics).toBe(now - 3 * DAY)
-    expect(result).toEqual({ tokenUsage: 3, llmCallMetrics: 7, scheduleRuns: 0, activations: 2 })
+    expect(cutoffs.agentContextSnapshots).toBe(now - 3 * DAY) // same window as llmCallMetrics
+    expect(result).toEqual({
+      tokenUsage: 3,
+      llmCallMetrics: 7,
+      agentContextSnapshots: 5,
+      scheduleRuns: 0,
+      activations: 2,
+    })
   })
 
   it('treats a non-positive window as disabled — no delete, zero reclaimed', async () => {
@@ -67,6 +89,13 @@ describe('sweepRetention', () => {
 
     expect(cutoffs.tokenUsage).toBe(now - 30 * DAY) // still pruned
     expect(cutoffs.llmCallMetrics).toBeNull() // disabled → never called
-    expect(result).toEqual({ tokenUsage: 3, llmCallMetrics: 0, scheduleRuns: 0, activations: 2 })
+    expect(cutoffs.agentContextSnapshots).toBeNull() // same disabled window → never called
+    expect(result).toEqual({
+      tokenUsage: 3,
+      llmCallMetrics: 0,
+      agentContextSnapshots: 0,
+      scheduleRuns: 0,
+      activations: 2,
+    })
   })
 })

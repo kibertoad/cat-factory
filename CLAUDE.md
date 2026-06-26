@@ -734,8 +734,8 @@ sweep.
 
 - **`llm_call_metrics`** — per proxied LLM call (prompt/response delta-stored, tokens,
   timing). Recorded by the LLM proxy via `LlmObservabilityService`. This captures what the
-  model *received* per call.
-- **`agent_context_snapshots`** — the complete context an agent was *provided* per container
+  model _received_ per call.
+- **`agent_context_snapshots`** — the complete context an agent was _provided_ per container
   dispatch: the fully fragment-composed system + user prompts, the best-practice fragment
   bodies folded in, and the **full content of the files injected into the container**
   (`.cat-context/*` — which the agent reads via tools, so they never reach proxy telemetry).

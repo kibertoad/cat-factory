@@ -1,11 +1,11 @@
 ---
-"@cat-factory/kernel": minor
-"@cat-factory/contracts": minor
-"@cat-factory/orchestration": minor
-"@cat-factory/server": minor
-"@cat-factory/worker": minor
-"@cat-factory/node-server": minor
-"@cat-factory/app": minor
+'@cat-factory/kernel': minor
+'@cat-factory/contracts': minor
+'@cat-factory/orchestration': minor
+'@cat-factory/server': minor
+'@cat-factory/worker': minor
+'@cat-factory/node-server': minor
+'@cat-factory/app': minor
 ---
 
 Capture the complete context provided to each container agent as observability, in an
