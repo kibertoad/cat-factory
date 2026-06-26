@@ -371,6 +371,15 @@ export interface ContainerAgentExecutorDependencies {
   /** Attribute a finished subscription job's usage to its leased token (usage-aware rotation). */
   recordSubscriptionUsage?: RecordSubscriptionUsage
   /**
+   * NATIVE LOCAL EXECUTION (local facade only, opt-in via `LOCAL_NATIVE_AGENTS`): when this
+   * returns true for a resolved subscription harness, the job carries `ambientAuth: true`
+   * INSTEAD of a leased credential — the harness (run as a host process) drives the
+   * developer's OWN installed `claude` / `codex` CLI with its ambient login. No token is
+   * leased and no personal-credential gate applies. Default off everywhere else, so the
+   * Cloudflare/Node leasing paths are untouched.
+   */
+  nativeAmbientAuth?: (harness: HarnessKind) => boolean
+  /**
    * Whether the workspace has a pooled token for a vendor. Drives "subscriptions
    * always win" for POOLABLE vendors: a step pinned to a dual-mode model (Kimi/DeepSeek
    * with a Cloudflare base) is auto-routed to its subscription flavour when this returns
@@ -939,6 +948,11 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         model: ref.model,
       })
       return { auth: { harness, proxyBaseUrl: this.deps.proxyBaseUrl, sessionToken } }
+    }
+    // Native local execution: the harness runs the developer's own CLI with its ambient
+    // login, so we lease NOTHING and gate NOTHING — just flag ambient auth for the harness.
+    if (this.deps.nativeAmbientAuth?.(harness)) {
+      return { auth: { harness, ambientAuth: true } }
     }
     if (!subscriptionVendor) {
       throw new Error(

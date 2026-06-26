@@ -13,6 +13,10 @@ import {
   type LocalContainerRunnerTransport,
   createLocalContainerTransportFromEnv,
 } from './LocalContainerRunnerTransport.js'
+import {
+  type LocalProcessRunnerTransport,
+  createLocalProcessTransportFromEnv,
+} from './LocalProcessRunnerTransport.js'
 import { createRuntimeAdapter } from './runtimes/index.js'
 
 // The local-mode composition root. It is intentionally thin: the ENTIRE Drizzle/
@@ -39,9 +43,15 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // ON: the Node loader only enables it for a configured GitHub App, but local mode reaches
   // GitHub through the PAT-backed client, so the read/link endpoints (connection, available
   // repos, "add from existing repo") should be served the same way.
+  // Native local execution (opt-in): run agents as a host process driving the developer's
+  // OWN installed `claude` / `codex` CLI (ambient login), bypassing Docker. When on, the
+  // executor flags `ambientAuth` and the personal-credential gate is skipped (no managed
+  // credential is used). Default off — the container path is unchanged.
+  const nativeAgents = env.LOCAL_NATIVE_AGENTS?.trim()
   const config: AppConfig = {
     ...base,
     ...(pat ? { github: { ...base.github, enabled: true } } : {}),
+    ...(nativeAgents ? { nativeAmbientAuth: true } : {}),
     localMode: {
       enabled: true,
       ...(pat ? {} : { githubPatSetupUrl: githubPatCreationUrl() }),
@@ -67,9 +77,11 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // service still boots to serve the board (and inline kinds) when LOCAL_HARNESS_IMAGE
   // is unset — only repo-operating kinds then fail, loudly and with a clear message,
   // mirroring how the Node facade treats a missing runner backend.
-  let transport: LocalContainerRunnerTransport | undefined
+  let transport: LocalContainerRunnerTransport | LocalProcessRunnerTransport | undefined
   const resolveTransport: ResolveRunnerTransport = () => {
-    transport ??= createLocalContainerTransportFromEnv(env)
+    transport ??= nativeAgents
+      ? createLocalProcessTransportFromEnv(env)
+      : createLocalContainerTransportFromEnv(env)
     return Promise.resolve(transport)
   }
 
@@ -79,7 +91,13 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // engine so it refuses a local-infra Tester run on an incapable runtime ("limited
   // mode") instead of dispatching a job that can't stand its dependencies up. Building
   // the adapter is pure (no IO), so this is cheap even though the transport stays lazy.
-  const localTestInfraSupported = createRuntimeAdapter(env).capabilities.localDind
+  // Native mode runs agents on the host with no per-run Docker container; the Tester's
+  // local docker-compose infra (host compose with per-run project names) is a later phase,
+  // so it's reported unsupported for now (the engine steers to "limited mode"). The
+  // container path keeps the runtime's real Docker-in-Docker capability.
+  const localTestInfraSupported = nativeAgents
+    ? false
+    : createRuntimeAdapter(env).capabilities.localDind
 
   return buildNodeContainer({
     ...options,

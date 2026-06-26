@@ -27,6 +27,12 @@ export interface HarnessAuthFields {
    * (CLAUDE_CODE_OAUTH_TOKEN against api.anthropic.com).
    */
   subscriptionBaseUrl?: string
+  /**
+   * Native local execution: the `claude-code` / `codex` CLI runs with the developer's
+   * OWN ambient login (`~/.claude` / `~/.codex`) instead of a leased subscription token.
+   * Set only by the local native transport; when true `subscriptionToken` is not required.
+   */
+  ambientAuth?: boolean
 }
 
 export interface RepoSpec {
@@ -65,9 +71,14 @@ function parseHarnessAuth(o: Record<string, unknown>): HarnessAuthFields {
       ? (o.harness as HarnessKind)
       : undefined
   if (harness === 'claude-code' || harness === 'codex') {
+    // Native ambient auth uses the developer's own CLI login, so no leased token is
+    // required (and none should be sent); otherwise the subscription token is mandatory.
+    const ambientAuth = o.ambientAuth === true
     return {
       harness,
-      subscriptionToken: str(o.subscriptionToken, 'subscriptionToken'),
+      ...(ambientAuth
+        ? { ambientAuth: true }
+        : { subscriptionToken: str(o.subscriptionToken, 'subscriptionToken') }),
       ...(typeof o.subscriptionBaseUrl === 'string' && o.subscriptionBaseUrl
         ? { subscriptionBaseUrl: o.subscriptionBaseUrl }
         : {}),
@@ -307,6 +318,15 @@ export interface AgentJob extends HarnessAuthFields {
    * no-op. Default true.
    */
   noChangesIsError?: boolean
+  /**
+   * Reuse a STABLE per-repo checkout (clean-sweep + fetch + switch branch) instead of a
+   * fresh clone into a throwaway temp dir. Set ONLY by the local warm-pool transport,
+   * whose containers are reused across runs; absent everywhere else, so every other
+   * runtime keeps the ephemeral fresh-clone behaviour. The explore + ordinary coding
+   * flows honour it; bootstrap (resets `.git`) and conflict-resolution (needs full
+   * multi-branch state) always run ephemeral regardless.
+   */
+  persistentCheckout?: boolean
 }
 
 /** The generic agent response. `custom` carries a structured explore result. */
@@ -459,6 +479,7 @@ export function parseAgentJob(input: unknown): AgentJob {
       : {}),
     ...(pr ? { pr } : {}),
     ...(o.noChangesIsError === false ? { noChangesIsError: false } : {}),
+    ...(o.persistentCheckout === true ? { persistentCheckout: true } : {}),
   }
   assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
   if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')

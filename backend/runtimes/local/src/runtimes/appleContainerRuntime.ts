@@ -130,7 +130,10 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
   readonly id = 'apple' as const
   readonly binary: string
   readonly hostAlias: string
-  readonly capabilities = { localDind: false }
+  // One-VM-per-container with a deterministic-name identity: no Docker-in-Docker, and the
+  // warm pool isn't supported (re-leasing a name-keyed VM is messy) — so the transport
+  // keeps the per-run path here even when a pool size is configured.
+  readonly capabilities = { localDind: false, pooling: false }
 
   constructor(options: { binary?: string; hostAlias: string }) {
     this.binary = options.binary ?? 'container'
@@ -204,5 +207,10 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
       await exec(['delete', '--force', ...rows.map((r) => r.name ?? r.id)]).catch(() => undefined)
     }
     return rows.length
+  }
+
+  /** Apple `container` doesn't support the warm pool (see capabilities.pooling=false). */
+  async listPoolMembers(): Promise<string[]> {
+    return []
   }
 }

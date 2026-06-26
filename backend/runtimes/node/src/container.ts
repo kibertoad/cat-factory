@@ -601,6 +601,9 @@ function buildNodeContainerExecutor(
           hasPersonalSubscription: (userId, vendor) => personalSubscriptions.has(userId, vendor),
         }
       : {}),
+    // Native local execution (local facade, opt-in): run subscription-harness agents with
+    // the developer's OWN installed CLI + ambient login instead of leasing a credential.
+    ...(config.nativeAmbientAuth ? { nativeAmbientAuth: (h) => h !== 'pi' } : {}),
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
     // Point container agents' web search at the backend search proxy (no provider key in
     // the sandbox), but only for a run whose account has keys (resolved per run — see the

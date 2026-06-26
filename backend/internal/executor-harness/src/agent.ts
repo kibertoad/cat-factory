@@ -11,6 +11,7 @@ import {
   headCommit,
   mergeBranch,
   openPullRequest,
+  prepareExistingCheckout,
   pushBranch,
   reinitAndPush,
   unmergedPaths,
@@ -18,6 +19,7 @@ import {
 import type { PiRunStats } from './pi.js'
 import { noChangesReason, runCodingAgent } from './coding-agent.js'
 import {
+  acquireRepoCheckout,
   agentNeverActed,
   agentOutputTail,
   NEVER_ACTED_CAUSE,
@@ -129,151 +131,170 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
     repo: `${job.repo.owner}/${job.repo.name}`,
     branch: job.branch,
   }
-  return withWorkspace('agent-explore', async (dir) => {
-    log.info('agent(explore): cloning', trace)
-    await cloneRepo({
-      repo: { ...job.repo, baseBranch: job.branch },
-      ghToken: job.ghToken,
-      dir,
-      full: job.full,
-      signal: opts.signal,
-    })
+  return acquireRepoCheckout(
+    { persistent: job.persistentCheckout === true, prefix: 'agent-explore', repo: job.repo },
+    async (dir) => {
+      if (job.persistentCheckout) {
+        log.info('agent(explore): preparing reused checkout', trace)
+        await prepareExistingCheckout({
+          dir,
+          repo: job.repo,
+          ghToken: job.ghToken,
+          branch: job.branch,
+          baseBranch: job.branch,
+          existing: true,
+          signal: opts.signal,
+        })
+      } else {
+        log.info('agent(explore): cloning', trace)
+        await cloneRepo({
+          repo: { ...job.repo, baseBranch: job.branch },
+          ghToken: job.ghToken,
+          dir,
+          full: job.full,
+          signal: opts.signal,
+        })
+      }
 
-    // Monorepo: run with cwd set to the service subtree (created if missing), mirroring
-    // the coding flow so a service-scoped exploration sees the right subdirectory.
-    const serviceDirectory = job.repo.serviceDirectory
-    const workDir = serviceDirectory ? join(dir, serviceDirectory) : dir
-    if (serviceDirectory) await mkdir(workDir, { recursive: true })
+      // Monorepo: run with cwd set to the service subtree (created if missing), mirroring
+      // the coding flow so a service-scoped exploration sees the right subdirectory.
+      const serviceDirectory = job.repo.serviceDirectory
+      const workDir = serviceDirectory ? join(dir, serviceDirectory) : dir
+      if (serviceDirectory) await mkdir(workDir, { recursive: true })
 
-    // Optional infra stand-up (the tester): bring the service's docker-compose
-    // dependencies up at the repo root for the duration of the run, tearing them down in
-    // the `finally`. A stand-up failure is non-fatal — it's surfaced to the agent as a
-    // prompt note so it can still run what it can and flag dependency gaps as concerns.
-    // The run-mode guidance itself lives in the backend-composed system/user prompt; the
-    // harness only manages the lifecycle + this dynamic stand-up note.
-    const infra = job.infra
-    const standUp = infra ? await standUpInfra(dir, infra, opts.signal, trace) : { started: false }
-    const userPrompt = standUp.note
-      ? `${job.userPrompt}\n\nNote: standing the infra up reported a problem (${standUp.note}). ` +
-        `Test what you can and flag any dependency-related gaps as concerns.`
-      : job.userPrompt
+      // Optional infra stand-up (the tester): bring the service's docker-compose
+      // dependencies up at the repo root for the duration of the run, tearing them down in
+      // the `finally`. A stand-up failure is non-fatal — it's surfaced to the agent as a
+      // prompt note so it can still run what it can and flag dependency gaps as concerns.
+      // The run-mode guidance itself lives in the backend-composed system/user prompt; the
+      // harness only manages the lifecycle + this dynamic stand-up note.
+      const infra = job.infra
+      const standUp = infra
+        ? await standUpInfra(dir, infra, opts.signal, trace)
+        : { started: false }
+      const userPrompt = standUp.note
+        ? `${job.userPrompt}\n\nNote: standing the infra up reported a problem (${standUp.note}). ` +
+          `Test what you can and flag any dependency-related gaps as concerns.`
+        : job.userPrompt
 
-    try {
-      log.info('agent(explore): running agent', { ...trace, serviceDirectory })
-      const {
-        summary,
-        stats,
-        stderrTail,
-        usage,
-        diagnostics: runDiag,
-      } = await runAgentInWorkspace(
-        {
-          dir: workDir,
-          systemPrompt: job.systemPrompt,
-          userPrompt,
-          model: job.model,
-          harness: job.harness,
-          subscriptionToken: job.subscriptionToken,
-          subscriptionBaseUrl: job.subscriptionBaseUrl,
-          proxyBaseUrl: job.proxyBaseUrl,
-          sessionToken: job.sessionToken,
-          serviceDirectory,
-          // Read-only: it inspects and reports, making no edits — so the no-progress
-          // guard's no-edit bound must not fire on its legitimately edit-free run.
-          expectsEdits: false,
-          webToolsGuidance: job.webToolsGuidance,
-          webSearchProxy: job.webSearch,
-          contextFiles: job.contextFiles,
-        },
-        opts,
-      )
-
-      if (!summary.trim()) {
-        return {
+      try {
+        log.info('agent(explore): running agent', { ...trace, serviceDirectory })
+        const {
           summary,
           stats,
-          error: noOutputReason(stats, stderrTail),
-          ...(usage ? { usage } : {}),
-        }
-      }
-
-      // Opt-in (document producers): a final answer cut off at the output ceiling — or empty —
-      // must FAIL LOUDLY here, BEFORE the structured repair below could launder a truncated
-      // reply into a half-baked doc the backend then shards/commits + hands onward. Mirrors the
-      // bespoke `/spec` handler's `unusableFinalAnswerCause` gate (which drove the old loop).
-      if (job.output?.kind === 'structured' && job.output.failOnUnusableFinal) {
-        const unusable = unusableFinalAnswerCause(runDiag)
-        if (unusable) {
-          return {
-            summary,
-            stats,
-            error: `the agent did not return a usable result: ${unusable}.${agentOutputTail(stderrTail, summary)}`,
-            ...(usage ? { usage } : {}),
-          }
-        }
-      }
-
-      // Prose: the summary IS the deliverable.
-      if (job.output?.kind !== 'structured') {
-        log.info('agent(explore): done (prose)', { ...trace, ...stats })
-        return { summary, stats, ...(usage ? { usage } : {}) }
-      }
-
-      // Structured: parse the agent's JSON. With repair enabled (default) a malformed
-      // reply gets ONE structured repair call before giving up; with `repair:false` we
-      // parse directly (no repair channel). The backend coerces/validates + renders from
-      // the returned object in a post-op.
-      let custom: unknown = null
-      let diagnostics: StructuredOutputDiagnostics | undefined
-      if (job.output.repair === false) {
-        try {
-          custom = extractJsonObject(summary)
-        } catch {
-          custom = null
-        }
-      } else {
-        const resolved = await resolveStructuredOutput(
+          stderrTail,
+          usage,
+          diagnostics: runDiag,
+        } = await runAgentInWorkspace(
           {
-            label: 'agent',
-            shapeHint: job.output.shapeHint ?? 'Expected a single JSON object.',
-            parse: (text) => extractJsonObject(text),
-          },
-          summary,
-          {
+            dir: workDir,
+            systemPrompt: job.systemPrompt,
+            userPrompt,
+            model: job.model,
             harness: job.harness,
             subscriptionToken: job.subscriptionToken,
             subscriptionBaseUrl: job.subscriptionBaseUrl,
+            ambientAuth: job.ambientAuth,
             proxyBaseUrl: job.proxyBaseUrl,
             sessionToken: job.sessionToken,
-            model: job.model,
-            jobId: job.jobId,
-            signal: opts.signal,
+            serviceDirectory,
+            // Read-only: it inspects and reports, making no edits — so the no-progress
+            // guard's no-edit bound must not fire on its legitimately edit-free run.
+            expectsEdits: false,
+            webToolsGuidance: job.webToolsGuidance,
+            webSearchProxy: job.webSearch,
+            contextFiles: job.contextFiles,
           },
+          opts,
         )
-        custom = resolved.value
-        diagnostics = resolved.diagnostics
-      }
-      if (custom === undefined || custom === null) {
-        return {
-          summary,
-          stats,
-          error: noStructuredReason(stats, stderrTail, diagnostics),
-          ...(usage ? { usage } : {}),
+
+        if (!summary.trim()) {
+          return {
+            summary,
+            stats,
+            error: noOutputReason(stats, stderrTail),
+            ...(usage ? { usage } : {}),
+          }
         }
+
+        // Opt-in (document producers): a final answer cut off at the output ceiling — or empty —
+        // must FAIL LOUDLY here, BEFORE the structured repair below could launder a truncated
+        // reply into a half-baked doc the backend then shards/commits + hands onward. Mirrors the
+        // bespoke `/spec` handler's `unusableFinalAnswerCause` gate (which drove the old loop).
+        if (job.output?.kind === 'structured' && job.output.failOnUnusableFinal) {
+          const unusable = unusableFinalAnswerCause(runDiag)
+          if (unusable) {
+            return {
+              summary,
+              stats,
+              error: `the agent did not return a usable result: ${unusable}.${agentOutputTail(stderrTail, summary)}`,
+              ...(usage ? { usage } : {}),
+            }
+          }
+        }
+
+        // Prose: the summary IS the deliverable.
+        if (job.output?.kind !== 'structured') {
+          log.info('agent(explore): done (prose)', { ...trace, ...stats })
+          return { summary, stats, ...(usage ? { usage } : {}) }
+        }
+
+        // Structured: parse the agent's JSON. With repair enabled (default) a malformed
+        // reply gets ONE structured repair call before giving up; with `repair:false` we
+        // parse directly (no repair channel). The backend coerces/validates + renders from
+        // the returned object in a post-op.
+        let custom: unknown = null
+        let diagnostics: StructuredOutputDiagnostics | undefined
+        if (job.output.repair === false) {
+          try {
+            custom = extractJsonObject(summary)
+          } catch {
+            custom = null
+          }
+        } else {
+          const resolved = await resolveStructuredOutput(
+            {
+              label: 'agent',
+              shapeHint: job.output.shapeHint ?? 'Expected a single JSON object.',
+              parse: (text) => extractJsonObject(text),
+            },
+            summary,
+            {
+              harness: job.harness,
+              subscriptionToken: job.subscriptionToken,
+              subscriptionBaseUrl: job.subscriptionBaseUrl,
+              proxyBaseUrl: job.proxyBaseUrl,
+              sessionToken: job.sessionToken,
+              model: job.model,
+              jobId: job.jobId,
+              signal: opts.signal,
+            },
+          )
+          custom = resolved.value
+          diagnostics = resolved.diagnostics
+        }
+        if (custom === undefined || custom === null) {
+          return {
+            summary,
+            stats,
+            error: noStructuredReason(stats, stderrTail, diagnostics),
+            ...(usage ? { usage } : {}),
+          }
+        }
+        // Stamp the run's actual environment authoritatively onto the structured result when
+        // infra was managed (the tester): which env the suite ran in is decided by the job's
+        // infra spec, NOT the model, so the backend can echo it back to the UI deterministically
+        // even when the model omits it from its JSON (or a structured repair drops it).
+        if (infra && typeof custom === 'object') {
+          ;(custom as Record<string, unknown>).environment = infra.environment
+        }
+        log.info('agent(explore): done (structured)', { ...trace, ...stats })
+        return { summary, custom, stats, ...(usage ? { usage } : {}) }
+      } finally {
+        if (infra) await tearDownInfra(dir, infra)
       }
-      // Stamp the run's actual environment authoritatively onto the structured result when
-      // infra was managed (the tester): which env the suite ran in is decided by the job's
-      // infra spec, NOT the model, so the backend can echo it back to the UI deterministically
-      // even when the model omits it from its JSON (or a structured repair drops it).
-      if (infra && typeof custom === 'object') {
-        ;(custom as Record<string, unknown>).environment = infra.environment
-      }
-      log.info('agent(explore): done (structured)', { ...trace, ...stats })
-      return { summary, custom, stats, ...(usage ? { usage } : {}) }
-    } finally {
-      if (infra) await tearDownInfra(dir, infra)
-    }
-  })
+    },
+  )
 }
 
 /**
@@ -308,11 +329,13 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
       harness: job.harness,
       subscriptionToken: job.subscriptionToken,
       subscriptionBaseUrl: job.subscriptionBaseUrl,
+      ambientAuth: job.ambientAuth,
       proxyBaseUrl: job.proxyBaseUrl,
       sessionToken: job.sessionToken,
       commitMessage: job.commitMessage ?? job.pr?.title ?? 'Agent changes',
       webToolsGuidance: job.webToolsGuidance,
       webSearchProxy: job.webSearch,
+      ...(job.persistentCheckout ? { persistentCheckout: true } : {}),
     },
     opts,
   )
@@ -422,6 +445,7 @@ async function runConflictResolution(job: AgentJob, opts: RunOptions): Promise<A
         harness: job.harness,
         subscriptionToken: job.subscriptionToken,
         subscriptionBaseUrl: job.subscriptionBaseUrl,
+        ambientAuth: job.ambientAuth,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
         contextFiles: job.contextFiles,
@@ -549,6 +573,7 @@ async function runBootstrap(job: AgentJob, opts: RunOptions): Promise<AgentResul
         harness: job.harness,
         subscriptionToken: job.subscriptionToken,
         subscriptionBaseUrl: job.subscriptionBaseUrl,
+        ambientAuth: job.ambientAuth,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
       },

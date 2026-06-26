@@ -144,6 +144,9 @@ export async function personalGateForBlock(
   user: SessionPayload | undefined,
   password: string | undefined,
 ): Promise<PersonalCredentialGate> {
+  // Native local execution runs the developer's own CLI with its ambient login, so no
+  // leased/pooled/personal credential is involved — the individual-usage gate is moot.
+  if (container.config.nativeAmbientAuth) return { initiatedBy: user?.id ?? null }
   const vendors = await container.executionService.individualVendorsForBlock(
     workspaceId,
     blockId,
@@ -161,6 +164,8 @@ export async function personalGateForRun(
   user: SessionPayload | undefined,
   password: string | undefined,
 ): Promise<PersonalCredentialGate> {
+  // See personalGateForBlock: native ambient execution uses no managed credential.
+  if (container.config.nativeAmbientAuth) return { initiatedBy: user?.id ?? null }
   const vendors = await container.executionService.individualVendorsForRun(
     workspaceId,
     executionId,

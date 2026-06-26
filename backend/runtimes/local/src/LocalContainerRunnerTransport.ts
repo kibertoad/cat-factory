@@ -34,6 +34,15 @@ const execFileAsync = promisify(execFile)
 // its endpoint, re-attach the run's later steps to it, poll the harness over HTTP, and
 // reap it. The harness reaches this service's LLM proxy at the runtime's host alias and
 // clones/pushes to github.com directly with the per-job token in the request body.
+//
+// WARM POOL (opt-in, `LOCAL_POOL_SIZE>0` on a pooling-capable runtime): instead of cold
+// -starting a container per run, idle harness containers are kept ready and LEASED to a
+// run for its duration, then RETURNED to the pool. A leased member is preferentially one
+// that already holds a checkout of the run's repo, so the harness does a `git fetch` +
+// branch switch (persistent checkout) instead of a fresh clone — the run-spec carries
+// `persistentCheckout: true` so the harness reuses its `/workspace/<owner>/<repo>` dir.
+// Lease state lives IN THIS PROCESS (pool members aren't labelled by run id), so a run is
+// addressed by the member it currently holds rather than a container label.
 
 // The failed-poll error the engine classifies as a container eviction (matched by
 // orchestration `isContainerEvictionError`, also used by the bootstrap flow). A
@@ -80,9 +89,41 @@ export interface LocalContainerRunnerTransportOptions {
    * best-effort rootless daemon (e.g. under rootless Podman).
    */
   privilegedTestJobs?: boolean
+  /**
+   * Warm-pool size: the max number of idle harness containers kept ready for re-lease.
+   * `0` (default) disables pooling entirely — every run cold-starts its own container and
+   * is torn down on release, the classic behaviour. Pooling additionally requires a
+   * runtime whose `capabilities.pooling` is true (the Docker family); it is ignored on
+   * Apple `container`.
+   */
+  poolSize?: number
+  /** Members to pre-warm at boot (clamped to `poolMax`). Default 0. */
+  poolMinWarm?: number
+  /**
+   * Hard cap on total members (leased + idle). A lease beyond this starts a TRANSIENT
+   * member that is removed on release rather than returned to the pool. Default = poolSize.
+   */
+  poolMax?: number
+  /** How long an idle pooled member is kept before eviction. Default 10 min. */
+  poolIdleTtlMs?: number
 }
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+/** A warm-pool container the transport leases to runs (lease state is in-process). */
+interface PoolMember extends ContainerEndpoint {
+  /** Internal member id (used only for the container name; never a run-id label). */
+  id: string
+  containerId: string
+  /** `owner/name` of the repo this member last checked out (affinity hint). */
+  repo?: string
+  /** The run id currently holding this member, or undefined when idle. */
+  leasedTo?: string
+  /** Over-capacity member: removed on release instead of returned to the pool. */
+  transient: boolean
+  /** Idle-eviction timer set while the member is unleased. */
+  idleTimer?: ReturnType<typeof setTimeout>
+}
 
 export class LocalContainerRunnerTransport implements RunnerTransport {
   private readonly adapter: ContainerRuntimeAdapter
@@ -95,9 +136,16 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   private readonly readyTimeoutMs: number
   private readonly requestTimeoutMs: number
   private readonly privilegedTestJobs: boolean
+  private readonly poolSize: number
+  private readonly poolMax: number
+  private readonly poolMinWarm: number
+  private readonly poolIdleTtlMs: number
 
   /** runId → resolved container handle, to spare a CLI lookup on the hot poll path. */
   private readonly cache = new Map<string, { containerId: string } & ContainerEndpoint>()
+
+  /** Warm-pool members (only used when pooling is enabled). Leased in-process by run id. */
+  private readonly members: PoolMember[] = []
 
   constructor(options: LocalContainerRunnerTransportOptions) {
     this.adapter =
@@ -108,6 +156,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         hostAlias: 'host.docker.internal',
         addHostGateway: true,
         localDind: true,
+        pooling: true,
       })
     this.image = options.image
     this.sharedSecret = options.sharedSecret ?? randomBytes(24).toString('hex')
@@ -120,11 +169,20 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     this.readyTimeoutMs = options.readyTimeoutMs ?? 60_000
     this.requestTimeoutMs = options.requestTimeoutMs ?? 30_000
     this.privilegedTestJobs = options.privilegedTestJobs ?? true
+    this.poolSize = Math.max(0, Math.floor(options.poolSize ?? 0))
+    this.poolMax = Math.max(this.poolSize, Math.floor(options.poolMax ?? this.poolSize))
+    this.poolMinWarm = Math.max(0, Math.min(Math.floor(options.poolMinWarm ?? 0), this.poolMax))
+    this.poolIdleTtlMs = Math.max(0, Math.floor(options.poolIdleTtlMs ?? 600_000))
   }
 
   /** The runtime's capabilities (e.g. whether local Docker-in-Docker testing is possible). */
   get capabilities() {
     return this.adapter.capabilities
+  }
+
+  /** Whether the warm pool is active (a size is configured AND the runtime supports it). */
+  private get poolingEnabled(): boolean {
+    return this.poolSize > 0 && this.adapter.capabilities.pooling
   }
 
   async dispatch(
@@ -133,6 +191,8 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
   ): Promise<void> {
+    if (this.poolingEnabled) return this.dispatchPooled(ref, spec, kind)
+
     // The container is per-RUN: a run's first step starts it, later steps re-attach to
     // it (resolved by the run id), and the harness keys each step's job by the per-step
     // `ref.jobId` carried in the spec body.
@@ -169,20 +229,12 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     // POST the job to the single harness endpoint, with the kind in the body. Idempotent:
     // re-attaching to an already-running container re-POSTs, which the harness's per-id
     // registry treats as a re-attach.
-    const res = await this.fetchImpl(this.url(resolved, '/jobs'), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', [SECRET_HEADER]: this.sharedSecret },
-      body: JSON.stringify({ ...spec, kind }),
-      signal: AbortSignal.timeout(this.requestTimeoutMs),
-    })
-    if (!res.ok) {
-      throw new Error(
-        `Local container dispatch failed (HTTP ${res.status}): ${await safeText(res)}`,
-      )
-    }
+    await this.postJob(resolved, { ...spec, kind })
   }
 
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
+    if (this.poolingEnabled) return this.pollPooled(ref)
+
     const resolved = await this.resolve(ref.runId)
     // No container for this run at all → it was evicted/reaped (or never started).
     if (!resolved) return { state: 'failed', error: EVICTION_ERROR }
@@ -219,9 +271,12 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   /**
    * Reclaim the per-RUN container now rather than leaving it idle — this tears down the
    * whole run's container (and with it any step still running in it). Best-effort and
-   * idempotent: removing an already-gone container is a no-op.
+   * idempotent: removing an already-gone container is a no-op. With pooling enabled, this
+   * RETURNS the leased member to the pool (or removes a transient/over-capacity one).
    */
   async release(ref: RunnerJobRef): Promise<void> {
+    if (this.poolingEnabled) return this.releasePooled(ref)
+
     const containerId =
       this.cache.get(ref.runId)?.containerId ?? (await this.adapter.find(this.exec, ref.runId))
     this.cache.delete(ref.runId)
@@ -232,13 +287,221 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   /**
    * Reap exited per-run containers this transport manages — orphans a crash or hard
    * kill left behind (release() never ran for them). Best-effort; returns the count
-   * removed. Call once at boot, before any job is in flight.
+   * removed. Call once at boot, before any job is in flight. When pooling is enabled it
+   * ALSO drains pool members orphaned by a previous process (their in-process lease state
+   * died with it, so they can't be safely re-leased) and pre-warms the configured minimum.
    */
   async reapExited(): Promise<number> {
-    return this.adapter.reapExited(this.exec)
+    const reaped = await this.adapter.reapExited(this.exec)
+    if (this.poolingEnabled) {
+      await this.drainPoolOrphans()
+      await this.prewarmPool()
+    }
+    return reaped
+  }
+
+  // --- warm pool ----------------------------------------------------------
+
+  private async dispatchPooled(
+    ref: RunnerJobRef,
+    spec: Record<string, unknown>,
+    kind: RunnerDispatchKind,
+  ): Promise<void> {
+    const repoKey = repoKeyOf(spec)
+    // Later steps of the same run re-attach to the member it already holds (idempotent).
+    let member = this.members.find((m) => m.leasedTo === ref.runId)
+    if (!member) member = await this.acquireMember(ref.runId, repoKey)
+    if (repoKey) member.repo = repoKey
+    // Tell the harness to reuse its per-repo checkout (clean-sweep + fetch + switch branch)
+    // rather than clone fresh — the whole point of repo-affinity pooling.
+    await this.postJob(member, { ...spec, kind, persistentCheckout: true })
+  }
+
+  private async pollPooled(ref: RunnerJobRef): Promise<RunnerJobView> {
+    const member = this.members.find((m) => m.leasedTo === ref.runId)
+    if (!member) return { state: 'failed', error: EVICTION_ERROR }
+    let res: Response
+    try {
+      res = await this.fetchImpl(this.url(member, `/jobs/${encodeURIComponent(ref.jobId)}`), {
+        method: 'GET',
+        headers: { [SECRET_HEADER]: this.sharedSecret },
+        signal: AbortSignal.timeout(this.requestTimeoutMs),
+      })
+    } catch (err) {
+      // The member died mid-run: drop it from the pool so it isn't re-leased, and report
+      // an eviction so the stale-run sweeper re-drives (a retry leases a healthy member
+      // and the harness's persistent checkout resumes the work branch).
+      if (!(await this.adapter.isRunning(this.exec, member.containerId))) {
+        this.dropMember(member)
+        return { state: 'failed', error: EVICTION_ERROR }
+      }
+      throw err
+    }
+    // Member is up but the harness lost this job id (reaped after completion / recreated):
+    // an eviction, but the member itself is healthy so keep it leased for a re-dispatch.
+    if (res.status === 404) return { state: 'failed', error: EVICTION_ERROR }
+    if (!res.ok) {
+      throw new Error(
+        `Local container job poll failed (HTTP ${res.status}): ${await safeText(res)}`,
+      )
+    }
+    return (await res.json()) as RunnerJobView
+  }
+
+  private async releasePooled(ref: RunnerJobRef): Promise<void> {
+    const member = this.members.find((m) => m.leasedTo === ref.runId)
+    if (!member) return
+    member.leasedTo = undefined
+    // An over-capacity (transient) member is torn down; a pooled one returns to the warm
+    // set with an idle-eviction timer, and we trim any idle excess beyond `poolSize`.
+    if (member.transient) {
+      this.dropMember(member)
+      await this.adapter.remove(this.exec, member.containerId)
+      return
+    }
+    this.scheduleIdleEviction(member)
+    await this.trimIdle()
+  }
+
+  /** Lease a member for `runId`, preferring repo affinity, starting one if needed. */
+  private async acquireMember(runId: string, repoKey: string | undefined): Promise<PoolMember> {
+    // Prefer an idle member already holding this repo (fastest: fetch + switch branch),
+    // then any idle member, replacing any that turns out to be unhealthy.
+    for (;;) {
+      const idle =
+        (repoKey ? this.members.find((m) => !m.leasedTo && m.repo === repoKey) : undefined) ??
+        this.members.find((m) => !m.leasedTo)
+      if (!idle) break
+      this.clearIdleEviction(idle)
+      if (await this.isHealthy(idle)) {
+        idle.leasedTo = runId
+        return idle
+      }
+      // Unhealthy idle member → remove and try the next candidate.
+      this.dropMember(idle)
+      await this.adapter.remove(this.exec, idle.containerId)
+    }
+    // No idle member: start a new one. Within the cap it's a pooled member; beyond the cap
+    // it's a transient member torn down on release (so a burst never blocks).
+    const transient = this.members.length >= this.poolMax
+    const member = await this.startMember(transient)
+    member.leasedTo = runId
+    return member
+  }
+
+  /** Start a fresh pool member container and wait for it to be healthy. */
+  private async startMember(transient: boolean): Promise<PoolMember> {
+    const id = `pool-${randomBytes(6).toString('hex')}`
+    const containerId = await this.adapter.run(this.exec, {
+      runId: id,
+      image: this.image,
+      sharedSecret: this.sharedSecret,
+      // Pooled members are reused across runs (incl. Tester runs), so they run privileged
+      // when the runtime supports DinD — the same rule as a per-run container. Per-run
+      // instance sizing is NOT applied to a reused member (it keeps host defaults).
+      privileged: this.privilegedTestJobs,
+      network: this.network,
+      env: this.extraEnv,
+      pool: true,
+    })
+    const endpoint = await this.waitForEndpoint(containerId)
+    await this.waitForHealth(endpoint)
+    const member: PoolMember = { id, containerId, transient, ...endpoint }
+    this.members.push(member)
+    return member
+  }
+
+  /** Pre-warm idle members up to `poolMinWarm` (best-effort; a failure is logged-and-skipped). */
+  private async prewarmPool(): Promise<void> {
+    while (this.members.length < this.poolMinWarm) {
+      try {
+        const member = await this.startMember(false)
+        this.scheduleIdleEviction(member)
+      } catch {
+        break
+      }
+    }
+  }
+
+  /**
+   * Remove every pool member the runtime reports from a PREVIOUS process — their
+   * in-process lease state died with that process, so they can't be safely re-leased.
+   * Best-effort and idempotent.
+   */
+  private async drainPoolOrphans(): Promise<void> {
+    const ids = await this.adapter.listPoolMembers(this.exec).catch(() => [])
+    for (const containerId of ids) {
+      await this.adapter.remove(this.exec, containerId).catch(() => undefined)
+    }
+  }
+
+  /** Remove idle members beyond `poolSize` (oldest first) so the warm set stays bounded. */
+  private async trimIdle(): Promise<void> {
+    const idle = this.members.filter((m) => !m.leasedTo)
+    let excess = idle.length - this.poolSize
+    for (const member of idle) {
+      if (excess <= 0) break
+      this.dropMember(member)
+      await this.adapter.remove(this.exec, member.containerId)
+      excess--
+    }
+  }
+
+  private scheduleIdleEviction(member: PoolMember): void {
+    this.clearIdleEviction(member)
+    if (this.poolIdleTtlMs <= 0) return
+    member.idleTimer = setTimeout(() => {
+      // Only evict if still idle when the timer fires.
+      if (member.leasedTo) return
+      this.dropMember(member)
+      void this.adapter.remove(this.exec, member.containerId).catch(() => undefined)
+    }, this.poolIdleTtlMs)
+    member.idleTimer.unref?.()
+  }
+
+  private clearIdleEviction(member: PoolMember): void {
+    if (member.idleTimer) {
+      clearTimeout(member.idleTimer)
+      member.idleTimer = undefined
+    }
+  }
+
+  /** Drop a member from the in-process pool (does NOT remove the container). */
+  private dropMember(member: PoolMember): void {
+    this.clearIdleEviction(member)
+    const i = this.members.indexOf(member)
+    if (i !== -1) this.members.splice(i, 1)
+  }
+
+  /** A single quick `/health` probe (vs `waitForHealth`'s retry loop) for re-lease. */
+  private async isHealthy(endpoint: ContainerEndpoint): Promise<boolean> {
+    try {
+      const res = await this.fetchImpl(this.url(endpoint, '/health'), {
+        method: 'GET',
+        signal: AbortSignal.timeout(Math.min(this.requestTimeoutMs, 5_000)),
+      })
+      return res.ok
+    } catch {
+      return false
+    }
   }
 
   // --- internals ----------------------------------------------------------
+
+  /** POST a job body to a container's harness, throwing on a non-OK response. */
+  private async postJob(endpoint: ContainerEndpoint, body: Record<string, unknown>): Promise<void> {
+    const res = await this.fetchImpl(this.url(endpoint, '/jobs'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', [SECRET_HEADER]: this.sharedSecret },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(this.requestTimeoutMs),
+    })
+    if (!res.ok) {
+      throw new Error(
+        `Local container dispatch failed (HTTP ${res.status}): ${await safeText(res)}`,
+      )
+    }
+  }
 
   private url(endpoint: ContainerEndpoint, path: string): string {
     return `http://${endpoint.host}:${endpoint.port}${path}`
@@ -301,6 +564,15 @@ async function safeText(res: Response): Promise<string> {
   }
 }
 
+/** The `owner/name` repo-affinity key from a dispatched job spec, when present. */
+function repoKeyOf(spec: Record<string, unknown>): string | undefined {
+  const repo = spec.repo
+  if (typeof repo !== 'object' || repo === null) return undefined
+  const { owner, name } = repo as { owner?: unknown; name?: unknown }
+  if (typeof owner !== 'string' || typeof name !== 'string' || !owner || !name) return undefined
+  return `${owner}/${name}`
+}
+
 /**
  * Build a {@link LocalContainerRunnerTransport} from the process environment. The image
  * ref (`LOCAL_HARNESS_IMAGE`) is required; the runtime adapter is selected by
@@ -317,6 +589,7 @@ export function createLocalContainerTransportFromEnv(
         '(a GHCR pull or a tag built from backend/internal/executor-harness/Dockerfile).',
     )
   }
+  const poolSize = numberEnv(env.LOCAL_POOL_SIZE)
   return new LocalContainerRunnerTransport({
     image,
     adapter: createRuntimeAdapter(env),
@@ -326,5 +599,25 @@ export function createLocalContainerTransportFromEnv(
     // which needs a privileged job container. Set to `false` for runtimes that run
     // nested containers without it (e.g. rootless Podman).
     privilegedTestJobs: env.LOCAL_DOCKER_PRIVILEGED_TEST_JOBS?.trim() !== 'false',
+    // Warm pool (opt-in): keep idle harness containers ready and re-lease them with
+    // repo-affinity checkout reuse. 0 (default) keeps the classic per-run behaviour.
+    ...(poolSize !== undefined ? { poolSize } : {}),
+    ...(numberEnv(env.LOCAL_POOL_MIN_WARM) !== undefined
+      ? { poolMinWarm: numberEnv(env.LOCAL_POOL_MIN_WARM) }
+      : {}),
+    ...(numberEnv(env.LOCAL_POOL_MAX) !== undefined
+      ? { poolMax: numberEnv(env.LOCAL_POOL_MAX) }
+      : {}),
+    ...(numberEnv(env.LOCAL_POOL_IDLE_TTL_MS) !== undefined
+      ? { poolIdleTtlMs: numberEnv(env.LOCAL_POOL_IDLE_TTL_MS) }
+      : {}),
   })
+}
+
+/** Parse a non-negative integer env var, or undefined when unset/blank/invalid. */
+function numberEnv(raw: string | undefined): number | undefined {
+  const trimmed = raw?.trim()
+  if (!trimmed) return undefined
+  const n = Number(trimmed)
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : undefined
 }

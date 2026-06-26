@@ -295,4 +295,11 @@ export interface AppConfig {
    * (the Worker/Node facades leave it undefined). Carries the missing-PAT setup prompt.
    */
   localMode?: LocalModeConfig
+  /**
+   * NATIVE LOCAL EXECUTION (local facade only, opt-in via `LOCAL_NATIVE_AGENTS`): agents
+   * run on the host with the developer's OWN installed `claude` / `codex` CLI and ambient
+   * login. When true the personal-credential gate is skipped (no leased/pooled credential
+   * is used) and the executor flags `ambientAuth`. Absent/false everywhere else.
+   */
+  nativeAmbientAuth?: boolean
 }

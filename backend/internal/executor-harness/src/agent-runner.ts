@@ -31,13 +31,25 @@ export interface SubscriptionRunOptions {
   systemPrompt: string
   /** The concrete task prompt handed to the CLI over stdin. */
   userPrompt: string
-  /** The decrypted subscription credential: an OAuth token (claude) or auth.json blob (codex). */
-  subscriptionToken: string
+  /**
+   * The decrypted subscription credential: an OAuth token (claude) or auth.json blob
+   * (codex). Omitted when `ambientAuth` is set — the CLI uses the developer's own login.
+   */
+  subscriptionToken?: string
   /**
    * Anthropic-compatible base URL for a non-Anthropic Claude-Code vendor (GLM/Kimi).
    * Present ⇒ ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN; absent ⇒ CLAUDE_CODE_OAUTH_TOKEN.
    */
   subscriptionBaseUrl?: string
+  /**
+   * Native local execution: run the developer's ALREADY-INSTALLED CLI with its OWN
+   * ambient login (`~/.claude` / `~/.codex`) — no leased credential, no isolated config
+   * home. Set ONLY by the local native transport (which runs the harness as a host
+   * process); a no-op everywhere else. The agent then runs with the user's personal
+   * subscription, unsandboxed, on their own machine — the explicit trade for skipping the
+   * container.
+   */
+  ambientAuth?: boolean
   /** Aborting this kills the CLI (the job's inactivity/max-duration watchdog). */
   signal?: AbortSignal
   /** Called on every chunk of CLI output, so the watchdog sees the agent is alive. */
@@ -244,12 +256,17 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     }
   }
 
-  // Claude Code persists user config/credentials under its config dir; point that at
-  // an isolated, per-run temp dir OUTSIDE the cloned checkout (`opts.cwd`). Otherwise
-  // the agents that finish with `git add -A` (blueprint/requirements/bootstrap) could
-  // stage a stray `.claude/` directory — and any cached credential in it — into the
-  // pushed branch. Mirrors the Codex CODEX_HOME isolation below; removed in `finally`.
-  const configHome = await mkdtemp(join(tmpdir(), 'cf-claude-'))
+  // Native (ambient) mode: run the developer's installed `claude` with its OWN login —
+  // no isolated config home, no injected credential, no onboarding pre-seed. Otherwise,
+  // Claude Code persists user config/credentials under its config dir; point that at an
+  // isolated, per-run temp dir OUTSIDE the cloned checkout (`opts.cwd`). Otherwise the
+  // agents that finish with `git add -A` (blueprint/requirements/bootstrap) could stage a
+  // stray `.claude/` directory — and any cached credential in it — into the pushed branch.
+  // Mirrors the Codex CODEX_HOME isolation below; removed in `finally`.
+  if (!opts.ambientAuth && !opts.subscriptionToken) {
+    throw new Error('claude-code harness requires a subscription token (or ambientAuth)')
+  }
+  const configHome = opts.ambientAuth ? undefined : await mkdtemp(join(tmpdir(), 'cf-claude-'))
 
   // The config dir is brand-new every run, so Claude Code would otherwise treat this
   // as a first launch and BLOCK on the interactive onboarding / "trust this folder" /
@@ -257,28 +274,34 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   // hanging the job until the watchdog kills it. Pre-seed the config that marks those
   // as already accepted so `-p` starts straight into the run. Best-effort: written
   // before the CLI starts; unknown keys are harmless if a CLI version ignores them.
-  await writeFile(
-    join(configHome, '.claude.json'),
-    JSON.stringify({
-      hasCompletedOnboarding: true,
-      bypassPermissionsModeAccepted: true,
-      hasTrustDialogAccepted: true,
-    }),
-    { mode: 0o600 },
-  ).catch(() => {})
+  // (Ambient mode skips this — the developer's own config is already onboarded.)
+  if (configHome) {
+    await writeFile(
+      join(configHome, '.claude.json'),
+      JSON.stringify({
+        hasCompletedOnboarding: true,
+        bypassPermissionsModeAccepted: true,
+        hasTrustDialogAccepted: true,
+      }),
+      { mode: 0o600 },
+    ).catch(() => {})
+  }
 
   // Anthropic itself authenticates with the subscription OAuth token; a
   // non-Anthropic Claude-Code vendor (GLM via Z.ai, Kimi via Moonshot, DeepSeek)
   // points Claude Code at its Anthropic-compatible endpoint with an auth-token key.
-  const env: Record<string, string> = {
-    CLAUDE_CONFIG_DIR: configHome,
-    ...(opts.subscriptionBaseUrl
-      ? {
-          ANTHROPIC_BASE_URL: opts.subscriptionBaseUrl,
-          ANTHROPIC_AUTH_TOKEN: opts.subscriptionToken,
-        }
-      : { CLAUDE_CODE_OAUTH_TOKEN: opts.subscriptionToken }),
-  }
+  // Ambient mode injects neither — the CLI uses the developer's logged-in `~/.claude`.
+  const env: Record<string, string> = opts.ambientAuth
+    ? {}
+    : {
+        CLAUDE_CONFIG_DIR: configHome!,
+        ...(opts.subscriptionBaseUrl
+          ? {
+              ANTHROPIC_BASE_URL: opts.subscriptionBaseUrl,
+              ANTHROPIC_AUTH_TOKEN: opts.subscriptionToken!,
+            }
+          : { CLAUDE_CODE_OAUTH_TOKEN: opts.subscriptionToken! }),
+      }
 
   try {
     const { stderrTail } = await streamCli(
@@ -302,14 +325,14 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       opts.userPrompt,
       opts,
       env,
-      secretsToRedact(opts.subscriptionToken),
+      opts.subscriptionToken ? secretsToRedact(opts.subscriptionToken) : [],
       onEvent,
     )
 
     return { summary, stats, stderrTail, ...(usage ? { usage } : {}) }
   } finally {
     // Never leave the config dir (and any cached credential) on disk past the run.
-    await rm(configHome, { recursive: true, force: true }).catch(() => {})
+    if (configHome) await rm(configHome, { recursive: true, force: true }).catch(() => {})
   }
 }
 
@@ -378,9 +401,17 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
   // copy; if OpenAI ever rotates refresh tokens on use, a pooled Codex token would
   // eventually need to be re-connected by the user. Claude OAuth tokens (from
   // `claude setup-token`) are long-lived and unaffected.
-  const codexHome = await mkdtemp(join(tmpdir(), 'cf-codex-'))
-  await writeFile(join(codexHome, 'auth.json'), opts.subscriptionToken, { mode: 0o600 })
-  await writeFile(join(codexHome, 'config.toml'), 'cli_auth_credentials_store = "file"\n', 'utf8')
+  // Native (ambient) mode: run the developer's installed `codex` with its OWN login —
+  // no isolated CODEX_HOME, no injected auth.json. Otherwise write the leased credential
+  // to a per-run temp home kept OUTSIDE the checkout (and removed in `finally`).
+  if (!opts.ambientAuth && !opts.subscriptionToken) {
+    throw new Error('codex harness requires a subscription token (or ambientAuth)')
+  }
+  const codexHome = opts.ambientAuth ? undefined : await mkdtemp(join(tmpdir(), 'cf-codex-'))
+  if (codexHome) {
+    await writeFile(join(codexHome, 'auth.json'), opts.subscriptionToken!, { mode: 0o600 })
+    await writeFile(join(codexHome, 'config.toml'), 'cli_auth_credentials_store = "file"\n', 'utf8')
+  }
 
   const onEvent = (event: Record<string, unknown>): void => {
     const type = typeof event.type === 'string' ? event.type : ''
@@ -422,15 +453,15 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
       ],
       prompt,
       opts,
-      { CODEX_HOME: codexHome },
-      secretsToRedact(opts.subscriptionToken),
+      codexHome ? { CODEX_HOME: codexHome } : {},
+      opts.subscriptionToken ? secretsToRedact(opts.subscriptionToken) : [],
       onEvent,
     )
 
     return { summary, stats, stderrTail, ...(usage ? { usage } : {}) }
   } finally {
     // Never leave the decrypted credential on disk past the run.
-    await rm(codexHome, { recursive: true, force: true }).catch(() => {})
+    if (codexHome) await rm(codexHome, { recursive: true, force: true }).catch(() => {})
   }
 }
 
