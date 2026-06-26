@@ -4,7 +4,12 @@
 // in dev, test and prod). `start()` boots an HTTP server; `createServer()` returns the
 // app (for embedding/tests); `buildNodeContainer()` is the composition root.
 export { createApp, createServer, start, type CreateServerOptions } from './server.js'
-export { buildNodeContainer, type NodeContainerOptions } from './container.js'
+export {
+  buildNodeContainer,
+  buildNodeResolveTransport,
+  withProvisioningLog,
+  type NodeContainerOptions,
+} from './container.js'
 export { loadNodeConfig } from './config.js'
 export { createNodeGateways } from './gateways.js'
 export { createNodeModelProviderResolver } from './modelProvider.js'
@@ -20,8 +25,19 @@ export {
   type AgentKindDefinition,
 } from '@cat-factory/agents'
 export { registerPipeline, registerPipelines, clearRegisteredPipelines } from '@cat-factory/kernel'
+export { SystemClock, CryptoIdGenerator } from './runtime.js'
+// Re-exported so the local facade can build its own provisioning-log recorder for the
+// per-workspace transport chooser without taking a direct @cat-factory/integrations dep.
+export { ProvisioningLogRecorder } from '@cat-factory/integrations'
 export { createDbClient, type DbClient, type DrizzleDb } from './db/client.js'
 export { migrate } from './db/migrate.js'
-export { createDrizzleRepositories, type CoreRepositories } from './repositories/drizzle.js'
-export { DrizzleGitHubInstallationRepository } from './repositories/containerExecution.js'
+export {
+  createDrizzleRepositories,
+  DrizzleWorkspaceSettingsRepository,
+  type CoreRepositories,
+} from './repositories/drizzle.js'
+export {
+  DrizzleGitHubInstallationRepository,
+  DrizzleRunnerPoolConnectionRepository,
+} from './repositories/containerExecution.js'
 export * as schema from './db/schema.js'

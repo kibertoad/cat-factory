@@ -178,7 +178,8 @@ const commands = computed<Command[]>(() => {
     label: 'Account settings',
     group: 'Account',
     icon: 'i-lucide-settings',
-    keywords: 'account fragment best practice library context organization personal',
+    keywords:
+      'account team members roles invitations email api keys fragment best practice library context organization personal',
     run: () => ui.openAccountSettings(),
   })
   list.push({

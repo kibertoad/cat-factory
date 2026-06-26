@@ -121,7 +121,7 @@ function remove(id: string) {
       <button
         type="button"
         class="font-medium text-primary-400 hover:underline"
-        @click="ui.openAccountSettings()"
+        @click="ui.openAccountSettings('fragments')"
       >
         Manage account fragments →
       </button>

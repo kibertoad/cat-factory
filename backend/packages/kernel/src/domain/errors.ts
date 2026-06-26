@@ -48,6 +48,7 @@ export type ConflictReason =
   | 'dependencies_unmet'
   | 'task_limit_reached'
   | 'tester_infra_unsupported'
+  | 'agent_backend_unconfigured'
   | 'run_not_retryable'
   | 'no_pr_to_merge'
   | 'github_not_connected'

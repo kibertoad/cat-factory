@@ -14,6 +14,7 @@ const github = useGitHubStore()
 const slack = useSlackStore()
 const library = useFragmentLibraryStore()
 const workspace = useWorkspaceStore()
+const accounts = useAccountsStore()
 const ui = useUiStore()
 
 // Resolve whether the document-source / task-source / GitHub integrations are
@@ -202,6 +203,20 @@ watch(
           @click="ui.openModelConfig()"
         >
           Model Configuration
+        </UButton>
+        <!-- Account & team: members + roles, invitations, email sender, account API keys.
+             Shown once accounts (auth) are enabled. -->
+        <UButton
+          v-if="accounts.enabled"
+          block
+          color="primary"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-users"
+          class="justify-start"
+          @click="ui.openAccountSettings()"
+        >
+          Account settings
         </UButton>
       </div>
     </section>

@@ -77,9 +77,6 @@ export const useUiStore = defineStore('ui', () => {
   // linked guideline repos; ADR 0006).
   const fragmentLibraryOpen = ref(false)
 
-  // Account settings panel (account-tier fragment library; personal or org).
-  const accountSettingsOpen = ref(false)
-
   // Command bar (⌘K) — searchable launcher for every navbar action.
   const commandBarOpen = ref(false)
 
@@ -99,6 +96,13 @@ export const useUiStore = defineStore('ui', () => {
   // `workspaceSettingsTab` lets other surfaces deep-link straight to a tab.
   const workspaceSettingsOpen = ref(false)
   const workspaceSettingsTab = ref('workspace')
+  // Account-settings modal: a single tabbed window for the per-account configuration —
+  // the team panel (members + roles + invitations + email sender + account API keys,
+  // `AccountTeamSettings`) and the account-tier prompt-fragment library. Account-scoped
+  // (distinct from workspace settings). `accountSettingsTab` lets other surfaces deep-link
+  // straight to a tab.
+  const accountSettingsOpen = ref(false)
+  const accountSettingsTab = ref('team')
   // Observability integration: the post-release-health connection panel (Datadog
   // today, pluggable). NB: distinct from `observabilityInstanceId` below, which is the
   // LLM per-call observability panel.
@@ -346,12 +350,6 @@ export const useUiStore = defineStore('ui', () => {
   function closeFragmentLibrary() {
     fragmentLibraryOpen.value = false
   }
-  function openAccountSettings() {
-    accountSettingsOpen.value = true
-  }
-  function closeAccountSettings() {
-    accountSettingsOpen.value = false
-  }
   function openCommandBar() {
     commandBarOpen.value = true
   }
@@ -388,6 +386,17 @@ export const useUiStore = defineStore('ui', () => {
   }
   function setWorkspaceSettingsTab(tab: string) {
     workspaceSettingsTab.value = tab
+  }
+  function openAccountSettings(tab = 'team') {
+    cameFromIntegrations.value = false
+    accountSettingsTab.value = tab
+    accountSettingsOpen.value = true
+  }
+  function closeAccountSettings() {
+    accountSettingsOpen.value = false
+  }
+  function setAccountSettingsTab(tab: string) {
+    accountSettingsTab.value = tab
   }
   function openObservabilityConnection() {
     cameFromIntegrations.value = false
@@ -559,12 +568,13 @@ export const useUiStore = defineStore('ui', () => {
     githubOpen,
     slackOpen,
     fragmentLibraryOpen,
-    accountSettingsOpen,
     commandBarOpen,
     integrationsOpen,
     cameFromIntegrations,
     workspaceSettingsOpen,
     workspaceSettingsTab,
+    accountSettingsOpen,
+    accountSettingsTab,
     observabilityConnectionOpen,
     providerConnectionKind,
     modelConfigOpen,
@@ -618,8 +628,6 @@ export const useUiStore = defineStore('ui', () => {
     closeSlack,
     openFragmentLibrary,
     closeFragmentLibrary,
-    openAccountSettings,
-    closeAccountSettings,
     openCommandBar,
     closeCommandBar,
     toggleCommandBar,
@@ -629,6 +637,9 @@ export const useUiStore = defineStore('ui', () => {
     openWorkspaceSettings,
     closeWorkspaceSettings,
     setWorkspaceSettingsTab,
+    openAccountSettings,
+    closeAccountSettings,
+    setAccountSettingsTab,
     openObservabilityConnection,
     closeObservabilityConnection,
     openProviderConnection,

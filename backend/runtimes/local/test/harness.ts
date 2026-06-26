@@ -115,6 +115,12 @@ export function makeConformanceApp(
     cloudflareModelsEnabled?: boolean
     resolveRunRepoContext?: CoreDependencies['resolveRunRepoContext']
     gateProviders?: GateProviderOverrides
+    /**
+     * Keep the REAL local-mode Tester default (`local` / host DinD) instead of pinning the
+     * neutral `ephemeral` used for the shared assertions. Local-only tests that assert the
+     * facade-specific default set this.
+     */
+    realLocalTesterDefault?: boolean
   },
 ): ConformanceApp {
   const recorder = new RecordingEventPublisher()
@@ -135,6 +141,13 @@ export function makeConformanceApp(
     // Inject the engine's run-repo resolver (a fake in the suite) so the registered
     // custom kind's pre/post-op hooks run + commit identically to a real GitHub-wired facade.
     ...(opts?.resolveRunRepoContext ? { resolveRunRepoContext: opts.resolveRunRepoContext } : {}),
+    // Pin the facade-NEUTRAL Tester default (`ephemeral`) for the SHARED conformance
+    // assertions: local mode's real default is `local` (host DinD), a facade-specific
+    // behavior covered by its own tests — but the shared fixtures don't configure a
+    // compose path, so they assume the zero-config `ephemeral` default node/worker use.
+    ...(opts?.realLocalTesterDefault
+      ? {}
+      : { resolveTesterFallbackDefault: () => Promise.resolve('ephemeral' as const) }),
   }
   const container = buildLocalContainer({
     db,

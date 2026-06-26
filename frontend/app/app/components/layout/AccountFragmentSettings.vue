@@ -1,8 +1,8 @@
 <script setup lang="ts">
-// Account settings for the active account (personal or org). Today its primary
-// surface is the account-tier prompt-fragment library (ADR 0006): best-practice
-// guidelines shared by every board in the account, which each board inherits and
-// can override. Reachable for ALL account types (unlike the org-only Team settings).
+// Account-tier prompt-fragment library (ADR 0006): best-practice guidelines shared by
+// every board in the account, which each board inherits and can override. A body-only
+// section rendered in the "Context fragments" tab of AccountSettingsPanel; available for
+// ALL account types (unlike the org-only Team tab).
 import { computed } from 'vue'
 import FragmentLibraryManager from '~/components/fragments/FragmentLibraryManager.vue'
 
@@ -21,7 +21,6 @@ const viaWorkspaceId = computed(() => {
 <template>
   <div class="space-y-6 text-sm">
     <section>
-      <h3 class="mb-1 font-semibold text-white">Context fragments</h3>
       <p class="mb-3 text-[11px] text-slate-400">
         Best-practice guidelines shared by every board in this account. Each board inherits these
         and can override or add its own. Code-aware agents (coder, reviewer, architect, fixers) fold

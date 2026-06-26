@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { CloudProvider } from '~/types/domain'
-import AccountSettings from '~/components/layout/AccountSettings.vue'
 
 // Account + board switching. Picks the active account (personal / org) and the
 // active board within it, and manages boards (new / rename / delete). The account
@@ -54,16 +53,14 @@ const accountItems = computed<DropdownMenuItem[][]>(() => [
   })),
   [
     { label: 'New organization…', icon: 'i-lucide-plus', onSelect: () => openPrompt('account') },
-    // Account settings (account-tier fragment library) — personal and org accounts.
+    // Account settings: the unified per-account panel (team + roles + invitations + email
+    // sender + account-tier fragment library). The panel itself handles personal accounts
+    // (prompting to create an org for the team tab), so this is not gated.
     {
       label: 'Account settings…',
       icon: 'i-lucide-settings',
       onSelect: () => ui.openAccountSettings(),
     },
-    // Team management (members + invitations + email sender) for org accounts.
-    ...(accounts.activeAccount?.type === 'org'
-      ? [{ label: 'Manage team…', icon: 'i-lucide-users', onSelect: () => openSettings() }]
-      : []),
     // Admins can set the account-wide default provider new services inherit.
     ...(accounts.activeAccount?.roles?.includes('admin')
       ? [
@@ -192,19 +189,6 @@ async function submitPrompt() {
     busy.value = false
   }
 }
-
-// ---- team settings modal (members / invitations / email; org only) ---------
-const settingsOpen = ref(false)
-function openSettings() {
-  settingsOpen.value = true
-}
-
-// ---- account settings modal (account-tier fragment library) ----------------
-// Bound to the ui store so the command bar can open it too.
-const accountSettingsOpen = computed({
-  get: () => ui.accountSettingsOpen,
-  set: (v: boolean) => (v ? ui.openAccountSettings() : ui.closeAccountSettings()),
-})
 </script>
 
 <template>
@@ -279,27 +263,6 @@ const accountSettingsOpen = computed({
             </UButton>
           </div>
         </form>
-      </template>
-    </UModal>
-
-    <!-- account team settings: members, invitations, email sender (org only) -->
-    <UModal v-model:open="settingsOpen" title="Team settings">
-      <template #body>
-        <AccountTeamSettings
-          v-if="accounts.activeAccountId"
-          :account-id="accounts.activeAccountId"
-        />
-      </template>
-    </UModal>
-
-    <!-- account settings: account-tier fragment library (personal or org) -->
-    <UModal
-      v-model:open="accountSettingsOpen"
-      title="Account settings"
-      :ui="{ content: 'max-w-3xl' }"
-    >
-      <template #body>
-        <AccountSettings v-if="accounts.activeAccountId" :account-id="accounts.activeAccountId" />
       </template>
     </UModal>
   </div>

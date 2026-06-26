@@ -76,6 +76,18 @@ export default defineConfig(async () => {
     ],
     test: {
       setupFiles: ['./test/apply-migrations.ts'],
+      // These run inside real workerd against a real local D1, and the heaviest
+      // engine specs drive a run to a standstill TWICE (park on a decision / the
+      // spend gate, resolve it, then drive again) — each round is real store I/O.
+      // Vitest's 5s unit-test default leaves no headroom under parallel CI shard
+      // load, so a legitimately-passing double-drive test (~5–6s) occasionally
+      // tips over into a spurious timeout. The driver is budget-bounded
+      // (`maxRounds`/`jobMaxPolls`), so a genuinely stuck run fails fast via a
+      // wrong-status assertion, never a hang — meaning a timeout here only ever
+      // means "slow", not "broken". 10s roughly doubles the observed worst case:
+      // enough to absorb CI variance without letting a real stall sit for long.
+      testTimeout: 10_000,
+      hookTimeout: 10_000,
     },
   }
 })
