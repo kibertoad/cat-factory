@@ -12,7 +12,6 @@ const DEFAULTS: WorkspaceSettings = {
   storeAgentContext: true,
   spendCurrency: null,
   spendMonthlyLimit: null,
-  spendModelPrices: null,
 }
 
 /**

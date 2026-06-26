@@ -862,11 +862,10 @@ export const workspaceSettings = pgTable('workspace_settings', {
   // Whether to store the full provided-context snapshot for each container agent
   // (the observability feature). On by default; integer 0/1 to match the SQLite store.
   store_agent_context: integer('store_agent_context').notNull().default(1),
-  // Per-workspace spend budget (moved out of env). All nullable; null ⇒ the built-in
-  // DEFAULT_SPEND_PRICING base table. spend_model_prices is a JSON object of overrides.
+  // Per-workspace spend budget (moved out of env). Both nullable; null ⇒ the built-in
+  // DEFAULT_SPEND_PRICING base table.
   spend_currency: text('spend_currency'),
   spend_monthly_limit: doublePrecision('spend_monthly_limit'),
-  spend_model_prices: text('spend_model_prices'),
 })
 
 // Per-workspace merge threshold presets (mirror of D1 migration 0024's
