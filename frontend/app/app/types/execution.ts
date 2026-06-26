@@ -339,6 +339,13 @@ export interface PipelineStep {
    * Absent on non-human-test steps. Mirrors `humanTestStepStateSchema`.
    */
   humanTest?: HumanTestStepState | null
+  /**
+   * The ephemeral environment this step runs against (when its block has one), so a
+   * run's details show its lifecycle state + the exact error. Populated by the engine
+   * for container/deployer steps; the `human-test` gate uses `humanTest.environment`.
+   * Mirrors `runEnvironmentSchema`.
+   */
+  environment?: RunEnvironment | null
 }
 
 /** One failing CI check the gate's precheck saw (mirrors `gateFailingCheckSchema`). */
@@ -408,6 +415,20 @@ export interface HumanTestEnvironment {
   url: string | null
   status: HumanTestEnvironmentStatus
   expiresAt?: number | null
+}
+
+/**
+ * The ephemeral environment a run's step is associated with — surfaced in run details
+ * so its spinning-up / running / shut-down / errored state + the exact error show next
+ * to the consuming step (tester/coder). Mirrors `runEnvironmentSchema`.
+ */
+export interface RunEnvironment {
+  id: string
+  url: string | null
+  status: HumanTestEnvironmentStatus
+  expiresAt?: number | null
+  /** The verbatim provider error when the environment failed/expired, else null. */
+  lastError?: string | null
 }
 
 /** One fix / pull-main round on a `human-test` gate (mirrors `humanTestRoundSchema`). */

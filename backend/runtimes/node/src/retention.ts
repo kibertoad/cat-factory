@@ -2,6 +2,7 @@ import type {
   Clock,
   LlmCallMetricRepository,
   PipelineScheduleRepository,
+  ProvisioningLogRepository,
   SubscriptionActivationRepository,
   TokenUsageRepository,
 } from '@cat-factory/kernel'
@@ -26,6 +27,8 @@ export interface RetentionRepos {
   // Personal-credential per-run activations whose TTL has passed (individual-usage
   // subscriptions). Mirrors the Worker's activation-sweeper cron.
   subscriptionActivationRepository: Pick<SubscriptionActivationRepository, 'deleteExpired'>
+  // High-churn provisioning event log (its own Postgres schema); always wired on Node.
+  provisioningLogRepository: Pick<ProvisioningLogRepository, 'deleteOlderThan'>
 }
 
 /** Rows reclaimed from each table, for logging. */
@@ -34,6 +37,7 @@ export interface RetentionResult {
   llmCallMetrics: number
   scheduleRuns: number
   activations: number
+  provisioningLog: number
 }
 
 /**
@@ -76,6 +80,9 @@ export async function sweepRetention(
     ),
     // Delete activations whose own TTL (expires_at) has passed — `now`, not a window.
     activations: await repos.subscriptionActivationRepository.deleteExpired(now),
+    provisioningLog: await prune(retention.provisioningLogMs, now, (c) =>
+      repos.provisioningLogRepository.deleteOlderThan(c),
+    ),
   }
 }
 
@@ -93,14 +100,17 @@ export function startRetentionSweeper(
 ): () => void {
   const tick = async () => {
     try {
-      const { tokenUsage, llmCallMetrics, scheduleRuns, activations } = await sweepRetention(
-        repos,
-        retention,
-        clock.now(),
-      )
-      if (tokenUsage > 0 || llmCallMetrics > 0 || scheduleRuns > 0 || activations > 0) {
+      const { tokenUsage, llmCallMetrics, scheduleRuns, activations, provisioningLog } =
+        await sweepRetention(repos, retention, clock.now())
+      if (
+        tokenUsage > 0 ||
+        llmCallMetrics > 0 ||
+        scheduleRuns > 0 ||
+        activations > 0 ||
+        provisioningLog > 0
+      ) {
         log.info(
-          { tokenUsage, llmCallMetrics, scheduleRuns, activations },
+          { tokenUsage, llmCallMetrics, scheduleRuns, activations, provisioningLog },
           'retention sweep reclaimed rows',
         )
       }

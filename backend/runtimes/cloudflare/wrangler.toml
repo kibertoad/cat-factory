@@ -33,6 +33,13 @@ binding = "SANDBOX_DB"
 database_name = "cat_factory_sandbox"
 migrations_dir = "sandbox-migrations"
 
+# Separate D1 database for the high-churn provisioning event log (its own binding +
+# migrations). Tests apply ./migrations-provisioning to it (see test/apply-migrations.ts).
+[[d1_databases]]
+binding = "PROVISIONING_DB"
+database_name = "cat_factory_provisioning"
+migrations_dir = "migrations-provisioning"
+
 # Workers AI binding. Tests inject a FakeAgentExecutor and never touch env.AI
 # (vitest.config.ts sets remoteBindings:false); declared so the binding shape
 # matches production.

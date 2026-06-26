@@ -6,6 +6,7 @@ import { agentKindMeta } from '~/utils/catalog'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import StepMetadataCard from '~/components/panels/StepMetadataCard.vue'
 import StepTestReport from '~/components/panels/StepTestReport.vue'
+import EnvironmentStatusPanel from '~/components/environments/EnvironmentStatusPanel.vue'
 import { useStepTimer } from '~/composables/useStepTimer'
 import { useStepProse } from '~/composables/useStepProse'
 import { useStepApproval } from '~/composables/useStepApproval'
@@ -49,6 +50,10 @@ const pctOf = (n: number) => `${Math.round(n * 100)}%`
 // greenlight) + its loop phase/attempts, surfaced when this is a `tester` step.
 const testReport = computed(() => step.value?.test?.lastReport ?? null)
 const testPhase = computed(() => step.value?.test ?? null)
+
+// The ephemeral environment this step runs against (deployer provisions it; tester/
+// coder consume it), so the panel shows its spinning-up/running/shutdown/errored state.
+const stepEnvironment = computed(() => step.value?.environment ?? null)
 
 // A failed run is no longer executing: a step left mid-flight (state still
 // `working`, no `finishedAt`) must stop looking live — no ticking clock, no
@@ -309,6 +314,10 @@ async function copyOutput() {
                 :loading="resolvingCap"
                 @resolve="resolveCompanionCap"
               />
+
+              <!-- ephemeral environment lifecycle (spinning up / running / shut down /
+                   errored + the exact error), when this step runs against one -->
+              <EnvironmentStatusPanel v-if="stepEnvironment" :environment="stepEnvironment" />
 
               <!-- tester report: what was tested, the per-area outcomes, the concerns
                    it raised and the greenlight verdict; plus the fixer-loop phase -->

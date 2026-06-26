@@ -3,6 +3,7 @@ import type {
   CommitProjectionRepository,
   LlmCallMetricRepository,
   PipelineScheduleRepository,
+  ProvisioningLogRepository,
   RateLimitRepository,
   TokenUsageRepository,
 } from '@cat-factory/kernel'
@@ -23,6 +24,8 @@ export interface RetentionPolicy {
   rateLimitMs: number
   commitMs: number
   llmCallMetricsMs: number
+  /** High-churn provisioning event log (separate D1 db). Optional — absent ⇒ no prune. */
+  provisioningLogMs?: number
 }
 
 export interface RetentionDeps {
@@ -32,6 +35,8 @@ export interface RetentionDeps {
   llmCallMetricRepository: LlmCallMetricRepository
   /** Optional: prunes recurring-pipeline run history to {@link SCHEDULE_RUN_RETENTION_MS}. */
   pipelineScheduleRepository?: PipelineScheduleRepository
+  /** Optional: the provisioning event log (only when the PROVISIONING_DB binding is present). */
+  provisioningLogRepository?: ProvisioningLogRepository
   clock: Clock
   policy: RetentionPolicy
 }
@@ -43,6 +48,7 @@ export interface RetentionResult {
   commits: number
   llmCallMetrics: number
   scheduleRuns: number
+  provisioningLog: number
 }
 
 /** Delete rows older than `now - windowMs`, treating a non-positive window as "disabled". */
@@ -66,6 +72,7 @@ export async function sweepRetention({
   commitRepository,
   llmCallMetricRepository,
   pipelineScheduleRepository,
+  provisioningLogRepository,
   clock,
   policy,
 }: RetentionDeps): Promise<RetentionResult> {
@@ -84,5 +91,11 @@ export async function sweepRetention({
           pipelineScheduleRepository.pruneRunsBefore(c),
         )
       : 0,
+    provisioningLog:
+      provisioningLogRepository && policy.provisioningLogMs != null
+        ? await prune(policy.provisioningLogMs, now, (c) =>
+            provisioningLogRepository.deleteOlderThan(c),
+          )
+        : 0,
   }
 }

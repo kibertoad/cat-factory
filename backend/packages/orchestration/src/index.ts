@@ -175,6 +175,7 @@ export {
   type TasksModule,
   type EnvironmentsModule,
   type RunnersModule,
+  type ProvisioningLogsModule,
   type BootstrapModule,
   type RequirementsModule,
   type ClarityModule,

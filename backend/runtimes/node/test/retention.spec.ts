@@ -12,9 +12,17 @@ const DAY = 24 * 60 * 60 * 1000
 /** A repo pair that records the cutoff each prune was asked for (or `null` if skipped). */
 function fakeRepos(): {
   repos: RetentionRepos
-  cutoffs: { tokenUsage: number | null; llmCallMetrics: number | null }
+  cutoffs: {
+    tokenUsage: number | null
+    llmCallMetrics: number | null
+    provisioningLog: number | null
+  }
 } {
-  const cutoffs = { tokenUsage: null as number | null, llmCallMetrics: null as number | null }
+  const cutoffs = {
+    tokenUsage: null as number | null,
+    llmCallMetrics: null as number | null,
+    provisioningLog: null as number | null,
+  }
   return {
     cutoffs,
     repos: {
@@ -35,6 +43,12 @@ function fakeRepos(): {
       pipelineScheduleRepository: { pruneRunsBefore: async () => 0 },
       // Expired personal-credential activations (deleted by `now`, not a window).
       subscriptionActivationRepository: { deleteExpired: async () => 2 },
+      provisioningLogRepository: {
+        deleteOlderThan: async (c) => {
+          cutoffs.provisioningLog = c
+          return 5
+        },
+      },
     },
   }
 }
@@ -45,6 +59,7 @@ function policy(overrides: Partial<RetentionConfig> = {}): RetentionConfig {
     rateLimitMs: 7 * DAY,
     commitMs: 90 * DAY,
     llmCallMetricsMs: 3 * DAY,
+    provisioningLogMs: 14 * DAY,
     ...overrides,
   }
 }
@@ -58,7 +73,14 @@ describe('sweepRetention', () => {
 
     expect(cutoffs.tokenUsage).toBe(now - 30 * DAY)
     expect(cutoffs.llmCallMetrics).toBe(now - 3 * DAY)
-    expect(result).toEqual({ tokenUsage: 3, llmCallMetrics: 7, scheduleRuns: 0, activations: 2 })
+    expect(cutoffs.provisioningLog).toBe(now - 14 * DAY)
+    expect(result).toEqual({
+      tokenUsage: 3,
+      llmCallMetrics: 7,
+      scheduleRuns: 0,
+      activations: 2,
+      provisioningLog: 5,
+    })
   })
 
   it('treats a non-positive window as disabled — no delete, zero reclaimed', async () => {
@@ -67,6 +89,12 @@ describe('sweepRetention', () => {
 
     expect(cutoffs.tokenUsage).toBe(now - 30 * DAY) // still pruned
     expect(cutoffs.llmCallMetrics).toBeNull() // disabled → never called
-    expect(result).toEqual({ tokenUsage: 3, llmCallMetrics: 0, scheduleRuns: 0, activations: 2 })
+    expect(result).toEqual({
+      tokenUsage: 3,
+      llmCallMetrics: 0,
+      scheduleRuns: 0,
+      activations: 2,
+      provisioningLog: 5,
+    })
   })
 })

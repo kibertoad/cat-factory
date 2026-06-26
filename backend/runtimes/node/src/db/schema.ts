@@ -512,6 +512,38 @@ export const llmCallMetrics = pgTable(
   ],
 )
 
+// The unified provisioning event log lives in its OWN Postgres schema (`provisioning`)
+// rather than `public`, isolating its high write churn from the main tables (the
+// Cloudflare analogue is a separate D1 binding). One row per spin-up/down attempt
+// across the environment + runner-pool/container subsystems; pruned to a retention
+// window. `CREATE SCHEMA "provisioning"` is emitted ahead of the table by the
+// generated migration and bootstrapped idempotently by migrate() on boot.
+export const provisioning = pgSchema('provisioning')
+export const provisioningLog = provisioning.table(
+  'provisioning_log',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    subsystem: text('subsystem').notNull(),
+    operation: text('operation').notNull(),
+    target_id: text('target_id'),
+    provider_id: text('provider_id'),
+    block_id: text('block_id'),
+    execution_id: text('execution_id'),
+    outcome: text('outcome').notNull(),
+    error: text('error'),
+    detail: text('detail'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    index('idx_provisioning_log_workspace').on(t.workspace_id, t.created_at),
+    index('idx_provisioning_log_subsystem').on(t.workspace_id, t.subsystem, t.created_at),
+    index('idx_provisioning_log_execution').on(t.workspace_id, t.execution_id, t.created_at),
+    index('idx_provisioning_log_target').on(t.workspace_id, t.target_id),
+    index('idx_provisioning_log_created').on(t.created_at),
+  ],
+)
+
 // Recurring pipelines (mirror of D1 migration 0029). A schedule attaches a pipeline
 // to a service frame and owns one reused on-board block; the sweeper fires every
 // enabled schedule whose `next_run_at <= now`. `weekdays` is a JSON array (text),
