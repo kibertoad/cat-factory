@@ -227,11 +227,70 @@ jobs:
       - name: Run worker shard
         run: pnpm --filter @cat-factory/worker exec vitest run --shard=${{ matrix.shard }}/2
 
-  # Everything except the worker: the Postgres-backed Node/Local conformance
-  # suites (the only tests that need a database) plus every pure-unit package.
-  # Postgres is scoped to this job so the worker shards don't pay its ~20s init.
-  test-rest:
-    name: Test rest (node/local + units)
+  # Every non-worker package that needs NO database: the pure-unit suites
+  # (orchestration, integrations, server, agents, gates, …) plus the frontend layer.
+  # Split out from the Postgres suites so they run at full file parallelism without
+  # paying the database's ~20s init or sharing its lane.
+  test-units:
+    name: Test units (no DB)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Cache node_modules
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
+          # is a near-no-op on a hit and the frontend typecheck still resolves.
+          path: |
+            node_modules
+            backend/packages/*/node_modules
+            backend/runtimes/*/node_modules
+            backend/internal/*/node_modules
+            frontend/app/node_modules
+            frontend/app/.nuxt
+            deploy/backend/node_modules
+            deploy/frontend/node_modules
+            deploy/frontend/.nuxt
+            deploy/node/node_modules
+            deploy/local/node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build libraries
+        run: pnpm build
+
+      # Exclude the worker (its own sharded job) and the two Postgres facades (the
+      # test-db job below). Everything left is database-free pure-unit work.
+      - name: Run unit packages
+        run: >-
+          pnpm
+          --filter='!@cat-factory/worker'
+          --filter='!@cat-factory/node-server'
+          --filter='!@cat-factory/local-server'
+          -r run test:run
+
+  # The Postgres-backed conformance + integration suites (Node + Local facades) — the
+  # only tests that need a database. Each vitest worker gets its OWN database
+  # (per-worker isolation in the test harness), so these now run with file parallelism;
+  # the conformance suite is split into per-group spec files that fan out across workers.
+  test-db:
+    name: Test DB (node/local)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -290,8 +349,11 @@ jobs:
       - name: Build libraries
         run: pnpm build
 
-      - name: Run non-worker tests
-        run: pnpm --filter='!@cat-factory/worker' -r run test:run
+      # Node + Local share this one Postgres server; the harness gives each vitest worker
+      # its own database (`<base>_node_<id>` / `<base>_local_<id>`), so the two facades and
+      # their parallel workers never collide.
+      - name: Run Postgres-backed suites
+        run: pnpm --filter @cat-factory/node-server --filter @cat-factory/local-server -r run test:run
 
   # Playwright e2e: the real SPA against a real Node backend (real Postgres + real
   # WebSocket) with only the external deps faked (see backend/internal/e2e). Needs the
@@ -392,7 +454,7 @@ jobs:
   # job comment above), so its result does not gate this required status.
   test-gate:
     name: Test
-    needs: [test-worker, test-rest]
+    needs: [test-worker, test-units, test-db]
     if: always()
     runs-on: ubuntu-latest
     permissions: {}
@@ -400,10 +462,11 @@ jobs:
       - name: Verify all test jobs passed
         env:
           WORKER: ${{ needs.test-worker.result }}
-          REST: ${{ needs.test-rest.result }}
+          UNITS: ${{ needs.test-units.result }}
+          DB: ${{ needs.test-db.result }}
         run: |
-          echo "worker shards: $WORKER | rest: $REST"
-          test "$WORKER" = "success" && test "$REST" = "success"
+          echo "worker shards: $WORKER | units: $UNITS | db: $DB"
+          test "$WORKER" = "success" && test "$UNITS" = "success" && test "$DB" = "success"
 
   acceptance:
     name: Container acceptance (Docker)

@@ -6,6 +6,7 @@ import {
   FakeRepoBootstrapper,
   FakeTaskSourceProvider,
   RecordingEventPublisher,
+  deriveWorkerDatabase,
   driveWorkspace,
   makeIncorporatedClarityReview,
   makeIncorporatedReview,
@@ -61,15 +62,44 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   GITHUB_PAT: 'test-pat',
 }
 
-/** Connect to the test Postgres (`DATABASE_URL`) and ensure the schema. Idempotent. */
+/**
+ * Connect to the test Postgres and ensure the schema. Each vitest worker gets its OWN
+ * database (`<base>_local_<workerId>`, created on demand) so the spec files run with file
+ * parallelism without racing on shared tables; the `local` label keeps these databases
+ * distinct from the Node suite's on a shared server. Falls back to the base `DATABASE_URL`
+ * outside a vitest worker.
+ */
 export async function setupTestDb(): Promise<DrizzleDb> {
   const url = process.env.DATABASE_URL
   if (!url) {
     throw new Error('DATABASE_URL is required to run the local conformance tests')
   }
-  const { db, pool } = createDbClient(url)
+  const worker = deriveWorkerDatabase(url, 'local', process.env.VITEST_WORKER_ID)
+  if (worker) await ensureDatabase(url, worker.dbName)
+  const { db, pool } = createDbClient(worker?.url ?? url)
   await migrate(db, pool)
   return db
+}
+
+/**
+ * Create `dbName` if absent, over an admin connection to the base `DATABASE_URL`
+ * (`CREATE DATABASE` cannot run in a transaction). Tolerates the duplicate-database race
+ * (`42P04`) when two workers create their databases concurrently.
+ */
+async function ensureDatabase(adminUrl: string, dbName: string): Promise<void> {
+  const { pool } = createDbClient(adminUrl)
+  try {
+    const existing = await pool.query('SELECT 1 FROM pg_database WHERE datname = $1', [dbName])
+    if (existing.rowCount === 0) {
+      try {
+        await pool.query(`CREATE DATABASE "${dbName}"`)
+      } catch (err) {
+        if ((err as { code?: string }).code !== '42P04') throw err
+      }
+    }
+  } finally {
+    await pool.end()
+  }
 }
 
 /**
