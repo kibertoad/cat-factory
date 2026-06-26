@@ -132,6 +132,16 @@ export const useAuthStore = defineStore(
       applySession(await api.passwordLogin(body))
     }
 
+    /** Request a password-reset link by email (always resolves; never reveals existence). */
+    async function forgotPassword(email: string) {
+      await api.forgotPassword({ email })
+    }
+
+    /** Redeem a reset token and set a new password. Throws on an invalid/expired token. */
+    async function resetPassword(token: string, password: string) {
+      await api.resetPassword({ token, password })
+    }
+
     /** Drop the local session (sessions are stateless server-side). */
     function logout() {
       api.logout().catch(() => {})
@@ -158,6 +168,8 @@ export const useAuthStore = defineStore(
       loginWithGoogle,
       signup,
       passwordLogin,
+      forgotPassword,
+      resetPassword,
       logout,
       handleUnauthorized,
     }

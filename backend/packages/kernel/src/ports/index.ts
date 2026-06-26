@@ -34,6 +34,11 @@ export type {
   InvitationStatus,
 } from './invitation-repositories.js'
 export type {
+  PasswordResetTokenRecord,
+  PasswordResetTokenRepository,
+  PasswordResetTokenStatus,
+} from './password-reset-repositories.js'
+export type {
   ServicePatch,
   ServiceRepository,
   WorkspaceMountPatch,

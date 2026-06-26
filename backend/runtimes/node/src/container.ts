@@ -24,6 +24,7 @@ import {
   ProvisioningLogRecorder,
   LoggingRunnerTransport,
   EMAIL_CIPHER_INFO,
+  createEmailSender,
   SLACK_CIPHER_INFO,
   SlackNotificationChannel,
   TicketTrackerService,
@@ -44,6 +45,7 @@ import {
   type DocumentSourceProvider,
   type EnvironmentProvider,
   type FragmentOwnerKind,
+  type EmailSender,
   type GitHubClient,
   type GitHubInstallationRepository,
   type ModelProviderResolver,
@@ -281,7 +283,12 @@ function selectNodeEmailInvitationDeps(
 ): Partial<CoreDependencies> {
   const deps: Partial<CoreDependencies> = {
     invitationRepository: repos.invitationRepository,
+    // Password reset works without email (the link is logged in dev); the system sender
+    // below upgrades it to real delivery when configured.
+    passwordResetTokenRepository: repos.passwordResetTokenRepository,
+    resolveSystemEmailSender: buildSystemEmailSender(config),
     appBaseUrl: config.email.appBaseUrl || undefined,
+    logger,
   }
   if (config.email.enabled && config.email.encryptionKey) {
     deps.emailConnectionRepository = repos.emailConnectionRepository
@@ -291,6 +298,25 @@ function selectNodeEmailInvitationDeps(
     })
   }
   return deps
+}
+
+/**
+ * Build the deployment-level system email sender (auth emails like password reset) from
+ * the env-driven `email.system` config, or undefined when not configured.
+ */
+function buildSystemEmailSender(
+  config: AppConfig,
+): (() => Promise<EmailSender | null>) | undefined {
+  const system = config.email.system
+  if (!system) return undefined
+  const sender = createEmailSender({
+    provider: system.provider,
+    from: system.from,
+    sendgrid: system.provider === 'sendgrid' ? { apiKey: system.apiKey } : undefined,
+    resend: system.provider === 'resend' ? { apiKey: system.apiKey } : undefined,
+  })
+  if (!sender) return undefined
+  return async () => sender
 }
 
 /**

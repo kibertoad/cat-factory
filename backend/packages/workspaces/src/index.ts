@@ -19,3 +19,8 @@ export {
   type InvitationServiceDependencies,
   type CreatedInvitation,
 } from './modules/invitations/InvitationService.js'
+export {
+  PasswordResetService,
+  type PasswordResetServiceDependencies,
+  type ResetLogger,
+} from './modules/auth/PasswordResetService.js'

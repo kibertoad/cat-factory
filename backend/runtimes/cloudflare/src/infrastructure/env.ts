@@ -267,6 +267,10 @@ export interface Env {
   /** Transactional email (invitations): opt-in flag + master key for the per-account API key. */
   EMAIL_ENABLED?: string
   EMAIL_ENCRYPTION_KEY?: string
+  /** Deployment-level system sender for auth emails (password reset): provider/from/key. */
+  EMAIL_SYSTEM_PROVIDER?: string
+  EMAIL_SYSTEM_FROM?: string
+  EMAIL_SYSTEM_API_KEY?: string
   /** Public SPA base URL the invite-accept link points at. */
   APP_BASE_URL?: string
   /**

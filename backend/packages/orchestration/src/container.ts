@@ -12,7 +12,9 @@ import type { AccountRepository, MembershipRepository } from '@cat-factory/kerne
 import type {
   AccountInvitationRepository,
   EmailConnectionRepository,
+  EmailSender,
   PasswordHasher,
+  PasswordResetTokenRepository,
   UserRepository,
 } from '@cat-factory/kernel'
 import type { ServiceRepository, WorkspaceMountRepository } from '@cat-factory/kernel'
@@ -105,6 +107,7 @@ import { WorkspaceService } from '@cat-factory/workspaces'
 import { AccountService } from '@cat-factory/workspaces'
 import { UserService } from '@cat-factory/workspaces'
 import { InvitationService } from '@cat-factory/workspaces'
+import { PasswordResetService } from '@cat-factory/workspaces'
 import { EmailConnectionService } from '@cat-factory/integrations'
 import { SpendService, DEFAULT_SPEND_PRICING, type SpendPricing } from '@cat-factory/spend'
 import type { OpenRouterModelMeta } from '@cat-factory/contracts'
@@ -185,8 +188,18 @@ export interface CoreDependencies {
   emailConnectionRepository?: EmailConnectionRepository
   /** Master-key cipher sealing the per-account email API key at rest. */
   emailSecretCipher?: SecretCipher
+  /** Password-reset tokens ("forgot my password"). Optional: opt-in feature. */
+  passwordResetTokenRepository?: PasswordResetTokenRepository
+  /**
+   * Resolve the deployment's system email sender (auth emails like password reset),
+   * independent of the per-account connections. Absent ⇒ reset links are logged, not
+   * emailed.
+   */
+  resolveSystemEmailSender?: () => Promise<EmailSender | null>
   /** Base URL the invite-accept link points at (SPA origin). */
   appBaseUrl?: string
+  /** Optional structural logger (the facade's pino logger) for best-effort diagnostics. */
+  logger?: { info(obj: Record<string, unknown>, msg?: string): void }
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
   executionRepository: ExecutionRepository
@@ -767,6 +780,8 @@ export interface Core {
   userService: UserService
   /** Present only when the invitation repository is wired (see CoreDependencies). */
   invitations?: InvitationService
+  /** Present only when the password-reset token repository is wired. */
+  passwordReset?: PasswordResetService
   /** Present only when the email-connection repository + cipher are wired. */
   email?: EmailConnectionService
   boardService: BoardService
@@ -1710,6 +1725,18 @@ export function createCore(dependencies: CoreDependencies): Core {
         appBaseUrl: dependencies.appBaseUrl,
       })
     : undefined
+  const passwordReset = dependencies.passwordResetTokenRepository
+    ? new PasswordResetService({
+        passwordResetTokenRepository: dependencies.passwordResetTokenRepository,
+        userRepository: dependencies.userRepository,
+        passwordHasher: dependencies.passwordHasher,
+        idGenerator: dependencies.idGenerator,
+        clock: dependencies.clock,
+        resolveSystemEmailSender: dependencies.resolveSystemEmailSender,
+        appBaseUrl: dependencies.appBaseUrl,
+        logger: dependencies.logger,
+      })
+    : undefined
   const pipelineService = new PipelineService(dependencies)
   const spendService = new SpendService({
     tokenUsageRepository: dependencies.tokenUsageRepository,
@@ -1833,6 +1860,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     accountService,
     userService,
     ...(invitations ? { invitations } : {}),
+    ...(passwordReset ? { passwordReset } : {}),
     ...(email ? { email } : {}),
     boardService,
     pipelineService,

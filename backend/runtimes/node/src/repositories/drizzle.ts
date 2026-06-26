@@ -1,6 +1,9 @@
 import type {
   AccountInvitationRecord,
   AccountInvitationRepository,
+  PasswordResetTokenRecord,
+  PasswordResetTokenRepository,
+  PasswordResetTokenStatus,
   AccountRecord,
   AccountRepository,
   AccountRole,
@@ -129,6 +132,7 @@ import { and, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from 'drizzle-or
 import type { DrizzleDb } from '../db/client.js'
 import {
   accountInvitations,
+  passwordResetTokens,
   accountSettings,
   accounts,
   agentContextSnapshots,
@@ -851,6 +855,64 @@ class DrizzleAccountInvitationRepository implements AccountInvitationRepository 
 
   async setStatus(id: string, status: AccountInvitationRecord['status']): Promise<void> {
     await this.db.update(accountInvitations).set({ status }).where(eq(accountInvitations.id, id))
+  }
+}
+
+function rowToPasswordResetToken(
+  row: typeof passwordResetTokens.$inferSelect,
+): PasswordResetTokenRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    tokenHash: row.token_hash,
+    status: row.status as PasswordResetTokenStatus,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+  }
+}
+
+class DrizzlePasswordResetTokenRepository implements PasswordResetTokenRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async create(record: PasswordResetTokenRecord): Promise<void> {
+    await this.db.insert(passwordResetTokens).values({
+      id: record.id,
+      user_id: record.userId,
+      token_hash: record.tokenHash,
+      status: record.status,
+      expires_at: record.expiresAt,
+      created_at: record.createdAt,
+    })
+  }
+
+  async findByTokenHash(tokenHash: string): Promise<PasswordResetTokenRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(passwordResetTokens)
+      .where(eq(passwordResetTokens.token_hash, tokenHash))
+    return row ? rowToPasswordResetToken(row) : null
+  }
+
+  async listPendingByUser(userId: string): Promise<PasswordResetTokenRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(passwordResetTokens)
+      .where(
+        and(eq(passwordResetTokens.user_id, userId), eq(passwordResetTokens.status, 'pending')),
+      )
+      .orderBy(desc(passwordResetTokens.created_at))
+    return rows.map(rowToPasswordResetToken)
+  }
+
+  async setStatus(id: string, status: PasswordResetTokenStatus): Promise<void> {
+    await this.db.update(passwordResetTokens).set({ status }).where(eq(passwordResetTokens.id, id))
+  }
+
+  async deleteExpired(before: number): Promise<number> {
+    const result = await this.db
+      .delete(passwordResetTokens)
+      .where(lt(passwordResetTokens.expires_at, before))
+    return result.rowCount ?? 0
   }
 }
 
@@ -3516,6 +3578,7 @@ export interface CoreRepositories {
   membershipRepository: MembershipRepository
   userRepository: UserRepository
   invitationRepository: AccountInvitationRepository
+  passwordResetTokenRepository: PasswordResetTokenRepository
   emailConnectionRepository: EmailConnectionRepository
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
@@ -3553,6 +3616,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     membershipRepository: new DrizzleMembershipRepository(db),
     userRepository: new DrizzleUserRepository(db),
     invitationRepository: new DrizzleAccountInvitationRepository(db),
+    passwordResetTokenRepository: new DrizzlePasswordResetTokenRepository(db),
     emailConnectionRepository: new DrizzleEmailConnectionRepository(db),
     blockRepository: new DrizzleBlockRepository(db),
     pipelineRepository: new DrizzlePipelineRepository(db),

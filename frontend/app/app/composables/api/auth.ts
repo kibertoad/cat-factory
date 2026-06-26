@@ -21,6 +21,15 @@ export function authApi({ http, ws }: ApiContext) {
     passwordLogin: (body: { email: string; password: string }) =>
       http<{ token: string; user: AuthUser }>('/auth/password-login', { method: 'POST', body }),
 
+    // Request a reset link. Always succeeds (204) regardless of whether the email is
+    // registered, so the response can't be used to enumerate accounts.
+    forgotPassword: (body: { email: string }) =>
+      http('/auth/forgot-password', { method: 'POST', body }),
+
+    // Redeem a reset token + set a new password (throws 400 on an invalid/expired token).
+    resetPassword: (body: { token: string; password: string }) =>
+      http('/auth/reset-password', { method: 'POST', body }),
+
     peekInvite: (token: string) =>
       http<{ valid: boolean; email?: string; accountName?: string | null }>(
         `/auth/invitations/${encodeURIComponent(token)}`,

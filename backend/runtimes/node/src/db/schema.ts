@@ -161,6 +161,24 @@ export const accountInvitations = pgTable(
   ],
 )
 
+// Password-reset tokens ("forgot my password"). Only the SHA-256 token hash is stored;
+// single-use (status flips to 'used') and expiring. Mirrors the D1 table.
+export const passwordResetTokens = pgTable(
+  'password_reset_tokens',
+  {
+    id: text('id').primaryKey(),
+    user_id: text('user_id').notNull(),
+    token_hash: text('token_hash').notNull(),
+    status: text('status').notNull().default('pending'),
+    expires_at: bigint('expires_at', { mode: 'number' }).notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('idx_password_reset_tokens_token').on(t.token_hash),
+    index('idx_password_reset_tokens_user').on(t.user_id, t.status),
+  ],
+)
+
 export const blocks = pgTable(
   'blocks',
   {

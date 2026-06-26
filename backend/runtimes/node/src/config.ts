@@ -9,6 +9,7 @@ import type { DocumentSourceKind } from '@cat-factory/kernel'
 import type {
   AppConfig,
   DocumentsConfig,
+  EmailConfig,
   PrivilegedAppConfig,
   TasksConfig,
 } from '@cat-factory/server'
@@ -102,6 +103,20 @@ function loadTasksConfig(env: NodeJS.ProcessEnv): TasksConfig {
     enabled: true,
     encryptionKey,
   }
+}
+
+/**
+ * The deployment-level system sender for auth emails (password reset), read entirely
+ * from env. Present only when the provider, From address, and API key are all set.
+ */
+function loadSystemEmailSender(env: NodeJS.ProcessEnv): EmailConfig['system'] {
+  const provider = env.EMAIL_SYSTEM_PROVIDER?.trim()
+  const from = env.EMAIL_SYSTEM_FROM?.trim()
+  const apiKey = env.EMAIL_SYSTEM_API_KEY?.trim()
+  if ((provider === 'sendgrid' || provider === 'resend') && from && apiKey) {
+    return { provider, from, apiKey }
+  }
+  return undefined
 }
 
 export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
@@ -279,10 +294,12 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
             enabled: true,
             encryptionKey: env.ENCRYPTION_KEY.trim(),
             appBaseUrl: env.APP_BASE_URL?.trim() || env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
+            system: loadSystemEmailSender(env),
           }
         : {
             enabled: false,
             appBaseUrl: env.APP_BASE_URL?.trim() || env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
+            system: loadSystemEmailSender(env),
           },
     // Document-source integration: the providers (Confluence/Notion/GitHub-docs) are
     // the shared `@cat-factory/integrations` fetch shells, wired in the container
