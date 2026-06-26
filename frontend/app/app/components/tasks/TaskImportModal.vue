@@ -21,6 +21,7 @@ const open = computed({
     if (!v) ui.closeTaskImport()
   },
 })
+const back = useIntegrationBack(open)
 
 const source = ref<TaskSourceKind | undefined>(undefined)
 const ref_ = ref('')
@@ -197,13 +198,7 @@ async function doSpawnEpic() {
 <template>
   <UModal v-model:open="open" :title="title">
     <template #title>
-      <IntegrationBackTitle
-        :title="title"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
-      />
+      <IntegrationBackTitle :title="title" @back="back" />
     </template>
     <template #body>
       <!-- Empty state: no source offered (none connected/installed, or all disabled) -->

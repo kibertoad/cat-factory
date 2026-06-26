@@ -16,6 +16,7 @@ const open = computed({
   get: () => ui.observabilityConnectionOpen,
   set: (v: boolean) => (v ? ui.openObservabilityConnection() : ui.closeObservabilityConnection()),
 })
+const back = useIntegrationBack(open)
 
 // The providers a user can connect. Datadog only today; the picker is ready for more.
 const PROVIDERS: { value: ObservabilityProviderKind; label: string }[] = [
@@ -130,13 +131,7 @@ const connectedLabel = computed(() => {
 <template>
   <UModal v-model:open="open" title="Post-release health" :ui="{ content: 'max-w-lg' }">
     <template #title>
-      <IntegrationBackTitle
-        title="Post-release health"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
-      />
+      <IntegrationBackTitle title="Post-release health" @back="back" />
     </template>
     <template #body>
       <div class="space-y-4">

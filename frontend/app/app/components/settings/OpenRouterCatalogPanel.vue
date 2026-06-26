@@ -22,6 +22,7 @@ const open = computed({
   get: () => ui.openRouterOpen,
   set: (v: boolean) => (v ? ui.openOpenRouter() : ui.closeOpenRouter()),
 })
+const back = useIntegrationBack(open)
 
 // Popular slugs offered by "Enable recommended" — these mirror the curated `openrouter`
 // refs in the backend MODEL_CATALOG. Only the ones present in the live browse list are
@@ -195,13 +196,7 @@ function manageKeys() {
 <template>
   <UModal v-model:open="open" title="OpenRouter" :ui="{ content: 'max-w-2xl' }">
     <template #title>
-      <IntegrationBackTitle
-        title="OpenRouter"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
-      />
+      <IntegrationBackTitle title="OpenRouter" @back="back" />
     </template>
     <template #body>
       <div class="space-y-4">

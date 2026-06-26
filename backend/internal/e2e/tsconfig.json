@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Type-stripped at runtime (no emit) — this package is never built to `dist`,
+    // it runs via Node type stripping (`node src/testServer.ts`) and Playwright's
+    // own esbuild transform for the specs. Node globals + the DOM lib (the specs
+    // use Playwright's `page`, but Web types keep editor checks honest).
+    "noEmit": true,
+    "types": ["node"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts", "playwright.config.ts"]
+}

@@ -17,6 +17,7 @@ const open = computed({
   get: () => ui.slackOpen,
   set: (v: boolean) => (v ? ui.openSlack() : ui.closeSlack()),
 })
+const back = useIntegrationBack(open)
 
 const ROUTABLE: { type: NotificationType; label: string }[] = [
   { type: 'merge_review', label: 'Merge review' },
@@ -143,13 +144,7 @@ async function saveMapping() {
 <template>
   <UModal v-model:open="open" title="Slack notifications" :ui="{ content: 'max-w-2xl' }">
     <template #title>
-      <IntegrationBackTitle
-        title="Slack notifications"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
-      />
+      <IntegrationBackTitle title="Slack notifications" @back="back" />
     </template>
     <template #body>
       <div class="space-y-5">

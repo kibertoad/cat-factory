@@ -16,6 +16,7 @@ const open = computed({
   get: () => ui.userSecretsOpen,
   set: (v: boolean) => (v ? ui.openUserSecrets() : ui.closeUserSecrets()),
 })
+const back = useIntegrationBack(open)
 
 // The kind being edited (only `github_pat` today; descriptors drive the rest generically).
 const kind = ref<UserSecretKind>('github_pat')
@@ -125,13 +126,7 @@ async function remove() {
 <template>
   <UModal v-model:open="open" title="My GitHub token" :ui="{ content: 'max-w-xl' }">
     <template #title>
-      <IntegrationBackTitle
-        title="My GitHub token"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
-      />
+      <IntegrationBackTitle title="My GitHub token" @back="back" />
     </template>
     <template #body>
       <div class="space-y-4">

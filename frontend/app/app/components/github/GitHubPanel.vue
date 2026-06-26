@@ -22,6 +22,7 @@ const open = computed({
     if (!v) ui.closeGitHub()
   },
 })
+const back = useIntegrationBack(open)
 
 // On open: refresh projections when connected. The not-connected state renders
 // <GitHubConnect>, which discovers and links installations on its own.
@@ -201,13 +202,7 @@ async function merge(pr: GitHubPullRequest) {
 <template>
   <UModal v-model:open="open" title="GitHub" :ui="{ content: 'max-w-2xl' }">
     <template #title>
-      <IntegrationBackTitle
-        title="GitHub"
-        @back="
-          open = false
-          ui.openIntegrations()
-        "
-      />
+      <IntegrationBackTitle title="GitHub" @back="back" />
     </template>
     <template #body>
       <div class="space-y-5">

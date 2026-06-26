@@ -1,0 +1,22 @@
+{
+  "name": "@cat-factory/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Playwright end-to-end suite: drives the real SPA against a real Node backend (real Postgres + real WebSocket push) with only the external dependencies faked (LLMs + agent containers via the deterministic FakeAgentExecutor; GitHub/email/Slack/Datadog left off). Not published.",
+  "type": "module",
+  "scripts": {
+    "serve": "node --env-file-if-exists=.env src/testServer.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@cat-factory/conformance": "workspace:*",
+    "@cat-factory/node-server": "workspace:*"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@types/node": "^26.0.0",
+    "typescript": "7.0.1-rc"
+  }
+}

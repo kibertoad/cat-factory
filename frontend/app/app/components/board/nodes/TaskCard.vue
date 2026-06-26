@@ -173,6 +173,8 @@ function selectTask() {
   <div
     v-if="task && statusMeta"
     :data-block-id="task.id"
+    :data-status="task.status"
+    data-testid="task-card"
     class="nodrag w-full cursor-pointer rounded-lg border bg-slate-950/70 p-2 text-left transition"
     :class="[
       selected ? 'border-white' : 'border-slate-700 hover:border-slate-500',
@@ -273,6 +275,7 @@ function selectTask() {
         color="warning"
         variant="soft"
         size="xs"
+        data-testid="task-resolve"
         :icon="attention.icon"
         @click.stop="attention.open()"
       >
