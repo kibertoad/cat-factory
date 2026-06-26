@@ -390,7 +390,9 @@ async function clone(p: Pipeline) {
                         ? 'i-lucide-circle-slash'
                         : 'i-lucide-compass'
                     "
-                    :color="pipelines.draftFollowUps[unit.index] === false ? 'neutral' : 'secondary'"
+                    :color="
+                      pipelines.draftFollowUps[unit.index] === false ? 'neutral' : 'secondary'
+                    "
                     variant="ghost"
                     size="xs"
                     :title="

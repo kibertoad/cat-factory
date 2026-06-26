@@ -463,8 +463,7 @@ export const useUiStore = defineStore('ui', () => {
     const execution = useExecutionStore()
     const instance = execution.getInstance(instanceId)
     if (!instance) return
-    const idx =
-      stepIndex ?? instance.steps.findIndex((s) => s.followUps?.enabled)
+    const idx = stepIndex ?? instance.steps.findIndex((s) => s.followUps?.enabled)
     if (idx < 0) return
     resultView.value = {
       view: 'follow-ups',

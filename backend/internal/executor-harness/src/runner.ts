@@ -103,8 +103,12 @@ export function loadRunnerLimits(env: NodeJS.ProcessEnv = process.env): RunnerLi
 }
 
 function toView<TResult extends JobResultBase>(entry: JobEntry<TResult>): JobView<TResult> {
-  const { promise: _promise, spanBuffer: _spanBuffer, followUpBuffer: _followUpBuffer, ...view } =
-    entry
+  const {
+    promise: _promise,
+    spanBuffer: _spanBuffer,
+    followUpBuffer: _followUpBuffer,
+    ...view
+  } = entry
   return { ...view }
 }
 

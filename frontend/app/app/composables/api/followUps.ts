@@ -19,15 +19,21 @@ export function followUpsApi({ http, ws }: ApiContext) {
 
     // File a follow-up as a tracker issue (GitHub Issues / Jira).
     fileFollowUp: (workspaceId: string, executionId: string, itemId: string) =>
-      http<FollowUpsStepState>(`${base(workspaceId, executionId)}/${encodeURIComponent(itemId)}/file`, {
-        method: 'POST',
-      }),
+      http<FollowUpsStepState>(
+        `${base(workspaceId, executionId)}/${encodeURIComponent(itemId)}/file`,
+        {
+          method: 'POST',
+        },
+      ),
 
     // Send a follow-up back to the Coder (queued for its next pass).
     queueFollowUp: (workspaceId: string, executionId: string, itemId: string) =>
-      http<FollowUpsStepState>(`${base(workspaceId, executionId)}/${encodeURIComponent(itemId)}/queue`, {
-        method: 'POST',
-      }),
+      http<FollowUpsStepState>(
+        `${base(workspaceId, executionId)}/${encodeURIComponent(itemId)}/queue`,
+        {
+          method: 'POST',
+        },
+      ),
 
     // Answer a question item (folded into the Coder's next pass).
     answerFollowUp: (workspaceId: string, executionId: string, itemId: string, answer: string) =>

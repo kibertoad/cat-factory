@@ -989,7 +989,14 @@ export class ExecutionService {
           // per-step `followUps[i] === false` toggle disables it. Seeded empty here; the
           // harness streams items in as the Coder surfaces them (see pollAgentJob).
           ...(kind === FOLLOW_UP_PRODUCER_KIND && pipeline.followUps?.[i] !== false
-            ? { followUps: { enabled: true, items: [], loops: 0, maxLoops: DEFAULT_FOLLOW_UP_MAX_LOOPS } }
+            ? {
+                followUps: {
+                  enabled: true,
+                  items: [],
+                  loops: 0,
+                  maxLoops: DEFAULT_FOLLOW_UP_MAX_LOOPS,
+                },
+              }
             : {}),
         }
       })
@@ -2991,10 +2998,7 @@ export class ExecutionService {
   }
 
   /** Read a run's live follow-up companion state (the Coder step's items), or null. */
-  async getFollowUps(
-    workspaceId: string,
-    executionId: string,
-  ): Promise<FollowUpsStepState | null> {
+  async getFollowUps(workspaceId: string, executionId: string): Promise<FollowUpsStepState | null> {
     const instance = await this.executionRepository.get(workspaceId, executionId)
     if (!instance) throw new NotFoundError('Execution', executionId)
     return this.followUpStep(instance)?.step.followUps ?? null
@@ -3040,7 +3044,10 @@ export class ExecutionService {
     const frameId =
       (await this.contextBuilder.resolveServiceFrameId(workspaceId, instance.blockId)) ??
       instance.blockId
-    const body = [item.detail, item.suggestedAction ? `\n\nSuggested approach: ${item.suggestedAction}` : '']
+    const body = [
+      item.detail,
+      item.suggestedAction ? `\n\nSuggested approach: ${item.suggestedAction}` : '',
+    ]
       .join('')
       .trim()
     const ticket = await this.ticketTrackerProvider.createTicket({

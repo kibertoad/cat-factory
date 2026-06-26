@@ -91,15 +91,11 @@ const STATUS_META: Record<
               {{ FOLLOW_UP_COMPANION_META.label }}{{ block ? ` — ${block.title}` : '' }}
             </h2>
             <p class="truncate text-[11px] text-slate-400">
-              Forward-looking follow-ups & questions the Coder surfaced. The pipeline continues
-              once every item is decided.
+              Forward-looking follow-ups & questions the Coder surfaced. The pipeline continues once
+              every item is decided.
             </p>
           </div>
-          <UBadge
-            :color="pendingCount > 0 ? 'warning' : 'success'"
-            variant="subtle"
-            size="sm"
-          >
+          <UBadge :color="pendingCount > 0 ? 'warning' : 'success'" variant="subtle" size="sm">
             {{ pendingCount > 0 ? `${pendingCount} to decide` : 'All decided' }}
           </UBadge>
           <button
@@ -119,13 +115,16 @@ const STATUS_META: Record<
             <UIcon :name="FOLLOW_UP_COMPANION_META.icon" class="h-8 w-8 opacity-40" />
             <p class="text-sm">No follow-ups yet.</p>
             <p class="max-w-sm text-[11px] text-slate-500">
-              As the Coder works it streams loose ends, side-tasks and questions here. They
-              appear live — you can act on them before the Coder even finishes.
+              As the Coder works it streams loose ends, side-tasks and questions here. They appear
+              live — you can act on them before the Coder even finishes.
             </p>
           </div>
 
           <div v-else class="space-y-3">
-            <p v-if="followUps.error" class="rounded-md bg-rose-500/10 px-3 py-2 text-[12px] text-rose-300">
+            <p
+              v-if="followUps.error"
+              class="rounded-md bg-rose-500/10 px-3 py-2 text-[12px] text-rose-300"
+            >
               {{ followUps.error }}
             </p>
 
@@ -166,7 +165,10 @@ const STATUS_META: Record<
                       {{ item.ticketExternalId ?? 'View issue' }}
                     </a>
                   </p>
-                  <p v-if="item.status === 'answered' && item.answer" class="mt-1 text-[11px] text-slate-300">
+                  <p
+                    v-if="item.status === 'answered' && item.answer"
+                    class="mt-1 text-[11px] text-slate-300"
+                  >
                     <span class="text-slate-500">Your answer:</span> {{ item.answer }}
                   </p>
 

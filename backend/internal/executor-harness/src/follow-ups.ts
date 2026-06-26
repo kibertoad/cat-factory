@@ -32,7 +32,12 @@ function coerceLine(value: unknown): FollowUpLine | null {
     typeof o.suggestedAction === 'string' && o.suggestedAction.trim()
       ? o.suggestedAction.trim()
       : undefined
-  return { kind, title: title.slice(0, 300), detail, ...(suggestedAction ? { suggestedAction } : {}) }
+  return {
+    kind,
+    title: title.slice(0, 300),
+    detail,
+    ...(suggestedAction ? { suggestedAction } : {}),
+  }
 }
 
 /**
