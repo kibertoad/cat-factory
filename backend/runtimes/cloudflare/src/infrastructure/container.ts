@@ -9,7 +9,9 @@ import {
   type ModelProviderResolver,
   type NotificationChannel,
   NoopWorkRunner,
+  type ProvisioningSubsystem,
   type ResolveUserGitHubToken,
+  type RunnerTransport,
   type TaskSourceProvider,
   type WorkRunner,
 } from '@cat-factory/kernel'
@@ -35,6 +37,8 @@ import {
   PersonalSubscriptionService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
+  ProvisioningLogRecorder,
+  LoggingRunnerTransport,
   SLACK_CIPHER_INFO,
   SlackNotificationChannel,
   TicketTrackerService,
@@ -113,6 +117,7 @@ import { D1ServiceRepository } from './repositories/D1ServiceRepository'
 import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepository'
 import { D1TokenUsageRepository } from './repositories/D1TokenUsageRepository'
 import { D1LlmCallMetricRepository } from './repositories/D1LlmCallMetricRepository'
+import { D1ProvisioningLogRepository } from './repositories/D1ProvisioningLogRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
 import {
   D1SlackConnectionRepository,
@@ -375,6 +380,7 @@ function buildResolveTransport(
   config: AppConfig,
   db: D1Database,
   clock: Clock,
+  provisioningLog?: ProvisioningLogRecorder,
 ): ResolveRunnerTransport | null {
   // The Cloudflare backend folds in instance-level reaping: the registry records
   // each dispatched container in the live inventory and clears it on release, so the
@@ -411,14 +417,41 @@ function buildResolveTransport(
 
   if (!cloudflare && !runnerService) return null
 
+  // Wrap a resolved transport so every dispatch/release/poll-failure appends a
+  // provisioning-log event tagged with the right subsystem (a self-hosted pool vs a
+  // per-run Cloudflare container). No-op when the separate log store isn't wired.
+  // The dedup set is closure-owned so it outlives each (per-resolution) wrapper.
+  const loggedPollFailures = new Set<string>()
+  const log = (
+    inner: RunnerTransport,
+    subsystem: ProvisioningSubsystem,
+    workspaceId: string | undefined,
+    providerId?: string | null,
+  ): RunnerTransport =>
+    provisioningLog
+      ? new LoggingRunnerTransport({
+          inner,
+          recorder: provisioningLog,
+          workspaceId: workspaceId ?? '',
+          subsystem,
+          providerId,
+          loggedPollFailures,
+        })
+      : inner
+
   return async (workspaceId) => {
     if (runnerService && poolProvider && workspaceId) {
       const resolved = await runnerService.resolve(workspaceId)
       if (resolved) {
-        return new RunnerPoolTransport(poolProvider, resolved.manifest, resolved.resolveSecret)
+        return log(
+          new RunnerPoolTransport(poolProvider, resolved.manifest, resolved.resolveSecret),
+          'runner-pool',
+          workspaceId,
+          resolved.manifest.providerId,
+        )
       }
     }
-    if (cloudflare) return cloudflare
+    if (cloudflare) return log(cloudflare, 'container', workspaceId)
     throw new Error(
       `No runner backend available for workspace '${workspaceId ?? '(unknown)'}': ` +
         `register a runner pool or enable Cloudflare Containers`,
@@ -1533,11 +1566,22 @@ export function buildContainer(
   // can't clobber the test's. Gates read their provider lazily at probe time, so the last write wins.
   clearGateProviders()
 
+  // The unified provisioning event log lives in a SEPARATE D1 database (its own
+  // binding + migrations) to isolate its high write churn. When wired, build the
+  // repo + a best-effort recorder shared by the env services (via createCore) and
+  // the runner/container transport decorator below.
+  const provisioningLogRepository = env.PROVISIONING_DB
+    ? new D1ProvisioningLogRepository({ db: env.PROVISIONING_DB })
+    : undefined
+  const provisioningLogRecorder = provisioningLogRepository
+    ? new ProvisioningLogRecorder({ repository: provisioningLogRepository, idGenerator, clock })
+    : undefined
+
   // The runner-backend factory is shared by every container-backed flow (the
   // implementation executor and the repo bootstrapper), so both dispatch through the
   // same Cloudflare/self-hosted seam — and the bootstrapper rides the reaping-aware
   // Cloudflare transport for free. Null when no backend is configured.
-  const resolveTransport = buildResolveTransport(env, config, db, clock)
+  const resolveTransport = buildResolveTransport(env, config, db, clock, provisioningLogRecorder)
 
   // The subscription-token pool (Claude Code / Codex credentials) — built once and
   // shared by the container executor (lease + usage feedback) and the
@@ -1599,6 +1643,10 @@ export function buildContainer(
     workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
     llmCallMetricRepository: new D1LlmCallMetricRepository({ db }),
+    // Unified provisioning event log (separate D1 binding). Threads the recorder into
+    // the env services and exposes the read service for the logs controller; undefined
+    // when PROVISIONING_DB isn't bound.
+    ...(provisioningLogRepository ? { provisioningLogRepository } : {}),
     recordLlmPrompts: config.observability.recordPrompts,
     idGenerator,
     clock,

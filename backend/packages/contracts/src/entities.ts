@@ -769,6 +769,28 @@ export type TesterStepState = v.InferOutput<typeof testerStepStateSchema>
  * projection. Null in degraded manual mode (no env provider wired) or after the human
  * destroys the env from the gate.
  */
+/**
+ * The compact, non-secret projection of the ephemeral environment a run's step is
+ * associated with — its lifecycle state, public URL, TTL, and (when failed) the
+ * exact provider error. Surfaced in a run's details (esp. the Tester step) so the
+ * env's spinning-up / running / shut-down / errored state is visible without a
+ * second fetch. The full record (with encrypted creds) lives in the `environments`
+ * table. {@link humanTestEnvironmentSchema} is the human-test gate's subset of this.
+ */
+export const runEnvironmentSchema = v.object({
+  /** The `environments` row id (lets a window fetch access creds / re-poll status). */
+  id: v.string(),
+  /** The provisioned public URL (null while still provisioning). */
+  url: v.nullable(v.string()),
+  /** The environment lifecycle status; see {@link environmentStatusSchema}. */
+  status: environmentStatusSchema,
+  /** Epoch ms the environment expires (TTL), when known. */
+  expiresAt: v.optional(v.nullable(v.number())),
+  /** The verbatim provider error when the environment failed/expired, else null. */
+  lastError: v.optional(v.nullable(v.string())),
+})
+export type RunEnvironment = v.InferOutput<typeof runEnvironmentSchema>
+
 export const humanTestEnvironmentSchema = v.object({
   /** The `environments` row id, so the window can fetch access creds / re-poll status. */
   id: v.string(),
@@ -910,6 +932,14 @@ export const pipelineStepSchema = v.object({
    * {@link humanTestStepStateSchema}. Absent for every other step kind.
    */
   humanTest: v.optional(v.nullable(humanTestStepStateSchema)),
+  /**
+   * The ephemeral environment this step runs against (when the block has one), so a
+   * run's details can show its spinning-up / running / shut-down / errored state +
+   * the exact error. Populated by the engine for container/deployer steps from the
+   * block's live environment; see {@link runEnvironmentSchema}. The `human-test` gate
+   * keeps its own richer `humanTest.environment` and is not double-populated here.
+   */
+  environment: v.optional(v.nullable(runEnvironmentSchema)),
   /** Live subtask counts while an async (container) step runs; see {@link stepSubtasksSchema}. */
   subtasks: v.optional(stepSubtasksSchema),
   /**

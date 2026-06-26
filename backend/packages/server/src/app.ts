@@ -32,6 +32,7 @@ import { consensusController } from './modules/consensus/ConsensusController.js'
 import { clarityReviewController } from './modules/clarity/ClarityReviewController.js'
 import { webSearchProxyController } from './modules/webSearch/WebSearchProxyController.js'
 import { runnerPoolController } from './modules/runners/RunnerPoolController.js'
+import { provisioningLogController } from './modules/provisioningLogs/ProvisioningLogController.js'
 import { slackController, slackOAuthController } from './modules/slack/SlackController.js'
 import { vendorCredentialController } from './modules/providers/VendorCredentialController.js'
 import { personalSubscriptionController } from './modules/providers/PersonalSubscriptionController.js'
@@ -89,6 +90,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', taskSourceController())
   app.route('/workspaces/:workspaceId', environmentController())
   app.route('/workspaces/:workspaceId', runnerPoolController())
+  app.route('/workspaces/:workspaceId', provisioningLogController())
   app.route('/workspaces/:workspaceId', vendorCredentialController())
   app.route('/workspaces/:workspaceId', workspaceApiKeyController())
   app.route('/workspaces/:workspaceId', bootstrapController())

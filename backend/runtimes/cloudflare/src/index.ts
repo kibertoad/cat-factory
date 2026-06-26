@@ -10,6 +10,7 @@ import { ContainerInstanceRegistry } from './infrastructure/containers/Container
 import { D1RateLimitRepository } from './infrastructure/repositories/D1RateLimitRepository'
 import { D1TokenUsageRepository } from './infrastructure/repositories/D1TokenUsageRepository'
 import { D1LlmCallMetricRepository } from './infrastructure/repositories/D1LlmCallMetricRepository'
+import { D1ProvisioningLogRepository } from './infrastructure/repositories/D1ProvisioningLogRepository'
 import { D1PipelineScheduleRepository } from './infrastructure/repositories/D1PipelineScheduleRepository'
 import { buildContainer } from './infrastructure/container'
 import { escalateStaleNotifications } from '@cat-factory/server'
@@ -102,6 +103,14 @@ export default {
           commitRepository: new D1CommitProjectionRepository({ db: env.DB }),
           llmCallMetricRepository: new D1LlmCallMetricRepository({ db: env.DB }),
           pipelineScheduleRepository: new D1PipelineScheduleRepository({ db: env.DB }),
+          // Prune the separate provisioning-log database when its binding is present.
+          ...(env.PROVISIONING_DB
+            ? {
+                provisioningLogRepository: new D1ProvisioningLogRepository({
+                  db: env.PROVISIONING_DB,
+                }),
+              }
+            : {}),
           clock,
           policy: loadConfig(env).retention,
         })

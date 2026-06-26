@@ -148,6 +148,21 @@ export {
   type HttpRunnerPoolProviderOptions,
 } from './modules/runners/HttpRunnerPoolProvider.js'
 export { RunnerPoolTransport } from './modules/runners/RunnerPoolTransport.js'
+// Unified provisioning event log: the best-effort recorder every spin-up/down site
+// writes through, and the read service behind the "View logs" drawers + run details.
+export {
+  ProvisioningLogRecorder,
+  ProvisioningLogService,
+  PROVISIONING_LOG_MAX_LIMIT,
+  type ProvisioningLogEvent,
+  type ProvisioningLogRecorderDependencies,
+  type ProvisioningLogServiceDependencies,
+} from './modules/provisioning-logs/ProvisioningLogService.js'
+export {
+  LoggingRunnerTransport,
+  type LoggingRunnerTransportOptions,
+} from './modules/provisioning-logs/LoggingRunnerTransport.js'
+export { redactSecrets } from './modules/provisioning-logs/redact.js'
 
 // Slack: an additional delivery transport for the existing notification mechanism
 // (the `SlackNotificationChannel` implements the same `NotificationChannel` port),

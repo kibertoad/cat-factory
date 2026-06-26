@@ -202,6 +202,11 @@ export interface RetentionConfig {
    * for recent debugging, so it is pruned aggressively (default 3 days).
    */
   llmCallMetricsMs: number
+  /**
+   * Provisioning event log (one row per spin-up/down attempt). High-churn and only
+   * useful for recent debugging, so pruned aggressively (default 14 days). 0 disables.
+   */
+  provisioningLogMs: number
 }
 
 export interface FragmentLibraryConfig {

@@ -6,6 +6,7 @@ import type { EnvironmentHandle } from '@cat-factory/kernel'
 import { assertFound } from '@cat-factory/kernel'
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
 import { recordToHandle } from './environments.logic.js'
+import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningLogService.js'
 
 // EnvironmentTeardownService: destroys provisioned environments — on demand and,
 // via `sweepExpired`, when their TTL elapses (driven by the cron). Best-effort:
@@ -18,6 +19,8 @@ export interface EnvironmentTeardownServiceDependencies {
   environmentRegistryRepository: EnvironmentRegistryRepository
   secretCipher: SecretCipher
   clock: Clock
+  /** Best-effort provisioning-event log; absent ⇒ teardown is unchanged. */
+  provisioningLog?: ProvisioningLogRecorder
 }
 
 export class EnvironmentTeardownService {
@@ -58,18 +61,50 @@ export class EnvironmentTeardownService {
     if (connection) {
       const resolveSecret = await this.deps.connectionService.resolveSecrets(record.workspaceId)
       const provisionFields = await this.decryptFields(record.provisionFieldsCipher)
-      await this.deps.environmentProvider.teardown({
-        manifest: connection.manifest,
-        externalId: record.externalId,
-        provisionFields,
-        resolveSecret,
-      })
+      try {
+        await this.deps.environmentProvider.teardown({
+          manifest: connection.manifest,
+          externalId: record.externalId,
+          provisionFields,
+          resolveSecret,
+        })
+      } catch (error) {
+        // Log the verbatim provider error before it propagates (the sweep swallows
+        // it; an on-demand teardown surfaces it). The local record is NOT tombstoned
+        // on a provider failure, matching the existing retry-next-pass behaviour.
+        await this.logTeardown(
+          record,
+          'failure',
+          error instanceof Error ? error.message : String(error),
+        )
+        throw error
+      }
     }
     await this.deps.environmentRegistryRepository.softDelete(
       record.workspaceId,
       record.id,
       this.deps.clock.now(),
     )
+    await this.logTeardown(record, 'success', null)
+  }
+
+  private async logTeardown(
+    record: EnvironmentRecord,
+    outcome: 'success' | 'failure',
+    error: string | null,
+  ): Promise<void> {
+    await this.deps.provisioningLog?.record({
+      workspaceId: record.workspaceId,
+      subsystem: 'environment',
+      operation: 'teardown',
+      targetId: record.id,
+      providerId: record.providerId,
+      blockId: record.blockId,
+      executionId: record.executionId,
+      outcome,
+      error,
+      detail: null,
+    })
   }
 
   private async decryptFields(cipher: string | null): Promise<Record<string, string>> {

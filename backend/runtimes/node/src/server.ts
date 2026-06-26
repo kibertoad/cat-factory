@@ -138,6 +138,7 @@ export async function start(
       llmCallMetricRepository: repos.llmCallMetricRepository,
       pipelineScheduleRepository: repos.pipelineScheduleRepository,
       subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(db),
+      provisioningLogRepository: repos.provisioningLogRepository,
     },
     container.config.retention,
     clock,

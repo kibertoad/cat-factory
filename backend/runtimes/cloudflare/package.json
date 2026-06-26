@@ -10,7 +10,8 @@
   "files": [
     "dist",
     "migrations",
-    "sandbox-migrations"
+    "sandbox-migrations",
+    "migrations-provisioning"
   ],
   "type": "module",
   "main": "./dist/index.js",
@@ -35,7 +36,8 @@
     "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "db:migrate:local": "wrangler d1 migrations apply cat_factory --local"
+    "db:migrate:local": "wrangler d1 migrations apply cat_factory --local",
+    "db:migrate:provisioning:local": "wrangler d1 migrations apply cat_factory_provisioning --local"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.85",
