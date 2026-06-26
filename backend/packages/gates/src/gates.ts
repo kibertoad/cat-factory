@@ -5,6 +5,7 @@ import type {
   GateHelperCompletionArgs,
   GateProbe,
   IncidentUpdate,
+  PullRequestReviewProvider,
   PullRequestReviewSnapshot,
   ReleaseSignal,
 } from '@cat-factory/kernel'
@@ -366,6 +367,28 @@ const REVIEW_THREAD_RESOLVED_REPLY =
   'Addressed by the cat-factory fixer in the latest commit(s) on this branch.'
 
 /**
+ * Resolve the gate-handed review threads on GitHub, returning whether every resolve landed.
+ * Shared by the probe's reconcile (resolve-only retry of a lagged resolve) and the
+ * helper-completion hook (reply + resolve after a fixer round). `resolveThreads` throws on a
+ * partial failure, so `false` means "some threads are still open — retain them for a retry".
+ */
+async function tryResolveThreads(
+  provider: PullRequestReviewProvider,
+  workspaceId: string,
+  blockId: string,
+  threadIds: string[],
+  reply: string,
+): Promise<boolean> {
+  if (threadIds.length === 0) return true
+  try {
+    await provider.resolveThreads(workspaceId, blockId, threadIds, reply)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
  * Human-review gate: watch the PR for a human code review on GitHub. It advances once the PR
  * meets GitHub's required approvals with no unresolved review threads; on outstanding feedback it
  * loops the `fixer` (immediately when approved; after a grace window otherwise), resolving each
@@ -428,21 +451,20 @@ export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
       const stillOpen = handed.filter((id) =>
         snapshot.unresolvedThreads.some((t) => t.threadId === id),
       )
-      if (stillOpen.length > 0) {
-        try {
-          await provider.resolveThreads(workspaceId, blockId, stillOpen, '')
-        } catch {
-          // best-effort: retained below; the next poll re-attempts
-        }
-      }
+      // Retention is SNAPSHOT-driven (not throw-driven): keep whatever GitHub still reports
+      // open, so a resolve that succeeded but hasn't propagated yet (read-after-write lag) is
+      // re-checked next poll, and a resolve that failed is retried. Resolve-only (empty reply)
+      // so a retry never double-posts the courtesy comment.
+      await tryResolveThreads(provider, workspaceId, blockId, stillOpen, '')
       gateState.pendingThreadIds = stillOpen.length > 0 ? stillOpen : null
     }
     const graceMinutes =
       gateState.humanReviewGraceMinutes ?? DEFAULT_MERGE_PRESET.humanReviewGraceMinutes
     // Surface the approval progress for the UI (persisted via the caller's `...step.gate` spread),
     // and cache the static branch-protection required count so later polls skip re-reading it.
+    // The UI derives the displayed "required" count from `requiredApprovingReviewCount` via the
+    // same `max(1, …)` floor (see review.logic.ts), so it is NOT persisted a second time.
     gateState.lastApprovals = snapshot.approvals
-    gateState.requiredApprovals = snapshot.headSha === null ? null : requiredApprovals(snapshot)
     if (snapshot.headSha !== null) {
       gateState.requiredApprovingReviewCount = snapshot.requiredApprovingReviewCount
     }
@@ -511,13 +533,19 @@ export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
   },
   // Fold the reviewer's feedback into the fixer's prompt.
   helperPriorOutput: (summary) => ({ agentKind: HUMAN_REVIEW_AGENT_KIND, output: summary }),
-  // After a SUCCESSFUL fixer round, reply to + RESOLVE the threads it was handed, so the
-  // immediately following re-probe counts them as addressed. A FAILED fixer addressed nothing,
-  // so its threads are left open (resolving them would post a misleading "addressed" reply and
-  // hide unfixed feedback from the gate) — the negative state makes the next probe re-dispatch.
-  // Best-effort: on a SUCCESS whose GitHub-side resolve threw transiently, the handed ids are
-  // RETAINED (not cleared) so the probe's reconcile re-attempts exactly those — that retention is
-  // what keeps the reconcile precise (it touches only gate-handed threads, never any bot thread).
+  // After a fixer round that made REAL PROGRESS, reply to + RESOLVE the threads it was handed,
+  // so the immediately following re-probe counts them as addressed. A FAILED fixer addressed
+  // nothing, so its threads are left open (resolving them would post a misleading "addressed"
+  // reply and hide unfixed feedback) — the negative state makes the next probe re-dispatch.
+  // CRITICAL: a "done" fixer that pushed NOTHING (it found nothing to do, or its push no-op'd)
+  // ALSO addressed nothing — resolving its threads would let an APPROVED PR advance with the
+  // reviewer's feedback silently unaddressed. So gate the resolve on the PR head having
+  // advanced since dispatch (`step.gate.headSha` is the gated head; the engine overwrites it
+  // only on the next probe). No progress → leave the threads open and drop the stash so the
+  // reconcile doesn't resolve them either; the next probe's backoff raises the stall card.
+  // Best-effort: on a progressed round whose GitHub-side resolve threw transiently, the handed
+  // ids are RETAINED so the probe's reconcile re-attempts exactly those (scoped to gate-handed
+  // threads, never any bot thread).
   onHelperComplete: async ({ workspaceId, block, step, result }) => {
     const threadIds = step.gate?.pendingThreadIds ?? []
     // A failed fixer (or nothing handed): drop the stash without resolving anything.
@@ -530,13 +558,35 @@ export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
       if (step.gate) step.gate.pendingThreadIds = null
       return
     }
+    // Read the current head once (cheap relative to a fixer round) to confirm the fixer pushed.
+    const dispatchedHead = step.gate?.headSha ?? null
+    let snapshot: PullRequestReviewSnapshot
     try {
-      await provider.resolveThreads(workspaceId, block.id, threadIds, REVIEW_THREAD_RESOLVED_REPLY)
-      if (step.gate) step.gate.pendingThreadIds = null
+      snapshot = await provider.getReview(
+        workspaceId,
+        block.id,
+        step.gate?.requiredApprovingReviewCount ?? null,
+      )
     } catch {
-      // Resolve threw — RETAIN the handed ids so the next probe's reconcile retries the resolve
-      // (scoped to exactly these gate-handed threads); leaving them set is deliberate.
+      // Couldn't confirm progress — do NOT resolve (could hide unaddressed feedback). Drop the
+      // stash so the reconcile doesn't resolve them unchecked; the next probe re-evaluates.
+      if (step.gate) step.gate.pendingThreadIds = null
+      return
     }
+    if (dispatchedHead !== null && snapshot.headSha === dispatchedHead) {
+      // The fixer made no commit — leave the handed threads open and drop the stash so the
+      // reconcile leaves them alone; the next probe's backoff surfaces the stall card.
+      if (step.gate) step.gate.pendingThreadIds = null
+      return
+    }
+    const ok = await tryResolveThreads(
+      provider,
+      workspaceId,
+      block.id,
+      threadIds,
+      REVIEW_THREAD_RESOLVED_REPLY,
+    )
+    if (step.gate) step.gate.pendingThreadIds = ok ? null : threadIds
   },
   // Never reached (the attempt budget is effectively unbounded), but raise a card defensively so
   // a misconfiguration surfaces rather than silently failing the run.

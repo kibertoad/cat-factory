@@ -57,6 +57,10 @@ async function submitFix() {
   fixInstructions.value = ''
 }
 
+// The displayed "required approvals" is derived from the cached branch-protection count via
+// the gate's effective floor (`max(1, …)`, see review.logic.ts) rather than persisted twice.
+const requiredApprovals = computed(() => Math.max(1, gate.value?.requiredApprovingReviewCount ?? 1))
+
 const failingChecks = computed(() => gate.value?.failingChecks ?? [])
 const shortSha = computed(() => (gate.value?.headSha ? gate.value.headSha.slice(0, 7) : null))
 
@@ -210,8 +214,8 @@ const conflictVerdict = computed(() => {
                 >
                   <UIcon name="i-lucide-users" class="h-4 w-4 shrink-0 text-violet-300" />
                   <span class="text-[13px] text-slate-200">
-                    {{ gate.lastApprovals ?? 0 }} / {{ gate.requiredApprovals ?? 1 }} approval{{
-                      (gate.requiredApprovals ?? 1) === 1 ? '' : 's'
+                    {{ gate.lastApprovals ?? 0 }} / {{ requiredApprovals }} approval{{
+                      requiredApprovals === 1 ? '' : 's'
                     }}
                     <template v-if="status === 'fixing'"> · fixer addressing comments…</template>
                     <template v-else-if="status === 'failing'">

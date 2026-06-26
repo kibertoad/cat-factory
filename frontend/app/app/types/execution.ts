@@ -467,9 +467,10 @@ export interface GateStepState {
   // ---- human-review gate only ----
   /** approvals the PR had at the last probe (human-review gate) */
   lastApprovals?: number | null
-  /** approvals GitHub requires before merge (human-review gate) */
-  requiredApprovals?: number | null
-  /** raw branch-protection required count, cached after the first probe (human-review gate) */
+  /**
+   * raw branch-protection required count, cached after the first probe (human-review gate).
+   * The displayed "required" count is `max(1, this)` — the gate's effective floor.
+   */
   requiredApprovingReviewCount?: number | null
   /** review threads handed to the fixer, pending resolve on its completion (human-review gate) */
   pendingThreadIds?: string[] | null

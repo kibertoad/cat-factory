@@ -95,7 +95,11 @@ export interface PullRequestReviewProvider {
    * would hide a still-unresolved thread from the gate's outstanding set). A non-empty `reply`
    * is posted on each successfully-resolved thread; an EMPTY `reply` means "resolve only" (used
    * by the gate's reconcile retry, which must not re-post the courtesy reply). Best-effort per
-   * thread; a failure on one thread must not throw.
+   * thread (one bad thread does not abort the rest), but if ANY thread failed to resolve the
+   * call THROWS after attempting them all — so the gate's helper-completion hook retains the
+   * handed ids and the next probe's reconcile retries exactly those (a swallowed failure would
+   * let the gate clear its stash and re-dispatch an entire fixer round for an already-fixed
+   * thread instead of the cheap resolve-only reconcile).
    */
   resolveThreads(
     workspaceId: string,

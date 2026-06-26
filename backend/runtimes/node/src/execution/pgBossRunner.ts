@@ -132,7 +132,20 @@ export async function startExecutionWorker(
           // (the old decision-timeout was removed). It simply parks here; `signalDecision`
           // re-enqueues an advance when the human resolves it, and the stale-run sweeper
           // leaves a `blocked` run alone. Urgency is conveyed by the escalating notification.
-          await driveExecution(container.executionService, workspaceId, executionId, cfg, { log })
+          const outcome = await driveExecution(
+            container.executionService,
+            workspaceId,
+            executionId,
+            cfg,
+            { log },
+          )
+          // An unbounded-wait gate (human-review) released after one poll budget so this job
+          // doesn't outlive its expire cap. The run stays `running`; the stale-run sweeper
+          // re-enqueues a fresh advance for the next poll cycle (no in-handler re-send: the
+          // `exclusive` queue would suppress it while this job is still active).
+          if (outcome.rearmedGate) {
+            log.info({ workspaceId, executionId }, 'human-review gate re-armed; awaiting sweep')
+          }
         } catch (error) {
           log.error(
             {

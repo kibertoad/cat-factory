@@ -162,10 +162,12 @@ describe('humanReviewGate', () => {
     expect(gs.pendingThreadIds).toEqual(['T9'])
   })
 
-  it('onHelperComplete resolves the stashed threads and clears them', async () => {
+  it('onHelperComplete resolves the stashed threads and clears them when the fixer pushed', async () => {
+    // The fixer advanced the PR head (sha-old → sha-new), so its handed threads are genuinely
+    // addressed: resolve them and clear the stash.
     const resolved: string[] = []
     wirePullRequestReviewProvider({
-      getReview: async () => snapshot(),
+      getReview: async () => snapshot({ headSha: 'sha-new' }),
       resolveThreads: async (_ws, _b, ids) => {
         resolved.push(...ids)
       },
@@ -173,7 +175,13 @@ describe('humanReviewGate', () => {
     const gate = humanReviewGate(stubGateContext())
     const step = {
       agentKind: 'human-review',
-      gate: { phase: 'working', attempts: 1, maxAttempts: 1, pendingThreadIds: ['T9'] },
+      gate: {
+        phase: 'working',
+        attempts: 1,
+        maxAttempts: 1,
+        headSha: 'sha-old',
+        pendingThreadIds: ['T9'],
+      },
     } as unknown as Parameters<NonNullable<typeof gate.onHelperComplete>>[0]['step']
     await gate.onHelperComplete!({
       workspaceId: 'ws',
@@ -184,6 +192,71 @@ describe('humanReviewGate', () => {
     })
     expect(resolved).toEqual(['T9'])
     expect(step.gate?.pendingThreadIds).toBeNull()
+  })
+
+  it('onHelperComplete does NOT resolve when the fixer pushed nothing (head unchanged)', async () => {
+    // A "done" fixer that left the head sha unchanged addressed nothing. Resolving its threads
+    // would post a misleading "addressed" reply and let an approved PR advance with the
+    // reviewer's feedback unaddressed — so leave them open and drop the stash (the next probe's
+    // backoff surfaces the stall card).
+    const resolved: string[] = []
+    wirePullRequestReviewProvider({
+      getReview: async () => snapshot({ headSha: 'sha1' }),
+      resolveThreads: async (_ws, _b, ids) => {
+        resolved.push(...ids)
+      },
+    })
+    const gate = humanReviewGate(stubGateContext())
+    const step = {
+      agentKind: 'human-review',
+      gate: {
+        phase: 'working',
+        attempts: 1,
+        maxAttempts: 1,
+        headSha: 'sha1',
+        pendingThreadIds: ['T9'],
+      },
+    } as unknown as Parameters<NonNullable<typeof gate.onHelperComplete>>[0]['step']
+    await gate.onHelperComplete!({
+      workspaceId: 'ws',
+      instance: {} as never,
+      block: { id: 'b' } as never,
+      step,
+      result: { state: 'done', result: { output: '' } },
+    })
+    expect(resolved).toEqual([])
+    expect(step.gate?.pendingThreadIds).toBeNull()
+  })
+
+  it('onHelperComplete retains the handed threads when the resolve fails (for the reconcile)', async () => {
+    // The fixer pushed (head advanced) but the GitHub-side resolve threw transiently. Retain the
+    // handed ids so the probe's reconcile retries exactly those (resolve-only) — rather than
+    // clearing the stash and re-dispatching a whole fixer round for an already-fixed thread.
+    wirePullRequestReviewProvider({
+      getReview: async () => snapshot({ headSha: 'sha-new' }),
+      resolveThreads: async () => {
+        throw new Error('502 from GitHub')
+      },
+    })
+    const gate = humanReviewGate(stubGateContext())
+    const step = {
+      agentKind: 'human-review',
+      gate: {
+        phase: 'working',
+        attempts: 1,
+        maxAttempts: 1,
+        headSha: 'sha-old',
+        pendingThreadIds: ['T9'],
+      },
+    } as unknown as Parameters<NonNullable<typeof gate.onHelperComplete>>[0]['step']
+    await gate.onHelperComplete!({
+      workspaceId: 'ws',
+      instance: {} as never,
+      block: { id: 'b' } as never,
+      step,
+      result: { state: 'done', result: { output: '' } },
+    })
+    expect(step.gate?.pendingThreadIds).toEqual(['T9'])
   })
 
   it('reconciles ONLY the gate-handed threads whose resolve lagged (resolve-only, retained)', async () => {

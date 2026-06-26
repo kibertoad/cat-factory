@@ -1140,12 +1140,19 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         // sees it clean and advances.
         const resolvedThreads: string[] = []
         let resolved = false
+        // The gate only resolves a fixer round's threads once the fixer actually pushed a commit
+        // (the PR head advanced). Model that: the head is `sha1` on the dispatch probe and
+        // advances to `sha2` afterwards, so onHelperComplete confirms progress and resolves.
+        let reviews = 0
         const provider: PullRequestReviewProvider = {
-          getReview: async () =>
-            resolved
-              ? APPROVED_CLEAN
+          getReview: async () => {
+            reviews += 1
+            const headSha = reviews >= 2 ? 'sha2' : 'sha'
+            return resolved
+              ? { ...APPROVED_CLEAN, headSha }
               : {
                   ...APPROVED_CLEAN,
+                  headSha,
                   unresolvedThreads: [
                     {
                       threadId: 'T1',
@@ -1157,7 +1164,8 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
                       latestCommentAt: 0,
                     },
                   ],
-                },
+                }
+          },
           resolveThreads: async (_ws, _b, ids) => {
             resolvedThreads.push(...ids)
             resolved = true

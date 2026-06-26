@@ -752,17 +752,18 @@ export const gateStepStateSchema = v.object({
   attemptLog: v.optional(v.nullable(v.array(gateAttemptSchema))),
   // ---- human-review gate only (absent for the CI/conflicts/post-release-health gates) ----
   /**
-   * The number of approving reviews the PR had at the last probe vs. what GitHub requires,
-   * so the UI can show "1 / 2 approvals". Absent for the other gates.
+   * The number of approving reviews the PR had at the last probe, so the UI can show
+   * "1 / N approvals". The "required" side is derived from {@link requiredApprovingReviewCount}
+   * via the same `max(1, …)` floor the gate applies (see review.logic.ts) rather than persisted
+   * a second time. Absent for the other gates.
    */
   lastApprovals: v.optional(v.nullable(v.number())),
-  requiredApprovals: v.optional(v.nullable(v.number())),
   /**
    * The raw branch-protection required-approving-review count, cached after the FIRST probe
    * resolves it so subsequent polls skip the static protection read (branch protection is repo
    * config, not PR activity — re-reading it every poll over a multi-day review only burns GitHub
-   * rate budget). Distinct from {@link requiredApprovals}, which is the gate's effective floor
-   * (`max(1, …)`) for the UI. Absent for the other gates.
+   * rate budget). The UI's displayed "required" count is `max(1, this)` (the gate's effective
+   * floor). Absent for the other gates.
    */
   requiredApprovingReviewCount: v.optional(v.nullable(v.number())),
   /**

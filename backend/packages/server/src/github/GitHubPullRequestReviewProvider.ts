@@ -1,6 +1,7 @@
 import type {
   BlockRepository,
   GitHubClient,
+  GitHubPullRequestComment,
   GitHubPullRequestReview,
   PullRequestReviewProvider,
   PullRequestReviewSnapshot,
@@ -115,18 +116,34 @@ export class GitHubPullRequestReviewProvider implements PullRequestReviewProvide
         ? cachedRequiredApprovingReviewCount
         : await this.resolveRequiredApprovingReviewCount(target, ref, number)
 
-    const [assignedReviewers, reviews, threads, comments] = await Promise.all([
-      gh.listRequestedReviewers?.(target.installationId, ref, number) ?? Promise.resolve([]),
+    // The reviews (approval) + unresolved threads are needed on EVERY poll. The plain issue
+    // comments and the assigned-reviewer list are consulted by the gate ONLY while the PR is
+    // not yet approved — `classifyHumanReview` discards comments once approved, and the
+    // assigned-reviewer list only feeds the "assign a reviewer" awaiting-approval card — so
+    // skip those two reads once the PR is approved. Over an indefinite review wait that trims
+    // the per-poll GitHub reads in the approved-with-open-threads window. (The dominant
+    // not-yet-approved wait still needs all four; the GraphQL thread read has no etag, so it
+    // can't be made conditional.) `approved` MUST mirror the gate's `isApproved` floor
+    // (`max(1, requiredApprovingReviewCount)` — see review.logic.ts) so the provider never
+    // skips a read the gate would have consulted.
+    const [reviews, threads] = await Promise.all([
       gh.listPullRequestReviews?.(target.installationId, ref, number) ?? Promise.resolve([]),
       gh.listReviewThreads?.(target.installationId, ref, number) ?? Promise.resolve([]),
-      gh.listIssueComments?.(target.installationId, ref, number) ?? Promise.resolve([]),
     ])
+    const approvals = countApprovals(reviews)
+    const approved = approvals >= Math.max(1, requiredCount)
+    const [assignedReviewers, comments] = approved
+      ? [[] as string[], [] as GitHubPullRequestComment[]]
+      : await Promise.all([
+          gh.listRequestedReviewers?.(target.installationId, ref, number) ?? Promise.resolve([]),
+          gh.listIssueComments?.(target.installationId, ref, number) ?? Promise.resolve([]),
+        ])
 
     return {
       headSha,
       requiredApprovingReviewCount: requiredCount,
       assignedReviewers,
-      approvals: countApprovals(reviews),
+      approvals,
       unresolvedThreads: threads.filter((t) => !t.isResolved).map(toReviewThread),
       comments: comments.map((c) => ({
         id: c.id,
@@ -163,6 +180,7 @@ export class GitHubPullRequestReviewProvider implements PullRequestReviewProvide
     const ref = { owner: target.owner, repo: target.name }
     const gh = this.deps.githubClient
     const wantsReply = reply.trim().length > 0
+    const failed: string[] = []
     for (const threadId of threadIds) {
       try {
         // RESOLVE first, then (only if a reply was requested) post the courtesy reply. Doing the
@@ -174,8 +192,16 @@ export class GitHubPullRequestReviewProvider implements PullRequestReviewProvide
         await gh.resolveReviewThread?.(target.installationId, ref, threadId)
         if (wantsReply) await gh.replyToReviewThread?.(target.installationId, ref, threadId, reply)
       } catch {
-        // best-effort per thread: a failure leaves it unresolved for the next probe to retry
+        // Best-effort per thread: keep going so a single bad thread doesn't strand the rest.
+        failed.push(threadId)
       }
+    }
+    // Surface a partial failure to the caller. The gate's onHelperComplete RETAINS the handed
+    // thread ids when this throws so the next probe's reconcile retries exactly those (a
+    // swallowed failure here would let the gate clear its stash and re-dispatch a whole fixer
+    // round for an already-fixed thread instead of the cheap resolve-only reconcile).
+    if (failed.length > 0) {
+      throw new Error(`Failed to resolve ${failed.length} review thread(s): ${failed.join(', ')}`)
     }
   }
 }
