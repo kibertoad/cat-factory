@@ -78,6 +78,14 @@ const GITHUB_RECONCILE_STALE_MS = 30 * 60 * 1000
 const KAIZEN_STALE_MS = 10 * 60 * 1000
 /** Max Kaizen gradings to run per scheduled pass (each is an LLM call; keep the batch small). */
 const KAIZEN_SWEEP_BATCH = 5
+/**
+ * In-isolate re-entrancy guard for the Kaizen sweep (the analogue of the Node sweeper's
+ * `running` flag). A batch of LLM gradings can outlast the 2-min cron interval, and a warm
+ * isolate can have the next cron fire while the previous `waitUntil` is still in flight;
+ * skipping an overlapping pass keeps two passes from racing the per-combo streak's
+ * read-modify-write in `updateCombo` (the per-row `claim()` only serializes a single row).
+ */
+let kaizenSweeping = false
 
 /** Queue name for GitHub webhook deliveries / resync jobs (see wrangler.toml). */
 const GITHUB_SYNC_QUEUE_NAME = 'cat-factory-github-sync'
@@ -301,21 +309,27 @@ export default {
     // re-drives `running` rows orphaned by a crashed sweep). Bounded per pass to stay
     // within the cron budget; no-op when the Kaizen feature isn't wired. The grader's
     // model is resolved per-workspace (Model Configuration), so this is workspace-wide.
-    ctx.waitUntil(
-      Promise.resolve(
-        buildContainer(env).kaizen?.service.runPending(
-          clock.now() - KAIZEN_STALE_MS,
-          KAIZEN_SWEEP_BATCH,
-        ),
+    if (!kaizenSweeping) {
+      kaizenSweeping = true
+      ctx.waitUntil(
+        Promise.resolve(
+          buildContainer(env).kaizen?.service.runPending(
+            clock.now() - KAIZEN_STALE_MS,
+            KAIZEN_SWEEP_BATCH,
+          ),
+        )
+          .then((processed) => {
+            if (processed && processed > 0)
+              logger.info({ cron: 'kaizen-sweeper', processed }, 'ran pending kaizen gradings')
+          })
+          .catch((error) =>
+            logger.error({ cron: 'kaizen-sweeper', err: errInfo(error) }, 'kaizen sweep failed'),
+          )
+          .finally(() => {
+            kaizenSweeping = false
+          }),
       )
-        .then((processed) => {
-          if (processed && processed > 0)
-            logger.info({ cron: 'kaizen-sweeper', processed }, 'ran pending kaizen gradings')
-        })
-        .catch((error) =>
-          logger.error({ cron: 'kaizen-sweeper', err: errInfo(error) }, 'kaizen sweep failed'),
-        ),
-    )
+    }
 
     // Reconcile GitHub projections that may have missed a webhook (no-op unless
     // the integration is configured).

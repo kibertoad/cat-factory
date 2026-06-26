@@ -36,8 +36,15 @@ export interface KaizenGradingRepository {
    * Returns whether THIS caller won the claim. The sweep is best-effort and can overlap
    * (a slow batch outlasts the poll interval; a runtime may fire concurrent passes), so
    * {@link listPending} alone would let two passes grade the same row — double-spending an
-   * LLM call and double-incrementing a combo's streak. Winning the claim here makes a row
-   * grade at most once per attempt.
+   * LLM call. Winning the claim here makes a row grade at most once per attempt.
+   *
+   * NOTE: this serializes a single ROW, not a combo. Two DIFFERENT rows sharing a combo
+   * key (e.g. the same kind in two steps of one run) could still be graded by two
+   * concurrent passes and race the read-modify-write of the combo streak in
+   * `KaizenService.updateCombo`. That race is strictly conservative — it can only UNDER-
+   * count the streak (delaying verification), never falsely verify — so each runtime just
+   * avoids overlapping its own passes (the Node sweeper's re-entrancy flag / the Worker's
+   * `kaizenSweeping` guard) rather than locking per combo.
    */
   claim(workspaceId: string, id: string, staleBefore: number, now: number): Promise<boolean>
 }

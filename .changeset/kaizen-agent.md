@@ -28,3 +28,8 @@ improvements.
   a `kaizen` real-time event, a Kaizen screen (grading history + verified combos), and
   per-step grading status (scheduled/running/complete + results) inside the run window —
   never on the board.
+- A step with neither a provided-context snapshot nor any recorded LLM calls (e.g. prompt
+  recording is off deployment-wide) is settled `failed` rather than graded blind, so a
+  guessed grade can't advance a combo toward a bogus `verified`.
+- The Worker Kaizen sweep gains an in-isolate re-entrancy guard (mirroring the Node
+  sweeper) so overlapping passes don't race the per-combo streak update.

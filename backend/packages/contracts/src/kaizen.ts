@@ -8,7 +8,7 @@ import * as v from 'valibot'
 // or confused / chaotic, returning a 1..5 grade plus improvement recommendations.
 //
 // A grading targets one completed step, identified by its `(promptVersion,
-// agentKind, model)` combo. When a combo earns a high grade (5) with no
+// agentKind, model)` combo. When a combo earns a high grade (4 or 5) with no
 // recommendations VERIFICATION_STREAK (5) times in a row it is marked VERIFIED
 // and is no longer graded. Both the grading history and the verified combos are
 // persisted (D1 ⇄ Drizzle parity) and surfaced on the Kaizen screen; per-run
@@ -61,7 +61,7 @@ export type KaizenGrading = v.InferOutput<typeof kaizenGradingSchema>
 
 /**
  * A `(promptVersion, agentKind, model)` combo's verification progress. The combo
- * earns a high grade each time a grading returns grade 5 with no recommendations;
+ * earns a high grade each time a grading returns grade 4 or 5 with no recommendations;
  * `consecutiveHighGrades` resets to 0 on anything lower. At VERIFICATION_STREAK it
  * flips `verified` true and the engine stops scheduling gradings for it.
  */

@@ -195,6 +195,19 @@ export class KaizenService {
           grading.agentKind,
         ),
       ])
+      // Don't grade blind. With neither a provided-context snapshot NOR any recorded LLM
+      // calls (e.g. the deployment has prompt recording off), the grader has no evidence to
+      // judge the interaction on — it would be guessing, and a guessed high-grade-with-no-recs
+      // would advance the combo streak toward a bogus `verified`, after which the engine stops
+      // grading that combo for good. Settle `failed` instead so the combo is left untouched.
+      if (!snapshot && stepCalls.length === 0) {
+        await this.fail(
+          workspaceId,
+          running,
+          'No telemetry was captured for this step (prompt recording may be off), so it cannot be graded',
+        )
+        return
+      }
       const { ref, provider } = await this.resolveModel(workspaceId, grading.blockId)
       const model = provider.resolve(ref)
       const result = await generateText({

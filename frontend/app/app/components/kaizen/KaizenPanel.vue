@@ -97,8 +97,8 @@ function statusLabel(g: KaizenGrading): string {
               <span class="text-xs font-normal text-slate-500">({{ kaizen.verifiedCount }})</span>
             </h2>
             <p class="mb-3 text-[11px] text-slate-500">
-              A prompt + agent + model combination that graded 5/5 with no recommendations five
-              times in a row. These are no longer graded.
+              A prompt + agent + model combination that graded 4 or 5 with no recommendations
+              five times in a row. These are no longer graded.
             </p>
             <ul class="space-y-2">
               <li
