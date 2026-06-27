@@ -56,5 +56,11 @@ export const useConsensusStore = defineStore('consensus', () => {
     }
   }
 
-  return { sessions, sessionFor, isLoading, load, upsert }
+  /** Drop all cached sessions + in-flight state (called on workspace switch). */
+  function reset() {
+    sessions.value = {}
+    loading.value = new Set()
+  }
+
+  return { sessions, sessionFor, isLoading, load, upsert, reset }
 })

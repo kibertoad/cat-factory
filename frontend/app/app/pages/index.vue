@@ -5,45 +5,93 @@ import BoardToolbar from '~/components/layout/BoardToolbar.vue'
 import SpendWarningBanner from '~/components/layout/SpendWarningBanner.vue'
 import GitHubPatBanner from '~/components/layout/GitHubPatBanner.vue'
 import AiProvidersBanner from '~/components/layout/AiProvidersBanner.vue'
+import ProviderConfigBanner from '~/components/layout/ProviderConfigBanner.vue'
+// Always-mounted, fast-path surfaces (opened frequently during a run / board edits, or
+// store-driven so they must react from anywhere — kept eager for snappy open/close).
 import PipelineBuilder from '~/components/pipeline/PipelineBuilder.vue'
 import InspectorPanel from '~/components/panels/InspectorPanel.vue'
 import DecisionModal from '~/components/panels/DecisionModal.vue'
 import AgentStepDetail from '~/components/panels/AgentStepDetail.vue'
 import StepResultViewHost from '~/components/panels/StepResultViewHost.vue'
-import ObservabilityPanel from '~/components/panels/ObservabilityPanel.vue'
-import KaizenPanel from '~/components/kaizen/KaizenPanel.vue'
 import BlockFocusView from '~/components/focus/BlockFocusView.vue'
-import DocumentSourceConnectModal from '~/components/documents/DocumentSourceConnectModal.vue'
-import DocumentImportModal from '~/components/documents/DocumentImportModal.vue'
-import SpawnPreviewModal from '~/components/documents/SpawnPreviewModal.vue'
 import TaskSourceConnectModal from '~/components/tasks/TaskSourceConnectModal.vue'
 import TaskImportModal from '~/components/tasks/TaskImportModal.vue'
 import AddTaskModal from '~/components/board/AddTaskModal.vue'
 import RecurringPipelineModal from '~/components/board/RecurringPipelineModal.vue'
-import BootstrapModal from '~/components/bootstrap/BootstrapModal.vue'
-import AddServiceFromRepoModal from '~/components/github/AddServiceFromRepoModal.vue'
-import GitHubPanel from '~/components/github/GitHubPanel.vue'
-import SlackPanel from '~/components/slack/SlackPanel.vue'
 import GitHubOnboarding from '~/components/github/GitHubOnboarding.vue'
-import FragmentLibraryPanel from '~/components/fragments/FragmentLibraryPanel.vue'
 import CommandBar from '~/components/layout/CommandBar.vue'
-import IntegrationsHub from '~/components/layout/IntegrationsHub.vue'
-import PersonalSetupModal from '~/components/layout/PersonalSetupModal.vue'
-import WorkspaceSettingsPanel from '~/components/settings/WorkspaceSettingsPanel.vue'
-import AccountSettingsPanel from '~/components/settings/AccountSettingsPanel.vue'
-import ObservabilityConnectionPanel from '~/components/settings/ObservabilityConnectionPanel.vue'
-import ProviderConnectionPanel from '~/components/settings/ProviderConnectionPanel.vue'
-import ProviderConfigBanner from '~/components/layout/ProviderConfigBanner.vue'
-import ModelConfigurationPanel from '~/components/settings/ModelConfigurationPanel.vue'
-import LocalModelEndpointsPanel from '~/components/settings/LocalModelEndpointsPanel.vue'
-import LocalModeSettingsPanel from '~/components/settings/LocalModeSettingsPanel.vue'
-import SandboxPanel from '~/components/sandbox/SandboxPanel.vue'
-import UserSecretsSection from '~/components/settings/UserSecretsSection.vue'
-import OpenRouterCatalogPanel from '~/components/settings/OpenRouterCatalogPanel.vue'
-import VendorCredentialsModal from '~/components/providers/VendorCredentialsModal.vue'
 import PersonalCredentialModal from '~/components/providers/PersonalCredentialModal.vue'
-import AiProviderOnboardingModal from '~/components/providers/AiProviderOnboardingModal.vue'
-import AiPresetMismatchDialog from '~/components/providers/AiPresetMismatchDialog.vue'
+
+// Heavy, rarely-open panels — code-split into their own chunks via defineAsyncComponent
+// and mounted only while their ui open-flag is set (the v-if gates in the template), so
+// they stay out of the initial bundle and don't run setup/watchers while closed.
+const ObservabilityPanel = defineAsyncComponent(
+  () => import('~/components/panels/ObservabilityPanel.vue'),
+)
+const KaizenPanel = defineAsyncComponent(() => import('~/components/kaizen/KaizenPanel.vue'))
+const DocumentSourceConnectModal = defineAsyncComponent(
+  () => import('~/components/documents/DocumentSourceConnectModal.vue'),
+)
+const DocumentImportModal = defineAsyncComponent(
+  () => import('~/components/documents/DocumentImportModal.vue'),
+)
+const SpawnPreviewModal = defineAsyncComponent(
+  () => import('~/components/documents/SpawnPreviewModal.vue'),
+)
+const BootstrapModal = defineAsyncComponent(
+  () => import('~/components/bootstrap/BootstrapModal.vue'),
+)
+const AddServiceFromRepoModal = defineAsyncComponent(
+  () => import('~/components/github/AddServiceFromRepoModal.vue'),
+)
+const GitHubPanel = defineAsyncComponent(() => import('~/components/github/GitHubPanel.vue'))
+const SlackPanel = defineAsyncComponent(() => import('~/components/slack/SlackPanel.vue'))
+const FragmentLibraryPanel = defineAsyncComponent(
+  () => import('~/components/fragments/FragmentLibraryPanel.vue'),
+)
+const IntegrationsHub = defineAsyncComponent(
+  () => import('~/components/layout/IntegrationsHub.vue'),
+)
+const PersonalSetupModal = defineAsyncComponent(
+  () => import('~/components/layout/PersonalSetupModal.vue'),
+)
+const WorkspaceSettingsPanel = defineAsyncComponent(
+  () => import('~/components/settings/WorkspaceSettingsPanel.vue'),
+)
+const AccountSettingsPanel = defineAsyncComponent(
+  () => import('~/components/settings/AccountSettingsPanel.vue'),
+)
+const ObservabilityConnectionPanel = defineAsyncComponent(
+  () => import('~/components/settings/ObservabilityConnectionPanel.vue'),
+)
+const ProviderConnectionPanel = defineAsyncComponent(
+  () => import('~/components/settings/ProviderConnectionPanel.vue'),
+)
+const ModelConfigurationPanel = defineAsyncComponent(
+  () => import('~/components/settings/ModelConfigurationPanel.vue'),
+)
+const LocalModelEndpointsPanel = defineAsyncComponent(
+  () => import('~/components/settings/LocalModelEndpointsPanel.vue'),
+)
+const LocalModeSettingsPanel = defineAsyncComponent(
+  () => import('~/components/settings/LocalModeSettingsPanel.vue'),
+)
+const SandboxPanel = defineAsyncComponent(() => import('~/components/sandbox/SandboxPanel.vue'))
+const UserSecretsSection = defineAsyncComponent(
+  () => import('~/components/settings/UserSecretsSection.vue'),
+)
+const OpenRouterCatalogPanel = defineAsyncComponent(
+  () => import('~/components/settings/OpenRouterCatalogPanel.vue'),
+)
+const VendorCredentialsModal = defineAsyncComponent(
+  () => import('~/components/providers/VendorCredentialsModal.vue'),
+)
+const AiProviderOnboardingModal = defineAsyncComponent(
+  () => import('~/components/providers/AiProviderOnboardingModal.vue'),
+)
+const AiPresetMismatchDialog = defineAsyncComponent(
+  () => import('~/components/providers/AiPresetMismatchDialog.vue'),
+)
 
 const workspace = useWorkspaceStore()
 const github = useGitHubStore()
@@ -170,41 +218,45 @@ watch(
         <BlockFocusView />
       </main>
 
+      <!-- Always-mounted, fast-path surfaces. -->
       <PipelineBuilder />
       <DecisionModal />
       <AgentStepDetail />
       <StepResultViewHost />
-      <ObservabilityPanel />
-      <KaizenPanel />
-      <DocumentSourceConnectModal />
-      <DocumentImportModal />
-      <SpawnPreviewModal />
       <TaskSourceConnectModal />
       <TaskImportModal />
       <AddTaskModal />
       <RecurringPipelineModal />
-      <BootstrapModal />
-      <AddServiceFromRepoModal />
-      <GitHubPanel />
-      <SlackPanel />
-      <FragmentLibraryPanel />
       <CommandBar />
-      <IntegrationsHub />
-      <PersonalSetupModal />
-      <WorkspaceSettingsPanel />
-      <AccountSettingsPanel />
-      <ObservabilityConnectionPanel />
-      <ProviderConnectionPanel />
-      <ModelConfigurationPanel />
-      <LocalModelEndpointsPanel />
-      <LocalModeSettingsPanel />
-      <SandboxPanel />
-      <UserSecretsSection />
-      <OpenRouterCatalogPanel />
-      <VendorCredentialsModal />
       <PersonalCredentialModal />
-      <AiProviderOnboardingModal />
-      <AiPresetMismatchDialog />
+
+      <!-- Lazy panels: mounted only while their ui open-flag is set, so each loads on
+           first open (its own chunk) rather than bloating the initial bundle. -->
+      <ObservabilityPanel v-if="ui.observabilityInstanceId" />
+      <KaizenPanel v-if="ui.kaizenScreenOpen" />
+      <DocumentSourceConnectModal v-if="ui.documentConnect" />
+      <DocumentImportModal v-if="ui.documentImport" />
+      <SpawnPreviewModal v-if="ui.spawnPreview" />
+      <BootstrapModal v-if="ui.bootstrapOpen" />
+      <AddServiceFromRepoModal v-if="ui.addServiceOpen" />
+      <GitHubPanel v-if="ui.githubOpen" />
+      <SlackPanel v-if="ui.slackOpen" />
+      <FragmentLibraryPanel v-if="ui.fragmentLibraryOpen" />
+      <IntegrationsHub v-if="ui.integrationsOpen" />
+      <PersonalSetupModal v-if="ui.personalSetupOpen" />
+      <WorkspaceSettingsPanel v-if="ui.workspaceSettingsOpen" />
+      <AccountSettingsPanel v-if="ui.accountSettingsOpen" />
+      <ObservabilityConnectionPanel v-if="ui.observabilityConnectionOpen" />
+      <ProviderConnectionPanel v-if="ui.providerConnectionKind" />
+      <ModelConfigurationPanel v-if="ui.modelConfigOpen" />
+      <LocalModelEndpointsPanel v-if="ui.localModelsOpen" />
+      <LocalModeSettingsPanel v-if="ui.localModeSettingsOpen" />
+      <SandboxPanel v-if="ui.sandboxOpen" />
+      <UserSecretsSection v-if="ui.userSecretsOpen" />
+      <OpenRouterCatalogPanel v-if="ui.openRouterOpen" />
+      <VendorCredentialsModal v-if="ui.vendorCredentialsOpen" />
+      <AiProviderOnboardingModal v-if="ui.aiProviderSetupOpen" />
+      <AiPresetMismatchDialog v-if="ui.aiPresetMismatchOpen" />
     </template>
 
     <!-- Backend unreachable / bootstrap failed -->
