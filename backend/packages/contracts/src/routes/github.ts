@@ -20,7 +20,7 @@ import {
   resyncRequestSchema,
   setRepoMonorepoSchema,
 } from '../github.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Workspace-scoped GitHub route contracts. Mounted under `/workspaces/:workspaceId`,
@@ -52,7 +52,7 @@ const resyncResultSchema = v.object({
   status: v.picklist(['backfill_started', 'backfilled', 'queued', 'synced']),
 })
 
-const repoGithubIdParams = withObjectKeys(v.object({ repoGithubId: v.string() }))
+const repoGithubIdParams = singleStringParam('repoGithubId')
 const repoPullNumberParams = withObjectKeys(
   v.object({ repoGithubId: v.string(), number: v.string() }),
 )

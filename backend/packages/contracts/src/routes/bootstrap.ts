@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   bootstrapJobSchema,
@@ -7,7 +7,7 @@ import {
   referenceArchitectureSchema,
   updateReferenceArchitectureSchema,
 } from '../bootstrap.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Repo-bootstrap route contracts. Mounted under `/workspaces/:workspaceId`, so
@@ -16,8 +16,8 @@ import { errorResponses } from './_shared.js'
 
 const referenceArchitectureListSchema = v.array(referenceArchitectureSchema)
 const bootstrapJobListSchema = v.array(bootstrapJobSchema)
-const referenceArchitectureIdParams = withObjectKeys(v.object({ id: v.string() }))
-const bootstrapJobIdParams = withObjectKeys(v.object({ id: v.string() }))
+const referenceArchitectureIdParams = singleStringParam('id')
+const bootstrapJobIdParams = singleStringParam('id')
 
 // ---- reference architectures ----------------------------------------------
 

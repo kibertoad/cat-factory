@@ -1,3 +1,4 @@
+import { withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 
 // ---------------------------------------------------------------------------
@@ -39,3 +40,15 @@ export const errorResponses = {
   '4xx': errorResponseSchema,
   '5xx': errorResponseSchema,
 } as const
+
+/**
+ * A path-params schema for a single string segment:
+ * `singleStringParam('blockId')` ≡ `withObjectKeys(v.object({ blockId: v.string() }))`.
+ * Collapses the one-key param schemas every route file otherwise re-declares. The mapped
+ * type over the single literal key preserves exact per-key typing (`{ blockId: string }`,
+ * not a widened `Record<string, string>`), so the handler's `c.req.valid('param')` and the
+ * client's `pathParams` stay as precise as the inline form.
+ */
+export function singleStringParam<const K extends string>(key: K) {
+  return withObjectKeys(v.object({ [key]: v.string() } as { [P in K]: v.StringSchema<undefined> }))
+}

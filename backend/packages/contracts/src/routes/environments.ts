@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   environmentConnectionSchema,
@@ -9,7 +9,7 @@ import {
   updateEnvironmentSecretsSchema,
 } from '../environments.js'
 import { connectionTestResultSchema, providerDescriptorSchema } from '../provider-config.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Ephemeral-environment route contracts: provider registration (manifest +
@@ -19,7 +19,7 @@ import { errorResponses } from './_shared.js'
 // that prefix. See EnvironmentController.
 // ---------------------------------------------------------------------------
 
-const environmentIdParams = withObjectKeys(v.object({ environmentId: v.string() }))
+const environmentIdParams = singleStringParam('environmentId')
 
 // Response wrapper that exists only inline in the controller today.
 const environmentConnectionViewSchema = v.object({

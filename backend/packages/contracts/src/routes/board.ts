@@ -1,5 +1,4 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
-import * as v from 'valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import { blockSchema } from '../entities.js'
 import {
   addEpicSchema,
@@ -13,7 +12,7 @@ import {
   toggleDependencySchema,
   updateBlockSchema,
 } from '../requests.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Board mutation route contracts. Mounted under `/workspaces/:workspaceId`, so
@@ -21,7 +20,7 @@ import { errorResponses } from './_shared.js'
 // @cat-factory/server.
 // ---------------------------------------------------------------------------
 
-const blockIdParams = withObjectKeys(v.object({ blockId: v.string() }))
+const blockIdParams = singleStringParam('blockId')
 
 export const addFrameContract = defineApiContract({
   method: 'post',

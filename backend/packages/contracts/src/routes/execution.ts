@@ -15,7 +15,7 @@ import {
   restartFromStepSchema,
   startExecutionSchema,
 } from '../requests.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Execution-engine route contracts. Mounted under `/workspaces/:workspaceId`, so
@@ -24,8 +24,8 @@ import { errorResponses } from './_shared.js'
 
 const executionInstanceListSchema = v.array(executionInstanceSchema)
 
-const blockIdParams = withObjectKeys(v.object({ blockId: v.string() }))
-const executionIdParams = withObjectKeys(v.object({ executionId: v.string() }))
+const blockIdParams = singleStringParam('blockId')
+const executionIdParams = singleStringParam('executionId')
 const decisionParams = withObjectKeys(v.object({ executionId: v.string(), decisionId: v.string() }))
 const approvalParams = withObjectKeys(v.object({ executionId: v.string(), approvalId: v.string() }))
 

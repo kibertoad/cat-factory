@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   connectDocumentSourceSchema,
@@ -13,7 +13,7 @@ import {
   sourceDocumentSchema,
   spawnDocumentSchema,
 } from '../documents.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Document-source route contracts: source discovery, connection management,
@@ -22,7 +22,7 @@ import { errorResponses } from './_shared.js'
 // so the paths here are relative to that prefix. See DocumentSourceController.
 // ---------------------------------------------------------------------------
 
-const sourceParams = withObjectKeys(v.object({ source: v.string() }))
+const sourceParams = singleStringParam('source')
 
 // Response wrappers that exist only inline in the controller today.
 const documentSourcesViewSchema = v.object({

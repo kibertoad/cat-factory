@@ -9,7 +9,7 @@ import {
   resolveRequirementsExceededSchema,
   updateReviewItemStatusSchema,
 } from '../requirements.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Requirements-review route contracts. Mounted under `/workspaces/:workspaceId`,
@@ -17,7 +17,7 @@ import { errorResponses } from './_shared.js'
 // in @cat-factory/server.
 // ---------------------------------------------------------------------------
 
-const blockIdParams = withObjectKeys(v.object({ blockId: v.string() }))
+const blockIdParams = singleStringParam('blockId')
 const reviewItemParams = withObjectKeys(v.object({ reviewId: v.string(), itemId: v.string() }))
 const reviewRecParams = withObjectKeys(v.object({ reviewId: v.string(), recId: v.string() }))
 

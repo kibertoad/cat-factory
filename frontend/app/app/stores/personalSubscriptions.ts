@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { apiErrorEnvelope } from '~/composables/api/errors'
 import type {
   PersonalSubscriptionStatus,
   StorePersonalSubscriptionInput,
@@ -45,7 +46,7 @@ export interface PendingCredential {
 export function parseCredentialError(
   error: unknown,
 ): { vendor: SubscriptionVendor; reason: PendingCredential['reason'] } | null {
-  const data = (error as { data?: { error?: { code?: string; details?: unknown } } })?.data?.error
+  const data = apiErrorEnvelope(error)
   if (data?.code !== 'credential_required') return null
   const details = data.details as {
     vendor?: SubscriptionVendor

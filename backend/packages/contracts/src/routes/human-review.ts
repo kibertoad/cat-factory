@@ -1,8 +1,7 @@
-import { defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
-import * as v from 'valibot'
+import { defineApiContract } from '@toad-contracts/valibot'
 import { executionInstanceSchema } from '../entities.js'
 import { requestHumanReviewFixSchema } from '../human-review.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Human-review gate route contracts. Mounted under `/workspaces/:workspaceId`,
@@ -11,7 +10,7 @@ import { errorResponses } from './_shared.js'
 // See HumanReviewController in @cat-factory/server.
 // ---------------------------------------------------------------------------
 
-const blockIdParams = withObjectKeys(v.object({ blockId: v.string() }))
+const blockIdParams = singleStringParam('blockId')
 
 export const requestHumanReviewFixContract = defineApiContract({
   method: 'post',

@@ -1,8 +1,7 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
-import * as v from 'valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import { executionInstanceSchema } from '../entities.js'
 import { requestHumanTestFixSchema } from '../human-test.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Human-testing gate route contracts. Mounted under `/workspaces/:workspaceId`,
@@ -11,7 +10,7 @@ import { errorResponses } from './_shared.js'
 // HumanTestController in @cat-factory/server.
 // ---------------------------------------------------------------------------
 
-const blockIdParams = withObjectKeys(v.object({ blockId: v.string() }))
+const blockIdParams = singleStringParam('blockId')
 
 export const confirmHumanTestContract = defineApiContract({
   method: 'post',

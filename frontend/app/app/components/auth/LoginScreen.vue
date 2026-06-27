@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { apiErrorEnvelope } from '~/composables/api/errors'
 
 const auth = useAuthStore()
 
@@ -37,8 +38,7 @@ async function submitPassword() {
     if (typeof window !== 'undefined') window.location.assign(window.location.pathname)
   } catch (e) {
     error.value =
-      (e as { data?: { error?: { message?: string } } })?.data?.error?.message ??
-      'Sign-in failed. Check your details and try again.'
+      apiErrorEnvelope(e)?.message ?? 'Sign-in failed. Check your details and try again.'
   } finally {
     busy.value = false
   }

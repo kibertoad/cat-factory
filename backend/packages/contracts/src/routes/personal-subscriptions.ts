@@ -1,10 +1,10 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   personalSubscriptionStatusSchema,
   storePersonalSubscriptionSchema,
 } from '../personal-subscriptions.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Per-USER individual-usage subscription route contracts. Scoped to the
@@ -17,7 +17,7 @@ const personalSubscriptionsViewSchema = v.object({
   subscriptions: v.array(personalSubscriptionStatusSchema),
 })
 
-const vendorParams = withObjectKeys(v.object({ vendor: v.string() }))
+const vendorParams = singleStringParam('vendor')
 
 export const listPersonalSubscriptionsContract = defineApiContract({
   method: 'get',
