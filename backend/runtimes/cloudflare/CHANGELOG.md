@@ -1,5 +1,37 @@
 # @cat-factory/worker
 
+## 0.28.0
+
+### Minor Changes
+
+- 6d829bb: Make invalid-state pipelines more robust. On app open, a startup advisory surfaces pipelines that
+  reference a nonexistent agent kind or have an invalid shape (delete a custom one, reseed a built-in)
+  and built-in pipelines whose seeded definition is newer than the stored copy (reseed to adopt it).
+
+  Built-in pipelines now carry a per-pipeline `version` (persisted on both runtimes via a new D1
+  migration and a Drizzle column), the snapshot ships the current catalog versions
+  (`pipelineCatalogVersions`), and a new `POST /workspaces/:ws/pipelines/:id/reseed` endpoint restores a
+  built-in's canonical definition while preserving its labels/archive state.
+
+  BREAKING: existing workspaces' persisted built-in pipelines have no stored `version`, so they read as
+  "update available" once until reseeded — intentional adoption of the now-versioned definitions.
+
+### Patch Changes
+
+- Updated dependencies [6d829bb]
+  - @cat-factory/contracts@0.38.0
+  - @cat-factory/kernel@0.40.0
+  - @cat-factory/orchestration@0.30.0
+  - @cat-factory/server@0.34.0
+  - @cat-factory/agents@0.18.5
+  - @cat-factory/consensus@0.7.52
+  - @cat-factory/gates@0.2.4
+  - @cat-factory/integrations@0.23.4
+  - @cat-factory/prompt-fragments@0.7.36
+  - @cat-factory/spend@0.10.9
+  - @cat-factory/observability-langfuse@0.7.48
+  - @cat-factory/provider-cloudflare@0.7.52
+
 ## 0.27.0
 
 ### Minor Changes
