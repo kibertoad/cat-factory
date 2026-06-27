@@ -422,9 +422,18 @@ export function seedPipelines(): Pipeline[] {
     // gate the human approves or requests a fix (the Tester's `fixer`). Opt-in — it needs a
     // human present, the UI-tester image, and a binary-artifact store, so it is NOT folded into
     // the always-on defaults; the gate passes through when no store is wired.
+    //
+    // EXPERIMENTAL (labelled as such): `tester-ui` auto-capture is not wired end-to-end yet —
+    // routing a job into the dedicated UI-tester image and the harness env-passthrough are the
+    // remaining deploy-time steps (see the visual-confirmation handover doc). Until they land,
+    // the `tester-ui` step has no browser and the gate is driven in MANUAL mode (a human uploads
+    // the reference designs + screenshots and reviews them). The `experimental` label keeps the
+    // pipeline discoverable but clearly flagged in the library so it isn't picked expecting
+    // automatic capture.
     {
       id: 'pl_visual',
       name: 'Build & visual confirmation',
+      labels: ['experimental'],
       agentKinds: [
         'coder',
         'reviewer',

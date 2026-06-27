@@ -960,13 +960,16 @@ export type VisualConfirmRound = v.InferOutput<typeof visualConfirmRoundSchema>
  * programmatic verdict — a HUMAN reviews the UI tester's screenshots against the uploaded
  * reference designs and approves, or requests a fix (which dispatches the `fixer` and then
  * re-captures via the UI tester). Phases:
- *   - `capturing`     — a `tester-ui` re-capture job is in flight (after a fix round).
  *   - `awaiting_human`— parked: the human reviews actual-vs-reference and approves / requests a fix.
  *   - `fixing`        — a `fixer` job (from the human's findings) is in flight.
  *   - `approved`      — the human approved; the run advances.
+ *
+ * (A dedicated `capturing` phase for an auto re-run of the UI tester after a fix is deferred
+ * until that loop is wired — see the visual-confirmation handover doc — so it is intentionally
+ * absent from the picklist rather than carried as dead state.)
  */
 export const visualConfirmStepStateSchema = v.object({
-  phase: v.picklist(['capturing', 'awaiting_human', 'fixing', 'approved']),
+  phase: v.picklist(['awaiting_human', 'fixing', 'approved']),
   /** The actual-vs-reference pairs the human reviews, refreshed on each (re)capture. */
   pairs: v.optional(v.array(visualConfirmPairSchema)),
   /** Set when no screenshots could be gathered (no UI tester ran / no storage) — manual mode. */

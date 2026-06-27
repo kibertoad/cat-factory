@@ -198,17 +198,34 @@ export function createBinaryArtifactStore(deps: {
     },
     async pruneOlderThan(workspaceId, olderThan) {
       // Delete the BYTES first (best-effort per blob, so one stuck object doesn't strand the
-      // rest), then drop the metadata rows in one statement. A blob delete that fails leaves
-      // an orphan the next sweep retries — never a metadata row pointing at missing bytes.
+      // rest), then drop the metadata rows. The invariant in both directions: we NEVER drop a
+      // metadata row whose blob is still present-but-failed-to-delete, because that would orphan
+      // the bytes forever (the metadata is the only handle the next sweep has on the key). So a
+      // blob delete that throws keeps its metadata row, leaving the pair intact for the next
+      // sweep to retry — and the common all-succeeded path still collapses to a single bulk
+      // delete. We also never keep a metadata row pointing at already-deleted bytes.
       const expired = await metadata.listOlderThan(workspaceId, olderThan)
+      const failed = new Set<string>()
       for (const record of expired) {
         try {
           await blob.delete(record.storageKey)
         } catch {
-          // Tolerate a backend hiccup on a single object; the metadata delete below still runs.
+          // Tolerate a backend hiccup on a single object; retain its metadata so the next sweep
+          // retries the blob delete instead of orphaning the bytes.
+          failed.add(record.id)
         }
       }
-      return metadata.deleteOlderThan(workspaceId, olderThan)
+      // Fast path: every blob went, so a single range delete reclaims all the metadata.
+      if (failed.size === 0) return metadata.deleteOlderThan(workspaceId, olderThan)
+      // Otherwise delete only the rows whose bytes are confirmed gone, one at a time, leaving
+      // the failed pairs (row + blob) for the next sweep.
+      let removed = 0
+      for (const record of expired) {
+        if (failed.has(record.id)) continue
+        await metadata.delete(workspaceId, record.id)
+        removed += 1
+      }
+      return removed
     },
   }
 }

@@ -21,3 +21,6 @@ CREATE TABLE binary_artifacts (
 );
 CREATE INDEX idx_binary_artifacts_execution ON binary_artifacts (workspace_id, execution_id);
 CREATE INDEX idx_binary_artifacts_block ON binary_artifacts (workspace_id, block_id);
+-- The per-workspace retention sweep filters on `created_at` (delete everything older than the
+-- workspace's window), so index it alongside the workspace to keep that prune an indexed range.
+CREATE INDEX idx_binary_artifacts_created ON binary_artifacts (workspace_id, created_at);

@@ -165,7 +165,14 @@ export class VisualConfirmationController {
     return this.signalAction(workspaceId, blockId, { type: 'request-fix', findings })
   }
 
-  /** Refresh the pairs from the latest UI-tester report (e.g. after an out-of-band re-run). */
+  /**
+   * Re-pair actual-vs-reference from the current store state: the latest UI-tester report's
+   * screenshots PLUS any reference design images uploaded since the gate parked. This is the
+   * action a human takes after uploading (or replacing) reference images mid-review, or after an
+   * out-of-band UI-tester re-run. NOTE: it does not itself re-run the UI tester — auto re-capture
+   * after a fix is a deferred enhancement (see the visual-confirmation handover doc) — so with no
+   * new references/run it is a harmless refresh that re-reads the same pairs.
+   */
   async recapture(workspaceId: string, blockId: string): Promise<ExecutionInstance> {
     return this.signalAction(workspaceId, blockId, { type: 'recapture' })
   }

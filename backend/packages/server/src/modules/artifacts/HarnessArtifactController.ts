@@ -2,7 +2,19 @@ import { Hono } from 'hono'
 import { ContainerSessionService } from '../../containers/ContainerSessionService.js'
 import type { AppEnv } from '../../http/env.js'
 import { logger } from '../../observability/logger.js'
-import { MAX_UPLOAD_BYTES, normalizeImageContentType } from './imageArtifacts.js'
+import {
+  MAX_UPLOAD_BYTES,
+  exceedsRequestSizeLimit,
+  normalizeImageContentType,
+} from './imageArtifacts.js'
+
+/**
+ * Cap on how many screenshots a single run may upload. A `tester-ui` run captures one shot per
+ * distinct view, so a couple of dozen is generous; the ceiling stops a buggy or compromised
+ * container from filling the blob store with unbounded uploads before retention sweeps it. The
+ * count is read back from the store per ingest (cheap, indexed by execution).
+ */
+const MAX_SCREENSHOTS_PER_RUN = 100
 
 /** Pull the bearer token from the Authorization header. */
 function bearer(header: string | undefined): string | null {
@@ -47,6 +59,26 @@ export function harnessArtifactController(): Hono<AppEnv> {
       return c.json({ error: { code: 'unauthorized', message: 'Invalid or expired token' } }, 401)
     }
 
+    // Refuse a grossly oversized body from Content-Length before it is buffered into memory; the
+    // exact per-file ceiling is still enforced after parsing below.
+    if (exceedsRequestSizeLimit(c.req.header('content-length'))) {
+      return c.json({ error: { code: 'too_large', message: 'Artifact exceeds size limit' } }, 413)
+    }
+
+    // Per-run upload ceiling: a runaway/compromised container can't fill the store with
+    // unbounded screenshots scoped to its run.
+    const existing = await store.listByExecution(session.workspaceId, session.executionId)
+    if (existing.length >= MAX_SCREENSHOTS_PER_RUN) {
+      logger.warn(
+        { scope: 'artifactIngest', executionId: session.executionId, count: existing.length },
+        'artifact ingest: per-run screenshot limit reached',
+      )
+      return c.json(
+        { error: { code: 'too_many', message: 'Per-run screenshot limit reached' } },
+        429,
+      )
+    }
+
     let form: FormData
     try {
       form = await c.req.formData()
@@ -57,7 +89,29 @@ export function harnessArtifactController(): Hono<AppEnv> {
     if (!(file instanceof File)) {
       return c.json({ error: { code: 'invalid_body', message: 'Missing `file`' } }, 400)
     }
-    const contentType = normalizeImageContentType(file.type) ?? 'image/png'
+    // Screenshots are always PNGs. Tolerate a typeless upload (default to PNG), but REJECT a
+    // recognised non-image type rather than silently storing it mislabelled — keeping this path's
+    // content-type posture aligned with the workspace upload endpoint (both gate on the shared
+    // image allow-list in imageArtifacts.ts).
+    const declaredType = file.type?.trim()
+    let contentType: string
+    if (!declaredType) {
+      contentType = 'image/png'
+    } else {
+      const normalized = normalizeImageContentType(declaredType)
+      if (!normalized) {
+        return c.json(
+          {
+            error: {
+              code: 'unsupported_media',
+              message: 'Only raster image screenshots are accepted',
+            },
+          },
+          415,
+        )
+      }
+      contentType = normalized
+    }
     const bytes = new Uint8Array(await file.arrayBuffer())
     if (bytes.byteLength > MAX_UPLOAD_BYTES) {
       return c.json({ error: { code: 'too_large', message: 'Artifact exceeds size limit' } }, 413)

@@ -20,6 +20,27 @@ export const ALLOWED_IMAGE_CONTENT_TYPES: ReadonlySet<string> = new Set([
 export const MAX_UPLOAD_BYTES = 16 * 1024 * 1024
 
 /**
+ * A coarse ceiling on the whole multipart request, checked from `Content-Length` BEFORE the
+ * body is buffered, so a grossly oversized upload is rejected without first materialising it
+ * in memory. It is `MAX_UPLOAD_BYTES` plus a generous slack for multipart framing (boundaries,
+ * the `view`/`kind` fields) so a legitimate ~16 MiB file is never falsely rejected; the exact
+ * per-file `MAX_UPLOAD_BYTES` check still runs after parsing as the authoritative limit.
+ */
+export const MAX_REQUEST_BYTES = MAX_UPLOAD_BYTES + 1024 * 1024
+
+/**
+ * Reject (from the declared `Content-Length`) a request whose body is grossly larger than an
+ * artifact upload can legitimately be, BEFORE the body is read into memory. Returns true when
+ * the request should be refused (caller sends 413). A missing/unparseable header returns false
+ * — we can't pre-judge it, so the post-parse `MAX_UPLOAD_BYTES` check remains the backstop.
+ */
+export function exceedsRequestSizeLimit(contentLength: string | undefined | null): boolean {
+  if (!contentLength) return false
+  const n = Number(contentLength)
+  return Number.isFinite(n) && n > MAX_REQUEST_BYTES
+}
+
+/**
  * Canonicalise a client-supplied content type to one of {@link ALLOWED_IMAGE_CONTENT_TYPES},
  * or `null` when it isn't an allowed image type. Strips any `; charset=…` parameter and
  * lower-cases before matching.

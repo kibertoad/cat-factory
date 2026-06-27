@@ -6,6 +6,7 @@ import { param } from '../../http/params.js'
 import {
   MAX_UPLOAD_BYTES,
   blobResponseHeaders,
+  exceedsRequestSizeLimit,
   normalizeImageContentType,
 } from './imageArtifacts.js'
 
@@ -36,6 +37,11 @@ export function artifactController(): Hono<AppEnv> {
   app.post('/artifacts', async (c) => {
     const store = requireStore(c)
     if (!store) return unavailable(c)
+    // Refuse a grossly oversized body up-front (from Content-Length) so it is never buffered
+    // into memory; the exact per-file ceiling is still enforced after parsing below.
+    if (exceedsRequestSizeLimit(c.req.header('content-length'))) {
+      return c.json({ error: { code: 'too_large', message: 'Artifact exceeds size limit' } }, 413)
+    }
     let form: FormData
     try {
       form = await c.req.formData()
@@ -71,11 +77,17 @@ export function artifactController(): Hono<AppEnv> {
     }
     const view = form.get('view')
     const blockId = form.get('blockId')
-    const executionId = form.get('executionId')
+    // This human-facing endpoint uploads BLOCK-scoped reference design images, which precede any
+    // run, so `executionId` is always null here — a run-scoped capture goes through the
+    // token-authed harness ingest route instead, where the execution is derived from the verified
+    // session token (never the request body). We deliberately ignore any client-supplied
+    // `executionId` rather than trust it. `blockId` is non-authoritative but harmless: every read
+    // filters by the path's (authenticated) `workspaceId`, so a row tagged with a foreign/bogus
+    // block is simply never surfaced by the gate.
     const record = await store.store({
       meta: {
         workspaceId: param(c, 'workspaceId'),
-        executionId: typeof executionId === 'string' && executionId ? executionId : null,
+        executionId: null,
         blockId: typeof blockId === 'string' && blockId ? blockId : null,
         kind,
         view: typeof view === 'string' && view ? view : null,

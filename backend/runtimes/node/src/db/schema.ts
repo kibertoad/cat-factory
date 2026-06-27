@@ -1665,6 +1665,9 @@ export const binaryArtifacts = pgTable(
     primaryKey({ columns: [t.workspace_id, t.id] }),
     index('idx_binary_artifacts_execution').on(t.workspace_id, t.execution_id),
     index('idx_binary_artifacts_block').on(t.workspace_id, t.block_id),
+    // The per-workspace retention sweep filters on `created_at`; index it so the prune is an
+    // indexed range delete (mirrors the D1 idx_binary_artifacts_created index).
+    index('idx_binary_artifacts_created').on(t.workspace_id, t.created_at),
   ],
 )
 

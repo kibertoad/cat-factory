@@ -2760,6 +2760,71 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(gateStep.state).toBe('done')
       })
 
+      it('visual-confirmation request-fix dispatches the fixer, re-parks, then approves', async () => {
+        // Exercises the gate's fix loop (only reachable when a binary-artifact store is wired, so
+        // the gate parks rather than passing through): a parked gate + a human "request a fix"
+        // dispatches the Tester's `fixer`, and when that job settles the gate re-parks (recording
+        // the round + bumping attempts) so the human can approve. On a runtime with NO store wired
+        // (the Node harness) the gate passes through and the fix path isn't reachable — we assert
+        // completion either way, and the fix-loop assertions only when the gate actually parked.
+        const green = {
+          greenlight: true,
+          summary: 'ui looks good',
+          tested: ['dashboard'],
+          outcomes: [{ name: 'dashboard', status: 'passed' as const }],
+          concerns: [],
+        }
+        const app = harness.makeApp({
+          asyncKinds: ['coder', 'tester-ui', 'fixer'],
+          asyncPolls: 1,
+          testReports: [green],
+          pullRequest: { url: 'https://gh/pr/3', number: 3, branch: 'cat-factory/task_login' },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'UI test + visual confirmation (fix)',
+          agentKinds: ['coder', 'tester-ui', 'visual-confirmation'],
+        })
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          agentConfig: { 'tester.environment': 'ephemeral' },
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        let exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        if (exec.status !== 'done') {
+          // Store wired ⇒ parked. Request a fix from findings: the fixer dispatches.
+          let gate = exec.steps.find((s) => s.agentKind === 'visual-confirmation')!
+          expect(gate.state).toBe('waiting_decision')
+          await app.call(
+            'POST',
+            `/workspaces/${wsId}/blocks/task_login/visual-confirmation/request-fix`,
+            { findings: 'The header is misaligned on the dashboard view.' },
+          )
+          // Drive the fixer job to completion; the gate re-parks awaiting the human.
+          exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+          gate = exec.steps.find((s) => s.agentKind === 'visual-confirmation')!
+          expect(gate.state).toBe('waiting_decision')
+          expect(gate.visualConfirm?.attempts).toBe(1)
+          expect(gate.visualConfirm?.rounds?.length).toBe(1)
+          expect(gate.visualConfirm?.rounds?.[0]?.outcome).toBe('completed')
+          // Now approve and drive to completion.
+          await app.call(
+            'POST',
+            `/workspaces/${wsId}/blocks/task_login/visual-confirmation/approve`,
+            {},
+          )
+          exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        }
+        expect(exec.status).toBe('done')
+      })
+
       it('always loops the fixer on the FIRST round, then treats low/medium concerns as advisory', async () => {
         // The FIRST testing round hands ANY finding back to the fixer — even a single
         // low-severity nit — so the first batch of issues is always addressed. From the
