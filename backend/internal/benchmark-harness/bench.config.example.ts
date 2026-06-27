@@ -18,6 +18,14 @@ export default defineConfig({
       ref: { provider: 'workers-ai', model: '@cf/meta/llama-3.1-8b-instruct' },
     },
     // { label: 'claude', ref: { provider: 'anthropic', model: 'claude-sonnet-4-6' } },
+    //
+    // CACHING DIMENSION — route the SAME model through a cache-capable flavour vs the
+    // cache-less Workers-AI flavour to see which actually caches (the report's "Cache
+    // hit" column reports >0% only when the provider serves cached prompt tokens) and
+    // the latency delta on a repeated-prefix run. The hot-path defaults run on
+    // workers-ai (no caching); a direct key upgrades the same model to a caching route.
+    //   { label: 'qwen-direct (cache)', ref: { provider: 'qwen', model: 'qwen3-max' } },
+    //   { label: 'qwen-cf (no cache)',  ref: { provider: 'workers-ai', model: '@cf/qwen/qwen3-30b-a3b-fp8' } },
   ],
   // ...across the requirement-review and code-review tasks.
   tasks: ['requirement-review', 'code-review'],

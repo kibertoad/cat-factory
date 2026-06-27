@@ -4186,6 +4186,7 @@ export class ExecutionService {
         step.metrics = {
           calls: s.calls,
           promptTokens: s.promptTokens,
+          cachedPromptTokens: s.cachedPromptTokens,
           completionTokens: s.completionTokens,
           peakCompletionTokens: s.peakCompletionTokens,
           maxOutputTokens: s.maxOutputTokens,

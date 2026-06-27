@@ -48,7 +48,7 @@ afterEach(async () => {
 describe('prompt versioning', () => {
   it('resolves built-in prompts to id@vN with their text', () => {
     const r = resolvePromptVariant(defaultVariant('build'))
-    expect(r.label).toBe('build@v2')
+    expect(r.label).toBe('build@v3')
     expect(r.system).toContain('senior engineer')
   })
 
@@ -140,7 +140,9 @@ describe('runBenchmark', () => {
     expect(rr.cell.model).toBe('workers-ai:@cf/test')
     expect(rr.cell.prompt).toBe('requirement-review@v2')
     expect(rr.output).toContain('Link expiry')
-    expect(rr.usage).toEqual({ inputTokens: 11, outputTokens: 22 })
+    // The requirement-review runner now also reports provider cache hits (0 here — the
+    // fake model serves no cached tokens), so the caching dimension can be measured.
+    expect(rr.usage).toEqual({ inputTokens: 11, outputTokens: 22, cachedInputTokens: 0 })
     const cr = results.find((r) => r.cell.task === 'code-review')!
     expect(cr.cell.prompt).toBe('review@v2')
     expect(cr.usage).toEqual({ inputTokens: 11, outputTokens: 22 })

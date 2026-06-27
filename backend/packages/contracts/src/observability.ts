@@ -117,6 +117,10 @@ export const llmExportInsightSchema = v.object({
   agentKind: v.string(),
   calls: v.number(),
   promptTokens: v.number(),
+  /** Prompt tokens served from the provider's prefix cache (subset of promptTokens). */
+  cachedPromptTokens: v.number(),
+  /** cachedPromptTokens / promptTokens, 0..1; null when there were no prompt tokens. */
+  cacheHitRate: v.nullable(v.number()),
   completionTokens: v.number(),
   peakCompletionTokens: v.number(),
   maxOutputTokens: v.nullable(v.number()),
@@ -147,6 +151,10 @@ export const llmMetricsExportSchema = v.object({
   totals: v.object({
     calls: v.number(),
     promptTokens: v.number(),
+    /** Prompt tokens served from the provider's prefix cache (subset of promptTokens). */
+    cachedPromptTokens: v.number(),
+    /** cachedPromptTokens / promptTokens, 0..1; null when there were no prompt tokens. */
+    cacheHitRate: v.nullable(v.number()),
     completionTokens: v.number(),
     upstreamMs: v.number(),
     overheadMs: v.number(),

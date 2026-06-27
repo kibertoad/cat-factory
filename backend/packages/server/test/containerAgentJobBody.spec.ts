@@ -183,6 +183,18 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
     await executor.startJob(context('coder'))
     expect(captured[0]).toMatchSnapshot()
   })
+
+  it('folds a tuned kind’s loosen-only guard overrides into the job body', async () => {
+    // conflict-resolver carries a built-in tuning entry (more error headroom). The body
+    // must carry it so the harness loosens the guard for that kind.
+    await executor.startJob(context('conflict-resolver', { pullRequest: PR }))
+    expect(captured[0].spec.guardLimits).toEqual({ maxConsecutiveErrors: 20 })
+  })
+
+  it('omits guardLimits for an un-tuned kind (the harness keeps its defaults)', async () => {
+    await executor.startJob(context('coder'))
+    expect(captured[0].spec.guardLimits).toBeUndefined()
+  })
 })
 
 // The migrated merger/on-call dispatch the generic `agent` kind and return their JSON as

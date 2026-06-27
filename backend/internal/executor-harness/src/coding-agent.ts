@@ -23,6 +23,7 @@ import {
   agentOutputTail,
   runAgentInWorkspace,
 } from './pi-workspace.js'
+import type { ProgressGuardLimits } from './pi.js'
 import type { RunOptions } from './runner.js'
 import { log } from './logger.js'
 
@@ -60,6 +61,8 @@ export interface CodingAgentSpec extends HarnessAuthFields {
   webToolsGuidance?: string
   /** Enable proxy-backed web search for this run (see {@link AgentRunSpec.webSearchProxy}). */
   webSearchProxy?: boolean
+  /** Per-knob progress-guard overrides (loosen-only), set per agent kind by the backend. */
+  guardLimits?: Partial<ProgressGuardLimits>
   /**
    * Reuse a stable per-repo checkout (clean-sweep + fetch + switch branch) instead of a
    * fresh clone into a throwaway temp dir. Set only by the local warm-pool transport
@@ -307,6 +310,7 @@ export async function runCodingAgent(
             serviceDirectory,
             webToolsGuidance: spec.webToolsGuidance,
             webSearchProxy: spec.webSearchProxy,
+            guardLimits: spec.guardLimits,
           },
           opts,
         )

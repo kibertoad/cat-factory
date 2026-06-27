@@ -93,6 +93,8 @@ describe('buildLlmMetricsExport', () => {
       metric({
         id: 'a',
         agentKind: 'coder',
+        promptTokens: 200,
+        cachedPromptTokens: 50,
         completionTokens: 50,
         requestMaxTokens: 1000,
         upstreamMs: 100,
@@ -101,6 +103,8 @@ describe('buildLlmMetricsExport', () => {
       metric({
         id: 'b',
         agentKind: 'coder',
+        promptTokens: 200,
+        cachedPromptTokens: 150,
         completionTokens: 990,
         requestMaxTokens: 1000,
         finishReason: 'length',
@@ -140,6 +144,10 @@ describe('buildLlmMetricsExport', () => {
     expect(coder.outputHeadroomRatio).toBe(0.99)
     expect(coder.truncatedCalls).toBe(1)
     expect(coder.warnings).toBe(1)
+    // 200 cached / 400 prompt tokens across the two coder calls = 0.5
+    expect(coder.cachedPromptTokens).toBe(200)
+    expect(coder.cacheHitRate).toBeCloseTo(0.5, 5)
+    expect(out.totals.cachedPromptTokens).toBe(200)
 
     const reviewer = out.insights.find((i) => i.agentKind === 'reviewer')!
     expect(reviewer.errors).toBe(1)

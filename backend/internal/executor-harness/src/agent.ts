@@ -204,6 +204,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
             webToolsGuidance: job.webToolsGuidance,
             webSearchProxy: job.webSearch,
             contextFiles: job.contextFiles,
+            guardLimits: job.guardLimits,
           },
           opts,
         )
@@ -335,6 +336,7 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
       commitMessage: job.commitMessage ?? job.pr?.title ?? 'Agent changes',
       webToolsGuidance: job.webToolsGuidance,
       webSearchProxy: job.webSearch,
+      guardLimits: job.guardLimits,
       ...(job.persistentCheckout ? { persistentCheckout: true } : {}),
       ...(job.streamFollowUps ? { streamFollowUps: true } : {}),
     },
@@ -450,6 +452,7 @@ async function runConflictResolution(job: AgentJob, opts: RunOptions): Promise<A
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
         contextFiles: job.contextFiles,
+        guardLimits: job.guardLimits,
       },
       opts,
     )
@@ -577,6 +580,7 @@ async function runBootstrap(job: AgentJob, opts: RunOptions): Promise<AgentResul
         ambientAuth: job.ambientAuth,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
+        guardLimits: job.guardLimits,
       },
       opts,
     )

@@ -142,7 +142,7 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       expect(stored.promptText).toBe('[{"role":"assistant"},{"role":"tool"}]')
     })
 
-    it('summarizes per agent-kind: tokens, peak, headroom, truncation, errors, warnings', async () => {
+    it('summarizes per agent-kind: tokens, cached tokens, peak, headroom, truncation, errors, warnings', async () => {
       const repo = makeRepo()
       const { ws, e1 } = ids()
       // ok stop, truncated (length → warning), and a failed call — same agent kind.
@@ -151,6 +151,8 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
           id: `${ws}-1`,
           workspaceId: ws,
           executionId: e1,
+          promptTokens: 100,
+          cachedPromptTokens: 40,
           completionTokens: 50,
           requestMaxTokens: 1000,
           upstreamMs: 100,
@@ -162,6 +164,8 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
           id: `${ws}-2`,
           workspaceId: ws,
           executionId: e1,
+          promptTokens: 100,
+          cachedPromptTokens: 60,
           completionTokens: 990,
           requestMaxTokens: 1000,
           finishReason: 'length',
@@ -188,6 +192,7 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       const s = summaries[0]!
       expect(s.agentKind).toBe('coder')
       expect(s.calls).toBe(3)
+      expect(s.cachedPromptTokens).toBe(100)
       expect(s.completionTokens).toBe(1040)
       expect(s.peakCompletionTokens).toBe(990)
       expect(s.maxOutputTokens).toBe(1000)
