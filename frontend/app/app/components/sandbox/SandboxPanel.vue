@@ -19,9 +19,13 @@ const open = computed({
 
 const tab = ref<'experiments' | 'prompts' | 'fixtures'>('experiments')
 
-watch(open, (isOpen) => {
-  if (isOpen) void store.load()
-})
+watch(
+  open,
+  (isOpen) => {
+    if (isOpen) void store.load()
+  },
+  { immediate: true },
+)
 
 // ---- experiment builder ----------------------------------------------------
 const agentKind = ref('requirements-review')

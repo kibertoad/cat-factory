@@ -111,25 +111,17 @@ export const useExecutionStore = defineStore('execution', () => {
    * resolves its own + its tasks' pending gates with O(1) lookups instead of
    * re-filtering the global lists once per frame on every execution event.
    */
-  const decisionsByBlock = computed(() => {
-    const map = new Map<string, (typeof openDecisions.value)[number][]>()
-    for (const d of openDecisions.value) {
-      const list = map.get(d.blockId)
-      if (list) list.push(d)
-      else map.set(d.blockId, [d])
+  function groupByBlock<T extends { blockId: string }>(items: T[]): Map<string, T[]> {
+    const map = new Map<string, T[]>()
+    for (const item of items) {
+      const list = map.get(item.blockId)
+      if (list) list.push(item)
+      else map.set(item.blockId, [item])
     }
     return map
-  })
-
-  const approvalsByBlock = computed(() => {
-    const map = new Map<string, (typeof openApprovals.value)[number][]>()
-    for (const a of openApprovals.value) {
-      const list = map.get(a.blockId)
-      if (list) list.push(a)
-      else map.set(a.blockId, [a])
-    }
-    return map
-  })
+  }
+  const decisionsByBlock = computed(() => groupByBlock(openDecisions.value))
+  const approvalsByBlock = computed(() => groupByBlock(openApprovals.value))
 
   /**
    * Start `pipeline` against a block; the server marks the block in-progress. A block

@@ -38,11 +38,24 @@ export const useBoardStore = defineStore('board', () => {
    * blocks invalidate. Blocks are emitted in a stable order by the backend mapper, so
    * a per-block JSON compare is a reliable, cheap (refresh is debounced) equality check.
    */
+  // Per-object serialization cache, keyed by block identity so it self-invalidates: a
+  // block we keep (same reference) stays cached, while a fresh/`upsert`ed object isn't in
+  // the map and is re-serialized. Lets a hydrate stringify each kept block once (the
+  // incoming snapshot) rather than twice (existing + incoming).
+  const serialized = new WeakMap<Block, string>()
+  function jsonFor(b: Block): string {
+    let s = serialized.get(b)
+    if (s === undefined) {
+      s = JSON.stringify(b)
+      serialized.set(b, s)
+    }
+    return s
+  }
   function hydrate(next: Block[]) {
     const prev = new Map(blocks.value.map((b) => [b.id, b]))
     blocks.value = next.map((n) => {
       const existing = prev.get(n.id)
-      return existing && JSON.stringify(existing) === JSON.stringify(n) ? existing : n
+      return existing && jsonFor(existing) === jsonFor(n) ? existing : n
     })
   }
 

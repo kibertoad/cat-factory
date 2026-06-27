@@ -52,12 +52,16 @@ const label = ref('')
 const token = ref('')
 const busy = ref(false)
 
-watch(open, (isOpen) => {
-  if (!isOpen) return
-  // Honour a deep-linked tab each time the modal opens (e.g. "My subscriptions" → personal).
-  activeTab.value = ui.vendorCredentialsTab
-  if (workspace.workspaceId) void creds.load(workspace.workspaceId)
-})
+watch(
+  open,
+  (isOpen) => {
+    if (!isOpen) return
+    // Honour a deep-linked tab each time the modal opens (e.g. "My subscriptions" → personal).
+    activeTab.value = ui.vendorCredentialsTab
+    if (workspace.workspaceId) void creds.load(workspace.workspaceId)
+  },
+  { immediate: true },
+)
 
 /** Step-by-step instructions for the selected vendor. */
 const steps = computed<string[]>(() => {

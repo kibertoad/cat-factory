@@ -41,13 +41,17 @@ const sourceDocs = computed(() =>
   source.value ? documents.documents.filter((d) => d.source === source.value) : [],
 )
 
-watch(open, (isOpen) => {
-  if (isOpen) {
-    ref_.value = ''
-    source.value = ui.documentImport?.source ?? documents.connectedSources[0]?.source ?? undefined
-    documents.loadDocuments().catch(() => {})
-  }
-})
+watch(
+  open,
+  (isOpen) => {
+    if (isOpen) {
+      ref_.value = ''
+      source.value = ui.documentImport?.source ?? documents.connectedSources[0]?.source ?? undefined
+      documents.loadDocuments().catch(() => {})
+    }
+  },
+  { immediate: true },
+)
 
 async function doImport() {
   const value = ref_.value.trim()

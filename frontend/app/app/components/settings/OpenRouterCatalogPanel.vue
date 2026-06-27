@@ -51,15 +51,20 @@ const connectingKey = ref(false)
 
 // Load key state + persisted catalog whenever the panel opens; seed the tick selection,
 // then auto-refresh the live catalog if a key is already connected (no extra click).
-watch(open, (isOpen) => {
-  if (!isOpen || !workspace.workspaceId) return
-  const ws = workspace.workspaceId
-  void apiKeys.load(ws).catch(() => {})
-  void store.load(ws).then(() => {
-    selected.value = new Set(store.enabled.map((m) => m.id))
-    if (keyConnected.value && store.browse.length === 0) void refresh()
-  })
-})
+watch(
+  open,
+  (isOpen) => {
+    // Lazy v-if mount runs this immediately (see below); guard still skips the closed case.
+    if (!isOpen || !workspace.workspaceId) return
+    const ws = workspace.workspaceId
+    void apiKeys.load(ws).catch(() => {})
+    void store.load(ws).then(() => {
+      selected.value = new Set(store.enabled.map((m) => m.id))
+      if (keyConnected.value && store.browse.length === 0) void refresh()
+    })
+  },
+  { immediate: true },
+)
 
 // The list to show: the live browse list once refreshed, else the persisted enabled set.
 const source = computed<OpenRouterModelMeta[]>(() =>

@@ -55,14 +55,18 @@ const filteredKinds = computed(() => {
   )
 })
 
-watch(open, (isOpen) => {
-  if (isOpen) {
-    editor.value = null
-    filter.value = ''
-    void models.ensureLoaded(workspace.workspaceId ?? undefined)
-    if (workspace.workspaceId) void creds.load(workspace.workspaceId)
-  }
-})
+watch(
+  open,
+  (isOpen) => {
+    if (isOpen) {
+      editor.value = null
+      filter.value = ''
+      void models.ensureLoaded(workspace.workspaceId ?? undefined)
+      if (workspace.workspaceId) void creds.load(workspace.workspaceId)
+    }
+  },
+  { immediate: true },
+)
 
 onKeyStroke('Escape', () => {
   if (!open.value) return
