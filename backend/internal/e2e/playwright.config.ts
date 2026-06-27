@@ -55,12 +55,22 @@ export default defineConfig({
     },
     {
       // The SPA (the @cat-factory/app layer via the deploy/frontend consumer), pointed at
-      // the backend above. `--filter` makes the command cwd-independent; Nuxt binds the
-      // port from `PORT`.
-      command: 'pnpm --filter @cat-factory/deploy-frontend run dev',
+      // the backend above. We serve a PRODUCTION build (`nuxt build` → `nuxt preview`), not
+      // `nuxt dev`: the dev server pre-bundles deps by crawling static imports only, so the
+      // board page's `defineAsyncComponent(() => import(...))` panels hide their transitive
+      // deps from the startup scan. Vite then discovers them at runtime and re-optimizes,
+      // each re-optimization forcing a full page reload that aborts an in-flight `page.goto`
+      // (`net::ERR_ABORTED`) and hangs a spec to its timeout — a flaky ~3min stall. A
+      // production build has all chunks emitted ahead of time (no runtime re-optimization,
+      // no reloads), which also makes this a more faithful test of the shipped artifact.
+      // `--filter` makes the command cwd-independent; Nuxt's preview server binds `PORT`.
+      command:
+        'pnpm --filter @cat-factory/deploy-frontend run build && pnpm --filter @cat-factory/deploy-frontend run preview',
       url: FRONTEND_URL,
       reuseExistingServer: !process.env.CI,
-      timeout: 180_000,
+      // Headroom for the one-off production build (libraries are already built by CI) plus
+      // the preview server start.
+      timeout: 240_000,
       stdout: 'pipe',
       stderr: 'pipe',
       env: { NUXT_PUBLIC_API_BASE: BACKEND_URL, PORT: String(FRONTEND_PORT) },
