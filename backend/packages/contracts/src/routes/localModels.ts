@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   localModelEndpointSchema,
@@ -6,7 +6,7 @@ import {
   testLocalModelEndpointSchema,
   upsertLocalModelEndpointSchema,
 } from '../localModels.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Per-user local-runner endpoint route contracts. The
@@ -21,7 +21,7 @@ const localModelEndpointListSchema = v.object({
 })
 
 // The `:provider` segment is re-validated against `localRunnerSchema` in the handler.
-const providerParams = withObjectKeys(v.object({ provider: v.string() }))
+const providerParams = singleStringParam('provider')
 
 export const listLocalModelEndpointsContract = defineApiContract({
   method: 'get',

@@ -189,6 +189,24 @@ export const accountInvitations = pgTable(
   ],
 )
 
+// Password-reset tokens ("forgot my password"). Only the SHA-256 token hash is stored;
+// single-use (status flips to 'used') and expiring. Mirrors the D1 table.
+export const passwordResetTokens = pgTable(
+  'password_reset_tokens',
+  {
+    id: text('id').primaryKey(),
+    user_id: text('user_id').notNull(),
+    token_hash: text('token_hash').notNull(),
+    status: text('status').notNull().default('pending'),
+    expires_at: bigint('expires_at', { mode: 'number' }).notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('idx_password_reset_tokens_token').on(t.token_hash),
+    index('idx_password_reset_tokens_user').on(t.user_id, t.status),
+  ],
+)
+
 export const blocks = pgTable(
   'blocks',
   {
@@ -338,6 +356,10 @@ export const pipelines = pgTable(
     // pipeline from the default library view (mirror of D1 0003).
     labels: text('labels'),
     archived: integer('archived'),
+    // Monotonic seed version for a built-in pipeline (mirror of D1 migration 0017); NULL on
+    // custom/cloned pipelines and on legacy rows. Lets a workspace's persisted copy be compared
+    // against the current `seedPipelines()` catalog and offered a reseed when it moves ahead.
+    version: integer('version'),
     // Monotonic insert sequence (Postgres has no SQLite rowid): a workspace's pipelines
     // are read back in the order they were seeded — the curated `seedPipelines()` order
     // — so the catalog order (and the UI's default `pipelines[0]`) is deterministic and

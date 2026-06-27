@@ -43,9 +43,13 @@ function syncDraft() {
 }
 
 // Load + hydrate the draft whenever the panel opens.
-watch(open, (isOpen) => {
-  if (isOpen) void store.load().then(syncDraft)
-})
+watch(
+  open,
+  (isOpen) => {
+    if (isOpen) void store.load().then(syncDraft)
+  },
+  { immediate: true },
+)
 watch(() => store.settings, syncDraft)
 
 async function save() {

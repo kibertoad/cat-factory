@@ -546,6 +546,9 @@ importers:
       typescript:
         specifier: 7.0.1-rc
         version: 7.0.1-rc
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.0.0)(happy-dom@20.10.6)(msw@2.14.6(@types/node@26.0.0)(typescript@7.0.1-rc))(vite@7.3.5(@types/node@26.0.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
 
   backend/runtimes/cloudflare:
     dependencies:
@@ -732,8 +735,8 @@ importers:
         specifier: ^8.22.0
         version: 8.22.0
       pg-boss:
-        specifier: ^12.21.0
-        version: 12.21.0
+        specifier: ^12.23.0
+        version: 12.23.0
       ws:
         specifier: ^8.21.0
         version: 8.21.0
@@ -4483,8 +4486,8 @@ packages:
     resolution: {integrity: sha512-piICUB6ei4IlTv1+653yq5+KoqfBYmj9bw6LqXoOneTMDXk5nM1qt12mFW1caG3LlJXEKW1Bp0WggEmIfQB34g==}
     engines: {node: '>= 14'}
 
-  cron-parser@5.6.0:
-    resolution: {integrity: sha512-6159NDv4eDOjXYDmMTkvUtaVcIrNZI779ydTMOfDdi9fSjhPqmySx0icCHX2+nOyXgNSw6sFCsgLKxYs/2KPuQ==}
+  cron-parser@5.6.1:
+    resolution: {integrity: sha512-QBm4o1PwZiuY7KFbVvW7FLC8bozy7YWzv+Fz6KRS7sQghzcbDZCGxr/Bc5b6TQreAoSwuWVP491dIcK0THCX6A==}
     engines: {node: '>=18'}
 
   croner@10.0.1:
@@ -5925,8 +5928,8 @@ packages:
   perfect-debounce@2.1.0:
     resolution: {integrity: sha512-LjgdTytVFXeUgtHZr9WYViYSM/g8MkcTPYDlPa3cDqMirHjKiSZPYd6DoL7pK8AJQr+uWkQvCjHNdiMqsrJs+g==}
 
-  pg-boss@12.21.0:
-    resolution: {integrity: sha512-G2tNCAL5JsxmD8nNrmNOnX1t2CVI5/TYMz/LN+6b9kEm/KZEr4YlExAGBf5i9K1PpCwqkD3C5l+80otGxi05Cw==}
+  pg-boss@12.23.0:
+    resolution: {integrity: sha512-WOhvsaTZQkvCdE5w8diGoUi/tXcIc9lyuKn4KrmMZXnW+75181U1tzsyqQNMaMVqxIUREjwQtNbgFmFxp3rd1w==}
     engines: {node: '>=22.12.0'}
     hasBin: true
 
@@ -10911,7 +10914,7 @@ snapshots:
       crc-32: 1.2.2
       readable-stream: 4.7.0
 
-  cron-parser@5.6.0:
+  cron-parser@5.6.1:
     dependencies:
       luxon: 3.7.2
 
@@ -12682,9 +12685,9 @@ snapshots:
 
   perfect-debounce@2.1.0: {}
 
-  pg-boss@12.21.0:
+  pg-boss@12.23.0:
     dependencies:
-      cron-parser: 5.6.0
+      cron-parser: 5.6.1
       pg: 8.22.0
       serialize-error: 13.0.1
     transitivePeerDependencies:

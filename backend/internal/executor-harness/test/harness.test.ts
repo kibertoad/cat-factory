@@ -8,6 +8,7 @@ import { readFile } from 'node:fs/promises'
 import {
   DEFAULT_PROGRESS_GUARD_LIMITS,
   ProgressGuard,
+  mergeGuardLimits,
   parsePiOutput,
   parseTodoProgress,
   progressGuardLimitsFromEnv,
@@ -706,6 +707,52 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     // Garbage values fall back rather than disabling the guard.
     expect(progressGuardLimitsFromEnv({ JOB_MAX_TOOLCALLS_WITHOUT_EDIT: '-3' })).toEqual(
       DEFAULT_PROGRESS_GUARD_LIMITS,
+    )
+  })
+})
+
+describe('mergeGuardLimits (per-kind override over the base)', () => {
+  it('returns the base unchanged when there are no overrides', () => {
+    expect(mergeGuardLimits(DEFAULT_PROGRESS_GUARD_LIMITS, undefined)).toEqual(
+      DEFAULT_PROGRESS_GUARD_LIMITS,
+    )
+  })
+
+  it('applies only the knobs present in the override, keeping the base for the rest', () => {
+    const merged = mergeGuardLimits(DEFAULT_PROGRESS_GUARD_LIMITS, { maxConsecutiveErrors: 20 })
+    expect(merged).toEqual({
+      ...DEFAULT_PROGRESS_GUARD_LIMITS,
+      maxConsecutiveErrors: 20,
+    })
+    // The unspecified knobs are untouched (a partial override is not all-or-nothing).
+    expect(merged.maxToolCallsWithoutEdit).toBe(
+      DEFAULT_PROGRESS_GUARD_LIMITS.maxToolCallsWithoutEdit,
+    )
+    expect(merged.maxConsecutiveWebCalls).toBe(DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveWebCalls)
+  })
+
+  it('enforces loosen-only: an override TIGHTER than the base is clamped up to the base', () => {
+    // A value below the default must never tighten the guard (it would abort a
+    // legitimately-progressing run). Every knob is clamped to at least the base.
+    const tighter = {
+      maxToolCallsWithoutEdit: 1,
+      maxConsecutiveErrors: 1,
+      maxConsecutiveWebCalls: 1,
+    }
+    expect(mergeGuardLimits(DEFAULT_PROGRESS_GUARD_LIMITS, tighter)).toEqual(
+      DEFAULT_PROGRESS_GUARD_LIMITS,
+    )
+  })
+
+  it('loosens only the over-base knobs while clamping the rest, in a mixed override', () => {
+    const merged = mergeGuardLimits(DEFAULT_PROGRESS_GUARD_LIMITS, {
+      maxConsecutiveErrors: 999, // loosen
+      maxConsecutiveWebCalls: 1, // tighter than base ⇒ clamped back to base
+    })
+    expect(merged.maxConsecutiveErrors).toBe(999)
+    expect(merged.maxConsecutiveWebCalls).toBe(DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveWebCalls)
+    expect(merged.maxToolCallsWithoutEdit).toBe(
+      DEFAULT_PROGRESS_GUARD_LIMITS.maxToolCallsWithoutEdit,
     )
   })
 })

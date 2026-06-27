@@ -109,6 +109,9 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > conflict-r
     "full": true,
     "ghToken": "GH-TOKEN",
     "githubApiBase": "https://api.github.com",
+    "guardLimits": {
+      "maxConsecutiveErrors": 20,
+    },
     "harness": "pi",
     "jobId": "ex_1-conflict-resolver",
     "mergeBase": "main",

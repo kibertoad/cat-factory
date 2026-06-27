@@ -1,5 +1,143 @@
 # @cat-factory/orchestration
 
+## 0.31.0
+
+### Minor Changes
+
+- b5231b0: Make prompt-caching a first-class, visible capability and add per-kind progress-guard
+  leniency.
+
+  **Caching capability + observability.** `providerCachePolicy` moves to the kernel
+  (`domain/cache-policy.ts`, re-exported from `@cat-factory/agents`) so the model catalog
+  can derive a per-flavour `ModelOption.cachesPrompts` from the effective provider — the
+  same model reads `false` on its cache-less Cloudflare/Workers-AI flavour and `true` once
+  a direct key upgrades it to its caching `direct` flavour. The already-recorded
+  `cachedPromptTokens` is now aggregated per agent kind in `summarizeByExecution` (D1 +
+  Drizzle, kept symmetric) and surfaced as `cachedPromptTokens` + a derived `cacheHitRate`
+  on the step rollup and the LLM-metrics export.
+
+  **Vendor-selection UI.** The model picker shows a `Prompt caching` / `No prompt caching`
+  badge per flavour, the API-keys panel notes which direct keys enable caching, and the
+  step metrics bar shows a cached-token split when present — so a user can see (and act on)
+  the hot path running cache-less. Shipped model defaults are intentionally NOT changed;
+  extending `providerCachePolicy` to more providers (Moonshot / OpenRouter / LiteLLM) is
+  gated on benchmark evidence (see `backend/docs/prompt-caching.md`).
+
+  **Per-kind guard leniency.** The container progress guard can now be loosened per agent
+  kind via an optional `guardLimits` job-body field (clamped per knob in the harness;
+  merged over the env/built-in defaults — loosen-only, never tighten). A data-driven
+  `agentTuningFor` seam (`@cat-factory/agents`, plus an `AgentKindDefinition.tuning` hook
+  for custom kinds) supplies the profile, which `ContainerAgentExecutor` folds into the
+  dispatch body. Initial profiles give `conflict-resolver` more error headroom and the
+  research-heavy kinds a higher consecutive-web cap, so a legitimately-progressing run is
+  not killed for its normal pattern. Output-token ceilings are unchanged.
+
+### Patch Changes
+
+- Updated dependencies [b5231b0]
+  - @cat-factory/contracts@0.39.0
+  - @cat-factory/kernel@0.41.0
+  - @cat-factory/agents@0.19.0
+  - @cat-factory/integrations@0.23.5
+  - @cat-factory/prompt-fragments@0.7.37
+  - @cat-factory/sandbox@0.8.17
+  - @cat-factory/spend@0.10.10
+  - @cat-factory/workspaces@0.9.1
+
+## 0.30.0
+
+### Minor Changes
+
+- 6d829bb: Make invalid-state pipelines more robust. On app open, a startup advisory surfaces pipelines that
+  reference a nonexistent agent kind or have an invalid shape (delete a custom one, reseed a built-in)
+  and built-in pipelines whose seeded definition is newer than the stored copy (reseed to adopt it).
+
+  Built-in pipelines now carry a per-pipeline `version` (persisted on both runtimes via a new D1
+  migration and a Drizzle column), the snapshot ships the current catalog versions
+  (`pipelineCatalogVersions`), and a new `POST /workspaces/:ws/pipelines/:id/reseed` endpoint restores a
+  built-in's canonical definition while preserving its labels/archive state.
+
+  BREAKING: existing workspaces' persisted built-in pipelines have no stored `version`, so they read as
+  "update available" once until reseeded — intentional adoption of the now-versioned definitions.
+
+### Patch Changes
+
+- Updated dependencies [6d829bb]
+  - @cat-factory/contracts@0.38.0
+  - @cat-factory/kernel@0.40.0
+  - @cat-factory/workspaces@0.9.0
+  - @cat-factory/agents@0.18.5
+  - @cat-factory/integrations@0.23.4
+  - @cat-factory/prompt-fragments@0.7.36
+  - @cat-factory/sandbox@0.8.16
+  - @cat-factory/spend@0.10.9
+
+## 0.29.0
+
+### Minor Changes
+
+- 714b7c9: Add "forgot my password" self-service reset for password-based logins.
+
+  A user can request a reset link by email (`POST /auth/forgot-password`) and set a new
+  password via a one-time, expiring token (`POST /auth/reset-password`). Tokens are stored
+  hashed (SHA-256), single-use, and mirror the invitation flow; the reset email is sent
+  through a new deployment-level **system** email sender configured via
+  `EMAIL_SYSTEM_PROVIDER` / `EMAIL_SYSTEM_FROM` / `EMAIL_SYSTEM_API_KEY` (when unset, the
+  link is logged for local/dev). The request endpoint never reveals whether an email is
+  registered.
+
+  Schema addition (both runtimes): a new `password_reset_tokens` table (D1 migration
+  `0017_password_reset_tokens.sql` ⇄ a Drizzle Postgres migration). No data migration is
+  needed — the table starts empty.
+
+### Patch Changes
+
+- Updated dependencies [714b7c9]
+  - @cat-factory/contracts@0.37.0
+  - @cat-factory/kernel@0.39.0
+  - @cat-factory/workspaces@0.8.0
+  - @cat-factory/agents@0.18.4
+  - @cat-factory/integrations@0.23.3
+  - @cat-factory/prompt-fragments@0.7.35
+  - @cat-factory/sandbox@0.8.15
+  - @cat-factory/spend@0.10.8
+
+## 0.28.3
+
+### Patch Changes
+
+- Updated dependencies [efbd910]
+  - @cat-factory/contracts@0.36.0
+  - @cat-factory/agents@0.18.3
+  - @cat-factory/integrations@0.23.2
+  - @cat-factory/kernel@0.38.1
+  - @cat-factory/prompt-fragments@0.7.34
+  - @cat-factory/sandbox@0.8.14
+  - @cat-factory/spend@0.10.7
+  - @cat-factory/workspaces@0.7.46
+
+## 0.28.2
+
+### Patch Changes
+
+- Updated dependencies [692ccb4]
+  - @cat-factory/agents@0.18.2
+  - @cat-factory/sandbox@0.8.13
+
+## 0.28.1
+
+### Patch Changes
+
+- Updated dependencies [a4ea607]
+  - @cat-factory/contracts@0.35.0
+  - @cat-factory/kernel@0.38.0
+  - @cat-factory/agents@0.18.1
+  - @cat-factory/integrations@0.23.1
+  - @cat-factory/prompt-fragments@0.7.33
+  - @cat-factory/sandbox@0.8.12
+  - @cat-factory/spend@0.10.6
+  - @cat-factory/workspaces@0.7.45
+
 ## 0.28.0
 
 ### Minor Changes

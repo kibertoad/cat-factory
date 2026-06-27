@@ -1,7 +1,12 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
-import { passwordLoginSchema, signupSchema } from '../auth.js'
-import { errorResponses } from './_shared.js'
+import {
+  forgotPasswordSchema,
+  passwordLoginSchema,
+  resetPasswordSchema,
+  signupSchema,
+} from '../auth.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Authentication route contracts. Mounted under `/auth`, so the paths here are
@@ -69,7 +74,7 @@ const invitationPeekSchema = v.union([
 
 const acceptInvitationResultSchema = v.object({ accountId: v.string() })
 
-const inviteTokenParams = withObjectKeys(v.object({ token: v.string() }))
+const inviteTokenParams = singleStringParam('token')
 
 export const authConfigContract = defineApiContract({
   method: 'get',
@@ -119,6 +124,25 @@ export const passwordLoginContract = defineApiContract({
   pathResolver: () => '/password-login',
   requestBodySchema: passwordLoginSchema,
   responsesByStatusCode: { 200: loginResultSchema, ...errorResponses },
+})
+
+// ---- Forgot / reset password ----------------------------------------------
+
+// Request a reset link. ALWAYS succeeds (204) regardless of whether the email is
+// registered, so the response can't be used to enumerate accounts.
+export const forgotPasswordContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/forgot-password',
+  requestBodySchema: forgotPasswordSchema,
+  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+})
+
+// Redeem a reset token + set a new password (a 400 on an invalid/used/expired token).
+export const resetPasswordContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/reset-password',
+  requestBodySchema: resetPasswordSchema,
+  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
 })
 
 // ---- Invitations (peek + accept) ------------------------------------------

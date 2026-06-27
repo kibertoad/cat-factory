@@ -277,6 +277,10 @@ export interface Env {
   GOOGLE_OAUTH_REDIRECT_URL?: string
   /** Optional dedicated master key for the per-account email API key (falls back to ENCRYPTION_KEY). */
   EMAIL_ENCRYPTION_KEY?: string
+  /** Deployment-level system sender for auth emails (password reset): provider/from/key. */
+  EMAIL_SYSTEM_PROVIDER?: string
+  EMAIL_SYSTEM_FROM?: string
+  EMAIL_SYSTEM_API_KEY?: string
   /** Public SPA base URL the invite-accept link points at. */
   APP_BASE_URL?: string
   /**

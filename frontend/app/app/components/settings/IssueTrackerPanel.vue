@@ -41,7 +41,9 @@ onMounted(() => {
   // probe on open if the navbar hasn't already, so the toggles below reflect reality.
   if (tasks.available === null) void tasks.probe()
 })
-watch(() => tracker.settings, hydrate, { deep: true })
+// `tracker.settings` is reassigned wholesale on hydrate/save, so a reference watch
+// (no deep traversal) catches every change.
+watch(() => tracker.settings, hydrate)
 
 // Per-source live state (available = usable now; enabled = offered to the workspace).
 const github = computed(() => tasks.descriptorFor('github'))

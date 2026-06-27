@@ -1,5 +1,97 @@
 # @cat-factory/agents
 
+## 0.19.0
+
+### Minor Changes
+
+- b5231b0: Make prompt-caching a first-class, visible capability and add per-kind progress-guard
+  leniency.
+
+  **Caching capability + observability.** `providerCachePolicy` moves to the kernel
+  (`domain/cache-policy.ts`, re-exported from `@cat-factory/agents`) so the model catalog
+  can derive a per-flavour `ModelOption.cachesPrompts` from the effective provider — the
+  same model reads `false` on its cache-less Cloudflare/Workers-AI flavour and `true` once
+  a direct key upgrades it to its caching `direct` flavour. The already-recorded
+  `cachedPromptTokens` is now aggregated per agent kind in `summarizeByExecution` (D1 +
+  Drizzle, kept symmetric) and surfaced as `cachedPromptTokens` + a derived `cacheHitRate`
+  on the step rollup and the LLM-metrics export.
+
+  **Vendor-selection UI.** The model picker shows a `Prompt caching` / `No prompt caching`
+  badge per flavour, the API-keys panel notes which direct keys enable caching, and the
+  step metrics bar shows a cached-token split when present — so a user can see (and act on)
+  the hot path running cache-less. Shipped model defaults are intentionally NOT changed;
+  extending `providerCachePolicy` to more providers (Moonshot / OpenRouter / LiteLLM) is
+  gated on benchmark evidence (see `backend/docs/prompt-caching.md`).
+
+  **Per-kind guard leniency.** The container progress guard can now be loosened per agent
+  kind via an optional `guardLimits` job-body field (clamped per knob in the harness;
+  merged over the env/built-in defaults — loosen-only, never tighten). A data-driven
+  `agentTuningFor` seam (`@cat-factory/agents`, plus an `AgentKindDefinition.tuning` hook
+  for custom kinds) supplies the profile, which `ContainerAgentExecutor` folds into the
+  dispatch body. Initial profiles give `conflict-resolver` more error headroom and the
+  research-heavy kinds a higher consecutive-web cap, so a legitimately-progressing run is
+  not killed for its normal pattern. Output-token ceilings are unchanged.
+
+### Patch Changes
+
+- Updated dependencies [b5231b0]
+  - @cat-factory/contracts@0.39.0
+  - @cat-factory/kernel@0.41.0
+  - @cat-factory/prompt-fragments@0.7.37
+
+## 0.18.5
+
+### Patch Changes
+
+- Updated dependencies [6d829bb]
+  - @cat-factory/contracts@0.38.0
+  - @cat-factory/kernel@0.40.0
+  - @cat-factory/prompt-fragments@0.7.36
+
+## 0.18.4
+
+### Patch Changes
+
+- Updated dependencies [714b7c9]
+  - @cat-factory/contracts@0.37.0
+  - @cat-factory/kernel@0.39.0
+  - @cat-factory/prompt-fragments@0.7.35
+
+## 0.18.3
+
+### Patch Changes
+
+- Updated dependencies [efbd910]
+  - @cat-factory/contracts@0.36.0
+  - @cat-factory/kernel@0.38.1
+  - @cat-factory/prompt-fragments@0.7.34
+
+## 0.18.2
+
+### Patch Changes
+
+- 692ccb4: Centralize OpenAI-compatible provider base-URL resolution.
+
+  The env-override→default base-URL logic (and the "litellm has no public default" rule)
+  was reconstructed per facade — a `NODE_BASE_URLS` map plus a `||` lookup on Node and a
+  provider `switch` on the Worker. Both now route through a single
+  `resolveOpenAiCompatibleBaseUrl(provider, override)` in `@cat-factory/agents`, driven by
+  the existing `DEFAULT_OPENAI_COMPATIBLE_BASE_URLS` table, so adding an OpenAI-compatible
+  vendor is a one-line table entry both runtimes pick up automatically.
+
+  Minor behavioural alignment: a _blank_ `${PROVIDER}_BASE_URL` override now falls back to
+  the built-in default on the Worker too (it previously returned the empty string), matching
+  Node's long-standing `||` semantics.
+
+## 0.18.1
+
+### Patch Changes
+
+- Updated dependencies [a4ea607]
+  - @cat-factory/contracts@0.35.0
+  - @cat-factory/kernel@0.38.0
+  - @cat-factory/prompt-fragments@0.7.33
+
 ## 0.18.0
 
 ### Minor Changes

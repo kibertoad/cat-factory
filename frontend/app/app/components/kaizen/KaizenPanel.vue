@@ -12,9 +12,13 @@ const kaizen = useKaizenStore()
 
 const open = computed(() => ui.kaizenScreenOpen)
 
-watch(open, (isOpen) => {
-  if (isOpen) void kaizen.loadOverview()
-})
+watch(
+  open,
+  (isOpen) => {
+    if (isOpen) void kaizen.loadOverview()
+  },
+  { immediate: true },
+)
 
 function close() {
   ui.closeKaizen()

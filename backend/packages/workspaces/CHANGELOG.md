@@ -1,5 +1,75 @@
 # @cat-factory/workspaces
 
+## 0.9.1
+
+### Patch Changes
+
+- Updated dependencies [b5231b0]
+  - @cat-factory/contracts@0.39.0
+  - @cat-factory/kernel@0.41.0
+
+## 0.9.0
+
+### Minor Changes
+
+- 6d829bb: Make invalid-state pipelines more robust. On app open, a startup advisory surfaces pipelines that
+  reference a nonexistent agent kind or have an invalid shape (delete a custom one, reseed a built-in)
+  and built-in pipelines whose seeded definition is newer than the stored copy (reseed to adopt it).
+
+  Built-in pipelines now carry a per-pipeline `version` (persisted on both runtimes via a new D1
+  migration and a Drizzle column), the snapshot ships the current catalog versions
+  (`pipelineCatalogVersions`), and a new `POST /workspaces/:ws/pipelines/:id/reseed` endpoint restores a
+  built-in's canonical definition while preserving its labels/archive state.
+
+  BREAKING: existing workspaces' persisted built-in pipelines have no stored `version`, so they read as
+  "update available" once until reseeded — intentional adoption of the now-versioned definitions.
+
+### Patch Changes
+
+- Updated dependencies [6d829bb]
+  - @cat-factory/contracts@0.38.0
+  - @cat-factory/kernel@0.40.0
+
+## 0.8.0
+
+### Minor Changes
+
+- 714b7c9: Add "forgot my password" self-service reset for password-based logins.
+
+  A user can request a reset link by email (`POST /auth/forgot-password`) and set a new
+  password via a one-time, expiring token (`POST /auth/reset-password`). Tokens are stored
+  hashed (SHA-256), single-use, and mirror the invitation flow; the reset email is sent
+  through a new deployment-level **system** email sender configured via
+  `EMAIL_SYSTEM_PROVIDER` / `EMAIL_SYSTEM_FROM` / `EMAIL_SYSTEM_API_KEY` (when unset, the
+  link is logged for local/dev). The request endpoint never reveals whether an email is
+  registered.
+
+  Schema addition (both runtimes): a new `password_reset_tokens` table (D1 migration
+  `0017_password_reset_tokens.sql` ⇄ a Drizzle Postgres migration). No data migration is
+  needed — the table starts empty.
+
+### Patch Changes
+
+- Updated dependencies [714b7c9]
+  - @cat-factory/contracts@0.37.0
+  - @cat-factory/kernel@0.39.0
+
+## 0.7.46
+
+### Patch Changes
+
+- Updated dependencies [efbd910]
+  - @cat-factory/contracts@0.36.0
+  - @cat-factory/kernel@0.38.1
+
+## 0.7.45
+
+### Patch Changes
+
+- Updated dependencies [a4ea607]
+  - @cat-factory/contracts@0.35.0
+  - @cat-factory/kernel@0.38.0
+
 ## 0.7.44
 
 ### Patch Changes

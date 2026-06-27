@@ -1,5 +1,86 @@
 # @cat-factory/conformance
 
+## 0.9.1
+
+### Patch Changes
+
+- Updated dependencies [b5231b0]
+  - @cat-factory/kernel@0.41.0
+  - @cat-factory/agents@0.19.0
+  - @cat-factory/orchestration@0.31.0
+  - @cat-factory/gates@0.2.5
+  - @cat-factory/integrations@0.23.5
+  - @cat-factory/prompt-fragments@0.7.37
+
+## 0.9.0
+
+### Minor Changes
+
+- 6d829bb: Make invalid-state pipelines more robust. On app open, a startup advisory surfaces pipelines that
+  reference a nonexistent agent kind or have an invalid shape (delete a custom one, reseed a built-in)
+  and built-in pipelines whose seeded definition is newer than the stored copy (reseed to adopt it).
+
+  Built-in pipelines now carry a per-pipeline `version` (persisted on both runtimes via a new D1
+  migration and a Drizzle column), the snapshot ships the current catalog versions
+  (`pipelineCatalogVersions`), and a new `POST /workspaces/:ws/pipelines/:id/reseed` endpoint restores a
+  built-in's canonical definition while preserving its labels/archive state.
+
+  BREAKING: existing workspaces' persisted built-in pipelines have no stored `version`, so they read as
+  "update available" once until reseeded — intentional adoption of the now-versioned definitions.
+
+### Patch Changes
+
+- Updated dependencies [6d829bb]
+  - @cat-factory/kernel@0.40.0
+  - @cat-factory/orchestration@0.30.0
+  - @cat-factory/agents@0.18.5
+  - @cat-factory/gates@0.2.4
+  - @cat-factory/integrations@0.23.4
+  - @cat-factory/prompt-fragments@0.7.36
+
+## 0.8.7
+
+### Patch Changes
+
+- Updated dependencies [714b7c9]
+  - @cat-factory/kernel@0.39.0
+  - @cat-factory/orchestration@0.29.0
+  - @cat-factory/agents@0.18.4
+  - @cat-factory/gates@0.2.3
+  - @cat-factory/integrations@0.23.3
+  - @cat-factory/prompt-fragments@0.7.35
+
+## 0.8.6
+
+### Patch Changes
+
+- @cat-factory/agents@0.18.3
+- @cat-factory/gates@0.2.2
+- @cat-factory/integrations@0.23.2
+- @cat-factory/kernel@0.38.1
+- @cat-factory/orchestration@0.28.3
+- @cat-factory/prompt-fragments@0.7.34
+
+## 0.8.5
+
+### Patch Changes
+
+- Updated dependencies [692ccb4]
+  - @cat-factory/agents@0.18.2
+  - @cat-factory/orchestration@0.28.2
+
+## 0.8.4
+
+### Patch Changes
+
+- Updated dependencies [a4ea607]
+  - @cat-factory/kernel@0.38.0
+  - @cat-factory/agents@0.18.1
+  - @cat-factory/gates@0.2.1
+  - @cat-factory/integrations@0.23.1
+  - @cat-factory/orchestration@0.28.1
+  - @cat-factory/prompt-fragments@0.7.33
+
 ## 0.8.3
 
 ### Patch Changes

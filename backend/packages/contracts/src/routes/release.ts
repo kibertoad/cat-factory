@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   observabilityConnectionViewSchema,
@@ -6,7 +6,7 @@ import {
   upsertObservabilityConnectionSchema,
   upsertReleaseHealthConfigSchema,
 } from '../release.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Post-release-health route contracts: the per-workspace observability connection
@@ -16,7 +16,7 @@ import { errorResponses } from './_shared.js'
 // ---------------------------------------------------------------------------
 
 const releaseHealthConfigListSchema = v.array(releaseHealthConfigSchema)
-const blockIdParams = withObjectKeys(v.object({ blockId: v.string() }))
+const blockIdParams = singleStringParam('blockId')
 
 export const getObservabilityConnectionContract = defineApiContract({
   method: 'get',

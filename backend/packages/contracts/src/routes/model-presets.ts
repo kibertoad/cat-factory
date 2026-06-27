@@ -1,11 +1,11 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   createModelPresetSchema,
   modelPresetSchema,
   updateModelPresetSchema,
 } from '../model-presets.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Model preset route contracts. Mounted under `/workspaces/:workspaceId`, so the
@@ -14,7 +14,7 @@ import { errorResponses } from './_shared.js'
 // ---------------------------------------------------------------------------
 
 const modelPresetListSchema = v.array(modelPresetSchema)
-const presetIdParams = withObjectKeys(v.object({ presetId: v.string() }))
+const presetIdParams = singleStringParam('presetId')
 
 export const listModelPresetsContract = defineApiContract({
   method: 'get',

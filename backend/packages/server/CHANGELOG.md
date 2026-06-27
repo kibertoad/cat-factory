@@ -1,5 +1,207 @@
 # @cat-factory/server
 
+## 0.35.0
+
+### Minor Changes
+
+- b5231b0: Make prompt-caching a first-class, visible capability and add per-kind progress-guard
+  leniency.
+
+  **Caching capability + observability.** `providerCachePolicy` moves to the kernel
+  (`domain/cache-policy.ts`, re-exported from `@cat-factory/agents`) so the model catalog
+  can derive a per-flavour `ModelOption.cachesPrompts` from the effective provider — the
+  same model reads `false` on its cache-less Cloudflare/Workers-AI flavour and `true` once
+  a direct key upgrades it to its caching `direct` flavour. The already-recorded
+  `cachedPromptTokens` is now aggregated per agent kind in `summarizeByExecution` (D1 +
+  Drizzle, kept symmetric) and surfaced as `cachedPromptTokens` + a derived `cacheHitRate`
+  on the step rollup and the LLM-metrics export.
+
+  **Vendor-selection UI.** The model picker shows a `Prompt caching` / `No prompt caching`
+  badge per flavour, the API-keys panel notes which direct keys enable caching, and the
+  step metrics bar shows a cached-token split when present — so a user can see (and act on)
+  the hot path running cache-less. Shipped model defaults are intentionally NOT changed;
+  extending `providerCachePolicy` to more providers (Moonshot / OpenRouter / LiteLLM) is
+  gated on benchmark evidence (see `backend/docs/prompt-caching.md`).
+
+  **Per-kind guard leniency.** The container progress guard can now be loosened per agent
+  kind via an optional `guardLimits` job-body field (clamped per knob in the harness;
+  merged over the env/built-in defaults — loosen-only, never tighten). A data-driven
+  `agentTuningFor` seam (`@cat-factory/agents`, plus an `AgentKindDefinition.tuning` hook
+  for custom kinds) supplies the profile, which `ContainerAgentExecutor` folds into the
+  dispatch body. Initial profiles give `conflict-resolver` more error headroom and the
+  research-heavy kinds a higher consecutive-web cap, so a legitimately-progressing run is
+  not killed for its normal pattern. Output-token ceilings are unchanged.
+
+### Patch Changes
+
+- Updated dependencies [b5231b0]
+  - @cat-factory/contracts@0.39.0
+  - @cat-factory/kernel@0.41.0
+  - @cat-factory/agents@0.19.0
+  - @cat-factory/orchestration@0.31.0
+  - @cat-factory/integrations@0.23.5
+  - @cat-factory/prompt-fragments@0.7.37
+  - @cat-factory/spend@0.10.10
+
+## 0.34.0
+
+### Minor Changes
+
+- 6d829bb: Make invalid-state pipelines more robust. On app open, a startup advisory surfaces pipelines that
+  reference a nonexistent agent kind or have an invalid shape (delete a custom one, reseed a built-in)
+  and built-in pipelines whose seeded definition is newer than the stored copy (reseed to adopt it).
+
+  Built-in pipelines now carry a per-pipeline `version` (persisted on both runtimes via a new D1
+  migration and a Drizzle column), the snapshot ships the current catalog versions
+  (`pipelineCatalogVersions`), and a new `POST /workspaces/:ws/pipelines/:id/reseed` endpoint restores a
+  built-in's canonical definition while preserving its labels/archive state.
+
+  BREAKING: existing workspaces' persisted built-in pipelines have no stored `version`, so they read as
+  "update available" once until reseeded — intentional adoption of the now-versioned definitions.
+
+### Patch Changes
+
+- Updated dependencies [6d829bb]
+  - @cat-factory/contracts@0.38.0
+  - @cat-factory/kernel@0.40.0
+  - @cat-factory/orchestration@0.30.0
+  - @cat-factory/agents@0.18.5
+  - @cat-factory/integrations@0.23.4
+  - @cat-factory/prompt-fragments@0.7.36
+  - @cat-factory/spend@0.10.9
+
+## 0.33.0
+
+### Minor Changes
+
+- 714b7c9: Add "forgot my password" self-service reset for password-based logins.
+
+  A user can request a reset link by email (`POST /auth/forgot-password`) and set a new
+  password via a one-time, expiring token (`POST /auth/reset-password`). Tokens are stored
+  hashed (SHA-256), single-use, and mirror the invitation flow; the reset email is sent
+  through a new deployment-level **system** email sender configured via
+  `EMAIL_SYSTEM_PROVIDER` / `EMAIL_SYSTEM_FROM` / `EMAIL_SYSTEM_API_KEY` (when unset, the
+  link is logged for local/dev). The request endpoint never reveals whether an email is
+  registered.
+
+  Schema addition (both runtimes): a new `password_reset_tokens` table (D1 migration
+  `0017_password_reset_tokens.sql` ⇄ a Drizzle Postgres migration). No data migration is
+  needed — the table starts empty.
+
+### Patch Changes
+
+- Updated dependencies [714b7c9]
+  - @cat-factory/contracts@0.37.0
+  - @cat-factory/kernel@0.39.0
+  - @cat-factory/orchestration@0.29.0
+  - @cat-factory/agents@0.18.4
+  - @cat-factory/integrations@0.23.3
+  - @cat-factory/prompt-fragments@0.7.35
+  - @cat-factory/spend@0.10.8
+
+## 0.32.2
+
+### Patch Changes
+
+- efbd910: Fix the SPA error handling broken by the `@toad-contracts/*` migration.
+
+  The contract client (`sendByApiContract`) reports a contract-declared non-2xx as a plain
+  `{ statusCode, headers, body }` value (not an `Error`), with the `{ error: { code, message,
+details } }` envelope under `body`. The old `$fetch` threw an ofetch `FetchError` with the
+  body under `data` and was always an `Error`. Several handlers still read the old shape, so:
+
+  - `parseCredentialError` returned `null` for every 428, so the personal-subscription
+    password modal never opened and individual-usage runs (Claude/Codex/GLM) could not be
+    started or retried.
+  - `parseConflict` returned `null` for every 409, so run-control conflict toasts lost their
+    tailored guidance (including the `providers_unconfigured` "Configure AI" jump).
+  - `instanceof Error` message extraction across many catch blocks rendered `"[object Object]"`
+    for declared 4xx/5xx, and the login/account/tracker-probe handlers dropped the server's
+    message.
+
+  `sendContract` now wraps a bare non-2xx into a real `ApiError` (an `Error` carrying
+  `statusCode`, the parsed `body`, and the server's message), and a shared
+  `apiErrorEnvelope` / `apiErrorStatus` reads the envelope from either client shape. The
+  provisioning-logs query now validates through the contract schema so an invalid query
+  returns the standard `{ code: 'validation' }` 400 like every other route. `@cat-factory/contracts`
+  gains a `singleStringParam` helper that collapses the one-key path-param schemas the route
+  files each re-declared (typing preserved).
+
+- Updated dependencies [efbd910]
+  - @cat-factory/contracts@0.36.0
+  - @cat-factory/agents@0.18.3
+  - @cat-factory/integrations@0.23.2
+  - @cat-factory/kernel@0.38.1
+  - @cat-factory/orchestration@0.28.3
+  - @cat-factory/prompt-fragments@0.7.34
+  - @cat-factory/spend@0.10.7
+
+## 0.32.1
+
+### Patch Changes
+
+- 692ccb4: Refactor the shared block row<->domain mappers to a field-map-driven factory.
+
+  `rowToBlock` / `blockInsertValues` / `blockPatchToColumns` were three hand-enumerated
+  functions kept in sync by eye — a new persisted column meant 3–4 coordinated edits and a
+  renamed column only surfaced at runtime. They now derive all three directions from a single
+  `blockFields` table (one `FieldMapper` per column, with `scalarField` / `optField` /
+  `optJsonField` / `optBoolIntField` builders that default the column to the snake_case of the
+  property). The genuinely divergent columns (the `position`/`size` composites, the tri-state
+  `technical`, and `serviceFragmentIds`/`agentConfig` whose insert vs patch emptiness rules
+  differ) stay spelled out inline. Behaviour is unchanged — the existing mapper test suite is
+  preserved and extended to cover the tri-state, length-clear, and insert-only columns.
+
+- Updated dependencies [692ccb4]
+  - @cat-factory/agents@0.18.2
+  - @cat-factory/orchestration@0.28.2
+
+## 0.32.0
+
+### Minor Changes
+
+- a4ea607: Adopt `@toad-contracts/*` for end-to-end typed, validated API contracts.
+
+  The HTTP boundary is now a single source of truth. Each route is defined once with
+  `defineApiContract` in `@cat-factory/contracts` (`src/routes/*`) and consumed by both
+  sides: the backend mounts it with `@toad-contracts/hono`'s `buildHonoRoute` (method,
+  path and request validation derived from the contract; the handler's `c.req.valid(...)`
+  inputs and `c.json(body, status)` return are type-checked against it), and the SPA calls
+  it with `@toad-contracts/frontend-http-client`'s `sendByApiContract` over `wretch`
+  (runtime-validating every response). The frontend wire-type mirror in
+  `frontend/app/app/types/*` no longer hand-redefines shapes — it re-exports the inferred
+  types from `@cat-factory/contracts`, so backend and frontend can't drift.
+
+  Breaking / notable:
+
+  - `@cat-factory/server` no longer exports `jsonBody`, and drops the
+    `@hono/valibot-validator` dependency (request validation now comes from the contract
+    via `buildHonoRoute`); request-validation failures still return the same
+    `{ error: { code: 'validation', issues } }` 400 envelope, mapped centrally in
+    `handleError`.
+  - `updateBlockSchema` now accepts `responsibleProductUserId` (it was silently dropped on
+    the wire despite the domain block carrying it and the mapper persisting it).
+  - The runtime-internal endpoints that are not request/response JSON APIs (the WebSocket
+    event stream, the LLM/web-search proxies, the GitHub webhook, the Slack OAuth callback)
+    are intentionally left on plain Hono routing.
+  - The wire-returned shapes that the kernel ports also describe (`ProvisionedRepo`,
+    `AgentContextSnapshot`/`AgentContextFile`/`AgentContextFragment`) now have their single
+    source of truth in `@cat-factory/contracts` valibot schemas; the `@cat-factory/kernel`
+    ports re-export the inferred types, so the route contract and the port can't drift. The
+    `/auth/config` `localMode` field is now a real schema (`localModeConfigSchema`) instead
+    of `v.unknown()`, and `AppConfig.localMode` derives its type from it.
+
+### Patch Changes
+
+- Updated dependencies [a4ea607]
+  - @cat-factory/contracts@0.35.0
+  - @cat-factory/kernel@0.38.0
+  - @cat-factory/agents@0.18.1
+  - @cat-factory/integrations@0.23.1
+  - @cat-factory/orchestration@0.28.1
+  - @cat-factory/prompt-fragments@0.7.33
+  - @cat-factory/spend@0.10.6
+
 ## 0.31.0
 
 ### Minor Changes

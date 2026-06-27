@@ -4,6 +4,7 @@ import {
   OPENAI_BASE_URL,
   OPENROUTER_BASE_URL,
   QWEN_BASE_URL,
+  resolveOpenAiCompatibleBaseUrl,
 } from '@cat-factory/agents'
 import type { Env } from '../env'
 
@@ -16,25 +17,22 @@ import type { Env } from '../env'
 // regional endpoint, or — in the acceptance tests — a local stub, without code changes.
 export { DEEPSEEK_BASE_URL, MOONSHOT_BASE_URL, OPENAI_BASE_URL, OPENROUTER_BASE_URL, QWEN_BASE_URL }
 
-/** The effective base URL for a provider: env override, else the built-in default. */
+/**
+ * The effective base URL for a provider: the typed `${PROVIDER}_BASE_URL` env override,
+ * else the built-in default. The override-vs-default precedence, the defaults table and
+ * the litellm-has-no-default semantics live in @cat-factory/agents so the Node service
+ * resolves identically; this only maps the Worker's typed Env fields to that resolver.
+ */
 export function baseUrlFor(provider: string, env: Env): string | null {
-  switch (provider) {
-    case 'qwen':
-      return env.QWEN_BASE_URL ?? QWEN_BASE_URL
-    case 'deepseek':
-      return env.DEEPSEEK_BASE_URL ?? DEEPSEEK_BASE_URL
-    case 'moonshot':
-      return env.MOONSHOT_BASE_URL ?? MOONSHOT_BASE_URL
-    case 'openai':
-      return env.OPENAI_BASE_URL ?? OPENAI_BASE_URL
-    case 'openrouter':
-      return env.OPENROUTER_BASE_URL ?? OPENROUTER_BASE_URL
-    // LiteLLM is operator-hosted: no public default, only the deployment's own gateway.
-    case 'litellm':
-      return env.LITELLM_BASE_URL ?? null
-    default:
-      return null
+  const override: Record<string, string | undefined> = {
+    qwen: env.QWEN_BASE_URL,
+    deepseek: env.DEEPSEEK_BASE_URL,
+    moonshot: env.MOONSHOT_BASE_URL,
+    openai: env.OPENAI_BASE_URL,
+    openrouter: env.OPENROUTER_BASE_URL,
+    litellm: env.LITELLM_BASE_URL,
   }
+  return resolveOpenAiCompatibleBaseUrl(provider, override[provider]) ?? null
 }
 
 /** A resolved OpenAI-compatible upstream: where to send the request (key-free). */

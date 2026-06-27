@@ -15,7 +15,7 @@ import { onKeyStroke } from '@vueuse/core'
 import type { AgentKind } from '~/types/domain'
 import type { ModelPreset } from '~/types/model-presets'
 import { MODEL_CONFIGURABLE_SYSTEM_KINDS } from '~/utils/catalog'
-import { contextLabel, costLabel, displayFlavor, isSelectable } from '~/stores/models'
+import { cachingLabel, contextLabel, costLabel, displayFlavor, isSelectable } from '~/stores/models'
 
 const ui = useUiStore()
 const models = useModelsStore()
@@ -55,14 +55,18 @@ const filteredKinds = computed(() => {
   )
 })
 
-watch(open, (isOpen) => {
-  if (isOpen) {
-    editor.value = null
-    filter.value = ''
-    void models.ensureLoaded(workspace.workspaceId ?? undefined)
-    if (workspace.workspaceId) void creds.load(workspace.workspaceId)
-  }
-})
+watch(
+  open,
+  (isOpen) => {
+    if (isOpen) {
+      editor.value = null
+      filter.value = ''
+      void models.ensureLoaded(workspace.workspaceId ?? undefined)
+      if (workspace.workspaceId) void creds.load(workspace.workspaceId)
+    }
+  },
+  { immediate: true },
+)
 
 onKeyStroke('Escape', () => {
   if (!open.value) return
@@ -80,7 +84,10 @@ const selectableModels = computed(() => {
       const flavor = displayFlavor(m, configured)
       const ctx = contextLabel(flavor.contextTokens)
       const price = costLabel(flavor) ?? (flavor.quotaBased ? 'quota' : undefined)
-      const suffix = [flavor.providerLabel, ctx, price].filter(Boolean).join(' · ')
+      // Surface caching in the suffix: a cache-less flavour (the Workers-AI hot path)
+      // re-bills its whole growing prompt every turn, which the user can act on.
+      const caching = cachingLabel(flavor)
+      const suffix = [flavor.providerLabel, ctx, price, caching].filter(Boolean).join(' · ')
       return {
         id: m.id,
         label: m.label,

@@ -351,6 +351,14 @@ export const modelOptionSchema = v.object({
   /** Effective model id within the provider. */
   model: v.string(),
   /**
+   * Whether the active flavour's provider caches the re-sent prompt prefix. False on
+   * a Cloudflare/Workers-AI flavour (no caching), true once a direct key upgrades the
+   * model to its caching `direct` flavour. The pickers surface this so a user can see
+   * the hot path running cache-less and act on it (connect a direct key / pick a
+   * caching model). Absent ⇒ unknown (older catalog).
+   */
+  cachesPrompts: v.optional(v.boolean()),
+  /**
    * For a `subscription` model, the vendor whose pooled token authenticates it;
    * the frontend enables the option only when the workspace has a token for it.
    */
@@ -378,6 +386,7 @@ export const modelOptionSchema = v.object({
       providerLabel: v.string(),
       provider: v.string(),
       model: v.string(),
+      cachesPrompts: v.optional(v.boolean()),
       cost: v.optional(modelCostSchema),
       contextTokens: v.optional(v.number()),
     }),
@@ -463,6 +472,13 @@ export const pipelineSchema = v.object({
    * edited in place. Absent / false on user-created and cloned pipelines.
    */
   builtin: v.optional(v.boolean()),
+  /**
+   * Monotonic seed version for a built-in pipeline (`seedPipelines()` assigns it). When the
+   * current catalog version for this id exceeds the persisted copy's `version`, the app offers
+   * to reseed the pipeline from the backend. Absent on user-created/cloned pipelines (they are
+   * not version-tracked) and on rows persisted before versioning existed (treated as 0).
+   */
+  version: v.optional(v.number()),
 })
 export type Pipeline = v.InferOutput<typeof pipelineSchema>
 
@@ -1010,6 +1026,14 @@ export const stepMetricsSchema = v.object({
   calls: v.number(),
   /** Sum of prompt (input) tokens across the step's calls. */
   promptTokens: v.number(),
+  /**
+   * Sum of prompt tokens served from the provider's prefix cache. A subset of
+   * promptTokens on OpenAI/DeepSeek, but on Anthropic cache reads are reported
+   * separately from input tokens, so this can exceed promptTokens. 0 on a cache-less
+   * flavour (Workers AI); the metrics bar shows the cached split when present. Absent ⇒
+   * unknown (older snapshot).
+   */
+  cachedPromptTokens: v.optional(v.number()),
   /** Sum of completion (output) tokens across the step's calls. */
   completionTokens: v.number(),
   /** Largest single completion the model produced (closest approach to the limit). */

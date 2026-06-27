@@ -6,9 +6,12 @@ import {
   type ContextFileInfo,
   type PiRunOutcome,
   type PiRunStats,
+  type ProgressGuardLimits,
   type RunDiagnostics,
   CONTEXT_DIR,
   materializeContextFiles,
+  mergeGuardLimits,
+  progressGuardLimitsFromEnv,
   runPi,
   webSearchConfigFromEnv,
   webSearchProxyEnv,
@@ -165,6 +168,12 @@ export interface AgentRunSpec {
    */
   expectsEdits?: boolean
   /**
+   * Per-knob overrides for the progress guard, set by the backend per agent kind (it
+   * only LOOSENS limits, never tightens). Each present knob overrides the env/default;
+   * absent knobs keep {@link progressGuardLimitsFromEnv}. Absent ⇒ env/default for all.
+   */
+  guardLimits?: Partial<ProgressGuardLimits>
+  /**
    * Per-kind web-search guidance composed by the backend (so it can speak to what
    * this agent kind does). Surfaced in AGENTS.md only when web search is configured;
    * absent ⇒ the generic blurb is used. See `writeAgentsContext`.
@@ -262,6 +271,9 @@ export async function runAgentInWorkspace(
     onProgress,
     onSpan,
     expectsEdits: spec.expectsEdits ?? true,
+    // Start from the env/built-in defaults and apply only the per-knob overrides the
+    // backend set for this kind (loosen-only), so an unspecified knob keeps its default.
+    guardLimits: mergeGuardLimits(progressGuardLimitsFromEnv(), spec.guardLimits),
     extraEnv,
   })
 }

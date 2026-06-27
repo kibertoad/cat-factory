@@ -100,6 +100,13 @@ export interface LlmCallMetricSummary {
   calls: number
   /** Sum of prompt (input) tokens. */
   promptTokens: number
+  /**
+   * Sum of prompt tokens served from the provider's prefix cache. On OpenAI/DeepSeek
+   * this is a subset of `promptTokens`; on Anthropic cache reads are reported SEPARATELY
+   * from input tokens (not included in `promptTokens`), so this can exceed it — hence
+   * `cacheHitRate` is clamped to 1.
+   */
+  cachedPromptTokens: number
   /** Sum of completion (output) tokens. */
   completionTokens: number
   /** The largest single completion the model produced (closest approach to the limit). */

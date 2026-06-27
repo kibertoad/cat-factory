@@ -1,8 +1,8 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { bootstrapJobSchema } from '../bootstrap.js'
 import { agentRunKindSchema, executionInstanceSchema } from '../entities.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Cross-cutting agent-run route contracts (retry / stop over a bootstrap or
@@ -18,7 +18,7 @@ const agentRunResultSchema = v.object({
   run: v.union([bootstrapJobSchema, executionInstanceSchema]),
 })
 
-const agentRunIdParams = withObjectKeys(v.object({ id: v.string() }))
+const agentRunIdParams = singleStringParam('id')
 
 export const retryAgentRunContract = defineApiContract({
   method: 'post',

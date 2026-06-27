@@ -7,6 +7,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { AgentPresentation } from '@cat-factory/contracts'
 import type { AgentTrait } from './traits.js'
+import type { AgentTuning } from './tuning.js'
 import type { StructuredOutput } from './structured-output.js'
 
 // Installation-level extension point for custom agent kinds, mirroring the
@@ -65,6 +66,15 @@ export interface AgentKindDefinition {
    * their own traits registered via `registerAgentTrait`. Omitted ⇒ no traits.
    */
   traits?: AgentTrait[]
+  /**
+   * Per-kind execution tuning folded into a container dispatch's job body (today the
+   * progress-guard knobs). Lets a custom kind whose normal pattern differs from the
+   * default loosen a guard so it isn't killed mid-progress. The knobs are loosen-only:
+   * the harness clamps each override up to its base, so a custom kind can only raise a
+   * limit, never tighten one. Omitted ⇒ the kind inherits the harness defaults. See
+   * ./tuning.
+   */
+  tuning?: AgentTuning
   /**
    * The optional LLM step's execution surface + output/clone spec (inline, or a
    * container explore/coding run). Present ⇒ the kind runs an agent step; omitted ⇒ the
@@ -175,6 +185,11 @@ export function registeredUserPrompt(context: AgentRunContext): string | undefin
 /** A registered kind's web-research hint, or undefined when unregistered / not supplied. */
 export function registeredWebResearchHint(kind: AgentKind): string | undefined {
   return registry.get(kind)?.webResearchHint
+}
+
+/** A registered kind's execution tuning, or undefined when unregistered / not supplied. */
+export function registeredAgentTuning(kind: AgentKind): AgentTuning | undefined {
+  return registry.get(kind)?.tuning
 }
 
 /** A registered kind's contributed config descriptors, or an empty array when none. */

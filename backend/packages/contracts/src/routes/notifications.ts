@@ -1,7 +1,7 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { notificationSchema } from '../notifications.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Notification inbox route contracts. Mounted under `/workspaces/:workspaceId`,
@@ -10,7 +10,7 @@ import { errorResponses } from './_shared.js'
 // ---------------------------------------------------------------------------
 
 const notificationListSchema = v.array(notificationSchema)
-const notificationIdParams = withObjectKeys(v.object({ notificationId: v.string() }))
+const notificationIdParams = singleStringParam('notificationId')
 
 export const listNotificationsContract = defineApiContract({
   method: 'get',

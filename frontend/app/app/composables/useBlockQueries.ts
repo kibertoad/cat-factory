@@ -9,14 +9,36 @@ import type { Block, BlockStatus } from '~/types/domain'
  * them unchanged, so callers and tests are unaffected.
  */
 export function useBlockQueries(blocks: Ref<Block[]>) {
-  const byId = computed(() => {
-    const map = new Map<string, Block>()
-    for (const b of blocks.value) map.set(b.id, b)
-    return map
+  /**
+   * Single-pass indexes rebuilt once per `blocks` change: id → block,
+   * parentId → children (insertion order), epicId → members. Every per-frame
+   * query reads these instead of re-scanning the whole array, so a streamed
+   * single-block upsert costs ~O(children touched) rather than O(frames × N).
+   */
+  const index = computed(() => {
+    const byId = new Map<string, Block>()
+    const childrenByParent = new Map<string, Block[]>()
+    const membersByEpic = new Map<string, Block[]>()
+    for (const b of blocks.value) {
+      byId.set(b.id, b)
+      if (b.parentId) {
+        const siblings = childrenByParent.get(b.parentId)
+        if (siblings) siblings.push(b)
+        else childrenByParent.set(b.parentId, [b])
+      }
+      if (b.epicId) {
+        const members = membersByEpic.get(b.epicId)
+        if (members) members.push(b)
+        else membersByEpic.set(b.epicId, [b])
+      }
+    }
+    return { byId, childrenByParent, membersByEpic }
   })
 
+  const byId = computed(() => index.value.byId)
+
   function getBlock(id: string) {
-    return byId.value.get(id)
+    return index.value.byId.get(id)
   }
 
   /** Top-level architecture blocks (the only ones drawn as Vue Flow nodes). */
@@ -24,17 +46,17 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
 
   /** Direct children of a block, in insertion order. */
   function childrenOf(parentId: string) {
-    return blocks.value.filter((b) => b.parentId === parentId)
+    return index.value.childrenByParent.get(parentId) ?? []
   }
 
   /** Tasks directly inside a container (a service or a module). */
   function tasksOf(containerId: string) {
-    return blocks.value.filter((b) => b.parentId === containerId && b.level === 'task')
+    return childrenOf(containerId).filter((b) => b.level === 'task')
   }
 
   /** Modules (sub-frames) inside a service. */
   function modulesOf(serviceId: string) {
-    return blocks.value.filter((b) => b.parentId === serviceId && b.level === 'module')
+    return childrenOf(serviceId).filter((b) => b.level === 'module')
   }
 
   /** Tasks anywhere under a container — directly, or nested inside its modules. */
@@ -61,7 +83,7 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
 
   /** The tasks that belong to an epic (anywhere on the board) via their `epicId`. */
   function epicMembers(epicId: string): Block[] {
-    return blocks.value.filter((b) => b.epicId === epicId)
+    return index.value.membersByEpic.get(epicId) ?? []
   }
 
   /** The epic a task belongs to, if any. */

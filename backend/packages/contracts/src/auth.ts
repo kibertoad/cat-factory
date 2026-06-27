@@ -18,6 +18,19 @@ export const passwordLoginSchema = v.object({
 })
 export type PasswordLoginInput = v.InferOutput<typeof passwordLoginSchema>
 
+/** Request a password-reset link by email (the "forgot my password" entry point). */
+export const forgotPasswordSchema = v.object({
+  email: v.pipe(v.string(), v.trim(), v.email(), v.maxLength(320)),
+})
+export type ForgotPasswordInput = v.InferOutput<typeof forgotPasswordSchema>
+
+/** Redeem a reset token and set a new password (same length rules as signup). */
+export const resetPasswordSchema = v.object({
+  token: v.pipe(v.string(), v.minLength(1)),
+  password: v.pipe(v.string(), v.minLength(8), v.maxLength(200)),
+})
+export type ResetPasswordInput = v.InferOutput<typeof resetPasswordSchema>
+
 /** What `GET /auth/config` reports so the SPA renders the right login controls. */
 export interface AuthProvidersConfig {
   enabled: boolean

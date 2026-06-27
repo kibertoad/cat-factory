@@ -33,7 +33,7 @@ export class D1PipelineRepository implements PipelineRepository {
   async insert(workspaceId: string, pipeline: Pipeline): Promise<void> {
     await this.db
       .prepare(
-        'INSERT INTO pipelines (workspace_id, id, name, agent_kinds, gates, thresholds, enabled, consensus, gating, labels, archived, builtin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO pipelines (workspace_id, id, name, agent_kinds, gates, thresholds, enabled, consensus, gating, labels, archived, builtin, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .bind(
         workspaceId,
@@ -48,6 +48,7 @@ export class D1PipelineRepository implements PipelineRepository {
         pipeline.labels ? JSON.stringify(pipeline.labels) : null,
         pipeline.archived ? 1 : null,
         pipeline.builtin ? 1 : null,
+        pipeline.version ?? null,
       )
       .run()
   }
@@ -55,9 +56,10 @@ export class D1PipelineRepository implements PipelineRepository {
   async update(workspaceId: string, pipeline: Pipeline): Promise<void> {
     // UPDATE (not delete+insert) preserves the row's rowid, so an edited pipeline keeps
     // its place in the catalog order. `builtin` is immutable, so it is not rewritten.
+    // `version` IS rewritten so a reseed bumps the stored copy to the current catalog version.
     await this.db
       .prepare(
-        'UPDATE pipelines SET name = ?, agent_kinds = ?, gates = ?, thresholds = ?, enabled = ?, consensus = ?, gating = ?, labels = ?, archived = ? WHERE workspace_id = ? AND id = ?',
+        'UPDATE pipelines SET name = ?, agent_kinds = ?, gates = ?, thresholds = ?, enabled = ?, consensus = ?, gating = ?, labels = ?, archived = ?, version = ? WHERE workspace_id = ? AND id = ?',
       )
       .bind(
         pipeline.name,
@@ -69,6 +71,7 @@ export class D1PipelineRepository implements PipelineRepository {
         pipeline.gating ? JSON.stringify(pipeline.gating) : null,
         pipeline.labels ? JSON.stringify(pipeline.labels) : null,
         pipeline.archived ? 1 : null,
+        pipeline.version ?? null,
         workspaceId,
         pipeline.id,
       )

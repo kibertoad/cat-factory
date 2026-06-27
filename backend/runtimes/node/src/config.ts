@@ -10,6 +10,7 @@ import type {
   AppConfig,
   BinaryStorageConfig,
   DocumentsConfig,
+  EmailConfig,
   PrivilegedAppConfig,
   TasksConfig,
 } from '@cat-factory/server'
@@ -138,6 +139,20 @@ function loadTasksConfig(env: NodeJS.ProcessEnv): TasksConfig {
     enabled: true,
     encryptionKey,
   }
+}
+
+/**
+ * The deployment-level system sender for auth emails (password reset), read entirely
+ * from env. Present only when the provider, From address, and API key are all set.
+ */
+function loadSystemEmailSender(env: NodeJS.ProcessEnv): EmailConfig['system'] {
+  const provider = env.EMAIL_SYSTEM_PROVIDER?.trim()
+  const from = env.EMAIL_SYSTEM_FROM?.trim()
+  const apiKey = env.EMAIL_SYSTEM_API_KEY?.trim()
+  if ((provider === 'sendgrid' || provider === 'resend') && from && apiKey) {
+    return { provider, from, apiKey }
+  }
+  return undefined
 }
 
 export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
@@ -310,16 +325,20 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       }),
     },
     // Email is available whenever an encryption key exists — there is no separate opt-in
-    // flag. The per-account provider API key is sealed with that key.
+    // flag. The per-account provider API key is sealed with that key. The deployment-level
+    // `system` sender (auth emails like password reset) is read entirely from env and is
+    // independent of the per-account connections, so it loads regardless of `enabled`.
     email: env.ENCRYPTION_KEY?.trim()
       ? {
           enabled: true,
           encryptionKey: env.ENCRYPTION_KEY.trim(),
           appBaseUrl: env.APP_BASE_URL?.trim() || env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
+          system: loadSystemEmailSender(env),
         }
       : {
           enabled: false,
           appBaseUrl: env.APP_BASE_URL?.trim() || env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
+          system: loadSystemEmailSender(env),
         },
     // Document-source integration: the providers (Confluence/Notion/GitHub-docs) are
     // the shared `@cat-factory/integrations` fetch shells, wired in the container

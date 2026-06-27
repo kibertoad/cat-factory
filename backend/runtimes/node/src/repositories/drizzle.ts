@@ -1,6 +1,9 @@
 import type {
   AccountInvitationRecord,
   AccountInvitationRepository,
+  PasswordResetTokenRecord,
+  PasswordResetTokenRepository,
+  PasswordResetTokenStatus,
   AccountRecord,
   AccountRepository,
   AccountRole,
@@ -133,6 +136,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from 'drizz
 import type { DrizzleDb } from '../db/client.js'
 import {
   accountInvitations,
+  passwordResetTokens,
   accountSettings,
   localSettings,
   accounts,
@@ -375,12 +379,14 @@ class DrizzlePipelineRepository implements PipelineRepository {
       labels: pipeline.labels ? JSON.stringify(pipeline.labels) : null,
       archived: pipeline.archived ? 1 : null,
       builtin: pipeline.builtin ? 1 : null,
+      version: pipeline.version ?? null,
     })
   }
 
   async update(workspaceId: string, pipeline: Pipeline): Promise<void> {
     // UPDATE in place preserves the row's `seq`, so an edited pipeline keeps its place
-    // in the catalog order. `builtin` is immutable, so it is not rewritten.
+    // in the catalog order. `builtin` is immutable, so it is not rewritten. `version` IS
+    // rewritten so a reseed bumps the stored copy to the current catalog version.
     await this.db
       .update(pipelines)
       .set({
@@ -393,6 +399,7 @@ class DrizzlePipelineRepository implements PipelineRepository {
         gating: pipeline.gating ? JSON.stringify(pipeline.gating) : null,
         labels: pipeline.labels ? JSON.stringify(pipeline.labels) : null,
         archived: pipeline.archived ? 1 : null,
+        version: pipeline.version ?? null,
       })
       .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines.id, pipeline.id)))
   }
@@ -860,6 +867,73 @@ class DrizzleAccountInvitationRepository implements AccountInvitationRepository 
   }
 }
 
+function rowToPasswordResetToken(
+  row: typeof passwordResetTokens.$inferSelect,
+): PasswordResetTokenRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    tokenHash: row.token_hash,
+    status: row.status as PasswordResetTokenStatus,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+  }
+}
+
+class DrizzlePasswordResetTokenRepository implements PasswordResetTokenRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async create(record: PasswordResetTokenRecord): Promise<void> {
+    await this.db.insert(passwordResetTokens).values({
+      id: record.id,
+      user_id: record.userId,
+      token_hash: record.tokenHash,
+      status: record.status,
+      expires_at: record.expiresAt,
+      created_at: record.createdAt,
+    })
+  }
+
+  async findByTokenHash(tokenHash: string): Promise<PasswordResetTokenRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(passwordResetTokens)
+      .where(eq(passwordResetTokens.token_hash, tokenHash))
+    return row ? rowToPasswordResetToken(row) : null
+  }
+
+  async listPendingByUser(userId: string): Promise<PasswordResetTokenRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(passwordResetTokens)
+      .where(
+        and(eq(passwordResetTokens.user_id, userId), eq(passwordResetTokens.status, 'pending')),
+      )
+      .orderBy(desc(passwordResetTokens.created_at))
+    return rows.map(rowToPasswordResetToken)
+  }
+
+  async setStatus(id: string, status: PasswordResetTokenStatus): Promise<void> {
+    await this.db.update(passwordResetTokens).set({ status }).where(eq(passwordResetTokens.id, id))
+  }
+
+  async consume(id: string): Promise<boolean> {
+    // Conditional on `status='pending'` so concurrent redemptions can't both win.
+    const result = await this.db
+      .update(passwordResetTokens)
+      .set({ status: 'used' })
+      .where(and(eq(passwordResetTokens.id, id), eq(passwordResetTokens.status, 'pending')))
+    return (result.rowCount ?? 0) > 0
+  }
+
+  async deleteExpired(before: number): Promise<number> {
+    const result = await this.db
+      .delete(passwordResetTokens)
+      .where(lt(passwordResetTokens.expires_at, before))
+    return result.rowCount ?? 0
+  }
+}
+
 function rowToEmailConnection(row: typeof emailConnections.$inferSelect): EmailConnectionRecord {
   return {
     accountId: row.account_id,
@@ -1111,6 +1185,7 @@ class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
         agentKind: llmCallMetrics.agent_kind,
         calls: sql<number>`count(*)::int`,
         promptTokens: sql<number>`coalesce(sum(${llmCallMetrics.prompt_tokens}), 0)::int`,
+        cachedPromptTokens: sql<number>`coalesce(sum(${llmCallMetrics.cached_prompt_tokens}), 0)::int`,
         completionTokens: sql<number>`coalesce(sum(${llmCallMetrics.completion_tokens}), 0)::int`,
         peakCompletionTokens: sql<number>`coalesce(max(${llmCallMetrics.completion_tokens}), 0)::int`,
         maxOutputTokens: sql<number | null>`max(${llmCallMetrics.request_max_tokens})`,
@@ -1136,6 +1211,7 @@ class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
       agentKind: r.agentKind,
       calls: Number(r.calls),
       promptTokens: Number(r.promptTokens),
+      cachedPromptTokens: Number(r.cachedPromptTokens),
       completionTokens: Number(r.completionTokens),
       peakCompletionTokens: Number(r.peakCompletionTokens),
       maxOutputTokens: r.maxOutputTokens == null ? null : Number(r.maxOutputTokens),
@@ -3678,6 +3754,7 @@ export interface CoreRepositories {
   membershipRepository: MembershipRepository
   userRepository: UserRepository
   invitationRepository: AccountInvitationRepository
+  passwordResetTokenRepository: PasswordResetTokenRepository
   emailConnectionRepository: EmailConnectionRepository
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
@@ -3716,6 +3793,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     membershipRepository: new DrizzleMembershipRepository(db),
     userRepository: new DrizzleUserRepository(db),
     invitationRepository: new DrizzleAccountInvitationRepository(db),
+    passwordResetTokenRepository: new DrizzlePasswordResetTokenRepository(db),
     emailConnectionRepository: new DrizzleEmailConnectionRepository(db),
     blockRepository: new DrizzleBlockRepository(db),
     pipelineRepository: new DrizzlePipelineRepository(db),

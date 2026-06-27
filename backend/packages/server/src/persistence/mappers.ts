@@ -1,22 +1,11 @@
 import type { BlockPatch } from '@cat-factory/kernel'
 import type {
-  AgentConfigValues,
   AgentFailure,
   Block,
-  BlockLevel,
-  BlockStatus,
-  BlockType,
-  CloudProvider,
   ExecutionInstance,
   ExecutionStatus,
-  InstanceSize,
   Pipeline,
   PipelineStep,
-  PullRequestRef,
-  TaskEstimate,
-  TaskType,
-  TaskTypeFields,
-  WritebackOverride,
   Workspace,
 } from '@cat-factory/contracts'
 
@@ -97,211 +86,300 @@ export interface BlockRow {
   tracker_resolve_on_merge?: string | null
 }
 
-export function rowToBlock(row: BlockRow): Block {
-  const block: Block = {
-    id: row.id,
-    title: row.title,
-    type: row.type as BlockType,
-    description: row.description,
-    position: { x: row.pos_x, y: row.pos_y },
-    status: row.status as BlockStatus,
-    progress: row.progress,
-    dependsOn: JSON.parse(row.depends_on) as string[],
-    executionId: row.execution_id,
-    level: row.level as BlockLevel,
-    parentId: row.parent_id,
+// ---------------------------------------------------------------------------
+// Field-map driven mappers
+//
+// Hand-enumerating `rowTo*` + `*InsertValues` + `*PatchToColumns` per entity means a
+// single persisted field is 3–4 edits kept in sync by eye, and a renamed column only
+// surfaces at runtime. Instead, an entity declares each column ONCE as a
+// {@link FieldMapper} and the three directions (read / insert / patch) are derived from
+// it. The common shapes have builders (`scalarField` / `optField` / `optJsonField` /
+// `optBoolIntField`, all defaulting the column to the snake_case of the property); the
+// genuinely divergent ones (composite position/size, the tri-state `technical`, the
+// emptiness rules that differ between insert and patch) are spelled out inline. Adding a
+// column is then a single table entry both the D1 and Drizzle repos pick up.
+// ---------------------------------------------------------------------------
+
+type AnyRow = Record<string, unknown>
+type ColumnValues = Record<string, unknown>
+
+/** One entity field's bidirectional mapping between a domain property and its column(s). */
+interface FieldMapper<Domain, Patch> {
+  /** Column row → domain object (mutates `out`); skips absent optionals so they stay unset. */
+  read(row: AnyRow, out: AnyRow): void
+  /** Domain object → insert column values (mutates `out`). */
+  insert(domain: Domain, out: ColumnValues): void
+  /** Domain patch → UPDATE column values (mutates `out`); only when the property is present. */
+  patch(patch: Patch, out: ColumnValues): void
+}
+
+/** camelCase property → snake_case column (`responsibleProductUserId` → `responsible_product_user_id`). */
+function toSnake(prop: string): string {
+  return prop.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
+}
+
+/**
+ * A required scalar present on both the row and the domain (including always-present
+ * nullables like `executionId`): read/insert pass the value straight through, patch
+ * writes it whenever the property is defined.
+ */
+function scalarField<D, P>(prop: string, column = toSnake(prop)): FieldMapper<D, P> {
+  return {
+    read: (row, out) => {
+      out[prop] = row[column]
+    },
+    insert: (d, out) => {
+      out[column] = (d as AnyRow)[prop]
+    },
+    patch: (p, out) => {
+      const v = (p as AnyRow)[prop]
+      if (v !== undefined) out[column] = v
+    },
   }
-  if (row.width !== null && row.height !== null) block.size = { w: row.width, h: row.height }
-  if (row.epic_id != null) block.epicId = row.epic_id
-  if (row.auto_start_dependents != null) block.autoStartDependents = row.auto_start_dependents === 1
-  if (row.confidence !== null) block.confidence = row.confidence
-  if (row.module_name !== null) block.moduleName = row.module_name
-  if (row.fragment_ids !== null) block.fragmentIds = JSON.parse(row.fragment_ids) as string[]
-  if (row.service_fragment_ids !== null)
-    block.serviceFragmentIds = JSON.parse(row.service_fragment_ids) as string[]
-  if (row.model_id !== null) block.modelId = row.model_id
-  if (row.pull_request !== null) block.pullRequest = JSON.parse(row.pull_request) as PullRequestRef
-  if (row.merge_preset_id !== null) block.mergePresetId = row.merge_preset_id
-  if (row.model_preset_id !== null) block.modelPresetId = row.model_preset_id
-  if (row.pipeline_id !== null) block.pipelineId = row.pipeline_id
-  if (row.agent_config !== null)
-    block.agentConfig = JSON.parse(row.agent_config) as AgentConfigValues
-  if (row.test_compose_path !== null) block.testComposePath = row.test_compose_path
-  if (row.no_infra_dependencies !== null)
-    block.noInfraDependencies = row.no_infra_dependencies === 1
-  if (row.default_test_environment != null)
-    block.defaultTestEnvironment = row.default_test_environment as 'local' | 'ephemeral'
-  if (row.cloud_provider !== null) block.cloudProvider = row.cloud_provider as CloudProvider
-  if (row.instance_size !== null) block.instanceSize = row.instance_size as InstanceSize
-  if (row.created_by !== null) block.createdBy = row.created_by
-  if (row.responsible_product_user_id !== null)
-    block.responsibleProductUserId = row.responsible_product_user_id
-  if (row.estimate != null) block.estimate = JSON.parse(row.estimate) as TaskEstimate
-  if (row.task_type != null) block.taskType = row.task_type as TaskType
-  if (row.task_type_fields != null)
-    block.taskTypeFields = JSON.parse(row.task_type_fields) as TaskTypeFields
-  if (row.technical != null) block.technical = row.technical === 1
-  if (row.tracker_comment_on_pr_open != null)
-    block.trackerCommentOnPrOpen = row.tracker_comment_on_pr_open as WritebackOverride
-  if (row.tracker_resolve_on_merge != null)
-    block.trackerResolveOnMerge = row.tracker_resolve_on_merge as WritebackOverride
-  return block
+}
+
+/**
+ * An optional scalar: read only when the column is non-null (so the domain key stays
+ * absent), insert null when unset. With `clearOnEmpty` a falsy patch value (the empty
+ * string from a "clear the selection" dropdown) writes null; otherwise the defined value
+ * is written as-is. `patchable: false` leaves the column out of patches entirely.
+ */
+function optField<D, P>(
+  prop: string,
+  opts: { column?: string; clearOnEmpty?: boolean; patchable?: boolean } = {},
+): FieldMapper<D, P> {
+  const column = opts.column ?? toSnake(prop)
+  const patchable = opts.patchable ?? true
+  return {
+    read: (row, out) => {
+      if (row[column] != null) out[prop] = row[column]
+    },
+    insert: (d, out) => {
+      out[column] = (d as AnyRow)[prop] ?? null
+    },
+    patch: (p, out) => {
+      if (!patchable) return
+      const v = (p as AnyRow)[prop]
+      if (v === undefined) return
+      out[column] = opts.clearOnEmpty ? v || null : v
+    },
+  }
+}
+
+/** An optional JSON column: parse when present, serialize a truthy value else write null. */
+function optJsonField<D, P>(prop: string, column = toSnake(prop)): FieldMapper<D, P> {
+  return {
+    read: (row, out) => {
+      if (row[column] != null) out[prop] = JSON.parse(row[column] as string)
+    },
+    insert: (d, out) => {
+      const v = (d as AnyRow)[prop]
+      out[column] = v ? JSON.stringify(v) : null
+    },
+    patch: (p, out) => {
+      const v = (p as AnyRow)[prop]
+      if (v === undefined) return
+      out[column] = v ? JSON.stringify(v) : null
+    },
+  }
+}
+
+/** An optional boolean stored as 1/null (absent ⇒ off). */
+function optBoolIntField<D, P>(prop: string, column = toSnake(prop)): FieldMapper<D, P> {
+  return {
+    read: (row, out) => {
+      if (row[column] != null) out[prop] = row[column] === 1
+    },
+    insert: (d, out) => {
+      out[column] = (d as AnyRow)[prop] ? 1 : null
+    },
+    patch: (p, out) => {
+      const v = (p as AnyRow)[prop]
+      if (v === undefined) return
+      out[column] = v ? 1 : null
+    },
+  }
+}
+
+/** Build `rowTo*` / `*InsertValues` / `*PatchToColumns` from an entity's field table. */
+function makeEntityMapper<Domain, Patch, Row>(
+  fields: FieldMapper<Domain, Patch>[],
+): {
+  fromRow(row: Row): Domain
+  toInsert(domain: Domain): ColumnValues
+  toPatch(patch: Patch): ColumnValues
+} {
+  return {
+    fromRow(row) {
+      const out: AnyRow = {}
+      for (const f of fields) f.read(row as AnyRow, out)
+      return out as Domain
+    },
+    toInsert(domain) {
+      const out: ColumnValues = {}
+      for (const f of fields) f.insert(domain, out)
+      return out
+    },
+    toPatch(patch) {
+      const out: ColumnValues = {}
+      for (const f of fields) f.patch(patch, out)
+      return out
+    },
+  }
+}
+
+// Block: the columns declared once, in insert order. The `position`/`size` composites,
+// the tri-state `technical`, and `serviceFragmentIds`/`agentConfig` (whose insert and
+// patch emptiness rules differ) are spelled out inline; everything else uses a builder.
+const blockFields: FieldMapper<Block, BlockPatch>[] = [
+  scalarField('id'),
+  scalarField('title'),
+  scalarField('type'),
+  scalarField('description'),
+  {
+    read: (row, out) => {
+      out.position = { x: row.pos_x, y: row.pos_y }
+    },
+    insert: (b, out) => {
+      out.pos_x = b.position.x
+      out.pos_y = b.position.y
+    },
+    patch: (p, out) => {
+      if (p.position !== undefined) {
+        out.pos_x = p.position.x
+        out.pos_y = p.position.y
+      }
+    },
+  },
+  {
+    read: (row, out) => {
+      if (row.width !== null && row.height !== null) out.size = { w: row.width, h: row.height }
+    },
+    insert: (b, out) => {
+      out.width = b.size?.w ?? null
+      out.height = b.size?.h ?? null
+    },
+    patch: (p, out) => {
+      if (p.size !== undefined) {
+        out.width = p.size?.w ?? null
+        out.height = p.size?.h ?? null
+      }
+    },
+  },
+  scalarField('status'),
+  scalarField('progress'),
+  // `dependsOn` is a required (always-present) JSON array, unlike the optional JSON fields.
+  {
+    read: (row, out) => {
+      out.dependsOn = JSON.parse(row.depends_on as string)
+    },
+    insert: (b, out) => {
+      out.depends_on = JSON.stringify(b.dependsOn)
+    },
+    patch: (p, out) => {
+      if (p.dependsOn !== undefined) out.depends_on = JSON.stringify(p.dependsOn)
+    },
+  },
+  scalarField('executionId'),
+  scalarField('level'),
+  scalarField('parentId'),
+  // Epic membership; an empty string / null detaches the task from its epic.
+  optField('epicId', { clearOnEmpty: true }),
+  optBoolIntField('autoStartDependents'),
+  optField('confidence'),
+  optField('moduleName'),
+  optJsonField('fragmentIds'),
+  // Service-level selection (frame blocks). Insert keeps a truthy value verbatim; patch
+  // treats an empty array as "clear it" (length check), so the two directions differ.
+  {
+    read: (row, out) => {
+      if (row.service_fragment_ids != null)
+        out.serviceFragmentIds = JSON.parse(row.service_fragment_ids as string)
+    },
+    insert: (b, out) => {
+      out.service_fragment_ids = b.serviceFragmentIds ? JSON.stringify(b.serviceFragmentIds) : null
+    },
+    patch: (p, out) => {
+      if (p.serviceFragmentIds !== undefined) {
+        out.service_fragment_ids =
+          p.serviceFragmentIds && p.serviceFragmentIds.length
+            ? JSON.stringify(p.serviceFragmentIds)
+            : null
+      }
+    },
+  },
+  // An empty string clears the selection (back to the routing default).
+  optField('modelId', { clearOnEmpty: true }),
+  optJsonField('pullRequest'),
+  // An empty string clears the selection (back to the workspace default preset).
+  optField('mergePresetId', { clearOnEmpty: true }),
+  // An empty string clears the selection (back to the workspace default model preset).
+  optField('modelPresetId', { clearOnEmpty: true }),
+  // An empty string clears the pinned pipeline selection.
+  optField('pipelineId', { clearOnEmpty: true }),
+  // Replace the whole task-level config map; an empty map clears it (both directions).
+  {
+    read: (row, out) => {
+      if (row.agent_config != null) out.agentConfig = JSON.parse(row.agent_config as string)
+    },
+    insert: (b, out) => {
+      out.agent_config =
+        b.agentConfig && Object.keys(b.agentConfig).length ? JSON.stringify(b.agentConfig) : null
+    },
+    patch: (p, out) => {
+      if (p.agentConfig !== undefined) {
+        out.agent_config =
+          p.agentConfig && Object.keys(p.agentConfig).length ? JSON.stringify(p.agentConfig) : null
+      }
+    },
+  },
+  // Service-level fields. An empty compose path clears it.
+  optField('testComposePath', { clearOnEmpty: true }),
+  optBoolIntField('noInfraDependencies'),
+  optField('defaultTestEnvironment'),
+  optField('cloudProvider'),
+  optField('instanceSize'),
+  // `createdBy` is set at insert time and never patched.
+  optField('createdBy', { patchable: false }),
+  // The responsible product person; an empty string clears the assignment.
+  optField('responsibleProductUserId', { clearOnEmpty: true }),
+  // The task-estimator's triage; a falsy value clears it.
+  optJsonField('estimate'),
+  optField('taskType'),
+  optJsonField('taskTypeFields'),
+  // Technical label: 1/0 column, null clears it back to "not yet determined" (the tri-state
+  // "unset", so the engine may re-infer). `== null` distinguishes that from explicit false.
+  {
+    read: (row, out) => {
+      if (row.technical != null) out.technical = row.technical === 1
+    },
+    insert: (b, out) => {
+      out.technical = b.technical == null ? null : b.technical ? 1 : 0
+    },
+    patch: (p, out) => {
+      if (p.technical !== undefined)
+        out.technical = p.technical == null ? null : p.technical ? 1 : 0
+    },
+  },
+  // Per-task writeback overrides; an empty string clears it (back to inheriting the workspace setting).
+  optField('trackerCommentOnPrOpen', { clearOnEmpty: true }),
+  optField('trackerResolveOnMerge', { clearOnEmpty: true }),
+]
+
+const blockMapper = makeEntityMapper<Block, BlockPatch, BlockRow>(blockFields)
+
+export function rowToBlock(row: BlockRow): Block {
+  return blockMapper.fromRow(row)
 }
 
 /** Full column tuple for inserting a block. */
 export function blockInsertValues(block: Block): Record<string, unknown> {
-  return {
-    id: block.id,
-    title: block.title,
-    type: block.type,
-    description: block.description,
-    pos_x: block.position.x,
-    pos_y: block.position.y,
-    width: block.size?.w ?? null,
-    height: block.size?.h ?? null,
-    status: block.status,
-    progress: block.progress,
-    depends_on: JSON.stringify(block.dependsOn),
-    execution_id: block.executionId,
-    level: block.level,
-    parent_id: block.parentId,
-    epic_id: block.epicId ?? null,
-    auto_start_dependents: block.autoStartDependents ? 1 : null,
-    confidence: block.confidence ?? null,
-    module_name: block.moduleName ?? null,
-    fragment_ids: block.fragmentIds ? JSON.stringify(block.fragmentIds) : null,
-    service_fragment_ids: block.serviceFragmentIds
-      ? JSON.stringify(block.serviceFragmentIds)
-      : null,
-    model_id: block.modelId ?? null,
-    pull_request: block.pullRequest ? JSON.stringify(block.pullRequest) : null,
-    merge_preset_id: block.mergePresetId ?? null,
-    model_preset_id: block.modelPresetId ?? null,
-    pipeline_id: block.pipelineId ?? null,
-    agent_config:
-      block.agentConfig && Object.keys(block.agentConfig).length
-        ? JSON.stringify(block.agentConfig)
-        : null,
-    test_compose_path: block.testComposePath ?? null,
-    no_infra_dependencies: block.noInfraDependencies ? 1 : null,
-    default_test_environment: block.defaultTestEnvironment ?? null,
-    cloud_provider: block.cloudProvider ?? null,
-    instance_size: block.instanceSize ?? null,
-    created_by: block.createdBy ?? null,
-    responsible_product_user_id: block.responsibleProductUserId ?? null,
-    estimate: block.estimate ? JSON.stringify(block.estimate) : null,
-    task_type: block.taskType ?? null,
-    task_type_fields: block.taskTypeFields ? JSON.stringify(block.taskTypeFields) : null,
-    technical: block.technical == null ? null : block.technical ? 1 : 0,
-    tracker_comment_on_pr_open: block.trackerCommentOnPrOpen ?? null,
-    tracker_resolve_on_merge: block.trackerResolveOnMerge ?? null,
-  }
+  return blockMapper.toInsert(block)
 }
 
 /** Map a domain patch onto `{ column: value }` pairs for an UPDATE. */
 export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> {
-  const set: Record<string, unknown> = {}
-  if (patch.title !== undefined) set.title = patch.title
-  if (patch.type !== undefined) set.type = patch.type
-  if (patch.description !== undefined) set.description = patch.description
-  if (patch.position !== undefined) {
-    set.pos_x = patch.position.x
-    set.pos_y = patch.position.y
-  }
-  if (patch.size !== undefined) {
-    set.width = patch.size?.w ?? null
-    set.height = patch.size?.h ?? null
-  }
-  if (patch.status !== undefined) set.status = patch.status
-  if (patch.progress !== undefined) set.progress = patch.progress
-  if (patch.dependsOn !== undefined) set.depends_on = JSON.stringify(patch.dependsOn)
-  if (patch.executionId !== undefined) set.execution_id = patch.executionId
-  if (patch.level !== undefined) set.level = patch.level
-  if (patch.parentId !== undefined) set.parent_id = patch.parentId
-  // Epic membership; an empty string / null detaches the task from its epic.
-  if (patch.epicId !== undefined) set.epic_id = patch.epicId ? patch.epicId : null
-  if (patch.autoStartDependents !== undefined) {
-    set.auto_start_dependents = patch.autoStartDependents ? 1 : null
-  }
-  if (patch.confidence !== undefined) set.confidence = patch.confidence
-  if (patch.moduleName !== undefined) set.module_name = patch.moduleName
-  if (patch.fragmentIds !== undefined) {
-    set.fragment_ids = patch.fragmentIds ? JSON.stringify(patch.fragmentIds) : null
-  }
-  // Service-level selection (frame blocks). An empty array clears it.
-  if (patch.serviceFragmentIds !== undefined) {
-    set.service_fragment_ids =
-      patch.serviceFragmentIds && patch.serviceFragmentIds.length
-        ? JSON.stringify(patch.serviceFragmentIds)
-        : null
-  }
-  // An empty string clears the selection (back to the routing default).
-  if (patch.modelId !== undefined) set.model_id = patch.modelId ? patch.modelId : null
-  // The responsible product person; an empty string clears the assignment.
-  if (patch.responsibleProductUserId !== undefined) {
-    set.responsible_product_user_id = patch.responsibleProductUserId
-      ? patch.responsibleProductUserId
-      : null
-  }
-  if (patch.pullRequest !== undefined) {
-    set.pull_request = patch.pullRequest ? JSON.stringify(patch.pullRequest) : null
-  }
-  // An empty string clears the selection (back to the workspace default preset).
-  if (patch.mergePresetId !== undefined) {
-    set.merge_preset_id = patch.mergePresetId ? patch.mergePresetId : null
-  }
-  // An empty string clears the selection (back to the workspace default model preset).
-  if (patch.modelPresetId !== undefined) {
-    set.model_preset_id = patch.modelPresetId ? patch.modelPresetId : null
-  }
-  // An empty string clears the pinned pipeline selection.
-  if (patch.pipelineId !== undefined) {
-    set.pipeline_id = patch.pipelineId ? patch.pipelineId : null
-  }
-  // Replace the whole task-level config map; an empty map clears it.
-  if (patch.agentConfig !== undefined) {
-    set.agent_config =
-      patch.agentConfig && Object.keys(patch.agentConfig).length
-        ? JSON.stringify(patch.agentConfig)
-        : null
-  }
-  // Service-level fields. An empty compose path clears it.
-  if (patch.testComposePath !== undefined) {
-    set.test_compose_path = patch.testComposePath ? patch.testComposePath : null
-  }
-  if (patch.noInfraDependencies !== undefined) {
-    set.no_infra_dependencies = patch.noInfraDependencies ? 1 : null
-  }
-  if (patch.defaultTestEnvironment !== undefined) {
-    set.default_test_environment = patch.defaultTestEnvironment ?? null
-  }
-  if (patch.cloudProvider !== undefined) set.cloud_provider = patch.cloudProvider ?? null
-  if (patch.instanceSize !== undefined) set.instance_size = patch.instanceSize ?? null
-  // The task-estimator's triage; null clears it.
-  if (patch.estimate !== undefined) {
-    set.estimate = patch.estimate ? JSON.stringify(patch.estimate) : null
-  }
-  if (patch.taskType !== undefined) set.task_type = patch.taskType ?? null
-  if (patch.taskTypeFields !== undefined) {
-    set.task_type_fields = patch.taskTypeFields ? JSON.stringify(patch.taskTypeFields) : null
-  }
-  // Technical label: 1/0 column, null clears it back to "not yet determined" (so the
-  // engine may infer it). A human-set value is what reaches here via the inspector toggle;
-  // an explicit `null` is the tri-state "unset".
-  if (patch.technical !== undefined) {
-    set.technical = patch.technical == null ? null : patch.technical ? 1 : 0
-  }
-  // Per-task writeback overrides; an empty string clears it (back to inheriting the
-  // workspace setting).
-  if (patch.trackerCommentOnPrOpen !== undefined) {
-    set.tracker_comment_on_pr_open = patch.trackerCommentOnPrOpen
-      ? patch.trackerCommentOnPrOpen
-      : null
-  }
-  if (patch.trackerResolveOnMerge !== undefined) {
-    set.tracker_resolve_on_merge = patch.trackerResolveOnMerge ? patch.trackerResolveOnMerge : null
-  }
-  return set
+  return blockMapper.toPatch(patch)
 }
 
 export interface PipelineRow {
@@ -324,6 +402,8 @@ export interface PipelineRow {
   labels?: string | null
   /** Truthy (1) when the pipeline is archived / hidden from the default view (migration 0003). */
   archived?: number | boolean | null
+  /** Monotonic seed version for a built-in pipeline (migration 0017); null on custom/legacy rows. */
+  version?: number | null
 }
 
 export function rowToPipeline(row: PipelineRow): Pipeline {
@@ -339,6 +419,7 @@ export function rowToPipeline(row: PipelineRow): Pipeline {
     ...(row.labels ? { labels: JSON.parse(row.labels) as string[] } : {}),
     ...(row.archived ? { archived: true } : {}),
     ...(row.builtin ? { builtin: true } : {}),
+    ...(row.version != null ? { version: row.version } : {}),
   }
 }
 

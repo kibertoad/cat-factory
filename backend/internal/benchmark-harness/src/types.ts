@@ -66,7 +66,7 @@ export interface CandidateResult {
   input: string
   output: string
   latencyMs: number
-  usage?: { inputTokens: number; outputTokens: number }
+  usage?: { inputTokens: number; outputTokens: number; cachedInputTokens?: number }
   costEur?: number
   error?: string
   /** Task-specific extras, e.g. the captured diff + Pi summary for implementation. */

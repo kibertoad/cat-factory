@@ -23,7 +23,7 @@ export const llmCallMetricSchema = v.object({
   /** The `max_tokens` the request asked for (the output ceiling), or null. */
   requestMaxTokens: v.nullable(v.number()),
   promptTokens: v.number(),
-  /** Prompt tokens served from the provider's prompt cache (subset of promptTokens). */
+  /** Prompt tokens served from the prefix cache (subset on OpenAI/DeepSeek; may exceed promptTokens on Anthropic, which reports cache reads separately). */
   cachedPromptTokens: v.optional(v.number(), 0),
   completionTokens: v.number(),
   totalTokens: v.number(),
@@ -117,6 +117,10 @@ export const llmExportInsightSchema = v.object({
   agentKind: v.string(),
   calls: v.number(),
   promptTokens: v.number(),
+  /** Prompt tokens served from the prefix cache (subset on OpenAI/DeepSeek; may exceed promptTokens on Anthropic, which reports cache reads separately). */
+  cachedPromptTokens: v.number(),
+  /** cachedPromptTokens / promptTokens, 0..1; null when there were no prompt tokens. */
+  cacheHitRate: v.nullable(v.number()),
   completionTokens: v.number(),
   peakCompletionTokens: v.number(),
   maxOutputTokens: v.nullable(v.number()),
@@ -147,6 +151,10 @@ export const llmMetricsExportSchema = v.object({
   totals: v.object({
     calls: v.number(),
     promptTokens: v.number(),
+    /** Prompt tokens served from the prefix cache (subset on OpenAI/DeepSeek; may exceed promptTokens on Anthropic, which reports cache reads separately). */
+    cachedPromptTokens: v.number(),
+    /** cachedPromptTokens / promptTokens, 0..1; null when there were no prompt tokens. */
+    cacheHitRate: v.nullable(v.number()),
     completionTokens: v.number(),
     upstreamMs: v.number(),
     overheadMs: v.number(),

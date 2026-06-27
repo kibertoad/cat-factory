@@ -674,6 +674,38 @@ export function progressGuardLimitsFromEnv(
 }
 
 /**
+ * Apply per-knob overrides onto a base set of guard limits, ENFORCING loosen-only: an
+ * override can only RAISE a knob (more headroom), never lower it below the base. A
+ * larger value is more lenient for every knob (more no-edit tool calls / errors / web
+ * calls tolerated), so each result is `max(base, override)`. This is a hard guarantee,
+ * not a convention — a tuning entry (built-in or a custom kind's, which reaches this via
+ * an untrusted job body) that supplies a value TIGHTER than the base is clamped back up
+ * to the base rather than aborting a legitimately-progressing run. An absent/undefined
+ * knob keeps the base value untouched.
+ */
+export function mergeGuardLimits(
+  base: ProgressGuardLimits,
+  overrides: Partial<ProgressGuardLimits> | undefined,
+): ProgressGuardLimits {
+  if (!overrides) return base
+  const loosen = (b: number, o: number | undefined): number =>
+    typeof o === 'number' ? Math.max(b, o) : b
+  return {
+    maxToolCallsWithoutEdit: loosen(
+      base.maxToolCallsWithoutEdit,
+      overrides.maxToolCallsWithoutEdit,
+    ),
+    maxConsecutiveErrors: loosen(base.maxConsecutiveErrors, overrides.maxConsecutiveErrors),
+    // `maxConsecutiveWebCalls` is optional on the interface (callers may omit it), so
+    // fall back to the default before loosening — keeps `loosen`'s base a concrete number.
+    maxConsecutiveWebCalls: loosen(
+      base.maxConsecutiveWebCalls ?? DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveWebCalls,
+      overrides.maxConsecutiveWebCalls,
+    ),
+  }
+}
+
+/**
  * Live anti-rabbithole guard: fed each streamed Pi event, it returns a diagnostic
  * reason the moment a run has plainly stopped making progress, so the harness can
  * kill Pi early instead of letting it burn the whole budget (and then surface a

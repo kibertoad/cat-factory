@@ -27,6 +27,7 @@ import {
 import { resolveInstanceTypeId } from '@cat-factory/contracts'
 import {
   type AgentRouting,
+  agentTuningFor,
   coerceBlueprintService,
   coerceSpecDoc,
   composeBlockSystemPrompt,
@@ -922,6 +923,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       typeof auth.sessionToken === 'string'
         ? { url: `${auth.proxyBaseUrl}/artifacts/ingest`, token: auth.sessionToken }
         : undefined
+    // Per-kind execution tuning (loosen-only progress-guard knobs) the harness applies
+    // over its env/built-in defaults, so a kind whose normal pattern differs (e.g. a
+    // research-heavy or retry-heavy kind) isn't killed mid-progress. Absent ⇒ defaults.
+    const tuning = agentTuningFor(context.agentKind)
     const common = {
       jobId,
       model: ref.model,
@@ -931,6 +936,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       ...(contextFiles.length ? { contextFiles } : {}),
       ...(artifactUpload ? { artifactUpload } : {}),
+      ...(tuning?.guardLimits ? { guardLimits: tuning.guardLimits } : {}),
     }
     // Render the prompt's linked-context summary index from exactly the items that were
     // materialised (some may have been dropped at the byte cap), so the agent is never

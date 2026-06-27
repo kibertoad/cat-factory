@@ -5,7 +5,7 @@ import type {
   UpdatePipelineInput,
 } from '@cat-factory/contracts'
 import type { ConsensusStepConfig, Pipeline, StepGating } from '@cat-factory/kernel'
-import { assertFound, ValidationError } from '@cat-factory/kernel'
+import { assertFound, seedPipelines, ValidationError } from '@cat-factory/kernel'
 import type {
   ObservabilityConnectionRepository,
   PipelineRepository,
@@ -186,6 +186,38 @@ export class PipelineService {
       ...normalizedLabels(labels),
       // `archived` is organization-only state, mutated via `organize` — preserved here.
       ...(existing.archived ? { archived: true } : {}),
+    }
+    await this.pipelineRepository.update(workspaceId, pipeline)
+    return pipeline
+  }
+
+  /**
+   * Restore a built-in pipeline to its current catalog definition (`seedPipelines()`).
+   * Used to adopt an improved built-in or to repair a built-in whose persisted copy has
+   * drifted invalid. The canonical steps / gates / `version` overwrite the stored row, but
+   * the user's organizational metadata (labels / archive state, owned by `organize`) is
+   * preserved. Rejects a custom pipeline (delete it instead) and a built-in id no longer in
+   * the catalog (nothing to reseed from — also delete it instead).
+   */
+  async reseed(workspaceId: string, id: string): Promise<Pipeline> {
+    await this.requireWorkspace(workspaceId)
+    const existing = assertFound(await this.pipelineRepository.get(workspaceId, id), 'Pipeline', id)
+    if (!existing.builtin) {
+      throw new ValidationError(
+        'Only built-in pipelines can be reseeded. Delete a custom pipeline instead.',
+      )
+    }
+    const seed = seedPipelines().find((p) => p.id === id)
+    if (!seed) {
+      throw new ValidationError(
+        `Pipeline '${id}' is no longer in the built-in catalog, so it cannot be reseeded. Delete it instead.`,
+      )
+    }
+    const labels = existing.labels ?? seed.labels
+    const pipeline: Pipeline = {
+      ...seed,
+      ...(labels && labels.length ? { labels } : { labels: undefined }),
+      ...(existing.archived ? { archived: true } : { archived: undefined }),
     }
     await this.pipelineRepository.update(workspaceId, pipeline)
     return pipeline

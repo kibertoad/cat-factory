@@ -149,6 +149,7 @@ export async function start(
       pipelineScheduleRepository: repos.pipelineScheduleRepository,
       subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(db),
       provisioningLogRepository: repos.provisioningLogRepository,
+      passwordResetTokenRepository: repos.passwordResetTokenRepository,
     },
     container.config.retention,
     clock,

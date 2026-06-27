@@ -89,7 +89,9 @@ function hydrate() {
   draft.spendMonthlyLimit = s.spendMonthlyLimit == null ? '' : String(s.spendMonthlyLimit)
 }
 
-watch(() => store.settings, hydrate, { immediate: true, deep: true })
+// `store.settings` is always replaced wholesale (store hydrate/update reassign the ref),
+// so tracking the object reference is enough — no deep per-field traversal needed.
+watch(() => store.settings, hydrate, { immediate: true })
 
 const saving = ref(false)
 

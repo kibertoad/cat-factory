@@ -12,6 +12,13 @@ export interface DisplayFlavor {
   /** True ⇒ flat-rate quota; its cost is a quota burn rate, not budget spend. */
   quotaBased: boolean
   vendor?: SubscriptionVendor
+  /**
+   * Whether this flavour's provider caches the re-sent prompt prefix. False on a
+   * Cloudflare/Workers-AI flavour (the hot path re-bills the whole prompt every turn);
+   * true once a direct key upgrades the model to its caching `direct` flavour. Undefined
+   * ⇒ unknown (older catalog). Surfaced as a badge in the picker.
+   */
+  cachesPrompts?: boolean
 }
 
 /**
@@ -30,6 +37,7 @@ export function displayFlavor(m: ModelOption, configured: Set<SubscriptionVendor
       cost: m.subscription.cost,
       quotaBased: true,
       vendor: m.subscription.vendor,
+      cachesPrompts: m.subscription.cachesPrompts,
     }
   }
   return {
@@ -40,6 +48,7 @@ export function displayFlavor(m: ModelOption, configured: Set<SubscriptionVendor
     cost: m.cost,
     quotaBased: m.quotaBased ?? false,
     vendor: m.vendor,
+    cachesPrompts: m.cachesPrompts,
   }
 }
 
@@ -67,6 +76,20 @@ export function costLabel(flavor: DisplayFlavor): string | undefined {
   const { inputPerMillion, outputPerMillion, currency } = flavor.cost
   const body = `${inputPerMillion}/${outputPerMillion} ${currency} per Mtok`
   return flavor.quotaBased ? `quota burn ~${body}` : body
+}
+
+/**
+ * A short caching label for the picker: whether the flavour's provider caches the
+ * re-sent prompt prefix. `null` when unknown (older catalog) so the caller can omit it
+ * entirely. A long agentic run on a non-caching flavour re-bills its whole growing
+ * prompt every turn (slower, more rate-limited), so we surface it as an informational
+ * hint the user can act on (connect a direct key / pick a caching model). The model
+ * picker is a text-only dropdown-menu item list, so this is a label token in the option
+ * suffix rather than a styled badge.
+ */
+export function cachingLabel(flavor: DisplayFlavor): string | null {
+  if (flavor.cachesPrompts === undefined) return null
+  return flavor.cachesPrompts ? 'Prompt caching' : 'No prompt caching'
 }
 
 /**

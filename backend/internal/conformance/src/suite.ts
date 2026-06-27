@@ -145,6 +145,63 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
       })
     })
 
+    describe('pipeline versioning + reseed', () => {
+      it('ships catalog versions on the snapshot and reseeds a built-in, preserving organization', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        // The snapshot advertises the current built-in catalog versions, keyed by id, so the
+        // SPA can flag a stale persisted copy and offer a reseed.
+        const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const expectedVersions = Object.fromEntries(
+          seedPipelines().map((p) => [p.id, p.version ?? 0]),
+        )
+        expect(snap.body.pipelineCatalogVersions).toEqual(expectedVersions)
+        // A seeded built-in carries its version, persisted + round-tripped through the store.
+        const seededFull = snap.body.pipelines.find((p) => p.id === 'pl_full')!
+        expect(seededFull.version).toBe(expectedVersions.pl_full)
+
+        // Organize a built-in (label + archive) — user-owned metadata reseed must preserve.
+        await call('PATCH', `/workspaces/${wsId}/pipelines/pl_full/organize`, {
+          labels: ['mine'],
+          archived: true,
+        })
+
+        // Reseed restores the canonical definition + version while keeping labels/archive.
+        const seed = seedPipelines().find((p) => p.id === 'pl_full')!
+        const reseeded = await call<Pipeline>(
+          'POST',
+          `/workspaces/${wsId}/pipelines/pl_full/reseed`,
+        )
+        expect(reseeded.status).toBe(200)
+        expect(reseeded.body.agentKinds).toEqual(seed.agentKinds)
+        expect(reseeded.body.version).toBe(seed.version)
+        expect(reseeded.body.builtin).toBe(true)
+        expect(reseeded.body.labels).toEqual(['mine'])
+        expect(reseeded.body.archived).toBe(true)
+
+        // It round-trips identically through the store on a fresh read (D1 ⇄ Postgres).
+        const after = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const stored = after.body.pipelines.find((p) => p.id === 'pl_full')!
+        expect(stored.labels).toEqual(['mine'])
+        expect(stored.archived).toBe(true)
+        expect(stored.version).toBe(seed.version)
+      })
+
+      it('refuses to reseed a custom pipeline (delete it instead)', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+        const custom = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Custom',
+          agentKinds: ['coder'],
+        })
+        const res = await call('POST', `/workspaces/${wsId}/pipelines/${custom.body.id}/reseed`)
+        expect(res.status).toBe(422)
+      })
+    })
+
     describe('service spec read', () => {
       it('serves an empty service-spec view when GitHub is not wired', async () => {
         // The "View Requirements" window reads the sharded `spec/` artifact off the repo

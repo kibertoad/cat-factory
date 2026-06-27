@@ -1,5 +1,200 @@
 # @cat-factory/node-server
 
+## 0.30.0
+
+### Minor Changes
+
+- b5231b0: Make prompt-caching a first-class, visible capability and add per-kind progress-guard
+  leniency.
+
+  **Caching capability + observability.** `providerCachePolicy` moves to the kernel
+  (`domain/cache-policy.ts`, re-exported from `@cat-factory/agents`) so the model catalog
+  can derive a per-flavour `ModelOption.cachesPrompts` from the effective provider — the
+  same model reads `false` on its cache-less Cloudflare/Workers-AI flavour and `true` once
+  a direct key upgrades it to its caching `direct` flavour. The already-recorded
+  `cachedPromptTokens` is now aggregated per agent kind in `summarizeByExecution` (D1 +
+  Drizzle, kept symmetric) and surfaced as `cachedPromptTokens` + a derived `cacheHitRate`
+  on the step rollup and the LLM-metrics export.
+
+  **Vendor-selection UI.** The model picker shows a `Prompt caching` / `No prompt caching`
+  badge per flavour, the API-keys panel notes which direct keys enable caching, and the
+  step metrics bar shows a cached-token split when present — so a user can see (and act on)
+  the hot path running cache-less. Shipped model defaults are intentionally NOT changed;
+  extending `providerCachePolicy` to more providers (Moonshot / OpenRouter / LiteLLM) is
+  gated on benchmark evidence (see `backend/docs/prompt-caching.md`).
+
+  **Per-kind guard leniency.** The container progress guard can now be loosened per agent
+  kind via an optional `guardLimits` job-body field (clamped per knob in the harness;
+  merged over the env/built-in defaults — loosen-only, never tighten). A data-driven
+  `agentTuningFor` seam (`@cat-factory/agents`, plus an `AgentKindDefinition.tuning` hook
+  for custom kinds) supplies the profile, which `ContainerAgentExecutor` folds into the
+  dispatch body. Initial profiles give `conflict-resolver` more error headroom and the
+  research-heavy kinds a higher consecutive-web cap, so a legitimately-progressing run is
+  not killed for its normal pattern. Output-token ceilings are unchanged.
+
+### Patch Changes
+
+- Updated dependencies [b5231b0]
+  - @cat-factory/contracts@0.39.0
+  - @cat-factory/kernel@0.41.0
+  - @cat-factory/agents@0.19.0
+  - @cat-factory/orchestration@0.31.0
+  - @cat-factory/server@0.35.0
+  - @cat-factory/consensus@0.7.53
+  - @cat-factory/gates@0.2.5
+  - @cat-factory/integrations@0.23.5
+  - @cat-factory/prompt-fragments@0.7.37
+  - @cat-factory/spend@0.10.10
+  - @cat-factory/observability-langfuse@0.7.49
+  - @cat-factory/provider-bedrock@0.7.53
+  - @cat-factory/provider-cloudflare@0.7.53
+
+## 0.29.0
+
+### Minor Changes
+
+- 6d829bb: Make invalid-state pipelines more robust. On app open, a startup advisory surfaces pipelines that
+  reference a nonexistent agent kind or have an invalid shape (delete a custom one, reseed a built-in)
+  and built-in pipelines whose seeded definition is newer than the stored copy (reseed to adopt it).
+
+  Built-in pipelines now carry a per-pipeline `version` (persisted on both runtimes via a new D1
+  migration and a Drizzle column), the snapshot ships the current catalog versions
+  (`pipelineCatalogVersions`), and a new `POST /workspaces/:ws/pipelines/:id/reseed` endpoint restores a
+  built-in's canonical definition while preserving its labels/archive state.
+
+  BREAKING: existing workspaces' persisted built-in pipelines have no stored `version`, so they read as
+  "update available" once until reseeded — intentional adoption of the now-versioned definitions.
+
+### Patch Changes
+
+- Updated dependencies [6d829bb]
+  - @cat-factory/contracts@0.38.0
+  - @cat-factory/kernel@0.40.0
+  - @cat-factory/orchestration@0.30.0
+  - @cat-factory/server@0.34.0
+  - @cat-factory/agents@0.18.5
+  - @cat-factory/consensus@0.7.52
+  - @cat-factory/gates@0.2.4
+  - @cat-factory/integrations@0.23.4
+  - @cat-factory/prompt-fragments@0.7.36
+  - @cat-factory/spend@0.10.9
+  - @cat-factory/observability-langfuse@0.7.48
+  - @cat-factory/provider-bedrock@0.7.52
+  - @cat-factory/provider-cloudflare@0.7.52
+
+## 0.28.0
+
+### Minor Changes
+
+- 714b7c9: Add "forgot my password" self-service reset for password-based logins.
+
+  A user can request a reset link by email (`POST /auth/forgot-password`) and set a new
+  password via a one-time, expiring token (`POST /auth/reset-password`). Tokens are stored
+  hashed (SHA-256), single-use, and mirror the invitation flow; the reset email is sent
+  through a new deployment-level **system** email sender configured via
+  `EMAIL_SYSTEM_PROVIDER` / `EMAIL_SYSTEM_FROM` / `EMAIL_SYSTEM_API_KEY` (when unset, the
+  link is logged for local/dev). The request endpoint never reveals whether an email is
+  registered.
+
+  Schema addition (both runtimes): a new `password_reset_tokens` table (D1 migration
+  `0017_password_reset_tokens.sql` ⇄ a Drizzle Postgres migration). No data migration is
+  needed — the table starts empty.
+
+### Patch Changes
+
+- Updated dependencies [714b7c9]
+  - @cat-factory/contracts@0.37.0
+  - @cat-factory/kernel@0.39.0
+  - @cat-factory/orchestration@0.29.0
+  - @cat-factory/server@0.33.0
+  - @cat-factory/agents@0.18.4
+  - @cat-factory/consensus@0.7.51
+  - @cat-factory/gates@0.2.3
+  - @cat-factory/integrations@0.23.3
+  - @cat-factory/prompt-fragments@0.7.35
+  - @cat-factory/spend@0.10.8
+  - @cat-factory/observability-langfuse@0.7.47
+  - @cat-factory/provider-bedrock@0.7.51
+  - @cat-factory/provider-cloudflare@0.7.51
+
+## 0.27.4
+
+### Patch Changes
+
+- Updated dependencies [efbd910]
+  - @cat-factory/contracts@0.36.0
+  - @cat-factory/server@0.32.2
+  - @cat-factory/agents@0.18.3
+  - @cat-factory/consensus@0.7.50
+  - @cat-factory/gates@0.2.2
+  - @cat-factory/integrations@0.23.2
+  - @cat-factory/kernel@0.38.1
+  - @cat-factory/orchestration@0.28.3
+  - @cat-factory/prompt-fragments@0.7.34
+  - @cat-factory/spend@0.10.7
+  - @cat-factory/provider-bedrock@0.7.50
+  - @cat-factory/provider-cloudflare@0.7.50
+  - @cat-factory/observability-langfuse@0.7.46
+
+## 0.27.3
+
+### Patch Changes
+
+- ae7bfcd: Update pg-boss `12.21.0 -> 12.23.0`. Purely a dependency bump — the durable-execution
+  wiring (`PgBossWorkRunner` / `PgBossBootstrapRunner`, the `exclusive` advance queues,
+  the send options) is unchanged and the public API we use is stable across the bump.
+
+  The two internal pg-boss schema migrations (v33/v34) are applied automatically on
+  `boss.start()`: v33 slims the job-fetch index and adds the background flow-resolver
+  index (a free query-plan win for our advance queues), and v34 adds dead-letter source
+  provenance columns (inert for us — we don't configure dead-letter queues; orphaned runs
+  are recovered by the stale-run sweeper).
+
+## 0.27.2
+
+### Patch Changes
+
+- 692ccb4: Centralize OpenAI-compatible provider base-URL resolution.
+
+  The env-override→default base-URL logic (and the "litellm has no public default" rule)
+  was reconstructed per facade — a `NODE_BASE_URLS` map plus a `||` lookup on Node and a
+  provider `switch` on the Worker. Both now route through a single
+  `resolveOpenAiCompatibleBaseUrl(provider, override)` in `@cat-factory/agents`, driven by
+  the existing `DEFAULT_OPENAI_COMPATIBLE_BASE_URLS` table, so adding an OpenAI-compatible
+  vendor is a one-line table entry both runtimes pick up automatically.
+
+  Minor behavioural alignment: a _blank_ `${PROVIDER}_BASE_URL` override now falls back to
+  the built-in default on the Worker too (it previously returned the empty string), matching
+  Node's long-standing `||` semantics.
+
+- Updated dependencies [692ccb4]
+- Updated dependencies [692ccb4]
+  - @cat-factory/server@0.32.1
+  - @cat-factory/agents@0.18.2
+  - @cat-factory/consensus@0.7.49
+  - @cat-factory/orchestration@0.28.2
+  - @cat-factory/provider-bedrock@0.7.49
+  - @cat-factory/provider-cloudflare@0.7.49
+
+## 0.27.1
+
+### Patch Changes
+
+- Updated dependencies [a4ea607]
+  - @cat-factory/contracts@0.35.0
+  - @cat-factory/kernel@0.38.0
+  - @cat-factory/server@0.32.0
+  - @cat-factory/agents@0.18.1
+  - @cat-factory/consensus@0.7.48
+  - @cat-factory/gates@0.2.1
+  - @cat-factory/integrations@0.23.1
+  - @cat-factory/orchestration@0.28.1
+  - @cat-factory/prompt-fragments@0.7.33
+  - @cat-factory/spend@0.10.6
+  - @cat-factory/observability-langfuse@0.7.45
+  - @cat-factory/provider-bedrock@0.7.48
+  - @cat-factory/provider-cloudflare@0.7.48
+
 ## 0.27.0
 
 ### Minor Changes

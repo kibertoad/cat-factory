@@ -19,6 +19,11 @@ export const useUiStore = defineStore('ui', () => {
   const selectedBlockId = ref<string | null>(null)
   const focusBlockId = ref<string | null>(null)
   const builderOpen = ref(false)
+  // Pipeline-health startup advisory: lists invalid pipelines (delete / reseed) + built-ins
+  // with a newer catalog version (reseed). `pipelineHealthSeen` gates auto-open to once per
+  // session so it does not re-pop on every snapshot re-hydration.
+  const pipelineHealthOpen = ref(false)
+  const pipelineHealthSeen = ref(false)
   const decisionContext = ref<{ instanceId: string; decisionId: string } | null>(null)
 
   // Document-source integration modals, keyed by source. `documentImport` and
@@ -215,6 +220,22 @@ export const useUiStore = defineStore('ui', () => {
 
   function openBuilder() {
     builderOpen.value = true
+  }
+
+  /** Auto-open the pipeline-health advisory once per session (no-op after it's been shown). */
+  function maybeOpenPipelineHealth() {
+    if (pipelineHealthSeen.value) return
+    pipelineHealthSeen.value = true
+    pipelineHealthOpen.value = true
+  }
+
+  function openPipelineHealth() {
+    pipelineHealthSeen.value = true
+    pipelineHealthOpen.value = true
+  }
+
+  function closePipelineHealth() {
+    pipelineHealthOpen.value = false
   }
 
   function openDecision(instanceId: string, decisionId: string) {
@@ -600,6 +621,8 @@ export const useUiStore = defineStore('ui', () => {
     selectedBlockId,
     focusBlockId,
     builderOpen,
+    pipelineHealthOpen,
+    pipelineHealthSeen,
     decisionContext,
     documentConnect,
     documentImport,
@@ -651,6 +674,9 @@ export const useUiStore = defineStore('ui', () => {
     select,
     focus,
     openBuilder,
+    maybeOpenPipelineHealth,
+    openPipelineHealth,
+    closePipelineHealth,
     openDecision,
     closeDecision,
     openApprovalDetail,

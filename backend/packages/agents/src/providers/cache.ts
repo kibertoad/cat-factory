@@ -1,35 +1,18 @@
-// Prompt-caching policy, shared by BOTH AI-call paths so they treat a provider the
-// same way: the in-container path (Pi → the LLM proxy, OpenAI Chat Completions over
-// HTTP) and the inline path (the Vercel AI SDK via the ModelProvider port). A
-// container agent re-sends its whole growing prompt every turn, so on the providers
-// that cache it the stable prefix should be a cache hit rather than re-billed input
-// — but only if we (a) keep the prefix byte-stable and (b) give the provider the
-// hint it needs. This module is the single source of truth for "how does provider X
-// cache", so neither path hard-codes provider ids.
+// Prompt-caching request/response helpers, shared by BOTH AI-call paths so they treat
+// a provider the same way: the in-container path (Pi → the LLM proxy, OpenAI Chat
+// Completions over HTTP) and the inline path (the Vercel AI SDK via the ModelProvider
+// port). A container agent re-sends its whole growing prompt every turn, so on the
+// providers that cache it the stable prefix should be a cache hit rather than re-billed
+// input — but only if we (a) keep the prefix byte-stable and (b) give the provider the
+// hint it needs.
+//
+// The classification of HOW a provider caches lives in the kernel
+// (`providerCachePolicy`) because the model catalog also needs it (to project a
+// per-model `cachesPrompts` capability the UI surfaces); it is re-exported here so the
+// existing `@cat-factory/agents` import sites keep working.
+import { type CachePolicy, providerCachePolicy } from '@cat-factory/kernel'
 
-export type CachePolicy =
-  // Caches automatically on an exact prefix match; some accept a routing key to pin
-  // multi-turn calls to the same cached prefix (OpenAI), others need nothing but a
-  // stable prefix (DeepSeek, Qwen/DashScope).
-  | 'auto-prefix'
-  // Requires explicit `cache_control` breakpoints in the request (Anthropic).
-  | 'explicit-anthropic'
-  // No caching we rely on (Workers AI third-party models, Moonshot, unknown).
-  | 'none'
-
-/** How `provider` caches prompt prefixes. The single source of truth for both paths. */
-export function providerCachePolicy(provider: string): CachePolicy {
-  switch (provider) {
-    case 'openai':
-    case 'deepseek':
-    case 'qwen':
-      return 'auto-prefix'
-    case 'anthropic':
-      return 'explicit-anthropic'
-    default:
-      return 'none'
-  }
-}
+export { type CachePolicy, providerCachePolicy }
 
 /**
  * Extra OpenAI Chat Completions params that route a multi-turn conversation to the
@@ -60,17 +43,28 @@ export function inlineCacheProviderOptions(provider: string): Record<string, unk
   return {}
 }
 
-/** The cached-input-token count a provider reports in its usage, across the field names they use. */
+/**
+ * The cached-input-token count a provider reports in its usage, across the field names
+ * they use. Covers OpenAI (`prompt_tokens_details.cached_tokens`), DeepSeek
+ * (`prompt_cache_hit_tokens`) and Anthropic (`cache_read_input_tokens`, or the AI SDK's
+ * camelCase `cacheReadInputTokens`). NOTE on the Anthropic shape: its cache reads are
+ * reported SEPARATELY from `input_tokens` (they are NOT a subset of it), so a hit-rate
+ * computed as cached/prompt can exceed 1 — callers clamp it (see `cacheHitRate`).
+ */
 export function cachedTokensFromUsage(usage: unknown): number {
   if (typeof usage !== 'object' || usage === null) return 0
   const u = usage as Record<string, unknown>
-  // OpenAI: prompt_tokens_details.cached_tokens. DeepSeek: prompt_cache_hit_tokens.
+  // OpenAI: prompt_tokens_details.cached_tokens.
   const details = u.prompt_tokens_details
   if (typeof details === 'object' && details !== null) {
     const cached = (details as Record<string, unknown>).cached_tokens
     if (typeof cached === 'number' && cached >= 0) return cached
   }
+  // DeepSeek: prompt_cache_hit_tokens.
   const hit = u.prompt_cache_hit_tokens
   if (typeof hit === 'number' && hit >= 0) return hit
+  // Anthropic: cache_read_input_tokens (raw API) / cacheReadInputTokens (AI SDK).
+  const anthropicRead = u.cache_read_input_tokens ?? u.cacheReadInputTokens
+  if (typeof anthropicRead === 'number' && anthropicRead >= 0) return anthropicRead
   return 0
 }

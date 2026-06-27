@@ -14,6 +14,7 @@ import { D1LlmCallMetricRepository } from './infrastructure/repositories/D1LlmCa
 import { D1AgentContextSnapshotRepository } from './infrastructure/repositories/D1AgentContextSnapshotRepository'
 import { D1ProvisioningLogRepository } from './infrastructure/repositories/D1ProvisioningLogRepository'
 import { D1PipelineScheduleRepository } from './infrastructure/repositories/D1PipelineScheduleRepository'
+import { D1PasswordResetTokenRepository } from './infrastructure/repositories/D1PasswordResetTokenRepository'
 import { buildContainer } from './infrastructure/container'
 import { escalateStaleNotifications } from '@cat-factory/server'
 import { CryptoIdGenerator, SystemClock } from './infrastructure/runtime'
@@ -140,6 +141,7 @@ export default {
             db: telemetryDb,
           }),
           pipelineScheduleRepository: new D1PipelineScheduleRepository({ db: env.DB }),
+          passwordResetTokenRepository: new D1PasswordResetTokenRepository({ db: env.DB }),
           // Prune the separate provisioning-log database when its binding is present.
           ...(env.PROVISIONING_DB
             ? {

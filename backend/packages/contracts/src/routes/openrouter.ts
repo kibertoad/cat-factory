@@ -1,11 +1,10 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
-import * as v from 'valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import {
   openRouterCatalogSchema,
   openRouterRefreshResultSchema,
   upsertOpenRouterCatalogSchema,
 } from '../openrouter.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Per-workspace OpenRouter dynamic-catalog route contracts. The
@@ -14,7 +13,7 @@ import { errorResponses } from './_shared.js'
 // @cat-factory/server.
 // ---------------------------------------------------------------------------
 
-const workspaceIdParams = withObjectKeys(v.object({ workspaceId: v.string() }))
+const workspaceIdParams = singleStringParam('workspaceId')
 
 export const getOpenRouterCatalogContract = defineApiContract({
   method: 'get',

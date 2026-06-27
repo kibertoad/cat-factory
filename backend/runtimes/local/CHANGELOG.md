@@ -1,5 +1,88 @@
 # @cat-factory/local-server
 
+## 0.17.7
+
+### Patch Changes
+
+- Updated dependencies [b5231b0]
+  - @cat-factory/contracts@0.39.0
+  - @cat-factory/kernel@0.41.0
+  - @cat-factory/agents@0.19.0
+  - @cat-factory/orchestration@0.31.0
+  - @cat-factory/server@0.35.0
+  - @cat-factory/node-server@0.30.0
+  - @cat-factory/integrations@0.23.5
+
+## 0.17.6
+
+### Patch Changes
+
+- Updated dependencies [6d829bb]
+  - @cat-factory/contracts@0.38.0
+  - @cat-factory/kernel@0.40.0
+  - @cat-factory/orchestration@0.30.0
+  - @cat-factory/server@0.34.0
+  - @cat-factory/node-server@0.29.0
+  - @cat-factory/agents@0.18.5
+  - @cat-factory/integrations@0.23.4
+
+## 0.17.5
+
+### Patch Changes
+
+- Updated dependencies [714b7c9]
+  - @cat-factory/contracts@0.37.0
+  - @cat-factory/kernel@0.39.0
+  - @cat-factory/orchestration@0.29.0
+  - @cat-factory/server@0.33.0
+  - @cat-factory/node-server@0.28.0
+  - @cat-factory/agents@0.18.4
+  - @cat-factory/integrations@0.23.3
+
+## 0.17.4
+
+### Patch Changes
+
+- Updated dependencies [efbd910]
+  - @cat-factory/contracts@0.36.0
+  - @cat-factory/server@0.32.2
+  - @cat-factory/agents@0.18.3
+  - @cat-factory/integrations@0.23.2
+  - @cat-factory/kernel@0.38.1
+  - @cat-factory/orchestration@0.28.3
+  - @cat-factory/node-server@0.27.4
+
+## 0.17.3
+
+### Patch Changes
+
+- Updated dependencies [ae7bfcd]
+  - @cat-factory/node-server@0.27.3
+
+## 0.17.2
+
+### Patch Changes
+
+- Updated dependencies [692ccb4]
+- Updated dependencies [692ccb4]
+  - @cat-factory/server@0.32.1
+  - @cat-factory/agents@0.18.2
+  - @cat-factory/node-server@0.27.2
+  - @cat-factory/orchestration@0.28.2
+
+## 0.17.1
+
+### Patch Changes
+
+- Updated dependencies [a4ea607]
+  - @cat-factory/contracts@0.35.0
+  - @cat-factory/kernel@0.38.0
+  - @cat-factory/server@0.32.0
+  - @cat-factory/agents@0.18.1
+  - @cat-factory/integrations@0.23.1
+  - @cat-factory/orchestration@0.28.1
+  - @cat-factory/node-server@0.27.1
+
 ## 0.17.0
 
 ### Minor Changes

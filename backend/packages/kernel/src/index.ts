@@ -15,6 +15,11 @@ export {
   type ConflictReason,
 } from './domain/errors.js'
 export { sameSubtasks, sameSubtaskItems } from './domain/subtasks.logic.js'
+export {
+  type CachePolicy,
+  providerCachePolicy,
+  providerCachesPrompts,
+} from './domain/cache-policy.js'
 export { resolveWritebackFlag } from './domain/writeback.js'
 export { extractJson } from './domain/llm-output.js'
 export {

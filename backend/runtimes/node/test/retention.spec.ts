@@ -58,6 +58,8 @@ function fakeRepos(): {
           return 5
         },
       },
+      // Expired password-reset tokens (deleted by `now`, not a window).
+      passwordResetTokenRepository: { deleteExpired: async () => 1 },
     },
   }
 }
@@ -91,6 +93,7 @@ describe('sweepRetention', () => {
       scheduleRuns: 0,
       activations: 2,
       provisioningLog: 5,
+      passwordResetTokens: 1,
     })
   })
 
@@ -108,6 +111,7 @@ describe('sweepRetention', () => {
       scheduleRuns: 0,
       activations: 2,
       provisioningLog: 5,
+      passwordResetTokens: 1,
     })
   })
 })
