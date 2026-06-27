@@ -26,10 +26,14 @@ const back = useIntegrationBack(open)
 
 // On open: refresh projections when connected. The not-connected state renders
 // <GitHubConnect>, which discovers and links installations on its own.
-watch(open, (isOpen) => {
-  if (!isOpen) return
-  if (github.connected) void github.load()
-})
+watch(
+  open,
+  (isOpen) => {
+    if (!isOpen) return
+    if (github.connected) void github.load()
+  },
+  { immediate: true },
+)
 
 function notifyError(title: string, e: unknown) {
   toast.add({

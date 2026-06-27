@@ -107,6 +107,23 @@ export const useExecutionStore = defineStore('execution', () => {
   })
 
   /**
+   * Open decisions/approvals grouped by the block they belong to, so a board card
+   * resolves its own + its tasks' pending gates with O(1) lookups instead of
+   * re-filtering the global lists once per frame on every execution event.
+   */
+  function groupByBlock<T extends { blockId: string }>(items: T[]): Map<string, T[]> {
+    const map = new Map<string, T[]>()
+    for (const item of items) {
+      const list = map.get(item.blockId)
+      if (list) list.push(item)
+      else map.set(item.blockId, [item])
+    }
+    return map
+  }
+  const decisionsByBlock = computed(() => groupByBlock(openDecisions.value))
+  const approvalsByBlock = computed(() => groupByBlock(openApprovals.value))
+
+  /**
    * Start `pipeline` against a block; the server marks the block in-progress. A block
    * pinned to an individual-usage model (Claude) needs the initiator's personal
    * password — supplied transparently from the local cache, and prompted via the
@@ -279,6 +296,8 @@ export const useExecutionStore = defineStore('execution', () => {
     pendingDecisionCount,
     openDecisions,
     openApprovals,
+    decisionsByBlock,
+    approvalsByBlock,
     pendingApprovalCount,
     start,
     resolveDecision,

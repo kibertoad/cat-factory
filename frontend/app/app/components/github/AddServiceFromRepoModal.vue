@@ -41,11 +41,15 @@ async function loadRepos() {
 
 // On open: ensure we know the connection + which repos the App can access, and
 // the workspace's already-tracked repos (to flag ones already on the board).
-watch(open, (isOpen) => {
-  if (!isOpen) return
-  resetSelection()
-  void loadRepos()
-})
+watch(
+  open,
+  (isOpen) => {
+    if (!isOpen) return
+    resetSelection()
+    void loadRepos()
+  },
+  { immediate: true },
+)
 
 // If the user connects from inside the modal (the not-connected prompt), pull the
 // repo list as soon as the connection is bound.

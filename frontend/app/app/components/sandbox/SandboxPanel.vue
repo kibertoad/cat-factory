@@ -19,9 +19,13 @@ const open = computed({
 
 const tab = ref<'experiments' | 'prompts' | 'fixtures'>('experiments')
 
-watch(open, (isOpen) => {
-  if (isOpen) void store.load()
-})
+watch(
+  open,
+  (isOpen) => {
+    if (isOpen) void store.load()
+  },
+  { immediate: true },
+)
 
 // ---- experiment builder ----------------------------------------------------
 const agentKind = ref('requirements-review')
@@ -107,6 +111,21 @@ const gradeByRun = computed(() => {
   for (const g of store.detail?.grades ?? []) map.set(g.runId, g)
   return map
 })
+// Fixture id → name, so a row resolves its fixture in O(1) instead of a .find scan.
+const fixtureMap = computed(() => {
+  const map = new Map<string, string>()
+  for (const f of store.fixtures) map.set(f.id, f.name)
+  return map
+})
+// Pre-join each run with its grade + fixture name once, so the results table doesn't
+// re-`.get()` the same grade four times (and `.find()` the fixture) per row on render.
+const detailRows = computed(() =>
+  (store.detail?.runs ?? []).map((run) => ({
+    run,
+    grade: gradeByRun.value.get(run.id) ?? null,
+    fixtureName: fixtureMap.value.get(run.fixtureId) ?? run.fixtureId,
+  })),
+)
 const selectedRun = ref<SandboxRun | null>(null)
 
 function scoreColor(score: number): string {
@@ -157,8 +176,6 @@ async function archive(prompt: SandboxPromptVersion) {
     })
   }
 }
-
-const fixtureName = (id: string) => store.fixtures.find((f) => f.id === id)?.name ?? id
 </script>
 
 <template>
@@ -348,7 +365,7 @@ const fixtureName = (id: string) => store.fixtures.find((f) => f.id === id)?.nam
                   </thead>
                   <tbody>
                     <tr
-                      v-for="run in store.detail.runs"
+                      v-for="{ run, grade, fixtureName } in detailRows"
                       :key="run.id"
                       class="cursor-pointer border-t border-slate-800 hover:bg-slate-800/40"
                       @click="selectedRun = run"
@@ -357,14 +374,14 @@ const fixtureName = (id: string) => store.fixtures.find((f) => f.id === id)?.nam
                       <td class="py-1 pr-2 font-mono text-[11px] text-slate-400">
                         {{ run.model }}
                       </td>
-                      <td class="py-1 pr-2 text-slate-400">{{ fixtureName(run.fixtureId) }}</td>
+                      <td class="py-1 pr-2 text-slate-400">{{ fixtureName }}</td>
                       <td class="py-1 pr-2">
                         <span
-                          v-if="gradeByRun.get(run.id)"
-                          :class="scoreColor(gradeByRun.get(run.id)!.weightedTotal)"
+                          v-if="grade"
+                          :class="scoreColor(grade.weightedTotal)"
                           class="font-semibold"
                         >
-                          {{ gradeByRun.get(run.id)!.weightedTotal.toFixed(2) }}
+                          {{ grade.weightedTotal.toFixed(2) }}
                         </span>
                         <span v-else-if="run.status === 'failed'" class="text-rose-400"
                           >failed</span
@@ -373,16 +390,10 @@ const fixtureName = (id: string) => store.fixtures.find((f) => f.id === id)?.nam
                       </td>
                       <td class="py-1">
                         <span
-                          v-if="gradeByRun.get(run.id)?.objective"
-                          :class="
-                            gradeByRun.get(run.id)!.objective!.pass
-                              ? 'text-emerald-400'
-                              : 'text-amber-400'
-                          "
+                          v-if="grade?.objective"
+                          :class="grade.objective.pass ? 'text-emerald-400' : 'text-amber-400'"
                         >
-                          {{ gradeByRun.get(run.id)!.objective!.caught }}/{{
-                            gradeByRun.get(run.id)!.objective!.total
-                          }}
+                          {{ grade.objective.caught }}/{{ grade.objective.total }}
                         </span>
                         <span v-else class="text-slate-600">—</span>
                       </td>

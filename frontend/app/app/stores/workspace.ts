@@ -16,6 +16,11 @@ import { useRecurringPipelinesStore } from '~/stores/recurringPipelines'
 import { useServicesStore } from '~/stores/services'
 import { useAgentsStore } from '~/stores/agents'
 import { useTrackerStore } from '~/stores/tracker'
+import { useRequirementsStore } from '~/stores/requirements'
+import { useClarityStore } from '~/stores/clarity'
+import { useBrainstormStore } from '~/stores/brainstorm'
+import { useConsensusStore } from '~/stores/consensus'
+import { useGitHubStore } from '~/stores/github'
 
 /**
  * Owns the active workspace and bootstraps the app against the backend. On load
@@ -58,6 +63,18 @@ export const useWorkspaceStore = defineStore(
 
     /** Push a snapshot into the data stores. */
     function hydrate(snapshot: WorkspaceSnapshot) {
+      // A change of active board (or the first load) — drop the per-block caches that are
+      // NOT part of the snapshot (reviews, brainstorm/consensus sessions, the GitHub
+      // projection) so a switched-to board never shows the previous one's stale state.
+      // These are lazily reloaded/re-probed per board, so clearing on a same-board refresh
+      // would needlessly wipe an open review window — hence only on an actual id change.
+      if (workspaceId.value !== snapshot.workspace.id) {
+        useRequirementsStore().reset()
+        useClarityStore().reset()
+        useBrainstormStore().reset()
+        useConsensusStore().reset()
+        useGitHubStore().reset()
+      }
       workspaceId.value = snapshot.workspace.id
       spend.value = snapshot.spend ?? null
       // Keep the board list in step (e.g. a freshly created board, or a rename).

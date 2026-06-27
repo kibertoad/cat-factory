@@ -259,6 +259,22 @@ export const useGitHubStore = defineStore('github', () => {
     return api.commentGitHubIssue(workspace.requireId(), repoGithubId, number, body)
   }
 
+  /**
+   * Drop the per-workspace projection + connection state (called on workspace switch)
+   * so the prior workspace's repos/PRs/issues don't linger until the re-probe + reload
+   * land. `available` returns to `null` (unknown) so the onboarding gate re-resolves.
+   */
+  function reset() {
+    available.value = null
+    connection.value = null
+    installations.value = []
+    repos.value = []
+    availableRepos.value = []
+    pulls.value = []
+    issues.value = []
+    branches.value = {}
+  }
+
   return {
     available,
     connection,
@@ -300,5 +316,6 @@ export const useGitHubStore = defineStore('github', () => {
     openPullRequest,
     mergePullRequest,
     comment,
+    reset,
   }
 })

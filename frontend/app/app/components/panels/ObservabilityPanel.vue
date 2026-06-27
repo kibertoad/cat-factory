@@ -44,13 +44,18 @@ const contextLoading = computed(
 
 // Load (and refresh) whenever a different run's panel opens. Reset to the calls view
 // and load both the calls and the provided-context snapshots.
-watch(executionId, (id) => {
-  if (id) {
-    view.value = 'calls'
-    void observability.load(id)
-    void observability.loadContext(id)
-  }
-})
+watch(
+  executionId,
+  (id) => {
+    if (id) {
+      view.value = 'calls'
+      void observability.load(id)
+      void observability.loadContext(id)
+    }
+  },
+  // Lazy v-if mount: the panel mounts with executionId already set, so load immediately.
+  { immediate: true },
+)
 
 const expandedCtx = reactive<Record<string, boolean>>({})
 function toggleCtx(s: AgentContextSnapshot) {

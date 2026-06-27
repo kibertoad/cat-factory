@@ -24,12 +24,16 @@ const open = computed({
 
 // Load the workspace's reference architectures + recent jobs, plus (best-effort)
 // the GitHub repos the user can access so the base form can pick from them.
-watch(open, (isOpen) => {
-  if (isOpen) {
-    void bootstrap.load()
-    void loadGitHubRepos()
-  }
-})
+watch(
+  open,
+  (isOpen) => {
+    if (isOpen) {
+      void bootstrap.load()
+      void loadGitHubRepos()
+    }
+  },
+  { immediate: true },
+)
 
 async function loadGitHubRepos() {
   try {

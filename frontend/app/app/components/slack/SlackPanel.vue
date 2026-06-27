@@ -78,6 +78,8 @@ watch(
       notifyError('Could not load Slack settings', e)
     }
   },
+  // Lazy v-if mount: the panel mounts with `open` already true, so load immediately.
+  { immediate: true },
 )
 
 async function connectViaOAuth() {

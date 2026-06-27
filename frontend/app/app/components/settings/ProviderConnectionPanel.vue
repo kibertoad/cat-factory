@@ -7,7 +7,7 @@
 // see backend/docs/native-environment-adapter.md): a `secret` field → the write-only secret
 // bundle, a non-secret field → providerConfig[key], a `baseUrl` field → baseUrl. A field
 // with a `default` is optional — left blank it falls back to that default.
-import { computed, ref, watch } from 'vue'
+import { computed, ref, toRaw, watch } from 'vue'
 import type { ProviderConnectionKind } from '~/types/providerConnections'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
@@ -163,9 +163,9 @@ function buildManifestPayload(): {
   const template = descriptor.value?.manifestTemplate
   if (!template) return null
   const base = descriptor.value?.savedManifest ?? template
-  // `base` is a Vue reactive proxy, which structuredClone refuses (DataCloneError). The
-  // manifest is plain JSON config, so a JSON round-trip both unwraps the proxy and deep-clones.
-  const manifest: Record<string, unknown> = JSON.parse(JSON.stringify(base))
+  // `base` is a Vue reactive proxy, which structuredClone refuses (DataCloneError). `toRaw`
+  // unwraps it to the underlying plain-JSON config so structuredClone can deep-clone it.
+  const manifest: Record<string, unknown> = structuredClone(toRaw(base))
   const providerConfig: Record<string, unknown> = {
     ...(manifest.providerConfig as Record<string, unknown> | undefined),
   }

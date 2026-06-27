@@ -21,9 +21,13 @@ const back = useIntegrationBack(open)
 
 // Load the user's endpoints whenever the panel opens (loaded independently of the
 // workspace snapshot, like personal subscriptions).
-watch(open, (isOpen) => {
-  if (isOpen) void store.load()
-})
+watch(
+  open,
+  (isOpen) => {
+    if (isOpen) void store.load()
+  },
+  { immediate: true },
+)
 
 const RUNNERS: { value: LocalRunner; label: string }[] = (
   Object.keys(LOCAL_RUNNER_LABELS) as LocalRunner[]
