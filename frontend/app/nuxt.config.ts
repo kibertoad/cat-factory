@@ -60,4 +60,29 @@ export default defineNuxtConfig({
       meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1' }],
     },
   },
+
+  vite: {
+    // Pre-bundle the SPA's heavy dependencies at dev-server startup. Since ~25 panels in
+    // `pages/index.vue` are `defineAsyncComponent(() => import(...))`, Vite's startup dep
+    // scan (which follows static imports only) no longer crawls into them, so these deps
+    // would otherwise be discovered at runtime — each discovery triggers a dep
+    // re-optimization that forces a full page reload. In the Playwright e2e run (which
+    // drives `nuxt dev`) such a mid-test reload aborts an in-flight `page.goto` with
+    // `net::ERR_ABORTED`, hanging a spec to its 180s timeout. Pinning the list (the exact
+    // set the dev server reports discovering) keeps dev/e2e deterministic without giving
+    // back the production code-splitting win.
+    optimizeDeps: {
+      include: [
+        'wretch',
+        'valibot',
+        '@toad-contracts/frontend-http-client',
+        '@toad-contracts/valibot',
+        '@vue-flow/core',
+        '@vue-flow/background',
+        '@vue-flow/minimap',
+        '@vueuse/core',
+        'markdown-it',
+      ],
+    },
+  },
 })
