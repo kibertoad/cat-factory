@@ -696,7 +696,10 @@ export function mergeGuardLimits(
       overrides.maxToolCallsWithoutEdit,
     ),
     maxConsecutiveErrors: loosen(base.maxConsecutiveErrors, overrides.maxConsecutiveErrors),
-    maxConsecutiveWebCalls: loosen(base.maxConsecutiveWebCalls, overrides.maxConsecutiveWebCalls),
+    maxConsecutiveWebCalls: loosen(
+      base.maxConsecutiveWebCalls ?? DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveWebCalls,
+      overrides.maxConsecutiveWebCalls,
+    ),
   }
 }
 
