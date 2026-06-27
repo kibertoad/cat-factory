@@ -1,11 +1,11 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   addVendorCredentialSchema,
   vendorCredentialListSchema,
   vendorCredentialSchema,
 } from '../vendor-credentials.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Vendor-credential (subscription token pool) route contracts. Tokens are
@@ -14,7 +14,7 @@ import { errorResponses } from './_shared.js'
 // prefix. See VendorCredentialController.
 // ---------------------------------------------------------------------------
 
-const credentialIdParams = withObjectKeys(v.object({ id: v.string() }))
+const credentialIdParams = singleStringParam('id')
 
 // Response wrapper that exists only inline in the controller today.
 const vendorCredentialsViewSchema = v.object({

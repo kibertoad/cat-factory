@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { promptFragmentSchema } from '../entities.js'
 import {
@@ -11,7 +11,7 @@ import {
   resolvedFragmentCatalogSchema,
   updatePromptFragmentSchema,
 } from '../fragment-library.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Prompt-fragment library route contracts. See FragmentLibraryController in
@@ -29,8 +29,8 @@ import { errorResponses } from './_shared.js'
 
 const promptFragmentListSchema = v.array(promptFragmentSchema)
 const fragmentSourceListSchema = v.array(fragmentSourceSchema)
-const fragmentIdParams = withObjectKeys(v.object({ fragmentId: v.string() }))
-const sourceIdParams = withObjectKeys(v.object({ id: v.string() }))
+const fragmentIdParams = singleStringParam('fragmentId')
+const sourceIdParams = singleStringParam('id')
 
 // ---- fragments (this tier, raw — not merged) ------------------------------
 

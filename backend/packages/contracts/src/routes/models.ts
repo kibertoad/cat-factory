@@ -1,7 +1,6 @@
-import { defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
-import * as v from 'valibot'
+import { defineApiContract } from '@toad-contracts/valibot'
 import { modelCatalogSchema } from '../entities.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Model picker catalog route contracts. The ModelController is mounted at `/`,
@@ -9,7 +8,7 @@ import { errorResponses } from './_shared.js'
 // ModelController in @cat-factory/server.
 // ---------------------------------------------------------------------------
 
-const workspaceIdParams = withObjectKeys(v.object({ workspaceId: v.string() }))
+const workspaceIdParams = singleStringParam('workspaceId')
 
 // Deployment-level catalog (no workspace context).
 export const listModelsContract = defineApiContract({

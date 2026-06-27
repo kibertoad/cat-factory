@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { connectionTestResultSchema } from '../provider-config.js'
 import {
@@ -7,7 +7,7 @@ import {
   userSecretDescriptorSchema,
   userSecretStatusSchema,
 } from '../user-secret.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Per-USER generic secret route contracts (a GitHub PAT today). Scoped to the
@@ -22,7 +22,7 @@ const userSecretsViewSchema = v.object({
   descriptors: v.array(userSecretDescriptorSchema),
 })
 
-const kindParams = withObjectKeys(v.object({ kind: v.string() }))
+const kindParams = singleStringParam('kind')
 
 export const listUserSecretsContract = defineApiContract({
   method: 'get',

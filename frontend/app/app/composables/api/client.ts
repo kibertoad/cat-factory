@@ -11,6 +11,7 @@ import {
   type WretchInstance,
 } from '@toad-contracts/frontend-http-client'
 import wretch from 'wretch'
+import { ApiError } from './errors'
 
 /**
  * The validated success-response body inferred from a route contract (every REST
@@ -75,7 +76,16 @@ export async function sendContract<T extends ApiContract>(
   params: SendParams<T>,
 ): Promise<SuccessBodyOf<T>> {
   const outcome = await sendByApiContract(client, contract, params)
-  if (outcome.error) throw outcome.error
+  if (outcome.error) {
+    const error = outcome.error
+    // A contract-declared non-2xx is reported as a plain `{ statusCode, headers, body }`
+    // value (not an Error). Wrap it so call sites get `instanceof Error` + the server's
+    // message; anything already an Error (UnexpectedResponseError, request-validation
+    // SchemaValidationError, a network fault) is rethrown unchanged.
+    if (error instanceof Error) throw error
+    const { statusCode, body } = error as { statusCode: number; body: unknown }
+    throw new ApiError(statusCode, body)
+  }
   return outcome.result!.body as SuccessBodyOf<T>
 }
 

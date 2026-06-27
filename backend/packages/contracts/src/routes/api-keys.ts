@@ -1,7 +1,6 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
-import * as v from 'valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import { addApiKeySchema, apiKeyListResultSchema, apiKeySchema } from '../api-keys.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Direct-provider API-key route contracts. Two controllers consume these:
@@ -11,7 +10,7 @@ import { errorResponses } from './_shared.js'
 // @cat-factory/server. (The account-scoped key routes live in `routes/accounts.ts`.)
 // ---------------------------------------------------------------------------
 
-const idParams = withObjectKeys(v.object({ id: v.string() }))
+const idParams = singleStringParam('id')
 
 // ---- workspace-scoped (relative to `/workspaces/:workspaceId`) ------------
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { apiErrorEnvelope } from '~/composables/api/errors'
 import type { AccountRole } from '~/types/domain'
 import AccountDeploymentSettings from '~/components/layout/AccountDeploymentSettings.vue'
 
@@ -39,9 +40,7 @@ async function updateMemberRoles(userId: string, roles: AccountRole[]) {
 function notifyError(title: string, e: unknown) {
   toast.add({
     title,
-    description:
-      (e as { data?: { error?: { message?: string } } })?.data?.error?.message ??
-      (e instanceof Error ? e.message : String(e)),
+    description: apiErrorEnvelope(e)?.message ?? (e instanceof Error ? e.message : String(e)),
     icon: 'i-lucide-triangle-alert',
     color: 'error',
   })

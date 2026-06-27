@@ -1,5 +1,5 @@
 import { listProvisioningLogsContract, provisioningLogQuerySchema } from '@cat-factory/contracts'
-import * as v from 'valibot'
+import { validate } from '@toad-contracts/core'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
@@ -37,11 +37,12 @@ export function provisioningLogController(): Hono<AppEnv> {
   buildHonoRoute(app, listProvisioningLogsContract, async (c) => {
     const logs = requireProvisioningLogs(c)
     if (!logs) return unavailable(c)
-    const parsed = v.safeParse(provisioningLogQuerySchema, presentQuery(c))
-    if (!parsed.success) {
-      return c.json({ error: { code: 'invalid_query', message: 'Invalid query parameters' } }, 400)
-    }
-    const entries = await logs.service.list(param(c, 'workspaceId'), parsed.output)
+    // Validate through the contract schema so an invalid query yields the same central
+    // `{ code: 'validation' }` 400 every other route does (via `handleError`), instead of a
+    // one-off envelope. `presentQuery` still drops empty/absent params so the optionals
+    // aren't fed empty strings.
+    const query = await validate(provisioningLogQuerySchema, presentQuery(c))
+    const entries = await logs.service.list(param(c, 'workspaceId'), query)
     return c.json({ entries }, 200)
   })
 
