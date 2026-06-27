@@ -34,6 +34,13 @@ interface ProviderMeta {
   label: string
   url: string
   steps: string[]
+  /**
+   * Whether this provider caches the re-sent prompt prefix. Connecting a key here
+   * upgrades its models to the caching `direct` flavour, so a long agentic run stops
+   * re-billing its whole growing prompt every turn. Mirrors the backend
+   * `providerCachePolicy`; the gateways are pass-through (no caching we rely on yet).
+   */
+  caches?: boolean
 }
 
 /** Direct vendors: the key reaches that one vendor's own endpoint. */
@@ -46,6 +53,7 @@ const DIRECT_PROVIDERS: ProviderMeta[] = [
       'Open platform.openai.com → API keys and create a new secret key.',
       'Copy the key (starts with sk-…); it is shown only once.',
     ],
+    caches: true,
   },
   {
     value: 'anthropic',
@@ -55,6 +63,7 @@ const DIRECT_PROVIDERS: ProviderMeta[] = [
       'Open console.anthropic.com → Settings → API Keys and create a key.',
       'Copy the key (starts with sk-ant-…).',
     ],
+    caches: true,
   },
   {
     value: 'qwen',
@@ -64,6 +73,7 @@ const DIRECT_PROVIDERS: ProviderMeta[] = [
       'Open the DashScope console (international) → API-KEY and create a key.',
       'Copy the key; it authenticates the OpenAI-compatible Qwen endpoint.',
     ],
+    caches: true,
   },
   {
     value: 'deepseek',
@@ -73,6 +83,7 @@ const DIRECT_PROVIDERS: ProviderMeta[] = [
       'Open platform.deepseek.com → API keys and create a key.',
       'Copy the key (starts with sk-…).',
     ],
+    caches: true,
   },
   {
     value: 'moonshot',
@@ -267,6 +278,14 @@ async function remove(k: ApiKey) {
         </a>
       </li>
     </ol>
+
+    <!-- caching capability: connecting a direct key that caches upgrades its models to
+         the caching flavour, so long agentic runs stop re-billing the whole prompt. -->
+    <p v-if="selected.caches" class="flex items-center gap-1.5 text-[12px] text-emerald-400/90">
+      <UIcon name="i-lucide-zap" class="h-3.5 w-3.5 shrink-0" />
+      Enables prompt caching for {{ selected.label }} models — a long multi-turn run reuses its
+      cached prompt prefix instead of re-sending it every turn.
+    </p>
 
     <!-- add form -->
     <div class="space-y-2">

@@ -674,6 +674,24 @@ export function progressGuardLimitsFromEnv(
 }
 
 /**
+ * Apply per-knob overrides onto a base set of guard limits. Only the knobs present in
+ * `overrides` win; an absent/undefined knob keeps the base value. The backend sets these
+ * per agent kind and only ever LOOSENS them (a read-heavy kind tolerates more web /
+ * exploration), so a legitimately-progressing run isn't killed for its normal pattern.
+ */
+export function mergeGuardLimits(
+  base: ProgressGuardLimits,
+  overrides: Partial<ProgressGuardLimits> | undefined,
+): ProgressGuardLimits {
+  if (!overrides) return base
+  return {
+    maxToolCallsWithoutEdit: overrides.maxToolCallsWithoutEdit ?? base.maxToolCallsWithoutEdit,
+    maxConsecutiveErrors: overrides.maxConsecutiveErrors ?? base.maxConsecutiveErrors,
+    maxConsecutiveWebCalls: overrides.maxConsecutiveWebCalls ?? base.maxConsecutiveWebCalls,
+  }
+}
+
+/**
  * Live anti-rabbithole guard: fed each streamed Pi event, it returns a diagnostic
  * reason the moment a run has plainly stopped making progress, so the harness can
  * kill Pi early instead of letting it burn the whole budget (and then surface a

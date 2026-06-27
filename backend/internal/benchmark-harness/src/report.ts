@@ -16,11 +16,21 @@ export interface ReportRow {
   latencyMs: number
   inputTokens?: number
   outputTokens?: number
+  /** Input tokens served from the provider's prefix cache (0 on a cache-less route). */
+  cachedInputTokens?: number
+  /** cachedInputTokens / inputTokens, 0..1; undefined when there were no input tokens. */
+  cacheHitRate?: number
   costEur?: number
   error?: string
   score?: number
   scores?: Record<string, number>
   notes?: string
+}
+
+/** cachedInputTokens / inputTokens (0..1), or undefined when there are no input tokens. */
+function cacheHitRate(usage: CandidateResult['usage']): number | undefined {
+  if (!usage || !usage.inputTokens) return undefined
+  return Math.min(1, (usage.cachedInputTokens ?? 0) / usage.inputTokens)
 }
 
 function buildRows(candidates: CandidateResult[], grades: CellGrade[]): ReportRow[] {
@@ -38,6 +48,8 @@ function buildRows(candidates: CandidateResult[], grades: CellGrade[]): ReportRo
       latencyMs: c.latencyMs,
       inputTokens: c.usage?.inputTokens,
       outputTokens: c.usage?.outputTokens,
+      cachedInputTokens: c.usage?.cachedInputTokens,
+      cacheHitRate: cacheHitRate(c.usage),
       costEur: c.costEur,
       error: c.error,
       score: grade ? (grade.weightedTotal ?? weightedTotal(c.cell.task, grade.scores)) : undefined,
@@ -59,6 +71,7 @@ function renderTaskTable(task: TaskType, rows: ReportRow[]): string {
     'Score',
     ...dims.map((d) => d.label),
     'Latency (ms)',
+    'Cache hit',
     'Cost (€)',
   ]
   const sep = header.map(() => '---')
@@ -72,6 +85,9 @@ function renderTaskTable(task: TaskType, rows: ReportRow[]): string {
         r.error ? '⚠ failed' : fmt(r.score),
         ...dims.map((d) => fmt(r.scores?.[d.key], 0)),
         String(r.latencyMs),
+        // Cache hit rate as a %, or — when the route reports no cached tokens at all
+        // (a cache-less provider like Workers AI, the whole point of the dimension).
+        typeof r.cacheHitRate === 'number' ? `${Math.round(r.cacheHitRate * 100)}%` : '—',
         fmt(r.costEur, 4),
       ].join(' | '),
     )

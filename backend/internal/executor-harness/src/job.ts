@@ -60,6 +60,32 @@ function str(value: unknown, path: string): string {
   return value
 }
 
+/** A positive finite integer, or undefined for any other input (silently ignored). */
+function posInt(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : undefined
+}
+
+/**
+ * Parse the optional per-job progress-guard overrides. Each knob is independently
+ * clamped to a positive int; a malformed value is dropped (the run keeps the env /
+ * default for that knob). Returns undefined when nothing usable was supplied so the
+ * job body stays sparse.
+ */
+function parseGuardLimits(value: unknown): GuardLimitsSpec | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const o = value as Record<string, unknown>
+  const spec: GuardLimitsSpec = {}
+  const noEdit = posInt(o.maxToolCallsWithoutEdit)
+  const errors = posInt(o.maxConsecutiveErrors)
+  const web = posInt(o.maxConsecutiveWebCalls)
+  if (noEdit !== undefined) spec.maxToolCallsWithoutEdit = noEdit
+  if (errors !== undefined) spec.maxConsecutiveErrors = errors
+  if (web !== undefined) spec.maxConsecutiveWebCalls = web
+  return Object.keys(spec).length > 0 ? spec : undefined
+}
+
 /**
  * Parse the shared per-job auth fields, validating per harness: a subscription
  * harness (`claude-code` / `codex`) requires `subscriptionToken`; the default Pi
@@ -334,6 +360,22 @@ export interface AgentJob extends HarnessAuthFields {
    * for the `coder` dispatch when the companion is enabled. Absent ⇒ no follow-up streaming.
    */
   streamFollowUps?: boolean
+  /**
+   * Per-job overrides for the anti-rabbithole progress guard, set by the backend per
+   * AGENT KIND (a read-heavy kind tolerates more web/exploration before it counts as a
+   * stall). Each knob is optional and falls back to the env / built-in default
+   * ({@link progressGuardLimitsFromEnv}); only the knobs present here override. The
+   * backend only ever LOOSENS these (never tightens), so a legitimately-progressing run
+   * isn't killed for a kind's normal working pattern. Absent ⇒ env/default for all knobs.
+   */
+  guardLimits?: GuardLimitsSpec
+}
+
+/** Per-job, per-knob progress-guard overrides (see {@link AgentJob.guardLimits}). */
+export interface GuardLimitsSpec {
+  maxToolCallsWithoutEdit?: number
+  maxConsecutiveErrors?: number
+  maxConsecutiveWebCalls?: number
 }
 
 /** The generic agent response. `custom` carries a structured explore result. */
@@ -460,6 +502,7 @@ export function parseAgentJob(input: unknown): AgentJob {
   const infra = parseAgentInfraSpec(o.infra)
   const bootstrap = parseAgentBootstrapSpec(o.bootstrap)
   const contextFiles = parseContextFiles(o.contextFiles)
+  const guardLimits = parseGuardLimits(o.guardLimits)
   const job: AgentJob = {
     jobId: str(o.jobId, 'jobId'),
     mode,
@@ -488,6 +531,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     ...(o.noChangesIsError === false ? { noChangesIsError: false } : {}),
     ...(o.persistentCheckout === true ? { persistentCheckout: true } : {}),
     ...(o.streamFollowUps === true ? { streamFollowUps: true } : {}),
+    ...(guardLimits ? { guardLimits } : {}),
   }
   assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
   if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')

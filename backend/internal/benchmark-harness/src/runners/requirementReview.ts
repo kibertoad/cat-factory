@@ -31,7 +31,13 @@ export async function runRequirementReview(
     : '(no review items raised — requirements judged complete)'
   return {
     output: rendered,
-    usage: { inputTokens: usage.inputTokens ?? 0, outputTokens: usage.outputTokens ?? 0 },
+    usage: {
+      inputTokens: usage.inputTokens ?? 0,
+      outputTokens: usage.outputTokens ?? 0,
+      // The AI SDK surfaces provider prefix-cache hits here (0 on a cache-less route),
+      // so the report can quantify the caching dimension across providers.
+      cachedInputTokens: usage.cachedInputTokens ?? 0,
+    },
     meta: { itemCount: items.length, raw: text },
   }
 }

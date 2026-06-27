@@ -1,35 +1,18 @@
-// Prompt-caching policy, shared by BOTH AI-call paths so they treat a provider the
-// same way: the in-container path (Pi → the LLM proxy, OpenAI Chat Completions over
-// HTTP) and the inline path (the Vercel AI SDK via the ModelProvider port). A
-// container agent re-sends its whole growing prompt every turn, so on the providers
-// that cache it the stable prefix should be a cache hit rather than re-billed input
-// — but only if we (a) keep the prefix byte-stable and (b) give the provider the
-// hint it needs. This module is the single source of truth for "how does provider X
-// cache", so neither path hard-codes provider ids.
+// Prompt-caching request/response helpers, shared by BOTH AI-call paths so they treat
+// a provider the same way: the in-container path (Pi → the LLM proxy, OpenAI Chat
+// Completions over HTTP) and the inline path (the Vercel AI SDK via the ModelProvider
+// port). A container agent re-sends its whole growing prompt every turn, so on the
+// providers that cache it the stable prefix should be a cache hit rather than re-billed
+// input — but only if we (a) keep the prefix byte-stable and (b) give the provider the
+// hint it needs.
+//
+// The classification of HOW a provider caches lives in the kernel
+// (`providerCachePolicy`) because the model catalog also needs it (to project a
+// per-model `cachesPrompts` capability the UI surfaces); it is re-exported here so the
+// existing `@cat-factory/agents` import sites keep working.
+import { type CachePolicy, providerCachePolicy } from '@cat-factory/kernel'
 
-export type CachePolicy =
-  // Caches automatically on an exact prefix match; some accept a routing key to pin
-  // multi-turn calls to the same cached prefix (OpenAI), others need nothing but a
-  // stable prefix (DeepSeek, Qwen/DashScope).
-  | 'auto-prefix'
-  // Requires explicit `cache_control` breakpoints in the request (Anthropic).
-  | 'explicit-anthropic'
-  // No caching we rely on (Workers AI third-party models, Moonshot, unknown).
-  | 'none'
-
-/** How `provider` caches prompt prefixes. The single source of truth for both paths. */
-export function providerCachePolicy(provider: string): CachePolicy {
-  switch (provider) {
-    case 'openai':
-    case 'deepseek':
-    case 'qwen':
-      return 'auto-prefix'
-    case 'anthropic':
-      return 'explicit-anthropic'
-    default:
-      return 'none'
-  }
-}
+export { type CachePolicy, providerCachePolicy }
 
 /**
  * Extra OpenAI Chat Completions params that route a multi-turn conversation to the

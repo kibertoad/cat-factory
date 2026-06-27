@@ -6,6 +6,7 @@ import {
   isLocalRunner,
 } from '@cat-factory/contracts'
 import type { HarnessKind, ModelRef } from '../ports/model-provider.js'
+import { providerCachesPrompts } from './cache-policy.js'
 
 // How each subscription vendor authenticates and which harness runs it. Claude
 // Code is an Anthropic-API client that honours ANTHROPIC_BASE_URL +
@@ -543,6 +544,11 @@ function toOption(
     providerLabel: variant.providerLabel,
     provider: variant.ref.provider,
     model: variant.ref.model,
+    // Whether the effective flavour's provider caches the (re-sent) prompt prefix —
+    // false on a Cloudflare/Workers-AI flavour, true once a direct key upgrades the
+    // same model to its caching `direct` flavour. The UI surfaces this so a user can
+    // see (and act on) the hot path running cache-less.
+    cachesPrompts: providerCachesPrompts(variant.ref.provider),
     ...(variant.vendor ? { vendor: variant.vendor } : {}),
     ...(cost ? { cost } : {}),
     ...(variant.ref.contextTokens ? { contextTokens: variant.ref.contextTokens } : {}),
@@ -559,6 +565,7 @@ function toOption(
       providerLabel: SUBSCRIPTION_VENDORS[model.subscription.vendor].label,
       provider: subRef.provider,
       model: subRef.model,
+      cachesPrompts: providerCachesPrompts(subRef.provider),
       ...(subCost ? { cost: subCost } : {}),
       ...(subRef.contextTokens ? { contextTokens: subRef.contextTokens } : {}),
     }

@@ -62,6 +62,9 @@ export {
   hasTrait,
   traitGuidanceFor,
 } from './agents/kinds/traits.js'
+// Per-agent-kind execution tuning (today: progress-guard knobs) folded into a container
+// dispatch's job body. Loosen-only, so a kind's normal pattern isn't killed mid-progress.
+export { type AgentTuning, type AgentGuardTuning, agentTuningFor } from './agents/kinds/tuning.js'
 // Agent configuration-contribution catalog (the descriptors surfaced on task
 // creation / inspector, frozen once the contributing step runs).
 export {

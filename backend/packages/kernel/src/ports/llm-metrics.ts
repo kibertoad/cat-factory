@@ -100,6 +100,8 @@ export interface LlmCallMetricSummary {
   calls: number
   /** Sum of prompt (input) tokens. */
   promptTokens: number
+  /** Sum of prompt tokens served from the provider's prefix cache (subset of promptTokens). */
+  cachedPromptTokens: number
   /** Sum of completion (output) tokens. */
   completionTokens: number
   /** The largest single completion the model produced (closest approach to the limit). */

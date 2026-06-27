@@ -43,6 +43,16 @@ export function transportOverheadRatio(upstreamMs: number, overheadMs: number): 
   return total > 0 ? overheadMs / total : null
 }
 
+/**
+ * Share of prompt tokens served from the provider's prefix cache (0..1), or null when
+ * there were no prompt tokens. A low rate on a multi-turn run flags a cache-less hot
+ * path (e.g. a Workers-AI flavour) re-billing the whole prompt every turn.
+ */
+export function cacheHitRate(cachedPromptTokens: number, promptTokens: number): number | null {
+  if (promptTokens <= 0) return null
+  return Math.min(1, cachedPromptTokens / promptTokens)
+}
+
 // --- Delta prompt storage --------------------------------------------------
 // A container agent re-sends its WHOLE growing conversation on every model call,
 // so storing each call's full prompt is hugely redundant — in a real 30-call run
@@ -189,6 +199,7 @@ export function buildLlmMetricsExport(
 
   const insights: LlmExportInsight[] = [...byKind.entries()].map(([agentKind, kindCalls]) => {
     const promptTokens = sum(kindCalls, (c) => c.promptTokens)
+    const cachedPromptTokens = sum(kindCalls, (c) => c.cachedPromptTokens)
     const completionTokens = sum(kindCalls, (c) => c.completionTokens)
     const peakCompletionTokens = kindCalls.reduce((m, c) => Math.max(m, c.completionTokens), 0)
     const maxOutputTokens = maxNullable(kindCalls.map((c) => c.requestMaxTokens))
@@ -198,6 +209,8 @@ export function buildLlmMetricsExport(
       agentKind,
       calls: kindCalls.length,
       promptTokens,
+      cachedPromptTokens,
+      cacheHitRate: cacheHitRate(cachedPromptTokens, promptTokens),
       completionTokens,
       peakCompletionTokens,
       maxOutputTokens,
@@ -221,6 +234,11 @@ export function buildLlmMetricsExport(
     totals: {
       calls: calls.length,
       promptTokens: sum(calls, (c) => c.promptTokens),
+      cachedPromptTokens: sum(calls, (c) => c.cachedPromptTokens),
+      cacheHitRate: cacheHitRate(
+        sum(calls, (c) => c.cachedPromptTokens),
+        sum(calls, (c) => c.promptTokens),
+      ),
       completionTokens: sum(calls, (c) => c.completionTokens),
       upstreamMs,
       overheadMs,

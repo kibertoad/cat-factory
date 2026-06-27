@@ -43,6 +43,13 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
       <span class="tabular-nums text-slate-400" title="Prompt / completion tokens">
         {{ formatTokens(m.promptTokens) }}↑ {{ formatTokens(m.completionTokens) }}↓
       </span>
+      <span
+        v-if="(m.cachedPromptTokens ?? 0) > 0"
+        class="tabular-nums text-emerald-400/80"
+        title="Prompt tokens served from the provider's cache"
+      >
+        ({{ formatTokens(m.cachedPromptTokens ?? 0) }} cached)
+      </span>
       <div class="ml-auto flex items-center gap-1">
         <UBadge v-if="m.errors > 0" color="error" variant="subtle" size="sm">
           {{ m.errors }} error{{ m.errors === 1 ? '' : 's' }}

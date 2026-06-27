@@ -8,6 +8,7 @@ import { readFile } from 'node:fs/promises'
 import {
   DEFAULT_PROGRESS_GUARD_LIMITS,
   ProgressGuard,
+  mergeGuardLimits,
   parsePiOutput,
   parseTodoProgress,
   progressGuardLimitsFromEnv,
@@ -707,6 +708,27 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     expect(progressGuardLimitsFromEnv({ JOB_MAX_TOOLCALLS_WITHOUT_EDIT: '-3' })).toEqual(
       DEFAULT_PROGRESS_GUARD_LIMITS,
     )
+  })
+})
+
+describe('mergeGuardLimits (per-kind override over the base)', () => {
+  it('returns the base unchanged when there are no overrides', () => {
+    expect(mergeGuardLimits(DEFAULT_PROGRESS_GUARD_LIMITS, undefined)).toEqual(
+      DEFAULT_PROGRESS_GUARD_LIMITS,
+    )
+  })
+
+  it('applies only the knobs present in the override, keeping the base for the rest', () => {
+    const merged = mergeGuardLimits(DEFAULT_PROGRESS_GUARD_LIMITS, { maxConsecutiveErrors: 20 })
+    expect(merged).toEqual({
+      ...DEFAULT_PROGRESS_GUARD_LIMITS,
+      maxConsecutiveErrors: 20,
+    })
+    // The unspecified knobs are untouched (a partial override is not all-or-nothing).
+    expect(merged.maxToolCallsWithoutEdit).toBe(
+      DEFAULT_PROGRESS_GUARD_LIMITS.maxToolCallsWithoutEdit,
+    )
+    expect(merged.maxConsecutiveWebCalls).toBe(DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveWebCalls)
   })
 })
 
