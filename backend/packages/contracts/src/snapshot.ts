@@ -125,7 +125,8 @@ export const workspaceSnapshotSchema = v.object({
    * SPA compares each persisted built-in's `version` against this to detect a stale copy and
    * offer a reseed ("newer version available"). A persisted `version` below the catalog value
    * (or absent → treated as 0) means an update is available. Static, workspace-independent;
-   * attached by the facade, so optional on the wire.
+   * built by the shared `WorkspaceService.snapshot()` (so it is automatically symmetric across
+   * runtimes), but optional on the wire for forward-compatibility.
    */
   pipelineCatalogVersions: v.optional(v.record(v.string(), v.number())),
 })

@@ -303,6 +303,28 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     color: '#22d3ee',
     description: 'Maps the repository into the service → modules blueprint.',
   },
+  // A read-only repository audit that emits a prioritized findings report. Not a palette
+  // archetype (it is only seeded into the recurring tech-debt pipeline), so it lives here
+  // for run-timeline / saved-pipeline display rather than in AGENT_ARCHETYPES.
+  analysis: {
+    kind: 'analysis',
+    label: 'Analyst',
+    icon: 'i-lucide-search-code',
+    color: '#818cf8',
+    description:
+      'Audits the repository read-only and emits a prioritized findings report (drives the tech-debt pipeline).',
+  },
+  // A one-shot engine step that files a tracker ticket (GitHub issue / Jira) from the
+  // preceding analysis before implementation. Runs no model itself; seeded only into the
+  // tech-debt pipeline, so it is a display-metadata system kind, not a palette archetype.
+  tracker: {
+    kind: 'tracker',
+    label: 'Issue Tracker',
+    icon: 'i-lucide-ticket',
+    color: '#fb923c',
+    description:
+      'Files a tracker ticket (GitHub issue / Jira) from the analysis before work starts.',
+  },
   conflicts: {
     kind: 'conflicts',
     label: 'Conflicts Gate',

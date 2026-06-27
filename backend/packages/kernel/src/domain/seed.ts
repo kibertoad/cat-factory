@@ -463,8 +463,12 @@ export function seedPipelines(): Pipeline[] {
   // the current catalog and offered a reseed when this definition moves ahead. To ship a new
   // version of a built-in, bump that pipeline's own `version` here (an explicit `version: N`
   // on the object overrides this default) — that increment is the signal the app's reseed
-  // prompt keys off.
-  return mergeRegisteredPipelines(builtins.map((p) => ({ version: 1, ...p, builtin: true })))
+  // prompt keys off. The default is applied to EVERY built-in in the merged catalog — including
+  // ones contributed by `registerPipeline` — so a registered built-in is version-tracked +
+  // reseedable too, while custom (non-built-in) registered pipelines stay versionless.
+  return mergeRegisteredPipelines(builtins.map((p) => ({ ...p, builtin: true }))).map((p) =>
+    p.builtin ? { ...p, version: p.version ?? 1 } : p,
+  )
 }
 
 /** Pipeline id of the blueprint-only run kicked off after a successful bootstrap. */
