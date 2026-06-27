@@ -101,10 +101,13 @@ describe('requirements review HTTP surface', () => {
 
   it('gates incorporation until every item is settled', async () => {
     const { app, ws, blockId } = await setup()
-    // One item still open → incorporate is rejected with a validation error.
+    // One item still open → incorporate is rejected with a validation error. Send the empty
+    // JSON body the real client sends (`{}`); the contract requires a JSON body, so the guard
+    // (422) is what we're asserting, not the empty-body request rejection (400).
     const blocked = await app.call(
       'POST',
       `/workspaces/${ws}/blocks/${blockId}/requirement-review/incorporate`,
+      {},
     )
     expect(blocked.status).toBe(422)
     expect(JSON.stringify(blocked.body)).toContain('Answer or dismiss')

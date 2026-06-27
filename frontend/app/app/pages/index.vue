@@ -28,6 +28,7 @@ import GitHubOnboarding from '~/components/github/GitHubOnboarding.vue'
 import FragmentLibraryPanel from '~/components/fragments/FragmentLibraryPanel.vue'
 import CommandBar from '~/components/layout/CommandBar.vue'
 import IntegrationsHub from '~/components/layout/IntegrationsHub.vue'
+import PersonalSetupModal from '~/components/layout/PersonalSetupModal.vue'
 import WorkspaceSettingsPanel from '~/components/settings/WorkspaceSettingsPanel.vue'
 import AccountSettingsPanel from '~/components/settings/AccountSettingsPanel.vue'
 import ObservabilityConnectionPanel from '~/components/settings/ObservabilityConnectionPanel.vue'
@@ -189,6 +190,7 @@ watch(
       <FragmentLibraryPanel />
       <CommandBar />
       <IntegrationsHub />
+      <PersonalSetupModal />
       <WorkspaceSettingsPanel />
       <AccountSettingsPanel />
       <ObservabilityConnectionPanel />

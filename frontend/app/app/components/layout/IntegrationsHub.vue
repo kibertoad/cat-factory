@@ -1,12 +1,16 @@
 <script setup lang="ts">
-// The Integrations hub: a single modal that lists every external system the
-// workspace can enable or link in — replacing the per-integration buttons that
-// used to clutter the left navbar. Each row reuses the existing per-integration
-// panel handlers on the `ui` store (so the integrations themselves are unchanged);
-// opening one closes the hub and reveals that integration's own panel/modal.
+// The Integrations hub: a single modal that lists every external system the WORKSPACE can
+// enable or link in. Each row reuses the existing per-integration panel handlers on the `ui`
+// store (so the integrations themselves are unchanged); opening one closes the hub and
+// reveals that integration's own panel/modal.
 //
-// Sections gate on the same `available` probes the navbar used, so a system that
-// the backend has turned off simply doesn't appear here.
+// Sections gate on the same `available` probes the navbar used, so a system that the backend
+// has turned off simply doesn't appear here.
+//
+// Scope split: per-USER connections (a personal GitHub token, own-machine runners, personal
+// subscriptions) now live in the "My setup" hub (UserMenu → My setup), NOT here — keeping
+// this hub purely workspace-scoped. When auth is disabled there is no UserMenu to host them,
+// so a "Personal (only you)" group falls back into this hub so they stay reachable.
 const ui = useUiStore()
 const auth = useAuthStore()
 const github = useGitHubStore()
@@ -20,6 +24,11 @@ const userSecrets = useUserSecretsStore()
 const apiKeys = useApiKeysStore()
 const workspace = useWorkspaceStore()
 
+// True when the per-user "My setup" hub is reachable (UserMenu renders only when signed in).
+// When false (auth disabled / local mode) we fold the personal rows back into this hub so
+// nothing becomes unreachable.
+const personalHubReachable = computed(() => !!auth.user)
+
 // The selected filing tracker, as a badge label ("GitHub Issues" / "Jira").
 const trackerLabel = computed(() => {
   if (tracker.settings.tracker === 'github') return 'GitHub Issues'
@@ -27,12 +36,17 @@ const trackerLabel = computed(() => {
   return undefined
 })
 
+// Free-text filter over the rows (label + description), so a workspace with many enabled
+// systems stays scannable. Reset when the hub re-opens.
+const query = ref('')
+
 // The observability connection status drives the hub's connected badge. Load it
 // lazily when the hub opens (the secret-less connection view is cheap).
 watch(
   () => ui.integrationsOpen,
   (isOpen) => {
     if (isOpen) {
+      query.value = ''
       void releaseHealth.ensureLoaded().catch(() => {})
       void providerConnections.ensureLoaded().catch(() => {})
       void userSecrets.load().catch(() => {})
@@ -47,8 +61,10 @@ const open = computed({
   set: (v: boolean) => (v ? ui.openIntegrations() : ui.closeIntegrations()),
 })
 
-// One integration row. `status` is the connected-state line shown under the label
-// (an account/team name, "Connected", or a hint); `connected` drives the badge.
+// One integration row. `connected` drives the green badge (`status` is its line — an
+// account/team name or "Connected"); `attention` drives an amber badge (e.g. a source that
+// is available but turned off) with `attentionLabel`. `recommended` tags an essential row
+// with a "Recommended" chip while the workspace has nothing connected yet.
 interface IntegrationItem {
   key: string
   icon: string
@@ -56,12 +72,27 @@ interface IntegrationItem {
   description: string
   status?: string
   connected?: boolean
+  attention?: boolean
+  attentionLabel?: string
+  recommended?: boolean
+  onClick: () => void
+}
+
+// A group may carry a small de-emphasised footer LINK (workspace config that isn't itself an
+// integration, e.g. the issue-tracker settings) rendered under its rows rather than as a
+// full row competing with the connections.
+interface IntegrationFooterLink {
+  key: string
+  icon: string
+  label: string
+  status?: string
   onClick: () => void
 }
 
 interface IntegrationGroup {
   title: string
   items: IntegrationItem[]
+  footerLink?: IntegrationFooterLink
 }
 
 // Run an integration's open handler, then dismiss the hub so its panel takes over.
@@ -87,21 +118,15 @@ const groups = computed<IntegrationGroup[]>(() => {
         description: 'One gateway to 300+ models — add your key and enable models in one place.',
         status: openRouterKeyConnected ? 'Key connected' : undefined,
         connected: openRouterKeyConnected,
+        recommended: true,
         onClick: () => go(ui.openOpenRouter),
       },
       {
         key: 'vendors',
         icon: 'i-lucide-key-round',
         label: 'Vendors & keys',
-        description: 'LLM vendor subscriptions and provider API keys.',
+        description: 'Workspace LLM subscriptions and provider API keys.',
         onClick: () => go(ui.openVendorCredentials),
-      },
-      {
-        key: 'local-runners',
-        icon: 'i-lucide-server',
-        label: 'My local runners',
-        description: 'Your own-machine model runners (Ollama, LM Studio, vLLM…).',
-        onClick: () => go(ui.openLocalModels),
       },
     ],
   })
@@ -116,21 +141,8 @@ const groups = computed<IntegrationGroup[]>(() => {
       description: 'Connect the workspace’s GitHub App, browse repos, PRs and issues.',
       status: github.connected ? github.connection?.accountLogin : undefined,
       connected: github.connected,
+      recommended: true,
       onClick: () => go(ui.openGitHub),
-    })
-  }
-  // Per-user GitHub PAT — works on every runtime (used for runs you initiate). Always
-  // offered; the badge reflects whether the signed-in user has stored one.
-  {
-    const pat = userSecrets.statusFor('github_pat')
-    code.push({
-      key: 'github-pat',
-      icon: 'i-lucide-key-round',
-      label: 'My GitHub token',
-      description: 'A personal access token used for runs you start (pushes, PRs, CI, merge).',
-      status: pat ? 'Connected' : undefined,
-      connected: !!pat,
-      onClick: () => go(ui.openUserSecrets),
     })
   }
   if (code.length) out.push({ title: 'Source control', items: code })
@@ -180,10 +192,11 @@ const groups = computed<IntegrationGroup[]>(() => {
       icon: src.icon,
       label: src.label,
       description: `Link ${src.label} to import and reference tracker issues.`,
-      // Available + enabled ⇒ offered (green); available + off ⇒ "Disabled";
+      // Available + enabled ⇒ offered (green); available + off ⇒ "Disabled" (amber);
       // not available ⇒ no badge (Jira needs connecting; GitHub needs its App).
-      status: src.available ? (src.enabled ? undefined : 'Disabled') : undefined,
       connected: src.available && src.enabled,
+      attention: src.available && !src.enabled,
+      attentionLabel: 'Disabled',
       onClick: () => go(() => ui.openTaskConnect(src.source)),
     }))
     if (tasks.anyOffered) {
@@ -195,16 +208,19 @@ const groups = computed<IntegrationGroup[]>(() => {
         onClick: () => go(() => ui.openTaskImport(null)),
       })
     }
-    trackers.push({
-      key: 'task:tracker',
-      icon: 'i-lucide-list-checks',
-      label: 'Issue tracker settings',
-      description: 'Choose the filing tracker, enable linking sources, and configure writeback.',
-      status: trackerLabel.value,
-      connected: tracker.settings.tracker !== null,
-      onClick: () => go(() => ui.openWorkspaceSettings('tracker')),
+    // Choosing the filing tracker / writeback is workspace CONFIG, not an integration, so it
+    // sits as a quiet footer link under the sources rather than a competing row.
+    out.push({
+      title: 'Task trackers',
+      items: trackers,
+      footerLink: {
+        key: 'task:tracker',
+        icon: 'i-lucide-list-checks',
+        label: 'Issue tracker settings',
+        status: trackerLabel.value,
+        onClick: () => go(() => ui.openWorkspaceSettings('tracker')),
+      },
     })
-    out.push({ title: 'Task trackers', items: trackers })
   }
 
   // --- Observability ---------------------------------------------------------
@@ -271,7 +287,72 @@ const groups = computed<IntegrationGroup[]>(() => {
   }
   if (infra.length) out.push({ title: 'Infrastructure', items: infra })
 
+  // --- Personal (only you) — fallback when there is no UserMenu to host "My setup" -------
+  // Per-user connections normally live in the My-setup hub; with auth disabled they fold in
+  // here so they stay reachable. (The badge reflects the signed-in user's stored secret.)
+  if (!personalHubReachable.value) {
+    const pat = !!userSecrets.statusFor('github_pat')
+    out.push({
+      title: 'Personal (only you)',
+      items: [
+        {
+          key: 'github-pat',
+          icon: 'i-lucide-key-round',
+          label: 'My GitHub token',
+          description: 'A personal access token used for runs you start (pushes, PRs, CI, merge).',
+          status: pat ? 'Connected' : undefined,
+          connected: pat,
+          onClick: () => go(ui.openUserSecrets),
+        },
+        {
+          key: 'local-runners',
+          icon: 'i-lucide-server',
+          label: 'My local runners',
+          description: 'Your own-machine model runners (Ollama, LM Studio, vLLM…).',
+          onClick: () => go(ui.openLocalModels),
+        },
+      ],
+    })
+  }
+
   return out
+})
+
+// Sort connected rows first, then amber "attention", then idle — a stable rank so each
+// group reads "what's live" top-down without reshuffling unrelated rows.
+function stateRank(item: IntegrationItem): number {
+  if (item.connected) return 0
+  if (item.attention) return 1
+  return 2
+}
+
+const allItems = computed(() => groups.value.flatMap((g) => g.items))
+const anyConnected = computed(() => allItems.value.some((i) => i.connected))
+// Essential rows still unconnected — surfaced as the empty-workspace get-started shortcuts.
+const recommendedActions = computed(() =>
+  allItems.value.filter((i) => i.recommended && !i.connected),
+)
+
+function matches(text: string, q: string): boolean {
+  return text.toLowerCase().includes(q)
+}
+
+// Groups after the search filter + connected-first sort. A footer link is kept only when it
+// also matches the query (or the query is empty); a group with no surviving rows/link drops.
+const filteredGroups = computed<IntegrationGroup[]>(() => {
+  const q = query.value.trim().toLowerCase()
+  return groups.value
+    .map((g) => {
+      const items = (
+        q ? g.items.filter((i) => matches(i.label, q) || matches(i.description, q)) : g.items
+      )
+        .slice()
+        .sort((a, b) => stateRank(a) - stateRank(b))
+      const footerLink =
+        g.footerLink && (!q || matches(g.footerLink.label, q)) ? g.footerLink : undefined
+      return { ...g, items, footerLink }
+    })
+    .filter((g) => g.items.length || g.footerLink)
 })
 </script>
 
@@ -283,7 +364,47 @@ const groups = computed<IntegrationGroup[]>(() => {
           Connect and manage the external systems this workspace can link in.
         </p>
 
-        <section v-for="group in groups" :key="group.title">
+        <!-- Get-started cue: an empty workspace gets the two essentials up front so the first
+             run isn't blocked on hunting for them. Hidden once anything is connected. -->
+        <div
+          v-if="!anyConnected && recommendedActions.length"
+          class="rounded-lg border border-primary-500/40 bg-primary-500/10 p-3"
+        >
+          <div class="mb-2 flex items-center gap-2 text-sm font-medium text-primary-200">
+            <UIcon name="i-lucide-rocket" class="h-4 w-4 shrink-0" />
+            <span>Get started</span>
+          </div>
+          <p class="mb-3 text-xs text-slate-300">
+            Connect a code source and a model provider to run your first pipeline.
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <UButton
+              v-for="item in recommendedActions"
+              :key="`rec:${item.key}`"
+              size="xs"
+              color="primary"
+              variant="soft"
+              :icon="item.icon"
+              @click="item.onClick()"
+            >
+              {{ item.label }}
+            </UButton>
+          </div>
+        </div>
+
+        <UInput
+          v-model="query"
+          icon="i-lucide-search"
+          size="sm"
+          placeholder="Search integrations…"
+          class="w-full"
+        />
+
+        <p v-if="!filteredGroups.length" class="px-1 py-6 text-center text-sm text-slate-500">
+          No integrations match “{{ query }}”.
+        </p>
+
+        <section v-for="group in filteredGroups" :key="group.title">
           <h3 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             {{ group.title }}
           </h3>
@@ -302,12 +423,39 @@ const groups = computed<IntegrationGroup[]>(() => {
                   <UBadge v-if="item.connected" color="success" variant="subtle" size="sm">
                     {{ item.status || 'Connected' }}
                   </UBadge>
+                  <UBadge v-else-if="item.attention" color="warning" variant="subtle" size="sm">
+                    {{ item.attentionLabel || 'Needs attention' }}
+                  </UBadge>
+                  <span v-else class="text-[11px] text-slate-500">Not connected</span>
+                  <UBadge
+                    v-if="!anyConnected && item.recommended && !item.connected"
+                    color="primary"
+                    variant="subtle"
+                    size="sm"
+                  >
+                    Recommended
+                  </UBadge>
                 </div>
                 <p class="truncate text-xs text-slate-400">{{ item.description }}</p>
               </div>
               <UIcon name="i-lucide-chevron-right" class="h-4 w-4 shrink-0 text-slate-500" />
             </button>
           </div>
+
+          <!-- De-emphasised workspace-config link (e.g. issue tracker settings). -->
+          <button
+            v-if="group.footerLink"
+            type="button"
+            class="mt-1.5 flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-xs text-slate-400 transition hover:bg-slate-900/60 hover:text-slate-200"
+            @click="group.footerLink.onClick()"
+          >
+            <UIcon :name="group.footerLink.icon" class="h-3.5 w-3.5 shrink-0" />
+            <span class="flex-1 truncate">{{ group.footerLink.label }}</span>
+            <span v-if="group.footerLink.status" class="shrink-0 text-slate-500">{{
+              group.footerLink.status
+            }}</span>
+            <UIcon name="i-lucide-chevron-right" class="h-3.5 w-3.5 shrink-0 text-slate-600" />
+          </button>
         </section>
       </div>
     </template>

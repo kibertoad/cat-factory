@@ -91,6 +91,14 @@ export const useUiStore = defineStore('ui', () => {
   // is one. Every direct `open*` below resets it; `openFromIntegrations` sets it.
   const cameFromIntegrations = ref(false)
 
+  // Personal "My setup" hub: a user-scoped sibling of the Integrations hub, listing the
+  // signed-in user's own connections (GitHub PAT, local runners, personal subscriptions)
+  // separated out of the workspace-scoped Integrations hub. `cameFromPersonal` is the
+  // symmetric came-from marker, so a panel reached from here renders a "Back to My setup"
+  // control instead of "Back to Integrations".
+  const personalSetupOpen = ref(false)
+  const cameFromPersonal = ref(false)
+
   // Workspace-settings modal: a single tabbed window gathering the workspace-wide
   // config (workspace / merge thresholds / issue writeback / service best practices).
   // `workspaceSettingsTab` lets other surfaces deep-link straight to a tab.
@@ -112,8 +120,10 @@ export const useUiStore = defineStore('ui', () => {
   const providerConnectionKind = ref<'environment' | 'runner-pool' | null>(null)
   const modelConfigOpen = ref(false)
   // LLM-vendor subscription credentials (the token pool powering the Claude Code
-  // / Codex harnesses).
+  // / Codex harnesses). `vendorCredentialsTab` lets a caller deep-link to one tab —
+  // the user-scoped "My subscriptions" entry opens straight onto the `personal` tab.
   const vendorCredentialsOpen = ref(false)
+  const vendorCredentialsTab = ref('pool')
   // Per-user settings panel: the signed-in user's own-machine local model runners.
   const localModelsOpen = ref(false)
   // Local-mode-only settings panel: the warm-container pool sizing + per-repo checkout reuse
@@ -267,7 +277,7 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   function openDocumentConnect(source: DocumentSourceKind) {
-    cameFromIntegrations.value = false
+    resetHubReturn()
     documentConnect.value = { source }
   }
   function closeDocumentConnect() {
@@ -277,7 +287,7 @@ export const useUiStore = defineStore('ui', () => {
     targetFrameId: string | null = null,
     source: DocumentSourceKind | null = null,
   ) {
-    cameFromIntegrations.value = false
+    resetHubReturn()
     documentImport.value = { source, targetFrameId }
   }
   function closeDocumentImport() {
@@ -294,14 +304,14 @@ export const useUiStore = defineStore('ui', () => {
     spawnPreview.value = null
   }
   function openTaskConnect(source: TaskSourceKind) {
-    cameFromIntegrations.value = false
+    resetHubReturn()
     taskConnect.value = { source }
   }
   function closeTaskConnect() {
     taskConnect.value = null
   }
   function openTaskImport(source: TaskSourceKind | null = null, containerId: string | null = null) {
-    cameFromIntegrations.value = false
+    resetHubReturn()
     taskImport.value = { source, containerId }
   }
   function closeTaskImport() {
@@ -334,14 +344,14 @@ export const useUiStore = defineStore('ui', () => {
     addServiceOpen.value = false
   }
   function openGitHub() {
-    cameFromIntegrations.value = false
+    resetHubReturn()
     githubOpen.value = true
   }
   function closeGitHub() {
     githubOpen.value = false
   }
   function openSlack() {
-    cameFromIntegrations.value = false
+    resetHubReturn()
     slackOpen.value = true
   }
   function closeSlack() {
@@ -362,14 +372,36 @@ export const useUiStore = defineStore('ui', () => {
   function toggleCommandBar() {
     commandBarOpen.value = !commandBarOpen.value
   }
+  // Clear BOTH hub came-from markers. Every direct `open*` below calls this so that a
+  // panel opened outside the hubs never grows a dead Back control, and so switching from
+  // one hub's panel to the other's clears the stale marker.
+  function resetHubReturn() {
+    resetHubReturn()
+    cameFromPersonal.value = false
+  }
   function openIntegrations() {
     // Reaching the hub itself (fresh, or via a panel's Back control) clears the
-    // came-from marker — we're at the hub, not inside a hub-spawned panel.
-    cameFromIntegrations.value = false
+    // came-from markers — we're at the hub, not inside a hub-spawned panel.
+    resetHubReturn()
     integrationsOpen.value = true
   }
   function closeIntegrations() {
     integrationsOpen.value = false
+  }
+  function openPersonalSetup() {
+    resetHubReturn()
+    personalSetupOpen.value = true
+  }
+  function closePersonalSetup() {
+    personalSetupOpen.value = false
+  }
+  // Open a user-scoped panel FROM the My-setup hub: run its open handler (which resets the
+  // markers), then mark that we came from My setup and dismiss it, so the panel's
+  // IntegrationBackTitle returns here rather than to the workspace Integrations hub.
+  function openFromPersonal(open: () => void) {
+    open()
+    cameFromPersonal.value = true
+    personalSetupOpen.value = false
   }
   // Open an integration's own panel FROM the hub: run its open handler (which resets
   // `cameFromIntegrations`), then mark that we came from the hub and dismiss it. The
@@ -380,7 +412,7 @@ export const useUiStore = defineStore('ui', () => {
     integrationsOpen.value = false
   }
   function openWorkspaceSettings(tab = 'workspace') {
-    cameFromIntegrations.value = false
+    resetHubReturn()
     workspaceSettingsTab.value = tab
     workspaceSettingsOpen.value = true
   }
@@ -391,7 +423,7 @@ export const useUiStore = defineStore('ui', () => {
     workspaceSettingsTab.value = tab
   }
   function openAccountSettings(tab = 'team') {
-    cameFromIntegrations.value = false
+    resetHubReturn()
     accountSettingsTab.value = tab
     accountSettingsOpen.value = true
   }
@@ -402,14 +434,14 @@ export const useUiStore = defineStore('ui', () => {
     accountSettingsTab.value = tab
   }
   function openObservabilityConnection() {
-    cameFromIntegrations.value = false
+    resetHubReturn()
     observabilityConnectionOpen.value = true
   }
   function closeObservabilityConnection() {
     observabilityConnectionOpen.value = false
   }
   function openProviderConnection(kind: 'environment' | 'runner-pool') {
-    cameFromIntegrations.value = false
+    resetHubReturn()
     providerConnectionKind.value = kind
   }
   function closeProviderConnection() {
@@ -421,22 +453,26 @@ export const useUiStore = defineStore('ui', () => {
   function closeModelConfig() {
     modelConfigOpen.value = false
   }
-  function openVendorCredentials() {
-    cameFromIntegrations.value = false
+  function openVendorCredentials(tab = 'pool') {
+    resetHubReturn()
+    vendorCredentialsTab.value = tab
     vendorCredentialsOpen.value = true
+  }
+  function setVendorCredentialsTab(tab: string) {
+    vendorCredentialsTab.value = tab
   }
   function closeVendorCredentials() {
     vendorCredentialsOpen.value = false
   }
   function openLocalModels() {
-    cameFromIntegrations.value = false
+    resetHubReturn()
     localModelsOpen.value = true
   }
   function closeLocalModels() {
     localModelsOpen.value = false
   }
   function openLocalModeSettings() {
-    cameFromIntegrations.value = false
+    resetHubReturn()
     localModeSettingsOpen.value = true
   }
   function closeLocalModeSettings() {
@@ -449,14 +485,14 @@ export const useUiStore = defineStore('ui', () => {
     sandboxOpen.value = false
   }
   function openUserSecrets() {
-    cameFromIntegrations.value = false
+    resetHubReturn()
     userSecretsOpen.value = true
   }
   function closeUserSecrets() {
     userSecretsOpen.value = false
   }
   function openOpenRouter() {
-    cameFromIntegrations.value = false
+    resetHubReturn()
     openRouterOpen.value = true
   }
   function closeOpenRouter() {
@@ -581,6 +617,8 @@ export const useUiStore = defineStore('ui', () => {
     commandBarOpen,
     integrationsOpen,
     cameFromIntegrations,
+    personalSetupOpen,
+    cameFromPersonal,
     workspaceSettingsOpen,
     workspaceSettingsTab,
     accountSettingsOpen,
@@ -589,6 +627,7 @@ export const useUiStore = defineStore('ui', () => {
     providerConnectionKind,
     modelConfigOpen,
     vendorCredentialsOpen,
+    vendorCredentialsTab,
     localModelsOpen,
     localModeSettingsOpen,
     sandboxOpen,
@@ -645,6 +684,9 @@ export const useUiStore = defineStore('ui', () => {
     openIntegrations,
     closeIntegrations,
     openFromIntegrations,
+    openPersonalSetup,
+    closePersonalSetup,
+    openFromPersonal,
     openWorkspaceSettings,
     closeWorkspaceSettings,
     setWorkspaceSettingsTab,
@@ -658,6 +700,7 @@ export const useUiStore = defineStore('ui', () => {
     openModelConfig,
     closeModelConfig,
     openVendorCredentials,
+    setVendorCredentialsTab,
     closeVendorCredentials,
     openLocalModels,
     closeLocalModels,
