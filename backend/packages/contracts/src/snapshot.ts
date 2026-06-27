@@ -120,5 +120,13 @@ export const workspaceSnapshotSchema = v.object({
    * by the facade, so optional on the wire and omitted when no custom kind is registered.
    */
   customAgentKinds: v.optional(v.array(customAgentKindSchema)),
+  /**
+   * Current built-in pipeline catalog versions (`seedPipelines()`), keyed by pipeline id. The
+   * SPA compares each persisted built-in's `version` against this to detect a stale copy and
+   * offer a reseed ("newer version available"). A persisted `version` below the catalog value
+   * (or absent → treated as 0) means an update is available. Static, workspace-independent;
+   * attached by the facade, so optional on the wire.
+   */
+  pipelineCatalogVersions: v.optional(v.record(v.string(), v.number())),
 })
 export type WorkspaceSnapshot = v.InferOutput<typeof workspaceSnapshotSchema>

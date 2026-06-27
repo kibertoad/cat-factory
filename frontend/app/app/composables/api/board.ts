@@ -13,6 +13,7 @@ import {
   organizePipelineContract,
   removeBlockContract,
   reparentBlockContract,
+  reseedPipelineContract,
   toggleDependencyContract,
   updateBlockContract,
   updatePipelineContract,
@@ -129,5 +130,10 @@ export function boardApi({ send, ws }: ApiContext) {
 
     removePipeline: (workspaceId: string, pipelineId: string) =>
       send(deletePipelineContract, { pathPrefix: ws(workspaceId), pathParams: { pipelineId } }),
+
+    // Restore a built-in pipeline to its current catalog definition (adopt an improved
+    // built-in, or repair a drifted/invalid one). Custom pipelines reject this.
+    reseedPipeline: (workspaceId: string, pipelineId: string) =>
+      send(reseedPipelineContract, { pathPrefix: ws(workspaceId), pathParams: { pipelineId } }),
   }
 }

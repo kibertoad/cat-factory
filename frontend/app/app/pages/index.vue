@@ -6,6 +6,7 @@ import SpendWarningBanner from '~/components/layout/SpendWarningBanner.vue'
 import GitHubPatBanner from '~/components/layout/GitHubPatBanner.vue'
 import AiProvidersBanner from '~/components/layout/AiProvidersBanner.vue'
 import PipelineBuilder from '~/components/pipeline/PipelineBuilder.vue'
+import PipelineHealthModal from '~/components/pipeline/PipelineHealthModal.vue'
 import InspectorPanel from '~/components/panels/InspectorPanel.vue'
 import DecisionModal from '~/components/panels/DecisionModal.vue'
 import AgentStepDetail from '~/components/panels/AgentStepDetail.vue'
@@ -74,7 +75,21 @@ watch(
       autoOpenedSetup.value = false
       autoOpenedPreset.value = false
       ui.resetAiOnboarding()
+      // A different board has its own pipeline library, so re-arm the once-per-session advisory.
+      ui.pipelineHealthSeen = false
     }
+  },
+  { immediate: true },
+)
+
+// Pipeline-health advisory: once a board is loaded, surface any invalid / outdated pipelines in
+// a startup modal (auto-opened at most once per session per board — later opens are user-driven).
+// Detection is reactive, so this fires as soon as the snapshot hydrates.
+const { hasIssues: pipelineIssues } = usePipelineHealth()
+watch(
+  () => [workspace.ready, pipelineIssues.value],
+  () => {
+    if (workspace.ready && pipelineIssues.value) ui.maybeOpenPipelineHealth()
   },
   { immediate: true },
 )
@@ -183,6 +198,7 @@ watch(
       <TaskImportModal />
       <AddTaskModal />
       <RecurringPipelineModal />
+      <PipelineHealthModal />
       <BootstrapModal />
       <AddServiceFromRepoModal />
       <GitHubPanel />

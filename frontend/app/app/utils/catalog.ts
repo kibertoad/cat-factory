@@ -447,6 +447,18 @@ export function agentKindMeta(kind: string): AgentArchetype {
   )
 }
 
+/**
+ * Whether an agent kind is actually known to this build — a palette archetype or companion
+ * ({@link AGENT_BY_KIND}, which deployment custom kinds are merged into via
+ * `useAgentsStore().registerCustomKinds`), or an engine system/gate kind
+ * ({@link SYSTEM_AGENT_META}). Unlike {@link agentKindMeta} (which always returns a usable
+ * fallback so renderers never crash), this returns `false` for an unknown kind — used to flag
+ * a pipeline that references a nonexistent agent. Call AFTER custom kinds are registered.
+ */
+export function isKnownAgentKind(kind: string): boolean {
+  return kind in AGENT_BY_KIND || kind in SYSTEM_AGENT_META
+}
+
 type BlockTypeMeta = { label: string; icon: string; accent: string }
 
 /** Visual metadata for each architecture block type. */

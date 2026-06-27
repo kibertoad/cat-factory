@@ -39,6 +39,14 @@ export const clonePipelineContract = defineApiContract({
   responsesByStatusCode: { 201: pipelineSchema, ...errorResponses },
 })
 
+export const reseedPipelineContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: pipelineIdParams,
+  pathResolver: ({ pipelineId }) => `/pipelines/${pipelineId}/reseed`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: pipelineSchema, ...errorResponses },
+})
+
 export const updatePipelineContract = defineApiContract({
   method: 'patch',
   requestPathParamsSchema: pipelineIdParams,

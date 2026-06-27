@@ -372,12 +372,14 @@ class DrizzlePipelineRepository implements PipelineRepository {
       labels: pipeline.labels ? JSON.stringify(pipeline.labels) : null,
       archived: pipeline.archived ? 1 : null,
       builtin: pipeline.builtin ? 1 : null,
+      version: pipeline.version ?? null,
     })
   }
 
   async update(workspaceId: string, pipeline: Pipeline): Promise<void> {
     // UPDATE in place preserves the row's `seq`, so an edited pipeline keeps its place
-    // in the catalog order. `builtin` is immutable, so it is not rewritten.
+    // in the catalog order. `builtin` is immutable, so it is not rewritten. `version` IS
+    // rewritten so a reseed bumps the stored copy to the current catalog version.
     await this.db
       .update(pipelines)
       .set({
@@ -390,6 +392,7 @@ class DrizzlePipelineRepository implements PipelineRepository {
         gating: pipeline.gating ? JSON.stringify(pipeline.gating) : null,
         labels: pipeline.labels ? JSON.stringify(pipeline.labels) : null,
         archived: pipeline.archived ? 1 : null,
+        version: pipeline.version ?? null,
       })
       .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines.id, pipeline.id)))
   }

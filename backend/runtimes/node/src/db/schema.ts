@@ -323,6 +323,10 @@ export const pipelines = pgTable(
     // pipeline from the default library view (mirror of D1 0003).
     labels: text('labels'),
     archived: integer('archived'),
+    // Monotonic seed version for a built-in pipeline (mirror of D1 migration 0017); NULL on
+    // custom/cloned pipelines and on legacy rows. Lets a workspace's persisted copy be compared
+    // against the current `seedPipelines()` catalog and offered a reseed when it moves ahead.
+    version: integer('version'),
     // Monotonic insert sequence (Postgres has no SQLite rowid): a workspace's pipelines
     // are read back in the order they were seeded — the curated `seedPipelines()` order
     // — so the catalog order (and the UI's default `pipelines[0]`) is deterministic and
