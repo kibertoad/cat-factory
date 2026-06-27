@@ -2,6 +2,7 @@ import type {
   AgentContextSnapshotRepository,
   Clock,
   LlmCallMetricRepository,
+  PasswordResetTokenRepository,
   PipelineScheduleRepository,
   ProvisioningLogRepository,
   SubscriptionActivationRepository,
@@ -32,6 +33,8 @@ export interface RetentionRepos {
   subscriptionActivationRepository: Pick<SubscriptionActivationRepository, 'deleteExpired'>
   // High-churn provisioning event log (its own Postgres schema); always wired on Node.
   provisioningLogRepository: Pick<ProvisioningLogRepository, 'deleteOlderThan'>
+  // Password-reset tokens past their own TTL (single-use + 1h expiry, so tiny).
+  passwordResetTokenRepository: Pick<PasswordResetTokenRepository, 'deleteExpired'>
 }
 
 /** Rows reclaimed from each table, for logging. */
@@ -42,6 +45,7 @@ export interface RetentionResult {
   scheduleRuns: number
   activations: number
   provisioningLog: number
+  passwordResetTokens: number
 }
 
 /**
@@ -91,6 +95,8 @@ export async function sweepRetention(
     provisioningLog: await prune(retention.provisioningLogMs, now, (c) =>
       repos.provisioningLogRepository.deleteOlderThan(c),
     ),
+    // Reset tokens past their own expiry — `now`, not a window (like activations).
+    passwordResetTokens: await repos.passwordResetTokenRepository.deleteExpired(now),
   }
 }
 
@@ -115,6 +121,7 @@ export function startRetentionSweeper(
         scheduleRuns,
         activations,
         provisioningLog,
+        passwordResetTokens,
       } = await sweepRetention(repos, retention, clock.now())
       if (
         tokenUsage > 0 ||
@@ -122,7 +129,8 @@ export function startRetentionSweeper(
         agentContextSnapshots > 0 ||
         scheduleRuns > 0 ||
         activations > 0 ||
-        provisioningLog > 0
+        provisioningLog > 0 ||
+        passwordResetTokens > 0
       ) {
         log.info(
           {
@@ -132,6 +140,7 @@ export function startRetentionSweeper(
             scheduleRuns,
             activations,
             provisioningLog,
+            passwordResetTokens,
           },
           'retention sweep reclaimed rows',
         )

@@ -4,6 +4,7 @@ import {
   type Clock,
   CompositeNotificationChannel,
   type DocumentSourceProvider,
+  type EmailSender,
   type ExecutionEventPublisher,
   type FragmentOwnerKind,
   type IdGenerator,
@@ -53,6 +54,7 @@ import {
   INCIDENT_ENRICHMENT_CIPHER_INFO,
   AccountSettingsService,
   ACCOUNT_SETTINGS_CIPHER_INFO,
+  createEmailSender,
 } from '@cat-factory/integrations'
 import {
   AgentContextObservabilityService,
@@ -133,6 +135,7 @@ import { D1AccountRepository } from './repositories/D1AccountRepository'
 import { D1MembershipRepository } from './repositories/D1MembershipRepository'
 import { D1UserRepository } from './repositories/D1UserRepository'
 import { D1AccountInvitationRepository } from './repositories/D1AccountInvitationRepository'
+import { D1PasswordResetTokenRepository } from './repositories/D1PasswordResetTokenRepository'
 import { D1EmailConnectionRepository } from './repositories/D1EmailConnectionRepository'
 import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
 import { D1RepoProjectionRepository } from './repositories/D1RepoProjectionRepository'
@@ -778,7 +781,12 @@ function selectSlackDeps(config: AppConfig, db: D1Database): Partial<CoreDepende
 function selectEmailInvitationDeps(config: AppConfig, db: D1Database): Partial<CoreDependencies> {
   const deps: Partial<CoreDependencies> = {
     invitationRepository: new D1AccountInvitationRepository({ db }),
+    // Password reset works without email (the link is logged in dev); the system
+    // sender below upgrades it to real delivery when configured.
+    passwordResetTokenRepository: new D1PasswordResetTokenRepository({ db }),
+    resolveSystemEmailSender: buildSystemEmailSender(config),
     appBaseUrl: config.email.appBaseUrl || undefined,
+    logger,
   }
   if (config.email.enabled && config.email.encryptionKey) {
     deps.emailConnectionRepository = new D1EmailConnectionRepository({ db })
@@ -788,6 +796,26 @@ function selectEmailInvitationDeps(config: AppConfig, db: D1Database): Partial<C
     })
   }
   return deps
+}
+
+/**
+ * Build the deployment-level system email sender (auth emails like password reset) from
+ * the env-driven `email.system` config, or undefined when not configured. Runtime-neutral
+ * (`createEmailSender` is fetch-based), so the Node facade reuses the identical helper.
+ */
+function buildSystemEmailSender(
+  config: AppConfig,
+): (() => Promise<EmailSender | null>) | undefined {
+  const system = config.email.system
+  if (!system) return undefined
+  const sender = createEmailSender({
+    provider: system.provider,
+    from: system.from,
+    sendgrid: system.provider === 'sendgrid' ? { apiKey: system.apiKey } : undefined,
+    resend: system.provider === 'resend' ? { apiKey: system.apiKey } : undefined,
+  })
+  if (!sender) return undefined
+  return async () => sender
 }
 
 /**

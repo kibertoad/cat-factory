@@ -236,6 +236,7 @@ describe('storage retention sweep', () => {
       agentContextSnapshots: 0,
       scheduleRuns: 0,
       provisioningLog: 0,
+      passwordResetTokens: 0,
     })
     expect(await countRows('token_usage', 'id = ?', 'tok_disabled')).toBe(1)
   })
