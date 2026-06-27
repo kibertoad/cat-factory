@@ -199,9 +199,6 @@ export class VisualConfirmationController {
       pairs,
       attempts: 0,
       maxAttempts,
-      // No head-SHA staleness check on this gate (the human is the verdict), so leave it null
-      // rather than stamping branch-presence into a field meant for a commit sha.
-      headSha: null,
       rounds: [],
       ...(pairs.length === 0
         ? {
@@ -336,10 +333,13 @@ export class VisualConfirmationController {
       const refs = (await this.deps.binaryArtifactStore.listByBlock(workspaceId, block.id)).filter(
         (r) => r.kind === 'reference',
       )
+      // `listByBlock` returns references oldest-first, so assign unconditionally: the LAST
+      // (newest) reference uploaded for a view wins. A human re-uploading a corrected reference
+      // for a view they already populated must override the stale one, not be discarded.
       for (const ref of refs) {
         const view = ref.view ?? '(reference)'
         const existing = byView.get(view)
-        if (existing) existing.referenceArtifactId = existing.referenceArtifactId ?? ref.id
+        if (existing) existing.referenceArtifactId = ref.id
         else byView.set(view, { view, actualArtifactId: null, referenceArtifactId: ref.id })
       }
     }

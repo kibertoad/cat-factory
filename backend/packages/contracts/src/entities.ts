@@ -978,8 +978,6 @@ export const visualConfirmStepStateSchema = v.object({
   attempts: v.number(),
   /** Ceiling on fixer attempts, resolved from the task's merge preset (`ciMaxAttempts`). */
   maxAttempts: v.number(),
-  /** The PR head commit being reviewed, when known. */
-  headSha: v.optional(v.nullable(v.string())),
   /** Append-only history of fix rounds; see {@link visualConfirmRoundSchema}. */
   rounds: v.optional(v.array(visualConfirmRoundSchema)),
   /**

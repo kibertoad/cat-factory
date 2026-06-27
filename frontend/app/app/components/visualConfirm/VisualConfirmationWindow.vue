@@ -33,10 +33,9 @@ const phase = computed(() => vc.value?.phase ?? null)
 const pairs = computed(() => vc.value?.pairs ?? [])
 const busy = computed(() => (blockId.value ? visualConfirm.isBusy(blockId.value) : false))
 const awaitingHuman = computed(() => phase.value === 'awaiting_human')
-const working = computed(() => phase.value === 'fixing' || phase.value === 'capturing')
+const working = computed(() => phase.value === 'fixing')
 
 const PHASE_LABEL: Record<NonNullable<VisualConfirmStepState['phase']>, string> = {
-  capturing: 'Capturing screenshots…',
   awaiting_human: 'Awaiting your review',
   fixing: 'Fixer is addressing your findings…',
   approved: 'Approved',

@@ -1,9 +1,11 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import type { BinaryArtifactKind, BinaryArtifactStore } from '@cat-factory/kernel'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import {
+  MAX_REQUEST_BYTES,
   MAX_UPLOAD_BYTES,
   blobResponseHeaders,
   exceedsRequestSizeLimit,
@@ -34,69 +36,80 @@ export function artifactController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   // Upload a reference design image (multipart: `file` + `kind`/`view`/`blockId`/`executionId`).
-  app.post('/artifacts', async (c) => {
-    const store = requireStore(c)
-    if (!store) return unavailable(c)
-    // Refuse a grossly oversized body up-front (from Content-Length) so it is never buffered
-    // into memory; the exact per-file ceiling is still enforced after parsing below.
-    if (exceedsRequestSizeLimit(c.req.header('content-length'))) {
-      return c.json({ error: { code: 'too_large', message: 'Artifact exceeds size limit' } }, 413)
-    }
-    let form: FormData
-    try {
-      form = await c.req.formData()
-    } catch {
-      return c.json({ error: { code: 'invalid_body', message: 'Expected multipart form' } }, 400)
-    }
-    const file = form.get('file')
-    if (!(file instanceof File)) {
-      return c.json({ error: { code: 'invalid_body', message: 'Missing `file`' } }, 400)
-    }
-    const kind = String(form.get('kind') ?? 'reference') as BinaryArtifactKind
-    if (!ALLOWED_KINDS.includes(kind)) {
-      return c.json({ error: { code: 'invalid_kind', message: 'Unknown artifact kind' } }, 400)
-    }
-    // Reject anything that isn't an allowed raster image. An attacker-controlled content
-    // type (HTML, SVG) served back inline same-origin from the blob endpoint would be a
-    // stored-XSS vector, so the type is pinned to the allow-list at the write boundary.
-    const contentType = normalizeImageContentType(file.type)
-    if (!contentType) {
-      return c.json(
-        {
-          error: {
-            code: 'unsupported_media',
-            message: 'Only PNG/JPEG/WebP/GIF images are accepted',
+  app.post(
+    '/artifacts',
+    // Hard backstop on the buffered body: `bodyLimit` counts bytes as the stream is read, so a
+    // chunked body with NO Content-Length (or a spoofed header) can't buffer past the ceiling.
+    // The `exceedsRequestSizeLimit` precheck below is just the cheap early-out for honest clients.
+    bodyLimit({
+      maxSize: MAX_REQUEST_BYTES,
+      onError: (c) =>
+        c.json({ error: { code: 'too_large', message: 'Artifact exceeds size limit' } }, 413),
+    }),
+    async (c) => {
+      const store = requireStore(c)
+      if (!store) return unavailable(c)
+      // Refuse a grossly oversized body up-front (from Content-Length) so it is never buffered
+      // into memory; the exact per-file ceiling is still enforced after parsing below.
+      if (exceedsRequestSizeLimit(c.req.header('content-length'))) {
+        return c.json({ error: { code: 'too_large', message: 'Artifact exceeds size limit' } }, 413)
+      }
+      let form: FormData
+      try {
+        form = await c.req.formData()
+      } catch {
+        return c.json({ error: { code: 'invalid_body', message: 'Expected multipart form' } }, 400)
+      }
+      const file = form.get('file')
+      if (!(file instanceof File)) {
+        return c.json({ error: { code: 'invalid_body', message: 'Missing `file`' } }, 400)
+      }
+      const kind = String(form.get('kind') ?? 'reference') as BinaryArtifactKind
+      if (!ALLOWED_KINDS.includes(kind)) {
+        return c.json({ error: { code: 'invalid_kind', message: 'Unknown artifact kind' } }, 400)
+      }
+      // Reject anything that isn't an allowed raster image. An attacker-controlled content
+      // type (HTML, SVG) served back inline same-origin from the blob endpoint would be a
+      // stored-XSS vector, so the type is pinned to the allow-list at the write boundary.
+      const contentType = normalizeImageContentType(file.type)
+      if (!contentType) {
+        return c.json(
+          {
+            error: {
+              code: 'unsupported_media',
+              message: 'Only PNG/JPEG/WebP/GIF images are accepted',
+            },
           },
+          415,
+        )
+      }
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      if (bytes.byteLength > MAX_UPLOAD_BYTES) {
+        return c.json({ error: { code: 'too_large', message: 'Artifact exceeds size limit' } }, 413)
+      }
+      const view = form.get('view')
+      const blockId = form.get('blockId')
+      // This human-facing endpoint uploads BLOCK-scoped reference design images, which precede any
+      // run, so `executionId` is always null here — a run-scoped capture goes through the
+      // token-authed harness ingest route instead, where the execution is derived from the verified
+      // session token (never the request body). We deliberately ignore any client-supplied
+      // `executionId` rather than trust it. `blockId` is non-authoritative but harmless: every read
+      // filters by the path's (authenticated) `workspaceId`, so a row tagged with a foreign/bogus
+      // block is simply never surfaced by the gate.
+      const record = await store.store({
+        meta: {
+          workspaceId: param(c, 'workspaceId'),
+          executionId: null,
+          blockId: typeof blockId === 'string' && blockId ? blockId : null,
+          kind,
+          view: typeof view === 'string' && view ? view : null,
+          contentType,
         },
-        415,
-      )
-    }
-    const bytes = new Uint8Array(await file.arrayBuffer())
-    if (bytes.byteLength > MAX_UPLOAD_BYTES) {
-      return c.json({ error: { code: 'too_large', message: 'Artifact exceeds size limit' } }, 413)
-    }
-    const view = form.get('view')
-    const blockId = form.get('blockId')
-    // This human-facing endpoint uploads BLOCK-scoped reference design images, which precede any
-    // run, so `executionId` is always null here — a run-scoped capture goes through the
-    // token-authed harness ingest route instead, where the execution is derived from the verified
-    // session token (never the request body). We deliberately ignore any client-supplied
-    // `executionId` rather than trust it. `blockId` is non-authoritative but harmless: every read
-    // filters by the path's (authenticated) `workspaceId`, so a row tagged with a foreign/bogus
-    // block is simply never surfaced by the gate.
-    const record = await store.store({
-      meta: {
-        workspaceId: param(c, 'workspaceId'),
-        executionId: null,
-        blockId: typeof blockId === 'string' && blockId ? blockId : null,
-        kind,
-        view: typeof view === 'string' && view ? view : null,
-        contentType,
-      },
-      blob: bytes,
-    })
-    return c.json({ artifact: record }, 201)
-  })
+        blob: bytes,
+      })
+      return c.json({ artifact: record }, 201)
+    },
+  )
 
   // Stream a stored blob's bytes (the metadata names its content type).
   app.get('/artifacts/:id/blob', async (c) => {
