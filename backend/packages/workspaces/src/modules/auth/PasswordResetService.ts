@@ -94,18 +94,36 @@ export class PasswordResetService {
       ? await this.deps.resolveSystemEmailSender()
       : null
     if (sender && resetUrl) {
-      await sender.send({
-        to: normalizedEmail,
-        subject: 'Reset your Cat Factory password',
-        text: `Reset your password using this link (valid for 1 hour): ${resetUrl}`,
-        html: resetEmailHtml(resetUrl),
-      })
+      // Best-effort: a provider/transport failure must NOT propagate. The controller
+      // answers identically (204) for a registered and an unregistered email so the
+      // endpoint can't enumerate accounts — letting a send error bubble to a 500 would
+      // turn a flaky provider into exactly that registration oracle. Log and move on.
+      try {
+        await sender.send({
+          to: normalizedEmail,
+          subject: 'Reset your Cat Factory password',
+          text: `Reset your password using this link (valid for 1 hour): ${resetUrl}`,
+          html: resetEmailHtml(resetUrl),
+        })
+      } catch (err) {
+        this.deps.logger?.info(
+          { userId: identity.userId, err: String(err) },
+          'Password reset email failed to send',
+        )
+      }
     } else if (resetUrl) {
       // No system sender configured: surface the link in the logs so local/dev can test.
       // It is NEVER returned to the unauthenticated caller.
       this.deps.logger?.info(
         { resetUrl, userId: identity.userId },
         'Password reset requested but no email sender configured; link logged for dev',
+      )
+    } else {
+      // A token was minted but there is no app base URL to build a link from, so the user
+      // can never receive it. Flag the misconfiguration rather than failing silently.
+      this.deps.logger?.info(
+        { userId: identity.userId },
+        'Password reset requested but appBaseUrl is not configured; no reset link could be built',
       )
     }
   }
@@ -115,6 +133,12 @@ export class PasswordResetService {
    * used / expired token (the controller maps these to a generic 400). On success the
    * password identity's secret is replaced, the token is consumed, and every other
    * pending token for the user is superseded.
+   *
+   * NOTE: sessions are stateless (signed, self-expiring tokens with no server-side
+   * store), so a reset does NOT retroactively revoke a session already issued to this
+   * user — any live session stays valid until its own TTL lapses. Revoking on reset would
+   * require a per-user session epoch checked on every request, i.e. trading away the
+   * stateless model; that is a separate, deliberate decision, not handled here.
    */
   async reset(token: string, newPassword: string): Promise<void> {
     if (newPassword.length < 8) {
@@ -129,13 +153,19 @@ export class PasswordResetService {
     if (record.expiresAt < this.deps.clock.now()) {
       throw new ConflictError('This password reset link has expired')
     }
-    const user = await this.deps.userRepository.get(record.userId)
-    if (!user?.email) {
-      // The token references a user with no resettable email identity — treat as invalid.
+    // Resolve the password identity straight from the token's user — not by round-tripping
+    // through `users.email` — so the lookup can't drift from how the identity subject was
+    // stored. A user with no password identity (e.g. OAuth-only) has nothing to reset.
+    const identity = (await this.deps.userRepository.listIdentities(record.userId)).find(
+      (i) => i.provider === 'password',
+    )
+    if (!identity) throw new NotFoundError('PasswordResetToken', 'token')
+
+    // Atomically consume the token BEFORE touching the password: only the call that flips
+    // `pending` → `used` proceeds, so two concurrent redemptions can't both reset.
+    if (!(await this.deps.passwordResetTokenRepository.consume(record.id))) {
       throw new NotFoundError('PasswordResetToken', 'token')
     }
-    const identity = await this.deps.userRepository.getIdentity('password', user.email)
-    if (!identity) throw new NotFoundError('PasswordResetToken', 'token')
 
     // Replace the secret in place (idempotent on `(provider, subject)`, exactly like the
     // rehash-on-login path in UserService).
@@ -143,7 +173,6 @@ export class PasswordResetService {
       ...identity,
       secret: await this.deps.passwordHasher.hash(newPassword),
     })
-    await this.deps.passwordResetTokenRepository.setStatus(record.id, 'used')
     // Invalidate any other live tokens for this user — the password is now changed.
     const pending = await this.deps.passwordResetTokenRepository.listPendingByUser(record.userId)
     for (const other of pending) {

@@ -23,8 +23,15 @@ export interface PasswordResetTokenRepository {
   findByTokenHash(tokenHash: string): Promise<PasswordResetTokenRecord | null>
   /** Every still-pending token for a user (used to supersede on mint/redeem). */
   listPendingByUser(userId: string): Promise<PasswordResetTokenRecord[]>
-  /** Flip a token's status (consume / supersede). */
+  /** Flip a token's status (supersede a still-live token on mint/redeem). */
   setStatus(id: string, status: PasswordResetTokenStatus): Promise<void>
+  /**
+   * Atomically consume a token: flip `pending` → `used` and report whether THIS call
+   * performed the transition. The single-use guard — two concurrent redemptions of the
+   * same token race here, and only the winner gets `true`, so the password is set exactly
+   * once. A token that is already `used` (or gone) yields `false`.
+   */
+  consume(id: string): Promise<boolean>
   /** Purge tokens whose `expiresAt` is before `before`; returns the count removed. */
   deleteExpired(before: number): Promise<number>
 }

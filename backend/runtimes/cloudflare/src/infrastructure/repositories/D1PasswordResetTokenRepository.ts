@@ -76,6 +76,17 @@ export class D1PasswordResetTokenRepository implements PasswordResetTokenReposit
       .run()
   }
 
+  async consume(id: string): Promise<boolean> {
+    // Conditional on `status='pending'` so concurrent redemptions can't both win.
+    const result = await this.db
+      .prepare(
+        "UPDATE password_reset_tokens SET status = 'used' WHERE id = ? AND status = 'pending'",
+      )
+      .bind(id)
+      .run()
+    return (result.meta.changes ?? 0) > 0
+  }
+
   async deleteExpired(before: number): Promise<number> {
     const result = await this.db
       .prepare('DELETE FROM password_reset_tokens WHERE expires_at < ?')

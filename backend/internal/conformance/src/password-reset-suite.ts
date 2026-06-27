@@ -64,6 +64,19 @@ export function definePasswordResetTokenSuite(
       expect((await repo.findByTokenHash(`h-${a}`))?.status).toBe('used')
     })
 
+    it('consume is atomic single-use: only the first call wins', async () => {
+      const repo = makeRepo()
+      const { u, a } = ids()
+      await repo.create(record({ id: a, userId: u, tokenHash: `h-${a}` }))
+
+      expect(await repo.consume(a)).toBe(true)
+      // A second consume (the concurrent-redemption / token-reuse case) loses.
+      expect(await repo.consume(a)).toBe(false)
+      expect((await repo.findByTokenHash(`h-${a}`))?.status).toBe('used')
+      // Consuming an unknown id is a no-op that reports false.
+      expect(await repo.consume(`missing-${a}`)).toBe(false)
+    })
+
     it('prunes only expired tokens', async () => {
       const repo = makeRepo()
       const { u, a, b } = ids()

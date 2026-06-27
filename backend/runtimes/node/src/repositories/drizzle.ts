@@ -911,6 +911,15 @@ class DrizzlePasswordResetTokenRepository implements PasswordResetTokenRepositor
     await this.db.update(passwordResetTokens).set({ status }).where(eq(passwordResetTokens.id, id))
   }
 
+  async consume(id: string): Promise<boolean> {
+    // Conditional on `status='pending'` so concurrent redemptions can't both win.
+    const result = await this.db
+      .update(passwordResetTokens)
+      .set({ status: 'used' })
+      .where(and(eq(passwordResetTokens.id, id), eq(passwordResetTokens.status, 'pending')))
+    return (result.rowCount ?? 0) > 0
+  }
+
   async deleteExpired(before: number): Promise<number> {
     const result = await this.db
       .delete(passwordResetTokens)

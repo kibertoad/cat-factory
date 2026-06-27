@@ -448,7 +448,13 @@ export function authController(): Hono<AppEnv> {
     if (!cfg.passwordEnabled) return unavailable(c)
     const body = c.req.valid('json')
     if (passwordAttemptLimited(c, body.email)) return tooManyAttempts(c)
-    await c.get('container').passwordReset?.request(body.email)
+    try {
+      await c.get('container').passwordReset?.request(body.email)
+    } catch {
+      // Swallow: the response must be identical (204) for a registered and an
+      // unregistered email, so a failure on the registered-only path (a token write, etc.)
+      // can't become an account-enumeration oracle. The service logs internally.
+    }
     return c.body(null, 204)
   })
 
@@ -459,7 +465,11 @@ export function authController(): Hono<AppEnv> {
     const passwordReset = c.get('container').passwordReset
     if (!cfg.passwordEnabled || !passwordReset) return unavailable(c)
     const body = c.req.valid('json')
-    if (passwordAttemptLimited(c, body.token)) return tooManyAttempts(c)
+    // Throttle per client IP, NOT per token: a brute-force attacker uses a fresh token
+    // each guess, so keying on the token value would hand every guess its own bucket and
+    // limit nothing. (Per-IP can't lock out a "victim" here — redeem is token-, not
+    // email-, addressed.)
+    if (passwordAttemptLimited(c, 'reset-password')) return tooManyAttempts(c)
     try {
       await passwordReset.reset(body.token, body.password)
       return c.body(null, 204)

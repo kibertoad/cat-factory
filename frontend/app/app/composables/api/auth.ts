@@ -1,10 +1,12 @@
 import {
   acceptInvitationContract,
   authConfigContract,
+  forgotPasswordContract,
   logoutContract,
   meContract,
   passwordLoginContract,
   peekInvitationContract,
+  resetPasswordContract,
   signupContract,
 } from '@cat-factory/contracts'
 import type { ApiContext } from './context'
@@ -28,11 +30,11 @@ export function authApi({ http, send, ws }: ApiContext) {
     // Request a reset link. Always succeeds (204) regardless of whether the email is
     // registered, so the response can't be used to enumerate accounts.
     forgotPassword: (body: { email: string }) =>
-      http('/auth/forgot-password', { method: 'POST', body }),
+      send(forgotPasswordContract, { pathPrefix: '/auth', body }),
 
     // Redeem a reset token + set a new password (throws 400 on an invalid/expired token).
     resetPassword: (body: { token: string; password: string }) =>
-      http('/auth/reset-password', { method: 'POST', body }),
+      send(resetPasswordContract, { pathPrefix: '/auth', body }),
 
     peekInvite: (token: string) =>
       send(peekInvitationContract, { pathPrefix: '/auth', pathParams: { token } }),

@@ -26,6 +26,12 @@ function fakeTokenRepo() {
       const r = rows.get(id)
       if (r) r.status = status
     },
+    consume: async (id) => {
+      const r = rows.get(id)
+      if (!r || r.status !== 'pending') return false
+      r.status = 'used'
+      return true
+    },
     deleteExpired: async (before) => {
       let n = 0
       for (const [id, r] of rows) {
@@ -46,6 +52,7 @@ function fakeUserRepo(identities: UserIdentityRecord[], users: UserRecord[]) {
     get: async (id) => users.find((u) => u.id === id) ?? null,
     getIdentity: async (provider, subject) =>
       idents.find((i) => i.provider === provider && i.subject === subject) ?? null,
+    listIdentities: async (userId) => idents.filter((i) => i.userId === userId),
     linkIdentity: async (identity) => {
       const idx = idents.findIndex(
         (i) => i.provider === identity.provider && i.subject === identity.subject,
@@ -148,6 +155,21 @@ describe('PasswordResetService.request', () => {
     const pending = [...tokenRepo.rows.values()].filter((r) => r.status === 'pending')
     expect(pending).toHaveLength(1)
   })
+
+  it('never throws when the email provider fails (no error-based enumeration)', async () => {
+    const failing: EmailSender = {
+      send: async () => {
+        throw new Error('provider down')
+      },
+    }
+    const { service, tokenRepo } = makeService({ sender: failing })
+
+    // The registered path must resolve identically to the unregistered one — a thrown
+    // send error would otherwise surface as a 500 only for registered emails.
+    await expect(service.request('a@example.com')).resolves.toBeUndefined()
+    // The token is still minted; only the delivery failed.
+    expect(tokenRepo.rows.size).toBe(1)
+  })
 })
 
 describe('PasswordResetService.reset', () => {
@@ -185,5 +207,15 @@ describe('PasswordResetService.reset', () => {
   it('rejects a too-short password before touching the token', async () => {
     const { service } = makeService({})
     await expect(service.reset('whatever', 'short')).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it('is single-use: a second redemption of the same token is rejected', async () => {
+    const { sender, sent } = captureSender()
+    const { service } = makeService({ sender })
+    await service.request('a@example.com')
+    const token = tokenFromLink(sent[0]!.text!)
+
+    await service.reset(token, 'newpassword')
+    await expect(service.reset(token, 'anotherpassword')).rejects.toBeInstanceOf(NotFoundError)
   })
 })
