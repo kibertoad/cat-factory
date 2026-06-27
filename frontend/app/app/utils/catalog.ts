@@ -177,6 +177,18 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     resultView: 'human-test',
   },
   {
+    kind: 'visual-confirmation',
+    label: 'Visual Confirmation',
+    icon: 'i-lucide-image-play',
+    color: '#f59e0b',
+    category: 'test',
+    description:
+      'Pauses for a person to review the UI tester’s screenshots against the uploaded reference designs — approve, or request a fix from findings — before the pipeline continues.',
+    // Opens the dedicated visual-confirmation window (actual-vs-reference gallery + approve /
+    // request-fix / recapture) instead of the generic prose step-detail panel.
+    resultView: 'visual-confirm',
+  },
+  {
     kind: 'documenter',
     label: 'Documenter',
     icon: 'i-lucide-book-open-text',

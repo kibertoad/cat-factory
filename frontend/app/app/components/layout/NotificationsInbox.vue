@@ -36,6 +36,9 @@ const META: Record<Notification['type'], { icon: string; color: Accent; action: 
   // Clicking the title opens the human-testing window for the task (see `reveal`); "act" just
   // marks it read (the gate is resolved in that window — confirm / request a fix — not here).
   human_test_ready: { icon: 'i-lucide-user-check', color: 'primary', action: 'Mark read' },
+  // Clicking the title opens the visual-confirmation window for the task (see `reveal`); "act"
+  // just marks it read (the gate is resolved in that window — approve / request a fix — not here).
+  visual_confirmation_ready: { icon: 'i-lucide-camera', color: 'primary', action: 'Mark read' },
   // Clicking the title opens the task's gate window (where the human can request a freeform
   // fix); "act" just marks it read (approval happens on GitHub, not here).
   human_review: { icon: 'i-lucide-users', color: 'primary', action: 'Mark read' },
@@ -87,6 +90,7 @@ function reveal(n: Notification) {
   else if (n.type === 'clarity_review') ui.openClarityReview(n.blockId)
   else if (n.type === 'decision_required') revealDecision(n)
   else if (n.type === 'human_test_ready') revealHumanTest(n)
+  else if (n.type === 'visual_confirmation_ready') revealVisualConfirm(n)
   else if (n.type === 'human_review') revealHumanReview(n)
   else if (n.type === 'followup_pending') revealFollowUps(n)
   else ui.select(n.blockId)
@@ -123,6 +127,21 @@ function revealHumanTest(n: Notification) {
   const idx =
     instance?.steps.findIndex(
       (s) => s.agentKind === 'human-test' && s.state === 'waiting_decision',
+    ) ?? -1
+  if (instance && idx >= 0) ui.openStepDetail(instance.id, idx)
+  else if (n.blockId) ui.select(n.blockId)
+}
+
+/**
+ * Open the visual-confirmation window for a parked `visual-confirmation` gate: find the run's
+ * parked step and open it through the universal step dispatch (its archetype declares the
+ * `visual-confirm` result view). Falls back to focusing the block.
+ */
+function revealVisualConfirm(n: Notification) {
+  const instance = n.executionId ? execution.getInstance(n.executionId) : undefined
+  const idx =
+    instance?.steps.findIndex(
+      (s) => s.agentKind === 'visual-confirmation' && s.state === 'waiting_decision',
     ) ?? -1
   if (instance && idx >= 0) ui.openStepDetail(instance.id, idx)
   else if (n.blockId) ui.select(n.blockId)
