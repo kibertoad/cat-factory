@@ -1,5 +1,39 @@
 # @cat-factory/worker
 
+## 0.27.0
+
+### Minor Changes
+
+- 714b7c9: Add "forgot my password" self-service reset for password-based logins.
+
+  A user can request a reset link by email (`POST /auth/forgot-password`) and set a new
+  password via a one-time, expiring token (`POST /auth/reset-password`). Tokens are stored
+  hashed (SHA-256), single-use, and mirror the invitation flow; the reset email is sent
+  through a new deployment-level **system** email sender configured via
+  `EMAIL_SYSTEM_PROVIDER` / `EMAIL_SYSTEM_FROM` / `EMAIL_SYSTEM_API_KEY` (when unset, the
+  link is logged for local/dev). The request endpoint never reveals whether an email is
+  registered.
+
+  Schema addition (both runtimes): a new `password_reset_tokens` table (D1 migration
+  `0017_password_reset_tokens.sql` ⇄ a Drizzle Postgres migration). No data migration is
+  needed — the table starts empty.
+
+### Patch Changes
+
+- Updated dependencies [714b7c9]
+  - @cat-factory/contracts@0.37.0
+  - @cat-factory/kernel@0.39.0
+  - @cat-factory/orchestration@0.29.0
+  - @cat-factory/server@0.33.0
+  - @cat-factory/agents@0.18.4
+  - @cat-factory/consensus@0.7.51
+  - @cat-factory/gates@0.2.3
+  - @cat-factory/integrations@0.23.3
+  - @cat-factory/prompt-fragments@0.7.35
+  - @cat-factory/spend@0.10.8
+  - @cat-factory/observability-langfuse@0.7.47
+  - @cat-factory/provider-cloudflare@0.7.51
+
 ## 0.26.3
 
 ### Patch Changes
