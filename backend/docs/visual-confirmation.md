@@ -35,6 +35,7 @@ binary-artifact storage (the substrate both rely on)
 ## What's DONE (and how it's verified)
 
 ### Part A — Binary-artifact storage abstraction ✅ verified on both runtimes
+
 - Kernel port `backend/packages/kernel/src/ports/binary-artifacts.ts`:
   `BinaryArtifactStore` composed by `createBinaryArtifactStore(metadata, blob, …)` from a
   per-runtime `BinaryArtifactMetadataStore` + a pluggable `BinaryBlobBackend` (the "custom
@@ -57,6 +58,7 @@ binary-artifact storage (the substrate both rely on)
 - **Verified:** Cloudflare suite (workerd + real D1) and Node suite (real Postgres) both pass.
 
 ### Part B — Tester split (tester-api + tester-ui) ✅ code verified
+
 - `tester` renamed to **`tester-api`**; new **`tester-ui`** kind. Constants + helper
   `isTesterKind`/`TESTER_KINDS` in `orchestration/.../ci.logic.ts`; both share the Tester→Fixer
   loop, the `tester.environment` infra choice, and the env projection.
@@ -74,6 +76,7 @@ binary-artifact storage (the substrate both rely on)
 - **Verified:** Node execution conformance (38 tests) passes with the renamed kind.
 
 ### Part C — Visual Confirmation gate + SPA ✅ backend verified, SPA typechecked
+
 - Step state `visualConfirmStepStateSchema` + `pipelineStepSchema.visualConfirm`
   (`contracts/entities.ts`). Kind `VISUAL_CONFIRM_AGENT_KIND = 'visual-confirmation'`.
 - `VisualConfirmationController` (`orchestration/.../VisualConfirmationController.ts`), cloned
@@ -87,8 +90,8 @@ binary-artifact storage (the substrate both rely on)
   (`/blocks/:id/visual-confirmation/{approve,request-fix,recapture}`). New `pl_visual` pipeline
   (`… tester-ui → visual-confirmation → merger`).
 - SPA: `VisualConfirmationWindow.vue` (actual-vs-reference gallery + approve/request-fix/recapture
-  + reference upload), `stores/visualConfirm.ts`, `composables/api/visualConfirm.ts`, the
-  `visual-confirm` result-view registration, notification reveal + Slack panel entries.
+  - reference upload), `stores/visualConfirm.ts`, `composables/api/visualConfirm.ts`, the
+    `visual-confirm` result-view registration, notification reveal + Slack panel entries.
 - **Verified:** Node conformance incl. a new gate pass-through test (59 tests total); frontend
   `nuxt typecheck` + catalog tests pass.
 
@@ -97,6 +100,7 @@ binary-artifact storage (the substrate both rely on)
 ## What's LEFT (deploy-time, intentionally not landed)
 
 ### 1. Route a job INTO the UI-tester image (the one real gap)
+
 The image is defined (`Dockerfile.ui`) and the dispatch seam (`RunnerDispatchOptions.image: 'ui'`)
 is in place, but nothing maps that flag to the image yet. This is deploy-coupled and couldn't be
 built/verified in the dev container:
@@ -109,7 +113,7 @@ built/verified in the dev container:
   `image: 'ui'` (a separate container for that step) in `LocalContainerRunnerTransport` /
   `RunnerPoolTransport`.
 - Publish the UI image: `docker build -f Dockerfile.ui --build-arg BASE_TAG=<v> -t
-  cat-factory-executor-ui:<v> .` and wire the tag into `deploy/backend` (package.json + wrangler).
+cat-factory-executor-ui:<v> .` and wire the tag into `deploy/backend` (package.json + wrangler).
 - Inject `ARTIFACT_UPLOAD_URL` / `ARTIFACT_UPLOAD_TOKEN` into the `tester-ui` job body (a
   per-run, scoped artifact-ingest credential — the prompt already tells the agent to use them),
   and add the container-token-authed ingest route the harness POSTs to.
@@ -119,17 +123,20 @@ auto-capture lights up once routing is wired. (A stop-gap: `tester-ui` would oth
 base image with no browser — so don't enable `pl_visual` end-to-end in prod until routed.)
 
 ### 2. Recapture-after-fix loop (enhancement)
+
 Today `request-fix` dispatches the `fixer` and re-parks with the existing screenshots (the gate
 flags them as predating the fix). Auto re-running `tester-ui` after a fix to refresh the gallery
 needs the gate to dispatch a `tester-ui` job and consume its result back into the gate (a small
 extension of `onHelperComplete` + the `pollAgentJob` capture-result path).
 
 ### 3. Reference-screenshot pre-op injection
+
 The UI-tester prompt references `.cat-context/reference-screenshots/`; a `preOps` that pulls the
 block's `kind:'reference'` artifacts from the store and writes them into the container context is
 not yet wired (the gate still pairs by view from the store, so the comparison works regardless).
 
 ### 4. Non-redundant capture heuristic
+
 The "one screenshot per distinct view" dedup is prompt-driven; it'll want iteration on real apps
 (hash-based dedup of near-identical views).
 
@@ -154,6 +161,7 @@ cd frontend/app && pnpm typecheck && pnpm exec vitest run app/utils/catalog.spec
 ```
 
 ## Key files
+
 - Storage: `kernel/src/ports/binary-artifacts.ts`, `provider-s3/`, the D1/Drizzle stores + blob
   backends, `migrations/0017_binary_artifacts.sql`.
 - Tester: `orchestration/.../ci.logic.ts` (constants), `agents/prompts/testing.ts`,

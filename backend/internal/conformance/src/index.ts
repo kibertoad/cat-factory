@@ -33,10 +33,7 @@ export {
 } from './suite.js'
 export { deriveWorkerDatabase, type WorkerDatabase } from './test-db.js'
 export { defineLlmMetricsSuite } from './llm-metrics-suite.js'
-export {
-  defineBinaryArtifactsSuite,
-  MemoryBinaryBlobBackend,
-} from './binary-artifacts-suite.js'
+export { defineBinaryArtifactsSuite, MemoryBinaryBlobBackend } from './binary-artifacts-suite.js'
 export { defineAgentContextSuite } from './agent-context-suite.js'
 export { defineBrainstormSuite } from './brainstorm-suite.js'
 export { defineKaizenSuite } from './kaizen-suite.js'

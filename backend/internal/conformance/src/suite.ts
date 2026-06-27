@@ -2706,11 +2706,13 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(testerStep.test?.lastReport?.greenlight).toBe(true)
       })
 
-      it('passes the visual-confirmation gate through (auto-advances) when no artifact store is wired', async () => {
-        // A `tester-ui` → `visual-confirmation` tail: the UI tester greenlights, and the gate
-        // — with no binary-artifact store wired in the conformance harness — passes through
-        // (auto-advances) rather than parking, so the run completes on both runtimes. This
-        // pins the engine's delegation of the new gate kind + its no-store pass-through.
+      it('drives the visual-confirmation gate to completion (pass-through or park → approve)', async () => {
+        // A `tester-ui` → `visual-confirmation` tail: the UI tester greenlights, then the gate
+        // is reached. Whether it parks depends on the runtime's wiring: with NO binary-artifact
+        // store wired (Node conformance harness) it passes through and the run completes; with a
+        // store wired (the Worker test config binds an R2 bucket) it parks awaiting the human, and
+        // approving advances it. Either way the gate kind is engine-delegated and the run finishes —
+        // this pins both the delegation and the approve path across runtimes.
         const green = {
           greenlight: true,
           summary: 'ui looks good',
@@ -2741,8 +2743,18 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         )
         expect(start.status).toBe(201)
 
-        const ticked = await app.drive(wsId)
-        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        let exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        // Store wired ⇒ the gate parks awaiting the human; approve it, then drive to completion.
+        if (exec.status !== 'done') {
+          const gate = exec.steps.find((s) => s.agentKind === 'visual-confirmation')
+          expect(gate?.state).toBe('waiting_decision')
+          await app.call(
+            'POST',
+            `/workspaces/${wsId}/blocks/task_login/visual-confirmation/approve`,
+            {},
+          )
+          exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        }
         expect(exec.status).toBe('done')
         const gateStep = exec.steps.find((s) => s.agentKind === 'visual-confirmation')!
         expect(gateStep.state).toBe('done')

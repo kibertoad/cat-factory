@@ -24,7 +24,7 @@ Add the Visual Confirmation gate and split the tester into an API + UI tester.
   The human approves (advance), requests a fix (dispatches the Tester's `fixer`, then re-parks),
   or recaptures. Raises a `visual_confirmation_ready` notification; passes through when no
   binary-artifact store is wired. New `pl_visual` pipeline (`… tester-ui → visual-confirmation
-  → merger`) and the `GET /blocks/:id/artifacts` + visual-confirmation action endpoints.
+→ merger`) and the `GET /blocks/:id/artifacts` + visual-confirmation action endpoints.
 - Cross-runtime conformance covers the gate's no-store pass-through and the artifact store's
   `listByBlock`.
 

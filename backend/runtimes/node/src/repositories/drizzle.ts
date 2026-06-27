@@ -155,7 +155,6 @@ import {
   kaizenGradings,
   kaizenVerifiedCombos,
   clarityReviews,
-  binaryArtifactBlobs,
   binaryArtifacts,
   brainstormSessions,
   sandboxPromptVersions,
