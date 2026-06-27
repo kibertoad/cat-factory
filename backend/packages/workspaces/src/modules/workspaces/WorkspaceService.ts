@@ -189,7 +189,12 @@ export class WorkspaceService {
         : []
     const blocks = await this.composeBoard(localBlocks, mounts)
     const executions = await this.composeExecutions(localExecutions, mounts)
-    return { workspace, blocks, pipelines, executions }
+    // The current built-in catalog versions, so the SPA can flag a workspace's stale
+    // built-in copies and offer a reseed (see WorkspaceSnapshot.pipelineCatalogVersions).
+    const pipelineCatalogVersions = Object.fromEntries(
+      seedPipelines().map((p) => [p.id, p.version ?? 0]),
+    )
+    return { workspace, blocks, pipelines, executions, pipelineCatalogVersions }
   }
 
   /**

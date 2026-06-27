@@ -402,6 +402,8 @@ export interface PipelineRow {
   labels?: string | null
   /** Truthy (1) when the pipeline is archived / hidden from the default view (migration 0003). */
   archived?: number | boolean | null
+  /** Monotonic seed version for a built-in pipeline (migration 0017); null on custom/legacy rows. */
+  version?: number | null
 }
 
 export function rowToPipeline(row: PipelineRow): Pipeline {
@@ -417,6 +419,7 @@ export function rowToPipeline(row: PipelineRow): Pipeline {
     ...(row.labels ? { labels: JSON.parse(row.labels) as string[] } : {}),
     ...(row.archived ? { archived: true } : {}),
     ...(row.builtin ? { builtin: true } : {}),
+    ...(row.version != null ? { version: row.version } : {}),
   }
 }
 
