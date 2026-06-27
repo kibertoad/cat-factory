@@ -3,6 +3,11 @@ import type { Context } from 'hono'
 import type { BinaryArtifactKind, BinaryArtifactStore } from '@cat-factory/kernel'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
+import {
+  MAX_UPLOAD_BYTES,
+  blobResponseHeaders,
+  normalizeImageContentType,
+} from './imageArtifacts.js'
 
 /** Resolve the binary-artifact store or send a 503, returning null when unconfigured. */
 function requireStore<E extends AppEnv>(c: Context<E>): BinaryArtifactStore | null {
@@ -16,7 +21,6 @@ const unavailable = <E extends AppEnv>(c: Context<E>) =>
   )
 
 const ALLOWED_KINDS: BinaryArtifactKind[] = ['screenshot', 'reference']
-const MAX_UPLOAD_BYTES = 16 * 1024 * 1024
 
 /**
  * Workspace-scoped binary-artifact API backing the visual-confirmation gate: upload a
@@ -46,6 +50,21 @@ export function artifactController(): Hono<AppEnv> {
     if (!ALLOWED_KINDS.includes(kind)) {
       return c.json({ error: { code: 'invalid_kind', message: 'Unknown artifact kind' } }, 400)
     }
+    // Reject anything that isn't an allowed raster image. An attacker-controlled content
+    // type (HTML, SVG) served back inline same-origin from the blob endpoint would be a
+    // stored-XSS vector, so the type is pinned to the allow-list at the write boundary.
+    const contentType = normalizeImageContentType(file.type)
+    if (!contentType) {
+      return c.json(
+        {
+          error: {
+            code: 'unsupported_media',
+            message: 'Only PNG/JPEG/WebP/GIF images are accepted',
+          },
+        },
+        415,
+      )
+    }
     const bytes = new Uint8Array(await file.arrayBuffer())
     if (bytes.byteLength > MAX_UPLOAD_BYTES) {
       return c.json({ error: { code: 'too_large', message: 'Artifact exceeds size limit' } }, 413)
@@ -60,7 +79,7 @@ export function artifactController(): Hono<AppEnv> {
         blockId: typeof blockId === 'string' && blockId ? blockId : null,
         kind,
         view: typeof view === 'string' && view ? view : null,
-        contentType: file.type || 'application/octet-stream',
+        contentType,
       },
       blob: bytes,
     })
@@ -78,13 +97,12 @@ export function artifactController(): Hono<AppEnv> {
     const bytes = await store.getBlob(workspaceId, id)
     if (!bytes) return c.json({ error: { code: 'not_found', message: 'Artifact bytes gone' } }, 404)
     // Uint8Array is a valid BodyInit on both runtimes (workerd + Node/undici); the cast
-    // satisfies the narrower ambient BodyInit type this package compiles against.
+    // satisfies the narrower ambient BodyInit type this package compiles against. Headers
+    // clamp the type to the image allow-list + send `nosniff` so the bytes can never be
+    // sniffed/served as active content (defence-in-depth with the upload-time allow-list).
     return new Response(bytes as unknown as BodyInit, {
       status: 200,
-      headers: {
-        'Content-Type': meta.contentType,
-        'Cache-Control': 'private, max-age=86400',
-      },
+      headers: blobResponseHeaders(meta.contentType),
     })
   })
 

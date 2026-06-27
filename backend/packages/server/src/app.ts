@@ -3,6 +3,7 @@ import type { AppEnv } from './http/env.js'
 import { accountController } from './modules/accounts/AccountController.js'
 import { agentRunController } from './modules/agentRuns/AgentRunController.js'
 import { artifactController } from './modules/artifacts/ArtifactController.js'
+import { harnessArtifactController } from './modules/artifacts/HarnessArtifactController.js'
 import { authController } from './modules/auth/AuthController.js'
 import { boardController } from './modules/board/BoardController.js'
 import { bootstrapController } from './modules/bootstrap/BootstrapController.js'
@@ -67,6 +68,9 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   // OpenAI-compatible LLM proxy for implementation containers (authenticated by a
   // signed, model-locked container token; upstream/in-process via the llmUpstream gateway).
   app.route('/', llmProxyController())
+  // In-container screenshot ingest for the UI tester (same container session token as the
+  // LLM proxy; reachable at `${proxyBaseUrl}/artifacts/ingest`). 503 when no blob storage.
+  app.route('/', harnessArtifactController())
   // SearXNG-compatible web-search proxy for implementation containers (same
   // model-locked container token; the search runs server-side under the deployment's
   // own key via the `webSearch` gateway, so no provider key reaches the sandbox). A

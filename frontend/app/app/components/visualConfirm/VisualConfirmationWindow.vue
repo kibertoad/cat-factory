@@ -6,13 +6,17 @@
 // view), and drives the human actions: approve (advance), request a fix from findings (the
 // Tester's fixer), or recapture (refresh the pairs). It also lets the human upload reference
 // design images for the task.
-import { reactive, ref, watch } from 'vue'
+import { onUnmounted, reactive, ref, watch } from 'vue'
 import type { VisualConfirmStepState } from '~/types/execution'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
 const visualConfirm = useVisualConfirmStore()
+
+// Release the cached screenshot/reference object URLs when the window goes away, so the
+// (potentially large) blob bytes don't linger in memory for the rest of the session.
+onUnmounted(() => visualConfirm.revokeBlobs())
 
 const { open, blockId, instanceId, stepIndex, close } = useResultView('visual-confirm')
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))

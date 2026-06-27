@@ -911,6 +911,17 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       contextDocs: keptDocs,
       contextTasks: keptTasks,
     } = buildContextFiles(context)
+    // The UI tester uploads its captured screenshots back to the backend from inside the
+    // container. It reuses the SAME container session token it already carries for the LLM
+    // proxy (auth.sessionToken), POSTing to the harness ingest route that shares the proxy
+    // base URL — so no extra credential and no extra public-URL dependency. Only the
+    // `tester-ui` kind gets it; every other kind never sees an upload seam.
+    const artifactUpload =
+      context.agentKind === UI_TESTER_AGENT_KIND &&
+      typeof auth.proxyBaseUrl === 'string' &&
+      typeof auth.sessionToken === 'string'
+        ? { url: `${auth.proxyBaseUrl}/artifacts/ingest`, token: auth.sessionToken }
+        : undefined
     const common = {
       jobId,
       model: ref.model,
@@ -919,6 +930,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       repo: buildRepoSpec(repo),
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       ...(contextFiles.length ? { contextFiles } : {}),
+      ...(artifactUpload ? { artifactUpload } : {}),
     }
     // Render the prompt's linked-context summary index from exactly the items that were
     // materialised (some may have been dropped at the byte cap), so the agent is never

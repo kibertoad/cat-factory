@@ -68,6 +68,7 @@ const draft = reactive({
   taskLimitShared: 5 as number,
   perType: {} as Record<CreateTaskType, number>,
   storeAgentContext: true,
+  artifactRetentionDays: 14,
   kaizenEnabled: true,
   // Budget: empty string ⇒ "use the built-in default" (null on the wire).
   spendCurrency: '',
@@ -82,6 +83,7 @@ function hydrate() {
   const pt = s.taskLimitPerType ?? {}
   for (const t of TASK_TYPES) draft.perType[t] = pt[t] ?? 3
   draft.storeAgentContext = s.storeAgentContext
+  draft.artifactRetentionDays = s.artifactRetentionDays
   draft.kaizenEnabled = s.kaizenEnabled
   draft.spendCurrency = s.spendCurrency ?? ''
   draft.spendMonthlyLimit = s.spendMonthlyLimit == null ? '' : String(s.spendMonthlyLimit)
@@ -109,6 +111,7 @@ async function save() {
             )
           : null,
       storeAgentContext: draft.storeAgentContext,
+      artifactRetentionDays: draft.artifactRetentionDays,
       kaizenEnabled: draft.kaizenEnabled,
     })
     toast.add({ title: 'Settings saved', icon: 'i-lucide-check', color: 'success' })
@@ -237,6 +240,28 @@ async function saveBudget() {
               <label class="flex items-center gap-2">
                 <USwitch v-model="draft.storeAgentContext" size="sm" />
                 <span class="text-sm text-slate-200">Store full agent context</span>
+              </label>
+            </section>
+
+            <!-- Visual-confirmation artifact retention -->
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-slate-200">Screenshot retention</h3>
+              <p class="text-[11px] text-slate-400">
+                How long to keep the UI tester’s captured screenshots and the reference design
+                images they’re reviewed against (the visual-confirmation gate). A daily cleanup job
+                deletes both the image bytes and their metadata once they age past this window.
+              </p>
+              <label class="block w-48">
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                  Retention (days)
+                </span>
+                <UInput
+                  v-model.number="draft.artifactRetentionDays"
+                  type="number"
+                  :min="1"
+                  :max="3650"
+                  size="sm"
+                />
               </label>
             </section>
 

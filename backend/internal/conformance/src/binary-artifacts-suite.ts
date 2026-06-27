@@ -143,5 +143,30 @@ export function defineBinaryArtifactsSuite(
       expect(await store.getBlob(ws, rec.id)).toBeNull()
       expect(await store.listByExecution(ws, e1)).toEqual([])
     })
+
+    it('pruneOlderThan removes expired artifacts (metadata + bytes) and keeps fresh ones', async () => {
+      const store = makeStore()
+      const { ws, e1, blk } = ids()
+      const rec = await store.store({
+        meta: {
+          workspaceId: ws,
+          executionId: e1,
+          blockId: blk,
+          kind: 'screenshot',
+          view: 'v',
+          contentType: 'image/png',
+        },
+        blob: png(11),
+      })
+      // A cutoff in the past keeps the just-created artifact (createdAt ≮ cutoff).
+      expect(await store.pruneOlderThan(ws, 1)).toBe(0)
+      expect(await store.getMetadata(ws, rec.id)).not.toBeNull()
+      // A cutoff in the future is past the artifact's createdAt, so it's pruned — and its
+      // bytes go with it (no orphaned blob left behind).
+      const removed = await store.pruneOlderThan(ws, Date.now() + 60_000)
+      expect(removed).toBe(1)
+      expect(await store.getMetadata(ws, rec.id)).toBeNull()
+      expect(await store.getBlob(ws, rec.id)).toBeNull()
+    })
   })
 }

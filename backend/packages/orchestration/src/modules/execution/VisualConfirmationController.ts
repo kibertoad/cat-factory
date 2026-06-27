@@ -138,6 +138,14 @@ export class VisualConfirmationController {
     const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
     vc.pairs = await this.gatherPairs(workspaceId, instance, block)
+    // The pairs come from the LAST UI-tester report, which predates this fix — the gate does
+    // not auto re-run the UI tester yet (see the handover doc). Flag the staleness so the human
+    // knows to recapture (or re-run the UI tester) before judging the screenshots as final,
+    // unless the fix itself failed (then the existing pre-fix shots are still the right ones).
+    vc.degradedReason =
+      update.state === 'failed'
+        ? 'The requested fix did not complete — review the change manually, then approve or retry.'
+        : 'A fix was applied. These screenshots were captured BEFORE it — recapture (or re-run the UI tester) to refresh them before approving.'
     return this.toAwaitingHuman(workspaceId, instance, step, block)
   }
 
@@ -184,7 +192,9 @@ export class VisualConfirmationController {
       pairs,
       attempts: 0,
       maxAttempts,
-      headSha: block.pullRequest?.branch ? null : undefined,
+      // No head-SHA staleness check on this gate (the human is the verdict), so leave it null
+      // rather than stamping branch-presence into a field meant for a commit sha.
+      headSha: null,
       rounds: [],
       ...(pairs.length === 0
         ? {
@@ -232,8 +242,24 @@ export class VisualConfirmationController {
   ): Promise<AdvanceResult> {
     const vc = step.visualConfirm!
     const executor = this.deps.agentExecutor
-    // The fixer pushes onto the PR branch, so it needs one to exist + an async executor.
+    // The fixer pushes onto the PR branch, so it needs one to exist + an async executor. If
+    // it can't run, DON'T silently swallow the human's findings: surface why on the gate (a
+    // degraded reason + a recorded failed round) and re-park, so the human sees the request
+    // didn't dispatch rather than the window quietly resetting.
     if (!isAsyncAgentExecutor(executor) || !block.pullRequest?.branch) {
+      vc.degradedReason = !block.pullRequest?.branch
+        ? 'Could not request a fix: this task has no open pull-request branch for the fixer to push to. Review the change manually, then approve.'
+        : 'Could not request a fix: no async agent executor is wired in this runtime. Review the change manually, then approve.'
+      vc.rounds = [
+        ...(vc.rounds ?? []),
+        {
+          findings,
+          helperKind: FIXER_AGENT_KIND,
+          jobId: null,
+          outcome: 'failed',
+          at: this.deps.clockNow(),
+        },
+      ]
       return this.toAwaitingHuman(workspaceId, instance, step, block)
     }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
@@ -262,6 +288,8 @@ export class VisualConfirmationController {
     this.deps.startStep(step)
     step.approval = null
     vc.phase = 'fixing'
+    // A fix is now in flight: clear any prior degraded note (e.g. a previous failed dispatch).
+    vc.degradedReason = null
     vc.attempts += 1
     vc.rounds = [
       ...(vc.rounds ?? []),

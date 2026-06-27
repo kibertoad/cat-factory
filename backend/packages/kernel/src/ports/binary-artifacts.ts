@@ -75,6 +75,12 @@ export interface BinaryArtifactStore {
    */
   listByBlock(workspaceId: string, blockId: string): Promise<BinaryArtifactRecord[]>
   delete(workspaceId: string, id: string): Promise<void>
+  /**
+   * Retention sweep: delete every artifact in the workspace created before `olderThan`
+   * (epoch ms) — BOTH the metadata row AND its bytes — and return how many were removed.
+   * Drives the configurable per-workspace retention cleanup (default 14 days).
+   */
+  pruneOlderThan(workspaceId: string, olderThan: number): Promise<number>
 }
 
 /** Per-runtime metadata persistence (D1 ⇄ Drizzle). Bytes live elsewhere. */
@@ -84,6 +90,10 @@ export interface BinaryArtifactMetadataStore {
   listByExecution(workspaceId: string, executionId: string): Promise<BinaryArtifactRecord[]>
   listByBlock(workspaceId: string, blockId: string): Promise<BinaryArtifactRecord[]>
   delete(workspaceId: string, id: string): Promise<void>
+  /** Records in the workspace created before `olderThan` (epoch ms) — for the retention sweep. */
+  listOlderThan(workspaceId: string, olderThan: number): Promise<BinaryArtifactRecord[]>
+  /** Delete metadata rows in the workspace created before `olderThan`; returns the count. */
+  deleteOlderThan(workspaceId: string, olderThan: number): Promise<number>
 }
 
 /**
@@ -185,6 +195,20 @@ export function createBinaryArtifactStore(deps: {
       const record = await metadata.get(workspaceId, id)
       if (record) await blob.delete(record.storageKey)
       await metadata.delete(workspaceId, id)
+    },
+    async pruneOlderThan(workspaceId, olderThan) {
+      // Delete the BYTES first (best-effort per blob, so one stuck object doesn't strand the
+      // rest), then drop the metadata rows in one statement. A blob delete that fails leaves
+      // an orphan the next sweep retries — never a metadata row pointing at missing bytes.
+      const expired = await metadata.listOlderThan(workspaceId, olderThan)
+      for (const record of expired) {
+        try {
+          await blob.delete(record.storageKey)
+        } catch {
+          // Tolerate a backend hiccup on a single object; the metadata delete below still runs.
+        }
+      }
+      return metadata.deleteOlderThan(workspaceId, olderThan)
     },
   }
 }

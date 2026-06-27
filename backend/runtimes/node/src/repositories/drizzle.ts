@@ -1309,6 +1309,32 @@ class DrizzleBinaryArtifactMetadataStore implements BinaryArtifactMetadataStore 
       .delete(binaryArtifacts)
       .where(and(eq(binaryArtifacts.workspace_id, workspaceId), eq(binaryArtifacts.id, id)))
   }
+
+  async listOlderThan(workspaceId: string, olderThan: number): Promise<BinaryArtifactRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(binaryArtifacts)
+      .where(
+        and(
+          eq(binaryArtifacts.workspace_id, workspaceId),
+          lt(binaryArtifacts.created_at, olderThan),
+        ),
+      )
+    return rows.map(rowToBinaryArtifact)
+  }
+
+  async deleteOlderThan(workspaceId: string, olderThan: number): Promise<number> {
+    const deleted = await this.db
+      .delete(binaryArtifacts)
+      .where(
+        and(
+          eq(binaryArtifacts.workspace_id, workspaceId),
+          lt(binaryArtifacts.created_at, olderThan),
+        ),
+      )
+      .returning({ id: binaryArtifacts.id })
+    return deleted.length
+  }
 }
 
 function rowToProvisioningLog(row: typeof provisioningLog.$inferSelect): ProvisioningLogRecord {
@@ -3294,6 +3320,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
       taskLimitShared: row.task_limit_shared,
       taskLimitPerType: perType,
       storeAgentContext: row.store_agent_context === 1,
+      artifactRetentionDays: row.artifact_retention_days,
       kaizenEnabled: row.kaizen_enabled === 1,
       delegateAgentsToRunnerPool: row.delegate_agents_to_runner_pool === 1,
       delegateTestEnvToProvider: row.delegate_test_env_to_provider === 1,
@@ -3312,6 +3339,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
         ? JSON.stringify(settings.taskLimitPerType)
         : null,
       store_agent_context: settings.storeAgentContext ? 1 : 0,
+      artifact_retention_days: settings.artifactRetentionDays,
       kaizen_enabled: settings.kaizenEnabled ? 1 : 0,
       delegate_agents_to_runner_pool: settings.delegateAgentsToRunnerPool ? 1 : 0,
       delegate_test_env_to_provider: settings.delegateTestEnvToProvider ? 1 : 0,
@@ -3329,6 +3357,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
           task_limit_shared: values.task_limit_shared,
           task_limit_per_type: values.task_limit_per_type,
           store_agent_context: values.store_agent_context,
+          artifact_retention_days: values.artifact_retention_days,
           kaizen_enabled: values.kaizen_enabled,
           delegate_agents_to_runner_pool: values.delegate_agents_to_runner_pool,
           delegate_test_env_to_provider: values.delegate_test_env_to_provider,

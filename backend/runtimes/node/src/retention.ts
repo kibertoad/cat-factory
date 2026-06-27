@@ -1,12 +1,17 @@
 import type {
   AgentContextSnapshotRepository,
+  BinaryArtifactStore,
   Clock,
   LlmCallMetricRepository,
   PipelineScheduleRepository,
   ProvisioningLogRepository,
   SubscriptionActivationRepository,
   TokenUsageRepository,
+  WorkspaceRepository,
+  WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
+import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
+import { sweepBinaryArtifactRetention } from '@cat-factory/orchestration'
 import type { Logger, RetentionConfig } from '@cat-factory/server'
 
 /** Recurring-pipeline run history is kept ~1 week (the inspector's window). */
@@ -146,5 +151,48 @@ export function startRetentionSweeper(
   void tick()
   const timer = setInterval(() => void tick(), RETENTION_SWEEP_INTERVAL_MS)
   timer.unref?.() // never keep the process alive on the sweep timer alone
+  return () => clearInterval(timer)
+}
+
+/**
+ * Start the per-workspace binary-artifact retention sweep (the Node analogue of the Worker's
+ * artifact-retention cron). Unlike the global ledger sweep above, retention here is a
+ * per-workspace setting, so each tick iterates workspaces and prunes each one's screenshots +
+ * reference images — bytes and metadata — past its own `artifactRetentionDays` window. Runs
+ * once immediately then hourly; best-effort. Returns a stop function.
+ */
+export function startArtifactRetentionSweeper(
+  store: Pick<BinaryArtifactStore, 'pruneOlderThan'>,
+  workspaceRepository: Pick<WorkspaceRepository, 'listVisible'>,
+  settingsRepository: Pick<WorkspaceSettingsRepository, 'get'>,
+  clock: Clock,
+  log: Logger,
+): () => void {
+  const tick = async () => {
+    try {
+      const removed = await sweepBinaryArtifactRetention({
+        store,
+        listWorkspaceIds: () =>
+          workspaceRepository.listVisible(null).then((ws) => ws.map((w) => w.id)),
+        retentionDaysFor: (workspaceId) =>
+          settingsRepository
+            .get(workspaceId)
+            .then(
+              (s) => s?.artifactRetentionDays ?? DEFAULT_WORKSPACE_SETTINGS.artifactRetentionDays,
+            ),
+        now: clock.now(),
+      })
+      if (removed > 0)
+        log.info({ binaryArtifacts: removed }, 'artifact retention sweep reclaimed rows')
+    } catch (error) {
+      log.error(
+        { err: error instanceof Error ? error.message : String(error) },
+        'artifact retention sweep failed',
+      )
+    }
+  }
+  void tick()
+  const timer = setInterval(() => void tick(), RETENTION_SWEEP_INTERVAL_MS)
+  timer.unref?.()
   return () => clearInterval(timer)
 }

@@ -24,7 +24,12 @@ import { WorkflowsLookup, sweepStuckRuns } from './infrastructure/workflows/swee
 import { handleGitHubSyncBatch, reconcileStaleRepos } from './infrastructure/github/sync-consumer'
 import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 import { logger } from './infrastructure/observability/logger'
-import { validateRegistrationsOnce } from '@cat-factory/orchestration'
+import { sweepBinaryArtifactRetention, validateRegistrationsOnce } from '@cat-factory/orchestration'
+import { DEFAULT_WORKSPACE_SETTINGS, createBinaryArtifactStore } from '@cat-factory/kernel'
+import { D1WorkspaceRepository } from './infrastructure/repositories/D1WorkspaceRepository'
+import { D1WorkspaceSettingsRepository } from './infrastructure/repositories/D1WorkspaceSettingsRepository'
+import { D1BinaryArtifactMetadataStore } from './infrastructure/repositories/D1BinaryArtifactMetadataStore'
+import { R2BinaryBlobBackend } from './infrastructure/storage/R2BinaryBlobBackend'
 
 // Cloudflare Worker entry. In addition to the Hono `fetch` handler, we expose a
 // `scheduled` handler (the cron sweeper, now also reconciling GitHub
@@ -153,6 +158,45 @@ export default {
             logger.error({ cron: 'retention', err: errInfo(error) }, 'retention sweep failed'),
           ),
       )
+      // Binary-artifact retention (UI screenshots + reference designs) is per-workspace, so
+      // it iterates workspaces and applies each one's configured window. Only when R2 is bound.
+      if (env.ARTIFACT_BUCKET) {
+        const settingsRepo = new D1WorkspaceSettingsRepository({ db: env.DB })
+        ctx.waitUntil(
+          sweepBinaryArtifactRetention({
+            store: createBinaryArtifactStore({
+              metadata: new D1BinaryArtifactMetadataStore({ db: env.DB }),
+              blob: new R2BinaryBlobBackend({ bucket: env.ARTIFACT_BUCKET }),
+              idGenerator: new CryptoIdGenerator(),
+              clock,
+            }),
+            listWorkspaceIds: () =>
+              new D1WorkspaceRepository({ db: env.DB })
+                .listVisible(null)
+                .then((ws) => ws.map((w) => w.id)),
+            retentionDaysFor: (workspaceId) =>
+              settingsRepo
+                .get(workspaceId)
+                .then(
+                  (s) =>
+                    s?.artifactRetentionDays ?? DEFAULT_WORKSPACE_SETTINGS.artifactRetentionDays,
+                ),
+            now: clock.now(),
+          })
+            .then((removed) =>
+              logger.info(
+                { cron: 'retention', binaryArtifacts: removed },
+                'artifact retention sweep complete',
+              ),
+            )
+            .catch((error) =>
+              logger.error(
+                { cron: 'retention', err: errInfo(error) },
+                'artifact retention sweep failed',
+              ),
+            ),
+        )
+      }
       return
     }
 

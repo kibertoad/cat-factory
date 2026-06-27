@@ -65,6 +65,12 @@ export const workspaceSettingsSchema = v.object({
    */
   storeAgentContext: v.boolean(),
   /**
+   * How many days captured UI screenshots + uploaded reference design images (the
+   * binary artifacts backing the visual-confirmation gate) are retained before the
+   * cleanup sweep deletes them — bytes and metadata. Default 14. Bounded 1–3650.
+   */
+  artifactRetentionDays: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(3650)),
+  /**
    * Whether the Kaizen agent grades agent steps after each run completes and
    * recommends prompt/model improvements. On by default. When off, no gradings are
    * scheduled (existing history + verified combos are retained, just not extended).
@@ -112,6 +118,9 @@ export const updateWorkspaceSettingsSchema = v.object({
   taskLimitShared: v.optional(v.nullable(limitSchema)),
   taskLimitPerType: v.optional(v.nullable(taskLimitPerTypeSchema)),
   storeAgentContext: v.optional(v.boolean()),
+  artifactRetentionDays: v.optional(
+    v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(3650)),
+  ),
   kaizenEnabled: v.optional(v.boolean()),
   delegateAgentsToRunnerPool: v.optional(v.boolean()),
   delegateTestEnvToProvider: v.optional(v.boolean()),

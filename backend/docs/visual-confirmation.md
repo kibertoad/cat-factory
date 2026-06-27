@@ -99,11 +99,16 @@ binary-artifact storage (the substrate both rely on)
 
 ## What's LEFT (deploy-time, intentionally not landed)
 
-### 1. Route a job INTO the UI-tester image (the one real gap)
+### 1. Auto-capture: image routing + harness consumption
 
-The image is defined (`Dockerfile.ui`) and the dispatch seam (`RunnerDispatchOptions.image: 'ui'`)
-is in place, but nothing maps that flag to the image yet. This is deploy-coupled and couldn't be
-built/verified in the dev container:
+For `tester-ui` to auto-capture, three things have to be true. The backend seam (the third) is
+now DONE; the two deploy-coupled / harness pieces remain (they couldn't be built/verified in the
+dev container).
+
+**1a. Route a job INTO the UI-tester image (deploy-coupled).** The image is defined
+(`Dockerfile.ui`) and the dispatch seam (`RunnerDispatchOptions.image: 'ui'`, set for `tester-ui`
+in `ContainerAgentExecutor.dispatchOptions`) is in place, but nothing maps that flag to the image
+yet:
 
 - **Cloudflare** reuses **one container per run** (one Durable Object per run id), so a `tester-ui`
   step needs its OWN container on the UI image. Add a second `[[containers]]` class (e.g.
@@ -114,13 +119,23 @@ built/verified in the dev container:
   `RunnerPoolTransport`.
 - Publish the UI image: `docker build -f Dockerfile.ui --build-arg BASE_TAG=<v> -t
 cat-factory-executor-ui:<v> .` and wire the tag into `deploy/backend` (package.json + wrangler).
-- Inject `ARTIFACT_UPLOAD_URL` / `ARTIFACT_UPLOAD_TOKEN` into the `tester-ui` job body (a
-  per-run, scoped artifact-ingest credential — the prompt already tells the agent to use them),
-  and add the container-token-authed ingest route the harness POSTs to.
 
-Until this lands, the gate is fully usable against **manually-uploaded** reference + screenshots;
-auto-capture lights up once routing is wired. (A stop-gap: `tester-ui` would otherwise run on the
-base image with no browser — so don't enable `pl_visual` end-to-end in prod until routed.)
+**1b. Harness consumption (executor-harness image, image-bumped).** The harness must surface the
+job body's `artifactUpload` (`{ url, token }`) to the agent as the `ARTIFACT_UPLOAD_URL` /
+`ARTIFACT_UPLOAD_TOKEN` the `tester-ui` prompt already references, and provide the Playwright
+driver. No `switch(agentKind)` belongs in the container, but the env passthrough does.
+
+**1c. Backend ingest seam — DONE.** `ContainerAgentExecutor` now injects `artifactUpload` into the
+`tester-ui` job body (reusing the run's existing container session token + the proxy base URL, so
+no extra credential or public-URL dependency), and `harnessArtifactController` mounts a
+container-token-authed `POST ${proxyBaseUrl}/artifacts/ingest` that stores the bytes as a
+`screenshot` artifact scoped to the token's workspace + execution. Image-allow-list + size guard +
+`nosniff` serving are shared with the workspace upload endpoint (`imageArtifacts.ts`).
+
+Until 1a + 1b land, the gate is fully usable against **manually-uploaded** reference + screenshots;
+auto-capture lights up once routing + harness passthrough are wired. The `pl_visual` pipeline still
+parks for a human regardless (manual mode), so it is safe to expose — it just won't have
+auto-captured shots until then.
 
 ### 2. Recapture-after-fix loop (enhancement)
 

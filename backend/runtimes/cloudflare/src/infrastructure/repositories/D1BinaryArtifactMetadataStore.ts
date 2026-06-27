@@ -104,4 +104,20 @@ export class D1BinaryArtifactMetadataStore implements BinaryArtifactMetadataStor
       .bind(workspaceId, id)
       .run()
   }
+
+  async listOlderThan(workspaceId: string, olderThan: number): Promise<BinaryArtifactRecord[]> {
+    const { results } = await this.db
+      .prepare('SELECT * FROM binary_artifacts WHERE workspace_id = ? AND created_at < ?')
+      .bind(workspaceId, olderThan)
+      .all<ArtifactRow>()
+    return (results ?? []).map(rowToRecord)
+  }
+
+  async deleteOlderThan(workspaceId: string, olderThan: number): Promise<number> {
+    const { meta } = await this.db
+      .prepare('DELETE FROM binary_artifacts WHERE workspace_id = ? AND created_at < ?')
+      .bind(workspaceId, olderThan)
+      .run()
+    return meta.changes ?? 0
+  }
 }

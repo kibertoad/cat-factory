@@ -72,5 +72,21 @@ export const useVisualConfirmStore = defineStore('visualConfirm', () => {
     }
   }
 
-  return { isBusy, approve, requestFix, recapture, uploadReference, blobUrl }
+  /**
+   * Release every cached object URL and clear the cache. `URL.createObjectURL` holds the
+   * blob in memory until explicitly revoked, so the gate window calls this on unmount to
+   * avoid leaking the (potentially large) screenshot bytes for the session's lifetime.
+   */
+  function revokeBlobs(): void {
+    for (const url of blobUrls.value.values()) {
+      try {
+        URL.revokeObjectURL(url)
+      } catch {
+        // Ignore — a URL already revoked / unsupported environment.
+      }
+    }
+    blobUrls.value = new Map()
+  }
+
+  return { isBusy, approve, requestFix, recapture, uploadReference, blobUrl, revokeBlobs }
 })

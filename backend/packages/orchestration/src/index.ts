@@ -14,6 +14,7 @@ export {
 
 export { BoardService, type BoardServiceDependencies } from './modules/board/BoardService.js'
 export * as boardLogic from './modules/board/board.logic.js'
+export { sweepBinaryArtifactRetention } from './modules/artifacts/artifactRetention.js'
 
 export {
   PipelineService,
