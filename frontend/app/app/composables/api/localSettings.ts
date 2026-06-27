@@ -1,4 +1,5 @@
-import type { LocalSettings, UpdateLocalSettingsInput } from '~/types/localSettings'
+import { getLocalSettingsContract, updateLocalSettingsContract } from '@cat-factory/contracts'
+import type { UpdateLocalSettingsInput } from '~/types/localSettings'
 import type { ApiContext } from './context'
 
 /**
@@ -7,11 +8,11 @@ import type { ApiContext } from './context'
  * Worker / stock Node facades (the store hides the panel then). No secrets, so the read view
  * is the plain config and the write replaces it wholesale.
  */
-export function localSettingsApi({ http }: ApiContext) {
+export function localSettingsApi({ send }: ApiContext) {
   return {
-    getLocalSettings: () => http<LocalSettings>('/local-settings'),
+    getLocalSettings: () => send(getLocalSettingsContract, {}),
 
     updateLocalSettings: (body: UpdateLocalSettingsInput) =>
-      http<LocalSettings>('/local-settings', { method: 'PUT', body }),
+      send(updateLocalSettingsContract, { body }),
   }
 }

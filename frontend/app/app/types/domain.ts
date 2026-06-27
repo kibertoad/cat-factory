@@ -1,332 +1,58 @@
 // ---------------------------------------------------------------------------
 // Domain model for the Agent Architecture Board.
 //
-// These shapes mirror the `@cat-factory/contracts` wire schemas exactly, so a
-// payload returned by the backend drops straight into the Pinia stores without
-// translation. The board and its agent pipelines are owned by the backend; the
-// frontend renders and mutates that state over the REST API.
+// The wire shapes are owned by `@cat-factory/contracts` and re-exported here, so
+// a payload returned by the backend drops straight into the Pinia stores without
+// translation. This module re-exports the core board vocabulary from the
+// contracts package and adds the few genuinely frontend-only types (palette
+// presentation, level-of-detail, the signed-in user view) on top.
 //
-// This module holds the core board vocabulary. Adjacent concerns live in
-// sibling modules and are re-exported below so `~/types/domain` stays the single
-// import surface:
+// Adjacent concerns live in sibling modules and are re-exported below so
+// `~/types/domain` stays the single import surface:
 //   - execution model  → ./execution
 //   - models/fragments  → ./models
 //   - document sources  → ./documents
 // ---------------------------------------------------------------------------
 
-import type { ExecutionInstance, LlmCallActivity } from './execution'
-import type { BootstrapJob } from './bootstrap'
-import type { Notification } from './notifications'
-import type { RequirementReview } from './requirements'
-import type { ConsensusSession, ConsensusStepConfig, StepGating, TaskEstimate } from './consensus'
-import type { ClarityReview } from './clarity'
-import type { BrainstormSession } from './brainstorm'
-import type { MergeThresholdPreset } from './merge'
-import type { ModelPreset } from './model-presets'
-import type { PipelineSchedule } from './recurring'
-import type { Service, WorkspaceMount } from './services'
-import type { TrackerSettings, WritebackOverride } from './tracker'
+// Wire types sourced from the contracts package (single source of truth).
+export type {
+  BlockStatus,
+  BlockType,
+  BlockLevel,
+  TaskType,
+  CreateTaskType,
+  TaskTypeFields,
+  Block,
+  PullRequestRef,
+  CloudProvider,
+  InstanceSize,
+  AgentConfigOption,
+  AgentConfigDescriptor,
+  TestConcernSeverity,
+  TestConcern,
+  TestOutcome,
+  TestReport,
+  AgentKind,
+  AgentCategory,
+  CustomAgentKind,
+  Pipeline,
+  SpendStatus,
+  Workspace,
+  WorkspaceSnapshot,
+  TaskLimitMode,
+  WorkspaceSettings,
+  UpdateWorkspaceSettingsInput,
+  ServiceFragmentDefaults,
+  KaizenGradingStatus,
+  KaizenGrading,
+  KaizenVerifiedCombo,
+  KaizenOverview,
+  WorkspaceEvent,
+} from '@cat-factory/contracts'
 
-/** Lifecycle of an architecture building block. */
-export type BlockStatus =
-  | 'planned' // sketched, no dependencies satisfied yet
-  | 'ready' // dependencies done, can be implemented
-  | 'in_progress' // a pipeline is (visually) running against it
-  | 'blocked' // a pipeline step is waiting on a human decision
-  | 'pr_ready' // pipeline finished — a PR is open and awaiting merge
-  | 'done' // PR merged, implementation complete
+import type { AgentCategory, AgentKind } from '@cat-factory/contracts'
 
-/**
- * Kind of architecture building block (drives icon + accent). `external` and
- * `environment` are no longer user-creatable, but the backend still emits them
- * (the seed's third-party `external` service, and the environments integration's
- * `environment` blocks), so they remain part of the union for display parity with
- * the contracts `blockTypeSchema`.
- */
-export type BlockType =
-  | 'frontend'
-  | 'service'
-  | 'api'
-  | 'database'
-  | 'queue'
-  | 'integration'
-  | 'external'
-  | 'environment'
-
-/**
- * Where a block sits in the granularity hierarchy. Both `frame` and `module`
- * are containers ("frames") that hold draggable tasks:
- *  - `frame`   a top-level Service; the only level rendered as a board node
- *  - `module`  a sub-frame inside a service; created when a task assigned to a
- *              not-yet-existing module is implemented (tasks can also be dragged in)
- *  - `task`    a draggable unit of work living inside a service or a module
- *  - `epic`    a NON-structural grouping node: it groups tasks (which keep their own
- *              service/module parent) via their `epicId`, and is drawn linked to them.
- *              Never a container — nothing is reparented into an epic.
- */
-export type BlockLevel = 'frame' | 'module' | 'task' | 'epic'
-
-/**
- * The kind of work a task represents, chosen at creation. Drives the card's badge/icon
- * and the optional per-service running-task limit's bucketing. `recurring` tasks are
- * created via a recurring-pipeline schedule, not the add-task form.
- */
-export type TaskType = 'feature' | 'bug' | 'document' | 'spike' | 'recurring'
-
-/** The task types selectable in the add-task form (recurring is created via a schedule). */
-export type CreateTaskType = 'feature' | 'bug' | 'document' | 'spike'
-
-/** Small, optional per-type fields collected on the add-task form. */
-export interface TaskTypeFields {
-  /** bug: defect severity. */
-  severity?: 'low' | 'medium' | 'high' | 'critical'
-  /** bug: reproduction steps / observed-vs-expected. */
-  stepsToReproduce?: string
-  /** spike: the investigation time-box, in hours. */
-  timeboxHours?: number
-  /** document: what kind of document this task produces. */
-  docKind?: 'prd' | 'rfc' | 'runbook' | 'reference' | 'other'
-}
-
-/** A building block dropped on the board. */
-export interface Block {
-  id: string
-  title: string
-  type: BlockType
-  description: string
-  /** position relative to the parent container (service or module). */
-  position: { x: number; y: number }
-  /**
-   * Explicit, user-dragged pixel size for a resizable frame (Miro-style border
-   * drag). Absent = the board auto-sizes the frame from its contents; present =
-   * the dragged size, never shrunk below the content's natural extent.
-   */
-  size?: { w: number; h: number }
-  status: BlockStatus
-  /** 0..1 implementation progress, derived from the running execution. */
-  progress: number
-  /** ids of tasks that must be implemented before this one (drives arrows). */
-  dependsOn: string[]
-  /** id of the ExecutionInstance currently running against this block, if any. */
-  executionId: string | null
-  /** granularity level; absent on legacy/persisted data means `frame`. */
-  level: BlockLevel
-  /** parent container: service or module for a task, service for a module. */
-  parentId: string | null
-  /**
-   * task-only: membership link to an `epic`-level block, independent of `parentId`.
-   * Set when the task belongs to an epic (drawn linked to it); absent/null otherwise.
-   */
-  epicId?: string | null
-  /**
-   * task-only: when this task merges, automatically start the tasks that depend on it
-   * (and whose other dependencies are also done). Off/absent ⇒ dependents wait.
-   */
-  autoStartDependents?: boolean
-  /** task-only: 0..1 confidence produced when the pipeline finishes. */
-  confidence?: number
-  /** task-only: the task-estimator's triage (complexity/risk/impact); absent until it runs. */
-  estimate?: TaskEstimate | null
-  /** task-only: the module this task belongs to (created on implement if absent). */
-  moduleName?: string
-  /** task-only: the kind of work (feature/bug/document/spike/recurring); absent = feature. */
-  taskType?: TaskType
-  /** task-only: small per-type form fields (bug severity, spike timebox, …). */
-  taskTypeFields?: TaskTypeFields | null
-  /**
-   * task-only: TECHNICAL label. `true` ⇒ a refactor / non-functional / internal change
-   * (the implementer treats the task definition as primary, specs as a regression
-   * reference; the spec-writer may produce no business specs). `false` ⇒ a business task.
-   * `null`/absent ⇒ not yet determined — the engine may infer it from the spec phase. A
-   * human-set value is authoritative and never overridden; the inspector toggle is
-   * tri-state (unset / technical / business) and sends `null` for "unset".
-   */
-  technical?: boolean | null
-  /** ids of best-practice prompt fragments folded into this block's agent prompts. */
-  fragmentIds?: string[]
-  /**
-   * frame-only: the service's selected best-practice fragment ids. Folded into the
-   * prompt of every `code-aware` agent on tasks under this service. Seeded from the
-   * workspace default on new services; absent = none.
-   */
-  serviceFragmentIds?: string[]
-  /** id of the model (from MODEL_CATALOG) to run this block's agents with; absent = default. */
-  modelId?: string
-  /** the PR the block's implementer agent opened for its work; absent = none yet. */
-  pullRequest?: PullRequestRef
-  /** task-only: selected merge threshold preset id; absent = workspace default. */
-  mergePresetId?: string
-  /** task-only: selected model preset id (which model each agent runs); absent = workspace default. */
-  modelPresetId?: string
-  /** task-only: pinned default pipeline id picked at creation; absent = none. */
-  pipelineId?: string
-  /** task-only: agent-contributed config values (id→value), e.g. the Tester's environment. */
-  agentConfig?: Record<string, string>
-  /** service-only (frame): docker-compose path for the Tester's local infra; absent = none. */
-  testComposePath?: string
-  /** service-only (frame): the service has no infra dependencies to stand up. */
-  noInfraDependencies?: boolean
-  /**
-   * service-only (frame): the default test environment a task under this service is
-   * spawned with — `local` (docker-compose infra) or `ephemeral` (provisioned env).
-   * Tasks inherit it unless they override via their `tester.environment` config.
-   * absent = the built-in `ephemeral`.
-   */
-  defaultTestEnvironment?: 'local' | 'ephemeral'
-  /** service-only (frame): cloud provider the service's jobs run on; absent = account default. */
-  cloudProvider?: CloudProvider
-  /** service-only (frame): abstract instance size for the service's jobs; absent = default. */
-  instanceSize?: InstanceSize
-  /** GitHub user id of the task's creator; drives "notify the task creator" routing. */
-  createdBy?: number | null
-  /**
-   * Internal user id (`usr_*`) of the responsible product person — an account member
-   * with the `product` role, notified when requirement review flags this task.
-   */
-  responsibleProductUserId?: string | null
-  /** task-only: override "comment on the linked issue when a PR opens"; absent/null = inherit workspace. */
-  trackerCommentOnPrOpen?: WritebackOverride | null
-  /** task-only: override "close the linked issue as resolved on merge"; absent/null = inherit workspace. */
-  trackerResolveOnMerge?: WritebackOverride | null
-}
-
-/**
- * A lightweight link from a block to the pull request its implementer agent
- * opened. Just enough to display the PR on the board and navigate to it; mirrors
- * `PullRequestRef` in `@cat-factory/contracts`.
- */
-export interface PullRequestRef {
-  /** The PR's web URL, opened when the user clicks through from the board. */
-  url: string
-  /** The PR number within the repo, shown as `#<number>` when known. */
-  number?: number
-  /** The head branch the agent pushed its work to, when known. */
-  branch?: string
-}
-
-/** The cloud provider a service's container jobs run on (per service; account default otherwise). */
-export type CloudProvider = 'cloudflare' | 'docker' | 'aws' | 'gcp' | 'azure' | 'custom'
-
-/** Abstract, cloud-neutral instance size selectable per service. */
-export type InstanceSize = 'small' | 'medium' | 'large' | 'xlarge'
-
-/** One choice of a `select` agent-config descriptor. */
-export interface AgentConfigOption {
-  value: string
-  label: string
-}
-
-/** A task-level configuration parameter an agent kind contributes (see the snapshot catalog). */
-export interface AgentConfigDescriptor {
-  id: string
-  agentKind: string
-  label: string
-  description: string
-  type: 'select'
-  options: AgentConfigOption[]
-  default: string
-}
-
-/** Severity of a Tester-raised concern. */
-export type TestConcernSeverity = 'low' | 'medium' | 'high' | 'critical'
-
-/** A bug/risk the Tester surfaced. */
-export interface TestConcern {
-  title: string
-  detail: string
-  severity: TestConcernSeverity
-}
-
-/** A per-area Tester result. */
-export interface TestOutcome {
-  name: string
-  status: 'passed' | 'failed' | 'skipped'
-  detail?: string
-}
-
-/** A Tester's structured report (what was tested, outcomes, concerns, greenlight). */
-export interface TestReport {
-  greenlight: boolean
-  summary: string
-  tested: string[]
-  outcomes: TestOutcome[]
-  concerns: TestConcern[]
-  environment?: 'local' | 'ephemeral'
-}
-
-/** The kinds of agents available in the agent palette. */
-export type AgentKind =
-  | 'requirements-review'
-  // Brainstorm (structured-dialogue) gates: propose options with trade-offs and let the human
-  // converge. `requirements-brainstorm` runs before the requirements review; `architecture-
-  // brainstorm` before the architect. Both open the shared brainstorm window.
-  | 'requirements-brainstorm'
-  | 'architecture-brainstorm'
-  | 'architect'
-  | 'researcher'
-  | 'coder'
-  | 'tester'
-  // `reviewer` is the coder's companion: it rates the change and loops it back for
-  // automatic rework below the quality threshold (see companions below).
-  | 'reviewer'
-  | 'documenter'
-  | 'integrator'
-  | 'playwright'
-  | 'mocker'
-  | 'business-documenter'
-  | 'business-reviewer'
-  // Companion agents: they grade a prior producer step's output (0..1), loop it back
-  // for automatic rework below threshold, then raise the human gate on a pass.
-  | 'architect-companion'
-  | 'spec-companion'
-  // Engine-driven "system" kinds: not user-addable palette archetypes, but they
-  // appear in seeded pipelines and run timelines. The spec-writer (aggregates every
-  // task's clarified requirements + acceptance scenarios into the service's in-repo
-  // `spec/` document before the coder runs), the blueprint mapper, the conflicts gate
-  // + its resolver, the CI gate (a special non-LLM step that polls checks + loops the
-  // fixer) + its fixer, and the PR-scoring merger.
-  | 'spec-writer'
-  | 'blueprints'
-  | 'conflicts'
-  | 'conflict-resolver'
-  | 'ci'
-  | 'ci-fixer'
-  // The Tester's companion: dispatched within the tester gate to fix the bugs the
-  // Tester found, then the Tester re-runs (skipped when the tests pass).
-  | 'fixer'
-  | 'merger'
-  // The observability-gated post-release-health gate: not in any default pipeline and
-  // only addable once an observability integration is connected. Watches the released
-  // PR's monitors/SLOs and escalates to the on-call agent on a regression.
-  | 'post-release-health'
-  // Recurring tech-debt pipeline: read-only code `analysis`, then a special
-  // non-LLM `tracker` step that files a GitHub issue / Jira ticket.
-  | 'analysis'
-  | 'tracker'
-  // Pre-implementation triage: rates Complexity/Risk/Impact after requirements are
-  // clarified, used to gate the optional consensus mechanism (and shown as ratings).
-  | 'task-estimator'
-  // Bug-fix pipeline: the `clarity-review` gate triages the bug report (the analogue
-  // of `requirements-review`, with its own structured review window), then the
-  // read-only `bug-investigator` container agent enriches it into a prose report.
-  | 'clarity-review'
-  | 'bug-investigator'
-  // The human-testing gate: spins up an ephemeral environment and PARKS for a person to
-  // validate the change in a live URL, dispatching the Tester's `fixer` (from findings) or
-  // the `conflict-resolver` (on a conflicting pull-main) on demand. Opens its own window.
-  | 'human-test'
-  // The human-review gate: watches the PR for a human code review on GitHub, looping the
-  // `fixer` to address review comments and advancing once approved with no unresolved threads.
-  // Opens the shared gate window (with a freeform "request a fix" box).
-  | 'human-review'
-  // The Kaizen agent: post-run grader (NOT a pipeline step / palette archetype). Surfaced
-  // only in Model Configuration (its model is pinnable like any agent) and run details.
-  | 'kaizen'
-
-/** A draggable agent definition shown in the agent palette. */
-/** Palette grouping for the agent archetypes (collapsible sections in the builder). */
-export type AgentCategory = 'review' | 'design' | 'build' | 'test' | 'docs' | 'gates'
-
+/** A draggable agent definition shown in the agent palette. Frontend-only. */
 export interface AgentArchetype {
   kind: AgentKind
   label: string
@@ -346,281 +72,23 @@ export interface AgentArchetype {
   resultView?: string
 }
 
-/**
- * A registered CUSTOM agent kind carried in the workspace snapshot: its id + display
- * metadata + whether it runs in a container. The SPA merges these into its palette
- * catalog (`registerCustomKinds`) so a deployment's proprietary kind becomes a
- * first-class palette block + result view. Mirrors `CustomAgentKind` in
- * `@cat-factory/contracts`.
- */
-export interface CustomAgentKind {
-  kind: AgentKind
-  presentation: {
-    label: string
-    icon: string
-    color: string
-    description: string
-    category?: AgentCategory
-    resultView?: string
-  }
-  container: boolean
-}
-
-/** A reusable, linear sequence of agents. */
-export interface Pipeline {
-  id: string
-  name: string
-  /** ordered agent kinds — the chain executes left to right */
-  agentKinds: AgentKind[]
-  /**
-   * Per-step human approval gates, parallel to `agentKinds`: `gates[i]` true ⇒
-   * the run pauses after step `i` for a human to review/edit its proposal. Absent
-   * means no gates.
-   */
-  gates?: boolean[]
-  /**
-   * Per-step companion quality thresholds (0..1), parallel to `agentKinds`. Only
-   * meaningful on companion steps; `null`/absent ⇒ use the companion's default bar.
-   */
-  thresholds?: (number | null)[]
-  /**
-   * Per-step enable flags, parallel to `agentKinds`: `enabled[i] === false` keeps the
-   * step in the pipeline but skips it at run start. Absent/true ⇒ the step runs.
-   */
-  enabled?: boolean[]
-  /**
-   * Per-step consensus config, parallel to `agentKinds`: when set (with `enabled`) and the
-   * step's kind carries a consensus trait, the step runs through the multi-model consensus
-   * mechanism. `null`/absent ⇒ standard single-actor agent.
-   */
-  consensus?: (ConsensusStepConfig | null)[]
-  /**
-   * Per-step estimate gating, parallel to `agentKinds`: when set (with `enabled`) the step
-   * is skipped at runtime unless the task estimate meets the threshold. `null`/absent ⇒
-   * always run. Used to make a companion conditional on the task estimate.
-   */
-  gating?: (StepGating | null)[]
-  /**
-   * Per-step Follow-up companion toggle, parallel to `agentKinds`: governs whether a `coder`
-   * step runs the future-looking Follow-up companion. `followUps[i] === false` disables it;
-   * `null`/`true`/absent ⇒ enabled (a Coder step gets it by default). Ignored on non-coder steps.
-   */
-  followUps?: (boolean | null)[]
-  /** Free-form organizational labels for the library (filter/search). */
-  labels?: string[]
-  /** True when archived: kept but hidden from the default library view. */
-  archived?: boolean
-  /**
-   * True for the curated built-in catalog pipelines. Built-ins are read-only
-   * templates — clone one to make an editable copy. Absent/false on custom pipelines.
-   */
-  builtin?: boolean
-}
-
-/**
- * Spend-safeguard status for the current billing period (a calendar month).
- * Token usage is priced into a single currency and gated by a budget; once
- * `exceeded`, runs are paused and the frontend shows a large warning.
- */
-export interface SpendStatus {
-  /** Start of the current billing period (epoch ms). */
-  periodStart: number
-  inputTokens: number
-  outputTokens: number
-  /** Estimated spend this period, in `currency`. */
-  costSpent: number
-  /** Configured budget for one period, in `currency`. */
-  costLimit: number
-  /** ISO 4217 currency (e.g. 'EUR'). */
-  currency: string
-  /** True once the budget is reached: execution is paused. */
-  exceeded: boolean
-}
-
-/** A board/project container owned by the backend. */
-export interface Workspace {
-  id: string
-  name: string
-  /** Optional free-text description (null when unset). */
-  description: string | null
-  createdAt: number
-  /** The account this board belongs to, or null for a legacy/unscoped board. */
-  accountId: string | null
-}
-
-/** Full server-side state of a workspace, returned on load and after resets. */
-export interface WorkspaceSnapshot {
-  workspace: Workspace
-  blocks: Block[]
-  pipelines: Pipeline[]
-  executions: ExecutionInstance[]
-  /** Bootstrap runs (the unified `agent_runs` bootstrap rows), so the board can
-   * render a bootstrap's live progress / failure + retry on load. Absent on
-   * older servers. */
-  bootstrapJobs?: BootstrapJob[]
-  /** Current spend-safeguard status; absent on older servers. */
-  spend?: SpendStatus
-  /** Open human-actionable notifications for the board inbox + badges. */
-  notifications?: Notification[]
-  /** The workspace's merge threshold presets (the task preset picker's options). */
-  mergePresets?: MergeThresholdPreset[]
-  /** Agent config-contribution descriptors (the task-level fields the board renders). */
-  agentConfigCatalog?: AgentConfigDescriptor[]
-  /** The workspace's model presets (the Model Configuration library + per-task picker). */
-  modelPresets?: ModelPreset[]
-  /**
-   * The deployment's env-routing defaults as `provider:model` refs: the model a
-   * kind runs on when neither the task nor the workspace pins one. `default` is the
-   * global fallback; `byKind` carries kinds the operator routed specifically. Used
-   * to name the model behind "Deployment default" in the settings panel.
-   */
-  deploymentModelDefaults?: { default: string; byKind: Record<string, string> }
-  /** The workspace's default service-fragment selection (ids new services inherit). */
-  serviceFragmentDefaults?: ServiceFragmentDefaults
-  /** The workspace's recurring pipelines (schedules shown on the board + inspector). */
-  recurringPipelines?: PipelineSchedule[]
-  /** The workspace's issue-tracker selection (where the tech-debt pipeline files tickets). */
-  trackerSettings?: TrackerSettings
-  /** In-org sharing: the services this workspace mounts (with per-board frame layout). */
-  mounts?: WorkspaceMount[]
-  /** In-org sharing: the org's services this board can mount from (with mount counts). */
-  serviceCatalog?: Service[]
-  /** The workspace's runtime settings (human-wait escalation threshold + task limit). */
-  settings?: WorkspaceSettings
-  /**
-   * Registered custom agent kinds (kind + presentation + container flag) a deployment
-   * mixed in. The SPA merges these into its palette catalog so a proprietary kind becomes
-   * a first-class palette block + result view. Absent when none are registered.
-   */
-  customAgentKinds?: CustomAgentKind[]
-}
-
-/** How the per-service running-task limit is bucketed. Mirrors `@cat-factory/contracts`. */
-export type TaskLimitMode = 'off' | 'shared' | 'per_type'
-
-/**
- * A workspace's runtime settings: how long a run may wait for a human before its
- * notification escalates yellow → red, and whether/how the number of tasks running
- * concurrently under one service is capped. Mirrors `@cat-factory/contracts`.
- */
-export interface WorkspaceSettings {
-  /** Minutes a run may wait for human input before its notification turns red. */
-  waitingEscalationMinutes: number
-  /** Whether/how the per-service running-task limit is enforced. */
-  taskLimitMode: TaskLimitMode
-  /** The shared cap, when `taskLimitMode` is `shared`. */
-  taskLimitShared: number | null
-  /** The per-type caps, when `taskLimitMode` is `per_type` (type → cap). */
-  taskLimitPerType: Partial<Record<CreateTaskType, number>> | null
-  /** Whether to store the complete provided-context snapshot for each container agent. */
-  storeAgentContext: boolean
-  /** Whether the Kaizen agent grades agent steps after each run. On by default. */
-  kaizenEnabled: boolean
-  /** Local mode only: dispatch container agents to the runner pool instead of host Docker. */
-  delegateAgentsToRunnerPool: boolean
-  /** Local mode only: provision Tester environments via the env provider instead of DinD. */
-  delegateTestEnvToProvider: boolean
-  /** Spend budget currency (ISO 4217). Null ⇒ the built-in default (`EUR`). */
-  spendCurrency: string | null
-  /** Monthly spend budget in `spendCurrency`. Null ⇒ the built-in default. */
-  spendMonthlyLimit: number | null
-}
-
-/** Patch a workspace's settings (only the supplied fields change). */
-export interface UpdateWorkspaceSettingsInput {
-  waitingEscalationMinutes?: number
-  taskLimitMode?: TaskLimitMode
-  taskLimitShared?: number | null
-  taskLimitPerType?: Partial<Record<CreateTaskType, number>> | null
-  storeAgentContext?: boolean
-  kaizenEnabled?: boolean
-  delegateAgentsToRunnerPool?: boolean
-  delegateTestEnvToProvider?: boolean
-  spendCurrency?: string | null
-  spendMonthlyLimit?: number | null
-}
-
-/**
- * A workspace's default service-fragment selection: the best-practice fragment ids
- * new services inherit onto their `serviceFragmentIds`. Mirrors `@cat-factory/contracts`.
- */
-export interface ServiceFragmentDefaults {
-  fragmentIds: string[]
-}
-
-/** Lifecycle of a Kaizen grading. Mirrors `@cat-factory/contracts`. */
-export type KaizenGradingStatus = 'scheduled' | 'running' | 'complete' | 'failed'
-
-/**
- * A Kaizen grading of one completed agent step (how smooth/efficient the interaction
- * was, 1..5, plus recommendations). Mirrors `@cat-factory/contracts`.
- */
-export interface KaizenGrading {
-  id: string
-  executionId: string
-  blockId: string
-  stepIndex: number
-  agentKind: string
-  model: string
-  promptVersion: number
-  comboKey: string
-  status: KaizenGradingStatus
-  grade: number | null
-  summary: string
-  recommendations: string[]
-  graderModel: string | null
-  error: string | null
-  createdAt: number
-  updatedAt: number
-}
-
-/** A `(promptVersion, agentKind, model)` combo's verification progress. */
-export interface KaizenVerifiedCombo {
-  comboKey: string
-  agentKind: string
-  model: string
-  promptVersion: number
-  consecutiveHighGrades: number
-  verified: boolean
-  verifiedAt: number | null
-  updatedAt: number
-}
-
-/** The Kaizen screen payload: recent grading history + the verified-combo library. */
-export interface KaizenOverview {
-  gradings: KaizenGrading[]
-  verified: KaizenVerifiedCombo[]
-}
-
-/**
- * Real-time events pushed over the workspace WebSocket stream (see
- * `useWorkspaceStream`). Mirrors `WorkspaceEvent` in `@cat-factory/contracts`.
- */
-export type WorkspaceEvent =
-  | { type: 'execution'; instance: ExecutionInstance; block: Block | null; at: number }
-  | { type: 'board'; reason: string; at: number }
-  | { type: 'bootstrap'; job: BootstrapJob; block: Block | null; at: number }
-  | { type: 'notification'; notification: Notification; at: number }
-  | { type: 'llmCall'; call: LlmCallActivity; at: number }
-  | { type: 'requirements'; review: RequirementReview; at: number }
-  | { type: 'consensus'; session: ConsensusSession; at: number }
-  | { type: 'clarity'; review: ClarityReview; at: number }
-  | { type: 'brainstorm'; session: BrainstormSession; at: number }
-  | { type: 'kaizen'; grading: KaizenGrading; at: number }
-
 /** Level-of-detail buckets driven by the canvas zoom level. Shallow → deep:
  * `far`/`mid`/`close` govern a service frame (chip → card → opened with tasks);
  * `steps`/`subtasks` drill spatially into an individual task — revealing its
- * build-pipeline steps, then each step's live todo breakdown. */
+ * build-pipeline steps, then each step's live todo breakdown. Frontend-only. */
 export type LodLevel = 'far' | 'mid' | 'close' | 'steps' | 'subtasks'
 
-/** The signed-in GitHub user, as returned by the backend's /auth/me. */
+/**
+ * The signed-in user, as returned by the backend's /auth/me. The backend's
+ * session-user id is an internal `usr_*` string (NOT the GitHub numeric id).
+ */
 export interface AuthUser {
-  /** GitHub user id (stable across renames). */
-  id: number
+  /** Internal user id (`usr_*`). */
+  id: string
   login: string
   name: string | null
   avatarUrl: string | null
+  email?: string | null
 }
 
 // Re-export the adjacent domain modules so `~/types/domain` remains the single

@@ -1,43 +1,21 @@
-// Frontend mirrors of the shared provider self-description + connection wire contracts
-// (`@cat-factory/contracts` provider-config.ts + environments.ts + runners.ts), used by
-// the generic connect form for the two infrastructure providers: the ephemeral-environment
-// provider and the self-hosted runner pool. Both speak the same ProviderDescriptor.
+// Provider self-description + connection wire contracts for the generic connect form
+// used by the two infrastructure providers: the ephemeral-environment provider and the
+// self-hosted runner pool. Both speak the same ProviderDescriptor.
+//
+// The shared shapes are sourced from @cat-factory/contracts (single source of truth).
+// The register/test request bodies are the union of the two per-kind contract inputs
+// (the composable picks the right contract per kind). `ProviderConnectionKind` and the
+// generic `ProviderConnection` view have no exported contract type, so they stay
+// frontend-only below.
+
+export type {
+  ProviderConfigField,
+  ProviderDescriptor,
+  ConnectionTestResult,
+} from '@cat-factory/contracts'
 
 /** The two infrastructure providers configured through the generic connect form. */
 export type ProviderConnectionKind = 'environment' | 'runner-pool'
-
-/** One config value a provider needs, rendered as a single form field. */
-export interface ProviderConfigField {
-  key: string
-  label: string
-  help?: string
-  placeholder?: string
-  secret?: boolean
-  required?: boolean
-  type?: 'text' | 'password' | 'select'
-  options?: { value: string; label: string }[]
-  /** The provider/manifest default; a field with one is optional (UI shows a hint). */
-  default?: string
-}
-
-/** What the SPA needs to render a provider's connect form. */
-export interface ProviderDescriptor {
-  providerId: string
-  label: string
-  kind: 'native' | 'manifest'
-  configFields: ProviderConfigField[]
-  supportsTest: boolean
-  /** Required-without-default keys not yet supplied (drives the banner). */
-  missingRequired: string[]
-  /** Base manifest a native provider's flat fields are overlaid onto before save. */
-  manifestTemplate?: Record<string, unknown>
-  /**
-   * The CURRENT saved manifest (non-secret — only secret-ref key names), present once a
-   * connection exists. Edits are overlaid onto this (not the bare `manifestTemplate`) so
-   * re-saving preserves previously-stored providerConfig instead of dropping it.
-   */
-  savedManifest?: Record<string, unknown>
-}
 
 /** A workspace's provider binding, as exposed to clients (never secret values). */
 export interface ProviderConnection {
@@ -49,10 +27,11 @@ export interface ProviderConnection {
   secretKeys: string[]
 }
 
-export interface ConnectionTestResult {
-  ok: boolean
-  message?: string
-}
+// The connect form builds the manifest dynamically from a server-provided scaffold
+// (`ProviderDescriptor.manifestTemplate`/`savedManifest`) overlaid with form values, so
+// the FE treats it as an opaque JSON bag. The backend re-validates it against the precise
+// per-provider manifest contract on receipt; the composable casts to the contract input
+// type at the single `send` boundary.
 
 /** The assembled register payload (a full manifest + the write-only secret bundle). */
 export interface RegisterProviderInput {
@@ -60,6 +39,7 @@ export interface RegisterProviderInput {
   secrets: Record<string, string>
 }
 
+/** The test/probe payload (manifest-driven or native), shared by both providers. */
 export interface TestProviderInput {
   manifest?: Record<string, unknown>
   config?: Record<string, string>

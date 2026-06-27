@@ -1,11 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type {
-  CreateScheduleInput,
-  PipelineSchedule,
-  ScheduleRun,
-  UpdateScheduleInput,
-} from '~/types/recurring'
+import type { PipelineSchedule, ScheduleRun, UpdateScheduleInput } from '~/types/recurring'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useBoardStore } from '~/stores/board'
 
@@ -39,7 +34,7 @@ export const useRecurringPipelinesStore = defineStore('recurringPipelines', () =
     return schedules.value.find((s) => s.blockId === blockId)
   }
 
-  async function create(input: CreateScheduleInput) {
+  async function create(input: Parameters<typeof api.createRecurringPipeline>[1]) {
     const ws = useWorkspaceStore()
     const created = await api.createRecurringPipeline(ws.requireId(), input)
     await ws.refresh()

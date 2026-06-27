@@ -1,17 +1,24 @@
-import { createScheduleSchema, updateScheduleSchema } from '@cat-factory/contracts'
+import {
+  createScheduleContract,
+  deleteScheduleContract,
+  listScheduleRunsContract,
+  listSchedulesContract,
+  runScheduleNowContract,
+  updateScheduleContract,
+} from '@cat-factory/contracts'
+import type { RecurringModule } from '@cat-factory/orchestration'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import type { RecurringModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 
 /** Resolve the recurring-pipeline module or send a 503, returning null when unconfigured. */
-function requireRecurring(c: Context<AppEnv>): RecurringModule | null {
+function requireRecurring<E extends AppEnv>(c: Context<E>): RecurringModule | null {
   return c.get('container').recurring ?? null
 }
 
-const unavailable = (c: Context<AppEnv>) =>
+const unavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json({ error: { code: 'unavailable', message: 'Recurring pipelines are not configured' } }, 503)
 
 /**
@@ -21,48 +28,54 @@ const unavailable = (c: Context<AppEnv>) =>
 export function recurringPipelineController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.get('/recurring-pipelines', async (c) => {
+  buildHonoRoute(app, listSchedulesContract, async (c) => {
     const recurring = requireRecurring(c)
     if (!recurring) return unavailable(c)
-    return c.json(await recurring.service.list(param(c, 'workspaceId')))
+    return c.json(await recurring.service.list(param(c, 'workspaceId')), 200)
   })
 
-  app.post('/recurring-pipelines', jsonBody(createScheduleSchema), async (c) => {
+  buildHonoRoute(app, createScheduleContract, async (c) => {
     const recurring = requireRecurring(c)
     if (!recurring) return unavailable(c)
     const schedule = await recurring.service.create(param(c, 'workspaceId'), c.req.valid('json'))
     return c.json(schedule, 201)
   })
 
-  app.patch('/recurring-pipelines/:scheduleId', jsonBody(updateScheduleSchema), async (c) => {
+  buildHonoRoute(app, updateScheduleContract, async (c) => {
     const recurring = requireRecurring(c)
     if (!recurring) return unavailable(c)
     const schedule = await recurring.service.update(
       param(c, 'workspaceId'),
-      param(c, 'scheduleId'),
+      c.req.valid('param').scheduleId,
       c.req.valid('json'),
     )
-    return c.json(schedule)
+    return c.json(schedule, 200)
   })
 
-  app.delete('/recurring-pipelines/:scheduleId', async (c) => {
+  buildHonoRoute(app, deleteScheduleContract, async (c) => {
     const recurring = requireRecurring(c)
     if (!recurring) return unavailable(c)
-    await recurring.service.remove(param(c, 'workspaceId'), param(c, 'scheduleId'))
+    await recurring.service.remove(param(c, 'workspaceId'), c.req.valid('param').scheduleId)
     return c.body(null, 204)
   })
 
-  app.get('/recurring-pipelines/:scheduleId/runs', async (c) => {
+  buildHonoRoute(app, listScheduleRunsContract, async (c) => {
     const recurring = requireRecurring(c)
     if (!recurring) return unavailable(c)
-    return c.json(await recurring.service.listRuns(param(c, 'workspaceId'), param(c, 'scheduleId')))
+    return c.json(
+      await recurring.service.listRuns(param(c, 'workspaceId'), c.req.valid('param').scheduleId),
+      200,
+    )
   })
 
-  app.post('/recurring-pipelines/:scheduleId/run-now', async (c) => {
+  buildHonoRoute(app, runScheduleNowContract, async (c) => {
     const recurring = requireRecurring(c)
     if (!recurring) return unavailable(c)
-    const schedule = await recurring.service.runNow(param(c, 'workspaceId'), param(c, 'scheduleId'))
-    return c.json(schedule)
+    const schedule = await recurring.service.runNow(
+      param(c, 'workspaceId'),
+      c.req.valid('param').scheduleId,
+    )
+    return c.json(schedule, 200)
   })
 
   return app

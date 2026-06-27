@@ -1,67 +1,77 @@
-import type { Service, WorkspaceMount } from '~/types/domain'
-import type {
-  CreateScheduleInput,
-  PipelineSchedule,
-  ScheduleRun,
-  UpdateScheduleInput,
-} from '~/types/recurring'
+import {
+  createScheduleContract,
+  deleteScheduleContract,
+  listSchedulesContract,
+  listScheduleRunsContract,
+  listServiceCatalogContract,
+  listServiceMountsContract,
+  mountServiceContract,
+  runScheduleNowContract,
+  unmountServiceContract,
+  updateScheduleContract,
+  updateServiceMountLayoutContract,
+} from '@cat-factory/contracts'
+import type { UpdateScheduleInput } from '~/types/recurring'
+import type { SendParams } from './client'
 import type { ApiContext, Position } from './context'
 
+// The create-schedule body is typed from the contract's INPUT shape so the
+// valibot-defaulted `enabled` stays optional for callers (the exported
+// `CreateScheduleInput` is the post-default OUTPUT shape).
+type CreateScheduleBody = NonNullable<SendParams<typeof createScheduleContract>['body']>
+
 /** Recurring (scheduled) pipelines + the in-org shared-service mount catalog. */
-export function recurringApi({ http, ws }: ApiContext) {
+export function recurringApi({ send, ws }: ApiContext) {
   return {
     // ---- recurring pipelines (scheduled runs against a service) -----------
     listRecurringPipelines: (workspaceId: string) =>
-      http<PipelineSchedule[]>(`${ws(workspaceId)}/recurring-pipelines`),
+      send(listSchedulesContract, { pathPrefix: ws(workspaceId) }),
 
-    createRecurringPipeline: (workspaceId: string, body: CreateScheduleInput) =>
-      http<PipelineSchedule>(`${ws(workspaceId)}/recurring-pipelines`, { method: 'POST', body }),
+    createRecurringPipeline: (workspaceId: string, body: CreateScheduleBody) =>
+      send(createScheduleContract, { pathPrefix: ws(workspaceId), body }),
 
     updateRecurringPipeline: (workspaceId: string, id: string, body: UpdateScheduleInput) =>
-      http<PipelineSchedule>(`${ws(workspaceId)}/recurring-pipelines/${encodeURIComponent(id)}`, {
-        method: 'PATCH',
+      send(updateScheduleContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { scheduleId: id },
         body,
       }),
 
     deleteRecurringPipeline: (workspaceId: string, id: string) =>
-      http(`${ws(workspaceId)}/recurring-pipelines/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-      }),
+      send(deleteScheduleContract, { pathPrefix: ws(workspaceId), pathParams: { scheduleId: id } }),
 
     listScheduleRuns: (workspaceId: string, id: string) =>
-      http<ScheduleRun[]>(`${ws(workspaceId)}/recurring-pipelines/${encodeURIComponent(id)}/runs`),
+      send(listScheduleRunsContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { scheduleId: id },
+      }),
 
     runScheduleNow: (workspaceId: string, id: string) =>
-      http<PipelineSchedule>(
-        `${ws(workspaceId)}/recurring-pipelines/${encodeURIComponent(id)}/run-now`,
-        { method: 'POST' },
-      ),
+      send(runScheduleNowContract, { pathPrefix: ws(workspaceId), pathParams: { scheduleId: id } }),
 
     // ---- in-org shared services (mount/unmount + org catalog) -------------
     // The services this workspace mounts, and the org catalog it can mount from. A 503
     // means the feature isn't wired (the store hides its UI on any error here).
     listServiceMounts: (workspaceId: string) =>
-      http<WorkspaceMount[]>(`${ws(workspaceId)}/services`),
+      send(listServiceMountsContract, { pathPrefix: ws(workspaceId) }),
 
     listServiceCatalog: (workspaceId: string) =>
-      http<Service[]>(`${ws(workspaceId)}/services/catalog`),
+      send(listServiceCatalogContract, { pathPrefix: ws(workspaceId) }),
 
     mountService: (workspaceId: string, serviceId: string, body: { position?: Position } = {}) =>
-      http<WorkspaceMount>(`${ws(workspaceId)}/services/${encodeURIComponent(serviceId)}`, {
-        method: 'POST',
-        body,
-      }),
+      send(mountServiceContract, { pathPrefix: ws(workspaceId), pathParams: { serviceId }, body }),
 
     unmountService: (workspaceId: string, serviceId: string) =>
-      http(`${ws(workspaceId)}/services/${encodeURIComponent(serviceId)}`, { method: 'DELETE' }),
+      send(unmountServiceContract, { pathPrefix: ws(workspaceId), pathParams: { serviceId } }),
 
     updateMountLayout: (
       workspaceId: string,
       serviceId: string,
       body: { position?: Position; size?: { w: number; h: number } | null },
     ) =>
-      http<WorkspaceMount>(`${ws(workspaceId)}/services/${encodeURIComponent(serviceId)}/layout`, {
-        method: 'PATCH',
+      send(updateServiceMountLayoutContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { serviceId },
         body,
       }),
   }

@@ -91,7 +91,6 @@ export {
 export { InAppNotificationChannel } from './events/InAppNotificationChannel.js'
 export { mountAuthGate } from './http/authGate.js'
 export { param } from './http/params.js'
-export { jsonBody } from './http/validation.js'
 export { handleError } from './http/errorHandler.js'
 export { parseAllowedOrigins, resolveCorsOrigin } from './http/cors.js'
 export { base64url, base64urlToBytes, pkcs8PemToDer, timingSafeEqual } from './crypto/encoding.js'

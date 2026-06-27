@@ -1,17 +1,22 @@
-import { createModelPresetSchema, updateModelPresetSchema } from '@cat-factory/contracts'
+import {
+  createModelPresetContract,
+  deleteModelPresetContract,
+  listModelPresetsContract,
+  updateModelPresetContract,
+} from '@cat-factory/contracts'
+import type { ModelPresetsModule } from '@cat-factory/orchestration'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import type { ModelPresetsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 
 /** Resolve the model-preset module or send a 503, returning null when unconfigured. */
-function requireModelPresets(c: Context<AppEnv>): ModelPresetsModule | null {
+function requireModelPresets<E extends AppEnv>(c: Context<E>): ModelPresetsModule | null {
   return c.get('container').modelPresets ?? null
 }
 
-const unavailable = (c: Context<AppEnv>) =>
+const unavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json({ error: { code: 'unavailable', message: 'Model presets are not configured' } }, 503)
 
 /**
@@ -23,34 +28,34 @@ const unavailable = (c: Context<AppEnv>) =>
 export function modelPresetController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.get('/model-presets', async (c) => {
+  buildHonoRoute(app, listModelPresetsContract, async (c) => {
     const presets = requireModelPresets(c)
     if (!presets) return unavailable(c)
-    return c.json(await presets.service.list(param(c, 'workspaceId')))
+    return c.json(await presets.service.list(param(c, 'workspaceId')), 200)
   })
 
-  app.post('/model-presets', jsonBody(createModelPresetSchema), async (c) => {
+  buildHonoRoute(app, createModelPresetContract, async (c) => {
     const presets = requireModelPresets(c)
     if (!presets) return unavailable(c)
     const preset = await presets.service.create(param(c, 'workspaceId'), c.req.valid('json'))
     return c.json(preset, 201)
   })
 
-  app.patch('/model-presets/:presetId', jsonBody(updateModelPresetSchema), async (c) => {
+  buildHonoRoute(app, updateModelPresetContract, async (c) => {
     const presets = requireModelPresets(c)
     if (!presets) return unavailable(c)
     const preset = await presets.service.update(
       param(c, 'workspaceId'),
-      param(c, 'presetId'),
+      c.req.valid('param').presetId,
       c.req.valid('json'),
     )
-    return c.json(preset)
+    return c.json(preset, 200)
   })
 
-  app.delete('/model-presets/:presetId', async (c) => {
+  buildHonoRoute(app, deleteModelPresetContract, async (c) => {
     const presets = requireModelPresets(c)
     if (!presets) return unavailable(c)
-    await presets.service.remove(param(c, 'workspaceId'), param(c, 'presetId'))
+    await presets.service.remove(param(c, 'workspaceId'), c.req.valid('param').presetId)
     return c.body(null, 204)
   })
 

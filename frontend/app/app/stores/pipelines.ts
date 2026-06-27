@@ -132,7 +132,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
   function toggleDraftGating(index: number) {
     draftGating.value[index] = draftGating.value[index]?.enabled
       ? null
-      : { enabled: true, minRisk: 0.5, minImpact: 0.5 }
+      : { enabled: true, minRisk: 0.5, minImpact: 0.5, onMissingEstimate: 'run' }
   }
 
   /**

@@ -7,51 +7,14 @@
 // Two scopes: the connection (+ bot token, never sent here) is per-account; the
 // notification routing is per-workspace; the @-mention member map is per-account.
 // ---------------------------------------------------------------------------
+//
+// All wire shapes are sourced from @cat-factory/contracts (single source of truth).
 
-import type { NotificationType } from './notifications'
-
-/** An account's Slack connection, as exposed to clients — safe metadata only. */
-export interface SlackConnection {
-  teamId: string
-  teamName: string
-  teamIconUrl?: string | null
-  botUserId?: string | null
-  scopes?: string[]
-  connectedAt: number
-}
-
-/** Routing for a single notification type: whether it posts, and where. */
-export interface SlackRoute {
-  enabled: boolean
-  /** A channel id (`C0123…`) or name (`#general`); empty = unrouted. */
-  channel: string
-}
-
-/** A workspace's Slack notification routing. */
-export interface SlackNotificationSettings {
-  routes: Partial<Record<NotificationType, SlackRoute>>
-  mentionsEnabled: boolean
-  updatedAt: number
-}
-
-/** One internal user id → Slack member id mapping entry. */
-export type SlackMemberRole = 'product' | 'engineering'
-
-export interface SlackMemberMappingEntry {
-  /** Internal user id (`usr_*`) — the same id the member roster shows. */
-  userId: string
-  slackUserId: string
-  /**
-   * Notification role: `product` people are @-mentioned on requirement-review
-   * findings; everyone else (`engineering`) only when they created the task.
-   * Absent means `engineering`.
-   */
-  role?: SlackMemberRole
-}
-
-/** A Slack channel option for the routing picker. */
-export interface SlackChannel {
-  id: string
-  name: string
-  isPrivate: boolean
-}
+export type {
+  SlackConnection,
+  SlackRoute,
+  SlackNotificationSettings,
+  SlackMemberRole,
+  SlackMemberMappingEntry,
+  SlackChannel,
+} from '@cat-factory/contracts'

@@ -1,5 +1,6 @@
-import { provisioningLogQuerySchema } from '@cat-factory/contracts'
+import { listProvisioningLogsContract, provisioningLogQuerySchema } from '@cat-factory/contracts'
 import * as v from 'valibot'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { ProvisioningLogsModule } from '@cat-factory/orchestration'
@@ -7,15 +8,15 @@ import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 
 /** Resolve the provisioning-log module or send a 503, returning null when unconfigured. */
-function requireProvisioningLogs(c: Context<AppEnv>): ProvisioningLogsModule | null {
+function requireProvisioningLogs<E extends AppEnv>(c: Context<E>): ProvisioningLogsModule | null {
   return c.get('container').provisioningLogs ?? null
 }
 
-const unavailable = (c: Context<AppEnv>) =>
+const unavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json({ error: { code: 'unavailable', message: 'Provisioning log is not configured' } }, 503)
 
 /** Drop undefined query params so valibot's optionals don't see empty strings. */
-function presentQuery(c: Context<AppEnv>): Record<string, string> {
+function presentQuery<E extends AppEnv>(c: Context<E>): Record<string, string> {
   const out: Record<string, string> = {}
   for (const key of ['subsystem', 'executionId', 'targetId', 'limit', 'before']) {
     const value = c.req.query(key)
@@ -33,7 +34,7 @@ function presentQuery(c: Context<AppEnv>): Record<string, string> {
 export function provisioningLogController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.get('/provisioning-logs', async (c) => {
+  buildHonoRoute(app, listProvisioningLogsContract, async (c) => {
     const logs = requireProvisioningLogs(c)
     if (!logs) return unavailable(c)
     const parsed = v.safeParse(provisioningLogQuerySchema, presentQuery(c))
@@ -41,7 +42,7 @@ export function provisioningLogController(): Hono<AppEnv> {
       return c.json({ error: { code: 'invalid_query', message: 'Invalid query parameters' } }, 400)
     }
     const entries = await logs.service.list(param(c, 'workspaceId'), parsed.output)
-    return c.json({ entries })
+    return c.json({ entries }, 200)
   })
 
   return app

@@ -50,6 +50,10 @@ export type ApiKey = v.InferOutput<typeof apiKeySchema>
 export const apiKeyListSchema = v.array(apiKeySchema)
 export type ApiKeyList = v.InferOutput<typeof apiKeyListSchema>
 
+/** The `{ keys }` envelope every key-list endpoint (workspace/user/account) returns. */
+export const apiKeyListResultSchema = v.object({ keys: apiKeyListSchema })
+export type ApiKeyListResult = v.InferOutput<typeof apiKeyListResultSchema>
+
 /** Add a key to a pool. `key` is write-only (the raw secret). */
 export const addApiKeySchema = v.object({
   provider: apiKeyProviderSchema,

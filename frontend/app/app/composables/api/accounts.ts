@@ -1,93 +1,78 @@
-import type {
-  Account,
-  AccountInvitation,
-  AccountMember,
-  AccountRole,
-  AddMemberInput,
-  EmailConnection,
-  UpdateAccountInput,
-} from '~/types/domain'
-import type { AccountSettingsView, UpdateAccountSettingsInput } from '~/types/accountSettings'
+import {
+  addAccountMemberContract,
+  connectEmailContract,
+  createAccountContract,
+  createInvitationContract,
+  disconnectEmailContract,
+  getAccountSettingsContract,
+  getEmailConnectionContract,
+  listAccountMembersContract,
+  listAccountsContract,
+  listInvitationsContract,
+  revokeInvitationContract,
+  setMemberRolesContract,
+  testEmailContract,
+  updateAccountContract,
+  updateAccountSettingsContract,
+} from '@cat-factory/contracts'
+import type { AccountRole, UpdateAccountInput } from '~/types/domain'
+import type { UpdateAccountSettingsInput } from '~/types/accountSettings'
 import type { ApiContext } from './context'
 
 /** Account (tenancy) management: orgs, members, invitations + the email sender. */
-export function accountsApi({ http }: ApiContext) {
+export function accountsApi({ send }: ApiContext) {
   return {
     // ---- accounts (tenancy) -----------------------------------------------
     // The accounts the user can switch between (personal + orgs), org creation
     // and membership management. Empty when auth is disabled (dev).
-    listAccounts: () => http<Account[]>('/accounts'),
+    listAccounts: () => send(listAccountsContract, {}),
 
     createAccount: (body: { name: string; githubAccountLogin?: string }) =>
-      http<Account>('/accounts', { method: 'POST', body }),
+      send(createAccountContract, { body }),
 
     updateAccount: (accountId: string, body: UpdateAccountInput) =>
-      http<Account>(`/accounts/${encodeURIComponent(accountId)}`, { method: 'PATCH', body }),
+      send(updateAccountContract, { pathParams: { accountId }, body }),
 
     listAccountMembers: (accountId: string) =>
-      http<AccountMember[]>(`/accounts/${encodeURIComponent(accountId)}/members`),
+      send(listAccountMembersContract, { pathParams: { accountId } }),
 
-    addAccountMember: (accountId: string, body: AddMemberInput) =>
-      http<AccountMember>(`/accounts/${encodeURIComponent(accountId)}/members`, {
-        method: 'POST',
-        body,
-      }),
+    addAccountMember: (accountId: string, body: { userId: string; roles?: AccountRole[] }) =>
+      send(addAccountMemberContract, { pathParams: { accountId }, body }),
 
     setMemberRoles: (accountId: string, userId: string, roles: AccountRole[]) =>
-      http<AccountMember>(
-        `/accounts/${encodeURIComponent(accountId)}/members/${encodeURIComponent(userId)}/roles`,
-        { method: 'PATCH', body: { roles } },
-      ),
+      send(setMemberRolesContract, { pathParams: { accountId, userId }, body: { roles } }),
 
     // Invitations: invite teammates by email into an org account.
     listInvitations: (accountId: string) =>
-      http<AccountInvitation[]>(`/accounts/${encodeURIComponent(accountId)}/invitations`),
+      send(listInvitationsContract, { pathParams: { accountId } }),
 
     createInvitation: (accountId: string, body: { email: string; roles?: AccountRole[] }) =>
-      http<{ invitation: AccountInvitation; acceptUrl: string | null }>(
-        `/accounts/${encodeURIComponent(accountId)}/invitations`,
-        { method: 'POST', body },
-      ),
+      send(createInvitationContract, { pathParams: { accountId }, body }),
 
     revokeInvitation: (accountId: string, invitationId: string) =>
-      http(
-        `/accounts/${encodeURIComponent(accountId)}/invitations/${encodeURIComponent(invitationId)}`,
-        { method: 'DELETE' },
-      ),
+      send(revokeInvitationContract, { pathParams: { accountId, invitationId } }),
 
     // Per-account email sender (UI-onboarded): connect/inspect/disconnect/test.
     getEmailConnection: (accountId: string) =>
-      http<{ connection: EmailConnection | null; configured: boolean }>(
-        `/accounts/${encodeURIComponent(accountId)}/email-connection`,
-      ),
+      send(getEmailConnectionContract, { pathParams: { accountId } }),
 
     connectEmail: (
       accountId: string,
       body: { provider: 'sendgrid' | 'resend'; apiKey: string; fromAddress: string },
-    ) =>
-      http<EmailConnection>(`/accounts/${encodeURIComponent(accountId)}/email-connection`, {
-        method: 'POST',
-        body,
-      }),
+    ) => send(connectEmailContract, { pathParams: { accountId }, body }),
 
     disconnectEmail: (accountId: string) =>
-      http(`/accounts/${encodeURIComponent(accountId)}/email-connection`, { method: 'DELETE' }),
+      send(disconnectEmailContract, { pathParams: { accountId } }),
 
     testEmail: (accountId: string, to: string) =>
-      http<{ ok: boolean }>(`/accounts/${encodeURIComponent(accountId)}/email-connection/test`, {
-        method: 'POST',
-        body: { to },
-      }),
+      send(testEmailContract, { pathParams: { accountId }, body: { to } }),
 
     // Per-account deployment settings (admin only): integration secrets (Slack OAuth +
     // web-search keys), sealed at rest. Read returns config + non-secret summary only.
     getAccountSettings: (accountId: string) =>
-      http<AccountSettingsView>(`/accounts/${encodeURIComponent(accountId)}/settings`),
+      send(getAccountSettingsContract, { pathParams: { accountId } }),
 
     updateAccountSettings: (accountId: string, body: UpdateAccountSettingsInput) =>
-      http<AccountSettingsView>(`/accounts/${encodeURIComponent(accountId)}/settings`, {
-        method: 'PUT',
-        body,
-      }),
+      send(updateAccountSettingsContract, { pathParams: { accountId }, body }),
   }
 }

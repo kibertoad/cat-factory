@@ -1,4 +1,17 @@
-import { passwordLoginSchema, signupSchema } from '@cat-factory/contracts'
+import {
+  acceptInvitationContract,
+  authConfigContract,
+  githubCallbackContract,
+  githubLoginContract,
+  googleCallbackContract,
+  googleLoginContract,
+  logoutContract,
+  meContract,
+  passwordLoginContract,
+  peekInvitationContract,
+  signupContract,
+} from '@cat-factory/contracts'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
@@ -13,7 +26,6 @@ import {
 } from '../../auth/signing.js'
 import type { AuthConfig } from '../../config/types.js'
 import type { AppEnv } from '../../http/env.js'
-import { jsonBody } from '../../http/validation.js'
 import type { UserRecord } from '@cat-factory/kernel'
 import { ConflictError, NotFoundError, ValidationError } from '@cat-factory/kernel'
 
@@ -41,10 +53,10 @@ interface OAuthState {
   exp: number
 }
 
-const unavailable = (c: Context<AppEnv>) =>
+const unavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json({ error: { code: 'unavailable', message: 'Authentication is not configured' } }, 503)
 
-function authConfig(c: Context<AppEnv>): AuthConfig {
+function authConfig<E extends AppEnv>(c: Context<E>): AuthConfig {
   return c.get('container').config.auth
 }
 
@@ -67,12 +79,12 @@ function googleClient(cfg: AuthConfig): GoogleOAuth | null {
   })
 }
 
-function githubCallbackUrl(c: Context<AppEnv>, cfg: AuthConfig): string {
+function githubCallbackUrl<E extends AppEnv>(c: Context<E>, cfg: AuthConfig): string {
   if (cfg.callbackUrl) return cfg.callbackUrl
   return `${new URL(c.req.url).origin}/auth/callback`
 }
 
-function googleCallbackUrl(c: Context<AppEnv>, cfg: AuthConfig): string {
+function googleCallbackUrl<E extends AppEnv>(c: Context<E>, cfg: AuthConfig): string {
   if (cfg.google?.redirectUrl) return cfg.google.redirectUrl
   return `${new URL(c.req.url).origin}/auth/google/callback`
 }
@@ -103,7 +115,7 @@ export function pickPostLoginRedirect(
   return fallback
 }
 
-function resolveRedirect(c: Context<AppEnv>, cfg: AuthConfig): string {
+function resolveRedirect<E extends AppEnv>(c: Context<E>, cfg: AuthConfig): string {
   return pickPostLoginRedirect(c.req.query('redirect'), new URL(c.req.url).origin, cfg)
 }
 
@@ -170,7 +182,7 @@ const ATTEMPT_WINDOW_MS = 15 * 60 * 1000
 const MAX_ATTEMPTS = 10
 const attempts = new Map<string, number[]>()
 
-function clientIp(c: Context<AppEnv>): string {
+function clientIp<E extends AppEnv>(c: Context<E>): string {
   return (
     c.req.header('cf-connecting-ip') ||
     c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
@@ -179,7 +191,7 @@ function clientIp(c: Context<AppEnv>): string {
 }
 
 /** Record a password attempt for `c`+`email`; true once it is over the burst limit. */
-function passwordAttemptLimited(c: Context<AppEnv>, email: string): boolean {
+function passwordAttemptLimited<E extends AppEnv>(c: Context<E>, email: string): boolean {
   const now = Date.now()
   const key = `${clientIp(c)}:${email.toLowerCase().trim()}`
   const recent = (attempts.get(key) ?? []).filter((t) => now - t < ATTEMPT_WINDOW_MS)
@@ -194,7 +206,7 @@ function passwordAttemptLimited(c: Context<AppEnv>, email: string): boolean {
   return recent.length > MAX_ATTEMPTS
 }
 
-const tooManyAttempts = (c: Context<AppEnv>) =>
+const tooManyAttempts = <E extends AppEnv>(c: Context<E>) =>
   c.json(
     { error: { code: 'rate_limited', message: 'Too many attempts. Please try again later.' } },
     429,
@@ -205,23 +217,26 @@ export function authController(): Hono<AppEnv> {
 
   // Lets the SPA decide which login controls to show, and (local mode only) surface a
   // setup banner when the GitHub PAT is missing.
-  app.get('/config', (c) => {
+  buildHonoRoute(app, authConfigContract, (c) => {
     const cfg = authConfig(c)
     const { localMode } = c.get('container').config
-    return c.json({
-      enabled: cfg.enabled,
-      providers: {
-        github: cfg.githubEnabled,
-        password: cfg.passwordEnabled,
-        google: !!cfg.google,
+    return c.json(
+      {
+        enabled: cfg.enabled,
+        providers: {
+          github: cfg.githubEnabled,
+          password: cfg.passwordEnabled,
+          google: !!cfg.google,
+        },
+        ...(localMode ? { localMode } : {}),
       },
-      ...(localMode ? { localMode } : {}),
-    })
+      200,
+    )
   })
 
   // ---- GitHub OAuth -------------------------------------------------------
 
-  app.get('/login', async (c) => {
+  buildHonoRoute(app, githubLoginContract, async (c) => {
     const cfg = authConfig(c)
     if (!cfg.githubEnabled) return unavailable(c)
     const nonce = crypto.randomUUID()
@@ -248,7 +263,7 @@ export function authController(): Hono<AppEnv> {
     return c.redirect(url)
   })
 
-  app.get('/callback', async (c) => {
+  buildHonoRoute(app, githubCallbackContract, async (c) => {
     const cfg = authConfig(c)
     if (!cfg.githubEnabled) return unavailable(c)
     const state = await consumeState(c, cfg)
@@ -293,7 +308,7 @@ export function authController(): Hono<AppEnv> {
 
   // ---- Google OAuth -------------------------------------------------------
 
-  app.get('/google/login', async (c) => {
+  buildHonoRoute(app, googleLoginContract, async (c) => {
     const cfg = authConfig(c)
     const google = googleClient(cfg)
     if (!google) return unavailable(c)
@@ -318,7 +333,7 @@ export function authController(): Hono<AppEnv> {
     )
   })
 
-  app.get('/google/callback', async (c) => {
+  buildHonoRoute(app, googleCallbackContract, async (c) => {
     const cfg = authConfig(c)
     const google = googleClient(cfg)
     if (!google) return unavailable(c)
@@ -366,7 +381,7 @@ export function authController(): Hono<AppEnv> {
 
   // ---- Email / password ---------------------------------------------------
 
-  app.post('/signup', jsonBody(signupSchema), async (c) => {
+  buildHonoRoute(app, signupContract, async (c) => {
     const cfg = authConfig(c)
     if (!cfg.passwordEnabled) return unavailable(c)
     const body = c.req.valid('json')
@@ -408,7 +423,7 @@ export function authController(): Hono<AppEnv> {
     }
   })
 
-  app.post('/password-login', jsonBody(passwordLoginSchema), async (c) => {
+  buildHonoRoute(app, passwordLoginContract, async (c) => {
     const cfg = authConfig(c)
     if (!cfg.passwordEnabled) return unavailable(c)
     const body = c.req.valid('json')
@@ -418,23 +433,26 @@ export function authController(): Hono<AppEnv> {
       return c.json({ error: { code: 'unauthorized', message: 'Invalid email or password' } }, 401)
     }
     const token = await mintSession(cfg, sessionUser(user, user.email || user.id))
-    return c.json({ token, user: sessionUser(user, user.email || user.id) })
+    return c.json({ token, user: sessionUser(user, user.email || user.id) }, 200)
   })
 
   // ---- Invitations (peek + accept) ----------------------------------------
 
   // Public peek so the SPA can show the org name on the accept screen.
-  app.get('/invitations/:token', async (c) => {
+  buildHonoRoute(app, peekInvitationContract, async (c) => {
     const container = c.get('container')
-    if (!container.invitations) return c.json({ valid: false })
-    const record = await container.invitations.peek(c.req.param('token'))
-    if (!record) return c.json({ valid: false })
+    if (!container.invitations) return c.json({ valid: false } as const, 200)
+    const record = await container.invitations.peek(c.req.valid('param').token)
+    if (!record) return c.json({ valid: false } as const, 200)
     const account = await container.accountService.get(record.accountId)
-    return c.json({ valid: true, email: record.email, accountName: account?.name ?? null })
+    return c.json(
+      { valid: true as const, email: record.email, accountName: account?.name ?? null },
+      200,
+    )
   })
 
   // Accept an invitation as the signed-in user (the SPA calls this after login).
-  app.post('/invitations/:token/accept', async (c) => {
+  buildHonoRoute(app, acceptInvitationContract, async (c) => {
     const user = await verifySession(c)
     if (!user) {
       return c.json({ error: { code: 'unauthorized', message: 'Sign in to accept' } }, 401)
@@ -445,11 +463,11 @@ export function authController(): Hono<AppEnv> {
     }
     try {
       const accountId = await container.invitations.accept(
-        c.req.param('token'),
+        c.req.valid('param').token,
         user.id,
         user.email ?? null,
       )
-      return c.json({ accountId })
+      return c.json({ accountId }, 200)
     } catch (err) {
       if (err instanceof ConflictError) {
         return c.json({ error: { code: 'conflict', message: err.message } }, 409)
@@ -462,32 +480,38 @@ export function authController(): Hono<AppEnv> {
   })
 
   // Who am I? Used by the SPA to validate a stored token on boot.
-  app.get('/me', async (c) => {
-    if (!authConfig(c).enabled) return c.json({ user: null, enabled: false })
+  buildHonoRoute(app, meContract, async (c) => {
+    if (!authConfig(c).enabled) return c.json({ user: null, enabled: false }, 200)
     const user = await verifySession(c)
     if (!user) {
       return c.json({ error: { code: 'unauthorized', message: 'Not authenticated' } }, 401)
     }
-    return c.json({
-      user: {
-        id: user.id,
-        login: user.login,
-        name: user.name,
-        avatarUrl: user.avatarUrl,
-        email: user.email ?? null,
+    return c.json(
+      {
+        user: {
+          id: user.id,
+          login: user.login,
+          name: user.name,
+          avatarUrl: user.avatarUrl,
+          email: user.email ?? null,
+        },
+        enabled: true,
       },
-      enabled: true,
-    })
+      200,
+    )
   })
 
   // Stateless sessions: logout is a client-side token drop. Provided for symmetry.
-  app.post('/logout', (c) => c.body(null, 204))
+  buildHonoRoute(app, logoutContract, (c) => c.body(null, 204))
 
   return app
 }
 
 /** Verify + single-use the OAuth state (signature, expiry, browser-binding cookie). */
-async function consumeState(c: Context<AppEnv>, cfg: AuthConfig): Promise<OAuthState | null> {
+async function consumeState<E extends AppEnv>(
+  c: Context<E>,
+  cfg: AuthConfig,
+): Promise<OAuthState | null> {
   const state = await new HmacSigner(cfg.sessionSecret).verify<OAuthState>(c.req.query('state'), {
     aud: TOKEN_AUDIENCE.oauthState,
   })
@@ -497,7 +521,7 @@ async function consumeState(c: Context<AppEnv>, cfg: AuthConfig): Promise<OAuthS
   return state
 }
 
-async function peekInvite(c: Context<AppEnv>, token: string) {
+async function peekInvite<E extends AppEnv>(c: Context<E>, token: string) {
   const inv = c.get('container').invitations
   return inv ? inv.peek(token) : null
 }
@@ -507,8 +531,8 @@ function emailMatchesInvite(signInEmail: string | null | undefined, inviteEmail:
   return !!signInEmail && signInEmail.toLowerCase().trim() === inviteEmail
 }
 
-async function acceptInvite(
-  c: Context<AppEnv>,
+async function acceptInvite<E extends AppEnv>(
+  c: Context<E>,
   token: string,
   userId: string,
   userEmail: string | null,

@@ -1,5 +1,5 @@
 import type { AgentRouting } from '@cat-factory/agents'
-import type { ModelOption } from '@cat-factory/contracts'
+import type { LocalModeConfig, ModelOption } from '@cat-factory/contracts'
 import type { DocumentSourceKind, HarnessKind, ModelRef } from '@cat-factory/kernel'
 import type { SpendPricing } from '@cat-factory/spend'
 
@@ -240,21 +240,6 @@ export interface LangfuseConfig {
   secretKey?: string
   /** Host of the Langfuse instance; defaults to Langfuse Cloud when omitted. */
   baseUrl?: string
-}
-
-export interface LocalModeConfig {
-  /**
-   * True on the local-mode facade (a single developer running the whole product on
-   * their own machine). Absent/false on the Worker and stock Node facades.
-   */
-  enabled: boolean
-  /**
-   * When local mode is running WITHOUT a GitHub PAT, a github.com URL with the scopes
-   * local mode needs pre-selected, so the developer can create one in a single click.
-   * Absent once a PAT is configured. The SPA surfaces this as a dismissible banner so
-   * the warning isn't lost in the server console.
-   */
-  githubPatSetupUrl?: string
 }
 
 export interface AppConfig {

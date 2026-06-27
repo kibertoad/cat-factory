@@ -1,4 +1,4 @@
-import type { ExecutionInstance } from '~/types/domain'
+import { requestHumanReviewFixContract } from '@cat-factory/contracts'
 import type { ApiContext } from './context'
 
 /**
@@ -7,12 +7,13 @@ import type { ApiContext } from './context'
  * immediately. Returns the updated execution instance (the gate state rides on its step + the
  * execution stream).
  */
-export function humanReviewApi({ http, ws }: ApiContext) {
+export function humanReviewApi({ send, ws }: ApiContext) {
   return {
     requestHumanReviewFix: (workspaceId: string, blockId: string, instructions: string) =>
-      http<ExecutionInstance>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/human-review/request-fix`,
-        { method: 'POST', body: { instructions } },
-      ),
+      send(requestHumanReviewFixContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId },
+        body: { instructions },
+      }),
   }
 }

@@ -1,4 +1,5 @@
 import { DomainError } from '@cat-factory/kernel'
+import { SchemaValidationError } from '@toad-contracts/core'
 import type { Context } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { logger } from '../observability/logger.js'
@@ -14,6 +15,30 @@ const STATUS_BY_CODE: Record<DomainError['code'], ContentfulStatusCode> = {
 
 /** Maps domain errors to HTTP responses; anything else is a 500. */
 export function handleError(error: unknown, c: Context): Response {
+  // A contract request schema (path/query/header/body) rejected the input. Surface the
+  // same `{ error: { code: 'validation', ... } }` envelope the old @hono/valibot-validator
+  // `jsonBody` middleware produced, so the wire shape is unchanged after the contract migration.
+  if (error instanceof SchemaValidationError) {
+    return c.json(
+      {
+        error: {
+          code: 'validation',
+          message: 'Request failed validation',
+          issues: error.issues.map((issue) => ({
+            path: issue.path
+              ?.map((segment) =>
+                typeof segment === 'object' && segment !== null && 'key' in segment
+                  ? String((segment as { key: PropertyKey }).key)
+                  : String(segment),
+              )
+              .join('.'),
+            message: issue.message,
+          })),
+        },
+      },
+      400,
+    )
+  }
   if (error instanceof DomainError) {
     return c.json(
       {

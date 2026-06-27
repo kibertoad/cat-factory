@@ -171,6 +171,8 @@ export const updateBlockSchema = v.partial(
     // Task-level TECHNICAL label (tri-state): true ⇒ technical, false ⇒ business, null ⇒
     // "unset" (let the engine infer it). A human-set value is never overridden.
     technical: v.nullable(v.boolean()),
+    // Task-level responsible product person (an account `product` member); null clears it.
+    responsibleProductUserId: v.nullable(v.string()),
     // Epic membership; an empty string detaches the task from its epic.
     epicId: v.string(),
     // Preceding-task auto-start toggle: when this task merges, start its dependents.

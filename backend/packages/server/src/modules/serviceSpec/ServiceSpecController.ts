@@ -1,4 +1,5 @@
-import { EMPTY_SERVICE_SPEC_VIEW } from '@cat-factory/contracts'
+import { EMPTY_SERVICE_SPEC_VIEW, getServiceSpecContract } from '@cat-factory/contracts'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
@@ -21,25 +22,25 @@ const EMPTY = EMPTY_SERVICE_SPEC_VIEW
 export function serviceSpecController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.get('/blocks/:blockId/spec', async (c) => {
+  buildHonoRoute(app, getServiceSpecContract, async (c) => {
     const container = c.get('container')
     const resolve = container.resolveRunRepoContext
-    if (!resolve) return c.json(EMPTY)
+    if (!resolve) return c.json(EMPTY, 200)
     let ctx
     try {
-      ctx = await resolve(param(c, 'workspaceId'), param(c, 'blockId'))
+      ctx = await resolve(param(c, 'workspaceId'), c.req.valid('param').blockId)
     } catch {
       // A block under no linked service throws in the resolver; treat as "no spec" for the
       // read path rather than surfacing the misconfiguration to the inspector.
-      return c.json(EMPTY)
+      return c.json(EMPTY, 200)
     }
-    if (!ctx) return c.json(EMPTY)
+    if (!ctx) return c.json(EMPTY, 200)
     // `readServiceSpec` is total (every repo read is guarded), but keep a defensive fallback
     // so a transient GitHub failure can never 500 the inspector — it shows an empty state.
     try {
-      return c.json(await readServiceSpec(ctx.repo, ctx.baseBranch))
+      return c.json(await readServiceSpec(ctx.repo, ctx.baseBranch), 200)
     } catch {
-      return c.json(EMPTY)
+      return c.json(EMPTY, 200)
     }
   })
 

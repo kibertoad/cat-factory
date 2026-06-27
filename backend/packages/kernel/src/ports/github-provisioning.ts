@@ -9,6 +9,12 @@
 // it acts rather than discovering a 403 mid-flight.
 // ---------------------------------------------------------------------------
 
+// `ProvisionedRepo` is the wire-returned shape, so its single source of truth is the
+// valibot schema in `@cat-factory/contracts` (`provisionedRepoSchema`); re-exported
+// here so the port and the createRepo route contract can't drift.
+import type { ProvisionedRepo } from '@cat-factory/contracts'
+export type { ProvisionedRepo }
+
 /**
  * The permissions an installation token was actually granted, as reported by
  * `POST /app/installations/{id}/access_tokens`. This is the intersection of the
@@ -34,15 +40,6 @@ export interface CreateRepoInput {
   description?: string
   /** Seed the repo with an initial commit (so it has a default branch). */
   autoInit?: boolean
-}
-
-/** Identifying details of a freshly-created repository. */
-export interface ProvisionedRepo {
-  githubId: number
-  owner: string
-  name: string
-  defaultBranch: string | null
-  private: boolean
 }
 
 export interface GitHubProvisioningClient {

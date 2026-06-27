@@ -1,34 +1,42 @@
-import type { Block, BlockType, CreateTaskType, Pipeline, TaskTypeFields } from '~/types/domain'
-import type { ConsensusStepConfig, StepGating } from '~/types/consensus'
+import {
+  addEpicContract,
+  addFrameContract,
+  addModuleContract,
+  addServiceFromRepoContract,
+  addTaskContract,
+  assignEpicContract,
+  clonePipelineContract,
+  createPipelineContract,
+  deletePipelineContract,
+  listPipelinesContract,
+  moveBlockContract,
+  organizePipelineContract,
+  removeBlockContract,
+  reparentBlockContract,
+  toggleDependencyContract,
+  updateBlockContract,
+  updatePipelineContract,
+} from '@cat-factory/contracts'
+import type {
+  CreatePipelineInput,
+  UpdateBlockInput,
+  UpdatePipelineInput,
+} from '@cat-factory/contracts'
+import type { BlockType, CreateTaskType, TaskTypeFields } from '~/types/domain'
 import type { ApiContext, Position } from './context'
 
-/**
- * Create/update body for a pipeline. `name`+`agentKinds` required on create, all optional on
- * update; the parallel arrays are aligned to `agentKinds` and persisted only when non-default.
- */
-interface PipelineWriteBody {
-  name?: string
-  agentKinds?: string[]
-  gates?: boolean[]
-  thresholds?: (number | null)[]
-  enabled?: boolean[]
-  consensus?: (ConsensusStepConfig | null)[]
-  gating?: (StepGating | null)[]
-  labels?: string[]
-}
-
 /** Board structure: block (frame/module/task) mutations + the pipeline library. */
-export function boardApi({ http, ws }: ApiContext) {
+export function boardApi({ send, ws }: ApiContext) {
   return {
     // ---- blocks -----------------------------------------------------------
     addFrame: (workspaceId: string, body: { type: BlockType; position: Position }) =>
-      http<Block>(`${ws(workspaceId)}/blocks`, { method: 'POST', body }),
+      send(addFrameContract, { pathPrefix: ws(workspaceId), body }),
 
     // Import an existing GitHub repo as a service frame (no bootstrap run).
     addServiceFromRepo: (
       workspaceId: string,
       body: { repoGithubId: number; position?: Position; directory?: string; isMonorepo?: boolean },
-    ) => http<Block>(`${ws(workspaceId)}/blocks/from-repo`, { method: 'POST', body }),
+    ) => send(addServiceFromRepoContract, { pathPrefix: ws(workspaceId), body }),
 
     addTask: (
       workspaceId: string,
@@ -44,54 +52,65 @@ export function boardApi({ http, ws }: ApiContext) {
         agentConfig?: Record<string, string>
         technical?: boolean
       },
-    ) => http<Block>(`${ws(workspaceId)}/blocks/${blockId}/tasks`, { method: 'POST', body }),
+    ) => send(addTaskContract, { pathPrefix: ws(workspaceId), pathParams: { blockId }, body }),
 
     addModule: (
       workspaceId: string,
       blockId: string,
       body: { name: string; position?: Position },
-    ) => http<Block>(`${ws(workspaceId)}/blocks/${blockId}/modules`, { method: 'POST', body }),
+    ) => send(addModuleContract, { pathPrefix: ws(workspaceId), pathParams: { blockId }, body }),
 
     // Create an epic grouping node (optionally placed under a service/module).
     addEpic: (
       workspaceId: string,
       body: { title: string; description?: string; position: Position; parentId?: string },
-    ) => http<Block>(`${ws(workspaceId)}/epics`, { method: 'POST', body }),
+    ) => send(addEpicContract, { pathPrefix: ws(workspaceId), body }),
 
     // Assign a task to an epic, or detach it (epicId: null).
     assignToEpic: (workspaceId: string, blockId: string, body: { epicId: string | null }) =>
-      http<Block>(`${ws(workspaceId)}/blocks/${blockId}/epic`, { method: 'POST', body }),
+      send(assignEpicContract, { pathPrefix: ws(workspaceId), pathParams: { blockId }, body }),
 
-    updateBlock: (workspaceId: string, blockId: string, body: Partial<Block>) =>
-      http<Block>(`${ws(workspaceId)}/blocks/${blockId}`, { method: 'PATCH', body }),
+    updateBlock: (workspaceId: string, blockId: string, body: UpdateBlockInput) =>
+      send(updateBlockContract, { pathPrefix: ws(workspaceId), pathParams: { blockId }, body }),
 
     moveBlock: (workspaceId: string, blockId: string, body: { position: Position }) =>
-      http<Block>(`${ws(workspaceId)}/blocks/${blockId}/move`, { method: 'POST', body }),
+      send(moveBlockContract, { pathPrefix: ws(workspaceId), pathParams: { blockId }, body }),
 
     reparentBlock: (
       workspaceId: string,
       blockId: string,
       body: { parentId: string; position: Position },
-    ) => http<Block>(`${ws(workspaceId)}/blocks/${blockId}/reparent`, { method: 'POST', body }),
+    ) =>
+      send(reparentBlockContract, { pathPrefix: ws(workspaceId), pathParams: { blockId }, body }),
 
     removeBlock: (workspaceId: string, blockId: string) =>
-      http(`${ws(workspaceId)}/blocks/${blockId}`, { method: 'DELETE' }),
+      send(removeBlockContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
 
     toggleDependency: (workspaceId: string, blockId: string, body: { sourceId: string }) =>
-      http<Block>(`${ws(workspaceId)}/blocks/${blockId}/dependencies`, { method: 'POST', body }),
+      send(toggleDependencyContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId },
+        body,
+      }),
 
     // ---- pipelines --------------------------------------------------------
-    listPipelines: (workspaceId: string) => http<Pipeline[]>(`${ws(workspaceId)}/pipelines`),
+    listPipelines: (workspaceId: string) =>
+      send(listPipelinesContract, { pathPrefix: ws(workspaceId) }),
 
-    createPipeline: (workspaceId: string, body: PipelineWriteBody) =>
-      http<Pipeline>(`${ws(workspaceId)}/pipelines`, { method: 'POST', body }),
+    createPipeline: (workspaceId: string, body: CreatePipelineInput) =>
+      send(createPipelineContract, { pathPrefix: ws(workspaceId), body }),
 
-    updatePipeline: (workspaceId: string, pipelineId: string, body: PipelineWriteBody) =>
-      http<Pipeline>(`${ws(workspaceId)}/pipelines/${pipelineId}`, { method: 'PATCH', body }),
+    updatePipeline: (workspaceId: string, pipelineId: string, body: UpdatePipelineInput) =>
+      send(updatePipelineContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { pipelineId },
+        body,
+      }),
 
     clonePipeline: (workspaceId: string, pipelineId: string, body: { name?: string } = {}) =>
-      http<Pipeline>(`${ws(workspaceId)}/pipelines/${pipelineId}/clone`, {
-        method: 'POST',
+      send(clonePipelineContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { pipelineId },
         body,
       }),
 
@@ -102,12 +121,13 @@ export function boardApi({ http, ws }: ApiContext) {
       pipelineId: string,
       body: { labels?: string[]; archived?: boolean },
     ) =>
-      http<Pipeline>(`${ws(workspaceId)}/pipelines/${pipelineId}/organize`, {
-        method: 'PATCH',
+      send(organizePipelineContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { pipelineId },
         body,
       }),
 
     removePipeline: (workspaceId: string, pipelineId: string) =>
-      http(`${ws(workspaceId)}/pipelines/${pipelineId}`, { method: 'DELETE' }),
+      send(deletePipelineContract, { pathPrefix: ws(workspaceId), pathParams: { pipelineId } }),
   }
 }

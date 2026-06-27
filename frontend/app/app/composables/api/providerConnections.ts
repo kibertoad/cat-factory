@@ -1,61 +1,103 @@
+import {
+  describeEnvironmentProviderContract,
+  describeRunnerPoolProviderContract,
+  getEnvironmentConnectionContract,
+  getRunnerPoolConnectionContract,
+  registerEnvironmentProviderContract,
+  registerRunnerPoolContract,
+  testEnvironmentConnectionContract,
+  testRunnerPoolConnectionContract,
+  unregisterEnvironmentProviderContract,
+  unregisterRunnerPoolContract,
+  updateEnvironmentSecretsContract,
+  updateRunnerPoolSecretsContract,
+} from '@cat-factory/contracts'
 import type {
-  ConnectionTestResult,
-  ProviderConnection,
+  RegisterEnvironmentProviderInput,
+  RegisterRunnerPoolInput,
+  TestEnvironmentConnectionInput,
+  TestRunnerPoolConnectionInput,
+} from '@cat-factory/contracts'
+import type {
   ProviderConnectionKind,
-  ProviderDescriptor,
   RegisterProviderInput,
   TestProviderInput,
 } from '~/types/providerConnections'
 import type { ApiContext } from './context'
 
 // The two infrastructure providers share an identical REST surface, differing only in the
-// path segment (`environments` vs `runner-pool`). One factory serves both so a single
-// generic store + connect form drives either.
-const SEGMENT: Record<ProviderConnectionKind, string> = {
-  environment: 'environments',
-  'runner-pool': 'runner-pool',
-}
+// path segment (`environments` vs `runner-pool`). The contracts split into per-kind names,
+// so a small lookup table maps each kind to its four contracts; one factory then serves both
+// so a single generic store + connect form drives either.
+const CONTRACTS = {
+  environment: {
+    describe: describeEnvironmentProviderContract,
+    get: getEnvironmentConnectionContract,
+    register: registerEnvironmentProviderContract,
+    updateSecrets: updateEnvironmentSecretsContract,
+    test: testEnvironmentConnectionContract,
+    unregister: unregisterEnvironmentProviderContract,
+  },
+  'runner-pool': {
+    describe: describeRunnerPoolProviderContract,
+    get: getRunnerPoolConnectionContract,
+    register: registerRunnerPoolContract,
+    updateSecrets: updateRunnerPoolSecretsContract,
+    test: testRunnerPoolConnectionContract,
+    unregister: unregisterRunnerPoolContract,
+  },
+} satisfies Record<ProviderConnectionKind, unknown>
 
 /** Environment-provider + runner-pool connection endpoints (self-describe + register/test). */
-export function providerConnectionsApi({ http, ws }: ApiContext) {
-  const base = (workspaceId: string, kind: ProviderConnectionKind) =>
-    `${ws(workspaceId)}/${SEGMENT[kind]}`
-
+export function providerConnectionsApi({ send, ws }: ApiContext) {
   return {
     describeProvider: (workspaceId: string, kind: ProviderConnectionKind) =>
-      http<ProviderDescriptor>(`${base(workspaceId, kind)}/provider`),
+      send(CONTRACTS[kind].describe, { pathPrefix: ws(workspaceId) }),
 
     getProviderConnection: (workspaceId: string, kind: ProviderConnectionKind) =>
-      http<{ connection: ProviderConnection | null }>(`${base(workspaceId, kind)}/connection`),
+      send(CONTRACTS[kind].get, { pathPrefix: ws(workspaceId) }),
 
+    // The connect form builds the manifest dynamically from a server-provided scaffold, so
+    // the FE input keeps `manifest` opaque (`Record<string, unknown>`); narrow on the kind
+    // and cast to the matching per-kind contract input at this single boundary (the backend
+    // re-validates the manifest against the precise contract on receipt).
     registerProviderConnection: (
       workspaceId: string,
       kind: ProviderConnectionKind,
       body: RegisterProviderInput,
     ) =>
-      http<ProviderConnection>(`${base(workspaceId, kind)}/connection`, { method: 'POST', body }),
+      kind === 'environment'
+        ? send(CONTRACTS.environment.register, {
+            pathPrefix: ws(workspaceId),
+            body: body as RegisterEnvironmentProviderInput,
+          })
+        : send(CONTRACTS['runner-pool'].register, {
+            pathPrefix: ws(workspaceId),
+            body: body as RegisterRunnerPoolInput,
+          }),
 
     updateProviderSecrets: (
       workspaceId: string,
       kind: ProviderConnectionKind,
       secrets: Record<string, string>,
-    ) =>
-      http<ProviderConnection>(`${base(workspaceId, kind)}/connection/secrets`, {
-        method: 'PUT',
-        body: { secrets },
-      }),
+    ) => send(CONTRACTS[kind].updateSecrets, { pathPrefix: ws(workspaceId), body: { secrets } }),
 
     testProviderConnection: (
       workspaceId: string,
       kind: ProviderConnectionKind,
       body: TestProviderInput,
     ) =>
-      http<ConnectionTestResult>(`${base(workspaceId, kind)}/connection/test`, {
-        method: 'POST',
-        body,
-      }),
+      kind === 'environment'
+        ? send(CONTRACTS.environment.test, {
+            pathPrefix: ws(workspaceId),
+            body: body as TestEnvironmentConnectionInput,
+          })
+        : send(CONTRACTS['runner-pool'].test, {
+            pathPrefix: ws(workspaceId),
+            body: body as TestRunnerPoolConnectionInput,
+          }),
 
     deleteProviderConnection: (workspaceId: string, kind: ProviderConnectionKind) =>
-      http(`${base(workspaceId, kind)}/connection`, { method: 'DELETE' }),
+      send(CONTRACTS[kind].unregister, { pathPrefix: ws(workspaceId) }),
   }
 }

@@ -1,4 +1,10 @@
-import type { FollowUpsStepState } from '~/types/execution'
+import {
+  answerFollowUpContract,
+  dismissFollowUpContract,
+  fileFollowUpContract,
+  getFollowUpsContract,
+  queueFollowUpContract,
+} from '@cat-factory/contracts'
 import type { ApiContext } from './context'
 
 /**
@@ -8,45 +14,39 @@ import type { ApiContext } from './context'
  * the last item is decided, the backend drives the run forward (loop the Coder for the
  * queued / answered items, else advance).
  */
-export function followUpsApi({ http, ws }: ApiContext) {
-  const base = (workspaceId: string, executionId: string) =>
-    `${ws(workspaceId)}/executions/${encodeURIComponent(executionId)}/follow-ups`
-
+export function followUpsApi({ send, ws }: ApiContext) {
   return {
     // The live follow-up state for a run (null when the companion is off / nothing surfaced).
     getFollowUps: (workspaceId: string, executionId: string) =>
-      http<FollowUpsStepState | null>(base(workspaceId, executionId)),
+      send(getFollowUpsContract, { pathPrefix: ws(workspaceId), pathParams: { executionId } }),
 
     // File a follow-up as a tracker issue (GitHub Issues / Jira).
     fileFollowUp: (workspaceId: string, executionId: string, itemId: string) =>
-      http<FollowUpsStepState>(
-        `${base(workspaceId, executionId)}/${encodeURIComponent(itemId)}/file`,
-        {
-          method: 'POST',
-        },
-      ),
+      send(fileFollowUpContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { executionId, itemId },
+      }),
 
     // Send a follow-up back to the Coder (queued for its next pass).
     queueFollowUp: (workspaceId: string, executionId: string, itemId: string) =>
-      http<FollowUpsStepState>(
-        `${base(workspaceId, executionId)}/${encodeURIComponent(itemId)}/queue`,
-        {
-          method: 'POST',
-        },
-      ),
+      send(queueFollowUpContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { executionId, itemId },
+      }),
 
     // Answer a question item (folded into the Coder's next pass).
     answerFollowUp: (workspaceId: string, executionId: string, itemId: string, answer: string) =>
-      http<FollowUpsStepState>(
-        `${base(workspaceId, executionId)}/${encodeURIComponent(itemId)}/answer`,
-        { method: 'POST', body: { answer } },
-      ),
+      send(answerFollowUpContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { executionId, itemId },
+        body: { answer },
+      }),
 
     // Dismiss a follow-up / question item without acting on it.
     dismissFollowUp: (workspaceId: string, executionId: string, itemId: string) =>
-      http<FollowUpsStepState>(
-        `${base(workspaceId, executionId)}/${encodeURIComponent(itemId)}/dismiss`,
-        { method: 'POST' },
-      ),
+      send(dismissFollowUpContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { executionId, itemId },
+      }),
   }
 }

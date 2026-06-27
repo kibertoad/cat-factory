@@ -1,3 +1,5 @@
+import { getConsensusSessionContract } from '@cat-factory/contracts'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
@@ -14,11 +16,11 @@ export function consensusController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   // The most recent consensus session for a block (null when none / not configured).
-  app.get('/blocks/:blockId/consensus-session', async (c) => {
+  buildHonoRoute(app, getConsensusSessionContract, async (c) => {
     const repo = c.get('container').consensusSessionRepository
-    if (!repo) return c.json({ session: null })
-    const session = await repo.getByBlock(param(c, 'workspaceId'), param(c, 'blockId'))
-    return c.json({ session })
+    if (!repo) return c.json({ session: null }, 200)
+    const session = await repo.getByBlock(param(c, 'workspaceId'), c.req.valid('param').blockId)
+    return c.json({ session }, 200)
   })
 
   return app

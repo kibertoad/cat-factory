@@ -1,28 +1,40 @@
 import {
-  addApiKeySchema,
-  addMemberSchema,
-  connectEmailSchema,
-  createAccountSchema,
-  createInvitationSchema,
-  setMemberRolesSchema,
-  testEmailSchema,
-  updateAccountSchema,
-  updateAccountSettingsSchema,
+  addAccountApiKeyContract,
+  addAccountMemberContract,
+  connectEmailContract,
+  createAccountContract,
+  createInvitationContract,
+  disconnectEmailContract,
+  getAccountSettingsContract,
+  getEmailConnectionContract,
+  listAccountApiKeysContract,
+  listAccountMembersContract,
+  listAccountsContract,
+  listInvitationsContract,
+  removeAccountApiKeyContract,
+  revokeInvitationContract,
+  setMemberRolesContract,
+  testEmailContract,
+  updateAccountContract,
+  updateAccountSettingsContract,
 } from '@cat-factory/contracts'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 import { apiKeyToWire } from '../providers/ApiKeyController.js'
 
-/** The signed-in user, narrowed to what the tenancy layer needs. */
-function accountUser(c: Context<AppEnv>) {
+/**
+ * The signed-in user, narrowed to what the tenancy layer needs. Generic over the
+ * env so it accepts a contract-typed handler context (`ContractEnv<T> & AppEnv`),
+ * which Hono treats as a distinct, non-assignable env from the bare `AppEnv`.
+ */
+function accountUser<E extends AppEnv>(c: Context<E>) {
   const user = c.get('user')
   return user ? { id: user.id, login: user.login, name: user.name } : null
 }
 
-const signInRequired = (c: Context<AppEnv>) =>
+const signInRequired = <E extends AppEnv>(c: Context<E>) =>
   c.json({ error: { code: 'unauthorized', message: 'Sign in to manage accounts' } }, 401)
 
 /**
@@ -30,84 +42,82 @@ const signInRequired = (c: Context<AppEnv>) =>
  * plus any orgs they belong to), org creation, and membership management. Accounts
  * are an authenticated concept; with auth disabled (no signed-in user) there is a
  * single implicit dev context, so the list is empty and mutations are refused.
+ *
+ * Every route is mounted from its `@cat-factory/contracts` contract via
+ * `buildHonoRoute`: the method/path and request validation come from the contract,
+ * and `c.req.valid(...)` + the `c.json(body, status)` return are typed from it.
  */
 export function accountController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.get('/accounts', async (c) => {
+  buildHonoRoute(app, listAccountsContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return c.json([])
-    return c.json(await c.get('container').accountService.listForUser(user))
+    if (!user) return c.json([], 200)
+    return c.json(await c.get('container').accountService.listForUser(user), 200)
   })
 
-  app.post('/accounts', jsonBody(createAccountSchema), async (c) => {
+  buildHonoRoute(app, createAccountContract, async (c) => {
     const user = accountUser(c)
     if (!user) return signInRequired(c)
     const account = await c.get('container').accountService.createOrg(user, c.req.valid('json'))
     return c.json(account, 201)
   })
 
-  app.patch('/accounts/:accountId', jsonBody(updateAccountSchema), async (c) => {
+  buildHonoRoute(app, updateAccountContract, async (c) => {
     const user = accountUser(c)
     if (!user) return signInRequired(c)
     const account = await c
       .get('container')
-      .accountService.updateSettings(param(c, 'accountId'), user.id, c.req.valid('json'))
-    return c.json(account)
+      .accountService.updateSettings(c.req.valid('param').accountId, user.id, c.req.valid('json'))
+    return c.json(account, 200)
   })
 
-  app.get('/accounts/:accountId/members', async (c) => {
+  buildHonoRoute(app, listAccountMembersContract, async (c) => {
     const user = accountUser(c)
     if (!user) return signInRequired(c)
     const accounts = c.get('container').accountService
+    const { accountId } = c.req.valid('param')
     // Membership in the account is required to see its roster (404 otherwise).
-    await accounts.requireMember(param(c, 'accountId'), user.id)
-    return c.json(await accounts.members(param(c, 'accountId')))
+    await accounts.requireMember(accountId, user.id)
+    return c.json(await accounts.members(accountId), 200)
   })
 
-  app.post('/accounts/:accountId/members', jsonBody(addMemberSchema), async (c) => {
+  buildHonoRoute(app, addAccountMemberContract, async (c) => {
     const user = accountUser(c)
     if (!user) return signInRequired(c)
     const body = c.req.valid('json')
     const member = await c
       .get('container')
-      .accountService.addMember(param(c, 'accountId'), user.id, body.userId, body.roles)
+      .accountService.addMember(c.req.valid('param').accountId, user.id, body.userId, body.roles)
     return c.json(member, 201)
   })
 
   // Set a member's role set (admin-only). The acting admin can't drop their own admin.
-  app.patch(
-    '/accounts/:accountId/members/:userId/roles',
-    jsonBody(setMemberRolesSchema),
-    async (c) => {
-      const user = accountUser(c)
-      if (!user) return signInRequired(c)
-      const member = await c
-        .get('container')
-        .accountService.setMemberRoles(
-          param(c, 'accountId'),
-          user.id,
-          param(c, 'userId'),
-          c.req.valid('json').roles,
-        )
-      return c.json(member)
-    },
-  )
+  buildHonoRoute(app, setMemberRolesContract, async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const { accountId, userId } = c.req.valid('param')
+    const member = await c
+      .get('container')
+      .accountService.setMemberRoles(accountId, user.id, userId, c.req.valid('json').roles)
+    return c.json(member, 200)
+  })
 
   // ---- Invitations (email-based org onboarding) ---------------------------
   // Available only when the invitation repository is wired (opt-in feature).
 
-  app.get('/accounts/:accountId/invitations', async (c) => {
+  buildHonoRoute(app, listInvitationsContract, async (c) => {
     const user = accountUser(c)
     if (!user) return signInRequired(c)
     const container = c.get('container')
-    if (!container.invitations) return c.json([])
+    if (!container.invitations) return c.json([], 200)
+    const { accountId } = c.req.valid('param')
     // Membership is required to view the account's pending invitations.
-    await container.accountService.requireMember(param(c, 'accountId'), user.id)
-    return c.json(await container.invitations.list(param(c, 'accountId')))
+    await container.accountService.requireMember(accountId, user.id)
+    return c.json(await container.invitations.list(accountId), 200)
   })
 
-  app.post('/accounts/:accountId/invitations', jsonBody(createInvitationSchema), async (c) => {
+  buildHonoRoute(app, createInvitationContract, async (c) => {
     const user = accountUser(c)
     if (!user) return signInRequired(c)
     const container = c.get('container')
@@ -119,7 +129,7 @@ export function accountController(): Hono<AppEnv> {
     }
     const body = c.req.valid('json')
     const created = await container.invitations.invite(
-      param(c, 'accountId'),
+      c.req.valid('param').accountId,
       user.id,
       body.email,
       body.roles,
@@ -129,12 +139,13 @@ export function accountController(): Hono<AppEnv> {
     return c.json({ invitation: created.invitation, acceptUrl: created.acceptUrl }, 201)
   })
 
-  app.delete('/accounts/:accountId/invitations/:invitationId', async (c) => {
+  buildHonoRoute(app, revokeInvitationContract, async (c) => {
     const user = accountUser(c)
     if (!user) return signInRequired(c)
     const container = c.get('container')
     if (!container.invitations) return c.body(null, 204)
-    await container.invitations.revoke(param(c, 'accountId'), user.id, param(c, 'invitationId'))
+    const { accountId, invitationId } = c.req.valid('param')
+    await container.invitations.revoke(accountId, user.id, invitationId)
     return c.body(null, 204)
   })
 
@@ -144,88 +155,91 @@ export function accountController(): Hono<AppEnv> {
   // the raw key is write-only — only secret-free metadata is ever returned. Available
   // only when the API-key store is wired (ENCRYPTION_KEY).
 
-  const apiKeysUnavailable = (c: Context<AppEnv>) =>
+  const apiKeysUnavailable = <E extends AppEnv>(c: Context<E>) =>
     c.json({ error: { code: 'unavailable', message: 'API key storage is not configured' } }, 503)
 
-  app.get('/accounts/:accountId/api-keys', async (c) => {
+  buildHonoRoute(app, listAccountApiKeysContract, async (c) => {
     const user = accountUser(c)
     if (!user) return signInRequired(c)
     const container = c.get('container')
     if (!container.apiKeys) return apiKeysUnavailable(c)
-    await container.accountService.requireAdmin(param(c, 'accountId'), user.id)
-    const keys = await container.apiKeys.listKeys('account', param(c, 'accountId'))
-    return c.json({ keys: keys.map(apiKeyToWire) })
+    const { accountId } = c.req.valid('param')
+    await container.accountService.requireAdmin(accountId, user.id)
+    const keys = await container.apiKeys.listKeys('account', accountId)
+    return c.json({ keys: keys.map(apiKeyToWire) }, 200)
   })
 
-  app.post('/accounts/:accountId/api-keys', jsonBody(addApiKeySchema), async (c) => {
+  buildHonoRoute(app, addAccountApiKeyContract, async (c) => {
     const user = accountUser(c)
     if (!user) return signInRequired(c)
     const container = c.get('container')
     if (!container.apiKeys) return apiKeysUnavailable(c)
-    await container.accountService.requireAdmin(param(c, 'accountId'), user.id)
-    const summary = await container.apiKeys.addKey(
-      'account',
-      param(c, 'accountId'),
-      c.req.valid('json'),
-    )
+    const { accountId } = c.req.valid('param')
+    await container.accountService.requireAdmin(accountId, user.id)
+    const summary = await container.apiKeys.addKey('account', accountId, c.req.valid('json'))
     return c.json(apiKeyToWire(summary), 201)
   })
 
-  app.delete('/accounts/:accountId/api-keys/:id', async (c) => {
+  buildHonoRoute(app, removeAccountApiKeyContract, async (c) => {
     const user = accountUser(c)
     if (!user) return signInRequired(c)
     const container = c.get('container')
     if (!container.apiKeys) return apiKeysUnavailable(c)
-    await container.accountService.requireAdmin(param(c, 'accountId'), user.id)
-    await container.apiKeys.removeKey('account', param(c, 'accountId'), param(c, 'id'))
+    const { accountId, id } = c.req.valid('param')
+    await container.accountService.requireAdmin(accountId, user.id)
+    await container.apiKeys.removeKey('account', accountId, id)
     return c.body(null, 204)
   })
 
   // ---- Email sender connection (per-account, UI-onboarded) ----------------
   // Owner-only mutations; available only when the email module is wired.
 
-  app.get('/accounts/:accountId/email-connection', async (c) => {
+  buildHonoRoute(app, getEmailConnectionContract, async (c) => {
     const user = accountUser(c)
     if (!user) return signInRequired(c)
     const container = c.get('container')
-    if (!container.email) return c.json({ connection: null, configured: false })
-    await container.accountService.requireMember(param(c, 'accountId'), user.id)
-    const connection = await container.email.getConnection(param(c, 'accountId'))
-    return c.json({ connection, configured: true })
+    if (!container.email) return c.json({ connection: null, configured: false }, 200)
+    const { accountId } = c.req.valid('param')
+    await container.accountService.requireMember(accountId, user.id)
+    const connection = await container.email.getConnection(accountId)
+    return c.json({ connection, configured: true }, 200)
   })
 
-  app.post('/accounts/:accountId/email-connection', jsonBody(connectEmailSchema), async (c) => {
+  buildHonoRoute(app, connectEmailContract, async (c) => {
     const user = accountUser(c)
     if (!user) return signInRequired(c)
     const container = c.get('container')
     if (!container.email) {
       return c.json({ error: { code: 'unavailable', message: 'Email is not configured' } }, 503)
     }
-    await c.get('container').accountService.requireAdmin(param(c, 'accountId'), user.id)
-    const connection = await container.email.connect(param(c, 'accountId'), c.req.valid('json'))
+    const { accountId } = c.req.valid('param')
+    await container.accountService.requireAdmin(accountId, user.id)
+    const connection = await container.email.connect(accountId, c.req.valid('json'))
     return c.json(connection, 201)
   })
 
-  app.delete('/accounts/:accountId/email-connection', async (c) => {
+  buildHonoRoute(app, disconnectEmailContract, async (c) => {
     const user = accountUser(c)
     if (!user) return signInRequired(c)
     const container = c.get('container')
     if (!container.email) return c.body(null, 204)
-    await c.get('container').accountService.requireAdmin(param(c, 'accountId'), user.id)
-    await container.email.disconnect(param(c, 'accountId'))
+    const { accountId } = c.req.valid('param')
+    await container.accountService.requireAdmin(accountId, user.id)
+    await container.email.disconnect(accountId)
     return c.body(null, 204)
   })
 
-  app.post('/accounts/:accountId/email-connection/test', jsonBody(testEmailSchema), async (c) => {
+  buildHonoRoute(app, testEmailContract, async (c) => {
     const user = accountUser(c)
     if (!user) return signInRequired(c)
     const container = c.get('container')
     if (!container.email) {
       return c.json({ error: { code: 'unavailable', message: 'Email is not configured' } }, 503)
     }
-    await c.get('container').accountService.requireAdmin(param(c, 'accountId'), user.id)
-    await container.email.sendTest(param(c, 'accountId'), c.req.valid('json').to)
-    return c.json({ ok: true })
+    const { accountId } = c.req.valid('param')
+    await container.accountService.requireAdmin(accountId, user.id)
+    await container.email.sendTest(accountId, c.req.valid('json').to)
+    return c.json({ ok: true }, 200)
   })
 
   // ---- Deployment settings (per-account, admin-only) ----------------------
@@ -235,29 +249,32 @@ export function accountController(): Hono<AppEnv> {
   // settings store is wired (ENCRYPTION_KEY). Admin-gated for BOTH read and write —
   // these are sensitive deployment knobs.
 
-  const settingsUnavailable = (c: Context<AppEnv>) =>
+  const settingsUnavailable = <E extends AppEnv>(c: Context<E>) =>
     c.json(
       { error: { code: 'unavailable', message: 'Account settings storage is not configured' } },
       503,
     )
 
-  app.get('/accounts/:accountId/settings', async (c) => {
+  buildHonoRoute(app, getAccountSettingsContract, async (c) => {
     const user = accountUser(c)
     if (!user) return signInRequired(c)
     const container = c.get('container')
     if (!container.accountSettings) return settingsUnavailable(c)
-    await container.accountService.requireAdmin(param(c, 'accountId'), user.id)
-    return c.json(await container.accountSettings.service.read(param(c, 'accountId')))
+    const { accountId } = c.req.valid('param')
+    await container.accountService.requireAdmin(accountId, user.id)
+    return c.json(await container.accountSettings.service.read(accountId), 200)
   })
 
-  app.put('/accounts/:accountId/settings', jsonBody(updateAccountSettingsSchema), async (c) => {
+  buildHonoRoute(app, updateAccountSettingsContract, async (c) => {
     const user = accountUser(c)
     if (!user) return signInRequired(c)
     const container = c.get('container')
     if (!container.accountSettings) return settingsUnavailable(c)
-    await container.accountService.requireAdmin(param(c, 'accountId'), user.id)
+    const { accountId } = c.req.valid('param')
+    await container.accountService.requireAdmin(accountId, user.id)
     return c.json(
-      await container.accountSettings.service.write(param(c, 'accountId'), c.req.valid('json')),
+      await container.accountSettings.service.write(accountId, c.req.valid('json')),
+      200,
     )
   })
 

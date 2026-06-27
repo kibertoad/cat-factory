@@ -10,6 +10,7 @@
 import { parseOutputOutline } from '~/utils/agentOutput'
 import type {
   BrainstormItem,
+  BrainstormItemStatus,
   BrainstormSession,
   BrainstormStage,
   ReviewItemCategory,
@@ -136,7 +137,7 @@ async function submitReply(item: BrainstormItem) {
   }
 }
 
-async function setStatus(item: BrainstormItem, itemStatus: ReviewItemStatus) {
+async function setStatus(item: BrainstormItem, itemStatus: BrainstormItemStatus) {
   if (!session.value) return
   try {
     await brainstorm.setItemStatus(session.value, item.id, itemStatus)

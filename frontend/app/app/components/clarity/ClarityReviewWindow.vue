@@ -10,6 +10,7 @@
 // consumes.
 import { parseOutputOutline } from '~/utils/agentOutput'
 import type {
+  ClarityItemStatus,
   ClarityReview,
   ClarityReviewItem,
   ReviewItemCategory,
@@ -131,7 +132,7 @@ async function submitReply(item: ClarityReviewItem) {
   }
 }
 
-async function setStatus(item: ClarityReviewItem, itemStatus: ReviewItemStatus) {
+async function setStatus(item: ClarityReviewItem, itemStatus: ClarityItemStatus) {
   if (!review.value) return
   try {
     await clarity.setItemStatus(review.value, item.id, itemStatus)

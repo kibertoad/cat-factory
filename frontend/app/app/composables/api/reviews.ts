@@ -1,44 +1,69 @@
-import type { ClarityReview, ResolveClarityExceededChoice } from '~/types/clarity'
+import {
+  acceptRequirementRecommendationContract,
+  getBrainstormContract,
+  getClarityReviewContract,
+  getConsensusSessionContract,
+  getRequirementReviewContract,
+  incorporateBrainstormContract,
+  incorporateClarityContract,
+  incorporateRequirementsContract,
+  proceedBrainstormContract,
+  proceedClarityContract,
+  proceedRequirementsContract,
+  reRequestRequirementRecommendationContract,
+  reReviewBrainstormContract,
+  reReviewClarityContract,
+  reReviewRequirementsContract,
+  rejectRequirementRecommendationContract,
+  replyBrainstormItemContract,
+  replyClarityItemContract,
+  replyRequirementItemContract,
+  requestRequirementRecommendationsContract,
+  resolveBrainstormExceededContract,
+  resolveClarityExceededContract,
+  resolveRequirementsExceededContract,
+  updateBrainstormItemStatusContract,
+  updateClarityItemStatusContract,
+  updateRequirementItemStatusContract,
+} from '@cat-factory/contracts'
 import type {
-  BrainstormSession,
-  BrainstormStage,
-  ResolveBrainstormExceededChoice,
-} from '~/types/brainstorm'
-import type { ConsensusSession } from '~/types/consensus'
-import type {
-  RequirementReview,
-  ResolveRequirementsExceededChoice,
-  ReviewItemStatus,
-} from '~/types/requirements'
+  UpdateBrainstormItemStatusInput,
+  UpdateClarityItemStatusInput,
+} from '@cat-factory/contracts'
+import type { ResolveClarityExceededChoice } from '~/types/clarity'
+import type { BrainstormStage, ResolveBrainstormExceededChoice } from '~/types/brainstorm'
+import type { ResolveRequirementsExceededChoice, ReviewItemStatus } from '~/types/requirements'
 import type { ApiContext } from './context'
+
+// The clarity/brainstorm item-status routes accept a narrower set than the full
+// requirements `ReviewItemStatus` (no `recommend_requested`).
+type ClarityItemStatus = UpdateClarityItemStatusInput['status']
+type BrainstormItemStatus = UpdateBrainstormItemStatusInput['status']
 
 /**
  * The two iterative gate reviewers (requirements + clarity) and the consensus
  * session read. Each reviewer follows the same answer → incorporate → re-review
  * → proceed/resolve-exceeded loop.
  */
-export function reviewsApi({ http, ws }: ApiContext) {
+export function reviewsApi({ send, ws }: ApiContext) {
   return {
     // ---- requirements review (stateless reviewer agent) ------------------
     // The current review for a block (null when none has been run). A 503 means
     // the feature is unconfigured (the panel hides on any error here).
     getRequirementReview: (workspaceId: string, blockId: string) =>
-      http<RequirementReview | null>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review`,
-      ),
+      send(getRequirementReviewContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
 
     // The latest consensus session for a block (`{ session: null }` when none / consensus
     // off). The live transcript also arrives via the `consensus` stream event.
     getConsensusSession: (workspaceId: string, blockId: string) =>
-      http<{ session: ConsensusSession | null }>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/consensus-session`,
-      ),
+      send(getConsensusSessionContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
 
     replyRequirementItem: (workspaceId: string, reviewId: string, itemId: string, reply: string) =>
-      http<RequirementReview>(
-        `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/items/${encodeURIComponent(itemId)}/reply`,
-        { method: 'POST', body: { reply } },
-      ),
+      send(replyRequirementItemContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { reviewId, itemId },
+        body: { reply },
+      }),
 
     setRequirementItemStatus: (
       workspaceId: string,
@@ -46,35 +71,31 @@ export function reviewsApi({ http, ws }: ApiContext) {
       itemId: string,
       status: ReviewItemStatus,
     ) =>
-      http<RequirementReview>(
-        `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/items/${encodeURIComponent(itemId)}`,
-        { method: 'PATCH', body: { status } },
-      ),
+      send(updateRequirementItemStatusContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { reviewId, itemId },
+        body: { status },
+      }),
 
     // Incorporate the answers ASYNCHRONOUSLY (every finding must be answered or dismissed).
     // The durable driver folds them and re-reviews in the background. Optional `feedback` is
     // the "do it differently" lever when redoing a merge. Returns the `incorporating` review
     // at once; a notification calls the user back only if the re-review needs input.
     incorporateRequirements: (workspaceId: string, blockId: string, feedback?: string) =>
-      http<RequirementReview>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review/incorporate`,
-        { method: 'POST', body: feedback ? { feedback } : {} },
-      ),
+      send(incorporateRequirementsContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId },
+        body: feedback ? { feedback } : {},
+      }),
 
     // Re-review the incorporated document (one more reviewer pass). On convergence the
     // parked run advances; otherwise the response carries the next cycle / cap state.
     reReviewRequirements: (workspaceId: string, blockId: string) =>
-      http<RequirementReview>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review/re-review`,
-        { method: 'POST' },
-      ),
+      send(reReviewRequirementsContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
 
     // Proceed: settle the requirements and advance the parked run (all findings dismissed).
     proceedRequirements: (workspaceId: string, blockId: string) =>
-      http<RequirementReview>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review/proceed`,
-        { method: 'POST' },
-      ),
+      send(proceedRequirementsContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
 
     // Resolve a review that hit its iteration cap: extra-round / proceed / stop-reset.
     resolveRequirementsExceeded: (
@@ -82,10 +103,11 @@ export function reviewsApi({ http, ws }: ApiContext) {
       blockId: string,
       choice: ResolveRequirementsExceededChoice,
     ) =>
-      http<RequirementReview>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review/resolve-exceeded`,
-        { method: 'POST', body: { choice } },
-      ),
+      send(resolveRequirementsExceededContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId },
+        body: { choice },
+      }),
 
     // Ask the Requirement Writer to recommend grounded answers for a batch of findings (by
     // item id). Returns the review with `pending` placeholder recommendations; they fill in
@@ -96,80 +118,77 @@ export function reviewsApi({ http, ws }: ApiContext) {
       itemIds: string[],
       note?: string,
     ) =>
-      http<RequirementReview | null>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review/recommend`,
-        { method: 'POST', body: { itemIds, ...(note ? { note } : {}) } },
-      ),
+      send(requestRequirementRecommendationsContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId },
+        body: { itemIds, ...(note ? { note } : {}) },
+      }),
 
     // Accept a recommendation (becomes the finding's answer), reject it, or re-request it
     // with a "do it differently" note.
     acceptRecommendation: (workspaceId: string, reviewId: string, recId: string) =>
-      http<RequirementReview>(
-        `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/recommendations/${encodeURIComponent(recId)}/accept`,
-        { method: 'POST' },
-      ),
+      send(acceptRequirementRecommendationContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { reviewId, recId },
+      }),
 
     rejectRecommendation: (workspaceId: string, reviewId: string, recId: string) =>
-      http<RequirementReview>(
-        `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/recommendations/${encodeURIComponent(recId)}/reject`,
-        { method: 'POST' },
-      ),
+      send(rejectRequirementRecommendationContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { reviewId, recId },
+      }),
 
     reRequestRecommendation: (workspaceId: string, reviewId: string, recId: string, note: string) =>
-      http<RequirementReview>(
-        `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/recommendations/${encodeURIComponent(recId)}/re-request`,
-        { method: 'POST', body: { note } },
-      ),
+      send(reRequestRequirementRecommendationContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { reviewId, recId },
+        body: { note },
+      }),
 
     // ---- clarity review (bug-report triage reviewer agent) ---------------
     // The current review for a block (null when none has been run). A 503 means
     // the feature is unconfigured (the panel hides on any error here).
     getClarityReview: (workspaceId: string, blockId: string) =>
-      http<ClarityReview | null>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/clarity-review`,
-      ),
+      send(getClarityReviewContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
 
     replyClarityItem: (workspaceId: string, reviewId: string, itemId: string, reply: string) =>
-      http<ClarityReview>(
-        `${ws(workspaceId)}/clarity-reviews/${encodeURIComponent(reviewId)}/items/${encodeURIComponent(itemId)}/reply`,
-        { method: 'POST', body: { reply } },
-      ),
+      send(replyClarityItemContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { reviewId, itemId },
+        body: { reply },
+      }),
 
     setClarityItemStatus: (
       workspaceId: string,
       reviewId: string,
       itemId: string,
-      status: ReviewItemStatus,
+      status: ClarityItemStatus,
     ) =>
-      http<ClarityReview>(
-        `${ws(workspaceId)}/clarity-reviews/${encodeURIComponent(reviewId)}/items/${encodeURIComponent(itemId)}`,
-        { method: 'PATCH', body: { status } },
-      ),
+      send(updateClarityItemStatusContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { reviewId, itemId },
+        body: { status },
+      }),
 
     // Incorporate the answers ASYNCHRONOUSLY (every finding must be answered or dismissed).
     // The durable driver folds them and re-reviews in the background. Optional `feedback` is
     // the "do it differently" lever when redoing a merge. Returns the `incorporating` review
     // at once; a notification calls the user back only if the re-review needs input.
     incorporateClarity: (workspaceId: string, blockId: string, feedback?: string) =>
-      http<ClarityReview>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/clarity-review/incorporate`,
-        { method: 'POST', body: feedback ? { feedback } : {} },
-      ),
+      send(incorporateClarityContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId },
+        body: feedback ? { feedback } : {},
+      }),
 
     // Re-review the clarified report (one more reviewer pass). On convergence the parked run
     // advances; otherwise the response carries the next cycle / cap state.
     reReviewClarity: (workspaceId: string, blockId: string) =>
-      http<ClarityReview>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/clarity-review/re-review`,
-        { method: 'POST' },
-      ),
+      send(reReviewClarityContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
 
     // Proceed: settle the clarity review and advance the parked run (all findings dismissed).
     proceedClarity: (workspaceId: string, blockId: string) =>
-      http<ClarityReview>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/clarity-review/proceed`,
-        { method: 'POST' },
-      ),
+      send(proceedClarityContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
 
     // Resolve a review that hit its iteration cap: extra-round / proceed / stop-reset.
     resolveClarityExceeded: (
@@ -177,35 +196,36 @@ export function reviewsApi({ http, ws }: ApiContext) {
       blockId: string,
       choice: ResolveClarityExceededChoice,
     ) =>
-      http<ClarityReview>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/clarity-review/resolve-exceeded`,
-        { method: 'POST', body: { choice } },
-      ),
+      send(resolveClarityExceededContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId },
+        body: { choice },
+      }),
 
     // ---- brainstorm (structured-dialogue agent, stage-scoped) ------------
     // The current session for a block + stage (null when none has been run). A 503 means
     // the feature is unconfigured (the panel hides on any error here).
     getBrainstorm: (workspaceId: string, blockId: string, stage: BrainstormStage) =>
-      http<BrainstormSession | null>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/brainstorm/${stage}`,
-      ),
+      send(getBrainstormContract, { pathPrefix: ws(workspaceId), pathParams: { blockId, stage } }),
 
     replyBrainstormItem: (workspaceId: string, sessionId: string, itemId: string, reply: string) =>
-      http<BrainstormSession>(
-        `${ws(workspaceId)}/brainstorm-sessions/${encodeURIComponent(sessionId)}/items/${encodeURIComponent(itemId)}/reply`,
-        { method: 'POST', body: { reply } },
-      ),
+      send(replyBrainstormItemContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { sessionId, itemId },
+        body: { reply },
+      }),
 
     setBrainstormItemStatus: (
       workspaceId: string,
       sessionId: string,
       itemId: string,
-      status: ReviewItemStatus,
+      status: BrainstormItemStatus,
     ) =>
-      http<BrainstormSession>(
-        `${ws(workspaceId)}/brainstorm-sessions/${encodeURIComponent(sessionId)}/items/${encodeURIComponent(itemId)}`,
-        { method: 'PATCH', body: { status } },
-      ),
+      send(updateBrainstormItemStatusContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { sessionId, itemId },
+        body: { status },
+      }),
 
     // Incorporate the picks ASYNCHRONOUSLY (the durable driver folds + re-runs).
     incorporateBrainstorm: (
@@ -214,24 +234,25 @@ export function reviewsApi({ http, ws }: ApiContext) {
       stage: BrainstormStage,
       feedback?: string,
     ) =>
-      http<BrainstormSession>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/brainstorm/${stage}/incorporate`,
-        { method: 'POST', body: feedback ? { feedback } : {} },
-      ),
+      send(incorporateBrainstormContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId, stage },
+        body: feedback ? { feedback } : {},
+      }),
 
     // Re-run the brainstorm against the converged direction (one more pass).
     reReviewBrainstorm: (workspaceId: string, blockId: string, stage: BrainstormStage) =>
-      http<BrainstormSession>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/brainstorm/${stage}/re-review`,
-        { method: 'POST' },
-      ),
+      send(reReviewBrainstormContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId, stage },
+      }),
 
     // Proceed: settle the brainstorm and advance the parked run (all options dismissed).
     proceedBrainstorm: (workspaceId: string, blockId: string, stage: BrainstormStage) =>
-      http<BrainstormSession>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/brainstorm/${stage}/proceed`,
-        { method: 'POST' },
-      ),
+      send(proceedBrainstormContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId, stage },
+      }),
 
     // Resolve a session that hit its iteration cap: extra-round / proceed / stop-reset.
     resolveBrainstormExceeded: (
@@ -240,9 +261,10 @@ export function reviewsApi({ http, ws }: ApiContext) {
       stage: BrainstormStage,
       choice: ResolveBrainstormExceededChoice,
     ) =>
-      http<BrainstormSession>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/brainstorm/${stage}/resolve-exceeded`,
-        { method: 'POST', body: { choice } },
-      ),
+      send(resolveBrainstormExceededContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId, stage },
+        body: { choice },
+      }),
   }
 }

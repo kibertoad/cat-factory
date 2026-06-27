@@ -1,25 +1,42 @@
+import {
+  addAccountApiKeyContract,
+  addUserApiKeyContract,
+  addVendorCredentialContract,
+  addWorkspaceApiKeyContract,
+  getOpenRouterCatalogContract,
+  getServiceFragmentDefaultsContract,
+  listAccountApiKeysContract,
+  listLocalModelEndpointsContract,
+  listModelsContract,
+  listPersonalSubscriptionsContract,
+  listUserApiKeysContract,
+  listVendorCredentialsContract,
+  listWorkspaceApiKeysContract,
+  listWorkspaceModelsContract,
+  refreshOpenRouterCatalogContract,
+  removeAccountApiKeyContract,
+  removeLocalModelEndpointContract,
+  removePersonalSubscriptionContract,
+  removeUserApiKeyContract,
+  removeVendorCredentialContract,
+  removeWorkspaceApiKeyContract,
+  setServiceFragmentDefaultsContract,
+  storePersonalSubscriptionContract,
+  testLocalModelEndpointContract,
+  upsertLocalModelEndpointContract,
+  upsertOpenRouterCatalogContract,
+} from '@cat-factory/contracts'
 import type {
   AddApiKeyInput,
-  ApiKey,
-  ModelOption,
-  PersonalSubscriptionStatus,
-  ServiceFragmentDefaults,
   StorePersonalSubscriptionInput,
   SubscriptionVendor,
-  VendorCredential,
 } from '~/types/domain'
 import type {
-  LocalModelEndpoint,
-  LocalModelEndpointTestResult,
   LocalRunner,
   TestLocalModelEndpointInput,
   UpsertLocalModelEndpointInput,
 } from '~/types/localModels'
-import type {
-  OpenRouterCatalog,
-  OpenRouterRefreshResult,
-  UpsertOpenRouterCatalogInput,
-} from '~/types/openrouter'
+import type { UpsertOpenRouterCatalogInput } from '~/types/openrouter'
 import type { ApiContext } from './context'
 
 /**
@@ -27,104 +44,94 @@ import type { ApiContext } from './context'
  * API keys, vendor subscription tokens, per-user personal subscriptions + local
  * runners) + the per-workspace routing/selection defaults.
  */
-export function modelsApi({ http, ws }: ApiContext) {
+export function modelsApi({ send, ws }: ApiContext) {
   return {
     // ---- model picker catalog (effective per-deployment flavours) ---------
-    getModels: () => http<ModelOption[]>('/models'),
+    getModels: () => send(listModelsContract, {}),
     // Per-workspace catalog: selectability reflects the workspace's (+ account's +
     // caller's) configured API keys and subscription tokens (`available` flag).
-    getWorkspaceModels: (workspaceId: string) => http<ModelOption[]>(`${ws(workspaceId)}/models`),
+    getWorkspaceModels: (workspaceId: string) =>
+      send(listWorkspaceModelsContract, { pathParams: { workspaceId } }),
 
     // ---- direct-provider API keys (the DB-backed pool) --------------------
     // Onboarded via UI, stored encrypted, pooled + rotated. Scoped to a workspace,
     // its owning account, or the signed-in user. Keys are write-only (never returned).
     listWorkspaceApiKeys: (workspaceId: string) =>
-      http<{ keys: ApiKey[] }>(`${ws(workspaceId)}/api-keys`),
+      send(listWorkspaceApiKeysContract, { pathPrefix: ws(workspaceId) }),
     addWorkspaceApiKey: (workspaceId: string, body: AddApiKeyInput) =>
-      http<ApiKey>(`${ws(workspaceId)}/api-keys`, { method: 'POST', body }),
+      send(addWorkspaceApiKeyContract, { pathPrefix: ws(workspaceId), body }),
     removeWorkspaceApiKey: (workspaceId: string, id: string) =>
-      http(`${ws(workspaceId)}/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-    listMyApiKeys: () => http<{ keys: ApiKey[] }>('/me/api-keys'),
-    addMyApiKey: (body: AddApiKeyInput) => http<ApiKey>('/me/api-keys', { method: 'POST', body }),
-    removeMyApiKey: (id: string) =>
-      http(`/me/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+      send(removeWorkspaceApiKeyContract, { pathPrefix: ws(workspaceId), pathParams: { id } }),
+    listMyApiKeys: () => send(listUserApiKeysContract, {}),
+    addMyApiKey: (body: AddApiKeyInput) => send(addUserApiKeyContract, { body }),
+    removeMyApiKey: (id: string) => send(removeUserApiKeyContract, { pathParams: { id } }),
     // Account-scoped keys (shared by every workspace in the account); admin-only.
     listAccountApiKeys: (accountId: string) =>
-      http<{ keys: ApiKey[] }>(`/accounts/${encodeURIComponent(accountId)}/api-keys`),
+      send(listAccountApiKeysContract, { pathParams: { accountId } }),
     addAccountApiKey: (accountId: string, body: AddApiKeyInput) =>
-      http<ApiKey>(`/accounts/${encodeURIComponent(accountId)}/api-keys`, { method: 'POST', body }),
+      send(addAccountApiKeyContract, { pathParams: { accountId }, body }),
     removeAccountApiKey: (accountId: string, id: string) =>
-      http(`/accounts/${encodeURIComponent(accountId)}/api-keys/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-      }),
+      send(removeAccountApiKeyContract, { pathParams: { accountId, id } }),
 
     // ---- LLM vendor subscription credentials (the token pool) -------------
     listVendorCredentials: (workspaceId: string) =>
-      http<{ credentials: VendorCredential[] }>(`${ws(workspaceId)}/vendor-credentials`),
+      send(listVendorCredentialsContract, { pathPrefix: ws(workspaceId) }),
     addVendorCredential: (
       workspaceId: string,
       body: { vendor: SubscriptionVendor; label: string; token: string },
-    ) => http<VendorCredential>(`${ws(workspaceId)}/vendor-credentials`, { method: 'POST', body }),
+    ) => send(addVendorCredentialContract, { pathPrefix: ws(workspaceId), body }),
     removeVendorCredential: (workspaceId: string, id: string) =>
-      http(`${ws(workspaceId)}/vendor-credentials/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+      send(removeVendorCredentialContract, { pathPrefix: ws(workspaceId), pathParams: { id } }),
 
     // ---- personal (individual-usage) subscriptions (per-user, e.g. Claude) ----
     // Stored per signed-in user, double-encrypted under their personal password.
     // Metadata only is returned (never the token). User-scoped (no workspace).
-    listPersonalSubscriptions: () =>
-      http<{ subscriptions: PersonalSubscriptionStatus[] }>('/personal-subscriptions'),
+    listPersonalSubscriptions: () => send(listPersonalSubscriptionsContract, {}),
 
     storePersonalSubscription: (body: StorePersonalSubscriptionInput) =>
-      http<PersonalSubscriptionStatus>('/personal-subscriptions', { method: 'POST', body }),
+      send(storePersonalSubscriptionContract, { body }),
 
     removePersonalSubscription: (vendor: SubscriptionVendor) =>
-      http(`/personal-subscriptions/${encodeURIComponent(vendor)}`, { method: 'DELETE' }),
+      send(removePersonalSubscriptionContract, { pathParams: { vendor } }),
 
     // ---- local model runners (per-user, e.g. Ollama / LM Studio) ----------
     // A developer's own-machine LLM endpoints, stored per signed-in user (the API
     // key is write-only, never returned). User-scoped (no workspace). The enabled
     // models then surface automatically in the per-workspace `/models` catalog.
-    listLocalModelEndpoints: () =>
-      http<{ endpoints: LocalModelEndpoint[] }>('/local-model-endpoints'),
+    listLocalModelEndpoints: () => send(listLocalModelEndpointsContract, {}),
 
     upsertLocalModelEndpoint: (provider: LocalRunner, body: UpsertLocalModelEndpointInput) =>
-      http<LocalModelEndpoint>(`/local-model-endpoints/${encodeURIComponent(provider)}`, {
-        method: 'PUT',
-        body,
-      }),
+      send(upsertLocalModelEndpointContract, { pathParams: { provider }, body }),
 
     deleteLocalModelEndpoint: (provider: LocalRunner) =>
-      http(`/local-model-endpoints/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
+      send(removeLocalModelEndpointContract, { pathParams: { provider } }),
 
     // Probe a runner endpoint for reachability + the models it currently serves
     // (no persistence — drives the "Test connection" model multi-select).
     testLocalModelEndpoint: (body: TestLocalModelEndpointInput) =>
-      http<LocalModelEndpointTestResult>('/local-model-endpoints/test', {
-        method: 'POST',
-        body,
-      }),
+      send(testLocalModelEndpointContract, { body }),
 
     // ---- OpenRouter dynamic catalog (per-workspace gateway models) --------
     // Browse OpenRouter's live catalog (`refresh`, leasing the workspace's pooled
     // OpenRouter key server-side) and enable a subset; enabled models then surface
     // in the per-workspace `/models` catalog with their context + price.
     getOpenRouterCatalog: (workspaceId: string) =>
-      http<OpenRouterCatalog>(`${ws(workspaceId)}/openrouter/catalog`),
+      send(getOpenRouterCatalogContract, { pathParams: { workspaceId } }),
 
     setOpenRouterCatalog: (workspaceId: string, body: UpsertOpenRouterCatalogInput) =>
-      http<OpenRouterCatalog>(`${ws(workspaceId)}/openrouter/catalog`, { method: 'PUT', body }),
+      send(upsertOpenRouterCatalogContract, { pathParams: { workspaceId }, body }),
 
     refreshOpenRouterCatalog: (workspaceId: string) =>
-      http<OpenRouterRefreshResult>(`${ws(workspaceId)}/openrouter/refresh`, { method: 'POST' }),
+      send(refreshOpenRouterCatalogContract, { pathParams: { workspaceId } }),
 
     // The workspace's default service-fragment selection (the fragment ids new
     // services inherit). `setServiceFragmentDefaults` replaces the whole list.
     getServiceFragmentDefaults: (workspaceId: string) =>
-      http<ServiceFragmentDefaults>(`${ws(workspaceId)}/service-fragment-defaults`),
+      send(getServiceFragmentDefaultsContract, { pathPrefix: ws(workspaceId) }),
 
     setServiceFragmentDefaults: (workspaceId: string, fragmentIds: string[]) =>
-      http<ServiceFragmentDefaults>(`${ws(workspaceId)}/service-fragment-defaults`, {
-        method: 'PUT',
+      send(setServiceFragmentDefaultsContract, {
+        pathPrefix: ws(workspaceId),
         body: { fragmentIds },
       }),
   }

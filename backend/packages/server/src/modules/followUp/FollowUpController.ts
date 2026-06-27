@@ -1,8 +1,14 @@
-import { answerFollowUpSchema } from '@cat-factory/contracts'
+import {
+  answerFollowUpContract,
+  dismissFollowUpContract,
+  fileFollowUpContract,
+  getFollowUpsContract,
+  queueFollowUpContract,
+} from '@cat-factory/contracts'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 
 /**
  * Workspace-scoped Follow-up companion endpoints. The Coder surfaces forward-looking items
@@ -17,65 +23,48 @@ export function followUpController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   // The live follow-up state for a run (null when the companion is off / nothing surfaced).
-  app.get('/executions/:executionId/follow-ups', async (c) => {
+  buildHonoRoute(app, getFollowUpsContract, async (c) => {
     const state = await c
       .get('container')
-      .executionService.getFollowUps(param(c, 'workspaceId'), param(c, 'executionId'))
-    return c.json(state)
+      .executionService.getFollowUps(param(c, 'workspaceId'), c.req.valid('param').executionId)
+    return c.json(state, 200)
   })
 
   // File a follow-up item as a tracker issue (GitHub Issues / Jira).
-  app.post('/executions/:executionId/follow-ups/:itemId/file', async (c) => {
+  buildHonoRoute(app, fileFollowUpContract, async (c) => {
+    const { executionId, itemId } = c.req.valid('param')
     const state = await c
       .get('container')
-      .executionService.fileFollowUp(
-        param(c, 'workspaceId'),
-        param(c, 'executionId'),
-        param(c, 'itemId'),
-      )
-    return c.json(state)
+      .executionService.fileFollowUp(param(c, 'workspaceId'), executionId, itemId)
+    return c.json(state, 200)
   })
 
   // Send a follow-up item back to the Coder (queued for its next pass).
-  app.post('/executions/:executionId/follow-ups/:itemId/queue', async (c) => {
+  buildHonoRoute(app, queueFollowUpContract, async (c) => {
+    const { executionId, itemId } = c.req.valid('param')
     const state = await c
       .get('container')
-      .executionService.queueFollowUp(
-        param(c, 'workspaceId'),
-        param(c, 'executionId'),
-        param(c, 'itemId'),
-      )
-    return c.json(state)
+      .executionService.queueFollowUp(param(c, 'workspaceId'), executionId, itemId)
+    return c.json(state, 200)
   })
 
   // Answer a question item (the answer folds into the Coder's next pass).
-  app.post(
-    '/executions/:executionId/follow-ups/:itemId/answer',
-    jsonBody(answerFollowUpSchema),
-    async (c) => {
-      const { answer } = c.req.valid('json')
-      const state = await c
-        .get('container')
-        .executionService.answerFollowUp(
-          param(c, 'workspaceId'),
-          param(c, 'executionId'),
-          param(c, 'itemId'),
-          answer,
-        )
-      return c.json(state)
-    },
-  )
-
-  // Dismiss a follow-up / question item without acting on it.
-  app.post('/executions/:executionId/follow-ups/:itemId/dismiss', async (c) => {
+  buildHonoRoute(app, answerFollowUpContract, async (c) => {
+    const { executionId, itemId } = c.req.valid('param')
+    const { answer } = c.req.valid('json')
     const state = await c
       .get('container')
-      .executionService.dismissFollowUp(
-        param(c, 'workspaceId'),
-        param(c, 'executionId'),
-        param(c, 'itemId'),
-      )
-    return c.json(state)
+      .executionService.answerFollowUp(param(c, 'workspaceId'), executionId, itemId, answer)
+    return c.json(state, 200)
+  })
+
+  // Dismiss a follow-up / question item without acting on it.
+  buildHonoRoute(app, dismissFollowUpContract, async (c) => {
+    const { executionId, itemId } = c.req.valid('param')
+    const state = await c
+      .get('container')
+      .executionService.dismissFollowUp(param(c, 'workspaceId'), executionId, itemId)
+    return c.json(state, 200)
   })
 
   return app
