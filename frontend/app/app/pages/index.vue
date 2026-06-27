@@ -49,6 +49,11 @@ const SlackPanel = defineAsyncComponent(() => import('~/components/slack/SlackPa
 const FragmentLibraryPanel = defineAsyncComponent(
   () => import('~/components/fragments/FragmentLibraryPanel.vue'),
 )
+// Startup advisory for invalid / outdated pipelines — only mounted while open (auto-opened
+// at most once per session by the watcher below), so it stays out of the initial bundle.
+const PipelineHealthModal = defineAsyncComponent(
+  () => import('~/components/pipeline/PipelineHealthModal.vue'),
+)
 const IntegrationsHub = defineAsyncComponent(
   () => import('~/components/layout/IntegrationsHub.vue'),
 )
@@ -122,7 +127,21 @@ watch(
       autoOpenedSetup.value = false
       autoOpenedPreset.value = false
       ui.resetAiOnboarding()
+      // A different board has its own pipeline library, so re-arm the once-per-session advisory.
+      ui.pipelineHealthSeen = false
     }
+  },
+  { immediate: true },
+)
+
+// Pipeline-health advisory: once a board is loaded, surface any invalid / outdated pipelines in
+// a startup modal (auto-opened at most once per session per board — later opens are user-driven).
+// Detection is reactive, so this fires as soon as the snapshot hydrates.
+const { hasIssues: pipelineIssues } = usePipelineHealth()
+watch(
+  () => [workspace.ready, pipelineIssues.value],
+  () => {
+    if (workspace.ready && pipelineIssues.value) ui.maybeOpenPipelineHealth()
   },
   { immediate: true },
 )
@@ -242,6 +261,7 @@ watch(
       <GitHubPanel v-if="ui.githubOpen" />
       <SlackPanel v-if="ui.slackOpen" />
       <FragmentLibraryPanel v-if="ui.fragmentLibraryOpen" />
+      <PipelineHealthModal v-if="ui.pipelineHealthOpen" />
       <IntegrationsHub v-if="ui.integrationsOpen" />
       <PersonalSetupModal v-if="ui.personalSetupOpen" />
       <WorkspaceSettingsPanel v-if="ui.workspaceSettingsOpen" />

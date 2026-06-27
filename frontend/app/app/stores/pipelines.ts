@@ -31,6 +31,12 @@ function defaultConsensusConfig(): ConsensusStepConfig {
 export const usePipelinesStore = defineStore('pipelines', () => {
   const api = useApi()
   const pipelines = ref<Pipeline[]>([])
+  /**
+   * Current built-in catalog versions (`seedPipelines()`), keyed by pipeline id, from the
+   * workspace snapshot. A built-in whose stored `version` is below its catalog value here has
+   * a newer definition available (see `usePipelineHealth`).
+   */
+  const catalogVersions = ref<Record<string, number>>({})
 
   /** The chain currently being assembled in the builder. */
   const draft = ref<AgentKind[]>([])
@@ -59,9 +65,10 @@ export const usePipelinesStore = defineStore('pipelines', () => {
   /** The id of the pipeline being edited, or null when assembling a brand-new one. */
   const editingId = ref<string | null>(null)
 
-  /** Replace the cached pipelines with a server snapshot. */
-  function hydrate(next: Pipeline[]) {
+  /** Replace the cached pipelines (and the current built-in catalog versions) from a snapshot. */
+  function hydrate(next: Pipeline[], versions?: Record<string, number>) {
     pipelines.value = next
+    if (versions) catalogVersions.value = versions
   }
 
   function getPipeline(id: string) {
@@ -300,6 +307,19 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     if (editingId.value === id) clearDraft()
   }
 
+  /**
+   * Reseed a built-in pipeline from the backend's current catalog definition: restores its
+   * canonical structure + version (adopting an update, or repairing a drifted/invalid copy)
+   * while preserving its labels/archive state. Replaces the pipeline in the cache.
+   */
+  async function reseed(id: string): Promise<Pipeline> {
+    const updated = await api.reseedPipeline(useWorkspaceStore().requireId(), id)
+    const i = pipelines.value.findIndex((p) => p.id === updated.id)
+    if (i >= 0) pipelines.value[i] = updated
+    if (editingId.value === id) clearDraft()
+    return updated
+  }
+
   /** Set a pipeline's organizational metadata (labels / archive). Works on built-ins too. */
   async function organize(id: string, body: { labels?: string[]; archived?: boolean }) {
     const updated = await api.organizePipeline(useWorkspaceStore().requireId(), id, body)
@@ -314,6 +334,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
 
   return {
     pipelines,
+    catalogVersions,
     draft,
     draftGates,
     draftEnabled,
@@ -344,6 +365,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     saveDraft,
     clonePipeline,
     removePipeline,
+    reseed,
     organize,
     archive,
     unarchive,

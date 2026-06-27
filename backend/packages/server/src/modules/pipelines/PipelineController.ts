@@ -4,6 +4,7 @@ import {
   deletePipelineContract,
   listPipelinesContract,
   organizePipelineContract,
+  reseedPipelineContract,
   updatePipelineContract,
 } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
@@ -61,6 +62,15 @@ export function pipelineController(): Hono<AppEnv> {
         c.req.valid('param').pipelineId,
         c.req.valid('json'),
       )
+    return c.json(pipeline, 200)
+  })
+
+  // Restore a built-in pipeline to its current catalog definition (adopt an improved
+  // built-in, or repair a drifted/invalid one). Custom pipelines reject this (delete them).
+  buildHonoRoute(app, reseedPipelineContract, async (c) => {
+    const pipeline = await c
+      .get('container')
+      .pipelineService.reseed(param(c, 'workspaceId'), c.req.valid('param').pipelineId)
     return c.json(pipeline, 200)
   })
 

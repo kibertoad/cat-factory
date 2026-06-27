@@ -463,6 +463,13 @@ export const pipelineSchema = v.object({
    * edited in place. Absent / false on user-created and cloned pipelines.
    */
   builtin: v.optional(v.boolean()),
+  /**
+   * Monotonic seed version for a built-in pipeline (`seedPipelines()` assigns it). When the
+   * current catalog version for this id exceeds the persisted copy's `version`, the app offers
+   * to reseed the pipeline from the backend. Absent on user-created/cloned pipelines (they are
+   * not version-tracked) and on rows persisted before versioning existed (treated as 0).
+   */
+  version: v.optional(v.number()),
 })
 export type Pipeline = v.InferOutput<typeof pipelineSchema>
 
