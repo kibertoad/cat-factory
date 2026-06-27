@@ -32,6 +32,7 @@ import { requirementReviewController } from './modules/requirements/RequirementR
 import { followUpController } from './modules/followUp/FollowUpController.js'
 import { kaizenController } from './modules/kaizen/KaizenController.js'
 import { humanTestController } from './modules/humanTest/HumanTestController.js'
+import { visualConfirmationController } from './modules/visualConfirm/VisualConfirmationController.js'
 import { humanReviewController } from './modules/humanReview/HumanReviewController.js'
 import { consensusController } from './modules/consensus/ConsensusController.js'
 import { clarityReviewController } from './modules/clarity/ClarityReviewController.js'
@@ -110,6 +111,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', followUpController())
   app.route('/workspaces/:workspaceId', kaizenController())
   app.route('/workspaces/:workspaceId', humanTestController())
+  app.route('/workspaces/:workspaceId', visualConfirmationController())
   app.route('/workspaces/:workspaceId', humanReviewController())
   app.route('/workspaces/:workspaceId', consensusController())
   app.route('/workspaces/:workspaceId', clarityReviewController())

@@ -415,6 +415,27 @@ export function seedPipelines(): Pipeline[] {
         'merger',
       ],
     },
+    // A UI-focused build: implement → review → mock → the UI tester drives a browser through
+    // the new screens (capturing a screenshot of each distinct view), then a
+    // `visual-confirmation` gate PARKS for a person to review those screenshots against the
+    // uploaded reference designs before the standard mergeability / CI / merge tail. From the
+    // gate the human approves or requests a fix (the Tester's `fixer`). Opt-in — it needs a
+    // human present, the UI-tester image, and a binary-artifact store, so it is NOT folded into
+    // the always-on defaults; the gate passes through when no store is wired.
+    {
+      id: 'pl_visual',
+      name: 'Build & visual confirmation',
+      agentKinds: [
+        'coder',
+        'reviewer',
+        'mocker',
+        'tester-ui',
+        'visual-confirmation',
+        'conflicts',
+        'ci',
+        'merger',
+      ],
+    },
     // Recurring-pipeline presets. "Dependency updates" is a plain implement →
     // review → merge run; "Tech debt" first runs a read-only `analysis` agent and
     // a special `tracker` step (files a GitHub issue / Jira ticket from the

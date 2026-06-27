@@ -101,7 +101,7 @@ export function defineBinaryArtifactsSuite(
       expect((await store.listByExecution(ws, e2)).map((r) => r.view)).toEqual(['c'])
     })
 
-    it('round-trips a reference artifact (workspace-scoped, no execution)', async () => {
+    it('round-trips a reference artifact (block-scoped, no execution) and lists by block', async () => {
       const store = makeStore()
       const { ws, blk } = ids()
       const rec = await store.store({
@@ -118,6 +118,10 @@ export function defineBinaryArtifactsSuite(
       const meta = await store.getMetadata(ws, rec.id)
       expect(meta?.kind).toBe('reference')
       expect(meta?.executionId).toBeNull()
+      // listByBlock finds it even though it carries no executionId (the reference-design
+      // upload path the visual-confirmation gate reads).
+      const byBlock = await store.listByBlock(ws, blk)
+      expect(byBlock.map((r) => r.id)).toEqual([rec.id])
     })
 
     it('deletes a stored artifact (metadata + bytes)', async () => {

@@ -1457,6 +1457,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     ...releaseHealthDeps,
     ...incidentEnrichmentDeps,
     ...(accountSettings ? { accountSettings } : {}),
+    // The binary-artifact store (screenshots) for the visual-confirmation gate; present
+    // only when BINARY_STORAGE_BACKEND is configured (else the gate passes through).
+    ...(binaryArtifactStore ? { binaryArtifactStore } : {}),
     workspaceRepository: repos.workspaceRepository,
     accountRepository: repos.accountRepository,
     membershipRepository: repos.membershipRepository,

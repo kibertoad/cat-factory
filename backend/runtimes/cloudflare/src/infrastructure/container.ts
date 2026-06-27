@@ -1699,6 +1699,9 @@ export function buildContainer(
   const accountSettings = buildAccountSettings(env, db, clock)
 
   const dependencies: CoreDependencies = {
+    // The binary-artifact store (screenshots) for the visual-confirmation gate; present
+    // only when ARTIFACT_BUCKET is configured (else the gate passes through).
+    ...(binaryArtifactStore ? { binaryArtifactStore } : {}),
     workspaceRepository: new D1WorkspaceRepository({ db }),
     accountRepository: new D1AccountRepository({ db }),
     membershipRepository: new D1MembershipRepository({ db }),

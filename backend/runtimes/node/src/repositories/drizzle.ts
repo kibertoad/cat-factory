@@ -1294,6 +1294,17 @@ class DrizzleBinaryArtifactMetadataStore implements BinaryArtifactMetadataStore 
     return rows.map(rowToBinaryArtifact)
   }
 
+  async listByBlock(workspaceId: string, blockId: string): Promise<BinaryArtifactRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(binaryArtifacts)
+      .where(
+        and(eq(binaryArtifacts.workspace_id, workspaceId), eq(binaryArtifacts.block_id, blockId)),
+      )
+      .orderBy(asc(binaryArtifacts.created_at), asc(binaryArtifacts.id))
+    return rows.map(rowToBinaryArtifact)
+  }
+
   async delete(workspaceId: string, id: string): Promise<void> {
     await this.db
       .delete(binaryArtifacts)

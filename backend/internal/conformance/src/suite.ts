@@ -2706,6 +2706,48 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(testerStep.test?.lastReport?.greenlight).toBe(true)
       })
 
+      it('passes the visual-confirmation gate through (auto-advances) when no artifact store is wired', async () => {
+        // A `tester-ui` → `visual-confirmation` tail: the UI tester greenlights, and the gate
+        // — with no binary-artifact store wired in the conformance harness — passes through
+        // (auto-advances) rather than parking, so the run completes on both runtimes. This
+        // pins the engine's delegation of the new gate kind + its no-store pass-through.
+        const green = {
+          greenlight: true,
+          summary: 'ui looks good',
+          tested: ['dashboard'],
+          outcomes: [{ name: 'dashboard', status: 'passed' as const }],
+          concerns: [],
+        }
+        const app = harness.makeApp({
+          asyncKinds: ['coder', 'tester-ui'],
+          asyncPolls: 1,
+          testReports: [green],
+          pullRequest: { url: 'https://gh/pr/2', number: 2, branch: 'cat-factory/task_login' },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'UI test + visual confirmation',
+          agentKinds: ['coder', 'tester-ui', 'visual-confirmation'],
+        })
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          agentConfig: { 'tester.environment': 'ephemeral' },
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const gateStep = exec.steps.find((s) => s.agentKind === 'visual-confirmation')!
+        expect(gateStep.state).toBe('done')
+      })
+
       it('always loops the fixer on the FIRST round, then treats low/medium concerns as advisory', async () => {
         // The FIRST testing round hands ANY finding back to the fixer — even a single
         // low-severity nit — so the first batch of issues is always addressed. From the

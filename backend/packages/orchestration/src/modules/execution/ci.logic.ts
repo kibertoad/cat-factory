@@ -128,3 +128,13 @@ export const TRACKER_AGENT_KIND = 'tracker'
  * (no-env) mode when no ephemeral-environment provider is wired.
  */
 export const HUMAN_TEST_AGENT_KIND = 'human-test'
+
+/**
+ * The agent kind of the special `visual-confirmation` gate: a non-LLM engine step that
+ * PARKS for a human to review the UI tester's screenshots against the uploaded reference
+ * designs, then on demand dispatches the Tester's `fixer` (from the human's findings) and
+ * re-captures via the UI tester. Approving advances the run. Handled by the
+ * {@link VisualConfirmationController}; passes through (auto-advances) when no binary-artifact
+ * store is wired (nowhere to read screenshots from).
+ */
+export const VISUAL_CONFIRM_AGENT_KIND = 'visual-confirmation'

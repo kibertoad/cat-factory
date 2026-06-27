@@ -96,5 +96,14 @@ export function artifactController(): Hono<AppEnv> {
     return c.json({ artifacts }, 200)
   })
 
+  // List a block's artifacts (e.g. its uploaded reference design images, which carry no
+  // executionId because they're attached before any run).
+  app.get('/blocks/:blockId/artifacts', async (c) => {
+    const store = requireStore(c)
+    if (!store) return unavailable(c)
+    const artifacts = await store.listByBlock(param(c, 'workspaceId'), param(c, 'blockId'))
+    return c.json({ artifacts }, 200)
+  })
+
   return app
 }

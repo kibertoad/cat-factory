@@ -86,6 +86,18 @@ export class D1BinaryArtifactMetadataStore implements BinaryArtifactMetadataStor
     return (results ?? []).map(rowToRecord)
   }
 
+  async listByBlock(workspaceId: string, blockId: string): Promise<BinaryArtifactRecord[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM binary_artifacts
+         WHERE workspace_id = ? AND block_id = ?
+         ORDER BY created_at ASC, id ASC`,
+      )
+      .bind(workspaceId, blockId)
+      .all<ArtifactRow>()
+    return (results ?? []).map(rowToRecord)
+  }
+
   async delete(workspaceId: string, id: string): Promise<void> {
     await this.db
       .prepare('DELETE FROM binary_artifacts WHERE workspace_id = ? AND id = ?')

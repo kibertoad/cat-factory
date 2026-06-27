@@ -68,6 +68,12 @@ export interface BinaryArtifactStore {
   getMetadata(workspaceId: string, id: string): Promise<BinaryArtifactRecord | null>
   getBlob(workspaceId: string, id: string): Promise<Uint8Array | null>
   listByExecution(workspaceId: string, executionId: string): Promise<BinaryArtifactRecord[]>
+  /**
+   * Artifacts attached to a board block (task), across runs — used by the
+   * visual-confirmation gate to read the human-uploaded reference design images, which
+   * are attached to the block before any run (so they carry no executionId).
+   */
+  listByBlock(workspaceId: string, blockId: string): Promise<BinaryArtifactRecord[]>
   delete(workspaceId: string, id: string): Promise<void>
 }
 
@@ -76,6 +82,7 @@ export interface BinaryArtifactMetadataStore {
   insert(record: BinaryArtifactRecord): Promise<void>
   get(workspaceId: string, id: string): Promise<BinaryArtifactRecord | null>
   listByExecution(workspaceId: string, executionId: string): Promise<BinaryArtifactRecord[]>
+  listByBlock(workspaceId: string, blockId: string): Promise<BinaryArtifactRecord[]>
   delete(workspaceId: string, id: string): Promise<void>
 }
 
@@ -170,6 +177,9 @@ export function createBinaryArtifactStore(deps: {
     },
     listByExecution(workspaceId, executionId) {
       return metadata.listByExecution(workspaceId, executionId)
+    },
+    listByBlock(workspaceId, blockId) {
+      return metadata.listByBlock(workspaceId, blockId)
     },
     async delete(workspaceId, id) {
       const record = await metadata.get(workspaceId, id)

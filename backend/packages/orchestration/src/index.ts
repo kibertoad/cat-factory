@@ -75,6 +75,7 @@ export {
   TESTER_KINDS,
   isTesterKind,
   FIXER_AGENT_KIND,
+  VISUAL_CONFIRM_AGENT_KIND,
   type CiVerdict,
 } from './modules/execution/ci.logic.js'
 export {
