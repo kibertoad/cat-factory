@@ -19,6 +19,7 @@ export {
   OPENAI_BASE_URL,
   OPENROUTER_BASE_URL,
   QWEN_BASE_URL,
+  resolveOpenAiCompatibleBaseUrl,
 } from './endpoints.js'
 export {
   type CachePolicy,

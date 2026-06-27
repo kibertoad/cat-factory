@@ -25,6 +25,24 @@ export const DEFAULT_OPENAI_COMPATIBLE_BASE_URLS: Readonly<Record<string, string
 }
 
 /**
+ * The single source of truth for "where does OpenAI-compatible provider X live": a
+ * per-deployment env override always wins, but a *blank* override falls back to the
+ * built-in default (so `QWEN_BASE_URL=` does not silently disable the provider). Returns
+ * undefined when the provider has neither an override nor a built-in default — that covers
+ * both providers that are not OpenAI-compatible (`anthropic`, `workers-ai`) and the
+ * operator-hosted gateways with no public endpoint (`litellm`), which resolve only once
+ * their override is set. Every facade (Worker, Node) routes its base-URL resolution
+ * through here so adding a vendor is a one-line {@link DEFAULT_OPENAI_COMPATIBLE_BASE_URLS}
+ * entry both runtimes pick up automatically.
+ */
+export function resolveOpenAiCompatibleBaseUrl(
+  provider: string,
+  override: string | null | undefined,
+): string | undefined {
+  return override?.trim() || DEFAULT_OPENAI_COMPATIBLE_BASE_URLS[provider]
+}
+
+/**
  * Providers the container LLM proxy can serve, so a container agent's locked model
  * must resolve to one of them (see `LlmProxyController`):
  *  - `workers-ai` — run in-Worker through the AI binding (no upstream, no key);

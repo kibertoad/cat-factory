@@ -203,6 +203,7 @@ export {
   OPENAI_BASE_URL,
   OPENROUTER_BASE_URL,
   QWEN_BASE_URL,
+  resolveOpenAiCompatibleBaseUrl,
   type CachePolicy,
   cachedTokensFromUsage,
   inlineCacheProviderOptions,
