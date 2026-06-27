@@ -69,6 +69,8 @@ import {
   TRACKER_AGENT_KIND,
   ANALYSIS_AGENT_KIND,
   TESTER_AGENT_KIND,
+  UI_TESTER_AGENT_KIND,
+  isTesterKind,
   HUMAN_TEST_AGENT_KIND,
   HUMAN_REVIEW_AGENT_KIND,
   BLUEPRINTS_AGENT_KIND,
@@ -205,7 +207,12 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
  * the per-poll env projection so the `getByBlock` read never hits the hot path for
  * the many container steps that have no env to show (see attachEnvironmentProjection).
  */
-const ENV_PROJECTION_KINDS = new Set<string>(['deployer', 'tester', 'playwright'])
+const ENV_PROJECTION_KINDS = new Set<string>([
+  'deployer',
+  TESTER_AGENT_KIND,
+  UI_TESTER_AGENT_KIND,
+  'playwright',
+])
 
 /**
  * Parse `owner`/`repo` from a GitHub pull-request URL (`https://github.com/o/r/pull/42`).
@@ -1004,7 +1011,7 @@ export class ExecutionService {
     // configured (a docker-compose path, or an explicit "no infra dependencies"
     // flag). Block the start with a clear, actionable error otherwise — before any
     // side effects (activation mint / prior-run teardown).
-    if (pipeline.agentKinds.includes(TESTER_AGENT_KIND)) {
+    if (pipeline.agentKinds.some(isTesterKind)) {
       await this.assertTesterInfraConfigured(workspaceId, block)
     }
 
@@ -1788,7 +1795,7 @@ export class ExecutionService {
     // step's own work: when it finishes (or fails) we drop the handle, return to
     // `testing`, and re-dispatch the Tester against the (now-fixed) branch — its
     // fresh report then drives greenlight-or-loop again. Mirrors the CI gate.
-    if (step.agentKind === TESTER_AGENT_KIND && step.test?.phase === 'fixing') {
+    if (isTesterKind(step.agentKind) && step.test?.phase === 'fixing') {
       step.jobId = undefined
       step.subtasks = undefined
       step.test.phase = 'testing'
@@ -2157,7 +2164,7 @@ export class ExecutionService {
     // NOT finish the step: we loop the `fixer` (within the attempt budget) and
     // re-test, mirroring the CI gate. A greenlight (or no provider) falls through to
     // the normal finish/advance below. Records the report on the step either way.
-    if (step.agentKind === TESTER_AGENT_KIND && result.testReport !== undefined) {
+    if (isTesterKind(step.agentKind) && result.testReport !== undefined) {
       const looped = await this.testerController.resolveTesterResult(
         workspaceId,
         instance,

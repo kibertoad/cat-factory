@@ -182,7 +182,7 @@ export function seedPipelines(): Pipeline[] {
         // `mocker` stands up the external-dependency mocks the tester needs to run
         // the suite locally, so it always runs immediately before `tester`.
         'mocker',
-        'tester',
+        'tester-api',
         'conflicts',
         'ci',
         'merger',
@@ -276,7 +276,7 @@ export function seedPipelines(): Pipeline[] {
         'reviewer',
         'blueprints',
         'business-documenter',
-        'tester',
+        'tester-api',
         'playwright',
         'documenter',
         'conflicts',
@@ -364,7 +364,7 @@ export function seedPipelines(): Pipeline[] {
     {
       id: 'pl_quick',
       name: 'Quick implement',
-      agentKinds: ['coder', 'blueprints', 'mocker', 'tester', 'conflicts', 'ci', 'merger'],
+      agentKinds: ['coder', 'blueprints', 'mocker', 'tester-api', 'conflicts', 'ci', 'merger'],
     },
     // The leanest end-to-end build: implement → review → test, then the standard
     // mergeability / CI / merge tail. The `coder` (Implementer) writes the change,
@@ -375,12 +375,12 @@ export function seedPipelines(): Pipeline[] {
     {
       id: 'pl_simple',
       name: 'Simple',
-      agentKinds: ['coder', 'reviewer', 'mocker', 'tester', 'conflicts', 'ci', 'merger'],
+      agentKinds: ['coder', 'reviewer', 'mocker', 'tester-api', 'conflicts', 'ci', 'merger'],
     },
     {
       id: 'pl_integrate',
       name: 'Integrate & ship',
-      agentKinds: ['integrator', 'mocker', 'tester', 'documenter'],
+      agentKinds: ['integrator', 'mocker', 'tester-api', 'documenter'],
     },
     // A human-in-the-loop build: implement → review, then a `human-test` gate that spins up an
     // ephemeral environment and PARKS for a person to validate the change in a live URL before
@@ -408,7 +408,7 @@ export function seedPipelines(): Pipeline[] {
         'reviewer',
         'blueprints',
         'mocker',
-        'tester',
+        'tester-api',
         'conflicts',
         'ci',
         'human-review',
@@ -428,7 +428,7 @@ export function seedPipelines(): Pipeline[] {
         'reviewer',
         'blueprints',
         'mocker',
-        'tester',
+        'tester-api',
         'conflicts',
         'ci',
         'merger',
@@ -444,7 +444,7 @@ export function seedPipelines(): Pipeline[] {
         'reviewer',
         'blueprints',
         'mocker',
-        'tester',
+        'tester-api',
         'conflicts',
         'ci',
         'merger',

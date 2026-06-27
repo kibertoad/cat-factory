@@ -241,7 +241,7 @@ export class FakeAgentExecutor implements AgentExecutor {
     // The `tester` step returns a structured report. A `testReports` sequence walks
     // one report per Tester call (last repeats) so a test can drive a withheld
     // greenlight → fixer loop → greenlight; omitted ⇒ greenlight immediately.
-    if (context.agentKind === 'tester') {
+    if (context.agentKind === 'tester-api' || context.agentKind === 'tester-ui') {
       const seq = this.options.testReports
       const report: TestReport = seq?.length
         ? (seq[Math.min(this.testerCalls, seq.length - 1)] ?? greenReport())

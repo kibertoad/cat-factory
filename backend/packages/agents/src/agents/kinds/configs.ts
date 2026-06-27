@@ -11,24 +11,26 @@ export const TESTER_ENVIRONMENT_CONFIG_ID = 'tester.environment'
 /** The acceptance/e2e execution target: project CI, or the ephemeral env. */
 export const PLAYWRIGHT_E2E_TARGET_CONFIG_ID = 'playwright.e2eTarget'
 
-const BUILTIN_CONFIG_CONTRIBUTIONS: Partial<Record<AgentKind, AgentConfigDescriptor[]>> = {
-  tester: [
-    {
-      id: TESTER_ENVIRONMENT_CONFIG_ID,
-      agentKind: 'tester',
-      label: 'Test environment',
-      description:
-        "Where the Tester runs the suite: with the service's dependencies stood up locally via docker-compose, or against the provisioned ephemeral environment.",
-      type: 'select',
-      options: [
-        { value: 'ephemeral', label: 'Ephemeral environment' },
-        { value: 'local', label: 'Local (docker-compose infra)' },
-      ],
-      // Ephemeral is the zero-config default; local is an opt-in that requires the
-      // service's test infra to be configured (a compose path or the no-infra flag).
-      default: 'ephemeral',
-    },
+/** The Test environment select, contributed by both tester kinds (API + UI). */
+const testerEnvironmentDescriptor = (agentKind: AgentKind): AgentConfigDescriptor => ({
+  id: TESTER_ENVIRONMENT_CONFIG_ID,
+  agentKind,
+  label: 'Test environment',
+  description:
+    "Where the Tester runs the suite: with the service's dependencies stood up locally via docker-compose, or against the provisioned ephemeral environment.",
+  type: 'select',
+  options: [
+    { value: 'ephemeral', label: 'Ephemeral environment' },
+    { value: 'local', label: 'Local (docker-compose infra)' },
   ],
+  // Ephemeral is the zero-config default; local is an opt-in that requires the
+  // service's test infra to be configured (a compose path or the no-infra flag).
+  default: 'ephemeral',
+})
+
+const BUILTIN_CONFIG_CONTRIBUTIONS: Partial<Record<AgentKind, AgentConfigDescriptor[]>> = {
+  'tester-api': [testerEnvironmentDescriptor('tester-api')],
+  'tester-ui': [testerEnvironmentDescriptor('tester-ui')],
   playwright: [
     {
       id: PLAYWRIGHT_E2E_TARGET_CONFIG_ID,

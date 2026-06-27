@@ -514,7 +514,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > tester (lo
 {
   "kind": "agent",
   "ref": {
-    "jobId": "ex_1-tester",
+    "jobId": "ex_1-tester-api",
     "runId": "ex_1",
   },
   "spec": {
@@ -526,7 +526,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > tester (lo
       "environment": "local",
       "noInfraDependencies": false,
     },
-    "jobId": "ex_1-tester",
+    "jobId": "ex_1-tester-api",
     "mode": "explore",
     "model": "@cf/test/model",
     "output": {

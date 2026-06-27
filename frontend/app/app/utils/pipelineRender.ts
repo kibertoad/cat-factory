@@ -83,7 +83,7 @@ export const COMPANION_STATE_META: Record<
  * via `step.gate`, which all share the same possible/running/completed/skipped shape.
  */
 export function gateCompanionFor(step: PipelineStep, runFailed = false): GateCompanion | null {
-  if (step.agentKind === 'tester') {
+  if (step.agentKind === 'tester-api' || step.agentKind === 'tester-ui') {
     const attempts = step.test?.attempts ?? 0
     if (step.state === 'done') {
       // The gate finished: it ran the fixer iff it ever dispatched one.

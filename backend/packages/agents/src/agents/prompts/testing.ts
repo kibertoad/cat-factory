@@ -11,7 +11,8 @@ import { TESTER_ENVIRONMENT_CONFIG_ID } from '../kinds/configs.js'
 // the `fixer` with the report folded in; the fixer commits fixes to the same branch
 // and the Tester re-runs, until greenlight or the attempt budget is spent.
 
-const TESTER_AGENT_KIND = 'tester'
+const TESTER_AGENT_KIND = 'tester-api'
+const UI_TESTER_AGENT_KIND = 'tester-ui'
 const FIXER_AGENT_KIND = 'fixer'
 
 /** The JSON shape the Tester must emit, kept in sync with `testReportSchema`. */
@@ -55,6 +56,52 @@ const TESTER_SYSTEM_PROMPT = [
   FINAL_ANSWER_IN_REPLY,
 ].join('\n')
 
+/** The JSON shape the UI Tester must emit: a test report that also lists screenshots. */
+const UI_TEST_REPORT_SHAPE = [
+  'Respond with ONLY a JSON object (no prose, no code fences) of this shape:',
+  '{',
+  '  "greenlight": boolean,',
+  '  "summary": string,',
+  '  "tested": string[],',
+  '  "outcomes": [ { "name": string, "status": "passed" | "failed" | "skipped", "detail"?: string } ],',
+  '  "concerns": [ { "title": string, "detail": string, "severity": "low" | "medium" | "high" | "critical" } ],',
+  '  "environment"?: "local" | "ephemeral",',
+  '  "screenshots": [               // one entry per DISTINCT view you captured + uploaded',
+  '    { "view": string,            // a stable, human-readable view name (e.g. "login", "dashboard")',
+  '      "artifactId": string,      // the id returned by the screenshot upload endpoint',
+  '      "hash"?: string }',
+  '  ]',
+  '}',
+].join('\n')
+
+const TESTER_UI_SYSTEM_PROMPT = [
+  'You are a meticulous UI test engineer doing EXPLORATORY, BROWSER-DRIVEN testing of a pull request before release.',
+  'You drive a real browser with Playwright (already installed) against the running app and observe its behaviour — you do NOT judge by reading the diff.',
+  '',
+  'Bootstrap your environment from the repository (same as the API tester):',
+  "- Read the repo's README.md (and any docs it points to) to learn how to install, configure and START the app + its dependencies.",
+  '- Local mode: the platform stood up the service’s infra dependencies on localhost; start the app and point your browser at it.',
+  '- Ephemeral mode: a deployed environment URL is provided in the run context; drive your browser against it.',
+  '',
+  'What to do:',
+  '- Walk the new UI functionality for THIS task (start from the Gherkin acceptance scenarios in `spec/features/*.feature`), plus a reasonable amount of regression of related screens the change could affect.',
+  '- Use Playwright to navigate every DISTINCT view the functionality touches and verify it behaves correctly (interactions, validation, error states).',
+  '- For EACH distinct view, capture ONE full-page screenshot (PNG). Be non-redundant: one screenshot per logical view, not many near-identical shots of the same screen.',
+  '- If reference design images were provided (under `.cat-context/reference-screenshots/`), capture the matching views and name each screenshot’s `view` to match the reference so they can be compared side by side.',
+  '',
+  'Uploading screenshots:',
+  '- Upload each screenshot to the artifact store with an HTTP POST to the endpoint provided in the run context (the `ARTIFACT_UPLOAD_URL` with the `ARTIFACT_UPLOAD_TOKEN` bearer token), as multipart form-data with fields `file` (the PNG), `kind=screenshot`, and `view` (the view name).',
+  '- The response returns the stored artifact’s `id`; record it as the `artifactId` for that view in your report. Do NOT inline image bytes in your report.',
+  '',
+  'Rules:',
+  '- Make NO commits and open NO pull request — you only assess, capture and report.',
+  '- Base every outcome on something you actually observed in the browser. A blocking bug means greenlight=false with the concern listed.',
+  '',
+  UI_TEST_REPORT_SHAPE,
+  '',
+  FINAL_ANSWER_IN_REPLY,
+].join('\n')
+
 const FIXER_SYSTEM_PROMPT = [
   'You are a software engineer fixing problems raised on this pull-request branch — either by a',
   'tester (a structured report of failed outcomes and concerns) or by a human code reviewer (the',
@@ -74,14 +121,15 @@ const FIXER_SYSTEM_PROMPT = [
   STANDARDS_FOOTER,
 ].join('\n')
 
-/** True when the kind is part of the Tester/Fixer track. */
+/** True when the kind is part of the Tester/Fixer track (API or UI tester + fixer). */
 export function isTestingKind(kind: AgentKind): boolean {
-  return kind === TESTER_AGENT_KIND || kind === FIXER_AGENT_KIND
+  return kind === TESTER_AGENT_KIND || kind === UI_TESTER_AGENT_KIND || kind === FIXER_AGENT_KIND
 }
 
 /** The built-out system prompt for a Tester/Fixer kind, or undefined otherwise. */
 export function testingSystemPrompt(kind: AgentKind): string | undefined {
   if (kind === TESTER_AGENT_KIND) return TESTER_SYSTEM_PROMPT
+  if (kind === UI_TESTER_AGENT_KIND) return TESTER_UI_SYSTEM_PROMPT
   if (kind === FIXER_AGENT_KIND) return FIXER_SYSTEM_PROMPT
   return undefined
 }
@@ -92,7 +140,8 @@ export function testingSystemPrompt(kind: AgentKind): string | undefined {
  * or when nothing is set, so callers can append it unconditionally.
  */
 export function testerEnvironmentSection(context: AgentRunContext): string {
-  if (context.agentKind !== TESTER_AGENT_KIND) return ''
+  if (context.agentKind !== TESTER_AGENT_KIND && context.agentKind !== UI_TESTER_AGENT_KIND)
+    return ''
   const env = context.block.agentConfig?.[TESTER_ENVIRONMENT_CONFIG_ID]
   if (env === 'ephemeral') {
     return '\nRun mode: ephemeral environment — test against the provided environment URL; do not start the service locally.'

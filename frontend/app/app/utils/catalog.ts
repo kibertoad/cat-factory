@@ -134,14 +134,25 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     description: 'Builds WireMock mocks for external services and wires them into local/CI runs.',
   },
   {
-    kind: 'tester',
-    label: 'Tester',
+    kind: 'tester-api',
+    label: 'API Tester',
     icon: 'i-lucide-flask-conical',
     color: '#fbbf24',
     category: 'test',
     description: 'Exercises the change against the mocks + spec scenarios and reports outcomes.',
     // Opens the dedicated structured test-report window (scenarios → outcomes →
     // concerns tree) instead of the generic prose step-detail panel.
+    resultView: 'tester',
+  },
+  {
+    kind: 'tester-ui',
+    label: 'UI Tester',
+    icon: 'i-lucide-camera',
+    color: '#fbbf24',
+    category: 'test',
+    description:
+      'Drives a real browser through the new UI, captures a screenshot of each view, and reports outcomes.',
+    // Same structured test-report window; it additionally renders the captured screenshots.
     resultView: 'tester',
   },
   {

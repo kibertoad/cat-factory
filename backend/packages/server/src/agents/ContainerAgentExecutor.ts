@@ -50,6 +50,7 @@ import {
   ON_CALL_AGENT_KIND,
   SPEC_WRITER_AGENT_KIND,
   TESTER_AGENT_KIND,
+  UI_TESTER_AGENT_KIND,
 } from '@cat-factory/orchestration'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
@@ -555,6 +556,12 @@ const TEST_REPORT_SHAPE_HINT =
   '"outcomes": [{"name": string, "status": "passed"|"failed"|"skipped", "detail"?: string}], ' +
   '"concerns": [{"title": string, "detail": string, "severity": "low"|"medium"|"high"|"critical"}]}.'
 
+/** Shape hint for the UI tester: a test report that also lists captured screenshots. */
+const UI_TEST_REPORT_SHAPE_HINT =
+  TEST_REPORT_SHAPE_HINT.replace(/\}\.$/, '') +
+  ', "screenshots": [{"view": string, "artifactId": string, "hash"?: string}]}. Each ' +
+  'screenshot must be a distinct view you captured and uploaded to the artifact store.'
+
 const ON_CALL_SYSTEM_PROMPT =
   'You are an on-call engineer investigating a possible post-release regression. A ' +
   'recently merged pull request shipped, and the evidence below (alerting Datadog ' +
@@ -790,13 +797,17 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   private dispatchOptions(context: AgentRunContext): RunnerDispatchOptions | undefined {
     const provider = context.service?.cloudProvider
     const size = context.service?.instanceSize
-    if (!provider && !size) return undefined
+    // The UI tester needs the heavier Playwright+browser image; every other kind uses
+    // the default harness image (so the browser never bloats their cold-start).
+    const image: 'ui' | undefined = context.agentKind === UI_TESTER_AGENT_KIND ? 'ui' : undefined
+    if (!provider && !size && !image) return undefined
     return {
-      instanceTypeId: resolveInstanceTypeId(provider, size),
+      ...(provider || size ? { instanceTypeId: resolveInstanceTypeId(provider, size) } : {}),
       ...(provider ? { provider } : {}),
       // Forward the abstract size too, so the local Docker/Podman backend can size
       // the per-job container (`--memory`/`--cpus`) without decoding the cloud id.
       ...(size ? { instanceSize: size } : {}),
+      ...(image ? { image } : {}),
     }
   }
 
@@ -1403,6 +1414,24 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         )
         return { kind: built.kind, body: { ...built.body, infra: testerInfraSpec(context) } }
       }
+      // The UI tester is the Tester's browser-driven sibling: same read-only structured
+      // explore + infra stand-up, but it drives Playwright (supplied by the UI-tester
+      // image, routed via the `image:'ui'` dispatch option) to capture a non-redundant
+      // screenshot of each distinct view, uploads them to the artifact store, and reports
+      // them under `screenshots[]`. The role prompt carries the capture guidance.
+      case UI_TESTER_AGENT_KIND: {
+        const built = this.buildRegisteredAgentBody(
+          context,
+          parts,
+          {
+            surface: 'container-explore',
+            clone: { branch: 'pr' },
+            output: { kind: 'structured', shapeHint: UI_TEST_REPORT_SHAPE_HINT },
+          },
+          roleSystemPrompt,
+        )
+        return { kind: built.kind, body: { ...built.body, infra: testerInfraSpec(context) } }
+      }
     }
     return undefined
   }
@@ -1473,7 +1502,7 @@ function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResul
     // Tester: coerce into `testReport` (greenlight-or-loop the fixer; the conservative
     // greenlight/blocking rule the harness `/test` handler applied now runs in
     // `coerceTestReport`, re-applied defensively by the TesterController).
-    if (agentKind === TESTER_AGENT_KIND) {
+    if (agentKind === TESTER_AGENT_KIND || agentKind === UI_TESTER_AGENT_KIND) {
       return {
         output: result.summary?.trim() || 'Testing complete.',
         testReport: coerceTestReport(result.custom, result.summary),
@@ -1620,6 +1649,24 @@ function coerceTestReport(raw: unknown, summary: string | undefined): unknown {
   const blocking = concerns.some((c) => c.severity === 'high' || c.severity === 'critical')
   const environment =
     o.environment === 'local' || o.environment === 'ephemeral' ? o.environment : undefined
+  // The UI tester reports the screenshots it captured + uploaded (artifact ids); keep
+  // only the well-formed entries (a view name + an artifact id), passing the optionals
+  // through. Absent/empty for the API tester.
+  const screenshots = Array.isArray(o.screenshots)
+    ? (o.screenshots as unknown[])
+        .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
+        .filter((x) => typeof x.view === 'string' && typeof x.artifactId === 'string')
+        .map((x) => ({
+          view: x.view as string,
+          artifactId: x.artifactId as string,
+          ...(typeof x.hash === 'string' && x.hash ? { hash: x.hash } : {}),
+          ...(typeof x.width === 'number' ? { width: x.width } : {}),
+          ...(typeof x.height === 'number' ? { height: x.height } : {}),
+          ...(typeof x.referenceArtifactId === 'string' && x.referenceArtifactId
+            ? { referenceArtifactId: x.referenceArtifactId }
+            : {}),
+        }))
+    : []
   return {
     greenlight: o.greenlight === true && !blocking,
     summary:
@@ -1630,6 +1677,7 @@ function coerceTestReport(raw: unknown, summary: string | undefined): unknown {
     outcomes,
     concerns,
     ...(environment ? { environment } : {}),
+    ...(screenshots.length ? { screenshots } : {}),
   }
 }
 

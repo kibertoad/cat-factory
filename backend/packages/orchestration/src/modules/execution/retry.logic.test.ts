@@ -37,7 +37,7 @@ const fullSteps = (coderState: PipelineStep['state']): PipelineStep[] => [
     output: 'partial',
     startedAt: 7,
   }),
-  step('tester', 'pending'),
+  step('tester-api', 'pending'),
   step('merger', 'pending'),
 ]
 
