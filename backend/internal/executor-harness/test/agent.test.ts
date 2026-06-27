@@ -106,6 +106,28 @@ describe('parseAgentJob', () => {
     expect(job.full).toBe(true)
   })
 
+  it('carries per-knob progress-guard overrides through, clamping each knob', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      guardLimits: {
+        maxConsecutiveErrors: 20, // valid → kept
+        maxConsecutiveWebCalls: 40.7, // floored to 40
+        maxToolCallsWithoutEdit: -5, // invalid → dropped (keeps env/default)
+      },
+    })
+    expect(job.guardLimits).toEqual({ maxConsecutiveErrors: 20, maxConsecutiveWebCalls: 40 })
+  })
+
+  it('drops a guardLimits object with no usable knobs', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      guardLimits: { maxConsecutiveErrors: 'nope', maxConsecutiveWebCalls: 0 },
+    })
+    expect(job.guardLimits).toBeUndefined()
+  })
+
   it('carries the conflict-resolver merge base through (coding mode)', () => {
     const job = parseAgentJob({
       ...base,

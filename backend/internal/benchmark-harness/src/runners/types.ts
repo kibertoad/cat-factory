@@ -24,7 +24,16 @@ export interface RunnerInput<Fixture> {
 export interface RunnerOutput {
   /** The candidate work product, rendered for the arbiter to read. */
   output: string
-  usage?: { inputTokens: number; outputTokens: number }
+  usage?: {
+    inputTokens: number
+    outputTokens: number
+    /**
+     * Input tokens the provider served from its prompt-prefix cache (subset of
+     * inputTokens). Lets the report quantify the caching dimension — a cache-capable
+     * route reports >0 on a repeated-prefix call, a cache-less route (Workers AI) 0.
+     */
+    cachedInputTokens?: number
+  }
   /** Task-specific extras surfaced in the report/grading artifact. */
   meta?: Record<string, unknown>
 }

@@ -145,6 +145,17 @@ jobs:
       - name: Build libraries
         run: pnpm build
 
+      # The internal harnesses (executor-harness, benchmark-harness) are NOT in the
+      # `backend/tsconfig.build.json` project-reference graph, so `pnpm build` above
+      # never typechecks them — a type error in the harness `src` used to surface only
+      # in the much later "Container acceptance (Docker)" job (its `tsc` is the first
+      # to compile the harness). Typecheck them here so that class of error fails in
+      # this fast lane instead.
+      - name: Typecheck internal harnesses
+        run: |
+          pnpm --filter @cat-factory/executor-harness run typecheck
+          pnpm --filter @cat-factory/benchmark-harness run typecheck
+
       # Typecheck the frontend layer's shippable code (the deploy apps have no
       # source of their own, and the libraries are typechecked by the build above).
       - name: Typecheck frontend layer

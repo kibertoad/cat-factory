@@ -39,6 +39,9 @@ describe('provider cache policy', () => {
   it('reads cached token counts across the provider field names', () => {
     expect(cachedTokensFromUsage({ prompt_tokens_details: { cached_tokens: 1200 } })).toBe(1200)
     expect(cachedTokensFromUsage({ prompt_cache_hit_tokens: 800 })).toBe(800)
+    // Anthropic reports cache reads under its own field (raw API + AI SDK camelCase).
+    expect(cachedTokensFromUsage({ cache_read_input_tokens: 640 })).toBe(640)
+    expect(cachedTokensFromUsage({ cacheReadInputTokens: 512 })).toBe(512)
     expect(cachedTokensFromUsage({ prompt_tokens: 5000 })).toBe(0)
     expect(cachedTokensFromUsage(null)).toBe(0)
   })

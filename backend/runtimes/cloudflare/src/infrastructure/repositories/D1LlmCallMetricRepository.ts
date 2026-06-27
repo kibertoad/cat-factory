@@ -176,6 +176,7 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
            agent_kind                                                   AS agent_kind,
            COUNT(*)                                                     AS calls,
            COALESCE(SUM(prompt_tokens), 0)                              AS prompt_tokens,
+           COALESCE(SUM(cached_prompt_tokens), 0)                       AS cached_prompt_tokens,
            COALESCE(SUM(completion_tokens), 0)                          AS completion_tokens,
            COALESCE(MAX(completion_tokens), 0)                          AS peak_completion_tokens,
            MAX(request_max_tokens)                                      AS max_output_tokens,
@@ -193,6 +194,7 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
         agent_kind: string
         calls: number
         prompt_tokens: number
+        cached_prompt_tokens: number
         completion_tokens: number
         peak_completion_tokens: number
         max_output_tokens: number | null
@@ -206,6 +208,7 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
       agentKind: r.agent_kind,
       calls: r.calls,
       promptTokens: r.prompt_tokens,
+      cachedPromptTokens: r.cached_prompt_tokens,
       completionTokens: r.completion_tokens,
       peakCompletionTokens: r.peak_completion_tokens,
       maxOutputTokens: r.max_output_tokens,
