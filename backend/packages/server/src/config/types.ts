@@ -113,6 +113,17 @@ export interface EmailConfig {
   encryptionKey?: string
   /** Public base URL the invite-accept link points at (the SPA origin). */
   appBaseUrl: string
+  /**
+   * Optional deployment-level "system" sender for auth emails (e.g. password reset),
+   * configured entirely via env and independent of the per-account, UI-onboarded
+   * connections above. Present only when the provider + From + API key are all set;
+   * absent ⇒ reset links are logged (dev) rather than emailed.
+   */
+  system?: {
+    provider: 'sendgrid' | 'resend'
+    from: string
+    apiKey: string
+  }
 }
 
 export interface DocumentsConfig {

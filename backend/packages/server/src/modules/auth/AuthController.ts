@@ -1,6 +1,7 @@
 import {
   acceptInvitationContract,
   authConfigContract,
+  forgotPasswordContract,
   githubCallbackContract,
   githubLoginContract,
   googleCallbackContract,
@@ -9,6 +10,7 @@ import {
   meContract,
   passwordLoginContract,
   peekInvitationContract,
+  resetPasswordContract,
   signupContract,
 } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
@@ -434,6 +436,51 @@ export function authController(): Hono<AppEnv> {
     }
     const token = await mintSession(cfg, sessionUser(user, user.email || user.id))
     return c.json({ token, user: sessionUser(user, user.email || user.id) }, 200)
+  })
+
+  // ---- Forgot / reset password --------------------------------------------
+
+  // Request a reset link. ALWAYS returns 204 (whether or not the email is registered)
+  // so the endpoint can't be used to enumerate accounts; the service emails the link
+  // (or logs it when no system sender is configured) and never returns the raw token.
+  buildHonoRoute(app, forgotPasswordContract, async (c) => {
+    const cfg = authConfig(c)
+    if (!cfg.passwordEnabled) return unavailable(c)
+    const body = c.req.valid('json')
+    if (passwordAttemptLimited(c, body.email)) return tooManyAttempts(c)
+    await c.get('container').passwordReset?.request(body.email)
+    return c.body(null, 204)
+  })
+
+  // Redeem a reset token + set a new password. A missing / used / expired token maps to
+  // a generic 400 (never distinguishing the cases). Throttled by the token value.
+  buildHonoRoute(app, resetPasswordContract, async (c) => {
+    const cfg = authConfig(c)
+    const passwordReset = c.get('container').passwordReset
+    if (!cfg.passwordEnabled || !passwordReset) return unavailable(c)
+    const body = c.req.valid('json')
+    if (passwordAttemptLimited(c, body.token)) return tooManyAttempts(c)
+    try {
+      await passwordReset.reset(body.token, body.password)
+      return c.body(null, 204)
+    } catch (err) {
+      if (
+        err instanceof NotFoundError ||
+        err instanceof ConflictError ||
+        err instanceof ValidationError
+      ) {
+        return c.json(
+          {
+            error: {
+              code: 'validation',
+              message: 'This password reset link is invalid or has expired.',
+            },
+          },
+          400,
+        )
+      }
+      throw err
+    }
   })
 
   // ---- Invitations (peek + accept) ----------------------------------------

@@ -3,6 +3,7 @@ import type {
   Clock,
   CommitProjectionRepository,
   LlmCallMetricRepository,
+  PasswordResetTokenRepository,
   PipelineScheduleRepository,
   ProvisioningLogRepository,
   RateLimitRepository,
@@ -45,6 +46,8 @@ export interface RetentionDeps {
   pipelineScheduleRepository?: PipelineScheduleRepository
   /** Optional: the provisioning event log (only when the PROVISIONING_DB binding is present). */
   provisioningLogRepository?: ProvisioningLogRepository
+  /** Optional: password-reset tokens past their own TTL (single-use + 1h expiry). */
+  passwordResetTokenRepository?: PasswordResetTokenRepository
   clock: Clock
   policy: RetentionPolicy
 }
@@ -58,6 +61,7 @@ export interface RetentionResult {
   agentContextSnapshots: number
   scheduleRuns: number
   provisioningLog: number
+  passwordResetTokens: number
 }
 
 /** Delete rows older than `now - windowMs`, treating a non-positive window as "disabled". */
@@ -83,6 +87,7 @@ export async function sweepRetention({
   agentContextSnapshotRepository,
   pipelineScheduleRepository,
   provisioningLogRepository,
+  passwordResetTokenRepository,
   clock,
   policy,
 }: RetentionDeps): Promise<RetentionResult> {
@@ -109,6 +114,10 @@ export async function sweepRetention({
       ? await prune(policy.provisioningLogMs, now, (c) =>
           provisioningLogRepository.deleteOlderThan(c),
         )
+      : 0,
+    // Reset tokens past their own expiry — `now`, not a window.
+    passwordResetTokens: passwordResetTokenRepository
+      ? await passwordResetTokenRepository.deleteExpired(now)
       : 0,
   }
 }
