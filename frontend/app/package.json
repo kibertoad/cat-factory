@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/app",
-  "version": "0.37.1",
+  "version": "0.37.2",
   "description": "Reusable Nuxt layer for the Agent Architecture Board SPA (components, stores, composables, pages). Consume it from a thin deployment app via `extends: ['@cat-factory/app']` and point it at your backend with NUXT_PUBLIC_API_BASE. See deploy/frontend for an example.",
   "repository": {
     "type": "git",
