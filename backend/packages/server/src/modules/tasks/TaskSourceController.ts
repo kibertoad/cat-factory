@@ -1,36 +1,41 @@
 import {
-  connectTaskSourceSchema,
-  createTaskFromIssueSchema,
+  connectTaskSourceContract,
+  createTaskFromIssueContract,
+  diagnoseTaskSourceContract,
+  disconnectTaskSourceContract,
+  importTaskContract,
+  linkTaskContract,
+  listTaskConnectionsContract,
+  listTaskSourcesContract,
+  listTasksContract,
+  searchTasksContract,
+  setTaskSourceEnabledContract,
+  spawnEpicContract,
   taskSourceKindSchema,
-  importTaskSchema,
-  linkTaskSchema,
-  searchTasksSchema,
-  setTaskSourceEnabledSchema,
-  spawnEpicSchema,
   type TaskSourceKind,
 } from '@cat-factory/contracts'
 import * as v from 'valibot'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { ValidationError, type TaskSearchRepoScope } from '@cat-factory/kernel'
 import type { TasksModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 
 /** Resolve the tasks module or send a 503, returning null when unconfigured. */
-function requireTasks(c: Context<AppEnv>): TasksModule | null {
+function requireTasks<E extends AppEnv>(c: Context<E>): TasksModule | null {
   return c.get('container').tasks ?? null
 }
 
-const unavailable = (c: Context<AppEnv>) =>
+const unavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json(
     { error: { code: 'unavailable', message: 'Task-source integration is not configured' } },
     503,
   )
 
 /** Read + validate the `:source` path param as a known source kind. */
-function sourceParam(c: Context<AppEnv>): TaskSourceKind {
+function sourceParam<E extends AppEnv>(c: Context<E>): TaskSourceKind {
   const source = param(c, 'source')
   if (!v.is(taskSourceKindSchema, source)) {
     throw new ValidationError(`Unknown task source '${source}'`)
@@ -47,8 +52,8 @@ function sourceParam(c: Context<AppEnv>): TaskSourceKind {
  * Repo-less sources (Jira) and the unscoped "import an issue" surface (no blockId)
  * skip this entirely.
  */
-async function resolveSearchScope(
-  c: Context<AppEnv>,
+async function resolveSearchScope<E extends AppEnv>(
+  c: Context<E>,
   source: TaskSourceKind,
   blockId: string | undefined,
 ): Promise<TaskSearchRepoScope | undefined> {
@@ -86,18 +91,18 @@ export function taskSourceController(): Hono<AppEnv> {
   // The configured sources + their connect/import metadata AND the workspace's
   // per-source state (available + enabled), which drives the settings + import UI.
   // A 503 here is how the frontend learns the integration is off.
-  app.get('/task-sources', async (c) => {
+  buildHonoRoute(app, listTaskSourcesContract, async (c) => {
     const tasks = requireTasks(c)
     if (!tasks) return unavailable(c)
     const sources = await tasks.connectionService.listSourceStates(param(c, 'workspaceId'))
-    return c.json({ sources })
+    return c.json({ sources }, 200)
   })
 
   // Enable or disable a source for the workspace (the per-workspace toggle). A
   // credentialed source (Jira) must be connected first to be worth toggling; a
   // credentialless one (GitHub Issues) is offered with the GitHub App and toggled
   // off here when a workspace wants repos without issues.
-  app.put('/task-sources/:source/enabled', jsonBody(setTaskSourceEnabledSchema), async (c) => {
+  buildHonoRoute(app, setTaskSourceEnabledContract, async (c) => {
     const tasks = requireTasks(c)
     if (!tasks) return unavailable(c)
     await tasks.connectionService.setEnabled(
@@ -110,14 +115,14 @@ export function taskSourceController(): Hono<AppEnv> {
 
   // ---- connections --------------------------------------------------------
 
-  app.get('/task-sources/connections', async (c) => {
+  buildHonoRoute(app, listTaskConnectionsContract, async (c) => {
     const tasks = requireTasks(c)
     if (!tasks) return unavailable(c)
     const connections = await tasks.connectionService.listConnections(param(c, 'workspaceId'))
-    return c.json({ connections })
+    return c.json({ connections }, 200)
   })
 
-  app.post('/task-sources/:source/connect', jsonBody(connectTaskSourceSchema), async (c) => {
+  buildHonoRoute(app, connectTaskSourceContract, async (c) => {
     const tasks = requireTasks(c)
     if (!tasks) return unavailable(c)
     const connection = await tasks.connectionService.connect(
@@ -128,7 +133,7 @@ export function taskSourceController(): Hono<AppEnv> {
     return c.json(connection, 201)
   })
 
-  app.delete('/task-sources/:source/connection', async (c) => {
+  buildHonoRoute(app, disconnectTaskSourceContract, async (c) => {
     const tasks = requireTasks(c)
     if (!tasks) return unavailable(c)
     await tasks.connectionService.disconnect(param(c, 'workspaceId'), sourceParam(c))
@@ -140,25 +145,25 @@ export function taskSourceController(): Hono<AppEnv> {
   // / not connected / auth failed / missing permission / unreachable) so the UI can
   // tell a configured-but-broken source from a working one. POST (it performs a
   // live external call), no body — the source is the path param.
-  app.post('/task-sources/:source/diagnostics', async (c) => {
+  buildHonoRoute(app, diagnoseTaskSourceContract, async (c) => {
     const tasks = requireTasks(c)
     if (!tasks) return unavailable(c)
     const diagnostic = await tasks.connectionService.diagnose(
       param(c, 'workspaceId'),
       sourceParam(c),
     )
-    return c.json(diagnostic)
+    return c.json(diagnostic, 200)
   })
 
   // ---- issues -------------------------------------------------------------
 
-  app.get('/tasks', async (c) => {
+  buildHonoRoute(app, listTasksContract, async (c) => {
     const tasks = requireTasks(c)
     if (!tasks) return unavailable(c)
-    return c.json(await tasks.importService.listTasks(param(c, 'workspaceId')))
+    return c.json(await tasks.importService.listTasks(param(c, 'workspaceId')), 200)
   })
 
-  app.post('/task-sources/:source/import', jsonBody(importTaskSchema), async (c) => {
+  buildHonoRoute(app, importTaskContract, async (c) => {
     const tasks = requireTasks(c)
     if (!tasks) return unavailable(c)
     const task = await tasks.importService.import(
@@ -171,20 +176,20 @@ export function taskSourceController(): Hono<AppEnv> {
 
   // Search a tracker's issues by free text (title/content), returning lean hits
   // the picker can import + link on selection.
-  app.post('/task-sources/:source/search', jsonBody(searchTasksSchema), async (c) => {
+  buildHonoRoute(app, searchTasksContract, async (c) => {
     const tasks = requireTasks(c)
     if (!tasks) return unavailable(c)
     const source = sourceParam(c)
     const { query, blockId } = c.req.valid('json')
     const scope = await resolveSearchScope(c, source, blockId)
     const results = await tasks.importService.search(param(c, 'workspaceId'), source, query, scope)
-    return c.json({ results })
+    return c.json({ results }, 200)
   })
 
   // ---- context links ------------------------------------------------------
 
   // Attach an imported issue to a block as extra agent context.
-  app.post('/tasks/link', jsonBody(linkTaskSchema), async (c) => {
+  buildHonoRoute(app, linkTaskContract, async (c) => {
     const tasks = requireTasks(c)
     if (!tasks) return unavailable(c)
     const { source, externalId, blockId } = c.req.valid('json')
@@ -199,7 +204,7 @@ export function taskSourceController(): Hono<AppEnv> {
 
   // Materialise an imported issue as a new board task inside a container, linking
   // the issue to it for context. Returns the created block + the linked issue.
-  app.post('/tasks/create-block', jsonBody(createTaskFromIssueSchema), async (c) => {
+  buildHonoRoute(app, createTaskFromIssueContract, async (c) => {
     const tasks = requireTasks(c)
     if (!tasks) return unavailable(c)
     const { source, externalId, containerId } = c.req.valid('json')
@@ -216,7 +221,7 @@ export function taskSourceController(): Hono<AppEnv> {
   // Spawn an epic + its children: create an epic node, materialise each child issue as a
   // board task inside the container (joined to the epic), and seed dependsOn edges from
   // the issues' blocked-by/depends-on links. Returns the epic node + the created tasks.
-  app.post('/task-sources/:source/epics/spawn', jsonBody(spawnEpicSchema), async (c) => {
+  buildHonoRoute(app, spawnEpicContract, async (c) => {
     const tasks = requireTasks(c)
     if (!tasks) return unavailable(c)
     const { ref, containerId, position } = c.req.valid('json')

@@ -1,10 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type {
-  CreateMergePresetInput,
-  MergeThresholdPreset,
-  UpdateMergePresetInput,
-} from '~/types/domain'
+import type { MergeThresholdPreset, UpdateMergePresetInput } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -34,7 +30,7 @@ export const useMergePresetsStore = defineStore('mergePresets', () => {
     return defaultPreset.value
   }
 
-  async function create(input: CreateMergePresetInput) {
+  async function create(input: Parameters<typeof api.createMergePreset>[1]) {
     const ws = useWorkspaceStore()
     const created = await api.createMergePreset(ws.requireId(), input)
     await ws.refresh()

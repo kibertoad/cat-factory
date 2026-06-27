@@ -1,4 +1,4 @@
-import type { ServiceSpecView } from '~/types/spec'
+import { getServiceSpecContract } from '@cat-factory/contracts'
 import type { ApiContext } from './context'
 
 /**
@@ -6,9 +6,9 @@ import type { ApiContext } from './context'
  * sharded `spec/` artifact from the service repo's default branch. Always 200: a service
  * with no spec on main (or no GitHub connected) returns `{ present: false }`.
  */
-export function specApi({ http, ws }: ApiContext) {
+export function specApi({ send, ws }: ApiContext) {
   return {
     getServiceSpec: (workspaceId: string, blockId: string) =>
-      http<ServiceSpecView>(`${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/spec`),
+      send(getServiceSpecContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
   }
 }

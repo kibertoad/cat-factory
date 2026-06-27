@@ -28,6 +28,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@toad-contracts/core": "0.3.1",
+    "@toad-contracts/valibot": "0.3.1",
     "valibot": "^1.4.1"
   },
   "devDependencies": {

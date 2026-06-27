@@ -1,9 +1,16 @@
-import { createWorkspaceSchema, renameWorkspaceSchema } from '@cat-factory/contracts'
+import {
+  createWorkspaceContract,
+  deleteWorkspaceContract,
+  getWorkspaceContract,
+  listWorkspacesContract,
+  updateWorkspaceContract,
+} from '@cat-factory/contracts'
 import {
   configContributionCatalog,
   registeredAgentKinds,
   registeredKindRequiresContainer,
 } from '@cat-factory/agents'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { CustomAgentKind, WorkspaceSnapshot } from '@cat-factory/contracts'
 import type { AgentRouting } from '@cat-factory/agents'
@@ -58,10 +65,9 @@ function deploymentModelDefaults(routing: AgentRouting) {
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 
 /** The signed-in user, narrowed to what the tenancy layer needs. */
-function accountUser(c: Context<AppEnv>) {
+function accountUser<E extends AppEnv>(c: Context<E>) {
   const user = c.get('user')
   return user ? { id: user.id, login: user.login, name: user.name } : null
 }
@@ -73,16 +79,16 @@ export function workspaceController(): Hono<AppEnv> {
   // Boards visible to the signed-in user: those in any account they belong to,
   // plus any legacy board they personally own. When auth is disabled (`user`
   // unset) the scope is null → no scoping (every board, dev behaviour).
-  app.get('/workspaces', async (c) => {
+  buildHonoRoute(app, listWorkspacesContract, async (c) => {
     const container = c.get('container')
     const user = accountUser(c)
-    if (!user) return c.json(await container.workspaceService.list(null))
+    if (!user) return c.json(await container.workspaceService.list(null), 200)
     await container.accountService.ensurePersonalAccount(user)
     const accountIds = await container.accountService.accessibleAccountIds(user.id)
-    return c.json(await container.workspaceService.list({ accountIds, ownerUserId: user.id }))
+    return c.json(await container.workspaceService.list({ accountIds, ownerUserId: user.id }), 200)
   })
 
-  app.post('/workspaces', jsonBody(createWorkspaceSchema), async (c) => {
+  buildHonoRoute(app, createWorkspaceContract, async (c) => {
     const container = c.get('container')
     const user = accountUser(c)
     const body = c.req.valid('json')
@@ -117,7 +123,7 @@ export function workspaceController(): Hono<AppEnv> {
     )
   })
 
-  app.get('/workspaces/:workspaceId', async (c) => {
+  buildHonoRoute(app, getWorkspaceContract, async (c) => {
     const container = c.get('container')
     const workspaceId = param(c, 'workspaceId')
     const snapshot = await container.workspaceService.snapshot(workspaceId)
@@ -175,35 +181,38 @@ export function workspaceController(): Hono<AppEnv> {
         ? await container.services.service.listForAccount(accountId)
         : undefined
     const customAgentKinds = snapshotCustomAgentKinds()
-    return c.json({
-      ...snapshot,
-      spend,
-      ...(bootstrapJobs ? { bootstrapJobs } : {}),
-      ...(notifications ? { notifications } : {}),
-      ...(mergePresets ? { mergePresets } : {}),
-      ...(modelPresets ? { modelPresets } : {}),
-      ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),
-      ...(recurringPipelines ? { recurringPipelines } : {}),
-      ...(trackerSettings ? { trackerSettings } : {}),
-      ...(settings ? { settings } : {}),
-      ...(mounts ? { mounts } : {}),
-      ...(serviceCatalog ? { serviceCatalog } : {}),
-      agentConfigCatalog: snapshotAgentConfigCatalog(snapshot),
-      deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
-      ...(customAgentKinds ? { customAgentKinds } : {}),
-    })
+    return c.json(
+      {
+        ...snapshot,
+        spend,
+        ...(bootstrapJobs ? { bootstrapJobs } : {}),
+        ...(notifications ? { notifications } : {}),
+        ...(mergePresets ? { mergePresets } : {}),
+        ...(modelPresets ? { modelPresets } : {}),
+        ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),
+        ...(recurringPipelines ? { recurringPipelines } : {}),
+        ...(trackerSettings ? { trackerSettings } : {}),
+        ...(settings ? { settings } : {}),
+        ...(mounts ? { mounts } : {}),
+        ...(serviceCatalog ? { serviceCatalog } : {}),
+        agentConfigCatalog: snapshotAgentConfigCatalog(snapshot),
+        deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
+        ...(customAgentKinds ? { customAgentKinds } : {}),
+      },
+      200,
+    )
   })
 
-  app.patch('/workspaces/:workspaceId', jsonBody(renameWorkspaceSchema), async (c) => {
+  buildHonoRoute(app, updateWorkspaceContract, async (c) => {
     const body = c.req.valid('json')
     const workspace = await c.get('container').workspaceService.update(param(c, 'workspaceId'), {
       ...(body.name !== undefined ? { name: body.name } : {}),
       ...('description' in body ? { description: body.description } : {}),
     })
-    return c.json(workspace)
+    return c.json(workspace, 200)
   })
 
-  app.delete('/workspaces/:workspaceId', async (c) => {
+  buildHonoRoute(app, deleteWorkspaceContract, async (c) => {
     await c.get('container').workspaceService.delete(param(c, 'workspaceId'))
     return c.body(null, 204)
   })

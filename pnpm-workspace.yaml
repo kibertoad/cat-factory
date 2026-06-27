@@ -15,6 +15,7 @@ packages:
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true
+  msw: false
   sharp: true
   vue-demi: true
   workerd: true
@@ -24,3 +25,8 @@ minimumReleaseAgeExclude:
   - 'oxfmt'
   - 'oxlint'
   - 'workers-ai-provider@3.2.0'
+  - '@toad-contracts/core@0.3.1'
+  - '@toad-contracts/frontend-http-client@0.3.1'
+  - '@toad-contracts/hono@0.3.1'
+  - '@toad-contracts/testing@0.3.1'
+  - '@toad-contracts/valibot@0.3.1'

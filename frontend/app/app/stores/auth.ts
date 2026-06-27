@@ -53,7 +53,10 @@ export const useAuthStore = defineStore(
         const config = await api.getAuthConfig()
         required.value = config.enabled
         if (config.providers) providers.value = config.providers
-        localMode.value = config.localMode ?? null
+        // The `/auth/config` contract models `localMode` as an opaque optional
+        // (`v.unknown()`), so narrow it to the structured shape the UI reads here.
+        localMode.value =
+          (config.localMode as { enabled: boolean; githubPatSetupUrl?: string } | undefined) ?? null
       } catch {
         // Backend unreachable — let the board's own error UI handle it.
         required.value = false

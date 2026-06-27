@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import type { UpdateBlockInput } from '@cat-factory/contracts'
 import type { Block, BlockType, CreateTaskType, TaskTypeFields } from '~/types/domain'
 import { useServicesStore } from '~/stores/services'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -295,7 +296,7 @@ export const useBoardStore = defineStore('board', () => {
   }
 
   /** Patch the user-editable fields of a block (title, features, threshold…). */
-  async function updateBlock(id: string, patch: Partial<Block>) {
+  async function updateBlock(id: string, patch: UpdateBlockInput) {
     const b = getBlock(id)
     if (!b) return
     Object.assign(b, patch) // optimistic

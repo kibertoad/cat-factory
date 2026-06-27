@@ -1,8 +1,14 @@
-import { requestHumanTestFixSchema } from '@cat-factory/contracts'
+import {
+  confirmHumanTestContract,
+  destroyHumanTestEnvContract,
+  pullMainHumanTestContract,
+  recreateHumanTestEnvContract,
+  requestHumanTestFixContract,
+} from '@cat-factory/contracts'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 
 /**
  * Workspace-scoped run-driving endpoints for the human-testing gate. Each acts on the block's
@@ -16,52 +22,48 @@ export function humanTestController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   // The human validated the change in the env: tear it down and advance the pipeline.
-  app.post('/blocks/:blockId/human-test/confirm', async (c) => {
+  buildHonoRoute(app, confirmHumanTestContract, async (c) => {
     const instance = await c
       .get('container')
-      .executionService.confirmHumanTest(param(c, 'workspaceId'), param(c, 'blockId'))
-    return c.json(instance)
+      .executionService.confirmHumanTest(param(c, 'workspaceId'), c.req.valid('param').blockId)
+    return c.json(instance, 200)
   })
 
   // Submit findings and request a fix: dispatch the fixer, rebuild the env, re-park.
-  app.post(
-    '/blocks/:blockId/human-test/request-fix',
-    jsonBody(requestHumanTestFixSchema),
-    async (c) => {
-      const instance = await c
-        .get('container')
-        .executionService.requestHumanTestFix(
-          param(c, 'workspaceId'),
-          param(c, 'blockId'),
-          c.req.valid('json').findings,
-        )
-      return c.json(instance)
-    },
-  )
+  buildHonoRoute(app, requestHumanTestFixContract, async (c) => {
+    const instance = await c
+      .get('container')
+      .executionService.requestHumanTestFix(
+        param(c, 'workspaceId'),
+        c.req.valid('param').blockId,
+        c.req.valid('json').findings,
+      )
+    return c.json(instance, 200)
+  })
 
   // Pull the repo default branch into the PR branch + redeploy. A clean merge rebuilds the
   // env; a conflict dispatches the conflict-resolver (then rebuilds on its completion).
-  app.post('/blocks/:blockId/human-test/pull-main', async (c) => {
+  buildHonoRoute(app, pullMainHumanTestContract, async (c) => {
     const instance = await c
       .get('container')
-      .executionService.pullMainHumanTest(param(c, 'workspaceId'), param(c, 'blockId'))
-    return c.json(instance)
+      .executionService.pullMainHumanTest(param(c, 'workspaceId'), c.req.valid('param').blockId)
+    return c.json(instance, 200)
   })
 
   // Rebuild the ephemeral environment on demand.
-  app.post('/blocks/:blockId/human-test/recreate-env', async (c) => {
+  buildHonoRoute(app, recreateHumanTestEnvContract, async (c) => {
     const instance = await c
       .get('container')
-      .executionService.recreateHumanTestEnv(param(c, 'workspaceId'), param(c, 'blockId'))
-    return c.json(instance)
+      .executionService.recreateHumanTestEnv(param(c, 'workspaceId'), c.req.valid('param').blockId)
+    return c.json(instance, 200)
   })
 
   // Destroy the ephemeral environment on demand (the run stays parked).
-  app.post('/blocks/:blockId/human-test/destroy-env', async (c) => {
+  buildHonoRoute(app, destroyHumanTestEnvContract, async (c) => {
     const instance = await c
       .get('container')
-      .executionService.destroyHumanTestEnv(param(c, 'workspaceId'), param(c, 'blockId'))
-    return c.json(instance)
+      .executionService.destroyHumanTestEnv(param(c, 'workspaceId'), c.req.valid('param').blockId)
+    return c.json(instance, 200)
   })
 
   return app

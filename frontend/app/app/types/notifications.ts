@@ -1,77 +1,18 @@
-// Notification shapes, mirroring `@cat-factory/contracts` (notifications.ts). A
-// notification is a first-class, human-actionable item surfaced on the board that
-// outlives the run that raised it (a PR awaiting a merge decision, a completed
-// pipeline awaiting confirmation, CI that gave up).
+// Notification shapes. A notification is a first-class, human-actionable item
+// surfaced on the board that outlives the run that raised it (a PR awaiting a
+// merge decision, a completed pipeline awaiting confirmation, CI that gave up).
+//
+// All wire shapes are sourced from @cat-factory/contracts (single source of
+// truth). The historical frontend name `ReleaseSignal` is the contract's
+// `ReleaseSignalWire`.
 
-import type { MergeAssessment } from './merge'
-
-export type NotificationType =
-  | 'merge_review'
-  | 'pipeline_complete'
-  | 'ci_failed'
-  | 'test_failed'
-  | 'requirement_review'
-  | 'clarity_review'
-  | 'release_regression'
-  | 'decision_required'
-  | 'human_test_ready'
-  | 'human_review'
-  | 'followup_pending'
-export type NotificationStatus = 'open' | 'acted' | 'dismissed'
-
-/** The on-call agent's recommendation on a `release_regression`. */
-export type OnCallRecommendation = 'revert' | 'hold' | 'monitor'
-
-/** The on-call agent's assessment of a post-release regression. */
-export interface OnCallAssessment {
-  culpritConfidence: number
-  recommendation: OnCallRecommendation
-  rationale: string
-  evidence?: string[]
-}
-
-/** A regressed monitor/SLO on a `release_regression`. */
-export interface ReleaseSignal {
-  kind: 'monitor' | 'slo'
-  id: string
-  name: string
-  state: 'ok' | 'warn' | 'alert' | 'no_data'
-  detail?: string
-}
-
-/** Optional structured detail for rendering a notification card. */
-export interface NotificationPayload {
-  assessment?: MergeAssessment
-  prUrl?: string
-  pipelineName?: string
-  findingCount?: number
-  /** The on-call assessment, on a `release_regression`. */
-  onCallAssessment?: OnCallAssessment
-  /** The regressed monitors/SLOs, on a `release_regression`. */
-  releaseSignals?: ReleaseSignal[]
-  /** A proposed revert PR URL, when known. */
-  revertUrl?: string
-}
-
-/** A human-actionable item surfaced on the board. */
-/**
- * Render urgency. A notification starts `normal` (the inbox's usual per-type colour) and
- * is escalated to `urgent` (red) by the backend's sweep once it has waited for a human
- * past the workspace's `waitingEscalationMinutes` threshold. Absent ⇒ `normal`.
- */
-export type NotificationSeverity = 'normal' | 'urgent'
-
-export interface Notification {
-  id: string
-  type: NotificationType
-  status: NotificationStatus
-  /** Render urgency (yellow vs red); escalated by the backend sweep. Absent ⇒ normal. */
-  severity?: NotificationSeverity
-  blockId: string | null
-  executionId: string | null
-  title: string
-  body: string
-  payload?: NotificationPayload | null
-  createdAt: number
-  resolvedAt: number | null
-}
+export type {
+  NotificationType,
+  NotificationStatus,
+  OnCallRecommendation,
+  OnCallAssessment,
+  NotificationPayload,
+  NotificationSeverity,
+  Notification,
+  ReleaseSignalWire as ReleaseSignal,
+} from '@cat-factory/contracts'

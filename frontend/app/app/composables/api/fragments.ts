@@ -1,34 +1,44 @@
+import {
+  createDocumentFragmentContract,
+  createPromptFragmentContract,
+  deletePromptFragmentContract,
+  fragmentSourceStatusContract,
+  linkFragmentSourceContract,
+  listFragmentCatalogContract,
+  listFragmentSourcesContract,
+  listPromptFragmentsContract,
+  refreshPromptFragmentContract,
+  resolvedFragmentsContract,
+  syncFragmentSourceContract,
+  unlinkFragmentSourceContract,
+  updatePromptFragmentContract,
+} from '@cat-factory/contracts'
 import type {
   CreateDocumentFragmentInput,
   CreatePromptFragmentInput,
   FragmentOwnerKind,
-  FragmentSource,
-  FragmentSourceStatus,
-  FragmentSyncResult,
   LinkFragmentSourceInput,
-  PromptFragment,
-  ResolvedFragment,
   UpdatePromptFragmentInput,
 } from '~/types/domain'
 import type { ApiContext } from './context'
 
 /** Best-practice prompt-fragment catalog + the managed, tenant-scoped library. */
-export function fragmentsApi({ http, ws, scope }: ApiContext) {
+export function fragmentsApi({ send, ws, scope }: ApiContext) {
   return {
     // ---- prompt fragments (best-practice catalog) -------------------------
-    getPromptFragments: () => http<PromptFragment[]>('/prompt-fragments'),
+    getPromptFragments: () => send(listFragmentCatalogContract, {}),
 
     // ---- prompt-fragment library (managed, tenant-scoped; ADR 0006) -------
     // The merged catalog an agent actually sees for a board (builtin∪account∪ws).
     getResolvedFragments: (workspaceId: string) =>
-      http<ResolvedFragment[]>(`${ws(workspaceId)}/prompt-fragments/resolved`),
+      send(resolvedFragmentsContract, { pathPrefix: ws(workspaceId) }),
 
     // Per-tier management (scope = account or workspace).
     listFragments: (kind: FragmentOwnerKind, id: string) =>
-      http<PromptFragment[]>(`${scope(kind, id)}/prompt-fragments`),
+      send(listPromptFragmentsContract, { pathPrefix: scope(kind, id) }),
 
     createFragment: (kind: FragmentOwnerKind, id: string, body: CreatePromptFragmentInput) =>
-      http<PromptFragment>(`${scope(kind, id)}/prompt-fragments`, { method: 'POST', body }),
+      send(createPromptFragmentContract, { pathPrefix: scope(kind, id), body }),
 
     updateFragment: (
       kind: FragmentOwnerKind,
@@ -36,14 +46,16 @@ export function fragmentsApi({ http, ws, scope }: ApiContext) {
       fragmentId: string,
       body: UpdatePromptFragmentInput,
     ) =>
-      http<PromptFragment>(
-        `${scope(kind, id)}/prompt-fragments/${encodeURIComponent(fragmentId)}`,
-        { method: 'PATCH', body },
-      ),
+      send(updatePromptFragmentContract, {
+        pathPrefix: scope(kind, id),
+        pathParams: { fragmentId },
+        body,
+      }),
 
     deleteFragment: (kind: FragmentOwnerKind, id: string, fragmentId: string) =>
-      http(`${scope(kind, id)}/prompt-fragments/${encodeURIComponent(fragmentId)}`, {
-        method: 'DELETE',
+      send(deletePromptFragmentContract, {
+        pathPrefix: scope(kind, id),
+        pathParams: { fragmentId },
       }),
 
     // Link an external document (Confluence/Notion/GitHub) as a living fragment.
@@ -51,7 +63,7 @@ export function fragmentsApi({ http, ws, scope }: ApiContext) {
       kind: FragmentOwnerKind,
       id: string,
       body: CreateDocumentFragmentInput,
-    ) => http<PromptFragment>(`${scope(kind, id)}/document-fragments`, { method: 'POST', body }),
+    ) => send(createDocumentFragmentContract, { pathPrefix: scope(kind, id), body }),
 
     // Force an immediate live re-resolve of a document-backed fragment. At the
     // account scope the backend needs a `viaWorkspaceId` (the workspace whose
@@ -62,34 +74,35 @@ export function fragmentsApi({ http, ws, scope }: ApiContext) {
       fragmentId: string,
       viaWorkspaceId?: string,
     ) =>
-      http<PromptFragment>(
-        `${scope(kind, id)}/prompt-fragments/${encodeURIComponent(fragmentId)}/refresh${
-          viaWorkspaceId ? `?viaWorkspaceId=${encodeURIComponent(viaWorkspaceId)}` : ''
-        }`,
-        { method: 'POST' },
-      ),
+      send(refreshPromptFragmentContract, {
+        pathPrefix: scope(kind, id),
+        pathParams: { fragmentId },
+        queryParams: { viaWorkspaceId },
+      }),
 
     // Repo sources of guideline Markdown.
     listFragmentSources: (kind: FragmentOwnerKind, id: string) =>
-      http<FragmentSource[]>(`${scope(kind, id)}/fragment-sources`),
+      send(listFragmentSourcesContract, { pathPrefix: scope(kind, id) }),
 
     linkFragmentSource: (kind: FragmentOwnerKind, id: string, body: LinkFragmentSourceInput) =>
-      http<FragmentSource>(`${scope(kind, id)}/fragment-sources`, { method: 'POST', body }),
+      send(linkFragmentSourceContract, { pathPrefix: scope(kind, id), body }),
 
     unlinkFragmentSource: (kind: FragmentOwnerKind, id: string, sourceId: string) =>
-      http(`${scope(kind, id)}/fragment-sources/${encodeURIComponent(sourceId)}`, {
-        method: 'DELETE',
+      send(unlinkFragmentSourceContract, {
+        pathPrefix: scope(kind, id),
+        pathParams: { id: sourceId },
       }),
 
     fragmentSourceStatus: (kind: FragmentOwnerKind, id: string, sourceId: string) =>
-      http<FragmentSourceStatus>(
-        `${scope(kind, id)}/fragment-sources/${encodeURIComponent(sourceId)}/status`,
-      ),
+      send(fragmentSourceStatusContract, {
+        pathPrefix: scope(kind, id),
+        pathParams: { id: sourceId },
+      }),
 
     syncFragmentSource: (kind: FragmentOwnerKind, id: string, sourceId: string) =>
-      http<FragmentSyncResult>(
-        `${scope(kind, id)}/fragment-sources/${encodeURIComponent(sourceId)}/sync`,
-        { method: 'POST' },
-      ),
+      send(syncFragmentSourceContract, {
+        pathPrefix: scope(kind, id),
+        pathParams: { id: sourceId },
+      }),
   }
 }

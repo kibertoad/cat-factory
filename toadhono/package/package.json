@@ -1,0 +1,63 @@
+{
+  "name": "@toad-contracts/hono",
+  "version": "0.3.1",
+  "private": false,
+  "description": "Hono adapter for @toad-contracts: mount fully typed, self-validating routes from standard-schema contracts",
+  "keywords": [
+    "api",
+    "backend",
+    "contract",
+    "contracts",
+    "hono",
+    "route",
+    "server",
+    "standard-schema",
+    "typesafe"
+  ],
+  "homepage": "https://github.com/kibertoad/toad-contracts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/kibertoad/toad-contracts.git",
+    "directory": "packages/hono"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "rimraf dist && tsc --project tsconfig.build.json",
+    "lint": "oxlint && oxfmt --check . && tsc",
+    "lint:fix": "oxlint --fix && oxfmt .",
+    "test": "vitest run",
+    "test:ci": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@standard-schema/spec": "^1.1.0",
+    "@toad-contracts/core": "0.3.1"
+  },
+  "devDependencies": {
+    "@lokalise/tsconfig": "^5.0.0",
+    "@toad-contracts/valibot": "0.3.1",
+    "@types/node": "^25.9.3",
+    "@vitest/coverage-v8": "^4.1.9",
+    "hono": "^4.12.27",
+    "rimraf": "^6.1.2",
+    "typescript": "7.0.1-rc",
+    "valibot": "^1.4.1",
+    "vitest": "^4.1.9"
+  },
+  "peerDependencies": {
+    "hono": ">=4.0.0"
+  }
+}

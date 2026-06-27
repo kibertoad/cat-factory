@@ -1,31 +1,39 @@
 import {
-  createDocumentFragmentSchema,
-  createPromptFragmentSchema,
-  linkFragmentSourceSchema,
-  updatePromptFragmentSchema,
+  createDocumentFragmentContract,
+  createPromptFragmentContract,
+  deletePromptFragmentContract,
+  fragmentSourceStatusContract,
+  linkFragmentSourceContract,
+  listFragmentSourcesContract,
+  listPromptFragmentsContract,
+  refreshPromptFragmentContract,
+  resolvedFragmentsContract,
+  syncFragmentSourceContract,
+  unlinkFragmentSourceContract,
+  updatePromptFragmentContract,
 } from '@cat-factory/contracts'
 import { ValidationError, type FragmentOwnerKind } from '@cat-factory/kernel'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { FragmentLibraryModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 
 type Scope = 'account' | 'workspace'
 
 /** Resolve the fragment-library module or send a 503 when unconfigured. */
-function requireLibrary(c: Context<AppEnv>): FragmentLibraryModule | null {
+function requireLibrary<E extends AppEnv>(c: Context<E>): FragmentLibraryModule | null {
   return c.get('container').fragmentLibrary ?? null
 }
 
-const unavailable = (c: Context<AppEnv>) =>
+const unavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json(
     { error: { code: 'unavailable', message: 'Prompt-fragment library is not configured' } },
     503,
   )
 
-const sourcesUnavailable = (c: Context<AppEnv>) =>
+const sourcesUnavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json(
     {
       error: {
@@ -36,7 +44,7 @@ const sourcesUnavailable = (c: Context<AppEnv>) =>
     503,
   )
 
-const documentsUnavailable = (c: Context<AppEnv>) =>
+const documentsUnavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json(
     {
       error: {
@@ -59,7 +67,7 @@ const documentsUnavailable = (c: Context<AppEnv>) =>
 export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  const ownerId = (c: Context<AppEnv>) =>
+  const ownerId = <E extends AppEnv>(c: Context<E>) =>
     scope === 'account' ? param(c, 'accountId') : param(c, 'workspaceId')
   const ownerKind: FragmentOwnerKind = scope
 
@@ -75,39 +83,35 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
 
   // ---- fragments (this tier, raw — not merged) ----------------------------
 
-  app.get('/prompt-fragments', async (c) => {
+  buildHonoRoute(app, listPromptFragmentsContract, async (c) => {
     const lib = requireLibrary(c)
     if (!lib) return unavailable(c)
-    return c.json(await lib.libraryService.listTier(ownerKind, ownerId(c)))
+    return c.json(await lib.libraryService.listTier(ownerKind, ownerId(c)), 200)
   })
 
-  app.post('/prompt-fragments', jsonBody(createPromptFragmentSchema), async (c) => {
+  buildHonoRoute(app, createPromptFragmentContract, async (c) => {
     const lib = requireLibrary(c)
     if (!lib) return unavailable(c)
     const fragment = await lib.libraryService.create(ownerKind, ownerId(c), c.req.valid('json'))
     return c.json(fragment, 201)
   })
 
-  app.patch(
-    '/prompt-fragments/:fragmentId{.+}',
-    jsonBody(updatePromptFragmentSchema),
-    async (c) => {
-      const lib = requireLibrary(c)
-      if (!lib) return unavailable(c)
-      const fragment = await lib.libraryService.update(
-        ownerKind,
-        ownerId(c),
-        param(c, 'fragmentId'),
-        c.req.valid('json'),
-      )
-      return c.json(fragment)
-    },
-  )
-
-  app.delete('/prompt-fragments/:fragmentId{.+}', async (c) => {
+  buildHonoRoute(app, updatePromptFragmentContract, async (c) => {
     const lib = requireLibrary(c)
     if (!lib) return unavailable(c)
-    await lib.libraryService.remove(ownerKind, ownerId(c), param(c, 'fragmentId'))
+    const fragment = await lib.libraryService.update(
+      ownerKind,
+      ownerId(c),
+      c.req.valid('param').fragmentId,
+      c.req.valid('json'),
+    )
+    return c.json(fragment, 200)
+  })
+
+  buildHonoRoute(app, deletePromptFragmentContract, async (c) => {
+    const lib = requireLibrary(c)
+    if (!lib) return unavailable(c)
+    await lib.libraryService.remove(ownerKind, ownerId(c), c.req.valid('param').fragmentId)
     return c.body(null, 204)
   })
 
@@ -117,7 +121,7 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
   // fragment whose body is re-resolved from the source at run time. The fetch
   // uses the addressed workspace's connection at the workspace scope, or the
   // body's `viaWorkspaceId` at the account scope (credentials are per-workspace).
-  app.post('/document-fragments', jsonBody(createDocumentFragmentSchema), async (c) => {
+  buildHonoRoute(app, createDocumentFragmentContract, async (c) => {
     const lib = requireLibrary(c)
     if (!lib) return unavailable(c)
     if (!c.get('container').documents) return documentsUnavailable(c)
@@ -139,12 +143,12 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
   })
 
   // Force an immediate live re-resolve of a document-backed fragment.
-  app.post('/prompt-fragments/:fragmentId{.+}/refresh', async (c) => {
+  buildHonoRoute(app, refreshPromptFragmentContract, async (c) => {
     const lib = requireLibrary(c)
     if (!lib) return unavailable(c)
     if (!c.get('container').documents) return documentsUnavailable(c)
     const viaWorkspaceId =
-      scope === 'workspace' ? param(c, 'workspaceId') : (c.req.query('viaWorkspaceId') ?? '')
+      scope === 'workspace' ? param(c, 'workspaceId') : (c.req.valid('query').viaWorkspaceId ?? '')
     if (!viaWorkspaceId) {
       throw new ValidationError(
         'An account-tier refresh needs a `viaWorkspaceId` query param (the workspace whose connection to fetch through)',
@@ -153,22 +157,22 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
     const fragment = await lib.libraryService.refresh(
       ownerKind,
       ownerId(c),
-      param(c, 'fragmentId'),
+      c.req.valid('param').fragmentId,
       viaWorkspaceId,
     )
-    return c.json(fragment)
+    return c.json(fragment, 200)
   })
 
   // ---- repo sources -------------------------------------------------------
 
-  app.get('/fragment-sources', async (c) => {
+  buildHonoRoute(app, listFragmentSourcesContract, async (c) => {
     const lib = requireLibrary(c)
     if (!lib) return unavailable(c)
     if (!lib.sourceService) return sourcesUnavailable(c)
-    return c.json(await lib.sourceService.list(ownerKind, ownerId(c)))
+    return c.json(await lib.sourceService.list(ownerKind, ownerId(c)), 200)
   })
 
-  app.post('/fragment-sources', jsonBody(linkFragmentSourceSchema), async (c) => {
+  buildHonoRoute(app, linkFragmentSourceContract, async (c) => {
     const lib = requireLibrary(c)
     if (!lib) return unavailable(c)
     if (!lib.sourceService) return sourcesUnavailable(c)
@@ -176,35 +180,35 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
     return c.json(source, 201)
   })
 
-  app.delete('/fragment-sources/:id', async (c) => {
+  buildHonoRoute(app, unlinkFragmentSourceContract, async (c) => {
     const lib = requireLibrary(c)
     if (!lib) return unavailable(c)
     if (!lib.sourceService) return sourcesUnavailable(c)
-    await lib.sourceService.unlink(param(c, 'id'))
+    await lib.sourceService.unlink(c.req.valid('param').id)
     return c.body(null, 204)
   })
 
-  app.get('/fragment-sources/:id/status', async (c) => {
+  buildHonoRoute(app, fragmentSourceStatusContract, async (c) => {
     const lib = requireLibrary(c)
     if (!lib) return unavailable(c)
     if (!lib.sourceService) return sourcesUnavailable(c)
-    return c.json(await lib.sourceService.status(param(c, 'id')))
+    return c.json(await lib.sourceService.status(c.req.valid('param').id), 200)
   })
 
-  app.post('/fragment-sources/:id/sync', async (c) => {
+  buildHonoRoute(app, syncFragmentSourceContract, async (c) => {
     const lib = requireLibrary(c)
     if (!lib) return unavailable(c)
     if (!lib.sourceService) return sourcesUnavailable(c)
-    return c.json(await lib.sourceService.sync(param(c, 'id')))
+    return c.json(await lib.sourceService.sync(c.req.valid('param').id), 200)
   })
 
   // ---- resolved (workspace only) — the merged catalog an agent sees -------
 
   if (scope === 'workspace') {
-    app.get('/prompt-fragments/resolved', async (c) => {
+    buildHonoRoute(app, resolvedFragmentsContract, async (c) => {
       const lib = requireLibrary(c)
       if (!lib) return unavailable(c)
-      return c.json(await lib.libraryService.resolvedCatalog(param(c, 'workspaceId')))
+      return c.json(await lib.libraryService.resolvedCatalog(param(c, 'workspaceId')), 200)
     })
   }
 

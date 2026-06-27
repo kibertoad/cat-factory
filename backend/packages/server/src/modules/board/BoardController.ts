@@ -1,19 +1,20 @@
 import {
-  addEpicSchema,
-  addFrameSchema,
-  addModuleSchema,
-  addServiceFromRepoSchema,
-  addTaskSchema,
-  assignEpicSchema,
-  moveBlockSchema,
-  reparentSchema,
-  toggleDependencySchema,
-  updateBlockSchema,
+  addEpicContract,
+  addFrameContract,
+  addModuleContract,
+  addServiceFromRepoContract,
+  addTaskContract,
+  assignEpicContract,
+  moveBlockContract,
+  removeBlockContract,
+  reparentBlockContract,
+  toggleDependencyContract,
+  updateBlockContract,
 } from '@cat-factory/contracts'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 
 /**
  * Board mutations. Mounted under `/workspaces/:workspaceId`, so every handler
@@ -22,7 +23,7 @@ import { jsonBody } from '../../http/validation.js'
 export function boardController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.post('/blocks', jsonBody(addFrameSchema), async (c) => {
+  buildHonoRoute(app, addFrameContract, async (c) => {
     const block = await c
       .get('container')
       .boardService.addFrame(param(c, 'workspaceId'), c.req.valid('json'))
@@ -34,7 +35,7 @@ export function boardController(): Hono<AppEnv> {
   // not yet tracked here), then create the `ready` frame and link the repo to it.
   // A 409 tells the client the App can't see the repo yet (grant it access); the
   // board service 404s an unknown repo and 422s one already on the board.
-  app.post('/blocks/from-repo', jsonBody(addServiceFromRepoSchema), async (c) => {
+  buildHonoRoute(app, addServiceFromRepoContract, async (c) => {
     const container = c.get('container')
     const workspaceId = param(c, 'workspaceId')
     const { repoGithubId } = c.req.valid('json')
@@ -57,27 +58,31 @@ export function boardController(): Hono<AppEnv> {
     return c.json(block, 201)
   })
 
-  app.post('/blocks/:blockId/tasks', jsonBody(addTaskSchema), async (c) => {
+  buildHonoRoute(app, addTaskContract, async (c) => {
     const block = await c
       .get('container')
       .boardService.addTask(
         param(c, 'workspaceId'),
-        param(c, 'blockId'),
+        c.req.valid('param').blockId,
         c.req.valid('json'),
         c.get('user')?.id ?? null,
       )
     return c.json(block, 201)
   })
 
-  app.post('/blocks/:blockId/modules', jsonBody(addModuleSchema), async (c) => {
+  buildHonoRoute(app, addModuleContract, async (c) => {
     const block = await c
       .get('container')
-      .boardService.addModule(param(c, 'workspaceId'), param(c, 'blockId'), c.req.valid('json'))
+      .boardService.addModule(
+        param(c, 'workspaceId'),
+        c.req.valid('param').blockId,
+        c.req.valid('json'),
+      )
     return c.json(block, 201)
   })
 
   // Add an epic grouping node (optionally placed under a service/module via parentId).
-  app.post('/epics', jsonBody(addEpicSchema), async (c) => {
+  buildHonoRoute(app, addEpicContract, async (c) => {
     const block = await c
       .get('container')
       .boardService.addEpic(param(c, 'workspaceId'), c.req.valid('json'))
@@ -85,46 +90,54 @@ export function boardController(): Hono<AppEnv> {
   })
 
   // Assign a task to an epic, or detach it (epicId: null).
-  app.post('/blocks/:blockId/epic', jsonBody(assignEpicSchema), async (c) => {
+  buildHonoRoute(app, assignEpicContract, async (c) => {
     const block = await c
       .get('container')
       .boardService.assignToEpic(
         param(c, 'workspaceId'),
-        param(c, 'blockId'),
+        c.req.valid('param').blockId,
         c.req.valid('json').epicId,
       )
-    return c.json(block)
+    return c.json(block, 200)
   })
 
-  app.patch('/blocks/:blockId', jsonBody(updateBlockSchema), async (c) => {
+  buildHonoRoute(app, updateBlockContract, async (c) => {
     const block = await c
       .get('container')
-      .boardService.updateBlock(param(c, 'workspaceId'), param(c, 'blockId'), c.req.valid('json'))
-    return c.json(block)
+      .boardService.updateBlock(
+        param(c, 'workspaceId'),
+        c.req.valid('param').blockId,
+        c.req.valid('json'),
+      )
+    return c.json(block, 200)
   })
 
-  app.post('/blocks/:blockId/move', jsonBody(moveBlockSchema), async (c) => {
+  buildHonoRoute(app, moveBlockContract, async (c) => {
     const block = await c
       .get('container')
       .boardService.moveBlock(
         param(c, 'workspaceId'),
-        param(c, 'blockId'),
+        c.req.valid('param').blockId,
         c.req.valid('json').position,
       )
-    return c.json(block)
+    return c.json(block, 200)
   })
 
-  app.post('/blocks/:blockId/reparent', jsonBody(reparentSchema), async (c) => {
+  buildHonoRoute(app, reparentBlockContract, async (c) => {
     const block = await c
       .get('container')
-      .boardService.reparent(param(c, 'workspaceId'), param(c, 'blockId'), c.req.valid('json'))
-    return c.json(block)
+      .boardService.reparent(
+        param(c, 'workspaceId'),
+        c.req.valid('param').blockId,
+        c.req.valid('json'),
+      )
+    return c.json(block, 200)
   })
 
-  app.delete('/blocks/:blockId', async (c) => {
+  buildHonoRoute(app, removeBlockContract, async (c) => {
     const container = c.get('container')
     const workspaceId = param(c, 'workspaceId')
-    const blockId = param(c, 'blockId')
+    const blockId = c.req.valid('param').blockId
     // Tear down any running runs under this subtree FIRST — killing their containers
     // and durable drivers — so deleting a service/module never orphans a container
     // that would idle until its watchdog. Then remove the blocks + run records.
@@ -133,15 +146,15 @@ export function boardController(): Hono<AppEnv> {
     return c.body(null, 204)
   })
 
-  app.post('/blocks/:blockId/dependencies', jsonBody(toggleDependencySchema), async (c) => {
+  buildHonoRoute(app, toggleDependencyContract, async (c) => {
     const block = await c
       .get('container')
       .boardService.toggleDependency(
         param(c, 'workspaceId'),
-        param(c, 'blockId'),
+        c.req.valid('param').blockId,
         c.req.valid('json').sourceId,
       )
-    return c.json(block)
+    return c.json(block, 200)
   })
 
   return app

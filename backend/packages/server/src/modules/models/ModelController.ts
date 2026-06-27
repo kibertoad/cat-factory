@@ -1,9 +1,11 @@
+import { listModelsContract, listWorkspaceModelsContract } from '@cat-factory/contracts'
 import {
   effectiveCatalogWith,
   localSelectableModels,
   openRouterSelectableModels,
 } from '@cat-factory/kernel'
 import { modelCostResolver, withDynamicPrices } from '@cat-factory/spend'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
@@ -22,14 +24,14 @@ export function modelController(): Hono<AppEnv> {
   // Deployment-level catalog (no workspace context): deployment-wide selectability
   // only (no per-workspace direct keys / subscriptions). The picker uses the
   // per-workspace route below; this stays for contexts without a workspace.
-  app.get('/models', (c) => {
+  buildHonoRoute(app, listModelsContract, (c) => {
     c.header('Cache-Control', 'public, max-age=60')
-    return c.json(c.get('container').config.models)
+    return c.json(c.get('container').config.models, 200)
   })
 
   // Per-workspace catalog: selectability reflects this workspace's (+ its account's +
   // the caller's) configured API keys and subscription tokens.
-  app.get('/workspaces/:workspaceId/models', async (c) => {
+  buildHonoRoute(app, listWorkspaceModelsContract, async (c) => {
     const container = c.get('container')
     const workspaceId = param(c, 'workspaceId')
     const userId = c.get('user')?.id
@@ -52,6 +54,7 @@ export function modelController(): Hono<AppEnv> {
         caps,
         costFor,
       ),
+      200,
     )
   })
 

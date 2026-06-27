@@ -1,12 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import type { UpdateBrainstormItemStatusInput } from '@cat-factory/contracts'
 import type {
   BrainstormSession,
   BrainstormStage,
   ResolveBrainstormExceededChoice,
-  ReviewItemStatus,
 } from '~/types/brainstorm'
 import { useWorkspaceStore } from '~/stores/workspace'
+
+// A brainstorm option's status is the narrower set the route accepts (no `recommend_requested`).
+type BrainstormItemStatus = UpdateBrainstormItemStatusInput['status']
 
 /**
  * Brainstorm (structured-dialogue) state. On the pipeline path a brainstorm runs as an opt-in
@@ -123,7 +126,7 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   async function setItemStatus(
     session: BrainstormSession,
     itemId: string,
-    status: ReviewItemStatus,
+    status: BrainstormItemStatus,
   ) {
     store(await api.setBrainstormItemStatus(workspace.requireId(), session.id, itemId, status))
   }

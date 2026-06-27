@@ -10,46 +10,17 @@
 // Structurally identical to a requirements review (the items share the same shape), so the
 // per-item types are reused from `~/types/requirements`; only the `stage` discriminator and
 // the converged document (`convergedDirection`) differ.
+//
+// All wire shapes are sourced from @cat-factory/contracts (single source of truth).
 
-import type {
-  RequirementReviewItem,
+export type {
+  BrainstormStage,
+  BrainstormItem,
+  BrainstormStatus,
+  ResolveBrainstormExceededChoice,
+  BrainstormSession,
+  // The per-item types are shared with a requirements review (same shape).
   ReviewItemCategory,
   ReviewItemSeverity,
   ReviewItemStatus,
-} from '~/types/requirements'
-
-export type { ReviewItemCategory, ReviewItemSeverity, ReviewItemStatus }
-
-/** Which dialogue a brainstorm session drives. */
-export type BrainstormStage = 'requirements' | 'architecture'
-
-/** A brainstorm option is the same shape as a requirements-review item. */
-export type BrainstormItem = RequirementReviewItem
-
-/** Lifecycle of a brainstorm session — identical to the requirements review lifecycle. */
-export type BrainstormStatus =
-  | 'ready'
-  | 'incorporating'
-  | 'reviewing'
-  | 'merged'
-  | 'exceeded'
-  | 'incorporated'
-
-/** How a human resolves a session that hit its iteration cap. */
-export type ResolveBrainstormExceededChoice = 'extra-round' | 'proceed' | 'stop-reset'
-
-export interface BrainstormSession {
-  id: string
-  blockId: string
-  stage: BrainstormStage
-  status: BrainstormStatus
-  items: BrainstormItem[]
-  model: string | null
-  convergedDirection: string | null
-  /** Agent passes run so far (initial pass is 1; each re-run adds one). */
-  iteration: number
-  /** The agent-pass budget (from the task's merge preset; an extra round bumps it). */
-  maxIterations: number
-  createdAt: number
-  updatedAt: number
-}
+} from '@cat-factory/contracts'

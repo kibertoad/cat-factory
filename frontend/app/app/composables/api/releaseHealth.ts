@@ -1,61 +1,63 @@
+import {
+  deleteIncidentEnrichmentContract,
+  deleteObservabilityConnectionContract,
+  deleteReleaseHealthConfigContract,
+  getIncidentEnrichmentContract,
+  getObservabilityConnectionContract,
+  listReleaseHealthConfigsContract,
+  setIncidentEnrichmentContract,
+  setObservabilityConnectionContract,
+  upsertReleaseHealthConfigContract,
+} from '@cat-factory/contracts'
 import type {
-  ObservabilityConnectionView,
-  ReleaseHealthConfig,
   UpsertObservabilityConnectionInput,
   UpsertReleaseHealthConfigInput,
 } from '~/types/releaseHealth'
-import type {
-  IncidentEnrichmentView,
-  UpsertIncidentEnrichmentInput,
-} from '~/types/incidentEnrichment'
+import type { UpsertIncidentEnrichmentInput } from '~/types/incidentEnrichment'
 import type { ApiContext } from './context'
 
 /** Post-release-health: the observability connection + per-block monitor/SLO mapping. */
-export function releaseHealthApi({ http, ws }: ApiContext) {
+export function releaseHealthApi({ send, ws }: ApiContext) {
   return {
     // ---- Observability connection ------------------------------------------
     getObservabilityConnection: (workspaceId: string) =>
-      http<ObservabilityConnectionView>(`${ws(workspaceId)}/observability/connection`),
+      send(getObservabilityConnectionContract, { pathPrefix: ws(workspaceId) }),
 
     setObservabilityConnection: (workspaceId: string, body: UpsertObservabilityConnectionInput) =>
-      http<ObservabilityConnectionView>(`${ws(workspaceId)}/observability/connection`, {
-        method: 'PUT',
-        body,
-      }),
+      send(setObservabilityConnectionContract, { pathPrefix: ws(workspaceId), body }),
 
     deleteObservabilityConnection: (workspaceId: string) =>
-      http(`${ws(workspaceId)}/observability/connection`, { method: 'DELETE' }),
+      send(deleteObservabilityConnectionContract, { pathPrefix: ws(workspaceId) }),
 
     // ---- Per-block monitor/SLO config --------------------------------------
     listReleaseHealthConfigs: (workspaceId: string) =>
-      http<ReleaseHealthConfig[]>(`${ws(workspaceId)}/release-health-configs`),
+      send(listReleaseHealthConfigsContract, { pathPrefix: ws(workspaceId) }),
 
     upsertReleaseHealthConfig: (
       workspaceId: string,
       blockId: string,
       body: UpsertReleaseHealthConfigInput,
     ) =>
-      http<ReleaseHealthConfig>(
-        `${ws(workspaceId)}/release-health-configs/${encodeURIComponent(blockId)}`,
-        { method: 'PUT', body },
-      ),
+      send(upsertReleaseHealthConfigContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId },
+        body,
+      }),
 
     deleteReleaseHealthConfig: (workspaceId: string, blockId: string) =>
-      http(`${ws(workspaceId)}/release-health-configs/${encodeURIComponent(blockId)}`, {
-        method: 'DELETE',
+      send(deleteReleaseHealthConfigContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId },
       }),
 
     // ---- Incident enrichment (PagerDuty + incident.io, write-only secrets) --
     getIncidentEnrichment: (workspaceId: string) =>
-      http<IncidentEnrichmentView>(`${ws(workspaceId)}/incident-enrichment`),
+      send(getIncidentEnrichmentContract, { pathPrefix: ws(workspaceId) }),
 
     setIncidentEnrichment: (workspaceId: string, body: UpsertIncidentEnrichmentInput) =>
-      http<IncidentEnrichmentView>(`${ws(workspaceId)}/incident-enrichment`, {
-        method: 'PUT',
-        body,
-      }),
+      send(setIncidentEnrichmentContract, { pathPrefix: ws(workspaceId), body }),
 
     deleteIncidentEnrichment: (workspaceId: string) =>
-      http(`${ws(workspaceId)}/incident-enrichment`, { method: 'DELETE' }),
+      send(deleteIncidentEnrichmentContract, { pathPrefix: ws(workspaceId) }),
   }
 }

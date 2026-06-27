@@ -1,6 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { ClarityReview, ResolveClarityExceededChoice, ReviewItemStatus } from '~/types/clarity'
+import type { UpdateClarityItemStatusInput } from '@cat-factory/contracts'
+import type { ClarityReview, ResolveClarityExceededChoice } from '~/types/clarity'
+
+// A clarity item's status is the narrower set the route accepts (no `recommend_requested`).
+type ClarityItemStatus = UpdateClarityItemStatusInput['status']
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -120,7 +124,7 @@ export const useClarityStore = defineStore('clarity', () => {
   }
 
   /** Set an item's status (dismiss / reopen). */
-  async function setItemStatus(review: ClarityReview, itemId: string, status: ReviewItemStatus) {
+  async function setItemStatus(review: ClarityReview, itemId: string, status: ClarityItemStatus) {
     store(await api.setClarityItemStatus(workspace.requireId(), review.id, itemId, status))
   }
 

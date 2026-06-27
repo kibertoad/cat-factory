@@ -8,6 +8,7 @@
 // options or hits the iteration cap. The converged direction — not the original description — is
 // what the downstream stage (the requirements review / the architect) consumes.
 import { parseOutputOutline } from '~/utils/agentOutput'
+import type { UpdateBrainstormItemStatusInput } from '@cat-factory/contracts'
 import type {
   BrainstormItem,
   BrainstormSession,
@@ -16,6 +17,9 @@ import type {
   ReviewItemSeverity,
   ReviewItemStatus,
 } from '~/types/brainstorm'
+
+// The status a brainstorm option can be set to (narrower than the shared ReviewItemStatus).
+type BrainstormItemStatus = UpdateBrainstormItemStatusInput['status']
 
 const board = useBoardStore()
 const brainstorm = useBrainstormStore()
@@ -136,7 +140,7 @@ async function submitReply(item: BrainstormItem) {
   }
 }
 
-async function setStatus(item: BrainstormItem, itemStatus: ReviewItemStatus) {
+async function setStatus(item: BrainstormItem, itemStatus: BrainstormItemStatus) {
   if (!session.value) return
   try {
     await brainstorm.setItemStatus(session.value, item.id, itemStatus)

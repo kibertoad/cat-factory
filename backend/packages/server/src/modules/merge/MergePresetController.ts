@@ -1,17 +1,22 @@
-import { createMergePresetSchema, updateMergePresetSchema } from '@cat-factory/contracts'
+import {
+  createMergePresetContract,
+  deleteMergePresetContract,
+  listMergePresetsContract,
+  updateMergePresetContract,
+} from '@cat-factory/contracts'
+import type { MergePresetsModule } from '@cat-factory/orchestration'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import type { MergePresetsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 
 /** Resolve the merge-preset module or send a 503, returning null when unconfigured. */
-function requireMergePresets(c: Context<AppEnv>): MergePresetsModule | null {
+function requireMergePresets<E extends AppEnv>(c: Context<E>): MergePresetsModule | null {
   return c.get('container').mergePresets ?? null
 }
 
-const unavailable = (c: Context<AppEnv>) =>
+const unavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json({ error: { code: 'unavailable', message: 'Merge presets are not configured' } }, 503)
 
 /**
@@ -22,34 +27,34 @@ const unavailable = (c: Context<AppEnv>) =>
 export function mergePresetController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.get('/merge-presets', async (c) => {
+  buildHonoRoute(app, listMergePresetsContract, async (c) => {
     const presets = requireMergePresets(c)
     if (!presets) return unavailable(c)
-    return c.json(await presets.service.list(param(c, 'workspaceId')))
+    return c.json(await presets.service.list(param(c, 'workspaceId')), 200)
   })
 
-  app.post('/merge-presets', jsonBody(createMergePresetSchema), async (c) => {
+  buildHonoRoute(app, createMergePresetContract, async (c) => {
     const presets = requireMergePresets(c)
     if (!presets) return unavailable(c)
     const preset = await presets.service.create(param(c, 'workspaceId'), c.req.valid('json'))
     return c.json(preset, 201)
   })
 
-  app.patch('/merge-presets/:presetId', jsonBody(updateMergePresetSchema), async (c) => {
+  buildHonoRoute(app, updateMergePresetContract, async (c) => {
     const presets = requireMergePresets(c)
     if (!presets) return unavailable(c)
     const preset = await presets.service.update(
       param(c, 'workspaceId'),
-      param(c, 'presetId'),
+      c.req.valid('param').presetId,
       c.req.valid('json'),
     )
-    return c.json(preset)
+    return c.json(preset, 200)
   })
 
-  app.delete('/merge-presets/:presetId', async (c) => {
+  buildHonoRoute(app, deleteMergePresetContract, async (c) => {
     const presets = requireMergePresets(c)
     if (!presets) return unavailable(c)
-    await presets.service.remove(param(c, 'workspaceId'), param(c, 'presetId'))
+    await presets.service.remove(param(c, 'workspaceId'), c.req.valid('param').presetId)
     return c.body(null, 204)
   })
 

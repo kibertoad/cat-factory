@@ -1,4 +1,5 @@
 import type { FragmentOwnerKind } from '~/types/domain'
+import { createApiClient, createSend, createSendWith } from './api/client'
 import type { ApiContext } from './api/context'
 import { accountsApi } from './api/accounts'
 import { authApi } from './api/auth'
@@ -75,7 +76,14 @@ export function useApi() {
       ? `/accounts/${encodeURIComponent(id)}`
       : `/workspaces/${encodeURIComponent(id)}`
 
-  const ctx: ApiContext = { http, ws, scope, pwHeaders }
+  // The contract-driven client (wretch + sendByApiContract): one source of truth for
+  // path/method/request/response, shared with the backend via @cat-factory/contracts.
+  // API groups are migrated onto `send` incrementally; the rest still use `http`.
+  const client = createApiClient()
+  const send = createSend(client)
+  const sendWith = createSendWith(client)
+
+  const ctx: ApiContext = { http, client, send, sendWith, ws, scope, pwHeaders }
 
   return {
     ...authApi(ctx),

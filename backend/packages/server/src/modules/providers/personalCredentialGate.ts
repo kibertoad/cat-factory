@@ -14,7 +14,7 @@ import type { SessionPayload } from '../../auth/signing.js'
  * `PERSONAL_PASSWORD_HEADER`). The client attaches it on the gated run calls the way it
  * attaches the bearer token, so it never lives in a request body. Absent ⇒ undefined.
  */
-export function readPersonalPassword(c: Context<AppEnv>): string | undefined {
+export function readPersonalPassword<E extends AppEnv>(c: Context<E>): string | undefined {
   return c.req.header(PERSONAL_PASSWORD_HEADER) || undefined
 }
 
@@ -44,8 +44,8 @@ async function resolvePersonalVendorPredicate(
  * (the next dispatch then 428s and the client re-prompts on retry). Never throws, and skips
  * entirely for non-individual runs (no password work on the common path).
  */
-export async function remintActivations(
-  c: Context<AppEnv>,
+export async function remintActivations<E extends AppEnv>(
+  c: Context<E>,
   workspaceId: string,
   executionId: string,
 ): Promise<void> {

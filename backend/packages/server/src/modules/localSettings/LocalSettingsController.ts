@@ -1,8 +1,8 @@
-import { updateLocalSettingsSchema } from '@cat-factory/contracts'
+import { getLocalSettingsContract, updateLocalSettingsContract } from '@cat-factory/contracts'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { jsonBody } from '../../http/validation.js'
 
 /**
  * Local-mode operational settings (warm-container-pool sizing + per-repo checkout reuse),
@@ -16,7 +16,7 @@ import { jsonBody } from '../../http/validation.js'
 export function localSettingsController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  const unavailable = (c: Context<AppEnv>) =>
+  const unavailable = <E extends AppEnv>(c: Context<E>) =>
     c.json(
       {
         error: {
@@ -27,16 +27,16 @@ export function localSettingsController(): Hono<AppEnv> {
       503,
     )
 
-  app.get('/local-settings', async (c) => {
+  buildHonoRoute(app, getLocalSettingsContract, async (c) => {
     const container = c.get('container')
     if (!container.localSettings) return unavailable(c)
-    return c.json(await container.localSettings.service.read())
+    return c.json(await container.localSettings.service.read(), 200)
   })
 
-  app.put('/local-settings', jsonBody(updateLocalSettingsSchema), async (c) => {
+  buildHonoRoute(app, updateLocalSettingsContract, async (c) => {
     const container = c.get('container')
     if (!container.localSettings) return unavailable(c)
-    return c.json(await container.localSettings.service.write(c.req.valid('json')))
+    return c.json(await container.localSettings.service.write(c.req.valid('json')), 200)
   })
 
   return app

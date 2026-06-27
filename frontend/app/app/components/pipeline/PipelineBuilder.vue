@@ -31,7 +31,7 @@ function toggleGating(i: number) {
   if (!cfg) return
   cfg.gating = cfg.gating?.enabled
     ? { ...cfg.gating, enabled: false }
-    : { enabled: true, minRisk: 0.6, minImpact: 0.6 }
+    : { enabled: true, minRisk: 0.6, minImpact: 0.6, onMissingEstimate: 'consensus' }
 }
 const agents = useAgentsStore()
 const ui = useUiStore()
