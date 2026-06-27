@@ -1,23 +1,31 @@
 import {
-  cloneSandboxPromptSchema,
-  createSandboxExperimentSchema,
-  createSandboxFixtureSchema,
-  saveSandboxVersionSchema,
-  setSandboxLabelsSchema,
+  archiveSandboxPromptContract,
+  cloneSandboxPromptContract,
+  createSandboxExperimentContract,
+  createSandboxFixtureContract,
+  getSandboxExperimentContract,
+  launchSandboxExperimentContract,
+  listSandboxExperimentsContract,
+  listSandboxFixturesContract,
+  listSandboxPromptsContract,
+  removeSandboxFixtureContract,
+  sandboxOverviewContract,
+  saveSandboxPromptContract,
+  setSandboxPromptLabelsContract,
 } from '@cat-factory/contracts'
 import type { SandboxModule } from '@cat-factory/orchestration'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 
 /** Resolve the Sandbox module or send a 503, returning null when unconfigured. */
-function requireSandbox(c: Context<AppEnv>): SandboxModule | null {
+function requireSandbox<E extends AppEnv>(c: Context<E>): SandboxModule | null {
   return c.get('container').sandbox ?? null
 }
 
-const unavailable = (c: Context<AppEnv>) =>
+const unavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json({ error: { code: 'unavailable', message: 'The Sandbox is not configured' } }, 503)
 
 /**
@@ -30,60 +38,72 @@ export function sandboxController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   // ---- overview -------------------------------------------------------------
-  app.get('/sandbox/overview', async (c) => {
+  buildHonoRoute(app, sandboxOverviewContract, async (c) => {
     const sandbox = requireSandbox(c)
     if (!sandbox) return unavailable(c)
-    return c.json(await sandbox.service.overview(param(c, 'workspaceId')))
+    const overview = await sandbox.service.overview(param(c, 'workspaceId'))
+    // The catalog is exposed as `readonly` arrays; clone into the mutable shape the
+    // contract response schema infers (the readonly-ness is a source-side detail only).
+    return c.json(
+      {
+        ...overview,
+        agentKinds: overview.agentKinds.map((kind) => ({
+          ...kind,
+          fixtureKinds: [...kind.fixtureKinds],
+        })),
+      },
+      200,
+    )
   })
 
   // ---- prompt versions ------------------------------------------------------
-  app.get('/sandbox/prompts', async (c) => {
+  buildHonoRoute(app, listSandboxPromptsContract, async (c) => {
     const sandbox = requireSandbox(c)
     if (!sandbox) return unavailable(c)
-    const agentKind = c.req.query('agentKind')
-    return c.json(await sandbox.service.listPrompts(param(c, 'workspaceId'), agentKind))
+    const agentKind = c.req.valid('query').agentKind
+    return c.json(await sandbox.service.listPrompts(param(c, 'workspaceId'), agentKind), 200)
   })
 
-  app.post('/sandbox/prompts/clone', jsonBody(cloneSandboxPromptSchema), async (c) => {
+  buildHonoRoute(app, cloneSandboxPromptContract, async (c) => {
     const sandbox = requireSandbox(c)
     if (!sandbox) return unavailable(c)
     const version = await sandbox.service.clonePrompt(param(c, 'workspaceId'), c.req.valid('json'))
     return c.json(version, 201)
   })
 
-  app.post('/sandbox/prompts', jsonBody(saveSandboxVersionSchema), async (c) => {
+  buildHonoRoute(app, saveSandboxPromptContract, async (c) => {
     const sandbox = requireSandbox(c)
     if (!sandbox) return unavailable(c)
     const version = await sandbox.service.saveVersion(param(c, 'workspaceId'), c.req.valid('json'))
     return c.json(version, 201)
   })
 
-  app.patch('/sandbox/prompts/:promptId/labels', jsonBody(setSandboxLabelsSchema), async (c) => {
+  buildHonoRoute(app, setSandboxPromptLabelsContract, async (c) => {
     const sandbox = requireSandbox(c)
     if (!sandbox) return unavailable(c)
     const version = await sandbox.service.setLabels(
       param(c, 'workspaceId'),
-      param(c, 'promptId'),
+      c.req.valid('param').promptId,
       c.req.valid('json'),
     )
-    return c.json(version)
+    return c.json(version, 200)
   })
 
-  app.delete('/sandbox/prompts/:promptId', async (c) => {
+  buildHonoRoute(app, archiveSandboxPromptContract, async (c) => {
     const sandbox = requireSandbox(c)
     if (!sandbox) return unavailable(c)
-    await sandbox.service.archivePrompt(param(c, 'workspaceId'), param(c, 'promptId'))
+    await sandbox.service.archivePrompt(param(c, 'workspaceId'), c.req.valid('param').promptId)
     return c.body(null, 204)
   })
 
   // ---- fixtures -------------------------------------------------------------
-  app.get('/sandbox/fixtures', async (c) => {
+  buildHonoRoute(app, listSandboxFixturesContract, async (c) => {
     const sandbox = requireSandbox(c)
     if (!sandbox) return unavailable(c)
-    return c.json(await sandbox.service.listFixtures(param(c, 'workspaceId')))
+    return c.json(await sandbox.service.listFixtures(param(c, 'workspaceId')), 200)
   })
 
-  app.post('/sandbox/fixtures', jsonBody(createSandboxFixtureSchema), async (c) => {
+  buildHonoRoute(app, createSandboxFixtureContract, async (c) => {
     const sandbox = requireSandbox(c)
     if (!sandbox) return unavailable(c)
     const fixture = await sandbox.service.createFixture(
@@ -93,21 +113,21 @@ export function sandboxController(): Hono<AppEnv> {
     return c.json(fixture, 201)
   })
 
-  app.delete('/sandbox/fixtures/:fixtureId', async (c) => {
+  buildHonoRoute(app, removeSandboxFixtureContract, async (c) => {
     const sandbox = requireSandbox(c)
     if (!sandbox) return unavailable(c)
-    await sandbox.service.removeFixture(param(c, 'workspaceId'), param(c, 'fixtureId'))
+    await sandbox.service.removeFixture(param(c, 'workspaceId'), c.req.valid('param').fixtureId)
     return c.body(null, 204)
   })
 
   // ---- experiments ----------------------------------------------------------
-  app.get('/sandbox/experiments', async (c) => {
+  buildHonoRoute(app, listSandboxExperimentsContract, async (c) => {
     const sandbox = requireSandbox(c)
     if (!sandbox) return unavailable(c)
-    return c.json(await sandbox.service.listExperiments(param(c, 'workspaceId')))
+    return c.json(await sandbox.service.listExperiments(param(c, 'workspaceId')), 200)
   })
 
-  app.post('/sandbox/experiments', jsonBody(createSandboxExperimentSchema), async (c) => {
+  buildHonoRoute(app, createSandboxExperimentContract, async (c) => {
     const sandbox = requireSandbox(c)
     if (!sandbox) return unavailable(c)
     const experiment = await sandbox.service.createExperiment(
@@ -117,20 +137,25 @@ export function sandboxController(): Hono<AppEnv> {
     return c.json(experiment, 201)
   })
 
-  app.get('/sandbox/experiments/:experimentId', async (c) => {
+  buildHonoRoute(app, getSandboxExperimentContract, async (c) => {
     const sandbox = requireSandbox(c)
     if (!sandbox) return unavailable(c)
     return c.json(
-      await sandbox.service.getExperiment(param(c, 'workspaceId'), param(c, 'experimentId')),
+      await sandbox.service.getExperiment(
+        param(c, 'workspaceId'),
+        c.req.valid('param').experimentId,
+      ),
+      200,
     )
   })
 
   // Run + grade every cell of the experiment, then return the full result grid.
-  app.post('/sandbox/experiments/:experimentId/launch', async (c) => {
+  buildHonoRoute(app, launchSandboxExperimentContract, async (c) => {
     const sandbox = requireSandbox(c)
     if (!sandbox) return unavailable(c)
     return c.json(
-      await sandbox.runService.launch(param(c, 'workspaceId'), param(c, 'experimentId')),
+      await sandbox.runService.launch(param(c, 'workspaceId'), c.req.valid('param').experimentId),
+      200,
     )
   })
 

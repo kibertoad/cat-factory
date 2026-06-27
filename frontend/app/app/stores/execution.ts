@@ -7,7 +7,8 @@ import type {
   PipelineStep,
   StepApproval,
 } from '~/types/domain'
-import type { IterationCapChoice, ReviewComment } from '~/types/execution'
+import type { RequestStepChangesInput } from '@cat-factory/contracts'
+import type { IterationCapChoice } from '~/types/execution'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -163,7 +164,7 @@ export const useExecutionStore = defineStore('execution', () => {
   async function requestStepChanges(
     instanceId: string,
     approvalId: string,
-    review: { feedback?: string; comments?: ReviewComment[] },
+    review: RequestStepChangesInput,
   ) {
     const ws = useWorkspaceStore()
     const personal = usePersonalSubscriptionsStore()

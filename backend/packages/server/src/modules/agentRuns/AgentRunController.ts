@@ -1,10 +1,12 @@
+import { retryAgentRunContract, stopAgentRunContract } from '@cat-factory/contracts'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { personalGateForRun, readPersonalPassword } from '../providers/personalCredentialGate.js'
 
-const unavailable = (c: Context<AppEnv>, message: string) =>
+const unavailable = <E extends AppEnv>(c: Context<E>, message: string) =>
   c.json({ error: { code: 'unavailable', message } }, 503)
 
 /**
@@ -18,10 +20,10 @@ export function agentRunController(): Hono<AppEnv> {
 
   // Retry a failed run. Resolves the kind from the unified agent_runs table, then
   // re-drives via the matching service (both 409 if the run isn't `failed`).
-  app.post('/agent-runs/:id/retry', async (c) => {
+  buildHonoRoute(app, retryAgentRunContract, async (c) => {
     const container = c.get('container')
     const workspaceId = param(c, 'workspaceId')
-    const id = param(c, 'id')
+    const id = c.req.valid('param').id
 
     const ref = await container.agentRunRepository.getRef(workspaceId, id)
     if (!ref) {
@@ -60,10 +62,10 @@ export function agentRunController(): Hono<AppEnv> {
   // container and tears down the durable driver, then marks the run terminally
   // `cancelled` so the board stops showing it as running. Resolves the kind from
   // the unified agent_runs table and dispatches to the matching service.
-  app.post('/agent-runs/:id/stop', async (c) => {
+  buildHonoRoute(app, stopAgentRunContract, async (c) => {
     const container = c.get('container')
     const workspaceId = param(c, 'workspaceId')
-    const id = param(c, 'id')
+    const id = c.req.valid('param').id
 
     const ref = await container.agentRunRepository.getRef(workspaceId, id)
     if (!ref) {
@@ -74,11 +76,11 @@ export function agentRunController(): Hono<AppEnv> {
       const bootstrap = container.bootstrap
       if (!bootstrap) return unavailable(c, 'Repo bootstrap is not configured')
       const run = await bootstrap.service.stop(workspaceId, id)
-      return c.json({ kind: ref.kind, run })
+      return c.json({ kind: ref.kind, run }, 200)
     }
 
     const run = await container.executionService.stopRun(workspaceId, id)
-    return c.json({ kind: ref.kind, run })
+    return c.json({ kind: ref.kind, run }, 200)
   })
 
   return app

@@ -2,7 +2,6 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { ModelOption } from '~/types/domain'
 import type {
-  CreateSandboxExperimentInput,
   SandboxAgentKindMeta,
   SandboxExperiment,
   SandboxExperimentDetail,
@@ -118,7 +117,7 @@ export const useSandboxStore = defineStore('sandbox', () => {
     await load()
   }
 
-  async function createExperiment(input: CreateSandboxExperimentInput) {
+  async function createExperiment(input: Parameters<typeof api.createSandboxExperiment>[1]) {
     const ws = useWorkspaceStore()
     const created = await api.createSandboxExperiment(ws.requireId(), input)
     await load()

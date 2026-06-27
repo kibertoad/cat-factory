@@ -1,24 +1,30 @@
 import {
-  incorporateRequirementsSchema,
-  reRequestRecommendationSchema,
-  replyReviewItemSchema,
-  requestRecommendationsSchema,
-  resolveRequirementsExceededSchema,
-  updateReviewItemStatusSchema,
+  acceptRequirementRecommendationContract,
+  getRequirementReviewContract,
+  incorporateRequirementsContract,
+  proceedRequirementsContract,
+  reRequestRequirementRecommendationContract,
+  reReviewRequirementsContract,
+  rejectRequirementRecommendationContract,
+  replyRequirementItemContract,
+  requestRequirementRecommendationsContract,
+  resolveRequirementsExceededContract,
+  reviewRequirementsContract,
+  updateRequirementItemStatusContract,
 } from '@cat-factory/contracts'
+import type { RequirementsModule } from '@cat-factory/orchestration'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import type { RequirementsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 
 /** Resolve the requirements module or send a 503, returning null when unconfigured. */
-function requireRequirements(c: Context<AppEnv>): RequirementsModule | null {
+function requireRequirements<E extends AppEnv>(c: Context<E>): RequirementsModule | null {
   return c.get('container').requirements ?? null
 }
 
-const unavailable = (c: Context<AppEnv>) =>
+const unavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json({ error: { code: 'unavailable', message: 'Requirements review is not configured' } }, 503)
 
 /**
@@ -33,61 +39,55 @@ export function requirementReviewController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   // The current review for a block (null when none has been run yet).
-  app.get('/blocks/:blockId/requirement-review', async (c) => {
+  buildHonoRoute(app, getRequirementReviewContract, async (c) => {
     const requirements = requireRequirements(c)
     if (!requirements) return unavailable(c)
     const review = await requirements.service.getForBlock(
       param(c, 'workspaceId'),
-      param(c, 'blockId'),
+      c.req.valid('param').blockId,
     )
-    return c.json(review)
+    return c.json(review, 200)
   })
 
   // Run a fresh review of the block's collected requirements (replaces any prior).
   // Routed through the execution service so the off-path surface honours the task's
   // merge-preset knobs (iteration budget + tolerated severity) exactly like the gate.
-  app.post('/blocks/:blockId/requirement-review', async (c) => {
+  buildHonoRoute(app, reviewRequirementsContract, async (c) => {
     const requirements = requireRequirements(c)
     if (!requirements) return unavailable(c)
     const review = await c
       .get('container')
-      .executionService.reviewRequirements(param(c, 'workspaceId'), param(c, 'blockId'))
+      .executionService.reviewRequirements(param(c, 'workspaceId'), c.req.valid('param').blockId)
     return c.json(review, 201)
   })
 
   // Answer a single review item.
-  app.post(
-    '/requirement-reviews/:reviewId/items/:itemId/reply',
-    jsonBody(replyReviewItemSchema),
-    async (c) => {
-      const requirements = requireRequirements(c)
-      if (!requirements) return unavailable(c)
-      const review = await requirements.service.replyToItem(
-        param(c, 'workspaceId'),
-        param(c, 'reviewId'),
-        param(c, 'itemId'),
-        c.req.valid('json').reply,
-      )
-      return c.json(review)
-    },
-  )
+  buildHonoRoute(app, replyRequirementItemContract, async (c) => {
+    const requirements = requireRequirements(c)
+    if (!requirements) return unavailable(c)
+    const { reviewId, itemId } = c.req.valid('param')
+    const review = await requirements.service.replyToItem(
+      param(c, 'workspaceId'),
+      reviewId,
+      itemId,
+      c.req.valid('json').reply,
+    )
+    return c.json(review, 200)
+  })
 
   // Set a review item's status (resolve / dismiss / reopen).
-  app.patch(
-    '/requirement-reviews/:reviewId/items/:itemId',
-    jsonBody(updateReviewItemStatusSchema),
-    async (c) => {
-      const requirements = requireRequirements(c)
-      if (!requirements) return unavailable(c)
-      const review = await requirements.service.setItemStatus(
-        param(c, 'workspaceId'),
-        param(c, 'reviewId'),
-        param(c, 'itemId'),
-        c.req.valid('json').status,
-      )
-      return c.json(review)
-    },
-  )
+  buildHonoRoute(app, updateRequirementItemStatusContract, async (c) => {
+    const requirements = requireRequirements(c)
+    if (!requirements) return unavailable(c)
+    const { reviewId, itemId } = c.req.valid('param')
+    const review = await requirements.service.setItemStatus(
+      param(c, 'workspaceId'),
+      reviewId,
+      itemId,
+      c.req.valid('json').status,
+    )
+    return c.json(review, 200)
+  })
 
   // Incorporate the answers ASYNCHRONOUSLY: the durable driver folds them into one
   // standard-format document and re-reviews it in the background. Optional `feedback` is the
@@ -95,44 +95,40 @@ export function requirementReviewController(): Hono<AppEnv> {
   // once (no LLM in the request) so the SPA returns the user to the board; a notification
   // calls them back only if the re-review needs input. Blocks scoped (the review is resolved
   // from the block) to match the other run-driving endpoints.
-  app.post(
-    '/blocks/:blockId/requirement-review/incorporate',
-    jsonBody(incorporateRequirementsSchema),
-    async (c) => {
-      const requirements = requireRequirements(c)
-      if (!requirements) return unavailable(c)
-      const review = await c
-        .get('container')
-        .executionService.incorporateRequirements(
-          param(c, 'workspaceId'),
-          param(c, 'blockId'),
-          c.req.valid('json').feedback,
-        )
-      return c.json(review)
-    },
-  )
+  buildHonoRoute(app, incorporateRequirementsContract, async (c) => {
+    const requirements = requireRequirements(c)
+    if (!requirements) return unavailable(c)
+    const review = await c
+      .get('container')
+      .executionService.incorporateRequirements(
+        param(c, 'workspaceId'),
+        c.req.valid('param').blockId,
+        c.req.valid('json').feedback,
+      )
+    return c.json(review, 200)
+  })
 
   // Re-review the incorporated document (one more reviewer pass). On convergence the
   // parked run advances; otherwise the response carries the next cycle's findings (or the
   // iteration-cap state). Returns the updated review.
-  app.post('/blocks/:blockId/requirement-review/re-review', async (c) => {
+  buildHonoRoute(app, reReviewRequirementsContract, async (c) => {
     const requirements = requireRequirements(c)
     if (!requirements) return unavailable(c)
     const review = await c
       .get('container')
-      .executionService.reReviewRequirements(param(c, 'workspaceId'), param(c, 'blockId'))
-    return c.json(review)
+      .executionService.reReviewRequirements(param(c, 'workspaceId'), c.req.valid('param').blockId)
+    return c.json(review, 200)
   })
 
   // Proceed: settle the requirements (last incorporated doc wins downstream) and advance
   // the parked run. Used when every finding is dismissed.
-  app.post('/blocks/:blockId/requirement-review/proceed', async (c) => {
+  buildHonoRoute(app, proceedRequirementsContract, async (c) => {
     const requirements = requireRequirements(c)
     if (!requirements) return unavailable(c)
     const review = await c
       .get('container')
-      .executionService.proceedRequirements(param(c, 'workspaceId'), param(c, 'blockId'))
-    return c.json(review)
+      .executionService.proceedRequirements(param(c, 'workspaceId'), c.req.valid('param').blockId)
+    return c.json(review, 200)
   })
 
   // Ask the Requirement Writer to recommend grounded answers for a batch of findings the human
@@ -142,86 +138,77 @@ export function requirementReviewController(): Hono<AppEnv> {
   // placeholders so the user goes back to the board; a notification calls them back when the
   // batch is ready. Block-scoped (the live review is resolved from the block); a no-op when no
   // review exists.
-  app.post(
-    '/blocks/:blockId/requirement-review/recommend',
-    jsonBody(requestRecommendationsSchema),
-    async (c) => {
-      const requirements = requireRequirements(c)
-      if (!requirements) return unavailable(c)
-      const workspaceId = param(c, 'workspaceId')
-      const blockId = param(c, 'blockId')
-      const review = await requirements.service.getForBlock(workspaceId, blockId)
-      if (!review) return c.json(null)
-      const body = c.req.valid('json')
-      const updated = await c
-        .get('container')
-        .executionService.requestRecommendations(workspaceId, blockId, body.itemIds, body.note)
-      return c.json(updated)
-    },
-  )
+  buildHonoRoute(app, requestRequirementRecommendationsContract, async (c) => {
+    const requirements = requireRequirements(c)
+    if (!requirements) return unavailable(c)
+    const workspaceId = param(c, 'workspaceId')
+    const blockId = c.req.valid('param').blockId
+    const review = await requirements.service.getForBlock(workspaceId, blockId)
+    if (!review) return c.json(null, 200)
+    const body = c.req.valid('json')
+    const updated = await c
+      .get('container')
+      .executionService.requestRecommendations(workspaceId, blockId, body.itemIds, body.note)
+    return c.json(updated, 200)
+  })
 
   // Accept a recommendation (it becomes the finding's answer, folded into the next
   // incorporation), reject it, or re-request it with a "do it differently" note.
-  app.post('/requirement-reviews/:reviewId/recommendations/:recId/accept', async (c) => {
+  buildHonoRoute(app, acceptRequirementRecommendationContract, async (c) => {
     const requirements = requireRequirements(c)
     if (!requirements) return unavailable(c)
+    const { reviewId, recId } = c.req.valid('param')
     const review = await requirements.service.acceptRecommendation(
       param(c, 'workspaceId'),
-      param(c, 'reviewId'),
-      param(c, 'recId'),
+      reviewId,
+      recId,
     )
-    return c.json(review)
+    return c.json(review, 200)
   })
 
-  app.post('/requirement-reviews/:reviewId/recommendations/:recId/reject', async (c) => {
+  buildHonoRoute(app, rejectRequirementRecommendationContract, async (c) => {
     const requirements = requireRequirements(c)
     if (!requirements) return unavailable(c)
+    const { reviewId, recId } = c.req.valid('param')
     const review = await requirements.service.rejectRecommendation(
       param(c, 'workspaceId'),
-      param(c, 'reviewId'),
-      param(c, 'recId'),
+      reviewId,
+      recId,
     )
-    return c.json(review)
+    return c.json(review, 200)
   })
 
   // Re-request a recommendation with a "do it differently" note. ASYNCHRONOUS like the batch:
   // resets the recommendation to `pending` and signals the driver to re-run the Writer.
-  app.post(
-    '/requirement-reviews/:reviewId/recommendations/:recId/re-request',
-    jsonBody(reRequestRecommendationSchema),
-    async (c) => {
-      const requirements = requireRequirements(c)
-      if (!requirements) return unavailable(c)
-      const review = await c
-        .get('container')
-        .executionService.reRequestRecommendation(
-          param(c, 'workspaceId'),
-          param(c, 'reviewId'),
-          param(c, 'recId'),
-          c.req.valid('json').note,
-        )
-      return c.json(review)
-    },
-  )
+  buildHonoRoute(app, reRequestRequirementRecommendationContract, async (c) => {
+    const requirements = requireRequirements(c)
+    if (!requirements) return unavailable(c)
+    const { reviewId, recId } = c.req.valid('param')
+    const review = await c
+      .get('container')
+      .executionService.reRequestRecommendation(
+        param(c, 'workspaceId'),
+        reviewId,
+        recId,
+        c.req.valid('json').note,
+      )
+    return c.json(review, 200)
+  })
 
   // Resolve a review that hit its iteration cap: one more round / proceed anyway / stop
   // and reset the task to phase zero. Returns the updated review.
-  app.post(
-    '/blocks/:blockId/requirement-review/resolve-exceeded',
-    jsonBody(resolveRequirementsExceededSchema),
-    async (c) => {
-      const requirements = requireRequirements(c)
-      if (!requirements) return unavailable(c)
-      const review = await c
-        .get('container')
-        .executionService.resolveRequirementsExceeded(
-          param(c, 'workspaceId'),
-          param(c, 'blockId'),
-          c.req.valid('json').choice,
-        )
-      return c.json(review)
-    },
-  )
+  buildHonoRoute(app, resolveRequirementsExceededContract, async (c) => {
+    const requirements = requireRequirements(c)
+    if (!requirements) return unavailable(c)
+    const review = await c
+      .get('container')
+      .executionService.resolveRequirementsExceeded(
+        param(c, 'workspaceId'),
+        c.req.valid('param').blockId,
+        c.req.valid('json').choice,
+      )
+    return c.json(review, 200)
+  })
 
   return app
 }

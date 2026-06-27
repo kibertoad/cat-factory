@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type {
+  BrainstormItemStatus,
   BrainstormSession,
   BrainstormStage,
   ResolveBrainstormExceededChoice,
-  ReviewItemStatus,
 } from '~/types/brainstorm'
 import { useWorkspaceStore } from '~/stores/workspace'
 
@@ -123,7 +123,7 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   async function setItemStatus(
     session: BrainstormSession,
     itemId: string,
-    status: ReviewItemStatus,
+    status: BrainstormItemStatus,
   ) {
     store(await api.setBrainstormItemStatus(workspace.requireId(), session.id, itemId, status))
   }

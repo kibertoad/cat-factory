@@ -1,21 +1,25 @@
 import {
-  bootstrapRepoSchema,
-  createReferenceArchitectureSchema,
-  updateReferenceArchitectureSchema,
+  createReferenceArchitectureContract,
+  deleteReferenceArchitectureContract,
+  getBootstrapJobContract,
+  listBootstrapJobsContract,
+  listReferenceArchitecturesContract,
+  startBootstrapJobContract,
+  updateReferenceArchitectureContract,
 } from '@cat-factory/contracts'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { BootstrapModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 
 /** Resolve the bootstrap module or send a 503, returning null when unconfigured. */
-function requireBootstrap(c: Context<AppEnv>): BootstrapModule | null {
+function requireBootstrap<E extends AppEnv>(c: Context<E>): BootstrapModule | null {
   return c.get('container').bootstrap ?? null
 }
 
-const unavailable = (c: Context<AppEnv>, message: string) =>
+const unavailable = <E extends AppEnv>(c: Context<E>, message: string) =>
   c.json({ error: { code: 'unavailable', message } }, 503)
 
 /**
@@ -29,65 +33,63 @@ export function bootstrapController(): Hono<AppEnv> {
 
   // ---- reference architectures -------------------------------------------
 
-  app.get('/bootstrap/reference-architectures', async (c) => {
+  buildHonoRoute(app, listReferenceArchitecturesContract, async (c) => {
     const bootstrap = requireBootstrap(c)
     if (!bootstrap) return unavailable(c, 'Repo bootstrap is not configured')
-    return c.json(await bootstrap.service.listReferenceArchitectures(param(c, 'workspaceId')))
+    return c.json(await bootstrap.service.listReferenceArchitectures(param(c, 'workspaceId')), 200)
   })
 
-  app.post(
-    '/bootstrap/reference-architectures',
-    jsonBody(createReferenceArchitectureSchema),
-    async (c) => {
-      const bootstrap = requireBootstrap(c)
-      if (!bootstrap) return unavailable(c, 'Repo bootstrap is not configured')
-      const created = await bootstrap.service.createReferenceArchitecture(
-        param(c, 'workspaceId'),
-        c.req.valid('json'),
-      )
-      return c.json(created, 201)
-    },
-  )
-
-  app.patch(
-    '/bootstrap/reference-architectures/:id',
-    jsonBody(updateReferenceArchitectureSchema),
-    async (c) => {
-      const bootstrap = requireBootstrap(c)
-      if (!bootstrap) return unavailable(c, 'Repo bootstrap is not configured')
-      const updated = await bootstrap.service.updateReferenceArchitecture(
-        param(c, 'workspaceId'),
-        param(c, 'id'),
-        c.req.valid('json'),
-      )
-      return c.json(updated)
-    },
-  )
-
-  app.delete('/bootstrap/reference-architectures/:id', async (c) => {
+  buildHonoRoute(app, createReferenceArchitectureContract, async (c) => {
     const bootstrap = requireBootstrap(c)
     if (!bootstrap) return unavailable(c, 'Repo bootstrap is not configured')
-    await bootstrap.service.deleteReferenceArchitecture(param(c, 'workspaceId'), param(c, 'id'))
+    const created = await bootstrap.service.createReferenceArchitecture(
+      param(c, 'workspaceId'),
+      c.req.valid('json'),
+    )
+    return c.json(created, 201)
+  })
+
+  buildHonoRoute(app, updateReferenceArchitectureContract, async (c) => {
+    const bootstrap = requireBootstrap(c)
+    if (!bootstrap) return unavailable(c, 'Repo bootstrap is not configured')
+    const updated = await bootstrap.service.updateReferenceArchitecture(
+      param(c, 'workspaceId'),
+      c.req.valid('param').id,
+      c.req.valid('json'),
+    )
+    return c.json(updated, 200)
+  })
+
+  buildHonoRoute(app, deleteReferenceArchitectureContract, async (c) => {
+    const bootstrap = requireBootstrap(c)
+    if (!bootstrap) return unavailable(c, 'Repo bootstrap is not configured')
+    await bootstrap.service.deleteReferenceArchitecture(
+      param(c, 'workspaceId'),
+      c.req.valid('param').id,
+    )
     return c.body(null, 204)
   })
 
   // ---- bootstrap jobs -----------------------------------------------------
 
-  app.get('/bootstrap/jobs', async (c) => {
+  buildHonoRoute(app, listBootstrapJobsContract, async (c) => {
     const bootstrap = requireBootstrap(c)
     if (!bootstrap) return unavailable(c, 'Repo bootstrap is not configured')
-    return c.json(await bootstrap.service.listJobs(param(c, 'workspaceId')))
+    return c.json(await bootstrap.service.listJobs(param(c, 'workspaceId')), 200)
   })
 
-  app.get('/bootstrap/jobs/:id', async (c) => {
+  buildHonoRoute(app, getBootstrapJobContract, async (c) => {
     const bootstrap = requireBootstrap(c)
     if (!bootstrap) return unavailable(c, 'Repo bootstrap is not configured')
-    return c.json(await bootstrap.service.getJob(param(c, 'workspaceId'), param(c, 'id')))
+    return c.json(
+      await bootstrap.service.getJob(param(c, 'workspaceId'), c.req.valid('param').id),
+      200,
+    )
   })
 
   // Kick off a bootstrap run. Requires the GitHub + container machinery to be
   // wired; otherwise the run path is unavailable even though CRUD works.
-  app.post('/bootstrap/jobs', jsonBody(bootstrapRepoSchema), async (c) => {
+  buildHonoRoute(app, startBootstrapJobContract, async (c) => {
     const bootstrap = requireBootstrap(c)
     if (!bootstrap) return unavailable(c, 'Repo bootstrap is not configured')
     if (!bootstrap.service.canBootstrap) {

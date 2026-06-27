@@ -1,4 +1,6 @@
+import { listFragmentCatalogContract } from '@cat-factory/contracts'
 import { universalFragments } from '@cat-factory/prompt-fragments'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 
@@ -12,9 +14,9 @@ import type { AppEnv } from '../../http/env.js'
 export function promptFragmentController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.get('/prompt-fragments', (c) => {
+  buildHonoRoute(app, listFragmentCatalogContract, (c) => {
     c.header('Cache-Control', 'public, max-age=3600')
-    return c.json(universalFragments())
+    return c.json(universalFragments(), 200)
   })
 
   return app

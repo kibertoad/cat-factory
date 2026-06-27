@@ -1,17 +1,20 @@
-import { updateWorkspaceSettingsSchema } from '@cat-factory/contracts'
+import {
+  getWorkspaceSettingsContract,
+  updateWorkspaceSettingsContract,
+} from '@cat-factory/contracts'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { WorkspaceSettingsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 
 /** Resolve the workspace-settings module or send a 503, returning null when unconfigured. */
-function requireSettings(c: Context<AppEnv>): WorkspaceSettingsModule | null {
+function requireSettings<E extends AppEnv>(c: Context<E>): WorkspaceSettingsModule | null {
   return c.get('container').settings ?? null
 }
 
-const unavailable = (c: Context<AppEnv>) =>
+const unavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json({ error: { code: 'unavailable', message: 'Workspace settings are not configured' } }, 503)
 
 /**
@@ -22,13 +25,13 @@ const unavailable = (c: Context<AppEnv>) =>
 export function workspaceSettingsController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.get('/settings', async (c) => {
+  buildHonoRoute(app, getWorkspaceSettingsContract, async (c) => {
     const settings = requireSettings(c)
     if (!settings) return unavailable(c)
-    return c.json(await settings.service.get(param(c, 'workspaceId')))
+    return c.json(await settings.service.get(param(c, 'workspaceId')), 200)
   })
 
-  app.put('/settings', jsonBody(updateWorkspaceSettingsSchema), async (c) => {
+  buildHonoRoute(app, updateWorkspaceSettingsContract, async (c) => {
     const settings = requireSettings(c)
     if (!settings) return unavailable(c)
     const workspaceId = param(c, 'workspaceId')
@@ -36,7 +39,7 @@ export function workspaceSettingsController(): Hono<AppEnv> {
     // A budget edit must take effect immediately, not after the spend service's
     // short pricing cache TTL — drop the workspace's cached pricing now.
     c.get('container').spendService.invalidatePricing(workspaceId)
-    return c.json(updated)
+    return c.json(updated, 200)
   })
 
   return app

@@ -1,28 +1,35 @@
 import {
-  provisionEnvironmentSchema,
-  registerEnvironmentProviderSchema,
-  testEnvironmentConnectionSchema,
-  updateEnvironmentSecretsSchema,
+  describeEnvironmentProviderContract,
+  getEnvironmentAccessContract,
+  getEnvironmentConnectionContract,
+  getEnvironmentContract,
+  listEnvironmentsContract,
+  provisionEnvironmentContract,
+  registerEnvironmentProviderContract,
+  teardownEnvironmentContract,
+  testEnvironmentConnectionContract,
+  unregisterEnvironmentProviderContract,
+  updateEnvironmentSecretsContract,
 } from '@cat-factory/contracts'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { EnvironmentsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 
 /** Resolve the environment module or send a 503, returning null when unconfigured. */
-function requireEnvironments(c: Context<AppEnv>): EnvironmentsModule | null {
+function requireEnvironments<E extends AppEnv>(c: Context<E>): EnvironmentsModule | null {
   return c.get('container').environments ?? null
 }
 
-const unavailable = (c: Context<AppEnv>) =>
+const unavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json(
     { error: { code: 'unavailable', message: 'Environment integration is not configured' } },
     503,
   )
 
-const notFound = (c: Context<AppEnv>) =>
+const notFound = <E extends AppEnv>(c: Context<E>) =>
   c.json({ error: { code: 'not_found', message: 'Environment not found' } }, 404)
 
 /**
@@ -36,14 +43,14 @@ export function environmentController(): Hono<AppEnv> {
 
   // ---- provider connection ------------------------------------------------
 
-  app.get('/environments/connection', async (c) => {
+  buildHonoRoute(app, getEnvironmentConnectionContract, async (c) => {
     const env = requireEnvironments(c)
     if (!env) return unavailable(c)
     const connection = await env.connectionService.getConnection(param(c, 'workspaceId'))
-    return c.json({ connection })
+    return c.json({ connection }, 200)
   })
 
-  app.post('/environments/connection', jsonBody(registerEnvironmentProviderSchema), async (c) => {
+  buildHonoRoute(app, registerEnvironmentProviderContract, async (c) => {
     const env = requireEnvironments(c)
     if (!env) return unavailable(c)
     const { manifest, secrets } = c.req.valid('json')
@@ -54,21 +61,17 @@ export function environmentController(): Hono<AppEnv> {
     return c.json(connection, 201)
   })
 
-  app.put(
-    '/environments/connection/secrets',
-    jsonBody(updateEnvironmentSecretsSchema),
-    async (c) => {
-      const env = requireEnvironments(c)
-      if (!env) return unavailable(c)
-      const connection = await env.connectionService.updateSecrets(
-        param(c, 'workspaceId'),
-        c.req.valid('json').secrets,
-      )
-      return c.json(connection)
-    },
-  )
+  buildHonoRoute(app, updateEnvironmentSecretsContract, async (c) => {
+    const env = requireEnvironments(c)
+    if (!env) return unavailable(c)
+    const connection = await env.connectionService.updateSecrets(
+      param(c, 'workspaceId'),
+      c.req.valid('json').secrets,
+    )
+    return c.json(connection, 200)
+  })
 
-  app.delete('/environments/connection', async (c) => {
+  buildHonoRoute(app, unregisterEnvironmentProviderContract, async (c) => {
     const env = requireEnvironments(c)
     if (!env) return unavailable(c)
     await env.connectionService.unregister(param(c, 'workspaceId'))
@@ -77,55 +80,52 @@ export function environmentController(): Hono<AppEnv> {
 
   // What the provider needs configured (native fields or the manifest's secret keys),
   // so the UI can render a connect form generically.
-  app.get('/environments/provider', async (c) => {
+  buildHonoRoute(app, describeEnvironmentProviderContract, async (c) => {
     const env = requireEnvironments(c)
     if (!env) return unavailable(c)
-    return c.json(await env.connectionService.describeProvider(param(c, 'workspaceId')))
+    return c.json(await env.connectionService.describeProvider(param(c, 'workspaceId')), 200)
   })
 
   // Probe a candidate connection before saving (nothing persisted).
-  app.post(
-    '/environments/connection/test',
-    jsonBody(testEnvironmentConnectionSchema),
-    async (c) => {
-      const env = requireEnvironments(c)
-      if (!env) return unavailable(c)
-      return c.json(
-        await env.connectionService.testConnection(param(c, 'workspaceId'), c.req.valid('json')),
-      )
-    },
-  )
+  buildHonoRoute(app, testEnvironmentConnectionContract, async (c) => {
+    const env = requireEnvironments(c)
+    if (!env) return unavailable(c)
+    return c.json(
+      await env.connectionService.testConnection(param(c, 'workspaceId'), c.req.valid('json')),
+      200,
+    )
+  })
 
   // ---- environment registry ----------------------------------------------
 
-  app.get('/environments', async (c) => {
+  buildHonoRoute(app, listEnvironmentsContract, async (c) => {
     const env = requireEnvironments(c)
     if (!env) return unavailable(c)
-    return c.json(await env.provisioningService.listHandles(param(c, 'workspaceId')))
+    return c.json(await env.provisioningService.listHandles(param(c, 'workspaceId')), 200)
   })
 
-  app.get('/environments/:environmentId', async (c) => {
+  buildHonoRoute(app, getEnvironmentContract, async (c) => {
     const env = requireEnvironments(c)
     if (!env) return unavailable(c)
     const handle = await env.provisioningService.getHandle(
       param(c, 'workspaceId'),
-      param(c, 'environmentId'),
+      c.req.valid('param').environmentId,
     )
-    return handle ? c.json(handle) : notFound(c)
+    return handle ? c.json(handle, 200) : notFound(c)
   })
 
   // The only endpoint that returns decrypted access credentials (over TLS).
-  app.get('/environments/:environmentId/access', async (c) => {
+  buildHonoRoute(app, getEnvironmentAccessContract, async (c) => {
     const env = requireEnvironments(c)
     if (!env) return unavailable(c)
     const handle = await env.provisioningService.getHandleWithAccess(
       param(c, 'workspaceId'),
-      param(c, 'environmentId'),
+      c.req.valid('param').environmentId,
     )
-    return handle ? c.json(handle) : notFound(c)
+    return handle ? c.json(handle, 200) : notFound(c)
   })
 
-  app.post('/environments/provision', jsonBody(provisionEnvironmentSchema), async (c) => {
+  buildHonoRoute(app, provisionEnvironmentContract, async (c) => {
     const env = requireEnvironments(c)
     if (!env) return unavailable(c)
     const { blockId, inputs } = c.req.valid('json')
@@ -137,14 +137,14 @@ export function environmentController(): Hono<AppEnv> {
     return c.json(handle, 201)
   })
 
-  app.post('/environments/:environmentId/teardown', async (c) => {
+  buildHonoRoute(app, teardownEnvironmentContract, async (c) => {
     const env = requireEnvironments(c)
     if (!env) return unavailable(c)
     const handle = await env.teardownService.teardown(
       param(c, 'workspaceId'),
-      param(c, 'environmentId'),
+      c.req.valid('param').environmentId,
     )
-    return c.json(handle)
+    return c.json(handle, 200)
   })
 
   return app

@@ -1,91 +1,18 @@
 // Frontend mirror of the consensus + task-estimate wire contracts in
 // `@cat-factory/contracts` (src/consensus.ts). Hand-synced, like the other type mirrors.
+//
+// All wire shapes are sourced from @cat-factory/contracts (single source of truth).
 
-export type ConsensusStrategy = 'specialist-panel' | 'debate' | 'ranked-voting'
-
-export interface ConsensusParticipant {
-  id: string
-  role: string
-  systemFraming?: string
-  modelId?: string
-}
-
-export interface ConsensusGating {
-  enabled: boolean
-  minComplexity?: number
-  minRisk?: number
-  minImpact?: number
-  onMissingEstimate?: 'consensus' | 'standard'
-}
-
-/**
- * Estimate-based gating of whether a pipeline STEP runs at all (the same three axes as
- * {@link ConsensusGating}). When enabled the step runs only if ANY supplied axis is met or
- * exceeded; otherwise it is skipped at runtime. Used to make a companion conditional on how
- * heavy the task is. A step with enabled gating requires a `task-estimator` earlier in the
- * pipeline.
- */
-export interface StepGating {
-  enabled: boolean
-  minComplexity?: number
-  minRisk?: number
-  minImpact?: number
-  onMissingEstimate?: 'run' | 'skip'
-}
-
-export interface ConsensusStepConfig {
-  enabled: boolean
-  strategy: ConsensusStrategy
-  participants: ConsensusParticipant[]
-  synthesizerModelId?: string
-  rounds?: number
-  gating?: ConsensusGating
-}
-
-/** The task-estimator's triage of a task (each axis 0..1). */
-export interface TaskEstimate {
-  complexity: number
-  risk: number
-  impact: number
-  rationale: string
-  model?: string | null
-  createdAt: number
-}
-
-export interface ConsensusScore {
-  dimension: string
-  value: number
-  rationale?: string
-}
-
-export interface ConsensusContribution {
-  participantId: string
-  text: string
-  scores?: ConsensusScore[]
-}
-
-export interface ConsensusRound {
-  index: number
-  kind?: 'draft' | 'critique' | 'score'
-  contributions: ConsensusContribution[]
-}
-
-export type ConsensusSessionStatus = 'running' | 'synthesizing' | 'done' | 'failed'
-
-export interface ConsensusSession {
-  id: string
-  blockId: string
-  executionId: string | null
-  stepIndex: number
-  agentKind: string
-  strategy: ConsensusStrategy
-  status: ConsensusSessionStatus
-  participants: ConsensusParticipant[]
-  rounds: ConsensusRound[]
-  synthesis: string | null
-  confidence?: number | null
-  dissent?: string[]
-  error?: string | null
-  createdAt: number
-  updatedAt: number
-}
+export type {
+  ConsensusStrategy,
+  ConsensusParticipant,
+  ConsensusGating,
+  StepGating,
+  ConsensusStepConfig,
+  TaskEstimate,
+  ConsensusScore,
+  ConsensusContribution,
+  ConsensusRound,
+  ConsensusSessionStatus,
+  ConsensusSession,
+} from '@cat-factory/contracts'

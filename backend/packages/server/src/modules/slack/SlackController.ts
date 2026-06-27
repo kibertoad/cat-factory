@@ -1,15 +1,21 @@
 import {
-  connectSlackByTokenSchema,
-  updateSlackMemberMappingSchema,
-  updateSlackSettingsSchema,
+  connectSlackContract,
+  disconnectSlackContract,
+  getSlackConnectionContract,
+  getSlackInstallUrlContract,
+  getSlackMemberMappingContract,
+  getSlackSettingsContract,
+  listSlackChannelsContract,
+  updateSlackMemberMappingContract,
+  updateSlackSettingsContract,
 } from '@cat-factory/contracts'
 import type { SlackModule } from '@cat-factory/orchestration'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { StateSigner } from '../../github/state.js'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 
 // The bot scopes the "Add to Slack" flow requests: post messages + read channels
 // (public + private) so the routing picker can list them. `chat:write.public` lets
@@ -19,11 +25,11 @@ import { jsonBody } from '../../http/validation.js'
 const SLACK_BOT_SCOPES = ['chat:write', 'chat:write.public', 'channels:read', 'groups:read']
 
 /** Resolve the Slack module or send a 503, returning null when unconfigured. */
-function requireSlack(c: Context<AppEnv>): SlackModule | null {
+function requireSlack<E extends AppEnv>(c: Context<E>): SlackModule | null {
   return c.get('container').slack ?? null
 }
 
-const unavailable = (c: Context<AppEnv>) =>
+const unavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json({ error: { code: 'unavailable', message: 'Slack integration is not configured' } }, 503)
 
 /**
@@ -38,18 +44,18 @@ export function slackController(): Hono<AppEnv> {
 
   // ---- connection (per-account) ------------------------------------------
 
-  app.get('/slack/connection', async (c) => {
+  buildHonoRoute(app, getSlackConnectionContract, async (c) => {
     const slack = requireSlack(c)
     if (!slack) return unavailable(c)
     const connection = await slack.connectionService.getConnection(param(c, 'workspaceId'))
     const oauthEnabled = await slack.connectionService.oauthEnabled(param(c, 'workspaceId'))
-    return c.json({ connection, oauthEnabled })
+    return c.json({ connection, oauthEnabled }, 200)
   })
 
   // The "Add to Slack" URL, carrying an HMAC-signed `state` that binds the install
   // to this workspace + user with a short expiry. 503 when OAuth isn't configured
   // (the manual-token path below is then the way to connect).
-  app.get('/slack/install-url', async (c) => {
+  buildHonoRoute(app, getSlackInstallUrlContract, async (c) => {
     const slack = requireSlack(c)
     if (!slack) return unavailable(c)
     const workspaceId = param(c, 'workspaceId')
@@ -66,11 +72,11 @@ export function slackController(): Hono<AppEnv> {
       exp: Date.now() + 10 * 60 * 1000,
     })
     const url = await slack.connectionService.buildInstallUrl(workspaceId, state, SLACK_BOT_SCOPES)
-    return c.json({ url })
+    return c.json({ url }, 200)
   })
 
   // Manual bot-token paste (the always-available fallback to OAuth).
-  app.post('/slack/connect', jsonBody(connectSlackByTokenSchema), async (c) => {
+  buildHonoRoute(app, connectSlackContract, async (c) => {
     const slack = requireSlack(c)
     if (!slack) return unavailable(c)
     const connection = await slack.connectionService.connectWithToken(
@@ -80,7 +86,7 @@ export function slackController(): Hono<AppEnv> {
     return c.json(connection, 201)
   })
 
-  app.delete('/slack/connection', async (c) => {
+  buildHonoRoute(app, disconnectSlackContract, async (c) => {
     const slack = requireSlack(c)
     if (!slack) return unavailable(c)
     await slack.connectionService.disconnect(param(c, 'workspaceId'))
@@ -88,49 +94,49 @@ export function slackController(): Hono<AppEnv> {
   })
 
   // Channels the bot can post to, for the routing picker.
-  app.get('/slack/channels', async (c) => {
+  buildHonoRoute(app, listSlackChannelsContract, async (c) => {
     const slack = requireSlack(c)
     if (!slack) return unavailable(c)
     const channels = await slack.connectionService.listChannels(param(c, 'workspaceId'))
-    return c.json({ channels })
+    return c.json({ channels }, 200)
   })
 
   // ---- routing (per-workspace) -------------------------------------------
 
-  app.get('/slack/settings', async (c) => {
+  buildHonoRoute(app, getSlackSettingsContract, async (c) => {
     const slack = requireSlack(c)
     if (!slack) return unavailable(c)
     const settings = await slack.settingsService.get(param(c, 'workspaceId'))
-    return c.json(settings)
+    return c.json(settings, 200)
   })
 
-  app.put('/slack/settings', jsonBody(updateSlackSettingsSchema), async (c) => {
+  buildHonoRoute(app, updateSlackSettingsContract, async (c) => {
     const slack = requireSlack(c)
     if (!slack) return unavailable(c)
     const settings = await slack.settingsService.update(
       param(c, 'workspaceId'),
       c.req.valid('json'),
     )
-    return c.json(settings)
+    return c.json(settings, 200)
   })
 
   // ---- member mapping (per-account) --------------------------------------
 
-  app.get('/slack/member-mapping', async (c) => {
+  buildHonoRoute(app, getSlackMemberMappingContract, async (c) => {
     const slack = requireSlack(c)
     if (!slack) return unavailable(c)
     const entries = await slack.memberMappingService.get(param(c, 'workspaceId'))
-    return c.json({ entries })
+    return c.json({ entries }, 200)
   })
 
-  app.put('/slack/member-mapping', jsonBody(updateSlackMemberMappingSchema), async (c) => {
+  buildHonoRoute(app, updateSlackMemberMappingContract, async (c) => {
     const slack = requireSlack(c)
     if (!slack) return unavailable(c)
     const entries = await slack.memberMappingService.update(
       param(c, 'workspaceId'),
       c.req.valid('json').entries,
     )
-    return c.json({ entries })
+    return c.json({ entries }, 200)
   })
 
   return app

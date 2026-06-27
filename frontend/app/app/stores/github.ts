@@ -2,7 +2,6 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type {
   CreateBranchInput,
-  CreateRepoRequest,
   GitHubAvailableRepo,
   GitHubBranch,
   GitHubConnection,
@@ -224,7 +223,7 @@ export const useGitHubStore = defineStore('github', () => {
    * meaningful when `canCreateRepos`; the backend 409s otherwise. Returns the
    * created repo so the caller can confirm/link it.
    */
-  function createRepo(input: CreateRepoRequest) {
+  function createRepo(input: Parameters<typeof api.createGitHubRepo>[1]) {
     return api.createGitHubRepo(workspace.requireId(), input)
   }
 

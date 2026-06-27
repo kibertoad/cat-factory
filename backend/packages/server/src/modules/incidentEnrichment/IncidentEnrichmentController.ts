@@ -1,17 +1,23 @@
-import { upsertIncidentEnrichmentSchema } from '@cat-factory/contracts'
+import {
+  deleteIncidentEnrichmentContract,
+  getIncidentEnrichmentContract,
+  setIncidentEnrichmentContract,
+} from '@cat-factory/contracts'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { IncidentEnrichmentModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 
 /** Resolve the incident-enrichment module or send a 503, returning null when unconfigured. */
-function requireIncidentEnrichment(c: Context<AppEnv>): IncidentEnrichmentModule | null {
+function requireIncidentEnrichment<E extends AppEnv>(
+  c: Context<E>,
+): IncidentEnrichmentModule | null {
   return c.get('container').incidentEnrichmentSettings ?? null
 }
 
-const unavailable = (c: Context<AppEnv>) =>
+const unavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json(
     {
       error: {
@@ -30,19 +36,19 @@ const unavailable = (c: Context<AppEnv>) =>
 export function incidentEnrichmentController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.get('/incident-enrichment', async (c) => {
+  buildHonoRoute(app, getIncidentEnrichmentContract, async (c) => {
     const ie = requireIncidentEnrichment(c)
     if (!ie) return unavailable(c)
-    return c.json(await ie.service.getConnection(param(c, 'workspaceId')))
+    return c.json(await ie.service.getConnection(param(c, 'workspaceId')), 200)
   })
 
-  app.put('/incident-enrichment', jsonBody(upsertIncidentEnrichmentSchema), async (c) => {
+  buildHonoRoute(app, setIncidentEnrichmentContract, async (c) => {
     const ie = requireIncidentEnrichment(c)
     if (!ie) return unavailable(c)
-    return c.json(await ie.service.setConnection(param(c, 'workspaceId'), c.req.valid('json')))
+    return c.json(await ie.service.setConnection(param(c, 'workspaceId'), c.req.valid('json')), 200)
   })
 
-  app.delete('/incident-enrichment', async (c) => {
+  buildHonoRoute(app, deleteIncidentEnrichmentContract, async (c) => {
     const ie = requireIncidentEnrichment(c)
     if (!ie) return unavailable(c)
     await ie.service.deleteConnection(param(c, 'workspaceId'))

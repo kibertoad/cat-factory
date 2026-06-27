@@ -14,6 +14,16 @@ of fixes is committed. Do not stage the fixes on a side branch, and do not batch
 up to push later: the PR branch is the single source of truth the reviewer and CI act
 on, so the fixes have to land there right away.
 
+## Always finish a task with a PR (don't wait to be asked)
+
+When you finish working on a task, **always wrap it up as a pull request on your own
+initiative** — do not wait for an explicit "commit"/"push"/"open a PR" instruction. The
+moment the work is done, create a dedicated feature branch, commit the changes there,
+push it, and open a PR so the work goes through review and CI before it lands. **Don't
+commit task work directly to `main` unless you're explicitly asked to** (and if you
+started from `main`, branch off it before committing) — by default `main` should only
+receive changes by merging a PR.
+
 ## Backwards compatibility is NOT a goal
 
 This project is pre-1.0 and under active development with **no external consumers to

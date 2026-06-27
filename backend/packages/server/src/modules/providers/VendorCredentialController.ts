@@ -1,10 +1,15 @@
-import { addVendorCredentialSchema, type VendorCredential } from '@cat-factory/contracts'
+import {
+  addVendorCredentialContract,
+  listVendorCredentialsContract,
+  removeVendorCredentialContract,
+  type VendorCredential,
+} from '@cat-factory/contracts'
 import type { VendorCredentialSummary } from '@cat-factory/integrations'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 
 // Workspace-scoped vendor-credential (subscription token pool) endpoints. A user
 // connects one or more Claude Pro/Max OAuth tokens or ChatGPT auth.json bundles;
@@ -12,7 +17,7 @@ import { jsonBody } from '../../http/validation.js'
 // are write-only — only metadata + rolling-window usage is ever returned. Mounted
 // under `/workspaces/:workspaceId`.
 
-const unavailable = (c: Context<AppEnv>) =>
+const unavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json(
     {
       error: {
@@ -40,14 +45,14 @@ function toWire(summary: VendorCredentialSummary): VendorCredential {
 export function vendorCredentialController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.get('/vendor-credentials', async (c) => {
+  buildHonoRoute(app, listVendorCredentialsContract, async (c) => {
     const subscriptions = c.get('container').subscriptions
     if (!subscriptions) return unavailable(c)
     const tokens = await subscriptions.listTokens(param(c, 'workspaceId'))
-    return c.json({ credentials: tokens.map(toWire) })
+    return c.json({ credentials: tokens.map(toWire) }, 200)
   })
 
-  app.post('/vendor-credentials', jsonBody(addVendorCredentialSchema), async (c) => {
+  buildHonoRoute(app, addVendorCredentialContract, async (c) => {
     const subscriptions = c.get('container').subscriptions
     if (!subscriptions) return unavailable(c)
     const input = c.req.valid('json')
@@ -55,10 +60,10 @@ export function vendorCredentialController(): Hono<AppEnv> {
     return c.json(toWire(summary), 201)
   })
 
-  app.delete('/vendor-credentials/:id', async (c) => {
+  buildHonoRoute(app, removeVendorCredentialContract, async (c) => {
     const subscriptions = c.get('container').subscriptions
     if (!subscriptions) return unavailable(c)
-    await subscriptions.removeToken(param(c, 'workspaceId'), param(c, 'id'))
+    await subscriptions.removeToken(param(c, 'workspaceId'), c.req.valid('param').id)
     return c.body(null, 204)
   })
 

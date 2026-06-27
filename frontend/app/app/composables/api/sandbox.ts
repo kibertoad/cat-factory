@@ -1,14 +1,28 @@
-import type {
-  CloneSandboxPromptInput,
-  CreateSandboxExperimentInput,
-  SandboxExperiment,
-  SandboxExperimentDetail,
-  SandboxFixture,
-  SandboxOverview,
-  SandboxPromptVersion,
-  SaveSandboxVersionInput,
-} from '~/types/sandbox'
+import {
+  archiveSandboxPromptContract,
+  cloneSandboxPromptContract,
+  createSandboxExperimentContract,
+  createSandboxFixtureContract,
+  getSandboxExperimentContract,
+  launchSandboxExperimentContract,
+  removeSandboxFixtureContract,
+  sandboxOverviewContract,
+  saveSandboxPromptContract,
+  setSandboxPromptLabelsContract,
+} from '@cat-factory/contracts'
+import type { SendParams } from './client'
 import type { ApiContext } from './context'
+
+// Request bodies are typed from the contract's INPUT shape (`SendParams[...]['body']`),
+// so valibot-defaulted fields (labels / repeats / budgetTokens) stay optional for callers —
+// the contract's exported `*Input` types are the post-default OUTPUT shape and would force
+// callers to supply them.
+type CloneSandboxPromptBody = NonNullable<SendParams<typeof cloneSandboxPromptContract>['body']>
+type SaveSandboxVersionBody = NonNullable<SendParams<typeof saveSandboxPromptContract>['body']>
+type CreateSandboxFixtureBody = NonNullable<SendParams<typeof createSandboxFixtureContract>['body']>
+type CreateSandboxExperimentBody = NonNullable<
+  SendParams<typeof createSandboxExperimentContract>['body']
+>
 
 /**
  * The Sandbox API (the parallel prompt/model testing surface): manage versioned prompt
@@ -16,42 +30,46 @@ import type { ApiContext } from './context'
  * launch one to run + grade every cell. Opt-in: every endpoint 503s when the deployment
  * hasn't wired the Sandbox (its dedicated DB / schema).
  */
-export function sandboxApi({ http, ws }: ApiContext) {
-  const base = (workspaceId: string) => `${ws(workspaceId)}/sandbox`
+export function sandboxApi({ send, ws }: ApiContext) {
   return {
     getSandboxOverview: (workspaceId: string) =>
-      http<SandboxOverview>(`${base(workspaceId)}/overview`),
+      send(sandboxOverviewContract, { pathPrefix: ws(workspaceId) }),
 
     // ---- prompt versions -------------------------------------------------
-    cloneSandboxPrompt: (workspaceId: string, body: CloneSandboxPromptInput) =>
-      http<SandboxPromptVersion>(`${base(workspaceId)}/prompts/clone`, { method: 'POST', body }),
-    saveSandboxVersion: (workspaceId: string, body: SaveSandboxVersionInput) =>
-      http<SandboxPromptVersion>(`${base(workspaceId)}/prompts`, { method: 'POST', body }),
+    cloneSandboxPrompt: (workspaceId: string, body: CloneSandboxPromptBody) =>
+      send(cloneSandboxPromptContract, { pathPrefix: ws(workspaceId), body }),
+    saveSandboxVersion: (workspaceId: string, body: SaveSandboxVersionBody) =>
+      send(saveSandboxPromptContract, { pathPrefix: ws(workspaceId), body }),
     setSandboxPromptLabels: (workspaceId: string, promptId: string, labels: string[]) =>
-      http<SandboxPromptVersion>(
-        `${base(workspaceId)}/prompts/${encodeURIComponent(promptId)}/labels`,
-        { method: 'PATCH', body: { labels } },
-      ),
+      send(setSandboxPromptLabelsContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { promptId },
+        body: { labels },
+      }),
     archiveSandboxPrompt: (workspaceId: string, promptId: string) =>
-      http(`${base(workspaceId)}/prompts/${encodeURIComponent(promptId)}`, { method: 'DELETE' }),
+      send(archiveSandboxPromptContract, { pathPrefix: ws(workspaceId), pathParams: { promptId } }),
 
     // ---- fixtures --------------------------------------------------------
-    createSandboxFixture: (workspaceId: string, body: Partial<SandboxFixture>) =>
-      http<SandboxFixture>(`${base(workspaceId)}/fixtures`, { method: 'POST', body }),
+    createSandboxFixture: (workspaceId: string, body: CreateSandboxFixtureBody) =>
+      send(createSandboxFixtureContract, { pathPrefix: ws(workspaceId), body }),
     deleteSandboxFixture: (workspaceId: string, fixtureId: string) =>
-      http(`${base(workspaceId)}/fixtures/${encodeURIComponent(fixtureId)}`, { method: 'DELETE' }),
+      send(removeSandboxFixtureContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { fixtureId },
+      }),
 
     // ---- experiments -----------------------------------------------------
-    createSandboxExperiment: (workspaceId: string, body: CreateSandboxExperimentInput) =>
-      http<SandboxExperiment>(`${base(workspaceId)}/experiments`, { method: 'POST', body }),
+    createSandboxExperiment: (workspaceId: string, body: CreateSandboxExperimentBody) =>
+      send(createSandboxExperimentContract, { pathPrefix: ws(workspaceId), body }),
     getSandboxExperiment: (workspaceId: string, experimentId: string) =>
-      http<SandboxExperimentDetail>(
-        `${base(workspaceId)}/experiments/${encodeURIComponent(experimentId)}`,
-      ),
+      send(getSandboxExperimentContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { experimentId },
+      }),
     launchSandboxExperiment: (workspaceId: string, experimentId: string) =>
-      http<SandboxExperimentDetail>(
-        `${base(workspaceId)}/experiments/${encodeURIComponent(experimentId)}/launch`,
-        { method: 'POST' },
-      ),
+      send(launchSandboxExperimentContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { experimentId },
+      }),
   }
 }

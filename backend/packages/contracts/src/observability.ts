@@ -160,3 +160,67 @@ export const llmMetricsExportSchema = v.object({
   calls: v.array(llmCallMetricSchema),
 })
 export type LlmMetricsExport = v.InferOutput<typeof llmMetricsExportSchema>
+
+// ---------------------------------------------------------------------------
+// Agent-context observability: the complete, redacted context one container-agent
+// dispatch was *provided* (composed prompts + folded fragments + injected files).
+// These schemas are the single source of truth for the shape: the kernel
+// `agent-context` port derives its types from them, and the execution route
+// contract reuses them as its response body, so the wire shape and the port can't
+// drift.
+// ---------------------------------------------------------------------------
+
+/** One file injected into the agent's container as context, with its full body. */
+export const agentContextFileSchema = v.object({
+  /** Sanitized basename the file is materialised under (`.cat-context/<path>`). */
+  path: v.string(),
+  title: v.string(),
+  url: v.string(),
+  /** The full file body as written into the container. */
+  content: v.string(),
+})
+export type AgentContextFile = v.InferOutput<typeof agentContextFileSchema>
+
+/** One best-practice fragment folded into the agent's system prompt. */
+export const agentContextFragmentSchema = v.object({
+  id: v.string(),
+  /** The fragment body that was appended to the system prompt. */
+  body: v.string(),
+})
+export type AgentContextFragment = v.InferOutput<typeof agentContextFragmentSchema>
+
+/**
+ * The complete, redacted context provided to one container-agent dispatch. A
+ * deliberate allow-list projection of the dispatched job body + run context — it
+ * NEVER carries credentials.
+ */
+export const agentContextSnapshotSchema = v.object({
+  id: v.string(),
+  workspaceId: v.string(),
+  /** The run this dispatch belongs to. */
+  executionId: v.string(),
+  agentKind: v.string(),
+  /** The step's index within the run's pipeline (keys the snapshot to a step). */
+  stepIndex: v.number(),
+  /** When the dispatch was captured (epoch ms). */
+  createdAt: v.number(),
+  /** The resolved model id the step ran on (`provider:model`), or null. */
+  model: v.nullable(v.string()),
+  /** The harness the job ran under (`pi` | `claude-code` | `codex`), or null. */
+  harness: v.nullable(v.string()),
+  /** The fully fragment-composed system prompt sent to the harness. */
+  systemPrompt: v.string(),
+  /** The assembled user prompt sent to the harness (with materialised context refs). */
+  userPrompt: v.string(),
+  /** The best-practice fragments folded into the system prompt (id + body). */
+  fragments: v.array(agentContextFragmentSchema),
+  /** The files injected into the container as context, with full content. */
+  contextFiles: v.array(agentContextFileSchema),
+  /**
+   * Redacted structural bits useful for debugging — repo owner/name/branches, the
+   * web-search flag, the infra spec, the run's decisions and revision feedback.
+   * Never any token, secret, or credential-bearing URL.
+   */
+  extras: v.record(v.string(), v.unknown()),
+})
+export type AgentContextSnapshot = v.InferOutput<typeof agentContextSnapshotSchema>

@@ -1,3 +1,4 @@
+import type { LocalModeConfig } from '@cat-factory/contracts'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { AuthUser } from '~/types/domain'
@@ -29,7 +30,7 @@ export const useAuthStore = defineStore(
      * `githubPatSetupUrl` is set when local mode has no GitHub PAT configured (drives the
      * setup banner). Null on every other facade.
      */
-    const localMode = ref<{ enabled: boolean; githubPatSetupUrl?: string } | null>(null)
+    const localMode = ref<LocalModeConfig | null>(null)
     /** True once the initial auth handshake has settled. */
     const ready = ref(false)
 

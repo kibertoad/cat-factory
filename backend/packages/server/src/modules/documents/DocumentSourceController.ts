@@ -1,35 +1,39 @@
 import {
-  connectDocumentSourceSchema,
+  connectDocumentSourceContract,
+  disconnectDocumentSourceContract,
   documentSourceKindSchema,
-  importDocumentSchema,
-  linkDocumentSchema,
-  planDocumentSchema,
-  searchDocumentsSchema,
-  spawnDocumentSchema,
+  importDocumentContract,
+  linkDocumentContract,
+  listDocumentConnectionsContract,
+  listDocumentSourcesContract,
+  listDocumentsContract,
+  planDocumentContract,
+  searchDocumentsContract,
+  spawnDocumentContract,
   type DocumentSourceKind,
 } from '@cat-factory/contracts'
 import * as v from 'valibot'
+import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { ValidationError } from '@cat-factory/kernel'
 import type { DocumentsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { jsonBody } from '../../http/validation.js'
 
 /** Resolve the documents module or send a 503, returning null when unconfigured. */
-function requireDocuments(c: Context<AppEnv>): DocumentsModule | null {
+function requireDocuments<E extends AppEnv>(c: Context<E>): DocumentsModule | null {
   return c.get('container').documents ?? null
 }
 
-const unavailable = (c: Context<AppEnv>) =>
+const unavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json(
     { error: { code: 'unavailable', message: 'Document-source integration is not configured' } },
     503,
   )
 
 /** Read + validate the `:source` path param as a known source kind. */
-function sourceParam(c: Context<AppEnv>): DocumentSourceKind {
+function sourceParam<E extends AppEnv>(c: Context<E>): DocumentSourceKind {
   const source = param(c, 'source')
   if (!v.is(documentSourceKindSchema, source)) {
     throw new ValidationError(`Unknown document source '${source}'`)
@@ -50,37 +54,33 @@ export function documentSourceController(): Hono<AppEnv> {
 
   // The configured sources + their connect/import metadata (drives the UI). A
   // 503 here is how the frontend learns the integration is off.
-  app.get('/document-sources', async (c) => {
+  buildHonoRoute(app, listDocumentSourcesContract, async (c) => {
     const documents = requireDocuments(c)
     if (!documents) return unavailable(c)
-    return c.json({ sources: documents.connectionService.listSources() })
+    return c.json({ sources: documents.connectionService.listSources() }, 200)
   })
 
   // ---- connections --------------------------------------------------------
 
-  app.get('/document-sources/connections', async (c) => {
+  buildHonoRoute(app, listDocumentConnectionsContract, async (c) => {
     const documents = requireDocuments(c)
     if (!documents) return unavailable(c)
     const connections = await documents.connectionService.listConnections(param(c, 'workspaceId'))
-    return c.json({ connections })
+    return c.json({ connections }, 200)
   })
 
-  app.post(
-    '/document-sources/:source/connect',
-    jsonBody(connectDocumentSourceSchema),
-    async (c) => {
-      const documents = requireDocuments(c)
-      if (!documents) return unavailable(c)
-      const connection = await documents.connectionService.connect(
-        param(c, 'workspaceId'),
-        sourceParam(c),
-        c.req.valid('json').credentials,
-      )
-      return c.json(connection, 201)
-    },
-  )
+  buildHonoRoute(app, connectDocumentSourceContract, async (c) => {
+    const documents = requireDocuments(c)
+    if (!documents) return unavailable(c)
+    const connection = await documents.connectionService.connect(
+      param(c, 'workspaceId'),
+      sourceParam(c),
+      c.req.valid('json').credentials,
+    )
+    return c.json(connection, 201)
+  })
 
-  app.delete('/document-sources/:source/connection', async (c) => {
+  buildHonoRoute(app, disconnectDocumentSourceContract, async (c) => {
     const documents = requireDocuments(c)
     if (!documents) return unavailable(c)
     await documents.connectionService.disconnect(param(c, 'workspaceId'), sourceParam(c))
@@ -89,13 +89,13 @@ export function documentSourceController(): Hono<AppEnv> {
 
   // ---- documents ----------------------------------------------------------
 
-  app.get('/documents', async (c) => {
+  buildHonoRoute(app, listDocumentsContract, async (c) => {
     const documents = requireDocuments(c)
     if (!documents) return unavailable(c)
-    return c.json(await documents.importService.listDocuments(param(c, 'workspaceId')))
+    return c.json(await documents.importService.listDocuments(param(c, 'workspaceId')), 200)
   })
 
-  app.post('/document-sources/:source/import', jsonBody(importDocumentSchema), async (c) => {
+  buildHonoRoute(app, importDocumentContract, async (c) => {
     const documents = requireDocuments(c)
     if (!documents) return unavailable(c)
     const document = await documents.importService.import(
@@ -108,7 +108,7 @@ export function documentSourceController(): Hono<AppEnv> {
 
   // Search a source's catalogue by free text (title/content), returning lean hits
   // the picker can import + link on selection.
-  app.post('/document-sources/:source/search', jsonBody(searchDocumentsSchema), async (c) => {
+  buildHonoRoute(app, searchDocumentsContract, async (c) => {
     const documents = requireDocuments(c)
     if (!documents) return unavailable(c)
     const results = await documents.importService.search(
@@ -116,13 +116,13 @@ export function documentSourceController(): Hono<AppEnv> {
       sourceParam(c),
       c.req.valid('json').query,
     )
-    return c.json({ results })
+    return c.json({ results }, 200)
   })
 
   // ---- planning / spawning ------------------------------------------------
 
   // Preview the board structure a page would expand into (no writes).
-  app.post('/document-sources/:source/plan', jsonBody(planDocumentSchema), async (c) => {
+  buildHonoRoute(app, planDocumentContract, async (c) => {
     const documents = requireDocuments(c)
     if (!documents) return unavailable(c)
     const workspaceId = param(c, 'workspaceId')
@@ -131,11 +131,11 @@ export function documentSourceController(): Hono<AppEnv> {
       sourceParam(c),
       c.req.valid('json').externalId,
     )
-    return c.json(await documents.plannerService.plan(record))
+    return c.json(await documents.plannerService.plan(record), 200)
   })
 
   // Apply a page's structure to the board (new frames, or into an existing one).
-  app.post('/document-sources/:source/spawn', jsonBody(spawnDocumentSchema), async (c) => {
+  buildHonoRoute(app, spawnDocumentContract, async (c) => {
     const documents = requireDocuments(c)
     if (!documents) return unavailable(c)
     const workspaceId = param(c, 'workspaceId')
@@ -153,7 +153,7 @@ export function documentSourceController(): Hono<AppEnv> {
   // ---- context links ------------------------------------------------------
 
   // Attach an imported page to a block as extra agent context.
-  app.post('/documents/link', jsonBody(linkDocumentSchema), async (c) => {
+  buildHonoRoute(app, linkDocumentContract, async (c) => {
     const documents = requireDocuments(c)
     if (!documents) return unavailable(c)
     const { source, externalId, blockId } = c.req.valid('json')
