@@ -956,9 +956,11 @@ export const stepMetricsSchema = v.object({
   /** Sum of prompt (input) tokens across the step's calls. */
   promptTokens: v.number(),
   /**
-   * Sum of prompt tokens served from the provider's prefix cache (subset of
-   * promptTokens). 0 on a cache-less flavour (Workers AI); the metrics bar shows the
-   * cached split when present. Absent ⇒ unknown (older snapshot).
+   * Sum of prompt tokens served from the provider's prefix cache. A subset of
+   * promptTokens on OpenAI/DeepSeek, but on Anthropic cache reads are reported
+   * separately from input tokens, so this can exceed promptTokens. 0 on a cache-less
+   * flavour (Workers AI); the metrics bar shows the cached split when present. Absent ⇒
+   * unknown (older snapshot).
    */
   cachedPromptTokens: v.optional(v.number()),
   /** Sum of completion (output) tokens across the step's calls. */

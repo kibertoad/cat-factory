@@ -696,6 +696,8 @@ export function mergeGuardLimits(
       overrides.maxToolCallsWithoutEdit,
     ),
     maxConsecutiveErrors: loosen(base.maxConsecutiveErrors, overrides.maxConsecutiveErrors),
+    // `maxConsecutiveWebCalls` is optional on the interface (callers may omit it), so
+    // fall back to the default before loosening — keeps `loosen`'s base a concrete number.
     maxConsecutiveWebCalls: loosen(
       base.maxConsecutiveWebCalls ?? DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveWebCalls,
       overrides.maxConsecutiveWebCalls,

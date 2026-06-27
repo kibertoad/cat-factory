@@ -79,17 +79,17 @@ export function costLabel(flavor: DisplayFlavor): string | undefined {
 }
 
 /**
- * A small caching badge for the picker: whether the flavour's provider caches the
- * re-sent prompt prefix. `null` when unknown (older catalog) so the caller can omit the
- * badge entirely. A long agentic run on a non-caching flavour re-bills its whole growing
+ * A short caching label for the picker: whether the flavour's provider caches the
+ * re-sent prompt prefix. `null` when unknown (older catalog) so the caller can omit it
+ * entirely. A long agentic run on a non-caching flavour re-bills its whole growing
  * prompt every turn (slower, more rate-limited), so we surface it as an informational
- * hint the user can act on (connect a direct key / pick a caching model).
+ * hint the user can act on (connect a direct key / pick a caching model). The model
+ * picker is a text-only dropdown-menu item list, so this is a label token in the option
+ * suffix rather than a styled badge.
  */
-export function cachingBadge(flavor: DisplayFlavor): { label: string; caches: boolean } | null {
+export function cachingLabel(flavor: DisplayFlavor): string | null {
   if (flavor.cachesPrompts === undefined) return null
-  return flavor.cachesPrompts
-    ? { label: 'Prompt caching', caches: true }
-    : { label: 'No prompt caching', caches: false }
+  return flavor.cachesPrompts ? 'Prompt caching' : 'No prompt caching'
 }
 
 /**
