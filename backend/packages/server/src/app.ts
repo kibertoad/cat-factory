@@ -2,6 +2,7 @@ import type { Hono } from 'hono'
 import type { AppEnv } from './http/env.js'
 import { accountController } from './modules/accounts/AccountController.js'
 import { agentRunController } from './modules/agentRuns/AgentRunController.js'
+import { artifactController } from './modules/artifacts/ArtifactController.js'
 import { authController } from './modules/auth/AuthController.js'
 import { boardController } from './modules/board/BoardController.js'
 import { bootstrapController } from './modules/bootstrap/BootstrapController.js'
@@ -102,6 +103,9 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', workspaceApiKeyController())
   app.route('/workspaces/:workspaceId', bootstrapController())
   app.route('/workspaces/:workspaceId', agentRunController())
+  // Binary-artifact API (screenshots + reference uploads) for the visual-confirmation
+  // gate; 503 when no blob storage is configured.
+  app.route('/workspaces/:workspaceId', artifactController())
   app.route('/workspaces/:workspaceId', requirementReviewController())
   app.route('/workspaces/:workspaceId', followUpController())
   app.route('/workspaces/:workspaceId', kaizenController())

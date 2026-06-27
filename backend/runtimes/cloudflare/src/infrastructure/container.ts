@@ -3,6 +3,7 @@ import {
   type AgentExecutor,
   type Clock,
   CompositeNotificationChannel,
+  createBinaryArtifactStore,
   type DocumentSourceProvider,
   type ExecutionEventPublisher,
   type FragmentOwnerKind,
@@ -149,6 +150,8 @@ import { D1EnvironmentRegistryRepository } from './repositories/D1EnvironmentReg
 import { D1ReferenceArchitectureRepository } from './repositories/D1ReferenceArchitectureRepository'
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
 import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
+import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMetadataStore'
+import { R2BinaryBlobBackend } from './storage/R2BinaryBlobBackend'
 import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
 import { D1KaizenGradingRepository } from './repositories/D1KaizenGradingRepository'
 import { D1KaizenVerifiedComboRepository } from './repositories/D1KaizenVerifiedComboRepository'
@@ -1585,6 +1588,18 @@ export function buildContainer(
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
 
+  // Binary-artifact store (UI screenshots + reference design images) for the
+  // visual-confirmation gate. On Cloudflare the bytes go to R2 (D1 can't hold large
+  // values); the metadata lives in the main DB. Present only when ARTIFACT_BUCKET is bound.
+  const binaryArtifactStore = env.ARTIFACT_BUCKET
+    ? createBinaryArtifactStore({
+        metadata: new D1BinaryArtifactMetadataStore({ db }),
+        blob: new R2BinaryBlobBackend({ bucket: env.ARTIFACT_BUCKET }),
+        idGenerator,
+        clock,
+      })
+    : undefined
+
   // The built-in gates' providers are deployment-global module handles (in `@cat-factory/gates`),
   // not per-container DI. Reset them up-front so each build re-wires from a clean slate and only
   // the gates this env actually configures stay wired: `selectMergeLifecycleDeps` /
@@ -1804,6 +1819,9 @@ export function buildContainer(
     // The consensus transcript store, for the read endpoint (the SPA window's initial
     // load / reload). Always wired; live updates ride the `consensus` workspace event.
     consensusSessionRepository: new D1ConsensusSessionRepository({ db }),
+    // The binary-artifact store (screenshots) for the visual-confirmation gate; present
+    // only when the ARTIFACT_BUCKET R2 binding is configured.
+    binaryArtifactStore,
     // The vendor-credential (subscription token pool) service the shared controller
     // reads; present when the shared ENCRYPTION_KEY is configured.
     subscriptions,

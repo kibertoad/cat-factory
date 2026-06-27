@@ -6,6 +6,8 @@ import type {
   AccountRole,
   AccountSettingsPatch,
   AgentFailure,
+  BinaryArtifactMetadataStore,
+  BinaryArtifactRecord,
   EmailConnectionRecord,
   EmailConnectionRepository,
   EmailProviderKind,
@@ -127,7 +129,7 @@ import {
   rowToSandboxRun,
   rowToWorkspace,
 } from '@cat-factory/server'
-import { and, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import {
   accountInvitations,
@@ -153,6 +155,8 @@ import {
   kaizenGradings,
   kaizenVerifiedCombos,
   clarityReviews,
+  binaryArtifactBlobs,
+  binaryArtifacts,
   brainstormSessions,
   sandboxPromptVersions,
   sandboxFixtures,
@@ -1226,6 +1230,74 @@ class DrizzleAgentContextSnapshotRepository implements AgentContextSnapshotRepos
       .where(lt(agentContextSnapshots.created_at, epochMs))
       .returning({ id: agentContextSnapshots.id })
     return deleted.length
+  }
+}
+
+function rowToBinaryArtifact(row: typeof binaryArtifacts.$inferSelect): BinaryArtifactRecord {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    executionId: row.execution_id,
+    blockId: row.block_id,
+    kind: row.kind as BinaryArtifactRecord['kind'],
+    view: row.view,
+    contentType: row.content_type,
+    byteSize: row.byte_size,
+    hash: row.hash,
+    storage: row.storage as BinaryArtifactRecord['storage'],
+    storageKey: row.storage_key,
+    createdAt: row.created_at,
+  }
+}
+
+/** Drizzle/Postgres metadata store for binary artifacts (mirror of D1 migration 0017). */
+class DrizzleBinaryArtifactMetadataStore implements BinaryArtifactMetadataStore {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async insert(record: BinaryArtifactRecord): Promise<void> {
+    await this.db.insert(binaryArtifacts).values({
+      workspace_id: record.workspaceId,
+      id: record.id,
+      execution_id: record.executionId,
+      block_id: record.blockId,
+      kind: record.kind,
+      view: record.view,
+      content_type: record.contentType,
+      byte_size: record.byteSize,
+      hash: record.hash,
+      storage: record.storage,
+      storage_key: record.storageKey,
+      created_at: record.createdAt,
+    })
+  }
+
+  async get(workspaceId: string, id: string): Promise<BinaryArtifactRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(binaryArtifacts)
+      .where(and(eq(binaryArtifacts.workspace_id, workspaceId), eq(binaryArtifacts.id, id)))
+      .limit(1)
+    return rows[0] ? rowToBinaryArtifact(rows[0]) : null
+  }
+
+  async listByExecution(workspaceId: string, executionId: string): Promise<BinaryArtifactRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(binaryArtifacts)
+      .where(
+        and(
+          eq(binaryArtifacts.workspace_id, workspaceId),
+          eq(binaryArtifacts.execution_id, executionId),
+        ),
+      )
+      .orderBy(asc(binaryArtifacts.created_at), asc(binaryArtifacts.id))
+    return rows.map(rowToBinaryArtifact)
+  }
+
+  async delete(workspaceId: string, id: string): Promise<void> {
+    await this.db
+      .delete(binaryArtifacts)
+      .where(and(eq(binaryArtifacts.workspace_id, workspaceId), eq(binaryArtifacts.id, id)))
   }
 }
 
@@ -3574,6 +3646,7 @@ export interface CoreRepositories {
   tokenUsageRepository: TokenUsageRepository
   llmCallMetricRepository: LlmCallMetricRepository
   agentContextSnapshotRepository: AgentContextSnapshotRepository
+  binaryArtifactMetadataStore: BinaryArtifactMetadataStore
   agentRunRepository: AgentRunRepository
   modelPresetRepository: ModelPresetRepository
   serviceFragmentDefaultsRepository: ServiceFragmentDefaultsRepository
@@ -3611,6 +3684,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     tokenUsageRepository: new DrizzleTokenUsageRepository(db),
     llmCallMetricRepository: new DrizzleLlmCallMetricRepository(db),
     agentContextSnapshotRepository: new DrizzleAgentContextSnapshotRepository(db),
+    binaryArtifactMetadataStore: new DrizzleBinaryArtifactMetadataStore(db),
     agentRunRepository: new DrizzleAgentRunRepository(db),
     modelPresetRepository: new DrizzleModelPresetRepository(db),
     serviceFragmentDefaultsRepository: new DrizzleServiceFragmentDefaultsRepository(db),

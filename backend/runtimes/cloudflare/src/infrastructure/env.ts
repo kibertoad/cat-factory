@@ -3,6 +3,7 @@ import type {
   D1Database,
   DurableObjectNamespace,
   Queue,
+  R2Bucket,
   Workflow,
 } from '@cloudflare/workers-types'
 import type { ExecutionContainer } from './containers/ExecutionContainer'
@@ -56,6 +57,16 @@ export interface Env {
 
   /** Cloudflare Workers AI binding (optional; used when provider = workers-ai). */
   AI?: Ai
+
+  /**
+   * R2 bucket for binary artifacts (UI screenshots + reference design images). On
+   * Cloudflare the blob bytes ALWAYS go to R2 (D1's ~1MB value limit rules out
+   * large-PNG-in-D1); the queryable metadata lives in the main `DB`. Optional: absent
+   * ⇒ the binary-artifact store isn't assembled and the visual-confirmation gate has
+   * nowhere to put screenshots. Add an [[r2_buckets]] entry with binding =
+   * "ARTIFACT_BUCKET" to wrangler.toml to enable it.
+   */
+  ARTIFACT_BUCKET?: R2Bucket
 
   // ---- Durable execution (see config.ts) ----------------------------------
   /** Workflows binding that durably drives each run (the only execution path). */

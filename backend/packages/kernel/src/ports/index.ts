@@ -133,6 +133,16 @@ export type {
   ResolveRunRepoContext,
 } from './repo-files.js'
 export type {
+  BinaryArtifactKind,
+  BinaryArtifactRecord,
+  BinaryArtifactStorageKind,
+  BinaryArtifactStore,
+  BinaryArtifactMetadataStore,
+  BinaryBlobBackend,
+  StoreBinaryArtifactInput,
+} from './binary-artifacts.js'
+export { createBinaryArtifactStore } from './binary-artifacts.js'
+export type {
   AgentCloneSpec,
   AgentOutputSpec,
   AgentStepSpec,
