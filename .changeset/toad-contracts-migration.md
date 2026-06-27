@@ -1,5 +1,6 @@
 ---
 '@cat-factory/contracts': minor
+'@cat-factory/kernel': minor
 '@cat-factory/server': minor
 '@cat-factory/app': minor
 ---
@@ -28,3 +29,9 @@ Breaking / notable:
 - The runtime-internal endpoints that are not request/response JSON APIs (the WebSocket
   event stream, the LLM/web-search proxies, the GitHub webhook, the Slack OAuth callback)
   are intentionally left on plain Hono routing.
+- The wire-returned shapes that the kernel ports also describe (`ProvisionedRepo`,
+  `AgentContextSnapshot`/`AgentContextFile`/`AgentContextFragment`) now have their single
+  source of truth in `@cat-factory/contracts` valibot schemas; the `@cat-factory/kernel`
+  ports re-export the inferred types, so the route contract and the port can't drift. The
+  `/auth/config` `localMode` field is now a real schema (`localModeConfigSchema`) instead
+  of `v.unknown()`, and `AppConfig.localMode` derives its type from it.

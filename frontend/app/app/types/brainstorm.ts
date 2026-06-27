@@ -24,3 +24,7 @@ export type {
   ReviewItemSeverity,
   ReviewItemStatus,
 } from '@cat-factory/contracts'
+import type { UpdateBrainstormItemStatusInput } from '@cat-factory/contracts'
+
+/** The narrower status set the set-item-status action accepts (a subset of ReviewItemStatus). */
+export type BrainstormItemStatus = UpdateBrainstormItemStatusInput['status']

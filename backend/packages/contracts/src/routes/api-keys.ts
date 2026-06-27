@@ -1,6 +1,6 @@
 import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
-import { addApiKeySchema, apiKeySchema } from '../api-keys.js'
+import { addApiKeySchema, apiKeyListResultSchema, apiKeySchema } from '../api-keys.js'
 import { errorResponses } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -10,9 +10,6 @@ import { errorResponses } from './_shared.js'
 // paths are absolute and carry no path params). See ApiKeyController in
 // @cat-factory/server. (The account-scoped key routes live in `routes/accounts.ts`.)
 // ---------------------------------------------------------------------------
-
-// Response wrapper that exists only inline in the controllers today.
-const apiKeyListResultSchema = v.object({ keys: v.array(apiKeySchema) })
 
 const idParams = withObjectKeys(v.object({ id: v.string() }))
 

@@ -11,58 +11,16 @@
 // rides the same retention window. The domain depends only on this interface; each
 // runtime facade implements it.
 
-/** One file injected into the agent's container as context, with its full body. */
-export interface AgentContextFile {
-  /** Sanitized basename the file is materialised under in the checkout (`.cat-context/<path>`). */
-  path: string
-  title: string
-  url: string
-  /** The full file body as written into the container. */
-  content: string
-}
-
-/** One best-practice fragment folded into the agent's system prompt. */
-export interface AgentContextFragment {
-  id: string
-  /** The fragment body that was appended to the system prompt. */
-  body: string
-}
-
-/**
- * The complete, redacted context provided to one container-agent dispatch. A
- * deliberate allow-list projection of the dispatched job body + run context — it
- * NEVER carries credentials (the GitHub token, the proxy session token, a leased
- * subscription token, or the clone URL that embeds them).
- */
-export interface AgentContextSnapshot {
-  id: string
-  workspaceId: string
-  /** The run this dispatch belongs to. */
-  executionId: string
-  agentKind: string
-  /** The step's index within the run's pipeline (keys the snapshot to a step). */
-  stepIndex: number
-  /** When the dispatch was captured (epoch ms). */
-  createdAt: number
-  /** The resolved model id the step ran on (`provider:model`), or null. */
-  model: string | null
-  /** The harness the job ran under (`pi` | `claude-code` | `codex`), or null. */
-  harness: string | null
-  /** The fully fragment-composed system prompt sent to the harness. */
-  systemPrompt: string
-  /** The assembled user prompt sent to the harness (with materialised context refs). */
-  userPrompt: string
-  /** The best-practice fragments folded into the system prompt (id + body). */
-  fragments: AgentContextFragment[]
-  /** The files injected into the container as context, with full content. */
-  contextFiles: AgentContextFile[]
-  /**
-   * Redacted structural bits useful for debugging — repo owner/name/branches, the
-   * web-search flag, the infra spec, the run's decisions and revision feedback.
-   * Never any token, secret, or credential-bearing URL.
-   */
-  extras: Record<string, unknown>
-}
+// The snapshot and its parts are the wire-returned shape of the agent-context
+// observability endpoint, so their single source of truth is the valibot schemas in
+// `@cat-factory/contracts`; re-exported here so the port and the route contract can't
+// drift. The recorder/repository interfaces below stay in kernel (they have no wire form).
+import type {
+  AgentContextFile,
+  AgentContextFragment,
+  AgentContextSnapshot,
+} from '@cat-factory/contracts'
+export type { AgentContextFile, AgentContextFragment, AgentContextSnapshot }
 
 /**
  * The fields the dispatch site hands to the recorder. The service assigns the `id`

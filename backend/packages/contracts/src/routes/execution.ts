@@ -2,7 +2,11 @@ import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contrac
 import * as v from 'valibot'
 import { blockSchema, executionInstanceSchema, spendStatusSchema } from '../entities.js'
 import { resolveIterationCapSchema } from '../iteration-cap.js'
-import { llmMetricsExportSchema, llmMetricsResponseSchema } from '../observability.js'
+import {
+  agentContextSnapshotSchema,
+  llmMetricsExportSchema,
+  llmMetricsResponseSchema,
+} from '../observability.js'
 import {
   approveStepSchema,
   rejectStepSchema,
@@ -26,33 +30,8 @@ const decisionParams = withObjectKeys(v.object({ executionId: v.string(), decisi
 const approvalParams = withObjectKeys(v.object({ executionId: v.string(), approvalId: v.string() }))
 
 // The agent-context observability response — `{ executionId, snapshots }`. The
-// snapshot shape is the kernel `AgentContextSnapshot` port type, which has no
-// standalone wire schema today, so it is mirrored here for the response contract.
-const agentContextFileSchema = v.object({
-  path: v.string(),
-  title: v.string(),
-  url: v.string(),
-  content: v.string(),
-})
-const agentContextFragmentSchema = v.object({
-  id: v.string(),
-  body: v.string(),
-})
-const agentContextSnapshotSchema = v.object({
-  id: v.string(),
-  workspaceId: v.string(),
-  executionId: v.string(),
-  agentKind: v.string(),
-  stepIndex: v.number(),
-  createdAt: v.number(),
-  model: v.nullable(v.string()),
-  harness: v.nullable(v.string()),
-  systemPrompt: v.string(),
-  userPrompt: v.string(),
-  fragments: v.array(agentContextFragmentSchema),
-  contextFiles: v.array(agentContextFileSchema),
-  extras: v.record(v.string(), v.unknown()),
-})
+// snapshot schema (`agentContextSnapshotSchema`, imported from `../observability.js`)
+// is the shared source of truth the kernel `AgentContextSnapshot` port also derives from.
 const agentContextResponseSchema = v.object({
   executionId: v.string(),
   snapshots: v.array(agentContextSnapshotSchema),

@@ -21,6 +21,23 @@ const sessionUserViewSchema = v.object({
   email: v.optional(v.nullable(v.string())),
 })
 
+/**
+ * Local-mode facade signals surfaced to the SPA, present only on the local facade
+ * (the Worker/Node facades omit it). This is the single source of truth for the
+ * shape: the server's `AppConfig.localMode` derives its type from it (see
+ * `@cat-factory/server` config), and the SPA reads the inferred type directly.
+ */
+export const localModeConfigSchema = v.object({
+  /** True on the local-mode facade (a single developer running the whole product locally). */
+  enabled: v.boolean(),
+  /**
+   * When local mode runs WITHOUT a GitHub PAT, a github.com URL with the needed scopes
+   * pre-selected so the developer can create one in a click. Absent once a PAT is set.
+   */
+  githubPatSetupUrl: v.optional(v.string()),
+})
+export type LocalModeConfig = v.InferOutput<typeof localModeConfigSchema>
+
 const authConfigViewSchema = v.object({
   enabled: v.boolean(),
   providers: v.object({
@@ -28,7 +45,7 @@ const authConfigViewSchema = v.object({
     password: v.boolean(),
     google: v.boolean(),
   }),
-  localMode: v.optional(v.unknown()),
+  localMode: v.optional(localModeConfigSchema),
 })
 
 const meViewSchema = v.object({

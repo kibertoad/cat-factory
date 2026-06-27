@@ -15,6 +15,7 @@ import {
   linkReposSchema,
   mergePullRequestSchema,
   openPullRequestSchema,
+  provisionedRepoSchema,
   repoTreeEntrySchema,
   resyncRequestSchema,
   setRepoMonorepoSchema,
@@ -43,15 +44,9 @@ const pullRequestListSchema = v.array(githubPullRequestSchema)
 const issueListSchema = v.array(githubIssueSchema)
 const repoProjectionListSchema = v.array(githubRepoSchema)
 const commitResultSchema = v.object({ sha: v.string() })
-// The createRepo success body is a freshly-provisioned repo (kernel `ProvisionedRepo`),
-// which has no standalone wire schema today.
-const provisionedRepoSchema = v.object({
-  githubId: v.number(),
-  owner: v.string(),
-  name: v.string(),
-  defaultBranch: v.nullable(v.string()),
-  private: v.boolean(),
-})
+// The createRepo success body is a freshly-provisioned repo; `provisionedRepoSchema`
+// (imported from `../github.js`) is the shared source of truth that the kernel
+// `ProvisionedRepo` port type also derives from.
 // The resync endpoint returns a `{ status }` envelope across both 200 and 202.
 const resyncResultSchema = v.object({
   status: v.picklist(['backfill_started', 'backfilled', 'queued', 'synced']),

@@ -1,3 +1,4 @@
+import type { LocalModeConfig } from '@cat-factory/contracts'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { AuthUser } from '~/types/domain'
@@ -29,7 +30,7 @@ export const useAuthStore = defineStore(
      * `githubPatSetupUrl` is set when local mode has no GitHub PAT configured (drives the
      * setup banner). Null on every other facade.
      */
-    const localMode = ref<{ enabled: boolean; githubPatSetupUrl?: string } | null>(null)
+    const localMode = ref<LocalModeConfig | null>(null)
     /** True once the initial auth handshake has settled. */
     const ready = ref(false)
 
@@ -53,10 +54,7 @@ export const useAuthStore = defineStore(
         const config = await api.getAuthConfig()
         required.value = config.enabled
         if (config.providers) providers.value = config.providers
-        // The `/auth/config` contract models `localMode` as an opaque optional
-        // (`v.unknown()`), so narrow it to the structured shape the UI reads here.
-        localMode.value =
-          (config.localMode as { enabled: boolean; githubPatSetupUrl?: string } | undefined) ?? null
+        localMode.value = config.localMode ?? null
       } catch {
         // Backend unreachable — let the board's own error UI handle it.
         required.value = false

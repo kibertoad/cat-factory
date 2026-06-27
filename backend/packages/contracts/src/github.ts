@@ -37,6 +37,21 @@ export const githubRepoSchema = v.object({
 })
 export type GitHubRepo = v.InferOutput<typeof githubRepoSchema>
 
+/**
+ * Identifying details of a freshly-created repository, returned by the repo
+ * provisioning endpoint. Single source of truth for the shape: the kernel
+ * `GitHubProvisioningClient` port derives its `ProvisionedRepo` from this, and the
+ * createRepo route contract reuses it as its success body.
+ */
+export const provisionedRepoSchema = v.object({
+  githubId: v.number(),
+  owner: v.string(),
+  name: v.string(),
+  defaultBranch: v.nullable(v.string()),
+  private: v.boolean(),
+})
+export type ProvisionedRepo = v.InferOutput<typeof provisionedRepoSchema>
+
 export const githubBranchSchema = v.object({
   repoGithubId: v.number(),
   name: v.string(),

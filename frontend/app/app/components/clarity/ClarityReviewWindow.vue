@@ -9,17 +9,14 @@
 // description — is what every downstream agent step (the bug investigator, the coder)
 // consumes.
 import { parseOutputOutline } from '~/utils/agentOutput'
-import type { UpdateClarityItemStatusInput } from '@cat-factory/contracts'
 import type {
+  ClarityItemStatus,
   ClarityReview,
   ClarityReviewItem,
   ReviewItemCategory,
   ReviewItemSeverity,
   ReviewItemStatus,
 } from '~/types/clarity'
-
-// The status a clarity item can be set to (narrower than the shared ReviewItemStatus).
-type ClarityItemStatus = UpdateClarityItemStatusInput['status']
 
 const board = useBoardStore()
 const clarity = useClarityStore()

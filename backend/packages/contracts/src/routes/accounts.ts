@@ -14,7 +14,7 @@ import {
   updateAccountSchema,
 } from '../accounts.js'
 import { accountSettingsViewSchema, updateAccountSettingsSchema } from '../accountSettings.js'
-import { addApiKeySchema, apiKeySchema } from '../api-keys.js'
+import { addApiKeySchema, apiKeyListResultSchema, apiKeySchema } from '../api-keys.js'
 import { errorResponses } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -30,7 +30,6 @@ const createInvitationResultSchema = v.object({
   invitation: accountInvitationSchema,
   acceptUrl: v.nullable(v.string()),
 })
-const apiKeyListResultSchema = v.object({ keys: v.array(apiKeySchema) })
 const emailConnectionViewSchema = v.object({
   connection: v.nullable(emailConnectionSchema),
   configured: v.boolean(),

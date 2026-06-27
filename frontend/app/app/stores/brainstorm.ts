@@ -1,15 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { UpdateBrainstormItemStatusInput } from '@cat-factory/contracts'
 import type {
+  BrainstormItemStatus,
   BrainstormSession,
   BrainstormStage,
   ResolveBrainstormExceededChoice,
 } from '~/types/brainstorm'
 import { useWorkspaceStore } from '~/stores/workspace'
-
-// A brainstorm option's status is the narrower set the route accepts (no `recommend_requested`).
-type BrainstormItemStatus = UpdateBrainstormItemStatusInput['status']
 
 /**
  * Brainstorm (structured-dialogue) state. On the pipeline path a brainstorm runs as an opt-in

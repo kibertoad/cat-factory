@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { UpdateClarityItemStatusInput } from '@cat-factory/contracts'
-import type { ClarityReview, ResolveClarityExceededChoice } from '~/types/clarity'
-
-// A clarity item's status is the narrower set the route accepts (no `recommend_requested`).
-type ClarityItemStatus = UpdateClarityItemStatusInput['status']
+import type {
+  ClarityItemStatus,
+  ClarityReview,
+  ResolveClarityExceededChoice,
+} from '~/types/clarity'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
