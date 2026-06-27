@@ -54,8 +54,10 @@ migrations_dir = "migrations-provisioning"
 binding = "AI"
 
 # R2 bucket for binary artifacts (UI screenshots + reference design images). The blob
-# bytes go here; the queryable metadata lives in the main DB. Tests use an in-memory
-# blob backend, so this is declared only so the binding shape matches production.
+# bytes go here; the queryable metadata lives in the main DB. The vitest workers pool
+# binds this against the miniflare R2 simulator, so the integration tests exercise the
+# real `R2BinaryBlobBackend` path (not a stub) — buildContainer wires it whenever the
+# ARTIFACT_BUCKET binding is present.
 [[r2_buckets]]
 binding = "ARTIFACT_BUCKET"
 bucket_name = "cat-factory-artifacts"

@@ -86,6 +86,16 @@ export class D1BinaryArtifactMetadataStore implements BinaryArtifactMetadataStor
     return (results ?? []).map(rowToRecord)
   }
 
+  async countByExecution(workspaceId: string, executionId: string): Promise<number> {
+    const row = await this.db
+      .prepare(
+        'SELECT COUNT(*) AS n FROM binary_artifacts WHERE workspace_id = ? AND execution_id = ?',
+      )
+      .bind(workspaceId, executionId)
+      .first<{ n: number }>()
+    return row?.n ?? 0
+  }
+
   async listByBlock(workspaceId: string, blockId: string): Promise<BinaryArtifactRecord[]> {
     const { results } = await this.db
       .prepare(

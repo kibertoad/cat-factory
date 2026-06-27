@@ -99,6 +99,31 @@ export function defineBinaryArtifactsSuite(
       expect(list.map((r) => r.view)).toEqual(['a', 'b'])
       // The other run's artifact is excluded.
       expect((await store.listByExecution(ws, e2)).map((r) => r.view)).toEqual(['c'])
+      // countByExecution (the per-run upload-cap precheck) agrees with the list and scopes by run.
+      expect(await store.countByExecution(ws, e1)).toBe(2)
+      expect(await store.countByExecution(ws, e2)).toBe(1)
+    })
+
+    it('getBlobWithMetadata returns the record + bytes in one read', async () => {
+      const store = makeStore()
+      const { ws, e1, blk } = ids()
+      const bytes = png(5)
+      const rec = await store.store({
+        meta: {
+          workspaceId: ws,
+          executionId: e1,
+          blockId: blk,
+          kind: 'screenshot',
+          view: 'v',
+          contentType: 'image/png',
+        },
+        blob: bytes,
+      })
+      const got = await store.getBlobWithMetadata(ws, rec.id)
+      expect(got?.record).toEqual(rec)
+      expect(got?.bytes).toEqual(bytes)
+      // Missing id ⇒ null (not a throw), so the serve path can 404 cleanly.
+      expect(await store.getBlobWithMetadata(ws, 'nope')).toBeNull()
     })
 
     it('round-trips a reference artifact (block-scoped, no execution) and lists by block', async () => {

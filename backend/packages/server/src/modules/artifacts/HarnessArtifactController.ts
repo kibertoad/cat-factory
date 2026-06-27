@@ -76,12 +76,13 @@ export function harnessArtifactController(): Hono<AppEnv> {
 
       // Per-run upload ceiling (fast-path): a runaway/compromised container can't fill the store
       // with unbounded screenshots scoped to its run. This pre-check rejects the steady-state case
-      // cheaply; concurrent ingests that race past it are caught by the post-insert reconcile below,
-      // so the effective ceiling holds even without a DB-level atomic counter.
-      const existing = await store.listByExecution(session.workspaceId, session.executionId)
-      if (existing.length >= MAX_SCREENSHOTS_PER_RUN) {
+      // cheaply via an indexed COUNT (no row materialise); concurrent ingests that race past it are
+      // caught by the post-insert reconcile below, so the effective ceiling holds even without a
+      // DB-level atomic counter.
+      const existingCount = await store.countByExecution(session.workspaceId, session.executionId)
+      if (existingCount >= MAX_SCREENSHOTS_PER_RUN) {
         logger.warn(
-          { scope: 'artifactIngest', executionId: session.executionId, count: existing.length },
+          { scope: 'artifactIngest', executionId: session.executionId, count: existingCount },
           'artifact ingest: per-run screenshot limit reached',
         )
         return c.json(
@@ -142,23 +143,29 @@ export function harnessArtifactController(): Hono<AppEnv> {
         blob: bytes,
       })
       // Reconcile the cap against concurrent inserts: the pre-check is check-then-act, so a burst
-      // of parallel ingests can each pass it before any row lands. listByExecution is oldest-first,
-      // so anything at index >= the cap is overflow; if THIS record is in that tail, roll it back
-      // (delete its row + bytes) and reject. The oldest `MAX_SCREENSHOTS_PER_RUN` always survive, so
-      // the store is bounded to exactly the cap per run without dropping legitimate earlier shots.
-      const after = await store.listByExecution(session.workspaceId, session.executionId)
-      if (after.length > MAX_SCREENSHOTS_PER_RUN) {
-        const overflow = new Set(after.slice(MAX_SCREENSHOTS_PER_RUN).map((r) => r.id))
-        if (overflow.has(record.id)) {
-          await store.delete(session.workspaceId, record.id)
-          logger.warn(
-            { scope: 'artifactIngest', executionId: session.executionId, count: after.length },
-            'artifact ingest: per-run screenshot limit reached (post-insert reconcile)',
-          )
-          return c.json(
-            { error: { code: 'too_many', message: 'Per-run screenshot limit reached' } },
-            429,
-          )
+      // of parallel ingests can each pass it before any row lands. We only need to run this
+      // (which materialises the run's rows to find the overflow tail) when the insert COULD have
+      // crossed the cap — i.e. the pre-check count was already at the edge. Steady-state uploads
+      // far below the cap skip it entirely, so the common path is one COUNT + one insert.
+      if (existingCount + 1 >= MAX_SCREENSHOTS_PER_RUN) {
+        // listByExecution is oldest-first, so anything at index >= the cap is overflow; if THIS
+        // record is in that tail, roll it back (delete its row + bytes) and reject. The oldest
+        // `MAX_SCREENSHOTS_PER_RUN` always survive, so the store is bounded to exactly the cap per
+        // run without dropping legitimate earlier shots.
+        const after = await store.listByExecution(session.workspaceId, session.executionId)
+        if (after.length > MAX_SCREENSHOTS_PER_RUN) {
+          const overflow = new Set(after.slice(MAX_SCREENSHOTS_PER_RUN).map((r) => r.id))
+          if (overflow.has(record.id)) {
+            await store.delete(session.workspaceId, record.id)
+            logger.warn(
+              { scope: 'artifactIngest', executionId: session.executionId, count: after.length },
+              'artifact ingest: per-run screenshot limit reached (post-insert reconcile)',
+            )
+            return c.json(
+              { error: { code: 'too_many', message: 'Per-run screenshot limit reached' } },
+              429,
+            )
+          }
         }
       }
       return c.json({ artifactId: record.id }, 201)

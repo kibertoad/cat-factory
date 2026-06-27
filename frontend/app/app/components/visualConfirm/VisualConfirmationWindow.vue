@@ -62,8 +62,24 @@ watch(
 const findings = ref('')
 const showFindings = ref(false)
 
+// When the gate flags its screenshots as an unreliable basis (`degradedReason` — no capture
+// happened, a fix failed, or a fix landed AFTER these shots were taken), approving is no longer
+// a safe one-click: require the human to explicitly acknowledge they reviewed the change another
+// way (or recaptured) first. Re-armed whenever the reason changes so a fresh warning re-gates.
+const ackDegraded = ref(false)
+watch(
+  () => vc.value?.degradedReason ?? null,
+  () => {
+    ackDegraded.value = false
+  },
+)
+const needsAck = computed(() => !!vc.value?.degradedReason)
+const canApprove = computed(
+  () => awaitingHuman.value && !busy.value && (!needsAck.value || ackDegraded.value),
+)
+
 async function approve() {
-  if (!blockId.value) return
+  if (!blockId.value || !canApprove.value) return
   await visualConfirm.approve(blockId.value)
   close()
 }
@@ -306,6 +322,13 @@ async function onFilePicked(e: Event) {
             :failure-at="instance?.failure?.occurredAt"
           />
           <div class="flex items-center gap-2">
+            <label
+              v-if="awaitingHuman && needsAck"
+              class="flex items-center gap-1.5 text-[11px] text-amber-300/90"
+            >
+              <input v-model="ackDegraded" type="checkbox" class="accent-amber-500" />
+              I've reviewed this manually
+            </label>
             <UButton
               size="sm"
               variant="soft"
@@ -321,7 +344,7 @@ async function onFilePicked(e: Event) {
               color="primary"
               icon="i-lucide-circle-check"
               :loading="busy"
-              :disabled="busy || !awaitingHuman"
+              :disabled="!canApprove"
               @click="approve"
             >
               Approve — continue

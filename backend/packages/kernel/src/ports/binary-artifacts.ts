@@ -67,7 +67,19 @@ export interface BinaryArtifactStore {
   store(input: StoreBinaryArtifactInput): Promise<BinaryArtifactRecord>
   getMetadata(workspaceId: string, id: string): Promise<BinaryArtifactRecord | null>
   getBlob(workspaceId: string, id: string): Promise<Uint8Array | null>
+  /**
+   * Read a blob's metadata AND bytes in one call (a single metadata lookup), for the
+   * serve path that needs both the content type (from metadata) and the bytes. Returns
+   * null when the metadata row is missing; `{ record, bytes: null }` when the row exists
+   * but its bytes are gone from the backend.
+   */
+  getBlobWithMetadata(
+    workspaceId: string,
+    id: string,
+  ): Promise<{ record: BinaryArtifactRecord; bytes: Uint8Array | null } | null>
   listByExecution(workspaceId: string, executionId: string): Promise<BinaryArtifactRecord[]>
+  /** How many artifacts a run has (the per-run upload cap precheck — indexed COUNT, no row materialise). */
+  countByExecution(workspaceId: string, executionId: string): Promise<number>
   /**
    * Artifacts attached to a board block (task), across runs — used by the
    * visual-confirmation gate to read the human-uploaded reference design images, which
@@ -88,6 +100,8 @@ export interface BinaryArtifactMetadataStore {
   insert(record: BinaryArtifactRecord): Promise<void>
   get(workspaceId: string, id: string): Promise<BinaryArtifactRecord | null>
   listByExecution(workspaceId: string, executionId: string): Promise<BinaryArtifactRecord[]>
+  /** Count a run's artifacts without materialising rows (the per-run upload cap precheck). */
+  countByExecution(workspaceId: string, executionId: string): Promise<number>
   listByBlock(workspaceId: string, blockId: string): Promise<BinaryArtifactRecord[]>
   delete(workspaceId: string, id: string): Promise<void>
   /** Records in the workspace created before `olderThan` (epoch ms) — for the retention sweep. */
@@ -185,8 +199,16 @@ export function createBinaryArtifactStore(deps: {
       if (!record) return null
       return blob.get(record.storageKey)
     },
+    async getBlobWithMetadata(workspaceId, id) {
+      const record = await metadata.get(workspaceId, id)
+      if (!record) return null
+      return { record, bytes: await blob.get(record.storageKey) }
+    },
     listByExecution(workspaceId, executionId) {
       return metadata.listByExecution(workspaceId, executionId)
+    },
+    countByExecution(workspaceId, executionId) {
+      return metadata.countByExecution(workspaceId, executionId)
     },
     listByBlock(workspaceId, blockId) {
       return metadata.listByBlock(workspaceId, blockId)

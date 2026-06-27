@@ -317,14 +317,26 @@ export class VisualConfirmationController {
     block: Block,
   ): Promise<VisualConfirmPair[]> {
     const byView = new Map<string, VisualConfirmPair>()
+    // The artifact ids the run ACTUALLY uploaded — so a screenshot id the agent reported but
+    // that was never stored (a fabricated/typo'd id), or one since removed by the retention
+    // sweep, is treated as "not captured" rather than rendered as a dangling/404 gallery image.
+    const validActualIds = this.deps.binaryArtifactStore
+      ? new Set(
+          (await this.deps.binaryArtifactStore.listByExecution(workspaceId, instance.id))
+            .filter((r) => r.kind === 'screenshot')
+            .map((r) => r.id),
+        )
+      : null
     // Actual: the most recent `tester-ui` step's captured screenshots.
     const uiStep = [...instance.steps]
       .reverse()
       .find((s) => s.agentKind === UI_TESTER_AGENT_KIND && s.test?.lastReport)
     for (const shot of uiStep?.test?.lastReport?.screenshots ?? []) {
+      const actualArtifactId =
+        validActualIds === null || validActualIds.has(shot.artifactId) ? shot.artifactId : null
       byView.set(shot.view, {
         view: shot.view,
-        actualArtifactId: shot.artifactId,
+        actualArtifactId,
         referenceArtifactId: shot.referenceArtifactId ?? null,
       })
     }

@@ -28,6 +28,17 @@ Add the Visual Confirmation gate and split the tester into an API + UI tester.
 - Cross-runtime conformance covers the gate's no-store pass-through and the artifact store's
   `listByBlock`.
 
+BREAKING: the `tester` agent kind is renamed to `tester-api`. Per this repo's pre-1.0 policy
+(no backwards-compatibility shims), any persisted state that still names `tester` simply stops
+matching: a saved/custom pipeline referencing `tester` is detected as outdated and reseeded from
+the catalog, and an execution that is parked mid-`tester` at upgrade time will no longer be
+recognised by the tester gate (re-run the task). New runs are unaffected — the seeded pipelines
+all use `tester-api`.
+
 NOTE: the dedicated UI-tester container image (Playwright/Chromium) and the per-kind image
 routing into it (a second Cloudflare container class; image-per-step on the local/pool
-transports) are a deploy-time follow-up — the `image:'ui'` dispatch seam is in place.
+transports) are a deploy-time follow-up — the `image:'ui'` dispatch seam is in place. Until that
+routing AND the harness env-passthrough (`ARTIFACT_UPLOAD_URL`/`ARTIFACT_UPLOAD_TOKEN` + a
+Playwright driver) land, `tester-ui` has no browser and the `pl_visual` gate runs in MANUAL mode
+(a human uploads references + screenshots and reviews them), which is why `pl_visual` is flagged
+`experimental`.

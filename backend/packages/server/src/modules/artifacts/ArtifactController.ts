@@ -117,17 +117,19 @@ export function artifactController(): Hono<AppEnv> {
     if (!store) return unavailable(c)
     const workspaceId = param(c, 'workspaceId')
     const id = param(c, 'id')
-    const meta = await store.getMetadata(workspaceId, id)
-    if (!meta) return c.json({ error: { code: 'not_found', message: 'Artifact not found' } }, 404)
-    const bytes = await store.getBlob(workspaceId, id)
-    if (!bytes) return c.json({ error: { code: 'not_found', message: 'Artifact bytes gone' } }, 404)
+    // Read metadata + bytes in a SINGLE metadata lookup (the serve path needs both the
+    // content type and the bytes).
+    const got = await store.getBlobWithMetadata(workspaceId, id)
+    if (!got) return c.json({ error: { code: 'not_found', message: 'Artifact not found' } }, 404)
+    if (!got.bytes)
+      return c.json({ error: { code: 'not_found', message: 'Artifact bytes gone' } }, 404)
     // Uint8Array is a valid BodyInit on both runtimes (workerd + Node/undici); the cast
     // satisfies the narrower ambient BodyInit type this package compiles against. Headers
     // clamp the type to the image allow-list + send `nosniff` so the bytes can never be
     // sniffed/served as active content (defence-in-depth with the upload-time allow-list).
-    return new Response(bytes as unknown as BodyInit, {
+    return new Response(got.bytes as unknown as BodyInit, {
       status: 200,
-      headers: blobResponseHeaders(meta.contentType),
+      headers: blobResponseHeaders(got.record.contentType),
     })
   })
 

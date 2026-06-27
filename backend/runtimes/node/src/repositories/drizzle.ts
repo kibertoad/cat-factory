@@ -132,7 +132,7 @@ import {
   rowToSandboxRun,
   rowToWorkspace,
 } from '@cat-factory/server'
-import { and, asc, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import {
   accountInvitations,
@@ -1367,6 +1367,19 @@ class DrizzleBinaryArtifactMetadataStore implements BinaryArtifactMetadataStore 
       )
       .orderBy(asc(binaryArtifacts.created_at), asc(binaryArtifacts.id))
     return rows.map(rowToBinaryArtifact)
+  }
+
+  async countByExecution(workspaceId: string, executionId: string): Promise<number> {
+    const rows = await this.db
+      .select({ n: count() })
+      .from(binaryArtifacts)
+      .where(
+        and(
+          eq(binaryArtifacts.workspace_id, workspaceId),
+          eq(binaryArtifacts.execution_id, executionId),
+        ),
+      )
+    return rows[0]?.n ?? 0
   }
 
   async listByBlock(workspaceId: string, blockId: string): Promise<BinaryArtifactRecord[]> {
