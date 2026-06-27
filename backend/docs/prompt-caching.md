@@ -39,6 +39,19 @@ DeepSeek / OpenAI), which flips that model's effective flavour `cloudflare → d
 We deliberately **do not auto-flip the shipped model defaults** — that's a model-quality
 decision that needs benchmark evidence (below), not a blind change.
 
+### Reading the hit rate
+
+`cacheHitRate = cachedPromptTokens / promptTokens`, clamped to `[0, 1]`. The clamp is not
+cosmetic: for **`auto-prefix`** providers (OpenAI/DeepSeek/Qwen) the cached count is a
+true subset of the prompt tokens, so the ratio is already in range; for **Anthropic**
+(`explicit-anthropic`) the API reports `cache_read_input_tokens` SEPARATELY from
+`input_tokens` (the cached prefix is not counted in the prompt total), so an un-clamped
+ratio could exceed 1 — the clamp renders a fully-served prefix as `100%` rather than a
+nonsensical `>100%`. `cachedTokensFromUsage` attributes Anthropic's field (raw
+`cache_read_input_tokens` and the AI SDK's `cacheReadInputTokens`) alongside the
+OpenAI/DeepSeek field names, so the inline Anthropic path — which opts in via
+`inlineCacheProviderOptions` — is actually measured, not silently reported as `0`.
+
 ## Open questions — providers currently `none` that may cache
 
 `cachedTokensFromUsage` already attributes cached tokens for **any** provider that
@@ -64,3 +77,10 @@ provider "caches" iff its cell reports a non-zero cache-hit rate. When a provide
 confirmed, add it to `providerCachePolicy` (`auto-prefix`, plus a routing key in
 `promptCacheParams` if it needs one) and extend `provider-cache.spec.ts`. Until then the
 honest default — and the honest UI badge — is `No prompt caching`.
+
+The **Cache hit** column is only populated by the AI-SDK-backed runners that report
+token usage (`requirementReview`, `codeReview` — anything whose `usage` carries
+`cachedInputTokens`). The **`implementation`** runner drives the real **Pi** harness,
+which doesn't surface per-call SDK usage, so its cells render `—` (no data) rather than
+`0%` (cache-less). Read a Pi `—` as "not measured here", not "caching broken" — the Pi
+caching path is exercised in production, not in this report.

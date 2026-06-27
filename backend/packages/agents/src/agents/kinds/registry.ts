@@ -69,8 +69,10 @@ export interface AgentKindDefinition {
   /**
    * Per-kind execution tuning folded into a container dispatch's job body (today the
    * progress-guard knobs). Lets a custom kind whose normal pattern differs from the
-   * default loosen a guard so it isn't killed mid-progress; the harness clamps every
-   * value. Omitted ⇒ the kind inherits the harness defaults. See ./tuning.
+   * default loosen a guard so it isn't killed mid-progress. The knobs are loosen-only:
+   * the harness clamps each override up to its base, so a custom kind can only raise a
+   * limit, never tighten one. Omitted ⇒ the kind inherits the harness defaults. See
+   * ./tuning.
    */
   tuning?: AgentTuning
   /**

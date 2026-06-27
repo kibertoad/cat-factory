@@ -43,17 +43,28 @@ export function inlineCacheProviderOptions(provider: string): Record<string, unk
   return {}
 }
 
-/** The cached-input-token count a provider reports in its usage, across the field names they use. */
+/**
+ * The cached-input-token count a provider reports in its usage, across the field names
+ * they use. Covers OpenAI (`prompt_tokens_details.cached_tokens`), DeepSeek
+ * (`prompt_cache_hit_tokens`) and Anthropic (`cache_read_input_tokens`, or the AI SDK's
+ * camelCase `cacheReadInputTokens`). NOTE on the Anthropic shape: its cache reads are
+ * reported SEPARATELY from `input_tokens` (they are NOT a subset of it), so a hit-rate
+ * computed as cached/prompt can exceed 1 — callers clamp it (see `cacheHitRate`).
+ */
 export function cachedTokensFromUsage(usage: unknown): number {
   if (typeof usage !== 'object' || usage === null) return 0
   const u = usage as Record<string, unknown>
-  // OpenAI: prompt_tokens_details.cached_tokens. DeepSeek: prompt_cache_hit_tokens.
+  // OpenAI: prompt_tokens_details.cached_tokens.
   const details = u.prompt_tokens_details
   if (typeof details === 'object' && details !== null) {
     const cached = (details as Record<string, unknown>).cached_tokens
     if (typeof cached === 'number' && cached >= 0) return cached
   }
+  // DeepSeek: prompt_cache_hit_tokens.
   const hit = u.prompt_cache_hit_tokens
   if (typeof hit === 'number' && hit >= 0) return hit
+  // Anthropic: cache_read_input_tokens (raw API) / cacheReadInputTokens (AI SDK).
+  const anthropicRead = u.cache_read_input_tokens ?? u.cacheReadInputTokens
+  if (typeof anthropicRead === 'number' && anthropicRead >= 0) return anthropicRead
   return 0
 }

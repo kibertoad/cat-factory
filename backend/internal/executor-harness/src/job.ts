@@ -68,10 +68,13 @@ function posInt(value: unknown): number | undefined {
 }
 
 /**
- * Parse the optional per-job progress-guard overrides. Each knob is independently
- * clamped to a positive int; a malformed value is dropped (the run keeps the env /
- * default for that knob). Returns undefined when nothing usable was supplied so the
- * job body stays sparse.
+ * Parse the optional per-job progress-guard overrides. Each knob must be a positive
+ * int; a malformed value is dropped (the run keeps the env / default for that knob).
+ * This only validates the SHAPE — it does NOT enforce loosen-only. The loosen-only
+ * guarantee (an override can only raise a knob, never tighten it below the base) is
+ * applied later, where the override meets the base, by {@link mergeGuardLimits}. So a
+ * tighter-than-default value parses fine here and is clamped back up to the base there.
+ * Returns undefined when nothing usable was supplied so the job body stays sparse.
  */
 function parseGuardLimits(value: unknown): GuardLimitsSpec | undefined {
   if (typeof value !== 'object' || value === null) return undefined
@@ -364,9 +367,10 @@ export interface AgentJob extends HarnessAuthFields {
    * Per-job overrides for the anti-rabbithole progress guard, set by the backend per
    * AGENT KIND (a read-heavy kind tolerates more web/exploration before it counts as a
    * stall). Each knob is optional and falls back to the env / built-in default
-   * ({@link progressGuardLimitsFromEnv}); only the knobs present here override. The
-   * backend only ever LOOSENS these (never tightens), so a legitimately-progressing run
-   * isn't killed for a kind's normal working pattern. Absent ⇒ env/default for all knobs.
+   * ({@link progressGuardLimitsFromEnv}); only the knobs present here override. These are
+   * loosen-only: `mergeGuardLimits` clamps each override up to the base, so a value
+   * tighter than the default is ignored and a legitimately-progressing run is never
+   * killed for a kind's normal working pattern. Absent ⇒ env/default for all knobs.
    */
   guardLimits?: GuardLimitsSpec
 }

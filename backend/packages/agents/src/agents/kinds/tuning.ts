@@ -3,11 +3,12 @@ import { registeredAgentTuning } from './registry.js'
 // Per-agent-kind execution tuning the backend folds into a container dispatch's job
 // body, so a kind whose normal working pattern differs from the default isn't killed
 // by the harness's one-size anti-rabbithole guard. Today this carries only the
-// progress-guard knobs, and the backend only ever LOOSENS them (a read-heavy kind
-// tolerates more web/exploration before it counts as a stall) — never tightens — so a
-// legitimately-progressing run is never aborted for a kind's normal behaviour. The
-// harness re-clamps every value, so a bad number degrades to the default rather than
-// disabling a guard.
+// progress-guard knobs, which are LOOSEN-ONLY: a read-heavy kind tolerates more
+// web/exploration before it counts as a stall. The loosen-only contract is enforced in
+// the harness (`mergeGuardLimits` clamps each override up to the base), so even a custom
+// kind that supplies a value TIGHTER than the default can't tighten a guard and abort a
+// legitimately-progressing run — the worst a bad entry does is no-op. The built-in
+// entries below all raise a limit.
 //
 // Resolution mirrors the web-research-hint seam: a registered (custom) kind's own
 // `tuning` wins, then these built-in defaults, then nothing (the harness keeps its
