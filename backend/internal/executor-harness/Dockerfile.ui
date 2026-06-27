@@ -1,0 +1,37 @@
+# syntax=docker/dockerfile:1
+#
+# UI-tester image — the executor-harness image for the `tester-ui` agent kind ONLY.
+#
+# It layers Playwright + a Chromium browser on top of the slim base executor image, so the
+# (hundreds of MB) browser is isolated to the one kind that needs it and never bloats the
+# cold-start / pull of every other agent (coder, merger, ci-fixer, …). A transport routes a
+# job to this image when the dispatch option `image: 'ui'` is set (see RunnerDispatchOptions);
+# the base `Dockerfile` is unchanged.
+#
+# SECURITY: like the base image, this carries NO secrets — per-job GitHub / proxy / artifact
+# tokens are passed in the dispatch body at runtime. The `tester-ui` agent drives Playwright
+# against the running app, captures one screenshot per distinct view, and uploads each to the
+# binary-artifact store via the run's ARTIFACT_UPLOAD_URL / ARTIFACT_UPLOAD_TOKEN.
+#
+# Build (the version tag must match the base image you publish):
+#   docker build -f Dockerfile.ui --build-arg BASE_TAG=<version> -t cat-factory-executor-ui:<version> .
+#
+# DEPLOY NOTE: routing a job to this image is still wired per-runtime — on Cloudflare a second
+# `[[containers]]` class pinned to this image (the per-run container model means the UI-tester
+# step runs its own container); on a self-hosted pool / local Docker, the transport selects this
+# image tag for `image: 'ui'`. That wiring is the remaining deploy-time step.
+
+ARG BASE_TAG=latest
+FROM ghcr.io/kibertoad/cat-factory-executor:${BASE_TAG}
+
+USER root
+
+# Playwright + Chromium and the OS libraries it needs. Pinned so the image is reproducible;
+# bump alongside the harness version when upgrading. `--with-deps` installs the apt packages
+# Chromium requires on Debian trixie.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
+RUN npm install -g playwright@1.61.1 \
+  && PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npx --yes playwright@1.61.1 install --with-deps chromium \
+  && chown -R harness:harness /opt/pw-browsers
+
+USER harness

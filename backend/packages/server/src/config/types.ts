@@ -242,6 +242,31 @@ export interface LangfuseConfig {
   baseUrl?: string
 }
 
+export interface BinaryStorageConfig {
+  /**
+   * Whether a binary-artifact store is assembled. When false (the default) the
+   * visual-confirmation gate has nowhere to put screenshots and is a pass-through.
+   * The Worker enables it whenever the `ARTIFACT_BUCKET` R2 binding is present; a Node
+   * service enables it via `BINARY_STORAGE_BACKEND`.
+   */
+  enabled: boolean
+  /**
+   * Where the blob BYTES live (the metadata always lives in the runtime DB):
+   *  - `r2`  — Cloudflare R2 (the Worker's only blob store; the default there).
+   *  - `s3`  — AWS S3 / S3-compatible, via @cat-factory/provider-s3.
+   *  - `db`  — Postgres `bytea` (Node/local only; not valid on Cloudflare).
+   */
+  backend: 'db' | 'r2' | 's3'
+  /** S3 settings, required when `backend === 's3'`. */
+  s3?: {
+    region: string
+    bucket: string
+    prefix?: string
+    endpoint?: string
+    forcePathStyle?: boolean
+  }
+}
+
 export interface AppConfig {
   agents: AgentsConfig
   /** The effective model picker catalog (each model's active flavour). */
@@ -265,6 +290,8 @@ export interface AppConfig {
   slack: SlackConfig
   /** Observability post-release-health config; `enabled` is false unless opted in. */
   releaseHealth: ReleaseHealthConfig
+  /** Binary-artifact storage (screenshots) config; `enabled` is false unless configured. */
+  binaryStorage: BinaryStorageConfig
   /** Transactional email config (invitations); `enabled` is false unless opted in. */
   email: EmailConfig
   /** Retention windows for the unbounded ledgers/projections (epoch-ms ages). */

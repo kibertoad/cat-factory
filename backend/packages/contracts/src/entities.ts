@@ -933,6 +933,70 @@ export const humanTestStepStateSchema = v.object({
 export type HumanTestStepState = v.InferOutput<typeof humanTestStepStateSchema>
 
 /**
+ * One actual-vs-reference pairing the visual-confirmation gate shows the human: a logical
+ * view, the screenshot the UI tester captured of it (`actualArtifactId`), and the reference
+ * design image for the same view when one was uploaded (`referenceArtifactId`). Either side
+ * may be absent (a captured view with no reference, or a reference whose view wasn't captured).
+ */
+export const visualConfirmPairSchema = v.object({
+  view: v.string(),
+  actualArtifactId: v.optional(v.nullable(v.string())),
+  referenceArtifactId: v.optional(v.nullable(v.string())),
+})
+export type VisualConfirmPair = v.InferOutput<typeof visualConfirmPairSchema>
+
+/** One human-requested fix round on a visual-confirmation gate (dispatches the `fixer`). */
+export const visualConfirmRoundSchema = v.object({
+  findings: v.string(),
+  helperKind: v.string(),
+  jobId: v.optional(v.nullable(v.string())),
+  outcome: v.optional(v.nullable(v.picklist(['completed', 'failed']))),
+  at: v.number(),
+})
+export type VisualConfirmRound = v.InferOutput<typeof visualConfirmRoundSchema>
+
+/**
+ * State a `visual-confirmation` gate carries while it runs. Like `human-test` there is no
+ * programmatic verdict — a HUMAN reviews the UI tester's screenshots against the uploaded
+ * reference designs and approves, or requests a fix (which dispatches the `fixer` and then
+ * re-captures via the UI tester). Phases:
+ *   - `awaiting_human`— parked: the human reviews actual-vs-reference and approves / requests a fix.
+ *   - `fixing`        — a `fixer` job (from the human's findings) is in flight.
+ *   - `approved`      — the human approved; the run advances.
+ *
+ * (A dedicated `capturing` phase for an auto re-run of the UI tester after a fix is deferred
+ * until that loop is wired — see the visual-confirmation handover doc — so it is intentionally
+ * absent from the picklist rather than carried as dead state.)
+ */
+export const visualConfirmStepStateSchema = v.object({
+  phase: v.picklist(['awaiting_human', 'fixing', 'approved']),
+  /** The actual-vs-reference pairs the human reviews, refreshed on each (re)capture. */
+  pairs: v.optional(v.array(visualConfirmPairSchema)),
+  /** Set when no screenshots could be gathered (no UI tester ran / no storage) — manual mode. */
+  degradedReason: v.optional(v.nullable(v.string())),
+  /** How many fixer attempts have been dispatched so far. */
+  attempts: v.number(),
+  /** Ceiling on fixer attempts, resolved from the task's merge preset (`ciMaxAttempts`). */
+  maxAttempts: v.number(),
+  /** Append-only history of fix rounds; see {@link visualConfirmRoundSchema}. */
+  rounds: v.optional(v.array(visualConfirmRoundSchema)),
+  /**
+   * Transient action the human requested while parked — consumed by the durable driver
+   * when it re-enters the gate. Cleared once acted on.
+   */
+  pendingAction: v.optional(
+    v.nullable(
+      v.object({
+        type: v.picklist(['approve', 'request-fix', 'recapture']),
+        /** The findings prompt for a `request-fix` action. */
+        findings: v.optional(v.string()),
+      }),
+    ),
+  ),
+})
+export type VisualConfirmStepState = v.InferOutput<typeof visualConfirmStepStateSchema>
+
+/**
  * Per-step LLM observability rollup: a compact aggregate over every model call the
  * step's container made, recorded by the LLM proxy and summed by the engine for the
  * board. It surfaces, at a glance, token usage, how close the step ran to its
@@ -992,6 +1056,11 @@ export const pipelineStepSchema = v.object({
    * {@link humanTestStepStateSchema}. Absent for every other step kind.
    */
   humanTest: v.optional(v.nullable(humanTestStepStateSchema)),
+  /**
+   * Live state of a `visual-confirmation` gate (screenshot review + fix loop); see
+   * {@link visualConfirmStepStateSchema}. Absent for every other step kind.
+   */
+  visualConfirm: v.optional(v.nullable(visualConfirmStepStateSchema)),
   /**
    * The ephemeral environment this step runs against (when the block has one), so a
    * run's details can show its spinning-up / running / shut-down / errored state +

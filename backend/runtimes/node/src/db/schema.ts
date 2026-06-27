@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import {
   bigint,
+  customType,
   doublePrecision,
   index,
   integer,
@@ -11,6 +12,20 @@ import {
   text,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
+
+// Raw binary column (Postgres `bytea`), used by the Node-only `binary_artifact_blobs`
+// store-in-DB blob backend. Reads/writes as a `Uint8Array`.
+const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
+  dataType() {
+    return 'bytea'
+  },
+  toDriver(value: Uint8Array): Buffer {
+    return Buffer.from(value)
+  },
+  fromDriver(value: Buffer): Uint8Array {
+    return new Uint8Array(value)
+  },
+})
 
 // Telemetry has a very different write profile from the transactional domain
 // (append-heavy, high-volume, write-and-rarely-read, short retention), so it lives in
@@ -952,6 +967,9 @@ export const workspaceSettings = pgTable('workspace_settings', {
   // Whether to store the full provided-context snapshot for each container agent
   // (the observability feature). On by default; integer 0/1 to match the SQLite store.
   store_agent_context: integer('store_agent_context').notNull().default(1),
+  // Retention window (days) for binary artifacts (UI screenshots + reference designs)
+  // before the cleanup sweep deletes them. Default 14; mirrors the D1 column.
+  artifact_retention_days: integer('artifact_retention_days').notNull().default(14),
   // Per-workspace toggle for the Kaizen agent (post-run grading). On by default; integer
   // 0/1 to match the SQLite store.
   kaizen_enabled: integer('kaizen_enabled').notNull().default(1),
@@ -1623,3 +1641,41 @@ export const githubSyncCursors = pgTable(
   },
   (t) => [primaryKey({ columns: [t.installation_id, t.repo_github_id, t.kind] })],
 )
+
+// Binary-artifact METADATA (mirror of D1 migration 0017). The bytes live in a blob
+// backend keyed by `storage_key` (R2 / S3 / the `binary_artifact_blobs` table below);
+// this table holds only the queryable metadata, identical column-for-column to D1.
+export const binaryArtifacts = pgTable(
+  'binary_artifacts',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    execution_id: text('execution_id'),
+    block_id: text('block_id'),
+    kind: text('kind').notNull(),
+    view: text('view'),
+    content_type: text('content_type').notNull(),
+    byte_size: integer('byte_size').notNull(),
+    hash: text('hash').notNull(),
+    storage: text('storage').notNull(),
+    storage_key: text('storage_key').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    index('idx_binary_artifacts_execution').on(t.workspace_id, t.execution_id),
+    index('idx_binary_artifacts_block').on(t.workspace_id, t.block_id),
+    // The per-workspace retention sweep filters on `created_at`; index it so the prune is an
+    // indexed range delete (mirrors the D1 idx_binary_artifacts_created index).
+    index('idx_binary_artifacts_created').on(t.workspace_id, t.created_at),
+  ],
+)
+
+// Node-ONLY blob backend: when `BINARY_STORAGE_BACKEND=db`, the bytes live in this
+// Postgres `bytea` table (keyed by the artifact's `storage_key`). There is no D1
+// equivalent — on Cloudflare blobs always go to R2 (D1 can't hold large values), so
+// this store-in-DB backend genuinely cannot exist on the Worker runtime.
+export const binaryArtifactBlobs = pgTable('binary_artifact_blobs', {
+  storage_key: text('storage_key').primaryKey(),
+  bytes: bytea('bytes').notNull(),
+})

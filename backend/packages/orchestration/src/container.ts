@@ -73,6 +73,7 @@ import type {
   PipelineScheduleRepository,
   PullRequestMerger,
   BranchUpdater,
+  BinaryArtifactStore,
   ObservabilityConnectionRepository,
   IncidentEnrichmentConnectionRepository,
   ReleaseHealthConfigRepository,
@@ -523,6 +524,11 @@ export interface CoreDependencies {
   // remain on the engine (the `merger` resolver stays a privileged built-in).
   /** Merges the repo default branch into a block's PR branch (human-test "pull main"). */
   branchUpdater?: BranchUpdater
+  /**
+   * The binary-artifact store (UI screenshots + reference designs) the visual-confirmation
+   * gate reads. Absent → the gate passes through (auto-advances).
+   */
+  binaryArtifactStore?: BinaryArtifactStore
   /** Performs the real GitHub merge so a task's `done` means "PR merged". */
   pullRequestMerger?: PullRequestMerger
   /** Stores a workspace's observability connection (provider + sealed credentials). */

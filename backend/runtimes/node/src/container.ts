@@ -57,6 +57,7 @@ import {
   type TaskSourceProvider,
   CompositeNotificationChannel,
   SUBSCRIPTION_VENDORS,
+  createBinaryArtifactStore,
   isAmbientNativeVendor,
 } from '@cat-factory/kernel'
 import {
@@ -145,6 +146,8 @@ import { DrizzleLocalModelEndpointRepository } from './repositories/localModelEn
 import { DrizzleUserSecretRepository } from './repositories/userSecret.js'
 import { DrizzleProviderModelCatalogRepository } from './repositories/providerModelCatalog.js'
 import { createDrizzleRepositories, createDrizzleSandboxDeps } from './repositories/drizzle.js'
+import { PostgresBinaryBlobBackend } from './storage/PostgresBinaryBlobBackend.js'
+import { S3BinaryBlobBackend } from '@cat-factory/provider-s3'
 import {
   DrizzleBootstrapJobRepository,
   DrizzleReferenceArchitectureRepository,
@@ -918,6 +921,22 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const idGenerator = new CryptoIdGenerator()
   const repos = options.repos ?? createDrizzleRepositories(options.db, clock)
 
+  // Binary-artifact store (UI screenshots + reference design images) for the
+  // visual-confirmation gate. The metadata lives in Postgres; the bytes go to the
+  // configured blob backend (`db` → a Postgres `bytea` table; `s3` → an S3 bucket).
+  // Present only when `BINARY_STORAGE_BACKEND` is set (config.binaryStorage.enabled).
+  const binaryArtifactStore = config.binaryStorage.enabled
+    ? createBinaryArtifactStore({
+        metadata: repos.binaryArtifactMetadataStore,
+        blob:
+          config.binaryStorage.backend === 's3' && config.binaryStorage.s3
+            ? new S3BinaryBlobBackend(config.binaryStorage.s3)
+            : new PostgresBinaryBlobBackend(options.db),
+        idGenerator,
+        clock,
+      })
+    : undefined
+
   // The built-in gates' providers are deployment-global module handles (in `@cat-factory/gates`),
   // not per-container DI. Reset them up-front so each build re-wires from a clean slate and only
   // the gates this deployment actually configures stay wired: the GitHub + release-health wiring
@@ -1438,6 +1457,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     ...releaseHealthDeps,
     ...incidentEnrichmentDeps,
     ...(accountSettings ? { accountSettings } : {}),
+    // The binary-artifact store (screenshots) for the visual-confirmation gate; present
+    // only when BINARY_STORAGE_BACKEND is configured (else the gate passes through).
+    ...(binaryArtifactStore ? { binaryArtifactStore } : {}),
     workspaceRepository: repos.workspaceRepository,
     accountRepository: repos.accountRepository,
     membershipRepository: repos.membershipRepository,
@@ -1647,6 +1669,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     agentRunRepository: repos.agentRunRepository,
     // The consensus transcript store, for the read endpoint (window load / reload).
     consensusSessionRepository: repos.consensusSessionRepository,
+    // The binary-artifact store (screenshots) for the visual-confirmation gate; present
+    // only when BINARY_STORAGE_BACKEND is configured.
+    binaryArtifactStore,
     gateways: createNodeGateways(env),
     // The vendor-credential (subscription token pool) service the shared controller
     // reads; present when the shared ENCRYPTION_KEY is configured.

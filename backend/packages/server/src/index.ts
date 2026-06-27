@@ -166,6 +166,7 @@ export type {
   AgentsConfig,
   AppConfig,
   AuthConfig,
+  BinaryStorageConfig,
   ReleaseHealthConfig,
   DocumentsConfig,
   EmailConfig,

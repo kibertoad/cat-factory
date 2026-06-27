@@ -16,6 +16,7 @@ import ClarityReviewWindow from '~/components/clarity/ClarityReviewWindow.vue'
 import BrainstormWindow from '~/components/brainstorm/BrainstormWindow.vue'
 import TestReportWindow from '~/components/testing/TestReportWindow.vue'
 import HumanTestWindow from '~/components/humanTest/HumanTestWindow.vue'
+import VisualConfirmationWindow from '~/components/visualConfirm/VisualConfirmationWindow.vue'
 import GateResultView from '~/components/gates/GateResultView.vue'
 import ConsensusSessionWindow from '~/components/consensus/ConsensusSessionWindow.vue'
 import GenericStructuredResultView from '~/components/panels/GenericStructuredResultView.vue'
@@ -32,6 +33,8 @@ const STEP_RESULT_VIEWS: Record<string, Component> = {
   tester: TestReportWindow,
   // The human-testing gate: env URL + confirm / request-fix / pull-main / recreate / destroy.
   'human-test': HumanTestWindow,
+  // The visual-confirmation gate: actual-vs-reference screenshot gallery + approve / request-fix.
+  'visual-confirm': VisualConfirmationWindow,
   // Shared by both polling gates (`ci` + `conflicts`); the window branches on agentKind.
   gate: GateResultView,
   // Opened for any step that ran the consensus mechanism (routed in `ui.dispatchStepView`).

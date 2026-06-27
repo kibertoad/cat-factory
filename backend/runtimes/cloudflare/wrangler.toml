@@ -53,6 +53,13 @@ migrations_dir = "migrations-provisioning"
 [ai]
 binding = "AI"
 
+# R2 bucket for binary artifacts (UI screenshots + reference design images). The blob
+# bytes go here; the queryable metadata lives in the main DB. Tests use an in-memory
+# blob backend, so this is declared only so the binding shape matches production.
+[[r2_buckets]]
+binding = "ARTIFACT_BUCKET"
+bucket_name = "cat-factory-artifacts"
+
 # Durable execution engine — one Workflows instance per run.
 [[workflows]]
 binding = "EXECUTION_WORKFLOW"
