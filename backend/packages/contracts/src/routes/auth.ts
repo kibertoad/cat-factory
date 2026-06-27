@@ -1,7 +1,7 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { passwordLoginSchema, signupSchema } from '../auth.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Authentication route contracts. Mounted under `/auth`, so the paths here are
@@ -69,7 +69,7 @@ const invitationPeekSchema = v.union([
 
 const acceptInvitationResultSchema = v.object({ accountId: v.string() })
 
-const inviteTokenParams = withObjectKeys(v.object({ token: v.string() }))
+const inviteTokenParams = singleStringParam('token')
 
 export const authConfigContract = defineApiContract({
   method: 'get',

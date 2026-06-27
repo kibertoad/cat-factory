@@ -15,7 +15,7 @@ import {
 } from '../accounts.js'
 import { accountSettingsViewSchema, updateAccountSettingsSchema } from '../accountSettings.js'
 import { addApiKeySchema, apiKeyListResultSchema, apiKeySchema } from '../api-keys.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Account tenancy route contracts. See AccountController in @cat-factory/server.
@@ -36,7 +36,7 @@ const emailConnectionViewSchema = v.object({
 })
 const okSchema = v.object({ ok: v.boolean() })
 
-const accountIdParams = withObjectKeys(v.object({ accountId: v.string() }))
+const accountIdParams = singleStringParam('accountId')
 
 // ---- accounts (tenancy) ---------------------------------------------------
 

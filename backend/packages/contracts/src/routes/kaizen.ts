@@ -1,7 +1,6 @@
-import { defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
-import * as v from 'valibot'
+import { defineApiContract } from '@toad-contracts/valibot'
 import { kaizenOverviewSchema, kaizenRunGradingsSchema } from '../kaizen.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Kaizen route contracts (read-only). Mounted under `/workspaces/:workspaceId`,
@@ -9,7 +8,7 @@ import { errorResponses } from './_shared.js'
 // @cat-factory/server.
 // ---------------------------------------------------------------------------
 
-const executionIdParams = withObjectKeys(v.object({ executionId: v.string() }))
+const executionIdParams = singleStringParam('executionId')
 
 export const getKaizenOverviewContract = defineApiContract({
   method: 'get',

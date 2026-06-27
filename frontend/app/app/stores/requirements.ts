@@ -97,6 +97,17 @@ export const useRequirementsStore = defineStore('requirements', () => {
     reviews.value = { ...reviews.value, [review.blockId]: review }
   }
 
+  /** Drop all cached reviews + in-flight state (called on workspace switch). */
+  function reset() {
+    available.value = null
+    reviews.value = {}
+    reviewing.value = new Set()
+    incorporating.value = new Set()
+    recommending.value = new Set()
+    loadingByBlock.value = new Set()
+    inFlight.clear()
+  }
+
   function withFlag(set: typeof reviewing, key: string, on: boolean) {
     const next = new Set(set.value)
     if (on) next.add(key)
@@ -265,6 +276,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
     acceptRecommendation,
     rejectRecommendation,
     reRequestRecommendation,
+    reset,
     // Patch the cache from a live `requirements` stream event.
     upsert: store,
   }

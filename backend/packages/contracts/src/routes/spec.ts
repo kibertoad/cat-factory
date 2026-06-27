@@ -1,7 +1,6 @@
-import { defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
-import * as v from 'valibot'
+import { defineApiContract } from '@toad-contracts/valibot'
 import { serviceSpecViewSchema } from '../spec.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Service-spec read route contract. See ServiceSpecController in
@@ -12,7 +11,7 @@ import { errorResponses } from './_shared.js'
 
 export const getServiceSpecContract = defineApiContract({
   method: 'get',
-  requestPathParamsSchema: withObjectKeys(v.object({ blockId: v.string() })),
+  requestPathParamsSchema: singleStringParam('blockId'),
   pathResolver: ({ blockId }) => `/blocks/${blockId}/spec`,
   responsesByStatusCode: { 200: serviceSpecViewSchema, ...errorResponses },
 })

@@ -42,18 +42,22 @@ function notifyError(title: string, e: unknown) {
   })
 }
 
-watch(open, async (isOpen) => {
-  if (!isOpen) return
-  try {
-    await store.ensureLoaded()
-    if (store.connection.provider) provider.value = store.connection.provider
-    const site = store.connection.summary?.site
-    if (site) datadog.site = site
-    await store.loadIncident()
-  } catch (e) {
-    notifyError('Could not load observability settings', e)
-  }
-})
+watch(
+  open,
+  async (isOpen) => {
+    if (!isOpen) return
+    try {
+      await store.ensureLoaded()
+      if (store.connection.provider) provider.value = store.connection.provider
+      const site = store.connection.summary?.site
+      if (site) datadog.site = site
+      await store.loadIncident()
+    } catch (e) {
+      notifyError('Could not load observability settings', e)
+    }
+  },
+  { immediate: true },
+)
 
 async function saveIncident() {
   incidentBusy.value = true

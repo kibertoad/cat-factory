@@ -7,7 +7,7 @@ import {
   resolveClarityExceededSchema,
   updateClarityItemStatusSchema,
 } from '../clarity.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Clarity-review (bug-report triage) route contracts. Mounted under
@@ -15,7 +15,7 @@ import { errorResponses } from './_shared.js'
 // ClarityReviewController in @cat-factory/server.
 // ---------------------------------------------------------------------------
 
-const blockIdParams = withObjectKeys(v.object({ blockId: v.string() }))
+const blockIdParams = singleStringParam('blockId')
 const reviewItemParams = withObjectKeys(v.object({ reviewId: v.string(), itemId: v.string() }))
 
 export const getClarityReviewContract = defineApiContract({

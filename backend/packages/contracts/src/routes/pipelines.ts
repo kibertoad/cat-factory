@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { pipelineSchema } from '../entities.js'
 import {
@@ -7,7 +7,7 @@ import {
   organizePipelineSchema,
   updatePipelineSchema,
 } from '../requests.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Pipeline palette CRUD route contracts. Mounted under `/workspaces/:workspaceId`,
@@ -16,7 +16,7 @@ import { errorResponses } from './_shared.js'
 // ---------------------------------------------------------------------------
 
 const pipelineListSchema = v.array(pipelineSchema)
-const pipelineIdParams = withObjectKeys(v.object({ pipelineId: v.string() }))
+const pipelineIdParams = singleStringParam('pipelineId')
 
 export const listPipelinesContract = defineApiContract({
   method: 'get',

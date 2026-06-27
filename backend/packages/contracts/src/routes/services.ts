@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   mountServiceInputSchema,
@@ -6,7 +6,7 @@ import {
   updateMountInputSchema,
   workspaceMountSchema,
 } from '../services.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // In-org shared service mount route contracts. See ServiceMountController in
@@ -17,7 +17,7 @@ import { errorResponses } from './_shared.js'
 
 const workspaceMountListSchema = v.array(workspaceMountSchema)
 const serviceListSchema = v.array(serviceSchema)
-const serviceIdParams = withObjectKeys(v.object({ serviceId: v.string() }))
+const serviceIdParams = singleStringParam('serviceId')
 
 export const listServiceMountsContract = defineApiContract({
   method: 'get',

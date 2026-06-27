@@ -1,4 +1,5 @@
 import { type ComputedRef, type Ref, computed, ref } from 'vue'
+import { apiErrorEnvelope, apiErrorStatus } from '~/composables/api/errors'
 import { useUpsertList } from '~/composables/useUpsertList'
 
 /**
@@ -79,10 +80,9 @@ export function useSourceIntegration<
       // reason so a panel can explain it (503 = off here; 500 = the backend errored, e.g. an
       // unapplied migration).
       available.value = false
-      const err = e as { statusCode?: number; data?: { error?: { message?: string } } }
-      const serverMessage = err?.data?.error?.message
+      const serverMessage = apiErrorEnvelope(e)?.message
       probeError.value = {
-        status: err?.statusCode ?? null,
+        status: apiErrorStatus(e) ?? null,
         message: serverMessage || (e instanceof Error ? e.message : String(e)),
       }
       sources.value = []

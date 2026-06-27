@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   cloneSandboxPromptSchema,
@@ -13,7 +13,7 @@ import {
   saveSandboxVersionSchema,
   setSandboxLabelsSchema,
 } from '../sandbox.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Sandbox route contracts (the parallel prompt/model testing surface). Mounted
@@ -50,9 +50,9 @@ const sandboxPromptListSchema = v.array(sandboxPromptVersionSchema)
 const sandboxFixtureListSchema = v.array(sandboxFixtureSchema)
 const sandboxExperimentListSchema = v.array(sandboxExperimentSchema)
 
-const promptIdParams = withObjectKeys(v.object({ promptId: v.string() }))
-const fixtureIdParams = withObjectKeys(v.object({ fixtureId: v.string() }))
-const experimentIdParams = withObjectKeys(v.object({ experimentId: v.string() }))
+const promptIdParams = singleStringParam('promptId')
+const fixtureIdParams = singleStringParam('fixtureId')
+const experimentIdParams = singleStringParam('experimentId')
 
 // ---- overview -------------------------------------------------------------
 

@@ -1,9 +1,9 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { workspaceSchema } from '../entities.js'
 import { createWorkspaceSchema, renameWorkspaceSchema } from '../requests.js'
 import { workspaceSnapshotSchema } from '../snapshot.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Workspace (board) lifecycle route contracts. See WorkspaceController in
@@ -30,14 +30,14 @@ export const createWorkspaceContract = defineApiContract({
 
 export const getWorkspaceContract = defineApiContract({
   method: 'get',
-  requestPathParamsSchema: withObjectKeys(v.object({ workspaceId: v.string() })),
+  requestPathParamsSchema: singleStringParam('workspaceId'),
   pathResolver: ({ workspaceId }) => `/workspaces/${workspaceId}`,
   responsesByStatusCode: { 200: workspaceSnapshotSchema, ...errorResponses },
 })
 
 export const updateWorkspaceContract = defineApiContract({
   method: 'patch',
-  requestPathParamsSchema: withObjectKeys(v.object({ workspaceId: v.string() })),
+  requestPathParamsSchema: singleStringParam('workspaceId'),
   pathResolver: ({ workspaceId }) => `/workspaces/${workspaceId}`,
   requestBodySchema: renameWorkspaceSchema,
   responsesByStatusCode: { 200: workspaceSchema, ...errorResponses },
@@ -45,7 +45,7 @@ export const updateWorkspaceContract = defineApiContract({
 
 export const deleteWorkspaceContract = defineApiContract({
   method: 'delete',
-  requestPathParamsSchema: withObjectKeys(v.object({ workspaceId: v.string() })),
+  requestPathParamsSchema: singleStringParam('workspaceId'),
   pathResolver: ({ workspaceId }) => `/workspaces/${workspaceId}`,
   responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
 })

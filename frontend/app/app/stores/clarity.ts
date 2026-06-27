@@ -87,6 +87,16 @@ export const useClarityStore = defineStore('clarity', () => {
     reviews.value = { ...reviews.value, [review.blockId]: review }
   }
 
+  /** Drop all cached reviews + in-flight state (called on workspace switch). */
+  function reset() {
+    available.value = null
+    reviews.value = {}
+    reviewing.value = new Set()
+    incorporating.value = new Set()
+    loadingByBlock.value = new Set()
+    inFlight.clear()
+  }
+
   function withFlag(set: typeof reviewing, key: string, on: boolean) {
     const next = new Set(set.value)
     if (on) next.add(key)
@@ -194,6 +204,7 @@ export const useClarityStore = defineStore('clarity', () => {
     reReview,
     proceed,
     resolveExceeded,
+    reset,
     // Patch the cache from a live `clarity` stream event.
     upsert: store,
   }

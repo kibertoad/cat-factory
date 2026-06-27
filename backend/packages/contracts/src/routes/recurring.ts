@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   createScheduleSchema,
@@ -6,7 +6,7 @@ import {
   scheduleRunSchema,
   updateScheduleSchema,
 } from '../recurring.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Recurring pipeline route contracts. Mounted under `/workspaces/:workspaceId`, so
@@ -16,7 +16,7 @@ import { errorResponses } from './_shared.js'
 
 const scheduleListSchema = v.array(pipelineScheduleSchema)
 const scheduleRunListSchema = v.array(scheduleRunSchema)
-const scheduleIdParams = withObjectKeys(v.object({ scheduleId: v.string() }))
+const scheduleIdParams = singleStringParam('scheduleId')
 
 export const listSchedulesContract = defineApiContract({
   method: 'get',

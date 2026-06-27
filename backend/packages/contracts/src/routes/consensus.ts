@@ -1,7 +1,7 @@
-import { defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { consensusSessionSchema } from '../consensus.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Read-only consensus route contracts. Mounted under `/workspaces/:workspaceId`,
@@ -11,7 +11,7 @@ import { errorResponses } from './_shared.js'
 // @cat-factory/server.
 // ---------------------------------------------------------------------------
 
-const blockIdParams = withObjectKeys(v.object({ blockId: v.string() }))
+const blockIdParams = singleStringParam('blockId')
 
 /** The `{ session }` envelope the read route returns (session null when none). */
 const consensusSessionResponseSchema = v.object({

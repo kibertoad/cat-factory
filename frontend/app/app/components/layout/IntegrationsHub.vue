@@ -54,6 +54,8 @@ watch(
       if (workspace.workspaceId) void apiKeys.load(workspace.workspaceId).catch(() => {})
     }
   },
+  // Lazy v-if mount: the hub mounts with `integrationsOpen` already true → load immediately.
+  { immediate: true },
 )
 
 const open = computed({

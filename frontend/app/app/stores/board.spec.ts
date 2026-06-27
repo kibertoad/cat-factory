@@ -87,6 +87,36 @@ describe('board store read getters', () => {
     ).toEqual(['t2', 't3'])
   })
 
+  it('epicMembers groups blocks by their epicId (indexed lookup)', () => {
+    store.hydrate([
+      frame('f1'),
+      block('e1', { level: 'epic' }),
+      task('t1', 'f1', { epicId: 'e1' }),
+      task('t2', 'f1', { epicId: 'e1' }),
+      task('t3', 'f1'),
+    ])
+    expect(
+      store
+        .epicMembers('e1')
+        .map((b) => b.id)
+        .sort(),
+    ).toEqual(['t1', 't2'])
+    expect(store.epicMembers('none')).toEqual([])
+  })
+
+  it('hydrate reuses the existing object for an unchanged block (stable identity)', () => {
+    store.hydrate([frame('f1'), task('t1', 'f1', { title: 'a' })])
+    const before = store.getBlock('t1')
+    // Re-hydrate with an equal-but-distinct snapshot: identity is preserved so unchanged
+    // blocks don't force a re-render on a coarse full refresh.
+    store.hydrate([frame('f1'), task('t1', 'f1', { title: 'a' })])
+    expect(store.getBlock('t1')).toBe(before)
+    // A block whose content changed gets the fresh object.
+    store.hydrate([frame('f1'), task('t1', 'f1', { title: 'b' })])
+    expect(store.getBlock('t1')).not.toBe(before)
+    expect(store.getBlock('t1')?.title).toBe('b')
+  })
+
   it('serviceOf walks up to the owning top-level frame', () => {
     store.hydrate([frame('f1'), moduleBlock('m1', 'f1'), task('t1', 'm1'), task('t2', 'f1')])
     expect(store.serviceOf(store.getBlock('t1')!)?.id).toBe('f1')

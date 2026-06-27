@@ -1,7 +1,7 @@
 import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { answerFollowUpSchema, followUpsStepStateSchema } from '../followUp.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Follow-up companion route contracts. Mounted under `/workspaces/:workspaceId`,
@@ -10,7 +10,7 @@ import { errorResponses } from './_shared.js'
 // nothing surfaced. See FollowUpController in @cat-factory/server.
 // ---------------------------------------------------------------------------
 
-const executionIdParams = withObjectKeys(v.object({ executionId: v.string() }))
+const executionIdParams = singleStringParam('executionId')
 const executionItemParams = withObjectKeys(
   v.object({ executionId: v.string(), itemId: v.string() }),
 )

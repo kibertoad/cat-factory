@@ -1,5 +1,66 @@
 # @cat-factory/app
 
+## 0.37.3
+
+### Patch Changes
+
+- 16eee33: Frontend performance pass on the real-time board hot path and initial bundle:
+
+  - **Indexed block queries** — `useBlockQueries` now builds a single `parentId → children`
+    (and `epicId → members`) index per `blocks` change, so per-frame queries (`tasksOf`,
+    `modulesOf`, `childrenOf`, `allTasksUnder`, `epicMembers`) are O(1) lookups instead of
+    full-array scans. A streamed single-block upsert no longer costs O(frames × N).
+  - **Grouped gate lookups** — the execution store exposes `decisionsByBlock` /
+    `approvalsByBlock` maps, and `BlockNode` resolves its badges via those instead of
+    re-filtering the global open-decision/approval lists once per frame. `BlockNode` also
+    computes its merged/PR task counts in a single pass.
+  - **In-place board reconcile** — `board.hydrate` reuses the existing object for any
+    unchanged block, so a coarse full-refresh doesn't hand every frame/task a new reference
+    and re-render the whole board.
+  - **Lazy panels** — the ~25 heavy, rarely-open settings/integration/provider/sandbox
+    panels in the board page are now `defineAsyncComponent` + `v-if`-gated on their open
+    flag, so they code-split out of the initial bundle and don't run setup/watchers while
+    closed. Each such panel's load-on-open watcher (`watch(open|executionId, …)`) is now
+    `{ immediate: true }` so it still fetches on first open — under `v-if` the panel mounts
+    with its flag already true, so the `false→true` flip the watcher keyed on no longer
+    fires within its lifetime.
+  - **Per-workspace cache cleanup** — the requirements, clarity, brainstorm, consensus and
+    GitHub stores gained a `reset()` that runs on a workspace switch, so a switched-to board
+    no longer shows the previous workspace's stale reviews/sessions/repos.
+  - Smaller cleanups: single-pass fixture/grade joins in the sandbox results table,
+    `toRaw`-based manifest cloning, and dropped redundant `deep: true` settings watchers.
+
+## 0.37.2
+
+### Patch Changes
+
+- efbd910: Fix the SPA error handling broken by the `@toad-contracts/*` migration.
+
+  The contract client (`sendByApiContract`) reports a contract-declared non-2xx as a plain
+  `{ statusCode, headers, body }` value (not an `Error`), with the `{ error: { code, message,
+details } }` envelope under `body`. The old `$fetch` threw an ofetch `FetchError` with the
+  body under `data` and was always an `Error`. Several handlers still read the old shape, so:
+
+  - `parseCredentialError` returned `null` for every 428, so the personal-subscription
+    password modal never opened and individual-usage runs (Claude/Codex/GLM) could not be
+    started or retried.
+  - `parseConflict` returned `null` for every 409, so run-control conflict toasts lost their
+    tailored guidance (including the `providers_unconfigured` "Configure AI" jump).
+  - `instanceof Error` message extraction across many catch blocks rendered `"[object Object]"`
+    for declared 4xx/5xx, and the login/account/tracker-probe handlers dropped the server's
+    message.
+
+  `sendContract` now wraps a bare non-2xx into a real `ApiError` (an `Error` carrying
+  `statusCode`, the parsed `body`, and the server's message), and a shared
+  `apiErrorEnvelope` / `apiErrorStatus` reads the envelope from either client shape. The
+  provisioning-logs query now validates through the contract schema so an invalid query
+  returns the standard `{ code: 'validation' }` 400 like every other route. `@cat-factory/contracts`
+  gains a `singleStringParam` helper that collapses the one-key path-param schemas the route
+  files each re-declared (typing preserved).
+
+- Updated dependencies [efbd910]
+  - @cat-factory/contracts@0.36.0
+
 ## 0.37.1
 
 ### Patch Changes

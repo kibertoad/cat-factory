@@ -84,6 +84,16 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
     sessions.value = { ...sessions.value, [key(session.blockId, session.stage)]: session }
   }
 
+  /** Drop all cached sessions + in-flight state (called on workspace switch). */
+  function reset() {
+    available.value = null
+    sessions.value = {}
+    running.value = new Set()
+    incorporating.value = new Set()
+    loadingByKey.value = new Set()
+    inFlight.clear()
+  }
+
   function withFlag(set: typeof running, k: string, on: boolean) {
     const next = new Set(set.value)
     if (on) next.add(k)
@@ -204,6 +214,7 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
     reReview,
     proceed,
     resolveExceeded,
+    reset,
     // Patch the cache from a live `brainstorm` stream event.
     upsert: store,
   }

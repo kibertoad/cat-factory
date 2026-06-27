@@ -29,9 +29,34 @@ export const useBoardStore = defineStore('board', () => {
   const queries = useBlockQueries(blocks)
   const { getBlock } = queries
 
-  /** Replace the cached blocks with a server snapshot. */
+  /**
+   * Reconcile the cached blocks against a server snapshot, reusing the existing
+   * object for any block whose content is unchanged. The server stays authoritative
+   * (it replaces optimistic edits and drops deleted blocks), but an unchanged block
+   * keeps its identity, so a coarse full-refresh doesn't hand every frame/task a new
+   * object reference and force the whole board to re-render — only genuinely changed
+   * blocks invalidate. Blocks are emitted in a stable order by the backend mapper, so
+   * a per-block JSON compare is a reliable, cheap (refresh is debounced) equality check.
+   */
+  // Per-object serialization cache, keyed by block identity so it self-invalidates: a
+  // block we keep (same reference) stays cached, while a fresh/`upsert`ed object isn't in
+  // the map and is re-serialized. Lets a hydrate stringify each kept block once (the
+  // incoming snapshot) rather than twice (existing + incoming).
+  const serialized = new WeakMap<Block, string>()
+  function jsonFor(b: Block): string {
+    let s = serialized.get(b)
+    if (s === undefined) {
+      s = JSON.stringify(b)
+      serialized.set(b, s)
+    }
+    return s
+  }
   function hydrate(next: Block[]) {
-    blocks.value = next
+    const prev = new Map(blocks.value.map((b) => [b.id, b]))
+    blocks.value = next.map((n) => {
+      const existing = prev.get(n.id)
+      return existing && jsonFor(existing) === jsonFor(n) ? existing : n
+    })
   }
 
   /** Insert or replace a block returned by the backend. */

@@ -7,6 +7,7 @@ import { beforeEach, vi } from 'vitest'
 // surface a toast, and any mutation that would is out of scope for these unit tests.
 vi.stubGlobal('useApi', () => ({}))
 vi.stubGlobal('useToast', () => ({ add: vi.fn() }))
+vi.stubGlobal('usePipelineErrorToast', () => ({ present: vi.fn() }))
 
 // A fresh Pinia per test keeps store state isolated.
 beforeEach(() => {

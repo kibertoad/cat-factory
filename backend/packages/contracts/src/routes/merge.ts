@@ -1,11 +1,11 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   createMergePresetSchema,
   mergeThresholdPresetSchema,
   updateMergePresetSchema,
 } from '../merge.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Merge threshold preset route contracts. Mounted under `/workspaces/:workspaceId`,
@@ -14,7 +14,7 @@ import { errorResponses } from './_shared.js'
 // ---------------------------------------------------------------------------
 
 const mergePresetListSchema = v.array(mergeThresholdPresetSchema)
-const presetIdParams = withObjectKeys(v.object({ presetId: v.string() }))
+const presetIdParams = singleStringParam('presetId')
 
 export const listMergePresetsContract = defineApiContract({
   method: 'get',

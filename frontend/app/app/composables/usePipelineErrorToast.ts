@@ -6,6 +6,8 @@
  * SAME guidance + "Configure AI" jump as the no-AI-provider startup banner.
  */
 
+import { apiErrorEnvelope } from './api/errors'
+
 /** The parsed shape of a backend conflict (`{ error: { code: 'conflict', details } }`). */
 interface ConflictDetails {
   reason?: string
@@ -13,15 +15,13 @@ interface ConflictDetails {
   [key: string]: unknown
 }
 
-/** Pull a 409 conflict's `{ reason, message, details }` out of a thrown fetch error, else null. */
+/** Pull a 409 conflict's `{ reason, message, details }` out of a thrown API error, else null. */
 export function parseConflict(
   error: unknown,
 ): { reason?: string; message: string; details: ConflictDetails } | null {
-  const body = (
-    error as { data?: { error?: { code?: string; message?: string; details?: ConflictDetails } } }
-  )?.data?.error
+  const body = apiErrorEnvelope(error)
   if (body?.code !== 'conflict') return null
-  const details = body.details ?? {}
+  const details = (body.details as ConflictDetails | undefined) ?? {}
   return {
     reason: typeof details.reason === 'string' ? details.reason : undefined,
     message: body.message ?? 'This action conflicts with the current state.',

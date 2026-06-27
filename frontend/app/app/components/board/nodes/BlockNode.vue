@@ -35,8 +35,18 @@ const allTasks = computed(() => board.allTasksUnder(props.id))
 const taskIds = computed(() => new Set(allTasks.value.map((t) => t.id)))
 const taskCount = computed(() => allTasks.value.length)
 const hasTasks = computed(() => taskCount.value > 0 || modules.value.length > 0)
-const mergedTasks = computed(() => allTasks.value.filter((t) => t.status === 'done').length)
-const prTasks = computed(() => allTasks.value.filter((t) => t.status === 'pr_ready').length)
+// Single pass over the tasks for both rollups (vs. one filter each).
+const taskStats = computed(() => {
+  let merged = 0
+  let prReady = 0
+  for (const t of allTasks.value) {
+    if (t.status === 'done') merged++
+    else if (t.status === 'pr_ready') prReady++
+  }
+  return { merged, prReady }
+})
+const mergedTasks = computed(() => taskStats.value.merged)
+const prTasks = computed(() => taskStats.value.prReady)
 const canvas = computed(() => board.containerSize(props.id))
 
 // Frame status is derived from its tasks — services never reach "done".
@@ -60,10 +70,17 @@ const selected = computed(() => ui.selectedBlockId === props.id)
 // kept (gated off) so the prior behaviour is one edit away if we want chips back.
 const showExpanded = computed(() => true)
 
-// Surface a pending decision from this frame OR any of its tasks.
-const blockDecisions = computed(() =>
-  execution.openDecisions.filter((d) => d.blockId === props.id || taskIds.value.has(d.blockId)),
-)
+// Surface a pending decision from this frame OR any of its tasks (O(tasks) map
+// lookups, not a scan of every open decision per frame).
+const blockDecisions = computed(() => {
+  const byBlock = execution.decisionsByBlock
+  const out = [...(byBlock.get(props.id) ?? [])]
+  for (const id of taskIds.value) {
+    const list = byBlock.get(id)
+    if (list) out.push(...list)
+  }
+  return out
+})
 
 function openFirstDecision() {
   const d = blockDecisions.value[0]
@@ -74,13 +91,15 @@ function openFirstDecision() {
 // iterative reviewer gate (requirements-review / clarity-review) that's mid-cycle
 // (incorporating / re-reviewing in the driver), which is background work needing no human,
 // so it stays off the frame's "Approval" badge.
-const blockApprovals = computed(() =>
-  execution.openApprovals.filter(
-    (a) =>
-      (a.blockId === props.id || taskIds.value.has(a.blockId)) &&
-      !reviews.isBackground(a.agentKind, a.blockId),
-  ),
-)
+const blockApprovals = computed(() => {
+  const byBlock = execution.approvalsByBlock
+  const candidates = [...(byBlock.get(props.id) ?? [])]
+  for (const id of taskIds.value) {
+    const list = byBlock.get(id)
+    if (list) candidates.push(...list)
+  }
+  return candidates.filter((a) => !reviews.isBackground(a.agentKind, a.blockId))
+})
 
 function openFirstApproval() {
   const a = blockApprovals.value[0]

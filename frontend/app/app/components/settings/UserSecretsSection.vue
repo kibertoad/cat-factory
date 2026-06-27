@@ -40,9 +40,13 @@ function resetDraft() {
   if (meta) for (const [k, v] of Object.entries(meta)) values.value[k] = v
 }
 
-watch(open, (isOpen) => {
-  if (isOpen) void store.load().then(resetDraft)
-})
+watch(
+  open,
+  (isOpen) => {
+    if (isOpen) void store.load().then(resetDraft)
+  },
+  { immediate: true },
+)
 watch(kind, resetDraft)
 
 const secretField = computed<ProviderConfigField | undefined>(() =>
