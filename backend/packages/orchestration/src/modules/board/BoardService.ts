@@ -13,6 +13,7 @@ import { BLOCK_TYPE_LABEL } from '@cat-factory/kernel'
 import type {
   BlockRepository,
   Clock,
+  ExecutionEventPublisher,
   ExecutionRepository,
   RepoProjectionRepository,
   ServiceFragmentDefaultsRepository,
@@ -58,6 +59,15 @@ export interface BoardServiceDependencies {
    * → new frames start with no service-level fragments.
    */
   serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
+  /**
+   * Real-time push. When wired, every successful board mutation emits a coarse
+   * {@link ExecutionEventPublisher.boardChanged} so OTHER users active on the workspace
+   * (and every board mounting a shared service) see the create/rename/move/reparent/delete
+   * live instead of only on the next refresh. Best-effort: a publish failure never fails the
+   * mutation (the REST response already carried it, and clients reconcile on reconnect).
+   * Absent (tests / no real-time transport) → mutations behave exactly as before.
+   */
+  executionEventPublisher?: ExecutionEventPublisher
 }
 
 /**
@@ -76,6 +86,7 @@ export class BoardService {
   private readonly serviceRepository?: ServiceRepository
   private readonly workspaceMountRepository?: WorkspaceMountRepository
   private readonly serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
+  private readonly events?: ExecutionEventPublisher
 
   constructor({
     workspaceRepository,
@@ -87,6 +98,7 @@ export class BoardService {
     serviceRepository,
     workspaceMountRepository,
     serviceFragmentDefaultsRepository,
+    executionEventPublisher,
   }: BoardServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -97,6 +109,26 @@ export class BoardService {
     this.serviceRepository = serviceRepository
     this.workspaceMountRepository = workspaceMountRepository
     this.serviceFragmentDefaultsRepository = serviceFragmentDefaultsRepository
+    this.events = executionEventPublisher
+  }
+
+  /**
+   * Push a coarse board-changed signal for a successful mutation. Naming a block of the
+   * affected service lets {@link FanOutEventPublisher} reach every workspace that mounts it;
+   * pass `null` for a signal that should reach the acting workspace only (e.g. a per-workspace
+   * frame-layout move). Best-effort: swallow any failure so a missed push never fails the
+   * already-persisted mutation — the client reconciles by re-fetching its snapshot.
+   */
+  private async emitBoardChanged(
+    workspaceId: string,
+    reason: string,
+    blockId: string | null,
+  ): Promise<void> {
+    try {
+      await this.events?.boardChanged(workspaceId, reason, blockId)
+    } catch {
+      // best-effort; the REST response already carried the mutation
+    }
   }
 
   /**
@@ -234,6 +266,7 @@ export class BoardService {
     }
     const serviceId = await this.registerService(workspaceId, block)
     await this.blockRepository.insert(workspaceId, block, serviceId)
+    await this.emitBoardChanged(workspaceId, 'block-added', block.id)
     return block
   }
 
@@ -320,6 +353,7 @@ export class BoardService {
     if (!repo.isMonorepo) {
       await this.repoProjectionRepository.linkBlock(workspaceId, repo.githubId, block.id)
     }
+    await this.emitBoardChanged(workspaceId, 'block-added', block.id)
     return block
   }
 
@@ -384,6 +418,7 @@ export class BoardService {
       block,
       await this.serviceForContainer(blocks, container),
     )
+    await this.emitBoardChanged(workspaceId, 'block-added', block.id)
     return block
   }
 
@@ -415,6 +450,7 @@ export class BoardService {
       block,
       await this.serviceForContainer(blocks, service),
     )
+    await this.emitBoardChanged(workspaceId, 'block-added', block.id)
     return block
   }
 
@@ -450,6 +486,7 @@ export class BoardService {
       parentId,
     }
     await this.blockRepository.insert(workspaceId, block)
+    await this.emitBoardChanged(workspaceId, 'block-added', block.id)
     return block
   }
 
@@ -472,6 +509,7 @@ export class BoardService {
       }
     }
     await this.blockRepository.update(homeWorkspaceId, taskId, { epicId })
+    await this.emitBoardChanged(workspaceId, 'epic-assigned', taskId)
     return assertFound(await this.blockRepository.get(homeWorkspaceId, taskId), 'Block', taskId)
   }
 
@@ -486,11 +524,15 @@ export class BoardService {
       const service = await this.serviceRepository.getByFrameBlock(id)
       if (service && (await this.workspaceMountRepository.get(workspaceId, service.id))) {
         await this.workspaceMountRepository.update(workspaceId, service.id, { position })
+        // The frame's position is this workspace's private layout override — other boards
+        // mounting the service keep their own spot, so this signal is origin-only.
+        await this.emitBoardChanged(workspaceId, 'block-moved', null)
         return { ...block, position }
       }
     }
     // A non-frame block, or a legacy frame with no mount: move the shared block at its home.
     await this.blockRepository.update(homeWorkspaceId, id, { position })
+    await this.emitBoardChanged(workspaceId, 'block-moved', id)
     return assertFound(await this.blockRepository.get(homeWorkspaceId, id), 'Block', id)
   }
 
@@ -506,6 +548,7 @@ export class BoardService {
       effective = rest
     }
     await this.blockRepository.update(homeWorkspaceId, id, effective)
+    await this.emitBoardChanged(workspaceId, 'block-updated', id)
     return assertFound(await this.blockRepository.get(homeWorkspaceId, id), 'Block', id)
   }
 
@@ -540,6 +583,7 @@ export class BoardService {
           destService ?? null,
         )
       }
+      await this.emitBoardChanged(workspaceId, 'block-reparented', id)
       return assertFound(await this.blockRepository.get(blockHome, id), 'Block', id)
     }
 
@@ -566,6 +610,7 @@ export class BoardService {
     await this.blockRepository.deleteMany(blockHome, ids)
     // Drop dependency + epic edges in the source workspace that now dangle to the moved subtree.
     await this.pruneDanglingEdges(blockHome, srcBlocks, new Set(ids))
+    await this.emitBoardChanged(workspaceId, 'block-reparented', id)
     return assertFound(await this.blockRepository.get(parentHome, id), 'Block', id)
   }
 
@@ -605,6 +650,18 @@ export class BoardService {
     // home, so we tear down whatever references the id (+ its surviving descendants) without ever
     // touching another workspace's data.
     const homeWorkspaceId = await this.resolveBlockHomeForRemoval(workspaceId, id)
+    // Capture the boards this removal must reach BEFORE we delete the block + drop its service's
+    // mounts (after which the block→service→mounts join can't resolve anything). The union of the
+    // acting workspace and every workspace mounting the doomed service is then notified post-delete.
+    const fanoutTargets = new Set<string>([workspaceId])
+    if (this.workspaceMountRepository) {
+      for (const ws of await this.workspaceMountRepository.listWorkspaceIdsMountingBlock(
+        homeWorkspaceId,
+        id,
+      )) {
+        fanoutTargets.add(ws)
+      }
+    }
     const blocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
     const doomed = descendantIds(blocks, id)
 
@@ -646,6 +703,12 @@ export class BoardService {
     await this.blockRepository.deleteMany(homeWorkspaceId, [...doomed])
 
     await this.pruneDanglingEdges(homeWorkspaceId, blocks, doomed)
+
+    // The block + any shared service are now gone, so fan out per captured target (blockId is
+    // unresolvable post-delete) — every board that showed the block refreshes it away.
+    for (const ws of fanoutTargets) {
+      await this.emitBoardChanged(ws, 'block-removed', null)
+    }
   }
 
   /** Toggle a dependency edge: target dependsOn source. */
@@ -688,6 +751,7 @@ export class BoardService {
         throw new ValidationError('That dependency would create a cycle')
       }
     }
+    await this.emitBoardChanged(workspaceId, 'dependency-toggled', targetId)
     return assertFound(await this.blockRepository.get(homeWorkspaceId, targetId), 'Block', targetId)
   }
 }

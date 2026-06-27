@@ -1710,7 +1710,10 @@ function createRecurringModule(
 export function createCore(dependencies: CoreDependencies): Core {
   const workRunner = dependencies.workRunner ?? new NoopWorkRunner()
   const executionEventPublisher = dependencies.executionEventPublisher ?? new NoopEventPublisher()
-  const boardService = new BoardService(dependencies)
+  // Pass the resolved publisher so board mutations push a coarse `boardChanged` to every
+  // user on the workspace (and every board mounting a shared service) — both facades route
+  // here, so the wiring is symmetric by construction.
+  const boardService = new BoardService({ ...dependencies, executionEventPublisher })
   const workspaceService = new WorkspaceService(dependencies)
   const accountService = new AccountService({
     accountRepository: dependencies.accountRepository,
