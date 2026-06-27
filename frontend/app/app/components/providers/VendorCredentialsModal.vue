@@ -22,7 +22,9 @@ const back = useIntegrationBack(open)
 
 // Horizontal tabs replace the old long vertical scroll: each credential kind is its own
 // section (pooled subscriptions, direct vendor keys, proxy/gateway keys, personal subs).
-const activeTab = ref('pool')
+// Initialised from the ui store so a caller can deep-link to a tab — the user-scoped
+// "My subscriptions" entry opens straight onto the `personal` tab.
+const activeTab = ref(ui.vendorCredentialsTab)
 const tabs = [
   { value: 'pool', label: 'Workspace pool', icon: 'i-lucide-users', slot: 'pool' },
   { value: 'direct', label: 'Direct providers', icon: 'i-lucide-key-round', slot: 'direct' },
@@ -51,7 +53,10 @@ const token = ref('')
 const busy = ref(false)
 
 watch(open, (isOpen) => {
-  if (isOpen && workspace.workspaceId) void creds.load(workspace.workspaceId)
+  if (!isOpen) return
+  // Honour a deep-linked tab each time the modal opens (e.g. "My subscriptions" → personal).
+  activeTab.value = ui.vendorCredentialsTab
+  if (workspace.workspaceId) void creds.load(workspace.workspaceId)
 })
 
 /** Step-by-step instructions for the selected vendor. */
