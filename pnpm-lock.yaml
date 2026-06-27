@@ -108,7 +108,7 @@ importers:
         version: link:../../runtimes/node
     devDependencies:
       '@playwright/test':
-        specifier: ^1.56.0
+        specifier: ^1.61.1
         version: 1.61.1
       '@types/node':
         specifier: ^26.0.0

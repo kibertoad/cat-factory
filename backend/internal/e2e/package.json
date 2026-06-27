@@ -16,7 +16,7 @@
     "@cat-factory/node-server": "workspace:*"
   },
   "devDependencies": {
-    "@playwright/test": "^1.56.0",
+    "@playwright/test": "^1.61.1",
     "@types/node": "^26.0.0",
     "typescript": "7.0.1-rc"
   }
