@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import type { Notification } from '~/types/domain'
+import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -14,7 +15,11 @@ export const useNotificationsStore = defineStore('notifications', () => {
   const api = useApi()
 
   /** All open notifications, newest-first. */
-  const open = ref<Notification[]>([])
+  const {
+    items: open,
+    upsert: upsertOpen,
+    remove,
+  } = useUpsertList<Notification>({ key: (n) => n.id, prepend: true })
 
   /** Replace the cache from a server snapshot. */
   function hydrate(notifications: Notification[]) {
@@ -28,13 +33,11 @@ export const useNotificationsStore = defineStore('notifications', () => {
    * replaced in place; a resolved one (acted/dismissed) is removed from the inbox.
    */
   function upsert(notification: Notification) {
-    const i = open.value.findIndex((n) => n.id === notification.id)
     if (notification.status !== 'open') {
-      if (i >= 0) open.value.splice(i, 1)
+      remove(notification.id)
       return
     }
-    if (i >= 0) open.value[i] = notification
-    else open.value.unshift(notification)
+    upsertOpen(notification)
   }
 
   /** Open notifications for a given block (for the board card badge). */

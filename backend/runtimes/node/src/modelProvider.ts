@@ -1,11 +1,4 @@
-import { type ProviderRegistry } from '@cat-factory/agents'
-import {
-  DEEPSEEK_BASE_URL,
-  MOONSHOT_BASE_URL,
-  OPENAI_BASE_URL,
-  OPENROUTER_BASE_URL,
-  QWEN_BASE_URL,
-} from '@cat-factory/agents'
+import { type ProviderRegistry, resolveOpenAiCompatibleBaseUrl } from '@cat-factory/agents'
 import type { ApiKeyService, LocalModelEndpointService } from '@cat-factory/integrations'
 import type { ModelProviderResolver } from '@cat-factory/kernel'
 import { bedrockRegistry } from '@cat-factory/provider-bedrock'
@@ -20,20 +13,14 @@ import { createScopedModelProviderResolver } from '@cat-factory/server'
 // Workers AI binding on Node, so `workers-ai` is served via the Cloudflare REST flavour.
 // Inline calls are wrapped for Langfuse exactly like the proxied path when configured.
 
-const NODE_BASE_URLS: Record<string, string> = {
-  openai: OPENAI_BASE_URL,
-  qwen: QWEN_BASE_URL,
-  deepseek: DEEPSEEK_BASE_URL,
-  moonshot: MOONSHOT_BASE_URL,
-  openrouter: OPENROUTER_BASE_URL,
-  // `litellm` has no default: its base URL is the operator's own gateway, supplied via
-  // LITELLM_BASE_URL (honored automatically by baseUrlForNode's `${PROVIDER}_BASE_URL`).
-}
-
-/** The base URL for a direct provider: env override (e.g. QWEN_BASE_URL), else default. */
+/**
+ * The base URL for a direct provider: the `${PROVIDER}_BASE_URL` env override (e.g.
+ * QWEN_BASE_URL), else the built-in default. The override-vs-default precedence and the
+ * defaults table itself live in @cat-factory/agents so the Worker resolves identically;
+ * `litellm` has no default and so resolves only once LITELLM_BASE_URL is set.
+ */
 export function baseUrlForNode(provider: string, env: NodeJS.ProcessEnv): string | undefined {
-  // `||` not `??`: a set-but-blank override must fall back to the default.
-  return env[`${provider.toUpperCase()}_BASE_URL`] || NODE_BASE_URLS[provider]
+  return resolveOpenAiCompatibleBaseUrl(provider, env[`${provider.toUpperCase()}_BASE_URL`])
 }
 
 export function createNodeModelProviderResolver(

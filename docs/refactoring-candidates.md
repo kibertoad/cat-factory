@@ -9,16 +9,16 @@ disruption to existing code, not just effort. That ordering doubles as a recomme
 sequence: land the contained, low-risk wins first and work down toward the structural
 ones.
 
-| # | Candidate | Area | Impact | Effort |
-|---|-----------|------|--------|--------|
-| 1 | Shared OpenAI-compatible provider registry | Cross-runtime | Medium | Low |
-| 2 | Generic row mappers | Backend persistence | Medium | Low |
-| 3 | Store pattern factories | Frontend | Medium | Low |
-| 4 | Split the `ui.ts` store | Frontend | High | Medium |
-| 5 | Manifest-driven agent-kind registry | Backend engine | High | Medium |
-| 6 | Module registry for the orchestration container | Backend DI | High | High |
-| 7 | Shared container builder (Node ⇄ Cloudflare) | Cross-runtime | High | High |
-| 8 | Split `ExecutionService` | Backend engine | Very high | Very high |
+| #   | Candidate                                       | Area                | Impact    | Effort    |
+| --- | ----------------------------------------------- | ------------------- | --------- | --------- |
+| 1   | Shared OpenAI-compatible provider registry      | Cross-runtime       | Medium    | Low       |
+| 2   | Generic row mappers                             | Backend persistence | Medium    | Low       |
+| 3   | Store pattern factories                         | Frontend            | Medium    | Low       |
+| 4   | Split the `ui.ts` store                         | Frontend            | High      | Medium    |
+| 5   | Manifest-driven agent-kind registry             | Backend engine      | High      | Medium    |
+| 6   | Module registry for the orchestration container | Backend DI          | High      | High      |
+| 7   | Shared container builder (Node ⇄ Cloudflare)    | Cross-runtime       | High      | High      |
+| 8   | Split `ExecutionService`                        | Backend engine      | Very high | Very high |
 
 ---
 
@@ -71,6 +71,7 @@ to one shared module, so the blast radius stays small.
 `providerConnections`.
 
 **Problem.** Two duplicated patterns:
+
 - Find-by-id upsert (`findIndex` → replace or prepend) reimplemented per store.
 - Integration lifecycle (`available` flag + `probe()` + `connect()` + `disconnect()` +
   `connectionFor()`) reimplemented per integration store, with inconsistent error handling
@@ -111,14 +112,15 @@ intrusive than the helpers above: the split ripples to every component that impo
 **File:** `backend/packages/server/src/agents/ContainerAgentExecutor.ts` — **1,795 lines**.
 
 **Problem.** Two parallel hardcoded switches on `agentKind`:
+
 - `switch (context.agentKind)` at ~line 1260 with 9 cases (`BLUEPRINTS`, `SPEC_WRITER`,
   `CI_FIXER`, `FIXER`, `CONFLICT_RESOLVER`, `MERGER`, `ON_CALL`, `TESTER`) building
   kind-specific job bodies + system prompts.
 - A second `if (agentKind === …)` chain at ~line 1430 (`toRunResult`) coercing job output
   into domain shapes (`blueprintService`, `spec`, `mergeAssessment`, …).
 
-`CLAUDE.md` explicitly flags this as unfinished strangler work: *"the built-in agents are
-not yet migrated to this model — their rendering still lives in the harness."* The public
+`CLAUDE.md` explicitly flags this as unfinished strangler work: _"the built-in agents are
+not yet migrated to this model — their rendering still lives in the harness."_ The public
 extension seam already exists — `registerAgentKind` (`@cat-factory/agents`
 `agents/kinds/registry.ts`) and `registerGate` (`@cat-factory/kernel`) — so custom agents
 already avoid this switch; the built-ins are the holdout.
@@ -188,8 +190,9 @@ rewrites both facade boot paths at once and must be conformance-verified on both
 (requirements / clarity / brainstorm / human-test), agent dispatch, result recording,
 spend metering, individual-vendor activation, approval gates, follow-ups, and companion
 loops. Two methods concentrate the pain:
+
 - `stepInstance()` — ~260-line guard chain with 27+ `if`/early-return branches keyed on
-  step kind and gate type; branch *order* is load-bearing and implicit (spend check must
+  step kind and gate type; branch _order_ is load-bearing and implicit (spend check must
   precede re-entrancy, gates must precede companion).
 - `recordStepResult()` — ~400 lines of nested conditionals (decision parking, tester
   greenlight/withheld, PR open + issue writeback, blueprint/spec ingestion, companion and

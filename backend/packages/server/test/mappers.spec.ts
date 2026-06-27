@@ -1,4 +1,5 @@
 import type { Block } from '@cat-factory/contracts'
+import type { BlockPatch } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   type BlockRow,
@@ -109,6 +110,67 @@ describe('blockPatchToColumns', () => {
     expect(blockPatchToColumns({ pullRequest: null }).pull_request).toBeNull()
     expect(blockPatchToColumns({ fragmentIds: null }).fragment_ids).toBeNull()
     expect(blockPatchToColumns({ fragmentIds: ['a'] }).fragment_ids).toBe('["a"]')
+  })
+
+  it('treats an empty serviceFragmentIds array as "clear it" on patch', () => {
+    expect(blockPatchToColumns({ serviceFragmentIds: [] }).service_fragment_ids).toBeNull()
+    expect(blockPatchToColumns({ serviceFragmentIds: ['f'] }).service_fragment_ids).toBe('["f"]')
+  })
+
+  it('clears an empty agentConfig map on patch', () => {
+    expect(blockPatchToColumns({ agentConfig: {} }).agent_config).toBeNull()
+    expect(blockPatchToColumns({ agentConfig: { 'k.v': 'x' } }).agent_config).toBe('{"k.v":"x"}')
+  })
+
+  it('maps the technical tri-state (true→1, false→0, null→null)', () => {
+    expect(blockPatchToColumns({ technical: true }).technical).toBe(1)
+    expect(blockPatchToColumns({ technical: false }).technical).toBe(0)
+    expect(blockPatchToColumns({ technical: null }).technical).toBeNull()
+    expect('technical' in blockPatchToColumns({})).toBe(false)
+  })
+
+  it('maps boolean-as-int columns (autoStartDependents → 1/null)', () => {
+    expect(blockPatchToColumns({ autoStartDependents: true }).auto_start_dependents).toBe(1)
+    expect(blockPatchToColumns({ autoStartDependents: false }).auto_start_dependents).toBeNull()
+  })
+})
+
+describe('block insert/read of the less-common columns', () => {
+  it('round-trips the tri-state technical and bool-int / json optional columns', () => {
+    for (const technical of [true, false] as const) {
+      const block = {
+        id: 'blk_3',
+        title: 'T',
+        type: 'task',
+        description: '',
+        position: { x: 0, y: 0 },
+        status: 'todo',
+        progress: 0,
+        dependsOn: [],
+        executionId: null,
+        level: 'task',
+        parentId: null,
+        epicId: 'epic_1',
+        autoStartDependents: true,
+        serviceFragmentIds: ['svc_a'],
+        modelPresetId: 'mp_1',
+        responsibleProductUserId: 'usr_1',
+        estimate: { complexity: 0.2, risk: 0.1, impact: 0.3, rationale: 'r' },
+        taskType: 'bug',
+        taskTypeFields: { severity: 'high' },
+        technical,
+        trackerCommentOnPrOpen: 'on',
+        trackerResolveOnMerge: 'off',
+        createdBy: 'usr_1',
+      } as unknown as Block
+      const row = blockInsertValues(block) as unknown as BlockRow
+      expect(row.technical).toBe(technical ? 1 : 0)
+      expect(rowToBlock(row)).toEqual(block)
+    }
+  })
+
+  it('never patches createdBy (insert-only)', () => {
+    expect('created_by' in blockPatchToColumns({ createdBy: 'usr_x' } as BlockPatch)).toBe(false)
   })
 })
 
