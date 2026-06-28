@@ -318,6 +318,40 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   (a missing harness route then 404s as `Container dispatch failed (HTTP 404)`). A
   fresh, immutable tag is what forces the rollout.
 
+## Adding a new published package
+
+A new library under `backend/packages/<name>` is **not** wired up just by creating the
+folder. Miss one of these registries and it builds locally but ships broken (the classic
+failure: `@cat-factory/gitlab` + `@cat-factory/provider-s3` once published as **empty
+shells** — a `package.json` with no `dist/` — because a bare `pnpm publish` skipped the
+build and `dist/` is gitignored). The checklist:
+
+- **`package.json` must carry the full publish contract**, copied from an existing leaf
+  package (e.g. `packages/gates`): `"files": ["dist"]`, `"main"`/`"types"`/`"exports"`
+  pointing at `./dist`, `"publishConfig": { "access": "public" }`, a `"build": "tsc -b
+  tsconfig.build.json"` script, AND a **`"prepublishOnly": "pnpm run build"`** hook. The
+  `prepublishOnly` hook is mandatory and non-negotiable: `dist/` is gitignored, so without
+  it any publish path that doesn't pre-build (a bare `pnpm publish`, a one-off
+  `changeset publish`) ships an empty shell. The canonical `pnpm ci:publish` builds first,
+  but the hook is the guardrail for every other path.
+- **Register it in `backend/tsconfig.build.json`** — add `{ "path":
+  "packages/<name>/tsconfig.build.json" }` to the `references` array. This is the
+  solution-style build graph that `pnpm build:tsc` (and the incremental project-reference
+  build) walks. A package reachable only transitively (because some runtime happens to
+  reference it) builds today but silently drops out the moment that reference goes away;
+  list every publishable library here directly.
+- **No pnpm-workspace edit needed** — `pnpm-workspace.yaml` globs `backend/packages/*`, so
+  the package is picked up automatically. (`deploy/*` are listed individually, but library
+  packages are not.)
+- **Add a changeset** (`pnpm changeset`) — CI's `changeset status` gate fails the PR
+  otherwise. A brand-new package still needs an initial-release changeset.
+- **Keep the runtimes symmetric** if the package is a shared behaviour both facades must
+  wire (see "Keep the runtimes symmetric").
+
+After wiring, verify with a clean build + a publish dry-run from the package dir:
+`rm -rf dist && pnpm publish --dry-run --no-git-checks` — it must run `prepublishOnly`,
+rebuild `dist/`, and list the compiled files in the tarball.
+
 ## Execution flow (the canonical async + observable pattern)
 
 This is the gold-standard pattern for long-running agent work. Anything new that
