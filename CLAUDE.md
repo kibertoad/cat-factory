@@ -972,6 +972,7 @@ overrides or adds locales by dropping its own files, so the layer's per-layer
 **deep-merge** is the override seam (consumer wins, key by key).
 
 **Where things live:**
+
 - `frontend/app/i18n/locales/<locale>.json` — the message catalog (the v9+ `i18n/`
   `restructureDir` convention; **NOT** `app/locales/`). Today only `en.json` exists.
 - `frontend/app/i18n/i18n.config.ts` — runtime vue-i18n behaviour only (fallback locale +
@@ -985,6 +986,7 @@ overrides or adds locales by dropping its own files, so the layer's per-layer
   locales don't ship in the published layer.
 
 **Adding / changing a translatable string (the day-to-day flow):**
+
 1. Add the key to `i18n/locales/en.json` under the feature namespace, then resolve it at
    the call site with `t('feature.area.key')` (template) / `useI18n().t(...)` (script).
 2. Format **numbers, currency, percentages, and dates through vue-i18n**, not raw `Intl`:
@@ -995,6 +997,7 @@ overrides or adds locales by dropping its own files, so the layer's per-layer
    `nuxt.config.ts` `locales` array (and, downstream, just drop the JSON to override).
 
 **Key conventions:**
+
 - One namespace per feature; resolve with `t('feature.area.key')`.
 - **Leaf keys mirror the enum/code value verbatim** so a dynamic lookup is total — e.g.
   `errors.conflict.title.<reason>`, `catalog.status.<status>`.
@@ -1010,12 +1013,13 @@ SAME source of truth the backend throws against.
 
 **Drift guards (the repo lints with oxlint only, so the ESLint `@intlify/.../no-raw-text`
 rule is unavailable — these two tiers replace it):**
-1. **Typed message keys** (`i18n.experimental.typedOptionsAndMessages`) make a *statically
-   written* unknown `t('literal.key')` a `nuxt typecheck` failure (a CI gate). This does
-   NOT cover a key assembled at runtime — a `t(\`errors.conflict.title.${reason}\`)` template
-   or a variable key is typed as `string`, so the compiler can't check it.
+
+1. **Typed message keys** (`i18n.experimental.typedOptionsAndMessages`) make a _statically
+   written_ unknown `t('literal.key')` a `nuxt typecheck` failure (a CI gate). This does
+   NOT cover a key assembled at runtime — a `t(\`errors.conflict.title.${reason}\`)`template
+or a variable key is typed as`string`, so the compiler can't check it.
 2. For those **dynamic enum→key lookups**, guard with an **exhaustive `Record<TheEnum,
-   string>`** keyed off the source-of-truth union (e.g. `CONFLICT_TITLE_KEYS` in
+string>`** keyed off the source-of-truth union (e.g. `CONFLICT_TITLE_KEYS` in
    `usePipelineErrorToast.ts`, keyed off the contracts `ConflictReason`): adding an enum
    value without a key fails the typecheck on the map, and a runtime `te()`-guard falls back
    rather than leaking a raw key if a locale omits one. **Never rely on tier 1 alone for a
