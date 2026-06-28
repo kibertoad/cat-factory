@@ -505,6 +505,17 @@ export interface BlueprintReconciler {
 }
 
 /**
+ * The inline review/brainstorm gate kinds, all driven through the {@link ReviewGateController}
+ * by the engine's `review-gate` StepHandler. Kept in sync with the handler's `switch`.
+ */
+const REVIEW_GATE_AGENT_KINDS: ReadonlySet<string> = new Set([
+  REQUIREMENTS_REVIEW_AGENT_KIND,
+  CLARITY_REVIEW_AGENT_KIND,
+  REQUIREMENTS_BRAINSTORM_AGENT_KIND,
+  ARCHITECTURE_BRAINSTORM_AGENT_KIND,
+])
+
+/**
  * The execution engine. It orchestrates a pipeline of agent-performed steps and
  * is fully deterministic: `advanceInstance` moves one run forward by exactly one
  * step, delegating the actual work — and the choice of whether to pause for a
@@ -1450,117 +1461,10 @@ export class ExecutionService {
   private async runStepBody(ctx: StepHandlerContext): Promise<AdvanceResult> {
     const { workspaceId, instance, step, block, isFinalStep, options } = ctx
 
-    // (The `deployer` and `tracker` steps are handled by their own StepHandlers — see
-    // {@link buildStepHandlerRegistry} — so they no longer branch here.)
-
-    // A `requirements-review` step runs the inline reviewer and parks for the dedicated
-    // review window, driving the iterative answer → incorporate → re-review loop. NOT a
-    // container/prose agent. Pass-through when the reviewer isn't wired. The clarity gate
-    // shares the SAME flow (only the subject + persisted doc differ); both run through the
-    // {@link ReviewGateController}, parameterised by their {@link ReviewKind}.
-    if (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND) {
-      return this.reviewGate.evaluate(
-        this.requirementsKind,
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-      )
-    }
-
-    // A `clarity-review` step triages the block's bug report (optionally enriched by an
-    // upstream `bug-investigator` step) and parks for the dedicated review window, driving
-    // the same iterative loop as the requirements gate. NOT a container/prose agent.
-    // Pass-through when the reviewer isn't wired.
-    if (step.agentKind === CLARITY_REVIEW_AGENT_KIND) {
-      return this.reviewGate.evaluate(
-        this.clarityKind,
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-      )
-    }
-
-    // The two brainstorm (structured-dialogue) gates run the inline option-generator and park
-    // for the dedicated brainstorm window, driving the same iterative loop as the requirements
-    // gate. NOT container/prose agents. Pass-through when the brainstorm module isn't wired.
-    if (step.agentKind === REQUIREMENTS_BRAINSTORM_AGENT_KIND) {
-      return this.reviewGate.evaluate(
-        this.requirementsBrainstormKind,
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-      )
-    }
-    if (step.agentKind === ARCHITECTURE_BRAINSTORM_AGENT_KIND) {
-      return this.reviewGate.evaluate(
-        this.architectureBrainstormKind,
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-      )
-    }
-
-    // A `human-test` gate spins up an ephemeral environment and PARKS for a human to
-    // validate the change in a live URL before the run continues — NOT a container/prose
-    // agent and NOT a programmatic polling gate (the human is the verdict). It also drives
-    // the same helpers the other gates use on demand: the Tester's `fixer` (from findings)
-    // and the `conflict-resolver` (after a conflicting pull-main). Degrades to a manual
-    // (no-env) mode when no ephemeral-environment provider is wired. See {@link HumanTestController}.
-    if (step.agentKind === HUMAN_TEST_AGENT_KIND) {
-      return this.humanTestController.evaluate(workspaceId, instance, step, block, isFinalStep)
-    }
-
-    // A `visual-confirmation` gate gathers the UI tester's screenshots + the uploaded
-    // reference designs and PARKS for a human to review actual-vs-reference, then on demand
-    // dispatches the Tester's `fixer`. Passes through (auto-advances) when no binary-artifact
-    // store is wired. See {@link VisualConfirmationController}.
-    if (step.agentKind === VISUAL_CONFIRM_AGENT_KIND) {
-      return this.visualConfirmationController.evaluate(
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-      )
-    }
-
-    // A polling gate step (`ci` / `conflicts`) runs a programmatic precheck and only
-    // escalates to a helper container agent (`ci-fixer` / `conflict-resolver`) on a
-    // negative verdict — no LLM of its own. Pass-through when the gate's provider is
-    // not wired. One generic machine drives every gate; see {@link evaluateGate}.
-    const gate = this.gateFor(step.agentKind)
-    if (gate) {
-      return this.evaluateGate(workspaceId, instance, step, block, isFinalStep, gate)
-    }
-
-    // A companion step grades the nearest preceding producer of one of its target
-    // kinds, looping it back for automatic rework below the threshold (and failing
-    // the run once the budget is spent) before any human gate. See evaluateCompanion.
-    //
-    // INLINE companions (architect-companion / spec-companion) run their LLM grading right
-    // here. CONTAINER-backed companions (reviewer / doc-reviewer) instead fall through to the
-    // generic async container dispatch below — they clone the producer's PR branch and review
-    // the REAL repository — and their verdict is resolved in `recordStepResult` via
-    // `companionController.resolveContainerVerdict` (which runs the SAME threshold / rework
-    // loop). A summary-only review is useless; the container reviewer reads the actual diff.
-    if (isCompanionKind(step.agentKind) && !isContainerBackedCompanion(step.agentKind)) {
-      return this.companionController.evaluate(
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-        options,
-      )
-    }
+    // (The deployer / tracker / review + brainstorm gates / human-test / visual-confirm /
+    // polling gates / inline companions are each handled by their own StepHandler — see
+    // {@link buildStepHandlerRegistry}. What remains here is the generic container/inline
+    // agent dispatch, the lowest-priority fallthrough.)
 
     // Async (container) steps don't block: dispatch the job and park. The durable
     // driver polls `pollAgentJob` between sleeps so the run can span far longer
@@ -2880,6 +2784,124 @@ export class ExecutionService {
           const result = await this.runTracker(workspaceId, instance, block)
           return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
         },
+      },
+      // The `requirements-review` / `clarity-review` / `requirements-brainstorm` /
+      // `architecture-brainstorm` steps are inline reviewers that park for their dedicated
+      // window and drive the iterative answer → incorporate → re-review loop — NOT
+      // container/prose agents. All four run through the {@link ReviewGateController},
+      // parameterised by their {@link ReviewKind} (the per-case `switch` binds each kind's
+      // review type so `evaluate`'s generic infers). Pass-through when the service isn't wired.
+      {
+        kind: 'review-gate',
+        order: 120,
+        canHandle: ({ step }) => REVIEW_GATE_AGENT_KINDS.has(step.agentKind),
+        handle: ({ workspaceId, instance, step, block, isFinalStep }) => {
+          switch (step.agentKind) {
+            case REQUIREMENTS_REVIEW_AGENT_KIND:
+              return this.reviewGate.evaluate(
+                this.requirementsKind,
+                workspaceId,
+                instance,
+                step,
+                block,
+                isFinalStep,
+              )
+            case CLARITY_REVIEW_AGENT_KIND:
+              return this.reviewGate.evaluate(
+                this.clarityKind,
+                workspaceId,
+                instance,
+                step,
+                block,
+                isFinalStep,
+              )
+            case REQUIREMENTS_BRAINSTORM_AGENT_KIND:
+              return this.reviewGate.evaluate(
+                this.requirementsBrainstormKind,
+                workspaceId,
+                instance,
+                step,
+                block,
+                isFinalStep,
+              )
+            default:
+              return this.reviewGate.evaluate(
+                this.architectureBrainstormKind,
+                workspaceId,
+                instance,
+                step,
+                block,
+                isFinalStep,
+              )
+          }
+        },
+      },
+      // A `human-test` gate spins up an ephemeral environment and PARKS for a human to
+      // validate the change in a live URL — NOT a container/prose agent and NOT a
+      // programmatic polling gate (the human is the verdict). Degrades to a manual (no-env)
+      // mode when no ephemeral-environment provider is wired. See {@link HumanTestController}.
+      {
+        kind: HUMAN_TEST_AGENT_KIND,
+        order: 130,
+        canHandle: ({ step }) => step.agentKind === HUMAN_TEST_AGENT_KIND,
+        handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
+          this.humanTestController.evaluate(workspaceId, instance, step, block, isFinalStep),
+      },
+      // A `visual-confirmation` gate gathers the UI tester's screenshots + uploaded reference
+      // designs and PARKS for a human to review actual-vs-reference, then on demand dispatches
+      // the Tester's `fixer`. Passes through when no binary-artifact store is wired.
+      // See {@link VisualConfirmationController}.
+      {
+        kind: VISUAL_CONFIRM_AGENT_KIND,
+        order: 140,
+        canHandle: ({ step }) => step.agentKind === VISUAL_CONFIRM_AGENT_KIND,
+        handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
+          this.visualConfirmationController.evaluate(
+            workspaceId,
+            instance,
+            step,
+            block,
+            isFinalStep,
+          ),
+      },
+      // A polling gate step (`ci` / `conflicts` / `post-release-health` / `human-review`) runs
+      // a programmatic precheck and only escalates to a helper container agent on a negative
+      // verdict — no LLM of its own. Pass-through when the gate's provider is not wired. One
+      // generic machine drives every gate; see {@link evaluateGate}. `canHandle` is the gate
+      // registry lookup, so this claims exactly the registered gate kinds.
+      {
+        kind: 'polling-gate',
+        order: 150,
+        canHandle: ({ step }) => this.gateFor(step.agentKind) !== undefined,
+        handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
+          this.evaluateGate(
+            workspaceId,
+            instance,
+            step,
+            block,
+            isFinalStep,
+            this.gateFor(step.agentKind)!,
+          ),
+      },
+      // An INLINE companion (architect-companion / spec-companion) grades the nearest
+      // preceding producer right here and loops it back for automatic rework below the
+      // threshold before any human gate. CONTAINER-backed companions (reviewer / doc-reviewer)
+      // do NOT match — they fall through to the generic async container dispatch and have their
+      // verdict resolved by the completion interceptor instead. See {@link CompanionController}.
+      {
+        kind: 'inline-companion',
+        order: 160,
+        canHandle: ({ step }) =>
+          isCompanionKind(step.agentKind) && !isContainerBackedCompanion(step.agentKind),
+        handle: ({ workspaceId, instance, step, block, isFinalStep, options }) =>
+          this.companionController.evaluate(
+            workspaceId,
+            instance,
+            step,
+            block,
+            isFinalStep,
+            options,
+          ),
       },
       // The generic container/inline-agent fallthrough — claims every step no more-specific
       // handler did (today's `runStepBody` tail). Highest order so it always runs last.

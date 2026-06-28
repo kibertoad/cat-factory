@@ -29,7 +29,7 @@ conformance suite (both Cloudflare D1 and Node Postgres).
 | 1  | Deterministic one-shot step handlers (deployer/tracker)  | ✅     |
 | 2  | Post-completion resolvers (blueprint/spec/estimate)     | ✅     |
 | 3  | Verdict interceptors (tester/companion short-circuits)  | ✅     |
-| 4  | Decision/polling/companion gate step handlers           | ⬜     |
+| 4  | Decision/polling/companion gate step handlers           | ✅     |
 | 5  | Container-agent default handler + cleanup               | ⬜     |
 
 ## Phase 0 — scaffolding
@@ -105,6 +105,21 @@ Phase 0, merged in #373; pre-1.0, safe to drop).
 
 - **Phase 3 done.** Green on both runtimes: Cloudflare conformance 126 ✓; Node execution/agents/core
   conformance + durable-execution 83 ✓; orchestration unit 161 ✓.
+
+## Phase 4 — dispatch-path gate step handlers
+
+Lifted the remaining `runStepBody` branches into StepHandlers (built inline in
+`buildStepHandlerRegistry`, explicit `order` preserving the original precedence):
+`review-gate` (order 120 — the four requirements/clarity/brainstorm reviewers via
+`ReviewGateController`, a per-case `switch` so `evaluate`'s `TReview` generic infers),
+`human-test` (130), `visual-confirm` (140), `polling-gate` (150 — `canHandle` = the gate
+registry lookup, so it claims exactly the registered gate kinds: ci/conflicts/
+post-release-health/human-review), `inline-companion` (160 — container-backed companions
+deliberately don't match; they fall through to the container dispatch + the Phase-3
+interceptor). `runStepBody` now contains only the generic container/inline-agent tail.
+
+- **Phase 4 done.** Green on both runtimes: Cloudflare conformance 126 ✓; Node conformance
+  (all six specs) + durable-execution 127 ✓; orchestration unit 161 ✓.
 
 ## Notes / running log
 
