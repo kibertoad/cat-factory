@@ -41,11 +41,14 @@ function onHandle(e: PointerEvent) {
     >
       <!-- drag handle (`nopan` so the pane doesn't pan on a left-drag from here) -->
       <div
-        class="nodrag nopan flex cursor-grab items-center justify-center rounded-t-lg border border-b-0 border-slate-700 bg-slate-800/80 py-px active:cursor-grabbing"
+        class="nodrag nopan flex cursor-grab items-center justify-center rounded-t-lg border border-b-0 border-slate-700 bg-slate-800/80 py-px active:cursor-grabbing pointer-coarse:py-2"
         title="Drag task"
         @pointerdown="onHandle"
       >
-        <UIcon name="i-lucide-grip-horizontal" class="h-3 w-3 text-slate-500" />
+        <UIcon
+          name="i-lucide-grip-horizontal"
+          class="h-3 w-3 text-slate-500 pointer-coarse:h-5 pointer-coarse:w-5"
+        />
       </div>
       <TaskCard :task-id="taskId" class="!rounded-t-none" />
     </div>

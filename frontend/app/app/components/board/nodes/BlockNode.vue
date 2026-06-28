@@ -9,6 +9,7 @@ import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameResize } from '~/composables/useFrameResize'
 import { useFrameStacking } from '~/composables/useFrameStacking'
+import { useViewport } from '~/composables/useViewport'
 
 // Vue Flow passes the node's `id` and `data` as props to custom node components.
 // Only frames are rendered as board nodes; their tasks live inside the card.
@@ -22,6 +23,9 @@ const agentRuns = useAgentRunsStore()
 const services = useServicesStore()
 const reviews = useReviewStage()
 const { lod } = useSemanticZoom()
+// Coarse-pointer (touch) bumps the frame-header actions from `xs` to `sm` so
+// they clear a comfortable tap target on phones without affecting mouse desktops.
+const { isTouch } = useViewport()
 
 const block = computed<Block | undefined>(() => board.getBlock(props.id))
 /** This service frame is mounted on more than one board in the org. */
@@ -412,7 +416,7 @@ const ITEM_ICON: Record<string, string> = {
               <UButton
                 class="nodrag"
                 data-testid="frame-add-task"
-                size="xs"
+                :size="isTouch ? 'sm' : 'xs'"
                 variant="ghost"
                 color="neutral"
                 icon="i-lucide-plus"
@@ -422,7 +426,7 @@ const ITEM_ICON: Record<string, string> = {
               <UButton
                 v-if="tasks.anyOffered"
                 class="nodrag"
-                size="xs"
+                :size="isTouch ? 'sm' : 'xs'"
                 variant="ghost"
                 color="neutral"
                 icon="i-lucide-ticket"
@@ -431,7 +435,7 @@ const ITEM_ICON: Record<string, string> = {
               />
               <UButton
                 class="nodrag"
-                size="xs"
+                :size="isTouch ? 'sm' : 'xs'"
                 variant="ghost"
                 color="neutral"
                 icon="i-lucide-repeat"
@@ -440,7 +444,7 @@ const ITEM_ICON: Record<string, string> = {
               />
               <UButton
                 class="nodrag"
-                size="xs"
+                :size="isTouch ? 'sm' : 'xs'"
                 variant="ghost"
                 color="neutral"
                 icon="i-lucide-chevron-up"
@@ -481,17 +485,17 @@ const ITEM_ICON: Record<string, string> = {
                `nopan` (alongside `nodrag`) so the pane doesn't pan while resizing —
                same reason as the header handle above. -->
           <div
-            class="nodrag nopan absolute right-0 top-0 h-full w-2 cursor-ew-resize hover:bg-sky-400/20"
+            class="nodrag nopan absolute right-0 top-0 h-full w-2 cursor-ew-resize hover:bg-sky-400/20 pointer-coarse:w-4"
             title="Drag to resize"
             @pointerdown="onResize($event, 'e')"
           />
           <div
-            class="nodrag nopan absolute bottom-0 left-0 h-2 w-full cursor-ns-resize hover:bg-sky-400/20"
+            class="nodrag nopan absolute bottom-0 left-0 h-2 w-full cursor-ns-resize hover:bg-sky-400/20 pointer-coarse:h-4"
             title="Drag to resize"
             @pointerdown="onResize($event, 's')"
           />
           <div
-            class="nodrag nopan absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize"
+            class="nodrag nopan absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize pointer-coarse:h-7 pointer-coarse:w-7"
             title="Drag to resize"
             @pointerdown="onResize($event, 'se')"
           >

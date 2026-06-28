@@ -386,11 +386,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
   <Teleport to="body">
     <div
       v-if="open"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+      class="fixed inset-0 z-50 flex max-h-[100dvh] items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
       @click.self="close"
     >
       <div
-        class="flex h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
+        class="flex h-[90dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
       >
         <!-- header -->
         <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">

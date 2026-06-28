@@ -47,9 +47,23 @@ passes.
 
 ## Phase 2 — Touch targets + modal/panel responsiveness — PR 2
 
-- ☐ Enlarge hit targets (task grip, resize edges, connect button, `xs`→`sm` buttons) via `pointer: coarse`.
-- ☐ Modals/panels fit small screens (PipelineBuilder, settings/\*, review windows) using `dvh`.
-- ☐ Patch changeset.
+- ☑ Enlarge hit targets via the Tailwind v4 `pointer-coarse:` variant (the CSS form of
+  `useViewport().isTouch`, so mouse desktops are untouched): the task drag grip
+  (`DraggableTask.vue`), the service + module resize edges/corner (`BlockNode.vue`,
+  `ModuleFrame.vue`), and the drag-to-connect handle (`TaskCard.vue`). The frame-header
+  action buttons (`BlockNode.vue`) bind `:size="isTouch ? 'sm' : 'xs'"` (a prop, so it uses
+  the composable rather than the CSS variant).
+- ☑ Modals/panels fit small screens using `dvh`. The hand-rolled overlay windows are capped
+  to the dynamic viewport — the five centred review windows (requirements / clarity / spec /
+  consensus / brainstorm) swap `h-[90vh]`→`h-[90dvh]`, and every `fixed inset-0` overlay
+  (those five plus the `items-stretch` result views: follow-up, test-report,
+  visual-confirmation, gate, generic-structured, human-test) gains `max-h-[100dvh]` so its
+  controls clear the mobile browser chrome. The Pipeline builder stacks its three columns and
+  scrolls as one below `lg` (independent per-column scroll on `lg:`); `ModelConfigurationPanel`
+  (the one custom full-screen settings panel) gains `max-h-[100dvh]`; the rest of `settings/*`
+  are `UModal`s, already height-capped by Nuxt UI's default `max-h-[calc(100dvh-2rem)]`. Also
+  swapped the phase-1 `AgentStepDetail` mobile review-rail sheet `max-h-[70vh]`→`max-h-[70dvh]`.
+- ☑ Patch changeset (`.changeset/mobile-touch-targets.md`).
 
 ## Phase 3 — Board canvas touch gestures — PR 3
 
@@ -62,6 +76,12 @@ passes.
 
 ## Changelog
 
+- **Phase 2 complete** — touch targets + modal/panel responsiveness: coarse-pointer hit-target
+  enlargement (grip, resize edges, connect handle, frame-header buttons) via the
+  `pointer-coarse:` variant, every hand-rolled overlay window + the Pipeline builder + the
+  Model Configuration panel capped to the dynamic viewport (`dvh`) so nothing hides behind
+  mobile browser chrome, and the Pipeline builder columns stack-and-scroll below `lg`. Patch
+  changeset added.
 - **Review follow-up** — fixed the bottom-sheet e2e selector (clicked a non-existent descendant
   test id), added `inert` + focus-restore to the drawer, lowered the inspector sheet below the
   drawer scrim, lifted the SideBar/toolbar copy into i18n (pipe-plural decision count), and
