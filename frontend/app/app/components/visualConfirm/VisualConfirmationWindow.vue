@@ -2,21 +2,27 @@
 // Visual-confirmation gate window — the dedicated surface for a `visual-confirmation` step
 // (opened via the universal result-view host, the same seam the human-test / tester windows
 // use). It reads the gate's live state off the execution step (`step.visualConfirm`, pushed
-// over the stream), renders each captured screenshot next to its reference design (paired by
-// view), and drives the human actions: approve (advance), request a fix from findings (the
-// Tester's fixer), or recapture (refresh the pairs). It also lets the human upload reference
-// design images for the task.
-import { onUnmounted, reactive, ref, watch } from 'vue'
+// over the stream), renders each captured screenshot against its reference design (via the
+// reusable <ImageCompare>: side-by-side / overlay / swipe / diff, with click-to-zoom into the
+// shared <ArtifactLightbox>), and drives the human actions: approve (advance), request a fix
+// (per-view notes + a freeform box, composed into the Tester's fixer findings), or recapture.
+// References can be dropped straight onto a pair, or uploaded for any view below.
+import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import type { VisualConfirmStepState } from '~/types/execution'
+import { useArtifactBlobs } from '~/composables/useArtifactBlobs'
+import { useFocusTrap } from '~/composables/useFocusTrap'
+import ImageCompare from '~/components/media/ImageCompare.vue'
+import ArtifactLightbox from '~/components/media/ArtifactLightbox.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
 const visualConfirm = useVisualConfirmStore()
 
-// Release the cached screenshot/reference object URLs when the window goes away, so the
-// (potentially large) blob bytes don't linger in memory for the rest of the session.
-onUnmounted(() => visualConfirm.revokeBlobs())
+// Per-window blob cache; release the cached screenshot/reference object URLs when the window
+// goes away, so the (potentially large) blob bytes don't linger for the rest of the session.
+const blobs = useArtifactBlobs()
+onUnmounted(() => blobs.revokeAll())
 
 const { open, blockId, instanceId, stepIndex, close } = useResultView('visual-confirm')
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
@@ -41,31 +47,123 @@ const PHASE_LABEL: Record<NonNullable<VisualConfirmStepState['phase']>, string> 
   approved: 'Approved',
 }
 
-// Resolve each pair's artifact ids to object URLs for the <img>s (cached in the store).
-const urls = reactive<Record<string, string>>({})
-async function resolveUrl(id: string | null | undefined) {
-  if (!id || urls[id]) return
-  const url = await visualConfirm.blobUrl(id)
-  if (url) urls[id] = url
-}
+// Resolve every pair's artifacts (the gallery + the lightbox share this one cache).
 watch(
   pairs,
   (next) => {
     for (const p of next) {
-      void resolveUrl(p.actualArtifactId)
-      void resolveUrl(p.referenceArtifactId)
+      void blobs.resolve(p.actualArtifactId)
+      void blobs.resolve(p.referenceArtifactId)
     }
   },
   { immediate: true },
 )
 
-const findings = ref('')
-const showFindings = ref(false)
+// Flat list of all images (actual then reference, per pair) for the lightbox + its index.
+const lightboxItems = computed(() => {
+  const items: { artifactId: string; label: string; alt: string }[] = []
+  for (const p of pairs.value) {
+    if (p.actualArtifactId)
+      items.push({
+        artifactId: p.actualArtifactId,
+        label: `${p.view} — actual`,
+        alt: `${p.view} (actual)`,
+      })
+    if (p.referenceArtifactId)
+      items.push({
+        artifactId: p.referenceArtifactId,
+        label: `${p.view} — reference`,
+        alt: `${p.view} (reference)`,
+      })
+  }
+  return items
+})
+const lightboxOpen = ref(false)
+const lightboxIndex = ref(0)
+function expand(artifactId: string) {
+  const i = lightboxItems.value.findIndex((it) => it.artifactId === artifactId)
+  lightboxIndex.value = i < 0 ? 0 : i
+  lightboxOpen.value = true
+}
 
-// When the gate flags its screenshots as an unreliable basis (`degradedReason` — no capture
-// happened, a fix failed, or a fix landed AFTER these shots were taken), approving is no longer
-// a safe one-click: require the human to explicitly acknowledge they reviewed the change another
-// way (or recaptured) first. Re-armed whenever the reason changes so a fresh warning re-gates.
+// Focus management for the modal panel. While the lightbox is open it owns the trap, so the
+// window hands off (active = open && !lightbox) to avoid two Tab traps fighting.
+const dialogRoot = ref<HTMLElement | null>(null)
+useFocusTrap(
+  dialogRoot,
+  computed(() => open.value && !lightboxOpen.value),
+)
+
+// --- Request a fix: per-view notes + a freeform box, composed into one findings string. ---
+const perViewNotes = reactive<Record<string, string>>({})
+const noteOpen = reactive<Record<string, boolean>>({})
+const globalFindings = ref('')
+
+const hasFindings = computed(
+  () => globalFindings.value.trim() !== '' || pairs.value.some((p) => perViewNotes[p.view]?.trim()),
+)
+
+/** Compose the per-view notes + freeform text into the fixer's findings (and a structured
+ * mirror, so a future structured-findings contract is a one-line swap). */
+function buildFindings(): { text: string; structured: { view?: string; note: string }[] } {
+  const structured: { view?: string; note: string }[] = []
+  const blocks: string[] = []
+  for (const p of pairs.value) {
+    const note = perViewNotes[p.view]?.trim()
+    if (note) {
+      structured.push({ view: p.view, note })
+      blocks.push(`### ${p.view}\n${note}`)
+    }
+  }
+  const general = globalFindings.value.trim()
+  if (general) {
+    structured.push({ note: general })
+    blocks.push(`### General\n${general}`)
+  }
+  return { text: blocks.join('\n\n'), structured }
+}
+
+async function approve() {
+  if (!blockId.value || !canApprove.value) return
+  await visualConfirm.approve(blockId.value)
+  close()
+}
+async function submitFix() {
+  if (!blockId.value || !hasFindings.value) return
+  await visualConfirm.requestFix(blockId.value, buildFindings().text)
+  globalFindings.value = ''
+  for (const k of Object.keys(perViewNotes)) delete perViewNotes[k]
+  for (const k of Object.keys(noteOpen)) delete noteOpen[k]
+}
+async function recapture() {
+  if (!blockId.value) return
+  await visualConfirm.recapture(blockId.value)
+}
+
+// --- Reference upload (per-pair drop, plus a free "any view" picker below). ---
+async function uploadFor(view: string, file: File) {
+  if (!blockId.value) return
+  await visualConfirm.uploadReference(blockId.value, file, view)
+}
+const uploadView = ref('')
+const fileInput = ref<HTMLInputElement | null>(null)
+async function onFilePicked(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  const view = uploadView.value.trim()
+  // Require a view name: a reference with no view can't pair with any captured screenshot,
+  // so it would be silently orphaned. The input is also disabled until a view is entered.
+  if (!file || !blockId.value || !view) {
+    if (fileInput.value) fileInput.value.value = ''
+    return
+  }
+  await visualConfirm.uploadReference(blockId.value, file, view)
+  uploadView.value = ''
+  if (fileInput.value) fileInput.value.value = ''
+}
+
+// Degraded-basis approval guard (no capture / a fix landed after these shots): require an
+// explicit "I reviewed this another way" acknowledgement before the one-click approve.
 const ackDegraded = ref(false)
 watch(
   () => vc.value?.degradedReason ?? null,
@@ -77,34 +175,6 @@ const needsAck = computed(() => !!vc.value?.degradedReason)
 const canApprove = computed(
   () => awaitingHuman.value && !busy.value && (!needsAck.value || ackDegraded.value),
 )
-
-async function approve() {
-  if (!blockId.value || !canApprove.value) return
-  await visualConfirm.approve(blockId.value)
-  close()
-}
-async function submitFix() {
-  if (!blockId.value || !findings.value.trim()) return
-  await visualConfirm.requestFix(blockId.value, findings.value.trim())
-  findings.value = ''
-  showFindings.value = false
-}
-async function recapture() {
-  if (!blockId.value) return
-  await visualConfirm.recapture(blockId.value)
-}
-
-// Reference upload.
-const uploadView = ref('')
-const fileInput = ref<HTMLInputElement | null>(null)
-async function onFilePicked(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file || !blockId.value) return
-  await visualConfirm.uploadReference(blockId.value, file, uploadView.value.trim())
-  uploadView.value = ''
-  if (fileInput.value) fileInput.value.value = ''
-}
 </script>
 
 <template>
@@ -115,7 +185,12 @@ async function onFilePicked(e: Event) {
       @click.self="close"
     >
       <div
-        class="m-4 flex w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
+        ref="dialogRoot"
+        tabindex="-1"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Visual confirmation"
+        class="m-4 flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl focus:outline-none"
       >
         <header class="flex items-center gap-3 border-b border-slate-800 px-5 py-3">
           <span
@@ -164,57 +239,52 @@ async function onFilePicked(e: Event) {
               {{ phase ? PHASE_LABEL[phase] : '' }}
             </p>
 
-            <!-- Actual-vs-reference gallery -->
+            <!-- Actual-vs-reference gallery. Keyed by `view` (the contract's unique per-pair
+                 identity) so a pair's note/expand state stays bound to its view across recaptures. -->
             <section v-if="pairs.length" class="space-y-4">
-              <div
-                v-for="(p, i) in pairs"
-                :key="i"
-                class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
-              >
-                <h3 class="mb-2 text-[12px] font-semibold text-slate-200">{{ p.view }}</h3>
-                <div class="grid grid-cols-2 gap-3">
-                  <figure class="space-y-1">
-                    <figcaption class="text-[10px] uppercase tracking-wide text-slate-500">
-                      Actual
-                    </figcaption>
-                    <img
-                      v-if="p.actualArtifactId && urls[p.actualArtifactId]"
-                      :src="urls[p.actualArtifactId]"
-                      :alt="`${p.view} (actual)`"
-                      class="w-full rounded border border-slate-800"
+              <div v-for="p in pairs" :key="p.view" class="space-y-2">
+                <ImageCompare
+                  :view="p.view"
+                  :actual-id="p.actualArtifactId"
+                  :reference-id="p.referenceArtifactId"
+                  :blobs="blobs"
+                  :busy="busy"
+                  @expand="expand"
+                  @upload-reference="(file: File) => uploadFor(p.view, file)"
+                />
+                <!-- Per-view note (folded into the fixer findings) -->
+                <div v-if="awaitingHuman" class="px-1">
+                  <button
+                    class="flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-slate-200"
+                    @click="noteOpen[p.view] = !noteOpen[p.view]"
+                  >
+                    <UIcon
+                      :name="noteOpen[p.view] ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+                      class="h-3 w-3"
                     />
-                    <div
-                      v-else
-                      class="flex h-32 items-center justify-center rounded border border-dashed border-slate-700 text-[11px] text-slate-600"
+                    Note an issue with {{ p.view }}
+                    <span
+                      v-if="perViewNotes[p.view]?.trim()"
+                      class="rounded-full bg-amber-500/15 px-1.5 text-[9px] text-amber-300"
+                      >noted</span
                     >
-                      {{ p.actualArtifactId ? 'Loading…' : 'Not captured' }}
-                    </div>
-                  </figure>
-                  <figure class="space-y-1">
-                    <figcaption class="text-[10px] uppercase tracking-wide text-slate-500">
-                      Reference
-                    </figcaption>
-                    <img
-                      v-if="p.referenceArtifactId && urls[p.referenceArtifactId]"
-                      :src="urls[p.referenceArtifactId]"
-                      :alt="`${p.view} (reference)`"
-                      class="w-full rounded border border-slate-800"
-                    />
-                    <div
-                      v-else
-                      class="flex h-32 items-center justify-center rounded border border-dashed border-slate-700 text-[11px] text-slate-600"
-                    >
-                      {{ p.referenceArtifactId ? 'Loading…' : 'No reference' }}
-                    </div>
-                  </figure>
+                  </button>
+                  <textarea
+                    v-if="noteOpen[p.view]"
+                    v-model="perViewNotes[p.view]"
+                    rows="2"
+                    :placeholder="`What looks wrong on ${p.view}?`"
+                    class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-[12px] text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none"
+                  />
                 </div>
               </div>
             </section>
             <p v-else class="text-[12px] italic text-slate-500">
-              No screenshots were captured — review the change manually.
+              No screenshots were captured — review the change manually, or upload a reference
+              below.
             </p>
 
-            <!-- Reference upload -->
+            <!-- Upload a reference for any view -->
             <section class="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
               <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 Upload a reference design
@@ -222,18 +292,29 @@ async function onFilePicked(e: Event) {
               <div class="flex flex-wrap items-center gap-2">
                 <input
                   v-model="uploadView"
+                  list="vc-views"
                   placeholder="View name (e.g. login)"
                   class="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[12px] text-slate-200 placeholder:text-slate-600"
                 />
+                <datalist id="vc-views">
+                  <option v-for="p in pairs" :key="p.view" :value="p.view" />
+                </datalist>
                 <input
                   ref="fileInput"
                   type="file"
                   accept="image/png,image/jpeg"
-                  :disabled="busy"
-                  class="text-[12px] text-slate-300 file:mr-2 file:rounded file:border-0 file:bg-slate-800 file:px-2 file:py-1 file:text-slate-200"
+                  :disabled="busy || !uploadView.trim()"
+                  class="text-[12px] text-slate-300 file:mr-2 file:rounded file:border-0 file:bg-slate-800 file:px-2 file:py-1 file:text-slate-200 disabled:opacity-40"
                   @change="onFilePicked"
                 />
               </div>
+              <p class="mt-1.5 text-[10px] text-slate-600">
+                {{
+                  uploadView.trim()
+                    ? 'Tip: drop an image straight onto a pair above to set its reference.'
+                    : 'Enter a view name first, then choose a file. Or drop an image straight onto a pair above.'
+                }}
+              </p>
             </section>
 
             <!-- Request fix -->
@@ -241,30 +322,25 @@ async function onFilePicked(e: Event) {
               v-if="awaitingHuman"
               class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
             >
-              <div class="flex items-center justify-between">
-                <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Needs changes?
-                </h3>
-                <button
-                  class="text-[12px] text-slate-400 hover:text-slate-200"
-                  @click="showFindings = !showFindings"
-                >
-                  {{ showFindings ? 'Cancel' : 'Request a fix' }}
-                </button>
-              </div>
-              <div v-if="showFindings" class="mt-2 space-y-2">
-                <textarea
-                  v-model="findings"
-                  rows="4"
-                  placeholder="Describe what looks wrong — the Fixer agent gets this as context."
-                  class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-[13px] text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none"
-                />
+              <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Request a fix
+              </h3>
+              <textarea
+                v-model="globalFindings"
+                rows="3"
+                placeholder="Anything else the Fixer should know (in addition to any per-view notes above)."
+                class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-[13px] text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none"
+              />
+              <div class="mt-2 flex items-center justify-between">
+                <span class="text-[11px] text-slate-500">
+                  Per-view notes are folded in automatically.
+                </span>
                 <UButton
                   size="sm"
                   color="warning"
                   icon="i-lucide-wrench"
                   :loading="busy"
-                  :disabled="busy || !findings.trim()"
+                  :disabled="busy || !hasFindings"
                   @click="submitFix"
                 >
                   Send to Fixer
@@ -300,7 +376,9 @@ async function onFilePicked(e: Event) {
                     >
                       {{ r.outcome ?? 'in progress' }}
                     </span>
-                    <p v-if="r.findings" class="leading-snug text-slate-400">{{ r.findings }}</p>
+                    <p v-if="r.findings" class="whitespace-pre-wrap leading-snug text-slate-400">
+                      {{ r.findings }}
+                    </p>
                   </div>
                 </li>
               </ol>
@@ -353,5 +431,13 @@ async function onFilePicked(e: Event) {
         </footer>
       </div>
     </div>
+
+    <!-- Shared zoom/pan viewer for any screenshot in the gallery. -->
+    <ArtifactLightbox
+      v-model:open="lightboxOpen"
+      v-model:index="lightboxIndex"
+      :items="lightboxItems"
+      :blobs="blobs"
+    />
   </Teleport>
 </template>
