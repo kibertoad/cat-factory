@@ -4,6 +4,24 @@
 // any origin, which is safe here because every route is bearer-gated and fails
 // closed; pinning origins is defense-in-depth.
 
+/**
+ * The request headers the browser is allowed to send cross-origin (the preflight
+ * `Access-Control-Allow-Headers` response). Shared by every runtime facade so the
+ * two CORS configs can't drift: the SPA sends each of these on its API calls, so a
+ * header missing here makes the browser drop the whole request ("CORS Missing Allow
+ * Header") even though the route itself is fine.
+ * - `Authorization` — the bearer session token.
+ * - `X-Personal-Password` — the ambient personal-subscription unlock password.
+ * - `X-Connection-Id` — the per-tab connection id used for real-time self-echo
+ *   suppression (see the SPA's `connectionId()` / `BoardController`).
+ */
+export const CORS_ALLOWED_HEADERS = [
+  'Content-Type',
+  'Authorization',
+  'X-Personal-Password',
+  'X-Connection-Id',
+]
+
 /** Parse a comma-separated allowed-origins string into trimmed entries. */
 export function parseAllowedOrigins(configured: string | undefined): string[] {
   return (configured ?? '')
