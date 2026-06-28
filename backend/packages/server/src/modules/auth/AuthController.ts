@@ -9,6 +9,7 @@ import {
   logoutContract,
   meContract,
   passwordLoginContract,
+  patLoginContract,
   peekInvitationContract,
   resetPasswordContract,
   signupContract,
@@ -395,6 +396,7 @@ export function authController(): Hono<AppEnv> {
     // self-register an arbitrary address on a private deployment.
     const invited = body.invite ? await peekInvite(c, body.invite) : null
     const allowed =
+      cfg.openSignup ||
       (invited != null && emailMatchesInvite(body.email, invited.email)) ||
       emailDomainAllowed(body.email, cfg)
     if (!allowed) {
@@ -436,6 +438,66 @@ export function authController(): Hono<AppEnv> {
     }
     const token = await mintSession(cfg, sessionUser(user, user.email || user.id))
     return c.json({ token, user: sessionUser(user, user.email || user.id) }, 200)
+  })
+
+  // ---- Source-control PAT login (local mode) ------------------------------
+
+  // Log in as the account a GitHub/GitLab PAT belongs to. Served only where the facade
+  // wired identity resolvers (local mode); hosted facades authenticate via OAuth, so this
+  // 503s there. `token` omitted ⇒ use the deployment's configured PAT (one-click); present
+  // ⇒ the user pasted one. The resolved provider id is the SAME `(provider, subject)` key
+  // OAuth uses, so a PAT login and a GitHub OAuth login for the same person are one user.
+  buildHonoRoute(app, patLoginContract, async (c) => {
+    const cfg = authConfig(c)
+    const container = c.get('container')
+    const registry = container.vcsIdentity
+    if (!registry) return unavailable(c)
+    const { provider, token } = c.req.valid('json')
+    const entry = registry[provider]
+    if (!entry) {
+      return c.json(
+        { error: { code: 'unavailable', message: `${provider} sign-in is not available` } },
+        503,
+      )
+    }
+    const pat = token ?? entry.configuredToken
+    if (!pat) {
+      return c.json(
+        { error: { code: 'validation', message: `Enter your ${provider} token to sign in` } },
+        400,
+      )
+    }
+    let identity
+    try {
+      identity = await entry.resolver.resolveIdentity(pat)
+    } catch {
+      return c.json(
+        {
+          error: {
+            code: 'unauthorized',
+            message: `That ${provider} token is invalid or lacks the required access.`,
+          },
+        },
+        401,
+      )
+    }
+    const user = await container.userService.findOrCreateByIdentity(provider, identity.externalId, {
+      name: identity.name,
+      email: identity.email,
+      // The PAT proves control of the account, so its email is trusted to link onto an
+      // existing same-email user (parity with the OAuth path).
+      emailVerified: !!identity.email,
+      avatarUrl: identity.avatarUrl,
+      metadata: { login: identity.login },
+    })
+    await container.accountService.ensurePersonalAccount({
+      id: user.id,
+      login: identity.login,
+      name: user.name,
+    })
+    const session = sessionUser(user, identity.login)
+    const sessionToken = await mintSession(cfg, session)
+    return c.json({ token: sessionToken, user: session }, 200)
   })
 
   // ---- Forgot / reset password --------------------------------------------
@@ -536,11 +598,13 @@ export function authController(): Hono<AppEnv> {
     }
   })
 
-  // Who am I? Used by the SPA to validate a stored token on boot.
+  // Who am I? Used by the SPA to validate a stored token on boot. A valid session resolves
+  // even when auth is otherwise "disabled" (a local PAT/password session under devOpen);
+  // only an absent/invalid token on a disabled deployment reports the anonymous state.
   buildHonoRoute(app, meContract, async (c) => {
-    if (!authConfig(c).enabled) return c.json({ user: null, enabled: false }, 200)
     const user = await verifySession(c)
     if (!user) {
+      if (!authConfig(c).enabled) return c.json({ user: null, enabled: false }, 200)
       return c.json({ error: { code: 'unauthorized', message: 'Not authenticated' } }, 401)
     }
     return c.json(
@@ -552,7 +616,7 @@ export function authController(): Hono<AppEnv> {
           avatarUrl: user.avatarUrl,
           email: user.email ?? null,
         },
-        enabled: true,
+        enabled: authConfig(c).enabled,
       },
       200,
     )

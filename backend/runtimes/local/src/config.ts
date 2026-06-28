@@ -30,7 +30,18 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     ...env,
     // `|| 'true'` (not `??`) so an explicit empty `AUTH_DEV_OPEN=` still defaults open,
     // consistent with the other fields here; set `AUTH_DEV_OPEN=false` to close the gate.
+    // devOpen keeps the API open for unauthenticated reads (and the test harness), but a
+    // real developer now signs in (PAT or password) to get an identity — anonymous can't
+    // store per-user credentials (personal subscriptions, own keys). See the login flow.
     AUTH_DEV_OPEN: env.AUTH_DEV_OPEN?.trim() || 'true',
+    // Offer email/password sign-in alongside the source-control PAT login, so a developer
+    // without a PAT can still create a local account. This makes auth "enabled" (the SPA
+    // then requires sign-in), which is the point — anonymous local use is a half-product.
+    // The auto-generated session secret below is strong enough to satisfy the gate.
+    AUTH_PASSWORD_ENABLED: env.AUTH_PASSWORD_ENABLED?.trim() || 'true',
+    // Local accounts are created freely (no invite / email-domain gate) — it's the
+    // developer's own machine. Hosted facades leave this off (invite/domain-gated signup).
+    AUTH_OPEN_SIGNUP: env.AUTH_OPEN_SIGNUP?.trim() || 'true',
     // Stable within a process; only signs short-lived proxy tokens for local jobs.
     AUTH_SESSION_SECRET: env.AUTH_SESSION_SECRET?.trim() || randomBytes(32).toString('hex'),
     // The shared key backing credential encryption at rest (document/task/runner/slack

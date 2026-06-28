@@ -24,10 +24,17 @@ const props = withDefaults(defineProps<{ accountId?: string; category?: 'direct'
 const workspace = useWorkspaceStore()
 const keys = useApiKeysStore()
 const models = useModelsStore()
+const auth = useAuthStore()
 const toast = useToast()
+const { t } = useI18n()
 
 /** Account-wide mode (single account scope) vs the default workspace/user toggle. */
 const isAccount = computed(() => !!props.accountId)
+
+// "My keys" (user scope) are stored per-user, so they need a signed-in user. Block just
+// that scope when there's none (a deployment without sign-in); workspace/account keys are
+// unaffected. The scope toggle stays enabled so the user can switch back to a shared scope.
+const needsSignIn = computed(() => !isAccount.value && scope.value === 'user' && !auth.user)
 
 interface ProviderMeta {
   value: ApiKeyProvider
@@ -257,10 +264,16 @@ async function remove(k: ApiKey) {
         <USelect
           v-model="provider"
           :items="PROVIDERS.map((p) => ({ label: p.label, value: p.value }))"
+          :disabled="needsSignIn"
           class="w-64"
         />
       </UFormField>
     </div>
+
+    <ProvidersSignInRequiredNotice
+      v-if="needsSignIn"
+      :message="t('auth.signInRequired.userApiKeys')"
+    />
 
     <!-- where to get the key -->
     <ol
@@ -290,13 +303,24 @@ async function remove(k: ApiKey) {
     <!-- add form -->
     <div class="space-y-2">
       <UFormField label="Label (optional)">
-        <UInput v-model="label" placeholder="e.g. team key" />
+        <UInput v-model="label" :disabled="needsSignIn" placeholder="e.g. team key" />
       </UFormField>
       <UFormField label="API key">
-        <UTextarea v-model="key" :rows="2" placeholder="paste the API key" class="font-mono" />
+        <UTextarea
+          v-model="key"
+          :rows="2"
+          :disabled="needsSignIn"
+          placeholder="paste the API key"
+          class="font-mono"
+        />
       </UFormField>
       <div class="flex justify-end">
-        <UButton :loading="busy" :disabled="!key.trim()" icon="i-lucide-plus" @click="add()">
+        <UButton
+          :loading="busy"
+          :disabled="needsSignIn || !key.trim()"
+          icon="i-lucide-plus"
+          @click="add()"
+        >
           Connect
         </UButton>
       </div>

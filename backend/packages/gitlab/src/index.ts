@@ -13,6 +13,10 @@ import type { GitLabTokenSource } from './tokenSource.js'
 // ---------------------------------------------------------------------------
 
 export { FetchGitLabClient, GitLabApiError } from './FetchGitLabClient.js'
+export {
+  GitLabIdentityResolver,
+  type GitLabIdentityResolverOptions,
+} from './GitLabIdentityResolver.js'
 export type { FetchGitLabClientDependencies } from './FetchGitLabClient.js'
 export { GitLabProvisioningClient } from './provisioning.js'
 export type { GitLabProvisioningDependencies } from './provisioning.js'

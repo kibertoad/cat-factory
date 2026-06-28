@@ -310,6 +310,9 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       successRedirectUrl: env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
       callbackUrl: env.AUTH_CALLBACK_URL?.trim() || '',
       passwordEnabled,
+      // Open (un-gated) signup is a local-mode convenience; hosted defaults stay
+      // invite/email-domain-gated. `applyLocalDefaults` flips it on for local mode.
+      openSignup: env.AUTH_OPEN_SIGNUP?.trim() === 'true',
       ...(googleEnabled
         ? {
             google: {

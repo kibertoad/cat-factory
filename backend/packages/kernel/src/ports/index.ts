@@ -132,6 +132,12 @@ export type {
   ProvisionedRepo,
 } from './github-provisioning.js'
 export type { VcsClient } from './vcs-client.js'
+export type {
+  VcsIdentity,
+  VcsIdentityResolver,
+  VcsIdentityEntry,
+  VcsIdentityRegistry,
+} from './vcs-identity.js'
 export type { VcsProvisioningClient } from './vcs-provisioning.js'
 export type {
   RawWebhookDelivery,

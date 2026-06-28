@@ -27,7 +27,7 @@ onMounted(() => auth.bootstrap())
 
   <slot v-else-if="isPublicRoute" />
 
-  <LoginScreen v-else-if="auth.required && !auth.user" />
+  <LoginScreen v-else-if="auth.needsLogin" />
 
   <slot v-else />
 </template>

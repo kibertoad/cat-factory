@@ -8,8 +8,14 @@ import { computed, onMounted, ref } from 'vue'
 import type { SubscriptionVendor } from '~/types/domain'
 
 const personal = usePersonalSubscriptionsStore()
+const auth = useAuthStore()
 const toast = useToast()
 const { t, d } = useI18n()
+
+// Personal subscriptions are stored per-user, so they need a signed-in user. When there
+// isn't one (a deployment running without sign-in), block the form so the user doesn't
+// enter a token + password that can't be saved.
+const needsSignIn = computed(() => !auth.user)
 
 /**
  * Per-vendor metadata driving the connect form + connected-row labels. Reactive to the
@@ -150,6 +156,11 @@ async function disconnect(v: SubscriptionVendor) {
       <p class="mt-1 text-sm text-slate-400">{{ t('personalSubscriptions.intro') }}</p>
     </div>
 
+    <ProvidersSignInRequiredNotice
+      v-if="needsSignIn"
+      :message="t('auth.signInRequired.personalSubscriptions')"
+    />
+
     <!-- connected subscriptions -->
     <div
       v-for="sub in personal.subscriptions"
@@ -182,6 +193,7 @@ async function disconnect(v: SubscriptionVendor) {
       <USelect
         v-model="vendor"
         :items="PERSONAL_VENDORS.map((m) => ({ label: m.label, value: m.value }))"
+        :disabled="needsSignIn"
         class="w-64"
       />
     </UFormField>
@@ -197,6 +209,7 @@ async function disconnect(v: SubscriptionVendor) {
       <UFormField :label="t('personalSubscriptions.labelField')">
         <UInput
           v-model="label"
+          :disabled="needsSignIn"
           :placeholder="t('personalSubscriptions.labelPlaceholder', { vendor: selectedMeta.label })"
         />
       </UFormField>
@@ -204,6 +217,7 @@ async function disconnect(v: SubscriptionVendor) {
         <UTextarea
           v-model="token"
           :rows="2"
+          :disabled="needsSignIn"
           :placeholder="selectedMeta.tokenPlaceholder"
           class="font-mono"
         />
@@ -213,17 +227,18 @@ async function disconnect(v: SubscriptionVendor) {
           <UInput
             v-model="password"
             type="password"
+            :disabled="needsSignIn"
             :placeholder="t('personalSubscriptions.passwordPlaceholder')"
           />
         </UFormField>
         <UFormField :label="t('personalSubscriptions.renewsField')">
-          <UInput v-model="expiresOn" type="date" />
+          <UInput v-model="expiresOn" type="date" :disabled="needsSignIn" />
         </UFormField>
       </div>
       <div class="flex justify-end">
         <UButton
           :loading="busy"
-          :disabled="!token.trim() || password.length < 6"
+          :disabled="needsSignIn || !token.trim() || password.length < 6"
           icon="i-lucide-shield-check"
           @click="connect()"
         >

@@ -10,8 +10,15 @@
 // user's own GitHub OAuth token, so a non-GitHub user can still read/write repos.
 // ---------------------------------------------------------------------------
 
-/** The login providers an identity can come from. */
-export type IdentityProvider = 'github' | 'password' | 'google'
+/**
+ * The login providers an identity can come from. `github`/`gitlab` are sourced from a
+ * source-control account (OAuth in hosted mode, or a PAT in local mode — both resolve to
+ * the provider's stable numeric user id as the `subject`); `google` from Google OAuth;
+ * `password` is a cat-factory-generated account keyed on the email. Because the identity
+ * store keys on `(provider, subject)`, these namespaces never collide — a GitHub user, a
+ * GitLab user, and a password user are distinct rows even if their subjects coincide.
+ */
+export type IdentityProvider = 'github' | 'gitlab' | 'password' | 'google'
 
 /** The canonical user record. */
 export interface UserRecord {

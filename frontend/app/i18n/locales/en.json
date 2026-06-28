@@ -751,6 +751,19 @@
     "gate": {
       "loading": "Loading…"
     },
+    "localMode": {
+      "continueWith": "Continue with {provider}",
+      "enterPatTitle": "Or sign in with a personal access token",
+      "tokenPlaceholder": "paste a {provider} token",
+      "createToken": "Create a {provider} token ↗",
+      "submit": "Sign in",
+      "orDivider": "or",
+      "failed": "Sign-in failed. Check the token and try again."
+    },
+    "signInRequired": {
+      "personalSubscriptions": "Personal subscriptions are saved to your account, but this deployment runs without sign-in, so they can't be stored here. Use the workspace pool or a provider API key instead.",
+      "userApiKeys": "Your personal API keys are saved to your account, but this deployment runs without sign-in, so they can't be stored here. Switch the scope to \"This workspace\" to add a shared key."
+    },
     "login": {
       "appTitle": "Architecture Board",
       "@appTitle": {

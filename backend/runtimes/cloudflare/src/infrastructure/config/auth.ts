@@ -49,6 +49,8 @@ export function loadAuthConfig(env: Env): AuthConfig {
     successRedirectUrl: env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
     callbackUrl: env.AUTH_CALLBACK_URL?.trim() || '',
     passwordEnabled,
+    // Open (un-gated) signup is a local-mode convenience; the Worker stays invite/domain-gated.
+    openSignup: env.AUTH_OPEN_SIGNUP?.trim() === 'true',
     ...(googleEnabled
       ? {
           google: {
