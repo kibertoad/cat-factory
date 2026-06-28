@@ -1,5 +1,13 @@
 # @cat-factory/app
 
+## 0.45.1
+
+### Patch Changes
+
+- 78a9daa: Add a `vue-i18n-extract` CI guard (`i18n:check`) that fails when an i18n key is used in
+  code but missing from the catalog, and reports unused catalog keys as non-blocking
+  warnings. Closes the planned tier-3 i18n drift guard.
+
 ## 0.45.0
 
 ### Minor Changes
