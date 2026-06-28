@@ -13,6 +13,7 @@ const ui = useUiStore()
 const agentRuns = useAgentRunsStore()
 const reviews = useReviewStage()
 const toast = useToast()
+const { t } = useI18n()
 
 const task = computed<Block | undefined>(() => board.getBlock(props.taskId))
 const statusMeta = computed(() => (task.value ? STATUS_META[task.value.status] : null))
@@ -43,7 +44,9 @@ const defaultPipeline = computed(
 
 /** The PR the implementer agent opened for this task, if any. */
 const pr = computed(() => task.value?.pullRequest)
-const prLabel = computed(() => (pr.value?.number ? `PR #${pr.value.number}` : 'PR'))
+const prLabel = computed(() =>
+  pr.value?.number ? t('board.task.prNumber', { number: pr.value.number }) : t('board.task.pr'),
+)
 
 // This task's current agent run (if any). A failed run must surface the shared
 // failure banner + retry — NOT a stuck progress bar — so the card never looks
@@ -65,15 +68,18 @@ const starting = ref(false)
 async function run() {
   if (!runnable.value) {
     toast.add({
-      title: 'Blocked by dependencies',
-      description: `Waiting on: ${unmet.value.map((d) => d.title).join(', ')}`,
+      title: t('board.task.blockedByDependenciesTitle'),
+      description: t('board.task.waitingOn', { deps: unmet.value.map((d) => d.title).join(', ') }),
       icon: 'i-lucide-lock',
     })
     return
   }
   const pipeline = defaultPipeline.value
   if (!pipeline) {
-    toast.add({ title: 'No pipeline defined', description: 'Create one in the builder first.' })
+    toast.add({
+      title: t('board.task.noPipelineTitle'),
+      description: t('board.task.noPipelineBody'),
+    })
     return
   }
   starting.value = true
@@ -108,11 +114,11 @@ const pendingDecision = computed(() =>
 const reviewStage = computed(() => reviews.stageForBlock(props.taskId))
 const reviewStageLabel = computed(() =>
   reviewStage.value === 'incorporating'
-    ? 'Incorporating answers…'
+    ? t('board.task.incorporatingAnswers')
     : reviewStage.value === 'reviewing'
-      ? 'Re-reviewing…'
+      ? t('board.task.reReviewing')
       : reviewStage.value === 'recommending'
-        ? 'Recommending…'
+        ? t('board.task.recommending')
         : null,
 )
 const pendingApproval = computed(() => {
@@ -135,17 +141,17 @@ const attention = computed<{
   const d = pendingDecision.value
   if (d)
     return {
-      label: 'Decision needed',
+      label: t('board.task.decisionNeeded'),
       icon: 'i-lucide-circle-help',
-      action: 'Resolve',
+      action: t('board.task.resolve'),
       open: () => ui.openDecision(d.instanceId, d.decision.id),
     }
   const a = pendingApproval.value
   if (a)
     return {
-      label: 'Approval needed',
+      label: t('board.task.approvalNeeded'),
       icon: 'i-lucide-shield-check',
-      action: 'Approve',
+      action: t('board.task.approve'),
       open: () => ui.openApprovalDetail(a.instanceId, a.approval.id),
     }
   return null
@@ -155,7 +161,7 @@ const attention = computed<{
  * decision/approval reason, otherwise the generic status label. */
 const statusText = computed(() =>
   runFailed.value
-    ? 'Failed'
+    ? t('board.task.failed')
     : (reviewStageLabel.value ?? attention.value?.label ?? statusMeta.value?.label ?? ''),
 )
 
@@ -191,7 +197,11 @@ function selectTask() {
         v-if="schedule"
         name="i-lucide-repeat"
         class="h-3 w-3 shrink-0 text-indigo-400"
-        :title="schedule.enabled ? 'Recurring pipeline' : 'Recurring pipeline (paused)'"
+        :title="
+          schedule.enabled
+            ? t('board.task.recurringPipeline')
+            : t('board.task.recurringPipelinePaused')
+        "
       />
       <span
         class="ml-auto truncate text-[9px] uppercase tracking-wide"
@@ -211,7 +221,7 @@ function selectTask() {
       <button
         type="button"
         class="nodrag shrink-0 cursor-crosshair touch-none rounded-full p-0.5 text-slate-500 hover:bg-slate-800 hover:text-amber-400 pointer-coarse:p-2.5"
-        title="Drag onto another task to make it depend on this one"
+        :title="t('board.task.dragToConnect')"
         @pointerdown.stop="startConnect(task.id, $event)"
         @click.stop
       >
@@ -302,12 +312,20 @@ function selectTask() {
           :disabled="!runnable || starting"
           :title="
             runnable
-              ? `Start ${defaultPipeline?.name ?? 'pipeline'}`
-              : `Waiting on: ${unmet.map((d) => d.title).join(', ')}`
+              ? t('board.task.startPipeline', {
+                  name: defaultPipeline?.name ?? t('board.task.pipelineFallback'),
+                })
+              : t('board.task.waitingOn', { deps: unmet.map((d) => d.title).join(', ') })
           "
           @click.stop="run"
         >
-          {{ starting ? 'Starting…' : runnable ? 'Start' : 'Blocked' }}
+          {{
+            starting
+              ? t('board.task.starting')
+              : runnable
+                ? t('board.task.start')
+                : t('board.task.blocked')
+          }}
         </UButton>
         <span
           v-if="runnable && defaultPipeline"
@@ -328,7 +346,7 @@ function selectTask() {
           variant="soft"
           size="xs"
           icon="i-lucide-git-pull-request"
-          :title="`Open ${prLabel} on GitHub`"
+          :title="t('board.task.openPrOnGithub', { pr: prLabel })"
           @click.stop
         >
           {{ prLabel }}
@@ -340,7 +358,7 @@ function selectTask() {
           icon="i-lucide-scan-eye"
           @click.stop="review"
         >
-          Review
+          {{ t('board.task.review') }}
         </UButton>
         <UButton
           color="success"
@@ -349,7 +367,7 @@ function selectTask() {
           icon="i-lucide-git-merge"
           @click.stop="merge"
         >
-          Merge
+          {{ t('board.task.merge') }}
         </UButton>
       </template>
 
@@ -357,7 +375,7 @@ function selectTask() {
         v-else-if="task.status === 'done'"
         class="inline-flex items-center gap-1 text-[9px] text-emerald-400"
       >
-        <UIcon name="i-lucide-check-check" class="h-3 w-3" /> implemented
+        <UIcon name="i-lucide-check-check" class="h-3 w-3" /> {{ t('board.task.implemented') }}
       </span>
     </div>
 
@@ -368,7 +386,7 @@ function selectTask() {
     >
       <span
         class="inline-flex items-center gap-1 rounded bg-violet-500/15 px-1.5 py-0.5 text-[9px] text-violet-200"
-        :title="`Module: ${task.moduleName}`"
+        :title="t('board.task.module', { name: task.moduleName })"
       >
         <UIcon :name="MODULE_META.icon" class="h-3 w-3" :style="{ color: MODULE_META.color }" />
         {{ task.moduleName }}

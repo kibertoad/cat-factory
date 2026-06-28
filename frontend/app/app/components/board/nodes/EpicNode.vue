@@ -10,6 +10,7 @@ const props = defineProps<{ id: string }>()
 
 const board = useBoardStore()
 const ui = useUiStore()
+const { t } = useI18n()
 
 const block = computed<Block | undefined>(() => board.getBlock(props.id))
 const members = computed(() => board.epicMembers(props.id))
@@ -31,7 +32,9 @@ const selected = computed(() => ui.selectedBlockId === props.id)
   >
     <div class="flex items-center gap-1.5">
       <UIcon name="i-lucide-layers" class="h-3.5 w-3.5 shrink-0 text-violet-400" />
-      <span class="text-[10px] font-semibold uppercase tracking-wide text-violet-300">Epic</span>
+      <span class="text-[10px] font-semibold uppercase tracking-wide text-violet-300">{{
+        t('board.epic.label')
+      }}</span>
       <span class="ml-auto text-[10px] text-slate-400">{{ done }}/{{ total }}</span>
     </div>
     <div class="mt-1 truncate text-sm font-medium text-slate-100" :title="block.title">
@@ -43,7 +46,11 @@ const selected = computed(() => ui.selectedBlockId === props.id)
         :style="{ width: total ? `${Math.round((done / total) * 100)}%` : '0%' }"
       />
     </div>
-    <div v-if="active" class="mt-1 text-[10px] text-slate-400">{{ active }} active</div>
-    <div v-else-if="total === 0" class="mt-1 text-[10px] text-slate-500">No tasks yet</div>
+    <div v-if="active" class="mt-1 text-[10px] text-slate-400">
+      {{ t('board.epic.activeCount', { count: active }) }}
+    </div>
+    <div v-else-if="total === 0" class="mt-1 text-[10px] text-slate-500">
+      {{ t('board.epic.noTasksYet') }}
+    </div>
   </div>
 </template>
