@@ -60,7 +60,7 @@ const title = computed(() => {
 })
 
 async function submit() {
-  if (!pending.value || password.value.length < 8) return
+  if (!pending.value || password.value.length < 6) return
   busy.value = true
   try {
     await pending.value.retry(password.value)
@@ -117,7 +117,7 @@ function goConnect() {
           </UFormField>
           <div class="flex justify-end gap-2">
             <UButton color="neutral" variant="ghost" @click="open = false">Cancel</UButton>
-            <UButton :loading="busy" :disabled="password.length < 8" @click="submit()">
+            <UButton :loading="busy" :disabled="password.length < 6" @click="submit()">
               Unlock &amp; run
             </UButton>
           </div>

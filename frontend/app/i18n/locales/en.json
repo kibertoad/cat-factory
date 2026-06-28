@@ -88,5 +88,57 @@
         "action": "Configure AI"
       }
     }
+  },
+  "personalSubscriptions": {
+    "heading": "Personal subscriptions (individual use only)",
+    "intro": "Claude (Pro/Max), GLM (Z.ai Coding Plan) and ChatGPT (Codex) are each licensed to you as an individual, so they are stored just for you and only your runs use them. Each token is encrypted under a personal password (never stored) that you enter when you start such a run; it is cached in this browser for a while so it stays out of your way. The password is a low-friction convenience and a transparency signal that the system will not silently share your credential, not a wall against a system-key holder. These models cannot be used on recurring schedules.",
+    "vendorField": "Subscription",
+    "labelField": "Label (optional)",
+    "labelPlaceholder": "e.g. my {vendor}",
+    "defaultLabel": "My {vendor} subscription",
+    "passwordField": "Personal password (min 6 chars)",
+    "passwordPlaceholder": "protects your token",
+    "renewsField": "Subscription renews on (optional)",
+    "connect": "Connect",
+    "replace": "Replace",
+    "expires": "Expires {date}",
+    "noExpiry": "No expiry set",
+    "renewal": {
+      "expired": "Your {vendor} subscription has expired. Renew it and reconnect to keep running its models.",
+      "soon": "Your {vendor} subscription renews in {count} day. Update it here once renewed. | Your {vendor} subscription renews in {count} days. Update it here once renewed.",
+      "@soon": {
+        "description": "Count-based renewal reminder; {count} is the number of days until renewal (always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts). {vendor} is the subscription's product name, kept verbatim."
+      }
+    },
+    "toast": {
+      "connected": "{vendor} subscription connected",
+      "connectFailed": "Could not connect subscription",
+      "disconnected": "Disconnected",
+      "disconnectFailed": "Could not disconnect"
+    },
+    "vendors": {
+      "claude": {
+        "label": "Claude (Pro/Max)",
+        "tokenLabel": "Claude token",
+        "step1": "Install Claude Code and sign in with your Claude Pro/Max account: run `claude` once and complete the browser login.",
+        "step2": "Generate a long-lived token: run `claude setup-token` and copy it.",
+        "step3": "Paste it below and choose a personal password to protect it."
+      },
+      "glm": {
+        "label": "GLM (Z.ai Coding Plan)",
+        "tokenLabel": "Z.ai API key",
+        "tokenPlaceholder": "your GLM Coding Plan API key",
+        "step1": "Open your Z.ai GLM Coding Plan dashboard and create an API key for the Anthropic-compatible endpoint.",
+        "step2": "The GLM Coding Plan is licensed to you as an individual, so it is stored per-user here (not pooled).",
+        "step3": "Paste the key below and choose a personal password to protect it."
+      },
+      "codex": {
+        "label": "ChatGPT (Codex)",
+        "tokenLabel": "ChatGPT auth.json",
+        "step1": "Install the Codex CLI and sign in with your ChatGPT account: run `codex login` and complete the browser flow.",
+        "step2": "Open the credentials file Codex wrote at ~/.codex/auth.json (on Windows %USERPROFILE%\\.codex\\auth.json).",
+        "step3": "Copy the entire contents of auth.json, paste it below, and choose a personal password to protect it."
+      }
+    }
   }
 }

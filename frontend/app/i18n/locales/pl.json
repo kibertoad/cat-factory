@@ -67,5 +67,54 @@
         "action": "Skonfiguruj AI"
       }
     }
+  },
+  "personalSubscriptions": {
+    "heading": "Subskrypcje osobiste (tylko do użytku indywidualnego)",
+    "intro": "Claude (Pro/Max), GLM (Z.ai Coding Plan) i ChatGPT (Codex) są licencjonowane dla Ciebie jako osoby prywatnej, więc są przechowywane wyłącznie dla Ciebie i korzystają z nich tylko Twoje uruchomienia. Każdy token jest szyfrowany osobistym hasłem (nigdy nieprzechowywanym), które podajesz przy uruchamianiu takiego zadania; jest ono buforowane w tej przeglądarce przez pewien czas, aby Ci nie przeszkadzać. Hasło to wygodne, mało uciążliwe rozwiązanie i sygnał przejrzystości, że system nie udostępni po cichu Twoich poświadczeń, a nie zabezpieczenie przed posiadaczem klucza systemowego. Tych modeli nie można używać w harmonogramach cyklicznych.",
+    "vendorField": "Subskrypcja",
+    "labelField": "Etykieta (opcjonalnie)",
+    "labelPlaceholder": "np. mój {vendor}",
+    "defaultLabel": "Moja subskrypcja {vendor}",
+    "passwordField": "Hasło osobiste (min. 6 znaków)",
+    "passwordPlaceholder": "chroni Twój token",
+    "renewsField": "Subskrypcja odnawia się (opcjonalnie)",
+    "connect": "Połącz",
+    "replace": "Zastąp",
+    "expires": "Wygasa {date}",
+    "noExpiry": "Brak daty wygaśnięcia",
+    "renewal": {
+      "expired": "Twoja subskrypcja {vendor} wygasła. Odnów ją i połącz ponownie, aby nadal uruchamiać jej modele.",
+      "soon": "Twoja subskrypcja {vendor} odnawia się za {count} dzień. Zaktualizuj ją tutaj po odnowieniu. | Twoja subskrypcja {vendor} odnawia się za {count} dni. Zaktualizuj ją tutaj po odnowieniu. | Twoja subskrypcja {vendor} odnawia się za {count} dni. Zaktualizuj ją tutaj po odnowieniu."
+    },
+    "toast": {
+      "connected": "Połączono subskrypcję {vendor}",
+      "connectFailed": "Nie udało się połączyć subskrypcji",
+      "disconnected": "Rozłączono",
+      "disconnectFailed": "Nie udało się rozłączyć"
+    },
+    "vendors": {
+      "claude": {
+        "label": "Claude (Pro/Max)",
+        "tokenLabel": "Token Claude",
+        "step1": "Zainstaluj Claude Code i zaloguj się na konto Claude Pro/Max: uruchom `claude` raz i dokończ logowanie w przeglądarce.",
+        "step2": "Wygeneruj długotrwały token: uruchom `claude setup-token` i skopiuj go.",
+        "step3": "Wklej go poniżej i wybierz osobiste hasło, aby go chronić."
+      },
+      "glm": {
+        "label": "GLM (Z.ai Coding Plan)",
+        "tokenLabel": "Klucz API Z.ai",
+        "tokenPlaceholder": "Twój klucz API GLM Coding Plan",
+        "step1": "Otwórz panel GLM Coding Plan w Z.ai i utwórz klucz API dla punktu końcowego zgodnego z Anthropic.",
+        "step2": "GLM Coding Plan jest licencjonowany dla Ciebie jako osoby prywatnej, więc tutaj jest przechowywany osobno dla każdego użytkownika (nie jest współdzielony).",
+        "step3": "Wklej klucz poniżej i wybierz osobiste hasło, aby go chronić."
+      },
+      "codex": {
+        "label": "ChatGPT (Codex)",
+        "tokenLabel": "auth.json ChatGPT",
+        "step1": "Zainstaluj Codex CLI i zaloguj się na konto ChatGPT: uruchom `codex login` i dokończ proces w przeglądarce.",
+        "step2": "Otwórz plik poświadczeń zapisany przez Codex w ~/.codex/auth.json (w systemie Windows %USERPROFILE%\\.codex\\auth.json).",
+        "step3": "Skopiuj całą zawartość auth.json, wklej ją poniżej i wybierz osobiste hasło, aby ją chronić."
+      }
+    }
   }
 }

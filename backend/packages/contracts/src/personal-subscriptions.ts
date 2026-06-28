@@ -23,14 +23,14 @@ import { subscriptionVendorSchema } from './vendor-credentials.js'
 // ---------------------------------------------------------------------------
 
 /**
- * The personal password that gates the second encryption layer (8–256 chars). Restricted
+ * The personal password that gates the second encryption layer (6–256 chars). Restricted
  * to printable ASCII so the same value can ride **raw** in the `X-Personal-Password`
  * request header (see below) when unlocking a run — HTTP header values must be Latin-1, so
  * a non-ASCII password could not be sent without encoding. Never stored server-side.
  */
 export const personalPasswordSchema = v.pipe(
   v.string(),
-  v.minLength(8),
+  v.minLength(6),
   v.maxLength(256),
   v.regex(/^[\x20-\x7e]+$/, 'Password must use printable ASCII characters (no tabs/newlines).'),
 )

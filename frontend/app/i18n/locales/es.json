@@ -67,5 +67,54 @@
         "action": "Configurar IA"
       }
     }
+  },
+  "personalSubscriptions": {
+    "heading": "Suscripciones personales (solo para uso individual)",
+    "intro": "Claude (Pro/Max), GLM (Z.ai Coding Plan) y ChatGPT (Codex) tienen licencia para ti como individuo, así que se guardan solo para ti y únicamente tus ejecuciones las usan. Cada token se cifra con una contraseña personal (que nunca se almacena) que introduces al iniciar una de estas ejecuciones; se guarda en caché en este navegador durante un tiempo para que no te moleste. La contraseña es una comodidad de baja fricción y una señal de transparencia de que el sistema no compartirá tu credencial de forma silenciosa, no una barrera frente a quien posea la clave del sistema. Estos modelos no se pueden usar en programaciones recurrentes.",
+    "vendorField": "Suscripción",
+    "labelField": "Etiqueta (opcional)",
+    "labelPlaceholder": "p. ej. mi {vendor}",
+    "defaultLabel": "Mi suscripción de {vendor}",
+    "passwordField": "Contraseña personal (mín. 6 caracteres)",
+    "passwordPlaceholder": "protege tu token",
+    "renewsField": "La suscripción se renueva el (opcional)",
+    "connect": "Conectar",
+    "replace": "Reemplazar",
+    "expires": "Caduca el {date}",
+    "noExpiry": "Sin fecha de caducidad",
+    "renewal": {
+      "expired": "Tu suscripción de {vendor} ha caducado. Renuévala y vuelve a conectarla para seguir ejecutando sus modelos.",
+      "soon": "Tu suscripción de {vendor} se renueva en {count} día. Actualízala aquí cuando se renueve. | Tu suscripción de {vendor} se renueva en {count} días. Actualízala aquí cuando se renueve."
+    },
+    "toast": {
+      "connected": "Suscripción de {vendor} conectada",
+      "connectFailed": "No se pudo conectar la suscripción",
+      "disconnected": "Desconectada",
+      "disconnectFailed": "No se pudo desconectar"
+    },
+    "vendors": {
+      "claude": {
+        "label": "Claude (Pro/Max)",
+        "tokenLabel": "Token de Claude",
+        "step1": "Instala Claude Code e inicia sesión con tu cuenta de Claude Pro/Max: ejecuta `claude` una vez y completa el inicio de sesión en el navegador.",
+        "step2": "Genera un token de larga duración: ejecuta `claude setup-token` y cópialo.",
+        "step3": "Pégalo abajo y elige una contraseña personal para protegerlo."
+      },
+      "glm": {
+        "label": "GLM (Z.ai Coding Plan)",
+        "tokenLabel": "Clave de API de Z.ai",
+        "tokenPlaceholder": "tu clave de API del GLM Coding Plan",
+        "step1": "Abre tu panel del GLM Coding Plan de Z.ai y crea una clave de API para el endpoint compatible con Anthropic.",
+        "step2": "El GLM Coding Plan tiene licencia para ti como individuo, así que aquí se guarda por usuario (no se agrupa).",
+        "step3": "Pega la clave abajo y elige una contraseña personal para protegerla."
+      },
+      "codex": {
+        "label": "ChatGPT (Codex)",
+        "tokenLabel": "auth.json de ChatGPT",
+        "step1": "Instala la CLI de Codex e inicia sesión con tu cuenta de ChatGPT: ejecuta `codex login` y completa el flujo en el navegador.",
+        "step2": "Abre el archivo de credenciales que Codex escribió en ~/.codex/auth.json (en Windows %USERPROFILE%\\.codex\\auth.json).",
+        "step3": "Copia todo el contenido de auth.json, pégalo abajo y elige una contraseña personal para protegerlo."
+      }
+    }
   }
 }

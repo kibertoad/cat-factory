@@ -1038,6 +1038,33 @@ overrides or adds locales by dropping its own files, so the layer's per-layer
 - **No cross-key concatenation.** A full sentence is ONE key with `{named}` placeholders;
   plurals use the vue-i18n pipe form (`'no cats | one cat | {count} cats'`).
 
+**Component migration mechanics (the vue-i18n specifics that bite):**
+
+- **`useI18n` is auto-imported** — never add an `import`. In `<script setup>` destructure what
+  you need (`const { t, d, n } = useI18n()`); the template can then use the same `t`/`d`/`n`. Do
+  NOT reach for `$t`/`$d` in templates of migrated components — use the destructured fns so the
+  typed-message-keys check (tier 1) sees the literal keys.
+- **Plural + interpolation in one call:** `t(key, { vendor, count }, count)` — the THIRD arg is
+  the plural choice (a number); the named object still feeds `{…}` placeholders. `{count}` is the
+  conventional name for the count. Pass the count both as a named param and as the 3rd arg.
+- **Dates/numbers always go through `d()`/`n()`** (or `$d`/`$n`), NEVER `toLocaleDateString()` /
+  `Intl` / `new Date().toLocaleString()`. `t('…expires', { date: d(new Date(ts), 'short') })`.
+- **Code/format-example placeholders stay INLINE, not in the catalog.** A placeholder that is a
+  literal example (`sk-ant-oat01-…`, a JSON blob, a token shape) is not prose: leave it as a
+  component constant. This is REQUIRED when it contains `{`/`}` — those are vue-i18n interpolation
+  metacharacters and would need ugly `{'{'}` escaping. Only prose placeholders (`your GLM … key`)
+  get a key. Same for proper nouns / brand names rendered as labels (keep verbatim across locales).
+- **No HTML in message bodies** (the catalog has none): drop mid-sentence `<strong>` when
+  migrating (it also matches the writing rules), or use the `<i18n-t>` component with slots if the
+  emphasis is structural. Don't embed tags and `v-html` a message.
+- **A vendor/enum-keyed set of strings:** build it as an array/computed of STATIC literal `t()`
+  keys (`t('…vendors.claude.label')`), one per enum member — that keeps the tier-1 typed-key check
+  live. Reserve the runtime-assembled key + exhaustive `Record` guard (tier 2) for lookups whose
+  key genuinely isn't known until runtime.
+- **In new catalog entries use straight quotes/apostrophes and NO em-dashes** (rephrase; the
+  existing catalog is mixed, straight is the going-forward standard). Translated catalogs
+  (`es/fr/pl/uk`) carry NO `@<key>` description siblings — those live only in `en.json`.
+
 **Translator descriptions (`@<key>` siblings) — annotate ONLY truly ambiguous keys:**
 
 vue-i18n supports a per-message metadata sibling: alongside a leaf `foo` you may add an
