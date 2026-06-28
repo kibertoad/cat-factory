@@ -64,6 +64,8 @@ const harness: ConformanceHarness = {
       ...app,
       executionEmits: (blockId) =>
         blockId ? recorder.emits.filter((e) => e.blockId === blockId) : recorder.emits,
+      boardEmits: (blockId) =>
+        blockId ? recorder.boardEvents.filter((e) => e.blockId === blockId) : recorder.boardEvents,
       seedIncorporatedReview: (workspaceId, blockId, requirements) =>
         new D1RequirementReviewRepository({ db: env.DB }).upsert(
           workspaceId,

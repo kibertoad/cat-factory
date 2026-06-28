@@ -141,7 +141,7 @@ export const useExecutionStore = defineStore('execution', () => {
         await ws.refresh()
       })
     } catch (e) {
-      runErrors.present(e, 'Failed to start')
+      runErrors.present(e, 'errors.action.startFailed')
       return false
     }
   }
@@ -240,7 +240,7 @@ export const useExecutionStore = defineStore('execution', () => {
       await api.mergeBlock(ws.requireId(), blockId)
       await ws.refresh()
     } catch (e) {
-      runErrors.present(e, 'Failed to merge')
+      runErrors.present(e, 'errors.action.mergeFailed')
     }
   }
 
@@ -261,7 +261,7 @@ export const useExecutionStore = defineStore('execution', () => {
         await ws.refresh()
       })
     } catch (e) {
-      runErrors.present(e, 'Failed to restart')
+      runErrors.present(e, 'errors.action.restartFailed')
       return false
     }
   }

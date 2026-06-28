@@ -243,6 +243,35 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(block.taskTypeFields?.severity).toBe('high')
       })
 
+      it('pushes a real-time board event for human board mutations (add/rename/delete)', async () => {
+        // Other users active on a workspace must learn of a board edit live, not only on
+        // refresh — so every board mutation emits a coarse `boardChanged`. Asserted on every
+        // runtime so a facade can't silently drop the push.
+        const { call, createWorkspace, boardEmits } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        // Add → emits naming the new block.
+        const created = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'A collaboratively visible task',
+        })
+        expect(created.status).toBe(201)
+        expect(boardEmits(created.body.id).length).toBeGreaterThan(0)
+
+        // Rename → another event for the same block.
+        const before = boardEmits(created.body.id).length
+        const renamed = await call('PATCH', `/workspaces/${wsId}/blocks/${created.body.id}`, {
+          title: 'Renamed live',
+        })
+        expect(renamed.status).toBe(200)
+        expect(boardEmits(created.body.id).length).toBeGreaterThan(before)
+
+        // Delete → a removal signal reaches the workspace too.
+        const removed = await call('DELETE', `/workspaces/${wsId}/blocks/${created.body.id}`)
+        expect(removed.status).toBe(204)
+        expect(boardEmits().some((e) => e.reason === 'block-removed')).toBe(true)
+      })
+
       it('enforces a per-service running-task limit and lifts it when the mode is off', async () => {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
