@@ -32,7 +32,7 @@
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "ai": "^6.0.209",
-    "workers-ai-provider": "^3.2.0"
+    "workers-ai-provider": "^3.2.1"
   },
   "devDependencies": {
     "typescript": "7.0.1-rc"
