@@ -70,6 +70,11 @@ export default defineConfig(async () => {
             // must not reach an LLM. Specs that exercise the LLM planner inject a
             // model provider + planner ref via overrides instead.
             DOCUMENT_PLANNER: 'headings',
+            // Enable EVERY document source explicitly, including the opt-in
+            // `claude-design` (excluded from the production default set because its read
+            // API is provisional), so the conformance suite can exercise its per-user
+            // credential store on this facade too.
+            DOCUMENT_SOURCES: 'confluence,notion,github,figma,linear,claude-design',
           },
         },
       }),

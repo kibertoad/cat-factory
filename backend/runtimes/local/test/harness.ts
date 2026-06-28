@@ -58,6 +58,10 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   // Opt into the prompt-fragment library (ADR 0006) so its module wires up (parity
   // with the Node/Worker test envs); the conformance library CRUD asserts parity.
   PROMPT_LIBRARY_ENABLED: 'true',
+  // Enable EVERY document source explicitly, including the opt-in `claude-design`
+  // (excluded from the production default set because its read API is provisional), so
+  // the conformance suite exercises its per-user credential store on the local facade too.
+  DOCUMENT_SOURCES: 'confluence,notion,github,figma,linear,claude-design',
   LOCAL_HARNESS_IMAGE: 'cat-factory-executor:test',
   GITHUB_PAT: 'test-pat',
 }

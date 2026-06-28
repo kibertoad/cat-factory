@@ -37,7 +37,11 @@ import type {
   ProviderCapabilities,
 } from '@cat-factory/kernel'
 import type { DocumentContentResolver, DocumentSourceProvider } from '@cat-factory/kernel'
-import type { DocumentConnectionRepository, DocumentRepository } from '@cat-factory/kernel'
+import type {
+  DocumentConnectionRepository,
+  DocumentRepository,
+  UserDocumentConnectionRepository,
+} from '@cat-factory/kernel'
 import type { TaskSourceProvider } from '@cat-factory/kernel'
 import type {
   TaskConnectionRepository,
@@ -351,6 +355,12 @@ export interface CoreDependencies {
   documentPlannerModel?: ModelRef
   documentSourceProviders?: DocumentSourceProvider[]
   documentConnectionRepository?: DocumentConnectionRepository
+  /**
+   * Per-user store for personal (`credentialScope: 'user'`) document sources (a per-user
+   * PAT, e.g. Claude Design). Optional: absent → such sources can't connect, but every
+   * workspace-scoped source is unaffected.
+   */
+  userDocumentConnectionRepository?: UserDocumentConnectionRepository
   documentRepository?: DocumentRepository
 
   // ---- Task-source integration (optional; wired only when configured) ------
@@ -999,6 +1009,7 @@ function createDocumentsModule(
   const registry = new MapDocumentSourceRegistry(documentSourceProviders)
   const connectionService = new DocumentConnectionService({
     documentConnectionRepository,
+    userDocumentConnectionRepository: deps.userDocumentConnectionRepository,
     registry,
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
@@ -1845,6 +1856,19 @@ export function createCore(dependencies: CoreDependencies): Core {
     // managed + document-backed fragments reach a run), present only when the
     // library is configured; otherwise the engine falls back to the static pool.
     fragmentResolver: fragmentLibrary?.libraryService,
+    // Canonicalise a URL pasted into a block description to the document's stable
+    // (source, externalId) via the providers' parseRef, so a Figma/Notion/etc. link
+    // auto-matches its imported page even with a title segment or tracking params the
+    // stored canonical url omits. Absent providers → undefined (url-string match only).
+    documentUrlResolver: dependencies.documentSourceProviders?.length
+      ? (url: string) => {
+          for (const provider of dependencies.documentSourceProviders!) {
+            const externalId = provider.parseRef(url)
+            if (externalId) return { source: provider.kind, externalId }
+          }
+          return null
+        }
+      : undefined,
     requirementReviewService: requirements?.service,
     clarityReviewService: clarity?.service,
     brainstormServices: brainstorm?.services,

@@ -26,7 +26,9 @@ import {
 } from '@cat-factory/agents'
 import { cloudflareBindingRegistry } from '@cat-factory/provider-cloudflare'
 import {
+  ClaudeDesignProvider,
   ConfluenceProvider,
+  FigmaProvider,
   GitHubDocsProvider,
   GitHubIssuesProvider,
   JiraProvider,
@@ -149,6 +151,7 @@ import { D1CommitProjectionRepository } from './repositories/D1CommitProjectionR
 import { D1CheckRunProjectionRepository } from './repositories/D1CheckRunProjectionRepository'
 import { D1RateLimitRepository } from './repositories/D1RateLimitRepository'
 import { D1DocumentConnectionRepository } from './repositories/D1DocumentConnectionRepository'
+import { D1UserDocumentConnectionRepository } from './repositories/D1UserDocumentConnectionRepository'
 import { D1DocumentRepository } from './repositories/D1DocumentRepository'
 import { D1EnvironmentConnectionRepository } from './repositories/D1EnvironmentConnectionRepository'
 import { D1EnvironmentRegistryRepository } from './repositories/D1EnvironmentRegistryRepository'
@@ -1326,7 +1329,12 @@ function selectDocumentsDeps(
   const providers: DocumentSourceProvider[] = []
   if (config.documents.sources.includes('confluence')) providers.push(new ConfluenceProvider())
   if (config.documents.sources.includes('notion')) providers.push(new NotionProvider())
+  // Figma authenticates with a per-workspace PAT (no GitHub client needed), like Notion/Confluence.
+  if (config.documents.sources.includes('figma')) providers.push(new FigmaProvider())
   if (config.documents.sources.includes('linear')) providers.push(new LinearDocumentProvider())
+  // Claude Design uses a PERSONAL per-user PAT (descriptor `credentialScope: 'user'`), so it
+  // also needs the per-user connection store wired below.
+  if (config.documents.sources.includes('claude-design')) providers.push(new ClaudeDesignProvider())
   // GitHub repo docs reuse the workspace's installed GitHub App, so this provider
   // is wired only when the GitHub integration is also configured — it has no
   // credentials of its own and resolves the installation per file (mirrors the
@@ -1356,6 +1364,15 @@ function selectDocumentsDeps(
       cipher: new WebCryptoSecretCipher({
         masterKeyBase64: config.documents.encryptionKey!,
         info: 'cat-factory:documents',
+      }),
+    }),
+    // Per-user personal connections (Claude Design PAT), under a distinct HKDF info so a
+    // personal credential is domain-separated from the shared workspace credentials.
+    userDocumentConnectionRepository: new D1UserDocumentConnectionRepository({
+      db,
+      cipher: new WebCryptoSecretCipher({
+        masterKeyBase64: config.documents.encryptionKey!,
+        info: 'cat-factory:user-documents',
       }),
     }),
     documentRepository: new D1DocumentRepository({ db }),

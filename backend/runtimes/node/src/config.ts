@@ -101,19 +101,36 @@ function loadBinaryStorageConfig(env: NodeJS.ProcessEnv): BinaryStorageConfig {
   return { enabled: false, backend: 'db' }
 }
 
+// Every source this facade knows how to wire — the validation set an explicit
+// `DOCUMENT_SOURCES` entry is checked against.
 const ALL_DOCUMENT_SOURCES: readonly DocumentSourceKind[] = [
   'confluence',
   'notion',
   'github',
+  'figma',
+  'linear',
+  'claude-design',
+]
+
+// Sources enabled when `DOCUMENT_SOURCES` is unset. Claude Design is intentionally
+// NOT on by default: its credentialed project-read API is provisional (the read is
+// still claude.ai-login-bound, no per-user service token yet), so connecting it today
+// can't fetch. It must be opted in explicitly via `DOCUMENT_SOURCES=…,claude-design`
+// once the API is real, rather than exposing a non-functional connector to every tenant.
+const DEFAULT_DOCUMENT_SOURCES: readonly DocumentSourceKind[] = [
+  'confluence',
+  'notion',
+  'github',
+  'figma',
   'linear',
 ]
 
-/** Parse the comma-separated `DOCUMENT_SOURCES` allow-list, defaulting to all. */
+/** Parse the comma-separated `DOCUMENT_SOURCES` allow-list, defaulting to the on-by-default set. */
 function parseDocumentSources(raw: string | undefined): DocumentSourceKind[] {
   const requested = csv(raw).map((s) => s.toLowerCase())
-  if (requested.length === 0) return [...ALL_DOCUMENT_SOURCES]
+  if (requested.length === 0) return [...DEFAULT_DOCUMENT_SOURCES]
   const selected = ALL_DOCUMENT_SOURCES.filter((s) => requested.includes(s))
-  return selected.length > 0 ? selected : [...ALL_DOCUMENT_SOURCES]
+  return selected.length > 0 ? selected : [...DEFAULT_DOCUMENT_SOURCES]
 }
 
 /**
