@@ -1,5 +1,159 @@
 # @cat-factory/server
 
+## 0.39.8
+
+### Patch Changes
+
+- 8fad695: Update dependencies to latest.
+
+  - `undici` 7→8 (test-only `MockAgent`). undici's MockAgent must match Node's
+    bundled undici to intercept the global `fetch`; Node 26 bundles undici 8.5.0,
+    so the test runner / CI is pinned to **Node 26**. Production runtime is
+    unaffected — `undici` is a dev/test dependency only, and the service still runs
+    on any Node >=20 (e.g. the example `deploy/node` image stays on Node 24).
+  - Minor/patch bumps: `wrangler` 4.105, `@cloudflare/*`, `@types/node` 26.0.1,
+    `vue` 3.5.39, `msw` 2.14.6, `valibot` 1.4.2, `workers-ai-provider` 3.2.1,
+    `@toad-contracts/*` (core 0.4.0, valibot 0.5.0, hono/testing/http-client 0.3.2),
+    `@aws-sdk/client-s3` 3.1075.
+  - The AI SDK (`ai`, `@ai-sdk/*`) is intentionally held at v6 / v3-v4: the latest
+    `workers-ai-provider` (3.2.1, the Cloudflare Workers AI provider) still peers on
+    `ai@^6` / `@ai-sdk/provider@^3` and is not yet compatible with `ai` v7.
+  - Pinned the whole Vue runtime family to one version via a pnpm `override`
+    (`vue` + `@vue/*` → 3.5.39). Bumping `vue` to 3.5.39 left Nuxt 4.4.8's
+    transitive deps pinning parts of the graph to 3.5.38, so two copies of Vue were
+    bundled into the SPA; Vue's render internals are module-level singletons, so the
+    second copy crashed the app on boot (`Cannot read properties of null (reading
+'ce')` in `renderSlot`) — a blank 500 page that hung the whole e2e suite. One
+    version = one singleton.
+  - GitHub Actions: `actions/checkout` v6→v7, `pnpm/action-setup` v6.0.9,
+    `zizmorcore/zizmor-action` v0.5.7, `changesets/action` pinned to v1.9.0. CI Node 24→26.
+
+- Updated dependencies [8fad695]
+  - @cat-factory/integrations@0.26.5
+  - @cat-factory/orchestration@0.36.5
+  - @cat-factory/contracts@0.43.3
+  - @cat-factory/kernel@0.45.5
+  - @cat-factory/agents@0.21.6
+  - @cat-factory/prompt-fragments@0.8.3
+  - @cat-factory/spend@0.10.21
+
+## 0.39.7
+
+### Patch Changes
+
+- Updated dependencies [fb339db]
+  - @cat-factory/contracts@0.43.2
+  - @cat-factory/agents@0.21.5
+  - @cat-factory/integrations@0.26.4
+  - @cat-factory/kernel@0.45.4
+  - @cat-factory/orchestration@0.36.4
+  - @cat-factory/prompt-fragments@0.8.2
+  - @cat-factory/spend@0.10.20
+
+## 0.39.6
+
+### Patch Changes
+
+- 7d219ab: Allow the `X-Connection-Id` request header in CORS so the SPA can reach the backend.
+
+  The SPA sends `X-Connection-Id` on every API call (the per-tab connection id for real-time
+  self-echo suppression), but the Worker's CORS preflight only allow-listed
+  `Content-Type, Authorization, X-Personal-Password`. The browser's preflight asked permission
+  for `x-connection-id`, the response omitted it, so the browser dropped every cross-origin
+  request with "CORS Missing Allow Header" and the board failed to load ("Can't reach the
+  backend"). curl/server-side callers were unaffected because they don't send the header.
+
+  Move the allow-list to a single shared `CORS_ALLOWED_HEADERS` constant in
+  `@cat-factory/server` (now including `X-Connection-Id`) and use it in both runtime facades.
+  The Node facade previously passed no `allowHeaders` and so let Hono echo the requested
+  headers, which silently masked the drift; it now uses the same explicit list as the Worker.
+
+## 0.39.5
+
+### Patch Changes
+
+- ab146e5: Suppress the real-time self-echo for board moves/reparents so dragging a task several
+  times in quick succession is reliable. The SPA now tags every request with a stable
+  per-tab connection id (`X-Connection-Id`) and the realtime WebSocket connect with the
+  matching `?cid=`; the board `move`/`reparent` controllers forward it through
+  `BoardService` to `boardChanged`, and both realtime hubs (the Cloudflare
+  `WorkspaceEventsHub` Durable Object and the Node `NodeRealtimeHub`) skip delivering the
+  coarse `board` event back to the connection that caused it. The originating client keeps
+  its optimistic state plus its own authoritative REST response instead of refreshing off
+  its own move (a mid-flight snapshot of which carried a stale position, snapping the block
+  back). Other subscribers still receive the event and refresh.
+- Updated dependencies [ab146e5]
+  - @cat-factory/kernel@0.45.3
+  - @cat-factory/orchestration@0.36.3
+  - @cat-factory/agents@0.21.4
+  - @cat-factory/integrations@0.26.3
+  - @cat-factory/spend@0.10.19
+
+## 0.39.4
+
+### Patch Changes
+
+- 1a349b5: Drop persisted agent failures carrying a removed kind so a stale row can't brick the board.
+
+  `decision_timeout` was removed from the `AgentFailure` kind picklist when human decisions
+  stopped being timeout-limited. A run that failed before then still carries the obsolete kind
+  in its persisted failure JSON, which violates the now-closed picklist. Because the server
+  ships rows without validating them against the contract, one stale failure made the SPA's
+  response validation reject the entire workspace snapshot ("Can't reach the backend").
+
+  The three failure-column parsers (the shared execution mapper plus both runtimes' bootstrap
+  repositories) now drop a failure whose kind is no longer known, via the new shared
+  `isKnownAgentFailureKind` predicate. The run's `status` + `error` string still describe what
+  happened. This repair is temporary and marked for removal after the 2026-07-15 migration
+  grace cutoff.
+
+## 0.39.3
+
+### Patch Changes
+
+- 80e5fc9: Repair pre-#94 numeric user ids on read so a stale row can't brick the board.
+
+  PR #94 re-keyed user ids (block `createdBy`, execution `initiatedBy`) from the GitHub
+  numeric id to the canonical `usr_*` string with no data migration. The wire contract now
+  types these as `string | null`, and the server ships rows without validating them against
+  the contract, so a single pre-#94 row made the SPA's response validation reject the entire
+  workspace snapshot and the board failed to load with "Can't reach the backend".
+
+  The shared row→domain mapper (used by both the D1 and Drizzle stores) now drops a
+  non-string legacy id to null on read. The stale number is an old GitHub id that matches no
+  `usr_*` user, so dropping it loses nothing real. This repair is temporary and marked for
+  removal after the 2026-07-15 migration grace cutoff.
+
+## 0.39.2
+
+### Patch Changes
+
+- c11a0cc: Add a `prepublishOnly` build hook so each package is compiled to `dist/` before it is
+  packed, regardless of how publish is invoked. `dist/` is gitignored and was only built by
+  the canonical `pnpm ci:publish` flow, so a bare `pnpm publish` could ship an empty shell
+  (this is what happened to `@cat-factory/gitlab` and `@cat-factory/provider-s3`). The hook
+  removes that footgun for every publishable library.
+- Updated dependencies [c11a0cc]
+  - @cat-factory/agents@0.21.3
+  - @cat-factory/contracts@0.43.1
+  - @cat-factory/integrations@0.26.2
+  - @cat-factory/kernel@0.45.2
+  - @cat-factory/orchestration@0.36.2
+  - @cat-factory/prompt-fragments@0.8.1
+  - @cat-factory/spend@0.10.18
+
+## 0.39.1
+
+### Patch Changes
+
+- Updated dependencies [5363166]
+- Updated dependencies [5363166]
+  - @cat-factory/orchestration@0.36.1
+  - @cat-factory/kernel@0.45.1
+  - @cat-factory/agents@0.21.2
+  - @cat-factory/integrations@0.26.1
+  - @cat-factory/spend@0.10.17
+
 ## 0.39.0
 
 ### Minor Changes

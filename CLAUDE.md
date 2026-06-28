@@ -318,6 +318,40 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   (a missing harness route then 404s as `Container dispatch failed (HTTP 404)`). A
   fresh, immutable tag is what forces the rollout.
 
+## Adding a new published package
+
+A new library under `backend/packages/<name>` is **not** wired up just by creating the
+folder. Miss one of these registries and it builds locally but ships broken (the classic
+failure: `@cat-factory/gitlab` + `@cat-factory/provider-s3` once published as **empty
+shells** — a `package.json` with no `dist/` — because a bare `pnpm publish` skipped the
+build and `dist/` is gitignored). The checklist:
+
+- **`package.json` must carry the full publish contract**, copied from an existing leaf
+  package (e.g. `packages/gates`): `"files": ["dist"]`, `"main"`/`"types"`/`"exports"`
+  pointing at `./dist`, `"publishConfig": { "access": "public" }`, a `"build": "tsc -b
+tsconfig.build.json"` script, AND a **`"prepublishOnly": "pnpm run build"`** hook. The
+  `prepublishOnly` hook is mandatory and non-negotiable: `dist/` is gitignored, so without
+  it any publish path that doesn't pre-build (a bare `pnpm publish`, a one-off
+  `changeset publish`) ships an empty shell. The canonical `pnpm ci:publish` builds first,
+  but the hook is the guardrail for every other path.
+- **Register it in `backend/tsconfig.build.json`** — add `{ "path":
+"packages/<name>/tsconfig.build.json" }` to the `references` array. This is the
+  solution-style build graph that `pnpm build:tsc` (and the incremental project-reference
+  build) walks. A package reachable only transitively (because some runtime happens to
+  reference it) builds today but silently drops out the moment that reference goes away;
+  list every publishable library here directly.
+- **No pnpm-workspace edit needed** — `pnpm-workspace.yaml` globs `backend/packages/*`, so
+  the package is picked up automatically. (`deploy/*` are listed individually, but library
+  packages are not.)
+- **Add a changeset** (`pnpm changeset`) — CI's `changeset status` gate fails the PR
+  otherwise. A brand-new package still needs an initial-release changeset.
+- **Keep the runtimes symmetric** if the package is a shared behaviour both facades must
+  wire (see "Keep the runtimes symmetric").
+
+After wiring, verify with a clean build + a publish dry-run from the package dir:
+`rm -rf dist && pnpm publish --dry-run --no-git-checks` — it must run `prepublishOnly`,
+rebuild `dist/`, and list the compiled files in the tarball.
+
 ## Execution flow (the canonical async + observable pattern)
 
 This is the gold-standard pattern for long-running agent work. Anything new that
@@ -1003,6 +1037,33 @@ overrides or adds locales by dropping its own files, so the layer's per-layer
   `errors.conflict.title.<reason>`, `catalog.status.<status>`.
 - **No cross-key concatenation.** A full sentence is ONE key with `{named}` placeholders;
   plurals use the vue-i18n pipe form (`'no cats | one cat | {count} cats'`).
+
+**Component migration mechanics (the vue-i18n specifics that bite):**
+
+- **`useI18n` is auto-imported** — never add an `import`. In `<script setup>` destructure what
+  you need (`const { t, d, n } = useI18n()`); the template can then use the same `t`/`d`/`n`. Do
+  NOT reach for `$t`/`$d` in templates of migrated components — use the destructured fns so the
+  typed-message-keys check (tier 1) sees the literal keys.
+- **Plural + interpolation in one call:** `t(key, { vendor, count }, count)` — the THIRD arg is
+  the plural choice (a number); the named object still feeds `{…}` placeholders. `{count}` is the
+  conventional name for the count. Pass the count both as a named param and as the 3rd arg.
+- **Dates/numbers always go through `d()`/`n()`** (or `$d`/`$n`), NEVER `toLocaleDateString()` /
+  `Intl` / `new Date().toLocaleString()`. `t('…expires', { date: d(new Date(ts), 'short') })`.
+- **Code/format-example placeholders stay INLINE, not in the catalog.** A placeholder that is a
+  literal example (`sk-ant-oat01-…`, a JSON blob, a token shape) is not prose: leave it as a
+  component constant. This is REQUIRED when it contains `{`/`}` — those are vue-i18n interpolation
+  metacharacters and would need ugly `{'{'}` escaping. Only prose placeholders (`your GLM … key`)
+  get a key. Same for proper nouns / brand names rendered as labels (keep verbatim across locales).
+- **No HTML in message bodies** (the catalog has none): drop mid-sentence `<strong>` when
+  migrating (it also matches the writing rules), or use the `<i18n-t>` component with slots if the
+  emphasis is structural. Don't embed tags and `v-html` a message.
+- **A vendor/enum-keyed set of strings:** build it as an array/computed of STATIC literal `t()`
+  keys (`t('…vendors.claude.label')`), one per enum member — that keeps the tier-1 typed-key check
+  live. Reserve the runtime-assembled key + exhaustive `Record` guard (tier 2) for lookups whose
+  key genuinely isn't known until runtime.
+- **In new catalog entries use straight quotes/apostrophes and NO em-dashes** (rephrase; the
+  existing catalog is mixed, straight is the going-forward standard). Translated catalogs
+  (`es/fr/pl/uk`) carry NO `@<key>` description siblings — those live only in `en.json`.
 
 **Translator descriptions (`@<key>` siblings) — annotate ONLY truly ambiguous keys:**
 

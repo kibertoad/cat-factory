@@ -13,6 +13,7 @@ const pipelines = usePipelinesStore()
 const recurring = useRecurringPipelinesStore()
 const tracker = useTrackerStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const open = computed({
   get: () => ui.addRecurringFrameId !== null,
@@ -54,7 +55,9 @@ const pipelineMenu = computed(() => [
   })),
 ])
 const selectedPipeline = computed(() => pipelines.getPipeline(pipelineId.value))
-const selectedPipelineLabel = computed(() => selectedPipeline.value?.name ?? 'Pick a pipeline')
+const selectedPipelineLabel = computed(
+  () => selectedPipeline.value?.name ?? t('board.recurring.pickPipeline'),
+)
 
 // Infer the template from the picked pipeline so the backend seeds the right block
 // description (and so we know to show the tracker config).
@@ -108,7 +111,7 @@ async function add() {
     ui.closeAddRecurring()
   } catch (e) {
     toast.add({
-      title: 'Could not add recurring pipeline',
+      title: t('board.recurring.addFailedTitle'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -120,24 +123,27 @@ async function add() {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Add a recurring pipeline">
+  <UModal v-model:open="open" :title="t('board.recurring.title')">
     <template #body>
       <div class="space-y-4">
         <p v-if="frame" class="text-xs text-slate-400">
-          Recurring pipeline on
-          <span class="font-medium text-slate-200">{{ frame.title }}</span>
+          <i18n-t keypath="board.recurring.on" tag="span" scope="global">
+            <template #frame>
+              <span class="font-medium text-slate-200">{{ frame.title }}</span>
+            </template>
+          </i18n-t>
         </p>
 
-        <UFormField label="Name" required>
+        <UFormField :label="t('board.recurring.name')" required>
           <UInput
             v-model="name"
-            placeholder="e.g. Weekly dependency updates"
+            :placeholder="t('board.recurring.namePlaceholder')"
             autofocus
             class="w-full"
           />
         </UFormField>
 
-        <UFormField label="Pipeline" required>
+        <UFormField :label="t('board.recurring.pipeline')" required>
           <UDropdownMenu :items="pipelineMenu" class="w-full">
             <UButton
               color="neutral"
@@ -152,12 +158,12 @@ async function add() {
           </UDropdownMenu>
         </UFormField>
 
-        <UFormField label="Prompt">
+        <UFormField :label="t('board.recurring.prompt')">
           <UTextarea
             v-model="description"
             :rows="3"
             autoresize
-            placeholder="What should each run do? Describe the work — the same prompt a normal task carries. Leave blank to use the pipeline's default."
+            :placeholder="t('board.recurring.promptPlaceholder')"
             class="w-full"
           />
         </UFormField>
@@ -166,11 +172,10 @@ async function add() {
 
         <div v-if="isTechDebt" class="space-y-3 rounded-lg border border-slate-800 p-3">
           <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            Issue tracker
+            {{ t('board.recurring.issueTracker') }}
           </p>
           <p class="text-[11px] text-slate-500">
-            The tech-debt pipeline files a ticket from its analysis before implementing. Choose
-            where (saved for the whole workspace).
+            {{ t('board.recurring.issueTrackerHint') }}
           </p>
           <div class="flex gap-1">
             <UButton
@@ -180,7 +185,7 @@ async function add() {
               icon="i-lucide-github"
               @click="trackerKind = 'github'"
             >
-              GitHub Issues
+              {{ t('board.recurring.githubIssues') }}
             </UButton>
             <UButton
               size="xs"
@@ -189,7 +194,7 @@ async function add() {
               icon="i-lucide-square-check"
               @click="trackerKind = 'jira'"
             >
-              Jira
+              {{ t('board.recurring.jira') }}
             </UButton>
             <UButton
               size="xs"
@@ -198,27 +203,32 @@ async function add() {
               icon="i-lucide-square-kanban"
               @click="trackerKind = 'linear'"
             >
-              Linear
+              {{ t('board.recurring.linear') }}
             </UButton>
           </div>
-          <UFormField v-if="trackerKind === 'jira'" label="Jira project key">
-            <UInput v-model="jiraProjectKey" placeholder="e.g. ENG" class="w-full" />
+          <UFormField v-if="trackerKind === 'jira'" :label="t('board.recurring.jiraProjectKey')">
+            <UInput
+              v-model="jiraProjectKey"
+              :placeholder="t('board.recurring.jiraProjectKeyPlaceholder')"
+              class="w-full"
+            />
           </UFormField>
-          <UFormField v-if="trackerKind === 'linear'" label="Linear team id">
+          <UFormField v-if="trackerKind === 'linear'" :label="t('board.recurring.linearTeamId')">
             <UInput v-model="linearTeamId" placeholder="team_…" class="w-full" />
           </UFormField>
         </div>
 
         <p class="text-[11px] text-slate-500">
-          A single recurring task is added inside the service; each run replaces the last. Its run
-          history is visible in the inspector.
+          {{ t('board.recurring.footerHint') }}
         </p>
       </div>
     </template>
 
     <template #footer>
       <div class="flex w-full justify-end gap-2">
-        <UButton color="neutral" variant="ghost" @click="ui.closeAddRecurring()">Cancel</UButton>
+        <UButton color="neutral" variant="ghost" @click="ui.closeAddRecurring()">{{
+          t('common.cancel')
+        }}</UButton>
         <UButton
           color="primary"
           icon="i-lucide-repeat"
@@ -226,7 +236,7 @@ async function add() {
           :disabled="!canAdd"
           @click="add"
         >
-          Add recurring pipeline
+          {{ t('board.recurring.submit') }}
         </UButton>
       </div>
     </template>

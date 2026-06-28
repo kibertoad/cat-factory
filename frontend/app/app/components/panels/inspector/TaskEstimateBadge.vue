@@ -6,18 +6,19 @@ import { computed } from 'vue'
 import type { Block } from '~/types/domain'
 
 const props = defineProps<{ block: Block }>()
+const { t, n } = useI18n()
 
 const estimate = computed(() => props.block.estimate ?? null)
 
-const AXES = [
-  { key: 'complexity', label: 'Complexity' },
-  { key: 'risk', label: 'Risk' },
-  { key: 'impact', label: 'Impact' },
-] as const
+const AXES = computed(
+  () =>
+    [
+      { key: 'complexity', label: t('inspector.estimate.complexity') },
+      { key: 'risk', label: t('inspector.estimate.risk') },
+      { key: 'impact', label: t('inspector.estimate.impact') },
+    ] as const,
+)
 
-function pct(n: number): number {
-  return Math.round(n * 100)
-}
 /** Cool→hot bar colour by severity (low = sky, mid = amber, high = rose). */
 function barClass(n: number): string {
   if (n >= 0.66) return 'bg-rose-500'
@@ -32,7 +33,7 @@ function barClass(n: number): string {
       class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400"
     >
       <UIcon name="i-lucide-gauge" class="h-3.5 w-3.5" />
-      Estimate
+      {{ t('inspector.estimate.title') }}
     </div>
     <div class="space-y-1.5 rounded-lg border border-slate-800 bg-slate-900/40 p-2.5">
       <div v-for="axis in AXES" :key="axis.key" class="flex items-center gap-2">
@@ -41,12 +42,12 @@ function barClass(n: number): string {
           <div
             class="h-full rounded-full"
             :class="barClass(estimate[axis.key])"
-            :style="{ width: `${pct(estimate[axis.key])}%` }"
+            :style="{ width: `${Math.round(estimate[axis.key] * 100)}%` }"
           />
         </div>
-        <span class="w-9 shrink-0 text-right text-xs tabular-nums text-slate-300"
-          >{{ pct(estimate[axis.key]) }}%</span
-        >
+        <span class="w-9 shrink-0 text-right text-xs tabular-nums text-slate-300">{{
+          n(estimate[axis.key], { key: 'percent' })
+        }}</span>
       </div>
       <p v-if="estimate.rationale" class="pt-1 text-xs leading-relaxed text-slate-500">
         {{ estimate.rationale }}

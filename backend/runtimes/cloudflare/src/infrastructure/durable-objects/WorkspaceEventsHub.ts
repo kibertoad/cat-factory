@@ -22,10 +22,15 @@ export class WorkspaceEventsHub extends DurableObject<Env> {
   override async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url)
 
-    // Internal broadcast: fan a pre-serialised JSON event out to every socket.
+    // Internal broadcast: fan a pre-serialised JSON event out to every socket. When the
+    // publish names an origin connection (`X-Origin-Cid`), skip the socket that carried that
+    // `?cid=` — the connection that caused the change already has the authoritative REST
+    // result, so echoing it back would only make it refresh off (and fight) its own move.
     if (request.method === 'POST' && url.pathname === '/publish') {
       const body = await request.text()
+      const originCid = request.headers.get('X-Origin-Cid')
       for (const ws of this.ctx.getWebSockets()) {
+        if (originCid && ws.deserializeAttachment() === originCid) continue
         try {
           ws.send(body)
         } catch {
@@ -43,6 +48,10 @@ export class WorkspaceEventsHub extends DurableObject<Env> {
       const server = pair[1]
       // NOT server.accept() — that pins the DO in memory and disables hibernation.
       this.ctx.acceptWebSocket(server)
+      // Remember this connection's id (survives hibernation via the attachment) so a later
+      // /publish can skip echoing a board mutation back to the connection that caused it.
+      const cid = url.searchParams.get('cid')
+      if (cid) server.serializeAttachment(cid)
       return new Response(null, { status: 101, webSocket: client })
     }
 

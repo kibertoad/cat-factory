@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 
+const { t } = useI18n()
+
 // Local-mode setup prompt: when the local facade boots without a GitHub PAT, every
 // repo-operating agent step (clone, push, open PR, CI gate, merge) will fail. The server
 // also logs this, but a dev terminal is easy to miss — so surface it in the UI with the
@@ -23,19 +25,20 @@ const show = computed(() => !!setupUrl.value && !dismissed.value)
           <UIcon name="i-lucide-key-round" class="mt-0.5 h-9 w-9 shrink-0 text-amber-400" />
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
-              <h2 class="text-lg font-semibold text-amber-100">GitHub PAT not configured</h2>
+              <h2 class="text-lg font-semibold text-amber-100">
+                {{ t('layout.githubPatBanner.title') }}
+              </h2>
               <UButton
                 color="neutral"
                 variant="ghost"
                 size="xs"
                 icon="i-lucide-x"
-                aria-label="Dismiss"
+                :aria-label="t('common.close')"
                 @click="dismissed = true"
               />
             </div>
             <p class="mt-1 text-sm text-amber-200/90">
-              Local mode reaches GitHub with a personal access token. Without one, agent steps that
-              clone, push, open PRs, gate on CI or merge will fail.
+              {{ t('layout.githubPatBanner.body') }}
             </p>
 
             <div class="mt-4">
@@ -48,10 +51,14 @@ const show = computed(() => !!setupUrl.value && !dismissed.value)
                 icon="i-lucide-external-link"
                 trailing
               >
-                Create a GitHub token (scopes pre-selected)
+                {{ t('layout.githubPatBanner.createToken') }}
               </UButton>
               <p class="mt-2 text-xs text-amber-300/70">
-                Then set <code class="font-mono">GITHUB_PAT</code> and restart.
+                <i18n-t keypath="layout.githubPatBanner.thenSet" tag="span" scope="global">
+                  <template #envVar>
+                    <code class="font-mono">GITHUB_PAT</code>
+                  </template>
+                </i18n-t>
               </p>
             </div>
           </div>

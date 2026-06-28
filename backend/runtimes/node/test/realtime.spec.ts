@@ -103,6 +103,44 @@ describe('Node real-time WebSocket transport', () => {
     expect(got).toBe(false)
   })
 
+  it('suppresses a board echo to the connection that caused it, but not to others', async () => {
+    const { port, publisher } = await startHarness(authConfig({}))
+    // Two browsers on the same workspace, distinguished by their `?cid=` (the SPA's
+    // per-tab connection id). A board mutation attributed to `cid-origin` must reach the
+    // OTHER tab but skip the one that made the move (it already has the REST result).
+    const origin = open(port, '/workspaces/ws_a/events?cid=cid-origin')
+    const other = open(port, '/workspaces/ws_a/events?cid=cid-other')
+    await Promise.all([
+      new Promise<void>((res, rej) => {
+        origin.once('open', res)
+        origin.once('error', rej)
+      }),
+      new Promise<void>((res, rej) => {
+        other.once('open', res)
+        other.once('error', rej)
+      }),
+    ])
+
+    let originGot = 0
+    origin.on('message', () => {
+      originGot++
+    })
+    const otherReceived = new Promise<void>((resolve) => other.once('message', () => resolve()))
+
+    const pump = setInterval(
+      () => void publisher.boardChanged('ws_a', 'block-moved', 'blk_1', 'cid-origin'),
+      15,
+    )
+    await otherReceived
+    // Keep pumping briefly so a missed suppression on the origin socket would surface.
+    await new Promise((r) => setTimeout(r, 80))
+    clearInterval(pump)
+    origin.close()
+    other.close()
+
+    expect(originGot).toBe(0)
+  })
+
   it('rejects an upgrade with no ticket when auth is enabled', async () => {
     const { port } = await startHarness(authConfig({ enabled: true, devOpen: false }))
     const client = open(port, '/workspaces/ws_a/events')

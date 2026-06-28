@@ -1,5 +1,121 @@
 # @cat-factory/orchestration
 
+## 0.36.5
+
+### Patch Changes
+
+- 8fad695: Update dependencies to latest.
+
+  - `undici` 7→8 (test-only `MockAgent`). undici's MockAgent must match Node's
+    bundled undici to intercept the global `fetch`; Node 26 bundles undici 8.5.0,
+    so the test runner / CI is pinned to **Node 26**. Production runtime is
+    unaffected — `undici` is a dev/test dependency only, and the service still runs
+    on any Node >=20 (e.g. the example `deploy/node` image stays on Node 24).
+  - Minor/patch bumps: `wrangler` 4.105, `@cloudflare/*`, `@types/node` 26.0.1,
+    `vue` 3.5.39, `msw` 2.14.6, `valibot` 1.4.2, `workers-ai-provider` 3.2.1,
+    `@toad-contracts/*` (core 0.4.0, valibot 0.5.0, hono/testing/http-client 0.3.2),
+    `@aws-sdk/client-s3` 3.1075.
+  - The AI SDK (`ai`, `@ai-sdk/*`) is intentionally held at v6 / v3-v4: the latest
+    `workers-ai-provider` (3.2.1, the Cloudflare Workers AI provider) still peers on
+    `ai@^6` / `@ai-sdk/provider@^3` and is not yet compatible with `ai` v7.
+  - Pinned the whole Vue runtime family to one version via a pnpm `override`
+    (`vue` + `@vue/*` → 3.5.39). Bumping `vue` to 3.5.39 left Nuxt 4.4.8's
+    transitive deps pinning parts of the graph to 3.5.38, so two copies of Vue were
+    bundled into the SPA; Vue's render internals are module-level singletons, so the
+    second copy crashed the app on boot (`Cannot read properties of null (reading
+'ce')` in `renderSlot`) — a blank 500 page that hung the whole e2e suite. One
+    version = one singleton.
+  - GitHub Actions: `actions/checkout` v6→v7, `pnpm/action-setup` v6.0.9,
+    `zizmorcore/zizmor-action` v0.5.7, `changesets/action` pinned to v1.9.0. CI Node 24→26.
+
+- Updated dependencies [8fad695]
+  - @cat-factory/integrations@0.26.5
+  - @cat-factory/contracts@0.43.3
+  - @cat-factory/kernel@0.45.5
+  - @cat-factory/agents@0.21.6
+  - @cat-factory/sandbox@0.8.29
+  - @cat-factory/prompt-fragments@0.8.3
+  - @cat-factory/spend@0.10.21
+  - @cat-factory/workspaces@0.9.12
+
+## 0.36.4
+
+### Patch Changes
+
+- Updated dependencies [fb339db]
+  - @cat-factory/contracts@0.43.2
+  - @cat-factory/agents@0.21.5
+  - @cat-factory/integrations@0.26.4
+  - @cat-factory/kernel@0.45.4
+  - @cat-factory/prompt-fragments@0.8.2
+  - @cat-factory/sandbox@0.8.28
+  - @cat-factory/spend@0.10.20
+  - @cat-factory/workspaces@0.9.11
+
+## 0.36.3
+
+### Patch Changes
+
+- ab146e5: Suppress the real-time self-echo for board moves/reparents so dragging a task several
+  times in quick succession is reliable. The SPA now tags every request with a stable
+  per-tab connection id (`X-Connection-Id`) and the realtime WebSocket connect with the
+  matching `?cid=`; the board `move`/`reparent` controllers forward it through
+  `BoardService` to `boardChanged`, and both realtime hubs (the Cloudflare
+  `WorkspaceEventsHub` Durable Object and the Node `NodeRealtimeHub`) skip delivering the
+  coarse `board` event back to the connection that caused it. The originating client keeps
+  its optimistic state plus its own authoritative REST response instead of refreshing off
+  its own move (a mid-flight snapshot of which carried a stale position, snapping the block
+  back). Other subscribers still receive the event and refresh.
+- Updated dependencies [ab146e5]
+  - @cat-factory/kernel@0.45.3
+  - @cat-factory/agents@0.21.4
+  - @cat-factory/integrations@0.26.3
+  - @cat-factory/sandbox@0.8.27
+  - @cat-factory/spend@0.10.19
+  - @cat-factory/workspaces@0.9.10
+
+## 0.36.2
+
+### Patch Changes
+
+- c11a0cc: Add a `prepublishOnly` build hook so each package is compiled to `dist/` before it is
+  packed, regardless of how publish is invoked. `dist/` is gitignored and was only built by
+  the canonical `pnpm ci:publish` flow, so a bare `pnpm publish` could ship an empty shell
+  (this is what happened to `@cat-factory/gitlab` and `@cat-factory/provider-s3`). The hook
+  removes that footgun for every publishable library.
+- Updated dependencies [c11a0cc]
+  - @cat-factory/agents@0.21.3
+  - @cat-factory/contracts@0.43.1
+  - @cat-factory/integrations@0.26.2
+  - @cat-factory/kernel@0.45.2
+  - @cat-factory/prompt-fragments@0.8.1
+  - @cat-factory/sandbox@0.8.26
+  - @cat-factory/spend@0.10.18
+  - @cat-factory/workspaces@0.9.9
+
+## 0.36.1
+
+### Patch Changes
+
+- 5363166: ExecutionService split, phase 1: lift the `deployer` and `tracker` step branches out of
+  `stepInstance`'s per-kind body into dedicated `StepHandler`s (built inline in the engine,
+  each delegating to the existing `runDeployer`/`runTracker` paths). Behaviour-preserving;
+  verified on both runtimes via the cross-runtime conformance suite.
+- 5363166: Begin splitting the `ExecutionService` god class (refactoring candidate #8). Phase 0:
+  introduce an engine-internal `StepHandler` registry that `stepInstance` dispatches to after
+  its fixed run-lifecycle preamble, with a single fallthrough handler delegating the entire
+  per-kind body unchanged (zero behaviour change — the safety net for the incremental,
+  conformance-gated migration that follows). Adds an optional `control` field to the kernel
+  `StepResolution` seam (consumed from a later phase; resolvers that omit it keep today's
+  advance-on-completion behaviour).
+- Updated dependencies [5363166]
+  - @cat-factory/kernel@0.45.1
+  - @cat-factory/agents@0.21.2
+  - @cat-factory/integrations@0.26.1
+  - @cat-factory/sandbox@0.8.25
+  - @cat-factory/spend@0.10.17
+  - @cat-factory/workspaces@0.9.8
+
 ## 0.36.0
 
 ### Minor Changes

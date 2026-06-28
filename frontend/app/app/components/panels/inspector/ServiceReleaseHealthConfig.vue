@@ -11,6 +11,7 @@ const props = defineProps<{ block: Block }>()
 const store = useReleaseHealthStore()
 const ui = useUiStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const busy = ref(false)
 const draft = reactive({ monitorIds: '', sloIds: '', envTag: '' })
@@ -56,9 +57,13 @@ async function save() {
       sloIds: parseIds(draft.sloIds),
       envTag: draft.envTag.trim() || null,
     })
-    toast.add({ title: 'Monitoring saved', icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('inspector.releaseHealth.savedToast'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
-    notifyError('Could not save the mapping', e)
+    notifyError(t('inspector.releaseHealth.saveFailed'), e)
   } finally {
     busy.value = false
   }
@@ -72,7 +77,7 @@ async function clear() {
     draft.sloIds = ''
     draft.envTag = ''
   } catch (e) {
-    notifyError('Could not clear the mapping', e)
+    notifyError(t('inspector.releaseHealth.clearFailed'), e)
   } finally {
     busy.value = false
   }
@@ -83,7 +88,7 @@ async function clear() {
   <div class="space-y-2">
     <div class="flex items-center justify-between">
       <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        Post-release health
+        {{ t('inspector.releaseHealth.title') }}
       </span>
       <UButton
         v-if="saved"
@@ -94,7 +99,7 @@ async function clear() {
         :loading="busy"
         @click="clear"
       >
-        Clear
+        {{ t('inspector.releaseHealth.clear') }}
       </UButton>
     </div>
 
@@ -103,32 +108,32 @@ async function clear() {
       v-if="!connected"
       class="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-[11px] text-slate-400"
     >
-      <span>Connect an observability integration to watch this service after releases.</span>
+      <span>{{ t('inspector.releaseHealth.connectPrompt') }}</span>
       <UButton
         color="neutral"
         variant="soft"
         size="xs"
         icon="i-lucide-plug"
-        title="Connect an observability integration first"
+        :title="t('inspector.releaseHealth.connectFirst')"
         @click="ui.openObservabilityConnection()"
       >
-        Connect
+        {{ t('inspector.releaseHealth.connect') }}
       </UButton>
     </div>
 
     <div v-else class="space-y-2">
       <p class="text-[11px] text-slate-500">
-        The monitors and SLOs the gate watches after this service ships. Comma-separate ids.
+        {{ t('inspector.releaseHealth.hint') }}
       </p>
       <div class="grid grid-cols-2 gap-2">
-        <UFormField label="Monitor ids">
+        <UFormField :label="t('inspector.releaseHealth.monitorIds')">
           <UInput v-model="draft.monitorIds" placeholder="123, 456" size="sm" class="w-full" />
         </UFormField>
-        <UFormField label="SLO ids">
+        <UFormField :label="t('inspector.releaseHealth.sloIds')">
           <UInput v-model="draft.sloIds" placeholder="abc, def" size="sm" class="w-full" />
         </UFormField>
       </div>
-      <UFormField label="Env tag (optional)">
+      <UFormField :label="t('inspector.releaseHealth.envTag')">
         <UInput v-model="draft.envTag" placeholder="prod" size="sm" class="w-full" />
       </UFormField>
       <div class="flex justify-end">
@@ -140,7 +145,7 @@ async function clear() {
           :loading="busy"
           @click="save"
         >
-          Save monitoring
+          {{ t('inspector.releaseHealth.saveMonitoring') }}
         </UButton>
       </div>
     </div>

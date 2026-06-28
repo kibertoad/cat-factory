@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/integrations",
-  "version": "0.26.0",
+  "version": "0.26.5",
   "description": "External-system integration domain logic for the Agent Architecture Board (GitHub, documents, tasks, environments, runners).",
   "repository": {
     "type": "git",
@@ -25,6 +25,7 @@
   },
   "scripts": {
     "build": "tsc -b tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:run": "vitest run"
@@ -36,7 +37,7 @@
   },
   "devDependencies": {
     "typescript": "7.0.1-rc",
-    "undici": "^7.16.0",
+    "undici": "^8.5.0",
     "vitest": "^4.1.9"
   }
 }

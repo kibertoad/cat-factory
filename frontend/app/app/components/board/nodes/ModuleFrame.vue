@@ -7,6 +7,7 @@ import { useFrameResize } from '~/composables/useFrameResize'
 const props = defineProps<{ moduleId: string }>()
 const board = useBoardStore()
 const ui = useUiStore()
+const { t } = useI18n()
 
 const mod = computed(() => board.getBlock(props.moduleId))
 const tasks = computed(() => board.tasksOf(props.moduleId))
@@ -61,10 +62,10 @@ function onResize(e: PointerEvent, edge: 'e' | 's' | 'se') {
       />
       <span class="truncate text-[11px] font-semibold text-violet-100">{{ mod.title }}</span>
       <span v-if="inflight" class="ml-auto shrink-0 text-[9px] text-violet-300/70">
-        {{ inflight }} task{{ inflight === 1 ? '' : 's' }}
+        {{ t('board.frame.taskCount', { count: inflight }, inflight) }}
       </span>
       <span v-else-if="total" class="ml-auto shrink-0 text-[9px] text-violet-300/70">
-        {{ total }} task{{ total === 1 ? '' : 's' }}
+        {{ t('board.frame.taskCount', { count: total }, total) }}
       </span>
     </div>
 
@@ -77,17 +78,17 @@ function onResize(e: PointerEvent, edge: 'e' | 's' | 'se') {
          `nopan` (with `nodrag`) so resizing doesn't pan the pane. -->
     <div
       class="nodrag nopan absolute right-0 top-0 h-full w-2 cursor-ew-resize touch-none hover:bg-violet-400/20 pointer-coarse:w-4"
-      title="Drag to resize"
+      :title="t('board.frame.dragToResize')"
       @pointerdown="onResize($event, 'e')"
     />
     <div
       class="nodrag nopan absolute bottom-0 left-0 h-2 w-full cursor-ns-resize touch-none hover:bg-violet-400/20 pointer-coarse:h-4"
-      title="Drag to resize"
+      :title="t('board.frame.dragToResize')"
       @pointerdown="onResize($event, 's')"
     />
     <div
       class="nodrag nopan absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize touch-none pointer-coarse:h-11 pointer-coarse:w-11"
-      title="Drag to resize"
+      :title="t('board.frame.dragToResize')"
       @pointerdown="onResize($event, 'se')"
     >
       <span

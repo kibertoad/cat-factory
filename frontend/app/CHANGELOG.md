@@ -1,5 +1,167 @@
 # @cat-factory/app
 
+## 0.46.12
+
+### Patch Changes
+
+- b919df4: Localize the layout + auth components (phase 3 of the app i18n migration).
+
+  All user-facing copy in the auth screens and the layout chrome now resolves through
+  `@nuxtjs/i18n` instead of hard-coded strings:
+
+  - **Auth** (`auth.*`): the login / signup / forgot-password screen, the
+    reset-password screen, the auth gate loading state, and the user menu.
+  - **Layout** (`layout.*`): the account-level deployment / fragment / team settings,
+    the AI-providers / GitHub-PAT / provider-config / spend-warning banners, the board
+    switcher, the command bar (command labels plus search keywords), the integrations
+    hub (status, groups, per-item labels), the integration back-title, the
+    notifications inbox (per-notification-type actions), and the personal-setup modal.
+  - **SideBar** is now fully migrated: it switched off the global `$t` to the
+    destructured `t`.
+
+  New keys ship in all five bundled locales (en/es/fr/pl/uk). The connected-count in
+  the personal-setup modal uses correct plural forms (3-form for pl/uk); the spend
+  warning formats currency through the vue-i18n number formatter; and enum-keyed
+  lookups (notification type, invitation status, provider-config reason) use exhaustive
+  `Record` maps (the tier-2 drift guard).
+
+## 0.46.11
+
+### Patch Changes
+
+- 4dd3ad6: Localize the inspector + step/observability panels (phase 2 of the app i18n migration).
+
+  All user-facing copy in the panel surface now resolves through `@nuxtjs/i18n`
+  instead of hard-coded strings:
+
+  - **Inspector** (`inspector.*`): container/service summary, epic children, recurring
+    schedule settings, service fragments, release-health config, test-infrastructure
+    config, agent config, dependencies, estimate, the task execution pipeline list,
+    run settings, and task structure.
+  - **Step / result panels** (`panels.*`): the step-detail overlay (review/approve and
+    conclusion-editing flows), decision modal, generic structured result view, test
+    report, step metadata/run-meta cards, restart control, and the inspector panel
+    chrome.
+  - **Observability** (`observability.*`): the model-activity / provided-context panel,
+    the per-call metrics bar, and the step metrics bar.
+
+  New keys ship in all five bundled locales (en/es/fr/pl/uk) with correct plural forms
+  (3-form for pl/uk) for call/error/warning/truncation/correction counts. Dates use
+  the vue-i18n datetime formatter and percentages the number formatter; enum/status →
+  key lookups use exhaustive `Record` maps (the tier-2 drift guard).
+
+## 0.46.10
+
+### Patch Changes
+
+- f74f8dc: Localize the board surface (phase 1 of the app i18n migration).
+
+  All user-facing copy in the board components — the canvas empty state and drop
+  toasts, the toolbar (level-of-detail readout, spend indicator, decision/service
+  controls), the add-task and recurring-pipeline modals, the service/module frames,
+  task cards, epic nodes, the decision/approval badges, and the shared agent
+  failure/stop controls — now resolves through `@nuxtjs/i18n` under the `board.*`
+  namespace instead of hard-coded strings. New keys ship in all five bundled locales
+  (en/es/fr/pl/uk), with correct plural forms for task/module counts and the
+  attachment-link warning. Spend is now formatted via vue-i18n's number formatter.
+
+## 0.46.9
+
+### Patch Changes
+
+- 8fad695: Update dependencies to latest.
+
+  - `undici` 7→8 (test-only `MockAgent`). undici's MockAgent must match Node's
+    bundled undici to intercept the global `fetch`; Node 26 bundles undici 8.5.0,
+    so the test runner / CI is pinned to **Node 26**. Production runtime is
+    unaffected — `undici` is a dev/test dependency only, and the service still runs
+    on any Node >=20 (e.g. the example `deploy/node` image stays on Node 24).
+  - Minor/patch bumps: `wrangler` 4.105, `@cloudflare/*`, `@types/node` 26.0.1,
+    `vue` 3.5.39, `msw` 2.14.6, `valibot` 1.4.2, `workers-ai-provider` 3.2.1,
+    `@toad-contracts/*` (core 0.4.0, valibot 0.5.0, hono/testing/http-client 0.3.2),
+    `@aws-sdk/client-s3` 3.1075.
+  - The AI SDK (`ai`, `@ai-sdk/*`) is intentionally held at v6 / v3-v4: the latest
+    `workers-ai-provider` (3.2.1, the Cloudflare Workers AI provider) still peers on
+    `ai@^6` / `@ai-sdk/provider@^3` and is not yet compatible with `ai` v7.
+  - Pinned the whole Vue runtime family to one version via a pnpm `override`
+    (`vue` + `@vue/*` → 3.5.39). Bumping `vue` to 3.5.39 left Nuxt 4.4.8's
+    transitive deps pinning parts of the graph to 3.5.38, so two copies of Vue were
+    bundled into the SPA; Vue's render internals are module-level singletons, so the
+    second copy crashed the app on boot (`Cannot read properties of null (reading
+'ce')` in `renderSlot`) — a blank 500 page that hung the whole e2e suite. One
+    version = one singleton.
+  - GitHub Actions: `actions/checkout` v6→v7, `pnpm/action-setup` v6.0.9,
+    `zizmorcore/zizmor-action` v0.5.7, `changesets/action` pinned to v1.9.0. CI Node 24→26.
+
+- Updated dependencies [8fad695]
+  - @cat-factory/contracts@0.43.3
+
+## 0.46.8
+
+### Patch Changes
+
+- fb339db: Lower the personal-subscription password minimum from 8 to 6 characters.
+
+  The personal password that gates the second encryption layer on individual-usage
+  subscription credentials now requires at least 6 characters (was 8). Updated the
+  `personalPasswordSchema` contract and the matching client-side guards/labels in the
+  store and unlock UIs. The account login/reset password is unaffected.
+
+- fb339db: Move the Personal Subscriptions settings copy into i18n.
+
+  Every hardcoded label, hint, button, toast, renewal notice and vendor onboarding step in
+  `PersonalSubscriptionSection.vue` now resolves through `@nuxtjs/i18n` under a new
+  `personalSubscriptions` namespace, with full translations for all supported locales
+  (en, es, fr, pl, uk). Literal token-format placeholders (the `sk-ant-…` / Codex `auth.json`
+  examples) and brand names stay verbatim; the day-count renewal notice uses pluralized forms
+  (3-form for Polish/Ukrainian).
+
+- Updated dependencies [fb339db]
+  - @cat-factory/contracts@0.43.2
+
+## 0.46.7
+
+### Patch Changes
+
+- 89f9ad5: Pre-bundle `fast-querystring` so the SPA doesn't throw at runtime.
+
+  The app layer's HTTP client (`@toad-contracts/frontend-http-client`) imports the named
+  `stringify` export from `fast-querystring`, a CommonJS module. In Vite dev it was served raw
+  from `@fs`, where `cjs-module-lexer` can't detect the named export — `fast-querystring`
+  reassigns its exports (`module.exports = x; module.exports.stringify = …`) — so any
+  deployment extending this layer threw at runtime:
+
+  `SyntaxError: … fast-querystring/lib/index.js does not provide an export named 'stringify'`.
+
+  Force Vite to pre-bundle it via `optimizeDeps.include` so esbuild emits an ESM wrapper with
+  proper CJS interop (`needsInterop`). The specifier is resolved from the consumer app's root,
+  where under pnpm's strict layout only `@cat-factory/app` is hoisted, so it is anchored there
+  using Vite's nested `a > b > c` syntax.
+
+- 13693b9: Fix infinite recursion in the UI store's `resetHubReturn` (it called itself instead of clearing the `cameFromIntegrations` marker), which crashed with `Maximum call stack size exceeded` when opening hub-spawned panels (e.g. "configure environment provider").
+
+## 0.46.6
+
+### Patch Changes
+
+- ab146e5: Suppress the real-time self-echo for board moves/reparents so dragging a task several
+  times in quick succession is reliable. The SPA now tags every request with a stable
+  per-tab connection id (`X-Connection-Id`) and the realtime WebSocket connect with the
+  matching `?cid=`; the board `move`/`reparent` controllers forward it through
+  `BoardService` to `boardChanged`, and both realtime hubs (the Cloudflare
+  `WorkspaceEventsHub` Durable Object and the Node `NodeRealtimeHub`) skip delivering the
+  coarse `board` event back to the connection that caused it. The originating client keeps
+  its optimistic state plus its own authoritative REST response instead of refreshing off
+  its own move (a mid-flight snapshot of which carried a stale position, snapping the block
+  back). Other subscribers still receive the event and refresh.
+
+## 0.46.5
+
+### Patch Changes
+
+- Updated dependencies [c11a0cc]
+  - @cat-factory/contracts@0.43.1
+
 ## 0.46.4
 
 ### Patch Changes

@@ -1,5 +1,56 @@
 # @cat-factory/sandbox
 
+## 0.8.29
+
+### Patch Changes
+
+- Updated dependencies [8fad695]
+  - @cat-factory/sandbox-fixtures@0.7.46
+  - @cat-factory/contracts@0.43.3
+  - @cat-factory/kernel@0.45.5
+  - @cat-factory/agents@0.21.6
+
+## 0.8.28
+
+### Patch Changes
+
+- Updated dependencies [fb339db]
+  - @cat-factory/contracts@0.43.2
+  - @cat-factory/agents@0.21.5
+  - @cat-factory/kernel@0.45.4
+  - @cat-factory/sandbox-fixtures@0.7.45
+
+## 0.8.27
+
+### Patch Changes
+
+- Updated dependencies [ab146e5]
+  - @cat-factory/kernel@0.45.3
+  - @cat-factory/agents@0.21.4
+
+## 0.8.26
+
+### Patch Changes
+
+- c11a0cc: Add a `prepublishOnly` build hook so each package is compiled to `dist/` before it is
+  packed, regardless of how publish is invoked. `dist/` is gitignored and was only built by
+  the canonical `pnpm ci:publish` flow, so a bare `pnpm publish` could ship an empty shell
+  (this is what happened to `@cat-factory/gitlab` and `@cat-factory/provider-s3`). The hook
+  removes that footgun for every publishable library.
+- Updated dependencies [c11a0cc]
+  - @cat-factory/agents@0.21.3
+  - @cat-factory/contracts@0.43.1
+  - @cat-factory/kernel@0.45.2
+  - @cat-factory/sandbox-fixtures@0.7.44
+
+## 0.8.25
+
+### Patch Changes
+
+- Updated dependencies [5363166]
+  - @cat-factory/kernel@0.45.1
+  - @cat-factory/agents@0.21.2
+
 ## 0.8.24
 
 ### Patch Changes

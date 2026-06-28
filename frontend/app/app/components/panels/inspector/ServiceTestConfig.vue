@@ -20,6 +20,7 @@ const board = useBoardStore()
 const accounts = useAccountsStore()
 const github = useGitHubStore()
 const services = useServicesStore()
+const { t } = useI18n()
 
 const composePath = computed(() => props.block.testComposePath ?? '')
 const noInfra = computed(() => props.block.noInfraDependencies === true)
@@ -29,14 +30,20 @@ const noInfra = computed(() => props.block.noInfraDependencies === true)
 // against a provisioned environment. A task can override it per-task in its agent
 // settings. Absent ⇒ the built-in `ephemeral`.
 type TestEnvironment = 'local' | 'ephemeral'
-const TEST_ENVIRONMENTS: { value: TestEnvironment; label: string; hint: string }[] = [
-  {
-    value: 'ephemeral',
-    label: 'Ephemeral environment',
-    hint: 'tests run against a provisioned env',
-  },
-  { value: 'local', label: 'Local (docker-compose)', hint: 'the Tester stands deps up locally' },
-]
+const TEST_ENVIRONMENTS = computed<{ value: TestEnvironment; label: string; hint: string }[]>(
+  () => [
+    {
+      value: 'ephemeral',
+      label: t('inspector.testConfig.env.ephemeral'),
+      hint: t('inspector.testConfig.env.ephemeralHint'),
+    },
+    {
+      value: 'local',
+      label: t('inspector.testConfig.env.local'),
+      hint: t('inspector.testConfig.env.localHint'),
+    },
+  ],
+)
 const effectiveTestEnv = computed<TestEnvironment>(
   () => props.block.defaultTestEnvironment ?? 'ephemeral',
 )
@@ -86,20 +93,20 @@ function toggleNoInfra(value: boolean) {
   board.updateBlock(props.block.id, { noInfraDependencies: value })
 }
 
-const PROVIDERS: { value: CloudProvider; label: string }[] = [
+const PROVIDERS = computed<{ value: CloudProvider; label: string }[]>(() => [
   { value: 'cloudflare', label: 'Cloudflare' },
-  { value: 'docker', label: 'Docker (local)' },
+  { value: 'docker', label: t('inspector.testConfig.providers.docker') },
   { value: 'aws', label: 'AWS' },
   { value: 'gcp', label: 'GCP' },
   { value: 'azure', label: 'Azure' },
-  { value: 'custom', label: 'Custom' },
-]
-const SIZES: { value: InstanceSize; label: string }[] = [
-  { value: 'small', label: 'Small' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'large', label: 'Large' },
-  { value: 'xlarge', label: 'XLarge' },
-]
+  { value: 'custom', label: t('inspector.testConfig.providers.custom') },
+])
+const SIZES = computed<{ value: InstanceSize; label: string }[]>(() => [
+  { value: 'small', label: t('inspector.testConfig.sizes.small') },
+  { value: 'medium', label: t('inspector.testConfig.sizes.medium') },
+  { value: 'large', label: t('inspector.testConfig.sizes.large') },
+  { value: 'xlarge', label: t('inspector.testConfig.sizes.xlarge') },
+])
 
 function setProvider(value: CloudProvider) {
   board.updateBlock(props.block.id, { cloudProvider: value })
@@ -114,11 +121,11 @@ const missingInfra = computed(() => !noInfra.value && composePath.value.trim() =
 <template>
   <div class="space-y-3">
     <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-      Test infrastructure
+      {{ t('inspector.testConfig.title') }}
     </div>
 
     <div class="space-y-1">
-      <span class="text-[11px] text-slate-400">Default test environment</span>
+      <span class="text-[11px] text-slate-400">{{ t('inspector.testConfig.defaultEnv') }}</span>
       <div class="flex flex-wrap gap-1">
         <UButton
           v-for="e in TEST_ENVIRONMENTS"
@@ -133,13 +140,12 @@ const missingInfra = computed(() => !noInfra.value && composePath.value.trim() =
         </UButton>
       </div>
       <p class="text-[11px] leading-snug text-slate-500">
-        The default tasks under this service are spawned with — each task can override it in its
-        agent settings.
+        {{ t('inspector.testConfig.defaultEnvHint') }}
       </p>
     </div>
 
     <div class="space-y-1">
-      <label class="text-[11px] text-slate-400">docker-compose path</label>
+      <label class="text-[11px] text-slate-400">{{ t('inspector.testConfig.composePath') }}</label>
       <div class="flex items-center gap-1">
         <UInput
           :model-value="composePath"
@@ -159,20 +165,20 @@ const missingInfra = computed(() => !noInfra.value && composePath.value.trim() =
           color="neutral"
           icon="i-lucide-folder-search"
           :disabled="noInfra"
-          title="Browse the repository for the compose file"
+          :title="t('inspector.testConfig.browseRepo')"
           @click="openBrowse"
         />
       </div>
       <p class="text-[11px] leading-snug text-slate-500">
-        Used by the Tester to stand up the service's dependencies locally.
+        {{ t('inspector.testConfig.composeHint') }}
       </p>
     </div>
 
-    <UModal v-model:open="browseOpen" title="Select the docker-compose file">
+    <UModal v-model:open="browseOpen" :title="t('inspector.testConfig.selectComposeTitle')">
       <template #body>
         <div v-if="repoContext" class="space-y-3">
           <p class="text-xs text-slate-400">
-            Pick the compose file in the repository — its path is stored relative to the repo root.
+            {{ t('inspector.testConfig.selectComposeHint') }}
           </p>
           <RepoTreeBrowser
             v-model="pickedPath"
@@ -183,12 +189,16 @@ const missingInfra = computed(() => !noInfra.value && composePath.value.trim() =
           <div class="flex items-center justify-between gap-2">
             <p class="truncate text-xs text-slate-400">
               <template v-if="pickedPath">
-                Selected: <code class="text-slate-200">{{ pickedPath }}</code>
+                <i18n-t keypath="inspector.testConfig.selected" tag="span" scope="global">
+                  <template #path>
+                    <code class="text-slate-200">{{ pickedPath }}</code>
+                  </template>
+                </i18n-t>
               </template>
-              <template v-else>No file selected.</template>
+              <template v-else>{{ t('inspector.testConfig.noFileSelected') }}</template>
             </p>
             <UButton size="xs" color="primary" :disabled="!pickedPath" @click="applyPicked">
-              Use this file
+              {{ t('inspector.testConfig.useThisFile') }}
             </UButton>
           </div>
         </div>
@@ -200,12 +210,11 @@ const missingInfra = computed(() => !noInfra.value && composePath.value.trim() =
         :model-value="noInfra"
         @update:model-value="(v: boolean | 'indeterminate') => toggleNoInfra(v === true)"
       />
-      No infra dependencies (the Tester spins nothing up)
+      {{ t('inspector.testConfig.noInfra') }}
     </label>
 
     <p v-if="missingInfra" class="text-[11px] leading-snug text-amber-500">
-      Set a docker-compose path or enable “no infra dependencies”, otherwise a pipeline with a
-      Tester won't start.
+      {{ t('inspector.testConfig.missingInfra') }}
     </p>
 
     <!-- Provisioning hints: advisory inputs to the ephemeral-environment provisioner.
@@ -220,18 +229,18 @@ const missingInfra = computed(() => !noInfra.value && composePath.value.trim() =
           :name="showProvisioning ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
           class="h-3.5 w-3.5"
         />
-        Ephemeral environment provisioning
+        {{ t('inspector.testConfig.provisioningTitle') }}
       </button>
 
       <div v-if="showProvisioning" class="mt-2 space-y-3">
         <p class="text-[11px] leading-snug text-slate-500">
-          A hint for provisioning this service's ephemeral test environment — which cloud provider
-          to deploy to and how large an instance to request. Ignored for local (docker-compose)
-          testing.
+          {{ t('inspector.testConfig.provisioningHint') }}
         </p>
 
         <div class="space-y-1">
-          <span class="text-[11px] text-slate-400">Cloud provider</span>
+          <span class="text-[11px] text-slate-400">{{
+            t('inspector.testConfig.cloudProvider')
+          }}</span>
           <div class="flex flex-wrap gap-1">
             <UButton
               v-for="p in PROVIDERS"
@@ -247,7 +256,9 @@ const missingInfra = computed(() => !noInfra.value && composePath.value.trim() =
         </div>
 
         <div class="space-y-1">
-          <span class="text-[11px] text-slate-400">Instance size</span>
+          <span class="text-[11px] text-slate-400">{{
+            t('inspector.testConfig.instanceSize')
+          }}</span>
           <div class="flex flex-wrap gap-1">
             <UButton
               v-for="s in SIZES"

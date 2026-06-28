@@ -11,6 +11,7 @@
 // subscriptions) now live in the "My setup" hub (UserMenu → My setup), NOT here — keeping
 // this hub purely workspace-scoped. When auth is disabled there is no UserMenu to host them,
 // so a "Personal (only you)" group falls back into this hub so they stay reachable.
+const { t } = useI18n()
 const ui = useUiStore()
 const auth = useAuthStore()
 const github = useGitHubStore()
@@ -112,14 +113,16 @@ const groups = computed<IntegrationGroup[]>(() => {
   // Top of the hub: an OpenRouter key is the fastest path to 300+ models, so it leads.
   const openRouterKeyConnected = apiKeys.configuredProviders.has('openrouter')
   out.push({
-    title: 'Models & providers',
+    title: t('layout.integrationsHub.groups.models'),
     items: [
       {
         key: 'openrouter',
         icon: 'i-lucide-waypoints',
         label: 'OpenRouter',
-        description: 'One gateway to 300+ models — add your key and enable models in one place.',
-        status: openRouterKeyConnected ? 'Key connected' : undefined,
+        description: t('layout.integrationsHub.items.openrouter.description'),
+        status: openRouterKeyConnected
+          ? t('layout.integrationsHub.status.keyConnected')
+          : undefined,
         connected: openRouterKeyConnected,
         recommended: true,
         onClick: () => go(ui.openOpenRouter),
@@ -127,8 +130,8 @@ const groups = computed<IntegrationGroup[]>(() => {
       {
         key: 'vendors',
         icon: 'i-lucide-key-round',
-        label: 'Vendors & keys',
-        description: 'Workspace LLM subscriptions and provider API keys.',
+        label: t('layout.integrationsHub.items.vendors.label'),
+        description: t('layout.integrationsHub.items.vendors.description'),
         onClick: () => go(ui.openVendorCredentials),
       },
     ],
@@ -141,14 +144,15 @@ const groups = computed<IntegrationGroup[]>(() => {
       key: 'github',
       icon: 'i-lucide-github',
       label: 'GitHub',
-      description: 'Connect the workspace’s GitHub App, browse repos, PRs and issues.',
+      description: t('layout.integrationsHub.items.github.description'),
       status: github.connected ? github.connection?.accountLogin : undefined,
       connected: github.connected,
       recommended: true,
       onClick: () => go(ui.openGitHub),
     })
   }
-  if (code.length) out.push({ title: 'Source control', items: code })
+  if (code.length)
+    out.push({ title: t('layout.integrationsHub.groups.sourceControl'), items: code })
 
   // --- Communication ---------------------------------------------------------
   const comms: IntegrationItem[] = []
@@ -157,13 +161,14 @@ const groups = computed<IntegrationGroup[]>(() => {
       key: 'slack',
       icon: 'i-lucide-slack',
       label: 'Slack',
-      description: 'Route notifications to your team’s Slack workspace.',
+      description: t('layout.integrationsHub.items.slack.description'),
       status: slack.connected ? slack.connection?.teamName : undefined,
       connected: slack.connected,
       onClick: () => go(ui.openSlack),
     })
   }
-  if (comms.length) out.push({ title: 'Communication', items: comms })
+  if (comms.length)
+    out.push({ title: t('layout.integrationsHub.groups.communication'), items: comms })
 
   // --- Documents (dynamic sources: Confluence / Notion / GitHub) -------------
   if (documents.available && documents.sources.length) {
@@ -171,8 +176,12 @@ const groups = computed<IntegrationGroup[]>(() => {
       key: `doc:${src.source}`,
       icon: src.icon,
       label: src.label,
-      description: `Link ${src.label} as a document source for requirements context.`,
-      status: documents.isConnected(src.source) ? 'Connected' : undefined,
+      description: t('layout.integrationsHub.items.documentSource.description', {
+        source: src.label,
+      }),
+      status: documents.isConnected(src.source)
+        ? t('layout.integrationsHub.status.connected')
+        : undefined,
       connected: documents.isConnected(src.source),
       onClick: () => go(() => ui.openDocumentConnect(src.source)),
     }))
@@ -180,12 +189,12 @@ const groups = computed<IntegrationGroup[]>(() => {
       docs.push({
         key: 'doc:import',
         icon: 'i-lucide-file-down',
-        label: 'Import & spawn',
-        description: 'Pull documents from a connected source and spawn structure.',
+        label: t('layout.integrationsHub.items.documentImport.label'),
+        description: t('layout.integrationsHub.items.documentImport.description'),
         onClick: () => go(() => ui.openDocumentImport(null)),
       })
     }
-    out.push({ title: 'Documents', items: docs })
+    out.push({ title: t('layout.integrationsHub.groups.documents'), items: docs })
   }
 
   // --- Task trackers (dynamic sources: Jira / GitHub) ------------------------
@@ -194,32 +203,32 @@ const groups = computed<IntegrationGroup[]>(() => {
       key: `task:${src.source}`,
       icon: src.icon,
       label: src.label,
-      description: `Link ${src.label} to import and reference tracker issues.`,
+      description: t('layout.integrationsHub.items.taskSource.description', { source: src.label }),
       // Available + enabled ⇒ offered (green); available + off ⇒ "Disabled" (amber);
       // not available ⇒ no badge (Jira needs connecting; GitHub needs its App).
       connected: src.available && src.enabled,
       attention: src.available && !src.enabled,
-      attentionLabel: 'Disabled',
+      attentionLabel: t('layout.integrationsHub.status.disabled'),
       onClick: () => go(() => ui.openTaskConnect(src.source)),
     }))
     if (tasks.anyOffered) {
       trackers.push({
         key: 'task:import',
         icon: 'i-lucide-file-down',
-        label: 'Import issues',
-        description: 'Pull issues from a connected tracker onto the board.',
+        label: t('layout.integrationsHub.items.taskImport.label'),
+        description: t('layout.integrationsHub.items.taskImport.description'),
         onClick: () => go(() => ui.openTaskImport(null)),
       })
     }
     // Choosing the filing tracker / writeback is workspace CONFIG, not an integration, so it
     // sits as a quiet footer link under the sources rather than a competing row.
     out.push({
-      title: 'Task trackers',
+      title: t('layout.integrationsHub.groups.taskTrackers'),
       items: trackers,
       footerLink: {
         key: 'task:tracker',
         icon: 'i-lucide-list-checks',
-        label: 'Issue tracker settings',
+        label: t('layout.integrationsHub.items.trackerSettings.label'),
         status: trackerLabel.value,
         onClick: () => go(() => ui.openWorkspaceSettings('tracker')),
       },
@@ -232,14 +241,16 @@ const groups = computed<IntegrationGroup[]>(() => {
   // doesn't show a dead "Connect" row that only 503s.
   if (releaseHealth.available) {
     out.push({
-      title: 'Observability',
+      title: t('layout.integrationsHub.groups.observability'),
       items: [
         {
           key: 'observability',
           icon: 'i-lucide-activity',
-          label: 'Post-release health',
-          description: 'Watch monitors and SLOs after a release ships (Datadog).',
-          status: releaseHealth.connection.connected ? 'Connected' : undefined,
+          label: t('layout.integrationsHub.items.observability.label'),
+          description: t('layout.integrationsHub.items.observability.description'),
+          status: releaseHealth.connection.connected
+            ? t('layout.integrationsHub.status.connected')
+            : undefined,
           connected: releaseHealth.connection.connected,
           onClick: () => go(ui.openObservabilityConnection),
         },
@@ -257,9 +268,9 @@ const groups = computed<IntegrationGroup[]>(() => {
     infra.push({
       key: 'environment',
       icon: 'i-lucide-cloud',
-      label: 'Ephemeral environments',
-      description: 'Where the Tester agent runs against a live preview environment.',
-      status: conn ? 'Connected' : undefined,
+      label: t('layout.integrationsHub.items.environment.label'),
+      description: t('layout.integrationsHub.items.environment.description'),
+      status: conn ? t('layout.integrationsHub.status.connected') : undefined,
       connected: !!conn,
       onClick: () => go(() => ui.openProviderConnection('environment')),
     })
@@ -269,9 +280,9 @@ const groups = computed<IntegrationGroup[]>(() => {
     infra.push({
       key: 'runner-pool',
       icon: 'i-lucide-server-cog',
-      label: 'Self-hosted runner pool',
-      description: 'Where the coding agents run when not using Cloudflare Containers.',
-      status: conn ? 'Connected' : undefined,
+      label: t('layout.integrationsHub.items.runnerPool.label'),
+      description: t('layout.integrationsHub.items.runnerPool.description'),
+      status: conn ? t('layout.integrationsHub.status.connected') : undefined,
       connected: !!conn,
       onClick: () => go(() => ui.openProviderConnection('runner-pool')),
     })
@@ -283,12 +294,13 @@ const groups = computed<IntegrationGroup[]>(() => {
     infra.push({
       key: 'local-mode',
       icon: 'i-lucide-container',
-      label: 'Local mode',
-      description: 'Warm container pool + per-repo checkout reuse for the local runner.',
+      label: t('layout.integrationsHub.items.localMode.label'),
+      description: t('layout.integrationsHub.items.localMode.description'),
       onClick: () => go(ui.openLocalModeSettings),
     })
   }
-  if (infra.length) out.push({ title: 'Infrastructure', items: infra })
+  if (infra.length)
+    out.push({ title: t('layout.integrationsHub.groups.infrastructure'), items: infra })
 
   // --- Personal (only you) — fallback when there is no UserMenu to host "My setup" -------
   // Per-user connections normally live in the My-setup hub; with auth disabled they fold in
@@ -296,22 +308,22 @@ const groups = computed<IntegrationGroup[]>(() => {
   if (!personalHubReachable.value) {
     const pat = !!userSecrets.statusFor('github_pat')
     out.push({
-      title: 'Personal (only you)',
+      title: t('layout.integrationsHub.groups.personal'),
       items: [
         {
           key: 'github-pat',
           icon: 'i-lucide-key-round',
-          label: 'My GitHub token',
-          description: 'A personal access token used for runs you start (pushes, PRs, CI, merge).',
-          status: pat ? 'Connected' : undefined,
+          label: t('layout.integrationsHub.items.githubPat.label'),
+          description: t('layout.integrationsHub.items.githubPat.description'),
+          status: pat ? t('layout.integrationsHub.status.connected') : undefined,
           connected: pat,
           onClick: () => go(ui.openUserSecrets),
         },
         {
           key: 'local-runners',
           icon: 'i-lucide-server',
-          label: 'My local runners',
-          description: 'Your own-machine model runners (Ollama, LM Studio, vLLM…).',
+          label: t('layout.integrationsHub.items.localRunners.label'),
+          description: t('layout.integrationsHub.items.localRunners.description'),
           onClick: () => go(ui.openLocalModels),
         },
       ],
@@ -360,11 +372,15 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Integrations" :ui="{ content: 'max-w-xl' }">
+  <UModal
+    v-model:open="open"
+    :title="t('layout.integrationsHub.title')"
+    :ui="{ content: 'max-w-xl' }"
+  >
     <template #body>
       <div class="space-y-5">
         <p class="text-xs text-slate-400">
-          Connect and manage the external systems this workspace can link in.
+          {{ t('layout.integrationsHub.intro') }}
         </p>
 
         <!-- Get-started cue: an empty workspace gets the two essentials up front so the first
@@ -375,10 +391,10 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
         >
           <div class="mb-2 flex items-center gap-2 text-sm font-medium text-primary-200">
             <UIcon name="i-lucide-rocket" class="h-4 w-4 shrink-0" />
-            <span>Get started</span>
+            <span>{{ t('layout.integrationsHub.getStarted.title') }}</span>
           </div>
           <p class="mb-3 text-xs text-slate-300">
-            Connect a code source and a model provider to run your first pipeline.
+            {{ t('layout.integrationsHub.getStarted.body') }}
           </p>
           <div class="flex flex-wrap gap-2">
             <UButton
@@ -399,12 +415,12 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
           v-model="query"
           icon="i-lucide-search"
           size="sm"
-          placeholder="Search integrations…"
+          :placeholder="t('layout.integrationsHub.searchPlaceholder')"
           class="w-full"
         />
 
         <p v-if="!filteredGroups.length" class="px-1 py-6 text-center text-sm text-slate-500">
-          No integrations match “{{ query }}”.
+          {{ t('layout.integrationsHub.noMatches', { query }) }}
         </p>
 
         <section v-for="group in filteredGroups" :key="group.title">
@@ -424,19 +440,21 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
                 <div class="flex items-center gap-2">
                   <span class="truncate text-sm font-medium text-slate-100">{{ item.label }}</span>
                   <UBadge v-if="item.connected" color="success" variant="subtle" size="sm">
-                    {{ item.status || 'Connected' }}
+                    {{ item.status || t('layout.integrationsHub.status.connected') }}
                   </UBadge>
                   <UBadge v-else-if="item.attention" color="warning" variant="subtle" size="sm">
-                    {{ item.attentionLabel || 'Needs attention' }}
+                    {{ item.attentionLabel || t('layout.integrationsHub.status.needsAttention') }}
                   </UBadge>
-                  <span v-else class="text-[11px] text-slate-500">Not connected</span>
+                  <span v-else class="text-[11px] text-slate-500">{{
+                    t('layout.integrationsHub.status.notConnected')
+                  }}</span>
                   <UBadge
                     v-if="!anyConnected && item.recommended && !item.connected"
                     color="primary"
                     variant="subtle"
                     size="sm"
                   >
-                    Recommended
+                    {{ t('layout.integrationsHub.status.recommended') }}
                   </UBadge>
                 </div>
                 <p class="truncate text-xs text-slate-400">{{ item.description }}</p>

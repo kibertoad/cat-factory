@@ -13,6 +13,7 @@ const props = defineProps<{ block: Block }>()
 const board = useBoardStore()
 const agentConfig = useAgentConfigStore()
 const execution = useExecutionStore()
+const { t } = useI18n()
 
 // The descriptors that apply: those contributed by the task's pinned pipeline, plus
 // any whose value is already set (so an existing choice always stays visible/editable
@@ -77,20 +78,20 @@ function setValue(id: string, value: string) {
 <template>
   <div v-if="descriptors.length" class="space-y-3">
     <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-      Agent configuration
+      {{ t('inspector.agentConfig.title') }}
     </div>
     <div v-for="d in descriptors" :key="d.id" class="space-y-1">
       <div class="flex items-center justify-between">
         <span class="text-[11px] text-slate-400">{{ d.label }}</span>
         <div class="flex items-center gap-1.5">
-          <span v-if="isInherited(d)" class="text-[10px] text-slate-500"
-            >inherited from service</span
-          >
+          <span v-if="isInherited(d)" class="text-[10px] text-slate-500">{{
+            t('inspector.agentConfig.inherited')
+          }}</span>
           <UIcon
             v-if="isFrozen(d.agentKind)"
             name="i-lucide-lock"
             class="h-3 w-3 text-slate-500"
-            title="Frozen — the agent has started"
+            :title="t('inspector.agentConfig.frozen')"
           />
         </div>
       </div>

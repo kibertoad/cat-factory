@@ -7,7 +7,9 @@
 # One stage: install + build the workspace, then re-resolve to PRODUCTION-only
 # dependencies in place (drops dev tooling) and prune the pnpm store. No
 # `pnpm deploy` (and so no `--legacy`); the entry runs directly via Node 24 type
-# stripping. `CI=true` lets pnpm rewrite node_modules non-interactively.
+# stripping. `CI=true` lets pnpm rewrite node_modules non-interactively. The service
+# runs on any supported Node (>=20, e.g. Node 24 LTS); only the test suite pins Node 26
+# (so undici's MockAgent matches the runtime's bundled undici).
 
 FROM node:24-slim AS runtime
 WORKDIR /app

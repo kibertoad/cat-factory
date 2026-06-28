@@ -7,44 +7,72 @@ import type { Notification } from '~/types/domain'
 // (merge / confirm / retry) or dismissed. Hydrated from the snapshot and patched
 // live via the `notification` WorkspaceEvent.
 
+const { t, te } = useI18n()
+
 const notifications = useNotificationsStore()
 const ui = useUiStore()
 const execution = useExecutionStore()
 
 const busy = ref<string | null>(null)
 
-/** Per-type display metadata (icon, colour, primary-action label). */
+/** Per-type display metadata (icon, colour). The primary-action label is resolved
+ * separately through the i18n catalog (`ACTION_KEYS`). */
 type Accent = 'warning' | 'primary' | 'error'
-const META: Record<Notification['type'], { icon: string; color: Accent; action: string }> = {
-  merge_review: { icon: 'i-lucide-git-pull-request-arrow', color: 'warning', action: 'Merge' },
-  pipeline_complete: { icon: 'i-lucide-circle-check', color: 'primary', action: 'Confirm & merge' },
-  ci_failed: { icon: 'i-lucide-triangle-alert', color: 'error', action: 'Retry run' },
-  test_failed: { icon: 'i-lucide-flask-conical', color: 'error', action: 'Retry run' },
+const META: Record<Notification['type'], { icon: string; color: Accent }> = {
+  merge_review: { icon: 'i-lucide-git-pull-request-arrow', color: 'warning' },
+  pipeline_complete: { icon: 'i-lucide-circle-check', color: 'primary' },
+  ci_failed: { icon: 'i-lucide-triangle-alert', color: 'error' },
+  test_failed: { icon: 'i-lucide-flask-conical', color: 'error' },
   // Clicking the title opens the review window for the task (see `reveal`); "act" just marks
   // it read (the server performs no side-effect for this type).
-  requirement_review: { icon: 'i-lucide-clipboard-list', color: 'primary', action: 'Mark read' },
+  requirement_review: { icon: 'i-lucide-clipboard-list', color: 'primary' },
   // Clicking the title opens the clarity review window for the task (see `reveal`); "act"
   // just marks it read (the server performs no side-effect for this type).
-  clarity_review: { icon: 'i-lucide-bug', color: 'primary', action: 'Mark read' },
+  clarity_review: { icon: 'i-lucide-bug', color: 'primary' },
   // A post-release Datadog regression the on-call agent investigated. The human decides
   // whether to revert (in GitHub via the PR link) or acknowledge; "act" marks it handled.
-  release_regression: { icon: 'i-lucide-activity', color: 'error', action: 'Acknowledge' },
+  release_regression: { icon: 'i-lucide-activity', color: 'error' },
   // Clicking the title opens the parked step's decision surface (companion → step detail
   // with the iteration-cap prompt; requirements → the review window); "act" just marks it
   // read (the decision itself is resolved in that surface, not here).
-  decision_required: { icon: 'i-lucide-circle-help', color: 'warning', action: 'Mark read' },
+  decision_required: { icon: 'i-lucide-circle-help', color: 'warning' },
   // Clicking the title opens the human-testing window for the task (see `reveal`); "act" just
   // marks it read (the gate is resolved in that window — confirm / request a fix — not here).
-  human_test_ready: { icon: 'i-lucide-user-check', color: 'primary', action: 'Mark read' },
+  human_test_ready: { icon: 'i-lucide-user-check', color: 'primary' },
   // Clicking the title opens the visual-confirmation window for the task (see `reveal`); "act"
   // just marks it read (the gate is resolved in that window — approve / request a fix — not here).
-  visual_confirmation_ready: { icon: 'i-lucide-camera', color: 'primary', action: 'Mark read' },
+  visual_confirmation_ready: { icon: 'i-lucide-camera', color: 'primary' },
   // Clicking the title opens the task's gate window (where the human can request a freeform
   // fix); "act" just marks it read (approval happens on GitHub, not here).
-  human_review: { icon: 'i-lucide-users', color: 'primary', action: 'Mark read' },
+  human_review: { icon: 'i-lucide-users', color: 'primary' },
   // Clicking the title opens the Follow-up companion window for the run (see `reveal`); "act"
   // just marks it read (items are decided in that window — file / send back / answer — not here).
-  followup_pending: { icon: 'i-lucide-compass', color: 'warning', action: 'Mark read' },
+  followup_pending: { icon: 'i-lucide-compass', color: 'warning' },
+}
+
+// Per-type primary-action label. An exhaustive Record keyed off the notification
+// type union (a missing member fails the typecheck); each value is a LITERAL catalog
+// key so the typed-message-keys check sees it. Leaf keys mirror the enum value verbatim.
+const ACTION_KEYS: Record<Notification['type'], string> = {
+  merge_review: 'layout.notifications.action.merge_review',
+  pipeline_complete: 'layout.notifications.action.pipeline_complete',
+  ci_failed: 'layout.notifications.action.ci_failed',
+  test_failed: 'layout.notifications.action.test_failed',
+  requirement_review: 'layout.notifications.action.requirement_review',
+  clarity_review: 'layout.notifications.action.clarity_review',
+  release_regression: 'layout.notifications.action.release_regression',
+  decision_required: 'layout.notifications.action.decision_required',
+  human_test_ready: 'layout.notifications.action.human_test_ready',
+  visual_confirmation_ready: 'layout.notifications.action.visual_confirmation_ready',
+  human_review: 'layout.notifications.action.human_review',
+  followup_pending: 'layout.notifications.action.followup_pending',
+}
+
+/** The localized primary-action label for a notification (te()-guarded against a
+ * locale that omits the key, falling back to the generic "mark read" verb). */
+function actionLabel(n: Notification): string {
+  const key = ACTION_KEYS[n.type]
+  return te(key) ? t(key) : t('layout.notifications.action.markRead')
 }
 
 /** A notification the escalation sweep has flagged as overdue (waited past the threshold). */
@@ -176,7 +204,7 @@ function revealDecision(n: Notification) {
     <template #content>
       <div class="max-h-[28rem] w-[min(24rem,92vw)] overflow-y-auto p-2">
         <div class="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          Needs your attention
+          {{ t('layout.notifications.heading') }}
         </div>
         <div
           v-for="n in notifications.open"
@@ -208,7 +236,7 @@ function revealDecision(n: Notification) {
                   v-if="isUrgent(n)"
                   class="shrink-0 rounded bg-error-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-error-400"
                 >
-                  Overdue
+                  {{ t('layout.notifications.overdue') }}
                 </span>
               </div>
               <p class="mt-0.5 text-[11px] leading-snug text-slate-400">{{ n.body }}</p>
@@ -219,7 +247,8 @@ function revealDecision(n: Notification) {
                 rel="noopener"
                 class="mt-1 inline-flex items-center gap-1 text-[11px] text-sky-400 hover:underline"
               >
-                <UIcon name="i-lucide-external-link" class="h-3 w-3" /> Open PR
+                <UIcon name="i-lucide-external-link" class="h-3 w-3" />
+                {{ t('layout.notifications.openPr') }}
               </a>
               <div class="mt-2 flex items-center gap-1.5">
                 <UButton
@@ -230,7 +259,7 @@ function revealDecision(n: Notification) {
                   :loading="busy === n.id"
                   @click="act(n)"
                 >
-                  {{ META[n.type].action }}
+                  {{ actionLabel(n) }}
                 </UButton>
                 <UButton
                   data-testid="notification-dismiss"
@@ -240,7 +269,7 @@ function revealDecision(n: Notification) {
                   :disabled="busy === n.id"
                   @click="dismiss(n)"
                 >
-                  Dismiss
+                  {{ t('layout.notifications.dismiss') }}
                 </UButton>
               </div>
             </div>

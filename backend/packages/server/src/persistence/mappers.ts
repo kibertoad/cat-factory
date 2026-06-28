@@ -8,6 +8,7 @@ import type {
   PipelineStep,
   Workspace,
 } from '@cat-factory/contracts'
+import { agentFailureKindSchema } from '@cat-factory/contracts'
 
 // Row <-> domain mapping for the D1 (SQLite) tables. JSON-shaped columns are
 // (de)serialised here so the repositories stay focused on SQL.
@@ -116,6 +117,47 @@ interface FieldMapper<Domain, Patch> {
 /** camelCase property → snake_case column (`responsibleProductUserId` → `responsible_product_user_id`). */
 function toSnake(prop: string): string {
   return prop.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
+}
+
+// ---------------------------------------------------------------------------
+// LEGACY USER-ID REPAIR — REMOVE AFTER 2026-07-15
+//
+// PR #94 re-keyed every user id (block `createdBy`, execution `initiatedBy`, account
+// membership, personal subscriptions) from the GitHub *numeric* id to the canonical
+// `usr_*` *string*, with NO data migration (backwards compatibility is a non-goal here).
+// Rows written before that still hold a number. The wire contract now types these fields
+// as `string | null`, and the server ships rows WITHOUT validating them against the
+// contract — so a single pre-#94 row makes the SPA's response validation reject the entire
+// workspace snapshot, bricking the whole board with "Can't reach the backend".
+//
+// We repair on read: a non-string id is dropped to null. The stale number is an old GitHub
+// id that matches no `usr_*` user, so it is useless for creator/initiator routing anyway —
+// dropping it loses nothing real and lets the board load.
+//
+// After the 2026-07-15 grace cutoff, every project is expected to already be in the new
+// format. DELETE this block and its callers: read `createdBy` straight through with
+// `optField(prop, { patchable: false })`, and use `detail.initiatedBy ?? null` in
+// `rowToExecution`.
+function legacyUserId(value: unknown): string | null {
+  return typeof value === 'string' ? value : null
+}
+
+/**
+ * A legacy user-id column. Identical to a non-patchable {@link optField} except it drops a
+ * non-string (pre-#94 numeric) value to null on read. See the LEGACY USER-ID REPAIR note.
+ */
+function legacyUserIdField<D, P>(prop: string, column = toSnake(prop)): FieldMapper<D, P> {
+  return {
+    read: (row, out) => {
+      const v = legacyUserId(row[column])
+      if (v != null) out[prop] = v
+    },
+    insert: (d, out) => {
+      out[column] = (d as AnyRow)[prop] ?? null
+    },
+    // Insert-only, never patched (matches the previous `optField(..., { patchable: false })`).
+    patch: () => {},
+  }
 }
 
 /**
@@ -339,8 +381,9 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   optField('defaultTestEnvironment'),
   optField('cloudProvider'),
   optField('instanceSize'),
-  // `createdBy` is set at insert time and never patched.
-  optField('createdBy', { patchable: false }),
+  // `createdBy` is set at insert time and never patched. LEGACY: a pre-#94 numeric id is
+  // dropped to null on read (see the LEGACY USER-ID REPAIR note; remove after 2026-07-15).
+  legacyUserIdField('createdBy'),
   // The responsible product person; an empty string clears the assignment.
   optField('responsibleProductUserId', { clearOnEmpty: true }),
   // The task-estimator's triage; a falsy value clears it.
@@ -452,12 +495,38 @@ interface ExecutionDetail {
   initiatedBy: string | null
 }
 
+// ---------------------------------------------------------------------------
+// LEGACY FAILURE-KIND REPAIR — REMOVE AFTER 2026-07-15
+//
+// `decision_timeout` was removed from `agentFailureKindSchema` when human decisions
+// stopped being timeout-limited (other kinds may follow). A run that failed before then
+// can still carry the obsolete kind in its persisted failure JSON. The wire contract now
+// types the kind as a closed picklist, and the server ships rows WITHOUT validating them,
+// so one stale failure makes the SPA's response validation reject the entire workspace
+// snapshot and the board fails to load with "Can't reach the backend".
+//
+// We drop a failure whose kind is no longer known: the run's `status` + `error` string
+// still describe what happened, and the obsolete kind is meaningless now.
+//
+// After the 2026-07-15 grace cutoff, every project is expected to already be in the new
+// format. DELETE this helper and revert the three failure parsers (here + the two bootstrap
+// repos) to the plain `typeof o.kind === 'string'` check.
+const KNOWN_FAILURE_KINDS: ReadonlySet<string> = new Set(agentFailureKindSchema.options)
+
+/** Whether a persisted failure kind is still part of the current contract picklist. */
+export function isKnownAgentFailureKind(kind: string): boolean {
+  return KNOWN_FAILURE_KINDS.has(kind)
+}
+
 /** Parse the JSON-encoded structured failure column, tolerating null/garbage. */
 function parseAgentFailure(raw: string | null): AgentFailure | null {
   if (!raw) return null
   try {
     const o = JSON.parse(raw) as AgentFailure
-    if (o && typeof o.kind === 'string' && typeof o.message === 'string') return o
+    // LEGACY: drop a failure carrying a removed kind (see the LEGACY FAILURE-KIND REPAIR note).
+    if (o && typeof o.kind === 'string' && typeof o.message === 'string') {
+      return isKnownAgentFailureKind(o.kind) ? o : null
+    }
   } catch {
     // fall through
   }
@@ -482,7 +551,9 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
     currentStep: detail.currentStep ?? 0,
     status: row.status as ExecutionStatus,
     failure: parseAgentFailure(row.failure),
-    initiatedBy: detail.initiatedBy ?? null,
+    // LEGACY: drop a pre-#94 numeric initiator id to null (see the LEGACY USER-ID REPAIR
+    // note; after 2026-07-15 revert to `detail.initiatedBy ?? null`).
+    initiatedBy: legacyUserId(detail.initiatedBy),
   }
 }
 

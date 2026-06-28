@@ -1,5 +1,48 @@
 # @cat-factory/gates
 
+## 0.2.16
+
+### Patch Changes
+
+- Updated dependencies [8fad695]
+  - @cat-factory/contracts@0.43.3
+  - @cat-factory/kernel@0.45.5
+
+## 0.2.15
+
+### Patch Changes
+
+- Updated dependencies [fb339db]
+  - @cat-factory/contracts@0.43.2
+  - @cat-factory/kernel@0.45.4
+
+## 0.2.14
+
+### Patch Changes
+
+- Updated dependencies [ab146e5]
+  - @cat-factory/kernel@0.45.3
+
+## 0.2.13
+
+### Patch Changes
+
+- c11a0cc: Add a `prepublishOnly` build hook so each package is compiled to `dist/` before it is
+  packed, regardless of how publish is invoked. `dist/` is gitignored and was only built by
+  the canonical `pnpm ci:publish` flow, so a bare `pnpm publish` could ship an empty shell
+  (this is what happened to `@cat-factory/gitlab` and `@cat-factory/provider-s3`). The hook
+  removes that footgun for every publishable library.
+- Updated dependencies [c11a0cc]
+  - @cat-factory/contracts@0.43.1
+  - @cat-factory/kernel@0.45.2
+
+## 0.2.12
+
+### Patch Changes
+
+- Updated dependencies [5363166]
+  - @cat-factory/kernel@0.45.1
+
 ## 0.2.11
 
 ### Patch Changes

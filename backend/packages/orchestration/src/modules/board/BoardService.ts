@@ -138,19 +138,21 @@ export class BoardService {
    * move). Best-effort: swallow any failure so a missed push never fails the already-persisted
    * mutation — the client reconciles by re-fetching its snapshot.
    *
-   * NOTE: the origin board also receives this echo and does a debounced full refresh even though
-   * its REST response already carried the mutation. That's an accepted trade-off (consistent
-   * with the engine's existing board events): the board store reconciles a coarse refresh by
-   * identity so unchanged blocks aren't churned, and suppressing the self-echo would require
-   * threading a per-connection id through the whole publish/transport stack.
+   * When `originConnectionId` is given (a user-driven positional mutation — move/reparent —
+   * carrying the acting tab's connection id), the realtime transport SKIPS delivering this
+   * echo back to that connection: its REST response already carried the authoritative result,
+   * so refreshing off its own event would only race an in-flight drag and snap the block back
+   * to a stale position. Every OTHER subscriber still receives the coarse signal and refreshes.
+   * Engine-driven board changes pass no origin id, so they fan out to everyone as before.
    */
   private async emitBoardChanged(
     originWorkspaceId: string,
     reason: BoardChangeReason,
     blockId: string | null,
+    originConnectionId?: string | null,
   ): Promise<void> {
     try {
-      await this.events?.boardChanged(originWorkspaceId, reason, blockId)
+      await this.events?.boardChanged(originWorkspaceId, reason, blockId, originConnectionId)
     } catch {
       // best-effort; the REST response already carried the mutation
     }
@@ -542,7 +544,12 @@ export class BoardService {
     return assertFound(await this.blockRepository.get(homeWorkspaceId, taskId), 'Block', taskId)
   }
 
-  async moveBlock(workspaceId: string, id: string, position: Position): Promise<Block> {
+  async moveBlock(
+    workspaceId: string,
+    id: string,
+    position: Position,
+    originConnectionId?: string | null,
+  ): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     const { homeWorkspaceId, block } = await this.resolveBlock(workspaceId, id)
     // A service frame's board position is a PER-WORKSPACE layout override carried on the mount
@@ -555,14 +562,14 @@ export class BoardService {
         await this.workspaceMountRepository.update(workspaceId, service.id, { position })
         // The frame's position is this workspace's private layout override — other boards
         // mounting the service keep their own spot, so this signal is origin-only.
-        await this.emitBoardChanged(workspaceId, 'block-moved', null)
+        await this.emitBoardChanged(workspaceId, 'block-moved', null, originConnectionId)
         return { ...block, position }
       }
     }
     // A non-frame block, or a legacy frame with no mount: move the shared block at its home.
     await this.blockRepository.update(homeWorkspaceId, id, { position })
     // Origin = the block's HOME so moving a shared block fans the new position out to all mounts.
-    await this.emitBoardChanged(homeWorkspaceId, 'block-moved', id)
+    await this.emitBoardChanged(homeWorkspaceId, 'block-moved', id, originConnectionId)
     return assertFound(await this.blockRepository.get(homeWorkspaceId, id), 'Block', id)
   }
 
@@ -584,7 +591,12 @@ export class BoardService {
   }
 
   /** Move a block into a new container at a new local position. */
-  async reparent(workspaceId: string, id: string, input: ReparentInput): Promise<Block> {
+  async reparent(
+    workspaceId: string,
+    id: string,
+    input: ReparentInput,
+    originConnectionId?: string | null,
+  ): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     const { homeWorkspaceId: blockHome, block } = await this.resolveBlock(workspaceId, id)
     if (id === input.parentId) throw new ValidationError('A block cannot contain itself')
@@ -615,7 +627,7 @@ export class BoardService {
         )
       }
       // Origin = the block's HOME so the re-stamped subtree fans out to every mounting board.
-      await this.emitBoardChanged(blockHome, 'block-reparented', id)
+      await this.emitBoardChanged(blockHome, 'block-reparented', id, originConnectionId)
       return assertFound(await this.blockRepository.get(blockHome, id), 'Block', id)
     }
 
@@ -659,9 +671,11 @@ export class BoardService {
     // service's mounts (and that board). Source side: the block is gone from its old service, so
     // the block→service join can't resolve it anymore — notify the captured source boards
     // directly (origin-only) so they refresh the subtree away.
-    await this.emitBoardChanged(parentHome, 'block-reparented', id)
+    await this.emitBoardChanged(parentHome, 'block-reparented', id, originConnectionId)
     for (const ws of sourceFanout) {
-      if (ws !== parentHome) await this.emitBoardChanged(ws, 'block-reparented', null)
+      if (ws !== parentHome) {
+        await this.emitBoardChanged(ws, 'block-reparented', null, originConnectionId)
+      }
     }
     return assertFound(await this.blockRepository.get(parentHome, id), 'Block', id)
   }

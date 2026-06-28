@@ -56,8 +56,8 @@ the existing `runDeployer`/`runTracker` + `recordStepResult`. Their branches are
 
 **Resequencing note (ordering finding):** the plan also slated the `task-estimator` /
 `spec-writer noBusinessSpecs` → resolver conversions for Phase 1. Deferred to the artifact-resolver
-phase, because the existing `StepCompletionResolver` dispatch point runs *after* the approval gate,
-whereas the inline `task-estimator` branch sets `step.output = summarizeEstimate(...)` *before* it
+phase, because the existing `StepCompletionResolver` dispatch point runs _after_ the approval gate,
+whereas the inline `task-estimator` branch sets `step.output = summarizeEstimate(...)` _before_ it
 (an approval proposal would otherwise change from the readable summary to the raw JSON). Those
 resolver conversions need the resolver-ordering handled deliberately, so they move to Phase 2 where
 spec ingestion already lives (and spec-writer can be migrated atomically).

@@ -10,6 +10,7 @@ const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
 const ui = useUiStore()
+const { t } = useI18n()
 
 const members = computed(() => board.epicMembers(props.block.id))
 const done = computed(() => members.value.filter((m) => m.status === 'done').length)
@@ -47,13 +48,15 @@ const groups = computed(() => {
   <div>
     <div class="mb-1 flex items-center justify-between">
       <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        Epic tasks
+        {{ t('inspector.epicChildren.title') }}
       </span>
-      <span class="text-[11px] text-slate-500">{{ done }}/{{ members.length }} done</span>
+      <span class="text-[11px] text-slate-500">{{
+        t('inspector.epicChildren.doneCount', { done, total: members.length })
+      }}</span>
     </div>
 
     <div v-if="members.length === 0" class="text-[11px] text-slate-500">
-      No tasks belong to this epic yet. Import an epic's children, or set a task's epic.
+      {{ t('inspector.epicChildren.empty') }}
     </div>
 
     <div v-else class="space-y-2">
@@ -64,7 +67,7 @@ const groups = computed(() => {
       >
         <div class="mb-1 flex items-center gap-1 text-[11px] font-medium text-slate-300">
           <UIcon name="i-lucide-box" class="h-3 w-3 text-slate-500" />
-          {{ group.service?.title ?? 'Unassigned' }}
+          {{ group.service?.title ?? t('inspector.epicChildren.unassigned') }}
         </div>
         <div v-for="(mod, mi) in [...group.modules.values()]" :key="mi" class="pl-1">
           <div v-if="mod.module" class="text-[10px] uppercase tracking-wide text-slate-500">

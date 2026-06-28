@@ -11,6 +11,7 @@ const agentRuns = useAgentRunsStore()
 const ui = useUiStore()
 const models = useModelsStore()
 const reviews = useReviewStage()
+const { t } = useI18n()
 
 // The async stage this task's iterative reviewer gate (requirements-review / clarity-review)
 // is mid-cycle in (folding the answers, then re-reviewing), or null. While set, the gate is
@@ -19,11 +20,11 @@ const reviews = useReviewStage()
 const reviewStage = computed(() => reviews.stageForBlock(props.block.id))
 const reviewStageLabel = computed(() =>
   reviewStage.value === 'incorporating'
-    ? 'Incorporating…'
+    ? t('inspector.execution.stage.incorporating')
     : reviewStage.value === 'reviewing'
-      ? 'Re-reviewing…'
+      ? t('inspector.execution.stage.reviewing')
       : reviewStage.value === 'recommending'
-        ? 'Recommending…'
+        ? t('inspector.execution.stage.recommending')
         : null,
 )
 
@@ -44,14 +45,16 @@ const pr = computed(() => props.block.pullRequest)
 const prMerged = computed(() => props.block.status === 'done')
 const prLabel = computed(() => {
   const number = pr.value?.number
-  return number ? `PR #${number}` : 'Pull request'
+  return number
+    ? t('inspector.execution.prNumber', { number })
+    : t('inspector.execution.pullRequest')
 })
 
 const stepLabel: Record<string, string> = {
-  pending: 'Pending',
-  working: 'Working',
-  waiting_decision: 'Needs decision',
-  done: 'Done',
+  pending: 'inspector.execution.stepState.pending',
+  working: 'inspector.execution.stepState.working',
+  waiting_decision: 'inspector.execution.stepState.waiting_decision',
+  done: 'inspector.execution.stepState.done',
 }
 
 /** A step left mid-flight (`working`) on a failed run gave up — not still working. */
@@ -68,17 +71,19 @@ function labelForStep(s: {
   startingContainer?: boolean
 }) {
   // A step left mid-flight on a failed run reads "Failed", not the misleading "Working".
-  if (stepFailed(s)) return 'Failed'
+  if (stepFailed(s)) return t('inspector.execution.failed')
   // A reviewer gate mid-cycle reads its working stage, not "Needs approval".
   if (reviews.isBackground(s.agentKind, props.block.id) && reviewStageLabel.value)
     return reviewStageLabel.value
   // A companion that spent its rework budget needs a decision, not an approval.
-  if (s.approval?.status === 'pending' && s.companion?.exceeded) return 'Needs decision'
-  if (s.approval?.status === 'pending') return 'Needs approval'
+  if (s.approval?.status === 'pending' && s.companion?.exceeded)
+    return t('inspector.execution.needsDecision')
+  if (s.approval?.status === 'pending') return t('inspector.execution.needsApproval')
   // A container-backed step whose container is still cold-booting (only while the
   // run is live — a failed run's mid-flight step is no longer spinning up).
-  if (s.startingContainer && !runFailed.value) return 'Spinning up…'
-  return stepLabel[s.state]
+  if (s.startingContainer && !runFailed.value) return t('inspector.execution.spinningUp')
+  const key = stepLabel[s.state]
+  return key ? t(key) : s.state
 }
 
 function openDecisionFor(decisionId: string) {
@@ -138,11 +143,11 @@ async function resetRun() {
             size="xs"
             :loading="stopping"
             :disabled="resetting"
-            title="Stop the run but keep it (readable + retryable)"
+            :title="t('inspector.execution.stopTooltip')"
             data-testid="run-stop"
             @click="stopRun"
           >
-            Stop
+            {{ t('inspector.execution.stop') }}
           </UButton>
           <!-- Destructive: discard the run and return the task to planned. -->
           <UButton
@@ -152,11 +157,11 @@ async function resetRun() {
             size="xs"
             :loading="resetting"
             :disabled="stopping"
-            title="Discard this run and reset the task to planned"
+            :title="t('inspector.execution.resetTooltip')"
             data-testid="run-reset"
             @click="resetRun"
           >
-            Reset
+            {{ t('inspector.execution.reset') }}
           </UButton>
         </div>
       </div>
@@ -173,7 +178,11 @@ async function resetRun() {
             <button
               type="button"
               class="flex min-w-0 cursor-pointer items-center gap-2 text-left transition hover:text-white"
-              :title="s.output ? 'View details & read output' : 'View step details'"
+              :title="
+                s.output
+                  ? t('inspector.execution.viewDetailsOutput')
+                  : t('inspector.execution.viewDetails')
+              "
               @click="openStep(i)"
             >
               <UIcon
@@ -187,9 +196,9 @@ async function resetRun() {
               <span
                 v-if="isCompanionKind(s.agentKind)"
                 class="shrink-0 rounded bg-slate-700/60 px-1 text-[9px] font-medium uppercase tracking-wide text-slate-300"
-                title="Companion of a producer step"
+                :title="t('inspector.execution.companionTooltip')"
               >
-                Companion
+                {{ t('inspector.execution.companion') }}
               </span>
               <UIcon
                 :name="s.output ? 'i-lucide-book-open-text' : 'i-lucide-info'"
@@ -201,8 +210,15 @@ async function resetRun() {
               class="ml-auto font-mono text-[10px] tabular-nums text-slate-300"
               :title="
                 s.subtasks.inProgress > 0
-                  ? `${s.subtasks.completed} of ${s.subtasks.total} subtasks done, ${s.subtasks.inProgress} in progress`
-                  : `${s.subtasks.completed} of ${s.subtasks.total} subtasks done`
+                  ? t('inspector.execution.subtasksProgress', {
+                      completed: s.subtasks.completed,
+                      total: s.subtasks.total,
+                      inProgress: s.subtasks.inProgress,
+                    })
+                  : t('inspector.execution.subtasksDone', {
+                      completed: s.subtasks.completed,
+                      total: s.subtasks.total,
+                    })
               "
             >
               {{ s.subtasks.completed }}/{{ s.subtasks.total }}
@@ -225,7 +241,7 @@ async function resetRun() {
               icon="i-lucide-circle-help"
               @click="openDecisionFor(s.decision.id)"
             >
-              Resolve
+              {{ t('inspector.execution.resolve') }}
             </UButton>
             <!-- reviewer gate folding/re-reviewing in the background: a working
                  indicator, NOT a "Review" gate (the human is summoned only if needed) -->
@@ -248,7 +264,7 @@ async function resetRun() {
               icon="i-lucide-alert-triangle"
               @click="openApprovalFor(s.approval.id)"
             >
-              Decide
+              {{ t('inspector.execution.decide') }}
             </UButton>
             <UButton
               v-else-if="s.approval && s.approval.status === 'pending'"
@@ -262,7 +278,11 @@ async function resetRun() {
               "
               @click="openApprovalFor(s.approval.id)"
             >
-              {{ agentKindMeta(s.agentKind).resultView ? 'Review' : 'Approve' }}
+              {{
+                agentKindMeta(s.agentKind).resultView
+                  ? t('inspector.execution.review')
+                  : t('inspector.execution.approve')
+              }}
             </UButton>
           </div>
           <div
@@ -286,10 +306,20 @@ async function resetRun() {
           <div
             v-if="s.selectedFragmentIds && s.selectedFragmentIds.length"
             class="mt-0.5 flex flex-wrap items-center gap-1 pl-6 text-[10px] text-slate-500"
-            :title="`Best-practice fragments folded into this step: ${s.selectedFragmentIds.join(', ')}`"
+            :title="
+              t('inspector.execution.fragmentsTooltip', {
+                fragments: s.selectedFragmentIds.join(', '),
+              })
+            "
           >
             <UIcon name="i-lucide-book-marked" class="h-3 w-3 shrink-0" />
-            <span>{{ s.selectedFragmentIds.length }} standard(s) applied</span>
+            <span>{{
+              t(
+                'inspector.execution.standardsApplied',
+                { count: s.selectedFragmentIds.length },
+                s.selectedFragmentIds.length,
+              )
+            }}</span>
           </div>
           <!-- Conditionally-run companion (the Tester's fixer): possible/running/
                completed/skipped, so it's clear whether a fix pass ran. -->
@@ -306,7 +336,11 @@ async function resetRun() {
               ]"
             />
             <span class="text-slate-400">
-              {{ agentKindMeta(gateCompanionFor(s, runFailed)!.kind).label }} (companion)
+              {{
+                t('inspector.execution.companionOf', {
+                  label: agentKindMeta(gateCompanionFor(s, runFailed)!.kind).label,
+                })
+              }}
             </span>
             <span
               class="ml-auto"
@@ -325,7 +359,7 @@ async function resetRun() {
     <!-- Open PR: link straight to it on GitHub -->
     <div v-if="pr" class="space-y-2">
       <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        Pull request
+        {{ t('inspector.execution.pullRequest') }}
       </span>
       <UButton
         :to="pr.url"
@@ -342,7 +376,7 @@ async function resetRun() {
         <span class="flex w-full items-center gap-2">
           {{ prLabel }}
           <UBadge :color="prMerged ? 'success' : 'info'" variant="subtle" size="sm" class="ml-auto">
-            {{ prMerged ? 'Merged' : 'Open' }}
+            {{ prMerged ? t('inspector.execution.merged') : t('inspector.execution.open') }}
           </UBadge>
         </span>
       </UButton>
@@ -362,7 +396,7 @@ async function resetRun() {
       block
       @click="execution.mergePr(block.id)"
     >
-      Merge PR
+      {{ t('inspector.execution.mergePr') }}
     </UButton>
   </div>
 </template>

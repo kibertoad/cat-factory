@@ -13,7 +13,8 @@
     "cancel": "Cancelar",
     "retry": "Reintentar",
     "actionFailed": "La acción falló",
-    "close": "Cerrar"
+    "close": "Cerrar",
+    "block": "Bloque"
   },
   "nav": {
     "menu": "Menú de navegación",
@@ -38,7 +39,198 @@
   "board": {
     "toolbar": {
       "addService": "Añadir servicio",
-      "decisionWord": "decisión | decisiones"
+      "decisionWord": "decisión | decisiones",
+      "lod": {
+        "far": "Vista general",
+        "mid": "Resumen",
+        "close": "Detalle",
+        "steps": "Pasos de build",
+        "subtasks": "Subtareas"
+      },
+      "spendTitle": "Gasto de tokens este mes",
+      "spendLimitReached": "Límite de gasto alcanzado: ejecuciones en pausa",
+      "serviceAdded": "Se añadió {title}",
+      "serviceAddFailed": "No se pudo añadir el servicio"
+    },
+    "canvas": {
+      "emptyTitle": "Tu tablero está vacío",
+      "emptyBody": "Añade un servicio para empezar: arranca un repo nuevo o trae uno que ya tengas.",
+      "addBlockFailedTitle": "No se pudo añadir el bloque",
+      "addBlockFailedBody": "El backend rechazó la solicitud.",
+      "dropOntoTaskTitle": "Suéltalo sobre una tarea",
+      "dropOntoTaskBody": "Las pipelines se ejecutan sobre tareas, no sobre servicios.",
+      "taskBlockedTitle": "La tarea está bloqueada",
+      "taskBlockedBody": "Sus dependencias aún no se han fusionado."
+    },
+    "addTask": {
+      "title": "Añadir una tarea",
+      "newTaskIn": "Nueva tarea en {container}",
+      "typeLabel": "Tipo",
+      "types": {
+        "feature": "Funcionalidad",
+        "bug": "Error",
+        "document": "Documento",
+        "spike": "Spike",
+        "recurring": "Recurrente"
+      },
+      "recurringWithFrame": "Una tarea recurrente ejecuta una pipeline con cierta cadencia. Continúa para definir el horario y el prompt.",
+      "recurringNoFrame": "Una tarea recurrente debe vivir en un servicio. Añádela desde un marco de servicio (o un módulo dentro de él).",
+      "titleField": "Título",
+      "titlePlaceholder": "¿Qué hay que hacer?",
+      "issueIncluded": "{title} (de la incidencia, incluida)",
+      "loadingIssue": "Cargando la descripción de la incidencia vinculada…",
+      "additionalNotes": "Notas adicionales",
+      "description": "Descripción",
+      "notesPlaceholder": "Añade cualquier otra cosa que el agente deba saber; se añadirá a la descripción de la incidencia de arriba…",
+      "descriptionPlaceholder": "Describe el trabajo: contexto, criterios de aceptación y todo lo que el agente deba saber…",
+      "technical": "Tarea técnica",
+      "technicalHint": "Un refactor / cambio no funcional / interno. El implementador trata la definición de la tarea como principal y la especificación como referencia de regresión; déjalo desactivado para que decida la fase de especificación.",
+      "severity": "Gravedad",
+      "stepsToReproduce": "Pasos para reproducir",
+      "stepsToReproducePlaceholder": "Observado vs esperado, y cómo reproducirlo…",
+      "timebox": "Tiempo límite (horas)",
+      "timeboxPlaceholder": "p. ej. 8",
+      "documentKind": "Tipo de documento",
+      "audience": "Audiencia",
+      "audiencePlaceholder": "p. ej. ingenieros de plataforma",
+      "targetPath": "Ruta de destino",
+      "targetPathPlaceholder": "p. ej. docs/rfcs/0001-foo.md",
+      "outlineHints": "Sugerencias de esquema",
+      "outlineHintsPlaceholder": "Secciones o puntos que el documento debería cubrir",
+      "optional": "opcional",
+      "pipeline": "Pipeline",
+      "chooseAtRunTime": "Elegir al ejecutar",
+      "mergePolicy": "Política de fusión",
+      "workspaceDefault": "Predeterminado del espacio",
+      "defaultPreset": "Predeterminado ({name}): {thresholds}",
+      "defaultModelPreset": "Predeterminado ({name})",
+      "modelPreset": "Preset de modelo",
+      "agentConfiguration": "Configuración del agente",
+      "contextDocuments": "Documentos de contexto",
+      "contextIssues": "Incidencias de contexto",
+      "attach": "Adjuntar",
+      "done": "Hecho",
+      "attachDocDisabledConnect": "Conecta primero una fuente de documentos (Integraciones)",
+      "attachDocDisabledEnable": "Activa primero la integración de documentos",
+      "attachIssueDisabledConnect": "Conecta primero un gestor de incidencias (Integraciones)",
+      "attachIssueDisabledEnable": "Activa primero la integración del gestor de incidencias",
+      "importsOnAdd": "se importa al añadir",
+      "noDocsHint": "Adjunta un requisito, RFC o PRD para que los agentes lo vean al implementar esta tarea.",
+      "noIssuesHint": "Adjunta una incidencia del gestor para que los agentes vean su descripción y comentarios al implementar esta tarea.",
+      "plannedHint": "La tarea se añade en estado planificado. No se ejecutará hasta que inicies una pipeline sobre ella; puedes seguir editándola hasta entonces.",
+      "continue": "Continuar",
+      "submit": "Añadir tarea",
+      "addFailedTitle": "No se pudo añadir la tarea",
+      "linkFailed": "Tarea añadida, pero no se pudo vincular {count} adjunto | Tarea añadida, pero no se pudieron vincular {count} adjuntos"
+    },
+    "recurring": {
+      "title": "Añadir una pipeline recurrente",
+      "on": "Pipeline recurrente en {frame}",
+      "name": "Nombre",
+      "namePlaceholder": "p. ej. Actualizaciones semanales de dependencias",
+      "pipeline": "Pipeline",
+      "pickPipeline": "Elige una pipeline",
+      "prompt": "Prompt",
+      "promptPlaceholder": "¿Qué debe hacer cada ejecución? Describe el trabajo, el mismo prompt que llevaría una tarea normal. Déjalo en blanco para usar el predeterminado de la pipeline.",
+      "issueTracker": "Gestor de incidencias",
+      "issueTrackerHint": "La pipeline de deuda técnica crea un ticket a partir de su análisis antes de implementar. Elige dónde (se guarda para todo el espacio de trabajo).",
+      "githubIssues": "GitHub Issues",
+      "jira": "Jira",
+      "linear": "Linear",
+      "jiraProjectKey": "Clave del proyecto de Jira",
+      "jiraProjectKeyPlaceholder": "p. ej. ENG",
+      "linearTeamId": "ID del equipo de Linear",
+      "footerHint": "Se añade una única tarea recurrente dentro del servicio; cada ejecución reemplaza a la anterior. Su historial de ejecuciones es visible en el inspector.",
+      "submit": "Añadir pipeline recurrente",
+      "addFailedTitle": "No se pudo añadir la pipeline recurrente"
+    },
+    "failure": {
+      "containerFailedToStart": "El contenedor no pudo iniciarse",
+      "bootstrapFailed": "El arranque falló",
+      "runFailed": "La ejecución falló",
+      "retryBootstrap": "Reintentar arranque",
+      "retryRun": "Reintentar ejecución",
+      "showDetail": "Mostrar detalle",
+      "retrying": "Reintentando…"
+    },
+    "stop": {
+      "label": "Detener",
+      "bootstrapStopped": "Arranque detenido",
+      "runStopped": "Ejecución detenida",
+      "stoppedDescription": "El contenedor se cerró y la ejecución se canceló.",
+      "stopFailed": "No se pudo detener"
+    },
+    "frame": {
+      "status": {
+        "planned": "Sin tareas",
+        "ready": "Activo",
+        "in_progress": "Activo",
+        "blocked": "Requiere atención",
+        "pr_ready": "Activo",
+        "done": "Activo"
+      },
+      "shared": "Compartido",
+      "sharedTitle": "Compartido entre espacios de trabajo de esta organización",
+      "bootstrapping": "Arrancando…",
+      "bootstrappingRepository": "Arrancando repositorio…",
+      "bootstrapStepsCount": "{completed}/{total} pasos",
+      "runFailed": "La ejecución falló",
+      "mergedOfTotal": "{merged}/{total} fusionadas",
+      "noTasksYet": "Aún no hay tareas",
+      "prCount": "{count} PR",
+      "implemented": "{merged}/{total} implementadas",
+      "prReadyCount": "{count} PR listas",
+      "taskCount": "{count} tarea | {count} tareas",
+      "moduleCount": "{count} módulo | {count} módulos",
+      "addTaskTitle": "Añadir tarea",
+      "createTaskFromIssueTitle": "Crear tarea desde incidencia",
+      "addRecurringTitle": "Añadir pipeline recurrente",
+      "collapseTitle": "Contraer",
+      "dragService": "Arrastrar servicio",
+      "dragTask": "Arrastrar tarea",
+      "dragToResize": "Arrastra para cambiar el tamaño",
+      "addFirstTask": "Añade la primera tarea"
+    },
+    "decisionBadge": {
+      "decisionNeeded": "Decisión necesaria",
+      "approvalNeeded": "Aprobación necesaria"
+    },
+    "task": {
+      "recurringPipeline": "Pipeline recurrente",
+      "recurringPipelinePaused": "Pipeline recurrente (en pausa)",
+      "dragToConnect": "Arrastra sobre otra tarea para que dependa de esta",
+      "failed": "Fallida",
+      "decisionNeeded": "Decisión necesaria",
+      "approvalNeeded": "Aprobación necesaria",
+      "resolve": "Resolver",
+      "approve": "Aprobar",
+      "incorporatingAnswers": "Incorporando respuestas…",
+      "reReviewing": "Revisando de nuevo…",
+      "recommending": "Recomendando…",
+      "starting": "Iniciando…",
+      "start": "Iniciar",
+      "blocked": "Bloqueada",
+      "startPipeline": "Iniciar {name}",
+      "pipelineFallback": "pipeline",
+      "waitingOn": "Esperando a: {deps}",
+      "blockedByDependenciesTitle": "Bloqueada por dependencias",
+      "noPipelineTitle": "No hay pipeline definida",
+      "noPipelineBody": "Crea una en el constructor primero.",
+      "pr": "PR",
+      "prNumber": "PR n.º {number}",
+      "openPrOnGithub": "Abrir {pr} en GitHub",
+      "review": "Revisar",
+      "merge": "Fusionar",
+      "implemented": "implementada",
+      "module": "Módulo: {name}",
+      "buildSteps": "Pasos de build",
+      "reviewAndApprove": "Revisar y aprobar",
+      "clickToViewStep": "Haz clic para ver los detalles y la salida del paso"
+    },
+    "epic": {
+      "label": "Épica",
+      "activeCount": "{count} activas",
+      "noTasksYet": "Aún no hay tareas"
     }
   },
   "errors": {
@@ -65,6 +257,866 @@
         "title": "No hay proveedor de IA para este modelo",
         "body": "No hay ningún proveedor configurado para {models}. Añade una clave de proveedor, conecta una suscripción o activa Cloudflare AI para ejecutarlo.",
         "action": "Configurar IA"
+      }
+    }
+  },
+  "personalSubscriptions": {
+    "heading": "Suscripciones personales (solo para uso individual)",
+    "intro": "Claude (Pro/Max), GLM (Z.ai Coding Plan) y ChatGPT (Codex) tienen licencia para ti como individuo, así que se guardan solo para ti y únicamente tus ejecuciones las usan. Cada token se cifra con una contraseña personal (que nunca se almacena) que introduces al iniciar una de estas ejecuciones; se guarda en caché en este navegador durante un tiempo para que no te moleste. La contraseña es una comodidad de baja fricción y una señal de transparencia de que el sistema no compartirá tu credencial de forma silenciosa, no una barrera frente a quien posea la clave del sistema. Estos modelos no se pueden usar en programaciones recurrentes.",
+    "vendorField": "Suscripción",
+    "labelField": "Etiqueta (opcional)",
+    "labelPlaceholder": "p. ej. mi {vendor}",
+    "defaultLabel": "Mi suscripción de {vendor}",
+    "passwordField": "Contraseña personal (mín. 6 caracteres)",
+    "passwordPlaceholder": "protege tu token",
+    "renewsField": "La suscripción se renueva el (opcional)",
+    "connect": "Conectar",
+    "replace": "Reemplazar",
+    "expires": "Caduca el {date}",
+    "noExpiry": "Sin fecha de caducidad",
+    "renewal": {
+      "expired": "Tu suscripción de {vendor} ha caducado. Renuévala y vuelve a conectarla para seguir ejecutando sus modelos.",
+      "soon": "Tu suscripción de {vendor} se renueva en {count} día. Actualízala aquí cuando se renueve. | Tu suscripción de {vendor} se renueva en {count} días. Actualízala aquí cuando se renueve."
+    },
+    "toast": {
+      "connected": "Suscripción de {vendor} conectada",
+      "connectFailed": "No se pudo conectar la suscripción",
+      "disconnected": "Desconectada",
+      "disconnectFailed": "No se pudo desconectar"
+    },
+    "vendors": {
+      "claude": {
+        "label": "Claude (Pro/Max)",
+        "tokenLabel": "Token de Claude",
+        "step1": "Instala Claude Code e inicia sesión con tu cuenta de Claude Pro/Max: ejecuta `claude` una vez y completa el inicio de sesión en el navegador.",
+        "step2": "Genera un token de larga duración: ejecuta `claude setup-token` y cópialo.",
+        "step3": "Pégalo abajo y elige una contraseña personal para protegerlo."
+      },
+      "glm": {
+        "label": "GLM (Z.ai Coding Plan)",
+        "tokenLabel": "Clave de API de Z.ai",
+        "tokenPlaceholder": "tu clave de API del GLM Coding Plan",
+        "step1": "Abre tu panel del GLM Coding Plan de Z.ai y crea una clave de API para el endpoint compatible con Anthropic.",
+        "step2": "El GLM Coding Plan tiene licencia para ti como individuo, así que aquí se guarda por usuario (no se agrupa).",
+        "step3": "Pega la clave abajo y elige una contraseña personal para protegerla."
+      },
+      "codex": {
+        "label": "ChatGPT (Codex)",
+        "tokenLabel": "auth.json de ChatGPT",
+        "step1": "Instala la CLI de Codex e inicia sesión con tu cuenta de ChatGPT: ejecuta `codex login` y completa el flujo en el navegador.",
+        "step2": "Abre el archivo de credenciales que Codex escribió en ~/.codex/auth.json (en Windows %USERPROFILE%\\.codex\\auth.json).",
+        "step3": "Copia todo el contenido de auth.json, pégalo abajo y elige una contraseña personal para protegerlo."
+      }
+    }
+  },
+  "inspector": {
+    "container": {
+      "modules": "Módulos ({count})",
+      "taskCount": "{count} tarea | {count} tareas",
+      "allTasks": "Todas las tareas ({count})",
+      "tasks": "Tareas ({count})",
+      "addTask": "Añadir tarea",
+      "noTasks": "Aún no hay tareas. Añade una para empezar a trabajar.",
+      "servicesHint": "Los servicios son de larga duración y no se completan. El trabajo ocurre en sus tareas y módulos."
+    },
+    "epicChildren": {
+      "title": "Tareas de la épica",
+      "doneCount": "{done}/{total} completadas",
+      "empty": "Aún no hay tareas en esta épica. Importa las hijas de una épica o asigna la épica de una tarea.",
+      "unassigned": "Sin asignar"
+    },
+    "recurring": {
+      "title": "Pipeline recurrente",
+      "active": "Activo",
+      "paused": "Pausado",
+      "intervalDays": "{count}d",
+      "intervalHours": "{count}h",
+      "anyDay": "cualquier día",
+      "cadence": "Cada {every} · {days}{window} · {timezone}",
+      "weekdays": {
+        "sun": "Dom",
+        "mon": "Lun",
+        "tue": "Mar",
+        "wed": "Mié",
+        "thu": "Jue",
+        "fri": "Vie",
+        "sat": "Sáb"
+      },
+      "nextRun": "Próxima ejecución: {time}",
+      "runNow": "Ejecutar ahora",
+      "pause": "Pausar",
+      "resume": "Reanudar",
+      "editCadence": "Editar cadencia",
+      "recentRuns": "Ejecuciones recientes",
+      "runStatus": {
+        "running": "En ejecución",
+        "done": "Completada",
+        "failed": "Fallida",
+        "skipped": "Omitida"
+      },
+      "updateFailed": "No se pudo actualizar la programación",
+      "runNowFailed": "No se pudo ejecutar ahora"
+    },
+    "fragments": {
+      "serviceTitle": "Buenas prácticas del servicio",
+      "serviceEmpty": "Ninguna. Los agentes que conocen el código en este servicio siguen su guía predeterminada."
+    },
+    "releaseHealth": {
+      "title": "Salud posterior al lanzamiento",
+      "clear": "Limpiar",
+      "connectPrompt": "Conecta una integración de observabilidad para vigilar este servicio tras los lanzamientos.",
+      "connectFirst": "Conecta primero una integración de observabilidad",
+      "connect": "Conectar",
+      "hint": "Los monitores y SLO que la verificación vigila después de que este servicio se publique. Separa los ids con comas.",
+      "monitorIds": "Ids de monitores",
+      "sloIds": "Ids de SLO",
+      "envTag": "Etiqueta de entorno (opcional)",
+      "saveMonitoring": "Guardar monitoreo",
+      "savedToast": "Monitoreo guardado",
+      "saveFailed": "No se pudo guardar la asignación",
+      "clearFailed": "No se pudo limpiar la asignación"
+    },
+    "testConfig": {
+      "title": "Infraestructura de pruebas",
+      "defaultEnv": "Entorno de pruebas predeterminado",
+      "defaultEnvHint": "El entorno predeterminado con el que se generan las tareas de este servicio. Cada tarea puede anularlo en su configuración de agente.",
+      "env": {
+        "ephemeral": "Entorno efímero",
+        "ephemeralHint": "las pruebas se ejecutan contra un entorno aprovisionado",
+        "local": "Local (docker-compose)",
+        "localHint": "el Tester levanta las dependencias localmente"
+      },
+      "composePath": "Ruta de docker-compose",
+      "browseRepo": "Explorar el repositorio en busca del archivo de compose",
+      "composeHint": "Lo usa el Tester para levantar localmente las dependencias del servicio.",
+      "selectComposeTitle": "Selecciona el archivo docker-compose",
+      "selectComposeHint": "Elige el archivo de compose en el repositorio. Su ruta se guarda relativa a la raíz del repo.",
+      "selected": "Seleccionado: {path}",
+      "noFileSelected": "Ningún archivo seleccionado.",
+      "useThisFile": "Usar este archivo",
+      "noInfra": "Sin dependencias de infraestructura (el Tester no levanta nada)",
+      "missingInfra": "Define una ruta de docker-compose o habilita sin dependencias de infraestructura; de lo contrario, un pipeline con un Tester no se iniciará.",
+      "provisioningTitle": "Aprovisionamiento del entorno efímero",
+      "provisioningHint": "Una indicación para aprovisionar el entorno de pruebas efímero de este servicio: en qué proveedor de nube desplegar y qué tamaño de instancia solicitar. Se ignora en las pruebas locales (docker-compose).",
+      "cloudProvider": "Proveedor de nube",
+      "instanceSize": "Tamaño de instancia",
+      "providers": {
+        "docker": "Docker (local)",
+        "custom": "Personalizado"
+      },
+      "sizes": {
+        "small": "Pequeño",
+        "medium": "Mediano",
+        "large": "Grande",
+        "xlarge": "Extra grande"
+      }
+    },
+    "agentConfig": {
+      "title": "Configuración del agente",
+      "inherited": "heredado del servicio",
+      "frozen": "Congelado: el agente ya ha comenzado"
+    },
+    "dependencies": {
+      "title": "Depende de",
+      "merged": "Fusionado",
+      "notMerged": "Aún sin fusionar",
+      "empty": "Sin dependencias. Puede ejecutarse en cualquier momento.",
+      "blocked": "Bloqueado hasta que se fusionen las dependencias."
+    },
+    "estimate": {
+      "title": "Estimación",
+      "complexity": "Complejidad",
+      "risk": "Riesgo",
+      "impact": "Impacto"
+    },
+    "execution": {
+      "stage": {
+        "incorporating": "Incorporando…",
+        "reviewing": "Revisando de nuevo…",
+        "recommending": "Recomendando…"
+      },
+      "prNumber": "PR n.º {number}",
+      "pullRequest": "Pull request",
+      "stepState": {
+        "pending": "Pendiente",
+        "working": "Trabajando",
+        "waiting_decision": "Requiere decisión",
+        "done": "Completado"
+      },
+      "failed": "Fallido",
+      "needsDecision": "Requiere decisión",
+      "needsApproval": "Requiere aprobación",
+      "spinningUp": "Iniciando…",
+      "stop": "Detener",
+      "stopTooltip": "Detener la ejecución pero conservarla (legible y reintentable)",
+      "reset": "Restablecer",
+      "resetTooltip": "Descartar esta ejecución y restablecer la tarea a planificada",
+      "viewDetailsOutput": "Ver detalles y leer la salida",
+      "viewDetails": "Ver detalles del paso",
+      "companion": "Acompañante",
+      "companionTooltip": "Acompañante de un paso productor",
+      "subtasksProgress": "{completed} de {total} subtareas completadas, {inProgress} en progreso",
+      "subtasksDone": "{completed} de {total} subtareas completadas",
+      "resolve": "Resolver",
+      "decide": "Decidir",
+      "review": "Revisar",
+      "approve": "Aprobar",
+      "fragmentsTooltip": "Fragmentos de buenas prácticas incorporados en este paso: {fragments}",
+      "standardsApplied": "{count} estándar aplicado | {count} estándares aplicados",
+      "companionOf": "{label} (acompañante)",
+      "merged": "Fusionado",
+      "open": "Abierto",
+      "mergePr": "Fusionar PR"
+    },
+    "structure": {
+      "module": "Módulo",
+      "modulePlaceholder": "p. ej. Sesiones (creado al implementar si es nuevo)",
+      "bestPractices": "Buenas prácticas",
+      "bestPracticesEmpty": "Ninguna. Los agentes siguen su guía predeterminada."
+    },
+    "runSettings": {
+      "unassigned": "Sin asignar",
+      "workspaceDefault": "Predeterminado del espacio de trabajo",
+      "workspaceDefaultParen": "(predeterminado del espacio de trabajo)",
+      "defaultPresetThresholds": "Predeterminado ({name}): {thresholds}",
+      "defaultPreset": "Predeterminado ({name})",
+      "noDefault": "Sin predeterminado",
+      "inheritWorkspace": "Heredar del espacio de trabajo",
+      "on": "Activado",
+      "off": "Desactivado",
+      "inheritOn": "Heredar (activado)",
+      "inheritOff": "Heredar (desactivado)",
+      "technical": {
+        "unset": "Sin definir (detección automática)",
+        "technical": "Técnica",
+        "business": "De negocio"
+      },
+      "pipeline": "Pipeline",
+      "pipelineEmpty": "Sin predeterminado. Elige un pipeline cuando ejecutes esta tarea.",
+      "mergePolicy": "Política de fusión",
+      "mergePresetDetail": "{name}: fusión automática cuando complejidad ≤ {complexity}, riesgo ≤ {risk}, impacto ≤ {impact}; hasta {attempts} intentos de corrección de CI.",
+      "mergePresetEmpty": "No hay preajuste configurado. El fusionador genera una notificación de revisión para cada PR.",
+      "modelPreset": "Preajuste de modelo",
+      "modelPresetBase": "base {model}",
+      "modelPresetOverrides": ", {count} anulación | , {count} anulaciones",
+      "modelPresetEmpty": "No hay preajuste configurado. Los agentes se ejecutan con el enrutamiento predeterminado del despliegue.",
+      "unavailableModels": "No disponibles con la configuración actual: {models}. Esta tarea fallaría en esos pasos.",
+      "editPresets": "Editar preajustes",
+      "configureVendors": "Configurar proveedores",
+      "modelPresetChangeHint": "Cambiar esto solo afecta a los pasos que aún no han comenzado.",
+      "taskKind": "Tipo de tarea",
+      "technicalHint": {
+        "technical": "Técnica: el implementador trata la definición de la tarea como principal y la especificación como referencia de regresión; el spec-writer puede no producir especificaciones de negocio.",
+        "business": "De negocio: la especificación lidera, como es habitual.",
+        "unset": "Detección automática: se infiere de la fase de especificación. Defínela explícitamente para anularla."
+      },
+      "issueWriteback": "Reescritura de incidencias",
+      "commentOnPrOpen": "Comentar al abrir el PR",
+      "closeOnMerge": "Cerrar al fusionar",
+      "writebackHint": "Reescribe en la incidencia del tracker vinculada a esta tarea. Anula el valor predeterminado del espacio de trabajo.",
+      "responsibleProduct": "Producto responsable",
+      "responsibleEmpty": "Sin asignar. Define un responsable de producto para notificarle cuando la revisión de requisitos marque esta tarea.",
+      "autoStartDependents": "Iniciar dependientes automáticamente",
+      "autoStartHint": "Cuando esta tarea se fusione, inicia automáticamente las tareas que dependen de ella (una vez que sus otras dependencias también estén completas)."
+    }
+  },
+  "panels": {
+    "decision": {
+      "title": "Se requiere una decisión",
+      "agentOnBlock": "{agent} en {block}",
+      "visualizationHint": "Esto es una visualización. Cualquier elección simplemente reanuda el pipeline."
+    },
+    "stepRestart": {
+      "restartFromStep": "Reiniciar el pipeline desde este paso",
+      "restartFromHere": "Reiniciar desde aquí"
+    },
+    "structuredResult": {
+      "fallbackTitle": "Resultado del agente",
+      "titleWithBlock": "{label}: {title}",
+      "fallbackDescription": "Salida estructurada del agente",
+      "structuredOutput": "Salida estructurada",
+      "noResult": "Aún no hay resultado.",
+      "noResultHint": "La salida estructurada aparece cuando este agente termina. Mientras se ejecuta, el paso muestra el progreso en vivo en el tablero."
+    },
+    "testReport": {
+      "title": "Informe de pruebas",
+      "greenlit": "Aprobado",
+      "needsFixes": "Requiere correcciones",
+      "fixAttempts": "{count}/{max} intentos de corrección",
+      "fixing": "· corrigiendo…",
+      "tested": "Probado",
+      "outcomes": "Resultados",
+      "concerns": "Inquietudes"
+    },
+    "stepMeta": {
+      "stateLabel": "Estado",
+      "duration": "Duración",
+      "elapsed": "transcurrido",
+      "step": "Paso",
+      "stepOf": "{number} de {total}",
+      "started": "Iniciado",
+      "finished": "Finalizado",
+      "model": "Modelo",
+      "notRecorded": "No registrado",
+      "run": "Ejecución",
+      "clickToCopy": "{id} (haz clic para copiar)",
+      "spinningUpContainer": "Iniciando contenedor…",
+      "subtasks": "Subtareas · {completed}/{total}",
+      "standardsApplied": "Estándares aplicados",
+      "decision": "Decisión",
+      "awaitingChoice": "Esperando una elección humana",
+      "approvalGate": "Verificación de aprobación",
+      "companionReview": "Revisión del acompañante",
+      "correctionIterations": "{count} iteración de corrección. | {count} iteraciones de corrección.",
+      "state": {
+        "pending": "Pendiente",
+        "working": "Trabajando",
+        "waiting_decision": "Requiere entrada",
+        "done": "Completado",
+        "failed": "Fallido"
+      },
+      "approvalStatus": {
+        "pending": "Pendiente",
+        "approved": "Aprobado",
+        "changes_requested": "Cambios solicitados",
+        "rejected": "Rechazado"
+      }
+    },
+    "stepDetail": {
+      "contents": "Contenidos",
+      "details": "Detalles",
+      "approvalRequired": "Se requiere aprobación",
+      "decisionRequired": "Se requiere una decisión",
+      "expandAll": "Expandir todas las secciones",
+      "collapseAll": "Contraer todas las secciones",
+      "copyRawOutput": "Copiar salida sin procesar",
+      "closeEsc": "Cerrar (Esc)",
+      "companionCapHeading": "{agent} alcanzó su límite de {attempts} intentos de reelaboración, aún por debajo del umbral de {threshold}.",
+      "companionCapDetail": "Haz una ronda más de reelaboración automática, avanza al siguiente paso aceptando la salida actual, o detén y restablece la tarea para que puedas editar las entradas y reenviarla.",
+      "infraAttempts": "Intentos de infraestructura",
+      "hideInfraAttempts": "Ocultar intentos de infraestructura",
+      "editingConclusions": "Editando las conclusiones",
+      "editConclusionsPlaceholder": "Edita las conclusiones del agente; tus cambios se guardan cuando apruebas…",
+      "noProseOutput": "Este agente no produjo salida en prosa.",
+      "approveWithCorrections": "Aprobar con correcciones",
+      "reviewAndApprove": "Revisar y aprobar",
+      "editHint": "Edita las conclusiones a la izquierda; tus cambios se guardan cuando apruebas.",
+      "reviewHint": "Haz clic en cualquier bloque de la salida para comentarlo, o deja comentarios generales abajo.",
+      "editingNotice": "Estás editando las conclusiones directamente. Las ediciones manuales no se pueden combinar con comentarios por bloque. Aprueba para guardarlas, o cancela para volver a la revisión.",
+      "commentingOn": "Comentando en",
+      "commentPlaceholder": "Deja un comentario en este bloque…",
+      "addComment": "Añadir comentario",
+      "commentN": "Comentario {number}",
+      "removeComment": "Quitar comentario",
+      "overallFeedback": "Comentarios generales / motivo del rechazo",
+      "overallFeedbackPlaceholder": "Describe los cambios que el agente debe hacer (opcional si dejaste comentarios por bloque)…",
+      "approveWithEdits": "Aprobar con estas ediciones",
+      "cancelEdits": "Cancelar ediciones",
+      "approveAndProceed": "Aprobar y continuar",
+      "rejectConfirmPrompt": "¿Rechazar esta propuesta y detener la ejecución por completo?",
+      "confirmReject": "Confirmar rechazo",
+      "requestChanges": "Solicitar cambios",
+      "reject": "Rechazar",
+      "requestChangesHint": "Solicitar cambios vuelve a ejecutar este paso con tus comentarios y observaciones. Rechazar detiene la ejecución por completo."
+    },
+    "inspector": {
+      "frameStatus": {
+        "planned": "Sin tareas",
+        "ready": "En vivo",
+        "in_progress": "Activo",
+        "blocked": "Requiere atención",
+        "pr_ready": "Activo",
+        "done": "En vivo"
+      },
+      "deleteRecurringPipeline": "Eliminar pipeline recurrente",
+      "deleteTask": "Eliminar tarea",
+      "deleteModule": "Eliminar módulo",
+      "deleteService": "Eliminar servicio",
+      "titlePlaceholder": "Título…",
+      "reworkedRequirements": "Requisitos reelaborados",
+      "agentStepsUseDocument": "Los pasos del agente usan este documento.",
+      "open": "Abrir",
+      "originalDescriptionFrozen": "Descripción original (congelada)",
+      "noDescription": "Sin descripción",
+      "describeBlock": "Describe este bloque…",
+      "taskStartedLocked": "Esta tarea ha comenzado. Sus detalles están bloqueados.",
+      "lastIncorporatedRequirements": "Últimos requisitos incorporados",
+      "priorDocHint": "De la revisión anterior. Úsalo como base: edita la descripción de arriba y reenvíala.",
+      "bootstrapping": "Inicializando…",
+      "importIssue": "Importar incidencia",
+      "connectTracker": "Conectar un tracker",
+      "spawnFromDocument": "Generar desde documento",
+      "viewRequirements": "Ver requisitos",
+      "reRun": "Reejecutar",
+      "run": "Ejecutar",
+      "focus": "Enfocar"
+    }
+  },
+  "observability": {
+    "modelActivity": "Actividad del modelo",
+    "viewAllCalls": "Ver todas las llamadas →",
+    "providedContext": "Contexto proporcionado",
+    "exportJson": "Exportar JSON",
+    "exportHint": "Descarga una exportación JSON de esta ejecución, apta para LLM",
+    "closeEsc": "Cerrar (Esc)",
+    "loadingActivity": "Cargando actividad del modelo…",
+    "loadingContext": "Cargando contexto proporcionado…",
+    "noCalls": "No se registraron llamadas al modelo en esta ejecución.",
+    "noContext": "No se almacenó contexto del agente para esta ejecución. Se captura por despacho cuando el espacio de trabajo tiene activado 'Almacenar contexto completo del agente'.",
+    "summary": {
+      "calls": "Llamadas",
+      "tokensInOut": "Tokens (entrada / salida)",
+      "transportOverhead": "Sobrecarga de transporte",
+      "modelExecution": "Ejecución del modelo",
+      "truncated": "{count} truncada | {count} truncadas"
+    },
+    "metricsBar": {
+      "calls": "{count} llamada | {count} llamadas",
+      "promptCompletionTokens": "Tokens de prompt / completado",
+      "cachedTokens": "({tokens} en caché)",
+      "cachedTokensHint": "Tokens de prompt servidos desde la caché del proveedor",
+      "errors": "{count} error | {count} errores",
+      "warnings": "{count} advertencia | {count} advertencias",
+      "outputLimit": "Límite de salida",
+      "truncatedCalls": "{count} llamada truncada en el límite | {count} llamadas truncadas en el límite",
+      "transportVsExecution": "Transporte frente a ejecución",
+      "transportOverhead": "Sobrecarga de transporte / proxy",
+      "modelExecution": "Ejecución del modelo"
+    },
+    "call": {
+      "tokensTitle": "{prompt} tokens de prompt / {completion} de completado",
+      "outputUsedVsLimit": "Salida usada frente al límite",
+      "transportVsExecution": "Sobrecarga de transporte / ejecución del modelo",
+      "error": "error",
+      "ok": "ok",
+      "messages": "{count} mensajes",
+      "tools": "{count} herramientas",
+      "streamed": "en streaming",
+      "buffered": "en búfer",
+      "maxTokens": "max_tokens {value}",
+      "promptCached": "{cached}/{prompt} de prompt en caché",
+      "total": "total {duration}",
+      "prompt": "Prompt",
+      "promptPrefixOmitted": "(solo mensajes nuevos: {count} anteriores omitidos)",
+      "response": "Respuesta",
+      "reasoning": "Razonamiento"
+    },
+    "context": {
+      "injectedFiles": "Archivos de contexto inyectados",
+      "bestPracticeFragments": "Fragmentos de buenas prácticas",
+      "filesCount": "{count} archivos",
+      "fragmentsCount": "{count} fragmentos",
+      "systemPrompt": "Prompt del sistema",
+      "userPrompt": "Prompt del usuario",
+      "details": "Detalles"
+    }
+  },
+  "auth": {
+    "gate": {
+      "loading": "Cargando…"
+    },
+    "login": {
+      "appTitle": "Architecture Board",
+      "subtitle": "Inicia sesión para continuar.",
+      "inviteSubtitle": "Acepta tu invitación para continuar.",
+      "forgotSubtitle": "Restablece tu contraseña.",
+      "continueWithGithub": "Continuar con GitHub",
+      "continueWithGoogle": "Continuar con Google",
+      "or": "o",
+      "namePlaceholder": "Nombre (opcional)",
+      "emailPlaceholder": "Correo electrónico",
+      "passwordPlaceholder": "Contraseña",
+      "createAccount": "Crear cuenta",
+      "signIn": "Iniciar sesión",
+      "signUp": "Registrarse",
+      "needAccount": "¿Necesitas una cuenta? {signUp}",
+      "haveAccount": "¿Ya tienes una cuenta? {signIn}",
+      "forgotPassword": "¿Olvidaste tu contraseña?",
+      "forgotSent": "Si existe una cuenta con ese correo, un enlace para restablecer la contraseña está en camino. Revisa tu bandeja de entrada.",
+      "sendResetLink": "Enviar enlace de restablecimiento",
+      "backToSignIn": "Volver al inicio de sesión",
+      "signInFailed": "Error al iniciar sesión. Revisa tus datos e inténtalo de nuevo.",
+      "genericError": "Algo salió mal. Inténtalo de nuevo."
+    },
+    "resetPassword": {
+      "title": "Restablecer contraseña",
+      "subtitle": "Elige una nueva contraseña para tu cuenta.",
+      "doneBody": "Tu contraseña se ha restablecido. Ya puedes iniciar sesión con tu nueva contraseña.",
+      "goToSignIn": "Ir al inicio de sesión",
+      "missingToken": "A este enlace de restablecimiento le falta el token. Solicita un nuevo enlace desde la pantalla de inicio de sesión.",
+      "backToSignIn": "Volver al inicio de sesión",
+      "newPasswordPlaceholder": "Nueva contraseña",
+      "confirmPasswordPlaceholder": "Confirmar nueva contraseña",
+      "submit": "Restablecer contraseña",
+      "errorTooShort": "La contraseña debe tener al menos 8 caracteres.",
+      "errorMismatch": "Las contraseñas no coinciden.",
+      "errorInvalidLink": "Este enlace para restablecer la contraseña no es válido o ha caducado."
+    },
+    "userMenu": {
+      "mySetup": "Mi configuración",
+      "signOut": "Cerrar sesión"
+    }
+  },
+  "layout": {
+    "accountDeployment": {
+      "title": "Integraciones del despliegue",
+      "intro": "Credenciales compartidas por todos los espacios de trabajo de esta cuenta, cifradas en reposo. Los valores nunca se muestran tras guardarlos; deja un campo en blanco para conservar el secreto almacenado.",
+      "configured": "Configurado",
+      "notSet": "Sin definir",
+      "clear": "Borrar",
+      "loadFailed": "No se pudo cargar la configuración del despliegue",
+      "slack": {
+        "title": "Aplicación de Slack (OAuth)",
+        "description": "Habilita el flujo OAuth \"Add to Slack\". Sin él, los espacios de trabajo aún pueden conectar Slack pegando un token de bot.",
+        "clientId": "ID de cliente",
+        "clientSecret": "Secreto de cliente",
+        "redirectUrl": "URL de redirección",
+        "validation": "Introduce el id de cliente, el secreto y la URL de redirección",
+        "saved": "OAuth de Slack guardado",
+        "saveFailed": "No se pudo guardar el OAuth de Slack",
+        "cleared": "OAuth de Slack borrado",
+        "clearFailed": "No se pudo borrar el OAuth de Slack"
+      },
+      "web": {
+        "title": "Búsqueda web del contenedor",
+        "description": "El proveedor de búsqueda al que los agentes del contenedor acceden a través del proxy del backend. Define una clave de Brave (recomendado) o una URL de SearXNG autoalojada (con una clave bearer opcional).",
+        "configured": "Configurado ({provider})",
+        "braveKey": "Clave de API de Brave",
+        "searxngUrl": "URL de SearXNG",
+        "searxngKey": "Clave de SearXNG (opcional)",
+        "validation": "Introduce una clave de Brave o una URL de SearXNG",
+        "saved": "Claves de búsqueda web guardadas",
+        "saveFailed": "No se pudieron guardar las claves de búsqueda web",
+        "cleared": "Claves de búsqueda web borradas",
+        "clearFailed": "No se pudieron borrar las claves de búsqueda web"
+      }
+    },
+    "accountFragments": {
+      "intro": "Directrices de buenas prácticas compartidas por todos los tableros de esta cuenta. Cada tablero las hereda y puede anularlas o añadir las suyas. Los agentes que conocen el código (coder, reviewer, architect, fixers) incorporan las relevantes en su prompt."
+    },
+    "accountTeam": {
+      "roles": {
+        "admin": "Administrador",
+        "developer": "Desarrollador",
+        "product": "Producto"
+      },
+      "org": {
+        "ctaTitle": "Invita a compañeros y gestiona roles",
+        "ctaBody": "Los miembros, roles e invitaciones viven en una organización. Crea una para invitar a compañeros y gestionar sus roles; tus tableros personales se mantienen igual.",
+        "namePlaceholder": "Acme Inc.",
+        "create": "Crear organización",
+        "created": "Organización creada"
+      },
+      "members": {
+        "title": "Miembros",
+        "empty": "Todavía no hay miembros."
+      },
+      "invite": {
+        "title": "Invitar a un compañero",
+        "submit": "Invitar",
+        "revoke": "Revocar invitación",
+        "created": "Invitación creada",
+        "createdEmailed": "Se envió un correo (o copia el enlace de la lista de abajo).",
+        "createdShareLink": "Comparte el enlace de aceptación con tu compañero.",
+        "status": {
+          "pending": "Pendiente",
+          "accepted": "Aceptada",
+          "revoked": "Revocada"
+        }
+      },
+      "email": {
+        "title": "Remitente de correo",
+        "notEnabled": "El envío de correo no está habilitado en este despliegue. Las invitaciones aún generan un enlace de aceptación que se puede compartir.",
+        "connectedAs": "Conectado mediante {provider} como {from}",
+        "disconnect": "Desconectar",
+        "connect": "Conectar remitente de correo",
+        "connected": "Remitente de correo conectado",
+        "fromPlaceholder": "Dirección de remitente",
+        "apiKeyPlaceholder": "Clave de API del proveedor",
+        "providers": {
+          "resend": "Resend",
+          "sendgrid": "SendGrid"
+        }
+      },
+      "apiKeys": {
+        "title": "Claves de API de la cuenta"
+      },
+      "errors": {
+        "updateRoles": "No se pudieron actualizar los roles",
+        "loadSettings": "No se pudo cargar la configuración del equipo",
+        "createOrg": "No se pudo crear la organización",
+        "sendInvite": "No se pudo enviar la invitación",
+        "revokeInvite": "No se pudo revocar la invitación",
+        "connectEmail": "No se pudo conectar el remitente de correo",
+        "disconnectEmail": "No se pudo desconectar el remitente de correo"
+      }
+    },
+    "boardSwitcher": {
+      "accountFallback": "Cuenta",
+      "boardFallback": "Tablero",
+      "providers": {
+        "docker": "Docker (local)",
+        "custom": "Personalizado"
+      },
+      "account": {
+        "newOrg": "Nueva organización…",
+        "settings": "Configuración de la cuenta…",
+        "defaultProvider": "Proveedor de nube predeterminado"
+      },
+      "board": {
+        "new": "Nuevo tablero…",
+        "rename": "Cambiar nombre del tablero…",
+        "delete": "Eliminar tablero"
+      },
+      "prompt": {
+        "create": "Crear",
+        "nameLabel": "Nombre",
+        "descriptionLabel": "Descripción",
+        "descriptionHint": "Opcional",
+        "descriptionPlaceholder": "¿Para qué sirve este tablero?",
+        "account": {
+          "title": "Nueva organización",
+          "placeholder": "Acme Inc."
+        },
+        "board": {
+          "title": "Nuevo tablero",
+          "placeholder": "Tablero sin título"
+        },
+        "rename": {
+          "title": "Configuración del tablero",
+          "placeholder": "Nombre del tablero"
+        }
+      },
+      "toast": {
+        "updateProviderFailed": "No se pudo actualizar el proveedor predeterminado",
+        "switchAccountFailed": "No se pudo cambiar de cuenta",
+        "openBoardFailed": "No se pudo abrir el tablero",
+        "boardDeleted": "Tablero eliminado",
+        "deleteBoardFailed": "No se pudo eliminar el tablero"
+      }
+    },
+    "notifications": {
+      "heading": "Requiere tu atención",
+      "overdue": "Vencida",
+      "openPr": "Abrir PR",
+      "dismiss": "Descartar",
+      "action": {
+        "merge_review": "Fusionar",
+        "pipeline_complete": "Confirmar y fusionar",
+        "ci_failed": "Reintentar ejecución",
+        "test_failed": "Reintentar ejecución",
+        "requirement_review": "Marcar como leída",
+        "clarity_review": "Marcar como leída",
+        "release_regression": "Confirmar recepción",
+        "decision_required": "Marcar como leída",
+        "human_test_ready": "Marcar como leída",
+        "visual_confirmation_ready": "Marcar como leída",
+        "human_review": "Marcar como leída",
+        "followup_pending": "Marcar como leída",
+        "markRead": "Marcar como leída"
+      }
+    },
+    "aiProvidersBanner": {
+      "setup": {
+        "title": "No hay ningún modelo de IA configurado",
+        "body": "Los agentes necesitan un modelo para ejecutarse. La IA funciona de forma inmediata solo en un despliegue de Cloudflare con Workers AI habilitado. De lo contrario, conecta una clave de proveedor, una suscripción, un proxy o un ejecutor local para continuar.",
+        "action": "Configurar IA"
+      },
+      "preset": {
+        "title": "El preajuste de modelo predeterminado usa modelos no disponibles",
+        "body": "Las tareas que usan el preajuste predeterminado fallarían. Edita el preajuste o configura el proveedor que falta.",
+        "action": "Revisar preajuste"
+      }
+    },
+    "githubPatBanner": {
+      "title": "PAT de GitHub no configurado",
+      "body": "El modo local accede a GitHub con un token de acceso personal. Sin uno, los pasos de los agentes que clonan, hacen push, abren PR, validan CI o fusionan fallarán.",
+      "createToken": "Crear un token de GitHub (ámbitos preseleccionados)",
+      "thenSet": "Luego define {envVar} y reinicia."
+    },
+    "providerConfigBanner": {
+      "titleMany": "Los proveedores necesitan configuración",
+      "titleOne": {
+        "environment": "El proveedor de entorno necesita configuración",
+        "runner-pool": "El grupo de ejecutores necesita configuración"
+      },
+      "body": "Hay un proveedor conectado para esta instancia, pero le faltan ajustes obligatorios, así que aún no puede ejecutarse. Añade los campos obligatorios para terminar de conectarlo.",
+      "action": {
+        "environment": "Configurar proveedor de entorno",
+        "runner-pool": "Configurar grupo de ejecutores"
+      }
+    },
+    "spendWarningBanner": {
+      "title": "Límite de gasto alcanzado, ejecución de agentes en pausa",
+      "body": "El gasto de tokens de este mes ha alcanzado el presupuesto configurado, por lo que las canalizaciones en curso se pausaron para evitar más costes. La ejecución se reanuda automáticamente cuando el presupuesto se renueva el mes que viene, o una vez que se aumente el límite.",
+      "spent": "Gastado",
+      "budget": "Presupuesto",
+      "tokens": "Tokens",
+      "resume": "Reanudar de todos modos",
+      "resumeHint": "Reanudar sigue generando gasto; se pausará de nuevo si sigue por encima del presupuesto."
+    },
+    "personalSetup": {
+      "title": "Mi configuración",
+      "intro": "Tus conexiones personales, usadas para las ejecuciones que inicias y visibles solo para ti.",
+      "connected": "Conectado",
+      "notConnected": "No conectado",
+      "connectedCount": "ninguno conectado | {count} conectado | {count} conectados",
+      "sourceControl": {
+        "title": "Control de versiones"
+      },
+      "githubToken": {
+        "label": "Mi token de GitHub",
+        "description": "Un token de acceso personal usado para las ejecuciones que inicias (pushes, PR, CI, fusión)."
+      },
+      "models": {
+        "title": "Modelos"
+      },
+      "localRunners": {
+        "label": "Mis ejecutores locales",
+        "description": "Tus ejecutores de modelos en tu propia máquina (Ollama, LM Studio, vLLM)."
+      },
+      "subscriptions": {
+        "label": "Mis suscripciones",
+        "description": "Planes de uso individual que desbloqueas con una contraseña personal (Claude, GLM, Codex)."
+      }
+    },
+    "integrationBack": {
+      "backToMySetup": "Volver a Mi configuración",
+      "backToIntegrations": "Volver a Integraciones"
+    },
+    "commandBar": {
+      "searchPlaceholder": "Busca o ejecuta un comando…",
+      "noMatches": "No hay comandos que coincidan.",
+      "groups": {
+        "create": "Crear",
+        "repositories": "Repositorios",
+        "integrations": "Integraciones",
+        "workspace": "Espacio de trabajo",
+        "account": "Cuenta"
+      },
+      "cmd": {
+        "newPipeline": "Crear una canalización",
+        "addFromRepo": "Añadir servicio desde un repositorio existente",
+        "bootstrapRepo": "Iniciar un repositorio nuevo",
+        "githubManage": "Gestionar la conexión de GitHub",
+        "githubConnect": "Conectar GitHub",
+        "slackManage": "Gestionar las notificaciones de Slack",
+        "slackConnect": "Conectar Slack",
+        "sourceManage": "Gestionar {source}",
+        "sourceConnect": "Conectar {source}",
+        "documentImport": "Importar y generar desde documentos",
+        "taskImport": "Importar incidencias",
+        "fragments": "Biblioteca de fragmentos de contexto",
+        "mergeThresholds": "Umbrales de fusión",
+        "workspaceSettings": "Ajustes del espacio de trabajo",
+        "modelConfiguration": "Configuración de modelos",
+        "serviceFragmentDefaults": "Buenas prácticas del servicio por defecto",
+        "accountSettings": "Ajustes de la cuenta",
+        "localModels": "Mis ejecutores locales",
+        "sandbox": "Abrir el entorno de pruebas"
+      },
+      "keywords": {
+        "newPipeline": "canalización agentes cadena pipeline",
+        "addFromRepo": "github importar existente",
+        "bootstrapRepo": "andamiaje crear arquitectura de referencia",
+        "github": "git repositorios pull requests incidencias",
+        "slack": "slack notificaciones canal menciones",
+        "documentSource": "documento fuente prd rfc",
+        "documentImport": "documento importar generar",
+        "taskSource": "tarea fuente rastreador incidencias",
+        "taskImport": "tarea importar incidencias",
+        "fragments": "prompt fragmentos buenas prácticas directrices contexto",
+        "mergeThresholds": "fusión política preajuste auto-fusión ci",
+        "workspaceSettings": "límite tareas en ejecución por servicio espera escalado retraso notificación tiempo de espera",
+        "modelConfiguration": "modelo llm enrutamiento tipo de agente preajuste por defecto configuración",
+        "serviceFragmentDefaults": "fragmento buenas prácticas directriz servicio por defecto consciente del código",
+        "accountSettings": "cuenta equipo miembros roles invitaciones correo claves api fragmento buenas prácticas biblioteca contexto organización personal",
+        "localModels": "modelo local ejecutor ollama lm studio llamacpp vllm endpoint",
+        "sandbox": "entorno de pruebas prompt modelo prueba experimento juez fixture benchmark evaluar"
+      }
+    },
+    "integrationsHub": {
+      "title": "Integraciones",
+      "intro": "Conecta y gestiona los sistemas externos que este espacio de trabajo puede vincular.",
+      "searchPlaceholder": "Buscar integraciones…",
+      "noMatches": "Ninguna integración coincide con \"{query}\".",
+      "getStarted": {
+        "title": "Primeros pasos",
+        "body": "Conecta una fuente de código y un proveedor de modelos para ejecutar tu primera canalización."
+      },
+      "status": {
+        "connected": "Conectado",
+        "keyConnected": "Clave conectada",
+        "notConnected": "Sin conectar",
+        "needsAttention": "Requiere atención",
+        "disabled": "Desactivado",
+        "recommended": "Recomendado"
+      },
+      "groups": {
+        "models": "Modelos y proveedores",
+        "sourceControl": "Control de código fuente",
+        "communication": "Comunicación",
+        "documents": "Documentos",
+        "taskTrackers": "Rastreadores de tareas",
+        "observability": "Observabilidad",
+        "infrastructure": "Infraestructura",
+        "personal": "Personal (solo tú)"
+      },
+      "items": {
+        "openrouter": {
+          "description": "Una sola puerta de enlace a más de 300 modelos. Añade tu clave y activa modelos en un único lugar."
+        },
+        "vendors": {
+          "label": "Proveedores y claves",
+          "description": "Suscripciones de LLM del espacio de trabajo y claves API de proveedores."
+        },
+        "github": {
+          "description": "Conecta la GitHub App del espacio de trabajo y explora repositorios, PR e incidencias."
+        },
+        "slack": {
+          "description": "Envía las notificaciones al espacio de Slack de tu equipo."
+        },
+        "documentSource": {
+          "description": "Vincula {source} como fuente de documentos para el contexto de requisitos."
+        },
+        "documentImport": {
+          "label": "Importar y generar",
+          "description": "Importa documentos de una fuente conectada y genera estructura."
+        },
+        "taskSource": {
+          "description": "Vincula {source} para importar y consultar incidencias del rastreador."
+        },
+        "taskImport": {
+          "label": "Importar incidencias",
+          "description": "Importa incidencias de un rastreador conectado al tablero."
+        },
+        "trackerSettings": {
+          "label": "Ajustes del rastreador de incidencias"
+        },
+        "observability": {
+          "label": "Salud posterior al lanzamiento",
+          "description": "Vigila los monitores y SLO después de publicar una versión (Datadog)."
+        },
+        "environment": {
+          "label": "Entornos efímeros",
+          "description": "Donde el agente Tester se ejecuta contra un entorno de vista previa en vivo."
+        },
+        "runnerPool": {
+          "label": "Grupo de ejecutores autoalojado",
+          "description": "Donde se ejecutan los agentes de código cuando no se usan los Cloudflare Containers."
+        },
+        "localMode": {
+          "label": "Modo local",
+          "description": "Grupo de contenedores en caliente y reutilización de checkout por repositorio para el ejecutor local."
+        },
+        "githubPat": {
+          "label": "Mi token de GitHub",
+          "description": "Un token de acceso personal usado para las ejecuciones que inicias (pushes, PR, CI, fusión)."
+        },
+        "localRunners": {
+          "label": "Mis ejecutores locales",
+          "description": "Tus ejecutores de modelos en tu propia máquina (Ollama, LM Studio, vLLM…)."
+        }
       }
     }
   }
