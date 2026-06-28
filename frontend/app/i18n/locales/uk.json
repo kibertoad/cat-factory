@@ -813,7 +813,6 @@
       },
       "invite": {
         "title": "Запросити учасника команди",
-        "emailPlaceholder": "kolega@pryklad.com",
         "submit": "Запросити",
         "revoke": "Відкликати запрошення",
         "created": "Запрошення створено",

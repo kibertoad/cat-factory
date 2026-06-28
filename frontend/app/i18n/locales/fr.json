@@ -813,7 +813,6 @@
       },
       "invite": {
         "title": "Inviter un coéquipier",
-        "emailPlaceholder": "coequipier@exemple.com",
         "submit": "Inviter",
         "revoke": "Révoquer l'invitation",
         "created": "Invitation créée",

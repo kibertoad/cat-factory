@@ -231,7 +231,7 @@ async function disconnectEmail() {
         <UInput
           v-model="inviteEmail"
           type="email"
-          :placeholder="t('layout.accountTeam.invite.emailPlaceholder')"
+          placeholder="teammate@example.com"
           class="flex-1"
         />
         <USelect v-model="inviteRoles" multiple :items="ROLE_ITEMS" class="w-44" />

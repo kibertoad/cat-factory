@@ -813,7 +813,6 @@
       },
       "invite": {
         "title": "Zaproś członka zespołu",
-        "emailPlaceholder": "kolega@przyklad.com",
         "submit": "Zaproś",
         "revoke": "Odwołaj zaproszenie",
         "created": "Utworzono zaproszenie",

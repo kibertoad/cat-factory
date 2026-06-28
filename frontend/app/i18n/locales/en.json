@@ -852,7 +852,6 @@
       },
       "invite": {
         "title": "Invite a teammate",
-        "emailPlaceholder": "teammate@example.com",
         "submit": "Invite",
         "revoke": "Revoke invitation",
         "created": "Invitation created",
