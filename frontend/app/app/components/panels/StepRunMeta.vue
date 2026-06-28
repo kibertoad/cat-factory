@@ -25,6 +25,7 @@ const props = defineProps<{
 }>()
 
 const models = useModelsStore()
+const { t, d } = useI18n()
 
 const { isRunning, durationLabel } = useStepTimer({
   step: () => props.step,
@@ -36,7 +37,7 @@ const modelLabel = computed(() => (props.step.model ? models.labelForRef(props.s
 const runId = computed(() => props.step.runId ?? props.instanceId ?? null)
 
 function formatClock(ms?: number | null): string | null {
-  return ms ? new Date(ms).toLocaleString() : null
+  return ms ? d(new Date(ms), 'long') : null
 }
 
 async function copyRunId() {
@@ -47,13 +48,17 @@ async function copyRunId() {
 <template>
   <div class="flex flex-col gap-4">
     <div v-if="stepNumber && totalSteps">
-      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Step</h4>
-      <p class="text-[12px] text-slate-300">{{ stepNumber }} of {{ totalSteps }}</p>
+      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        {{ t('panels.stepMeta.step') }}
+      </h4>
+      <p class="text-[12px] text-slate-300">
+        {{ t('panels.stepMeta.stepOf', { number: stepNumber, total: totalSteps }) }}
+      </p>
     </div>
 
     <div v-if="durationLabel">
       <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-        Duration
+        {{ t('panels.stepMeta.duration') }}
       </h4>
       <p class="flex items-center gap-1.5 text-[12px] tabular-nums text-slate-300">
         <UIcon
@@ -62,34 +67,42 @@ async function copyRunId() {
           class="h-3 w-3 animate-spin text-indigo-400"
         />
         {{ durationLabel }}
-        <span v-if="isRunning" class="text-[11px] text-slate-500">elapsed</span>
+        <span v-if="isRunning" class="text-[11px] text-slate-500">{{
+          t('panels.stepMeta.elapsed')
+        }}</span>
       </p>
     </div>
 
     <div v-if="formatClock(step.startedAt)">
-      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Started</h4>
+      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        {{ t('panels.stepMeta.started') }}
+      </h4>
       <p class="text-[12px] text-slate-300">{{ formatClock(step.startedAt) }}</p>
     </div>
 
     <div v-if="formatClock(step.finishedAt)">
       <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-        Finished
+        {{ t('panels.stepMeta.finished') }}
       </h4>
       <p class="text-[12px] text-slate-300">{{ formatClock(step.finishedAt) }}</p>
     </div>
 
     <div v-if="step.model">
-      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Model</h4>
+      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        {{ t('panels.stepMeta.model') }}
+      </h4>
       <p class="break-all text-[12px] text-slate-300" :title="step.model">
         {{ modelLabel ?? step.model }}
       </p>
     </div>
 
     <div v-if="runId">
-      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Run</h4>
+      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        {{ t('panels.stepMeta.run') }}
+      </h4>
       <p
         class="cursor-pointer break-all font-mono text-[12px] text-slate-400 hover:text-slate-200"
-        :title="`${runId} — click to copy`"
+        :title="t('panels.stepMeta.clickToCopy', { id: runId })"
         @click="copyRunId"
       >
         {{ runId }}

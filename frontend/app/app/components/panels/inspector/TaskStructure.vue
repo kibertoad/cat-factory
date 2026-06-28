@@ -5,6 +5,7 @@ const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
 const fragments = useFragmentsStore()
+const { t } = useI18n()
 
 // ---- best-practice prompt fragments ----------------------------------------
 // Selected fragments (resolved against the catalog; unknown ids are dropped).
@@ -47,13 +48,13 @@ function removeFragment(id: string) {
     <!-- module assignment -->
     <div>
       <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        Module
+        {{ t('inspector.structure.module') }}
       </div>
       <UInput
         v-model="block.moduleName"
         size="sm"
         class="w-full"
-        placeholder="e.g. Sessions (created on implement if new)"
+        :placeholder="t('inspector.structure.modulePlaceholder')"
         icon="i-lucide-package"
       />
     </div>
@@ -62,7 +63,7 @@ function removeFragment(id: string) {
     <div>
       <div class="mb-1 flex items-center justify-between">
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          Best practices
+          {{ t('inspector.structure.bestPractices') }}
         </span>
         <UDropdownMenu v-if="fragmentMenu.length" :items="fragmentMenu">
           <UButton
@@ -89,7 +90,7 @@ function removeFragment(id: string) {
         </UBadge>
       </div>
       <div v-else class="text-[11px] text-slate-500">
-        None — agents follow their default guidance.
+        {{ t('inspector.structure.bestPracticesEmpty') }}
       </div>
     </div>
   </div>

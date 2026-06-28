@@ -25,11 +25,11 @@ const summary = computed(() => store.view?.summary ?? null)
 // Exhaustive enum→key map (drift guard tier 2): every backend resolves to a static literal
 // `t()` key, so adding a backend without a label fails the typecheck on this Record.
 const contentBackendLabels = computed<Record<ContentStorageBackend, string>>(() => ({
-  off: t('accountSettings.contentStorage.backends.off'),
-  fs: t('accountSettings.contentStorage.backends.fs'),
-  s3: t('accountSettings.contentStorage.backends.s3'),
-  r2: t('accountSettings.contentStorage.backends.r2'),
-  db: t('accountSettings.contentStorage.backends.db'),
+  off: t('layout.accountDeployment.contentStorage.backends.off'),
+  fs: t('layout.accountDeployment.contentStorage.backends.fs'),
+  s3: t('layout.accountDeployment.contentStorage.backends.s3'),
+  r2: t('layout.accountDeployment.contentStorage.backends.r2'),
+  db: t('layout.accountDeployment.contentStorage.backends.db'),
 }))
 const storageCapability = computed(() => store.view?.contentStorageCapability ?? null)
 const storageSummary = computed(() => summary.value?.contentStorage ?? null)
@@ -71,7 +71,7 @@ onMounted(async () => {
     hydrateStorage()
   } catch (e) {
     toast.add({
-      title: t('accountSettings.loadError'),
+      title: t('layout.accountDeployment.loadFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -88,7 +88,7 @@ async function saveStorage() {
   if (backend === 's3') {
     if (!cs.region.trim() || !cs.bucket.trim()) {
       toast.add({
-        title: t('accountSettings.contentStorage.regionBucketValidation'),
+        title: t('layout.accountDeployment.contentStorage.regionBucketValidation'),
         color: 'error',
       })
       return
@@ -108,10 +108,16 @@ async function saveStorage() {
     if (id && key) {
       input.secrets = { s3: { accessKeyId: id, secretAccessKey: key } }
     } else if (id || key) {
-      toast.add({ title: t('accountSettings.contentStorage.bothKeysValidation'), color: 'error' })
+      toast.add({
+        title: t('layout.accountDeployment.contentStorage.bothKeysValidation'),
+        color: 'error',
+      })
       return
     } else if (!storageSummary.value?.s3CredentialsConfigured) {
-      toast.add({ title: t('accountSettings.contentStorage.keysValidation'), color: 'error' })
+      toast.add({
+        title: t('layout.accountDeployment.contentStorage.keysValidation'),
+        color: 'error',
+      })
       return
     }
     // else: keys already stored and none re-entered → leave them unchanged.
@@ -124,13 +130,13 @@ async function saveStorage() {
     await store.save(props.accountId, input)
     hydrateStorage()
     toast.add({
-      title: t('accountSettings.contentStorage.saved'),
+      title: t('layout.accountDeployment.contentStorage.saved'),
       icon: 'i-lucide-check',
       color: 'success',
     })
   } catch (e) {
     toast.add({
-      title: t('accountSettings.contentStorage.saveError'),
+      title: t('layout.accountDeployment.contentStorage.saveFailed'),
       description: e instanceof Error ? e.message : String(e),
       color: 'error',
     })
@@ -141,7 +147,7 @@ async function saveStorage() {
 
 async function saveSlack() {
   if (!slack.clientId.trim() || !slack.clientSecret.trim() || !slack.redirectUrl.trim()) {
-    toast.add({ title: t('accountSettings.slack.validation'), color: 'error' })
+    toast.add({ title: t('layout.accountDeployment.slack.validation'), color: 'error' })
     return
   }
   savingSlack.value = true
@@ -158,10 +164,14 @@ async function saveSlack() {
     slack.clientId = ''
     slack.clientSecret = ''
     slack.redirectUrl = ''
-    toast.add({ title: t('accountSettings.slack.saved'), icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('layout.accountDeployment.slack.saved'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
     toast.add({
-      title: t('accountSettings.slack.saveError'),
+      title: t('layout.accountDeployment.slack.saveFailed'),
       description: e instanceof Error ? e.message : String(e),
       color: 'error',
     })
@@ -175,13 +185,13 @@ async function clearSlack() {
   try {
     await store.save(props.accountId, { secrets: { slackOAuth: null } })
     toast.add({
-      title: t('accountSettings.slack.cleared'),
+      title: t('layout.accountDeployment.slack.cleared'),
       icon: 'i-lucide-check',
       color: 'success',
     })
   } catch (e) {
     toast.add({
-      title: t('accountSettings.slack.clearError'),
+      title: t('layout.accountDeployment.slack.clearFailed'),
       description: e instanceof Error ? e.message : String(e),
       color: 'error',
     })
@@ -194,7 +204,7 @@ async function saveWeb() {
   const brave = web.braveApiKey.trim()
   const searxng = web.searxngUrl.trim()
   if (!brave && !searxng) {
-    toast.add({ title: t('accountSettings.web.validation'), color: 'error' })
+    toast.add({ title: t('layout.accountDeployment.web.validation'), color: 'error' })
     return
   }
   savingWeb.value = true
@@ -211,10 +221,14 @@ async function saveWeb() {
     web.braveApiKey = ''
     web.searxngUrl = ''
     web.searxngApiKey = ''
-    toast.add({ title: t('accountSettings.web.saved'), icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('layout.accountDeployment.web.saved'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
     toast.add({
-      title: t('accountSettings.web.saveError'),
+      title: t('layout.accountDeployment.web.saveFailed'),
       description: e instanceof Error ? e.message : String(e),
       color: 'error',
     })
@@ -227,10 +241,14 @@ async function clearWeb() {
   savingWeb.value = true
   try {
     await store.save(props.accountId, { secrets: { webSearch: null } })
-    toast.add({ title: t('accountSettings.web.cleared'), icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('layout.accountDeployment.web.cleared'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
     toast.add({
-      title: t('accountSettings.web.clearError'),
+      title: t('layout.accountDeployment.web.clearFailed'),
       description: e instanceof Error ? e.message : String(e),
       color: 'error',
     })
@@ -243,14 +261,18 @@ async function clearWeb() {
 <template>
   <div v-if="store.available !== false" class="space-y-6">
     <div>
-      <h3 class="mb-1 font-semibold text-white">{{ t('accountSettings.title') }}</h3>
-      <p class="text-[11px] text-slate-400">{{ t('accountSettings.description') }}</p>
+      <h3 class="mb-1 font-semibold text-white">{{ t('layout.accountDeployment.title') }}</h3>
+      <p class="text-[11px] text-slate-400">
+        {{ t('layout.accountDeployment.intro') }}
+      </p>
     </div>
 
     <!-- Slack app OAuth -->
     <section class="space-y-2">
       <div class="flex items-center gap-2">
-        <h4 class="text-sm font-semibold text-slate-200">{{ t('accountSettings.slack.title') }}</h4>
+        <h4 class="text-sm font-semibold text-slate-200">
+          {{ t('layout.accountDeployment.slack.title') }}
+        </h4>
         <UBadge
           :color="summary?.slackOAuthConfigured ? 'success' : 'neutral'"
           variant="subtle"
@@ -258,27 +280,29 @@ async function clearWeb() {
         >
           {{
             summary?.slackOAuthConfigured
-              ? t('accountSettings.status.configured')
-              : t('accountSettings.status.notSet')
+              ? t('layout.accountDeployment.configured')
+              : t('layout.accountDeployment.notSet')
           }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-slate-400">{{ t('accountSettings.slack.description') }}</p>
+      <p class="text-[11px] text-slate-400">
+        {{ t('layout.accountDeployment.slack.description') }}
+      </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <UInput
           v-model="slack.clientId"
-          :placeholder="t('accountSettings.slack.clientId')"
+          :placeholder="t('layout.accountDeployment.slack.clientId')"
           size="sm"
         />
         <UInput
           v-model="slack.clientSecret"
           type="password"
-          :placeholder="t('accountSettings.slack.clientSecret')"
+          :placeholder="t('layout.accountDeployment.slack.clientSecret')"
           size="sm"
         />
         <UInput
           v-model="slack.redirectUrl"
-          :placeholder="t('accountSettings.slack.redirectUrl')"
+          :placeholder="t('layout.accountDeployment.slack.redirectUrl')"
           size="sm"
         />
       </div>
@@ -300,7 +324,7 @@ async function clearWeb() {
           :loading="savingSlack"
           @click="clearSlack"
         >
-          {{ t('accountSettings.clear') }}
+          {{ t('layout.accountDeployment.clear') }}
         </UButton>
       </div>
     </section>
@@ -308,32 +332,36 @@ async function clearWeb() {
     <!-- Web search keys -->
     <section class="space-y-2 border-t border-slate-800 pt-6">
       <div class="flex items-center gap-2">
-        <h4 class="text-sm font-semibold text-slate-200">{{ t('accountSettings.web.title') }}</h4>
+        <h4 class="text-sm font-semibold text-slate-200">
+          {{ t('layout.accountDeployment.web.title') }}
+        </h4>
         <UBadge :color="summary?.webSearch ? 'success' : 'neutral'" variant="subtle" size="xs">
           {{
             summary?.webSearch
-              ? t('accountSettings.web.configured', { provider: summary.webSearch })
-              : t('accountSettings.status.notSet')
+              ? t('layout.accountDeployment.web.configured', { provider: summary.webSearch })
+              : t('layout.accountDeployment.notSet')
           }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-slate-400">{{ t('accountSettings.web.description') }}</p>
+      <p class="text-[11px] text-slate-400">
+        {{ t('layout.accountDeployment.web.description') }}
+      </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <UInput
           v-model="web.braveApiKey"
           type="password"
-          :placeholder="t('accountSettings.web.braveKey')"
+          :placeholder="t('layout.accountDeployment.web.braveKey')"
           size="sm"
         />
         <UInput
           v-model="web.searxngUrl"
-          :placeholder="t('accountSettings.web.searxngUrl')"
+          :placeholder="t('layout.accountDeployment.web.searxngUrl')"
           size="sm"
         />
         <UInput
           v-model="web.searxngApiKey"
           type="password"
-          :placeholder="t('accountSettings.web.searxngKey')"
+          :placeholder="t('layout.accountDeployment.web.searxngKey')"
           size="sm"
         />
       </div>
@@ -355,7 +383,7 @@ async function clearWeb() {
           :loading="savingWeb"
           @click="clearWeb"
         >
-          {{ t('accountSettings.clear') }}
+          {{ t('layout.accountDeployment.clear') }}
         </UButton>
       </div>
     </section>
@@ -364,7 +392,7 @@ async function clearWeb() {
     <section v-if="storageCapability" class="space-y-2 border-t border-slate-800 pt-6">
       <div class="flex items-center gap-2">
         <h4 class="text-sm font-semibold text-slate-200">
-          {{ t('accountSettings.contentStorage.title') }}
+          {{ t('layout.accountDeployment.contentStorage.title') }}
         </h4>
         <UBadge
           :color="
@@ -376,14 +404,14 @@ async function clearWeb() {
           {{
             storageSummary?.backend
               ? contentBackendLabels[storageSummary.backend]
-              : t('accountSettings.contentStorage.default', {
+              : t('layout.accountDeployment.contentStorage.default', {
                   backend: contentBackendLabels[storageCapability.defaultBackend],
                 })
           }}
         </UBadge>
       </div>
       <p class="text-[11px] text-slate-400">
-        {{ t('accountSettings.contentStorage.description') }}
+        {{ t('layout.accountDeployment.contentStorage.description') }}
       </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <USelect v-model="csBackend" :items="backendItems" value-key="value" size="sm" />
@@ -393,7 +421,7 @@ async function clearWeb() {
       <div v-if="csBackend === 'fs'" class="grid grid-cols-1 gap-2">
         <UInput
           v-model="cs.basePath"
-          :placeholder="t('accountSettings.contentStorage.basePath')"
+          :placeholder="t('layout.accountDeployment.contentStorage.basePath')"
           size="sm"
         />
       </div>
@@ -403,33 +431,33 @@ async function clearWeb() {
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <UInput
             v-model="cs.region"
-            :placeholder="t('accountSettings.contentStorage.region')"
+            :placeholder="t('layout.accountDeployment.contentStorage.region')"
             size="sm"
           />
           <UInput
             v-model="cs.bucket"
-            :placeholder="t('accountSettings.contentStorage.bucket')"
+            :placeholder="t('layout.accountDeployment.contentStorage.bucket')"
             size="sm"
           />
           <UInput
             v-model="cs.prefix"
-            :placeholder="t('accountSettings.contentStorage.prefix')"
+            :placeholder="t('layout.accountDeployment.contentStorage.prefix')"
             size="sm"
           />
           <UInput
             v-model="cs.endpoint"
-            :placeholder="t('accountSettings.contentStorage.endpoint')"
+            :placeholder="t('layout.accountDeployment.contentStorage.endpoint')"
             size="sm"
           />
         </div>
         <UCheckbox
           v-model="cs.forcePathStyle"
-          :label="t('accountSettings.contentStorage.forcePathStyle')"
+          :label="t('layout.accountDeployment.contentStorage.forcePathStyle')"
           size="sm"
         />
         <div class="flex items-center gap-2">
           <span class="text-[11px] text-slate-400">
-            {{ t('accountSettings.contentStorage.accessKeys') }}
+            {{ t('layout.accountDeployment.contentStorage.accessKeys') }}
           </span>
           <UBadge
             :color="storageSummary?.s3CredentialsConfigured ? 'success' : 'neutral'"
@@ -438,8 +466,8 @@ async function clearWeb() {
           >
             {{
               storageSummary?.s3CredentialsConfigured
-                ? t('accountSettings.status.configured')
-                : t('accountSettings.status.notSet')
+                ? t('layout.accountDeployment.configured')
+                : t('layout.accountDeployment.notSet')
             }}
           </UBadge>
         </div>
@@ -447,18 +475,18 @@ async function clearWeb() {
           <UInput
             v-model="cs.accessKeyId"
             type="password"
-            :placeholder="t('accountSettings.contentStorage.accessKeyId')"
+            :placeholder="t('layout.accountDeployment.contentStorage.accessKeyId')"
             size="sm"
           />
           <UInput
             v-model="cs.secretAccessKey"
             type="password"
-            :placeholder="t('accountSettings.contentStorage.secretAccessKey')"
+            :placeholder="t('layout.accountDeployment.contentStorage.secretAccessKey')"
             size="sm"
           />
         </div>
         <p class="text-[11px] text-slate-400">
-          {{ t('accountSettings.contentStorage.keysHint') }}
+          {{ t('layout.accountDeployment.contentStorage.keysHint') }}
         </p>
       </template>
 

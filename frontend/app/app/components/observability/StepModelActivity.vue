@@ -18,6 +18,7 @@ const props = defineProps<{
 }>()
 
 const ui = useUiStore()
+const { t } = useI18n()
 const hasCalls = computed(() => !!props.metrics && props.metrics.calls > 0)
 
 function openObservability() {
@@ -29,14 +30,14 @@ function openObservability() {
   <div v-if="instanceId || hasCalls">
     <div class="mb-1 flex items-center justify-between">
       <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-        Model activity
+        {{ t('observability.modelActivity') }}
       </span>
       <button
         v-if="instanceId"
         class="text-[11px] text-sky-400 hover:text-sky-300"
         @click="openObservability"
       >
-        View all calls →
+        {{ t('observability.viewAllCalls') }}
       </button>
     </div>
     <StepMetricsBar

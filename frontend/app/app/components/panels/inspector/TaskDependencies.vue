@@ -5,6 +5,7 @@ const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
 const { depLabel } = useDepLabels()
+const { t } = useI18n()
 
 const deps = computed(() =>
   (props.block.dependsOn ?? []).map((id) => board.getBlock(id)).filter((b): b is Block => !!b),
@@ -35,7 +36,7 @@ function removeDep(depId: string) {
   <div>
     <div class="mb-1 flex items-center justify-between">
       <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        Depends on
+        {{ t('inspector.dependencies.title') }}
       </span>
       <UDropdownMenu v-if="depMenu.length" :items="depMenu">
         <UButton
@@ -55,16 +56,20 @@ function removeDep(depId: string) {
         variant="subtle"
         size="sm"
         class="cursor-pointer"
-        :title="d.status === 'done' ? 'Merged' : 'Not merged yet'"
+        :title="
+          d.status === 'done'
+            ? t('inspector.dependencies.merged')
+            : t('inspector.dependencies.notMerged')
+        "
         @click="removeDep(d.id)"
       >
         {{ label(d) }}
         <UIcon name="i-lucide-x" class="ml-0.5 h-3 w-3" />
       </UBadge>
     </div>
-    <div v-else class="text-[11px] text-slate-500">No dependencies — can run any time.</div>
+    <div v-else class="text-[11px] text-slate-500">{{ t('inspector.dependencies.empty') }}</div>
     <div v-if="!runnable" class="mt-1 text-[10px] text-amber-400">
-      Blocked until dependencies merge.
+      {{ t('inspector.dependencies.blocked') }}
     </div>
   </div>
 </template>

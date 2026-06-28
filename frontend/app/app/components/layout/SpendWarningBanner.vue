@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+const { t, n } = useI18n()
 const workspace = useWorkspaceStore()
 
 const spend = computed(() => workspace.spend)
@@ -8,18 +9,13 @@ const spend = computed(() => workspace.spend)
 const exceeded = computed(() => spend.value?.exceeded ?? false)
 
 function money(amount: number, currency: string) {
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(amount)
-  } catch {
-    // Fall back if the currency code isn't recognised by the runtime.
-    return `${amount.toFixed(2)} ${currency}`
-  }
+  return n(amount, { key: 'currency', currency })
 }
 
 const tokens = computed(() => {
   const s = spend.value
   if (!s) return ''
-  return new Intl.NumberFormat().format(s.inputTokens + s.outputTokens)
+  return n(s.inputTokens + s.outputTokens, 'decimal')
 })
 
 const resuming = ref(false)
@@ -47,29 +43,33 @@ async function resume() {
           <UIcon name="i-lucide-octagon-alert" class="mt-0.5 h-10 w-10 shrink-0 text-red-400" />
           <div class="min-w-0 flex-1">
             <h2 class="text-lg font-semibold text-red-100">
-              Spend limit reached — agent execution paused
+              {{ t('layout.spendWarningBanner.title') }}
             </h2>
             <p class="mt-1 text-sm text-red-200/90">
-              This month's token spend has hit the configured budget, so running pipelines were
-              paused to avoid further cost. Execution resumes automatically when the budget rolls
-              over next month, or once the limit is raised.
+              {{ t('layout.spendWarningBanner.body') }}
             </p>
 
             <dl class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
               <div class="rounded-lg bg-red-900/50 px-3 py-2">
-                <dt class="text-[11px] uppercase tracking-wide text-red-300/80">Spent</dt>
+                <dt class="text-[11px] uppercase tracking-wide text-red-300/80">
+                  {{ t('layout.spendWarningBanner.spent') }}
+                </dt>
                 <dd class="text-base font-semibold tabular-nums text-red-50">
                   {{ money(spend.costSpent, spend.currency) }}
                 </dd>
               </div>
               <div class="rounded-lg bg-red-900/50 px-3 py-2">
-                <dt class="text-[11px] uppercase tracking-wide text-red-300/80">Budget</dt>
+                <dt class="text-[11px] uppercase tracking-wide text-red-300/80">
+                  {{ t('layout.spendWarningBanner.budget') }}
+                </dt>
                 <dd class="text-base font-semibold tabular-nums text-red-50">
                   {{ money(spend.costLimit, spend.currency) }}
                 </dd>
               </div>
               <div class="rounded-lg bg-red-900/50 px-3 py-2">
-                <dt class="text-[11px] uppercase tracking-wide text-red-300/80">Tokens</dt>
+                <dt class="text-[11px] uppercase tracking-wide text-red-300/80">
+                  {{ t('layout.spendWarningBanner.tokens') }}
+                </dt>
                 <dd class="text-base font-semibold tabular-nums text-red-50">{{ tokens }}</dd>
               </div>
             </dl>
@@ -82,10 +82,10 @@ async function resume() {
                 :loading="resuming"
                 @click="resume"
               >
-                Resume anyway
+                {{ t('layout.spendWarningBanner.resume') }}
               </UButton>
               <span class="text-xs text-red-300/70">
-                Resuming continues spending; it will pause again if still over budget.
+                {{ t('layout.spendWarningBanner.resumeHint') }}
               </span>
             </div>
           </div>

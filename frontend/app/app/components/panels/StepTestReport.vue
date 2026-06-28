@@ -9,6 +9,8 @@ defineProps<{
   phase: TesterStepState | null
 }>()
 
+const { t } = useI18n()
+
 const SEVERITY_COLOR: Record<string, string> = {
   low: '#64748b',
   medium: '#f59e0b',
@@ -26,16 +28,17 @@ const OUTCOME_COLOR: Record<string, string> = {
   <section class="mt-4 scroll-mt-4">
     <div class="mb-2 flex items-center gap-1.5 text-[11px]">
       <UIcon name="i-lucide-flask-conical" class="h-3.5 w-3.5 text-slate-400" />
-      <span class="font-semibold uppercase tracking-wide text-slate-400"> Test report </span>
+      <span class="font-semibold uppercase tracking-wide text-slate-400">
+        {{ t('panels.testReport.title') }}
+      </span>
       <UBadge :color="report.greenlight ? 'success' : 'warning'" variant="subtle" size="sm">
-        {{ report.greenlight ? 'Greenlit' : 'Needs fixes' }}
+        {{
+          report.greenlight ? t('panels.testReport.greenlit') : t('panels.testReport.needsFixes')
+        }}
       </UBadge>
       <span v-if="phase && phase.attempts > 0" class="text-[11px] text-slate-500">
-        {{ phase.attempts }}/{{ phase.maxAttempts }} fix attempt(s)<span
-          v-if="phase.phase === 'fixing'"
-        >
-          · fixing…</span
-        >
+        {{ t('panels.testReport.fixAttempts', { count: phase.attempts, max: phase.maxAttempts })
+        }}<span v-if="phase.phase === 'fixing'"> {{ t('panels.testReport.fixing') }}</span>
       </span>
     </div>
     <p v-if="report.summary" class="mb-3 text-[13px] leading-relaxed text-slate-300">
@@ -43,14 +46,14 @@ const OUTCOME_COLOR: Record<string, string> = {
     </p>
 
     <div v-if="report.tested.length" class="mb-3">
-      <div class="mb-1 text-[11px] text-slate-500">Tested</div>
+      <div class="mb-1 text-[11px] text-slate-500">{{ t('panels.testReport.tested') }}</div>
       <ul class="space-y-0.5 text-[12px] text-slate-300">
-        <li v-for="(t, i) in report.tested" :key="i">• {{ t }}</li>
+        <li v-for="(item, i) in report.tested" :key="i">• {{ item }}</li>
       </ul>
     </div>
 
     <div v-if="report.outcomes.length" class="mb-3 space-y-1">
-      <div class="text-[11px] text-slate-500">Outcomes</div>
+      <div class="text-[11px] text-slate-500">{{ t('panels.testReport.outcomes') }}</div>
       <div v-for="(o, i) in report.outcomes" :key="i" class="flex items-start gap-2 text-[12px]">
         <span
           class="mt-1 h-2 w-2 shrink-0 rounded-full"
@@ -63,7 +66,7 @@ const OUTCOME_COLOR: Record<string, string> = {
     </div>
 
     <div v-if="report.concerns.length" class="space-y-1">
-      <div class="text-[11px] text-slate-500">Concerns</div>
+      <div class="text-[11px] text-slate-500">{{ t('panels.testReport.concerns') }}</div>
       <div
         v-for="(c, i) in report.concerns"
         :key="i"

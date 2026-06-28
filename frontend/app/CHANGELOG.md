@@ -1,5 +1,70 @@
 # @cat-factory/app
 
+## 0.46.12
+
+### Patch Changes
+
+- b919df4: Localize the layout + auth components (phase 3 of the app i18n migration).
+
+  All user-facing copy in the auth screens and the layout chrome now resolves through
+  `@nuxtjs/i18n` instead of hard-coded strings:
+
+  - **Auth** (`auth.*`): the login / signup / forgot-password screen, the
+    reset-password screen, the auth gate loading state, and the user menu.
+  - **Layout** (`layout.*`): the account-level deployment / fragment / team settings,
+    the AI-providers / GitHub-PAT / provider-config / spend-warning banners, the board
+    switcher, the command bar (command labels plus search keywords), the integrations
+    hub (status, groups, per-item labels), the integration back-title, the
+    notifications inbox (per-notification-type actions), and the personal-setup modal.
+  - **SideBar** is now fully migrated: it switched off the global `$t` to the
+    destructured `t`.
+
+  New keys ship in all five bundled locales (en/es/fr/pl/uk). The connected-count in
+  the personal-setup modal uses correct plural forms (3-form for pl/uk); the spend
+  warning formats currency through the vue-i18n number formatter; and enum-keyed
+  lookups (notification type, invitation status, provider-config reason) use exhaustive
+  `Record` maps (the tier-2 drift guard).
+
+## 0.46.11
+
+### Patch Changes
+
+- 4dd3ad6: Localize the inspector + step/observability panels (phase 2 of the app i18n migration).
+
+  All user-facing copy in the panel surface now resolves through `@nuxtjs/i18n`
+  instead of hard-coded strings:
+
+  - **Inspector** (`inspector.*`): container/service summary, epic children, recurring
+    schedule settings, service fragments, release-health config, test-infrastructure
+    config, agent config, dependencies, estimate, the task execution pipeline list,
+    run settings, and task structure.
+  - **Step / result panels** (`panels.*`): the step-detail overlay (review/approve and
+    conclusion-editing flows), decision modal, generic structured result view, test
+    report, step metadata/run-meta cards, restart control, and the inspector panel
+    chrome.
+  - **Observability** (`observability.*`): the model-activity / provided-context panel,
+    the per-call metrics bar, and the step metrics bar.
+
+  New keys ship in all five bundled locales (en/es/fr/pl/uk) with correct plural forms
+  (3-form for pl/uk) for call/error/warning/truncation/correction counts. Dates use
+  the vue-i18n datetime formatter and percentages the number formatter; enum/status →
+  key lookups use exhaustive `Record` maps (the tier-2 drift guard).
+
+## 0.46.10
+
+### Patch Changes
+
+- f74f8dc: Localize the board surface (phase 1 of the app i18n migration).
+
+  All user-facing copy in the board components — the canvas empty state and drop
+  toasts, the toolbar (level-of-detail readout, spend indicator, decision/service
+  controls), the add-task and recurring-pipeline modals, the service/module frames,
+  task cards, epic nodes, the decision/approval badges, and the shared agent
+  failure/stop controls — now resolves through `@nuxtjs/i18n` under the `board.*`
+  namespace instead of hard-coded strings. New keys ship in all five bundled locales
+  (en/es/fr/pl/uk), with correct plural forms for task/module counts and the
+  attachment-link warning. Spend is now formatted via vue-i18n's number formatter.
+
 ## 0.46.9
 
 ### Patch Changes

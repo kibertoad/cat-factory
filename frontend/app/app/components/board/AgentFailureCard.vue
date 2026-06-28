@@ -11,6 +11,7 @@ const props = withDefaults(
   { variant: 'expanded' },
 )
 
+const { t } = useI18n()
 const agentRuns = useAgentRunsStore()
 
 const compact = computed(() => props.variant === 'compact')
@@ -19,11 +20,13 @@ const title = computed(() => {
   // A `dispatch` failure means the container/runner never accepted the job — say so
   // explicitly rather than the generic "Run failed", and show the verbatim provider
   // error in the collapsible detail below.
-  if (failure.value?.kind === 'dispatch') return 'Container failed to start'
-  return props.run.kind === 'bootstrap' ? 'Bootstrap failed' : 'Run failed'
+  if (failure.value?.kind === 'dispatch') return t('board.failure.containerFailedToStart')
+  return props.run.kind === 'bootstrap'
+    ? t('board.failure.bootstrapFailed')
+    : t('board.failure.runFailed')
 })
 const retryLabel = computed(() =>
-  props.run.kind === 'bootstrap' ? 'Retry bootstrap' : 'Retry run',
+  props.run.kind === 'bootstrap' ? t('board.failure.retryBootstrap') : t('board.failure.retryRun'),
 )
 
 const retrying = ref(false)
@@ -73,7 +76,7 @@ async function retry() {
 
     <details v-if="!compact && failure?.detail && failure.detail !== failure.message" class="mt-1">
       <summary class="cursor-pointer text-[10px] text-rose-400/60 hover:text-rose-300">
-        Show detail
+        {{ t('board.failure.showDetail') }}
       </summary>
       <pre
         class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-rose-950/60 p-1.5 text-[10px] text-rose-200/80"
@@ -92,7 +95,7 @@ async function retry() {
         :name="retrying ? 'i-lucide-loader-circle' : 'i-lucide-rotate-ccw'"
         :class="[compact ? 'h-3 w-3' : 'h-3.5 w-3.5', { 'animate-spin': retrying }]"
       />
-      {{ retrying ? 'Retrying…' : compact ? 'Retry' : retryLabel }}
+      {{ retrying ? t('board.failure.retrying') : compact ? t('common.retry') : retryLabel }}
     </button>
   </div>
 </template>

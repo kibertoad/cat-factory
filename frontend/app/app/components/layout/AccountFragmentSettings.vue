@@ -8,6 +8,7 @@ import FragmentLibraryManager from '~/components/fragments/FragmentLibraryManage
 
 const props = defineProps<{ accountId: string }>()
 const workspace = useWorkspaceStore()
+const { t } = useI18n()
 
 // Account-tier document fragments are fetched through a board's stored
 // document-source connection (credentials are per-workspace). Prefer the active
@@ -22,9 +23,7 @@ const viaWorkspaceId = computed(() => {
   <div class="space-y-6 text-sm">
     <section>
       <p class="mb-3 text-[11px] text-slate-400">
-        Best-practice guidelines shared by every board in this account. Each board inherits these
-        and can override or add its own. Code-aware agents (coder, reviewer, architect, fixers) fold
-        the relevant ones into their prompt.
+        {{ t('layout.accountFragments.intro') }}
       </p>
       <FragmentLibraryManager
         kind="account"
