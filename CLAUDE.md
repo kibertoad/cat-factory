@@ -927,6 +927,29 @@ drives a run to completion through the real pg-boss runner.
   facade and implement the ports + the `gateways` seam, wired in that facade's
   `container.ts` via constructor injection of a single `dependencies` object. Opt-in
   integrations (GitHub / environments / bootstrap) wire only when configured.
+- **Frontend i18n (`@cat-factory/app`):** user-facing copy is translatable via
+  **`@nuxtjs/i18n`** (vue-i18n under the hood). The layer is published and `extends`ed, so
+  the module's **per-layer locale deep-merge** is the override seam: messages live in
+  `frontend/app/i18n/locales/<locale>.json` (NOT `app/locales/`), and a downstream
+  deployment overrides/adds keys by dropping its own `i18n/locales/*.json` (consumer wins).
+  Config: `frontend/app/i18n/i18n.config.ts` (fallback + number/datetime formats) referenced
+  from `nuxt.config.ts` as the **bare** filename `vueI18n: 'i18n.config.ts'` (the module
+  resolves it per-layer — do NOT `layerDir`-anchor it like the css block). Adding the `i18n/`
+  dir to `package.json` `files` is **release-blocking** (else locales don't ship). Conventions:
+  resolve copy with `t('feature.area.key')`; **leaf keys mirror the enum/code value verbatim**
+  (`errors.conflict.title.<reason>`, `catalog.status.<status>`) so a new enum value missing a
+  translation trips typecheck; one namespace per feature; no cross-key concatenation (full
+  sentences are one key with `{named}` placeholders); plurals use the vue-i18n pipe form.
+  **Backend error strings** are translated by mapping the machine-readable
+  `error.details.reason`/`code` to a frontend key (the `usePipelineErrorToast.ts` pattern) —
+  raw backend `message` is shown only as an untranslated last-resort fallback; if a server
+  message must be localizable the backend emits a code and the frontend maps it.
+  **Maintainability guardrail:** the repo lints with oxlint only, so the ESLint
+  `@intlify/.../no-raw-text` rule is unavailable — the load-bearing drift guard is instead
+  **typed message keys** (`i18n.experimental.typedOptionsAndMessages`), which make an unknown
+  `t()` key a `nuxt typecheck` failure (already a CI gate). A `vue-i18n-extract` missing/unused
+  key CI check is the planned secondary guard. (Migration is incremental — `usePipelineErrorToast`
+  is the pilot; most components still hold inline strings.)
 - **Dedicated result-view seam (frontend):** an agent step opens the generic prose panel
   (`AgentStepDetail.vue`) UNLESS its archetype declares a `resultView` id (`app/utils/catalog.ts`).
   The `ui` store's step dispatch (`dispatchStepView`, used by both `openStepDetail` and

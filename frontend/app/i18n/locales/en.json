@@ -1,0 +1,34 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "retry": "Retry",
+    "actionFailed": "Action failed"
+  },
+  "errors": {
+    "action": {
+      "retryFailed": "Retry failed",
+      "startFailed": "Failed to start",
+      "mergeFailed": "Failed to merge",
+      "restartFailed": "Failed to restart"
+    },
+    "conflict": {
+      "title": {
+        "dependencies_unmet": "Blocked by dependencies",
+        "task_limit_reached": "Concurrency limit reached",
+        "tester_infra_unsupported": "Test infrastructure not configured",
+        "run_not_retryable": "Run can’t be retried",
+        "no_pr_to_merge": "No PR to merge",
+        "github_not_connected": "GitHub not connected",
+        "bootstrap_not_retryable": "Bootstrap can’t be retried",
+        "bootstrap_reference_missing": "Reference architecture is gone"
+      },
+      "fallbackMessage": "This action conflicts with the current state.",
+      "providersUnconfigured": {
+        "title": "No AI provider for this model",
+        "body": "No provider is configured for {models}. Add a provider key, connect a subscription, or enable Cloudflare AI to run it.",
+        "action": "Configure AI"
+      }
+    }
+  }
+}
