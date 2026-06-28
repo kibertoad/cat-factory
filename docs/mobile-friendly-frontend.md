@@ -30,10 +30,20 @@ Legend: ☐ not started · ◐ in progress · ☑ done
 - ☑ Mobile-viewport e2e spec (`backend/internal/e2e/tests/mobile-shell.spec.ts`) +
   `data-testid`s (`mobile-nav-toggle`, `sidebar`, `sidebar-backdrop`, `inspector-panel`).
 - ☑ Drawer a11y/hygiene: `useViewport().isCompact` drives Escape-to-close, body-scroll-lock,
-  focus-move-on-open, `role="dialog"`/`aria-modal`/`aria-label`, an accessible backdrop, and a
-  breakpoint-cross reset of `mobileNavOpen`. Hamburger `aria-label` reflects open/closed state.
+  focus-move-on-open **and focus-restore-to-hamburger on close**, `role="dialog"`/`aria-modal`/
+  `aria-label`, an accessible backdrop, a breakpoint-cross reset of `mobileNavOpen`, and `inert`
+  on the closed (off-screen) drawer so its controls aren't keyboard/AT-reachable behind the
+  board. Hamburger `aria-label` reflects open/closed state.
+- ☑ i18n: SideBar nav labels + section headers and the toolbar `Add service` / decision-count
+  label lifted into the `nav.*` / `board.toolbar.*` catalog namespaces (the decision count uses
+  the vue-i18n pipe-plural form instead of a hand-rolled `?'':'s'`).
+- ☑ Inspector bottom sheet sits at `z-20` (below the drawer scrim at `z-30`), so opening the
+  nav over a selected task no longer pokes the sheet through the backdrop.
 
-Verified: `pnpm --filter @cat-factory/app typecheck` clean, `pnpm lint:fix` clean.
+Verified: `pnpm --filter @cat-factory/app typecheck`, `pnpm --filter @cat-factory/app run i18n:check`,
+and `pnpm lint` (oxlint + `oxfmt --check`) all clean; the `mobile-shell` e2e spec selects the task
+card by its own `data-block-id` (the test id sits on the same element), so the bottom-sheet spec
+passes.
 
 ## Phase 2 — Touch targets + modal/panel responsiveness — PR 2
 
@@ -52,6 +62,10 @@ Verified: `pnpm --filter @cat-factory/app typecheck` clean, `pnpm lint:fix` clea
 
 ## Changelog
 
+- **Review follow-up** — fixed the bottom-sheet e2e selector (clicked a non-existent descendant
+  test id), added `inert` + focus-restore to the drawer, lowered the inspector sheet below the
+  drawer scrim, lifted the SideBar/toolbar copy into i18n (pipe-plural decision count), and
+  cleared the repo-wide `oxfmt` drift that was failing `Lint & format`.
 - **Phase 0 + Phase 1 complete** — responsive shell landed: `useViewport` composable,
   `ui.mobileNavOpen`, sidebar drawer + hamburger, toolbar reflow, inspector bottom sheet,
   notifications width cap, i18n labels, e2e spec + changeset. Typecheck + lint green.

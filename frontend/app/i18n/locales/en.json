@@ -9,7 +9,28 @@
   "nav": {
     "menu": "Navigation menu",
     "openMenu": "Open menu",
-    "closeMenu": "Close menu"
+    "closeMenu": "Close menu",
+    "commandBar": "Search or run a command…",
+    "create": "Create",
+    "buildPipeline": "Build a pipeline",
+    "repositories": "Repositories",
+    "addFromRepo": "Add from existing repo",
+    "bootstrapRepo": "Bootstrap repo",
+    "integrations": "Integrations",
+    "sandbox": "Sandbox",
+    "kaizen": "Kaizen",
+    "workspaceContext": "Workspace context",
+    "contextFragments": "Context fragments",
+    "configuration": "Configuration",
+    "workspaceSettings": "Workspace settings",
+    "modelConfiguration": "Model Configuration",
+    "accountSettings": "Account settings"
+  },
+  "board": {
+    "toolbar": {
+      "addService": "Add service",
+      "decisionWord": "decision | decisions"
+    }
   },
   "errors": {
     "action": {

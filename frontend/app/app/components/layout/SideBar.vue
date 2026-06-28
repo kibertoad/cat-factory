@@ -26,9 +26,12 @@ const { isCompact } = useViewport()
 // The off-canvas drawer is a modal surface on compact viewports, so give it the
 // expected affordances:
 //   • Escape closes it (keyboard parity with the backdrop tap),
-//   • the board behind it is scroll-locked while it's open,
+//   • body scroll is locked while it's open (defensive — the shell root is already
+//     `overflow-hidden`, so this just guards any future scrollable ancestor),
 //   • crossing back to lg+ clears the flag so it can't linger as stale open state,
-//   • focus moves into the drawer on open (so it isn't left on the now-hidden board).
+//   • focus moves into the drawer on open, and back to the hamburger on close,
+//   • when closed (off-screen) on compact the whole aside is `inert`, so its nav
+//     controls aren't reachable by keyboard / assistive tech behind the board.
 const aside = ref<HTMLElement>()
 const drawerOpen = computed(() => isCompact.value && ui.mobileNavOpen)
 
@@ -45,8 +48,18 @@ watch(isCompact, (compact) => {
   if (!compact) ui.closeMobileNav()
 })
 
+// Closing via a nav action immediately opens a board-covering panel/modal that claims
+// focus itself, so don't yank focus back to the hamburger in that case.
+let suppressFocusRestore = false
 watch(drawerOpen, (open) => {
-  if (open) void nextTick(() => aside.value?.focus())
+  if (open) {
+    suppressFocusRestore = false
+    void nextTick(() => aside.value?.focus())
+  } else if (isCompact.value && !suppressFocusRestore) {
+    void nextTick(() =>
+      document.querySelector<HTMLElement>('[data-testid="mobile-nav-toggle"]')?.focus(),
+    )
+  }
 })
 
 // On compact (< lg) viewports the navbar is an off-canvas drawer. Activating any
@@ -54,7 +67,10 @@ watch(drawerOpen, (open) => {
 // out — otherwise it lingers in front of (or behind) whatever just opened. Scoped to
 // the action sections (not the BoardSwitcher / UserMenu dropdowns at the ends).
 function onNavAction(e: MouseEvent) {
-  if ((e.target as HTMLElement).closest('button, a')) ui.closeMobileNav()
+  if ((e.target as HTMLElement).closest('button, a')) {
+    suppressFocusRestore = true
+    ui.closeMobileNav()
+  }
 }
 
 // Resolve whether the document-source / task-source / GitHub integrations are
@@ -102,6 +118,7 @@ watch(
     :role="drawerOpen ? 'dialog' : undefined"
     :aria-modal="drawerOpen ? 'true' : undefined"
     :aria-label="isCompact ? $t('nav.menu') : undefined"
+    :inert="isCompact && !ui.mobileNavOpen"
     class="fixed inset-y-0 left-0 z-40 flex h-full w-64 shrink-0 flex-col gap-4 overflow-y-auto border-r border-slate-800 bg-slate-900/95 p-3 backdrop-blur transition-transform duration-200 focus:outline-none lg:static lg:z-auto lg:translate-x-0 lg:bg-slate-900/80"
     :class="ui.mobileNavOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
   >
@@ -116,13 +133,13 @@ watch(
         @click="ui.openCommandBar()"
       >
         <UIcon name="i-lucide-search" class="h-4 w-4 shrink-0" />
-        <span class="flex-1 truncate">Search or run a command…</span>
+        <span class="flex-1 truncate">{{ $t('nav.commandBar') }}</span>
         <UKbd value="⌘K" />
       </button>
 
       <section>
         <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          Create
+          {{ $t('nav.create') }}
         </h2>
         <div class="space-y-1.5">
           <UButton
@@ -134,7 +151,7 @@ watch(
             class="justify-start"
             @click="ui.openBuilder()"
           >
-            Build a pipeline
+            {{ $t('nav.buildPipeline') }}
           </UButton>
         </div>
       </section>
@@ -143,7 +160,7 @@ watch(
 
       <section>
         <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          Repositories
+          {{ $t('nav.repositories') }}
         </h2>
         <div class="space-y-1.5">
           <UButton
@@ -156,7 +173,7 @@ watch(
             class="justify-start"
             @click="ui.openAddService()"
           >
-            Add from existing repo
+            {{ $t('nav.addFromRepo') }}
           </UButton>
           <UButton
             block
@@ -167,7 +184,7 @@ watch(
             class="justify-start"
             @click="ui.openBootstrap()"
           >
-            Bootstrap repo
+            {{ $t('nav.bootstrapRepo') }}
           </UButton>
         </div>
       </section>
@@ -176,7 +193,7 @@ watch(
 
       <section>
         <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          Integrations
+          {{ $t('nav.integrations') }}
         </h2>
         <div class="space-y-1.5">
           <!-- Every external system the workspace can enable/link now lives behind
@@ -191,7 +208,7 @@ watch(
             class="justify-start"
             @click="ui.openIntegrations()"
           >
-            Integrations
+            {{ $t('nav.integrations') }}
           </UButton>
           <!-- The Sandbox: try prompt versions/models against graded fixtures, off to the
              side of the board. Opens the on-demand testing window. -->
@@ -204,7 +221,7 @@ watch(
             class="justify-start"
             @click="ui.openSandbox()"
           >
-            Sandbox
+            {{ $t('nav.sandbox') }}
           </UButton>
           <!-- The Kaizen screen: grading history + verified prompt/agent/model combos. -->
           <UButton
@@ -216,7 +233,7 @@ watch(
             class="justify-start"
             @click="ui.openKaizen()"
           >
-            Kaizen
+            {{ $t('nav.kaizen') }}
           </UButton>
         </div>
       </section>
@@ -225,7 +242,7 @@ watch(
         <USeparator />
         <section>
           <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            Workspace context
+            {{ $t('nav.workspaceContext') }}
           </h2>
           <UButton
             block
@@ -236,7 +253,7 @@ watch(
             class="justify-start"
             @click="ui.openFragmentLibrary()"
           >
-            Context fragments
+            {{ $t('nav.contextFragments') }}
           </UButton>
         </section>
       </template>
@@ -244,7 +261,7 @@ watch(
       <USeparator />
       <section>
         <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          Configuration
+          {{ $t('nav.configuration') }}
         </h2>
         <div class="space-y-1.5">
           <!-- Merge thresholds, issue writeback and default service best practices are
@@ -258,7 +275,7 @@ watch(
             class="justify-start"
             @click="ui.openWorkspaceSettings()"
           >
-            Workspace settings
+            {{ $t('nav.workspaceSettings') }}
           </UButton>
           <UButton
             block
@@ -269,7 +286,7 @@ watch(
             class="justify-start"
             @click="ui.openModelConfig()"
           >
-            Model Configuration
+            {{ $t('nav.modelConfiguration') }}
           </UButton>
           <!-- Account & team: members + roles, invitations, email sender, account API keys.
              Shown once accounts (auth) are enabled. -->
@@ -283,7 +300,7 @@ watch(
             class="justify-start"
             @click="ui.openAccountSettings()"
           >
-            Account settings
+            {{ $t('nav.accountSettings') }}
           </UButton>
         </div>
       </section>

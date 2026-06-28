@@ -35,7 +35,10 @@ test.describe('mobile responsive shell', () => {
   test('selecting a task opens the inspector as a bottom sheet', async ({ page, seededBoard }) => {
     void seededBoard
 
-    await taskCard(page, 'task_login').getByTestId('task-card').first().click()
+    // `taskCard()` resolves by `data-block-id`, which sits on the SAME element as
+    // `data-testid="task-card"` — so click the card directly rather than a (non-existent)
+    // descendant test id.
+    await taskCard(page, 'task_login').first().click()
     const inspector = page.getByTestId('inspector-panel')
     await expect(inspector).toBeVisible({ timeout: LIVE_TIMEOUT })
     // The sheet is pinned to the bottom edge of the viewport on compact widths.

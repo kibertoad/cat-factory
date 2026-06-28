@@ -56,8 +56,8 @@ e.g. `@cat-factory/contracts` is always compiled before the frontend `nuxt gener
 resolves it. This replaces the per-package `pre*` build hooks the deploy packages
 used to carry. The scripts above are thin wrappers over `turbo run …`, so unchanged
 packages are served from Turbo's cache. The TypeScript libraries are still each
-compiled by their own `tsc -b` project-reference build; Turbo only decides *which*
-packages run and *in what order*. `pnpm build` is scoped to the backend libraries;
+compiled by their own `tsc -b` project-reference build; Turbo only decides _which_
+packages run and _in what order_. `pnpm build` is scoped to the backend libraries;
 use `pnpm build:all` (or `turbo run build`) to also build the SPA and the internal
 harnesses, and `pnpm build:tsc` for the raw `tsc -b` solution build.
 

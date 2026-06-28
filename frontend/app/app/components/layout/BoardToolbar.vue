@@ -117,8 +117,8 @@ const decisionItems = computed(() =>
         data-testid="decision-badge"
       >
         {{ execution.pendingDecisionCount
-        }}<span class="hidden sm:inline">
-          &nbsp;decision{{ execution.pendingDecisionCount === 1 ? '' : 's' }}</span
+        }}<span class="hidden sm:inline"
+          >&nbsp;{{ $t('board.toolbar.decisionWord', execution.pendingDecisionCount) }}</span
         >
       </UButton>
     </UDropdownMenu>
@@ -126,7 +126,7 @@ const decisionItems = computed(() =>
     <!-- in-org sharing: add an existing org service to this board -->
     <UDropdownMenu v-if="mountableItems.length" :items="mountableItems">
       <UButton color="neutral" variant="ghost" size="sm" icon="i-lucide-plus-circle">
-        <span class="hidden sm:inline">Add service</span>
+        <span class="hidden sm:inline">{{ $t('board.toolbar.addService') }}</span>
       </UButton>
     </UDropdownMenu>
 
