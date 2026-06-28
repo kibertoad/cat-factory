@@ -59,6 +59,7 @@ export const notificationTypeSchema = v.picklist([
   'release_regression',
   'decision_required',
   'human_test_ready',
+  'visual_confirmation_ready',
   'human_review',
   'followup_pending',
 ])

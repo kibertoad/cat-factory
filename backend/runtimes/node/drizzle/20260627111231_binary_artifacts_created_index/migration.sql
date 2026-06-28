@@ -1,0 +1,1 @@
+CREATE INDEX "idx_binary_artifacts_created" ON "binary_artifacts" ("workspace_id","created_at");

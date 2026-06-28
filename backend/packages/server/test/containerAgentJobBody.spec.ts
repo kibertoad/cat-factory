@@ -143,7 +143,7 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
 
   it('tester (local env)', async () => {
     await executor.startJob(
-      context('tester', { pullRequest: PR, agentConfig: { 'tester.environment': 'local' } }),
+      context('tester-api', { pullRequest: PR, agentConfig: { 'tester.environment': 'local' } }),
     )
     expect(captured[0]).toMatchSnapshot()
   })
@@ -154,7 +154,7 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
     // the agent hunting for services that never started).
     await executor.startJob(
       context(
-        'tester',
+        'tester-api',
         { pullRequest: PR, agentConfig: { 'tester.environment': 'local' } },
         { noInfraDependencies: true },
       ),
@@ -319,7 +319,7 @@ describe('ContainerAgentExecutor.pollJob (kind-aware result coercion)', () => {
         environment: 'local',
       },
     })
-    const update = await executor.pollJob(handle('tester'))
+    const update = await executor.pollJob(handle('tester-api'))
     expect(update).toEqual({
       state: 'done',
       result: {
@@ -341,7 +341,7 @@ describe('ContainerAgentExecutor.pollJob (kind-aware result coercion)', () => {
 
   it('garbage tester JSON coerces to a safe, no-greenlight report', async () => {
     const executor = makeExecutorReturning({ summary: 'nothing usable', custom: { junk: true } })
-    const update = await executor.pollJob(handle('tester'))
+    const update = await executor.pollJob(handle('tester-api'))
     expect(update).toEqual({
       state: 'done',
       result: {

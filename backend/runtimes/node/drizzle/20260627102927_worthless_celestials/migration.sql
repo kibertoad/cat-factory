@@ -1,0 +1,1 @@
+ALTER TABLE "workspace_settings" ADD COLUMN "artifact_retention_days" integer DEFAULT 14 NOT NULL;

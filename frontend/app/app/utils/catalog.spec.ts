@@ -21,7 +21,8 @@ const AGENT_KINDS: AgentKind[] = [
   'architect',
   'researcher',
   'coder',
-  'tester',
+  'tester-api',
+  'tester-ui',
   'reviewer',
   'documenter',
   'integrator',
@@ -32,6 +33,7 @@ const AGENT_KINDS: AgentKind[] = [
   'business-documenter',
   'business-reviewer',
   'human-test',
+  'visual-confirmation',
 ]
 const BLOCK_TYPES: BlockType[] = [
   'frontend',

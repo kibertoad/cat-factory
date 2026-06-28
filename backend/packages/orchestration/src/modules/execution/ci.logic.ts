@@ -78,12 +78,31 @@ export const BLUEPRINTS_AGENT_KIND = 'blueprints'
 export const MERGER_AGENT_KIND = 'merger'
 
 /**
- * The agent kind of the special `tester` gate step: a container agent that runs the
- * project's tests (local docker-compose infra or an ephemeral env) and returns a
- * structured report. On a withheld greenlight the engine loops the `fixer` agent
- * with the report and re-tests — mirroring the CI gate / ci-fixer loop.
+ * The agent kind of the API/general tester gate step (formerly `tester`): a container
+ * agent that runs the project's tests (local docker-compose infra or an ephemeral env)
+ * and returns a structured report. On a withheld greenlight the engine loops the `fixer`
+ * agent with the report and re-tests — mirroring the CI gate / ci-fixer loop. The UI
+ * tester ({@link UI_TESTER_AGENT_KIND}) is its browser-driven, screenshot-capturing sibling.
  */
-export const TESTER_AGENT_KIND = 'tester'
+export const TESTER_AGENT_KIND = 'tester-api'
+
+/**
+ * The agent kind of the UI tester gate step: like {@link TESTER_AGENT_KIND} but it drives
+ * a real browser (Playwright/Chromium — supplied by a dedicated UI-tester container image)
+ * against the running app, captures a non-redundant screenshot of each distinct view, and
+ * uploads them to the binary-artifact store. Its report carries `screenshots[]`, which the
+ * visual-confirmation gate reviews against the supplied reference designs. Shares the
+ * Tester→Fixer loop and the `tester.environment` infra choice; always needs a running app.
+ */
+export const UI_TESTER_AGENT_KIND = 'tester-ui'
+
+/** Both tester gate kinds (API + UI). They share the Tester→Fixer loop + infra choice. */
+export const TESTER_KINDS: readonly string[] = [TESTER_AGENT_KIND, UI_TESTER_AGENT_KIND]
+
+/** Whether an agent kind is one of the tester gate kinds (API or UI). */
+export function isTesterKind(kind: string): boolean {
+  return kind === TESTER_AGENT_KIND || kind === UI_TESTER_AGENT_KIND
+}
 
 /**
  * The agent kind of the read-only code-analysis agent that opens the tech-debt
@@ -109,3 +128,13 @@ export const TRACKER_AGENT_KIND = 'tracker'
  * (no-env) mode when no ephemeral-environment provider is wired.
  */
 export const HUMAN_TEST_AGENT_KIND = 'human-test'
+
+/**
+ * The agent kind of the special `visual-confirmation` gate: a non-LLM engine step that
+ * PARKS for a human to review the UI tester's screenshots against the uploaded reference
+ * designs, then on demand dispatches the Tester's `fixer` (from the human's findings) and
+ * re-captures via the UI tester. Approving advances the run. Handled by the
+ * {@link VisualConfirmationController}; passes through (auto-advances) when no binary-artifact
+ * store is wired (nowhere to read screenshots from).
+ */
+export const VISUAL_CONFIRM_AGENT_KIND = 'visual-confirmation'

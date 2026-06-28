@@ -50,7 +50,7 @@ describe('deployer agent + environment discovery', () => {
 
     const pipeline = await app.call<{ id: string }>('POST', `/workspaces/${ws}/pipelines`, {
       name: 'Deploy & test',
-      agentKinds: ['deployer', 'tester'],
+      agentKinds: ['deployer', 'tester-api'],
     })
     await app.call('POST', `/workspaces/${ws}/blocks/${task.body.id}/executions`, {
       pipelineId: pipeline.body.id,
@@ -60,7 +60,7 @@ describe('deployer agent + environment discovery', () => {
     // The deployer step ran deterministically (not through the agent executor),
     // so the recorder only saw the tester step.
     expect(stub.calls.some((c) => c.url === 'https://envs.test/api/environments')).toBe(true)
-    expect(recorder.contexts.map((c) => c.agentKind)).toEqual(['tester'])
+    expect(recorder.contexts.map((c) => c.agentKind)).toEqual(['tester-api'])
 
     // The tester discovered the live environment in its context.
     const tester = recorder.contexts[0]!

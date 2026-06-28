@@ -41,7 +41,7 @@ describe('standard solution-phase prompts', () => {
     // `tester` is no longer a one-shot phase: it routes through its own Tester/Fixer
     // prompt (it runs the tests and returns a structured report), so it maps to no
     // standard phase.
-    expect(phaseForKind('tester')).toBeUndefined()
+    expect(phaseForKind('tester-api')).toBeUndefined()
     expect(phaseForKind('documenter')).toBeUndefined()
     expect(phaseForKind('my-custom-agent')).toBeUndefined()
   })
@@ -54,8 +54,8 @@ describe('standard solution-phase prompts', () => {
       expect(systemPromptFor('coder')).toContain(standardSystemPrompt('build'))
       // `tester` no longer routes through the generic `test` phase — it has its own
       // built-out Tester prompt (run the suite, return a structured report).
-      expect(systemPromptFor('tester')).not.toBe(standardSystemPrompt('test'))
-      expect(systemPromptFor('tester')).toContain('test engineer')
+      expect(systemPromptFor('tester-api')).not.toBe(standardSystemPrompt('test'))
+      expect(systemPromptFor('tester-api')).toContain('test engineer')
     })
 
     it('builds the architect on the design phase prompt plus the read-only guardrail', () => {

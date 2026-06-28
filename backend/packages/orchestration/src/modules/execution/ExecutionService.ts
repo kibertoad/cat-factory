@@ -1,6 +1,7 @@
 import type {
   AgentFailure,
   AgentFailureKind,
+  BinaryArtifactStore,
   Block,
   BlueprintService,
   ExecutionInstance,
@@ -69,7 +70,10 @@ import {
   TRACKER_AGENT_KIND,
   ANALYSIS_AGENT_KIND,
   TESTER_AGENT_KIND,
+  UI_TESTER_AGENT_KIND,
+  isTesterKind,
   HUMAN_TEST_AGENT_KIND,
+  VISUAL_CONFIRM_AGENT_KIND,
   HUMAN_REVIEW_AGENT_KIND,
   BLUEPRINTS_AGENT_KIND,
   SPEC_WRITER_AGENT_KIND,
@@ -89,6 +93,7 @@ import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import { TesterController } from './TesterController.js'
 import { HumanTestController } from './HumanTestController.js'
+import { VisualConfirmationController } from './VisualConfirmationController.js'
 import type {
   GateContext,
   GateDefinition,
@@ -205,7 +210,12 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
  * the per-poll env projection so the `getByBlock` read never hits the hot path for
  * the many container steps that have no env to show (see attachEnvironmentProjection).
  */
-const ENV_PROJECTION_KINDS = new Set<string>(['deployer', 'tester', 'playwright'])
+const ENV_PROJECTION_KINDS = new Set<string>([
+  'deployer',
+  TESTER_AGENT_KIND,
+  UI_TESTER_AGENT_KIND,
+  'playwright',
+])
 
 /**
  * Parse `owner`/`repo` from a GitHub pull-request URL (`https://github.com/o/r/pull/42`).
@@ -343,6 +353,12 @@ export interface ExecutionServiceDependencies {
    * (no LLM), and downstream steps discover the resulting env via it.
    */
   environmentProvisioning?: EnvironmentProvisioningService
+  /**
+   * Optional: the binary-artifact store (UI screenshots + reference design images) the
+   * `visual-confirmation` gate reads. Absent → the gate passes through (auto-advances),
+   * since there is nowhere to read screenshots from.
+   */
+  binaryArtifactStore?: BinaryArtifactStore
   /**
    * Optional: tears down ephemeral environments. Wired alongside
    * {@link environmentProvisioning}; the `human-test` gate uses it to destroy an env on
@@ -509,6 +525,8 @@ export class ExecutionService {
   private readonly testerController: TesterController
   /** Drives the human-testing gate: provision env → park → confirm / fix / pull-main / recreate. */
   private readonly humanTestController: HumanTestController
+  /** Drives the visual-confirmation gate: gather screenshots → park → approve / fix / recapture. */
+  private readonly visualConfirmationController: VisualConfirmationController
   /** Drives both iterative review gates (requirements + clarity); kind-parameterised. */
   private readonly reviewGate: ReviewGateController
   /** The requirements subject for {@link reviewGate}. */
@@ -588,6 +606,7 @@ export class ExecutionService {
     branchUpdater,
     blueprintReconciler,
     notificationService,
+    binaryArtifactStore,
     workspaceSettingsService,
     llmObservability,
     pullRequestMerger,
@@ -704,6 +723,25 @@ export class ExecutionService {
           }
         : {}),
       ...(branchUpdater ? { branchUpdater } : {}),
+      resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
+      parkStepOnDecision: (ws, i, s, p) => this.parkStepOnDecision(ws, i, s, p),
+      finishStep: (s) => this.finishStep(s),
+      startStep: (s) => this.startStep(s),
+      updateBlockProgress: (ws, i, st) => this.updateBlockProgress(ws, i, st),
+      finalizeBlock: (ws, i, c) => this.finalizeBlock(ws, i, c),
+      stopRunContainer: (ws, i) => this.stopRunContainer(ws, i),
+      persistInstance: (ws, i) => this.executionRepository.upsert(ws, i),
+      emitInstance: (ws, i) => this.emitInstance(ws, i),
+      clockNow: () => this.clock.now(),
+    })
+    this.visualConfirmationController = new VisualConfirmationController({
+      blockRepository,
+      executionRepository,
+      workRunner,
+      agentExecutor,
+      contextBuilder: this.contextBuilder,
+      notificationService,
+      ...(binaryArtifactStore ? { binaryArtifactStore } : {}),
       resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
       parkStepOnDecision: (ws, i, s, p) => this.parkStepOnDecision(ws, i, s, p),
       finishStep: (s) => this.finishStep(s),
@@ -1004,7 +1042,7 @@ export class ExecutionService {
     // configured (a docker-compose path, or an explicit "no infra dependencies"
     // flag). Block the start with a clear, actionable error otherwise — before any
     // side effects (activation mint / prior-run teardown).
-    if (pipeline.agentKinds.includes(TESTER_AGENT_KIND)) {
+    if (pipeline.agentKinds.some(isTesterKind)) {
       await this.assertTesterInfraConfigured(workspaceId, block)
     }
 
@@ -1328,7 +1366,10 @@ export class ExecutionService {
       // rebuild the env, or advance) instead of immediately re-parking.
       const reentrantHumanTest =
         step.agentKind === HUMAN_TEST_AGENT_KIND && !!step.humanTest?.pendingAction
-      if (!reentrantRequirements && !reentrantHumanTest) {
+      // The visual-confirmation gate is likewise re-entrant on a human action.
+      const reentrantVisualConfirm =
+        step.agentKind === VISUAL_CONFIRM_AGENT_KIND && !!step.visualConfirm?.pendingAction
+      if (!reentrantRequirements && !reentrantHumanTest && !reentrantVisualConfirm) {
         // Parked on either an agent-raised decision or a human approval gate; both
         // are addressed by the same durable event id.
         const pendingId = step.decision?.id ?? step.approval?.id
@@ -1435,6 +1476,20 @@ export class ExecutionService {
     // (no-env) mode when no ephemeral-environment provider is wired. See {@link HumanTestController}.
     if (step.agentKind === HUMAN_TEST_AGENT_KIND) {
       return this.humanTestController.evaluate(workspaceId, instance, step, block, isFinalStep)
+    }
+
+    // A `visual-confirmation` gate gathers the UI tester's screenshots + the uploaded
+    // reference designs and PARKS for a human to review actual-vs-reference, then on demand
+    // dispatches the Tester's `fixer`. Passes through (auto-advances) when no binary-artifact
+    // store is wired. See {@link VisualConfirmationController}.
+    if (step.agentKind === VISUAL_CONFIRM_AGENT_KIND) {
+      return this.visualConfirmationController.evaluate(
+        workspaceId,
+        instance,
+        step,
+        block,
+        isFinalStep,
+      )
     }
 
     // A polling gate step (`ci` / `conflicts`) runs a programmatic precheck and only
@@ -1788,7 +1843,7 @@ export class ExecutionService {
     // step's own work: when it finishes (or fails) we drop the handle, return to
     // `testing`, and re-dispatch the Tester against the (now-fixed) branch — its
     // fresh report then drives greenlight-or-loop again. Mirrors the CI gate.
-    if (step.agentKind === TESTER_AGENT_KIND && step.test?.phase === 'fixing') {
+    if (isTesterKind(step.agentKind) && step.test?.phase === 'fixing') {
       step.jobId = undefined
       step.subtasks = undefined
       step.test.phase = 'testing'
@@ -1811,6 +1866,14 @@ export class ExecutionService {
       (step.humanTest?.phase === 'fixing' || step.humanTest?.phase === 'resolving_conflicts')
     ) {
       return this.humanTestController.onHelperComplete(workspaceId, instance, step, {
+        state: update.state === 'failed' ? 'failed' : 'done',
+      })
+    }
+
+    // A `visual-confirmation` gate in its `fixing` phase has a `fixer` job in flight: when it
+    // settles, record the round, refresh the screenshot pairs, and re-park the human.
+    if (step.agentKind === VISUAL_CONFIRM_AGENT_KIND && step.visualConfirm?.phase === 'fixing') {
+      return this.visualConfirmationController.onHelperComplete(workspaceId, instance, step, {
         state: update.state === 'failed' ? 'failed' : 'done',
       })
     }
@@ -2157,7 +2220,7 @@ export class ExecutionService {
     // NOT finish the step: we loop the `fixer` (within the attempt budget) and
     // re-test, mirroring the CI gate. A greenlight (or no provider) falls through to
     // the normal finish/advance below. Records the report on the step either way.
-    if (step.agentKind === TESTER_AGENT_KIND && result.testReport !== undefined) {
+    if (isTesterKind(step.agentKind) && result.testReport !== undefined) {
       const looped = await this.testerController.resolveTesterResult(
         workspaceId,
         instance,
@@ -3551,6 +3614,11 @@ export class ExecutionService {
         'Resolve the human-testing gate through its window (confirm / request a fix), not the approval gate',
       )
     }
+    if (step.agentKind === VISUAL_CONFIRM_AGENT_KIND) {
+      throw new ConflictError(
+        'Resolve the visual-confirmation gate through its window (approve / request a fix), not the approval gate',
+      )
+    }
     if (step.companion?.exceeded) {
       throw new ConflictError(
         'Resolve this companion review through its iteration-cap prompt, not the approval gate',
@@ -4067,6 +4135,29 @@ export class ExecutionService {
   /** Destroy the ephemeral environment on demand (the run stays parked). */
   destroyHumanTestEnv(workspaceId: string, blockId: string): Promise<ExecutionInstance> {
     return this.humanTestController.destroyEnvironment(workspaceId, blockId)
+  }
+
+  // ---- visual-confirmation gate actions (driven from the dedicated window) --
+  // Each mutates the parked gate step and wakes the durable driver; see
+  // {@link VisualConfirmationController}.
+
+  /** Approve the reviewed screenshots: advance the run. */
+  approveVisualConfirm(workspaceId: string, blockId: string): Promise<ExecutionInstance> {
+    return this.visualConfirmationController.approve(workspaceId, blockId)
+  }
+
+  /** Submit findings and request a fix: dispatch the Tester's `fixer`, then re-park. */
+  requestVisualConfirmFix(
+    workspaceId: string,
+    blockId: string,
+    findings: string,
+  ): Promise<ExecutionInstance> {
+    return this.visualConfirmationController.requestFix(workspaceId, blockId, findings)
+  }
+
+  /** Refresh the screenshot pairs from the latest UI-tester report. */
+  recaptureVisualConfirm(workspaceId: string, blockId: string): Promise<ExecutionInstance> {
+    return this.visualConfirmationController.recapture(workspaceId, blockId)
   }
 
   /**

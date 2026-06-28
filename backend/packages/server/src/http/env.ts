@@ -1,5 +1,6 @@
 import type {
   AgentRunRepository,
+  BinaryArtifactStore,
   ConsensusSessionRepository,
   ResolveRunRepoContext,
 } from '@cat-factory/kernel'
@@ -115,6 +116,14 @@ export interface ServerContainer extends Core {
    * the Worker / stock Node facades, so the controller 503s there.
    */
   localSettings?: { service: LocalSettingsService }
+  /**
+   * The binary-artifact store (UI screenshots + reference design images) backing the
+   * visual-confirmation gate. Present only when the facade configured blob storage
+   * (R2 on the Worker; a Postgres-`bytea`/S3 backend on Node/local). Drives the
+   * artifact ingest/blob/list controller, the UI-tester pre/post-ops, and the gate.
+   * Absent ⇒ the controller 503s and the gate is a pass-through.
+   */
+  binaryArtifactStore?: BinaryArtifactStore
 }
 
 /** Hono generics shared by the cross-runtime controllers (Variables only — no Bindings). */
