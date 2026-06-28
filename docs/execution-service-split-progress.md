@@ -26,7 +26,7 @@ conformance suite (both Cloudflare D1 and Node Postgres).
 | #  | Phase                                                   | Status |
 | -- | ------------------------------------------------------- | ------ |
 | 0  | StepHandler registry scaffolding (fallthrough, no-op)   | ✅     |
-| 1  | Deterministic one-shot steps (deployer/tracker + resolvers) | ⬜  |
+| 1  | Deterministic one-shot step handlers (deployer/tracker)  | ✅     |
 | 2  | Artifact ingestion resolvers (blueprint/spec/writeback) | ⬜     |
 | 3  | Verdict resolvers (tester/companion, `control` field)   | ⬜     |
 | 4  | Decision/polling/companion gate step handlers           | ⬜     |
@@ -45,6 +45,25 @@ Checklist:
 - [x] `ExecutionService`: `stepHandlerCache`, `buildStepHandlerRegistry()` (one fallthrough handler), `dispatchStepHandler()`, extract per-kind body into `runStepBody()`.
 - [x] Conformance green on both runtimes.
 - [x] Changeset for `@cat-factory/kernel` + `@cat-factory/orchestration`.
+
+## Phase 1 — deterministic one-shot step handlers
+
+**Scope (as shipped):** `DeployerStepHandler` (order 100, claims a `deployer` step only when an
+env-provisioning provider is wired) and `TrackerStepHandler` (order 110) — both built inline in
+`buildStepHandlerRegistry` closing over `this` (mirroring the merger resolver), each delegating to
+the existing `runDeployer`/`runTracker` + `recordStepResult`. Their branches are deleted from
+`runStepBody`.
+
+**Resequencing note (ordering finding):** the plan also slated the `task-estimator` /
+`spec-writer noBusinessSpecs` → resolver conversions for Phase 1. Deferred to the artifact-resolver
+phase, because the existing `StepCompletionResolver` dispatch point runs *after* the approval gate,
+whereas the inline `task-estimator` branch sets `step.output = summarizeEstimate(...)` *before* it
+(an approval proposal would otherwise change from the readable summary to the raw JSON). Those
+resolver conversions need the resolver-ordering handled deliberately, so they move to Phase 2 where
+spec ingestion already lives (and spec-writer can be migrated atomically).
+
+- **Phase 1 done.** Green on both runtimes: Cloudflare conformance 126 ✓; Node execution 40 +
+  durable-execution 1 + integration (covers deployer/tracker) 32 = 73 ✓.
 
 ## Notes / running log
 

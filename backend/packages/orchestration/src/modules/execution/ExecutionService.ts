@@ -164,7 +164,7 @@ import type {
   EnvironmentProvisioningService,
   EnvironmentTeardownService,
 } from '@cat-factory/integrations'
-import { isDeployStep } from '@cat-factory/integrations'
+import { isDeployStep, DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
 import type { BranchUpdater } from '@cat-factory/kernel'
 import {
   dependenciesMet,
@@ -1443,22 +1443,8 @@ export class ExecutionService {
   private async runStepBody(ctx: StepHandlerContext): Promise<AdvanceResult> {
     const { workspaceId, instance, step, block, isFinalStep, options } = ctx
 
-    // A `deployer` step provisions an ephemeral environment deterministically via
-    // the provider — no LLM, no token usage — when the integration is wired.
-    // Otherwise it falls through to the normal agent path.
-    if (this.environmentProvisioning && isDeployStep(step.agentKind)) {
-      const result = await this.runDeployer(workspaceId, instance, block, options)
-      return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
-    }
-
-    // A `tracker` step files a GitHub issue / Jira ticket from the preceding
-    // `analysis` output (the tech-debt pipeline) — no LLM of its own. It is a
-    // pass-through when no tracker provider is wired or none is configured for the
-    // workspace. See {@link runTracker}.
-    if (step.agentKind === TRACKER_AGENT_KIND) {
-      const result = await this.runTracker(workspaceId, instance, block)
-      return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
-    }
+    // (The `deployer` and `tracker` steps are handled by their own StepHandlers — see
+    // {@link buildStepHandlerRegistry} — so they no longer branch here.)
 
     // A `requirements-review` step runs the inline reviewer and parks for the dedicated
     // review window, driving the iterative answer → incorporate → re-review loop. NOT a
@@ -2896,6 +2882,33 @@ export class ExecutionService {
    */
   private buildStepHandlerRegistry(): StepHandler[] {
     const handlers: StepHandler[] = [
+      // A `deployer` step provisions an ephemeral environment deterministically via the
+      // provider — no LLM, no token usage — when the integration is wired. Unwired, its
+      // `canHandle` is false so the step falls through to the generic agent path.
+      {
+        kind: DEPLOYER_AGENT_KIND,
+        order: 100,
+        canHandle: ({ step }) => !!this.environmentProvisioning && isDeployStep(step.agentKind),
+        handle: async ({ workspaceId, instance, step, block, isFinalStep, options }) => {
+          const result = await this.runDeployer(workspaceId, instance, block, options)
+          return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
+        },
+      },
+      // A `tracker` step files a GitHub issue / Jira ticket from the preceding `analysis`
+      // output (the tech-debt pipeline) — no LLM of its own. It is a pass-through when no
+      // tracker provider is wired or none is configured for the workspace (handled inside
+      // {@link runTracker}, which still records a result), so it always claims the step.
+      {
+        kind: TRACKER_AGENT_KIND,
+        order: 110,
+        canHandle: ({ step }) => step.agentKind === TRACKER_AGENT_KIND,
+        handle: async ({ workspaceId, instance, step, block, isFinalStep }) => {
+          const result = await this.runTracker(workspaceId, instance, block)
+          return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
+        },
+      },
+      // The generic container/inline-agent fallthrough — claims every step no more-specific
+      // handler did (today's `runStepBody` tail). Highest order so it always runs last.
       {
         kind: '*',
         order: FALLTHROUGH_STEP_HANDLER_ORDER,
