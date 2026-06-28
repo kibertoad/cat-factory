@@ -38,6 +38,7 @@ LIVE pushed UI updates** (no reloads, no fragile canvas drag/zoom). Shared setup
 | `notifications.spec.ts` | A merger-less run raises a `pipeline_complete` notification live; the inbox bell + item render and acting / dismissing resolves it. (The real PR merge needs GitHub and is covered by the backend conformance suites, not here.) |
 | `create-task.spec.ts`   | Create a task through the real add-task modal → the new card appears on the board.                                                                                                                                               |
 | `approval-gate.spec.ts` | A per-step human **approval** gate parks the run; Approve in the full-screen step-detail rail and it advances. (Distinct from the agent-raised decision in `run.spec`.)                                                          |
+| `reset-run.spec.ts`     | The destructive run-lifecycle control: **Reset** a parked run from the task inspector → the `cancelExecution` path discards it and the task returns to `planned` live. (The dual of resolving/approving — nothing else covers cancel/reset.)    |
 
 ## Mocking other externals (when a spec needs a real outbound call)
 

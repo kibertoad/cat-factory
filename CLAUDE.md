@@ -920,6 +920,49 @@ repository that maps a column differently or an engine path only one facade wire
 a test instead of shipping. `runtimes/node/test/durable-execution.spec.ts` additionally
 drives a run to completion through the real pg-boss runner.
 
+## End-to-end (assembled-product) coverage
+
+Where the conformance suite asserts backend behaviour port-by-port, the **Playwright e2e
+suite** (`backend/internal/e2e`, `@cat-factory/e2e`, private) covers the **assembled
+product**: a real Chromium drives the real SPA (the `@cat-factory/app` layer via the
+`deploy/frontend` consumer), which talks to a **real Node backend** — real Postgres
+(Drizzle), real pg-boss durable execution, and the real WebSocket push transport. Only the
+**external** deps are faked, so it's deterministic and needs no secrets/Docker/network:
+LLMs + per-run containers → the canonical `FakeAgentExecutor`/`AsyncFakeAgentExecutor`
+(reused from `@cat-factory/conformance`), repo bootstrap → `FakeRepoBootstrapper`, and
+GitHub App / email / Slack / Datadog left **off** (all opt-in, so gates/providers pass
+through). The backend wiring lives in `src/testServer.ts` (the stock `buildContainer` seam
+with those fakes injected); the full picture is in [`backend/internal/e2e/README.md`](./backend/internal/e2e/README.md).
+
+- **What e2e is FOR vs conformance:** assert on what only the assembled product can show —
+  the **live, WebSocket-pushed UI round-trip** (start over REST → the board reacts with no
+  reload). A pure backend side-effect (a real PR merge, a column mapping) belongs in the
+  conformance/integration suites, NOT here. The e2e backend has GitHub off, so anything
+  needing a real outbound call (the `FetchGitHubClient`, an inline LLM) must be mocked at
+  the backend's **outbound boundary** (MSW / a `buildNodeContainer` port seam), never in
+  the browser — the SPA only ever talks to this one backend.
+- **Spec shape (mandatory):** **seed/trigger over REST, then assert only on LIVE pushed UI
+  updates** — no reloads, no fixed sleeps, no fragile canvas drag/zoom; only web-first
+  assertions (`toBeVisible`/`expect.poll`) on the named timeouts in `tests/helpers.ts`.
+  Shared setup is the `seededBoard` fixture (seed → pin → open) plus the **auto**
+  `pageErrors` fixture that fails any test on an uncaught SPA exception. Each spec **seeds
+  its own workspace** (`workers: 1`, serial), so concurrent workspaces never collide.
+- **Selectors are `data-testid`, always.** Every assertion targets a stable test id, never
+  text/CSS/DOM-shape. Covering a new flow whose affordance has no test id means **adding
+  the `data-testid`** to that component first (a one-line, behaviour-neutral frontend
+  change — e.g. `run-stop`/`run-reset` on the inspector's run controls) and a patch
+  changeset for `@cat-factory/app`, then writing the spec against it.
+- **Adding a spec:** drop a `*.spec.ts` under `tests/`, import `test`/`expect` from
+  `./fixtures` (NOT `@playwright/test`), reuse the `helpers.ts` REST helpers + timeouts,
+  and add a row to the README's Specs table. Deterministic variations are env knobs on
+  `testServer.ts` (`E2E_DECISION_ON_STEPS`, `E2E_CONFIDENCE`, `E2E_ASYNC_KINDS` /
+  `E2E_DISPATCH_THROW_KINDS`); a spec needing a different backend env (e.g. a merge-review
+  flow at low `E2E_CONFIDENCE`) wants its **own** `webServer` in `playwright.config.ts`.
+- **CI:** runs in its own non-blocking `Test e2e` job — NOT part of the unit `test:run`
+  lane and NOT wired into the aggregated `Test` gate, so a browser/boot flake can't block
+  an otherwise-green PR. Promote it into `test-gate.needs` only once it has earned trust
+  (see the README's promotion checklist).
+
 ## Conventions
 
 - Hexagonal layering: controllers (`@cat-factory/server`) → services
