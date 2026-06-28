@@ -9,6 +9,8 @@ import type { SubscriptionVendor } from '~/types/domain'
 
 const personal = usePersonalSubscriptionsStore()
 const auth = useAuthStore()
+const workspace = useWorkspaceStore()
+const models = useModelsStore()
 const toast = useToast()
 const { t, d } = useI18n()
 
@@ -117,6 +119,11 @@ async function connect() {
     password.value = ''
     label.value = ''
     expiresOn.value = ''
+    // A connected subscription makes its vendor's models usable, so refresh the catalog:
+    // this clears the "No AI model configured" banner and, if the default preset still
+    // points at models this subscription doesn't cover, reactively surfaces the
+    // preset-mismatch prompt (with its "pick a different preset" link).
+    if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
     toast.add({
       title: t('personalSubscriptions.toast.connected', { vendor: selectedMeta.value.label }),
       icon: 'i-lucide-check',
@@ -136,6 +143,9 @@ async function connect() {
 async function disconnect(v: SubscriptionVendor) {
   try {
     await personal.remove(v)
+    // Removing the subscription may drop the workspace's last usable model — refresh so the
+    // AI-readiness banners re-evaluate (mirrors the API-key flow).
+    if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
     toast.add({ title: t('personalSubscriptions.toast.disconnected'), icon: 'i-lucide-check' })
   } catch (e) {
     toast.add({
