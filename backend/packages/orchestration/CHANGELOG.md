@@ -1,5 +1,74 @@
 # @cat-factory/orchestration
 
+## 0.36.0
+
+### Minor Changes
+
+- eab73b8: feat(documents): add Claude Design as a per-user design-context document source
+
+  Implements the Claude Design half of the design record in
+  `backend/docs/figma-claude-design-context.md`. Claude Design becomes a new
+  `DocumentSourceProvider` (`source='claude-design'`) that reuses the whole documents
+  integration (link plumbing, controller, `.cat-context/` materialization, prompt
+  fragment), with a deterministic design-system normalizer that turns a project's
+  `_ds_manifest.json` / `@dsCard`-marked component HTML + CSS custom properties into the
+  same `### Components` / `### Design tokens` Markdown shape the Figma provider emits — so
+  it earns its place over a plain HTML upload.
+
+  Auth is a **personal per-user PAT**, supported on every runtime: a new descriptor flag
+  `credentialScope: 'user'` routes such a source to a new per-user
+  `user_document_connections` store (D1 ⇄ Drizzle, encrypted at rest under a distinct HKDF
+  info), keyed by the acting user and never shared with the workspace. `DocumentConnectionService`
+  becomes scope-aware; the import path threads the acting user. Workspace-scoped sources
+  (Notion/Confluence/GitHub/Figma/Linear) are unchanged. The acting user falls back to the
+  empty user id ONLY when auth is disabled (dev-open / single-user local mode) so those
+  deployments still connect; when auth is enabled the controller fails closed with a 401
+  rather than silently using the shared empty-user bucket.
+
+  Claude Design is **opt-in**, not on by default: its credentialed project-read API is
+  still provisional (the read is claude.ai-login-bound, no per-user service token yet), so
+  it is excluded from the default `DOCUMENT_SOURCES` set and must be enabled explicitly
+  (`DOCUMENT_SOURCES=…,claude-design`) once the API is real — every other source stays on
+  by default.
+
+  Also hoists the host-pinned `safeFetch`/SSRF guard/capped-read into a shared
+  `documents/http.ts` reused by Figma and Claude Design. Wired symmetrically into both
+  facades and gated by a new cross-runtime conformance case (per-user connect → list →
+  disconnect).
+
+- eab73b8: feat(documents): add Figma as a design-context document source
+
+  Implements the Figma half of the design record in
+  `backend/docs/figma-claude-design-context.md`. Figma becomes a new
+  `DocumentSourceProvider` (`source='figma'`) authenticated by a per-workspace
+  personal access token, reusing the whole documents integration (connection table,
+  sealing, link plumbing, controller, `.cat-context/` materialization). `fetchDocument`
+  renders a frame/file's layout tree, text, components-used and (Enterprise-gated)
+  design tokens to Markdown, with a best-effort rendered-preview URL on a reference
+  line. Wired symmetrically into both the Cloudflare and Node facades (and the
+  `DOCUMENT_SOURCES` allow-list), gated by a cross-runtime conformance case. Adds the
+  `design.figma-context` prompt fragment for frontend agents. (Claude Design ships in a
+  companion changeset.)
+
+  Also makes a URL pasted into a block description auto-match its imported document by the
+  document's stable `(source, externalId)` — canonicalised through the providers'
+  `parseRef` (`AgentContextBuilder.documentUrlResolver`) — instead of by exact URL-string
+  equality, which silently failed for a real Figma share link (title path segment, dash
+  node id, `&t=` tracking params) whose canonical stored `url` omits that noise.
+
+### Patch Changes
+
+- Updated dependencies [eab73b8]
+- Updated dependencies [eab73b8]
+  - @cat-factory/contracts@0.43.0
+  - @cat-factory/kernel@0.45.0
+  - @cat-factory/integrations@0.26.0
+  - @cat-factory/prompt-fragments@0.8.0
+  - @cat-factory/agents@0.21.1
+  - @cat-factory/sandbox@0.8.24
+  - @cat-factory/spend@0.10.16
+  - @cat-factory/workspaces@0.9.7
+
 ## 0.35.1
 
 ### Patch Changes
