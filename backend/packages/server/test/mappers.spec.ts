@@ -233,6 +233,51 @@ describe('legacy numeric user ids (pre-#94, repaired on read)', () => {
     expect(mapped.initiatedBy).toBeNull()
     expect(() => v.parse(executionInstanceSchema, mapped)).not.toThrow()
   })
+
+  it('drops a failure carrying a removed kind (decision_timeout) and stays contract-valid', () => {
+    const row: ExecutionRow = {
+      id: 'exec_legacy_fail',
+      block_id: 'blk_1',
+      status: 'failed',
+      detail: JSON.stringify({ pipelineId: 'pl_1', pipelineName: 'Q', steps: [], currentStep: 0 }),
+      error: 'decision timed out',
+      // Pre-cutoff failure with a kind that is no longer in the contract picklist.
+      failure: JSON.stringify({
+        kind: 'decision_timeout',
+        message: 'decision timed out',
+        detail: null,
+        hint: null,
+        occurredAt: 1,
+        lastSubtasks: null,
+      }),
+      updated_at: 1,
+      workflow_instance_id: null,
+    }
+    const mapped = rowToExecution(row)
+    expect(mapped.failure).toBeNull()
+    expect(() => v.parse(executionInstanceSchema, mapped)).not.toThrow()
+  })
+
+  it('keeps a failure whose kind is still part of the contract', () => {
+    const row: ExecutionRow = {
+      id: 'exec_ok_fail',
+      block_id: 'blk_1',
+      status: 'failed',
+      detail: JSON.stringify({ pipelineId: 'pl_1', pipelineName: 'Q', steps: [], currentStep: 0 }),
+      error: 'boom',
+      failure: JSON.stringify({
+        kind: 'agent',
+        message: 'boom',
+        detail: null,
+        hint: null,
+        occurredAt: 1,
+        lastSubtasks: null,
+      }),
+      updated_at: 1,
+      workflow_instance_id: null,
+    }
+    expect(rowToExecution(row).failure?.kind).toBe('agent')
+  })
 })
 
 describe('rowToExecution', () => {

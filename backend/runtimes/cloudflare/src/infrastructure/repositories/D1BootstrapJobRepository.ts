@@ -5,6 +5,7 @@ import type {
   BootstrapJobRepository,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
+import { isKnownAgentFailureKind } from '@cat-factory/server'
 import { chunkForIn } from './chunk'
 
 /**
@@ -80,7 +81,11 @@ function parseFailure(raw: string | null): BootstrapFailure | null {
   if (!raw) return null
   try {
     const o = JSON.parse(raw) as BootstrapFailure
-    if (o && typeof o.kind === 'string' && typeof o.message === 'string') return o
+    // LEGACY: drop a failure carrying a removed kind (e.g. `decision_timeout`); the obsolete
+    // value would fail the contract picklist and brick the snapshot. Remove after 2026-07-15.
+    if (o && typeof o.kind === 'string' && typeof o.message === 'string') {
+      return isKnownAgentFailureKind(o.kind) ? o : null
+    }
   } catch {
     // fall through
   }
