@@ -76,17 +76,17 @@ function onResize(e: PointerEvent, edge: 'e' | 's' | 'se') {
     <!-- resize handles (drag the borders to resize the module, Miro-style).
          `nopan` (with `nodrag`) so resizing doesn't pan the pane. -->
     <div
-      class="nodrag nopan absolute right-0 top-0 h-full w-2 cursor-ew-resize hover:bg-violet-400/20"
+      class="nodrag nopan absolute right-0 top-0 h-full w-2 cursor-ew-resize hover:bg-violet-400/20 pointer-coarse:w-4"
       title="Drag to resize"
       @pointerdown="onResize($event, 'e')"
     />
     <div
-      class="nodrag nopan absolute bottom-0 left-0 h-2 w-full cursor-ns-resize hover:bg-violet-400/20"
+      class="nodrag nopan absolute bottom-0 left-0 h-2 w-full cursor-ns-resize hover:bg-violet-400/20 pointer-coarse:h-4"
       title="Drag to resize"
       @pointerdown="onResize($event, 's')"
     />
     <div
-      class="nodrag nopan absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize"
+      class="nodrag nopan absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize pointer-coarse:h-11 pointer-coarse:w-11"
       title="Drag to resize"
       @pointerdown="onResize($event, 'se')"
     >

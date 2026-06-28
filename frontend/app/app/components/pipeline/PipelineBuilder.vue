@@ -210,9 +210,12 @@ async function clone(p: Pipeline) {
     :ui="{ content: 'max-w-[90vw] sm:max-w-2xl lg:max-w-5xl xl:max-w-6xl' }"
   >
     <template #body>
-      <div class="grid h-full grid-cols-1 gap-4 lg:grid-cols-3">
+      <!-- On compact viewports the three sections stack and the slideover body
+           scrolls as one column; on lg they become three independently-scrolling
+           columns filling the full height. -->
+      <div class="grid grid-cols-1 gap-4 lg:h-full lg:grid-cols-3">
         <!-- agent palette -->
-        <div class="flex min-h-0 flex-col overflow-hidden">
+        <div class="flex flex-col lg:min-h-0 lg:overflow-hidden">
           <div class="mb-2 flex shrink-0 items-center justify-between gap-2">
             <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Agent palette
@@ -227,13 +230,13 @@ async function clone(p: Pipeline) {
               Add agent
             </UButton>
           </div>
-          <div class="min-h-0 flex-1 overflow-y-auto pr-1">
+          <div class="flex-1 pr-1 lg:min-h-0 lg:overflow-y-auto">
             <AgentPalette @add="add" />
           </div>
         </div>
 
         <!-- draft chain -->
-        <div class="flex min-h-0 flex-col overflow-hidden">
+        <div class="flex flex-col lg:min-h-0 lg:overflow-hidden">
           <div class="mb-2 flex items-center justify-between gap-2">
             <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">Pipeline</h3>
             <UButton
@@ -293,7 +296,7 @@ async function clone(p: Pipeline) {
             Click agents on the left to assemble a linear pipeline.
           </div>
 
-          <ol v-else class="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+          <ol v-else class="flex-1 space-y-2 pr-1 lg:min-h-0 lg:overflow-y-auto">
             <li
               v-for="(unit, vi) in pipelines.units"
               :key="unit.index"
@@ -608,7 +611,7 @@ async function clone(p: Pipeline) {
 
         <!-- Saved pipelines: review the library + delete (the run affordance
              moved to the task card / inspector when the palettes were removed). -->
-        <div v-if="pipelines.pipelines.length" class="flex min-h-0 flex-col overflow-hidden">
+        <div v-if="pipelines.pipelines.length" class="flex flex-col lg:min-h-0 lg:overflow-hidden">
           <div class="mb-2 flex shrink-0 items-center justify-between gap-2">
             <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Saved pipelines
@@ -649,7 +652,7 @@ async function clone(p: Pipeline) {
             </UBadge>
           </div>
 
-          <ul class="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
+          <ul class="flex-1 space-y-1.5 pr-1 lg:min-h-0 lg:overflow-y-auto">
             <li
               v-for="p in visiblePipelines"
               :key="p.id"

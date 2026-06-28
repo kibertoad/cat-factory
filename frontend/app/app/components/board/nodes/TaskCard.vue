@@ -210,12 +210,12 @@ function selectTask() {
       <!-- drag-to-connect handle: drag onto another task to make it depend on this one -->
       <button
         type="button"
-        class="nodrag shrink-0 cursor-crosshair rounded-full p-0.5 text-slate-500 hover:bg-slate-800 hover:text-amber-400"
+        class="nodrag shrink-0 cursor-crosshair rounded-full p-0.5 text-slate-500 hover:bg-slate-800 hover:text-amber-400 pointer-coarse:p-2.5"
         title="Drag onto another task to make it depend on this one"
         @pointerdown.stop="startConnect(task.id, $event)"
         @click.stop
       >
-        <UIcon name="i-lucide-spline" class="h-3 w-3" />
+        <UIcon name="i-lucide-spline" class="h-3 w-3 pointer-coarse:h-5 pointer-coarse:w-5" />
       </button>
     </div>
 

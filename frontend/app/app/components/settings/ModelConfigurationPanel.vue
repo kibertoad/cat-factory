@@ -240,7 +240,7 @@ function fail(title: string, e: unknown) {
     <Transition name="reader-fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-50 flex flex-col bg-slate-950/96 backdrop-blur-sm"
+        class="fixed inset-0 z-50 flex max-h-[100dvh] flex-col bg-slate-950/96 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
       >
