@@ -79,6 +79,7 @@ export {
 export {
   makeRepoFiles,
   makeResolveRepoFiles,
+  makeResolveRepoFilesForCoords,
   makeResolveRunRepoContext,
   runRepoOps,
 } from './agents/repoFiles.js'

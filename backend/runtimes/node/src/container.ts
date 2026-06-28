@@ -101,6 +101,7 @@ import {
   WebCryptoWebhookVerifier,
   buildResolveRepoTarget,
   makeResolveRunRepoContext,
+  makeResolveRepoFilesForCoords,
   makeResolveBinaryArtifactStore,
   type BuildBlobBackend,
   ensureWorkBranchViaRest,
@@ -1344,6 +1345,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       // via this checkout-free RepoFiles resolver, composed from the same client +
       // repo-target walk the gates/merger use — parity with the Worker.
       resolveRunRepoContext: makeResolveRunRepoContext(githubClient, resolveRepoTarget),
+      // Block-less repo resolver for the environments module's on-demand repo
+      // validation / config bootstrap (operator names owner+repo).
+      resolveRepoFilesForCoords: makeResolveRepoFilesForCoords(
+        githubClient,
+        githubInstallationRepository,
+        repoProjectionRepository,
+      ),
       branchUpdater: new GitHubBranchUpdater({
         githubClient,
         resolveRepoTarget,

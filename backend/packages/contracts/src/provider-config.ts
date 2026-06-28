@@ -70,6 +70,18 @@ export const providerDescriptorSchema = v.object({
    */
   missingRequired: v.array(v.string()),
   /**
+   * Whether the provider implements a mechanical repo-config validation the UI can
+   * call ("validate repo" button) and the engine runs as a provision pre-flight.
+   */
+  supportsRepoValidation: v.optional(v.boolean()),
+  /**
+   * Whether the provider can mechanically bootstrap its config file into a repo
+   * ("set up config" flow). When true, `bootstrapInputs` carries the form fields.
+   */
+  supportsRepoBootstrap: v.optional(v.boolean()),
+  /** The variables the bootstrap form should collect (empty unless `supportsRepoBootstrap`). */
+  bootstrapInputs: v.optional(v.array(providerConfigFieldSchema)),
+  /**
    * For a NATIVE provider: the base manifest the SPA overlays the flat `configFields`
    * values onto before POSTing (so the connect form is flat fields but storage stays a
    * single full manifest — see `backend/docs/native-environment-adapter.md`). A `secret`
@@ -99,3 +111,39 @@ export const connectionTestResultSchema = v.object({
   message: v.optional(v.string()),
 })
 export type ConnectionTestResult = v.InferOutput<typeof connectionTestResultSchema>
+
+/** Severity of a single repo-config validation finding. */
+export const repoValidationSeveritySchema = v.picklist(['error', 'warning'])
+export type RepoValidationSeverity = v.InferOutput<typeof repoValidationSeveritySchema>
+
+/** One finding from a provider repo-config validation. */
+export const repoValidationIssueSchema = v.object({
+  severity: repoValidationSeveritySchema,
+  message: v.string(),
+  /** The repo-relative path the issue concerns, when applicable (e.g. `.kargo.yml`). */
+  path: v.optional(v.string()),
+})
+export type RepoValidationIssue = v.InferOutput<typeof repoValidationIssueSchema>
+
+/** The outcome of a provider's repo-config validation (never throws to the client). */
+export const repoValidationResultSchema = v.object({
+  ok: v.boolean(),
+  issues: v.array(repoValidationIssueSchema),
+})
+export type RepoValidationResult = v.InferOutput<typeof repoValidationResultSchema>
+
+/**
+ * The outcome of a "bootstrap provider config in repo" operation: whether the repo
+ * now satisfies the provider (`ok`), whether anything was written (`committed`), where
+ * (`branch`/`prUrl`), whether the agent fallback ran (`usedAgent`), and any residual
+ * issues. Never throws to the client.
+ */
+export const bootstrapRepoResultSchema = v.object({
+  ok: v.boolean(),
+  committed: v.boolean(),
+  branch: v.optional(v.string()),
+  prUrl: v.optional(v.string()),
+  usedAgent: v.optional(v.boolean()),
+  issues: v.array(repoValidationIssueSchema),
+})
+export type BootstrapRepoResult = v.InferOutput<typeof bootstrapRepoResultSchema>

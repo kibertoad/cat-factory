@@ -120,6 +120,9 @@ export type {
   EnvironmentHandle,
   EnvironmentConnection,
   TestEnvironmentConnectionInput,
+  ValidateEnvironmentRepoInput,
+  BootstrapEnvironmentRepoInput,
+  BootstrapRepoResult,
   // Unified provisioning event-log shapes.
   ProvisioningSubsystem,
   ProvisioningOperation,

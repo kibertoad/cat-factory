@@ -6,6 +6,9 @@ import type {
   EnvironmentManifest,
   EnvironmentProvider,
   ProviderConfigField,
+  RepoValidationRequest,
+  RepoFiles,
+  RunRepoContext,
   SecretCipher,
   Workspace,
   WorkspaceRepository,
@@ -207,5 +210,286 @@ describe('EnvironmentConnectionService — describeProvider.missingRequired', ()
       nested: { a: [1, 2] },
     })
     expect(JSON.stringify(descriptor)).not.toContain('super-secret-token')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Repo lifecycle: validateRepo + bootstrapRepo. The provider supplies the
+// expectations / generation; the engine supplies a VCS-neutral RepoFiles reader
+// (here a fake backed by an in-memory path → content map).
+// ---------------------------------------------------------------------------
+
+function fakeRepoFiles(seed: Record<string, string> = {}): RepoFiles & {
+  store: Map<string, string>
+  commits: { branch: string; files: { path: string; content: string }[] }[]
+  prs: number
+} {
+  const store = new Map(Object.entries(seed))
+  const commits: { branch: string; files: { path: string; content: string }[] }[] = []
+  let prs = 0
+  return {
+    store,
+    commits,
+    get prs() {
+      return prs
+    },
+    async getFile(path) {
+      const content = store.get(path)
+      return content != null ? { content, sha: `sha:${path}` } : null
+    },
+    async listDirectory() {
+      return []
+    },
+    async headSha() {
+      return 'base-sha'
+    },
+    async createBranch() {},
+    async commitFiles(input) {
+      commits.push({ branch: input.branch, files: input.files })
+      for (const f of input.files) store.set(f.path, f.content)
+      return { sha: 'commit-sha' }
+    },
+    async openPullRequest() {
+      prs += 1
+      return { number: prs } as never
+    },
+  }
+}
+
+function repoCtx(repo: RepoFiles, baseBranch = 'main'): RunRepoContext {
+  return { repo, baseBranch }
+}
+
+describe('EnvironmentConnectionService — validateRepo', () => {
+  it('returns ok with no issues when the provider has no validateRepo', async () => {
+    const service = makeService(fakeConnections())
+    const result = await service.validateRepo('ws1', { owner: 'o', repo: 'r' })
+    expect(result).toEqual({ ok: true, issues: [] })
+  })
+
+  it('reports an error when no VCS connection resolves the repo', async () => {
+    const service = new EnvironmentConnectionService({
+      environmentConnectionRepository: fakeConnections(),
+      workspaceRepository: fakeWorkspaces,
+      secretCipher: fakeCipher,
+      clock,
+      environmentProvider: {
+        validateRepo: async () => ({ ok: true, issues: [] }),
+      } as unknown as EnvironmentProvider,
+      resolveRepoFilesForWorkspace: async () => null,
+    })
+    const result = await service.validateRepo('ws1', { owner: 'o', repo: 'r' })
+    expect(result.ok).toBe(false)
+    expect(result.issues[0]?.message).toMatch(/no vcs connection/i)
+  })
+
+  it('delegates to the provider with a VCS-neutral reader, forwarding providerConfig + gitRef', async () => {
+    const repo = fakeRepoFiles({ '.kargo.yml': 'name: x\njobs: [a]\n' })
+    let captured: RepoValidationRequest | undefined
+    const repoConn = fakeConnections()
+    const service = new EnvironmentConnectionService({
+      environmentConnectionRepository: repoConn,
+      workspaceRepository: fakeWorkspaces,
+      secretCipher: fakeCipher,
+      clock,
+      environmentProvider: {
+        validateRepo: async (req: RepoValidationRequest) => {
+          captured = req
+          const file = await req.readRepoFile('.kargo.yml')
+          return file
+            ? { ok: true, issues: [] }
+            : { ok: false, issues: [{ severity: 'error', message: 'missing', path: '.kargo.yml' }] }
+        },
+      } as unknown as EnvironmentProvider,
+      resolveRepoFilesForWorkspace: async () => repoCtx(repo),
+    })
+    await service.register('ws1', {
+      manifest: { ...baseManifest, providerConfig: { project: 'acme' } },
+      secrets: {},
+    })
+
+    const result = await service.validateRepo('ws1', { owner: 'o', repo: 'r', gitRef: 'feat/x' })
+    expect(result.ok).toBe(true)
+    expect(captured?.config).toEqual({ project: 'acme' })
+    expect(captured?.defaultGitRef).toBe('feat/x')
+    expect(captured?.repoOwner).toBe('o')
+  })
+
+  it('passes provider issues through when the repo is invalid', async () => {
+    const repo = fakeRepoFiles() // no .kargo.yml
+    const repoConn = fakeConnections()
+    const service = new EnvironmentConnectionService({
+      environmentConnectionRepository: repoConn,
+      workspaceRepository: fakeWorkspaces,
+      secretCipher: fakeCipher,
+      clock,
+      environmentProvider: {
+        validateRepo: async (req: RepoValidationRequest) => {
+          const file = await req.readRepoFile('.kargo.yml')
+          return file
+            ? { ok: true, issues: [] }
+            : { ok: false, issues: [{ severity: 'error', message: 'missing', path: '.kargo.yml' }] }
+        },
+      } as unknown as EnvironmentProvider,
+      resolveRepoFilesForWorkspace: async () => repoCtx(repo),
+    })
+    await service.register('ws1', { manifest: baseManifest, secrets: {} })
+
+    const result = await service.validateRepo('ws1', { owner: 'o', repo: 'r' })
+    expect(result.ok).toBe(false)
+    expect(result.issues).toEqual([{ severity: 'error', message: 'missing', path: '.kargo.yml' }])
+  })
+})
+
+describe('EnvironmentConnectionService — bootstrapRepo', () => {
+  const VALID = 'name: x\njobs: [a]\n'
+
+  // A provider that writes `.kargo.yml` and validates it exists.
+  function bootstrapProvider(over: Partial<EnvironmentProvider> = {}): EnvironmentProvider {
+    return {
+      validateRepo: async (req: RepoValidationRequest) => {
+        const file = await req.readRepoFile('.kargo.yml')
+        const ok = !!file && file.content.includes('jobs')
+        return ok
+          ? { ok: true, issues: [] }
+          : {
+              ok: false,
+              issues: [
+                { severity: 'error', message: file ? 'invalid' : 'missing', path: '.kargo.yml' },
+              ],
+            }
+      },
+      bootstrapProviderConfiguration: async () => ({
+        files: [{ path: '.kargo.yml', content: VALID }],
+        commitMessage: 'add kargo config',
+      }),
+      ...over,
+    } as unknown as EnvironmentProvider
+  }
+
+  function serviceWith(
+    provider: EnvironmentProvider,
+    repo: RepoFiles,
+    extra: Partial<ConstructorParameters<typeof EnvironmentConnectionService>[0]> = {},
+  ) {
+    return new EnvironmentConnectionService({
+      environmentConnectionRepository: fakeConnections(),
+      workspaceRepository: fakeWorkspaces,
+      secretCipher: fakeCipher,
+      clock,
+      environmentProvider: provider,
+      resolveRepoFilesForWorkspace: async () => repoCtx(repo),
+      ...extra,
+    })
+  }
+
+  it('fails when the provider does not support bootstrap', async () => {
+    const service = serviceWith(
+      { validateRepo: async () => ({ ok: true, issues: [] }) } as unknown as EnvironmentProvider,
+      fakeRepoFiles(),
+    )
+    const result = await service.bootstrapRepo('ws1', { owner: 'o', repo: 'r', inputs: {} })
+    expect(result.ok).toBe(false)
+    expect(result.committed).toBe(false)
+  })
+
+  it('mechanically commits the generated config and re-validates ok', async () => {
+    const repo = fakeRepoFiles()
+    const service = serviceWith(bootstrapProvider(), repo)
+    await service.register('ws1', { manifest: baseManifest, secrets: {} })
+
+    const result = await service.bootstrapRepo('ws1', {
+      owner: 'o',
+      repo: 'r',
+      inputs: { name: 'x' },
+    })
+    expect(result.ok).toBe(true)
+    expect(result.committed).toBe(true)
+    expect(repo.store.get('.kargo.yml')).toBe(VALID)
+    expect(repo.commits).toHaveLength(1)
+    expect(repo.commits[0]?.branch).toBe('main')
+  })
+
+  it('is idempotent: skips committing when the file already matches', async () => {
+    const repo = fakeRepoFiles({ '.kargo.yml': VALID })
+    const service = serviceWith(bootstrapProvider(), repo)
+    await service.register('ws1', { manifest: baseManifest, secrets: {} })
+
+    const result = await service.bootstrapRepo('ws1', { owner: 'o', repo: 'r', inputs: {} })
+    expect(result.ok).toBe(true)
+    expect(result.committed).toBe(false)
+    expect(repo.commits).toHaveLength(0)
+  })
+
+  it('opens a PR onto the target branch when openPr is set', async () => {
+    const repo = fakeRepoFiles()
+    const service = serviceWith(bootstrapProvider(), repo)
+    await service.register('ws1', { manifest: baseManifest, secrets: {} })
+
+    const result = await service.bootstrapRepo('ws1', {
+      owner: 'o',
+      repo: 'r',
+      inputs: {},
+      openPr: true,
+    })
+    expect(result.committed).toBe(true)
+    expect(result.branch).toBe('cat-factory/env-config')
+    expect(repo.prs).toBe(1)
+  })
+
+  it('falls back to the repair agent when generation needs one and the caller allows it', async () => {
+    const repo = fakeRepoFiles({ '.kargo.yml': 'broken: [' })
+    let dispatched = false
+    const service = serviceWith(
+      bootstrapProvider({
+        bootstrapProviderConfiguration: async () => ({
+          files: [],
+          needsAgent: true,
+          issues: [{ severity: 'error', message: 'cannot merge existing config' }],
+        }),
+        describeRepairAgent: () => ({ prompt: 'fix the kargo config' }),
+      }),
+      repo,
+      {
+        dispatchConfigRepair: async () => {
+          dispatched = true
+          return { ok: true, issues: [] }
+        },
+      },
+    )
+    await service.register('ws1', { manifest: baseManifest, secrets: {} })
+
+    const result = await service.bootstrapRepo('ws1', {
+      owner: 'o',
+      repo: 'r',
+      inputs: {},
+      allowAgentFallback: true,
+    })
+    expect(dispatched).toBe(true)
+    expect(result.usedAgent).toBe(true)
+    expect(result.ok).toBe(true)
+  })
+
+  it('does not dispatch the agent when needsAgent but the caller did not opt in', async () => {
+    const repo = fakeRepoFiles({ '.kargo.yml': 'broken: [' })
+    let dispatched = false
+    const service = serviceWith(
+      bootstrapProvider({
+        bootstrapProviderConfiguration: async () => ({ files: [], needsAgent: true, issues: [] }),
+        describeRepairAgent: () => ({ prompt: 'fix' }),
+      }),
+      repo,
+      {
+        dispatchConfigRepair: async () => {
+          dispatched = true
+          return { ok: true, issues: [] }
+        },
+      },
+    )
+    await service.register('ws1', { manifest: baseManifest, secrets: {} })
+
+    const result = await service.bootstrapRepo('ws1', { owner: 'o', repo: 'r', inputs: {} })
+    expect(dispatched).toBe(false)
+    expect(result.usedAgent).toBeUndefined()
   })
 })

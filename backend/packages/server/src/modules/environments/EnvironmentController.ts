@@ -1,4 +1,5 @@
 import {
+  bootstrapEnvironmentRepoContract,
   describeEnvironmentProviderContract,
   getEnvironmentAccessContract,
   getEnvironmentConnectionContract,
@@ -10,6 +11,7 @@ import {
   testEnvironmentConnectionContract,
   unregisterEnvironmentProviderContract,
   updateEnvironmentSecretsContract,
+  validateEnvironmentRepoContract,
 } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
@@ -92,6 +94,28 @@ export function environmentController(): Hono<AppEnv> {
     if (!env) return unavailable(c)
     return c.json(
       await env.connectionService.testConnection(param(c, 'workspaceId'), c.req.valid('json')),
+      200,
+    )
+  })
+
+  // Validate that a target repo satisfies the provider's config expectations (e.g. a
+  // Kargo `.kargo.yml` is present + well-formed). Nothing persisted.
+  buildHonoRoute(app, validateEnvironmentRepoContract, async (c) => {
+    const env = requireEnvironments(c)
+    if (!env) return unavailable(c)
+    return c.json(
+      await env.connectionService.validateRepo(param(c, 'workspaceId'), c.req.valid('json')),
+      200,
+    )
+  })
+
+  // Mechanically bootstrap (and optionally agent-repair) the provider's config file
+  // in a target repo from UI-collected variables.
+  buildHonoRoute(app, bootstrapEnvironmentRepoContract, async (c) => {
+    const env = requireEnvironments(c)
+    if (!env) return unavailable(c)
+    return c.json(
+      await env.connectionService.bootstrapRepo(param(c, 'workspaceId'), c.req.valid('json')),
       200,
     )
   })
