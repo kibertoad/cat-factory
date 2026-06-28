@@ -506,7 +506,6 @@ export class ExecutionService {
   private readonly blockRepository: BlockRepository
   private readonly pipelineRepository: PipelineRepository
   private readonly executionRepository: ExecutionRepository
-  private readonly accountRepository: AccountRepository
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
   /** The pure step/cursor mutators (start/finish/park/reset + the companion rework loop). */
@@ -522,8 +521,6 @@ export class ExecutionService {
   private readonly clarityReviewService?: ClarityReviewService
   private readonly brainstormServices?: Record<BrainstormStage, BrainstormService>
   private readonly environmentProvisioning?: EnvironmentProvisioningService
-  private readonly environmentTeardown?: EnvironmentTeardownService
-  private readonly branchUpdater?: BranchUpdater
   /** Assembles the per-step agent context (requirements, docs, env, service frame, fragments). */
   private readonly contextBuilder: AgentContextBuilder
   /** Resolves a `merger` step's assessment into an auto-merge or a `merge_review` notification. */
@@ -653,7 +650,6 @@ export class ExecutionService {
     this.blockRepository = blockRepository
     this.pipelineRepository = pipelineRepository
     this.executionRepository = executionRepository
-    this.accountRepository = accountRepository
     this.idGenerator = idGenerator
     this.clock = clock
     this.stepGraph = new StepGraph(clock)
@@ -680,8 +676,6 @@ export class ExecutionService {
     this.clarityReviewService = clarityReviewService
     this.brainstormServices = brainstormServices
     this.environmentProvisioning = environmentProvisioning
-    this.environmentTeardown = environmentTeardown
-    this.branchUpdater = branchUpdater
     this.contextBuilder = new AgentContextBuilder({
       workspaceRepository,
       blockRepository,
