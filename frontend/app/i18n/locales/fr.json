@@ -1,4 +1,13 @@
 {
+  "language": {
+    "switcher": "Langue",
+    "warning": {
+      "title": "Traduction non officielle",
+      "body": "Cette traduction est fournie par la communauté et peut être inexacte. Vous avez repéré une erreur ? Signalez-la ou proposez une correction sur {repoLink}.",
+      "repoLinkLabel": "le dépôt cat-factory",
+      "dismiss": "Fermer"
+    }
+  },
   "common": {
     "save": "Enregistrer",
     "cancel": "Annuler",

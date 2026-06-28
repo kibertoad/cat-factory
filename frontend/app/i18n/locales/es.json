@@ -1,4 +1,13 @@
 {
+  "language": {
+    "switcher": "Idioma",
+    "warning": {
+      "title": "Traducción no oficial",
+      "body": "Esta traducción es proporcionada por la comunidad y puede contener errores. ¿Has encontrado un error? Repórtalo o envía una corrección en {repoLink}.",
+      "repoLinkLabel": "el repositorio de cat-factory",
+      "dismiss": "Descartar"
+    }
+  },
   "common": {
     "save": "Guardar",
     "cancel": "Cancelar",

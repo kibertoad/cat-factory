@@ -1,4 +1,13 @@
 {
+  "language": {
+    "switcher": "Język",
+    "warning": {
+      "title": "Nieoficjalne tłumaczenie",
+      "body": "To tłumaczenie pochodzi od społeczności i może być niedokładne. Zauważyłeś błąd? Zgłoś go lub prześlij poprawkę w {repoLink}.",
+      "repoLinkLabel": "repozytorium cat-factory",
+      "dismiss": "Odrzuć"
+    }
+  },
   "common": {
     "save": "Zapisz",
     "cancel": "Anuluj",
