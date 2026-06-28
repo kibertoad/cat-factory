@@ -1,5 +1,30 @@
 # @cat-factory/orchestration
 
+## 0.34.0
+
+### Minor Changes
+
+- 63e2177: Add Linear support as a document source and issue tracker. Linear Docs can be
+  imported as task context (mirroring Notion/Confluence); Linear issues can be
+  imported and linked to board blocks (mirroring Jira/GitHub Issues); the `tracker`
+  pipeline step can file issues into Linear; and PR writeback comments on and
+  resolves the linked Linear issue. Authentication is a per-workspace personal API
+  key (sealed at rest), behind a shared GraphQL client shaped so OAuth can be added
+  later. Adds one nullable `linear_team_id` column to `tracker_settings` (mirrored
+  across D1 and Postgres) for the team new issues are filed under.
+
+### Patch Changes
+
+- Updated dependencies [63e2177]
+  - @cat-factory/contracts@0.41.0
+  - @cat-factory/integrations@0.25.0
+  - @cat-factory/agents@0.20.2
+  - @cat-factory/kernel@0.42.2
+  - @cat-factory/prompt-fragments@0.7.40
+  - @cat-factory/sandbox@0.8.20
+  - @cat-factory/spend@0.10.13
+  - @cat-factory/workspaces@0.9.4
+
 ## 0.33.0
 
 ### Minor Changes
