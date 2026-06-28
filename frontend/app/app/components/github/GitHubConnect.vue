@@ -6,6 +6,7 @@
 // successful connect the github store flips `connected`, which the host surfaces
 // react to. Shared by the GitHub panel and the bootstrap modal so the connect
 // flow lives in one place.
+const { t } = useI18n()
 const github = useGitHubStore()
 const toast = useToast()
 
@@ -33,7 +34,7 @@ async function refreshInstallations() {
     await github.loadInstallations()
   } catch (e) {
     // A 503 (integration off) is handled by the host; surface anything else.
-    notifyError('Could not list GitHub installations', e)
+    notifyError(t('github.connect.errors.listInstallations'), e)
   }
 }
 
@@ -42,7 +43,7 @@ async function install() {
   try {
     window.location.href = await github.getInstallUrl()
   } catch (e) {
-    notifyError('Could not start the GitHub App install', e)
+    notifyError(t('github.connect.errors.startInstall'), e)
     installing.value = false
   }
 }
@@ -53,9 +54,13 @@ async function connect(id: number, onDone?: () => void) {
   try {
     await github.connect(id)
     onDone?.()
-    toast.add({ title: 'GitHub connected', icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('github.connect.toast.connected'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
-    notifyError('Could not connect', e)
+    notifyError(t('github.connect.errors.connect'), e)
   } finally {
     connecting.value = false
     connectingId.value = null
@@ -77,7 +82,7 @@ async function connectManually() {
     <section class="space-y-2">
       <div class="flex items-center justify-between">
         <span class="text-xs font-medium uppercase tracking-wide text-slate-500">
-          Your installations
+          {{ t('github.connect.yourInstallations') }}
         </span>
         <UButton
           size="xs"
@@ -87,7 +92,7 @@ async function connectManually() {
           :loading="github.loadingInstallations"
           @click="refreshInstallations"
         >
-          Refresh
+          {{ t('github.connect.refresh') }}
         </UButton>
       </div>
 
@@ -95,14 +100,15 @@ async function connectManually() {
         v-if="github.loadingInstallations && !github.installations.length"
         class="flex items-center gap-2 py-3 text-sm text-slate-400"
       >
-        <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" /> Looking for installations…
+        <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" />
+        {{ t('github.connect.lookingForInstallations') }}
       </div>
 
       <p
         v-else-if="!github.installations.length"
         class="rounded-md border border-dashed border-slate-800 px-3 py-3 text-sm text-slate-400"
       >
-        No installations found for the App yet. Install it below, or connect by ID.
+        {{ t('github.connect.noInstallations') }}
       </p>
 
       <div
@@ -121,7 +127,12 @@ async function connectManually() {
           <div class="min-w-0">
             <div class="truncate text-sm text-slate-200">{{ inst.accountLogin }}</div>
             <div class="text-[11px] text-slate-500">
-              {{ inst.targetType }} · installation {{ inst.installationId }}
+              {{
+                t('github.connect.installationMeta', {
+                  targetType: inst.targetType,
+                  id: inst.installationId,
+                })
+              }}
             </div>
           </div>
         </div>
@@ -130,18 +141,18 @@ async function connectManually() {
           color="success"
           variant="subtle"
           size="sm"
-          title="Already linked to this workspace"
+          :title="t('github.connect.linkedTitle')"
         >
-          linked
+          {{ t('github.connect.linked') }}
         </UBadge>
         <UBadge
           v-else-if="inst.connected === 'other'"
           color="neutral"
           variant="subtle"
           size="sm"
-          title="Already connected to another workspace"
+          :title="t('github.connect.inUseTitle')"
         >
-          in use
+          {{ t('github.connect.inUse') }}
         </UBadge>
         <UButton
           v-else
@@ -153,19 +164,19 @@ async function connectManually() {
           :disabled="connecting"
           @click="connect(inst.installationId)"
         >
-          Connect
+          {{ t('github.connect.connect') }}
         </UButton>
       </div>
     </section>
 
-    <USeparator label="or" />
+    <USeparator :label="t('github.connect.or')" />
     <UButton color="primary" icon="i-lucide-github" :loading="installing" @click="install">
-      Install GitHub App
+      {{ t('github.connect.installApp') }}
     </UButton>
 
-    <USeparator label="or connect by ID" />
+    <USeparator :label="t('github.connect.orConnectById')" />
     <div class="flex items-end gap-2">
-      <UFormField label="Installation ID" class="flex-1">
+      <UFormField :label="t('github.connect.installationId')" class="flex-1">
         <UInput v-model="installationId" type="number" placeholder="12345678" class="w-full" />
       </UFormField>
       <UButton
@@ -176,7 +187,7 @@ async function connectManually() {
         :disabled="!installationId.trim()"
         @click="connectManually"
       >
-        Connect
+        {{ t('github.connect.connect') }}
       </UButton>
     </div>
   </div>

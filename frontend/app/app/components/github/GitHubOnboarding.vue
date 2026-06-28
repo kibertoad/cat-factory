@@ -9,6 +9,7 @@
 // user who needs to switch GitHub accounts.
 import GitHubConnect from '~/components/github/GitHubConnect.vue'
 
+const { t } = useI18n()
 const auth = useAuthStore()
 </script>
 
@@ -21,11 +22,9 @@ const auth = useAuthStore()
     >
       <div class="mb-5 text-center">
         <UIcon name="i-lucide-github" class="mx-auto mb-3 h-10 w-10 text-indigo-400" />
-        <h1 class="mb-1 text-lg font-semibold text-white">Connect cat-factory to GitHub</h1>
+        <h1 class="mb-1 text-lg font-semibold text-white">{{ t('github.onboarding.title') }}</h1>
         <p class="text-sm text-slate-400">
-          cat-factory works by opening pull requests on your repositories. Install the GitHub App on
-          your account or organization to continue — you can grant it every repository or pick a
-          subset.
+          {{ t('github.onboarding.intro') }}
         </p>
       </div>
 
@@ -35,9 +34,9 @@ const auth = useAuthStore()
         v-if="auth.required && auth.user"
         class="mt-6 border-t border-slate-800 pt-4 text-center text-xs text-slate-500"
       >
-        Signed in as {{ auth.user.login }} ·
+        {{ t('github.onboarding.signedInAs', { login: auth.user.login }) }} ·
         <button class="text-slate-300 underline-offset-2 hover:underline" @click="auth.logout()">
-          Sign out
+          {{ t('github.onboarding.signOut') }}
         </button>
       </p>
     </div>

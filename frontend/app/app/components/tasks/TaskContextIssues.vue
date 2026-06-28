@@ -9,6 +9,7 @@ import type { Block, TaskSourceKind } from '~/types/domain'
 
 const props = defineProps<{ block: Block }>()
 
+const { t } = useI18n()
 const tasks = useTasksStore()
 const ui = useUiStore()
 const toast = useToast()
@@ -22,10 +23,10 @@ const linked = computed(() => tasks.tasksForBlock(props.block.id))
 async function attach(source: TaskSourceKind, externalId: string) {
   try {
     await tasks.linkToBlock(props.block.id, source, externalId)
-    toast.add({ title: 'Issue attached', icon: 'i-lucide-link' })
+    toast.add({ title: t('tasks.contextIssues.attached'), icon: 'i-lucide-link' })
   } catch (e) {
     toast.add({
-      title: 'Could not attach',
+      title: t('tasks.contextIssues.attachFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -43,7 +44,7 @@ const attachMenu = computed<DropdownMenuItem[][]>(() => {
       onSelect: () => attach(t.source, t.externalId),
     }))
   items.push({
-    label: 'Import an issue…',
+    label: t('tasks.contextIssues.importIssue'),
     icon: 'i-lucide-file-down',
     onSelect: () => ui.openTaskImport(),
   })
@@ -55,10 +56,12 @@ const attachMenu = computed<DropdownMenuItem[][]>(() => {
   <div v-if="tasks.available" class="space-y-2">
     <div class="flex items-center justify-between">
       <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        Context issues
+        {{ t('tasks.contextIssues.title') }}
       </span>
       <UDropdownMenu :items="attachMenu" :content="{ side: 'bottom', align: 'end' }">
-        <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-plus">Attach</UButton>
+        <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-plus">{{
+          t('tasks.contextIssues.attach')
+        }}</UButton>
       </UDropdownMenu>
     </div>
 
@@ -82,7 +85,7 @@ const attachMenu = computed<DropdownMenuItem[][]>(() => {
       </a>
     </div>
     <p v-else class="text-[11px] text-slate-500">
-      Attach a Jira issue so agents see its description and comments while implementing this task.
+      {{ t('tasks.contextIssues.emptyHint') }}
     </p>
   </div>
 </template>

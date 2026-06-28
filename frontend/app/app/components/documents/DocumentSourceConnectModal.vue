@@ -6,6 +6,7 @@
 // "Connected" with empty fields.
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
+const { t } = useI18n()
 const ui = useUiStore()
 const documents = useDocumentsStore()
 const toast = useToast()
@@ -54,14 +55,14 @@ async function submit() {
   try {
     await documents.connect(source.value, credentials)
     toast.add({
-      title: `${descriptor.value!.label} connected`,
+      title: t('documents.connect.connected', { source: descriptor.value!.label }),
       icon: 'i-lucide-check',
       color: 'success',
     })
     ui.closeDocumentConnect()
   } catch (e) {
     toast.add({
-      title: 'Could not connect',
+      title: t('documents.connect.connectFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -75,7 +76,9 @@ async function disconnect() {
   if (!source.value) return
   await documents.disconnect(source.value)
   toast.add({
-    title: `${descriptor.value?.label ?? 'Source'} disconnected`,
+    title: t('documents.connect.disconnected', {
+      source: descriptor.value?.label ?? t('documents.connect.sourceFallback'),
+    }),
     icon: 'i-lucide-unplug',
   })
   ui.closeDocumentConnect()
@@ -83,15 +86,17 @@ async function disconnect() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="descriptor?.label ?? 'Connect source'">
+  <UModal v-model:open="open" :title="descriptor?.label ?? t('documents.connect.title')">
     <template #title>
-      <IntegrationBackTitle :title="descriptor?.label ?? 'Connect source'" @back="back" />
+      <IntegrationBackTitle
+        :title="descriptor?.label ?? t('documents.connect.title')"
+        @back="back"
+      />
     </template>
     <template #body>
       <div v-if="descriptor" class="space-y-4">
         <p class="text-sm text-slate-400">
-          Connect {{ descriptor.label }} to import requirements, RFCs and PRDs, then spawn board
-          structure or attach them to tasks as agent context.
+          {{ t('documents.connect.intro', { source: descriptor.label }) }}
         </p>
 
         <p
@@ -101,8 +106,7 @@ async function disconnect() {
         >
           <UIcon name="i-lucide-user" class="mt-0.5 size-3.5 shrink-0" />
           <span>
-            Personal connection — this credential authenticates as you and is stored only for your
-            account, never shared with the rest of the workspace.
+            {{ t('documents.connect.personalNote') }}
           </span>
         </p>
 
@@ -130,7 +134,7 @@ async function disconnect() {
             icon="i-lucide-unplug"
             @click="disconnect"
           >
-            Disconnect
+            {{ t('documents.connect.disconnect') }}
           </UButton>
           <div v-else />
           <UButton
@@ -140,7 +144,7 @@ async function disconnect() {
             :disabled="!canSubmit"
             @click="submit"
           >
-            {{ connected ? 'Update connection' : 'Connect' }}
+            {{ connected ? t('documents.connect.update') : t('documents.connect.connect') }}
           </UButton>
         </div>
       </div>

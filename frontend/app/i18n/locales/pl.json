@@ -1783,5 +1783,335 @@
         }
       }
     }
+  },
+  "github": {
+    "onboarding": {
+      "title": "Połącz cat-factory z GitHub",
+      "intro": "cat-factory działa, otwierając pull requesty w Twoich repozytoriach. Zainstaluj aplikację GitHub na swoim koncie lub w organizacji, aby kontynuować, i możesz przyznać jej wszystkie repozytoria albo wybrać ich podzbiór.",
+      "signedInAs": "Zalogowano jako {login}",
+      "signOut": "Wyloguj się"
+    },
+    "connect": {
+      "yourInstallations": "Twoje instalacje",
+      "refresh": "Odśwież",
+      "lookingForInstallations": "Szukanie instalacji…",
+      "noInstallations": "Nie znaleziono jeszcze żadnych instalacji aplikacji. Zainstaluj ją poniżej lub połącz za pomocą ID.",
+      "installationMeta": "{targetType} · instalacja {id}",
+      "linked": "powiązana",
+      "linkedTitle": "Już powiązana z tym obszarem roboczym",
+      "inUse": "w użyciu",
+      "inUseTitle": "Już połączona z innym obszarem roboczym",
+      "connect": "Połącz",
+      "or": "lub",
+      "installApp": "Zainstaluj aplikację GitHub",
+      "orConnectById": "lub połącz za pomocą ID",
+      "installationId": "ID instalacji",
+      "toast": {
+        "connected": "Połączono z GitHub"
+      },
+      "errors": {
+        "listInstallations": "Nie udało się wyświetlić instalacji GitHub",
+        "startInstall": "Nie udało się rozpocząć instalacji aplikacji GitHub",
+        "connect": "Nie udało się połączyć"
+      }
+    },
+    "panel": {
+      "connectIntro": "Połącz instalację aplikacji GitHub, aby powiązać bloki tablicy z repozytoriami, przeglądać pull requesty i zgłoszenia oraz pozwolić agentom wypychać gałęzie i otwierać PR.",
+      "installationMeta": "{targetType} · instalacja {id}",
+      "resync": "Zsynchronizuj ponownie",
+      "backfill": "Uzupełnij",
+      "disconnect": "Rozłącz",
+      "loading": "Ładowanie…",
+      "tabs": {
+        "repos": "Repozytoria",
+        "pulls": "Pull requesty",
+        "issues": "Zgłoszenia"
+      },
+      "linkedToBoard": "Powiązane z tą tablicą",
+      "manageRepos": "Zarządzaj repozytoriami",
+      "manageHint": "Wybierz repozytoria, które ta tablica ma śledzić. Połączenie z GitHub jest współdzielone w obrębie konta, a każda tablica wiąże własne repozytoria.",
+      "loadingRepos": "Ładowanie repozytoriów…",
+      "noAvailableRepos": "Instalacja nie ma jeszcze dostępu do żadnych repozytoriów.",
+      "private": "prywatne",
+      "saveSelection": "Zapisz wybór",
+      "noLinkedRepos": "Nie powiązano jeszcze żadnych repozytoriów. Użyj opcji Zarządzaj repozytoriami, aby wybrać, które repozytoria śledzi ta tablica.",
+      "open": "Otwórz",
+      "protected": "chroniona",
+      "newBranch": "Nowa gałąź",
+      "fromSha": "Z SHA",
+      "commitShaPlaceholder": "sha commita",
+      "createBranch": "Utwórz gałąź",
+      "openPr": "Otwórz PR",
+      "repository": "Repozytorium",
+      "chooseRepository": "Wybierz repozytorium",
+      "prTitle": "Tytuł",
+      "headBranch": "Gałąź źródłowa",
+      "baseBranch": "Gałąź bazowa",
+      "openPullRequest": "Otwórz pull request",
+      "noPulls": "Nie zsynchronizowano żadnych pull requestów.",
+      "mergePr": "Scal pull request",
+      "noIssues": "Nie zsynchronizowano żadnych zgłoszeń.",
+      "prState": {
+        "open": "otwarty",
+        "closed": "zamknięty",
+        "merged": "scalony"
+      },
+      "issueState": {
+        "open": "otwarte",
+        "closed": "zamknięte"
+      },
+      "toast": {
+        "disconnected": "Rozłączono z GitHub",
+        "resync": "Ponowna synchronizacja {status}",
+        "reposUpdated": "Zaktualizowano powiązane repozytoria",
+        "branchCreated": "Utworzono gałąź {name}",
+        "prOpened": "Otwarto pull request",
+        "prMerged": "PR #{number} scalony"
+      },
+      "errors": {
+        "disconnect": "Nie udało się rozłączyć",
+        "resync": "Nie udało się zsynchronizować ponownie",
+        "loadRepos": "Nie udało się załadować repozytoriów",
+        "updateRepos": "Nie udało się zaktualizować repozytoriów",
+        "loadBranches": "Nie udało się załadować gałęzi",
+        "createBranch": "Nie udało się utworzyć gałęzi",
+        "openPr": "Nie udało się otworzyć pull requesta",
+        "merge": "Nie udało się scalić"
+      }
+    },
+    "addService": {
+      "title": "Dodaj usługę z repozytorium",
+      "intro": "Wybierz istniejące repozytorium GitHub, aby dodać je jako usługę tablicy. Bez inicjowania: repozytorium jest wiązane bez zmian z nową ramką usługi, a uruchamiane na nim zadania celują w to repozytorium.",
+      "connectFirst": "Najpierw połącz ten obszar roboczy z GitHub. Powiąż instalację, w której aplikacja już jest, albo ją zainstaluj.",
+      "repository": "Repozytorium",
+      "repositoryHint": "Repozytoria, do których aplikacja GitHub ma dostęp. Nie widzisz swojego? Przyznaj aplikacji dostęp poniżej, a następnie odśwież.",
+      "noReposAvailable": "Brak dostępnych repozytoriów. Przyznaj aplikacji dostęp do jednego poniżej, a następnie odśwież.",
+      "filterPlaceholder": "Filtruj według właściciela/nazwy…",
+      "clearFilter": "Wyczyść filtr",
+      "chooseRepository": "Wybierz repozytorium",
+      "showingCount": "Wyświetlanie {shown} z {total} repozytoriów.",
+      "repoLabel": {
+        "private": " (prywatne)",
+        "monorepo": " · monorepo",
+        "onBoard": " · już na tablicy"
+      },
+      "monorepoLabel": "To jest monorepo (zawiera więcej niż jedną usługę)",
+      "monorepoDescription": "Dodaj kilka usług z jednego repozytorium, każdą przypiętą do podkatalogu.",
+      "monorepoBrowseHint": "Przeglądaj repozytorium i wybierz katalog usługi, którą chcesz dodać. Agenci pracujący nad tą usługą będą działać w obrębie tego podkatalogu.",
+      "serviceDirectory": "Katalog usługi:",
+      "noDirectorySelected": "Nie wybrano jeszcze żadnego katalogu.",
+      "addedConfigure": "Dodano {title}, skonfiguruj",
+      "grantAccess": "Przyznaj aplikacji dostęp do repozytorium",
+      "grantAccessTitle": "Otwórz ustawienia instalacji aplikacji, aby przyznać jej dostęp do repozytorium",
+      "refreshList": "Odśwież listę",
+      "done": "Gotowe",
+      "add": "Dodaj usługę",
+      "addAnother": "Dodaj kolejną usługę",
+      "toast": {
+        "addedTitle": "Dodano usługę",
+        "addedDescription": "{title} jest na tablicy, skonfiguruj ją poniżej.",
+        "addFailedTitle": "Nie udało się dodać usługi"
+      }
+    },
+    "repoTree": {
+      "root": "katalog główny",
+      "loading": "Ładowanie…",
+      "noSubdirectories": "Brak podkatalogów.",
+      "empty": "Pusto.",
+      "select": "Wybierz",
+      "selected": "Wybrano",
+      "useThisFolder": "Użyj tego folderu",
+      "errors": {
+        "listDirectory": "Nie udało się wyświetlić katalogu"
+      }
+    }
+  },
+  "slack": {
+    "panel": {
+      "title": "Powiadomienia Slack",
+      "intro": "Publikuj powiadomienia tablicy (przeglady scalenia, zakonczenia pipeline'ow, niepowodzenia CI) w Slacku. Polaczenie jest wspoldzielone w calym koncie; routing jest per tablica."
+    },
+    "connect": {
+      "addToSlack": "Dodaj do Slacka",
+      "orPasteToken": "...lub wklej token bota (xoxb-...)",
+      "connect": "Polacz"
+    },
+    "connected": {
+      "label": "Polaczono z {team}",
+      "disconnect": "Rozlacz"
+    },
+    "routing": {
+      "heading": "Routing",
+      "channelPlaceholder": "#kanal lub id kanalu",
+      "mentionMembers": "Wzmiankuj ({'@'}) przypisanych czlonkow konta",
+      "save": "Zapisz routing"
+    },
+    "members": {
+      "heading": "Mapa czlonkow (id uzytkownika do id czlonka Slacka)",
+      "hint": "Osoby z dzialu {product} sa wzmiankowane przy ustaleniach przegladu wymagan; pozostali tylko wtedy, gdy utworzyli zadanie.",
+      "productLabel": "Produkt",
+      "userIdPlaceholder": "Id uzytkownika (usr_...)",
+      "slackIdPlaceholder": "Id czlonka Slacka (U...)",
+      "add": "Dodaj czlonka",
+      "save": "Zapisz mape"
+    },
+    "routable": {
+      "merge_review": "Przeglad scalenia",
+      "pipeline_complete": "Pipeline ukonczony",
+      "ci_failed": "Niepowodzenie CI",
+      "test_failed": "Niepowodzenie testow",
+      "requirement_review": "Przeglad wymagan",
+      "clarity_review": "Przeglad klarownosci",
+      "release_regression": "Regresja wydania",
+      "human_test_ready": "Gotowe do testow przez czlowieka",
+      "visual_confirmation_ready": "Gotowe do potwierdzenia wizualnego"
+    },
+    "role": {
+      "engineering": "Inzynieria",
+      "product": "Produkt"
+    },
+    "toast": {
+      "connected": "Slack polaczony",
+      "routingSaved": "Routing zapisany",
+      "mapSaved": "Mapa czlonkow zapisana"
+    },
+    "error": {
+      "loadSettings": "Nie udalo sie wczytac ustawien Slacka",
+      "startOAuth": "Nie udalo sie uruchomic OAuth Slacka",
+      "connect": "Nie udalo sie polaczyc Slacka",
+      "disconnect": "Nie udalo sie rozlaczyc Slacka",
+      "saveRouting": "Nie udalo sie zapisac routingu",
+      "saveMap": "Nie udalo sie zapisac mapy czlonkow"
+    }
+  },
+  "documents": {
+    "picker": {
+      "searchPlaceholder": "Wyszukaj strony lub wklej adres URL albo identyfikator…",
+      "refPlaceholder": "Wklej adres URL lub identyfikator strony…",
+      "searchFailed": "Wyszukiwanie nie powiodło się: {error}",
+      "importedBadge": "zaimportowano",
+      "attachByReference": "Dołącz {ref} przez odwołanie",
+      "noMatches": "Brak pasujących stron.",
+      "emptySearchable": "Wyszukaj według tytułu lub wybierz zaimportowany dokument.",
+      "emptyRefOnly": "Wklej adres URL lub identyfikator strony, aby ją dołączyć."
+    },
+    "import": {
+      "title": "Importuj ze źródła dokumentów",
+      "connectFirst": "Najpierw połącz źródło dokumentów.",
+      "connectSource": "Połącz {source}",
+      "spawningInto": "Tworzenie w {frame}",
+      "sourceLabel": "Źródło",
+      "refLabel": "Adres URL lub identyfikator strony",
+      "importButton": "Importuj",
+      "importedHeading": "Zaimportowane dokumenty",
+      "previewSpawn": "Podgląd i utworzenie",
+      "noneImported": "Nie zaimportowano jeszcze żadnych dokumentów.",
+      "imported": "Zaimportowano „{title}”",
+      "importFailed": "Import nie powiódł się"
+    },
+    "connect": {
+      "title": "Połącz źródło",
+      "sourceFallback": "Źródło",
+      "intro": "Połącz {source}, aby importować wymagania, dokumenty RFC i PRD, a następnie utworzyć strukturę tablicy lub dołączyć je do zadań jako kontekst dla agentów.",
+      "personalNote": "Połączenie osobiste: te poświadczenia uwierzytelniają Ciebie i są przechowywane tylko dla Twojego konta, nigdy nie są udostępniane reszcie obszaru roboczego.",
+      "disconnect": "Rozłącz",
+      "connect": "Połącz",
+      "update": "Zaktualizuj połączenie",
+      "connected": "Połączono {source}",
+      "disconnected": "Rozłączono {source}",
+      "connectFailed": "Nie udało się połączyć"
+    },
+    "spawn": {
+      "title": "Podgląd struktury",
+      "plannerLlm": "Wygenerowane przez SI",
+      "plannerHeadings": "Na podstawie nagłówków",
+      "intoFrame": "do {frame}",
+      "asTopLevel": "jako nowe ramki najwyższego poziomu",
+      "buildingPlan": "Tworzenie planu…",
+      "spawnOntoBoard": "Utwórz na tablicy",
+      "planFailed": "Nie udało się utworzyć planu",
+      "spawned": "Struktura utworzona",
+      "spawnFailed": "Tworzenie nie powiodło się",
+      "summary": "{frames} · {modules} · {tasks}",
+      "frameCount": "{count} ramka | {count} ramki | {count} ramek",
+      "moduleCount": "{count} moduł | {count} moduły | {count} modułów",
+      "taskCount": "{count} zadanie | {count} zadania | {count} zadań"
+    },
+    "taskDocs": {
+      "heading": "Dokumenty kontekstowe",
+      "attach": "Dołącz",
+      "importPage": "Importuj stronę…",
+      "empty": "Dołącz wymaganie, dokument RFC lub PRD, aby agenci widzieli je podczas realizacji tego zadania.",
+      "attached": "Dokument dołączony",
+      "attachFailed": "Nie udało się dołączyć"
+    }
+  },
+  "tasks": {
+    "picker": {
+      "searchPlaceholder": "Szukaj zgłoszeń lub wklej adres URL/klucz…",
+      "refPlaceholder": "Wklej adres URL lub klucz zgłoszenia…",
+      "searchFailed": "Wyszukiwanie nie powiodło się: {error}",
+      "imported": "zaimportowane",
+      "attachByReference": "Dołącz {ref} przez odniesienie",
+      "noMatches": "Brak pasujących zgłoszeń.",
+      "emptySearchable": "Szukaj według tytułu lub wybierz zaimportowane zgłoszenie.",
+      "emptyRefOnly": "Wklej adres URL lub klucz zgłoszenia, aby je dołączyć."
+    },
+    "contextIssues": {
+      "title": "Zgłoszenia kontekstowe",
+      "attach": "Dołącz",
+      "attached": "Dołączono zgłoszenie",
+      "attachFailed": "Nie można dołączyć",
+      "importIssue": "Importuj zgłoszenie…",
+      "emptyHint": "Dołącz zgłoszenie Jira, aby agenci widzieli jego opis i komentarze podczas realizacji tego zadania."
+    },
+    "import": {
+      "titleCreate": "Utwórz zadanie ze zgłoszenia",
+      "titleBrowse": "Zgłoszenia w narzędziu śledzącym",
+      "connectFirst": "Najpierw połącz lub włącz źródło zadań.",
+      "enableSource": "Włącz {label}",
+      "connectSource": "Połącz {label}",
+      "source": "Źródło",
+      "refLabel": "Klucz lub adres URL zgłoszenia",
+      "import": "Importuj",
+      "asEpic": "Jako epik",
+      "asEpicTitleReady": "Utwórz ten epik i jego elementy podrzędne jako powiązaną grupę zadań",
+      "asEpicTitleNeedsContainer": "Najpierw wybierz kontener dla zadań podrzędnych",
+      "epicChildrenContainer": "Kontener elementów podrzędnych epiku",
+      "pickContainer": "Wybierz ramę lub moduł",
+      "searchIssues": "Szukaj zgłoszeń",
+      "searchPlaceholder": "Szukaj według tytułu, wklej adres URL zgłoszenia lub wpisz numer zgłoszenia…",
+      "createTasksIn": "Utwórz zadania w",
+      "needFrameFirst": "Najpierw dodaj ramę usługi do tablicy, aby tworzyć zadania ze zgłoszeń.",
+      "searchFailed": "Wyszukiwanie nie powiodło się: {error}",
+      "searchResults": "Wyniki wyszukiwania",
+      "createFromIssue": "Utwórz zadanie z tego zgłoszenia",
+      "pickContainerFirst": "Najpierw wybierz kontener",
+      "viewOnGitHub": "Zobacz {id} w serwisie GitHub",
+      "emptyHint": "Wyszukaj powyżej lub wklej adres URL/klucz zgłoszenia, aby utworzyć z niego zadanie.",
+      "imported": "Zaimportowano „{title}”",
+      "importFailed": "Import nie powiódł się",
+      "epicSpawned": "Utworzono epik „{title}”",
+      "epicChildren": "Utworzono {count} zadanie podrzędne | Utworzono {count} zadania podrzędne | Utworzono {count} zadań podrzędnych",
+      "epicFailed": "Nie można utworzyć epiku"
+    },
+    "connect": {
+      "title": "Źródło zadań",
+      "sourceFallback": "Źródło",
+      "connectedToast": "Połączono {label}",
+      "connectFailed": "Nie można połączyć",
+      "disconnectedToast": "Rozłączono {label}",
+      "updateFailed": "Nie można zaktualizować",
+      "intro": "{label} pozwala importować zgłoszenia i dołączać je do zadań jako kontekst agenta.",
+      "credentialless": "To źródło korzysta z aplikacji GitHub już zainstalowanej w Twojej przestrzeni roboczej, więc nie trzeba podawać żadnych danych uwierzytelniających.",
+      "installAppHint": "Zainstaluj aplikację GitHub przestrzeni roboczej (połącz repozytoria GitHub), aby udostępnić {label}.",
+      "connected": "Połączono.",
+      "connectedTo": "Połączono z {label}.",
+      "offerToWorkspace": "Udostępnij tej przestrzeni roboczej",
+      "offerHint": "Po wyłączeniu {label} jest ukryte przed importem i powiązywaniem.",
+      "disconnect": "Rozłącz",
+      "updateConnection": "Zaktualizuj połączenie",
+      "connect": "Połącz"
+    }
   }
 }

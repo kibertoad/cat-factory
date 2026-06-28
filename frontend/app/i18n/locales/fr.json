@@ -1783,5 +1783,335 @@
         }
       }
     }
+  },
+  "github": {
+    "onboarding": {
+      "title": "Connecter cat-factory à GitHub",
+      "intro": "cat-factory fonctionne en ouvrant des pull requests sur vos dépôts. Installez la GitHub App sur votre compte ou votre organisation pour continuer, et vous pouvez lui accorder tous les dépôts ou en choisir un sous-ensemble.",
+      "signedInAs": "Connecté en tant que {login}",
+      "signOut": "Se déconnecter"
+    },
+    "connect": {
+      "yourInstallations": "Vos installations",
+      "refresh": "Actualiser",
+      "lookingForInstallations": "Recherche d'installations…",
+      "noInstallations": "Aucune installation trouvée pour l'App pour le moment. Installez-la ci-dessous, ou connectez-la par ID.",
+      "installationMeta": "{targetType} · installation {id}",
+      "linked": "liée",
+      "linkedTitle": "Déjà liée à cet espace de travail",
+      "inUse": "utilisée",
+      "inUseTitle": "Déjà connectée à un autre espace de travail",
+      "connect": "Connecter",
+      "or": "ou",
+      "installApp": "Installer la GitHub App",
+      "orConnectById": "ou connecter par ID",
+      "installationId": "ID d'installation",
+      "toast": {
+        "connected": "GitHub connecté"
+      },
+      "errors": {
+        "listInstallations": "Impossible de lister les installations GitHub",
+        "startInstall": "Impossible de démarrer l'installation de la GitHub App",
+        "connect": "Connexion impossible"
+      }
+    },
+    "panel": {
+      "connectIntro": "Connectez une installation de la GitHub App pour adosser les blocs du tableau à des dépôts, parcourir les pull requests et les tickets, et laisser les agents pousser des branches et ouvrir des PR.",
+      "installationMeta": "{targetType} · installation {id}",
+      "resync": "Resynchroniser",
+      "backfill": "Reremplir",
+      "disconnect": "Déconnecter",
+      "loading": "Chargement…",
+      "tabs": {
+        "repos": "Dépôts",
+        "pulls": "Pull requests",
+        "issues": "Tickets"
+      },
+      "linkedToBoard": "Lié à ce tableau",
+      "manageRepos": "Gérer les dépôts",
+      "manageHint": "Choisissez les dépôts que ce tableau doit suivre. La connexion GitHub est partagée sur tout le compte, et chaque tableau lie ses propres dépôts.",
+      "loadingRepos": "Chargement des dépôts…",
+      "noAvailableRepos": "L'installation ne peut encore accéder à aucun dépôt.",
+      "private": "privé",
+      "saveSelection": "Enregistrer la sélection",
+      "noLinkedRepos": "Aucun dépôt lié pour le moment. Utilisez Gérer les dépôts pour choisir les dépôts que ce tableau suit.",
+      "open": "Ouvrir",
+      "protected": "protégée",
+      "newBranch": "Nouvelle branche",
+      "fromSha": "Depuis le SHA",
+      "commitShaPlaceholder": "sha du commit",
+      "createBranch": "Créer la branche",
+      "openPr": "Ouvrir une PR",
+      "repository": "Dépôt",
+      "chooseRepository": "Choisir un dépôt",
+      "prTitle": "Titre",
+      "headBranch": "Branche source",
+      "baseBranch": "Branche de base",
+      "openPullRequest": "Ouvrir la pull request",
+      "noPulls": "Aucune pull request synchronisée.",
+      "mergePr": "Fusionner la pull request",
+      "noIssues": "Aucun ticket synchronisé.",
+      "prState": {
+        "open": "ouverte",
+        "closed": "fermée",
+        "merged": "fusionnée"
+      },
+      "issueState": {
+        "open": "ouvert",
+        "closed": "fermé"
+      },
+      "toast": {
+        "disconnected": "GitHub déconnecté",
+        "resync": "Resynchronisation {status}",
+        "reposUpdated": "Dépôts liés mis à jour",
+        "branchCreated": "Branche {name} créée",
+        "prOpened": "Pull request ouverte",
+        "prMerged": "PR #{number} fusionnée"
+      },
+      "errors": {
+        "disconnect": "Impossible de déconnecter",
+        "resync": "Impossible de resynchroniser",
+        "loadRepos": "Impossible de charger les dépôts",
+        "updateRepos": "Impossible de mettre à jour les dépôts",
+        "loadBranches": "Impossible de charger les branches",
+        "createBranch": "Impossible de créer la branche",
+        "openPr": "Impossible d'ouvrir la pull request",
+        "merge": "Impossible de fusionner"
+      }
+    },
+    "addService": {
+      "title": "Ajouter un service depuis un dépôt",
+      "intro": "Choisissez un dépôt GitHub existant à ajouter comme service du tableau. Sans amorçage : le dépôt est lié tel quel à un nouveau cadre de service, et les tâches que vous y exécutez ciblent ce dépôt.",
+      "connectFirst": "Connectez d'abord cet espace de travail à GitHub. Liez une installation sur laquelle l'App est déjà, ou installez-la.",
+      "repository": "Dépôt",
+      "repositoryHint": "Dépôts auxquels la GitHub App peut accéder. Vous ne voyez pas le vôtre ? Accordez l'accès à l'App ci-dessous, puis actualisez.",
+      "noReposAvailable": "Aucun dépôt disponible pour le moment. Accordez l'accès de l'App à l'un d'eux ci-dessous, puis actualisez.",
+      "filterPlaceholder": "Filtrer par propriétaire/nom…",
+      "clearFilter": "Effacer le filtre",
+      "chooseRepository": "Choisir un dépôt",
+      "showingCount": "Affichage de {shown} dépôts sur {total}.",
+      "repoLabel": {
+        "private": " (privé)",
+        "monorepo": " · monorepo",
+        "onBoard": " · déjà sur le tableau"
+      },
+      "monorepoLabel": "Ceci est un monorepo (héberge plusieurs services)",
+      "monorepoDescription": "Ajoutez plusieurs services depuis un même dépôt, chacun rattaché à un sous-répertoire.",
+      "monorepoBrowseHint": "Parcourez le dépôt et choisissez le répertoire du service que vous voulez ajouter. Les agents travaillant sur ce service s'exécuteront dans ce sous-répertoire.",
+      "serviceDirectory": "Répertoire du service :",
+      "noDirectorySelected": "Aucun répertoire sélectionné pour le moment.",
+      "addedConfigure": "{title} ajouté, configurez-le",
+      "grantAccess": "Accorder à l'App l'accès à un dépôt",
+      "grantAccessTitle": "Ouvrir les paramètres d'installation de l'App pour lui accorder l'accès à un dépôt",
+      "refreshList": "Actualiser la liste",
+      "done": "Terminé",
+      "add": "Ajouter le service",
+      "addAnother": "Ajouter un autre service",
+      "toast": {
+        "addedTitle": "Service ajouté",
+        "addedDescription": "{title} est sur le tableau, configurez-le ci-dessous.",
+        "addFailedTitle": "Impossible d'ajouter le service"
+      }
+    },
+    "repoTree": {
+      "root": "racine",
+      "loading": "Chargement…",
+      "noSubdirectories": "Aucun sous-répertoire ici.",
+      "empty": "Rien ici.",
+      "select": "Sélectionner",
+      "selected": "Sélectionné",
+      "useThisFolder": "Utiliser ce dossier",
+      "errors": {
+        "listDirectory": "Impossible de lister le répertoire"
+      }
+    }
+  },
+  "slack": {
+    "panel": {
+      "title": "Notifications Slack",
+      "intro": "Publiez les notifications du tableau (revues de fusion, fins de pipeline, echecs CI) sur Slack. La connexion est partagee a l'echelle du compte ; le routage est par tableau."
+    },
+    "connect": {
+      "addToSlack": "Ajouter a Slack",
+      "orPasteToken": "...ou collez un jeton de bot (xoxb-...)",
+      "connect": "Connecter"
+    },
+    "connected": {
+      "label": "Connecte a {team}",
+      "disconnect": "Deconnecter"
+    },
+    "routing": {
+      "heading": "Routage",
+      "channelPlaceholder": "#canal ou id de canal",
+      "mentionMembers": "Mentionner ({'@'}) les membres mappes du compte",
+      "save": "Enregistrer le routage"
+    },
+    "members": {
+      "heading": "Carte des membres (id utilisateur vers id de membre Slack)",
+      "hint": "Les membres {product} sont mentionnes sur les constats de revue des exigences ; les autres uniquement lorsqu'ils ont cree la tache.",
+      "productLabel": "Produit",
+      "userIdPlaceholder": "Id utilisateur (usr_...)",
+      "slackIdPlaceholder": "Id de membre Slack (U...)",
+      "add": "Ajouter un membre",
+      "save": "Enregistrer la carte"
+    },
+    "routable": {
+      "merge_review": "Revue de fusion",
+      "pipeline_complete": "Pipeline termine",
+      "ci_failed": "Echec de CI",
+      "test_failed": "Echec des tests",
+      "requirement_review": "Revue des exigences",
+      "clarity_review": "Revue de clarte",
+      "release_regression": "Regression de version",
+      "human_test_ready": "Pret pour les tests humains",
+      "visual_confirmation_ready": "Pret pour la confirmation visuelle"
+    },
+    "role": {
+      "engineering": "Ingenierie",
+      "product": "Produit"
+    },
+    "toast": {
+      "connected": "Slack connecte",
+      "routingSaved": "Routage enregistre",
+      "mapSaved": "Carte des membres enregistree"
+    },
+    "error": {
+      "loadSettings": "Impossible de charger les parametres Slack",
+      "startOAuth": "Impossible de demarrer OAuth Slack",
+      "connect": "Impossible de connecter Slack",
+      "disconnect": "Impossible de deconnecter Slack",
+      "saveRouting": "Impossible d'enregistrer le routage",
+      "saveMap": "Impossible d'enregistrer la carte des membres"
+    }
+  },
+  "documents": {
+    "picker": {
+      "searchPlaceholder": "Recherchez des pages ou collez une URL ou un ID…",
+      "refPlaceholder": "Collez l'URL ou l'ID d'une page…",
+      "searchFailed": "Échec de la recherche : {error}",
+      "importedBadge": "importé",
+      "attachByReference": "Joindre {ref} par référence",
+      "noMatches": "Aucune page correspondante.",
+      "emptySearchable": "Recherchez par titre ou choisissez un document importé.",
+      "emptyRefOnly": "Collez l'URL ou l'ID d'une page pour la joindre."
+    },
+    "import": {
+      "title": "Importer depuis une source de documents",
+      "connectFirst": "Connectez d'abord une source de documents.",
+      "connectSource": "Connecter {source}",
+      "spawningInto": "Génération dans {frame}",
+      "sourceLabel": "Source",
+      "refLabel": "URL ou ID de la page",
+      "importButton": "Importer",
+      "importedHeading": "Documents importés",
+      "previewSpawn": "Aperçu et génération",
+      "noneImported": "Aucun document importé pour l'instant.",
+      "imported": "« {title} » importé",
+      "importFailed": "Échec de l'importation"
+    },
+    "connect": {
+      "title": "Connecter une source",
+      "sourceFallback": "Source",
+      "intro": "Connectez {source} pour importer des exigences, des RFC et des PRD, puis générer la structure du tableau ou les joindre aux tâches comme contexte pour les agents.",
+      "personalNote": "Connexion personnelle : cet identifiant vous authentifie et n'est stocké que pour votre compte, jamais partagé avec le reste de l'espace de travail.",
+      "disconnect": "Déconnecter",
+      "connect": "Connecter",
+      "update": "Mettre à jour la connexion",
+      "connected": "{source} connecté",
+      "disconnected": "{source} déconnecté",
+      "connectFailed": "Connexion impossible"
+    },
+    "spawn": {
+      "title": "Aperçu de la structure",
+      "plannerLlm": "Généré par l'IA",
+      "plannerHeadings": "À partir des titres",
+      "intoFrame": "dans {frame}",
+      "asTopLevel": "en nouveaux cadres de premier niveau",
+      "buildingPlan": "Création du plan…",
+      "spawnOntoBoard": "Générer sur le tableau",
+      "planFailed": "Impossible de créer un plan",
+      "spawned": "Structure générée",
+      "spawnFailed": "Échec de la génération",
+      "summary": "{frames} · {modules} · {tasks}",
+      "frameCount": "{count} cadre | {count} cadres",
+      "moduleCount": "{count} module | {count} modules",
+      "taskCount": "{count} tâche | {count} tâches"
+    },
+    "taskDocs": {
+      "heading": "Documents de contexte",
+      "attach": "Joindre",
+      "importPage": "Importer une page…",
+      "empty": "Joignez une exigence, un RFC ou un PRD pour que les agents le voient pendant l'implémentation de cette tâche.",
+      "attached": "Document joint",
+      "attachFailed": "Impossible de joindre"
+    }
+  },
+  "tasks": {
+    "picker": {
+      "searchPlaceholder": "Rechercher des tickets ou coller une URL/clé…",
+      "refPlaceholder": "Coller l'URL ou la clé d'un ticket…",
+      "searchFailed": "Échec de la recherche : {error}",
+      "imported": "importé",
+      "attachByReference": "Joindre {ref} par référence",
+      "noMatches": "Aucun ticket correspondant.",
+      "emptySearchable": "Recherchez par titre ou choisissez un ticket importé.",
+      "emptyRefOnly": "Collez l'URL ou la clé d'un ticket pour le joindre."
+    },
+    "contextIssues": {
+      "title": "Tickets de contexte",
+      "attach": "Joindre",
+      "attached": "Ticket joint",
+      "attachFailed": "Impossible de joindre",
+      "importIssue": "Importer un ticket…",
+      "emptyHint": "Joignez un ticket Jira pour que les agents voient sa description et ses commentaires lors de l'implémentation de cette tâche."
+    },
+    "import": {
+      "titleCreate": "Créer une tâche à partir d'un ticket",
+      "titleBrowse": "Tickets du suivi",
+      "connectFirst": "Connectez ou activez d'abord une source de tâches.",
+      "enableSource": "Activer {label}",
+      "connectSource": "Connecter {label}",
+      "source": "Source",
+      "refLabel": "Clé ou URL du ticket",
+      "import": "Importer",
+      "asEpic": "En épopée",
+      "asEpicTitleReady": "Générer cette épopée et ses enfants comme un groupe de tâches lié",
+      "asEpicTitleNeedsContainer": "Choisissez d'abord un conteneur pour les tâches enfants",
+      "epicChildrenContainer": "Conteneur des enfants de l'épopée",
+      "pickContainer": "Choisir un cadre ou un module",
+      "searchIssues": "Rechercher des tickets",
+      "searchPlaceholder": "Recherchez par titre, collez l'URL d'un ticket ou saisissez un numéro de ticket…",
+      "createTasksIn": "Créer des tâches dans",
+      "needFrameFirst": "Ajoutez d'abord un cadre de service au tableau pour créer des tâches à partir de tickets.",
+      "searchFailed": "Échec de la recherche : {error}",
+      "searchResults": "Résultats de la recherche",
+      "createFromIssue": "Créer une tâche à partir de ce ticket",
+      "pickContainerFirst": "Choisissez d'abord un conteneur",
+      "viewOnGitHub": "Voir {id} sur GitHub",
+      "emptyHint": "Recherchez ci-dessus ou collez l'URL/clé d'un ticket pour en créer une tâche.",
+      "imported": "Importé « {title} »",
+      "importFailed": "Échec de l'importation",
+      "epicSpawned": "Épopée générée « {title} »",
+      "epicChildren": "{count} tâche enfant créée | {count} tâches enfants créées",
+      "epicFailed": "Impossible de générer l'épopée"
+    },
+    "connect": {
+      "title": "Source de tâches",
+      "sourceFallback": "Source",
+      "connectedToast": "{label} connectée",
+      "connectFailed": "Impossible de connecter",
+      "disconnectedToast": "{label} déconnectée",
+      "updateFailed": "Impossible de mettre à jour",
+      "intro": "{label} vous permet d'importer des tickets et de les joindre aux tâches comme contexte de l'agent.",
+      "credentialless": "Cette source utilise l'application GitHub déjà installée sur votre espace de travail, il n'y a donc aucun identifiant à saisir.",
+      "installAppHint": "Installez l'application GitHub de l'espace de travail (connectez des dépôts GitHub) pour proposer {label}.",
+      "connected": "Connectée.",
+      "connectedTo": "Connectée à {label}.",
+      "offerToWorkspace": "Proposer à cet espace de travail",
+      "offerHint": "Lorsqu'elle est désactivée, {label} est masquée de l'importation et de la liaison.",
+      "disconnect": "Déconnecter",
+      "updateConnection": "Mettre à jour la connexion",
+      "connect": "Connecter"
+    }
   }
 }
