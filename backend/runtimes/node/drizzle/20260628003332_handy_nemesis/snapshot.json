@@ -1,11 +1,10 @@
 {
-  "version": "8",
   "dialect": "postgres",
-  "id": "ff4804b4-a486-4c02-8e0c-7892c1a5522e",
+  "id": "09920ef9-30c2-4fbf-9cd9-e7d3681af253",
   "prevIds": [
-    "0b692460-d43b-43e7-b4a0-396f66bdbf5d",
-    "831ba498-de1d-41d0-8f67-fe9eb9bb527f"
+    "3cf68819-be91-4c77-870c-181f1e9af486"
   ],
+  "version": "8",
   "ddl": [
     {
       "name": "provisioning",
@@ -46,6 +45,18 @@
     {
       "isRlsEnabled": false,
       "name": "agent_runs",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "binary_artifact_blobs",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "binary_artifacts",
       "entityType": "tables",
       "schema": "public"
     },
@@ -1062,6 +1073,188 @@
       "entityType": "columns",
       "schema": "public",
       "table": "agent_runs"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "storage_key",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "binary_artifact_blobs"
+    },
+    {
+      "type": "bytea",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "bytes",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "binary_artifact_blobs"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "workspace_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "binary_artifacts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "binary_artifacts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "execution_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "binary_artifacts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "block_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "binary_artifacts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "kind",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "binary_artifacts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "view",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "binary_artifacts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "content_type",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "binary_artifacts"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "byte_size",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "binary_artifacts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "binary_artifacts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "storage",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "binary_artifacts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "storage_key",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "binary_artifacts"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "binary_artifacts"
     },
     {
       "type": "text",
@@ -9466,6 +9659,19 @@
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
+      "default": "14",
+      "generated": null,
+      "identity": null,
+      "name": "artifact_retention_days",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_settings"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
       "default": "1",
       "generated": null,
       "identity": null,
@@ -9827,6 +10033,90 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "agent_runs"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "workspace_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "execution_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_binary_artifacts_execution",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "binary_artifacts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "workspace_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "block_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_binary_artifacts_block",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "binary_artifacts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "workspace_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_binary_artifacts_created",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "binary_artifacts"
     },
     {
       "nameExplicit": true,
@@ -11735,6 +12025,17 @@
         "id"
       ],
       "nameExplicit": false,
+      "name": "binary_artifacts_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "binary_artifacts"
+    },
+    {
+      "columns": [
+        "workspace_id",
+        "id"
+      ],
+      "nameExplicit": false,
       "name": "blocks_pkey",
       "entityType": "pks",
       "schema": "public",
@@ -12216,6 +12517,16 @@
       "name": "agent_context_snapshots_pkey",
       "schema": "telemetry",
       "table": "agent_context_snapshots",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "storage_key"
+      ],
+      "nameExplicit": false,
+      "name": "binary_artifact_blobs_pkey",
+      "schema": "public",
+      "table": "binary_artifact_blobs",
       "entityType": "pks"
     },
     {

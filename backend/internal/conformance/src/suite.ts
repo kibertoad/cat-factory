@@ -2641,7 +2641,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
 
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Code + test',
-          agentKinds: ['coder', 'tester'],
+          agentKinds: ['coder', 'tester-api'],
         })
         // Opt the task into LOCAL testing without configuring the service's infra.
         await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
@@ -2678,7 +2678,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
 
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Code + test',
-          agentKinds: ['coder', 'tester'],
+          agentKinds: ['coder', 'tester-api'],
         })
 
         // Default the SERVICE frame to LOCAL testing without touching the task's own
@@ -2730,7 +2730,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           concerns: [],
         }
         const app = harness.makeApp({
-          asyncKinds: ['coder', 'tester', 'fixer'],
+          asyncKinds: ['coder', 'tester-api', 'fixer'],
           asyncPolls: 1,
           testReports: [notGreen, green],
           pullRequest: { url: 'https://gh/pr/1', number: 1, branch: 'cat-factory/task_login' },
@@ -2740,7 +2740,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
 
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Code + test loop',
-          agentKinds: ['coder', 'tester'],
+          agentKinds: ['coder', 'tester-api'],
         })
         // Ephemeral mode keeps the start guard happy without service infra config.
         await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
@@ -2756,11 +2756,130 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const ticked = await app.drive(wsId)
         const exec = ticked.find((e) => e.blockId === 'task_login')!
         expect(exec.status).toBe('done')
-        const testerStep = exec.steps.find((s) => s.agentKind === 'tester')!
+        const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
         expect(testerStep.state).toBe('done')
         // One fixer attempt was dispatched, and the final report greenlit.
         expect(testerStep.test?.attempts).toBe(1)
         expect(testerStep.test?.lastReport?.greenlight).toBe(true)
+      })
+
+      it('drives the visual-confirmation gate to completion (pass-through or park → approve)', async () => {
+        // A `tester-ui` → `visual-confirmation` tail: the UI tester greenlights, then the gate
+        // is reached. Whether it parks depends on the runtime's wiring: with NO binary-artifact
+        // store wired (Node conformance harness) it passes through and the run completes; with a
+        // store wired (the Worker test config binds an R2 bucket) it parks awaiting the human, and
+        // approving advances it. Either way the gate kind is engine-delegated and the run finishes —
+        // this pins both the delegation and the approve path across runtimes.
+        const green = {
+          greenlight: true,
+          summary: 'ui looks good',
+          tested: ['dashboard'],
+          outcomes: [{ name: 'dashboard', status: 'passed' as const }],
+          concerns: [],
+        }
+        const app = harness.makeApp({
+          asyncKinds: ['coder', 'tester-ui'],
+          asyncPolls: 1,
+          testReports: [green],
+          pullRequest: { url: 'https://gh/pr/2', number: 2, branch: 'cat-factory/task_login' },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'UI test + visual confirmation',
+          agentKinds: ['coder', 'tester-ui', 'visual-confirmation'],
+        })
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          agentConfig: { 'tester.environment': 'ephemeral' },
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        let exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        // Store wired ⇒ the gate parks awaiting the human; approve it, then drive to completion.
+        if (exec.status !== 'done') {
+          const gate = exec.steps.find((s) => s.agentKind === 'visual-confirmation')
+          expect(gate?.state).toBe('waiting_decision')
+          await app.call(
+            'POST',
+            `/workspaces/${wsId}/blocks/task_login/visual-confirmation/approve`,
+            {},
+          )
+          exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        }
+        expect(exec.status).toBe('done')
+        const gateStep = exec.steps.find((s) => s.agentKind === 'visual-confirmation')!
+        expect(gateStep.state).toBe('done')
+      })
+
+      it('visual-confirmation request-fix dispatches the fixer, re-parks, then approves', async () => {
+        // Exercises the gate's fix loop (only reachable when a binary-artifact store is wired, so
+        // the gate parks rather than passing through): a parked gate + a human "request a fix"
+        // dispatches the Tester's `fixer`, and when that job settles the gate re-parks (recording
+        // the round + bumping attempts) so the human can approve. On a runtime with NO store wired
+        // (the Node harness) the gate passes through and the fix path isn't reachable — we assert
+        // completion either way, and the fix-loop assertions only when the gate actually parked.
+        const green = {
+          greenlight: true,
+          summary: 'ui looks good',
+          tested: ['dashboard'],
+          outcomes: [{ name: 'dashboard', status: 'passed' as const }],
+          concerns: [],
+        }
+        const app = harness.makeApp({
+          asyncKinds: ['coder', 'tester-ui', 'fixer'],
+          asyncPolls: 1,
+          testReports: [green],
+          pullRequest: { url: 'https://gh/pr/3', number: 3, branch: 'cat-factory/task_login' },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'UI test + visual confirmation (fix)',
+          agentKinds: ['coder', 'tester-ui', 'visual-confirmation'],
+        })
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          agentConfig: { 'tester.environment': 'ephemeral' },
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        let exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        if (exec.status !== 'done') {
+          // Store wired ⇒ parked. Request a fix from findings: the fixer dispatches.
+          let gate = exec.steps.find((s) => s.agentKind === 'visual-confirmation')!
+          expect(gate.state).toBe('waiting_decision')
+          await app.call(
+            'POST',
+            `/workspaces/${wsId}/blocks/task_login/visual-confirmation/request-fix`,
+            { findings: 'The header is misaligned on the dashboard view.' },
+          )
+          // Drive the fixer job to completion; the gate re-parks awaiting the human.
+          exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+          gate = exec.steps.find((s) => s.agentKind === 'visual-confirmation')!
+          expect(gate.state).toBe('waiting_decision')
+          expect(gate.visualConfirm?.attempts).toBe(1)
+          expect(gate.visualConfirm?.rounds?.length).toBe(1)
+          expect(gate.visualConfirm?.rounds?.[0]?.outcome).toBe('completed')
+          // Now approve and drive to completion.
+          await app.call(
+            'POST',
+            `/workspaces/${wsId}/blocks/task_login/visual-confirmation/approve`,
+            {},
+          )
+          exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        }
+        expect(exec.status).toBe('done')
       })
 
       it('always loops the fixer on the FIRST round, then treats low/medium concerns as advisory', async () => {
@@ -2776,7 +2895,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           concerns: [{ title: 'naming', detail: 'rename a var', severity: 'low' as const }],
         }
         const app = harness.makeApp({
-          asyncKinds: ['coder', 'tester', 'fixer'],
+          asyncKinds: ['coder', 'tester-api', 'fixer'],
           asyncPolls: 1,
           // The SAME nit on both rounds: round 1 loops the fixer (first batch always
           // does); round 2 greenlights it (now advisory).
@@ -2787,7 +2906,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const wsId = workspace.id
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Code + test nit',
-          agentKinds: ['coder', 'tester'],
+          agentKinds: ['coder', 'tester-api'],
         })
         await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
           agentConfig: { 'tester.environment': 'ephemeral' },
@@ -2798,7 +2917,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(start.status).toBe(201)
         const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
         expect(exec.status).toBe('done')
-        const testerStep = exec.steps.find((s) => s.agentKind === 'tester')!
+        const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
         expect(testerStep.state).toBe('done')
         // The first-round nit looped the fixer exactly once; the second-round nit was advisory.
         expect(testerStep.test?.attempts).toBe(1)
@@ -2819,7 +2938,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           concerns: [{ title: 'NPE', detail: 'crashes on null', severity: 'critical' as const }],
         }
         const app = harness.makeApp({
-          asyncKinds: ['tester', 'fixer'],
+          asyncKinds: ['tester-api', 'fixer'],
           asyncPolls: 1,
           testReports: [bogusGreen],
           // No pullRequest → no branch for the fixer to push to → terminal failure.
@@ -2828,7 +2947,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const wsId = workspace.id
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Test only',
-          agentKinds: ['tester'],
+          agentKinds: ['tester-api'],
         })
         await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
           agentConfig: { 'tester.environment': 'ephemeral' },
@@ -2839,7 +2958,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(start.status).toBe(201)
         const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
         expect(exec.status).toBe('failed')
-        const testerStep = exec.steps.find((s) => s.agentKind === 'tester')!
+        const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
         expect(testerStep.state).not.toBe('done')
       })
 
@@ -3502,7 +3621,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
       it('rejects a companion separated from its producer by another step (strict adjacency)', async () => {
         // A companion must run IMMEDIATELY after a producer it can review — the builder
         // surfaces companions as toggles attached to their producer, and the validation
-        // enforces that adjacency on EVERY facade. ['coder','tester','reviewer'] slips
+        // enforces that adjacency on EVERY facade. ['coder','tester-api','reviewer'] slips
         // `tester` between the coder and its `reviewer` companion, so the pipeline save is
         // rejected (a `validation` domain error → 422) before any run is created.
         const app = harness.makeApp({ confidence: 1 })
@@ -3510,7 +3629,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const wsId = workspace.id
         const res = await app.call('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Build + gap companion',
-          agentKinds: ['coder', 'tester', 'reviewer'],
+          agentKinds: ['coder', 'tester-api', 'reviewer'],
         })
         expect(res.status).toBe(422)
       })

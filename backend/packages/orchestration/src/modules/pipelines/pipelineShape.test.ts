@@ -22,10 +22,10 @@ describe('validatePipelineShape', () => {
     // Adjacent producer → companion is valid.
     expect(() => assertValidCompanionPlacement(['coder', 'reviewer'])).not.toThrow()
     // A step slipped between the producer and its companion → rejected (strict adjacency).
-    expect(() => assertValidCompanionPlacement(['coder', 'tester', 'reviewer'])).toThrow()
+    expect(() => assertValidCompanionPlacement(['coder', 'tester-api', 'reviewer'])).toThrow()
     // Adjacency is over the ENABLED subset: a disabled step between them doesn't break it.
     expect(() =>
-      assertValidCompanionPlacement(['coder', 'tester', 'reviewer'], [true, false, true]),
+      assertValidCompanionPlacement(['coder', 'tester-api', 'reviewer'], [true, false, true]),
     ).not.toThrow()
   })
 
@@ -53,7 +53,7 @@ describe('validatePipelineShape', () => {
   it('only allows gating on companion steps (skipping a producer would starve downstream)', () => {
     // A producer (coder) cannot be estimate-gated even with an estimator before it.
     expect(() =>
-      assertValidGating(['task-estimator', 'coder', 'tester'], undefined, [
+      assertValidGating(['task-estimator', 'coder', 'tester-api'], undefined, [
         null,
         { enabled: true, minRisk: 0.5 },
         null,

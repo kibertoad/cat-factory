@@ -25,7 +25,7 @@ import { startNotificationEscalationSweeper } from './notifications.js'
 import { NodeRealtimeHub, attachRealtime } from './realtime.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
 import { DrizzleSubscriptionActivationRepository } from './repositories/personalSubscription.js'
-import { startRetentionSweeper } from './retention.js'
+import { startArtifactRetentionSweeper, startRetentionSweeper } from './retention.js'
 import { SystemClock } from './runtime.js'
 
 // The Node facade: the SAME shared Hono app (controllers + middleware) the Cloudflare
@@ -155,6 +155,16 @@ export async function start(
     clock,
     logger,
   )
+  // Per-workspace binary-artifact (screenshot) retention; only when blob storage is wired.
+  const stopArtifactRetention = container.binaryArtifactStore
+    ? startArtifactRetentionSweeper(
+        container.binaryArtifactStore,
+        repos.workspaceRepository,
+        repos.workspaceSettingsRepository,
+        clock,
+        logger,
+      )
+    : () => {}
   // Fire due recurring pipelines on a one-minute timer (the Worker uses cron).
   const stopScheduleSweeper = startScheduleSweeper(container, clock, logger)
   // Tear down expired ephemeral environments (the Worker uses cron); no-op unless the
@@ -187,6 +197,7 @@ export async function start(
     logger.info({ signal }, 'shutting down cat-factory node server')
     stopSweeper()
     stopRetention()
+    stopArtifactRetention()
     stopScheduleSweeper()
     stopEnvironmentSweeper()
     stopNotificationEscalation()

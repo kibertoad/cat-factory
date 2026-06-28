@@ -222,6 +222,10 @@ export type {
   HumanTestEnvironment,
   HumanTestRound,
   RequestHumanTestFixInput,
+  // Visual-confirmation gate shapes (screenshot review + fix loop).
+  VisualConfirmStepState,
+  VisualConfirmPair,
+  VisualConfirmRound,
   MergeAssessment,
   MergeThresholdPreset,
   RequirementConcernLevel,

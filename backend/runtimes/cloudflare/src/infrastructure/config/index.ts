@@ -75,6 +75,9 @@ export function loadConfig(env: Env): AppConfig {
     runners: loadRunnerPoolConfig(env),
     slack: loadSlackConfig(env),
     releaseHealth: loadReleaseHealthConfig(env),
+    // On Cloudflare blobs always go to R2 (D1 can't hold large values); enabled
+    // whenever the ARTIFACT_BUCKET binding is present.
+    binaryStorage: { enabled: !!env.ARTIFACT_BUCKET, backend: 'r2' },
     email: loadEmailConfig(env),
     retention: loadRetentionConfig(env),
     fragmentLibrary: loadFragmentLibraryConfig(env),

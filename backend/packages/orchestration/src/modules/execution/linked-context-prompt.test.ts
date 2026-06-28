@@ -52,7 +52,7 @@ function contextFor(agentKind: AgentKind): AgentRunContext {
 
 describe('linked context in agent prompts', () => {
   // The standard phases are the code-producing ones; they matter most.
-  for (const kind of ['architect', 'coder', 'reviewer', 'tester'] as AgentKind[]) {
+  for (const kind of ['architect', 'coder', 'reviewer', 'tester-api'] as AgentKind[]) {
     it(`includes linked docs and issues for the standard "${kind}" phase`, () => {
       const prompt = userPromptFor(contextFor(kind))
       expect(prompt).toContain('Linked context documents')
