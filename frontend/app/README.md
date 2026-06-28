@@ -35,7 +35,7 @@ over the WebSocket. How that sync works is written up in
 
 - **Nuxt 4 / Vue 3** SPA — single route (`pages/index.vue`).
 - **Pinia** (+ `pinia-plugin-persistedstate`) — feature stores.
-- **Vue Flow** (`core`, `background`, `controls`, `minimap`, `node-resizer`) — the canvas.
+- **Vue Flow** (`core`, `background`, `controls`, `node-resizer`) — the canvas.
 - **Nuxt UI** + Tailwind — components and styling.
 - **VueUse** — composable utilities.
 - Lint/format via **oxlint** + **oxfmt**; tests via **vitest** + **happy-dom**.
