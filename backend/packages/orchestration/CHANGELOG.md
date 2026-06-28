@@ -1,5 +1,27 @@
 # @cat-factory/orchestration
 
+## 0.36.3
+
+### Patch Changes
+
+- ab146e5: Suppress the real-time self-echo for board moves/reparents so dragging a task several
+  times in quick succession is reliable. The SPA now tags every request with a stable
+  per-tab connection id (`X-Connection-Id`) and the realtime WebSocket connect with the
+  matching `?cid=`; the board `move`/`reparent` controllers forward it through
+  `BoardService` to `boardChanged`, and both realtime hubs (the Cloudflare
+  `WorkspaceEventsHub` Durable Object and the Node `NodeRealtimeHub`) skip delivering the
+  coarse `board` event back to the connection that caused it. The originating client keeps
+  its optimistic state plus its own authoritative REST response instead of refreshing off
+  its own move (a mid-flight snapshot of which carried a stale position, snapping the block
+  back). Other subscribers still receive the event and refresh.
+- Updated dependencies [ab146e5]
+  - @cat-factory/kernel@0.45.3
+  - @cat-factory/agents@0.21.4
+  - @cat-factory/integrations@0.26.3
+  - @cat-factory/sandbox@0.8.27
+  - @cat-factory/spend@0.10.19
+  - @cat-factory/workspaces@0.9.10
+
 ## 0.36.2
 
 ### Patch Changes
