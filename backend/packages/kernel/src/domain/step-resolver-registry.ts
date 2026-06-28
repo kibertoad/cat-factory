@@ -44,19 +44,6 @@ export interface StepResolution {
    * engine's `finalizeBlock` then only backstops a block the resolver left untouched.
    */
   ownsTerminalStatus?: boolean
-  /**
-   * How the engine should proceed after this resolver runs, for the few kinds whose
-   * completion is NOT a plain "finish the step and advance":
-   *   - `advance` (default, also when omitted) — finish the step and advance/finalize as usual.
-   *   - `park` — the resolver parked the run on a decision/approval; the engine returns the
-   *     parking outcome instead of advancing (e.g. a container companion that withheld its
-   *     verdict pending a human gate).
-   *   - `loop` — the resolver re-queued an earlier step (e.g. a Tester that withheld its
-   *     greenlight re-runs the fixer); the engine returns early WITHOUT finishing this step.
-   * Consumed from Phase 3 of the ExecutionService split; resolvers that don't set it keep
-   * today's advance-on-completion behaviour.
-   */
-  control?: 'park' | 'loop' | 'advance'
 }
 
 /**

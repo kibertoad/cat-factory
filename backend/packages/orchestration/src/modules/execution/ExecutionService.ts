@@ -103,6 +103,8 @@ import {
   FALLTHROUGH_STEP_HANDLER_ORDER,
   type StepHandler,
   type StepHandlerContext,
+  type StepCompletionContext,
+  type StepCompletionInterceptor,
 } from './step-handler-registry.js'
 import type {
   GateContext,
@@ -599,6 +601,11 @@ export class ExecutionService {
    * and {@link StepHandler}. Engine-internal (no public registration seam).
    */
   private stepHandlerCache?: StepHandler[]
+  /**
+   * Lazily-built, order-sorted completion-path interceptor list (companion/tester verdict
+   * short-circuits). See {@link dispatchStepCompletionInterceptor}. Engine-internal.
+   */
+  private stepCompletionInterceptorCache?: StepCompletionInterceptor[]
 
   constructor({
     workspaceRepository,
@@ -2256,38 +2263,20 @@ export class ExecutionService {
       return { kind: 'awaiting_decision', decisionId: step.decision.id }
     }
 
-    // A container-backed companion (reviewer / doc-reviewer) just finished reviewing the
-    // real repository on the producer's PR branch and returned its verdict as `result.custom`.
-    // Hand it to the companion loop, which parses the verdict and applies the SAME threshold /
-    // rework / human-gate handling an inline companion gets. Routed here (not the normal step
-    // completion) so the verdict drives the loop instead of being recorded as plain output.
-    if (isCompanionKind(step.agentKind) && isContainerBackedCompanion(step.agentKind)) {
-      const companionBlock = await this.blockRepository.get(workspaceId, instance.blockId)
-      if (companionBlock) {
-        return this.companionController.resolveContainerVerdict(
-          workspaceId,
-          instance,
-          step,
-          companionBlock,
-          isFinalStep,
-          result,
-        )
-      }
-    }
-
-    // A `tester` step returned a structured report. On a withheld greenlight we do
-    // NOT finish the step: we loop the `fixer` (within the attempt budget) and
-    // re-test, mirroring the CI gate. A greenlight (or no provider) falls through to
-    // the normal finish/advance below. Records the report on the step either way.
-    if (isTesterKind(step.agentKind) && result.testReport !== undefined) {
-      const looped = await this.testerController.resolveTesterResult(
-        workspaceId,
-        instance,
-        step,
-        result,
-      )
-      if (looped) return looped
-    }
+    // Completion-path interceptors short-circuit before the normal finish/advance for the
+    // few kinds whose verdict drives run flow: a container-backed companion applies its
+    // threshold/rework/human-gate loop, and a Tester re-runs its `fixer` on a withheld
+    // greenlight. A non-null outcome replaces the normal completion; null (a Tester
+    // greenlight, or a companion whose block can't be loaded) falls through. See
+    // {@link buildStepCompletionInterceptors}.
+    const intercepted = await this.dispatchStepCompletionInterceptor({
+      workspaceId,
+      instance,
+      step,
+      isFinalStep,
+      result,
+    })
+    if (intercepted) return intercepted
 
     // The step completed.
     step.output = result.output ?? ''
@@ -2902,6 +2891,74 @@ export class ExecutionService {
       },
     ]
     return handlers.sort((a, b) => a.order - b.order)
+  }
+
+  /**
+   * Run the first completion-path interceptor that claims this finished step, returning its
+   * short-circuit {@link AdvanceResult} (the companion verdict loop / tester re-test) or
+   * `null` to let `recordStepResult`'s normal finish/advance spine run. Engine-internal,
+   * mirroring {@link dispatchStepHandler}.
+   */
+  private async dispatchStepCompletionInterceptor(
+    ctx: StepCompletionContext,
+  ): Promise<AdvanceResult | null> {
+    if (!this.stepCompletionInterceptorCache) {
+      this.stepCompletionInterceptorCache = this.buildStepCompletionInterceptors()
+    }
+    for (const interceptor of this.stepCompletionInterceptorCache) {
+      if (interceptor.canIntercept(ctx)) {
+        const outcome = await interceptor.intercept(ctx)
+        if (outcome) return outcome
+      }
+    }
+    return null
+  }
+
+  /**
+   * Build the order-sorted completion-path interceptors (companion / tester verdict
+   * short-circuits), mirroring {@link buildStepHandlerRegistry} — built-ins constructed
+   * inline closing over `this`, no public registration seam.
+   */
+  private buildStepCompletionInterceptors(): StepCompletionInterceptor[] {
+    const interceptors: StepCompletionInterceptor[] = [
+      // A container-backed companion (reviewer / doc-reviewer) just finished reviewing the
+      // real repository on the producer's PR branch and returned its verdict as
+      // `result.custom`. Hand it to the companion loop, which parses the verdict and applies
+      // the SAME threshold / rework / human-gate handling an inline companion gets. Routed
+      // here (not the normal step completion) so the verdict drives the loop instead of being
+      // recorded as plain output. Falls through (returns null) when the block can't be loaded.
+      {
+        kind: 'companion-verdict',
+        order: 100,
+        canIntercept: ({ step }) =>
+          isCompanionKind(step.agentKind) && isContainerBackedCompanion(step.agentKind),
+        intercept: async ({ workspaceId, instance, step, isFinalStep, result }) => {
+          const companionBlock = await this.blockRepository.get(workspaceId, instance.blockId)
+          if (!companionBlock) return null
+          return this.companionController.resolveContainerVerdict(
+            workspaceId,
+            instance,
+            step,
+            companionBlock,
+            isFinalStep,
+            result,
+          )
+        },
+      },
+      // A `tester` step returned a structured report. On a withheld greenlight we do NOT
+      // finish the step: loop the `fixer` (within the attempt budget) and re-test, mirroring
+      // the CI gate. A greenlight (or no provider) returns null and falls through to the
+      // normal finish/advance below. Records the report on the step either way.
+      {
+        kind: 'tester-verdict',
+        order: 110,
+        canIntercept: ({ step, result }) =>
+          isTesterKind(step.agentKind) && result.testReport !== undefined,
+        intercept: ({ workspaceId, instance, step, result }) =>
+          this.testerController.resolveTesterResult(workspaceId, instance, step, result),
+      },
+    ]
+    return interceptors.sort((a, b) => a.order - b.order)
   }
 
   private stepResolverFor(agentKind: string): StepCompletionResolver | undefined {
