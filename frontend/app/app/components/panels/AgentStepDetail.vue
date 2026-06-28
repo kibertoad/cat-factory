@@ -176,7 +176,7 @@ async function copyOutput() {
       <div
         v-if="open && step && agent"
         data-testid="step-detail"
-        class="fixed inset-0 z-50 flex bg-slate-950/96 backdrop-blur-sm"
+        class="fixed inset-0 z-50 flex max-h-[100dvh] bg-slate-950/96 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
       >
@@ -430,7 +430,7 @@ async function copyOutput() {
              bottom sheet (still reachable) below lg, so the gate is always actionable. -->
         <aside
           v-if="approvalPending && !companionExceeded"
-          class="absolute inset-x-0 bottom-0 z-10 flex max-h-[70vh] flex-col rounded-t-2xl border-t border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:w-96 lg:shrink-0 lg:rounded-none lg:border-l lg:border-t-0 lg:border-slate-800 lg:bg-slate-900/60 lg:shadow-none lg:backdrop-blur-none"
+          class="absolute inset-x-0 bottom-0 z-10 flex max-h-[70dvh] flex-col rounded-t-2xl border-t border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:w-96 lg:shrink-0 lg:rounded-none lg:border-l lg:border-t-0 lg:border-slate-800 lg:bg-slate-900/60 lg:shadow-none lg:backdrop-blur-none"
         >
           <div class="border-b border-slate-800 px-4 py-3">
             <div class="text-[11px] font-semibold uppercase tracking-wide text-amber-400">

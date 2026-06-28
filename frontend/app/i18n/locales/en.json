@@ -1,4 +1,13 @@
 {
+  "language": {
+    "switcher": "Language",
+    "warning": {
+      "title": "Unofficial translation",
+      "body": "This translation is community-provided and may be inaccurate. Spotted a mistake? Please report it or open a fix on {repoLink}.",
+      "repoLinkLabel": "the cat-factory repository",
+      "dismiss": "Dismiss"
+    }
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

@@ -100,7 +100,7 @@ const canDestroy = computed(
   <Teleport to="body">
     <div
       v-if="open"
-      class="fixed inset-0 z-50 flex items-stretch justify-center bg-slate-950/70 backdrop-blur-sm"
+      class="fixed inset-0 z-50 flex max-h-[100dvh] items-stretch justify-center bg-slate-950/70 backdrop-blur-sm"
       @click.self="close"
     >
       <div
