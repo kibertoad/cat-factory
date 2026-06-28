@@ -972,6 +972,7 @@ overrides or adds locales by dropping its own files, so the layer's per-layer
 **deep-merge** is the override seam (consumer wins, key by key).
 
 **Where things live:**
+
 - `frontend/app/i18n/locales/<locale>.json` — the message catalog (the v9+ `i18n/`
   `restructureDir` convention; **NOT** `app/locales/`). Today only `en.json` exists.
 - `frontend/app/i18n/i18n.config.ts` — runtime vue-i18n behaviour only (fallback locale +
@@ -985,6 +986,7 @@ overrides or adds locales by dropping its own files, so the layer's per-layer
   locales don't ship in the published layer.
 
 **Adding / changing a translatable string (the day-to-day flow):**
+
 1. Add the key to `i18n/locales/en.json` under the feature namespace, then resolve it at
    the call site with `t('feature.area.key')` (template) / `useI18n().t(...)` (script).
 2. Format **numbers, currency, percentages, and dates through vue-i18n**, not raw `Intl`:
@@ -995,6 +997,7 @@ overrides or adds locales by dropping its own files, so the layer's per-layer
    `nuxt.config.ts` `locales` array (and, downstream, just drop the JSON to override).
 
 **Key conventions:**
+
 - One namespace per feature; resolve with `t('feature.area.key')`.
 - **Leaf keys mirror the enum/code value verbatim** so a dynamic lookup is total — e.g.
   `errors.conflict.title.<reason>`, `catalog.status.<status>`.
@@ -1009,22 +1012,33 @@ a mapping lives in `@cat-factory/contracts` (e.g. `ConflictReason`), so the SPA 
 SAME source of truth the backend throws against.
 
 **Drift guards (the repo lints with oxlint only, so the ESLint `@intlify/.../no-raw-text`
-rule is unavailable — these two tiers replace it):**
-1. **Typed message keys** (`i18n.experimental.typedOptionsAndMessages`) make a *statically
-   written* unknown `t('literal.key')` a `nuxt typecheck` failure (a CI gate). This does
-   NOT cover a key assembled at runtime — a `t(\`errors.conflict.title.${reason}\`)` template
-   or a variable key is typed as `string`, so the compiler can't check it.
+rule is unavailable — these tiers replace it):**
+
+1. **Typed message keys** (`i18n.experimental.typedOptionsAndMessages`) make a _statically
+   written_ unknown `t('literal.key')` a `nuxt typecheck` failure (a CI gate). This does
+   NOT cover a key assembled at runtime — a `t(\`errors.conflict.title.${reason}\`)`template
+or a variable key is typed as`string`, so the compiler can't check it.
 2. For those **dynamic enum→key lookups**, guard with an **exhaustive `Record<TheEnum,
-   string>`** keyed off the source-of-truth union (e.g. `CONFLICT_TITLE_KEYS` in
+string>`** keyed off the source-of-truth union (e.g. `CONFLICT_TITLE_KEYS` in
    `usePipelineErrorToast.ts`, keyed off the contracts `ConflictReason`): adding an enum
    value without a key fails the typecheck on the map, and a runtime `te()`-guard falls back
    rather than leaking a raw key if a locale omits one. **Never rely on tier 1 alone for a
    reason/status-keyed lookup.**
 
-A `vue-i18n-extract` missing/unused-key CI check is the planned secondary guard. Migration
-is incremental — `usePipelineErrorToast` is the pilot; most components still hold inline
-strings, so **when you touch a component, lift its visible copy into the catalog** rather
-than adding more raw text.
+3. A `vue-i18n-extract` CI check is the secondary guard for keys the typecheck can't see
+   (runtime-built lookups) and for catalog staleness. It runs in CI's `build-typecheck`
+   job via `pnpm --filter @cat-factory/app run i18n:check` (the wrapper
+   `frontend/app/scripts/i18n-check.mjs`, which drives the `createI18NReport` programmatic
+   API). It **hard-fails on MISSING keys** (a `t('…')` whose key is absent from the
+   catalog — a raw-key leak) and **reports UNUSED keys as non-blocking warnings**: the
+   catalog seeds keys ahead of use (`common.save|cancel|retry`) and references many
+   indirectly (the `CONFLICT_TITLE_KEYS` Record, keys passed as string literals to
+   `usePipelineErrorToast().present(...)`), which the scanner can't see as used — so an
+   unused-key hard gate would fail spuriously and fight the incremental migration.
+
+Migration is incremental — `usePipelineErrorToast` is the pilot; most components still hold
+inline strings, so **when you touch a component, lift its visible copy into the catalog**
+rather than adding more raw text.
 
 ## Conventions
 

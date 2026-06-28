@@ -20,6 +20,7 @@
   "scripts": {
     "postinstall": "nuxt prepare",
     "typecheck": "nuxt typecheck",
+    "i18n:check": "node scripts/i18n-check.mjs",
     "test": "vitest",
     "test:run": "vitest run"
   },
@@ -50,6 +51,7 @@
     "nuxt": "^4.4.8",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",
+    "vue-i18n-extract": "^2.0.7",
     "vue-tsc": "^3.3.5"
   },
   "peerDependencies": {
