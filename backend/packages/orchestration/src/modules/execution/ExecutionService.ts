@@ -696,17 +696,8 @@ export class ExecutionService {
       idGenerator,
       previewStepModel: (ctx) => this.previewStepModel(ctx),
       runAgent: (ctx, opts) => this.runAgent(ctx, opts),
-      finishStep: (s) => this.stepGraph.finishStep(s),
-      startStep: (s) => this.stepGraph.startStep(s),
-      pauseStepForInput: (s) => this.stepGraph.pauseStepForInput(s),
-      updateBlockProgress: (ws, i, st) => this.runStateMachine.updateBlockProgress(ws, i, st),
-      persistInstance: (ws, i) => this.executionRepository.upsert(ws, i),
-      emitInstance: (ws, i) => this.runStateMachine.emitInstance(ws, i),
-      stopRunContainer: (ws, i) => this.runStateMachine.stopRunContainer(ws, i),
-      finalizeBlock: (ws, i, c) => this.runStateMachine.finalizeBlock(ws, i, c),
-      parkStepOnDecision: (ws, i, s, p) => this.runStateMachine.parkStepOnDecision(ws, i, s, p),
-      raiseDecisionRequired: (ws, i) => this.runStateMachine.raiseDecisionRequired(ws, i),
-      loopCompanionProducer: (i, ci, rw) => this.stepGraph.loopCompanionProducer(i, ci, rw),
+      stateMachine: this.runStateMachine,
+      stepGraph: this.stepGraph,
       inferTechnicalLabel: (ws, block, producer, companionStep) =>
         this.inferBlockTechnical(ws, block, producer, companionStep),
     })
@@ -716,9 +707,7 @@ export class ExecutionService {
       agentExecutor,
       contextBuilder: this.contextBuilder,
       resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
-      stopRunContainer: (ws, i) => this.runStateMachine.stopRunContainer(ws, i),
-      persistInstance: (ws, i) => this.executionRepository.upsert(ws, i),
-      emitInstance: (ws, i) => this.runStateMachine.emitInstance(ws, i),
+      stateMachine: this.runStateMachine,
     })
     this.humanTestController = new HumanTestController({
       blockRepository,
@@ -752,14 +741,8 @@ export class ExecutionService {
         : {}),
       ...(branchUpdater ? { branchUpdater } : {}),
       resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
-      parkStepOnDecision: (ws, i, s, p) => this.runStateMachine.parkStepOnDecision(ws, i, s, p),
-      finishStep: (s) => this.stepGraph.finishStep(s),
-      startStep: (s) => this.stepGraph.startStep(s),
-      updateBlockProgress: (ws, i, st) => this.runStateMachine.updateBlockProgress(ws, i, st),
-      finalizeBlock: (ws, i, c) => this.runStateMachine.finalizeBlock(ws, i, c),
-      stopRunContainer: (ws, i) => this.runStateMachine.stopRunContainer(ws, i),
-      persistInstance: (ws, i) => this.executionRepository.upsert(ws, i),
-      emitInstance: (ws, i) => this.runStateMachine.emitInstance(ws, i),
+      stateMachine: this.runStateMachine,
+      stepGraph: this.stepGraph,
       clockNow: () => this.clock.now(),
     })
     this.visualConfirmationController = new VisualConfirmationController({
@@ -771,34 +754,19 @@ export class ExecutionService {
       notificationService,
       ...(resolveBinaryArtifactStore ? { resolveBinaryArtifactStore } : {}),
       resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
-      parkStepOnDecision: (ws, i, s, p) => this.runStateMachine.parkStepOnDecision(ws, i, s, p),
-      finishStep: (s) => this.stepGraph.finishStep(s),
-      startStep: (s) => this.stepGraph.startStep(s),
-      updateBlockProgress: (ws, i, st) => this.runStateMachine.updateBlockProgress(ws, i, st),
-      finalizeBlock: (ws, i, c) => this.runStateMachine.finalizeBlock(ws, i, c),
-      stopRunContainer: (ws, i) => this.runStateMachine.stopRunContainer(ws, i),
-      persistInstance: (ws, i) => this.executionRepository.upsert(ws, i),
-      emitInstance: (ws, i) => this.runStateMachine.emitInstance(ws, i),
+      stateMachine: this.runStateMachine,
+      stepGraph: this.stepGraph,
       clockNow: () => this.clock.now(),
     })
     this.reviewGate = new ReviewGateController({
       blockRepository,
       executionRepository,
       workRunner,
+      stateMachine: this.runStateMachine,
+      stepGraph: this.stepGraph,
       resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
-      parkStepOnDecision: (ws, i, s, p) => this.runStateMachine.parkStepOnDecision(ws, i, s, p),
-      advancePastResolvedGate: (ws, i, idx) =>
-        this.runStateMachine.advancePastResolvedGate(ws, i, idx),
       dispatchIterationCap: (ws, blockId, choice, handlers) =>
         this.dispatchIterationCap(ws, blockId, choice, handlers),
-      raiseDecisionRequired: (ws, i) => this.runStateMachine.raiseDecisionRequired(ws, i),
-      finishStep: (s) => this.stepGraph.finishStep(s),
-      startStep: (s) => this.stepGraph.startStep(s),
-      updateBlockProgress: (ws, i, st) => this.runStateMachine.updateBlockProgress(ws, i, st),
-      finalizeBlock: (ws, i, c) => this.runStateMachine.finalizeBlock(ws, i, c),
-      stopRunContainer: (ws, i) => this.runStateMachine.stopRunContainer(ws, i),
-      persistInstance: (ws, i) => this.executionRepository.upsert(ws, i),
-      emitInstance: (ws, i) => this.runStateMachine.emitInstance(ws, i),
     })
     this.requirementsKind = this.buildRequirementsKind()
     this.clarityKind = this.buildClarityKind()

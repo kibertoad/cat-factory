@@ -12,6 +12,8 @@ import { assertFound, ConflictError, ValidationError } from '@cat-factory/kernel
 import { hasNotesToIncorporate } from '../requirements/requirements.logic.js'
 import type { ReviewCommon } from '../review/IterativeReviewService.js'
 import type { AdvanceResult } from './advance.js'
+import type { RunStateMachine } from './RunStateMachine.js'
+import type { StepGraph } from './StepGraph.js'
 
 /**
  * The merge-preset knobs an iterative review consults: how many reviewer passes it
@@ -87,54 +89,27 @@ export interface ReviewKind<TReview extends ReviewCommon> {
 }
 
 /**
- * The engine flow-control operations the review gates drive. These stay on
- * `ExecutionService` — they are the shared state-machine primitives reused by the generic
- * approval path and the companion iteration-cap gate (`parkStepOnDecision`,
- * `advancePastResolvedGate`, `dispatchIterationCap`) — and are injected here so the
- * requirements + clarity gate flow can live in its own unit without duplicating them.
+ * What the review gates need beyond the shared run state-machine spine. The spine primitives
+ * the gate flow drives (park / advance-past-resolved / finalize / persist / emit / progress /
+ * start-finish a step) now come from the cohesive {@link RunStateMachine} + {@link StepGraph}
+ * collaborators instead of a per-callback bag, so this is just the gate's own data access plus
+ * the two genuinely gate-flow operations (`resolveMergePreset`, `dispatchIterationCap`).
  */
 export interface ReviewGateControllerDeps {
   blockRepository: BlockRepository
   executionRepository: ExecutionRepository
   workRunner: WorkRunner
+  /** The async instance/block spine (park/advance/finalize/persist/emit/progress/notify). */
+  stateMachine: RunStateMachine
+  /** The pure step mutators (start/finish a step). */
+  stepGraph: StepGraph
   resolveMergePreset: (workspaceId: string, block: Block) => Promise<ReviewPreset>
-  parkStepOnDecision: (
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    proposal?: string,
-  ) => Promise<AdvanceResult>
-  advancePastResolvedGate: (
-    workspaceId: string,
-    instance: ExecutionInstance,
-    stepIndex: number,
-  ) => Promise<void>
   dispatchIterationCap: (
     workspaceId: string,
     blockId: string,
     choice: ResolveRequirementsExceededChoice,
     handlers: { extraRound: () => Promise<unknown>; proceed: () => Promise<unknown> },
   ) => Promise<void>
-  /**
-   * Raise a `decision_required` notification when the gate parks at its iteration cap, so
-   * the three-choice decision is discoverable instead of the run looking silently stuck.
-   */
-  raiseDecisionRequired: (workspaceId: string, instance: ExecutionInstance) => Promise<void>
-  finishStep: (step: PipelineStep) => void
-  startStep: (step: PipelineStep) => void
-  updateBlockProgress: (
-    workspaceId: string,
-    instance: ExecutionInstance,
-    status: 'in_progress' | 'blocked',
-  ) => Promise<void>
-  finalizeBlock: (
-    workspaceId: string,
-    instance: ExecutionInstance,
-    confidence: number | undefined,
-  ) => Promise<void>
-  stopRunContainer: (workspaceId: string, instance: ExecutionInstance) => Promise<void>
-  persistInstance: (workspaceId: string, instance: ExecutionInstance) => Promise<void>
-  emitInstance: (workspaceId: string, instance: ExecutionInstance) => Promise<void>
 }
 
 /**
@@ -182,7 +157,7 @@ export class ReviewGateController {
     if (pendingRec && kind.fillRecommendations) {
       step.pendingRecommendation = null
       await kind.fillRecommendations(workspaceId, block.id)
-      return this.deps.parkStepOnDecision(workspaceId, instance, step)
+      return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
     }
 
     // Re-entry: the human answered the findings and asked to incorporate. Do the (slow)
@@ -198,8 +173,9 @@ export class ReviewGateController {
       }
       // `ready`/`exceeded`: re-park (a fresh decision id) and wait for the human again.
       // At the cap, raise a notification so the three-choice decision is discoverable.
-      if (review.status === 'exceeded') await this.deps.raiseDecisionRequired(workspaceId, instance)
-      return this.deps.parkStepOnDecision(workspaceId, instance, step)
+      if (review.status === 'exceeded')
+        await this.deps.stateMachine.raiseDecisionRequired(workspaceId, instance)
+      return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
     }
 
     // Fresh entry: run the initial reviewer pass with the task's preset knobs (shared with
@@ -210,8 +186,9 @@ export class ReviewGateController {
     if (review.status === 'incorporated') {
       return this.completeStep(workspaceId, instance, step, isFinalStep)
     }
-    if (review.status === 'exceeded') await this.deps.raiseDecisionRequired(workspaceId, instance)
-    return this.deps.parkStepOnDecision(workspaceId, instance, step)
+    if (review.status === 'exceeded')
+      await this.deps.stateMachine.raiseDecisionRequired(workspaceId, instance)
+    return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
   }
 
   /**
@@ -263,24 +240,24 @@ export class ReviewGateController {
     step: PipelineStep,
     isFinalStep: boolean,
   ): Promise<AdvanceResult> {
-    this.deps.finishStep(step)
+    this.deps.stepGraph.finishStep(step)
     step.progress = 1
     step.subtasks = undefined
     step.approval = null
     if (isFinalStep) {
       instance.status = 'done'
-      await this.deps.finalizeBlock(workspaceId, instance, undefined)
-      await this.deps.persistInstance(workspaceId, instance)
-      await this.deps.emitInstance(workspaceId, instance)
-      await this.deps.stopRunContainer(workspaceId, instance)
+      await this.deps.stateMachine.finalizeBlock(workspaceId, instance, undefined)
+      await this.deps.stateMachine.persistInstance(workspaceId, instance)
+      await this.deps.stateMachine.emitInstance(workspaceId, instance)
+      await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
       return { kind: 'done' }
     }
     instance.currentStep += 1
     const next = instance.steps[instance.currentStep]
-    if (next) this.deps.startStep(next)
-    await this.deps.updateBlockProgress(workspaceId, instance, 'in_progress')
-    await this.deps.persistInstance(workspaceId, instance)
-    await this.deps.emitInstance(workspaceId, instance)
+    if (next) this.deps.stepGraph.startStep(next)
+    await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
+    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
   }
 
@@ -356,8 +333,8 @@ export class ReviewGateController {
     // forever. Mirrors every other resume path (e.g. `advancePastResolvedGate`).
     if (instance.status === 'blocked') instance.status = 'running'
     const updated = await kind.markIncorporating(workspaceId, review.id)
-    await this.deps.persistInstance(workspaceId, instance)
-    await this.deps.emitInstance(workspaceId, instance)
+    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.emitInstance(workspaceId, instance)
     await kind.emit(workspaceId, updated)
     await this.deps.workRunner.signalDecision(
       workspaceId,
@@ -450,8 +427,8 @@ export class ReviewGateController {
     // unless `running`/`paused`) so the woken driver actually re-enters the gate. Mirrors
     // {@link incorporate}.
     if (instance.status === 'blocked') instance.status = 'running'
-    await this.deps.persistInstance(workspaceId, instance)
-    await this.deps.emitInstance(workspaceId, instance)
+    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.emitInstance(workspaceId, instance)
     await this.deps.workRunner.signalDecision(
       workspaceId,
       instance.id,
@@ -565,6 +542,6 @@ export class ReviewGateController {
     )
     if (idx === -1) return
     instance.steps[idx]!.approval!.status = 'approved'
-    await this.deps.advancePastResolvedGate(workspaceId, instance, idx)
+    await this.deps.stateMachine.advancePastResolvedGate(workspaceId, instance, idx)
   }
 }

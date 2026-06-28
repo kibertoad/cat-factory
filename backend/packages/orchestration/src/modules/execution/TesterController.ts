@@ -13,6 +13,7 @@ import { FIXER_AGENT_KIND, TESTER_AGENT_KIND } from './ci.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
+import type { RunStateMachine } from './RunStateMachine.js'
 
 /** Whether a Tester report raised any concern serious enough to block a release. */
 function hasBlockingConcerns(report: TestReport): boolean {
@@ -64,10 +65,8 @@ export interface TesterControllerDeps {
   contextBuilder: AgentContextBuilder
   /** The task's CI/test attempt budget (from the resolved merge preset). */
   resolveMergePreset: (workspaceId: string, block: Block) => Promise<{ ciMaxAttempts: number }>
-  /** Reclaim the run's finished container before dispatching the next job. */
-  stopRunContainer: (workspaceId: string, instance: ExecutionInstance) => Promise<void>
-  persistInstance: (workspaceId: string, instance: ExecutionInstance) => Promise<void>
-  emitInstance: (workspaceId: string, instance: ExecutionInstance) => Promise<void>
+  /** The async instance/block spine (container reclaim, instance persist + emit). */
+  stateMachine: RunStateMachine
 }
 
 /**
@@ -143,7 +142,7 @@ export class TesterController {
       // Reclaim the finished Tester container before dispatching the Fixer so the
       // next job boots fresh — the per-run container would otherwise re-attach to the
       // completed Tester job (idempotent dispatch by run id), replaying its result.
-      await this.deps.stopRunContainer(workspaceId, instance)
+      await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
       return this.dispatchFixer(workspaceId, instance, step, block, report)
     }
     // Budget spent (or no async executor to fix with): give up for human attention.
@@ -186,8 +185,8 @@ export class TesterController {
     step.startingContainer = true
     step.subtasks = undefined
     if (step.test) step.test.phase = 'testing'
-    await this.deps.persistInstance(workspaceId, instance)
-    await this.deps.emitInstance(workspaceId, instance)
+    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
   }
 
@@ -207,7 +206,7 @@ export class TesterController {
     attempts: number,
   ): Promise<AdvanceResult> {
     step.output = output
-    await this.deps.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.persistInstance(workspaceId, instance)
     await this.raiseTestFailed(workspaceId, instance, block, error, attempts)
     // Carry the precise classification (`agent`, not the generic container `job_failed`)
     // and the Tester's own summary to the driver's single `failRun` funnel; failing the
@@ -299,8 +298,8 @@ export class TesterController {
       maxAttempts: step.test?.maxAttempts ?? DEFAULT_MERGE_PRESET.ciMaxAttempts,
       lastReport: report,
     }
-    await this.deps.persistInstance(workspaceId, instance)
-    await this.deps.emitInstance(workspaceId, instance)
+    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
   }
 }

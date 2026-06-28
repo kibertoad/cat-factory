@@ -57,22 +57,28 @@ function fakeDeps(over: Partial<HumanTestControllerDeps> = {}): HumanTestControl
       buildContext: vi.fn(async () => ({ agentKind: 'human-test', priorOutputs: [] })),
     } as never,
     resolveMergePreset: vi.fn(async () => ({ ciMaxAttempts: 10 })),
-    parkStepOnDecision: vi.fn(async (_ws, _i, s: PipelineStep) => {
-      s.approval = { id: 'appr_1', status: 'pending', proposal: '' }
-      s.state = 'waiting_decision'
-      return { kind: 'awaiting_decision', decisionId: 'appr_1' } as const
-    }),
-    finishStep: vi.fn((s: PipelineStep) => {
-      s.state = 'done'
-    }),
-    startStep: vi.fn((s: PipelineStep) => {
-      s.state = 'working'
-    }),
-    updateBlockProgress: vi.fn(async () => {}),
-    finalizeBlock: vi.fn(async () => {}),
-    stopRunContainer: vi.fn(async () => {}),
-    persistInstance: vi.fn(async () => {}),
-    emitInstance: vi.fn(async () => {}),
+    // The spine primitives now come from the cohesive RunStateMachine + StepGraph
+    // collaborators (debagged), so the fakes group under those two objects.
+    stateMachine: {
+      parkStepOnDecision: vi.fn(async (_ws, _i, s: PipelineStep) => {
+        s.approval = { id: 'appr_1', status: 'pending', proposal: '' }
+        s.state = 'waiting_decision'
+        return { kind: 'awaiting_decision', decisionId: 'appr_1' } as const
+      }),
+      updateBlockProgress: vi.fn(async () => {}),
+      finalizeBlock: vi.fn(async () => {}),
+      stopRunContainer: vi.fn(async () => {}),
+      persistInstance: vi.fn(async () => {}),
+      emitInstance: vi.fn(async () => {}),
+    } as never,
+    stepGraph: {
+      finishStep: vi.fn((s: PipelineStep) => {
+        s.state = 'done'
+      }),
+      startStep: vi.fn((s: PipelineStep) => {
+        s.state = 'working'
+      }),
+    } as never,
     clockNow: () => 1000,
     ...over,
   }
@@ -91,7 +97,7 @@ describe('HumanTestController', () => {
     expect(s.humanTest?.phase).toBe('awaiting_human')
     expect(s.humanTest?.environment ?? null).toBeNull()
     expect(s.humanTest?.degradedReason).toBeTruthy()
-    expect(deps.parkStepOnDecision).toHaveBeenCalled()
+    expect(deps.stateMachine.parkStepOnDecision).toHaveBeenCalled()
   })
 
   it('provisions an env and parks when a provider is wired and the env is ready', async () => {
@@ -128,7 +134,7 @@ describe('HumanTestController', () => {
 
     expect(result).toEqual({ kind: 'awaiting_gate', stepIndex: 0 })
     expect(s.humanTest?.phase).toBe('provisioning')
-    expect(deps.parkStepOnDecision).not.toHaveBeenCalled()
+    expect(deps.stateMachine.parkStepOnDecision).not.toHaveBeenCalled()
   })
 
   it('dispatches the fixer (and records the round) on a request-fix action', async () => {
@@ -198,7 +204,7 @@ describe('HumanTestController', () => {
     const result = await c.evaluate('ws', instance([s]), s, BLOCK, true)
 
     expect(result).toEqual({ kind: 'awaiting_job', jobId: 'job_42', stepIndex: 0 })
-    expect(deps.parkStepOnDecision).not.toHaveBeenCalled()
+    expect(deps.stateMachine.parkStepOnDecision).not.toHaveBeenCalled()
   })
 
   it('refuses request-fix once the fix-attempt ceiling is reached', async () => {
@@ -305,7 +311,7 @@ describe('HumanTestController', () => {
     const result = await c.evaluate('ws', inst, s, BLOCK, true)
 
     expect(teardownEnvironment).toHaveBeenCalledWith('ws', 'env_1')
-    expect(deps.finishStep).toHaveBeenCalledWith(s)
+    expect(deps.stepGraph.finishStep).toHaveBeenCalledWith(s)
     expect(inst.status).toBe('done')
     expect(result).toEqual({ kind: 'done' })
     expect(s.humanTest?.phase).toBe('passed')
