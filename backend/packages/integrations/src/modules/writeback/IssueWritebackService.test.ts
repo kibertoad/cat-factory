@@ -19,6 +19,7 @@ function settings(overrides: Partial<TrackerSettings> = {}): TrackerSettings {
   return {
     tracker: null,
     jiraProjectKey: null,
+    linearTeamId: null,
     writebackCommentOnPrOpen: false,
     writebackResolveOnMerge: false,
     updatedAt: 0,
@@ -212,5 +213,94 @@ describe('IssueWritebackService — Jira dispatch', () => {
     expect(getTransitions!.body).toBeUndefined()
     expect(postTransition).toBeDefined()
     expect(postTransition!.body).toContain('"id":"31"')
+  })
+})
+
+describe('IssueWritebackService — Linear dispatch', () => {
+  function linearIssue(): TaskRecord {
+    return { ...githubIssue('ENG-1'), source: 'linear', externalId: 'ENG-1' }
+  }
+
+  it('looks up the issue UUID + completed state, then comments and transitions on merge', async () => {
+    const operations: string[] = []
+    const fetchImpl = async (
+      _url: string,
+      init: { method: string; headers: Record<string, string>; body?: string },
+    ) => {
+      const body = JSON.parse(init.body ?? '{}') as {
+        query: string
+        variables: Record<string, unknown>
+      }
+      if (body.query.includes('IssueResolveLookup')) {
+        operations.push('resolve-lookup')
+        return {
+          ok: true,
+          status: 200,
+          text: async () => '',
+          json: async () => ({
+            data: {
+              issue: {
+                id: 'uuid-1',
+                team: { states: { nodes: [{ id: 'st-done', type: 'completed' }] } },
+              },
+            },
+          }),
+        }
+      }
+      if (body.query.includes('IssueId')) {
+        operations.push('id-lookup')
+        return {
+          ok: true,
+          status: 200,
+          text: async () => '',
+          json: async () => ({ data: { issue: { id: 'uuid-1' } } }),
+        }
+      }
+      if (body.query.includes('CommentCreate')) {
+        operations.push('comment')
+        expect((body.variables.input as { issueId: string }).issueId).toBe('uuid-1')
+        return {
+          ok: true,
+          status: 200,
+          text: async () => '',
+          json: async () => ({ data: { commentCreate: { success: true } } }),
+        }
+      }
+      if (body.query.includes('IssueUpdate')) {
+        operations.push('update')
+        expect((body.variables.input as { stateId: string }).stateId).toBe('st-done')
+        return {
+          ok: true,
+          status: 200,
+          text: async () => '',
+          json: async () => ({ data: { issueUpdate: { success: true } } }),
+        }
+      }
+      throw new Error(`unexpected query: ${body.query}`)
+    }
+    const svc = new IssueWritebackService({
+      trackerSettingsRepository: fakeTrackerSettings(settings({ writebackResolveOnMerge: true })),
+      taskRepository: fakeTasks([linearIssue()]),
+      resolveLinearConnection: async () => ({ apiKey: 'lin_api_x' }),
+      fetchImpl,
+    })
+    await svc.onPullRequestMerged('ws', block(), PR)
+    expect(operations).toContain('comment')
+    expect(operations).toContain('update')
+  })
+
+  it('passes through when no Linear connection is wired', async () => {
+    let called = false
+    const svc = new IssueWritebackService({
+      trackerSettingsRepository: fakeTrackerSettings(settings({ writebackCommentOnPrOpen: true })),
+      taskRepository: fakeTasks([linearIssue()]),
+      // no resolveLinearConnection / fetchImpl → linearRequest returns null
+      fetchImpl: async () => {
+        called = true
+        return { ok: true, status: 200, text: async () => '', json: async () => ({}) }
+      },
+    })
+    await svc.onPullRequestOpened('ws', block(), PR)
+    expect(called).toBe(false)
   })
 })

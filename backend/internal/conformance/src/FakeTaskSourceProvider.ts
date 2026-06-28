@@ -8,11 +8,16 @@ import type {
   TaskSourceProvider,
   NormalizedTaskConnection,
 } from '@cat-factory/kernel'
-import { GITHUB_ISSUES_DESCRIPTOR, JIRA_DESCRIPTOR } from '@cat-factory/integrations'
+import {
+  GITHUB_ISSUES_DESCRIPTOR,
+  JIRA_DESCRIPTOR,
+  LINEAR_TASK_DESCRIPTOR,
+} from '@cat-factory/integrations'
 
 const DESCRIPTORS: Record<TaskSourceKind, TaskSourceDescriptor> = {
   jira: JIRA_DESCRIPTOR,
   github: GITHUB_ISSUES_DESCRIPTOR,
+  linear: LINEAR_TASK_DESCRIPTOR,
 }
 
 /**

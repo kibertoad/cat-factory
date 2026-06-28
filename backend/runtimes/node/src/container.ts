@@ -9,6 +9,8 @@ import {
   GitHubDocsProvider,
   GitHubIssuesProvider,
   JiraProvider,
+  LinearDocumentProvider,
+  LinearTaskProvider,
   HttpEnvironmentProvider,
   HttpRunnerPoolProvider,
   NotionProvider,
@@ -1253,6 +1255,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
             if (!baseUrl || !accountEmail || !apiToken) return null
             return { baseUrl, accountEmail, apiToken }
           },
+          resolveLinearConnection: async (workspaceId: string) => {
+            const connection = await tasks.taskConnectionRepository!.getByWorkspace(
+              workspaceId,
+              'linear',
+            )
+            const apiKey = connection?.credentials?.apiKey
+            return apiKey ? { apiKey } : null
+          },
         }
       : {}),
   })
@@ -1574,6 +1584,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
               if (!baseUrl || !accountEmail || !apiToken) return null
               return { baseUrl, accountEmail, apiToken }
             },
+            resolveLinearConnection: async (workspaceId) => {
+              const connection = await tasks.taskConnectionRepository!.getByWorkspace(
+                workspaceId,
+                'linear',
+              )
+              const apiKey = connection?.credentials?.apiKey
+              return apiKey ? { apiKey } : null
+            },
           }
         : {}),
     }),
@@ -1737,8 +1755,8 @@ function selectNodeTasksDeps(
   installations: GitHubInstallationRepository,
 ): { deps: Partial<CoreDependencies>; taskConnectionRepository?: TaskConnectionRepository } {
   if (!config.tasks.enabled || !config.tasks.encryptionKey) return { deps: {} }
-  // Jira is always registered (its credentials are per-workspace, entered in the UI).
-  const providers: TaskSourceProvider[] = [new JiraProvider()]
+  // Jira and Linear are always registered (their credentials are per-workspace, entered in the UI).
+  const providers: TaskSourceProvider[] = [new JiraProvider(), new LinearTaskProvider()]
   // GitHub Issues reuse the workspace's installed GitHub App, so this provider is
   // wired whenever a GitHub client is available (the App is configured) — it has no
   // credentials of its own and resolves the installation per issue. Mirrors the
@@ -1788,6 +1806,7 @@ function selectNodeDocumentsDeps(
   const providers: DocumentSourceProvider[] = []
   if (config.documents.sources.includes('confluence')) providers.push(new ConfluenceProvider())
   if (config.documents.sources.includes('notion')) providers.push(new NotionProvider())
+  if (config.documents.sources.includes('linear')) providers.push(new LinearDocumentProvider())
   if (config.documents.sources.includes('github') && githubClient) {
     providers.push(new GitHubDocsProvider({ githubClient, installations }))
   }
