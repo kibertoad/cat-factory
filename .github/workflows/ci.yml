@@ -73,7 +73,7 @@ jobs:
           cache: pnpm
 
       - name: Cache node_modules
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
           # is a near-no-op on a hit and the frontend typecheck still resolves.
@@ -117,7 +117,7 @@ jobs:
           cache: pnpm
 
       - name: Cache node_modules
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
           # is a near-no-op on a hit and the frontend typecheck still resolves.
@@ -217,7 +217,7 @@ jobs:
           cache: pnpm
 
       - name: Cache node_modules
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
           # is a near-no-op on a hit and the frontend typecheck still resolves.
@@ -269,7 +269,7 @@ jobs:
           cache: pnpm
 
       - name: Cache node_modules
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
           # is a near-no-op on a hit and the frontend typecheck still resolves.
@@ -343,7 +343,7 @@ jobs:
           cache: pnpm
 
       - name: Cache node_modules
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
           # is a near-no-op on a hit and the frontend typecheck still resolves.
@@ -429,7 +429,7 @@ jobs:
           cache: pnpm
 
       - name: Cache node_modules
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             node_modules
@@ -456,7 +456,7 @@ jobs:
       # @playwright/test version). Install (with OS deps) on a miss.
       - name: Cache Playwright browser
         id: pw-cache
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
@@ -513,7 +513,7 @@ jobs:
           cache: pnpm
 
       - name: Cache node_modules
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             node_modules
@@ -602,7 +602,7 @@ jobs:
           cache: pnpm
 
       - name: Cache node_modules
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3 # zizmor: ignore[cache-poisoning]
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
         with:
           # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
           # is a near-no-op on a hit and the frontend typecheck still resolves.
@@ -681,7 +681,7 @@ jobs:
           cache: pnpm
 
       - name: Cache node_modules
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
           # is a near-no-op on a hit and the frontend typecheck still resolves.
