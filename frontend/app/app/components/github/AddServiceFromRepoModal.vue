@@ -39,18 +39,6 @@ async function loadRepos() {
   }
 }
 
-// On open: ensure we know the connection + which repos the App can access, and
-// the workspace's already-tracked repos (to flag ones already on the board).
-watch(
-  open,
-  (isOpen) => {
-    if (!isOpen) return
-    resetSelection()
-    void loadRepos()
-  },
-  { immediate: true },
-)
-
 // If the user connects from inside the modal (the not-connected prompt), pull the
 // repo list as soon as the connection is bound.
 watch(
@@ -150,6 +138,20 @@ const configuredBlockId = ref<string | undefined>(undefined)
 const configuredDirectory = ref<string | undefined>(undefined)
 const configuredBlock = computed(() =>
   configuredBlockId.value ? board.getBlock(configuredBlockId.value) : undefined,
+)
+
+// On open: ensure we know the connection + which repos the App can access, and
+// the workspace's already-tracked repos (to flag ones already on the board).
+// Declared after every ref resetSelection() touches so the `immediate` run
+// doesn't access them inside their temporal dead zone.
+watch(
+  open,
+  (isOpen) => {
+    if (!isOpen) return
+    resetSelection()
+    void loadRepos()
+  },
+  { immediate: true },
 )
 
 // A monorepo service needs a chosen directory; a whole-repo service can be added once.
