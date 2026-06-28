@@ -88,8 +88,7 @@ const renewals = computed(() =>
     .filter((s) => s.expiresAt !== null && (s.expired || s.renewSoon))
     .map((s) => {
       const vendorName = vendorLabel(s.vendor)
-      if (s.expired)
-        return t('personalSubscriptions.renewal.expired', { vendor: vendorName })
+      if (s.expired) return t('personalSubscriptions.renewal.expired', { vendor: vendorName })
       const days = s.expiresInDays ?? 0
       return t('personalSubscriptions.renewal.soon', { vendor: vendorName, count: days }, days)
     }),

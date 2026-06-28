@@ -46,14 +46,20 @@ binary-artifact storage (the substrate both rely on)
     is **no D1 blob adapter** (D1's ~1MB value limit).
   - **Postgres `bytea`** blob backend (`runtimes/node/src/storage/PostgresBinaryBlobBackend.ts`,
     size-guarded) + Drizzle metadata.
-  - **S3** blob backend — new opt-in package `backend/packages/provider-s3` (modelled on
-    `provider-bedrock`).
+  - **S3** blob backend — opt-in package `backend/packages/provider-s3` (modelled on
+    `provider-bedrock`); accepts explicit UI-entered credentials.
+  - **Filesystem** blob backend (`runtimes/node/src/storage/FilesystemBinaryBlobBackend.ts`):
+    on-disk under a base path (default `.file-storage`, git-ignored). Node/local only.
 - Metadata table `binary_artifacts` mirrored D1 (`migrations/0017_binary_artifacts.sql`) ⇄
   Drizzle (`db/schema.ts` + generated migration); Node-only `binary_artifact_blobs` `bytea`
   table for the `db` backend. `pnpm db:check` is green.
-- `AppConfig.binaryStorage` (`db|r2|s3`) selects the backend; wired in all three facades + the
-  request `ServerContainer`. New API: `POST /workspaces/:ws/artifacts` (multipart upload),
-  `GET …/artifacts/:id/blob`, `GET …/executions/:id/artifacts`, `GET …/blocks/:id/artifacts`.
+- The backend is configured **per ACCOUNT in the UI** (no env vars): it lives in the
+  `account_settings` `config.contentStorage` (S3 keys sealed in `secrets_cipher`). The store is
+  resolved per workspace→account via `makeResolveBinaryArtifactStore` (`@cat-factory/server`),
+  wired in all three facades (default backend: `off` on Node, `fs` in local mode, `r2` on
+  Cloudflare when bound). API: `POST /workspaces/:ws/artifacts` (multipart upload),
+  `GET …/artifacts/:id/blob`, `GET …/executions/:id/artifacts`, `GET …/blocks/:id/artifacts`;
+  configured via `GET|PUT /accounts/:id/settings`.
 - Conformance `defineBinaryArtifactsSuite` (store/get/list/listByBlock/delete + DB size-guard).
 - **Verified:** Cloudflare suite (workerd + real D1) and Node suite (real Postgres) both pass.
 

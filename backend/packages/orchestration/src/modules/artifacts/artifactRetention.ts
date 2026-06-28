@@ -1,4 +1,4 @@
-import type { BinaryArtifactStore } from '@cat-factory/kernel'
+import type { BinaryArtifactStore, ResolveBinaryArtifactStore } from '@cat-factory/kernel'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
@@ -7,12 +7,17 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000
  * design images). Retention is a PER-WORKSPACE setting (`artifactRetentionDays`, default 14),
  * so unlike the deployment-global ledger sweeps this iterates workspaces and applies each
  * one's own window: an artifact is pruned — bytes AND metadata — once it ages past its
- * workspace's cutoff. Driven from the Cloudflare retention cron and the Node retention timer
- * (kept symmetric); the per-runtime wiring supplies the workspace list + per-workspace day
- * lookup as closures so this stays free of any repo/runtime types.
+ * workspace's cutoff. The blob backend is configured per-account, so the store is resolved
+ * per workspace via {@link ResolveBinaryArtifactStore} (which caches per account, so the many
+ * workspaces under one account reuse a single store); a workspace whose account configured no
+ * storage resolves to null and is skipped. Driven from the Cloudflare retention cron and the
+ * Node retention timer (kept symmetric); the per-runtime wiring supplies the workspace list +
+ * per-workspace day lookup as closures so this stays free of any repo/runtime types.
  */
 export async function sweepBinaryArtifactRetention(deps: {
-  store: Pick<BinaryArtifactStore, 'pruneOlderThan'>
+  resolveStore:
+    | ResolveBinaryArtifactStore
+    | ((workspaceId: string) => Promise<BinaryArtifactStore | null>)
   listWorkspaceIds: () => Promise<string[]>
   retentionDaysFor: (workspaceId: string) => Promise<number>
   now: number
@@ -24,8 +29,10 @@ export async function sweepBinaryArtifactRetention(deps: {
     // A non-positive / non-finite window is treated as "keep everything" rather than wiping
     // the store — the UI bounds it to ≥ 1, but guard defensively against bad data.
     if (!Number.isFinite(days) || days <= 0) continue
+    const store = await deps.resolveStore(workspaceId)
+    if (!store) continue
     const cutoff = deps.now - days * MS_PER_DAY
-    removed += await deps.store.pruneOlderThan(workspaceId, cutoff)
+    removed += await store.pruneOlderThan(workspaceId, cutoff)
   }
   return removed
 }

@@ -15,7 +15,7 @@ import { D1AgentContextSnapshotRepository } from './infrastructure/repositories/
 import { D1ProvisioningLogRepository } from './infrastructure/repositories/D1ProvisioningLogRepository'
 import { D1PipelineScheduleRepository } from './infrastructure/repositories/D1PipelineScheduleRepository'
 import { D1PasswordResetTokenRepository } from './infrastructure/repositories/D1PasswordResetTokenRepository'
-import { buildContainer } from './infrastructure/container'
+import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastructure/container'
 import { escalateStaleNotifications } from '@cat-factory/server'
 import { CryptoIdGenerator, SystemClock } from './infrastructure/runtime'
 import { WorkflowsWorkRunner } from './infrastructure/workflows/WorkflowsWorkRunner'
@@ -26,11 +26,9 @@ import { handleGitHubSyncBatch, reconcileStaleRepos } from './infrastructure/git
 import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 import { logger } from './infrastructure/observability/logger'
 import { sweepBinaryArtifactRetention, validateRegistrationsOnce } from '@cat-factory/orchestration'
-import { DEFAULT_WORKSPACE_SETTINGS, createBinaryArtifactStore } from '@cat-factory/kernel'
+import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
 import { D1WorkspaceRepository } from './infrastructure/repositories/D1WorkspaceRepository'
 import { D1WorkspaceSettingsRepository } from './infrastructure/repositories/D1WorkspaceSettingsRepository'
-import { D1BinaryArtifactMetadataStore } from './infrastructure/repositories/D1BinaryArtifactMetadataStore'
-import { R2BinaryBlobBackend } from './infrastructure/storage/R2BinaryBlobBackend'
 
 // Cloudflare Worker entry. In addition to the Hono `fetch` handler, we expose a
 // `scheduled` handler (the cron sweeper, now also reconciling GitHub
@@ -160,18 +158,20 @@ export default {
             logger.error({ cron: 'retention', err: errInfo(error) }, 'retention sweep failed'),
           ),
       )
-      // Binary-artifact retention (UI screenshots + reference designs) is per-workspace, so
-      // it iterates workspaces and applies each one's configured window. Only when R2 is bound.
-      if (env.ARTIFACT_BUCKET) {
+      // Binary-artifact retention (UI screenshots + reference designs) is per-workspace, and
+      // the blob backend is per-account (R2 or S3), so it resolves each workspace's store. Run
+      // whenever storage could be configured: the R2 default (ARTIFACT_BUCKET) OR a per-account
+      // S3 backend (which needs the encryption key to unseal its credentials).
+      if (env.ARTIFACT_BUCKET || env.ENCRYPTION_KEY) {
         const settingsRepo = new D1WorkspaceSettingsRepository({ db: env.DB })
         ctx.waitUntil(
           sweepBinaryArtifactRetention({
-            store: createBinaryArtifactStore({
-              metadata: new D1BinaryArtifactMetadataStore({ db: env.DB }),
-              blob: new R2BinaryBlobBackend({ bucket: env.ARTIFACT_BUCKET }),
-              idGenerator: new CryptoIdGenerator(),
+            resolveStore: buildCloudflareArtifactStoreResolver(
+              env,
+              env.DB,
               clock,
-            }),
+              new CryptoIdGenerator(),
+            ),
             listWorkspaceIds: () =>
               new D1WorkspaceRepository({ db: env.DB })
                 .listVisible(null)

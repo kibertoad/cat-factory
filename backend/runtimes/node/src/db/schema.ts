@@ -1711,9 +1711,9 @@ export const binaryArtifacts = pgTable(
   ],
 )
 
-// Node-ONLY blob backend: when `BINARY_STORAGE_BACKEND=db`, the bytes live in this
-// Postgres `bytea` table (keyed by the artifact's `storage_key`). There is no D1
-// equivalent — on Cloudflare blobs always go to R2 (D1 can't hold large values), so
+// Node-ONLY blob backend: when an account selects the `db` content-storage backend, the
+// bytes live in this Postgres `bytea` table (keyed by the artifact's `storage_key`). There
+// is no D1 equivalent — on Cloudflare blobs always go to R2 (D1 can't hold large values), so
 // this store-in-DB backend genuinely cannot exist on the Worker runtime.
 export const binaryArtifactBlobs = pgTable('binary_artifact_blobs', {
   storage_key: text('storage_key').primaryKey(),

@@ -3,7 +3,6 @@ import {
   type AgentExecutor,
   type Clock,
   CompositeNotificationChannel,
-  createBinaryArtifactStore,
   type DocumentSourceProvider,
   type EmailSender,
   type ExecutionEventPublisher,
@@ -13,6 +12,7 @@ import {
   type NotificationChannel,
   NoopWorkRunner,
   type ProvisioningSubsystem,
+  type ResolveBinaryArtifactStore,
   type ResolveUserGitHubToken,
   type RunnerPoolProvider,
   type RunnerTransport,
@@ -71,6 +71,8 @@ import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
   makeResolveRunRepoContext,
+  makeResolveBinaryArtifactStore,
+  type BuildBlobBackend,
   ensureWorkBranchViaRest,
   FanOutEventPublisher,
   InAppNotificationChannel,
@@ -160,6 +162,8 @@ import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepositor
 import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
 import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMetadataStore'
 import { R2BinaryBlobBackend } from './storage/R2BinaryBlobBackend'
+import { S3BinaryBlobBackend } from '@cat-factory/provider-s3'
+import type { ContentStorageCapability } from '@cat-factory/contracts'
 import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
 import { D1KaizenGradingRepository } from './repositories/D1KaizenGradingRepository'
 import { D1KaizenVerifiedComboRepository } from './repositories/D1KaizenVerifiedComboRepository'
@@ -708,6 +712,7 @@ function buildAccountSettings(
   env: Env,
   db: D1Database,
   clock: Clock,
+  contentStorageCapability?: ContentStorageCapability,
 ): AccountSettingsService | undefined {
   const encryptionKey = env.ENCRYPTION_KEY?.trim()
   if (!encryptionKey) return undefined
@@ -718,6 +723,61 @@ function buildAccountSettings(
       info: ACCOUNT_SETTINGS_CIPHER_INFO,
     }),
     clock,
+    ...(contentStorageCapability ? { contentStorageCapability } : {}),
+  })
+}
+
+/**
+ * The Worker's content-storage capability + blob-backend factory: an account keeps the
+ * deployment's R2 bucket (the default when ARTIFACT_BUCKET is bound) or switches to its own
+ * S3 bucket. `fs`/`db` cannot exist on the Worker. Shared by the container wiring and the
+ * retention cron so both build the same backends.
+ */
+export function cloudflareContentStorage(env: Env): {
+  capability: ContentStorageCapability
+  buildBlobBackend: BuildBlobBackend
+} {
+  const capability: ContentStorageCapability = {
+    supportedBackends: env.ARTIFACT_BUCKET ? ['off', 'r2', 's3'] : ['off', 's3'],
+    defaultBackend: env.ARTIFACT_BUCKET ? 'r2' : 'off',
+  }
+  const buildBlobBackend: BuildBlobBackend = (kind, opts) => {
+    switch (kind) {
+      case 'r2':
+        return env.ARTIFACT_BUCKET ? new R2BinaryBlobBackend({ bucket: env.ARTIFACT_BUCKET }) : null
+      case 's3':
+        if (!opts.s3) return null
+        return new S3BinaryBlobBackend({
+          ...opts.s3,
+          ...(opts.s3Credentials ? { credentials: opts.s3Credentials } : {}),
+        })
+      default:
+        return null
+    }
+  }
+  return { capability, buildBlobBackend }
+}
+
+/**
+ * Build the per-account binary-artifact store resolver outside the full container (the
+ * retention cron runs in its own context). Mirrors the container wiring, with its own
+ * account-settings instance (a separate short-TTL cache is fine for a periodic sweep).
+ */
+export function buildCloudflareArtifactStoreResolver(
+  env: Env,
+  db: D1Database,
+  clock: Clock,
+  idGenerator: IdGenerator,
+): ResolveBinaryArtifactStore {
+  const { capability, buildBlobBackend } = cloudflareContentStorage(env)
+  return makeResolveBinaryArtifactStore({
+    accountSettings: buildAccountSettings(env, db, clock, capability),
+    accountOf: (workspaceId) => new D1WorkspaceRepository({ db }).accountOf(workspaceId),
+    metadata: new D1BinaryArtifactMetadataStore({ db }),
+    idGenerator,
+    clock,
+    buildBlobBackend,
+    defaultBackend: capability.defaultBackend,
   })
 }
 
@@ -1644,17 +1704,14 @@ export function buildContainer(
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
 
-  // Binary-artifact store (UI screenshots + reference design images) for the
-  // visual-confirmation gate. On Cloudflare the bytes go to R2 (D1 can't hold large
-  // values); the metadata lives in the main DB. Present only when ARTIFACT_BUCKET is bound.
-  const binaryArtifactStore = env.ARTIFACT_BUCKET
-    ? createBinaryArtifactStore({
-        metadata: new D1BinaryArtifactMetadataStore({ db }),
-        blob: new R2BinaryBlobBackend({ bucket: env.ARTIFACT_BUCKET }),
-        idGenerator,
-        clock,
-      })
-    : undefined
+  // Binary-artifact storage (UI screenshots + reference design images) for the
+  // visual-confirmation gate. The backend is configured PER ACCOUNT in the UI: an account can
+  // keep the deployment's R2 bucket (the default when the ARTIFACT_BUCKET binding is present)
+  // or switch to its own S3 bucket. The metadata always lives in D1; only the bytes' backend
+  // changes. The store is resolved per request/run from the account settings
+  // (`resolveBinaryArtifactStore`, built below once `accountSettings` exists).
+  const { capability: contentStorageCapability, buildBlobBackend: buildCfBlobBackend } =
+    cloudflareContentStorage(env)
 
   // The built-in gates' providers are deployment-global module handles (in `@cat-factory/gates`),
   // not per-container DI. Reset them up-front so each build re-wires from a clean slate and only
@@ -1762,15 +1819,30 @@ export function buildContainer(
     recordPrompts: config.observability.recordPrompts,
   })
 
-  // Per-account deployment settings (Slack OAuth + web-search keys). Built once so the
-  // service's short-TTL cache is shared across requests; the Slack OAuth resolver is
-  // derived from it in the domain composition root.
-  const accountSettings = buildAccountSettings(env, db, clock)
+  // Per-account deployment settings (Slack OAuth + web-search keys + content-storage). Built
+  // once so the service's short-TTL cache is shared across requests; the Slack OAuth +
+  // content-storage resolvers are derived from it in the domain composition root.
+  const accountSettings = buildAccountSettings(env, db, clock, contentStorageCapability)
+
+  // Resolve the binary-artifact store for a workspace's account from its content-storage
+  // settings (the blob backend is per-account; the metadata is the shared D1 store). Without
+  // `accountSettings` (no encryption key) every workspace falls back to the runtime default
+  // (R2 when bound), with no per-account override. Caches per account, so an R2→S3 switch
+  // rebuilds and the many workspaces under one account share a store.
+  const resolveBinaryArtifactStore = makeResolveBinaryArtifactStore({
+    accountSettings,
+    accountOf: (workspaceId) => new D1WorkspaceRepository({ db }).accountOf(workspaceId),
+    metadata: new D1BinaryArtifactMetadataStore({ db }),
+    idGenerator,
+    clock,
+    buildBlobBackend: buildCfBlobBackend,
+    defaultBackend: contentStorageCapability.defaultBackend,
+  })
 
   const dependencies: CoreDependencies = {
-    // The binary-artifact store (screenshots) for the visual-confirmation gate; present
-    // only when ARTIFACT_BUCKET is configured (else the gate passes through).
-    ...(binaryArtifactStore ? { binaryArtifactStore } : {}),
+    // Resolves the per-account binary-artifact store (screenshots) for the
+    // visual-confirmation gate; resolving to null ⇒ the gate passes through.
+    resolveBinaryArtifactStore,
     workspaceRepository: new D1WorkspaceRepository({ db }),
     accountRepository: new D1AccountRepository({ db }),
     membershipRepository: new D1MembershipRepository({ db }),
@@ -1891,9 +1963,9 @@ export function buildContainer(
     // The consensus transcript store, for the read endpoint (the SPA window's initial
     // load / reload). Always wired; live updates ride the `consensus` workspace event.
     consensusSessionRepository: new D1ConsensusSessionRepository({ db }),
-    // The binary-artifact store (screenshots) for the visual-confirmation gate; present
-    // only when the ARTIFACT_BUCKET R2 binding is configured.
-    binaryArtifactStore,
+    // Resolves the per-account binary-artifact store (screenshots) for the artifact
+    // controllers + the visual-confirmation gate (configured per-account in the UI).
+    resolveBinaryArtifactStore,
     // The vendor-credential (subscription token pool) service the shared controller
     // reads; present when the shared ENCRYPTION_KEY is configured.
     subscriptions,

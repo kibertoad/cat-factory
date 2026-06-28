@@ -622,6 +622,9 @@ importers:
       '@cat-factory/provider-cloudflare':
         specifier: workspace:*
         version: link:../../packages/provider-cloudflare
+      '@cat-factory/provider-s3':
+        specifier: workspace:*
+        version: link:../../packages/provider-s3
       '@cat-factory/server':
         specifier: workspace:*
         version: link:../../packages/server

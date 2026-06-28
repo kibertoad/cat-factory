@@ -2,6 +2,7 @@ import type {
   AgentExecutor,
   AgentRunContext,
   BinaryArtifactStore,
+  ResolveBinaryArtifactStore,
   Block,
   BlockRepository,
   ExecutionInstance,
@@ -41,8 +42,11 @@ export interface VisualConfirmationControllerDeps {
   agentExecutor: AgentExecutor
   contextBuilder: AgentContextBuilder
   notificationService?: NotificationService
-  /** The binary-artifact store the gate reads screenshots + reference designs from. */
-  binaryArtifactStore?: BinaryArtifactStore
+  /**
+   * Resolves the binary-artifact store (per-account backend) the gate reads screenshots +
+   * reference designs from, for the run's workspace. Absent / resolving to null → manual mode.
+   */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   /** The task's helper attempt budget (from the resolved merge preset). */
   resolveMergePreset: (workspaceId: string, block: Block) => Promise<{ ciMaxAttempts: number }>
   // Shared engine step-graph primitives (stay on ExecutionService, injected here).
@@ -179,6 +183,13 @@ export class VisualConfirmationController {
 
   // ---- internals -----------------------------------------------------------
 
+  /** Resolve the workspace's per-account binary-artifact store (null = none configured). */
+  private async store(workspaceId: string): Promise<BinaryArtifactStore | null> {
+    return this.deps.resolveBinaryArtifactStore
+      ? this.deps.resolveBinaryArtifactStore(workspaceId)
+      : null
+  }
+
   /** Fresh entry: gather screenshots and park (or pass through when no store is wired). */
   private async begin(
     workspaceId: string,
@@ -188,8 +199,8 @@ export class VisualConfirmationController {
     isFinalStep: boolean,
   ): Promise<AdvanceResult> {
     // No store ⇒ nowhere to read screenshots from: pass through so a pipeline that includes
-    // the gate still completes (tests / a deployment without blob storage).
-    if (!this.deps.binaryArtifactStore) {
+    // the gate still completes (tests / an account without content storage configured).
+    if (!(await this.store(workspaceId))) {
       return this.completeStep(workspaceId, instance, step, isFinalStep)
     }
     const maxAttempts = (await this.deps.resolveMergePreset(workspaceId, block)).ciMaxAttempts
@@ -317,12 +328,13 @@ export class VisualConfirmationController {
     block: Block,
   ): Promise<VisualConfirmPair[]> {
     const byView = new Map<string, VisualConfirmPair>()
+    const store = await this.store(workspaceId)
     // The artifact ids the run ACTUALLY uploaded — so a screenshot id the agent reported but
     // that was never stored (a fabricated/typo'd id), or one since removed by the retention
     // sweep, is treated as "not captured" rather than rendered as a dangling/404 gallery image.
-    const validActualIds = this.deps.binaryArtifactStore
+    const validActualIds = store
       ? new Set(
-          (await this.deps.binaryArtifactStore.listByExecution(workspaceId, instance.id))
+          (await store.listByExecution(workspaceId, instance.id))
             .filter((r) => r.kind === 'screenshot')
             .map((r) => r.id),
         )
@@ -341,8 +353,8 @@ export class VisualConfirmationController {
       })
     }
     // Reference: the block's uploaded reference design images (carry no executionId).
-    if (this.deps.binaryArtifactStore) {
-      const refs = (await this.deps.binaryArtifactStore.listByBlock(workspaceId, block.id)).filter(
+    if (store) {
+      const refs = (await store.listByBlock(workspaceId, block.id)).filter(
         (r) => r.kind === 'reference',
       )
       // `listByBlock` returns references oldest-first, so assign unconditionally: the LAST

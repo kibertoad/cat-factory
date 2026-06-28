@@ -1,6 +1,6 @@
 import type {
   AgentRunRepository,
-  BinaryArtifactStore,
+  ResolveBinaryArtifactStore,
   ConsensusSessionRepository,
   ResolveRunRepoContext,
   VcsWebhookSink,
@@ -118,13 +118,14 @@ export interface ServerContainer extends Core {
    */
   localSettings?: { service: LocalSettingsService }
   /**
-   * The binary-artifact store (UI screenshots + reference design images) backing the
-   * visual-confirmation gate. Present only when the facade configured blob storage
-   * (R2 on the Worker; a Postgres-`bytea`/S3 backend on Node/local). Drives the
-   * artifact ingest/blob/list controller, the UI-tester pre/post-ops, and the gate.
-   * Absent ⇒ the controller 503s and the gate is a pass-through.
+   * Resolves the binary-artifact store (UI screenshots + reference design images) for a
+   * workspace's account — the blob backend is configured per-account in the UI (filesystem /
+   * S3 on Node/local; R2 / S3 on the Worker). Drives the artifact ingest/blob/list
+   * controller, the UI-tester pre/post-ops, and the visual-confirmation gate. Absent, or
+   * resolving to null (the account configured no storage) ⇒ the controller 503s and the gate
+   * is a pass-through.
    */
-  binaryArtifactStore?: BinaryArtifactStore
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   /**
    * Consumer of normalised inbound VCS webhook events (the neutral ingest route's
    * `POST /vcs/:provider/webhooks` hands verified+mapped events here). Present only when a

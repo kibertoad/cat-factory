@@ -1,6 +1,6 @@
 import type {
   AgentContextSnapshotRepository,
-  BinaryArtifactStore,
+  ResolveBinaryArtifactStore,
   Clock,
   LlmCallMetricRepository,
   PasswordResetTokenRepository,
@@ -171,7 +171,7 @@ export function startRetentionSweeper(
  * once immediately then hourly; best-effort. Returns a stop function.
  */
 export function startArtifactRetentionSweeper(
-  store: Pick<BinaryArtifactStore, 'pruneOlderThan'>,
+  resolveStore: ResolveBinaryArtifactStore,
   workspaceRepository: Pick<WorkspaceRepository, 'listVisible'>,
   settingsRepository: Pick<WorkspaceSettingsRepository, 'get'>,
   clock: Clock,
@@ -180,7 +180,7 @@ export function startArtifactRetentionSweeper(
   const tick = async () => {
     try {
       const removed = await sweepBinaryArtifactRetention({
-        store,
+        resolveStore,
         listWorkspaceIds: () =>
           workspaceRepository.listVisible(null).then((ws) => ws.map((w) => w.id)),
         retentionDaysFor: (workspaceId) =>

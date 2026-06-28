@@ -152,6 +152,7 @@ export type {
   BinaryArtifactStore,
   BinaryArtifactMetadataStore,
   BinaryBlobBackend,
+  ResolveBinaryArtifactStore,
   StoreBinaryArtifactInput,
 } from './binary-artifacts.js'
 export { createBinaryArtifactStore } from './binary-artifacts.js'

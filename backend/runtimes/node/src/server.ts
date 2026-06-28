@@ -165,10 +165,12 @@ export async function start(
     clock,
     logger,
   )
-  // Per-workspace binary-artifact (screenshot) retention; only when blob storage is wired.
-  const stopArtifactRetention = container.binaryArtifactStore
+  // Per-workspace binary-artifact (screenshot) retention; only when content storage is wired
+  // (the resolver is present once an encryption key is configured). The sweep resolves each
+  // workspace's per-account store itself.
+  const stopArtifactRetention = container.resolveBinaryArtifactStore
     ? startArtifactRetentionSweeper(
-        container.binaryArtifactStore,
+        container.resolveBinaryArtifactStore,
         repos.workspaceRepository,
         repos.workspaceSettingsRepository,
         clock,

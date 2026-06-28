@@ -31,7 +31,8 @@ interface S3Sdk {
 /**
  * AWS S3 (or S3-compatible) blob backend for binary artifacts. Implements the kernel
  * {@link BinaryBlobBackend} port; the metadata still lives in the runtime's DB. Opt-in:
- * a deployment selects it via `BINARY_STORAGE_BACKEND=s3`.
+ * an account selects it (and supplies region/bucket + credentials) in the content-storage
+ * settings UI; the facade builds this backend from that config.
  *
  * The (heavy) `@aws-sdk/client-s3` is imported LAZILY on first use, not at module load:
  * a facade statically imports this class to wire its container, but a deployment that

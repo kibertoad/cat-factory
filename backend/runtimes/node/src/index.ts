@@ -42,3 +42,8 @@ export {
   DrizzleRunnerPoolConnectionRepository,
 } from './repositories/containerExecution.js'
 export * as schema from './db/schema.js'
+export {
+  FilesystemBinaryBlobBackend,
+  DEFAULT_FILE_STORAGE_PATH,
+} from './storage/FilesystemBinaryBlobBackend.js'
+export { PostgresBinaryBlobBackend } from './storage/PostgresBinaryBlobBackend.js'

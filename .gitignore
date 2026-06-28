@@ -148,3 +148,7 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Local filesystem binary-artifact storage (screenshots etc.) — the default content-storage
+# backend in local mode; never commit captured artifacts.
+.file-storage/
