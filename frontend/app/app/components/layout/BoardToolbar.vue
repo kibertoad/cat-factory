@@ -81,7 +81,7 @@ const decisionItems = computed(() =>
 
 <template>
   <div
-    class="absolute left-1/2 top-4 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full border border-slate-700 bg-slate-900/90 px-2 py-1.5 shadow-xl backdrop-blur"
+    class="absolute left-1/2 top-3 z-20 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-full border border-slate-700 bg-slate-900/90 px-2 py-1.5 shadow-xl backdrop-blur"
   >
     <!-- zoom controls -->
     <UButton
@@ -91,7 +91,8 @@ const decisionItems = computed(() =>
       size="sm"
       @click="zoomOut()"
     />
-    <div class="w-20 text-center text-xs tabular-nums text-slate-300">
+    <!-- The zoom %/LOD readout is the first thing to drop on narrow viewports. -->
+    <div class="hidden w-20 text-center text-xs tabular-nums text-slate-300 sm:block">
       {{ zoomPct }}%
       <div class="text-[9px] uppercase tracking-wide text-slate-500">{{ lodLabel }}</div>
     </div>
@@ -115,16 +116,17 @@ const decisionItems = computed(() =>
         icon="i-lucide-circle-help"
         data-testid="decision-badge"
       >
-        {{ execution.pendingDecisionCount }} decision{{
-          execution.pendingDecisionCount === 1 ? '' : 's'
-        }}
+        {{ execution.pendingDecisionCount
+        }}<span class="hidden sm:inline"
+          >&nbsp;{{ $t('board.toolbar.decisionWord', execution.pendingDecisionCount) }}</span
+        >
       </UButton>
     </UDropdownMenu>
 
     <!-- in-org sharing: add an existing org service to this board -->
     <UDropdownMenu v-if="mountableItems.length" :items="mountableItems">
       <UButton color="neutral" variant="ghost" size="sm" icon="i-lucide-plus-circle">
-        Add service
+        <span class="hidden sm:inline">{{ $t('board.toolbar.addService') }}</span>
       </UButton>
     </UDropdownMenu>
 
@@ -140,7 +142,7 @@ const decisionItems = computed(() =>
       icon="i-lucide-wallet"
       :title="spend?.exceeded ? 'Spend limit reached — runs paused' : 'Token spend this month'"
     >
-      {{ spendLabel }}
+      <span class="hidden sm:inline">{{ spendLabel }}</span>
     </UButton>
   </div>
 </template>
