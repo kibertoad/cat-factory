@@ -55,6 +55,11 @@ jobs:
 
   lint:
     name: Lint & format
+    # Skip on the Changesets "Release Packages" PR: its diff is bot-generated
+    # CHANGELOG.md entries + version bumps, which we don't author or gate on
+    # oxfmt, and lint is not a required check anyway. Mirrors the `changeset`
+    # job's skip below.
+    if: github.head_ref != 'changeset-release/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
