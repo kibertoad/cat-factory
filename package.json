@@ -4,15 +4,17 @@
   "description": "Agent Architecture Board — monorepo of reusable libraries (published to npm) + example deployments. See README.md.",
   "type": "module",
   "scripts": {
-    "build": "tsc -b backend/tsconfig.build.json",
-    "typecheck": "pnpm build && pnpm -r run typecheck",
-    "test": "pnpm test:run",
-    "test:run": "pnpm build && pnpm -r run test:run",
+    "build": "turbo run build --filter='./backend/**'",
+    "build:all": "turbo run build",
+    "build:tsc": "tsc -b backend/tsconfig.build.json",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test:run",
+    "test:run": "turbo run test:run",
     "lint": "oxlint && oxfmt --check .",
     "lint:fix": "oxlint --fix && oxfmt .",
-    "dev:backend": "pnpm --filter @cat-factory/deploy-backend run dev",
-    "dev:node": "pnpm --filter @cat-factory/deploy-node run dev",
-    "dev:frontend": "pnpm --filter @cat-factory/deploy-frontend run dev",
+    "dev:backend": "turbo run dev --filter=@cat-factory/deploy-backend",
+    "dev:node": "turbo run dev --filter=@cat-factory/deploy-node",
+    "dev:frontend": "turbo run dev --filter=@cat-factory/deploy-frontend",
     "changeset": "changeset",
     "version": "changeset version",
     "ci:publish": "pnpm build && changeset publish"
@@ -21,6 +23,7 @@
     "@changesets/cli": "^2.31.0",
     "oxfmt": "^0.56.0",
     "oxlint": "^1.71.0",
+    "turbo": "^2.10.0",
     "typescript": "7.0.1-rc"
   },
   "engines": {

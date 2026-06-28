@@ -15,6 +15,7 @@ export type {
   TaskType,
   CreateTaskType,
   TaskTypeFields,
+  DocKind,
   Decision,
   ExecutionInstance,
   ExecutionStatus,

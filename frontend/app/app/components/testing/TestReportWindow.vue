@@ -10,12 +10,20 @@
 // from the report itself: each `tested` entry is the scenario the Tester walked, and
 // outcomes / concerns are grouped under it by name. Deeper linkage to the in-repo
 // `spec/features/*.feature` files would need a spec endpoint (a future enhancement).
-import type { TestConcern, TestOutcome, TestReport } from '~/types/domain'
+import { computed, onUnmounted, ref, watch } from 'vue'
+import type { TestConcern, TestOutcome, TestReport, TestScreenshot } from '~/types/domain'
+import { useArtifactBlobs } from '~/composables/useArtifactBlobs'
+import { useFocusTrap } from '~/composables/useFocusTrap'
+import ArtifactLightbox from '~/components/media/ArtifactLightbox.vue'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
+
+// Per-window blob cache for the captured screenshots; revoked on unmount.
+const blobs = useArtifactBlobs()
+onUnmounted(() => blobs.revokeAll())
 
 // Shared seam contract (open/blockId/close + Escape). No `onOpen` loader: this window reads
 // its report straight off the execution step, so there's nothing to fetch on open.
@@ -31,6 +39,18 @@ const step = computed(() => {
 })
 const report = computed<TestReport | null>(() => step.value?.test?.lastReport ?? null)
 const testState = computed(() => step.value?.test ?? null)
+
+const screenshots = computed<TestScreenshot[]>(() => report.value?.screenshots ?? [])
+// Resolve each capture into an object URL for the gallery + lightbox. The shared cache
+// dedupes, so the lightbox reuses what the thumbnails fetched. (The reference design is not
+// shown in this window — that's the visual-confirmation gate's job — so we don't fetch it.)
+watch(
+  screenshots,
+  (next) => {
+    for (const s of next) void blobs.resolve(s.artifactId)
+  },
+  { immediate: true },
+)
 
 const STATUS_META: Record<TestOutcome['status'], { icon: string; text: string; label: string }> = {
   passed: { icon: 'i-lucide-circle-check', text: 'text-emerald-400', label: 'Passed' },
@@ -61,6 +81,7 @@ interface ScenarioGroup {
   other: boolean
   outcomes: TestOutcome[]
   concerns: TestConcern[]
+  screenshots: TestScreenshot[]
   status: 'passed' | 'failed' | 'skipped' | 'mixed' | 'empty'
 }
 
@@ -74,16 +95,18 @@ function rollUp(outcomes: TestOutcome[], concerns: TestConcern[]): ScenarioGroup
   return 'mixed'
 }
 
-// Group outcomes + concerns under the scenarios the Tester listed in `tested`. An
-// outcome/concern falls under a scenario when their names are related; anything left
-// over lands in a synthetic "Other checks" bucket so nothing is dropped.
-const groups = computed<ScenarioGroup[]>(() => {
+// Group outcomes + concerns + screenshots under the scenarios the Tester listed in
+// `tested`. An item falls under a scenario when their names are related; anything left over
+// lands in a synthetic "Other checks" bucket / the standalone gallery so nothing is dropped.
+const scenarioLayout = computed<{ groups: ScenarioGroup[]; ungrouped: TestScreenshot[] }>(() => {
   const r = report.value
-  if (!r) return []
+  if (!r) return { groups: [], ungrouped: [] }
   const outcomes = r.outcomes ?? []
   const concerns = r.concerns ?? []
+  const shots = r.screenshots ?? []
   const usedOutcome = new Set<number>()
   const usedConcern = new Set<number>()
+  const usedShot = new Set<number>()
   const out: ScenarioGroup[] = []
 
   r.tested.forEach((area, i) => {
@@ -103,12 +126,21 @@ const groups = computed<ScenarioGroup[]>(() => {
       }
       return false
     })
+    const groupShots = shots.filter((s, si) => {
+      if (usedShot.has(si)) return false
+      if (related(area, s.view) || groupOutcomes.some((o) => related(o.name, s.view))) {
+        usedShot.add(si)
+        return true
+      }
+      return false
+    })
     out.push({
       key: `s${i}`,
       title: area,
       other: false,
       outcomes: groupOutcomes,
       concerns: groupConcerns,
+      screenshots: groupShots,
       status: rollUp(groupOutcomes, groupConcerns),
     })
   })
@@ -122,11 +154,38 @@ const groups = computed<ScenarioGroup[]>(() => {
       other: true,
       outcomes: leftoverOutcomes,
       concerns: leftoverConcerns,
+      screenshots: [],
       status: rollUp(leftoverOutcomes, leftoverConcerns),
     })
   }
-  return out
+  const ungrouped = shots.filter((_, si) => !usedShot.has(si))
+  return { groups: out, ungrouped }
 })
+const groups = computed(() => scenarioLayout.value.groups)
+const ungroupedScreenshots = computed(() => scenarioLayout.value.ungrouped)
+
+// Shared lightbox over ALL captured screenshots (in report order).
+const lightboxItems = computed(() =>
+  screenshots.value.map((s) => ({
+    artifactId: s.artifactId,
+    label: s.view,
+    alt: `${s.view} (screenshot)`,
+  })),
+)
+const lightboxOpen = ref(false)
+const lightboxIndex = ref(0)
+function openShot(artifactId: string) {
+  const i = lightboxItems.value.findIndex((it) => it.artifactId === artifactId)
+  lightboxIndex.value = i < 0 ? 0 : i
+  lightboxOpen.value = true
+}
+
+// Focus management for the modal panel; hands the Tab trap off to the lightbox while it's open.
+const dialogRoot = ref<HTMLElement | null>(null)
+useFocusTrap(
+  dialogRoot,
+  computed(() => open.value && !lightboxOpen.value),
+)
 
 const sortedConcerns = computed<TestConcern[]>(() => {
   const r = report.value
@@ -175,7 +234,12 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
       @click.self="close"
     >
       <div
-        class="m-4 flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
+        ref="dialogRoot"
+        tabindex="-1"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Test report"
+        class="m-4 flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl focus:outline-none"
       >
         <!-- Header -->
         <header class="flex items-center gap-3 border-b border-slate-800 px-5 py-3">
@@ -272,6 +336,12 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                     >
                       {{ g.title }}
                     </span>
+                    <UIcon
+                      v-if="g.screenshots.length"
+                      name="i-lucide-camera"
+                      class="h-3.5 w-3.5 shrink-0 text-slate-500"
+                      :title="`${g.screenshots.length} screenshot${g.screenshots.length === 1 ? '' : 's'}`"
+                    />
                     <span class="shrink-0 text-[11px] text-slate-500">
                       {{ g.outcomes.length }} check{{ g.outcomes.length === 1 ? '' : 's' }}
                       <template v-if="g.concerns.length">
@@ -329,9 +399,72 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                         </p>
                       </div>
                     </div>
+
+                    <!-- Screenshots captured for this scenario -->
+                    <div v-if="g.screenshots.length" class="mt-2 flex flex-wrap gap-2">
+                      <button
+                        v-for="(s, si) in g.screenshots"
+                        :key="`shot${si}`"
+                        class="group relative h-20 w-28 shrink-0 overflow-hidden rounded border border-slate-800 bg-slate-950/60 hover:border-slate-600"
+                        :title="s.view"
+                        @click="openShot(s.artifactId)"
+                      >
+                        <img
+                          v-if="blobs.urlFor(s.artifactId)"
+                          :src="blobs.urlFor(s.artifactId)"
+                          :alt="`${s.view} (screenshot)`"
+                          class="h-full w-full object-cover object-top"
+                        />
+                        <span
+                          v-else
+                          class="flex h-full w-full items-center justify-center text-[10px] text-slate-600"
+                        >
+                          {{ blobs.statusFor(s.artifactId) === 'error' ? 'Failed' : 'Loading…' }}
+                        </span>
+                        <span
+                          class="absolute inset-x-0 bottom-0 truncate bg-slate-950/80 px-1 py-0.5 text-[9px] text-slate-300"
+                          >{{ s.view }}</span
+                        >
+                      </button>
+                    </div>
                   </div>
                 </li>
               </ul>
+
+              <!-- Standalone gallery: any captures not mapped to a scenario above -->
+              <section v-if="ungroupedScreenshots.length" class="mt-5">
+                <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Screenshots
+                </h3>
+                <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  <button
+                    v-for="(s, si) in ungroupedScreenshots"
+                    :key="`gal${si}`"
+                    class="group relative aspect-video overflow-hidden rounded-lg border border-slate-800 bg-slate-950/60 hover:border-slate-600"
+                    :title="s.view"
+                    @click="openShot(s.artifactId)"
+                  >
+                    <img
+                      v-if="blobs.urlFor(s.artifactId)"
+                      :src="blobs.urlFor(s.artifactId)"
+                      :alt="`${s.view} (screenshot)`"
+                      class="h-full w-full object-cover object-top"
+                    />
+                    <span
+                      v-else
+                      class="flex h-full w-full items-center justify-center text-[11px] text-slate-600"
+                    >
+                      {{
+                        blobs.statusFor(s.artifactId) === 'error' ? 'Failed to load' : 'Loading…'
+                      }}
+                    </span>
+                    <span
+                      class="absolute inset-x-0 bottom-0 truncate bg-slate-950/80 px-1.5 py-0.5 text-[10px] text-slate-300"
+                      >{{ s.view }}</span
+                    >
+                  </button>
+                </div>
+              </section>
             </template>
           </div>
 
@@ -409,5 +542,13 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
         </div>
       </div>
     </div>
+
+    <!-- Shared zoom/pan viewer for the captured screenshots. -->
+    <ArtifactLightbox
+      v-model:open="lightboxOpen"
+      v-model:index="lightboxIndex"
+      :items="lightboxItems"
+      :blobs="blobs"
+    />
   </Teleport>
 </template>

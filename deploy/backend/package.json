@@ -5,9 +5,7 @@
   "description": "Example Cloudflare Worker deployment of the @cat-factory/worker library. Carries the wrangler.toml + config; copy this package to deploy the backend on your own Cloudflare account.",
   "type": "module",
   "scripts": {
-    "predev": "pnpm --filter @cat-factory/worker run build",
     "dev": "wrangler dev",
-    "predeploy": "pnpm --filter @cat-factory/worker run build",
     "deploy": "wrangler deploy",
     "image:publish": "wrangler containers build ../../backend/internal/executor-harness -t cat-factory-executor:1.19.2 --push",
     "typecheck": "tsc -p tsconfig.json --noEmit",

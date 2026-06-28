@@ -1,5 +1,85 @@
 # @cat-factory/app
 
+## 0.45.1
+
+### Patch Changes
+
+- 78a9daa: Add a `vue-i18n-extract` CI guard (`i18n:check`) that fails when an i18n key is used in
+  code but missing from the catalog, and reports unused catalog keys as non-blocking
+  warnings. Closes the planned tier-3 i18n drift guard.
+
+## 0.45.0
+
+### Minor Changes
+
+- e641417: Add a document-authoring pipeline and a richer document task definition.
+
+  **Reviewers now read the real repository.** The `reviewer` (code) and `doc-reviewer`
+  companions run as read-only container reviewers: they clone the producer's PR branch and
+  read the ACTUAL changed files / committed document with tools before rating, instead of
+  grading the producer's summary reply (a review of a summary is worthless). They are
+  dispatched through the same async container path the coder/merger use and return their
+  verdict as structured JSON, resolved by the same threshold / rework-loop / human-gate
+  handling as before. Inline companions (`architect-companion` / `spec-companion`) are
+  unchanged. A container companion is gated on a wired sandbox like any other container kind.
+
+  A new forward-authoring track produces an in-repo Markdown document (PRD / RFC / design
+  doc / ADR / technical reference / runbook / research report) shipped as a pull request —
+  distinct from the reverse-documentation kinds (`documenter` / `business-documenter` /
+  `blueprints`) that describe existing code. Four new agent kinds are registered through the
+  public `registerAgentKind` seam — `doc-researcher` and `doc-outliner` (inline), `doc-writer`
+  (container-coding, opens the PR coder-style) and `doc-finalizer` (container-coding, polishes
+  on the PR branch) — plus a `doc-reviewer` companion that loops the writer back for rework.
+
+  Two built-in pipelines are seeded: `pl_document` (research → outline [human gate] → write →
+  AI review loop [human gate] → finalize → conflicts → ci → merger) and `pl_document_quick`.
+
+  The `document` task type gains a wider `docKind` set (`prd`/`rfc`/`adr`/`design`/`technical`/
+  `api`/`runbook`/`research`/`reference`/`other`) and optional `audience`, `targetPath` and
+  `outlineHints` fields, threaded into the agent context so the document agents specialise their
+  prompts. No new persisted tables — the committed Markdown is the durable artifact.
+
+### Patch Changes
+
+- Updated dependencies [e641417]
+  - @cat-factory/contracts@0.42.0
+
+## 0.44.0
+
+### Minor Changes
+
+- aeefe0a: Flesh out the tester-generated screenshot review UI — more robust, convenient, and
+  powerful, with the common review actions made pleasant.
+
+  - New reusable `ArtifactLightbox.vue` — a full-screen zoom/pan viewer over a SET of stored
+    screenshots, with keyboard nav (Esc/←/→/+/-/0), wheel + double-click zoom, pointer pan,
+    and per-image loading/error/retry states.
+  - New reusable `ImageCompare.vue` — actual-vs-reference comparator with four modes:
+    side-by-side, overlay (onion-skin opacity slider), swipe (draggable split), and a
+    client-side canvas pixel-difference (degrades to overlay if the canvas is ever tainted).
+  - New `useArtifactBlobs` composable — extracts the authed artifact-blob → object-URL
+    caching (with in-flight dedupe + status tracking) out of the visual-confirm store so both
+    review windows own and revoke their own blob cache on unmount.
+  - `VisualConfirmationWindow` reworked to use the comparator + lightbox, drag-and-drop a
+    reference straight onto a pair (view pre-filled) or pick by view via a datalist, and
+    attach per-view findings that are composed into the Fixer's findings alongside a freeform
+    box.
+  - `TestReportWindow` now renders the UI tester's captured screenshots (previously hidden):
+    thumbnails mapped under the matching scenario, an "ungrouped" gallery for the rest, and
+    click-to-zoom via the shared lightbox.
+  - New `useFocusTrap` composable — both review windows and the lightbox now move focus inside
+    on open, trap Tab, and restore focus on close (the window hands the trap off to the lightbox
+    while it's open, so nested surfaces don't fight over Tab).
+  - Comparator robustness: overlay/swipe fit the actual within the reference box
+    (`object-contain`) so a differing aspect ratio no longer stretches it; the diff render
+    guards against stale async draws; drag-dropped references are restricted to the same
+    PNG/JPEG the picker accepts; the "upload a reference for any view" picker now requires a
+    view name (an empty one can't pair and was silently orphaned); and the blob cache revokes a
+    fetch that resolves after the window unmounts instead of leaking it.
+
+  Frontend-only; no backend/contract changes (the per-view findings compose into the existing
+  `findings` string).
+
 ## 0.43.0
 
 ### Minor Changes

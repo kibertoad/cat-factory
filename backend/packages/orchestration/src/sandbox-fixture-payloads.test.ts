@@ -1,14 +1,20 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
-import type { clarityLogic, requirementsLogic } from '@cat-factory/orchestration'
+import { builtinFixture, builtinFixturesFor } from '@cat-factory/sandbox-fixtures'
 import { describe, expect, it } from 'vitest'
-import { builtinFixture, builtinFixturesFor } from './registry.js'
+import type * as clarityLogic from './modules/clarity/clarity.logic.js'
+import type * as requirementsLogic from './modules/requirements/requirements.logic.js'
 
 // Compile-time conformance: a fixture's `payload` is `Record<string, unknown>` on the wire,
 // but it MUST be the exact context shape the agent actually consumes. These typed literals
-// are checked against the real context types from orchestration/kernel (dev-only imports,
-// erased at runtime), and `toEqual` ties each one to the committed fixture so a drift in the
-// fixture payload — or in the upstream context type — fails this test instead of shipping.
-// (This lives in a test so the library build never depends on orchestration/kernel.)
+// are checked against the real context types from orchestration/kernel, and `toEqual` ties
+// each one to the committed fixture so a drift in the fixture payload — or in the upstream
+// context type — fails this test instead of shipping.
+//
+// This conformance test lives in orchestration (which owns the requirements/clarity logic
+// types AND can see the fixtures via @cat-factory/sandbox-fixtures) rather than in the
+// sandbox-fixtures package itself: a fixtures-side import of orchestration would close a
+// dependency cycle (orchestration -> sandbox -> sandbox-fixtures -> orchestration). Keeping
+// the check here leaves the fixtures package a pure, leaf data package.
 
 describe('fixture payloads conform to the agents’ context types', () => {
   it('requirements-review payload is a RequirementsContext', () => {

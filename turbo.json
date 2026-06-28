@@ -1,0 +1,57 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  // Turborepo owns the cross-package task graph (ordering + caching). Each package
+  // still builds/typechecks/tests itself with its own script (mostly `tsc -b` over
+  // the TS project-reference graph); Turbo only decides WHICH packages run a task
+  // and in WHAT order, then caches the result so unchanged packages are skipped.
+  //
+  // `^build` = "build every workspace dependency first" — this is what replaces the
+  // hand-wired `pre*` hooks the deploy packages used to carry (e.g. building
+  // @cat-factory/contracts before the frontend `nuxt generate`). Declare the edge
+  // once here and no entrypoint can run ahead of its dependencies again.
+  //
+  // A change to a shared tsconfig invalidates every cached build/typecheck.
+  "globalDependencies": ["backend/tsconfig.base.json"],
+  "tasks": {
+    // Per-package compile. `tsc -b` writes `dist/` + a sibling `*.tsbuildinfo`;
+    // both are cached so a restore reproduces the package's emitted state exactly.
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "*.tsbuildinfo"]
+    },
+    // `--noEmit` typecheck. Needs dependencies' declaration files, hence `^build`,
+    // but produces no cached artifact (only a pass/fail keyed on the inputs).
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    // Unit/integration suites. Tests import dependencies via their built `dist`
+    // (the package `main`), so dependencies must be built first.
+    "test:run": {
+      "dependsOn": ["^build"]
+    },
+    // Nuxt static SPA build. `^build` guarantees @cat-factory/contracts (via the
+    // @cat-factory/app layer) is compiled before vite resolves it.
+    "generate": {
+      "dependsOn": ["^build"],
+      "outputs": [".output/**", ".nuxt/**"]
+    },
+    // The frontend deploy package's `build` is `nuxt build`, not a `tsc -b` to
+    // `dist/` — override the generic `build` task's outputs for it.
+    "@cat-factory/deploy-frontend#build": {
+      "dependsOn": ["^build"],
+      "outputs": [".output/**", ".nuxt/**"]
+    },
+    // Wrangler deploy / pages deploy. Never cached (it has live side effects) and
+    // gated on its dependencies being built (the backend Worker, etc.).
+    "deploy": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    // Long-running dev servers: build deps once, then hand off to the watcher.
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

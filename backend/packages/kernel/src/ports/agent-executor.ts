@@ -11,6 +11,7 @@ import type {
   StepSubtasks,
   StreamedFollowUp,
   TaskEstimate,
+  TaskTypeFields,
 } from '../domain/types.js'
 
 // Port for "an agent doing its work". The execution engine calls this to perform
@@ -152,6 +153,14 @@ export interface AgentRunContext {
      * configured thresholds. Absent until an estimate has been produced.
      */
     estimate?: TaskEstimate | null
+    /**
+     * The block's per-type creation fields (a bug's severity, a `document` task's
+     * `docKind` / `audience` / `targetPath` / `outlineHints`, …). Threaded so a kind's
+     * user-prompt builder can specialise on them — e.g. the document-authoring agents read
+     * `docKind` to pick the right structure and `targetPath` to know where to write. Sparse;
+     * absent when no per-type fields were collected.
+     */
+    taskTypeFields?: TaskTypeFields
   }
   /** Outputs produced by earlier steps in the same run, in order. */
   priorOutputs: { agentKind: AgentKind; output: string }[]
