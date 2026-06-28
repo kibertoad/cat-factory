@@ -42,18 +42,12 @@ export class ValidationError extends DomainError {
  * conflict analogue of {@link CredentialRequiredReason}. Surfaced on the wire under
  * `error.details.reason`. Optional: a conflict with no client-specific handling can
  * omit it and just carry its message.
+ *
+ * The canonical list lives in `@cat-factory/contracts` (a wire shape shared by the SPA),
+ * re-exported here so `ConflictError` and the route contracts can't drift.
  */
-export type ConflictReason =
-  | 'providers_unconfigured'
-  | 'dependencies_unmet'
-  | 'task_limit_reached'
-  | 'tester_infra_unsupported'
-  | 'agent_backend_unconfigured'
-  | 'run_not_retryable'
-  | 'no_pr_to_merge'
-  | 'github_not_connected'
-  | 'bootstrap_not_retryable'
-  | 'bootstrap_reference_missing'
+export type { ConflictReason } from '@cat-factory/contracts'
+import type { ConflictReason } from '@cat-factory/contracts'
 
 /** Conflicts with current state (→ 409). */
 export class ConflictError extends DomainError {

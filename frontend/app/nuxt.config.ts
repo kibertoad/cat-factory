@@ -32,7 +32,29 @@ export default defineNuxtConfig({
     },
   },
 
-  modules: ['@nuxt/ui', '@pinia/nuxt', 'pinia-plugin-persistedstate/nuxt'],
+  modules: ['@nuxt/ui', '@pinia/nuxt', 'pinia-plugin-persistedstate/nuxt', '@nuxtjs/i18n'],
+
+  // i18n lives in THIS layer's `i18n/` dir (the v9+ `restructureDir` convention).
+  // @nuxtjs/i18n is layer-aware: it scans `i18n/locales/` in every layer of the
+  // `extends` chain and DEEP-MERGES them (the consumer layer wins on key conflicts),
+  // so a downstream deployment can override/add a locale by dropping its own
+  // `i18n/locales/*.json` with no change here. Unlike the css block above, the paths
+  // here MUST be bare filenames (not `layerDir`-anchored absolutes): the module
+  // resolves `vueI18n`/`langDir` per-layer itself, and an absolute path would break
+  // that per-layer resolution.
+  i18n: {
+    // Pure SPA (`ssr: false`): a single in-app locale, no URL-prefix routing.
+    strategy: 'no_prefix',
+    defaultLocale: 'en',
+    locales: [{ code: 'en', language: 'en-US', file: 'en.json', name: 'English' }],
+    vueI18n: 'i18n.config.ts',
+    experimental: {
+      // Generate types from the `en` messages so an unknown `$t`/`t` key is a `nuxt
+      // typecheck` failure — the load-bearing maintainability guardrail given the repo
+      // lints with oxlint only (no `@intlify/eslint-plugin-vue-i18n` `no-raw-text`).
+      typedOptionsAndMessages: 'default',
+    },
+  },
 
   // This is a Nuxt *layer*. @pinia/nuxt's default `storesDirs` is an ABSOLUTE path
   // resolved against the CONSUMER's srcDir, so when this layer is `extends`ed it
