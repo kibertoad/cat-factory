@@ -2821,7 +2821,7 @@ export class ExecutionService {
                 block,
                 isFinalStep,
               )
-            default:
+            case ARCHITECTURE_BRAINSTORM_AGENT_KIND:
               return this.reviewGate.evaluate(
                 this.architectureBrainstormKind,
                 workspaceId,
@@ -2830,6 +2830,12 @@ export class ExecutionService {
                 block,
                 isFinalStep,
               )
+            // `canHandle` admits only the kinds in REVIEW_GATE_AGENT_KINDS, so every member
+            // must have an explicit case above. Throw loudly if the two ever drift (a new
+            // review kind added to the Set without a case here) rather than silently routing
+            // it to the wrong reviewer.
+            default:
+              throw new Error(`Unhandled review-gate agentKind "${step.agentKind}"`)
           }
         },
       },
