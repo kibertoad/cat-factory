@@ -52,7 +52,7 @@ export function clarityReviewController(): Hono<AppEnv> {
     if (!clarity) return unavailable(c)
     const review = await c
       .get('container')
-      .executionService.reviewClarity(param(c, 'workspaceId'), c.req.valid('param').blockId)
+      .executionService.clarityReview.review(param(c, 'workspaceId'), c.req.valid('param').blockId)
     return c.json(review, 201)
   })
 
@@ -90,7 +90,7 @@ export function clarityReviewController(): Hono<AppEnv> {
     if (!clarity) return unavailable(c)
     const review = await c
       .get('container')
-      .executionService.incorporateClarity(
+      .executionService.clarityReview.incorporate(
         param(c, 'workspaceId'),
         c.req.valid('param').blockId,
         c.req.valid('json').feedback,
@@ -104,7 +104,10 @@ export function clarityReviewController(): Hono<AppEnv> {
     if (!clarity) return unavailable(c)
     const review = await c
       .get('container')
-      .executionService.reReviewClarity(param(c, 'workspaceId'), c.req.valid('param').blockId)
+      .executionService.clarityReview.reReview(
+        param(c, 'workspaceId'),
+        c.req.valid('param').blockId,
+      )
     return c.json(review, 200)
   })
 
@@ -114,7 +117,7 @@ export function clarityReviewController(): Hono<AppEnv> {
     if (!clarity) return unavailable(c)
     const review = await c
       .get('container')
-      .executionService.proceedClarity(param(c, 'workspaceId'), c.req.valid('param').blockId)
+      .executionService.clarityReview.proceed(param(c, 'workspaceId'), c.req.valid('param').blockId)
     return c.json(review, 200)
   })
 
@@ -124,7 +127,7 @@ export function clarityReviewController(): Hono<AppEnv> {
     if (!clarity) return unavailable(c)
     const review = await c
       .get('container')
-      .executionService.resolveClarityExceeded(
+      .executionService.clarityReview.resolveExceeded(
         param(c, 'workspaceId'),
         c.req.valid('param').blockId,
         c.req.valid('json').choice,
