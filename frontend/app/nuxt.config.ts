@@ -77,7 +77,6 @@ export default defineNuxtConfig({
   css: [
     '@vue-flow/core/dist/style.css',
     '@vue-flow/core/dist/theme-default.css',
-    '@vue-flow/minimap/dist/style.css',
     '@vue-flow/node-resizer/dist/style.css',
     join(layerDir, 'app/assets/css/main.css'),
   ],
