@@ -1569,5 +1569,166 @@
         "removeFailed": "No se pudo eliminar el runner"
       }
     }
+  },
+  "providers": {
+    "presetMismatch": {
+      "title": "El preajuste usa modelos no disponibles",
+      "intro": "El preajuste de modelo predeterminado del espacio de trabajo \"{name}\" asigna modelos que no están disponibles con la configuración actual. Las tareas que usen este preajuste fallarían al llegar a esos pasos.",
+      "unavailable": "No disponibles",
+      "advice": "Reapunta el preajuste a modelos que tengas configurados o añade el proveedor que falta.",
+      "later": "Más tarde",
+      "configureVendors": "Configurar proveedores",
+      "editPresets": "Editar preajustes",
+      "defaultPresetName": "preajuste predeterminado"
+    },
+    "onboarding": {
+      "title": "Configurar un proveedor de modelos de IA",
+      "noModelTitle": "Todavía no hay ningún modelo de IA disponible en este espacio de trabajo.",
+      "noModelBody": "Los agentes necesitan un modelo para ejecutarse. La IA funciona de inmediato solo en un despliegue de Cloudflare con Workers AI habilitado; de lo contrario, conecta al menos una fuente abajo.",
+      "operatorNote": "AWS Bedrock y Cloudflare Workers AI los habilita el operador del despliegue mediante la configuración del entorno, no desde esta pantalla.",
+      "routes": {
+        "keys": {
+          "title": "Claves y suscripciones de proveedores",
+          "body": "Añade una clave de API directa de un proveedor (OpenAI, Anthropic, Qwen, …) o conecta una suscripción comercial de plan de programación (Kimi, DeepSeek) o una personal (Claude, GLM, Codex).",
+          "cta": "Abrir proveedores de LLM"
+        },
+        "openrouter": {
+          "title": "Pasarela OpenRouter",
+          "body": "Habilita modelos a través de la pasarela OpenRouter con una sola clave. Explora y activa los modelos que quieras.",
+          "cta": "Explorar modelos de OpenRouter"
+        },
+        "local": {
+          "title": "Mis ejecutores locales",
+          "body": "Apunta cat-factory a un modelo que ejecutes tú mismo (Ollama, LM Studio, llama.cpp, vLLM, …). Sin clave de API ni gasto.",
+          "cta": "Configurar ejecutores locales"
+        }
+      }
+    },
+    "personalCredential": {
+      "titleWrongPassword": "Contraseña personal incorrecta",
+      "titleNoSubscription": "Conecta tu suscripción de {vendor}",
+      "titleExpired": "Tu suscripción de {vendor} ha caducado",
+      "titleDefault": "Introduce tu contraseña personal",
+      "fallbackVendor": "suscripción",
+      "connectBody": "Esta tarea usa un modelo de {vendor}, que se ejecuta con tu propia suscripción de {vendor}. Conéctala (o renuévala) primero y luego inicia la ejecución de nuevo.",
+      "connectCta": "Conectar suscripción",
+      "passwordBody": "Introduce la contraseña personal que protege tu suscripción de {vendor}. Desbloquea tu credencial solo para esta ejecución y se almacena en este navegador un tiempo para no volver a pedírtela enseguida.",
+      "passwordField": "Contraseña personal",
+      "passwordPlaceholder": "tu contraseña personal",
+      "submit": "Desbloquear y ejecutar",
+      "cancel": "Cancelar",
+      "toast": {
+        "started": "Ejecución iniciada",
+        "startFailed": "No se pudo iniciar la ejecución"
+      },
+      "vendors": {
+        "claude": "Claude",
+        "glm": "GLM (Z.ai)",
+        "codex": "ChatGPT (Codex)"
+      }
+    },
+    "apiKeys": {
+      "directHeading": "Claves de API de proveedores directos",
+      "proxyHeading": "Claves de API de proxy / pasarela",
+      "directAccountIntro": "Conecta una clave de API de proveedor compartida por todos los espacios de trabajo de esta cuenta. Las claves se almacenan cifradas, se agrupan y se rotan según el uso. Las claves de cuenta las gestiona un administrador.",
+      "directIntro": "Conecta una clave de API de proveedor para que los modelos se ejecuten directamente en ese proveedor. Las claves se almacenan cifradas, se agrupan y se rotan según el uso. Asigna el alcance de una clave a este espacio de trabajo (compartida con el equipo) o a ti (tu propio grupo, usable en cualquier sitio).",
+      "proxyAccountIntro": "Conecta una clave de proxy (OpenRouter, LiteLLM) compartida por todos los espacios de trabajo de esta cuenta. Un proxy es un intermediario que da acceso a muchos proveedores tras una sola clave. Las claves se almacenan cifradas, se agrupan y se rotan según el uso.",
+      "proxyIntro": "Conecta una clave de proxy (OpenRouter, LiteLLM). Un proxy es un intermediario que llega a los modelos de muchos proveedores a través de una sola pasarela, en lugar de un proveedor directo. Las claves se almacenan cifradas, se agrupan y se rotan según el uso. Asigna el alcance de una clave a este espacio de trabajo (compartida con el equipo) o a ti (tu propio grupo, usable en cualquier sitio).",
+      "scopeField": "Alcance",
+      "scopeWorkspace": "Este espacio de trabajo",
+      "scopeUser": "Mis claves (solo yo)",
+      "providerField": "Proveedor",
+      "proxyField": "Proxy",
+      "openKeys": "Abrir claves de {provider} ↗",
+      "cachingNote": "Habilita la caché de prompts para los modelos de {provider}, de modo que una ejecución larga de varios turnos reutiliza su prefijo de prompt en caché en lugar de reenviarlo cada turno.",
+      "labelField": "Etiqueta (opcional)",
+      "labelPlaceholder": "p. ej. clave del equipo",
+      "defaultLabel": "Clave de {provider}",
+      "keyField": "Clave de API",
+      "keyPlaceholder": "pega la clave de API",
+      "connect": "Conectar",
+      "connected": "Conectadas ({count})",
+      "usage": "{tokens} tok esta ventana · {count} llamada | {tokens} tok esta ventana · {count} llamadas",
+      "toast": {
+        "connected": "Clave de API conectada",
+        "connectFailed": "No se pudo conectar la clave",
+        "removeFailed": "No se pudo eliminar la clave"
+      },
+      "providers": {
+        "openai": {
+          "label": "OpenAI",
+          "step1": "Abre platform.openai.com → API keys y crea una nueva clave secreta.",
+          "step2": "Copia la clave (empieza por sk-…); solo se muestra una vez."
+        },
+        "anthropic": {
+          "label": "Anthropic (API de Claude)",
+          "step1": "Abre console.anthropic.com → Settings → API Keys y crea una clave.",
+          "step2": "Copia la clave (empieza por sk-ant-…)."
+        },
+        "qwen": {
+          "label": "Qwen (Alibaba DashScope)",
+          "step1": "Abre la consola de DashScope (internacional) → API-KEY y crea una clave.",
+          "step2": "Copia la clave; autentica el endpoint de Qwen compatible con OpenAI."
+        },
+        "deepseek": {
+          "label": "DeepSeek",
+          "step1": "Abre platform.deepseek.com → API keys y crea una clave.",
+          "step2": "Copia la clave (empieza por sk-…)."
+        },
+        "moonshot": {
+          "label": "Moonshot (API de Kimi)",
+          "step1": "Abre platform.moonshot.ai → API Keys y crea una clave.",
+          "step2": "Copia la clave; autentica el endpoint de Moonshot compatible con OpenAI."
+        },
+        "openrouter": {
+          "label": "OpenRouter",
+          "step1": "Abre openrouter.ai → Keys y crea una clave de API.",
+          "step2": "Copia la clave (empieza por sk-or-…); llega a más de 300 modelos a través de una sola pasarela."
+        },
+        "litellm": {
+          "label": "LiteLLM (pasarela autoalojada)",
+          "step1": "Genera una clave virtual en tu pasarela LiteLLM (o usa su clave maestra).",
+          "step2": "La URL base de la pasarela la establece el operador de tu despliegue (LITELLM_BASE_URL), no aquí."
+        }
+      }
+    },
+    "vendorCredentials": {
+      "title": "Proveedores de LLM",
+      "tabs": {
+        "pool": "Grupo del espacio de trabajo",
+        "direct": "Proveedores directos",
+        "proxy": "Proxies",
+        "personal": "Suscripciones personales"
+      },
+      "poolIntro": "Conecta una suscripción comercial de plan de programación (Kimi, DeepSeek) que permita uso de equipo/organización para ejecutar los pasos de agente en el harness de Claude Code en lugar de una clave de API. Los tokens se almacenan cifrados, se agrupan y se rotan según el uso. Los modelos de suscripción tienen cuota de tarifa plana, así que no consumen tu presupuesto de gasto. Las suscripciones de uso individual (Claude, GLM, ChatGPT/Codex) se conectan por usuario en la pestaña de Suscripciones personales.",
+      "vendorField": "Proveedor",
+      "labelField": "Etiqueta (opcional)",
+      "labelPlaceholder": "p. ej. cuenta de trabajo",
+      "defaultLabel": "Token de {vendor}",
+      "tokenField": "Token",
+      "tokenPlaceholder": "tu clave de API del plan de programación",
+      "connect": "Conectar",
+      "connected": "Conectados ({count})",
+      "usage": "{tokens} tok esta ventana · {count} ejecución | {tokens} tok esta ventana · {count} ejecuciones",
+      "toast": {
+        "connected": "Token conectado",
+        "connectFailed": "No se pudo conectar el token",
+        "removeFailed": "No se pudo eliminar el token"
+      },
+      "vendors": {
+        "kimi": {
+          "label": "Kimi (plan de programación de Moonshot)",
+          "step1": "Abre la consola de tu plan de programación de Moonshot (Kimi) y crea una clave de API para el endpoint compatible con Anthropic.",
+          "step2": "Copia la clave de API. Los pasos de agente se ejecutarán vía Claude Code contra el endpoint de Anthropic de Moonshot con contexto completo.",
+          "step3": "Pega la clave abajo."
+        },
+        "deepseek": {
+          "label": "DeepSeek (plan de programación)",
+          "step1": "Abre la consola de tu plan de programación de DeepSeek y crea una clave de API para el endpoint compatible con Anthropic.",
+          "step2": "Copia la clave de API. Los pasos de agente se ejecutarán vía Claude Code contra el endpoint de Anthropic de DeepSeek con contexto completo.",
+          "step3": "Pega la clave abajo."
+        }
+      }
+    }
   }
 }
