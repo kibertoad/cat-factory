@@ -1137,13 +1137,11 @@
           "label": "Santé après publication",
           "description": "Surveillez les moniteurs et les SLO après la publication d'une version (Datadog)."
         },
-        "environment": {
-          "label": "Environnements éphémères",
-          "description": "Là où l'agent Tester s'exécute contre un environnement d'aperçu en direct."
-        },
-        "runnerPool": {
-          "label": "Pool d'exécuteurs auto-hébergé",
-          "description": "Là où les agents de code s'exécutent quand les Cloudflare Containers ne sont pas utilisés."
+        "infrastructure": {
+          "label": "Infrastructure",
+          "description": "Pool d'exécuteurs auto-hébergé pour les agents de conteneur et environnements de test éphémères.",
+          "agents": "Agents : {state}",
+          "envs": "Environnements : {state}"
         },
         "localMode": {
           "label": "Mode local",
@@ -1212,6 +1210,12 @@
     },
     "providerConnection": {
       "fallbackTitle": "Fournisseur",
+      "windowTitle": "Infrastructure",
+      "noneAvailable": "Aucun fournisseur d'infrastructure n'est activé sur ce déploiement.",
+      "tabs": {
+        "containerAgents": "Agents de conteneur",
+        "testEnvironments": "Environnements de test"
+      },
       "kind": {
         "environment": {
           "title": "Fournisseur d'environnements éphémères",
@@ -1221,6 +1225,18 @@
           "title": "Pool d'exécuteurs auto-hébergé",
           "blurb": "Là où les agents de codage s'exécutent lorsque les conteneurs Cloudflare ne sont pas utilisés. Configurez le point de terminaison du planificateur du pool et les identifiants."
         }
+      },
+      "manifestEditor": {
+        "title": "Manifeste du fournisseur",
+        "jsonLabel": "Manifeste (JSON)",
+        "jsonHelp": "Décrivez l'API de votre fournisseur de manière déclarative : l'URL de base, le schéma d'authentification, les modèles de requête et le mappage des réponses. Validé par rapport au même contrat que celui appliqué par le serveur.",
+        "invalidJson": "Le manifeste n'est pas un JSON valide.",
+        "invalidShape": "Le manifeste ne correspond pas à la forme attendue.",
+        "schemaError": "Problème de manifeste — {message}",
+        "secretsLabel": "Secrets",
+        "noSecrets": "Ce manifeste ne référence aucun secret.",
+        "reenterSecrets": "Saisissez à nouveau chaque secret pour enregistrer : les secrets stockés sont en écriture seule et ne sont pas affichés.",
+        "starterHint": "Ceci est un exemple de départ. Modifiez-le pour qu'il corresponde à l'API de votre fournisseur."
       },
       "delegation": {
         "title": "Délégation locale",
@@ -1233,13 +1249,10 @@
         "envHint": "Montez l'environnement d'aperçu du Tester via le fournisseur d'environnements configuré ci-dessous plutôt que via docker-compose dans le conteneur. Connectez d'abord un fournisseur pour activer cette option.",
         "updateFailed": "Impossible de mettre à jour la délégation"
       },
-      "runnerPoolLocalHint": "Enregistrez votre pool ici, puis activez « Exécuter les agents de conteneur sur le pool d'exécuteurs » sur l'écran {link} pour y router les agents de cet espace de travail.",
-      "ephemeralEnvironments": "Environnements éphémères",
       "viewLogs": "Voir les journaux",
       "hideLogs": "Masquer les journaux",
       "connectedAt": "Connecté · {baseUrl}",
       "missingConfig": "Configuration requise manquante : {fields}",
-      "manifestEditorUnavailable": "Ce fournisseur se configure en rédigeant un manifeste. L'éditeur de manifeste intégré n'est pas encore disponible ; enregistrez-le via l'API pour le moment.",
       "form": {
         "updateConfiguration": "Mettre à jour la configuration",
         "connect": "Connecter",

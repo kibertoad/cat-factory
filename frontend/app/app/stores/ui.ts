@@ -125,9 +125,13 @@ export const useUiStore = defineStore('ui', () => {
   // today, pluggable). NB: distinct from `observabilityInstanceId` below, which is the
   // LLM per-call observability panel.
   const observabilityConnectionOpen = ref(false)
-  // Infrastructure provider connect panels (ephemeral-environment provider + self-hosted
-  // runner pool). One panel renders whichever kind is open; null ⇒ closed.
-  const providerConnectionKind = ref<'environment' | 'runner-pool' | null>(null)
+  // The single tabbed Infrastructure window (ephemeral-environment provider + self-hosted
+  // runner pool — the same custom pool typically backs both jobs, so they're configured
+  // together). `infrastructureOpen` is the modal flag; `infrastructureTab` selects which
+  // provider's tab is shown. `openProviderConnection(kind)` stays the entry API but now
+  // selects the matching tab instead of mounting a per-kind standalone panel.
+  const infrastructureOpen = ref(false)
+  const infrastructureTab = ref<'environment' | 'runner-pool'>('runner-pool')
   const modelConfigOpen = ref(false)
   // LLM-vendor subscription credentials (the token pool powering the Claude Code
   // / Codex harnesses). `vendorCredentialsTab` lets a caller deep-link to one tab —
@@ -477,10 +481,11 @@ export const useUiStore = defineStore('ui', () => {
   }
   function openProviderConnection(kind: 'environment' | 'runner-pool') {
     resetHubReturn()
-    providerConnectionKind.value = kind
+    infrastructureTab.value = kind
+    infrastructureOpen.value = true
   }
   function closeProviderConnection() {
-    providerConnectionKind.value = null
+    infrastructureOpen.value = false
   }
   function openModelConfig() {
     modelConfigOpen.value = true
@@ -662,7 +667,8 @@ export const useUiStore = defineStore('ui', () => {
     accountSettingsOpen,
     accountSettingsTab,
     observabilityConnectionOpen,
-    providerConnectionKind,
+    infrastructureOpen,
+    infrastructureTab,
     modelConfigOpen,
     vendorCredentialsOpen,
     vendorCredentialsTab,
