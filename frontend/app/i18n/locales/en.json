@@ -344,5 +344,407 @@
         "step3": "Copy the entire contents of auth.json, paste it below, and choose a personal password to protect it."
       }
     }
+  },
+  "inspector": {
+    "container": {
+      "modules": "Modules ({count})",
+      "taskCount": "{count} task | {count} tasks",
+      "allTasks": "All tasks ({count})",
+      "tasks": "Tasks ({count})",
+      "addTask": "Add task",
+      "noTasks": "No tasks yet. Add one to start work.",
+      "servicesHint": "Services are long-lived and don't complete. Work happens in their tasks and modules."
+    },
+    "epicChildren": {
+      "title": "Epic tasks",
+      "doneCount": "{done}/{total} done",
+      "empty": "No tasks belong to this epic yet. Import an epic's children, or set a task's epic.",
+      "unassigned": "Unassigned"
+    },
+    "recurring": {
+      "title": "Recurring pipeline",
+      "active": "Active",
+      "paused": "Paused",
+      "intervalDays": "{count}d",
+      "intervalHours": "{count}h",
+      "anyDay": "any day",
+      "cadence": "Every {every} · {days}{window} · {timezone}",
+      "weekdays": {
+        "sun": "Sun",
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat"
+      },
+      "nextRun": "Next run: {time}",
+      "runNow": "Run now",
+      "pause": "Pause",
+      "resume": "Resume",
+      "editCadence": "Edit cadence",
+      "recentRuns": "Recent runs",
+      "runStatus": {
+        "running": "Running",
+        "done": "Done",
+        "failed": "Failed",
+        "skipped": "Skipped"
+      },
+      "updateFailed": "Could not update schedule",
+      "runNowFailed": "Could not run now"
+    },
+    "fragments": {
+      "serviceTitle": "Service best practices",
+      "serviceEmpty": "None. Code-aware agents on this service follow their default guidance."
+    },
+    "releaseHealth": {
+      "title": "Post-release health",
+      "clear": "Clear",
+      "connectPrompt": "Connect an observability integration to watch this service after releases.",
+      "connectFirst": "Connect an observability integration first",
+      "connect": "Connect",
+      "hint": "The monitors and SLOs the gate watches after this service ships. Comma-separate ids.",
+      "monitorIds": "Monitor ids",
+      "sloIds": "SLO ids",
+      "envTag": "Env tag (optional)",
+      "saveMonitoring": "Save monitoring",
+      "savedToast": "Monitoring saved",
+      "saveFailed": "Could not save the mapping",
+      "clearFailed": "Could not clear the mapping"
+    },
+    "testConfig": {
+      "title": "Test infrastructure",
+      "defaultEnv": "Default test environment",
+      "defaultEnvHint": "The default tasks under this service are spawned with. Each task can override it in its agent settings.",
+      "env": {
+        "ephemeral": "Ephemeral environment",
+        "ephemeralHint": "tests run against a provisioned env",
+        "local": "Local (docker-compose)",
+        "localHint": "the Tester stands deps up locally"
+      },
+      "composePath": "docker-compose path",
+      "browseRepo": "Browse the repository for the compose file",
+      "composeHint": "Used by the Tester to stand up the service's dependencies locally.",
+      "selectComposeTitle": "Select the docker-compose file",
+      "selectComposeHint": "Pick the compose file in the repository. Its path is stored relative to the repo root.",
+      "selected": "Selected: {path}",
+      "noFileSelected": "No file selected.",
+      "useThisFile": "Use this file",
+      "noInfra": "No infra dependencies (the Tester spins nothing up)",
+      "missingInfra": "Set a docker-compose path or enable no infra dependencies, otherwise a pipeline with a Tester won't start.",
+      "provisioningTitle": "Ephemeral environment provisioning",
+      "provisioningHint": "A hint for provisioning this service's ephemeral test environment: which cloud provider to deploy to and how large an instance to request. Ignored for local (docker-compose) testing.",
+      "cloudProvider": "Cloud provider",
+      "instanceSize": "Instance size",
+      "providers": {
+        "docker": "Docker (local)",
+        "custom": "Custom"
+      },
+      "sizes": {
+        "small": "Small",
+        "medium": "Medium",
+        "large": "Large",
+        "xlarge": "XLarge"
+      }
+    },
+    "agentConfig": {
+      "title": "Agent configuration",
+      "inherited": "inherited from service",
+      "frozen": "Frozen: the agent has started"
+    },
+    "dependencies": {
+      "title": "Depends on",
+      "merged": "Merged",
+      "notMerged": "Not merged yet",
+      "empty": "No dependencies. Can run any time.",
+      "blocked": "Blocked until dependencies merge."
+    },
+    "estimate": {
+      "title": "Estimate",
+      "complexity": "Complexity",
+      "risk": "Risk",
+      "impact": "Impact"
+    },
+    "execution": {
+      "stage": {
+        "incorporating": "Incorporating…",
+        "reviewing": "Re-reviewing…",
+        "recommending": "Recommending…"
+      },
+      "prNumber": "PR #{number}",
+      "pullRequest": "Pull request",
+      "stepState": {
+        "pending": "Pending",
+        "working": "Working",
+        "waiting_decision": "Needs decision",
+        "done": "Done"
+      },
+      "failed": "Failed",
+      "needsDecision": "Needs decision",
+      "needsApproval": "Needs approval",
+      "spinningUp": "Spinning up…",
+      "stop": "Stop",
+      "stopTooltip": "Stop the run but keep it (readable and retryable)",
+      "reset": "Reset",
+      "resetTooltip": "Discard this run and reset the task to planned",
+      "viewDetailsOutput": "View details and read output",
+      "viewDetails": "View step details",
+      "companion": "Companion",
+      "companionTooltip": "Companion of a producer step",
+      "subtasksProgress": "{completed} of {total} subtasks done, {inProgress} in progress",
+      "subtasksDone": "{completed} of {total} subtasks done",
+      "resolve": "Resolve",
+      "decide": "Decide",
+      "review": "Review",
+      "approve": "Approve",
+      "fragmentsTooltip": "Best-practice fragments folded into this step: {fragments}",
+      "standardsApplied": "{count} standard applied | {count} standards applied",
+      "companionOf": "{label} (companion)",
+      "merged": "Merged",
+      "open": "Open",
+      "mergePr": "Merge PR"
+    },
+    "structure": {
+      "module": "Module",
+      "modulePlaceholder": "e.g. Sessions (created on implement if new)",
+      "bestPractices": "Best practices",
+      "bestPracticesEmpty": "None. Agents follow their default guidance."
+    },
+    "runSettings": {
+      "unassigned": "Unassigned",
+      "workspaceDefault": "Workspace default",
+      "workspaceDefaultParen": "(workspace default)",
+      "defaultPresetThresholds": "Default ({name}): {thresholds}",
+      "defaultPreset": "Default ({name})",
+      "noDefault": "No default",
+      "inheritWorkspace": "Inherit workspace",
+      "on": "On",
+      "off": "Off",
+      "inheritOn": "Inherit (on)",
+      "inheritOff": "Inherit (off)",
+      "technical": {
+        "unset": "Unset (auto-detect)",
+        "technical": "Technical",
+        "business": "Business"
+      },
+      "pipeline": "Pipeline",
+      "pipelineEmpty": "No default. Pick a pipeline when you run this task.",
+      "mergePolicy": "Merge policy",
+      "mergePresetDetail": "{name}: auto-merge when complexity ≤ {complexity}, risk ≤ {risk}, impact ≤ {impact}; up to {attempts} CI-fix attempts.",
+      "mergePresetEmpty": "No preset configured. The merger raises a review notification for every PR.",
+      "modelPreset": "Model preset",
+      "modelPresetBase": "base {model}",
+      "modelPresetOverrides": ", {count} override | , {count} overrides",
+      "modelPresetEmpty": "No preset configured. Agents run on the deployment's default routing.",
+      "unavailableModels": "Not available under the current configuration: {models}. This task would fail on those steps.",
+      "editPresets": "Edit presets",
+      "configureVendors": "Configure vendors",
+      "modelPresetChangeHint": "Changing this affects only steps that haven't started yet.",
+      "taskKind": "Task kind",
+      "technicalHint": {
+        "technical": "Technical: the implementer treats the task definition as primary and the spec as a regression reference; the spec-writer may produce no business specs.",
+        "business": "Business: the specification leads, as usual.",
+        "unset": "Auto-detect: inferred from the spec phase. Set it explicitly to override."
+      },
+      "issueWriteback": "Issue writeback",
+      "commentOnPrOpen": "Comment on PR open",
+      "closeOnMerge": "Close on merge",
+      "writebackHint": "Writes back to this task's linked tracker issue. Overrides the workspace default.",
+      "responsibleProduct": "Responsible product",
+      "responsibleEmpty": "Unassigned. Set a product owner to notify them when requirement review flags this task.",
+      "autoStartDependents": "Auto-start dependents",
+      "autoStartHint": "When this task merges, automatically start the tasks that depend on it (once their other dependencies are also done)."
+    }
+  },
+  "panels": {
+    "decision": {
+      "title": "Decision required",
+      "agentOnBlock": "{agent} on {block}",
+      "visualizationHint": "This is a visualization. Any choice simply resumes the pipeline."
+    },
+    "stepRestart": {
+      "restartFromStep": "Restart pipeline from this step",
+      "restartFromHere": "Restart from here"
+    },
+    "structuredResult": {
+      "fallbackTitle": "Agent result",
+      "titleWithBlock": "{label}: {title}",
+      "fallbackDescription": "Structured agent output",
+      "structuredOutput": "Structured output",
+      "noResult": "No result yet.",
+      "noResultHint": "The structured output appears once this agent finishes. While it runs, the step shows live progress on the board."
+    },
+    "testReport": {
+      "title": "Test report",
+      "greenlit": "Greenlit",
+      "needsFixes": "Needs fixes",
+      "fixAttempts": "{count}/{max} fix attempts",
+      "fixing": "· fixing…",
+      "tested": "Tested",
+      "outcomes": "Outcomes",
+      "concerns": "Concerns"
+    },
+    "stepMeta": {
+      "stateLabel": "State",
+      "duration": "Duration",
+      "elapsed": "elapsed",
+      "step": "Step",
+      "stepOf": "{number} of {total}",
+      "started": "Started",
+      "finished": "Finished",
+      "model": "Model",
+      "notRecorded": "Not recorded",
+      "run": "Run",
+      "clickToCopy": "{id} (click to copy)",
+      "spinningUpContainer": "Spinning up container…",
+      "subtasks": "Subtasks · {completed}/{total}",
+      "standardsApplied": "Standards applied",
+      "decision": "Decision",
+      "awaitingChoice": "Awaiting a human choice",
+      "approvalGate": "Approval gate",
+      "companionReview": "Companion review",
+      "correctionIterations": "{count} correction iteration. | {count} correction iterations.",
+      "state": {
+        "pending": "Pending",
+        "working": "Working",
+        "waiting_decision": "Needs input",
+        "done": "Done",
+        "failed": "Failed"
+      },
+      "approvalStatus": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "changes_requested": "Changes requested",
+        "rejected": "Rejected"
+      }
+    },
+    "stepDetail": {
+      "contents": "Contents",
+      "details": "Details",
+      "approvalRequired": "Approval required",
+      "decisionRequired": "Decision required",
+      "expandAll": "Expand all sections",
+      "collapseAll": "Collapse all sections",
+      "copyRawOutput": "Copy raw output",
+      "closeEsc": "Close (Esc)",
+      "companionCapHeading": "{agent} hit its {attempts}-attempt rework limit, still below the {threshold} bar.",
+      "companionCapDetail": "Do one more automatic rework round, proceed to the next step accepting the current output, or stop and reset the task so you can edit the inputs and resubmit.",
+      "infraAttempts": "Infrastructure attempts",
+      "hideInfraAttempts": "Hide infrastructure attempts",
+      "editingConclusions": "Editing the conclusions",
+      "editConclusionsPlaceholder": "Edit the agent's conclusions; your edits are saved when you approve…",
+      "noProseOutput": "This agent produced no prose output.",
+      "approveWithCorrections": "Approve with corrections",
+      "reviewAndApprove": "Review & approve",
+      "editHint": "Edit the conclusions on the left; your edits are saved when you approve.",
+      "reviewHint": "Click any block in the output to comment on it, or leave overall feedback below.",
+      "editingNotice": "You're editing the conclusions directly. Manual edits can't be combined with per-block comments. Approve to save them, or cancel to return to review.",
+      "commentingOn": "Commenting on",
+      "commentPlaceholder": "Leave a comment on this block…",
+      "addComment": "Add comment",
+      "commentN": "Comment {number}",
+      "removeComment": "Remove comment",
+      "overallFeedback": "Overall feedback / reject reason",
+      "overallFeedbackPlaceholder": "Describe the changes the agent should make (optional if you left per-block comments)…",
+      "approveWithEdits": "Approve with these edits",
+      "cancelEdits": "Cancel edits",
+      "approveAndProceed": "Approve & proceed",
+      "rejectConfirmPrompt": "Reject this proposal and stop the run entirely?",
+      "confirmReject": "Confirm reject",
+      "requestChanges": "Request changes",
+      "reject": "Reject",
+      "requestChangesHint": "Request changes re-runs this step with your feedback & comments. Reject stops the run entirely."
+    },
+    "inspector": {
+      "frameStatus": {
+        "planned": "No tasks",
+        "ready": "Live",
+        "in_progress": "Active",
+        "blocked": "Needs attention",
+        "pr_ready": "Active",
+        "done": "Live"
+      },
+      "deleteRecurringPipeline": "Delete recurring pipeline",
+      "deleteTask": "Delete task",
+      "deleteModule": "Delete module",
+      "deleteService": "Delete service",
+      "titlePlaceholder": "Title…",
+      "reworkedRequirements": "Reworked requirements",
+      "agentStepsUseDocument": "Agent steps use this document.",
+      "open": "Open",
+      "originalDescriptionFrozen": "Original description (frozen)",
+      "noDescription": "No description",
+      "describeBlock": "Describe this block…",
+      "taskStartedLocked": "This task has started. Its details are locked.",
+      "lastIncorporatedRequirements": "Last incorporated requirements",
+      "priorDocHint": "From the previous review. Use it as a base: edit the description above and resubmit.",
+      "bootstrapping": "Bootstrapping…",
+      "importIssue": "Import issue",
+      "connectTracker": "Connect a tracker",
+      "spawnFromDocument": "Spawn from document",
+      "viewRequirements": "View Requirements",
+      "reRun": "Re-run",
+      "run": "Run",
+      "focus": "Focus"
+    }
+  },
+  "observability": {
+    "modelActivity": "Model activity",
+    "viewAllCalls": "View all calls →",
+    "providedContext": "Provided context",
+    "exportJson": "Export JSON",
+    "exportHint": "Download an LLM-friendly JSON export of this run",
+    "closeEsc": "Close (Esc)",
+    "loadingActivity": "Loading model activity…",
+    "loadingContext": "Loading provided context…",
+    "noCalls": "No model calls recorded for this run.",
+    "noContext": "No agent context stored for this run. It is captured per dispatch when the workspace has 'Store full agent context' enabled.",
+    "summary": {
+      "calls": "Calls",
+      "tokensInOut": "Tokens (in / out)",
+      "transportOverhead": "Transport overhead",
+      "modelExecution": "Model execution",
+      "truncated": "{count} truncated | {count} truncated"
+    },
+    "metricsBar": {
+      "calls": "{count} call | {count} calls",
+      "promptCompletionTokens": "Prompt / completion tokens",
+      "cachedTokens": "({tokens} cached)",
+      "cachedTokensHint": "Prompt tokens served from the provider's cache",
+      "errors": "{count} error | {count} errors",
+      "warnings": "{count} warning | {count} warnings",
+      "outputLimit": "Output limit",
+      "truncatedCalls": "{count} call truncated at the limit | {count} calls truncated at the limit",
+      "transportVsExecution": "Transport vs execution",
+      "transportOverhead": "Transport / proxy overhead",
+      "modelExecution": "Model execution"
+    },
+    "call": {
+      "tokensTitle": "{prompt} prompt / {completion} completion tokens",
+      "outputUsedVsLimit": "Output used vs limit",
+      "transportVsExecution": "Transport overhead / model execution",
+      "error": "error",
+      "ok": "ok",
+      "messages": "{count} messages",
+      "tools": "{count} tools",
+      "streamed": "streamed",
+      "buffered": "buffered",
+      "maxTokens": "max_tokens {value}",
+      "promptCached": "{cached}/{prompt} prompt cached",
+      "total": "total {duration}",
+      "prompt": "Prompt",
+      "promptPrefixOmitted": "(new messages only: {count} earlier omitted)",
+      "response": "Response",
+      "reasoning": "Reasoning"
+    },
+    "context": {
+      "injectedFiles": "Injected context files",
+      "bestPracticeFragments": "Best-practice fragments",
+      "filesCount": "{count} files",
+      "fragmentsCount": "{count} fragments",
+      "systemPrompt": "System prompt",
+      "userPrompt": "User prompt",
+      "details": "Details"
+    }
   }
 }

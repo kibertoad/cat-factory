@@ -308,5 +308,407 @@
         "step3": "Skopiuj całą zawartość auth.json, wklej ją poniżej i wybierz osobiste hasło, aby ją chronić."
       }
     }
+  },
+  "inspector": {
+    "container": {
+      "modules": "Moduły ({count})",
+      "taskCount": "{count} zadanie | {count} zadania | {count} zadań",
+      "allTasks": "Wszystkie zadania ({count})",
+      "tasks": "Zadania ({count})",
+      "addTask": "Dodaj zadanie",
+      "noTasks": "Brak zadań. Dodaj jedno, aby rozpocząć pracę.",
+      "servicesHint": "Usługi są długowieczne i nie kończą się. Praca odbywa się w ich zadaniach i modułach."
+    },
+    "epicChildren": {
+      "title": "Zadania epiku",
+      "doneCount": "{done}/{total} ukończono",
+      "empty": "Do tego epiku nie należą jeszcze żadne zadania. Zaimportuj zadania podrzędne epiku lub przypisz epik do zadania.",
+      "unassigned": "Nieprzypisane"
+    },
+    "recurring": {
+      "title": "Cykliczny potok",
+      "active": "Aktywny",
+      "paused": "Wstrzymany",
+      "intervalDays": "{count} d",
+      "intervalHours": "{count} h",
+      "anyDay": "dowolny dzień",
+      "cadence": "Co {every} · {days}{window} · {timezone}",
+      "weekdays": {
+        "sun": "niedz.",
+        "mon": "pon.",
+        "tue": "wt.",
+        "wed": "śr.",
+        "thu": "czw.",
+        "fri": "pt.",
+        "sat": "sob."
+      },
+      "nextRun": "Następne uruchomienie: {time}",
+      "runNow": "Uruchom teraz",
+      "pause": "Wstrzymaj",
+      "resume": "Wznów",
+      "editCadence": "Edytuj harmonogram",
+      "recentRuns": "Ostatnie uruchomienia",
+      "runStatus": {
+        "running": "W toku",
+        "done": "Gotowe",
+        "failed": "Niepowodzenie",
+        "skipped": "Pominięto"
+      },
+      "updateFailed": "Nie udało się zaktualizować harmonogramu",
+      "runNowFailed": "Nie udało się uruchomić teraz"
+    },
+    "fragments": {
+      "serviceTitle": "Dobre praktyki usługi",
+      "serviceEmpty": "Brak. Agenci świadomi kodu w tej usłudze stosują swoje domyślne wytyczne."
+    },
+    "releaseHealth": {
+      "title": "Kondycja po wydaniu",
+      "clear": "Wyczyść",
+      "connectPrompt": "Połącz integrację obserwowalności, aby monitorować tę usługę po wydaniach.",
+      "connectFirst": "Najpierw połącz integrację obserwowalności",
+      "connect": "Połącz",
+      "hint": "Monitory i SLO, które bramka obserwuje po wdrożeniu tej usługi. Identyfikatory oddziel przecinkami.",
+      "monitorIds": "Identyfikatory monitorów",
+      "sloIds": "Identyfikatory SLO",
+      "envTag": "Tag środowiska (opcjonalnie)",
+      "saveMonitoring": "Zapisz monitorowanie",
+      "savedToast": "Monitorowanie zapisane",
+      "saveFailed": "Nie udało się zapisać mapowania",
+      "clearFailed": "Nie udało się wyczyścić mapowania"
+    },
+    "testConfig": {
+      "title": "Infrastruktura testowa",
+      "defaultEnv": "Domyślne środowisko testowe",
+      "defaultEnvHint": "Środowisko, z którym uruchamiane są domyślnie zadania w tej usłudze. Każde zadanie może je nadpisać w swoich ustawieniach agenta.",
+      "env": {
+        "ephemeral": "Środowisko efemeryczne",
+        "ephemeralHint": "testy uruchamiane wobec udostępnionego środowiska",
+        "local": "Lokalne (docker-compose)",
+        "localHint": "Tester stawia zależności lokalnie"
+      },
+      "composePath": "Ścieżka docker-compose",
+      "browseRepo": "Przeglądaj repozytorium w poszukiwaniu pliku compose",
+      "composeHint": "Używane przez Testera do lokalnego postawienia zależności usługi.",
+      "selectComposeTitle": "Wybierz plik docker-compose",
+      "selectComposeHint": "Wybierz plik compose w repozytorium. Jego ścieżka jest zapisywana względem katalogu głównego repo.",
+      "selected": "Wybrano: {path}",
+      "noFileSelected": "Nie wybrano pliku.",
+      "useThisFile": "Użyj tego pliku",
+      "noInfra": "Brak zależności infrastrukturalnych (Tester niczego nie stawia)",
+      "missingInfra": "Ustaw ścieżkę docker-compose lub włącz brak zależności infrastrukturalnych, w przeciwnym razie potok z Testerem się nie uruchomi.",
+      "provisioningTitle": "Udostępnianie środowiska efemerycznego",
+      "provisioningHint": "Wskazówka dotycząca udostępniania efemerycznego środowiska testowego tej usługi: do którego dostawcy chmury wdrożyć i jak duży zażądać instancji. Ignorowane przy testach lokalnych (docker-compose).",
+      "cloudProvider": "Dostawca chmury",
+      "instanceSize": "Rozmiar instancji",
+      "providers": {
+        "docker": "Docker (lokalnie)",
+        "custom": "Niestandardowy"
+      },
+      "sizes": {
+        "small": "Mały",
+        "medium": "Średni",
+        "large": "Duży",
+        "xlarge": "Bardzo duży"
+      }
+    },
+    "agentConfig": {
+      "title": "Konfiguracja agenta",
+      "inherited": "odziedziczone z usługi",
+      "frozen": "Zamrożone: agent został uruchomiony"
+    },
+    "dependencies": {
+      "title": "Zależy od",
+      "merged": "Scalone",
+      "notMerged": "Jeszcze nie scalone",
+      "empty": "Brak zależności. Można uruchomić w dowolnym momencie.",
+      "blocked": "Zablokowane do czasu scalenia zależności."
+    },
+    "estimate": {
+      "title": "Szacunek",
+      "complexity": "Złożoność",
+      "risk": "Ryzyko",
+      "impact": "Wpływ"
+    },
+    "execution": {
+      "stage": {
+        "incorporating": "Włączanie…",
+        "reviewing": "Ponowna recenzja…",
+        "recommending": "Rekomendowanie…"
+      },
+      "prNumber": "PR #{number}",
+      "pullRequest": "Pull request",
+      "stepState": {
+        "pending": "Oczekuje",
+        "working": "Praca",
+        "waiting_decision": "Wymaga decyzji",
+        "done": "Gotowe"
+      },
+      "failed": "Niepowodzenie",
+      "needsDecision": "Wymaga decyzji",
+      "needsApproval": "Wymaga zatwierdzenia",
+      "spinningUp": "Uruchamianie…",
+      "stop": "Zatrzymaj",
+      "stopTooltip": "Zatrzymaj uruchomienie, ale zachowaj je (do odczytu i ponownego uruchomienia)",
+      "reset": "Resetuj",
+      "resetTooltip": "Odrzuć to uruchomienie i przywróć zadanie do stanu zaplanowanego",
+      "viewDetailsOutput": "Wyświetl szczegóły i odczytaj wynik",
+      "viewDetails": "Wyświetl szczegóły kroku",
+      "companion": "Towarzysz",
+      "companionTooltip": "Towarzysz kroku produkującego",
+      "subtasksProgress": "Ukończono {completed} z {total} podzadań, {inProgress} w toku",
+      "subtasksDone": "Ukończono {completed} z {total} podzadań",
+      "resolve": "Rozwiąż",
+      "decide": "Zdecyduj",
+      "review": "Recenzuj",
+      "approve": "Zatwierdź",
+      "fragmentsTooltip": "Fragmenty dobrych praktyk wplecione w ten krok: {fragments}",
+      "standardsApplied": "Zastosowano {count} standard | Zastosowano {count} standardy | Zastosowano {count} standardów",
+      "companionOf": "{label} (towarzysz)",
+      "merged": "Scalone",
+      "open": "Otwarty",
+      "mergePr": "Scal PR"
+    },
+    "structure": {
+      "module": "Moduł",
+      "modulePlaceholder": "np. Sesje (tworzone przy implementacji, jeśli nowy)",
+      "bestPractices": "Dobre praktyki",
+      "bestPracticesEmpty": "Brak. Agenci stosują swoje domyślne wytyczne."
+    },
+    "runSettings": {
+      "unassigned": "Nieprzypisane",
+      "workspaceDefault": "Domyślne obszaru roboczego",
+      "workspaceDefaultParen": "(domyślne obszaru roboczego)",
+      "defaultPresetThresholds": "Domyślny ({name}): {thresholds}",
+      "defaultPreset": "Domyślny ({name})",
+      "noDefault": "Brak domyślnego",
+      "inheritWorkspace": "Dziedzicz z obszaru roboczego",
+      "on": "Wł.",
+      "off": "Wył.",
+      "inheritOn": "Dziedzicz (wł.)",
+      "inheritOff": "Dziedzicz (wył.)",
+      "technical": {
+        "unset": "Nieustawione (autodetekcja)",
+        "technical": "Techniczne",
+        "business": "Biznesowe"
+      },
+      "pipeline": "Potok",
+      "pipelineEmpty": "Brak domyślnego. Wybierz potok przy uruchamianiu tego zadania.",
+      "mergePolicy": "Polityka scalania",
+      "mergePresetDetail": "{name}: automatyczne scalanie, gdy złożoność ≤ {complexity}, ryzyko ≤ {risk}, wpływ ≤ {impact}; do {attempts} prób naprawy CI.",
+      "mergePresetEmpty": "Brak skonfigurowanego presetu. Element scalający zgłasza powiadomienie o recenzji dla każdego PR.",
+      "modelPreset": "Preset modelu",
+      "modelPresetBase": "bazowy {model}",
+      "modelPresetOverrides": ", {count} nadpisanie | , {count} nadpisania | , {count} nadpisań",
+      "modelPresetEmpty": "Brak skonfigurowanego presetu. Agenci działają na domyślnym routingu wdrożenia.",
+      "unavailableModels": "Niedostępne w bieżącej konfiguracji: {models}. To zadanie zakończyłoby się niepowodzeniem na tych krokach.",
+      "editPresets": "Edytuj presety",
+      "configureVendors": "Skonfiguruj dostawców",
+      "modelPresetChangeHint": "Zmiana tego wpływa tylko na kroki, które jeszcze się nie rozpoczęły.",
+      "taskKind": "Rodzaj zadania",
+      "technicalHint": {
+        "technical": "Techniczne: implementator traktuje definicję zadania jako nadrzędną, a specyfikację jako odniesienie regresyjne; autor specyfikacji może nie wytworzyć żadnych specyfikacji biznesowych.",
+        "business": "Biznesowe: specyfikacja prowadzi, jak zwykle.",
+        "unset": "Autodetekcja: wywnioskowane z fazy specyfikacji. Ustaw jawnie, aby nadpisać."
+      },
+      "issueWriteback": "Zapis zwrotny do zgłoszenia",
+      "commentOnPrOpen": "Komentarz przy otwarciu PR",
+      "closeOnMerge": "Zamknij przy scaleniu",
+      "writebackHint": "Zapisuje zwrotnie do powiązanego zgłoszenia w trackerze tego zadania. Nadpisuje domyślne obszaru roboczego.",
+      "responsibleProduct": "Odpowiedzialny produkt",
+      "responsibleEmpty": "Nieprzypisane. Ustaw właściciela produktu, aby powiadamiać go, gdy recenzja wymagań oznaczy to zadanie.",
+      "autoStartDependents": "Automatycznie uruchamiaj zależne",
+      "autoStartHint": "Gdy to zadanie zostanie scalone, automatycznie uruchom zadania od niego zależne (gdy ich pozostałe zależności również będą gotowe)."
+    }
+  },
+  "panels": {
+    "decision": {
+      "title": "Wymagana decyzja",
+      "agentOnBlock": "{agent} na {block}",
+      "visualizationHint": "To jest wizualizacja. Każdy wybór po prostu wznawia potok."
+    },
+    "stepRestart": {
+      "restartFromStep": "Uruchom ponownie potok od tego kroku",
+      "restartFromHere": "Uruchom ponownie od tego miejsca"
+    },
+    "structuredResult": {
+      "fallbackTitle": "Wynik agenta",
+      "titleWithBlock": "{label}: {title}",
+      "fallbackDescription": "Ustrukturyzowany wynik agenta",
+      "structuredOutput": "Ustrukturyzowany wynik",
+      "noResult": "Brak wyniku.",
+      "noResultHint": "Ustrukturyzowany wynik pojawia się po zakończeniu pracy tego agenta. W trakcie działania krok pokazuje postęp na żywo na tablicy."
+    },
+    "testReport": {
+      "title": "Raport z testów",
+      "greenlit": "Zatwierdzone",
+      "needsFixes": "Wymaga poprawek",
+      "fixAttempts": "{count}/{max} prób naprawy",
+      "fixing": "· naprawianie…",
+      "tested": "Przetestowano",
+      "outcomes": "Wyniki",
+      "concerns": "Zastrzeżenia"
+    },
+    "stepMeta": {
+      "stateLabel": "Stan",
+      "duration": "Czas trwania",
+      "elapsed": "upłynęło",
+      "step": "Krok",
+      "stepOf": "{number} z {total}",
+      "started": "Rozpoczęto",
+      "finished": "Zakończono",
+      "model": "Model",
+      "notRecorded": "Nie zarejestrowano",
+      "run": "Uruchomienie",
+      "clickToCopy": "{id} (kliknij, aby skopiować)",
+      "spinningUpContainer": "Uruchamianie kontenera…",
+      "subtasks": "Podzadania · {completed}/{total}",
+      "standardsApplied": "Zastosowane standardy",
+      "decision": "Decyzja",
+      "awaitingChoice": "Oczekiwanie na wybór człowieka",
+      "approvalGate": "Bramka zatwierdzenia",
+      "companionReview": "Recenzja towarzysza",
+      "correctionIterations": "{count} iteracja korekty. | {count} iteracje korekty. | {count} iteracji korekty.",
+      "state": {
+        "pending": "Oczekuje",
+        "working": "Praca",
+        "waiting_decision": "Wymaga danych",
+        "done": "Gotowe",
+        "failed": "Niepowodzenie"
+      },
+      "approvalStatus": {
+        "pending": "Oczekuje",
+        "approved": "Zatwierdzone",
+        "changes_requested": "Zażądano zmian",
+        "rejected": "Odrzucone"
+      }
+    },
+    "stepDetail": {
+      "contents": "Zawartość",
+      "details": "Szczegóły",
+      "approvalRequired": "Wymagane zatwierdzenie",
+      "decisionRequired": "Wymagana decyzja",
+      "expandAll": "Rozwiń wszystkie sekcje",
+      "collapseAll": "Zwiń wszystkie sekcje",
+      "copyRawOutput": "Kopiuj surowy wynik",
+      "closeEsc": "Zamknij (Esc)",
+      "companionCapHeading": "{agent} osiągnął limit {attempts} prób przeróbki, wciąż poniżej progu {threshold}.",
+      "companionCapDetail": "Wykonaj jeszcze jedną automatyczną rundę przeróbki, przejdź do następnego kroku akceptując bieżący wynik, albo zatrzymaj i zresetuj zadanie, aby edytować dane wejściowe i przesłać ponownie.",
+      "infraAttempts": "Próby infrastrukturalne",
+      "hideInfraAttempts": "Ukryj próby infrastrukturalne",
+      "editingConclusions": "Edytowanie wniosków",
+      "editConclusionsPlaceholder": "Edytuj wnioski agenta; Twoje zmiany zostaną zapisane po zatwierdzeniu…",
+      "noProseOutput": "Ten agent nie wytworzył wyniku tekstowego.",
+      "approveWithCorrections": "Zatwierdź z poprawkami",
+      "reviewAndApprove": "Recenzuj i zatwierdź",
+      "editHint": "Edytuj wnioski po lewej; Twoje zmiany zostaną zapisane po zatwierdzeniu.",
+      "reviewHint": "Kliknij dowolny blok w wyniku, aby go skomentować, lub zostaw ogólną opinię poniżej.",
+      "editingNotice": "Edytujesz wnioski bezpośrednio. Ręcznych zmian nie można łączyć z komentarzami do poszczególnych bloków. Zatwierdź, aby je zapisać, lub anuluj, aby wrócić do recenzji.",
+      "commentingOn": "Komentowanie",
+      "commentPlaceholder": "Zostaw komentarz do tego bloku…",
+      "addComment": "Dodaj komentarz",
+      "commentN": "Komentarz {number}",
+      "removeComment": "Usuń komentarz",
+      "overallFeedback": "Ogólna opinia / powód odrzucenia",
+      "overallFeedbackPlaceholder": "Opisz zmiany, które agent powinien wprowadzić (opcjonalne, jeśli zostawiono komentarze do bloków)…",
+      "approveWithEdits": "Zatwierdź z tymi zmianami",
+      "cancelEdits": "Anuluj zmiany",
+      "approveAndProceed": "Zatwierdź i kontynuuj",
+      "rejectConfirmPrompt": "Odrzucić tę propozycję i całkowicie zatrzymać uruchomienie?",
+      "confirmReject": "Potwierdź odrzucenie",
+      "requestChanges": "Zażądaj zmian",
+      "reject": "Odrzuć",
+      "requestChangesHint": "Zażądanie zmian uruchamia ten krok ponownie z Twoją opinią i komentarzami. Odrzucenie całkowicie zatrzymuje uruchomienie."
+    },
+    "inspector": {
+      "frameStatus": {
+        "planned": "Brak zadań",
+        "ready": "Na żywo",
+        "in_progress": "Aktywne",
+        "blocked": "Wymaga uwagi",
+        "pr_ready": "Aktywne",
+        "done": "Na żywo"
+      },
+      "deleteRecurringPipeline": "Usuń cykliczny potok",
+      "deleteTask": "Usuń zadanie",
+      "deleteModule": "Usuń moduł",
+      "deleteService": "Usuń usługę",
+      "titlePlaceholder": "Tytuł…",
+      "reworkedRequirements": "Przerobione wymagania",
+      "agentStepsUseDocument": "Kroki agenta używają tego dokumentu.",
+      "open": "Otwórz",
+      "originalDescriptionFrozen": "Pierwotny opis (zamrożony)",
+      "noDescription": "Brak opisu",
+      "describeBlock": "Opisz ten blok…",
+      "taskStartedLocked": "To zadanie zostało rozpoczęte. Jego szczegóły są zablokowane.",
+      "lastIncorporatedRequirements": "Ostatnie włączone wymagania",
+      "priorDocHint": "Z poprzedniej recenzji. Użyj go jako bazy: edytuj opis powyżej i prześlij ponownie.",
+      "bootstrapping": "Inicjowanie…",
+      "importIssue": "Importuj zgłoszenie",
+      "connectTracker": "Połącz tracker",
+      "spawnFromDocument": "Utwórz z dokumentu",
+      "viewRequirements": "Wyświetl wymagania",
+      "reRun": "Uruchom ponownie",
+      "run": "Uruchom",
+      "focus": "Skup"
+    }
+  },
+  "observability": {
+    "modelActivity": "Aktywność modelu",
+    "viewAllCalls": "Wyświetl wszystkie wywołania →",
+    "providedContext": "Dostarczony kontekst",
+    "exportJson": "Eksportuj JSON",
+    "exportHint": "Pobierz przyjazny dla LLM eksport JSON tego uruchomienia",
+    "closeEsc": "Zamknij (Esc)",
+    "loadingActivity": "Ładowanie aktywności modelu…",
+    "loadingContext": "Ładowanie dostarczonego kontekstu…",
+    "noCalls": "Brak zarejestrowanych wywołań modelu dla tego uruchomienia.",
+    "noContext": "Brak zapisanego kontekstu agenta dla tego uruchomienia. Jest on przechwytywany przy każdym wysłaniu, gdy w obszarze roboczym włączono opcję 'Przechowuj pełny kontekst agenta'.",
+    "summary": {
+      "calls": "Wywołania",
+      "tokensInOut": "Tokeny (we / wy)",
+      "transportOverhead": "Narzut transportu",
+      "modelExecution": "Wykonanie modelu",
+      "truncated": "{count} obcięte | {count} obcięte | {count} obciętych"
+    },
+    "metricsBar": {
+      "calls": "{count} wywołanie | {count} wywołania | {count} wywołań",
+      "promptCompletionTokens": "Tokeny promptu / dopełnienia",
+      "cachedTokens": "({tokens} z pamięci podręcznej)",
+      "cachedTokensHint": "Tokeny promptu obsłużone z pamięci podręcznej dostawcy",
+      "errors": "{count} błąd | {count} błędy | {count} błędów",
+      "warnings": "{count} ostrzeżenie | {count} ostrzeżenia | {count} ostrzeżeń",
+      "outputLimit": "Limit wyjścia",
+      "truncatedCalls": "{count} wywołanie obcięte na limicie | {count} wywołania obcięte na limicie | {count} wywołań obciętych na limicie",
+      "transportVsExecution": "Transport a wykonanie",
+      "transportOverhead": "Narzut transportu / proxy",
+      "modelExecution": "Wykonanie modelu"
+    },
+    "call": {
+      "tokensTitle": "{prompt} tokenów promptu / {completion} tokenów dopełnienia",
+      "outputUsedVsLimit": "Użyte wyjście a limit",
+      "transportVsExecution": "Narzut transportu / wykonanie modelu",
+      "error": "błąd",
+      "ok": "ok",
+      "messages": "{count} wiadomości",
+      "tools": "{count} narzędzi",
+      "streamed": "strumieniowane",
+      "buffered": "buforowane",
+      "maxTokens": "max_tokens {value}",
+      "promptCached": "{cached}/{prompt} promptu w pamięci podręcznej",
+      "total": "łącznie {duration}",
+      "prompt": "Prompt",
+      "promptPrefixOmitted": "(tylko nowe wiadomości: {count} wcześniejszych pominięto)",
+      "response": "Odpowiedź",
+      "reasoning": "Rozumowanie"
+    },
+    "context": {
+      "injectedFiles": "Wstrzyknięte pliki kontekstu",
+      "bestPracticeFragments": "Fragmenty dobrych praktyk",
+      "filesCount": "{count} plików",
+      "fragmentsCount": "{count} fragmentów",
+      "systemPrompt": "Prompt systemowy",
+      "userPrompt": "Prompt użytkownika",
+      "details": "Szczegóły"
+    }
   }
 }

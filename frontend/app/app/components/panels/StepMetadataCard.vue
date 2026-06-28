@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { AgentState, PipelineStep, CompanionVerdict } from '~/types/execution'
+import type { AgentState, PipelineStep, CompanionVerdict, StepApproval } from '~/types/execution'
 import { subtaskIconClass } from '~/utils/pipelineRender'
 import StepModelActivity from '~/components/observability/StepModelActivity.vue'
 
@@ -21,20 +21,28 @@ const props = defineProps<{
 }>()
 
 const models = useModelsStore()
+const { t, d } = useI18n()
 
-const STATE_META: Record<AgentState, { label: string; color: string }> = {
-  pending: { label: 'Pending', color: '#64748b' },
-  working: { label: 'Working', color: '#6366f1' },
-  waiting_decision: { label: 'Needs input', color: '#f59e0b' },
-  done: { label: 'Done', color: '#22c55e' },
+const STATE_LABEL_KEYS: Record<AgentState, string> = {
+  pending: 'panels.stepMeta.state.pending',
+  working: 'panels.stepMeta.state.working',
+  waiting_decision: 'panels.stepMeta.state.waiting_decision',
+  done: 'panels.stepMeta.state.done',
+}
+const STATE_COLOR: Record<AgentState, string> = {
+  pending: '#64748b',
+  working: '#6366f1',
+  waiting_decision: '#f59e0b',
+  done: '#22c55e',
 }
 
 // The state badge: a step left mid-flight on a failed run keeps `state: 'working'`,
 // so report it as "Failed" rather than the misleading "Working".
 const stateMeta = computed(() => {
   const s = props.step
-  if (props.runFailed && s.state === 'working') return { label: 'Failed', color: '#ef4444' }
-  return STATE_META[s.state]
+  if (props.runFailed && s.state === 'working')
+    return { label: t('panels.stepMeta.state.failed'), color: '#ef4444' }
+  return { label: t(STATE_LABEL_KEYS[s.state]), color: STATE_COLOR[s.state] }
 })
 
 const modelLabel = computed(() => (props.step.model ? models.labelForRef(props.step.model) : null))
@@ -47,8 +55,18 @@ const ITEM_ICON: Record<string, string> = {
 
 const pctOf = (n: number) => `${Math.round(n * 100)}%`
 
+const APPROVAL_STATUS_KEYS: Record<StepApproval['status'], string> = {
+  pending: 'panels.stepMeta.approvalStatus.pending',
+  approved: 'panels.stepMeta.approvalStatus.approved',
+  changes_requested: 'panels.stepMeta.approvalStatus.changes_requested',
+  rejected: 'panels.stepMeta.approvalStatus.rejected',
+}
+const approvalStatusLabel = computed(() =>
+  props.step.approval ? t(APPROVAL_STATUS_KEYS[props.step.approval.status]) : '',
+)
+
 function formatClock(ms?: number | null): string | null {
-  return ms ? new Date(ms).toLocaleString() : null
+  return ms ? d(new Date(ms), 'long') : null
 }
 
 async function copyRunId() {
@@ -61,7 +79,9 @@ async function copyRunId() {
   <div>
     <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-[13px] sm:grid-cols-3">
       <div>
-        <dt class="text-[11px] uppercase tracking-wide text-slate-500">State</dt>
+        <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+          {{ t('panels.stepMeta.stateLabel') }}
+        </dt>
         <dd class="mt-0.5 flex items-center gap-1.5 text-slate-200">
           <UIcon
             v-if="runFailed && step.state === 'working'"
@@ -74,7 +94,9 @@ async function copyRunId() {
         </dd>
       </div>
       <div>
-        <dt class="text-[11px] uppercase tracking-wide text-slate-500">Duration</dt>
+        <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+          {{ t('panels.stepMeta.duration') }}
+        </dt>
         <dd class="mt-0.5 flex items-center gap-1.5 tabular-nums text-slate-200">
           <UIcon
             v-if="isRunning"
@@ -83,33 +105,47 @@ async function copyRunId() {
           />
           <span v-if="durationLabel">{{ durationLabel }}</span>
           <span v-else class="text-slate-500">—</span>
-          <span v-if="isRunning" class="text-[11px] text-slate-500">elapsed</span>
+          <span v-if="isRunning" class="text-[11px] text-slate-500">{{
+            t('panels.stepMeta.elapsed')
+          }}</span>
         </dd>
       </div>
       <div>
-        <dt class="text-[11px] uppercase tracking-wide text-slate-500">Step</dt>
-        <dd class="mt-0.5 text-slate-200">{{ stepNumber }} of {{ totalSteps }}</dd>
+        <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+          {{ t('panels.stepMeta.step') }}
+        </dt>
+        <dd class="mt-0.5 text-slate-200">
+          {{ t('panels.stepMeta.stepOf', { number: stepNumber, total: totalSteps }) }}
+        </dd>
       </div>
       <div>
-        <dt class="text-[11px] uppercase tracking-wide text-slate-500">Started</dt>
+        <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+          {{ t('panels.stepMeta.started') }}
+        </dt>
         <dd class="mt-0.5 text-slate-300">{{ formatClock(step.startedAt) ?? '—' }}</dd>
       </div>
       <div>
-        <dt class="text-[11px] uppercase tracking-wide text-slate-500">Finished</dt>
+        <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+          {{ t('panels.stepMeta.finished') }}
+        </dt>
         <dd class="mt-0.5 text-slate-300">{{ formatClock(step.finishedAt) ?? '—' }}</dd>
       </div>
       <div>
-        <dt class="text-[11px] uppercase tracking-wide text-slate-500">Model</dt>
+        <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+          {{ t('panels.stepMeta.model') }}
+        </dt>
         <dd class="mt-0.5 truncate text-slate-300" :title="step.model">
-          {{ modelLabel ?? 'Not recorded' }}
+          {{ modelLabel ?? t('panels.stepMeta.notRecorded') }}
         </dd>
       </div>
       <!-- The run id this step belongs to, surfaced for debugging (copyable). -->
       <div class="col-span-2 sm:col-span-3">
-        <dt class="text-[11px] uppercase tracking-wide text-slate-500">Run</dt>
+        <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+          {{ t('panels.stepMeta.run') }}
+        </dt>
         <dd
           class="mt-0.5 cursor-pointer truncate font-mono text-[12px] text-slate-400 hover:text-slate-200"
-          :title="`${step.runId ?? instanceId ?? ''} — click to copy`"
+          :title="t('panels.stepMeta.clickToCopy', { id: step.runId ?? instanceId ?? '' })"
           @click="copyRunId"
         >
           {{ step.runId ?? instanceId ?? '—' }}
@@ -124,13 +160,18 @@ async function copyRunId() {
       class="mt-4 flex items-center gap-2 rounded-lg border border-sky-900/50 bg-sky-950/30 px-3 py-2 text-[12px] text-sky-300"
     >
       <UIcon name="i-lucide-loader-circle" class="h-4 w-4 shrink-0 animate-spin" />
-      <span>Spinning up container…</span>
+      <span>{{ t('panels.stepMeta.spinningUpContainer') }}</span>
     </div>
 
     <!-- live subtask breakdown -->
     <div v-if="step.subtasks && step.subtasks.total > 0" class="mt-4">
       <div class="text-[11px] uppercase tracking-wide text-slate-500">
-        Subtasks · {{ step.subtasks.completed }}/{{ step.subtasks.total }}
+        {{
+          t('panels.stepMeta.subtasks', {
+            completed: step.subtasks.completed,
+            total: step.subtasks.total,
+          })
+        }}
       </div>
       <div class="mt-1 h-1 overflow-hidden rounded-full bg-slate-700/60">
         <div
@@ -170,7 +211,9 @@ async function copyRunId() {
 
     <!-- standards (prompt fragments) folded into this step -->
     <div v-if="step.selectedFragmentIds && step.selectedFragmentIds.length" class="mt-4">
-      <div class="text-[11px] uppercase tracking-wide text-slate-500">Standards applied</div>
+      <div class="text-[11px] uppercase tracking-wide text-slate-500">
+        {{ t('panels.stepMeta.standardsApplied') }}
+      </div>
       <div class="mt-1 flex flex-wrap gap-1">
         <UBadge
           v-for="id in step.selectedFragmentIds"
@@ -186,7 +229,9 @@ async function copyRunId() {
 
     <!-- decision raised on this step -->
     <div v-if="step.decision" class="mt-4">
-      <div class="text-[11px] uppercase tracking-wide text-slate-500">Decision</div>
+      <div class="text-[11px] uppercase tracking-wide text-slate-500">
+        {{ t('panels.stepMeta.decision') }}
+      </div>
       <p class="mt-0.5 text-[13px] text-slate-200">{{ step.decision.question }}</p>
       <p
         v-if="step.decision.chosen"
@@ -195,21 +240,27 @@ async function copyRunId() {
         <UIcon name="i-lucide-check" class="h-3 w-3 shrink-0" />
         {{ step.decision.chosen }}
       </p>
-      <p v-else class="mt-0.5 text-[12px] text-amber-400">Awaiting a human choice</p>
+      <p v-else class="mt-0.5 text-[12px] text-amber-400">
+        {{ t('panels.stepMeta.awaitingChoice') }}
+      </p>
     </div>
 
     <!-- approval gate state -->
     <div v-if="step.approval" class="mt-4">
-      <div class="text-[11px] uppercase tracking-wide text-slate-500">Approval gate</div>
-      <p class="mt-0.5 text-[13px] text-slate-200 capitalize">
-        {{ step.approval.status.replace('_', ' ') }}
+      <div class="text-[11px] uppercase tracking-wide text-slate-500">
+        {{ t('panels.stepMeta.approvalGate') }}
+      </div>
+      <p class="mt-0.5 text-[13px] text-slate-200">
+        {{ approvalStatusLabel }}
       </p>
     </div>
 
     <!-- companion verdict + full correction sequence -->
     <div v-if="companionVerdicts.length" class="mt-4">
       <div class="flex items-center justify-between">
-        <span class="text-[11px] uppercase tracking-wide text-slate-500"> Companion review </span>
+        <span class="text-[11px] uppercase tracking-wide text-slate-500">
+          {{ t('panels.stepMeta.companionReview') }}
+        </span>
         <UBadge :color="latestVerdict?.passed ? 'success' : 'warning'" variant="subtle" size="sm">
           {{ pctOf(latestVerdict!.rating) }}
           {{ latestVerdict?.passed ? '≥' : '<' }} {{ pctOf(latestVerdict!.threshold) }}
@@ -234,7 +285,13 @@ async function copyRunId() {
         </li>
       </ol>
       <p v-if="companionVerdicts.length > 1" class="mt-1 text-[11px] text-slate-500">
-        {{ companionVerdicts.length }} correction iteration(s).
+        {{
+          t(
+            'panels.stepMeta.correctionIterations',
+            { count: companionVerdicts.length },
+            companionVerdicts.length,
+          )
+        }}
       </p>
     </div>
   </div>

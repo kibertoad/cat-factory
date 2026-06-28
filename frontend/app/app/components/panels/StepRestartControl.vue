@@ -25,6 +25,7 @@ const props = defineProps<{
 const emit = defineEmits<{ restarted: [] }>()
 
 const execution = useExecutionStore()
+const { t } = useI18n()
 
 const instance = computed(() =>
   props.instanceId ? execution.getInstance(props.instanceId) : undefined,
@@ -62,7 +63,7 @@ async function restart() {
       color="neutral"
       variant="ghost"
       size="sm"
-      title="Restart pipeline from this step"
+      :title="t('panels.stepRestart.restartFromStep')"
       @click="armed = true"
     />
     <template v-else>
@@ -74,7 +75,7 @@ async function restart() {
         :loading="restarting"
         @click="restart"
       >
-        Restart from here
+        {{ t('panels.stepRestart.restartFromHere') }}
       </UButton>
       <UButton
         color="neutral"
@@ -83,7 +84,7 @@ async function restart() {
         :disabled="restarting"
         @click="armed = false"
       >
-        Cancel
+        {{ t('common.cancel') }}
       </UButton>
     </template>
   </template>

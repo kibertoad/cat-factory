@@ -13,6 +13,7 @@ import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 const board = useBoardStore()
 const execution = useExecutionStore()
 const agents = useAgentsStore()
+const { t } = useI18n()
 
 // Shared seam contract (open/blockId/close + Escape). No `onOpen` loader: this window reads
 // its data straight off the execution step, so there's nothing to fetch on open.
@@ -27,6 +28,16 @@ const step = computed(() => {
   return instance.value.steps[stepIndex.value] ?? null
 })
 const meta = computed(() => (step.value ? agents.get(step.value.agentKind) : undefined))
+
+const headerLabel = computed(() => meta.value?.label ?? t('panels.structuredResult.fallbackTitle'))
+const headerTitle = computed(() =>
+  block.value
+    ? t('panels.structuredResult.titleWithBlock', {
+        label: headerLabel.value,
+        title: block.value.title,
+      })
+    : headerLabel.value,
+)
 
 /** The agent's structured JSON, pretty-printed; null when the step produced none. */
 const customJson = computed<string | null>(() => {
@@ -59,10 +70,10 @@ const customJson = computed<string | null>(() => {
           </span>
           <div class="min-w-0 flex-1">
             <h2 class="truncate text-sm font-semibold text-slate-100">
-              {{ meta?.label ?? 'Agent result' }}{{ block ? ` — ${block.title}` : '' }}
+              {{ headerTitle }}
             </h2>
             <p class="truncate text-[11px] text-slate-400">
-              {{ meta?.description ?? 'Structured agent output' }}
+              {{ meta?.description ?? t('panels.structuredResult.fallbackDescription') }}
             </p>
           </div>
           <StepRestartControl
@@ -90,7 +101,7 @@ const customJson = computed<string | null>(() => {
 
             <template v-if="customJson">
               <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Structured output
+                {{ t('panels.structuredResult.structuredOutput') }}
               </h3>
               <pre
                 class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-[12px] leading-relaxed text-slate-200"
@@ -102,10 +113,9 @@ const customJson = computed<string | null>(() => {
               class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
             >
               <UIcon name="i-lucide-braces" class="h-8 w-8 opacity-40" />
-              <p class="text-sm">No result yet.</p>
+              <p class="text-sm">{{ t('panels.structuredResult.noResult') }}</p>
               <p class="max-w-sm text-[11px] text-slate-500">
-                The structured output appears once this agent finishes. While it runs, the step
-                shows live progress on the board.
+                {{ t('panels.structuredResult.noResultHint') }}
               </p>
             </div>
           </div>
