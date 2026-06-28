@@ -3,24 +3,54 @@
     "save": "Save",
     "cancel": "Cancel",
     "retry": "Retry",
+    "@retry": {
+      "description": "Imperative verb on a button/action that re-attempts a failed operation. Distinct from errors.action.retryFailed (the toast shown when the retry itself fails)."
+    },
     "actionFailed": "Action failed",
-    "close": "Close"
+    "@actionFailed": {
+      "description": "Generic fallback TITLE for an error toast when a UI action fails and no more specific errors.action.* title applies. Subject is left unstated on purpose - keep it short and generic."
+    },
+    "close": "Close",
+    "@close": {
+      "description": "Verb meaning dismiss / shut (a panel, drawer, dialog), NOT the adjective 'near'. Used as an aria-label on the mobile-nav backdrop and other close affordances - translate as the imperative verb."
+    }
   },
   "nav": {
     "menu": "Navigation menu",
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
     "commandBar": "Search or run a command…",
+    "@commandBar": {
+      "description": "Placeholder text in the sidebar command-palette launcher (Cmd/Ctrl-K). 'command' = an in-app action you can search and trigger, not a shell command. Keep the trailing ellipsis."
+    },
     "create": "Create",
+    "@create": {
+      "description": "Sidebar SECTION HEADING grouping creation actions (e.g. Build a pipeline), not a button. Translate as the section label, which may differ grammatically from the 'Create' verb."
+    },
     "buildPipeline": "Build a pipeline",
     "repositories": "Repositories",
     "addFromRepo": "Add from existing repo",
     "bootstrapRepo": "Bootstrap repo",
+    "@bootstrapRepo": {
+      "description": "Action that scaffolds/initialises a brand-new empty git repository from a reference architecture. 'Bootstrap' here is the product's term for first-time repo creation."
+    },
     "integrations": "Integrations",
     "sandbox": "Sandbox",
+    "@sandbox": {
+      "description": "Named feature area: an off-to-the-side screen for trying prompt versions / models against graded fixtures. A product feature name, not a generic 'sandbox environment'."
+    },
     "kaizen": "Kaizen",
+    "@kaizen": {
+      "description": "Proper-noun product feature name (grading history + verified prompt/agent/model combos). Do NOT translate - keep 'Kaizen' verbatim in every locale."
+    },
     "workspaceContext": "Workspace context",
+    "@workspaceContext": {
+      "description": "Sidebar section heading for the workspace's reusable prompt/context material (the fragment library). 'Context' = material fed to the AI agents, not generic UI context."
+    },
     "contextFragments": "Context fragments",
+    "@contextFragments": {
+      "description": "Reusable, versioned best-practice prompt snippets that get folded into agent prompts. A domain term - 'fragments' are prompt building blocks, not file fragments."
+    },
     "configuration": "Configuration",
     "workspaceSettings": "Workspace settings",
     "modelConfiguration": "Model Configuration",
@@ -29,33 +59,84 @@
   "board": {
     "toolbar": {
       "addService": "Add service",
-      "decisionWord": "decision | decisions"
+      "@addService": {
+        "description": "Adds a 'service' to the board. A service is a top-level board frame (a project/codebase), the product's core unit - a domain term, translate consistently with how 'service' is rendered elsewhere."
+      },
+      "decisionWord": "decision | decisions",
+      "@decisionWord": {
+        "description": "Count-based plural noun rendered AFTER a number, e.g. '3 decisions' (pending human decisions in the run queue). Resolved via t(key, count); count is always 1 or more. Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - and rely on the custom pluralRules wired in i18n.config.ts)."
+      }
     }
   },
   "errors": {
     "action": {
       "retryFailed": "Retry failed",
+      "@retryFailed": {
+        "description": "Error-toast title shown when RE-RUNNING a failed pipeline run (or agent run) itself fails."
+      },
       "startFailed": "Failed to start",
+      "@startFailed": {
+        "description": "Error-toast title when starting a pipeline run fails. Implied subject is the run/pipeline."
+      },
       "mergeFailed": "Failed to merge",
-      "restartFailed": "Failed to restart"
+      "@mergeFailed": {
+        "description": "Error-toast title when merging the run's GitHub pull request fails. 'merge' = git/PR merge."
+      },
+      "restartFailed": "Failed to restart",
+      "@restartFailed": {
+        "description": "Error-toast title when restarting a pipeline run / step fails."
+      }
     },
     "conflict": {
       "title": {
         "dependencies_unmet": "Blocked by dependencies",
+        "@dependencies_unmet": {
+          "description": "Conflict-toast title: the task can't start because one or more tasks it depends on are not finished yet."
+        },
         "task_limit_reached": "Concurrency limit reached",
+        "@task_limit_reached": {
+          "description": "Conflict-toast title: too many tasks are already running concurrently under this service (the workspace's task-limit setting). 'Concurrency' = number running at once."
+        },
         "tester_infra_unsupported": "Test infrastructure not configured",
+        "@tester_infra_unsupported": {
+          "description": "Conflict-toast title for the Tester step's start gate. UMBRELLA over two cases: (a) the service has no test infra configured, AND (b) this deployment's container runtime can't run local test infra (limited mode). The detailed description carries the specific cause; keep the title broad ('not configured / unavailable')."
+        },
         "agent_backend_unconfigured": "Agent backend not configured",
+        "@agent_backend_unconfigured": {
+          "description": "Conflict-toast title: no execution backend (Cloudflare container / self-hosted runner pool) is wired to run container agent steps."
+        },
         "run_not_retryable": "Run can’t be retried",
+        "@run_not_retryable": {
+          "description": "Conflict-toast title. 'Run' is a NOUN here = a pipeline execution (only a failed run can be retried). Translate 'Run' as the execution noun, not the verb 'to run'."
+        },
         "no_pr_to_merge": "No PR to merge",
+        "@no_pr_to_merge": {
+          "description": "Conflict-toast title. 'PR' = GitHub pull request; keep the abbreviation if it is the established term in your locale, else expand it."
+        },
         "github_not_connected": "GitHub not connected",
         "bootstrap_not_retryable": "Bootstrap can’t be retried",
-        "bootstrap_reference_missing": "Reference architecture is gone"
+        "@bootstrap_not_retryable": {
+          "description": "Conflict-toast title. 'Bootstrap' = a repo-bootstrap job (see nav.bootstrapRepo); only a failed bootstrap job can be retried."
+        },
+        "bootstrap_reference_missing": "Reference architecture is gone",
+        "@bootstrap_reference_missing": {
+          "description": "Conflict-toast title. 'Reference architecture' is a domain term: a saved template repository a bootstrap was based on. 'is gone' = it was since deleted, so the bootstrap can't be retried."
+        }
       },
       "fallbackMessage": "This action conflicts with the current state.",
+      "@fallbackMessage": {
+        "description": "Generic DESCRIPTION (toast body) used for a 409 conflict that carries no human-readable server message. Shown under whichever conflict title applies."
+      },
       "providersUnconfigured": {
         "title": "No AI provider for this model",
         "body": "No provider is configured for {models}. Add a provider key, connect a subscription, or enable Cloudflare AI to run it.",
-        "action": "Configure AI"
+        "@body": {
+          "description": "Toast body when a pipeline step's model has no usable AI provider. Keep the named placeholder for the model list intact (a comma-separated list of model ids is injected). Offers the same remedy as the startup 'no AI model' banner."
+        },
+        "action": "Configure AI",
+        "@action": {
+          "description": "Label on the toast's action button that jumps to the AI-provider setup screen."
+        }
       }
     }
   }
