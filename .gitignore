@@ -83,6 +83,9 @@ out
 dist
 .output
 
+# Turborepo task cache + logs
+.turbo
+
 # Cloudflare Wrangler local state + local dev secrets (worker + deploy/*)
 .wrangler
 .dev.vars

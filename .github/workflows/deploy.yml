@@ -353,13 +353,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # The deploy script's `predeploy` hook builds @cat-factory/worker (+ its
-      # workspace deps via project references) before `wrangler deploy`.
+      # Turbo's `deploy` task `dependsOn: ["^build"]`, so it builds @cat-factory/worker
+      # (+ its workspace deps, in dependency order) before running `wrangler deploy`.
       - name: Deploy Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm --filter @cat-factory/deploy-backend run deploy
+        run: pnpm exec turbo run deploy --filter=@cat-factory/deploy-backend
 
   # Deploy the SPA to Cloudflare Pages. Independent of the backend chain. The API
   # origin is baked in at `nuxt generate` time (the SPA is ssr:false static), so
@@ -390,10 +390,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Turbo's `generate` task `dependsOn: ["^build"]`, so @cat-factory/contracts
+      # (consumed via the @cat-factory/app layer) is compiled before `nuxt generate`
+      # resolves it — this replaces the old `pregenerate` build hook.
       - name: Generate static SPA
         env:
           NUXT_PUBLIC_API_BASE: ${{ vars.NUXT_PUBLIC_API_BASE }}
-        run: pnpm --filter @cat-factory/deploy-frontend run generate
+        run: pnpm exec turbo run generate --filter=@cat-factory/deploy-frontend
 
       # Deploy the generated output (pages_build_output_dir in wrangler.toml) to
       # the project's production branch. checkout leaves a detached HEAD, so pass
