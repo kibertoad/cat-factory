@@ -1,5 +1,12 @@
 # @cat-factory/server
 
+## 0.40.1
+
+### Patch Changes
+
+- Updated dependencies [cc101a7]
+  - @cat-factory/orchestration@0.37.1
+
 ## 0.40.0
 
 ### Minor Changes
