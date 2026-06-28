@@ -1,4 +1,5 @@
 import type { DocumentSourceDescriptor } from '@cat-factory/kernel'
+import { assertHostPinned } from './http.js'
 
 // Figma-specific pure logic, kept out of the provider shell so it is unit-testable
 // without a live workspace: parsing/canonicalising a file+node ref out of user input,
@@ -37,18 +38,7 @@ export const FIGMA_DESCRIPTOR: DocumentSourceDescriptor = {
  * `FigmaApiError`); kept pure so it is unit-testable without a network.
  */
 export function assertSafeFigmaUrl(url: string): void {
-  let parsed: URL
-  try {
-    parsed = new URL(url)
-  } catch {
-    throw new Error(`Figma request URL is invalid: ${url}`)
-  }
-  if (parsed.protocol !== 'https:') {
-    throw new Error('Figma request must use https')
-  }
-  if (parsed.hostname.toLowerCase() !== FIGMA_API_HOST) {
-    throw new Error(`Figma redirect to a disallowed host: ${parsed.hostname}`)
-  }
+  assertHostPinned(url, FIGMA_API_HOST, 'Figma')
 }
 
 // ---- Ref parsing + canonical URL ------------------------------------------

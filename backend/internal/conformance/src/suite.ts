@@ -2468,6 +2468,38 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const afterDelete = await call<{ connections: unknown[] }>('GET', `${base}/connections`)
         expect(afterDelete.body.connections).toEqual([])
       })
+
+      it('connects, lists (secret-free), and disconnects Claude Design (per-user PAT)', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/document-sources`
+
+        // Claude Design is a PERSONAL source (descriptor `credentialScope: 'user'`): the PAT
+        // is stored in the per-user `user_document_connections` table, NOT the shared
+        // workspace table, yet it surfaces through the SAME connect/list/disconnect surface.
+        // (In dev-open conformance there is no signed-in user, so it is owned by the empty
+        // user id — the single-user/local-mode fallback.) Proves the per-user store + the
+        // scope-aware service are wired symmetrically on this facade, and the token never
+        // leaves the backend.
+        const connected = await call<{ source: string }>('POST', `${base}/claude-design/connect`, {
+          credentials: { apiToken: 'sk-ant-secret-design-token-xyz' },
+        })
+        expect(connected.status).toBe(201)
+        expect(connected.body.source).toBe('claude-design')
+        expect(JSON.stringify(connected.body)).not.toContain('secret-design-token')
+
+        const listed = await call<{ connections: { source: string }[] }>(
+          'GET',
+          `${base}/connections`,
+        )
+        expect(listed.body.connections.map((c) => c.source)).toEqual(['claude-design'])
+        expect(JSON.stringify(listed.body)).not.toContain('secret-design-token')
+
+        const del = await call('DELETE', `${base}/claude-design/connection`)
+        expect(del.status).toBe(204)
+        const afterDelete = await call<{ connections: unknown[] }>('GET', `${base}/connections`)
+        expect(afterDelete.body.connections).toEqual([])
+      })
     })
 
     describe('ephemeral environments', () => {

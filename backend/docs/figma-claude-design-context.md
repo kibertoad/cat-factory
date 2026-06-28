@@ -4,13 +4,20 @@
 > context** (component structure, layout, design tokens, visual intent) into the
 > UI/frontend coding agents.
 >
-> **Status:** the **Figma** provider described here is now **implemented** —
-> `FigmaProvider` + `figma.logic.ts`
-> (`backend/packages/integrations/src/modules/documents/`), `source='figma'` in the
-> contracts picklist, wired into both facades + the `DOCUMENT_SOURCES` allow-list, the
-> `design.figma-context` prompt fragment, pure logic tests, and a cross-runtime
-> conformance case. **Claude Design** remains a future provider (deferred — no
-> server-to-server credential yet; see §3 and the comparison table).
+> **Status:** **both** providers described here are now **implemented**.
+> **Figma** — `FigmaProvider` + `figma.logic.ts`, `source='figma'`, per-workspace PAT.
+> **Claude Design** — `ClaudeDesignProvider` + `claudeDesign.logic.ts`,
+> `source='claude-design'`, authenticated by a **personal per-user PAT** rather than a
+> shared workspace credential (a product decision: the token authenticates as an
+> individual). Both reuse the documents integration (link plumbing, controller,
+> `.cat-context/` materialization, a `design.*-context` prompt fragment each, pure logic
+> tests, and a cross-runtime conformance case) and share a hoisted host-pinned
+> `documents/http.ts` (the SSRF guard + capped read). The per-user credential lands in a
+> new `user_document_connections` store (D1 ⇄ Drizzle), selected by a new descriptor flag
+> `credentialScope: 'user'` — see "Per-user credential scope" below. The login-bound live
+> project-read this doc originally anticipated is superseded by the per-user-PAT model;
+> the API endpoint shapes in `ClaudeDesignProvider` are PROVISIONAL (host-pinned,
+> verify-at-build), but the design-system normalizer they feed is solid and fully tested.
 
 ## The problem
 
@@ -100,12 +107,12 @@ each is today**.
 
 ## Source comparison (the investigation finding)
 
-|                                 | **Figma**                                                    | **Claude Design**                                                                                                                                                         |
-| ------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Server-fetchable API            | **Yes** — REST at `api.figma.com`, `X-Figma-Token` header    | **Partial** — design-system project files are readable (HTML/components), but the read is bound to a **claude.ai login**, not a service token                             |
-| Per-workspace sealed credential | **Yes** — a Figma PAT, sealed exactly like Notion/Confluence | **Not today** — no documented server-to-server token; works under a single login (e.g. local mode), not multi-tenant hosted                                               |
-| Immediate no-API path           | n/a                                                          | **Yes** — an exported **handoff bundle** (HTML + design-system rules) / HTML / PDF, committed into the repo (agents read it natively) or attached as a document           |
-| MVP verdict                     | **Build now** (PAT provider)                                 | **Defer the provider** unless the export-bundle shell adds value over plain document upload (see §3); otherwise wire it when the credentialed live project-read API lands |
+|                       | **Figma**                                                          | **Claude Design**                                                                                                                                                                                                                                    |
+| --------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Server-fetchable API  | **Yes** — REST at `api.figma.com`, `X-Figma-Token` header          | **Partial** — design-system project files are readable (HTML/components), but the read is bound to a **claude.ai login**, not a service token                                                                                                        |
+| Sealed credential     | **Yes** — a Figma PAT, sealed per workspace like Notion/Confluence | **Yes** — a **personal per-user PAT**, sealed per user (`credentialScope: 'user'`); never shared with the workspace                                                                                                                                  |
+| Immediate no-API path | n/a                                                                | **Yes** — an exported **handoff bundle** (HTML + design-system rules) / HTML / PDF, committed into the repo (agents read it natively) or attached as a document                                                                                      |
+| MVP verdict           | **Built** (per-workspace PAT)                                      | **Built** (per-user PAT). The credentialed project-read replaces the deferred login-bound read; the API endpoint shapes are provisional/verify-at-build, but the deterministic normalizer they feed earns the provider its place over a plain upload |
 
 **Evidence for Claude Design's programmatic surface.** Claude Design exposes design-system
 **projects** that are readable programmatically — list the paths, read a file's content
@@ -124,11 +131,41 @@ needs no live API at all.
 > design→agent-context, and not something a headless backend consumes. Noted so it isn't
 > conflated with this integration.
 
-**Net:** one unified design. Figma is fully implemented in the MVP via a PAT. Claude Design
-rides the **same** provider shape, but whether its provider ships in v1 is conditional (see
-§3): only if the export-bundle path does real normalization work that plain document upload
-doesn't. Either way the seam is marked so the live, credentialed project-read slots in with
-no re-architecture the moment a workspace-scoped Claude Design credential exists.
+**Net:** one unified design, both halves now built. Figma rides a per-workspace PAT; Claude
+Design rides the **same** provider shape but a **per-user** PAT (see "Per-user credential
+scope" below) and a deterministic design-system normalizer that earns it its place over a
+plain document upload (it turns a project's `_ds_manifest.json` / `@dsCard`-marked component
+HTML + CSS custom properties into the `### Components` / `### Design tokens` Markdown shape
+the Figma renderer also emits). The provider's REST endpoint shapes are provisional and
+host-pinned (verify-at-build); the normalizer they feed is fully unit-tested independent of
+the network.
+
+## Per-user credential scope
+
+Most document sources (Notion, Confluence, GitHub docs, Figma, Linear) store **one shared
+credential per workspace**. Claude Design is different: its PAT authenticates as an
+**individual's** account, so it must be stored **per user** and never shared. Rather than
+fork the documents machinery, this is a small, source-declared generalization:
+
+- The provider descriptor gains an optional **`credentialScope: 'workspace' | 'user'`**
+  (absent ⇒ `'workspace'`, so every existing source is unchanged). Claude Design sets
+  `'user'`.
+- A new per-user store **`user_document_connections`** (D1 ⇄ Drizzle, keyed by
+  `(user_id, source)`, encrypted at rest under a distinct HKDF info) mirrors the existing
+  per-user precedents (`local_model_endpoints`, `personal_subscriptions`,
+  `user_secrets`). It is wired into both facades beside the workspace store.
+- `DocumentConnectionService` becomes **scope-aware**: it reads the acting source's
+  `credentialScope` and routes connect / list / disconnect / `requireConnection` to the
+  workspace or the per-user store. The import path threads the acting user; the cached
+  `documents` projection stays workspace-scoped (only the _credential_ is personal, so an
+  imported Claude Design page is still shared with the workspace once fetched).
+- The acting user is `c.get('user')?.id`, falling back to the **empty user id** when auth
+  is disabled — so single-user / local-mode deployments connect a personal source without a
+  sign-in wall, exactly as runs fall back for `initiatedBy`.
+- Live re-resolution of a _document-backed prompt fragment_ (the `DocumentContentResolver`
+  seam) is intentionally left workspace-scoped: a personal source can't back a run-time
+  live fragment yet (it throws a clear error), because that path doesn't thread the run
+  initiator. The primary path — import + link + `.cat-context/` — is fully per-user.
 
 ## Implementation outline
 
@@ -153,12 +190,11 @@ used`); `figmaVariablesToMarkdown` (`### Design tokens`, `collection › mode �
 value`).
    - `FigmaProvider.ts` — `normalizeConnection` validates the PAT; `fetchDocument` applies
      the **same** manual-redirect + fixed-host-pin + capped-read SSRF pattern Notion uses.
-     ⚠️ Note these helpers are **not directly reusable as-is**: in `NotionProvider.ts`,
-     `safeFetch`/`assertSafeNotionUrl`/`readCappedText`/`NotionApiError` are module-private
-     and hard-pinned to `api.notion.com`. So either (a) hoist a host-parameterized
-     `safeFetch(host)` + capped-read + a generic `*ApiError` into a shared
-     `documents/http.ts` and have both providers use it (the preferred cleanup), or
-     (b) copy the pattern into Figma pinned to `api.figma.com`. Then call:
+     ✅ **Done (option a).** The host-parameterized `createHostPinnedFetch(host)` +
+     `readCappedText` + `assertHostPinned` + `DocumentHttpError` now live in a shared
+     `documents/http.ts`; Figma and Claude Design both use it (Figma keeps
+     `assertSafeFigmaUrl` as a thin delegating wrapper so its SSRF unit test is unchanged).
+     Notion/Confluence keep their own copies (their tested code is left untouched). Then call:
      1. `GET /v1/files/:key/nodes?ids=:nodeId&depth=N` (or `/v1/files/:key?depth=2` for a
         whole-file link) → the layout tree;
      2. `GET /v1/files/:key/variables/local` → tokens; on **403/404** (non-Enterprise plan)
@@ -172,25 +208,27 @@ value`).
      provider is built — treat them as the intended shape, not a frozen contract.
 
    - `claudeDesign.logic.ts` + `ClaudeDesignProvider.ts` — `CLAUDE_DESIGN_DESCRIPTOR`
-     (kind `claude-design`); MVP `fetchDocument` renders an uploaded/pasted **handoff
-     bundle / export** (HTML + design-system rules) to Markdown, with a clearly-marked TODO
-     seam for the live project-read path; `normalizeConnection` documents that no server
-     token exists yet.
-     - ⚠️ **Decide whether the v1 shell earns its place.** On the export-bundle path there is
-       no server credential, so the descriptor would have **empty `credentialFields`** (the
-       generic connect modal renders nothing to fill in) and `fetchDocument` only reshapes an
-       already-HTML/Markdown blob — which the _existing_ document ingestion can already
-       attach. The shell only pays off if it adds real value over plain document upload:
-       e.g. a deterministic HTML→Markdown **design-system-rule normalizer**, or a
-       `searchable:false` import-by-paste UX. If it would just pass the bundle through, do
-       **not** ship the provider in v1 — list `claude-design` as a planned source and add the
-       provider when the live, credentialed project-read API lands, so we don't ship a
-       no-op connect surface.
-   - Export both from `index.ts`; add pure `*.logic.test.ts` (render/parse, no network).
-     _(changeset)_
+     (kind `claude-design`, **`credentialScope: 'user'`**, one secret PAT field,
+     `searchable: false`). `normalizeConnection` validates the per-user PAT; `fetchDocument`
+     lists a project's files, reads the manifest + bounded component HTML/CSS, and renders
+     `renderClaudeDesignProject` → `## <project>` / `### Components` (grouped) /
+     `### Design tokens`. The REST endpoints are PROVISIONAL/host-pinned (verify-at-build).
+     - ✅ **The shell earns its place (the normalizer is real).** This is NOT a pass-through:
+       `parseDsManifest` / `parseDsCardComment` / `extractCssTokens` deterministically pull
+       the component inventory (from `_ds_manifest.json` or `@dsCard` markers) and design
+       tokens (CSS custom properties) out of raw component HTML into the same Markdown shape
+       the Figma renderer emits — work the generic document ingestion does **not** do. The
+       connect surface is a real PAT field, not an empty form, because auth is the per-user
+       PAT (see "Per-user credential scope"), not the credential-less export bundle the
+       original investigation assumed.
+   - Export both from `index.ts`; add pure `claudeDesign.logic.test.ts` (parse/render +
+     SSRF host-pin, no network). _(changeset)_
 
-4. **Storage** — **none**. `source` is an existing `text` column; the widened picklist is
-   the only gate. No new tables, no migration, both document repos unchanged.
+4. **Storage** — a new **per-user** `user_document_connections` table (D1 ⇄ Drizzle),
+   because Claude Design's `credentialScope: 'user'` credential can't live in the
+   per-workspace `document_connections`. Workspace-scoped sources are unchanged (no
+   migration touches their table); the widened picklist is the only gate for them. See
+   "Per-user credential scope". _(changesets: worker, node-server)_
 
 5. **Runtime wiring** — push the new providers in `selectNodeDocumentsDeps()`
    (`backend/runtimes/node/src/container.ts`) and the Cloudflare mirror

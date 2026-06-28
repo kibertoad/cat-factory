@@ -1,5 +1,6 @@
 import type { PromptFragment } from '@cat-factory/contracts'
 import { acceptanceFragments } from './collections/acceptance.js'
+import { claudeDesignFragments } from './collections/claude-design.js'
 import { figmaFragments } from './collections/figma.js'
 import { nodeFragments } from './collections/node.js'
 import { reactFragments } from './collections/react.js'
@@ -20,6 +21,7 @@ export const FRAGMENTS: PromptFragment[] = [
   ...reactFragments,
   ...acceptanceFragments,
   ...figmaFragments,
+  ...claudeDesignFragments,
 ]
 
 /** Fragments keyed by id for O(1) lookup during prompt composition. */

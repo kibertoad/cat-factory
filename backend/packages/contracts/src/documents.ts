@@ -65,8 +65,19 @@ export const documentSourceDescriptorSchema = v.object({
    * backward-compatibility; absent is treated as `false`.
    */
   searchable: v.optional(v.boolean()),
+  /**
+   * Who owns this source's stored credential. `'workspace'` (the default when
+   * absent) — a single sealed credential shared by everyone in the workspace, the
+   * model Notion/Confluence/Figma/Linear use. `'user'` — a **personal** credential
+   * each member supplies for themselves (a per-user PAT), stored keyed by user id and
+   * never shared; Claude Design uses this because the token authenticates as an
+   * individual's account. The connect/import surface is otherwise identical, so the
+   * UI just labels a `'user'` source as personal.
+   */
+  credentialScope: v.optional(v.picklist(['workspace', 'user'])),
 })
 export type DocumentSourceDescriptor = v.InferOutput<typeof documentSourceDescriptorSchema>
+export type DocumentCredentialScope = NonNullable<DocumentSourceDescriptor['credentialScope']>
 
 // ---- Connection + document projections ------------------------------------
 

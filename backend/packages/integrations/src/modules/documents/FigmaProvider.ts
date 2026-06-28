@@ -5,8 +5,9 @@ import {
   type DocumentSourceProvider,
   type NormalizedConnection,
 } from '@cat-factory/kernel'
-import { FIGMA_DESCRIPTOR } from './figma.logic.js'
+import { FIGMA_API_HOST, FIGMA_DESCRIPTOR } from './figma.logic.js'
 import * as figmaLogic from './figma.logic.js'
+import { createHostPinnedFetch, readCappedText } from './http.js'
 
 // FigmaProvider: the document-source provider for Figma. It authenticates with a
 // per-workspace personal access token (the `X-Figma-Token` header), fetches a
@@ -22,8 +23,6 @@ const API_BASE = 'https://api.figma.com/v1'
 const USER_AGENT = 'cat-factory'
 /** Depth fetched for a whole-file link (a node link fetches its own subtree). */
 const FILE_DEPTH = 2
-/** Bound the redirect chain so the fixed API host can't 302 us elsewhere. */
-const MAX_REDIRECTS = 5
 /** Hard cap on the bytes read off any response body, to protect the isolate. */
 const MAX_RESPONSE_BYTES = 5_000_000
 
@@ -39,72 +38,11 @@ export class FigmaApiError extends Error {
 }
 
 /**
- * `fetch` with redirects followed by hand so the host guard runs against EVERY
- * hop. With the default `redirect: 'follow'` a 302 from the API could be chased
- * to an internal target (or downgraded to http), leaking the PAT. We force
- * `redirect: 'manual'`, re-resolve the `Location`, and re-validate against
- * `api.figma.com`.
+ * `fetch` pinned to `api.figma.com`, following redirects by hand so the SSRF host
+ * guard runs against every hop (a 302 can't chase the PAT off-host). The transport +
+ * capped-read are the shared documents `http` helpers; only the host/label differ.
  */
-async function safeFetch(url: string, init: RequestInit): Promise<Response> {
-  let current = url
-  for (let hop = 0; ; hop++) {
-    try {
-      figmaLogic.assertSafeFigmaUrl(current)
-    } catch (err) {
-      throw new FigmaApiError(502, err instanceof Error ? err.message : 'Figma request blocked')
-    }
-    const res = await fetch(current, { ...init, redirect: 'manual' })
-    if (res.status >= 300 && res.status < 400) {
-      const location = res.headers.get('location')
-      if (!location) return res
-      if (hop >= MAX_REDIRECTS) {
-        throw new FigmaApiError(502, 'Figma returned too many redirects')
-      }
-      current = new URL(location, current).toString()
-      continue
-    }
-    return res
-  }
-}
-
-/**
- * Read a response body with a running byte cap so a hostile/huge response can't
- * OOM the isolate. Checks the declared Content-Length first, then enforces the
- * cap while streaming.
- */
-async function readCappedText(res: Response, maxBytes: number): Promise<string> {
-  const declared = res.headers.get('content-length')
-  if (declared && Number(declared) > maxBytes) {
-    throw new FigmaApiError(502, 'Figma response too large')
-  }
-  const body = res.body
-  if (!body) return ''
-  const reader = body.getReader()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  try {
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (!value) continue
-      total += value.byteLength
-      if (total > maxBytes) {
-        await reader.cancel()
-        throw new FigmaApiError(502, 'Figma response too large')
-      }
-      chunks.push(value)
-    }
-  } finally {
-    reader.releaseLock()
-  }
-  const merged = new Uint8Array(total)
-  let offset = 0
-  for (const c of chunks) {
-    merged.set(c, offset)
-    offset += c.byteLength
-  }
-  return new TextDecoder().decode(merged)
-}
+const safeFetch = createHostPinnedFetch({ host: FIGMA_API_HOST, label: 'Figma' })
 
 interface FileResponse {
   name?: string

@@ -47,16 +47,26 @@ export * as confluenceLogic from './modules/documents/confluence.logic.js'
 export * as notionLogic from './modules/documents/notion.logic.js'
 export * as githubDocsLogic from './modules/documents/github-docs.logic.js'
 export * as figmaLogic from './modules/documents/figma.logic.js'
+export * as claudeDesignLogic from './modules/documents/claudeDesign.logic.js'
 export { CONFLUENCE_DESCRIPTOR } from './modules/documents/confluence.logic.js'
 export { NOTION_DESCRIPTOR } from './modules/documents/notion.logic.js'
 export { GITHUB_DOCS_DESCRIPTOR } from './modules/documents/github-docs.logic.js'
 export { FIGMA_DESCRIPTOR } from './modules/documents/figma.logic.js'
+export { CLAUDE_DESIGN_DESCRIPTOR } from './modules/documents/claudeDesign.logic.js'
+// Shared host-pinned HTTP helpers reused by the fixed-host document providers.
+export {
+  DocumentHttpError,
+  assertHostPinned,
+  createHostPinnedFetch,
+  readCappedText as readCappedDocumentText,
+} from './modules/documents/http.js'
 // Document-source provider classes (thin `fetch` shells around the logic above).
 // Promoted from the Worker infra so every facade composes the same providers.
 export { ConfluenceProvider, ConfluenceApiError } from './modules/documents/ConfluenceProvider.js'
 export { NotionProvider, NotionApiError } from './modules/documents/NotionProvider.js'
 export { GitHubDocsProvider } from './modules/documents/GitHubDocsProvider.js'
 export { FigmaProvider, FigmaApiError } from './modules/documents/FigmaProvider.js'
+export { ClaudeDesignProvider } from './modules/documents/ClaudeDesignProvider.js'
 export { LinearDocumentProvider } from './modules/documents/LinearDocumentProvider.js'
 export * as linearDocsLogic from './modules/documents/linear-docs.logic.js'
 export { LINEAR_DOCS_DESCRIPTOR } from './modules/documents/linear-docs.logic.js'

@@ -42,6 +42,16 @@ function sourceParam<E extends AppEnv>(c: Context<E>): DocumentSourceKind {
 }
 
 /**
+ * The acting user's id, used to scope a personal (`credentialScope: 'user'`) source's
+ * credential — e.g. a Claude Design PAT. Falls back to `''` when auth is disabled
+ * (dev-open / single-user local mode) so those deployments still connect a personal
+ * source; workspace-scoped sources ignore it entirely.
+ */
+function actingUserId<E extends AppEnv>(c: Context<E>): string {
+  return c.get('user')?.id ?? ''
+}
+
+/**
  * Workspace-scoped, source-parameterized document endpoints: source discovery,
  * connection management, page import, document listing, structure
  * planning/spawning, and linking a page to a block as agent context. Mounted
@@ -65,7 +75,10 @@ export function documentSourceController(): Hono<AppEnv> {
   buildHonoRoute(app, listDocumentConnectionsContract, async (c) => {
     const documents = requireDocuments(c)
     if (!documents) return unavailable(c)
-    const connections = await documents.connectionService.listConnections(param(c, 'workspaceId'))
+    const connections = await documents.connectionService.listConnections(
+      param(c, 'workspaceId'),
+      actingUserId(c),
+    )
     return c.json({ connections }, 200)
   })
 
@@ -76,6 +89,7 @@ export function documentSourceController(): Hono<AppEnv> {
       param(c, 'workspaceId'),
       sourceParam(c),
       c.req.valid('json').credentials,
+      actingUserId(c),
     )
     return c.json(connection, 201)
   })
@@ -83,7 +97,11 @@ export function documentSourceController(): Hono<AppEnv> {
   buildHonoRoute(app, disconnectDocumentSourceContract, async (c) => {
     const documents = requireDocuments(c)
     if (!documents) return unavailable(c)
-    await documents.connectionService.disconnect(param(c, 'workspaceId'), sourceParam(c))
+    await documents.connectionService.disconnect(
+      param(c, 'workspaceId'),
+      sourceParam(c),
+      actingUserId(c),
+    )
     return c.body(null, 204)
   })
 
@@ -102,6 +120,7 @@ export function documentSourceController(): Hono<AppEnv> {
       param(c, 'workspaceId'),
       sourceParam(c),
       c.req.valid('json').ref,
+      actingUserId(c),
     )
     return c.json(document, 201)
   })
@@ -115,6 +134,7 @@ export function documentSourceController(): Hono<AppEnv> {
       param(c, 'workspaceId'),
       sourceParam(c),
       c.req.valid('json').query,
+      actingUserId(c),
     )
     return c.json({ results }, 200)
   })
