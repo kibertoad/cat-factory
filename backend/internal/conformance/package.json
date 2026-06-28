@@ -23,7 +23,8 @@
     "@cat-factory/integrations": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/orchestration": "workspace:*",
-    "@cat-factory/prompt-fragments": "workspace:*"
+    "@cat-factory/prompt-fragments": "workspace:*",
+    "@cat-factory/server": "workspace:*"
   },
   "devDependencies": {
     "typescript": "7.0.1-rc",

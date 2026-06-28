@@ -166,7 +166,6 @@ export type {
   AgentsConfig,
   AppConfig,
   AuthConfig,
-  BinaryStorageConfig,
   ReleaseHealthConfig,
   DocumentsConfig,
   EmailConfig,
@@ -190,3 +189,13 @@ export { resolveUrlSafetyPolicy } from './config/url-safety.js'
 // the Drizzle/Postgres repos — both use the same column shapes).
 export * from './persistence/mappers.js'
 export * from './persistence/sandbox-mappers.js'
+
+// Per-account binary-artifact store resolution (the blob backend is configured per-account
+// in the UI; each facade supplies its own backend factory + default).
+export {
+  makeResolveBinaryArtifactStore,
+  type MakeResolveBinaryArtifactStoreDeps,
+  type BuildBlobBackend,
+  type BuildBlobBackendOptions,
+  type ContentStorageSettingsResolver,
+} from './persistence/binaryArtifactStore.js'

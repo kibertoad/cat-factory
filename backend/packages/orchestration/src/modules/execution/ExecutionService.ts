@@ -1,7 +1,7 @@
 import type {
   AgentFailure,
   AgentFailureKind,
-  BinaryArtifactStore,
+  ResolveBinaryArtifactStore,
   Block,
   BlueprintService,
   ExecutionInstance,
@@ -373,11 +373,12 @@ export interface ExecutionServiceDependencies {
    */
   environmentProvisioning?: EnvironmentProvisioningService
   /**
-   * Optional: the binary-artifact store (UI screenshots + reference design images) the
-   * `visual-confirmation` gate reads. Absent → the gate passes through (auto-advances),
-   * since there is nowhere to read screenshots from.
+   * Optional: resolves the binary-artifact store (UI screenshots + reference design images)
+   * for a workspace's account; the `visual-confirmation` gate reads it. Absent (or resolving
+   * to null — storage not configured) → the gate passes through (auto-advances), since there
+   * is nowhere to read screenshots from.
    */
-  binaryArtifactStore?: BinaryArtifactStore
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   /**
    * Optional: tears down ephemeral environments. Wired alongside
    * {@link environmentProvisioning}; the `human-test` gate uses it to destroy an env on
@@ -647,7 +648,7 @@ export class ExecutionService {
     branchUpdater,
     blueprintReconciler,
     notificationService,
-    binaryArtifactStore,
+    resolveBinaryArtifactStore,
     workspaceSettingsService,
     llmObservability,
     pullRequestMerger,
@@ -783,7 +784,7 @@ export class ExecutionService {
       agentExecutor,
       contextBuilder: this.contextBuilder,
       notificationService,
-      ...(binaryArtifactStore ? { binaryArtifactStore } : {}),
+      ...(resolveBinaryArtifactStore ? { resolveBinaryArtifactStore } : {}),
       resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
       parkStepOnDecision: (ws, i, s, p) => this.parkStepOnDecision(ws, i, s, p),
       finishStep: (s) => this.finishStep(s),

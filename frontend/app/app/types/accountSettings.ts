@@ -11,4 +11,8 @@ export type {
   AccountSettingsSummary,
   AccountSettingsView,
   UpdateAccountSettingsInput,
+  ContentStorageBackend,
+  ContentStorageConfig,
+  ContentStorageSummary,
+  ContentStorageCapability,
 } from '@cat-factory/contracts'

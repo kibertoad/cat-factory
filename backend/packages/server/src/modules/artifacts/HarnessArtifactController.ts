@@ -43,8 +43,8 @@ export function harnessArtifactController(): Hono<AppEnv> {
     }),
     async (c) => {
       const container = c.get('container')
-      const store = container.binaryArtifactStore
-      if (!store) {
+      const resolveStore = container.resolveBinaryArtifactStore
+      if (!resolveStore) {
         return c.json(
           { error: { code: 'unavailable', message: 'Artifact storage not configured' } },
           503,
@@ -66,6 +66,17 @@ export function harnessArtifactController(): Hono<AppEnv> {
           'artifact ingest: invalid or expired session token',
         )
         return c.json({ error: { code: 'unauthorized', message: 'Invalid or expired token' } }, 401)
+      }
+
+      // The store is the run's ACCOUNT's configured backend, resolved from the token's
+      // workspace (never the request body) — so a container can only write to its own
+      // account's storage. Null ⇒ the account configured no storage.
+      const store = await resolveStore(session.workspaceId)
+      if (!store) {
+        return c.json(
+          { error: { code: 'unavailable', message: 'Artifact storage not configured' } },
+          503,
+        )
       }
 
       // Refuse a grossly oversized body from Content-Length before it is buffered into memory; the

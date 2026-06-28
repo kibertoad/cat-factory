@@ -8,8 +8,9 @@ import type { Clock, IdGenerator } from './runtime.js'
 // stored separately: the METADATA always lives in the runtime's relational
 // store (D1 on Cloudflare, Postgres on Node — so it can be listed/joined/pruned
 // like any other row), while the BYTES live in whatever blob backend the
-// deployment configured (R2 on Cloudflare, S3 via @cat-factory/provider-s3, or
-// a Postgres `bytea` table on Node/local; or anything custom).
+// account configured (R2 on Cloudflare; S3 via @cat-factory/provider-s3, a
+// Postgres `bytea` table or the local filesystem on Node/local; or anything
+// custom). The backend is chosen per-account in the UI, not at boot.
 //
 // The seam is split so a deployment mixes-and-matches without duplicating the
 // metadata SQL per backend:
@@ -21,7 +22,7 @@ import type { Clock, IdGenerator } from './runtime.js'
 // ---------------------------------------------------------------------------
 
 /** Where a blob's bytes physically live. The metadata always lives in the DB. */
-export type BinaryArtifactStorageKind = 'db' | 'r2' | 's3' | 'memory'
+export type BinaryArtifactStorageKind = 'db' | 'r2' | 's3' | 'fs' | 'memory'
 
 /** What an artifact is — drives actual-vs-reference pairing in the gate UI. */
 export type BinaryArtifactKind = 'screenshot' | 'reference'
@@ -113,7 +114,8 @@ export interface BinaryArtifactMetadataStore {
 /**
  * The pluggable blob backend — the "custom adapter interface". Implement this to
  * store bytes anywhere: R2 (Cloudflare), S3 (@cat-factory/provider-s3), a
- * Postgres `bytea` table (Node), an in-memory map (tests), or your own store.
+ * Postgres `bytea` table or the local filesystem (Node/local), an in-memory map
+ * (tests), or your own store.
  * `kind` is stamped onto the metadata `storage` column so a read knows where the
  * bytes live.
  */
@@ -123,6 +125,19 @@ export interface BinaryBlobBackend {
   get(key: string): Promise<Uint8Array | null>
   delete(key: string): Promise<void>
 }
+
+/**
+ * Resolve the {@link BinaryArtifactStore} for a workspace's owning ACCOUNT. The blob
+ * backend (filesystem / S3 / R2 / Postgres) is configured per-account in the UI, so the
+ * store is resolved at request/run time from the account's settings rather than wired once
+ * at boot. Returns `null` when the account has no storage configured (or selected `off`),
+ * which every consumer treats as "storage unavailable" — the artifact controllers 503 and
+ * the visual-confirmation gate passes through. The facade composes this from the account
+ * settings + a runtime-specific blob-backend factory + the runtime's metadata store.
+ */
+export type ResolveBinaryArtifactStore = (
+  workspaceId: string,
+) => Promise<BinaryArtifactStore | null>
 
 // Web Crypto is a global in both workerd and Node, but the kernel compiles against the
 // ES2022 lib only (no DOM/WebWorker), so reach it through `globalThis` with a minimal

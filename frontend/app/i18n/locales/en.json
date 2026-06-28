@@ -828,6 +828,33 @@
         "saveFailed": "Could not save web search keys",
         "cleared": "Web search keys cleared",
         "clearFailed": "Could not clear web search keys"
+      },
+      "contentStorage": {
+        "title": "Content storage",
+        "description": "Where UI-tester screenshots and reference design images for this account are stored. The metadata always lives in the database; only the file bytes go to the chosen backend.",
+        "default": "Default ({backend})",
+        "backends": {
+          "off": "Off (storage disabled)",
+          "fs": "Local filesystem",
+          "s3": "Amazon S3 / S3-compatible",
+          "r2": "Cloudflare R2",
+          "db": "Postgres database"
+        },
+        "basePath": "Base path (default: .file-storage)",
+        "region": "Region (e.g. us-east-1)",
+        "bucket": "Bucket",
+        "prefix": "Key prefix (optional)",
+        "endpoint": "Endpoint (optional, S3-compatible)",
+        "forcePathStyle": "Force path-style addressing (most S3-compatible stores)",
+        "accessKeys": "Access keys",
+        "accessKeyId": "Access key ID",
+        "secretAccessKey": "Secret access key",
+        "keysHint": "Keys are sealed at rest and never shown after saving; leave blank to keep the stored keys.",
+        "regionBucketValidation": "Enter the S3 region and bucket",
+        "bothKeysValidation": "Enter both the access key id and secret",
+        "keysValidation": "Enter the S3 access key id and secret",
+        "saved": "Content storage saved",
+        "saveFailed": "Could not save content storage"
       }
     },
     "accountFragments": {

@@ -2,6 +2,7 @@ import type {
   AgentExecutor,
   AgentRunContext,
   BinaryArtifactStore,
+  ResolveBinaryArtifactStore,
   Block,
   BlockRepository,
   ExecutionInstance,
@@ -41,8 +42,11 @@ export interface VisualConfirmationControllerDeps {
   agentExecutor: AgentExecutor
   contextBuilder: AgentContextBuilder
   notificationService?: NotificationService
-  /** The binary-artifact store the gate reads screenshots + reference designs from. */
-  binaryArtifactStore?: BinaryArtifactStore
+  /**
+   * Resolves the binary-artifact store (per-account backend) the gate reads screenshots +
+   * reference designs from, for the run's workspace. Absent / resolving to null → manual mode.
+   */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   /** The task's helper attempt budget (from the resolved merge preset). */
   resolveMergePreset: (workspaceId: string, block: Block) => Promise<{ ciMaxAttempts: number }>
   // Shared engine step-graph primitives (stay on ExecutionService, injected here).
@@ -137,7 +141,7 @@ export class VisualConfirmationController {
     await this.deps.stopRunContainer(workspaceId, instance)
     const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
-    vc.pairs = await this.gatherPairs(workspaceId, instance, block)
+    vc.pairs = await this.gatherPairs(workspaceId, instance, block, await this.store(workspaceId))
     // The pairs come from the LAST UI-tester report, which predates this fix — the gate does
     // not auto re-run the UI tester yet (see the handover doc). Flag the staleness so the human
     // knows to recapture (or re-run the UI tester) before judging the screenshots as final,
@@ -179,6 +183,13 @@ export class VisualConfirmationController {
 
   // ---- internals -----------------------------------------------------------
 
+  /** Resolve the workspace's per-account binary-artifact store (null = none configured). */
+  private async store(workspaceId: string): Promise<BinaryArtifactStore | null> {
+    return this.deps.resolveBinaryArtifactStore
+      ? this.deps.resolveBinaryArtifactStore(workspaceId)
+      : null
+  }
+
   /** Fresh entry: gather screenshots and park (or pass through when no store is wired). */
   private async begin(
     workspaceId: string,
@@ -188,12 +199,13 @@ export class VisualConfirmationController {
     isFinalStep: boolean,
   ): Promise<AdvanceResult> {
     // No store ⇒ nowhere to read screenshots from: pass through so a pipeline that includes
-    // the gate still completes (tests / a deployment without blob storage).
-    if (!this.deps.binaryArtifactStore) {
+    // the gate still completes (tests / an account without content storage configured).
+    const store = await this.store(workspaceId)
+    if (!store) {
       return this.completeStep(workspaceId, instance, step, isFinalStep)
     }
     const maxAttempts = (await this.deps.resolveMergePreset(workspaceId, block)).ciMaxAttempts
-    const pairs = await this.gatherPairs(workspaceId, instance, block)
+    const pairs = await this.gatherPairs(workspaceId, instance, block, store)
     step.visualConfirm = {
       phase: 'awaiting_human',
       pairs,
@@ -230,7 +242,13 @@ export class VisualConfirmationController {
         return this.dispatchFixer(workspaceId, instance, step, block, action.findings ?? '')
       case 'recapture': {
         const vc = step.visualConfirm
-        if (vc) vc.pairs = await this.gatherPairs(workspaceId, instance, block)
+        if (vc)
+          vc.pairs = await this.gatherPairs(
+            workspaceId,
+            instance,
+            block,
+            await this.store(workspaceId),
+          )
         return this.toAwaitingHuman(workspaceId, instance, step, block)
       }
     }
@@ -310,19 +328,24 @@ export class VisualConfirmationController {
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
   }
 
-  /** Gather actual-vs-reference pairs: the latest UI-tester report's screenshots + block references. */
+  /**
+   * Gather actual-vs-reference pairs: the latest UI-tester report's screenshots + block
+   * references. The caller passes the already-resolved per-account store (or null) so the
+   * gate's entry path doesn't resolve it twice.
+   */
   private async gatherPairs(
     workspaceId: string,
     instance: ExecutionInstance,
     block: Block,
+    store: BinaryArtifactStore | null,
   ): Promise<VisualConfirmPair[]> {
     const byView = new Map<string, VisualConfirmPair>()
     // The artifact ids the run ACTUALLY uploaded — so a screenshot id the agent reported but
     // that was never stored (a fabricated/typo'd id), or one since removed by the retention
     // sweep, is treated as "not captured" rather than rendered as a dangling/404 gallery image.
-    const validActualIds = this.deps.binaryArtifactStore
+    const validActualIds = store
       ? new Set(
-          (await this.deps.binaryArtifactStore.listByExecution(workspaceId, instance.id))
+          (await store.listByExecution(workspaceId, instance.id))
             .filter((r) => r.kind === 'screenshot')
             .map((r) => r.id),
         )
@@ -341,8 +364,8 @@ export class VisualConfirmationController {
       })
     }
     // Reference: the block's uploaded reference design images (carry no executionId).
-    if (this.deps.binaryArtifactStore) {
-      const refs = (await this.deps.binaryArtifactStore.listByBlock(workspaceId, block.id)).filter(
+    if (store) {
+      const refs = (await store.listByBlock(workspaceId, block.id)).filter(
         (r) => r.kind === 'reference',
       )
       // `listByBlock` returns references oldest-first, so assign unconditionally: the LAST

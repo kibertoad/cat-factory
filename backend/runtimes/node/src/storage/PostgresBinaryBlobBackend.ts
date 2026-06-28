@@ -4,8 +4,8 @@ import type { DrizzleDb } from '../db/client.js'
 import { binaryArtifactBlobs } from '../db/schema.js'
 
 /**
- * Default Node/local blob backend: store the bytes in a Postgres `bytea` table
- * (`binary_artifact_blobs`). Used when `BINARY_STORAGE_BACKEND=db`. There is no
+ * Postgres `bytea` blob backend for Node/local: store the bytes in a `binary_artifact_blobs`
+ * table. Used when an account selects the `db` content-storage backend in the UI. There is no
  * Cloudflare equivalent — D1 can't hold large values, so the Worker uses R2.
  *
  * Postgres tolerates large `bytea` values, but a screenshot store should not become

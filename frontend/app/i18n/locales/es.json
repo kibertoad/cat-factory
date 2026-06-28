@@ -789,6 +789,33 @@
         "saveFailed": "No se pudieron guardar las claves de búsqueda web",
         "cleared": "Claves de búsqueda web borradas",
         "clearFailed": "No se pudieron borrar las claves de búsqueda web"
+      },
+      "contentStorage": {
+        "title": "Almacenamiento de contenido",
+        "description": "Dónde se almacenan las capturas del probador de UI y las imágenes de diseño de referencia de esta cuenta. Los metadatos siempre viven en la base de datos; solo los bytes de archivo van al backend elegido.",
+        "default": "Predeterminado ({backend})",
+        "backends": {
+          "off": "Desactivado (almacenamiento deshabilitado)",
+          "fs": "Sistema de archivos local",
+          "s3": "Amazon S3 / compatible con S3",
+          "r2": "Cloudflare R2",
+          "db": "Base de datos Postgres"
+        },
+        "basePath": "Ruta base (predeterminada: .file-storage)",
+        "region": "Región (p. ej. us-east-1)",
+        "bucket": "Bucket",
+        "prefix": "Prefijo de clave (opcional)",
+        "endpoint": "Endpoint (opcional, compatible con S3)",
+        "forcePathStyle": "Forzar direccionamiento de estilo de ruta (la mayoría de almacenes compatibles con S3)",
+        "accessKeys": "Claves de acceso",
+        "accessKeyId": "ID de clave de acceso",
+        "secretAccessKey": "Clave de acceso secreta",
+        "keysHint": "Las claves se sellan en reposo y nunca se muestran tras guardarlas; déjalas en blanco para conservar las almacenadas.",
+        "regionBucketValidation": "Introduce la región y el bucket de S3",
+        "bothKeysValidation": "Introduce tanto el id de clave de acceso como el secreto",
+        "keysValidation": "Introduce el id de clave de acceso y el secreto de S3",
+        "saved": "Almacenamiento de contenido guardado",
+        "saveFailed": "No se pudo guardar el almacenamiento de contenido"
       }
     },
     "accountFragments": {

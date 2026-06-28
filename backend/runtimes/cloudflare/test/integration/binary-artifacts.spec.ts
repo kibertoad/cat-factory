@@ -1,4 +1,8 @@
-import { defineBinaryArtifactsSuite, MemoryBinaryBlobBackend } from '@cat-factory/conformance'
+import {
+  defineBinaryArtifactsSuite,
+  defineContentStorageResolutionSuite,
+  MemoryBinaryBlobBackend,
+} from '@cat-factory/conformance'
 import { createBinaryArtifactStore } from '@cat-factory/kernel'
 import { env } from 'cloudflare:test'
 import { D1BinaryArtifactMetadataStore } from '../../src/infrastructure/repositories/D1BinaryArtifactMetadataStore'
@@ -18,3 +22,10 @@ defineBinaryArtifactsSuite('cloudflare', () =>
     clock,
   }),
 )
+
+// Per-account store resolution against the same real D1 metadata store.
+defineContentStorageResolutionSuite('cloudflare', {
+  metadata: new D1BinaryArtifactMetadataStore({ db: env.DB }),
+  idGenerator,
+  clock,
+})

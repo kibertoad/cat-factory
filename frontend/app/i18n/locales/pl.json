@@ -789,6 +789,33 @@
         "saveFailed": "Nie udało się zapisać kluczy wyszukiwania w sieci",
         "cleared": "Wyczyszczono klucze wyszukiwania w sieci",
         "clearFailed": "Nie udało się wyczyścić kluczy wyszukiwania w sieci"
+      },
+      "contentStorage": {
+        "title": "Przechowywanie treści",
+        "description": "Gdzie przechowywane są zrzuty ekranu testera UI oraz referencyjne obrazy projektowe dla tego konta. Metadane zawsze znajdują się w bazie danych; do wybranego backendu trafiają tylko bajty plików.",
+        "default": "Domyślnie ({backend})",
+        "backends": {
+          "off": "Wyłączone (przechowywanie wyłączone)",
+          "fs": "Lokalny system plików",
+          "s3": "Amazon S3 / zgodny z S3",
+          "r2": "Cloudflare R2",
+          "db": "Baza danych Postgres"
+        },
+        "basePath": "Ścieżka bazowa (domyślnie: .file-storage)",
+        "region": "Region (np. us-east-1)",
+        "bucket": "Bucket",
+        "prefix": "Prefiks klucza (opcjonalny)",
+        "endpoint": "Endpoint (opcjonalny, zgodny z S3)",
+        "forcePathStyle": "Wymuś adresowanie w stylu ścieżki (większość magazynów zgodnych z S3)",
+        "accessKeys": "Klucze dostępu",
+        "accessKeyId": "Identyfikator klucza dostępu",
+        "secretAccessKey": "Tajny klucz dostępu",
+        "keysHint": "Klucze są zapieczętowane w spoczynku i nigdy nie są wyświetlane po zapisaniu; pozostaw puste, aby zachować przechowywane klucze.",
+        "regionBucketValidation": "Wprowadź region i bucket S3",
+        "bothKeysValidation": "Wprowadź zarówno identyfikator klucza dostępu, jak i sekret",
+        "keysValidation": "Wprowadź identyfikator klucza dostępu i sekret S3",
+        "saved": "Zapisano przechowywanie treści",
+        "saveFailed": "Nie udało się zapisać przechowywania treści"
       }
     },
     "accountFragments": {

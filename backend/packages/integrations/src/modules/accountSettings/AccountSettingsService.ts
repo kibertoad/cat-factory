@@ -5,6 +5,9 @@ import type {
   AccountSettingsSecrets,
   AccountSettingsSummary,
   AccountSettingsView,
+  ContentStorageCapability,
+  ContentStorageConfig,
+  S3CredentialsSecret,
   SlackOAuthSecret,
   UpdateAccountSettingsInput,
   WebSearchSecret,
@@ -15,6 +18,12 @@ import {
   parseAccountSettingsConfig,
   parseAccountSettingsSecrets,
 } from '@cat-factory/contracts'
+
+/** Capability used when a facade doesn't supply one (storage disabled — e.g. in tests). */
+const DISABLED_CONTENT_STORAGE_CAPABILITY: ContentStorageCapability = {
+  supportedBackends: ['off'],
+  defaultBackend: 'off',
+}
 
 /** HKDF domain tag separating the grouped account-settings secret blob from other ciphers. */
 export const ACCOUNT_SETTINGS_CIPHER_INFO = 'cat-factory:account-settings'
@@ -27,6 +36,10 @@ export interface ResolvedAccountSettings {
   config: AccountSettingsConfig
   slackOAuth?: SlackOAuthSecret
   webSearch?: WebSearchSecret
+  /** Non-secret content-storage config (backend selection + connection settings). */
+  contentStorage?: ContentStorageConfig
+  /** Decrypted S3 access keys for the content-storage `s3` backend, when stored. */
+  s3Credentials?: S3CredentialsSecret
 }
 
 export interface AccountSettingsServiceDependencies {
@@ -34,6 +47,11 @@ export interface AccountSettingsServiceDependencies {
   /** Seals the grouped secrets blob (domain tag {@link ACCOUNT_SETTINGS_CIPHER_INFO}). */
   secretCipher: SecretCipher
   clock: Clock
+  /**
+   * Which content-storage backends THIS runtime can serve + its default. Surfaced in the
+   * admin view so the UI only offers valid options. Omitted ⇒ storage disabled (tests).
+   */
+  contentStorageCapability?: ContentStorageCapability
 }
 
 /**
@@ -47,12 +65,15 @@ export class AccountSettingsService {
   private readonly repo: AccountSettingsRepository
   private readonly cipher: SecretCipher
   private readonly clock: Clock
+  private readonly contentStorageCapability: ContentStorageCapability
   private readonly cache = new Map<string, { value: ResolvedAccountSettings; expiresAt: number }>()
 
   constructor(deps: AccountSettingsServiceDependencies) {
     this.repo = deps.accountSettingsRepository
     this.cipher = deps.secretCipher
     this.clock = deps.clock
+    this.contentStorageCapability =
+      deps.contentStorageCapability ?? DISABLED_CONTENT_STORAGE_CAPABILITY
   }
 
   /** The resolved (decrypted) settings for an account, cache-first. Defaults when no row. */
@@ -67,6 +88,8 @@ export class AccountSettingsService {
       config,
       ...(secrets.slackOAuth ? { slackOAuth: secrets.slackOAuth } : {}),
       ...(secrets.webSearch ? { webSearch: secrets.webSearch } : {}),
+      ...(config.contentStorage ? { contentStorage: config.contentStorage } : {}),
+      ...(secrets.s3 ? { s3Credentials: secrets.s3 } : {}),
     }
     this.cache.set(accountId, { value, expiresAt: now + CACHE_TTL_MS })
     return value
@@ -77,16 +100,21 @@ export class AccountSettingsService {
     this.cache.delete(accountId)
   }
 
-  /** Admin read: config + non-secret summary; NEVER decrypts/returns the secrets. */
+  /** Admin read: config + non-secret summary + runtime capability; NEVER returns secrets. */
   async read(accountId: string): Promise<AccountSettingsView> {
     const record = await this.repo.getByAccount(accountId)
     if (!record) {
       return {
         config: DEFAULT_ACCOUNT_SETTINGS_CONFIG,
         summary: accountSettingsSummary({}),
+        contentStorageCapability: this.contentStorageCapability,
       }
     }
-    return { config: parseConfig(record.config), summary: parseSummary(record.summary) }
+    return {
+      config: parseConfig(record.config),
+      summary: parseSummary(record.summary),
+      contentStorageCapability: this.contentStorageCapability,
+    }
   }
 
   /**
@@ -109,15 +137,15 @@ export class AccountSettingsService {
     const current = existing?.secretsCipher ? await this.decryptSecrets(existing.secretsCipher) : {}
     const merged: AccountSettingsSecrets = { ...current }
     if (input.secrets) {
-      for (const key of ['slackOAuth', 'webSearch'] as const) {
+      for (const key of ['slackOAuth', 'webSearch', 's3'] as const) {
         if (!(key in input.secrets)) continue
         const value = input.secrets[key]
         if (value == null) delete merged[key]
         else merged[key] = value as never
       }
     }
-    const hasSecrets = Boolean(merged.slackOAuth || merged.webSearch)
-    const summary = accountSettingsSummary(merged)
+    const hasSecrets = Boolean(merged.slackOAuth || merged.webSearch || merged.s3)
+    const summary = accountSettingsSummary(merged, config)
     await this.repo.upsert({
       accountId,
       config: JSON.stringify(config),
@@ -127,7 +155,7 @@ export class AccountSettingsService {
       updatedAt: now,
     })
     this.invalidate(accountId)
-    return { config, summary }
+    return { config, summary, contentStorageCapability: this.contentStorageCapability }
   }
 
   /** Decrypt + parse the sealed secrets blob. Throws when it can't be opened/parsed. */
@@ -161,15 +189,28 @@ function parseConfig(raw: string): AccountSettingsConfig {
   }
 }
 
-/** Parse the stored non-secret summary, tolerating a malformed/empty value. */
+const CONTENT_STORAGE_BACKENDS = new Set(['off', 'fs', 's3', 'r2', 'db'])
+
+/** Parse the stored non-secret summary, tolerating a malformed/empty/legacy value. */
 function parseSummary(raw: string): AccountSettingsSummary {
   try {
     const parsed: unknown = JSON.parse(raw)
     if (parsed && typeof parsed === 'object') {
       const o = parsed as Record<string, unknown>
+      const cs = (o.contentStorage ?? {}) as Record<string, unknown>
+      const backend =
+        typeof cs.backend === 'string' && CONTENT_STORAGE_BACKENDS.has(cs.backend)
+          ? (cs.backend as AccountSettingsSummary['contentStorage']['backend'])
+          : null
       return {
         slackOAuthConfigured: Boolean(o.slackOAuthConfigured),
         webSearch: o.webSearch === 'brave' || o.webSearch === 'searxng' ? o.webSearch : null,
+        contentStorage: {
+          backend,
+          bucket: typeof cs.bucket === 'string' ? cs.bucket : null,
+          basePath: typeof cs.basePath === 'string' ? cs.basePath : null,
+          s3CredentialsConfigured: Boolean(cs.s3CredentialsConfigured),
+        },
       }
     }
   } catch {

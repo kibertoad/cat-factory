@@ -302,6 +302,11 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     // to re-wrap with a single subsystem tag.
     resolveTransport,
     skipProvisioningLogWrap: true,
+    // Local mode defaults binary-artifact (screenshot) storage to the on-disk filesystem
+    // backend (`.file-storage`), so UI-tester screenshots work out of the box with no setup;
+    // an account can still switch to S3 in the UI. (Node mode defaults to `off` — storage
+    // there requires explicit per-account configuration.)
+    contentStorageDefaultBackend: 'fs',
     // Authenticate git with the developer's PAT when present. Absent → the executor
     // falls back to the GitHub App path (and is null without it), so container kinds
     // fail loudly rather than silently mis-running.
