@@ -1,5 +1,13 @@
 # @cat-factory/node-server
 
+## 0.31.2
+
+### Patch Changes
+
+- Updated dependencies [6903cd7]
+  - @cat-factory/orchestration@0.33.0
+  - @cat-factory/server@0.36.2
+
 ## 0.31.1
 
 ### Patch Changes

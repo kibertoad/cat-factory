@@ -1,5 +1,16 @@
 # @cat-factory/orchestration
 
+## 0.33.0
+
+### Minor Changes
+
+- 6903cd7: Board mutations now push a real-time `boardChanged` event. Creating, renaming,
+  moving, reparenting, deleting blocks (and toggling dependencies / epic assignment)
+  emit a coarse board signal through the `ExecutionEventPublisher`, so every user
+  active on a workspace — and every board mounting a shared service — sees human
+  board edits live instead of only after a refresh. Best-effort and a no-op when no
+  real-time transport is wired.
+
 ## 0.32.1
 
 ### Patch Changes

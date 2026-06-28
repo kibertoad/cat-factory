@@ -1,5 +1,12 @@
 # @cat-factory/conformance
 
+## 0.9.4
+
+### Patch Changes
+
+- Updated dependencies [6903cd7]
+  - @cat-factory/orchestration@0.33.0
+
 ## 0.9.3
 
 ### Patch Changes
