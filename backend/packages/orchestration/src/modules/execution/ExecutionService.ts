@@ -93,6 +93,7 @@ import {
   type FragmentBodyResolver,
 } from './AgentContextBuilder.js'
 import { CompanionController } from './CompanionController.js'
+import { StepGraph } from './StepGraph.js'
 import { inferTechnicalLabel } from './technical.logic.js'
 import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
@@ -534,6 +535,8 @@ export class ExecutionService {
   private readonly accountRepository: AccountRepository
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
+  /** The pure step/cursor mutators (start/finish/park/reset + the companion rework loop). */
+  private readonly stepGraph: StepGraph
   private readonly agentExecutor: AgentExecutor
   private readonly workRunner: WorkRunner
   private readonly events: ExecutionEventPublisher
@@ -673,6 +676,7 @@ export class ExecutionService {
     this.accountRepository = accountRepository
     this.idGenerator = idGenerator
     this.clock = clock
+    this.stepGraph = new StepGraph(clock)
     this.agentExecutor = agentExecutor
     this.workRunner = workRunner
     this.events = executionEventPublisher
@@ -711,9 +715,9 @@ export class ExecutionService {
       idGenerator,
       previewStepModel: (ctx) => this.previewStepModel(ctx),
       runAgent: (ctx, opts) => this.runAgent(ctx, opts),
-      finishStep: (s) => this.finishStep(s),
-      startStep: (s) => this.startStep(s),
-      pauseStepForInput: (s) => this.pauseStepForInput(s),
+      finishStep: (s) => this.stepGraph.finishStep(s),
+      startStep: (s) => this.stepGraph.startStep(s),
+      pauseStepForInput: (s) => this.stepGraph.pauseStepForInput(s),
       updateBlockProgress: (ws, i, st) => this.updateBlockProgress(ws, i, st),
       persistInstance: (ws, i) => this.executionRepository.upsert(ws, i),
       emitInstance: (ws, i) => this.emitInstance(ws, i),
@@ -721,7 +725,7 @@ export class ExecutionService {
       finalizeBlock: (ws, i, c) => this.finalizeBlock(ws, i, c),
       parkStepOnDecision: (ws, i, s, p) => this.parkStepOnDecision(ws, i, s, p),
       raiseDecisionRequired: (ws, i) => this.raiseDecisionRequired(ws, i),
-      loopCompanionProducer: (i, ci, rw) => this.loopCompanionProducer(i, ci, rw),
+      loopCompanionProducer: (i, ci, rw) => this.stepGraph.loopCompanionProducer(i, ci, rw),
       inferTechnicalLabel: (ws, block, producer, companionStep) =>
         this.inferBlockTechnical(ws, block, producer, companionStep),
     })
@@ -768,8 +772,8 @@ export class ExecutionService {
       ...(branchUpdater ? { branchUpdater } : {}),
       resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
       parkStepOnDecision: (ws, i, s, p) => this.parkStepOnDecision(ws, i, s, p),
-      finishStep: (s) => this.finishStep(s),
-      startStep: (s) => this.startStep(s),
+      finishStep: (s) => this.stepGraph.finishStep(s),
+      startStep: (s) => this.stepGraph.startStep(s),
       updateBlockProgress: (ws, i, st) => this.updateBlockProgress(ws, i, st),
       finalizeBlock: (ws, i, c) => this.finalizeBlock(ws, i, c),
       stopRunContainer: (ws, i) => this.stopRunContainer(ws, i),
@@ -787,8 +791,8 @@ export class ExecutionService {
       ...(resolveBinaryArtifactStore ? { resolveBinaryArtifactStore } : {}),
       resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
       parkStepOnDecision: (ws, i, s, p) => this.parkStepOnDecision(ws, i, s, p),
-      finishStep: (s) => this.finishStep(s),
-      startStep: (s) => this.startStep(s),
+      finishStep: (s) => this.stepGraph.finishStep(s),
+      startStep: (s) => this.stepGraph.startStep(s),
       updateBlockProgress: (ws, i, st) => this.updateBlockProgress(ws, i, st),
       finalizeBlock: (ws, i, c) => this.finalizeBlock(ws, i, c),
       stopRunContainer: (ws, i) => this.stopRunContainer(ws, i),
@@ -806,8 +810,8 @@ export class ExecutionService {
       dispatchIterationCap: (ws, blockId, choice, handlers) =>
         this.dispatchIterationCap(ws, blockId, choice, handlers),
       raiseDecisionRequired: (ws, i) => this.raiseDecisionRequired(ws, i),
-      finishStep: (s) => this.finishStep(s),
-      startStep: (s) => this.startStep(s),
+      finishStep: (s) => this.stepGraph.finishStep(s),
+      startStep: (s) => this.stepGraph.startStep(s),
       updateBlockProgress: (ws, i, st) => this.updateBlockProgress(ws, i, st),
       finalizeBlock: (ws, i, c) => this.finalizeBlock(ws, i, c),
       stopRunContainer: (ws, i) => this.stopRunContainer(ws, i),
@@ -1424,7 +1428,7 @@ export class ExecutionService {
         }
       }
     }
-    this.startStep(step)
+    this.stepGraph.startStep(step)
 
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
@@ -2027,29 +2031,6 @@ export class ExecutionService {
     }
   }
 
-  private startStep(step: PipelineStep): void {
-    step.state = 'working'
-    if (step.startedAt == null) step.startedAt = this.clock.now()
-    // (Re)entering `working` means the step is no longer parked on a human: resume
-    // its duration clock (see {@link pauseStepForInput}).
-    step.pausedAt = null
-  }
-
-  /**
-   * Transition a step into `done`, stamping its finish time once. Set-once so the
-   * approval-gate flow (which re-asserts `done` after a human approves, long after
-   * the agent actually finished) keeps the agent's true completion time, and so a
-   * replay doesn't move it. With {@link startStep}'s `startedAt` this yields the
-   * step's execution duration. A step finished directly out of a parked approval
-   * stopped *working* when it parked, so its duration is billed to the pause instant
-   * ({@link pauseStepForInput}), not the (later) moment the human decided.
-   */
-  private finishStep(step: PipelineStep): void {
-    step.state = 'done'
-    if (step.finishedAt == null) step.finishedAt = step.pausedAt ?? this.clock.now()
-    step.pausedAt = null
-  }
-
   /**
    * Finish a gated step that was skipped (its estimate gate was not satisfied) and either
    * complete the run or advance to the next step — the deterministic finish/advance tail
@@ -2067,7 +2048,7 @@ export class ExecutionService {
     step.output = ''
     step.progress = 1
     step.subtasks = undefined
-    this.finishStep(step)
+    this.stepGraph.finishStep(step)
 
     if (isFinalStep) {
       instance.status = 'done'
@@ -2079,23 +2060,11 @@ export class ExecutionService {
     }
     instance.currentStep += 1
     const next = instance.steps[instance.currentStep]
-    if (next) this.startStep(next)
+    if (next) this.stepGraph.startStep(next)
     await this.updateBlockProgress(workspaceId, instance, 'in_progress')
     await this.executionRepository.upsert(workspaceId, instance)
     await this.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
-  }
-
-  /**
-   * Park a step on a human decision and freeze its duration clock. Records when the
-   * step stopped working (`pausedAt`) so elapsed time no longer accrues while it waits
-   * for input — the symmetric counterpart of the terminal freeze on `finishedAt`.
-   * Set-once (a Workflows replay re-parking keeps the original instant); cleared when
-   * the step resumes ({@link startStep}) or finishes ({@link finishStep}).
-   */
-  private pauseStepForInput(step: PipelineStep): void {
-    step.state = 'waiting_decision'
-    if (step.pausedAt == null) step.pausedAt = this.clock.now()
   }
 
   /**
@@ -2157,7 +2126,7 @@ export class ExecutionService {
         options: [...result.decision.options],
         chosen: null,
       }
-      this.pauseStepForInput(step)
+      this.stepGraph.pauseStepForInput(step)
       instance.status = 'blocked'
       await this.updateBlockProgress(workspaceId, instance, 'blocked')
       await this.executionRepository.upsert(workspaceId, instance)
@@ -2188,7 +2157,7 @@ export class ExecutionService {
     if (result.custom !== undefined) step.custom = result.custom
     if (result.model) step.model = result.model
     step.progress = 1
-    this.finishStep(step)
+    this.stepGraph.finishStep(step)
     // Live subtask counts only describe an in-flight run; drop them now the step
     // is done so the board doesn't show a stale "3/8" against a finished step.
     step.subtasks = undefined
@@ -2281,7 +2250,7 @@ export class ExecutionService {
         status: 'pending',
         proposal: step.output,
       }
-      this.pauseStepForInput(step)
+      this.stepGraph.pauseStepForInput(step)
       instance.status = 'blocked'
       await this.updateBlockProgress(workspaceId, instance, 'blocked')
       await this.executionRepository.upsert(workspaceId, instance)
@@ -2347,7 +2316,7 @@ export class ExecutionService {
     }
     instance.currentStep += 1
     const next = instance.steps[instance.currentStep]
-    if (next) this.startStep(next)
+    if (next) this.stepGraph.startStep(next)
     // A resolver that already set the block's TERMINAL status (the merger flips it to
     // `done`/`pr_ready` mid-pipeline) must not be clobbered back to `in_progress` as we
     // advance to a trailing step — refresh progress only, preserving that status. (The
@@ -2360,85 +2329,6 @@ export class ExecutionService {
     await this.executionRepository.upsert(workspaceId, instance)
     await this.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
-  }
-
-  /**
-   * Reset a step so the durable driver re-runs it from scratch: clear its live
-   * container job handle (so it dispatches FRESH work rather than re-attaching to a
-   * finished or evicted job), its timings, approval gate, live subtasks and last
-   * output, and drop it back to `pending`. Preserves the step's identity
-   * (`agentKind` / `requiresApproval`) and any companion budget/verdict history.
-   */
-  private resetStepForRerun(step: PipelineStep): void {
-    step.state = 'pending'
-    step.startedAt = null
-    step.finishedAt = null
-    step.pausedAt = null
-    step.jobId = undefined
-    step.approval = null
-    step.subtasks = undefined
-    step.progress = 0
-    step.output = undefined
-    // Drop the prior run's structured output too, so a re-run that produces no `custom`
-    // doesn't leave stale JSON for the `generic-structured` result view to render.
-    step.custom = undefined
-    step.rework = undefined
-  }
-
-  /**
-   * Loop a producer step back for rework and re-run every step from it up to and
-   * including the companion at `companionIndex`: each one is reset (crucially clearing
-   * stale container job handles so an intermediate container step re-dispatches fresh
-   * work instead of re-attaching to its evicted job), the producer is handed the
-   * `rework` feedback + started, and the instance cursor is moved back to the producer.
-   * Shared by the automatic companion loop and the human "request changes" path.
-   */
-  private rerunProducerThrough(
-    instance: ExecutionInstance,
-    producerIndex: number,
-    companionIndex: number,
-    rework: NonNullable<PipelineStep['rework']>,
-  ): void {
-    for (let i = producerIndex; i <= companionIndex; i++) {
-      this.resetStepForRerun(instance.steps[i]!)
-    }
-    const producer = instance.steps[producerIndex]!
-    producer.rework = rework
-    this.startStep(producer)
-    instance.currentStep = producerIndex
-  }
-
-  /**
-   * The index of the nearest preceding step a companion grades (one of its target
-   * producer kinds), or -1 when none precedes it. The single producer-search used by the
-   * automatic companion loop, the human "request changes" redirect, and the iteration-cap
-   * extra-round resolution.
-   */
-  private companionProducerIndex(instance: ExecutionInstance, companionIndex: number): number {
-    const targets = companionTargets(instance.steps[companionIndex]!.agentKind)
-    for (let i = companionIndex - 1; i >= 0; i--) {
-      if (targets.includes(instance.steps[i]!.agentKind)) return i
-    }
-    return -1
-  }
-
-  /**
-   * Loop a companion's producer back for one more automatic rework cycle: charge one
-   * attempt against the budget, then re-run the producer (and any intermediate steps) up
-   * to and including the companion so it re-grades. Shared by the automatic
-   * below-threshold loop ({@link evaluateCompanion}) and the human-granted extra round
-   * ({@link resolveCompanionExceeded}), so both consume the budget identically.
-   */
-  private loopCompanionProducer(
-    instance: ExecutionInstance,
-    companionIndex: number,
-    rework: NonNullable<PipelineStep['rework']>,
-  ): void {
-    const companionStep = instance.steps[companionIndex]!
-    const producerIndex = this.companionProducerIndex(instance, companionIndex)
-    companionStep.companion!.attempts += 1
-    this.rerunProducerThrough(instance, producerIndex, companionIndex, rework)
-    if (instance.status === 'blocked') instance.status = 'running'
   }
 
   /**
@@ -3443,9 +3333,9 @@ export class ExecutionService {
     state.loops = (state.loops ?? 0) + 1
     // Reset the step for a fresh dispatch; `step.followUps` is intentionally preserved
     // (resetStepForRerun doesn't touch it) so the surfaced items survive the loop.
-    this.resetStepForRerun(step)
+    this.stepGraph.resetStepForRerun(step)
     step.rework = { previousProposal: '', feedback }
-    this.startStep(step)
+    this.stepGraph.startStep(step)
     if (instance.status === 'blocked') instance.status = 'running'
   }
 
@@ -3811,7 +3701,7 @@ export class ExecutionService {
     proposal = '',
   ): Promise<AdvanceResult> {
     step.approval = { id: this.idGenerator.next('appr'), status: 'pending', proposal }
-    this.pauseStepForInput(step)
+    this.stepGraph.pauseStepForInput(step)
     instance.status = 'blocked'
     await this.updateBlockProgress(workspaceId, instance, 'blocked')
     await this.executionRepository.upsert(workspaceId, instance)
@@ -4215,8 +4105,8 @@ export class ExecutionService {
       extraRound: async () => {
         step.companion!.maxAttempts += 1
         step.companion!.exceeded = undefined
-        const producer = instance.steps[this.companionProducerIndex(instance, stepIndex)]
-        this.loopCompanionProducer(instance, stepIndex, {
+        const producer = instance.steps[this.stepGraph.companionProducerIndex(instance, stepIndex)]
+        this.stepGraph.loopCompanionProducer(instance, stepIndex, {
           previousProposal: producer?.output ?? '',
           feedback: step.companion!.verdicts.at(-1)?.feedback ?? '',
         })
@@ -4234,7 +4124,8 @@ export class ExecutionService {
         // so infer the block's `technical` label here too — best-effort, human-authority
         // preserved — before advancing.
         if (step.agentKind === 'spec-companion') {
-          const producer = instance.steps[this.companionProducerIndex(instance, stepIndex)]
+          const producer =
+            instance.steps[this.stepGraph.companionProducerIndex(instance, stepIndex)]
           const block = await this.blockRepository.get(workspaceId, instance.blockId)
           if (producer && block) await this.inferBlockTechnical(workspaceId, block, producer, step)
         }
@@ -4259,7 +4150,7 @@ export class ExecutionService {
   ): Promise<void> {
     const step = instance.steps[stepIndex]!
     const decisionId = step.approval!.id
-    this.finishStep(step)
+    this.stepGraph.finishStep(step)
     step.progress = 1
     const isFinalStep = stepIndex === instance.steps.length - 1
     if (isFinalStep) {
@@ -4269,7 +4160,7 @@ export class ExecutionService {
     } else {
       instance.currentStep = stepIndex + 1
       const next = instance.steps[instance.currentStep]
-      if (next) this.startStep(next)
+      if (next) this.stepGraph.startStep(next)
       if (instance.status === 'blocked') instance.status = 'running'
       await this.updateBlockProgress(workspaceId, instance, 'in_progress')
     }
@@ -4804,7 +4695,7 @@ export class ExecutionService {
     if (!step || !step.decision) throw new NotFoundError('Decision', decisionId)
 
     step.decision.chosen = choice
-    this.startStep(step)
+    this.stepGraph.startStep(step)
     if (instance.status === 'blocked') instance.status = 'running'
     await this.updateBlockProgress(workspaceId, instance, 'in_progress')
     await this.executionRepository.upsert(workspaceId, instance)
@@ -4913,7 +4804,7 @@ export class ExecutionService {
         // including the companion, then the companion re-grades. Does NOT touch the
         // companion's automatic-rework budget — a human-driven iteration is unbounded.
         const previousProposal = producer.output ?? step.approval.proposal
-        this.rerunProducerThrough(instance, producerIndex, stepIndex, {
+        this.stepGraph.rerunProducerThrough(instance, producerIndex, stepIndex, {
           previousProposal,
           feedback: review.feedback ?? '',
           ...(review.comments?.length ? { comments: review.comments } : {}),
@@ -4938,7 +4829,7 @@ export class ExecutionService {
     // start/finish times this attempt rather than spanning the human gate wait.
     step.startedAt = null
     step.finishedAt = null
-    this.startStep(step)
+    this.stepGraph.startStep(step)
     if (instance.status === 'blocked') instance.status = 'running'
     await this.executionRepository.upsert(workspaceId, instance)
     await this.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'changes_requested')
