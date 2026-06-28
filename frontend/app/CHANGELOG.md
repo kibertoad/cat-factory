@@ -1,5 +1,14 @@
 # @cat-factory/app
 
+## 0.47.4
+
+### Patch Changes
+
+- 503dcef: Fix crash when opening "Add from selected repo" on the board: the open-watch ran
+  its `immediate` callback (`resetSelection()`) during setup before the selection
+  refs were initialized, throwing `Cannot access 'selectedDirectory' before
+initialization`. The watch is now declared after the refs it touches.
+
 ## 0.47.3
 
 ### Patch Changes
