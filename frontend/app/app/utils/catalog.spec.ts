@@ -28,6 +28,7 @@ const AGENT_KINDS: AgentKind[] = [
   'integrator',
   'architect-companion',
   'spec-companion',
+  'doc-reviewer',
   'playwright',
   'mocker',
   'business-documenter',

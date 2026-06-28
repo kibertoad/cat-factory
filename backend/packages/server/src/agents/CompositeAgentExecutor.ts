@@ -7,7 +7,7 @@ import {
   type AsyncAgentExecutor,
   isAsyncAgentExecutor,
 } from '@cat-factory/kernel'
-import { registeredKindRequiresContainer } from '@cat-factory/agents'
+import { isContainerBackedCompanion, registeredKindRequiresContainer } from '@cat-factory/agents'
 
 // Routes each pipeline step to the right executor by agent kind. The kinds that
 // produce and commit files against a real checkout — implementation (`coder`),
@@ -108,7 +108,11 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
     // `requiresContainer: true` (e.g. a proprietary org package contributing a
     // repo-operating agent), need a real checkout; everything else runs inline.
     const needsContainer =
-      CONTAINER_KINDS.has(context.agentKind) || registeredKindRequiresContainer(context.agentKind)
+      CONTAINER_KINDS.has(context.agentKind) ||
+      registeredKindRequiresContainer(context.agentKind) ||
+      // Container-backed companions (reviewer / doc-reviewer) clone the producer's PR branch
+      // and review the real repository, so they need a checkout exactly like a coding kind.
+      isContainerBackedCompanion(context.agentKind)
     if (!needsContainer) return this.inline
     if (!this.container) {
       throw new Error(
@@ -146,7 +150,9 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
   isQuotaBased(context: AgentRunContext): Promise<boolean> {
     if (!this.container) return Promise.resolve(false)
     const needsContainer =
-      CONTAINER_KINDS.has(context.agentKind) || registeredKindRequiresContainer(context.agentKind)
+      CONTAINER_KINDS.has(context.agentKind) ||
+      registeredKindRequiresContainer(context.agentKind) ||
+      isContainerBackedCompanion(context.agentKind)
     if (!needsContainer) return Promise.resolve(false)
     return this.container.isQuotaBased?.(context) ?? Promise.resolve(false)
   }
