@@ -67,9 +67,18 @@ watch(
   },
   { immediate: true },
 )
-// When availability resolves after open, re-pin onto a valid tab.
-watch(tabs, (list) => {
-  if (list.length && !list.some((x) => x.value === activeTab.value)) {
+// When availability resolves after open, re-pin onto a valid tab — but keep honouring the
+// deep-linked request. The two availability probes resolve independently, so `tabs` can pass
+// through a transient single-tab list (e.g. the runner-pool probe lands a tick before the
+// environment one). We must NOT let that transient list steal focus from a still-loading
+// requested tab, so only fall back to the first tab once loading has fully settled.
+watch([tabs, () => store.loaded], () => {
+  const list = tabs.value
+  if (list.some((x) => x.value === activeTab.value)) return
+  const requested = ui.infrastructureTab
+  if (list.some((x) => x.value === requested)) {
+    activeTab.value = requested
+  } else if (store.loaded && list.length) {
     activeTab.value = list[0]!.value
   }
 })

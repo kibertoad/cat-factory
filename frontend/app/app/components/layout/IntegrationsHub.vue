@@ -288,13 +288,23 @@ const groups = computed<IntegrationGroup[]>(() => {
       )
     // Default the window to the agents tab when available (the common case), else envs.
     const defaultKind = agentsAvailable ? 'runner-pool' : 'environment'
+    // A concern counts as satisfied when it's unavailable (nothing to configure) or connected.
+    // The row is "connected" (green) only when EVERY available concern is connected — a
+    // half-connected state shows the amber "attention" badge instead, so the green badge can't
+    // claim "done" while one concern is still unconfigured.
+    const agentsSatisfied = !agentsAvailable || !!agentsConn
+    const envsSatisfied = !envsAvailable || !!envsConn
+    const allConnected = agentsSatisfied && envsSatisfied
+    const someConnected = !!agentsConn || !!envsConn
     infra.push({
       key: 'infrastructure',
       icon: 'i-lucide-server-cog',
       label: t('layout.integrationsHub.items.infrastructure.label'),
       description: t('layout.integrationsHub.items.infrastructure.description'),
       status: parts.join(' · '),
-      connected: !!agentsConn || !!envsConn,
+      connected: allConnected,
+      attention: someConnected && !allConnected,
+      attentionLabel: parts.join(' · '),
       onClick: () => go(() => ui.openProviderConnection(defaultKind)),
     })
   }
