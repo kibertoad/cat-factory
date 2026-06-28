@@ -1,5 +1,24 @@
 # @cat-factory/orchestration
 
+## 0.36.2
+
+### Patch Changes
+
+- c11a0cc: Add a `prepublishOnly` build hook so each package is compiled to `dist/` before it is
+  packed, regardless of how publish is invoked. `dist/` is gitignored and was only built by
+  the canonical `pnpm ci:publish` flow, so a bare `pnpm publish` could ship an empty shell
+  (this is what happened to `@cat-factory/gitlab` and `@cat-factory/provider-s3`). The hook
+  removes that footgun for every publishable library.
+- Updated dependencies [c11a0cc]
+  - @cat-factory/agents@0.21.3
+  - @cat-factory/contracts@0.43.1
+  - @cat-factory/integrations@0.26.2
+  - @cat-factory/kernel@0.45.2
+  - @cat-factory/prompt-fragments@0.8.1
+  - @cat-factory/sandbox@0.8.26
+  - @cat-factory/spend@0.10.18
+  - @cat-factory/workspaces@0.9.9
+
 ## 0.36.1
 
 ### Patch Changes
