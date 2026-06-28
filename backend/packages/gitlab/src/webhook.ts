@@ -1,4 +1,5 @@
 import type {
+  Clock,
   RawWebhookDelivery,
   VcsConnectionRef,
   VcsRepoRef,
@@ -57,12 +58,16 @@ function numericRepoId(repo: VcsRepoRef): number {
 }
 
 export class GitLabWebhookMapper implements VcsWebhookMapper {
+  // The clock is injected (rather than `Date.now()`) so projected `updatedAt`/`syncedAt`
+  // timestamps are deterministic in tests and consistent with the client's clock.
+  constructor(private readonly clock: Clock) {}
+
   map(connection: VcsConnectionRef, delivery: RawWebhookDelivery): VcsWebhookEvent | null {
     const root = asObject(delivery.payload)
     if (!root) return null
     const repo = repoRefOf(root)
     if (!repo) return null
-    const now = Date.now()
+    const now = this.clock.now()
     const repoId = numericRepoId(repo)
 
     switch (delivery.eventName) {
@@ -98,6 +103,7 @@ export class GitLabWebhookMapper implements VcsWebhookMapper {
         const labels = Array.isArray(root.labels)
           ? (root.labels as Array<{ title?: string }>).map((l) => l.title ?? '').filter(Boolean)
           : []
+        const issueAuthor = asObject(root.user)
         return {
           kind: 'issue',
           connection,
@@ -108,7 +114,7 @@ export class GitLabWebhookMapper implements VcsWebhookMapper {
             githubId: num(attrs.id),
             title: str(attrs.title),
             state: str(attrs.state) === 'opened' ? 'open' : 'closed',
-            author: null,
+            author: issueAuthor ? str(issueAuthor.username) || null : null,
             labels,
             updatedAt: now,
             syncedAt: now,

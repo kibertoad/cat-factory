@@ -139,6 +139,59 @@ describe('FetchGitLabClient', () => {
     expect(m).toEqual({ mergeable: true, mergeableState: 'clean', headSha: 'abc' })
   })
 
+  it('prefers detailed_merge_status and only maps a real conflict to dirty', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/3': {
+        body: { detailed_merge_status: 'conflict', merge_status: 'cannot_be_merged', sha: 'x' },
+      },
+    })
+    expect(await c.getPullRequestMergeability(connection, ref, 3)).toEqual({
+      mergeable: false,
+      mergeableState: 'dirty',
+      headSha: 'x',
+    })
+  })
+
+  it('does NOT report a non-conflict block (CI pending, legacy cannot_be_merged) as conflicted', async () => {
+    const detailed = client({
+      'GET /projects/7/merge_requests/3': {
+        body: { detailed_merge_status: 'ci_still_running', sha: 'x' },
+      },
+    })
+    // 'blocked' is neither 'dirty' (conflict) nor null/'unknown' (still computing), so the
+    // conflicts gate classifies it as mergeable (nothing to resolve) instead of escalating.
+    expect(await detailed.c.getPullRequestMergeability(connection, ref, 3)).toEqual({
+      mergeable: false,
+      mergeableState: 'blocked',
+      headSha: 'x',
+    })
+    const legacy = client({
+      'GET /projects/7/merge_requests/4': { body: { merge_status: 'cannot_be_merged', sha: 'y' } },
+    })
+    expect(await legacy.c.getPullRequestMergeability(connection, ref, 4)).toEqual({
+      mergeable: false,
+      mergeableState: 'blocked',
+      headSha: 'y',
+    })
+  })
+
+  it('commitFiles pins the parent via start_sha when baseSha is given', async () => {
+    const { c, calls } = client({
+      'GET /projects/7/repository/files/a.txt?ref=base1': { status: 404 },
+      'POST /projects/7/repository/commits': { body: { id: 'newsha' } },
+    })
+    const res = await c.commitFiles(connection, ref, {
+      branch: 'feat',
+      message: 'm',
+      files: [{ path: 'a.txt', content: 'hi' }],
+      baseSha: 'base1',
+    })
+    expect(res).toEqual({ sha: 'newsha' })
+    const commit = calls.find((x) => x.method === 'POST')!
+    expect(commit.body).toMatchObject({ branch: 'feat', start_sha: 'base1' })
+    expect((commit.body as { actions: { action: string }[] }).actions[0]!.action).toBe('create')
+  })
+
   it('reports push access from the project access level', async () => {
     const { c } = client({
       'GET /projects/7': { body: { id: 7, permissions: { project_access: { access_level: 30 } } } },
@@ -201,7 +254,7 @@ describe('GitLab webhook', () => {
   })
 
   it('maps a Merge Request Hook to a neutral pull-request event', () => {
-    const mapper = new GitLabWebhookMapper()
+    const mapper = new GitLabWebhookMapper(clock)
     const event = mapper.map(connection, {
       eventName: 'Merge Request Hook',
       payload: {
@@ -227,7 +280,7 @@ describe('GitLab webhook', () => {
   })
 
   it('maps a Pipeline Hook to a neutral ci-status event', () => {
-    const mapper = new GitLabWebhookMapper()
+    const mapper = new GitLabWebhookMapper(clock)
     const event = mapper.map(connection, {
       eventName: 'Pipeline Hook',
       payload: {

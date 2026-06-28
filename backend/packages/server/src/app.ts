@@ -14,6 +14,7 @@ import { executionController } from './modules/execution/ExecutionController.js'
 import { fragmentLibraryController } from './modules/fragmentLibrary/FragmentLibraryController.js'
 import { githubController } from './modules/github/GitHubController.js'
 import { githubWebhookController } from './modules/github/GitHubWebhookController.js'
+import { vcsWebhookController } from './modules/vcs/VcsWebhookController.js'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
 import { mergePresetController } from './modules/merge/MergePresetController.js'
 import { sandboxController } from './modules/sandbox/SandboxController.js'
@@ -137,6 +138,9 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', slackController())
   // GitHub-facing (webhooks + setup callback); not workspace-scoped.
   app.route('/github', githubWebhookController())
+  // Provider-neutral VCS webhook receiver (GitLab first); not workspace-scoped. GitHub keeps
+  // its own route above; this serves any other provider registered in the VCS registry.
+  app.route('/vcs', vcsWebhookController())
   // Slack-facing OAuth callback (browser redirect); not workspace-scoped.
   app.route('/slack', slackOAuthController())
 }

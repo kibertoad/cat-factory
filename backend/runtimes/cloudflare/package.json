@@ -48,6 +48,7 @@
     "@cat-factory/consensus": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/gates": "workspace:*",
+    "@cat-factory/gitlab": "workspace:*",
     "@cat-factory/integrations": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/observability-langfuse": "workspace:*",

@@ -589,6 +589,9 @@ importers:
       '@cat-factory/gates':
         specifier: workspace:*
         version: link:../../packages/gates
+      '@cat-factory/gitlab':
+        specifier: workspace:*
+        version: link:../../packages/gitlab
       '@cat-factory/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations
@@ -708,6 +711,9 @@ importers:
       '@cat-factory/gates':
         specifier: workspace:*
         version: link:../../packages/gates
+      '@cat-factory/gitlab':
+        specifier: workspace:*
+        version: link:../../packages/gitlab
       '@cat-factory/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations

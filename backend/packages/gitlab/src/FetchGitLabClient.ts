@@ -60,6 +60,12 @@ export interface FetchGitLabClientDependencies {
   clock: Clock
   /** Injected for tests; defaults to the global `fetch`. */
   fetchImpl?: typeof fetch
+  /**
+   * Optional sink, warned when a listing hits the {@link MAX_PAGES} page cap with more
+   * results still available — so a truncated sync is surfaced rather than silently dropped
+   * (CLAUDE.md "no silent caps"). Defaults to no-op.
+   */
+  logger?: { warn: (message: string) => void }
 }
 
 interface RequestOptions {
@@ -197,7 +203,11 @@ export class FetchGitLabClient implements VcsClient {
     gitRef?: string,
   ): Promise<RepoFileContent | null> {
     const clean = path.replace(/^\/+/, '')
-    const params = new URLSearchParams({ ref: gitRef ?? 'HEAD' })
+    // GitLab's files API REQUIRES a concrete `ref` (branch/tag/commit); unlike GitHub it
+    // does not default to the repo's default branch, and `HEAD` is not a reliable ref on
+    // every instance. Resolve the project default branch when the caller passes none.
+    const resolvedRef = gitRef ?? (await this.defaultBranch(connection, ref))
+    const params = new URLSearchParams({ ref: resolvedRef })
     let json: unknown
     try {
       ;({ json } = await this.request(
@@ -386,10 +396,14 @@ export class FetchGitLabClient implements VcsClient {
     input: CommitFilesInput,
   ): Promise<CommitFilesResult> {
     // GitLab commits files atomically via a single actions[] payload. Each existing path
-    // is an `update`; a path that doesn't exist yet must be `create`, so probe per file.
+    // is an `update`; a path that doesn't exist yet must be `create`, so probe per file
+    // against the parent the commit will build on: `baseSha` when the caller pinned one
+    // (so the create/update classification matches the parent the commit is rooted at),
+    // else the branch tip.
+    const probeRef = input.baseSha ?? input.branch
     const actions: Array<{ action: string; file_path: string; content?: string }> = []
     for (const file of input.files) {
-      const exists = (await this.getFileContent(connection, ref, file.path, input.branch)) !== null
+      const exists = (await this.getFileContent(connection, ref, file.path, probeRef)) !== null
       actions.push({
         action: exists ? 'update' : 'create',
         file_path: file.path,
@@ -399,10 +413,20 @@ export class FetchGitLabClient implements VcsClient {
     for (const path of input.deletions ?? []) {
       actions.push({ action: 'delete', file_path: path })
     }
+    const body: Record<string, unknown> = {
+      branch: input.branch,
+      commit_message: input.message,
+      actions,
+    }
+    // Pin the parent to `baseSha`: GitLab honours `start_sha` only when `branch` does not
+    // yet exist (it creates the branch from that commit) — for an existing branch this API
+    // always appends to the tip, so unlike the GitHub Git-Data path it cannot force a
+    // specific parent. Passing it still gives the right parent on first-commit/branch-create.
+    if (input.baseSha) body.start_sha = input.baseSha
     const { json } = await this.request(`/projects/${projectPath(ref)}/repository/commits`, {
       connection,
       method: 'POST',
-      body: { branch: input.branch, commit_message: input.message, actions },
+      body,
     })
     return { sha: (json as { id?: string }).id ?? '' }
   }
@@ -482,8 +506,15 @@ export class FetchGitLabClient implements VcsClient {
     const { json } = await this.request(`/projects/${projectPath(ref)}/merge_requests/${number}`, {
       connection,
     })
-    const mr = (json ?? {}) as { merge_status?: string; sha?: string | null }
-    return { ...mergeabilityFromStatus(mr.merge_status), headSha: mr.sha ?? null }
+    const mr = (json ?? {}) as {
+      merge_status?: string
+      detailed_merge_status?: string
+      sha?: string | null
+    }
+    return {
+      ...mergeabilityFromStatus(mr.detailed_merge_status, mr.merge_status),
+      headSha: mr.sha ?? null,
+    }
   }
 
   async mergePullRequest(
@@ -547,6 +578,12 @@ export class FetchGitLabClient implements VcsClient {
 
   // ---- internals ----------------------------------------------------------
 
+  /** Resolve a project's default branch (for the files API, which needs a concrete ref). */
+  private async defaultBranch(connection: VcsConnectionRef, ref: VcsRepoRef): Promise<string> {
+    const repo = await this.getRepo(connection, ref)
+    return repo.defaultBranch ?? 'HEAD'
+  }
+
   private async paginate<T>(
     path: string,
     opts: Omit<RequestOptions, 'method' | 'body'>,
@@ -554,10 +591,17 @@ export class FetchGitLabClient implements VcsClient {
   ): Promise<T[]> {
     const all: T[] = []
     let url: string | undefined = path
-    for (let page = 0; url && page < MAX_PAGES; page++) {
+    let page = 0
+    for (; url && page < MAX_PAGES; page++) {
       const response: GitLabResponse = await this.request(url, opts)
       all.push(...map(response.json))
       url = response.next
+    }
+    // A `next` link still set at the cap means GitLab had more pages we did not fetch.
+    if (url) {
+      this.deps.logger?.warn(
+        `GitLab listing truncated at MAX_PAGES=${MAX_PAGES} (~${PER_PAGE * MAX_PAGES} items) for "${path}"; remaining results were dropped.`,
+      )
     }
     return all
   }

@@ -229,20 +229,53 @@ export function checkState(state: string | undefined): {
   }
 }
 
-/** GitLab's `merge_status` → the neutral mergeability triplet the gate normalises. */
-export function mergeabilityFromStatus(mergeStatus: string | undefined): {
+/**
+ * GitLab mergeability → the neutral triplet the conflicts gate normalises. Prefers
+ * GitLab 15.6+ `detailed_merge_status` (precise) over the deprecated `merge_status`.
+ *
+ * Only a genuine textual `conflict` maps to GitHub's `dirty` state — the single signal
+ * the `conflicts` gate escalates a conflict-resolver on. Every OTHER non-mergeable reason
+ * (CI pending, unresolved discussions, behind target, draft, not open) is reported as
+ * not-mergeable-but-not-`dirty`, so `classifyMergeability` returns `mergeable` (nothing to
+ * resolve) and the gate advances instead of spuriously spawning a conflict-resolver.
+ * `checking`/`unchecked` stay `mergeable: null` so the gate re-polls.
+ */
+export function mergeabilityFromStatus(
+  detailedStatus: string | undefined,
+  legacyStatus?: string | undefined,
+): {
   mergeable: boolean | null
   mergeableState: string
 } {
-  switch (mergeStatus) {
+  if (detailedStatus) {
+    switch (detailedStatus) {
+      case 'mergeable':
+        return { mergeable: true, mergeableState: 'clean' }
+      case 'conflict':
+        return { mergeable: false, mergeableState: 'dirty' }
+      case 'checking':
+      case 'unchecked':
+        return { mergeable: null, mergeableState: detailedStatus }
+      default:
+        // not_open | draft_status | discussions_not_resolved | ci_must_pass |
+        // ci_still_running | need_rebase | broken_status | commits_status | …
+        return { mergeable: false, mergeableState: 'blocked' }
+    }
+  }
+  switch (legacyStatus) {
     case 'can_be_merged':
       return { mergeable: true, mergeableState: 'clean' }
     case 'cannot_be_merged':
-      // The GitHub mergeability provider treats `mergeable_state === 'dirty'` as conflicted.
-      return { mergeable: false, mergeableState: 'dirty' }
+      // Ambiguous on the legacy field (a real conflict OR merely CI/discussions/draft).
+      // Report not-mergeable WITHOUT the `dirty` conflict signal so the gate does not
+      // escalate on a non-conflict block; `detailed_merge_status` (above) disambiguates.
+      return { mergeable: false, mergeableState: 'blocked' }
+    case 'checking':
+    case 'unchecked':
+    case 'cannot_be_merged_recheck':
+      return { mergeable: null, mergeableState: legacyStatus }
     default:
-      // 'unchecked' | 'checking' | 'cannot_be_merged_recheck' — still computing.
-      return { mergeable: null, mergeableState: mergeStatus ?? 'unknown' }
+      return { mergeable: null, mergeableState: legacyStatus ?? 'unknown' }
   }
 }
 

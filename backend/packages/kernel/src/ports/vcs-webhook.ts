@@ -82,3 +82,14 @@ export interface RawWebhookDelivery {
 export interface VcsWebhookMapper {
   map(connection: VcsConnectionRef, delivery: RawWebhookDelivery): VcsWebhookEvent | null
 }
+
+/**
+ * Consumer of a normalised {@link VcsWebhookEvent}, wired by a facade. The neutral webhook
+ * ingest route verifies + maps a delivery and hands the result here. Optional: when no sink
+ * is wired the route still verifies + maps (acks fast) but drops the event — projecting a
+ * neutral event into a provider's projection tables is the follow-up that generalises the
+ * GitHub-keyed `github_*` persistence onto the neutral identity.
+ */
+export interface VcsWebhookSink {
+  handle(event: VcsWebhookEvent): Promise<void>
+}

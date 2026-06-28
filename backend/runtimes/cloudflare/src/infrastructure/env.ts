@@ -213,6 +213,16 @@ export interface Env {
   /** Workflow that performs durable full-repo backfills. */
   GITHUB_BACKFILL_WORKFLOW?: Workflow
 
+  // ---- GitLab VCS provider (opt-in, single-token model) ------------------
+  /** GitLab access token (group/personal/OAuth); presence enables the provider (secret). */
+  GITLAB_TOKEN?: string
+  /** REST v4 API base; defaults to `https://gitlab.com/api/v4` (set for self-managed). */
+  GITLAB_API_BASE?: string
+  /** Id for the single configured connection (the `VcsConnectionRef.connectionId`). */
+  GITLAB_CONNECTION_ID?: string
+  /** Secret compared against the inbound `X-Gitlab-Token` webhook header (secret). */
+  GITLAB_WEBHOOK_SECRET?: string
+
   // ---- Privileged App tier (see config.ts; ADR 0005, opt-in) --------------
   /**
    * Second GitHub App id carrying `Administration: write`. An org opts in by

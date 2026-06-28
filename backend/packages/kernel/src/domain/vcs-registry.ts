@@ -2,7 +2,7 @@ import type { VcsConnectionRef, VcsProvider } from './vcs-types.js'
 import type { VcsClient } from '../ports/vcs-client.js'
 import type { VcsProvisioningClient } from '../ports/vcs-provisioning.js'
 import type { WebhookVerifier } from '../ports/webhook-verifier.js'
-import type { VcsWebhookEvent, VcsWebhookMapper } from '../ports/vcs-webhook.js'
+import type { VcsWebhookMapper } from '../ports/vcs-webhook.js'
 
 // ---------------------------------------------------------------------------
 // A process-wide registry of VCS providers, keyed by the {@link VcsProvider}
@@ -87,5 +87,3 @@ export function registeredVcsProviders(): VcsProvider[] {
 export function clearVcsProviders(): void {
   registry.clear()
 }
-
-export type { VcsWebhookEvent }

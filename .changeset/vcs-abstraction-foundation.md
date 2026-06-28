@@ -1,5 +1,5 @@
 ---
-"@cat-factory/kernel": minor
+'@cat-factory/kernel': minor
 ---
 
 Add a provider-neutral VCS abstraction foundation: neutral identity types

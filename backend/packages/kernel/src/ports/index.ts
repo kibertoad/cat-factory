@@ -137,6 +137,7 @@ export type {
   RawWebhookDelivery,
   VcsWebhookEvent,
   VcsWebhookMapper,
+  VcsWebhookSink,
 } from './vcs-webhook.js'
 export type {
   RepoFiles,

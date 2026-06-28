@@ -31,6 +31,8 @@ export interface RegisterGitLabOptions {
   webhookSecret?: string
   /** Injected for tests; defaults to the global `fetch`. */
   fetchImpl?: typeof fetch
+  /** Optional sink warned when a listing is truncated at the page cap. */
+  logger?: { warn: (message: string) => void }
 }
 
 /**
@@ -39,11 +41,11 @@ export interface RegisterGitLabOptions {
  * replaces the earlier registration.
  */
 export function registerGitLab(options: RegisterGitLabOptions): void {
-  const { tokenSource, clock, webhookSecret, fetchImpl } = options
+  const { tokenSource, clock, webhookSecret, fetchImpl, logger } = options
   registerVcsProvider({
     provider: 'gitlab',
-    client: new FetchGitLabClient({ tokenSource, clock, fetchImpl }),
-    webhookMapper: new GitLabWebhookMapper(),
+    client: new FetchGitLabClient({ tokenSource, clock, fetchImpl, logger }),
+    webhookMapper: new GitLabWebhookMapper(clock),
     webhookVerifier: webhookSecret ? new GitLabWebhookVerifier(webhookSecret) : undefined,
     provisioning: new GitLabProvisioningClient({ tokenSource, fetchImpl }),
   })
