@@ -1856,6 +1856,19 @@ export function createCore(dependencies: CoreDependencies): Core {
     // managed + document-backed fragments reach a run), present only when the
     // library is configured; otherwise the engine falls back to the static pool.
     fragmentResolver: fragmentLibrary?.libraryService,
+    // Canonicalise a URL pasted into a block description to the document's stable
+    // (source, externalId) via the providers' parseRef, so a Figma/Notion/etc. link
+    // auto-matches its imported page even with a title segment or tracking params the
+    // stored canonical url omits. Absent providers → undefined (url-string match only).
+    documentUrlResolver: dependencies.documentSourceProviders?.length
+      ? (url: string) => {
+          for (const provider of dependencies.documentSourceProviders!) {
+            const externalId = provider.parseRef(url)
+            if (externalId) return { source: provider.kind, externalId }
+          }
+          return null
+        }
+      : undefined,
     requirementReviewService: requirements?.service,
     clarityReviewService: clarity?.service,
     brainstormServices: brainstorm?.services,

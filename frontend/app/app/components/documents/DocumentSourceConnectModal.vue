@@ -18,6 +18,10 @@ const connection = computed(() =>
   source.value ? documents.connectionFor(source.value) : undefined,
 )
 const connected = computed(() => connection.value !== undefined)
+// A `credentialScope: 'user'` source (e.g. Claude Design) stores a PERSONAL credential
+// keyed to the signed-in user and never shared with the workspace — surface that so a
+// member understands they're connecting their own account, not the team's.
+const isPersonal = computed(() => descriptor.value?.credentialScope === 'user')
 
 const open = computed({
   get: () => ui.documentConnect !== null,
@@ -88,6 +92,18 @@ async function disconnect() {
         <p class="text-sm text-slate-400">
           Connect {{ descriptor.label }} to import requirements, RFCs and PRDs, then spawn board
           structure or attach them to tasks as agent context.
+        </p>
+
+        <p
+          v-if="isPersonal"
+          class="flex items-start gap-1.5 text-xs text-amber-400/90"
+          data-testid="document-source-personal-note"
+        >
+          <UIcon name="i-lucide-user" class="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            Personal connection — this credential authenticates as you and is stored only for your
+            account, never shared with the rest of the workspace.
+          </span>
         </p>
 
         <div class="space-y-3">

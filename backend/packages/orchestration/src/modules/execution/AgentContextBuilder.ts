@@ -8,6 +8,7 @@ import type {
   CloudProvider,
   DocumentRecord,
   DocumentRepository,
+  DocumentSourceKind,
   ExecutionInstance,
   PipelineStep,
   RequirementReviewRepository,
@@ -75,12 +76,33 @@ export interface FragmentBodyResolver {
   resolveBodiesForRun(workspaceId: string, ids: string[]): Promise<{ id: string; body: string }[]>
 }
 
+/**
+ * Resolve a URL named in prose to the document it refers to, by its stable
+ * `(source, externalId)` key. Built from the document providers' `parseRef` so a noisy
+ * pasted link (title segment, `&t=` tracking params, dash vs colon node id) still maps to
+ * the canonical id the document was imported under. Returns null when no provider claims
+ * the URL.
+ */
+export type DocumentUrlResolver = (
+  url: string,
+) => { source: DocumentSourceKind; externalId: string } | null
+
 /** The collaborators the context builder reads from (all owned by the engine container). */
 export interface AgentContextBuilderDeps {
   workspaceRepository: WorkspaceRepository
   blockRepository: BlockRepository
   accountRepository: AccountRepository
   documents?: DocumentRepository
+  /**
+   * Optional: canonicalise a URL named in a block's description to the (source,
+   * externalId) of the document it refers to, by delegating to the document providers'
+   * `parseRef`. Lets a pasted Figma/Notion/etc. link match the already-imported doc by its
+   * STABLE external id instead of by exact URL-string equality — which silently fails when
+   * the canonical stored `url` omits the title path segment / tracking query params a real
+   * pasted link carries (the Figma auto-match trap). Absent → the url-string `getByUrl`
+   * lookup is used alone.
+   */
+  documentUrlResolver?: DocumentUrlResolver
   tasks?: TaskRepository
   requirementReviews?: RequirementReviewRepository
   clarityReviews?: ClarityReviewRepository
@@ -473,7 +495,17 @@ export class AgentContextBuilder {
         addTask(await this.deps.tasks.get(workspaceId, 'github', ref))
     }
     for (const url of refs.urls) {
-      if (this.deps.documents) addDoc(await this.deps.documents.getByUrl(workspaceId, url))
+      if (this.deps.documents) {
+        // Prefer a precise match by the document's stable (source, externalId) — a pasted
+        // link canonicalised through the providers' parseRef — so a Figma/Notion URL with a
+        // title segment or tracking params still resolves. Fall back to the url-string
+        // lookup for any source the resolver doesn't claim (or when it isn't wired).
+        const ref = this.deps.documentUrlResolver?.(url)
+        const byRef = ref
+          ? await this.deps.documents.get(workspaceId, ref.source, ref.externalId)
+          : null
+        addDoc(byRef ?? (await this.deps.documents.getByUrl(workspaceId, url)))
+      }
       if (this.deps.tasks) addTask(await this.deps.tasks.getByUrl(workspaceId, url))
     }
 

@@ -1,6 +1,8 @@
 ---
 '@cat-factory/contracts': minor
 '@cat-factory/integrations': minor
+'@cat-factory/orchestration': minor
+'@cat-factory/server': minor
 '@cat-factory/prompt-fragments': minor
 '@cat-factory/worker': minor
 '@cat-factory/node-server': minor
@@ -17,5 +19,11 @@ renders a frame/file's layout tree, text, components-used and (Enterprise-gated)
 design tokens to Markdown, with a best-effort rendered-preview URL on a reference
 line. Wired symmetrically into both the Cloudflare and Node facades (and the
 `DOCUMENT_SOURCES` allow-list), gated by a cross-runtime conformance case. Adds the
-`design.figma-context` prompt fragment for frontend agents. Claude Design is
-intentionally deferred (no server-to-server credential yet — see the design record).
+`design.figma-context` prompt fragment for frontend agents. (Claude Design ships in a
+companion changeset.)
+
+Also makes a URL pasted into a block description auto-match its imported document by the
+document's stable `(source, externalId)` — canonicalised through the providers'
+`parseRef` (`AgentContextBuilder.documentUrlResolver`) — instead of by exact URL-string
+equality, which silently failed for a real Figma share link (title path segment, dash
+node id, `&t=` tracking params) whose canonical stored `url` omits that noise.

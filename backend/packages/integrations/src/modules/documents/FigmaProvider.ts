@@ -7,7 +7,7 @@ import {
 } from '@cat-factory/kernel'
 import { FIGMA_API_HOST, FIGMA_DESCRIPTOR } from './figma.logic.js'
 import * as figmaLogic from './figma.logic.js'
-import { createHostPinnedFetch, readCappedText } from './http.js'
+import { DocumentHttpError, createHostPinnedFetch, readCappedText } from './http.js'
 
 // FigmaProvider: the document-source provider for Figma. It authenticates with a
 // per-workspace personal access token (the `X-Figma-Token` header), fetches a
@@ -156,20 +156,28 @@ export class FigmaProvider implements DocumentSourceProvider {
     }
   }
 
-  /** Fetch local variables (design tokens); null on the Enterprise-gating 403/404. */
+  /**
+   * Fetch local variables (design tokens); null on the Enterprise-gating 403/404. Fully
+   * best-effort: any transport failure (incl. a blocked-redirect `DocumentHttpError`)
+   * drops the section rather than failing the whole import.
+   */
   private async fetchVariables(
     credentials: DocumentCredentials,
     fileKey: string,
   ): Promise<string | null> {
-    const res = await safeFetch(
-      `${API_BASE}/files/${encodeURIComponent(fileKey)}/variables/local`,
-      { method: 'GET', headers: this.headers(credentials) },
-    )
-    if (res.status === 403 || res.status === 404) return null
-    if (!res.ok) return null
-    const json = this.parse<VariablesResponse>(await readCappedText(res, MAX_RESPONSE_BYTES))
-    const markdown = figmaLogic.figmaVariablesToMarkdown(json?.meta)
-    return markdown || null
+    try {
+      const res = await safeFetch(
+        `${API_BASE}/files/${encodeURIComponent(fileKey)}/variables/local`,
+        { method: 'GET', headers: this.headers(credentials) },
+      )
+      if (res.status === 403 || res.status === 404) return null
+      if (!res.ok) return null
+      const json = this.parse<VariablesResponse>(await readCappedText(res, MAX_RESPONSE_BYTES))
+      const markdown = figmaLogic.figmaVariablesToMarkdown(json?.meta)
+      return markdown || null
+    } catch {
+      return null
+    }
   }
 
   /** Best-effort short-lived PNG render URL for the node (or whole file); null on any failure. */
@@ -179,15 +187,19 @@ export class FigmaProvider implements DocumentSourceProvider {
     nodeId: string | undefined,
   ): Promise<string | null> {
     if (!nodeId) return null
-    const res = await safeFetch(
-      `${API_BASE}/images/${encodeURIComponent(fileKey)}?ids=${encodeURIComponent(nodeId)}&format=png`,
-      { method: 'GET', headers: this.headers(credentials) },
-    )
-    if (!res.ok) return null
-    const json = this.parse<ImagesResponse>(await readCappedText(res, MAX_RESPONSE_BYTES))
-    if (!json || json.err) return null
-    const url = json.images?.[nodeId]
-    return typeof url === 'string' ? url : null
+    try {
+      const res = await safeFetch(
+        `${API_BASE}/images/${encodeURIComponent(fileKey)}?ids=${encodeURIComponent(nodeId)}&format=png`,
+        { method: 'GET', headers: this.headers(credentials) },
+      )
+      if (!res.ok) return null
+      const json = this.parse<ImagesResponse>(await readCappedText(res, MAX_RESPONSE_BYTES))
+      if (!json || json.err) return null
+      const url = json.images?.[nodeId]
+      return typeof url === 'string' ? url : null
+    } catch {
+      return null
+    }
   }
 
   private headers(credentials: DocumentCredentials): Record<string, string> {
@@ -208,7 +220,15 @@ export class FigmaProvider implements DocumentSourceProvider {
 
   private async get<T>(credentials: DocumentCredentials, path: string): Promise<T> {
     const url = `${API_BASE}${path}`
-    const res = await safeFetch(url, { method: 'GET', headers: this.headers(credentials) })
+    let res: Response
+    try {
+      res = await safeFetch(url, { method: 'GET', headers: this.headers(credentials) })
+    } catch (err) {
+      // The shared transport raises DocumentHttpError on a blocked/off-host redirect;
+      // surface it as the provider's own error type so callers see one shape.
+      if (err instanceof DocumentHttpError) throw new FigmaApiError(err.status, err.message)
+      throw err
+    }
     if (!res.ok) {
       const text = await readCappedText(res, MAX_RESPONSE_BYTES).catch(() => '')
       throw new FigmaApiError(res.status, `Figma GET ${url} → ${res.status}: ${text.slice(0, 300)}`)

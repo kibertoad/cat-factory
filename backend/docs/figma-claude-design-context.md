@@ -159,9 +159,12 @@ fork the documents machinery, this is a small, source-declared generalization:
   workspace or the per-user store. The import path threads the acting user; the cached
   `documents` projection stays workspace-scoped (only the _credential_ is personal, so an
   imported Claude Design page is still shared with the workspace once fetched).
-- The acting user is `c.get('user')?.id`, falling back to the **empty user id** when auth
-  is disabled — so single-user / local-mode deployments connect a personal source without a
-  sign-in wall, exactly as runs fall back for `initiatedBy`.
+- The acting user is `c.get('user')?.id`, falling back to the **empty user id** ONLY when
+  auth is disabled — so single-user / local-mode deployments connect a personal source
+  without a sign-in wall, exactly as runs fall back for `initiatedBy`. When auth is
+  **enabled** but no user is resolved, the controller fails closed with a **401** rather
+  than reading/writing the shared empty-user bucket (which would be a cross-user credential
+  exposure).
 - Live re-resolution of a _document-backed prompt fragment_ (the `DocumentContentResolver`
   seam) is intentionally left workspace-scoped: a personal source can't back a run-time
   live fragment yet (it throws a clear error), because that path doesn't thread the run
@@ -274,15 +277,22 @@ used` to existing repo components before creating new ones**; honour `Design tok
 ## Open questions for implementation
 
 - Where the `documents.sources` allow-list is validated in each facade's config loader.
-- **`getByUrl` auto-match is the most likely correctness trap — pin the canonicalisation
-  rule before coding.** Figma share URLs carry the node as `?node-id=1-2` (**dash**
-  delimiter), whereas the REST API and the stored composite external id use `1:2` (**colon**
-  delimiter). `parseFigmaRef` must reconcile the two AND strip non-significant query params
-  (e.g. `t=`, `m=`, `mode=`, `viewport=`) so that the `url` persisted at import time matches
-  the `url` derived from a pasted task-description link at resolve time — otherwise
-  `documents.getByUrl` silently fails to match and the design context never reaches the
-  agent. Decide the exact significant-param set (file key + node id only, most likely) and
-  cover it with a `figma.logic.test.ts` case for both URL spellings.
+  (Both facades now validate against the full known-source set but default to an
+  on-by-default subset that **excludes `claude-design`** — see below.)
+- **✅ Resolved — `getByUrl` auto-match no longer relies on URL-string equality.** The old
+  trap (Figma share URLs carry the node as `?node-id=1-2` with a **dash** delimiter and a
+  title path segment + `&t=` tracking params, while the canonical stored `url` is the
+  title-less colon-form `figmaUrlFor` output) is fixed by resolving a pasted link through
+  the document providers' `parseRef` to the document's stable `(source, externalId)` and
+  matching on THAT, not on the raw URL string. The seam is
+  `AgentContextBuilder.documentUrlResolver` (built from the providers in the orchestration
+  container), with the url-string `getByUrl` retained as a fallback for any source the
+  resolver doesn't claim. Covered by a both-spellings `figma.logic.test.ts` case.
+- **Claude Design is opt-in, not on by default.** Because its credentialed project-read API
+  is still provisional (the read is claude.ai-login-bound, no per-user service token yet),
+  connecting it today cannot fetch — so it is excluded from the default `DOCUMENT_SOURCES`
+  set and must be enabled explicitly (`DOCUMENT_SOURCES=…,claude-design`) once the API is
+  real. Figma and the other sources remain on by default.
 - Figma `/v1/files/:key/variables/local` is Enterprise-gated — handled by the drop-on-403
   fallback, but worth surfacing in the connect UI's help text.
 - The shape of a Claude Design **handoff bundle** as ingested today (single HTML vs. a

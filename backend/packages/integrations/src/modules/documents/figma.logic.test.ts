@@ -40,6 +40,20 @@ describe('parseFigmaRef', () => {
     expect(parseFigmaRef('   ')).toBeNull()
     expect(parseFigmaRef('not a ref!')).toBeNull()
   })
+
+  it('canonicalises a noisy pasted link and the stored canonical url to the SAME id', () => {
+    // The auto-match path (AgentContextBuilder.documentUrlResolver) resolves a pasted task
+    // link by its external id, not by URL-string equality — so a real Figma share URL (with
+    // a title segment, dash node id and tracking params) and the title-less canonical url
+    // figmaUrlFor() stores at import time MUST parse to the same external id, or the design
+    // context never reaches the agent.
+    const externalId = 'abcDEF123:1234:5678'
+    const pasted =
+      'https://www.figma.com/design/abcDEF123/Marketing-Site?node-id=1234-5678&t=Ab1Cd2Ef3&m=dev'
+    expect(parseFigmaRef(pasted)).toBe(externalId)
+    expect(parseFigmaRef(figmaUrlFor(externalId))).toBe(externalId)
+    expect(parseFigmaRef(pasted)).toBe(parseFigmaRef(figmaUrlFor(externalId)))
+  })
 })
 
 describe('normalizeFigmaNodeId', () => {

@@ -1,6 +1,6 @@
 CREATE TABLE "user_document_connections" (
-	"user_id" text,
-	"source" text,
+	"user_id" text NOT NULL,
+	"source" text NOT NULL,
 	"credentials" text NOT NULL,
 	"label" text DEFAULT '' NOT NULL,
 	"created_at" bigint NOT NULL,

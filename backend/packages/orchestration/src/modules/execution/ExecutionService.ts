@@ -86,7 +86,11 @@ import {
   renderFollowUpRework,
   shouldLoopCoder,
 } from './followUp.logic.js'
-import { AgentContextBuilder, type FragmentBodyResolver } from './AgentContextBuilder.js'
+import {
+  AgentContextBuilder,
+  type DocumentUrlResolver,
+  type FragmentBodyResolver,
+} from './AgentContextBuilder.js'
 import { CompanionController } from './CompanionController.js'
 import { inferTechnicalLabel } from './technical.logic.js'
 import { MergeResolver } from './MergeResolver.js'
@@ -258,6 +262,13 @@ export interface ExecutionServiceDependencies {
    * linked to a block are resolved here and fed to the agent as extra context.
    */
   documentRepository?: DocumentRepository
+  /**
+   * Optional: canonicalises a URL named in a block's description to the document's stable
+   * `(source, externalId)` (via the document providers' `parseRef`) so a pasted design/doc
+   * link auto-matches its imported page even when the URL carries title/tracking noise.
+   * Forwarded to {@link AgentContextBuilder}; absent → url-string matching only.
+   */
+  documentUrlResolver?: DocumentUrlResolver
   /**
    * Optional: when the task-source integration is configured, tracker issues
    * linked to a block are resolved here and fed to the agent as extra context.
@@ -592,6 +603,7 @@ export class ExecutionService {
     boardService,
     spendService,
     documentRepository,
+    documentUrlResolver,
     taskRepository,
     requirementReviewRepository,
     requirementReviewService,
@@ -648,6 +660,7 @@ export class ExecutionService {
       blockRepository,
       accountRepository,
       documents: documentRepository,
+      documentUrlResolver,
       tasks: taskRepository,
       requirementReviews: requirementReviewRepository,
       clarityReviews: clarityReviewRepository,

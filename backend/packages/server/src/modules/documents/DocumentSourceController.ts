@@ -41,14 +41,21 @@ function sourceParam<E extends AppEnv>(c: Context<E>): DocumentSourceKind {
   return source
 }
 
+const signInRequired = <E extends AppEnv>(c: Context<E>) =>
+  c.json({ error: { code: 'unauthorized', message: 'Sign in to manage document sources' } }, 401)
+
 /**
  * The acting user's id, used to scope a personal (`credentialScope: 'user'`) source's
- * credential — e.g. a Claude Design PAT. Falls back to `''` when auth is disabled
- * (dev-open / single-user local mode) so those deployments still connect a personal
- * source; workspace-scoped sources ignore it entirely.
+ * credential — e.g. a Claude Design PAT. Returns the signed-in user's id; `''` ONLY when
+ * auth is disabled (dev-open / single-user local mode) so those deployments still connect
+ * a personal source. Returns `null` when auth is ENABLED but no user is present so the
+ * caller fails closed with a 401 instead of silently reading/writing the shared empty-user
+ * bucket (a cross-user credential exposure). Workspace-scoped sources ignore the value.
  */
-function actingUserId<E extends AppEnv>(c: Context<E>): string {
-  return c.get('user')?.id ?? ''
+function actingUserId<E extends AppEnv>(c: Context<E>): string | null {
+  const user = c.get('user')
+  if (user?.id) return user.id
+  return c.get('container').config.auth.enabled ? null : ''
 }
 
 /**
@@ -75,9 +82,11 @@ export function documentSourceController(): Hono<AppEnv> {
   buildHonoRoute(app, listDocumentConnectionsContract, async (c) => {
     const documents = requireDocuments(c)
     if (!documents) return unavailable(c)
+    const userId = actingUserId(c)
+    if (userId === null) return signInRequired(c)
     const connections = await documents.connectionService.listConnections(
       param(c, 'workspaceId'),
-      actingUserId(c),
+      userId,
     )
     return c.json({ connections }, 200)
   })
@@ -85,11 +94,13 @@ export function documentSourceController(): Hono<AppEnv> {
   buildHonoRoute(app, connectDocumentSourceContract, async (c) => {
     const documents = requireDocuments(c)
     if (!documents) return unavailable(c)
+    const userId = actingUserId(c)
+    if (userId === null) return signInRequired(c)
     const connection = await documents.connectionService.connect(
       param(c, 'workspaceId'),
       sourceParam(c),
       c.req.valid('json').credentials,
-      actingUserId(c),
+      userId,
     )
     return c.json(connection, 201)
   })
@@ -97,11 +108,9 @@ export function documentSourceController(): Hono<AppEnv> {
   buildHonoRoute(app, disconnectDocumentSourceContract, async (c) => {
     const documents = requireDocuments(c)
     if (!documents) return unavailable(c)
-    await documents.connectionService.disconnect(
-      param(c, 'workspaceId'),
-      sourceParam(c),
-      actingUserId(c),
-    )
+    const userId = actingUserId(c)
+    if (userId === null) return signInRequired(c)
+    await documents.connectionService.disconnect(param(c, 'workspaceId'), sourceParam(c), userId)
     return c.body(null, 204)
   })
 
@@ -116,11 +125,13 @@ export function documentSourceController(): Hono<AppEnv> {
   buildHonoRoute(app, importDocumentContract, async (c) => {
     const documents = requireDocuments(c)
     if (!documents) return unavailable(c)
+    const userId = actingUserId(c)
+    if (userId === null) return signInRequired(c)
     const document = await documents.importService.import(
       param(c, 'workspaceId'),
       sourceParam(c),
       c.req.valid('json').ref,
-      actingUserId(c),
+      userId,
     )
     return c.json(document, 201)
   })
@@ -130,11 +141,13 @@ export function documentSourceController(): Hono<AppEnv> {
   buildHonoRoute(app, searchDocumentsContract, async (c) => {
     const documents = requireDocuments(c)
     if (!documents) return unavailable(c)
+    const userId = actingUserId(c)
+    if (userId === null) return signInRequired(c)
     const results = await documents.importService.search(
       param(c, 'workspaceId'),
       sourceParam(c),
       c.req.valid('json').query,
-      actingUserId(c),
+      userId,
     )
     return c.json({ results }, 200)
   })

@@ -4,6 +4,8 @@ import type { Env } from '../env'
 
 export type { DocumentsConfig }
 
+// Every source this facade knows how to wire — the validation set an explicit
+// `DOCUMENT_SOURCES` entry is checked against.
 const ALL_SOURCES: readonly DocumentSourceKind[] = [
   'confluence',
   'notion',
@@ -13,15 +15,28 @@ const ALL_SOURCES: readonly DocumentSourceKind[] = [
   'claude-design',
 ]
 
-/** Parse the comma-separated `DOCUMENT_SOURCES` allow-list, defaulting to all. */
+// Sources enabled when `DOCUMENT_SOURCES` is unset. Claude Design is intentionally NOT
+// on by default: its credentialed project-read API is provisional (the read is still
+// claude.ai-login-bound, no per-user service token yet), so connecting it today can't
+// fetch. Opt it in explicitly via `DOCUMENT_SOURCES=…,claude-design` once the API is
+// real, rather than exposing a non-functional connector to every tenant.
+const DEFAULT_SOURCES: readonly DocumentSourceKind[] = [
+  'confluence',
+  'notion',
+  'github',
+  'figma',
+  'linear',
+]
+
+/** Parse the comma-separated `DOCUMENT_SOURCES` allow-list, defaulting to the on-by-default set. */
 function parseSources(raw: string | undefined): DocumentSourceKind[] {
-  if (!raw?.trim()) return [...ALL_SOURCES]
+  if (!raw?.trim()) return [...DEFAULT_SOURCES]
   const requested = raw
     .split(',')
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean)
   const selected = ALL_SOURCES.filter((s) => requested.includes(s))
-  return selected.length > 0 ? selected : [...ALL_SOURCES]
+  return selected.length > 0 ? selected : [...DEFAULT_SOURCES]
 }
 
 export function loadDocumentsConfig(env: Env): DocumentsConfig {

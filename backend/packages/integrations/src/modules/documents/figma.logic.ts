@@ -205,7 +205,10 @@ export function figmaNodesToMarkdown(
     lines.push(`## ${root.name?.trim() || '(unnamed frame)'}${dimensionLabel(root)}`)
 
     const layout: string[] = []
-    for (const child of root.children ?? []) renderLayout(child, 0, { n: 0 }, layout)
+    // One counter shared across every top-level child so MAX_TREE_NODES bounds the whole
+    // frame, not each subtree — a wide frame can't blow past the cap one branch at a time.
+    const counter = { n: 0 }
+    for (const child of root.children ?? []) renderLayout(child, 0, counter, layout)
     if (layout.length) {
       lines.push('', '### Layout', ...layout)
     }
