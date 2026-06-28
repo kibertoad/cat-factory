@@ -1,6 +1,8 @@
 import type { Block } from '@cat-factory/contracts'
+import { blockSchema, executionInstanceSchema } from '@cat-factory/contracts'
 import type { BlockPatch } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
+import * as v from 'valibot'
 import {
   type BlockRow,
   type ExecutionRow,
@@ -171,6 +173,65 @@ describe('block insert/read of the less-common columns', () => {
 
   it('never patches createdBy (insert-only)', () => {
     expect('created_by' in blockPatchToColumns({ createdBy: 'usr_x' } as BlockPatch)).toBe(false)
+  })
+})
+
+// LEGACY USER-ID REPAIR — these guard the temporary coercion in mappers.ts and would have
+// caught the original bug (a pre-#94 numeric `created_by` brought down the whole board load
+// because the server ships rows unvalidated and only the SPA validates the snapshot). Delete
+// alongside the repair after 2026-07-15.
+describe('legacy numeric user ids (pre-#94, repaired on read)', () => {
+  function rowWith(overrides: Partial<BlockRow>): BlockRow {
+    const minimal: Block = {
+      id: 'blk_legacy',
+      title: 'Legacy task',
+      type: 'service',
+      description: '',
+      position: { x: 0, y: 0 },
+      status: 'done',
+      progress: 1,
+      dependsOn: [],
+      executionId: null,
+      level: 'task',
+      parentId: null,
+      createdBy: 'usr_real',
+    } as Block
+    return { ...(blockInsertValues(minimal) as unknown as BlockRow), ...overrides }
+  }
+
+  it('drops a numeric created_by to absent and keeps the mapped block contract-valid', () => {
+    // The exact shape from the field report: a leftover GitHub numeric id in created_by.
+    const mapped = rowToBlock(rowWith({ created_by: 1847934 as unknown as string }))
+    expect('createdBy' in mapped).toBe(false)
+    // The whole point: the mapped block must satisfy the wire contract the SPA validates,
+    // so one stale row can no longer reject the entire workspace snapshot.
+    expect(() => v.parse(blockSchema, mapped)).not.toThrow()
+  })
+
+  it('passes a real string created_by through unchanged', () => {
+    expect(rowToBlock(rowWith({ created_by: 'usr_real' })).createdBy).toBe('usr_real')
+  })
+
+  it('drops a numeric execution initiatedBy to null and stays contract-valid', () => {
+    const row: ExecutionRow = {
+      id: 'exec_legacy',
+      block_id: 'blk_1',
+      status: 'running',
+      detail: JSON.stringify({
+        pipelineId: 'pl_1',
+        pipelineName: 'Quick',
+        steps: [],
+        currentStep: 0,
+        initiatedBy: 1847934,
+      }),
+      error: null,
+      failure: null,
+      updated_at: 1,
+      workflow_instance_id: null,
+    }
+    const mapped = rowToExecution(row)
+    expect(mapped.initiatedBy).toBeNull()
+    expect(() => v.parse(executionInstanceSchema, mapped)).not.toThrow()
   })
 })
 
