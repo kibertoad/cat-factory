@@ -13,6 +13,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import type { TestConcern, TestOutcome, TestReport, TestScreenshot } from '~/types/domain'
 import { useArtifactBlobs } from '~/composables/useArtifactBlobs'
+import { useFocusTrap } from '~/composables/useFocusTrap'
 import ArtifactLightbox from '~/components/media/ArtifactLightbox.vue'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
@@ -40,15 +41,13 @@ const report = computed<TestReport | null>(() => step.value?.test?.lastReport ??
 const testState = computed(() => step.value?.test ?? null)
 
 const screenshots = computed<TestScreenshot[]>(() => report.value?.screenshots ?? [])
-// Resolve each capture (and its reference, when present) into an object URL for the gallery
-// + lightbox. The shared cache dedupes, so the lightbox reuses what the thumbnails fetched.
+// Resolve each capture into an object URL for the gallery + lightbox. The shared cache
+// dedupes, so the lightbox reuses what the thumbnails fetched. (The reference design is not
+// shown in this window — that's the visual-confirmation gate's job — so we don't fetch it.)
 watch(
   screenshots,
   (next) => {
-    for (const s of next) {
-      void blobs.resolve(s.artifactId)
-      void blobs.resolve(s.referenceArtifactId)
-    }
+    for (const s of next) void blobs.resolve(s.artifactId)
   },
   { immediate: true },
 )
@@ -181,6 +180,13 @@ function openShot(artifactId: string) {
   lightboxOpen.value = true
 }
 
+// Focus management for the modal panel; hands the Tab trap off to the lightbox while it's open.
+const dialogRoot = ref<HTMLElement | null>(null)
+useFocusTrap(
+  dialogRoot,
+  computed(() => open.value && !lightboxOpen.value),
+)
+
 const sortedConcerns = computed<TestConcern[]>(() => {
   const r = report.value
   if (!r) return []
@@ -228,7 +234,12 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
       @click.self="close"
     >
       <div
-        class="m-4 flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
+        ref="dialogRoot"
+        tabindex="-1"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Test report"
+        class="m-4 flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl focus:outline-none"
       >
         <!-- Header -->
         <header class="flex items-center gap-3 border-b border-slate-800 px-5 py-3">

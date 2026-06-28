@@ -27,6 +27,13 @@ export function useArtifactBlobs() {
   const status = reactive<Record<string, ArtifactBlobStatus>>({})
   /** In-flight promises, so concurrent `resolve(id)` calls share one fetch + one blob. */
   const inFlight = new Map<string, Promise<string | null>>()
+  /**
+   * Set once `revokeAll()` has run (the owning component unmounted). A fetch already in
+   * flight at that point still creates its object URL when it settles; without this guard
+   * that URL would be written into the now-cleared cache and never revoked (a leak), and
+   * we'd be mutating reactive state for a dead component.
+   */
+  let disposed = false
 
   function urlFor(id: string | null | undefined): string | undefined {
     return id ? urls[id] : undefined
@@ -38,7 +45,7 @@ export function useArtifactBlobs() {
 
   /** Resolve an artifact to an object URL (cached + deduped). Returns null on failure. */
   function resolve(id: string | null | undefined): Promise<string | null> {
-    if (!id) return Promise.resolve(null)
+    if (!id || disposed) return Promise.resolve(null)
     const cached = urls[id]
     if (cached) return Promise.resolve(cached)
     const pending = inFlight.get(id)
@@ -48,6 +55,16 @@ export function useArtifactBlobs() {
     const p = api
       .fetchArtifactBlobUrl(ws.requireId(), id)
       .then((url) => {
+        // The owner unmounted while this was in flight: revoke the freshly-minted URL
+        // instead of stranding it in the cleared cache.
+        if (disposed) {
+          try {
+            URL.revokeObjectURL(url)
+          } catch {
+            // Already revoked / unsupported environment — nothing to do.
+          }
+          return null
+        }
         urls[id] = url
         status[id] = 'ready'
         return url
@@ -65,6 +82,14 @@ export function useArtifactBlobs() {
 
   /** Force a re-fetch of a previously-failed artifact (clears its cached error state). */
   function retry(id: string): Promise<string | null> {
+    const stale = urls[id]
+    if (stale) {
+      try {
+        URL.revokeObjectURL(stale)
+      } catch {
+        // Already revoked / unsupported environment — nothing to do.
+      }
+    }
     delete urls[id]
     status[id] = 'idle'
     inFlight.delete(id)
@@ -76,6 +101,7 @@ export function useArtifactBlobs() {
    * the (potentially large) screenshot bytes linger in memory for the session's lifetime.
    */
   function revokeAll(): void {
+    disposed = true
     for (const url of Object.values(urls)) {
       try {
         URL.revokeObjectURL(url)

@@ -8,6 +8,7 @@
 // Esc close · ←/→ prev/next · +/- zoom · 0 reset · double-click toggle fit↔2×.
 import { computed, ref, watch } from 'vue'
 import type { ArtifactBlobs } from '~/composables/useArtifactBlobs'
+import { useFocusTrap } from '~/composables/useFocusTrap'
 
 interface LightboxItem {
   artifactId: string
@@ -32,6 +33,14 @@ const MAX_SCALE = 8
 const scale = ref(1)
 const tx = ref(0)
 const ty = ref(0)
+
+// Move focus into the lightbox on open + trap Tab within it (and restore focus on close).
+// It's the topmost surface, so its trap stays live even over an owning review window.
+const dialogRoot = ref<HTMLElement | null>(null)
+useFocusTrap(
+  dialogRoot,
+  computed(() => props.open),
+)
 
 const current = computed(() => props.items[props.index] ?? null)
 const total = computed(() => props.items.length)
@@ -147,7 +156,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
   <Teleport to="body">
     <div
       v-if="open"
-      class="fixed inset-0 z-[60] flex flex-col bg-slate-950/95 backdrop-blur-sm"
+      ref="dialogRoot"
+      tabindex="-1"
+      class="fixed inset-0 z-[60] flex flex-col bg-slate-950/95 backdrop-blur-sm focus:outline-none"
       role="dialog"
       aria-modal="true"
       :aria-label="current ? `Screenshot: ${current.label}` : 'Screenshot viewer'"

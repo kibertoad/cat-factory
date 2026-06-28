@@ -73,6 +73,9 @@ function onSwipeUp() {
 // --- diff canvas ---
 const diffCanvas = ref<HTMLCanvasElement | null>(null)
 const CAP = 2000
+// Bumped on every renderDiff entry so a render whose async work (image decode) is overtaken
+// by a newer mode/image change bails out instead of drawing stale pixels onto the canvas.
+let renderToken = 0
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -83,11 +86,13 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 }
 async function renderDiff() {
   if (mode.value !== 'diff' || !actualUrl.value || !refUrl.value) return
+  const token = ++renderToken
   await nextTick()
   const canvas = diffCanvas.value
-  if (!canvas) return
+  if (!canvas || token !== renderToken) return
   try {
     const [a, b] = await Promise.all([loadImage(actualUrl.value), loadImage(refUrl.value)])
+    if (token !== renderToken) return
     const scale = Math.min(1, CAP / Math.max(a.naturalWidth, a.naturalHeight || 1))
     const w = Math.max(1, Math.round((a.naturalWidth || 1) * scale))
     const h = Math.max(1, Math.round((a.naturalHeight || 1) * scale))
@@ -115,9 +120,12 @@ watch([mode, actualUrl, refUrl], renderDiff, { immediate: true })
 // --- reference upload (drag-drop + click) ---
 const dragOver = ref(false)
 const refInput = ref<HTMLInputElement | null>(null)
+// Accept only the formats the file input advertises (PNG/JPEG), so a dropped GIF/SVG/WebP
+// can't slip past the picker's `accept` filter.
+const ACCEPTED = /^image\/(png|jpeg)$/
 function pickFile(files: FileList | null | undefined) {
   const file = files?.[0]
-  if (file && file.type.startsWith('image/')) emit('uploadReference', file)
+  if (file && ACCEPTED.test(file.type)) emit('uploadReference', file)
 }
 function onDrop(e: DragEvent) {
   dragOver.value = false
@@ -217,10 +225,11 @@ function onRefInput(e: Event) {
     <div v-else-if="mode === 'overlay'" class="space-y-2">
       <div class="relative w-full overflow-hidden rounded border border-slate-800">
         <img :src="refUrl" :alt="`${view} (reference)`" class="w-full" />
+        <!-- object-contain so a differing aspect ratio onion-skins undistorted over the reference. -->
         <img
           :src="actualUrl"
           :alt="`${view} (actual)`"
-          class="absolute inset-0 h-full w-full"
+          class="absolute inset-0 h-full w-full object-contain"
           :style="{ opacity: overlayOpacity / 100 }"
         />
       </div>
@@ -252,7 +261,13 @@ function onRefInput(e: Event) {
         class="absolute inset-0 overflow-hidden"
         :style="{ clipPath: `inset(0 ${100 - splitPct}% 0 0)` }"
       >
-        <img :src="actualUrl" :alt="`${view} (actual)`" class="block w-full" />
+        <!-- Fit the actual within the reference's box (object-contain) so a differing aspect
+             ratio doesn't stretch it; the split then compares like-for-like. -->
+        <img
+          :src="actualUrl"
+          :alt="`${view} (actual)`"
+          class="absolute inset-0 block h-full w-full object-contain"
+        />
       </div>
       <div class="absolute inset-y-0 w-0.5 bg-amber-400" :style="{ left: `${splitPct}%` }">
         <span

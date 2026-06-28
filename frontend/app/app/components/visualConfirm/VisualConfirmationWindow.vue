@@ -10,6 +10,7 @@
 import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import type { VisualConfirmStepState } from '~/types/execution'
 import { useArtifactBlobs } from '~/composables/useArtifactBlobs'
+import { useFocusTrap } from '~/composables/useFocusTrap'
 import ImageCompare from '~/components/media/ImageCompare.vue'
 import ArtifactLightbox from '~/components/media/ArtifactLightbox.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
@@ -85,6 +86,14 @@ function expand(artifactId: string) {
   lightboxOpen.value = true
 }
 
+// Focus management for the modal panel. While the lightbox is open it owns the trap, so the
+// window hands off (active = open && !lightbox) to avoid two Tab traps fighting.
+const dialogRoot = ref<HTMLElement | null>(null)
+useFocusTrap(
+  dialogRoot,
+  computed(() => open.value && !lightboxOpen.value),
+)
+
 // --- Request a fix: per-view notes + a freeform box, composed into one findings string. ---
 const perViewNotes = reactive<Record<string, string>>({})
 const noteOpen = reactive<Record<string, boolean>>({})
@@ -141,8 +150,14 @@ const fileInput = ref<HTMLInputElement | null>(null)
 async function onFilePicked(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
-  if (!file || !blockId.value) return
-  await visualConfirm.uploadReference(blockId.value, file, uploadView.value.trim())
+  const view = uploadView.value.trim()
+  // Require a view name: a reference with no view can't pair with any captured screenshot,
+  // so it would be silently orphaned. The input is also disabled until a view is entered.
+  if (!file || !blockId.value || !view) {
+    if (fileInput.value) fileInput.value.value = ''
+    return
+  }
+  await visualConfirm.uploadReference(blockId.value, file, view)
   uploadView.value = ''
   if (fileInput.value) fileInput.value.value = ''
 }
@@ -170,7 +185,12 @@ const canApprove = computed(
       @click.self="close"
     >
       <div
-        class="m-4 flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
+        ref="dialogRoot"
+        tabindex="-1"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Visual confirmation"
+        class="m-4 flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl focus:outline-none"
       >
         <header class="flex items-center gap-3 border-b border-slate-800 px-5 py-3">
           <span
@@ -219,9 +239,10 @@ const canApprove = computed(
               {{ phase ? PHASE_LABEL[phase] : '' }}
             </p>
 
-            <!-- Actual-vs-reference gallery -->
+            <!-- Actual-vs-reference gallery. Keyed by `view` (the contract's unique per-pair
+                 identity) so a pair's note/expand state stays bound to its view across recaptures. -->
             <section v-if="pairs.length" class="space-y-4">
-              <div v-for="(p, i) in pairs" :key="i" class="space-y-2">
+              <div v-for="p in pairs" :key="p.view" class="space-y-2">
                 <ImageCompare
                   :view="p.view"
                   :actual-id="p.actualArtifactId"
@@ -282,13 +303,17 @@ const canApprove = computed(
                   ref="fileInput"
                   type="file"
                   accept="image/png,image/jpeg"
-                  :disabled="busy"
-                  class="text-[12px] text-slate-300 file:mr-2 file:rounded file:border-0 file:bg-slate-800 file:px-2 file:py-1 file:text-slate-200"
+                  :disabled="busy || !uploadView.trim()"
+                  class="text-[12px] text-slate-300 file:mr-2 file:rounded file:border-0 file:bg-slate-800 file:px-2 file:py-1 file:text-slate-200 disabled:opacity-40"
                   @change="onFilePicked"
                 />
               </div>
               <p class="mt-1.5 text-[10px] text-slate-600">
-                Tip: drop an image straight onto a pair above to set its reference.
+                {{
+                  uploadView.trim()
+                    ? 'Tip: drop an image straight onto a pair above to set its reference.'
+                    : 'Enter a view name first, then choose a file. Or drop an image straight onto a pair above.'
+                }}
               </p>
             </section>
 

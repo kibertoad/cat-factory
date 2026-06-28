@@ -21,6 +21,15 @@ powerful, with the common review actions made pleasant.
 - `TestReportWindow` now renders the UI tester's captured screenshots (previously hidden):
   thumbnails mapped under the matching scenario, an "ungrouped" gallery for the rest, and
   click-to-zoom via the shared lightbox.
+- New `useFocusTrap` composable — both review windows and the lightbox now move focus inside
+  on open, trap Tab, and restore focus on close (the window hands the trap off to the lightbox
+  while it's open, so nested surfaces don't fight over Tab).
+- Comparator robustness: overlay/swipe fit the actual within the reference box
+  (`object-contain`) so a differing aspect ratio no longer stretches it; the diff render
+  guards against stale async draws; drag-dropped references are restricted to the same
+  PNG/JPEG the picker accepts; the "upload a reference for any view" picker now requires a
+  view name (an empty one can't pair and was silently orphaned); and the blob cache revokes a
+  fetch that resolves after the window unmounts instead of leaking it.
 
 Frontend-only; no backend/contract changes (the per-view findings compose into the existing
 `findings` string).
