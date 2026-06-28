@@ -6,8 +6,11 @@
   "type": "module",
   "scripts": {
     "postinstall": "nuxt prepare",
+    "predev": "pnpm --filter @cat-factory/contracts run build",
     "dev": "nuxt dev",
+    "prebuild": "pnpm --filter @cat-factory/contracts run build",
     "build": "nuxt build",
+    "pregenerate": "pnpm --filter @cat-factory/contracts run build",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "deploy": "wrangler pages deploy"

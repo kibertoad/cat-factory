@@ -41,7 +41,15 @@ name: Deploy (production / Cloudflare)
 # Required configuration (repository Settings):
 #   environment "production":
 #     secrets.CLOUDFLARE_API_TOKEN   — token scoped to ONLY this account's Workers,
-#                                      D1, Pages & Containers edit (no broader scope)
+#                                      D1, Pages, R2 & Containers edit (no broader
+#                                      scope). R2 edit is REQUIRED: the Worker binds
+#                                      the `cat-factory-artifacts` R2 bucket
+#                                      (`[[r2_buckets]]` in deploy/backend/wrangler.toml,
+#                                      the visual-confirmation gate's binary-artifact
+#                                      store), and `wrangler deploy` validates that
+#                                      binding against the R2 API — a token without R2
+#                                      fails the backend deploy with "Authentication
+#                                      error [code: 10000]" on the bucket.
 #     secrets.CLOUDFLARE_ACCOUNT_ID  — the deployment's Cloudflare account id
 #     (recommended) Deployment branches: main only; required reviewers as desired
 #   vars.NUXT_PUBLIC_API_BASE        — backend origin baked into the SPA at build time
