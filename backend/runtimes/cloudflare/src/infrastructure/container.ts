@@ -27,6 +27,7 @@ import {
 import { cloudflareBindingRegistry } from '@cat-factory/provider-cloudflare'
 import {
   ConfluenceProvider,
+  FigmaProvider,
   GitHubDocsProvider,
   GitHubIssuesProvider,
   JiraProvider,
@@ -1316,6 +1317,8 @@ function selectDocumentsDeps(
   const providers: DocumentSourceProvider[] = []
   if (config.documents.sources.includes('confluence')) providers.push(new ConfluenceProvider())
   if (config.documents.sources.includes('notion')) providers.push(new NotionProvider())
+  // Figma authenticates with a per-workspace PAT (no GitHub client needed), like Notion/Confluence.
+  if (config.documents.sources.includes('figma')) providers.push(new FigmaProvider())
   // GitHub repo docs reuse the workspace's installed GitHub App, so this provider
   // is wired only when the GitHub integration is also configured — it has no
   // credentials of its own and resolves the installation per file (mirrors the

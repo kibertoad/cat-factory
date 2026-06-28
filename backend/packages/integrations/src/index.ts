@@ -46,14 +46,17 @@ export * as documentsLogic from './modules/documents/documents.logic.js'
 export * as confluenceLogic from './modules/documents/confluence.logic.js'
 export * as notionLogic from './modules/documents/notion.logic.js'
 export * as githubDocsLogic from './modules/documents/github-docs.logic.js'
+export * as figmaLogic from './modules/documents/figma.logic.js'
 export { CONFLUENCE_DESCRIPTOR } from './modules/documents/confluence.logic.js'
 export { NOTION_DESCRIPTOR } from './modules/documents/notion.logic.js'
 export { GITHUB_DOCS_DESCRIPTOR } from './modules/documents/github-docs.logic.js'
+export { FIGMA_DESCRIPTOR } from './modules/documents/figma.logic.js'
 // Document-source provider classes (thin `fetch` shells around the logic above).
 // Promoted from the Worker infra so every facade composes the same providers.
 export { ConfluenceProvider, ConfluenceApiError } from './modules/documents/ConfluenceProvider.js'
 export { NotionProvider, NotionApiError } from './modules/documents/NotionProvider.js'
 export { GitHubDocsProvider } from './modules/documents/GitHubDocsProvider.js'
+export { FigmaProvider, FigmaApiError } from './modules/documents/FigmaProvider.js'
 
 export {
   TaskConnectionService,

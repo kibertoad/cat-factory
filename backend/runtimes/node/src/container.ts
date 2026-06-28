@@ -6,6 +6,7 @@ import {
 } from '@cat-factory/agents'
 import {
   ConfluenceProvider,
+  FigmaProvider,
   GitHubDocsProvider,
   GitHubIssuesProvider,
   JiraProvider,
@@ -1788,6 +1789,8 @@ function selectNodeDocumentsDeps(
   const providers: DocumentSourceProvider[] = []
   if (config.documents.sources.includes('confluence')) providers.push(new ConfluenceProvider())
   if (config.documents.sources.includes('notion')) providers.push(new NotionProvider())
+  // Figma authenticates with a per-workspace PAT (no GitHub client needed), like Notion/Confluence.
+  if (config.documents.sources.includes('figma')) providers.push(new FigmaProvider())
   if (config.documents.sources.includes('github') && githubClient) {
     providers.push(new GitHubDocsProvider({ githubClient, installations }))
   }

@@ -2351,6 +2351,35 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const afterDelete = await call<{ connections: unknown[] }>('GET', `${base}/connections`)
         expect(afterDelete.body.connections).toEqual([])
       })
+
+      it('connects, lists (secret-free), and disconnects Figma (per-workspace PAT)', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/document-sources`
+
+        // Figma is wired on every facade beside Notion/Confluence (a per-workspace PAT;
+        // normalizeConnection is pure, so no network). The token never leaves the backend.
+        const connected = await call<{ source: string; label: string }>(
+          'POST',
+          `${base}/figma/connect`,
+          { credentials: { apiToken: 'figd_secret-figma-token-xyz' } },
+        )
+        expect(connected.status).toBe(201)
+        expect(connected.body.source).toBe('figma')
+        expect(JSON.stringify(connected.body)).not.toContain('secret-figma-token')
+
+        const listed = await call<{ connections: { source: string }[] }>(
+          'GET',
+          `${base}/connections`,
+        )
+        expect(listed.body.connections.map((c) => c.source)).toEqual(['figma'])
+        expect(JSON.stringify(listed.body)).not.toContain('secret-figma-token')
+
+        const del = await call('DELETE', `${base}/figma/connection`)
+        expect(del.status).toBe(204)
+        const afterDelete = await call<{ connections: unknown[] }>('GET', `${base}/connections`)
+        expect(afterDelete.body.connections).toEqual([])
+      })
     })
 
     describe('ephemeral environments', () => {

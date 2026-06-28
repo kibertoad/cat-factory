@@ -2,8 +2,15 @@
 
 > Investigation + design. This documents the chosen approach for feeding **design
 > context** (component structure, layout, design tokens, visual intent) into the
-> UI/frontend coding agents. It is a design record, not a shipped feature — the
-> provider code is the follow-up implementation.
+> UI/frontend coding agents.
+>
+> **Status:** the **Figma** provider described here is now **implemented** —
+> `FigmaProvider` + `figma.logic.ts`
+> (`backend/packages/integrations/src/modules/documents/`), `source='figma'` in the
+> contracts picklist, wired into both facades + the `DOCUMENT_SOURCES` allow-list, the
+> `design.figma-context` prompt fragment, pure logic tests, and a cross-runtime
+> conformance case. **Claude Design** remains a future provider (deferred — no
+> server-to-server credential yet; see §3 and the comparison table).
 
 ## The problem
 
@@ -15,7 +22,7 @@ component a screen is built from. So an agent implementing a frontend task guess
 layout, reinvents components that already exist, and ignores the team's tokens.
 
 We want to feed design context from **Figma** and from **Anthropic's Claude Design** into
-those agents. This doc records what each source can actually offer a *headless* backend,
+those agents. This doc records what each source can actually offer a _headless_ backend,
 and the single design that serves both.
 
 ## The hard constraint: agents are headless
@@ -26,7 +33,7 @@ an agent is the **`.cat-context/` materialization** pattern:
 
 > backend fetches the content over HTTP → renders it to Markdown → writes
 > `.cat-context/<slug>.md` into the checkout → the agent reads it on demand, and is told
-> *not* to reach external systems (everything is already on disk).
+> _not_ to reach external systems (everything is already on disk).
 
 See `backend/internal/executor-harness/src/pi.ts` (`materializeContextFiles`,
 `contextGuidance`, `CONTEXT_DIR`) and the `buildContextFiles` helper in
@@ -36,8 +43,8 @@ method — there is also a Cloudflare-facade class of the same name; the shared-
 meant). A design source therefore has to be **fetchable server-side and renderable to
 text**. Two consequences fall out of this immediately:
 
-- **No MCP path.** No MCP is wired in the harness. Figma's *local* Dev Mode MCP server is
-  bound to the desktop app (useless in a container), and Figma's *remote* MCP server gates
+- **No MCP path.** No MCP is wired in the harness. Figma's _local_ Dev Mode MCP server is
+  bound to the desktop app (useless in a container), and Figma's _remote_ MCP server gates
   the `mcp:connect` OAuth scope to catalog clients only (VS Code, Cursor, Claude Code) — a
   backend integration can't obtain it. The realistic Figma surface is the **REST API**.
 - **Text only on the document path.** `materializeContextFiles` writes the provider's
@@ -49,7 +56,7 @@ text**. Two consequences fall out of this immediately:
   **short-lived** (they can expire before the async run reaches the step), and most pipeline
   coding models are **not multimodal** and have no guaranteed `web_fetch` for these jobs. So
   v1 does **not** depend on the agent ever fetching the pixels.
-- **Pixels now have a separate home (post-#323).** Inlining design *images* is out of scope
+- **Pixels now have a separate home (post-#323).** Inlining design _images_ is out of scope
   for the document path above, but it is **no longer architecturally blocked**: PR #323
   landed runtime-neutral **binary-artifact storage** (`BinaryArtifactStore`, R2/S3/Postgres)
   and a **Visual Confirmation gate** whose UI tester materializes human-supplied
@@ -82,7 +89,7 @@ value is `'github'`, served by `GitHubDocsProvider`). Today `documentSourceKindS
 So both Figma and Claude Design become **new `DocumentSourceProvider`s**
 (`source='figma'`, `source='claude-design'`). The only per-source code is inside
 `normalizeConnection` + `fetchDocument`; the visual/token rendering is fully contained
-there and its *output* is still Markdown text — exactly `DocumentContent.body`, exactly
+there and its _output_ is still Markdown text — exactly `DocumentContent.body`, exactly
 what `.cat-context/` and Pi consume. A parallel `DesignSourceProvider` port/table was
 rejected: it would duplicate the table, the cipher wiring, the link plumbing, the
 controller, both runtimes' repos, the conformance assertion and the frontend connect
@@ -93,27 +100,27 @@ each is today**.
 
 ## Source comparison (the investigation finding)
 
-|                                  | **Figma**                                                                                 | **Claude Design**                                                                                                                                                  |
-| -------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Server-fetchable API             | **Yes** — REST at `api.figma.com`, `X-Figma-Token` header                                 | **Partial** — design-system project files are readable (HTML/components), but the read is bound to a **claude.ai login**, not a service token                       |
-| Per-workspace sealed credential  | **Yes** — a Figma PAT, sealed exactly like Notion/Confluence                              | **Not today** — no documented server-to-server token; works under a single login (e.g. local mode), not multi-tenant hosted                                         |
-| Immediate no-API path            | n/a                                                                                       | **Yes** — an exported **handoff bundle** (HTML + design-system rules) / HTML / PDF, committed into the repo (agents read it natively) or attached as a document      |
-| MVP verdict                      | **Build now** (PAT provider)                                                              | **Defer the provider** unless the export-bundle shell adds value over plain document upload (see §3); otherwise wire it when the credentialed live project-read API lands |
+|                                 | **Figma**                                                    | **Claude Design**                                                                                                                                                         |
+| ------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Server-fetchable API            | **Yes** — REST at `api.figma.com`, `X-Figma-Token` header    | **Partial** — design-system project files are readable (HTML/components), but the read is bound to a **claude.ai login**, not a service token                             |
+| Per-workspace sealed credential | **Yes** — a Figma PAT, sealed exactly like Notion/Confluence | **Not today** — no documented server-to-server token; works under a single login (e.g. local mode), not multi-tenant hosted                                               |
+| Immediate no-API path           | n/a                                                          | **Yes** — an exported **handoff bundle** (HTML + design-system rules) / HTML / PDF, committed into the repo (agents read it natively) or attached as a document           |
+| MVP verdict                     | **Build now** (PAT provider)                                 | **Defer the provider** unless the export-bundle shell adds value over plain document upload (see §3); otherwise wire it when the credentialed live project-read API lands |
 
 **Evidence for Claude Design's programmatic surface.** Claude Design exposes design-system
 **projects** that are readable programmatically — list the paths, read a file's content
 (HTML/component previews, capped at 256 KiB) — plus a `/design-sync` code↔canvas round-trip
 and **handoff-bundle / HTML / PDF / PPTX exports**. Anthropic has stated that
-build-your-own integrations with Claude Design are imminent. The blocker for a *hosted,
-multi-tenant* backend is purely auth: that programmatic read authenticates as the user's
+build-your-own integrations with Claude Design are imminent. The blocker for a _hosted,
+multi-tenant_ backend is purely auth: that programmatic read authenticates as the user's
 claude.ai login, not a per-workspace service token, so it doesn't yet fit the
 sealed-per-workspace-credential model the way Figma's PAT does. Until that lands, Claude
 Design's usable path is the **export bundle**: the design is already HTML/Markdown, so it
 needs no live API at all.
 
 > **Claude Code → Figma (the reverse flow) is out of scope.** Claude Design's Figma plugin
-> / "Code to Canvas" turns generated code *into* editable Figma layers. That's
-> design-*authoring* driven from an interactive client, the opposite direction from
+> / "Code to Canvas" turns generated code _into_ editable Figma layers. That's
+> design-_authoring_ driven from an interactive client, the opposite direction from
 > design→agent-context, and not something a headless backend consumes. Noted so it isn't
 > conflated with this integration.
 
@@ -142,8 +149,8 @@ lands in **both** facades and is asserted by the cross-runtime conformance suite
      external id `"<fileKey>:<nodeId>"` (`parseRef` returns a single string) and
      canonicalising `?node-id=` so the stored `url` is stable for auto-match;
      `figmaNodesToMarkdown` (`## Frame / ### Layout / ### Text content / ### Components
-     used`); `figmaVariablesToMarkdown` (`### Design tokens`, `collection › mode › name =
-     value`).
+used`); `figmaVariablesToMarkdown` (`### Design tokens`, `collection › mode › name =
+value`).
    - `FigmaProvider.ts` — `normalizeConnection` validates the PAT; `fetchDocument` applies
      the **same** manual-redirect + fixed-host-pin + capped-read SSRF pattern Notion uses.
      ⚠️ Note these helpers are **not directly reusable as-is**: in `NotionProvider.ts`,
@@ -163,6 +170,7 @@ lands in **both** facades and is asserted by the cross-runtime conformance suite
      Enterprise-gating of `variables/local` above are taken from the Figma REST docs at
      investigation time and should be **re-verified against the current API** when the
      provider is built — treat them as the intended shape, not a frozen contract.
+
    - `claudeDesign.logic.ts` + `ClaudeDesignProvider.ts` — `CLAUDE_DESIGN_DESCRIPTOR`
      (kind `claude-design`); MVP `fetchDocument` renders an uploaded/pasted **handoff
      bundle / export** (HTML + design-system rules) to Markdown, with a clearly-marked TODO
@@ -171,7 +179,7 @@ lands in **both** facades and is asserted by the cross-runtime conformance suite
      - ⚠️ **Decide whether the v1 shell earns its place.** On the export-bundle path there is
        no server credential, so the descriptor would have **empty `credentialFields`** (the
        generic connect modal renders nothing to fill in) and `fetchDocument` only reshapes an
-       already-HTML/Markdown blob — which the *existing* document ingestion can already
+       already-HTML/Markdown blob — which the _existing_ document ingestion can already
        attach. The shell only pays off if it adds real value over plain document upload:
        e.g. a deterministic HTML→Markdown **design-system-rule normalizer**, or a
        `searchable:false` import-by-paste UX. If it would just pass the bundle through, do
@@ -195,7 +203,7 @@ lands in **both** facades and is asserted by the cross-runtime conformance suite
 
 7. **Linking to a block** — both existing mechanisms work unchanged: **import + link**
    (`POST /document-sources/figma/import {ref}` → `POST /documents/link
-   {source,externalId,blockId}` → `DocumentLinkService.linkToBlock`), and **URL
+{source,externalId,blockId}` → `DocumentLinkService.linkToBlock`), and **URL
    auto-extract** (`extractReferences(description).urls` already captures `figma.com` URLs
    via the generic URL regex — do **not** add a Figma-specific regex; `resolveLinkedContext`
    matches via `documents.getByUrl` iff the file was already imported, which the canonical
@@ -204,7 +212,7 @@ lands in **both** facades and is asserted by the cross-runtime conformance suite
 8. **Prompt fragment** — `backend/packages/prompt-fragments/src/collections/figma.ts`,
    fragment `design.figma-context` (category `Design`, `appliesTo:{blockTypes:['frontend']}`):
    read the `.cat-context/*.md` layout tree as component structure; **match `Components
-   used` to existing repo components before creating new ones**; honour `Design tokens`
+used` to existing repo components before creating new ones**; honour `Design tokens`
    values; treat the preview URL as reference-only. Spread into `src/index.ts`'s
    `FRAGMENTS`. Reaches `coder` automatically (code-aware trait gate); a block/service pin
    for `spec-writer`/`architect`/`playwright`. _(changeset)_
