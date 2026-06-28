@@ -67,5 +67,54 @@
         "action": "Configurer l’IA"
       }
     }
+  },
+  "personalSubscriptions": {
+    "heading": "Abonnements personnels (usage individuel uniquement)",
+    "intro": "Claude (Pro/Max), GLM (Z.ai Coding Plan) et ChatGPT (Codex) vous sont concédés sous licence à titre individuel ; ils sont donc enregistrés rien que pour vous et seules vos exécutions les utilisent. Chaque jeton est chiffré avec un mot de passe personnel (jamais stocké) que vous saisissez au démarrage d'une telle exécution ; il est mis en cache dans ce navigateur pendant un certain temps pour ne pas vous gêner. Le mot de passe est une commodité à faible friction et un signal de transparence indiquant que le système ne partagera pas votre identifiant en silence, pas un rempart contre le détenteur de la clé système. Ces modèles ne peuvent pas être utilisés dans des planifications récurrentes.",
+    "vendorField": "Abonnement",
+    "labelField": "Libellé (facultatif)",
+    "labelPlaceholder": "p. ex. mon {vendor}",
+    "defaultLabel": "Mon abonnement {vendor}",
+    "passwordField": "Mot de passe personnel (6 caractères min.)",
+    "passwordPlaceholder": "protège votre jeton",
+    "renewsField": "L'abonnement se renouvelle le (facultatif)",
+    "connect": "Connecter",
+    "replace": "Remplacer",
+    "expires": "Expire le {date}",
+    "noExpiry": "Aucune date d'expiration",
+    "renewal": {
+      "expired": "Votre abonnement {vendor} a expiré. Renouvelez-le et reconnectez-le pour continuer à exécuter ses modèles.",
+      "soon": "Votre abonnement {vendor} se renouvelle dans {count} jour. Mettez-le à jour ici une fois renouvelé. | Votre abonnement {vendor} se renouvelle dans {count} jours. Mettez-le à jour ici une fois renouvelé."
+    },
+    "toast": {
+      "connected": "Abonnement {vendor} connecté",
+      "connectFailed": "Impossible de connecter l'abonnement",
+      "disconnected": "Déconnecté",
+      "disconnectFailed": "Impossible de déconnecter"
+    },
+    "vendors": {
+      "claude": {
+        "label": "Claude (Pro/Max)",
+        "tokenLabel": "Jeton Claude",
+        "step1": "Installez Claude Code et connectez-vous avec votre compte Claude Pro/Max : exécutez `claude` une fois et terminez la connexion dans le navigateur.",
+        "step2": "Générez un jeton de longue durée : exécutez `claude setup-token` et copiez-le.",
+        "step3": "Collez-le ci-dessous et choisissez un mot de passe personnel pour le protéger."
+      },
+      "glm": {
+        "label": "GLM (Z.ai Coding Plan)",
+        "tokenLabel": "Clé API Z.ai",
+        "tokenPlaceholder": "votre clé API du GLM Coding Plan",
+        "step1": "Ouvrez votre tableau de bord GLM Coding Plan de Z.ai et créez une clé API pour le point de terminaison compatible Anthropic.",
+        "step2": "Le GLM Coding Plan vous est concédé sous licence à titre individuel ; il est donc enregistré par utilisateur ici (non mutualisé).",
+        "step3": "Collez la clé ci-dessous et choisissez un mot de passe personnel pour la protéger."
+      },
+      "codex": {
+        "label": "ChatGPT (Codex)",
+        "tokenLabel": "auth.json de ChatGPT",
+        "step1": "Installez la CLI Codex et connectez-vous avec votre compte ChatGPT : exécutez `codex login` et terminez le flux dans le navigateur.",
+        "step2": "Ouvrez le fichier d'identifiants que Codex a écrit dans ~/.codex/auth.json (sous Windows %USERPROFILE%\\.codex\\auth.json).",
+        "step3": "Copiez tout le contenu de auth.json, collez-le ci-dessous et choisissez un mot de passe personnel pour le protéger."
+      }
+    }
   }
 }
