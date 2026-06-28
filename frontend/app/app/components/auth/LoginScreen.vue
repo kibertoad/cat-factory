@@ -7,13 +7,16 @@ const { t } = useI18n()
 
 // Local-mode source-control PAT login. GitHub/GitLab are brand names (kept verbatim across
 // locales), as are the token-settings URLs, so they're inline constants rather than catalog
-// keys — same convention as the provider descriptors in ApiKeysSection.
+// keys — same convention as the provider descriptors in ApiKeysSection. The actual link
+// prefers the server's scopes-preselected deep link (`patLogin.setupUrls`); these are the
+// fallback when it's absent.
 type PatProvider = 'github' | 'gitlab'
 const PROVIDER_LABELS: Record<PatProvider, string> = { github: 'GitHub', gitlab: 'GitLab' }
 const PROVIDER_ICONS: Record<PatProvider, string> = {
   github: 'i-lucide-github',
   gitlab: 'i-lucide-gitlab',
 }
+// Fallback token-creation pages, used only if the server didn't advertise a deep link.
 const PROVIDER_TOKEN_URLS: Record<PatProvider, string> = {
   github: 'https://github.com/settings/tokens/new',
   gitlab: 'https://gitlab.com/-/user_settings/personal_access_tokens',
@@ -44,6 +47,12 @@ watch(
 
 const patProviderItems = computed(() =>
   availableProviders.value.map((p) => ({ label: PROVIDER_LABELS[p], value: p })),
+)
+
+// Prefer the server's scopes-preselected deep link (it owns the per-provider scopes);
+// fall back to the plain token page if it wasn't advertised.
+const tokenCreateUrl = computed(
+  () => patLoginCfg.value?.setupUrls?.[patProvider.value] ?? PROVIDER_TOKEN_URLS[patProvider.value],
 )
 
 /** One-click (configured PAT) or pasted-token sign-in; reloads so the app boots signed in. */
@@ -182,7 +191,7 @@ const showOAuthDivider = computed(
           />
           <div class="flex items-center justify-between gap-2">
             <a
-              :href="PROVIDER_TOKEN_URLS[patProvider]"
+              :href="tokenCreateUrl"
               target="_blank"
               rel="noopener noreferrer"
               class="text-xs text-indigo-400 hover:underline"

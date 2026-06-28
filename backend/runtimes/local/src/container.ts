@@ -26,6 +26,7 @@ import {
   createLocalGitHubClient,
   fetchPatAccount,
   githubPatCreationUrl,
+  gitlabPatCreationUrl,
 } from './github.js'
 import { AutoProvisioningInstallationRepository, type PatAccount } from './installations.js'
 import {
@@ -92,7 +93,13 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     localMode: {
       enabled: true,
       ...(pat ? {} : { githubPatSetupUrl: githubPatCreationUrl() }),
-      patLogin: { configured, available },
+      // Scopes-preselected "create a PAT" deep links so the paste-a-PAT login form sends the
+      // developer straight to the right token page (scopes differ per provider).
+      patLogin: {
+        configured,
+        available,
+        setupUrls: { github: githubPatCreationUrl(), gitlab: gitlabPatCreationUrl() },
+      },
     },
   }
 
