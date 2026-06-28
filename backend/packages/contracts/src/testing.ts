@@ -50,6 +50,28 @@ export const testOutcomeSchema = v.object({
 export type TestOutcome = v.InferOutput<typeof testOutcomeSchema>
 
 /**
+ * One screenshot the UI tester (`tester-ui`) captured of a distinct view while
+ * exercising the functionality. The bytes are uploaded to the binary-artifact store
+ * during the run (so they never bloat the report JSON); this entry references the
+ * stored artifact by id. `referenceArtifactId` links the matching reference design
+ * image (when one was supplied) so the visual-confirmation gate can pair actual vs
+ * reference by `view`.
+ */
+export const testScreenshotSchema = v.object({
+  /** Logical view name (pairs with a reference design image of the same view). */
+  view: v.string(),
+  /** The stored artifact id (in the binary-artifact store) for the captured PNG. */
+  artifactId: v.string(),
+  /** Content hash — drives non-redundant capture (one shot per distinct view). */
+  hash: v.optional(v.string()),
+  width: v.optional(v.number()),
+  height: v.optional(v.number()),
+  /** The matching reference design image's artifact id, when one was supplied. */
+  referenceArtifactId: v.optional(v.string()),
+})
+export type TestScreenshot = v.InferOutput<typeof testScreenshotSchema>
+
+/**
  * A Tester's structured report. `greenlight` is the gate's verdict: true means the
  * change is safe to release (no blocking concerns); false routes the run through
  * the `fixer`. `tested` lists what the Tester decided to cover (this task's
@@ -73,6 +95,12 @@ export const testReportSchema = v.object({
   concerns: v.array(testConcernSchema),
   /** Which environment the suite ran in, echoed back for the UI. */
   environment: v.optional(testEnvironmentSchema),
+  /**
+   * Non-redundant screenshots of the views the UI tester exercised (one per distinct
+   * view). Empty/absent for the API tester (`tester-api`), which captures none. Backs
+   * the visual-confirmation gate's actual-vs-reference review.
+   */
+  screenshots: v.optional(v.array(testScreenshotSchema)),
 })
 export type TestReport = v.InferOutput<typeof testReportSchema>
 

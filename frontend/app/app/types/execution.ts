@@ -37,6 +37,9 @@ export type {
   RunEnvironment,
   HumanTestRound,
   HumanTestStepState,
+  VisualConfirmStepState,
+  VisualConfirmPair,
+  VisualConfirmRound,
   ExecutionInstance,
   // The historical frontend name for a per-block review comment is the contract's
   // StepReviewComment; the env-status union is the contract's EnvironmentStatus.

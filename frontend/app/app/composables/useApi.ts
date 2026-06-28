@@ -12,6 +12,7 @@ import { fragmentsApi } from './api/fragments'
 import { githubApi } from './api/github'
 import { humanReviewApi } from './api/humanReview'
 import { humanTestApi } from './api/humanTest'
+import { visualConfirmApi } from './api/visualConfirm'
 import { kaizenApi } from './api/kaizen'
 import { localSettingsApi } from './api/localSettings'
 import { modelsApi } from './api/models'
@@ -98,6 +99,7 @@ export function useApi() {
     ...reviewsApi(ctx),
     ...followUpsApi(ctx),
     ...humanTestApi(ctx),
+    ...visualConfirmApi(ctx),
     ...humanReviewApi(ctx),
     ...kaizenApi(ctx),
     ...localSettingsApi(ctx),
