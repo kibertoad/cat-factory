@@ -1,5 +1,13 @@
 # @cat-factory/gates
 
+## 0.2.15
+
+### Patch Changes
+
+- Updated dependencies [fb339db]
+  - @cat-factory/contracts@0.43.2
+  - @cat-factory/kernel@0.45.4
+
 ## 0.2.14
 
 ### Patch Changes

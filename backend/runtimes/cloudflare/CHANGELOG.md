@@ -1,5 +1,24 @@
 # @cat-factory/worker
 
+## 0.33.7
+
+### Patch Changes
+
+- Updated dependencies [fb339db]
+  - @cat-factory/contracts@0.43.2
+  - @cat-factory/agents@0.21.5
+  - @cat-factory/consensus@0.7.63
+  - @cat-factory/gates@0.2.15
+  - @cat-factory/gitlab@0.1.6
+  - @cat-factory/integrations@0.26.4
+  - @cat-factory/kernel@0.45.4
+  - @cat-factory/orchestration@0.36.4
+  - @cat-factory/prompt-fragments@0.8.2
+  - @cat-factory/server@0.39.7
+  - @cat-factory/spend@0.10.20
+  - @cat-factory/provider-cloudflare@0.7.63
+  - @cat-factory/observability-langfuse@0.7.59
+
 ## 0.33.6
 
 ### Patch Changes

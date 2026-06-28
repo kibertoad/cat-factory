@@ -1,5 +1,14 @@
 # @cat-factory/consensus
 
+## 0.7.63
+
+### Patch Changes
+
+- Updated dependencies [fb339db]
+  - @cat-factory/contracts@0.43.2
+  - @cat-factory/agents@0.21.5
+  - @cat-factory/kernel@0.45.4
+
 ## 0.7.62
 
 ### Patch Changes

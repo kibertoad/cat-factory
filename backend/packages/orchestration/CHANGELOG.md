@@ -1,5 +1,19 @@
 # @cat-factory/orchestration
 
+## 0.36.4
+
+### Patch Changes
+
+- Updated dependencies [fb339db]
+  - @cat-factory/contracts@0.43.2
+  - @cat-factory/agents@0.21.5
+  - @cat-factory/integrations@0.26.4
+  - @cat-factory/kernel@0.45.4
+  - @cat-factory/prompt-fragments@0.8.2
+  - @cat-factory/sandbox@0.8.28
+  - @cat-factory/spend@0.10.20
+  - @cat-factory/workspaces@0.9.11
+
 ## 0.36.3
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @cat-factory/kernel
 
+## 0.45.4
+
+### Patch Changes
+
+- Updated dependencies [fb339db]
+  - @cat-factory/contracts@0.43.2
+
 ## 0.45.3
 
 ### Patch Changes

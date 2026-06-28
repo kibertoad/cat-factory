@@ -1,5 +1,13 @@
 # @cat-factory/integrations
 
+## 0.26.4
+
+### Patch Changes
+
+- Updated dependencies [fb339db]
+  - @cat-factory/contracts@0.43.2
+  - @cat-factory/kernel@0.45.4
+
 ## 0.26.3
 
 ### Patch Changes

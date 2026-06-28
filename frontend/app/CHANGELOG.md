@@ -1,5 +1,28 @@
 # @cat-factory/app
 
+## 0.46.8
+
+### Patch Changes
+
+- fb339db: Lower the personal-subscription password minimum from 8 to 6 characters.
+
+  The personal password that gates the second encryption layer on individual-usage
+  subscription credentials now requires at least 6 characters (was 8). Updated the
+  `personalPasswordSchema` contract and the matching client-side guards/labels in the
+  store and unlock UIs. The account login/reset password is unaffected.
+
+- fb339db: Move the Personal Subscriptions settings copy into i18n.
+
+  Every hardcoded label, hint, button, toast, renewal notice and vendor onboarding step in
+  `PersonalSubscriptionSection.vue` now resolves through `@nuxtjs/i18n` under a new
+  `personalSubscriptions` namespace, with full translations for all supported locales
+  (en, es, fr, pl, uk). Literal token-format placeholders (the `sk-ant-…` / Codex `auth.json`
+  examples) and brand names stay verbatim; the day-count renewal notice uses pluralized forms
+  (3-form for Polish/Ukrainian).
+
+- Updated dependencies [fb339db]
+  - @cat-factory/contracts@0.43.2
+
 ## 0.46.7
 
 ### Patch Changes
