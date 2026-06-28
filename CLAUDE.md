@@ -1080,3 +1080,14 @@ rather than adding more raw text.
   (`DATABASE_URL`, a Postgres 18 service in CI); only the LLM is faked in both. Run
   the full backend suite with `pnpm test:run` from the repo root (builds, then runs
   every package's `test:run`); CI provides the Postgres service for the Node suite.
+- **Always run `typecheck`/`test:run`/`build` through Turbo from the repo root**
+  (`pnpm typecheck`, `pnpm test:run`, etc. — each is `turbo run <task>`), NOT a package's
+  raw script from inside its directory. Turbo's `^build` edge (`turbo.json`) — "build every
+  workspace dependency first" — only fires when the task runs THROUGH Turbo. Running a
+  package-local script directly (e.g. `cd frontend/app && pnpm run typecheck`, which is just
+  `nuxt typecheck`) bypasses the task graph, so an unbuilt workspace dependency surfaces as
+  spurious `TS2307 Cannot find module '@cat-factory/contracts'` errors that don't exist in
+  CI. To scope to one package, filter instead of `cd`: `pnpm exec turbo run typecheck
+  --filter=@cat-factory/app` still builds its deps first. (The exception is a task with no
+  build deps, e.g. the i18n check, which CI itself runs package-local as `pnpm --filter
+  @cat-factory/app run i18n:check`.)
