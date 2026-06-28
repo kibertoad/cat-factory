@@ -1,5 +1,17 @@
 # @cat-factory/observability-langfuse
 
+## 0.7.57
+
+### Patch Changes
+
+- c11a0cc: Add a `prepublishOnly` build hook so each package is compiled to `dist/` before it is
+  packed, regardless of how publish is invoked. `dist/` is gitignored and was only built by
+  the canonical `pnpm ci:publish` flow, so a bare `pnpm publish` could ship an empty shell
+  (this is what happened to `@cat-factory/gitlab` and `@cat-factory/provider-s3`). The hook
+  removes that footgun for every publishable library.
+- Updated dependencies [c11a0cc]
+  - @cat-factory/kernel@0.45.2
+
 ## 0.7.56
 
 ### Patch Changes

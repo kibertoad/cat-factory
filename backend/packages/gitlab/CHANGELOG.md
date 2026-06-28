@@ -1,5 +1,17 @@
 # @cat-factory/gitlab
 
+## 0.1.4
+
+### Patch Changes
+
+- c11a0cc: Republish with the compiled `dist/` payload. A prior `pnpm publish` ran without a build
+  step, so the tarball shipped as an empty shell (only `package.json`, no `dist/`) and the
+  package could not be imported. A `prepublishOnly` build hook now guarantees the package is
+  compiled before it is packed, regardless of how publish is invoked.
+- Updated dependencies [c11a0cc]
+  - @cat-factory/contracts@0.43.1
+  - @cat-factory/kernel@0.45.2
+
 ## 0.1.3
 
 ### Patch Changes
