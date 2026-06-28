@@ -1770,5 +1770,335 @@
         }
       }
     }
+  },
+  "github": {
+    "onboarding": {
+      "title": "Conecta cat-factory con GitHub",
+      "intro": "cat-factory funciona abriendo solicitudes de incorporación de cambios en tus repositorios. Instala la GitHub App en tu cuenta u organización para continuar, y puedes concederle todos los repositorios o elegir un subconjunto.",
+      "signedInAs": "Sesión iniciada como {login}",
+      "signOut": "Cerrar sesión"
+    },
+    "connect": {
+      "yourInstallations": "Tus instalaciones",
+      "refresh": "Actualizar",
+      "lookingForInstallations": "Buscando instalaciones…",
+      "noInstallations": "Aún no se encontraron instalaciones de la App. Instálala abajo o conéctala por ID.",
+      "installationMeta": "{targetType} · instalación {id}",
+      "linked": "vinculada",
+      "linkedTitle": "Ya está vinculada a este espacio de trabajo",
+      "inUse": "en uso",
+      "inUseTitle": "Ya está conectada a otro espacio de trabajo",
+      "connect": "Conectar",
+      "or": "o",
+      "installApp": "Instalar la GitHub App",
+      "orConnectById": "o conectar por ID",
+      "installationId": "ID de instalación",
+      "toast": {
+        "connected": "GitHub conectado"
+      },
+      "errors": {
+        "listInstallations": "No se pudieron listar las instalaciones de GitHub",
+        "startInstall": "No se pudo iniciar la instalación de la GitHub App",
+        "connect": "No se pudo conectar"
+      }
+    },
+    "panel": {
+      "connectIntro": "Conecta una instalación de la GitHub App para respaldar los bloques del tablero con repositorios, explorar solicitudes de incorporación de cambios e incidencias, y permitir que los agentes envíen ramas y abran PR.",
+      "installationMeta": "{targetType} · instalación {id}",
+      "resync": "Resincronizar",
+      "backfill": "Rellenar",
+      "disconnect": "Desconectar",
+      "loading": "Cargando…",
+      "tabs": {
+        "repos": "Repositorios",
+        "pulls": "Solicitudes de incorporación de cambios",
+        "issues": "Incidencias"
+      },
+      "linkedToBoard": "Vinculado a este tablero",
+      "manageRepos": "Gestionar repositorios",
+      "manageHint": "Elige los repositorios que este tablero debe seguir. La conexión de GitHub se comparte en toda la cuenta, y cada tablero vincula sus propios repositorios.",
+      "loadingRepos": "Cargando repositorios…",
+      "noAvailableRepos": "La instalación aún no puede acceder a ningún repositorio.",
+      "private": "privado",
+      "saveSelection": "Guardar selección",
+      "noLinkedRepos": "Aún no hay repositorios vinculados. Usa Gestionar repositorios para elegir qué repositorios sigue este tablero.",
+      "open": "Abrir",
+      "protected": "protegida",
+      "newBranch": "Nueva rama",
+      "fromSha": "Desde SHA",
+      "commitShaPlaceholder": "sha del commit",
+      "createBranch": "Crear rama",
+      "openPr": "Abrir PR",
+      "repository": "Repositorio",
+      "chooseRepository": "Elige un repositorio",
+      "prTitle": "Título",
+      "headBranch": "Rama de origen",
+      "baseBranch": "Rama base",
+      "openPullRequest": "Abrir solicitud de incorporación de cambios",
+      "noPulls": "No hay solicitudes de incorporación de cambios sincronizadas.",
+      "mergePr": "Fusionar solicitud de incorporación de cambios",
+      "noIssues": "No hay incidencias sincronizadas.",
+      "prState": {
+        "open": "abierta",
+        "closed": "cerrada",
+        "merged": "fusionada"
+      },
+      "issueState": {
+        "open": "abierta",
+        "closed": "cerrada"
+      },
+      "toast": {
+        "disconnected": "GitHub desconectado",
+        "resync": "Resincronización {status}",
+        "reposUpdated": "Repositorios vinculados actualizados",
+        "branchCreated": "Rama {name} creada",
+        "prOpened": "Solicitud de incorporación de cambios abierta",
+        "prMerged": "PR #{number} fusionada"
+      },
+      "errors": {
+        "disconnect": "No se pudo desconectar",
+        "resync": "No se pudo resincronizar",
+        "loadRepos": "No se pudieron cargar los repositorios",
+        "updateRepos": "No se pudieron actualizar los repositorios",
+        "loadBranches": "No se pudieron cargar las ramas",
+        "createBranch": "No se pudo crear la rama",
+        "openPr": "No se pudo abrir la solicitud de incorporación de cambios",
+        "merge": "No se pudo fusionar"
+      }
+    },
+    "addService": {
+      "title": "Añadir un servicio desde un repositorio",
+      "intro": "Elige un repositorio de GitHub existente para añadirlo como servicio del tablero. Sin arranque inicial: el repositorio se vincula tal cual a un nuevo marco de servicio, y las tareas que ejecutes en él apuntan a ese repositorio.",
+      "connectFirst": "Conecta primero este espacio de trabajo con GitHub. Vincula una instalación en la que la App ya esté, o instálala.",
+      "repository": "Repositorio",
+      "repositoryHint": "Repositorios a los que la GitHub App puede acceder. ¿No ves el tuyo? Concede acceso a la App abajo y luego actualiza.",
+      "noReposAvailable": "Aún no hay repositorios disponibles. Concede acceso a la App a uno abajo y luego actualiza.",
+      "filterPlaceholder": "Filtrar por propietario/nombre…",
+      "clearFilter": "Borrar filtro",
+      "chooseRepository": "Elige un repositorio",
+      "showingCount": "Mostrando {shown} de {total} repositorios.",
+      "repoLabel": {
+        "private": " (privado)",
+        "monorepo": " · monorepo",
+        "onBoard": " · ya en el tablero"
+      },
+      "monorepoLabel": "Es un monorepo (aloja más de un servicio)",
+      "monorepoDescription": "Añade varios servicios desde un repositorio, cada uno fijado a un subdirectorio.",
+      "monorepoBrowseHint": "Explora el repositorio y elige el directorio del servicio que quieres añadir. Los agentes que trabajen en este servicio se ejecutarán dentro de ese subdirectorio.",
+      "serviceDirectory": "Directorio del servicio:",
+      "noDirectorySelected": "Aún no se ha seleccionado ningún directorio.",
+      "addedConfigure": "{title} añadido, configúralo",
+      "grantAccess": "Conceder a la App acceso a un repositorio",
+      "grantAccessTitle": "Abrir la configuración de instalación de la App para concederle acceso a un repositorio",
+      "refreshList": "Actualizar lista",
+      "done": "Listo",
+      "add": "Añadir servicio",
+      "addAnother": "Añadir otro servicio",
+      "toast": {
+        "addedTitle": "Servicio añadido",
+        "addedDescription": "{title} está en el tablero, configúralo abajo.",
+        "addFailedTitle": "No se pudo añadir el servicio"
+      }
+    },
+    "repoTree": {
+      "root": "raíz",
+      "loading": "Cargando…",
+      "noSubdirectories": "No hay subdirectorios aquí.",
+      "empty": "No hay nada aquí.",
+      "select": "Seleccionar",
+      "selected": "Seleccionado",
+      "useThisFolder": "Usar esta carpeta",
+      "errors": {
+        "listDirectory": "No se pudo listar el directorio"
+      }
+    }
+  },
+  "slack": {
+    "panel": {
+      "title": "Notificaciones de Slack",
+      "intro": "Publica notificaciones del tablero (revisiones de fusion, finalizaciones de pipeline, fallos de CI) en Slack. La conexion se comparte en toda la cuenta; el enrutamiento es por tablero."
+    },
+    "connect": {
+      "addToSlack": "Anadir a Slack",
+      "orPasteToken": "...o pega un token de bot (xoxb-...)",
+      "connect": "Conectar"
+    },
+    "connected": {
+      "label": "Conectado a {team}",
+      "disconnect": "Desconectar"
+    },
+    "routing": {
+      "heading": "Enrutamiento",
+      "channelPlaceholder": "#canal o id de canal",
+      "mentionMembers": "Mencionar (@) a los miembros asignados de la cuenta",
+      "save": "Guardar enrutamiento"
+    },
+    "members": {
+      "heading": "Mapa de miembros (id de usuario a id de miembro de Slack)",
+      "hint": "Las personas de {product} reciben menciones en los hallazgos de revision de requisitos; el resto solo cuando crearon la tarea.",
+      "productLabel": "Producto",
+      "userIdPlaceholder": "Id de usuario (usr_...)",
+      "slackIdPlaceholder": "Id de miembro de Slack (U...)",
+      "add": "Anadir miembro",
+      "save": "Guardar mapa"
+    },
+    "routable": {
+      "merge_review": "Revision de fusion",
+      "pipeline_complete": "Pipeline completado",
+      "ci_failed": "CI fallido",
+      "test_failed": "Pruebas fallidas",
+      "requirement_review": "Revision de requisitos",
+      "clarity_review": "Revision de claridad",
+      "release_regression": "Regresion de version",
+      "human_test_ready": "Listo para pruebas humanas",
+      "visual_confirmation_ready": "Listo para confirmacion visual"
+    },
+    "role": {
+      "engineering": "Ingenieria",
+      "product": "Producto"
+    },
+    "toast": {
+      "connected": "Slack conectado",
+      "routingSaved": "Enrutamiento guardado",
+      "mapSaved": "Mapa de miembros guardado"
+    },
+    "error": {
+      "loadSettings": "No se pudieron cargar los ajustes de Slack",
+      "startOAuth": "No se pudo iniciar OAuth de Slack",
+      "connect": "No se pudo conectar Slack",
+      "disconnect": "No se pudo desconectar Slack",
+      "saveRouting": "No se pudo guardar el enrutamiento",
+      "saveMap": "No se pudo guardar el mapa de miembros"
+    }
+  },
+  "documents": {
+    "picker": {
+      "searchPlaceholder": "Busca páginas o pega una URL o ID…",
+      "refPlaceholder": "Pega la URL o el ID de una página…",
+      "searchFailed": "Error en la búsqueda: {error}",
+      "importedBadge": "importado",
+      "attachByReference": "Adjuntar {ref} por referencia",
+      "noMatches": "No hay páginas que coincidan.",
+      "emptySearchable": "Busca por título o elige un documento importado.",
+      "emptyRefOnly": "Pega la URL o el ID de una página para adjuntarla."
+    },
+    "import": {
+      "title": "Importar desde una fuente de documentos",
+      "connectFirst": "Conecta primero una fuente de documentos.",
+      "connectSource": "Conectar {source}",
+      "spawningInto": "Generando dentro de {frame}",
+      "sourceLabel": "Fuente",
+      "refLabel": "URL o ID de la página",
+      "importButton": "Importar",
+      "importedHeading": "Documentos importados",
+      "previewSpawn": "Previsualizar y generar",
+      "noneImported": "Aún no se ha importado ningún documento.",
+      "imported": "Se importó \"{title}\"",
+      "importFailed": "Error al importar"
+    },
+    "connect": {
+      "title": "Conectar fuente",
+      "sourceFallback": "Fuente",
+      "intro": "Conecta {source} para importar requisitos, RFC y PRD, y luego generar la estructura del tablero o adjuntarlos a las tareas como contexto para los agentes.",
+      "personalNote": "Conexión personal: esta credencial te autentica a ti y se almacena solo para tu cuenta, nunca se comparte con el resto del espacio de trabajo.",
+      "disconnect": "Desconectar",
+      "connect": "Conectar",
+      "update": "Actualizar conexión",
+      "connected": "{source} conectado",
+      "disconnected": "{source} desconectado",
+      "connectFailed": "No se pudo conectar"
+    },
+    "spawn": {
+      "title": "Previsualizar estructura",
+      "plannerLlm": "Generado por IA",
+      "plannerHeadings": "A partir de los encabezados",
+      "intoFrame": "en {frame}",
+      "asTopLevel": "como nuevos marcos de nivel superior",
+      "buildingPlan": "Creando el plan…",
+      "spawnOntoBoard": "Generar en el tablero",
+      "planFailed": "No se pudo crear un plan",
+      "spawned": "Estructura generada",
+      "spawnFailed": "Error al generar",
+      "summary": "{frames} · {modules} · {tasks}",
+      "frameCount": "{count} marco | {count} marcos",
+      "moduleCount": "{count} módulo | {count} módulos",
+      "taskCount": "{count} tarea | {count} tareas"
+    },
+    "taskDocs": {
+      "heading": "Documentos de contexto",
+      "attach": "Adjuntar",
+      "importPage": "Importar una página…",
+      "empty": "Adjunta un requisito, RFC o PRD para que los agentes lo vean mientras implementan esta tarea.",
+      "attached": "Documento adjuntado",
+      "attachFailed": "No se pudo adjuntar"
+    }
+  },
+  "tasks": {
+    "picker": {
+      "searchPlaceholder": "Busca incidencias o pega una URL/clave…",
+      "refPlaceholder": "Pega la URL o clave de una incidencia…",
+      "searchFailed": "La búsqueda falló: {error}",
+      "imported": "importada",
+      "attachByReference": "Adjuntar {ref} por referencia",
+      "noMatches": "No hay incidencias coincidentes.",
+      "emptySearchable": "Busca por título o elige una incidencia importada.",
+      "emptyRefOnly": "Pega la URL o clave de una incidencia para adjuntarla."
+    },
+    "contextIssues": {
+      "title": "Incidencias de contexto",
+      "attach": "Adjuntar",
+      "attached": "Incidencia adjuntada",
+      "attachFailed": "No se pudo adjuntar",
+      "importIssue": "Importar una incidencia…",
+      "emptyHint": "Adjunta una incidencia de Jira para que los agentes vean su descripción y comentarios al implementar esta tarea."
+    },
+    "import": {
+      "titleCreate": "Crear tarea desde incidencia",
+      "titleBrowse": "Incidencias del rastreador",
+      "connectFirst": "Conecta o habilita primero una fuente de tareas.",
+      "enableSource": "Habilitar {label}",
+      "connectSource": "Conectar {label}",
+      "source": "Fuente",
+      "refLabel": "Clave o URL de la incidencia",
+      "import": "Importar",
+      "asEpic": "Como épica",
+      "asEpicTitleReady": "Genera esta épica y sus hijos como un grupo de tareas vinculado",
+      "asEpicTitleNeedsContainer": "Elige primero un contenedor para las tareas hijas",
+      "epicChildrenContainer": "Contenedor de hijos de la épica",
+      "pickContainer": "Elige un marco o módulo",
+      "searchIssues": "Buscar incidencias",
+      "searchPlaceholder": "Busca por título, pega la URL de una incidencia o escribe un número de incidencia…",
+      "createTasksIn": "Crear tareas en",
+      "needFrameFirst": "Añade primero un marco de servicio al tablero para crear tareas desde incidencias.",
+      "searchFailed": "La búsqueda falló: {error}",
+      "searchResults": "Resultados de la búsqueda",
+      "createFromIssue": "Crear una tarea a partir de esta incidencia",
+      "pickContainerFirst": "Elige primero un contenedor",
+      "viewOnGitHub": "Ver {id} en GitHub",
+      "emptyHint": "Busca arriba o pega la URL/clave de una incidencia para crear una tarea a partir de ella.",
+      "imported": "Importada \"{title}\"",
+      "importFailed": "La importación falló",
+      "epicSpawned": "Épica generada \"{title}\"",
+      "epicChildren": "{count} tarea hija creada | {count} tareas hijas creadas",
+      "epicFailed": "No se pudo generar la épica"
+    },
+    "connect": {
+      "title": "Fuente de tareas",
+      "sourceFallback": "Fuente",
+      "connectedToast": "{label} conectada",
+      "connectFailed": "No se pudo conectar",
+      "disconnectedToast": "{label} desconectada",
+      "updateFailed": "No se pudo actualizar",
+      "intro": "{label} te permite importar incidencias y adjuntarlas a las tareas como contexto del agente.",
+      "credentialless": "Esta fuente usa la app de GitHub ya instalada en tu espacio de trabajo, por lo que no hay credenciales que introducir.",
+      "installAppHint": "Instala la app de GitHub del espacio de trabajo (conecta repositorios de GitHub) para ofrecer {label}.",
+      "connected": "Conectada.",
+      "connectedTo": "Conectada a {label}.",
+      "offerToWorkspace": "Ofrecer a este espacio de trabajo",
+      "offerHint": "Cuando está desactivada, {label} se oculta de la importación y la vinculación.",
+      "disconnect": "Desconectar",
+      "updateConnection": "Actualizar conexión",
+      "connect": "Conectar"
+    }
   }
 }

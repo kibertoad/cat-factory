@@ -21,6 +21,7 @@ const props = withDefaults(
 )
 const emit = defineEmits<{ 'update:modelValue': [string | undefined] }>()
 
+const { t } = useI18n()
 const github = useGitHubStore()
 const toast = useToast()
 
@@ -51,7 +52,7 @@ async function browseTo(path: string) {
   } catch (e) {
     treeEntries.value = []
     toast.add({
-      title: 'Could not list directory',
+      title: t('github.repoTree.errors.listDirectory'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -85,7 +86,7 @@ watch(
         :disabled="loading"
         @click="browseTo('')"
       >
-        root
+        {{ t('github.repoTree.root') }}
       </UButton>
       <template v-for="crumb in breadcrumbs" :key="crumb.path">
         <span class="text-slate-600">/</span>
@@ -103,9 +104,11 @@ watch(
 
     <!-- listing -->
     <div class="max-h-56 overflow-auto rounded border border-slate-800">
-      <div v-if="loading" class="p-3 text-sm text-slate-400">Loading…</div>
+      <div v-if="loading" class="p-3 text-sm text-slate-400">
+        {{ t('github.repoTree.loading') }}
+      </div>
       <div v-else-if="isEmpty" class="p-3 text-sm text-slate-400">
-        {{ mode === 'dir' ? 'No subdirectories here.' : 'Nothing here.' }}
+        {{ mode === 'dir' ? t('github.repoTree.noSubdirectories') : t('github.repoTree.empty') }}
       </div>
       <ul v-else class="divide-y divide-slate-800">
         <li
@@ -128,7 +131,11 @@ watch(
             :color="modelValue === entry.path ? 'primary' : 'neutral'"
             @click="pick(entry.path)"
           >
-            {{ modelValue === entry.path ? 'Selected' : 'Select' }}
+            {{
+              modelValue === entry.path
+                ? t('github.repoTree.selected')
+                : t('github.repoTree.select')
+            }}
           </UButton>
         </li>
         <template v-if="mode === 'file'">
@@ -164,7 +171,7 @@ watch(
         :color="modelValue === currentPath ? 'primary' : 'neutral'"
         @click="pick(currentPath)"
       >
-        Use this folder
+        {{ t('github.repoTree.useThisFolder') }}
       </UButton>
     </div>
   </div>

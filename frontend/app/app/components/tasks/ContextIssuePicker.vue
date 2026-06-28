@@ -20,6 +20,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ pick: [item: PendingContext] }>()
 
+const { t } = useI18n()
 const tasks = useTasksStore()
 
 const chosen = computed(() => new Set(props.chosenKeys ?? []))
@@ -186,28 +187,30 @@ onMounted(() => {
       class="w-full"
       :placeholder="
         searchable
-          ? 'Search issues or paste a URL/key…'
-          : (descriptor?.refPlaceholder ?? 'Paste an issue URL or key…')
+          ? t('tasks.picker.searchPlaceholder')
+          : (descriptor?.refPlaceholder ?? t('tasks.picker.refPlaceholder'))
       "
       @keydown.enter="refRow && pickRef(refRow)"
     />
 
     <p v-if="searchError" class="px-1 text-[11px] text-amber-400">
-      Search failed: {{ searchError }}
+      {{ t('tasks.picker.searchFailed', { error: searchError }) }}
     </p>
 
     <div class="max-h-56 space-y-0.5 overflow-y-auto">
       <!-- Already-imported issues (linked directly, no re-fetch). -->
       <button
-        v-for="t in importedRows"
-        :key="`imp:${t.externalId}`"
+        v-for="row in importedRows"
+        :key="`imp:${row.externalId}`"
         type="button"
         class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-800/70"
-        @click="pickImported(t)"
+        @click="pickImported(row)"
       >
         <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-indigo-400" />
-        <span class="truncate">{{ t.externalId }} · {{ t.title }}</span>
-        <UBadge color="neutral" variant="soft" size="xs" class="ml-auto shrink-0">imported</UBadge>
+        <span class="truncate">{{ row.externalId }} · {{ row.title }}</span>
+        <UBadge color="neutral" variant="soft" size="xs" class="ml-auto shrink-0">{{
+          t('tasks.picker.imported')
+        }}</UBadge>
       </button>
 
       <!-- Tracker search hits (imported on add). -->
@@ -233,18 +236,22 @@ onMounted(() => {
         @click="pickRef(refRow)"
       >
         <UIcon name="i-lucide-link" class="h-3.5 w-3.5 shrink-0 text-slate-400" />
-        <span class="truncate"
-          >Attach <span class="text-slate-200">{{ refRow }}</span> by reference</span
-        >
+        <span class="truncate">
+          <i18n-t keypath="tasks.picker.attachByReference" tag="span" scope="global">
+            <template #ref>
+              <span class="text-slate-200">{{ refRow }}</span>
+            </template>
+          </i18n-t>
+        </span>
       </button>
 
       <p v-if="empty" class="px-2 py-1.5 text-[11px] text-slate-500">
         {{
           query.trim()
-            ? 'No matching issues.'
+            ? t('tasks.picker.noMatches')
             : searchable
-              ? 'Search by title, or pick an imported issue.'
-              : 'Paste an issue URL or key to attach it.'
+              ? t('tasks.picker.emptySearchable')
+              : t('tasks.picker.emptyRefOnly')
         }}
       </p>
     </div>

@@ -4,6 +4,7 @@ import type { DocumentBoardPlan } from '~/types/domain'
 // Preview the structure an imported document expands into, then spawn it. The
 // plan is fetched fresh on open; a badge makes clear whether an LLM or the
 // deterministic heading parser produced it.
+const { t } = useI18n()
 const ui = useUiStore()
 const documents = useDocumentsStore()
 const board = useBoardStore()
@@ -36,7 +37,7 @@ watch(
       plan.value = await documents.plan(preview.source, externalId)
     } catch (e) {
       toast.add({
-        title: 'Could not build a plan',
+        title: t('documents.spawn.planFailed'),
         description: e instanceof Error ? e.message : String(e),
         icon: 'i-lucide-triangle-alert',
         color: 'error',
@@ -59,8 +60,12 @@ async function spawn() {
       targetFrameId.value ?? undefined,
     )
     toast.add({
-      title: 'Structure spawned',
-      description: `${result.frames} frames · ${result.modules} modules · ${result.tasks} tasks`,
+      title: t('documents.spawn.spawned'),
+      description: t('documents.spawn.summary', {
+        frames: t('documents.spawn.frameCount', { count: result.frames }, result.frames),
+        modules: t('documents.spawn.moduleCount', { count: result.modules }, result.modules),
+        tasks: t('documents.spawn.taskCount', { count: result.tasks }, result.tasks),
+      }),
       icon: 'i-lucide-check',
       color: 'success',
     })
@@ -68,7 +73,7 @@ async function spawn() {
     ui.closeDocumentImport()
   } catch (e) {
     toast.add({
-      title: 'Spawn failed',
+      title: t('documents.spawn.spawnFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -80,7 +85,7 @@ async function spawn() {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Preview structure">
+  <UModal v-model:open="open" :title="t('documents.spawn.title')">
     <template #body>
       <div class="space-y-4">
         <div v-if="plan" class="flex items-center justify-between gap-2">
@@ -89,16 +94,25 @@ async function spawn() {
             variant="subtle"
             size="sm"
           >
-            {{ plan.planner === 'llm' ? 'AI-generated' : 'From headings' }}
+            {{
+              plan.planner === 'llm'
+                ? t('documents.spawn.plannerLlm')
+                : t('documents.spawn.plannerHeadings')
+            }}
           </UBadge>
           <span v-if="targetFrameTitle" class="text-xs text-slate-400">
-            into <span class="font-medium text-slate-200">{{ targetFrameTitle }}</span>
+            <i18n-t keypath="documents.spawn.intoFrame" scope="global">
+              <template #frame>
+                <span class="font-medium text-slate-200">{{ targetFrameTitle }}</span>
+              </template>
+            </i18n-t>
           </span>
-          <span v-else class="text-xs text-slate-400">as new top-level frames</span>
+          <span v-else class="text-xs text-slate-400">{{ t('documents.spawn.asTopLevel') }}</span>
         </div>
 
         <div v-if="loadingPlan" class="flex items-center gap-2 text-sm text-slate-400">
-          <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" /> Building plan…
+          <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" />
+          {{ t('documents.spawn.buildingPlan') }}
         </div>
 
         <div v-else-if="plan" class="max-h-80 space-y-3 overflow-y-auto pr-1">
@@ -144,7 +158,9 @@ async function spawn() {
         </div>
 
         <div class="flex justify-end gap-2 pt-1">
-          <UButton color="neutral" variant="ghost" @click="ui.closeSpawnPreview()">Cancel</UButton>
+          <UButton color="neutral" variant="ghost" @click="ui.closeSpawnPreview()">{{
+            t('common.cancel')
+          }}</UButton>
           <UButton
             color="primary"
             icon="i-lucide-wand-sparkles"
@@ -152,7 +168,7 @@ async function spawn() {
             :disabled="!plan || loadingPlan"
             @click="spawn"
           >
-            Spawn onto board
+            {{ t('documents.spawn.spawnOntoBoard') }}
           </UButton>
         </div>
       </div>

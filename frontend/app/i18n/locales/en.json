@@ -1821,5 +1821,338 @@
         }
       }
     }
+  },
+  "github": {
+    "onboarding": {
+      "title": "Connect cat-factory to GitHub",
+      "intro": "cat-factory works by opening pull requests on your repositories. Install the GitHub App on your account or organization to continue, and you can grant it every repository or pick a subset.",
+      "signedInAs": "Signed in as {login}",
+      "signOut": "Sign out"
+    },
+    "connect": {
+      "yourInstallations": "Your installations",
+      "refresh": "Refresh",
+      "lookingForInstallations": "Looking for installations…",
+      "noInstallations": "No installations found for the App yet. Install it below, or connect by ID.",
+      "installationMeta": "{targetType} · installation {id}",
+      "linked": "linked",
+      "linkedTitle": "Already linked to this workspace",
+      "inUse": "in use",
+      "inUseTitle": "Already connected to another workspace",
+      "connect": "Connect",
+      "or": "or",
+      "installApp": "Install GitHub App",
+      "orConnectById": "or connect by ID",
+      "installationId": "Installation ID",
+      "toast": {
+        "connected": "GitHub connected"
+      },
+      "errors": {
+        "listInstallations": "Could not list GitHub installations",
+        "startInstall": "Could not start the GitHub App install",
+        "connect": "Could not connect"
+      }
+    },
+    "panel": {
+      "connectIntro": "Connect a GitHub App installation to back board blocks with repositories, browse pull requests and issues, and let agents push branches and open PRs.",
+      "installationMeta": "{targetType} · installation {id}",
+      "resync": "Resync",
+      "backfill": "Backfill",
+      "disconnect": "Disconnect",
+      "loading": "Loading…",
+      "tabs": {
+        "repos": "Repositories",
+        "pulls": "Pull requests",
+        "issues": "Issues"
+      },
+      "linkedToBoard": "Linked to this board",
+      "manageRepos": "Manage repos",
+      "manageHint": "Pick the repositories this board should track. The GitHub connection is shared across the account, and each board links its own repos.",
+      "loadingRepos": "Loading repositories…",
+      "noAvailableRepos": "The installation can't access any repositories yet.",
+      "private": "private",
+      "saveSelection": "Save selection",
+      "noLinkedRepos": "No repositories linked yet. Use Manage repos to pick which repositories this board tracks.",
+      "open": "Open",
+      "protected": "protected",
+      "newBranch": "New branch",
+      "fromSha": "From SHA",
+      "commitShaPlaceholder": "commit sha",
+      "createBranch": "Create branch",
+      "openPr": "Open PR",
+      "repository": "Repository",
+      "chooseRepository": "Choose a repository",
+      "prTitle": "Title",
+      "headBranch": "Head branch",
+      "baseBranch": "Base branch",
+      "openPullRequest": "Open pull request",
+      "noPulls": "No pull requests synced.",
+      "mergePr": "Merge pull request",
+      "noIssues": "No issues synced.",
+      "prState": {
+        "open": "open",
+        "closed": "closed",
+        "merged": "merged"
+      },
+      "issueState": {
+        "open": "open",
+        "closed": "closed"
+      },
+      "toast": {
+        "disconnected": "GitHub disconnected",
+        "resync": "Resync {status}",
+        "reposUpdated": "Linked repositories updated",
+        "branchCreated": "Branch {name} created",
+        "prOpened": "Pull request opened",
+        "prMerged": "PR #{number} merged"
+      },
+      "errors": {
+        "disconnect": "Could not disconnect",
+        "resync": "Could not resync",
+        "loadRepos": "Could not load repositories",
+        "updateRepos": "Could not update repositories",
+        "loadBranches": "Could not load branches",
+        "createBranch": "Could not create branch",
+        "openPr": "Could not open pull request",
+        "merge": "Could not merge"
+      }
+    },
+    "addService": {
+      "title": "Add a service from a repository",
+      "intro": "Pick an existing GitHub repository to add as a board service. No bootstrapping: the repo is linked to a new service frame as-is, and tasks you run on it target that repo.",
+      "connectFirst": "Connect this workspace to GitHub first. Link an installation the App is already on, or install it.",
+      "repository": "Repository",
+      "repositoryHint": "Repositories the GitHub App can access. Don't see yours? Grant the App access below, then refresh.",
+      "noReposAvailable": "No repositories available yet. Grant the App access to one below, then refresh.",
+      "filterPlaceholder": "Filter by owner/name…",
+      "clearFilter": "Clear filter",
+      "chooseRepository": "Choose a repository",
+      "showingCount": "Showing {shown} of {total} repositories.",
+      "repoLabel": {
+        "private": " (private)",
+        "monorepo": " · monorepo",
+        "onBoard": " · already on board"
+      },
+      "monorepoLabel": "This is a monorepo (hosts more than one service)",
+      "monorepoDescription": "Add several services from one repo, each pinned to a subdirectory.",
+      "monorepoBrowseHint": "Browse the repository and pick the directory of the service you want to add. Agents working on this service will run within that subdirectory.",
+      "serviceDirectory": "Service directory:",
+      "noDirectorySelected": "No directory selected yet.",
+      "addedConfigure": "{title} added, configure it",
+      "grantAccess": "Grant the App access to a repo",
+      "grantAccessTitle": "Open the App's installation settings to grant it access to a repository",
+      "refreshList": "Refresh list",
+      "done": "Done",
+      "add": "Add service",
+      "addAnother": "Add another service",
+      "toast": {
+        "addedTitle": "Service added",
+        "addedDescription": "{title} is on the board, configure it below.",
+        "addFailedTitle": "Could not add service"
+      }
+    },
+    "repoTree": {
+      "root": "root",
+      "loading": "Loading…",
+      "noSubdirectories": "No subdirectories here.",
+      "empty": "Nothing here.",
+      "select": "Select",
+      "selected": "Selected",
+      "useThisFolder": "Use this folder",
+      "errors": {
+        "listDirectory": "Could not list directory"
+      }
+    }
+  },
+  "slack": {
+    "panel": {
+      "title": "Slack notifications",
+      "intro": "Post board notifications (merge reviews, pipeline completions, CI failures) to Slack. The connection is shared across the account; routing is per board."
+    },
+    "connect": {
+      "addToSlack": "Add to Slack",
+      "orPasteToken": "...or paste a bot token (xoxb-...)",
+      "connect": "Connect"
+    },
+    "connected": {
+      "label": "Connected to {team}",
+      "disconnect": "Disconnect"
+    },
+    "routing": {
+      "heading": "Routing",
+      "channelPlaceholder": "#channel or channel id",
+      "mentionMembers": "@-mention mapped account members",
+      "save": "Save routing"
+    },
+    "members": {
+      "heading": "Member map (user id to Slack member id)",
+      "hint": "{product} people are mentioned on requirement-review findings; everyone else only when they created the task.",
+      "productLabel": "Product",
+      "userIdPlaceholder": "User id (usr_...)",
+      "slackIdPlaceholder": "Slack member id (U...)",
+      "add": "Add member",
+      "save": "Save map"
+    },
+    "routable": {
+      "merge_review": "Merge review",
+      "pipeline_complete": "Pipeline complete",
+      "ci_failed": "CI failed",
+      "test_failed": "Tests failed",
+      "requirement_review": "Requirement review",
+      "clarity_review": "Clarity review",
+      "release_regression": "Release regression",
+      "human_test_ready": "Ready for human testing",
+      "visual_confirmation_ready": "Ready for visual confirmation"
+    },
+    "role": {
+      "engineering": "Engineering",
+      "product": "Product"
+    },
+    "toast": {
+      "connected": "Slack connected",
+      "routingSaved": "Routing saved",
+      "mapSaved": "Member map saved"
+    },
+    "error": {
+      "loadSettings": "Could not load Slack settings",
+      "startOAuth": "Could not start Slack OAuth",
+      "connect": "Could not connect Slack",
+      "disconnect": "Could not disconnect Slack",
+      "saveRouting": "Could not save routing",
+      "saveMap": "Could not save member map"
+    }
+  },
+  "documents": {
+    "picker": {
+      "searchPlaceholder": "Search pages or paste a URL/ID…",
+      "refPlaceholder": "Paste a page URL or ID…",
+      "searchFailed": "Search failed: {error}",
+      "importedBadge": "imported",
+      "attachByReference": "Attach {ref} by reference",
+      "noMatches": "No matching pages.",
+      "emptySearchable": "Search by title, or pick an imported document.",
+      "emptyRefOnly": "Paste a page URL or ID to attach it."
+    },
+    "import": {
+      "title": "Import from a document source",
+      "connectFirst": "Connect a document source first.",
+      "connectSource": "Connect {source}",
+      "spawningInto": "Spawning into {frame}",
+      "sourceLabel": "Source",
+      "refLabel": "Page URL or ID",
+      "importButton": "Import",
+      "importedHeading": "Imported documents",
+      "previewSpawn": "Preview & spawn",
+      "noneImported": "No documents imported yet.",
+      "imported": "Imported \"{title}\"",
+      "importFailed": "Import failed"
+    },
+    "connect": {
+      "title": "Connect source",
+      "sourceFallback": "Source",
+      "intro": "Connect {source} to import requirements, RFCs and PRDs, then spawn board structure or attach them to tasks as agent context.",
+      "personalNote": "Personal connection — this credential authenticates as you and is stored only for your account, never shared with the rest of the workspace.",
+      "disconnect": "Disconnect",
+      "connect": "Connect",
+      "update": "Update connection",
+      "connected": "{source} connected",
+      "disconnected": "{source} disconnected",
+      "connectFailed": "Could not connect"
+    },
+    "spawn": {
+      "title": "Preview structure",
+      "plannerLlm": "AI-generated",
+      "plannerHeadings": "From headings",
+      "intoFrame": "into {frame}",
+      "asTopLevel": "as new top-level frames",
+      "buildingPlan": "Building plan…",
+      "spawnOntoBoard": "Spawn onto board",
+      "planFailed": "Could not build a plan",
+      "spawned": "Structure spawned",
+      "spawnFailed": "Spawn failed",
+      "summary": "{frames} · {modules} · {tasks}",
+      "frameCount": "{count} frame | {count} frames",
+      "moduleCount": "{count} module | {count} modules",
+      "taskCount": "{count} task | {count} tasks"
+    },
+    "taskDocs": {
+      "heading": "Context documents",
+      "attach": "Attach",
+      "importPage": "Import a page…",
+      "empty": "Attach a requirement, RFC or PRD so agents see it while implementing this task.",
+      "attached": "Document attached",
+      "attachFailed": "Could not attach"
+    }
+  },
+  "tasks": {
+    "picker": {
+      "searchPlaceholder": "Search issues or paste a URL/key…",
+      "refPlaceholder": "Paste an issue URL or key…",
+      "searchFailed": "Search failed: {error}",
+      "imported": "imported",
+      "attachByReference": "Attach {ref} by reference",
+      "noMatches": "No matching issues.",
+      "emptySearchable": "Search by title, or pick an imported issue.",
+      "emptyRefOnly": "Paste an issue URL or key to attach it."
+    },
+    "contextIssues": {
+      "title": "Context issues",
+      "attach": "Attach",
+      "attached": "Issue attached",
+      "attachFailed": "Could not attach",
+      "importIssue": "Import an issue…",
+      "emptyHint": "Attach a Jira issue so agents see its description and comments while implementing this task."
+    },
+    "import": {
+      "titleCreate": "Create task from issue",
+      "titleBrowse": "Tracker issues",
+      "connectFirst": "Connect or enable a task source first.",
+      "enableSource": "Enable {label}",
+      "connectSource": "Connect {label}",
+      "source": "Source",
+      "refLabel": "Issue key or URL",
+      "import": "Import",
+      "asEpic": "As epic",
+      "asEpicTitleReady": "Spawn this epic + its children as a linked task group",
+      "asEpicTitleNeedsContainer": "Pick a container for the child tasks first",
+      "epicChildrenContainer": "Epic children container",
+      "pickContainer": "Pick a frame or module",
+      "searchIssues": "Search issues",
+      "searchPlaceholder": "Search by title, paste an issue URL, or type an issue number…",
+      "createTasksIn": "Create tasks in",
+      "needFrameFirst": "Add a service frame to the board first to create tasks from issues.",
+      "searchFailed": "Search failed: {error}",
+      "searchResults": "Search results",
+      "createFromIssue": "Create a task from this issue",
+      "pickContainerFirst": "Pick a container first",
+      "viewOnGitHub": "View {id} on GitHub",
+      "emptyHint": "Search above, or paste an issue URL/key to create a task from it.",
+      "imported": "Imported \"{title}\"",
+      "importFailed": "Import failed",
+      "epicSpawned": "Spawned epic \"{title}\"",
+      "epicChildren": "{count} child task created | {count} child tasks created",
+      "@epicChildren": {
+        "description": "Count-based: how many child tasks were created when spawning an epic (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
+      },
+      "epicFailed": "Could not spawn epic"
+    },
+    "connect": {
+      "title": "Task source",
+      "sourceFallback": "Source",
+      "connectedToast": "{label} connected",
+      "connectFailed": "Could not connect",
+      "disconnectedToast": "{label} disconnected",
+      "updateFailed": "Could not update",
+      "intro": "{label} lets you import issues and attach them to tasks as agent context.",
+      "credentialless": "This source uses the GitHub App already installed on your workspace, so there are no credentials to enter.",
+      "installAppHint": "Install the workspace's GitHub App (connect GitHub repos) to offer {label}.",
+      "connected": "Connected.",
+      "connectedTo": "Connected to {label}.",
+      "offerToWorkspace": "Offer to this workspace",
+      "offerHint": "When off, {label} is hidden from import and linking.",
+      "disconnect": "Disconnect",
+      "updateConnection": "Update connection",
+      "connect": "Connect"
+    }
   }
 }

@@ -10,6 +10,7 @@ import type { TaskSearchResult, TaskSourceKind } from '~/types/domain'
 import type { AddTaskPrefill } from '~/stores/ui'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
+const { t } = useI18n()
 const ui = useUiStore()
 const tasks = useTasksStore()
 const board = useBoardStore()
@@ -30,7 +31,7 @@ const importing = ref(false)
 // When opened from a service frame the modal is the "create a task from an issue"
 // surface; opened standalone it's the general tracker-issue browser/importer.
 const title = computed(() =>
-  ui.taskImport?.containerId ? 'Create task from issue' : 'Tracker issues',
+  ui.taskImport?.containerId ? t('tasks.import.titleCreate') : t('tasks.import.titleBrowse'),
 )
 
 const sourceItems = computed(() =>
@@ -152,10 +153,13 @@ async function doImport() {
   try {
     const task = await tasks.importTask(source.value, value)
     ref_.value = ''
-    toast.add({ title: `Imported "${task.title}"`, icon: 'i-lucide-file-down' })
+    toast.add({
+      title: t('tasks.import.imported', { title: task.title }),
+      icon: 'i-lucide-file-down',
+    })
   } catch (e) {
     toast.add({
-      title: 'Import failed',
+      title: t('tasks.import.importFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -178,13 +182,13 @@ async function doSpawnEpic() {
     ui.closeTaskImport()
     ui.select(epic.id)
     toast.add({
-      title: `Spawned epic "${epic.title}"`,
-      description: `${spawned.length} child task(s) created`,
+      title: t('tasks.import.epicSpawned', { title: epic.title }),
+      description: t('tasks.import.epicChildren', { count: spawned.length }, spawned.length),
       icon: 'i-lucide-layers',
     })
   } catch (e) {
     toast.add({
-      title: 'Could not spawn epic',
+      title: t('tasks.import.epicFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -204,7 +208,7 @@ async function doSpawnEpic() {
       <!-- Empty state: no source offered (none connected/installed, or all disabled) -->
       <div v-if="!tasks.anyOffered" class="space-y-3 text-center">
         <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-slate-500" />
-        <p class="text-sm text-slate-400">Connect or enable a task source first.</p>
+        <p class="text-sm text-slate-400">{{ t('tasks.import.connectFirst') }}</p>
         <div class="flex justify-center gap-2">
           <UButton
             v-for="s in tasks.sources"
@@ -214,19 +218,23 @@ async function doSpawnEpic() {
             :icon="s.icon"
             @click="ui.openTaskConnect(s.source)"
           >
-            {{ s.available ? `Enable ${s.label}` : `Connect ${s.label}` }}
+            {{
+              s.available
+                ? t('tasks.import.enableSource', { label: s.label })
+                : t('tasks.import.connectSource', { label: s.label })
+            }}
           </UButton>
         </div>
       </div>
 
       <!-- Main form -->
       <div v-else class="space-y-4">
-        <UFormField v-if="sourceItems.length > 1" label="Source">
+        <UFormField v-if="sourceItems.length > 1" :label="t('tasks.import.source')">
           <USelect v-model="source" :items="sourceItems" class="w-full" />
         </UFormField>
 
         <div class="flex items-end gap-2">
-          <UFormField :label="descriptor?.refLabel ?? 'Issue key or URL'" class="flex-1">
+          <UFormField :label="descriptor?.refLabel ?? t('tasks.import.refLabel')" class="flex-1">
             <UInput
               v-model="ref_"
               :placeholder="descriptor?.refPlaceholder"
@@ -241,7 +249,7 @@ async function doSpawnEpic() {
             :disabled="!ref_.trim()"
             @click="doImport"
           >
-            Import
+            {{ t('tasks.import.import') }}
           </UButton>
           <UButton
             color="primary"
@@ -251,12 +259,12 @@ async function doSpawnEpic() {
             :disabled="!ref_.trim() || !containerId"
             :title="
               containerId
-                ? 'Spawn this epic + its children as a linked task group'
-                : 'Pick a container for the child tasks first'
+                ? t('tasks.import.asEpicTitleReady')
+                : t('tasks.import.asEpicTitleNeedsContainer')
             "
             @click="doSpawnEpic"
           >
-            As epic
+            {{ t('tasks.import.asEpic') }}
           </UButton>
         </div>
 
@@ -264,25 +272,25 @@ async function doSpawnEpic() {
              "Create tasks in" selector below covers the search-results case). -->
         <UFormField
           v-if="containerItems.length && !freshHits.length"
-          label="Epic children container"
+          :label="t('tasks.import.epicChildrenContainer')"
           class="w-72"
         >
           <USelect
             v-model="containerId"
             :items="containerItems"
-            placeholder="Pick a frame or module"
+            :placeholder="t('tasks.import.pickContainer')"
             class="w-full"
           />
         </UFormField>
 
         <!-- Browse: search the tracker by title so an issue can be turned into a
              task without knowing its key. -->
-        <UFormField v-if="searchable" label="Search issues">
+        <UFormField v-if="searchable" :label="t('tasks.import.searchIssues')">
           <UInput
             v-model="searchQuery"
             :icon="searching ? 'i-lucide-loader-circle' : 'i-lucide-search'"
             :ui="{ leadingIcon: searching ? 'animate-spin' : '' }"
-            placeholder="Search by title, paste an issue URL, or type an issue number…"
+            :placeholder="t('tasks.import.searchPlaceholder')"
             class="w-full"
           />
         </UFormField>
@@ -290,13 +298,13 @@ async function doSpawnEpic() {
         <!-- Shared target container for every "Create task" action below. -->
         <UFormField
           v-if="containerItems.length && freshHits.length"
-          label="Create tasks in"
+          :label="t('tasks.import.createTasksIn')"
           class="w-72"
         >
           <USelect
             v-model="containerId"
             :items="containerItems"
-            placeholder="Pick a frame or module"
+            :placeholder="t('tasks.import.pickContainer')"
             class="w-full"
           />
         </UFormField>
@@ -304,17 +312,17 @@ async function doSpawnEpic() {
           v-else-if="!containerItems.length && freshHits.length"
           class="text-[11px] text-slate-500"
         >
-          Add a service frame to the board first to create tasks from issues.
+          {{ t('tasks.import.needFrameFirst') }}
         </p>
 
         <!-- Search results (not yet imported): click a hit to create a task from it
              (opens the prefilled add-task form); the icon button views it on GitHub. -->
         <div v-if="searchError" class="text-[11px] text-amber-400">
-          Search failed: {{ searchError }}
+          {{ t('tasks.import.searchFailed', { error: searchError }) }}
         </div>
         <div v-if="freshHits.length" class="space-y-2">
           <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            Search results
+            {{ t('tasks.import.searchResults') }}
           </h3>
           <div
             v-for="hit in freshHits"
@@ -325,7 +333,11 @@ async function doSpawnEpic() {
               type="button"
               class="min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-60"
               :disabled="!containerId"
-              :title="containerId ? 'Create a task from this issue' : 'Pick a container first'"
+              :title="
+                containerId
+                  ? t('tasks.import.createFromIssue')
+                  : t('tasks.import.pickContainerFirst')
+              "
               @click="selectIssue(hit, true)"
             >
               <span class="block truncate text-sm font-medium text-white">
@@ -347,7 +359,7 @@ async function doSpawnEpic() {
                 :to="hit.url"
                 target="_blank"
                 rel="noopener"
-                :aria-label="`View ${hit.externalId} on GitHub`"
+                :aria-label="t('tasks.import.viewOnGitHub', { id: hit.externalId })"
               />
             </div>
           </div>
@@ -357,7 +369,7 @@ async function doSpawnEpic() {
           v-if="!freshHits.length && !searchQuery.trim()"
           class="text-center text-xs text-slate-500"
         >
-          Search above, or paste an issue URL/key to create a task from it.
+          {{ t('tasks.import.emptyHint') }}
         </p>
       </div>
     </template>

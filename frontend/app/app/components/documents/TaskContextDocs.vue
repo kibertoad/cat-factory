@@ -7,6 +7,7 @@ import type { Block, DocumentSourceKind } from '~/types/domain'
 // backend's userPromptFor). Rendered only when the integration is available.
 const props = defineProps<{ block: Block }>()
 
+const { t } = useI18n()
 const documents = useDocumentsStore()
 const ui = useUiStore()
 const toast = useToast()
@@ -20,10 +21,10 @@ const linked = computed(() => documents.docsForBlock(props.block.id))
 async function attach(source: DocumentSourceKind, externalId: string) {
   try {
     await documents.linkToBlock(props.block.id, source, externalId)
-    toast.add({ title: 'Document attached', icon: 'i-lucide-link' })
+    toast.add({ title: t('documents.taskDocs.attached'), icon: 'i-lucide-link' })
   } catch (e) {
     toast.add({
-      title: 'Could not attach',
+      title: t('documents.taskDocs.attachFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -41,7 +42,7 @@ const attachMenu = computed<DropdownMenuItem[][]>(() => {
       onSelect: () => attach(d.source, d.externalId),
     }))
   items.push({
-    label: 'Import a page…',
+    label: t('documents.taskDocs.importPage'),
     icon: 'i-lucide-file-down',
     onSelect: () => ui.openDocumentImport(null),
   })
@@ -53,10 +54,12 @@ const attachMenu = computed<DropdownMenuItem[][]>(() => {
   <div v-if="documents.available" class="space-y-2">
     <div class="flex items-center justify-between">
       <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        Context documents
+        {{ t('documents.taskDocs.heading') }}
       </span>
       <UDropdownMenu :items="attachMenu" :content="{ side: 'bottom', align: 'end' }">
-        <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-plus">Attach</UButton>
+        <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-plus">{{
+          t('documents.taskDocs.attach')
+        }}</UButton>
       </UDropdownMenu>
     </div>
 
@@ -77,7 +80,7 @@ const attachMenu = computed<DropdownMenuItem[][]>(() => {
       </a>
     </div>
     <p v-else class="text-[11px] text-slate-500">
-      Attach a requirement, RFC or PRD so agents see it while implementing this task.
+      {{ t('documents.taskDocs.empty') }}
     </p>
   </div>
 </template>

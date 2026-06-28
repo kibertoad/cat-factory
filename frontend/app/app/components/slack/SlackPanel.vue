@@ -12,6 +12,7 @@ import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 const ui = useUiStore()
 const slack = useSlackStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const open = computed({
   get: () => ui.slackOpen,
@@ -19,20 +20,23 @@ const open = computed({
 })
 const back = useIntegrationBack(open)
 
-const ROUTABLE: { type: NotificationType; label: string }[] = [
-  { type: 'merge_review', label: 'Merge review' },
-  { type: 'pipeline_complete', label: 'Pipeline complete' },
-  { type: 'ci_failed', label: 'CI failed' },
-  { type: 'test_failed', label: 'Tests failed' },
-  { type: 'requirement_review', label: 'Requirement review' },
-  { type: 'clarity_review', label: 'Clarity review' },
-  { type: 'release_regression', label: 'Release regression' },
-  { type: 'human_test_ready', label: 'Ready for human testing' },
-  { type: 'visual_confirmation_ready', label: 'Ready for visual confirmation' },
-]
+const ROUTABLE = computed<{ type: NotificationType; label: string }[]>(() => [
+  { type: 'merge_review', label: t('slack.routable.merge_review') },
+  { type: 'pipeline_complete', label: t('slack.routable.pipeline_complete') },
+  { type: 'ci_failed', label: t('slack.routable.ci_failed') },
+  { type: 'test_failed', label: t('slack.routable.test_failed') },
+  { type: 'requirement_review', label: t('slack.routable.requirement_review') },
+  { type: 'clarity_review', label: t('slack.routable.clarity_review') },
+  { type: 'release_regression', label: t('slack.routable.release_regression') },
+  { type: 'human_test_ready', label: t('slack.routable.human_test_ready') },
+  { type: 'visual_confirmation_ready', label: t('slack.routable.visual_confirmation_ready') },
+])
 
 /** Notification-role options for a mapped member (drives who gets @-mentioned). */
-const ROLE_OPTIONS: SlackMemberRole[] = ['engineering', 'product']
+const ROLE_OPTIONS = computed<{ label: string; value: SlackMemberRole }[]>(() => [
+  { label: t('slack.role.engineering'), value: 'engineering' },
+  { label: t('slack.role.product'), value: 'product' },
+])
 
 // Local editable copies, synced from the store on load.
 const routes = reactive<Record<NotificationType, SlackRoute>>({
@@ -71,13 +75,13 @@ watch(
     if (!isOpen || !slack.connected) return
     try {
       await Promise.all([slack.loadSettings(), slack.loadMemberMapping(), slack.loadChannels()])
-      for (const { type } of ROUTABLE) {
+      for (const { type } of ROUTABLE.value) {
         routes[type] = slack.settings?.routes[type] ?? { enabled: false, channel: '' }
       }
       mentionsEnabled.value = slack.settings?.mentionsEnabled ?? false
       mapping.value = slack.memberMapping.map((e) => ({ role: 'engineering', ...e }))
     } catch (e) {
-      notifyError('Could not load Slack settings', e)
+      notifyError(t('slack.error.loadSettings'), e)
     }
   },
   // Lazy v-if mount: the panel mounts with `open` already true, so load immediately.
@@ -88,7 +92,7 @@ async function connectViaOAuth() {
   try {
     window.location.href = await slack.installUrl()
   } catch (e) {
-    notifyError('Could not start Slack OAuth', e)
+    notifyError(t('slack.error.startOAuth'), e)
   }
 }
 
@@ -97,9 +101,9 @@ async function connectWithToken() {
   try {
     await slack.connectWithToken(tokenInput.value.trim())
     tokenInput.value = ''
-    toast.add({ title: 'Slack connected', icon: 'i-lucide-check', color: 'success' })
+    toast.add({ title: t('slack.toast.connected'), icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
-    notifyError('Could not connect Slack', e)
+    notifyError(t('slack.error.connect'), e)
   }
 }
 
@@ -107,7 +111,7 @@ async function disconnect() {
   try {
     await slack.disconnect()
   } catch (e) {
-    notifyError('Could not disconnect Slack', e)
+    notifyError(t('slack.error.disconnect'), e)
   }
 }
 
@@ -118,9 +122,9 @@ async function saveRouting() {
       routes: { ...routes },
       mentionsEnabled: mentionsEnabled.value,
     })
-    toast.add({ title: 'Routing saved', icon: 'i-lucide-check', color: 'success' })
+    toast.add({ title: t('slack.toast.routingSaved'), icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
-    notifyError('Could not save routing', e)
+    notifyError(t('slack.error.saveRouting'), e)
   } finally {
     busy.value = false
   }
@@ -138,9 +142,9 @@ async function saveMapping() {
     const entries = mapping.value.filter((e) => e.userId.trim() && e.slackUserId.trim())
     await slack.updateMemberMapping(entries)
     mapping.value = slack.memberMapping.map((e) => ({ ...e }))
-    toast.add({ title: 'Member map saved', icon: 'i-lucide-check', color: 'success' })
+    toast.add({ title: t('slack.toast.mapSaved'), icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
-    notifyError('Could not save member map', e)
+    notifyError(t('slack.error.saveMap'), e)
   } finally {
     busy.value = false
   }
@@ -148,15 +152,14 @@ async function saveMapping() {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Slack notifications" :ui="{ content: 'max-w-2xl' }">
+  <UModal v-model:open="open" :title="t('slack.panel.title')" :ui="{ content: 'max-w-2xl' }">
     <template #title>
-      <IntegrationBackTitle title="Slack notifications" @back="back" />
+      <IntegrationBackTitle :title="t('slack.panel.title')" @back="back" />
     </template>
     <template #body>
       <div class="space-y-5">
         <p class="text-xs text-slate-400">
-          Post board notifications (merge reviews, pipeline completions, CI failures) to Slack. The
-          connection is shared across the account; routing is per board.
+          {{ t('slack.panel.intro') }}
         </p>
 
         <!-- not connected: connect UI -->
@@ -167,11 +170,11 @@ async function saveMapping() {
             icon="i-lucide-slack"
             @click="connectViaOAuth"
           >
-            Add to Slack
+            {{ t('slack.connect.addToSlack') }}
           </UButton>
           <div class="space-y-1">
             <span class="block text-[10px] uppercase tracking-wide text-slate-500">
-              …or paste a bot token (xoxb-…)
+              {{ t('slack.connect.orPasteToken') }}
             </span>
             <div class="flex gap-2">
               <UInput
@@ -189,7 +192,7 @@ async function saveMapping() {
                 :disabled="!tokenInput.trim()"
                 @click="connectWithToken"
               >
-                Connect
+                {{ t('slack.connect.connect') }}
               </UButton>
             </div>
           </div>
@@ -202,7 +205,11 @@ async function saveMapping() {
           >
             <UIcon name="i-lucide-slack" class="text-emerald-400" />
             <span class="flex-1 text-sm text-slate-200">
-              Connected to <span class="font-semibold">{{ slack.connection?.teamName }}</span>
+              <i18n-t keypath="slack.connected.label" tag="span">
+                <template #team>
+                  <span class="font-semibold">{{ slack.connection?.teamName }}</span>
+                </template>
+              </i18n-t>
             </span>
             <UButton
               color="error"
@@ -211,13 +218,15 @@ async function saveMapping() {
               icon="i-lucide-unplug"
               @click="disconnect"
             >
-              Disconnect
+              {{ t('slack.connected.disconnect') }}
             </UButton>
           </div>
 
           <!-- routing -->
           <div class="space-y-3">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Routing</p>
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              {{ t('slack.routing.heading') }}
+            </p>
             <div
               v-for="row in ROUTABLE"
               :key="row.type"
@@ -229,7 +238,7 @@ async function saveMapping() {
                 v-model="routes[row.type]!.channel"
                 size="sm"
                 class="flex-1"
-                placeholder="#channel or channel id"
+                :placeholder="t('slack.routing.channelPlaceholder')"
                 :disabled="!routes[row.type]!.enabled"
                 list="slack-channels"
               />
@@ -240,7 +249,7 @@ async function saveMapping() {
 
             <label class="flex items-center gap-2">
               <USwitch v-model="mentionsEnabled" size="sm" />
-              <span class="text-sm text-slate-300">@-mention mapped account members</span>
+              <span class="text-sm text-slate-300">{{ t('slack.routing.mentionMembers') }}</span>
             </label>
 
             <div class="flex justify-end">
@@ -252,7 +261,7 @@ async function saveMapping() {
                 :loading="busy"
                 @click="saveRouting"
               >
-                Save routing
+                {{ t('slack.routing.save') }}
               </UButton>
             </div>
           </div>
@@ -260,21 +269,37 @@ async function saveMapping() {
           <!-- member mapping -->
           <div v-if="mentionsEnabled" class="space-y-2">
             <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Member map (user id → Slack member id)
+              {{ t('slack.members.heading') }}
             </p>
             <p class="text-[11px] leading-snug text-slate-500">
-              <span class="font-medium text-slate-400">Product</span> people are mentioned on
-              requirement-review findings; everyone else only when they created the task.
+              <i18n-t keypath="slack.members.hint" tag="span">
+                <template #product>
+                  <span class="font-medium text-slate-400">{{
+                    t('slack.members.productLabel')
+                  }}</span>
+                </template>
+              </i18n-t>
             </p>
             <div v-for="(entry, i) in mapping" :key="i" class="flex items-center gap-2">
-              <UInput v-model="entry.userId" size="sm" class="w-40" placeholder="User id (usr_…)" />
+              <UInput
+                v-model="entry.userId"
+                size="sm"
+                class="w-40"
+                :placeholder="t('slack.members.userIdPlaceholder')"
+              />
               <UInput
                 v-model="entry.slackUserId"
                 size="sm"
                 class="flex-1"
-                placeholder="Slack member id (U…)"
+                :placeholder="t('slack.members.slackIdPlaceholder')"
               />
-              <USelect v-model="entry.role" :items="ROLE_OPTIONS" size="sm" class="w-32" />
+              <USelect
+                v-model="entry.role"
+                :items="ROLE_OPTIONS"
+                value-key="value"
+                size="sm"
+                class="w-32"
+              />
               <UButton
                 color="error"
                 variant="ghost"
@@ -291,7 +316,7 @@ async function saveMapping() {
                 icon="i-lucide-plus"
                 @click="addMapping"
               >
-                Add member
+                {{ t('slack.members.add') }}
               </UButton>
               <UButton
                 color="primary"
@@ -301,7 +326,7 @@ async function saveMapping() {
                 :loading="busy"
                 @click="saveMapping"
               >
-                Save map
+                {{ t('slack.members.save') }}
               </UButton>
             </div>
           </div>
