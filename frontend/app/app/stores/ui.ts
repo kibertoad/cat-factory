@@ -411,7 +411,7 @@ export const useUiStore = defineStore('ui', () => {
   // panel opened outside the hubs never grows a dead Back control, and so switching from
   // one hub's panel to the other's clears the stale marker.
   function resetHubReturn() {
-    resetHubReturn()
+    cameFromIntegrations.value = false
     cameFromPersonal.value = false
   }
   function openIntegrations() {
