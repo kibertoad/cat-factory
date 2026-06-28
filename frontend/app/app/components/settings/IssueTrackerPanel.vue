@@ -25,6 +25,7 @@ const toast = useToast()
 // --- filing tracker + writeback (one Save, persisted on tracker settings) -----
 const trackerKind = ref<TrackerKind | null>(null)
 const jiraProjectKey = ref('')
+const linearTeamId = ref('')
 const commentOnPrOpen = ref(false)
 const resolveOnMerge = ref(false)
 const saving = ref(false)
@@ -32,6 +33,7 @@ const saving = ref(false)
 function hydrate() {
   trackerKind.value = tracker.settings.tracker
   jiraProjectKey.value = tracker.settings.jiraProjectKey ?? ''
+  linearTeamId.value = tracker.settings.linearTeamId ?? ''
   commentOnPrOpen.value = tracker.settings.writebackCommentOnPrOpen
   resolveOnMerge.value = tracker.settings.writebackResolveOnMerge
 }
@@ -48,17 +50,22 @@ watch(() => tracker.settings, hydrate)
 // Per-source live state (available = usable now; enabled = offered to the workspace).
 const github = computed(() => tasks.descriptorFor('github'))
 const jira = computed(() => tasks.descriptorFor('jira'))
+const linear = computed(() => tasks.descriptorFor('linear'))
 
 // A tracker can only file where it can authenticate: GitHub rides the installed
-// App, Jira needs a connection. Selecting an unusable tracker is allowed (it just
-// won't file until set up), but we surface the gap inline.
+// App, Jira/Linear need a connection. Selecting an unusable tracker is allowed (it
+// just won't file until set up), but we surface the gap inline.
 const githubAvailable = computed(() => github.value?.available ?? false)
 const jiraConnected = computed(() => tasks.isConnected('jira'))
+const linearConnected = computed(() => tasks.isConnected('linear'))
 
-// Jira needs a project key to file into; block Save on an empty one when picked.
-const canSave = computed(
-  () => trackerKind.value !== 'jira' || jiraProjectKey.value.trim().length > 0,
-)
+// Jira needs a project key and Linear needs a team id to file into; block Save on
+// an empty one when that tracker is picked.
+const canSave = computed(() => {
+  if (trackerKind.value === 'jira') return jiraProjectKey.value.trim().length > 0
+  if (trackerKind.value === 'linear') return linearTeamId.value.trim().length > 0
+  return true
+})
 
 async function save() {
   if (!canSave.value) return
@@ -67,6 +74,7 @@ async function save() {
     await tracker.save({
       tracker: trackerKind.value,
       jiraProjectKey: trackerKind.value === 'jira' ? jiraProjectKey.value.trim() : null,
+      linearTeamId: trackerKind.value === 'linear' ? linearTeamId.value.trim() : null,
       writebackCommentOnPrOpen: commentOnPrOpen.value,
       writebackResolveOnMerge: resolveOnMerge.value,
     })
@@ -197,6 +205,15 @@ const STATUS_UI: Record<
         >
           Jira
         </UButton>
+        <UButton
+          icon="i-lucide-square-kanban"
+          size="sm"
+          :color="trackerKind === 'linear' ? 'primary' : 'neutral'"
+          :variant="trackerKind === 'linear' ? 'solid' : 'subtle'"
+          @click="trackerKind = 'linear'"
+        >
+          Linear
+        </UButton>
       </div>
 
       <!-- Inline readiness hints for the picked tracker. -->
@@ -210,11 +227,28 @@ const STATUS_UI: Record<
         <button class="underline" @click="ui.openTaskConnect('jira')">Connect it</button> to file
         and link issues.
       </p>
+      <p
+        v-else-if="trackerKind === 'linear' && !linearConnected"
+        class="text-[11px] text-amber-400"
+      >
+        Linear isn't connected yet.
+        <button class="underline" @click="ui.openTaskConnect('linear')">Connect it</button> to file
+        and link issues.
+      </p>
 
       <UFormField v-if="trackerKind === 'jira'" label="Jira project key" class="w-48">
         <UInput v-model="jiraProjectKey" placeholder="ENG" size="sm" class="w-full" />
         <template #help>
           <span class="text-[11px] text-slate-500">New tickets are filed under this project.</span>
+        </template>
+      </UFormField>
+
+      <UFormField v-if="trackerKind === 'linear'" label="Linear team id" class="w-64">
+        <UInput v-model="linearTeamId" placeholder="team_…" size="sm" class="w-full" />
+        <template #help>
+          <span class="text-[11px] text-slate-500">
+            New issues are created under this team (Linear requires a team to create an issue).
+          </span>
         </template>
       </UFormField>
     </section>
@@ -340,6 +374,62 @@ const STATUS_UI: Record<
           :description="
             tasks.diagnostics.jira.message +
             (tasks.diagnostics.jira.detail ? ` ${tasks.diagnostics.jira.detail}` : '')
+          "
+          :ui="{ description: 'text-[11px]' }"
+        />
+      </div>
+
+      <!-- Linear source -->
+      <div class="rounded-lg border border-slate-800 bg-slate-800/40 px-3 py-2.5">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex min-w-0 items-center gap-2.5">
+            <UIcon name="i-lucide-square-kanban" class="h-5 w-5 shrink-0 text-slate-300" />
+            <div class="min-w-0">
+              <div class="text-sm font-medium text-slate-200">Linear</div>
+              <div class="text-[11px] text-slate-500">
+                {{ linearConnected ? 'Connected.' : 'Connect with a Linear personal API key.' }}
+              </div>
+            </div>
+          </div>
+          <div class="flex shrink-0 items-center gap-2">
+            <UButton
+              v-if="linearConnected"
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-stethoscope"
+              :loading="tasks.checking === 'linear'"
+              @click="checkSetup('linear')"
+            >
+              Check setup
+            </UButton>
+            <USwitch
+              v-if="linear?.available"
+              :model-value="linear?.enabled ?? false"
+              :loading="togglingSource === 'linear'"
+              @update:model-value="(v: boolean) => toggleSource('linear', v)"
+            />
+            <UButton
+              v-else
+              size="xs"
+              color="neutral"
+              variant="soft"
+              icon="i-lucide-plug"
+              @click="ui.openTaskConnect('linear')"
+            >
+              Connect
+            </UButton>
+          </div>
+        </div>
+        <UAlert
+          v-if="tasks.diagnostics.linear"
+          class="mt-2.5"
+          :color="STATUS_UI[tasks.diagnostics.linear.status].color"
+          variant="subtle"
+          :icon="STATUS_UI[tasks.diagnostics.linear.status].icon"
+          :description="
+            tasks.diagnostics.linear.message +
+            (tasks.diagnostics.linear.detail ? ` ${tasks.diagnostics.linear.detail}` : '')
           "
           :ui="{ description: 'text-[11px]' }"
         />

@@ -174,6 +174,7 @@ export type {
   ExecutionConfig,
   FragmentLibraryConfig,
   GitHubConfig,
+  GitLabConfig,
   GoogleOAuthConfig,
   LangfuseConfig,
   ObservabilityConfig,

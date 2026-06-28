@@ -3,6 +3,7 @@ import type {
   BinaryArtifactStore,
   ConsensusSessionRepository,
   ResolveRunRepoContext,
+  VcsWebhookSink,
 } from '@cat-factory/kernel'
 import type {
   ApiKeyService,
@@ -124,6 +125,13 @@ export interface ServerContainer extends Core {
    * Absent ⇒ the controller 503s and the gate is a pass-through.
    */
   binaryArtifactStore?: BinaryArtifactStore
+  /**
+   * Consumer of normalised inbound VCS webhook events (the neutral ingest route's
+   * `POST /vcs/:provider/webhooks` hands verified+mapped events here). Present only when a
+   * facade wires a sink; absent ⇒ the route still verifies + maps + acks but drops the event
+   * (projection into provider-aware persistence is the follow-up to the GitHub-keyed tables).
+   */
+  vcsWebhookSink?: VcsWebhookSink
 }
 
 /** Hono generics shared by the cross-runtime controllers (Variables only — no Bindings). */

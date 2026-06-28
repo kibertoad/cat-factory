@@ -33,6 +33,7 @@ export type {
   TestConcern,
   TestOutcome,
   TestReport,
+  TestScreenshot,
   AgentKind,
   AgentCategory,
   CustomAgentKind,

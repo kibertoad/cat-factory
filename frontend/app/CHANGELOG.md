@@ -1,5 +1,97 @@
 # @cat-factory/app
 
+## 0.44.0
+
+### Minor Changes
+
+- aeefe0a: Flesh out the tester-generated screenshot review UI — more robust, convenient, and
+  powerful, with the common review actions made pleasant.
+
+  - New reusable `ArtifactLightbox.vue` — a full-screen zoom/pan viewer over a SET of stored
+    screenshots, with keyboard nav (Esc/←/→/+/-/0), wheel + double-click zoom, pointer pan,
+    and per-image loading/error/retry states.
+  - New reusable `ImageCompare.vue` — actual-vs-reference comparator with four modes:
+    side-by-side, overlay (onion-skin opacity slider), swipe (draggable split), and a
+    client-side canvas pixel-difference (degrades to overlay if the canvas is ever tainted).
+  - New `useArtifactBlobs` composable — extracts the authed artifact-blob → object-URL
+    caching (with in-flight dedupe + status tracking) out of the visual-confirm store so both
+    review windows own and revoke their own blob cache on unmount.
+  - `VisualConfirmationWindow` reworked to use the comparator + lightbox, drag-and-drop a
+    reference straight onto a pair (view pre-filled) or pick by view via a datalist, and
+    attach per-view findings that are composed into the Fixer's findings alongside a freeform
+    box.
+  - `TestReportWindow` now renders the UI tester's captured screenshots (previously hidden):
+    thumbnails mapped under the matching scenario, an "ungrouped" gallery for the rest, and
+    click-to-zoom via the shared lightbox.
+  - New `useFocusTrap` composable — both review windows and the lightbox now move focus inside
+    on open, trap Tab, and restore focus on close (the window hands the trap off to the lightbox
+    while it's open, so nested surfaces don't fight over Tab).
+  - Comparator robustness: overlay/swipe fit the actual within the reference box
+    (`object-contain`) so a differing aspect ratio no longer stretches it; the diff render
+    guards against stale async draws; drag-dropped references are restricted to the same
+    PNG/JPEG the picker accepts; the "upload a reference for any view" picker now requires a
+    view name (an empty one can't pair and was silently orphaned); and the blob cache revokes a
+    fetch that resolves after the window unmounts instead of leaking it.
+
+  Frontend-only; no backend/contract changes (the per-view findings compose into the existing
+  `findings` string).
+
+## 0.43.0
+
+### Minor Changes
+
+- 63e2177: Add Linear support as a document source and issue tracker. Linear Docs can be
+  imported as task context (mirroring Notion/Confluence); Linear issues can be
+  imported and linked to board blocks (mirroring Jira/GitHub Issues); the `tracker`
+  pipeline step can file issues into Linear; and PR writeback comments on and
+  resolves the linked Linear issue. Authentication is a per-workspace personal API
+  key (sealed at rest), behind a shared GraphQL client shaped so OAuth can be added
+  later. Adds one nullable `linear_team_id` column to `tracker_settings` (mirrored
+  across D1 and Postgres) for the team new issues are filed under.
+
+### Patch Changes
+
+- Updated dependencies [63e2177]
+  - @cat-factory/contracts@0.41.0
+
+## 0.42.1
+
+### Patch Changes
+
+- 5b3fe44: Add `run-stop`/`run-reset` test ids to the task inspector's run-lifecycle controls so the e2e suite can drive the cancel/reset flow.
+
+## 0.42.0
+
+### Minor Changes
+
+- d1027ec: Add internationalization (i18n) foundation to the SPA via `@nuxtjs/i18n`. The Nuxt layer
+  now ships a `i18n/` config + `en` locale catalog and resolves user-facing copy through
+  vue-i18n message keys. Downstream deployments can override or add locales by dropping their
+  own `i18n/locales/*.json` (per-layer deep-merge, consumer wins).
+
+  Note for consumers: the published layer now depends on `@nuxtjs/i18n` (and pulls in
+  vue-i18n), so a downstream `extends` of `@cat-factory/app` gains that dependency weight.
+
+  Maintainability is guarded in two tiers. Typed message keys
+  (`i18n.experimental.typedOptionsAndMessages`) make a statically written unknown `t()` key a
+  `nuxt typecheck` failure. Because that cannot see a key assembled at runtime, enum→key
+  lookups are additionally guarded by an exhaustive `Record<TheEnum, string>` keyed off the
+  source-of-truth union — adding an enum value without a key fails the typecheck on the map.
+
+  To make that source of truth reachable by the SPA, the `ConflictReason` wire vocabulary
+  moves from `@cat-factory/kernel` to `@cat-factory/contracts` (kernel re-exports it, so
+  backend imports are unchanged).
+
+  First migrated surface: the pipeline-error toast (`usePipelineErrorToast`), which now
+  resolves conflict titles from `errors.conflict.*` keys via an exhaustive `ConflictReason`
+  map and shows raw backend prose only as an untranslated fallback. Most other components
+  still hold inline strings — the sweep is incremental.
+
+### Patch Changes
+
+- Updated dependencies [d1027ec]
+  - @cat-factory/contracts@0.40.1
+
 ## 0.41.0
 
 ### Minor Changes

@@ -17,6 +17,7 @@ export interface TrackerSettingsServiceDependencies {
 const EMPTY: Omit<TrackerSettings, 'updatedAt'> = {
   tracker: null,
   jiraProjectKey: null,
+  linearTeamId: null,
   writebackCommentOnPrOpen: false,
   writebackResolveOnMerge: false,
 }
@@ -44,6 +45,8 @@ export class TrackerSettingsService {
       tracker: input.tracker,
       // Only keep a Jira project key when Jira is the selected tracker.
       jiraProjectKey: input.tracker === 'jira' ? input.jiraProjectKey?.trim() || null : null,
+      // Only keep a Linear team id when Linear is the selected tracker.
+      linearTeamId: input.tracker === 'linear' ? input.linearTeamId?.trim() || null : null,
       // Writeback applies to a task's linked tracker issue(s) of any source, so it is
       // kept regardless of the filing tracker selection above. Default off.
       writebackCommentOnPrOpen: input.writebackCommentOnPrOpen ?? false,

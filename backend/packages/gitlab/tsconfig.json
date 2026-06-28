@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    // Web-standard globals (fetch, Response, URLSearchParams, atob, TextDecoder) —
+    // runtime-neutral across workerd + Node, like @cat-factory/server.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["src/**/*.ts"]
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "tracker_settings" ADD COLUMN "linear_team_id" text;

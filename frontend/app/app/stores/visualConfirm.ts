@@ -6,9 +6,11 @@ import { useWorkspaceStore } from '~/stores/workspace'
 /**
  * Visual-confirmation gate actions. The gate's live state rides on its execution step
  * (`step.visualConfirm`) and arrives via the execution stream, so this store holds NO gate
- * state — it only drives the actions (approve / request a fix / recapture), uploads reference
- * design images, and resolves stored artifacts into object URLs for the gallery. A per-block
- * `busy` flag lets the window disable its controls while an action is in flight.
+ * state — it only drives the actions (approve / request a fix / recapture) and uploads
+ * reference design images. A per-block `busy` flag lets the window disable its controls
+ * while an action is in flight. (Resolving stored artifacts into object URLs for the gallery
+ * lives in the per-component `useArtifactBlobs` composable, so each window owns + revokes its
+ * own blob cache on unmount.)
  */
 export const useVisualConfirmStore = defineStore('visualConfirm', () => {
   const api = useApi()
@@ -16,8 +18,6 @@ export const useVisualConfirmStore = defineStore('visualConfirm', () => {
   const execution = useExecutionStore()
 
   const busy = ref<Set<string>>(new Set())
-  /** Cache of artifactId → object URL, so the gallery doesn't re-fetch the same blob. */
-  const blobUrls = ref<Map<string, string>>(new Map())
 
   function isBusy(blockId: string): boolean {
     return busy.value.has(blockId)
@@ -59,34 +59,5 @@ export const useVisualConfirmStore = defineStore('visualConfirm', () => {
     return run(blockId, () => api.uploadReferenceArtifact(ws.requireId(), blockId, file, view))
   }
 
-  /** Resolve a stored artifact to an object URL (cached). Returns null on failure. */
-  async function blobUrl(artifactId: string): Promise<string | null> {
-    const cached = blobUrls.value.get(artifactId)
-    if (cached) return cached
-    try {
-      const url = await api.fetchArtifactBlobUrl(ws.requireId(), artifactId)
-      blobUrls.value.set(artifactId, url)
-      return url
-    } catch {
-      return null
-    }
-  }
-
-  /**
-   * Release every cached object URL and clear the cache. `URL.createObjectURL` holds the
-   * blob in memory until explicitly revoked, so the gate window calls this on unmount to
-   * avoid leaking the (potentially large) screenshot bytes for the session's lifetime.
-   */
-  function revokeBlobs(): void {
-    for (const url of blobUrls.value.values()) {
-      try {
-        URL.revokeObjectURL(url)
-      } catch {
-        // Ignore — a URL already revoked / unsupported environment.
-      }
-    }
-    blobUrls.value = new Map()
-  }
-
-  return { isBusy, approve, requestFix, recapture, uploadReference, blobUrl, revokeBlobs }
+  return { isBusy, approve, requestFix, recapture, uploadReference }
 })

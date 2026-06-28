@@ -920,6 +920,49 @@ repository that maps a column differently or an engine path only one facade wire
 a test instead of shipping. `runtimes/node/test/durable-execution.spec.ts` additionally
 drives a run to completion through the real pg-boss runner.
 
+## End-to-end (assembled-product) coverage
+
+Where the conformance suite asserts backend behaviour port-by-port, the **Playwright e2e
+suite** (`backend/internal/e2e`, `@cat-factory/e2e`, private) covers the **assembled
+product**: a real Chromium drives the real SPA (the `@cat-factory/app` layer via the
+`deploy/frontend` consumer), which talks to a **real Node backend** — real Postgres
+(Drizzle), real pg-boss durable execution, and the real WebSocket push transport. Only the
+**external** deps are faked, so it's deterministic and needs no secrets/Docker/network:
+LLMs + per-run containers → the canonical `FakeAgentExecutor`/`AsyncFakeAgentExecutor`
+(reused from `@cat-factory/conformance`), repo bootstrap → `FakeRepoBootstrapper`, and
+GitHub App / email / Slack / Datadog left **off** (all opt-in, so gates/providers pass
+through). The backend wiring lives in `src/testServer.ts` (the stock `buildContainer` seam
+with those fakes injected); the full picture is in [`backend/internal/e2e/README.md`](./backend/internal/e2e/README.md).
+
+- **What e2e is FOR vs conformance:** assert on what only the assembled product can show —
+  the **live, WebSocket-pushed UI round-trip** (start over REST → the board reacts with no
+  reload). A pure backend side-effect (a real PR merge, a column mapping) belongs in the
+  conformance/integration suites, NOT here. The e2e backend has GitHub off, so anything
+  needing a real outbound call (the `FetchGitHubClient`, an inline LLM) must be mocked at
+  the backend's **outbound boundary** (MSW / a `buildNodeContainer` port seam), never in
+  the browser — the SPA only ever talks to this one backend.
+- **Spec shape (mandatory):** **seed/trigger over REST, then assert only on LIVE pushed UI
+  updates** — no reloads, no fixed sleeps, no fragile canvas drag/zoom; only web-first
+  assertions (`toBeVisible`/`expect.poll`) on the named timeouts in `tests/helpers.ts`.
+  Shared setup is the `seededBoard` fixture (seed → pin → open) plus the **auto**
+  `pageErrors` fixture that fails any test on an uncaught SPA exception. Each spec **seeds
+  its own workspace** (`workers: 1`, serial), so concurrent workspaces never collide.
+- **Selectors are `data-testid`, always.** Every assertion targets a stable test id, never
+  text/CSS/DOM-shape. Covering a new flow whose affordance has no test id means **adding
+  the `data-testid`** to that component first (a one-line, behaviour-neutral frontend
+  change — e.g. `run-stop`/`run-reset` on the inspector's run controls) and a patch
+  changeset for `@cat-factory/app`, then writing the spec against it.
+- **Adding a spec:** drop a `*.spec.ts` under `tests/`, import `test`/`expect` from
+  `./fixtures` (NOT `@playwright/test`), reuse the `helpers.ts` REST helpers + timeouts,
+  and add a row to the README's Specs table. Deterministic variations are env knobs on
+  `testServer.ts` (`E2E_DECISION_ON_STEPS`, `E2E_CONFIDENCE`, `E2E_ASYNC_KINDS` /
+  `E2E_DISPATCH_THROW_KINDS`); a spec needing a different backend env (e.g. a merge-review
+  flow at low `E2E_CONFIDENCE`) wants its **own** `webServer` in `playwright.config.ts`.
+- **CI:** runs in its own non-blocking `Test e2e` job — NOT part of the unit `test:run`
+  lane and NOT wired into the aggregated `Test` gate, so a browser/boot flake can't block
+  an otherwise-green PR. Promote it into `test-gate.needs` only once it has earned trust
+  (see the README's promotion checklist).
+
 ## Conventions
 
 - Hexagonal layering: controllers (`@cat-factory/server`) → services
@@ -927,6 +970,42 @@ drives a run to completion through the real pg-boss runner.
   facade and implement the ports + the `gateways` seam, wired in that facade's
   `container.ts` via constructor injection of a single `dependencies` object. Opt-in
   integrations (GitHub / environments / bootstrap) wire only when configured.
+- **Frontend i18n (`@cat-factory/app`):** user-facing copy is translatable via
+  **`@nuxtjs/i18n`** (vue-i18n under the hood). The layer is published and `extends`ed, so
+  the module's **per-layer locale deep-merge** is the override seam: messages live in
+  `frontend/app/i18n/locales/<locale>.json` (NOT `app/locales/`), and a downstream
+  deployment overrides/adds keys by dropping its own `i18n/locales/*.json` (consumer wins).
+  Config: `frontend/app/i18n/i18n.config.ts` (fallback + number/datetime formats) referenced
+  from `nuxt.config.ts` as the **bare** filename `vueI18n: 'i18n.config.ts'` (the module
+  resolves it per-layer — do NOT `layerDir`-anchor it like the css block). Adding the `i18n/`
+  dir to `package.json` `files` is **release-blocking** (else locales don't ship). Conventions:
+  resolve copy with `t('feature.area.key')`; **leaf keys mirror the enum/code value verbatim**
+  (`errors.conflict.title.<reason>`, `catalog.status.<status>`); one namespace per feature; no
+  cross-key concatenation (full sentences are one key with `{named}` placeholders); plurals use
+  the vue-i18n pipe form.
+  **Backend error strings** are translated by mapping the machine-readable
+  `error.details.reason`/`code` to a frontend key (the `usePipelineErrorToast.ts` pattern) —
+  raw backend `message` is shown only as an untranslated last-resort fallback; if a server
+  message must be localizable the backend emits a code and the frontend maps it. The wire
+  vocabulary that drives such a mapping lives in `@cat-factory/contracts` (e.g. `ConflictReason`),
+  so the SPA imports the SAME source of truth the backend throws against.
+  **Maintainability guardrail:** the repo lints with oxlint only, so the ESLint
+  `@intlify/.../no-raw-text` rule is unavailable. The drift guard has TWO tiers, because they
+  cover different things:
+  1. **Typed message keys** (`i18n.experimental.typedOptionsAndMessages`) make a **statically
+     written** unknown `t('literal.key')` a `nuxt typecheck` failure (a CI gate). This does NOT
+     cover a key assembled at runtime — a `t(\`errors.conflict.title.${reason}\`)`template or a
+variable key is typed as`string`, so the compiler can't check it.
+  2. For those **dynamic enum→key lookups**, guard with an **exhaustive
+     `Record<TheEnum, string>`** keyed off the source-of-truth union (the
+     `CONFLICT_TITLE_KEYS` map in `usePipelineErrorToast.ts`, keyed off the contracts
+     `ConflictReason`): adding an enum value without a key fails the typecheck on the map, and a
+     runtime `te()`-guard falls back rather than leaking a raw key if a locale omits one. Never
+     rely on tier 1 alone for a reason/status-keyed lookup.
+
+  A `vue-i18n-extract` missing/unused key CI check is the planned secondary guard. (Migration is
+  incremental — `usePipelineErrorToast` is the pilot; most components still hold inline strings.)
+
 - **Dedicated result-view seam (frontend):** an agent step opens the generic prose panel
   (`AgentStepDetail.vue`) UNLESS its archetype declares a `resultView` id (`app/utils/catalog.ts`).
   The `ui` store's step dispatch (`dispatchStepView`, used by both `openStepDetail` and
