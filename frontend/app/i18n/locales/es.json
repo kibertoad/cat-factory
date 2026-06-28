@@ -1,0 +1,62 @@
+{
+  "common": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "retry": "Reintentar",
+    "actionFailed": "La acción falló",
+    "close": "Cerrar"
+  },
+  "nav": {
+    "menu": "Menú de navegación",
+    "openMenu": "Abrir menú",
+    "closeMenu": "Cerrar menú",
+    "commandBar": "Buscar o ejecutar un comando…",
+    "create": "Crear",
+    "buildPipeline": "Crear una canalización",
+    "repositories": "Repositorios",
+    "addFromRepo": "Añadir desde un repositorio existente",
+    "bootstrapRepo": "Inicializar repositorio",
+    "integrations": "Integraciones",
+    "sandbox": "Entorno de pruebas",
+    "kaizen": "Kaizen",
+    "workspaceContext": "Contexto del espacio de trabajo",
+    "contextFragments": "Fragmentos de contexto",
+    "configuration": "Configuración",
+    "workspaceSettings": "Ajustes del espacio de trabajo",
+    "modelConfiguration": "Configuración del modelo",
+    "accountSettings": "Ajustes de la cuenta"
+  },
+  "board": {
+    "toolbar": {
+      "addService": "Añadir servicio",
+      "decisionWord": "decisión | decisiones"
+    }
+  },
+  "errors": {
+    "action": {
+      "retryFailed": "El reintento falló",
+      "startFailed": "No se pudo iniciar",
+      "mergeFailed": "No se pudo fusionar",
+      "restartFailed": "No se pudo reiniciar"
+    },
+    "conflict": {
+      "title": {
+        "dependencies_unmet": "Bloqueado por dependencias",
+        "task_limit_reached": "Límite de concurrencia alcanzado",
+        "tester_infra_unsupported": "Infraestructura de pruebas no configurada",
+        "agent_backend_unconfigured": "Backend del agente no configurado",
+        "run_not_retryable": "La ejecución no se puede reintentar",
+        "no_pr_to_merge": "No hay PR para fusionar",
+        "github_not_connected": "GitHub no conectado",
+        "bootstrap_not_retryable": "La inicialización no se puede reintentar",
+        "bootstrap_reference_missing": "La arquitectura de referencia ha desaparecido"
+      },
+      "fallbackMessage": "Esta acción entra en conflicto con el estado actual.",
+      "providersUnconfigured": {
+        "title": "No hay proveedor de IA para este modelo",
+        "body": "No hay ningún proveedor configurado para {models}. Añade una clave de proveedor, conecta una suscripción o activa Cloudflare AI para ejecutarlo.",
+        "action": "Configurar IA"
+      }
+    }
+  }
+}

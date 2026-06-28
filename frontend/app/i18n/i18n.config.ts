@@ -19,9 +19,45 @@ export default defineI18nConfig(() => ({
       currency: { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol' },
       percent: { style: 'percent', maximumFractionDigits: 1 },
     },
+    es: {
+      decimal: { style: 'decimal' },
+      currency: { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol' },
+      percent: { style: 'percent', maximumFractionDigits: 1 },
+    },
+    pl: {
+      decimal: { style: 'decimal' },
+      currency: { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol' },
+      percent: { style: 'percent', maximumFractionDigits: 1 },
+    },
+    uk: {
+      decimal: { style: 'decimal' },
+      currency: { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol' },
+      percent: { style: 'percent', maximumFractionDigits: 1 },
+    },
+    fr: {
+      decimal: { style: 'decimal' },
+      currency: { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol' },
+      percent: { style: 'percent', maximumFractionDigits: 1 },
+    },
   },
   datetimeFormats: {
     en: {
+      short: { dateStyle: 'medium' },
+      long: { dateStyle: 'long', timeStyle: 'short' },
+    },
+    es: {
+      short: { dateStyle: 'medium' },
+      long: { dateStyle: 'long', timeStyle: 'short' },
+    },
+    pl: {
+      short: { dateStyle: 'medium' },
+      long: { dateStyle: 'long', timeStyle: 'short' },
+    },
+    uk: {
+      short: { dateStyle: 'medium' },
+      long: { dateStyle: 'long', timeStyle: 'short' },
+    },
+    fr: {
       short: { dateStyle: 'medium' },
       long: { dateStyle: 'long', timeStyle: 'short' },
     },

@@ -1,0 +1,62 @@
+{
+  "common": {
+    "save": "Zapisz",
+    "cancel": "Anuluj",
+    "retry": "Ponów",
+    "actionFailed": "Akcja nie powiodła się",
+    "close": "Zamknij"
+  },
+  "nav": {
+    "menu": "Menu nawigacji",
+    "openMenu": "Otwórz menu",
+    "closeMenu": "Zamknij menu",
+    "commandBar": "Wyszukaj lub uruchom polecenie…",
+    "create": "Utwórz",
+    "buildPipeline": "Zbuduj potok",
+    "repositories": "Repozytoria",
+    "addFromRepo": "Dodaj z istniejącego repozytorium",
+    "bootstrapRepo": "Zainicjuj repozytorium",
+    "integrations": "Integracje",
+    "sandbox": "Piaskownica",
+    "kaizen": "Kaizen",
+    "workspaceContext": "Kontekst obszaru roboczego",
+    "contextFragments": "Fragmenty kontekstu",
+    "configuration": "Konfiguracja",
+    "workspaceSettings": "Ustawienia obszaru roboczego",
+    "modelConfiguration": "Konfiguracja modelu",
+    "accountSettings": "Ustawienia konta"
+  },
+  "board": {
+    "toolbar": {
+      "addService": "Dodaj usługę",
+      "decisionWord": "decyzja | decyzje | decyzji"
+    }
+  },
+  "errors": {
+    "action": {
+      "retryFailed": "Ponowienie nie powiodło się",
+      "startFailed": "Nie udało się uruchomić",
+      "mergeFailed": "Nie udało się scalić",
+      "restartFailed": "Nie udało się ponownie uruchomić"
+    },
+    "conflict": {
+      "title": {
+        "dependencies_unmet": "Zablokowane przez zależności",
+        "task_limit_reached": "Osiągnięto limit współbieżności",
+        "tester_infra_unsupported": "Infrastruktura testowa nie jest skonfigurowana",
+        "agent_backend_unconfigured": "Backend agenta nie jest skonfigurowany",
+        "run_not_retryable": "Uruchomienia nie można ponowić",
+        "no_pr_to_merge": "Brak PR do scalenia",
+        "github_not_connected": "GitHub nie jest połączony",
+        "bootstrap_not_retryable": "Inicjalizacji nie można ponowić",
+        "bootstrap_reference_missing": "Architektura referencyjna zniknęła"
+      },
+      "fallbackMessage": "Ta akcja jest sprzeczna z bieżącym stanem.",
+      "providersUnconfigured": {
+        "title": "Brak dostawcy AI dla tego modelu",
+        "body": "Dla {models} nie skonfigurowano żadnego dostawcy. Dodaj klucz dostawcy, połącz subskrypcję lub włącz Cloudflare AI, aby go uruchomić.",
+        "action": "Skonfiguruj AI"
+      }
+    }
+  }
+}

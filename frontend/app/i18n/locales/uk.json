@@ -1,0 +1,62 @@
+{
+  "common": {
+    "save": "Зберегти",
+    "cancel": "Скасувати",
+    "retry": "Повторити",
+    "actionFailed": "Не вдалося виконати дію",
+    "close": "Закрити"
+  },
+  "nav": {
+    "menu": "Меню навігації",
+    "openMenu": "Відкрити меню",
+    "closeMenu": "Закрити меню",
+    "commandBar": "Знайти або виконати команду…",
+    "create": "Створити",
+    "buildPipeline": "Створити конвеєр",
+    "repositories": "Репозиторії",
+    "addFromRepo": "Додати з наявного репозиторію",
+    "bootstrapRepo": "Ініціалізувати репозиторій",
+    "integrations": "Інтеграції",
+    "sandbox": "Пісочниця",
+    "kaizen": "Kaizen",
+    "workspaceContext": "Контекст робочого простору",
+    "contextFragments": "Фрагменти контексту",
+    "configuration": "Конфігурація",
+    "workspaceSettings": "Налаштування робочого простору",
+    "modelConfiguration": "Конфігурація моделі",
+    "accountSettings": "Налаштування облікового запису"
+  },
+  "board": {
+    "toolbar": {
+      "addService": "Додати сервіс",
+      "decisionWord": "рішення | рішення | рішень"
+    }
+  },
+  "errors": {
+    "action": {
+      "retryFailed": "Не вдалося повторити",
+      "startFailed": "Не вдалося запустити",
+      "mergeFailed": "Не вдалося злити",
+      "restartFailed": "Не вдалося перезапустити"
+    },
+    "conflict": {
+      "title": {
+        "dependencies_unmet": "Заблоковано залежностями",
+        "task_limit_reached": "Досягнуто ліміту одночасності",
+        "tester_infra_unsupported": "Тестову інфраструктуру не налаштовано",
+        "agent_backend_unconfigured": "Бекенд агента не налаштовано",
+        "run_not_retryable": "Запуск неможливо повторити",
+        "no_pr_to_merge": "Немає PR для злиття",
+        "github_not_connected": "GitHub не підключено",
+        "bootstrap_not_retryable": "Ініціалізацію неможливо повторити",
+        "bootstrap_reference_missing": "Еталонна архітектура зникла"
+      },
+      "fallbackMessage": "Ця дія суперечить поточному стану.",
+      "providersUnconfigured": {
+        "title": "Немає постачальника ШІ для цієї моделі",
+        "body": "Для {models} не налаштовано жодного постачальника. Додайте ключ постачальника, підключіть підписку або увімкніть Cloudflare AI, щоб запустити її.",
+        "action": "Налаштувати ШІ"
+      }
+    }
+  }
+}

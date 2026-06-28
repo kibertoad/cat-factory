@@ -46,7 +46,13 @@ export default defineNuxtConfig({
     // Pure SPA (`ssr: false`): a single in-app locale, no URL-prefix routing.
     strategy: 'no_prefix',
     defaultLocale: 'en',
-    locales: [{ code: 'en', language: 'en-US', file: 'en.json', name: 'English' }],
+    locales: [
+      { code: 'en', language: 'en-US', file: 'en.json', name: 'English' },
+      { code: 'es', language: 'es-ES', file: 'es.json', name: 'Español' },
+      { code: 'pl', language: 'pl-PL', file: 'pl.json', name: 'Polski' },
+      { code: 'uk', language: 'uk-UA', file: 'uk.json', name: 'Українська' },
+      { code: 'fr', language: 'fr-FR', file: 'fr.json', name: 'Français' },
+    ],
     vueI18n: 'i18n.config.ts',
     experimental: {
       // Generate types from the `en` messages so an unknown `$t`/`t` key is a `nuxt
