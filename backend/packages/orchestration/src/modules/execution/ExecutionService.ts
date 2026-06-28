@@ -1440,7 +1440,7 @@ export class ExecutionService {
 
     // The fixed run-lifecycle preamble is done; hand the per-kind work to the
     // engine-internal StepHandler registry (the first handler whose `canHandle` claims
-    // this step). See {@link dispatchStepHandler} / {@link runStepBody}.
+    // this step). See {@link dispatchStepHandler} / {@link handleAgentStep}.
     return this.dispatchStepHandler({
       workspaceId,
       instance,
@@ -1452,19 +1452,16 @@ export class ExecutionService {
   }
 
   /**
-   * The per-step-kind body run by the StepHandler registry once {@link stepInstance}'s
-   * preamble has completed. Phase 0 of the ExecutionService split: a single fallthrough
-   * handler delegates the ENTIRE body here unchanged (so dispatch is wired with zero
-   * behaviour change); later phases lift each branch below into its own handler and shrink
-   * this method until only the generic container/inline-agent tail remains.
+   * The generic container/inline-agent step — the lowest-priority StepHandler, claiming
+   * every step no more-specific handler did (coder, architect, spec-writer, merger,
+   * task-estimator, the container-backed companions, …). Builds the agent context, runs the
+   * kind's pre-ops, then either dispatches an async container job and parks (the durable
+   * driver polls between sleeps) or runs the inline LLM call and records the result. This is
+   * what the dispatch chain falls through to; all the deterministic / gate / inline-review
+   * kinds are claimed earlier by their own handlers (see {@link buildStepHandlerRegistry}).
    */
-  private async runStepBody(ctx: StepHandlerContext): Promise<AdvanceResult> {
+  private async handleAgentStep(ctx: StepHandlerContext): Promise<AdvanceResult> {
     const { workspaceId, instance, step, block, isFinalStep, options } = ctx
-
-    // (The deployer / tracker / review + brainstorm gates / human-test / visual-confirm /
-    // polling gates / inline companions are each handled by their own StepHandler — see
-    // {@link buildStepHandlerRegistry}. What remains here is the generic container/inline
-    // agent dispatch, the lowest-priority fallthrough.)
 
     // Async (container) steps don't block: dispatch the job and park. The durable
     // driver polls `pollAgentJob` between sleeps so the run can span far longer
@@ -2903,13 +2900,13 @@ export class ExecutionService {
             options,
           ),
       },
-      // The generic container/inline-agent fallthrough — claims every step no more-specific
-      // handler did (today's `runStepBody` tail). Highest order so it always runs last.
+      // The generic container/inline-agent step — claims every step no more-specific handler
+      // did. Highest order so it always runs last. See {@link handleAgentStep}.
       {
-        kind: '*',
+        kind: 'agent',
         order: FALLTHROUGH_STEP_HANDLER_ORDER,
         canHandle: () => true,
-        handle: (ctx) => this.runStepBody(ctx),
+        handle: (ctx) => this.handleAgentStep(ctx),
       },
     ]
     return handlers.sort((a, b) => a.order - b.order)

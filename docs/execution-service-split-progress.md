@@ -30,7 +30,7 @@ conformance suite (both Cloudflare D1 and Node Postgres).
 | 2  | Post-completion resolvers (blueprint/spec/estimate)     | ✅     |
 | 3  | Verdict interceptors (tester/companion short-circuits)  | ✅     |
 | 4  | Decision/polling/companion gate step handlers           | ✅     |
-| 5  | Container-agent default handler + cleanup               | ⬜     |
+| 5  | Container-agent default handler + cleanup               | ✅     |
 
 ## Phase 0 — scaffolding
 
@@ -120,6 +120,43 @@ interceptor). `runStepBody` now contains only the generic container/inline-agent
 
 - **Phase 4 done.** Green on both runtimes: Cloudflare conformance 126 ✓; Node conformance
   (all six specs) + durable-execution 127 ✓; orchestration unit 161 ✓.
+
+## Phase 5 — container-agent default handler + cleanup
+
+Renamed the temporary `runStepBody` fallthrough to `handleAgentStep` (the legitimate generic
+container/inline-agent handler, `kind: 'agent'`, lowest priority) now that all the specific kinds
+are claimed by their own handlers. The `stepInstance` per-kind body is gone: the method is now an
+**81-line run-lifecycle preamble** (existence → spend → paused-resume → re-entrancy → start-step →
+block load → estimate gate) + a single `dispatchStepHandler` call.
+
+**Left as-is (deliberately):** the preamble's re-entrancy guards and `assertNotIterativeGate` (both
+keyed on `agentKind` but legitimate — the former is the lifecycle spine, the latter a correctness
+guard in the approval-resolution methods with distinct user-facing messages per kind; re-homing it
+onto handler flags would obscure those messages and add indirection).
+
+## Outcome
+
+What the split achieved (primary goals from the candidate doc):
+
+- The **load-bearing-but-implicit ordering** of the old ~290-line `stepInstance` `if`/early-return
+  chain is now an explicit `order` field on each handler — adding a kind can't silently reorder.
+- **Dispatch-time `step.agentKind ===` checks** are localized into each handler's `canHandle`
+  (and the post-completion/verdict logic into the resolver `phase` / interceptor registries),
+  instead of scattered across two ~260–290-line methods.
+- Each handler / resolver / interceptor is independently readable and testable.
+
+What it intentionally did NOT do: handlers/resolvers/interceptors are built **inline** in the engine
+(closing over `this`, mirroring the existing `buildStepResolverRegistry` merger pattern), NOT
+extracted into a `handlers/` folder behind a large `StepHandlerEngine` interface. That extraction
+would shrink the file's line count further but only by introducing a wide, leaky engine seam
+inconsistent with the codebase's inline-built-in convention — net-negative for the engine-internal
+design we chose. So `ExecutionService.ts` is **restructured, not dramatically shortened** (5,148 →
+5,339 lines; the registry scaffolding + per-handler doc comments offset the removed `if`-branches).
+The implicit-ordering hazard and scattered dispatch checks — the actual debt — are gone.
+
+- **Phase 5 done.** Final verification green on both runtimes: Cloudflare conformance 126 ✓; full
+  Node suite 191 ✓ (all conformance specs + durable-execution + local mode); full orchestration
+  vitest 296 ✓.
 
 ## Notes / running log
 
