@@ -1930,7 +1930,7 @@
     "routing": {
       "heading": "Routing",
       "channelPlaceholder": "#kanal lub id kanalu",
-      "mentionMembers": "Wzmiankuj (@) przypisanych czlonkow konta",
+      "mentionMembers": "Wzmiankuj ({'@'}) przypisanych czlonkow konta",
       "save": "Zapisz routing"
     },
     "members": {

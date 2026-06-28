@@ -1930,7 +1930,7 @@
     "routing": {
       "heading": "Routage",
       "channelPlaceholder": "#canal ou id de canal",
-      "mentionMembers": "Mentionner (@) les membres mappes du compte",
+      "mentionMembers": "Mentionner ({'@'}) les membres mappes du compte",
       "save": "Enregistrer le routage"
     },
     "members": {

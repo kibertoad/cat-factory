@@ -1930,7 +1930,7 @@
     "routing": {
       "heading": "Enrutamiento",
       "channelPlaceholder": "#canal o id de canal",
-      "mentionMembers": "Mencionar (@) a los miembros asignados de la cuenta",
+      "mentionMembers": "Mencionar ({'@'}) a los miembros asignados de la cuenta",
       "save": "Guardar enrutamiento"
     },
     "members": {

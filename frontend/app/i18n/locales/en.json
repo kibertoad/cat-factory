@@ -1981,7 +1981,7 @@
     "routing": {
       "heading": "Routing",
       "channelPlaceholder": "#channel or channel id",
-      "mentionMembers": "@-mention mapped account members",
+      "mentionMembers": "{'@'}-mention mapped account members",
       "save": "Save routing"
     },
     "members": {
