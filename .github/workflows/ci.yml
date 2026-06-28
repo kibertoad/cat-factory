@@ -376,11 +376,21 @@ jobs:
   # browser/boot flake here can't block an otherwise-green PR. It still runs on every PR
   # and uploads its report; treat red runs as a signal to investigate, not a merge stop.
   # Promote it into `test-gate.needs` once it has proven stable.
+  #
+  # SHARDED across 2 jobs via Playwright's --shard (deterministic file partition), mirroring
+  # the `test-worker` vitest sharding above. Each shard is its own job, so the Postgres
+  # service below is instantiated per shard — every shard gets a fresh, private datastore,
+  # which keeps the serial `workers: 1` config valid within a shard. Each shard emits a
+  # `blob` report; the `test-e2e-report` job merges them into one HTML report.
   test-e2e:
-    name: Test e2e (playwright)
+    name: Test e2e (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     services:
       postgres:
         image: postgres:18
@@ -447,19 +457,92 @@ jobs:
       - name: Install Playwright Chromium
         run: pnpm --filter @cat-factory/e2e exec playwright install --with-deps chromium
 
-      - name: Run e2e suite
-        run: pnpm --filter @cat-factory/e2e run test:e2e
+      - name: Run e2e shard
+        run: pnpm --filter @cat-factory/e2e exec playwright test --shard=${{ matrix.shard }}/2
 
-      - name: Upload Playwright report
+      # Each shard uploads its `blob` report (mergeable) so `test-e2e-report` can recombine
+      # them into a single HTML report. `test-results/` carries the per-failure trace + video
+      # (retain-on-failure) that actually make a flake diagnosable.
+      - name: Upload blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: e2e-blob-report-${{ matrix.shard }}
+          path: backend/internal/e2e/blob-report
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload shard test-results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: e2e-test-results-${{ matrix.shard }}
+          path: backend/internal/e2e/test-results
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # Merge the per-shard Playwright `blob` reports into one HTML report. Runs even when a
+  # shard failed (`!cancelled()`) — that's exactly when the combined report is wanted.
+  # Like `test-e2e`, this is NON-BLOCKING (not in `test-gate.needs`).
+  test-e2e-report:
+    name: Test e2e (merged report)
+    needs: [test-e2e]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Cache node_modules
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            node_modules
+            backend/packages/*/node_modules
+            backend/runtimes/*/node_modules
+            backend/internal/*/node_modules
+            frontend/app/node_modules
+            frontend/app/.nuxt
+            deploy/backend/node_modules
+            deploy/frontend/node_modules
+            deploy/frontend/.nuxt
+            deploy/node/node_modules
+            deploy/local/node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Gather every shard's blob report into one directory (merge-multiple flattens the
+      # per-shard artifacts) for `playwright merge-reports`.
+      - name: Download blob reports
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: e2e-blob-report-*
+          path: backend/internal/e2e/all-blob-reports
+          merge-multiple: true
+
+      - name: Merge into HTML report
+        run: pnpm --filter @cat-factory/e2e run test:e2e:merge
+
+      - name: Upload merged Playwright report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: playwright-report
-          # Include `test-results/` too: that's where the per-failure trace + video
-          # (retain-on-failure) land, which are what actually make a flake diagnosable.
-          path: |
-            backend/internal/e2e/playwright-report
-            backend/internal/e2e/test-results
+          path: backend/internal/e2e/playwright-report
           retention-days: 7
           if-no-files-found: ignore
 

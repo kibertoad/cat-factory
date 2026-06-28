@@ -18,7 +18,10 @@ export default defineConfig({
   workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? [['html', { open: 'never' }], ['list']] : 'list',
+  // In CI the suite is sharded across jobs (playwright test --shard=i/N), so each shard
+  // emits a `blob` report; a follow-on `test-e2e-report` job merges them into one HTML
+  // report (`playwright merge-reports`). Locally we just want the live `list` output.
+  reporter: process.env.CI ? [['blob'], ['list']] : 'list',
   // A live run advances through several durable pg-boss steps; give web-first assertions
   // headroom over the default 5s without resorting to fixed sleeps.
   expect: { timeout: 15_000 },
