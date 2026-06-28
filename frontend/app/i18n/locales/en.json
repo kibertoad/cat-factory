@@ -13,7 +13,10 @@
     "cancel": "Cancel",
     "retry": "Retry",
     "actionFailed": "Action failed",
-    "close": "Close"
+    "close": "Close",
+    "@close": {
+      "description": "Verb meaning dismiss / shut (a panel, drawer, dialog), NOT the adjective 'near'. Used as an aria-label on close affordances - translate as the imperative verb."
+    }
   },
   "nav": {
     "menu": "Navigation menu",
@@ -27,18 +30,27 @@
     "bootstrapRepo": "Bootstrap repo",
     "integrations": "Integrations",
     "sandbox": "Sandbox",
+    "@sandbox": {
+      "description": "Named feature area (a screen for trying prompt versions / models against graded fixtures). Fine to localize descriptively per locale - unlike nav.kaizen, this one is NOT kept verbatim."
+    },
     "kaizen": "Kaizen",
+    "@kaizen": {
+      "description": "Proper-noun product feature name (grading history + verified prompt/agent/model combos). Do NOT translate - keep 'Kaizen' verbatim in every locale."
+    },
     "workspaceContext": "Workspace context",
     "contextFragments": "Context fragments",
     "configuration": "Configuration",
     "workspaceSettings": "Workspace settings",
-    "modelConfiguration": "Model Configuration",
+    "modelConfiguration": "Model configuration",
     "accountSettings": "Account settings"
   },
   "board": {
     "toolbar": {
       "addService": "Add service",
-      "decisionWord": "decision | decisions"
+      "decisionWord": "decision | decisions",
+      "@decisionWord": {
+        "description": "Count-based plural noun rendered AFTER a number, e.g. '3 decisions' (pending human decisions in the run queue). Resolved via t(key, count); count is always 1 or more. Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - and rely on the custom pluralRules wired in i18n.config.ts)."
+      }
     }
   },
   "errors": {
@@ -53,8 +65,14 @@
         "dependencies_unmet": "Blocked by dependencies",
         "task_limit_reached": "Concurrency limit reached",
         "tester_infra_unsupported": "Test infrastructure not configured",
+        "@tester_infra_unsupported": {
+          "description": "Conflict-toast title for the Tester step's start gate. UMBRELLA over two cases not visible from the string: (a) the service has no test infra configured, AND (b) this deployment's container runtime can't run local test infra (limited mode). The detailed description carries the specific cause; keep the title broad ('not configured / unavailable')."
+        },
         "agent_backend_unconfigured": "Agent backend not configured",
         "run_not_retryable": "Run can’t be retried",
+        "@run_not_retryable": {
+          "description": "'Run' is a NOUN here = a pipeline execution (only a failed run can be retried). Translate it as the execution noun, not the verb 'to run'."
+        },
         "no_pr_to_merge": "No PR to merge",
         "github_not_connected": "GitHub not connected",
         "bootstrap_not_retryable": "Bootstrap can’t be retried",
@@ -64,6 +82,9 @@
       "providersUnconfigured": {
         "title": "No AI provider for this model",
         "body": "No provider is configured for {models}. Add a provider key, connect a subscription, or enable Cloudflare AI to run it.",
+        "@body": {
+          "description": "Keep the named placeholder for the model list intact (a comma-separated list of model ids is injected at runtime)."
+        },
         "action": "Configure AI"
       }
     }
