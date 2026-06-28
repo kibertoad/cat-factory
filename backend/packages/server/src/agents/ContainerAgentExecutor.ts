@@ -33,6 +33,7 @@ import {
   composeBlockSystemPrompt,
   FINAL_ANSWER_IN_REPLY,
   FOLLOW_UP_GUIDANCE,
+  isContainerBackedCompanion,
   isProxyableProvider,
   isReadOnlyAgentKind,
   registeredAgentStep,
@@ -1121,6 +1122,22 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // The default coder dispatches the generic coding agent at the end of this method.
     const migrated = this.buildMigratedBuiltInBody(context, parts, roleSystemPrompt)
     if (migrated) return migrated
+
+    // Container-backed companions (reviewer / doc-reviewer): a read-only explore that clones
+    // the producer's PR branch and reads the ACTUAL repository (changed files / committed
+    // document) before rating it, returning the verdict as structured JSON. Surfaced to the
+    // engine as `result.custom` (the default `toRunResult` branch) and parsed back into a
+    // CompanionAssessment by `CompanionController.resolveContainerVerdict`. The companion
+    // review system prompt (which already instructs the JSON shape and, for these kinds, to
+    // read the checkout) wins in `systemPromptFor`, so no per-kind prompt wiring is needed.
+    if (isContainerBackedCompanion(context.agentKind)) {
+      return this.buildRegisteredAgentBody(
+        context,
+        parts,
+        { surface: 'container-explore', clone: { branch: 'pr' }, output: { kind: 'structured' } },
+        roleSystemPrompt,
+      )
+    }
 
     // Read-only agents (architect, analysis) explore a real checkout but never edit it:
     // they clone a branch, produce a prose report/proposal and return it as `output`,

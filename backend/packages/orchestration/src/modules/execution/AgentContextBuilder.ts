@@ -226,6 +226,10 @@ export class AgentContextBuilder {
         // The task-estimator's triage, when produced earlier in this run — the
         // consensus executor's gating input.
         ...(block.estimate ? { estimate: block.estimate } : {}),
+        // Per-type creation fields (a `document` task's docKind/audience/targetPath/…),
+        // so a kind's user-prompt builder can specialise on them — the document-authoring
+        // agents read these. Sparse; omitted when none were collected.
+        ...(block.taskTypeFields ? { taskTypeFields: block.taskTypeFields } : {}),
       },
       ...(environment ? { environment } : {}),
       ...(service ? { service } : {}),

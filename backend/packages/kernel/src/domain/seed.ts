@@ -486,6 +486,47 @@ export function seedPipelines(): Pipeline[] {
     // A spec-only pipeline, to (re)generate a service's unified in-repo specification
     // (and its Gherkin acceptance scenarios) independently.
     { id: 'pl_spec', name: 'Write spec', agentKinds: ['spec-writer'] },
+    {
+      // FORWARD document authoring: turn a brief (+ linked PRDs/RFCs/issues) into a polished
+      // in-repo Markdown document shipped as a PR. Unlike the reverse-documentation kinds
+      // (documenter / business-documenter / blueprints) that describe existing code, this
+      // produces a NEW document (PRD / RFC / design / ADR / technical reference / runbook /
+      // research report — driven by the task's `docKind`).
+      //
+      //   doc-researcher → investigate the topic, prior art and linked context (inline)
+      //   doc-outliner   → propose a kind-appropriate outline (inline) — HUMAN GATE: the
+      //                    cheapest, highest-leverage checkpoint is on the structure
+      //   doc-writer     → write the document as Markdown and open a PR (container-coding)
+      //   doc-reviewer   → the writer's companion: rate the draft and loop it back for rework
+      //                    below threshold (AI-to-AI convergence) — HUMAN GATE on the converged
+      //                    draft, whose feedback the finalizer folds in via the revision context
+      //   doc-finalizer  → final editorial pass on the PR branch (container-coding, no new PR)
+      //   conflicts → ci → merger → the same mergeability / CI / merge tail as a code pipeline
+      id: 'pl_document',
+      name: 'Author a document',
+      agentKinds: [
+        'doc-researcher',
+        'doc-outliner',
+        'doc-writer',
+        'doc-reviewer',
+        'doc-finalizer',
+        'conflicts',
+        'ci',
+        'merger',
+      ],
+      // Human gates on the outline (index 1) and on the converged review (`doc-reviewer`,
+      // index 3, after its rework loop clears the bar). Everything else self-drives.
+      gates: [false, true, false, true, false, false, false, false],
+    },
+    {
+      // A lean document pipeline for a small / low-stakes doc: draft, auto-review loop, then
+      // the standard mergeability / CI / merge tail — so even a quick doc can't merge over a
+      // conflict or a red build, just without the research / outline / finalize stages and
+      // their human gates.
+      id: 'pl_document_quick',
+      name: 'Quick document',
+      agentKinds: ['doc-writer', 'doc-reviewer', 'conflicts', 'ci', 'merger'],
+    },
   ]
   // Every curated catalog pipeline is a read-only template: it can be cloned into an
   // editable copy but not edited in place (see PipelineService.update / clone). Each carries

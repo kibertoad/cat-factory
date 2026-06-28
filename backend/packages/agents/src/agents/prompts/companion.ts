@@ -1,5 +1,5 @@
 import type { AgentKind } from '@cat-factory/kernel'
-import { companionFor } from '../kinds/companions.js'
+import { companionFor, isContainerBackedCompanion } from '../kinds/companions.js'
 import { FINAL_ANSWER_IN_REPLY } from './shared.js'
 
 // System prompt for a companion agent, parameterised by the producer kind it
@@ -18,6 +18,21 @@ export function companionSystemPrompt(kind: AgentKind): string | undefined {
     'anything that would block confident downstream work. Then give a SINGLE overall quality',
     'rating between 0 and 1 (1 = excellent and complete, 0 = unusable). Be a fair but demanding',
     'critic — do not rubber-stamp.',
+    // A container-backed companion gets a real, read-only checkout of the producer's PR
+    // branch. Reviewing the producer's summary reply alone is worthless — judge the ACTUAL
+    // artifact: open and read the changed files / the full committed document and whatever
+    // surrounding repository context you need to assess it properly. The preceding step's
+    // reply (if any) is only a pointer; the repository on disk is the source of truth.
+    ...(isContainerBackedCompanion(kind)
+      ? [
+          '',
+          'You have a read-only checkout of the branch under review. Do NOT judge from the',
+          "summary alone: inspect what actually changed (diff the branch against the repo's",
+          'default/base branch), then open and read the changed files in full — plus any',
+          'related code or documents in the repository you need for context — before rating.',
+          'Ground every comment in what the files actually contain. Make no commits.',
+        ]
+      : []),
     // The spec-writer only TRANSLATES the task requirements it was given into a spec
     // increment; inventing, completing, or deciding requirements is the requirements
     // step's job, not its. So judge only what the writer controls — fidelity to the

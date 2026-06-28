@@ -27,6 +27,23 @@ function parseCompanionOrUndefined(output: string | undefined): CompanionAssessm
   }
 }
 
+/**
+ * Parse the verdict of a CONTAINER-backed companion. A structured explore returns the verdict
+ * as `result.custom` (already a parsed object), so validate that first; fall back to the reply
+ * text for a model that emitted the JSON inline instead. `undefined` when neither parses — the
+ * caller then surfaces it for a human rather than treating it as a pass.
+ */
+function parseContainerVerdict(result: AgentRunResult): CompanionAssessment | undefined {
+  if (result.custom !== undefined) {
+    try {
+      return parseCompanionAssessment(result.custom)
+    } catch {
+      // Fall back to the reply text below.
+    }
+  }
+  return parseCompanionOrUndefined(result.output)
+}
+
 /** Sum the token usage of two model calls (for the companion's repair retry). */
 function sumUsage(
   a: AgentTokenUsage | undefined,
@@ -116,6 +133,13 @@ export interface CompanionControllerDeps {
 export class CompanionController {
   constructor(private readonly deps: CompanionControllerDeps) {}
 
+  /**
+   * Drive an INLINE companion (architect-companion / spec-companion): run it as a one-shot
+   * LLM step that grades the producer's reported output text, then act on the verdict. A
+   * container-backed companion (reviewer / doc-reviewer) does NOT take this path — it is
+   * dispatched through the engine's async container path and resolved by
+   * {@link resolveContainerVerdict}.
+   */
   async evaluate(
     workspaceId: string,
     instance: ExecutionInstance,
@@ -124,15 +148,7 @@ export class CompanionController {
     isFinalStep: boolean,
     options: AdvanceOptions,
   ): Promise<AdvanceResult> {
-    const targets = companionTargets(step.agentKind)
-    // The nearest earlier step whose kind this companion reviews (the producer).
-    let producerIndex = -1
-    for (let i = instance.currentStep - 1; i >= 0; i--) {
-      if (targets.includes(instance.steps[i]!.agentKind)) {
-        producerIndex = i
-        break
-      }
-    }
+    const producerIndex = this.producerIndexFor(instance, step)
 
     // Run the companion as a normal inline LLM step: its prompt asks for the rating
     // JSON and `priorOutputs` already carries the producer's output for it to grade.
@@ -160,6 +176,78 @@ export class CompanionController {
     }
     if (result.model) step.model = result.model
 
+    return this.applyAssessment(
+      workspaceId,
+      instance,
+      step,
+      block,
+      isFinalStep,
+      producerIndex,
+      assessment,
+      result,
+    )
+  }
+
+  /**
+   * Resolve a CONTAINER-backed companion (reviewer / doc-reviewer) whose read-only explore
+   * job has just completed: it cloned the producer's PR branch, read the real repository, and
+   * returned its verdict as structured JSON (`result.custom`, falling back to the reply text).
+   * The threshold / rework-loop / human-gate handling is then identical to an inline companion
+   * — the SAME {@link applyAssessment}. Spend is metered by `recordStepResult` (its single
+   * funnel for every completed job), so this does not re-record it. Called from
+   * `ExecutionService.recordStepResult` when a container companion's job finishes.
+   */
+  async resolveContainerVerdict(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    isFinalStep: boolean,
+    result: AgentRunResult,
+  ): Promise<AdvanceResult> {
+    const producerIndex = this.producerIndexFor(instance, step)
+    if (result.model) step.model = result.model
+    const assessment = parseContainerVerdict(result)
+    return this.applyAssessment(
+      workspaceId,
+      instance,
+      step,
+      block,
+      isFinalStep,
+      producerIndex,
+      assessment,
+      result,
+    )
+  }
+
+  /** The nearest earlier step whose kind this companion reviews (the producer), or -1. */
+  private producerIndexFor(instance: ExecutionInstance, step: PipelineStep): number {
+    const targets = companionTargets(step.agentKind)
+    for (let i = instance.currentStep - 1; i >= 0; i--) {
+      if (targets.includes(instance.steps[i]!.agentKind)) return i
+    }
+    return -1
+  }
+
+  /**
+   * Act on a companion's parsed verdict — shared by the inline ({@link evaluate}) and
+   * container ({@link resolveContainerVerdict}) paths so both behave identically:
+   *   - at/above threshold → finish; a gated companion raises the human approval gate, else
+   *     the run advances;
+   *   - below, budget left → loop the producer back with the feedback folded in;
+   *   - below, budget spent → park on the iteration-cap gate;
+   *   - producer present but verdict unparseable → surface for a human (NOT a silent pass).
+   */
+  private async applyAssessment(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    isFinalStep: boolean,
+    producerIndex: number,
+    assessment: CompanionAssessment | undefined,
+    result: AgentRunResult,
+  ): Promise<AdvanceResult> {
     const companion = step.companion ?? {
       threshold: companionFor(step.agentKind)?.defaultThreshold ?? 0.8,
       maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,

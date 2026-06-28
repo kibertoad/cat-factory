@@ -51,6 +51,42 @@ export const createTaskTypeSchema = v.picklist(['feature', 'bug', 'document', 's
 export type CreateTaskType = v.InferOutput<typeof createTaskTypeSchema>
 
 /**
+ * The kinds of document a `document` task can produce. Drives the document-authoring
+ * pipeline's prompts (each kind implies a structure: a PRD vs an RFC vs a runbook) and
+ * the default in-repo location the writer commits to. An open-ended `reference`/`other`
+ * keeps the list from constraining genuine one-offs.
+ */
+export const DOC_KINDS = [
+  'prd',
+  'rfc',
+  'adr',
+  'design',
+  'technical',
+  'api',
+  'runbook',
+  'research',
+  'reference',
+  'other',
+] as const
+export type DocKind = (typeof DOC_KINDS)[number]
+
+/**
+ * Whether a `document` task's `targetPath` is a SAFE relative Markdown path. The value is used
+ * verbatim as the in-repo file the doc-writer commits, so it must not escape the repo or
+ * clobber non-document files: no `..` traversal, no absolute path (`/…` or a Windows drive),
+ * no backslash / NUL, and it must end in `.md`. Rejecting e.g. `../../package.json` at the
+ * write boundary stops a malformed (or hostile) path from overwriting arbitrary repo files.
+ */
+export function isSafeDocPath(path: string): boolean {
+  const p = path.trim()
+  if (!p || p.length > 300) return false
+  if (p.startsWith('/') || /^[a-zA-Z]:/.test(p)) return false
+  if (p.includes('\\') || p.includes('\0')) return false
+  if (p.split('/').some((segment) => segment === '..')) return false
+  return p.toLowerCase().endsWith('.md')
+}
+
+/**
  * Small, additive, per-type fields collected on the create-task form. All optional;
  * which ones are shown depends on the chosen {@link TaskType}. Stored verbatim on the
  * block as a sparse object so adding a field never needs a schema migration.
@@ -63,7 +99,27 @@ export const taskTypeFieldsSchema = v.object({
   /** Spike: the investigation time-box, in hours. */
   timeboxHours: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(1000))),
   /** Document: what kind of document this task produces. */
-  docKind: v.optional(v.picklist(['prd', 'rfc', 'runbook', 'reference', 'other'])),
+  docKind: v.optional(v.picklist(DOC_KINDS)),
+  /** Document: the intended audience (e.g. "platform engineers", "product stakeholders"). */
+  audience: v.optional(v.pipe(v.string(), v.maxLength(300))),
+  /**
+   * Document: an explicit in-repo path the document is written to, overriding the
+   * pipeline's default `docs/<kind>/<slug>.md` location (e.g. `docs/rfcs/0001-foo.md`).
+   * Constrained to a safe relative Markdown path (see {@link isSafeDocPath}) so it can't
+   * escape the repo or overwrite non-document files.
+   */
+  targetPath: v.optional(
+    v.pipe(
+      v.string(),
+      v.maxLength(300),
+      v.check(
+        isSafeDocPath,
+        'targetPath must be a relative path inside the repo, ending in .md, with no "..", absolute, or backslash segments.',
+      ),
+    ),
+  ),
+  /** Document: freeform hints on the sections / structure the author should produce. */
+  outlineHints: v.optional(v.pipe(v.string(), v.maxLength(4000))),
 })
 export type TaskTypeFields = v.InferOutput<typeof taskTypeFieldsSchema>
 
