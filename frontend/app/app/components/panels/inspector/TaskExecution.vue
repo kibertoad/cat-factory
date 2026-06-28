@@ -139,6 +139,7 @@ async function resetRun() {
             :loading="stopping"
             :disabled="resetting"
             title="Stop the run but keep it (readable + retryable)"
+            data-testid="run-stop"
             @click="stopRun"
           >
             Stop
@@ -152,6 +153,7 @@ async function resetRun() {
             :loading="resetting"
             :disabled="stopping"
             title="Discard this run and reset the task to planned"
+            data-testid="run-reset"
             @click="resetRun"
           >
             Reset

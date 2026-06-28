@@ -9,6 +9,18 @@ vi.stubGlobal('useApi', () => ({}))
 vi.stubGlobal('useToast', () => ({ add: vi.fn() }))
 vi.stubGlobal('usePipelineErrorToast', () => ({ present: vi.fn() }))
 
+// @nuxtjs/i18n auto-imports `useI18n`. Under plain Vitest the module isn't booted, so
+// stub it with a passthrough: `t` echoes the key and `n`/`d` stringify. `te` reports NO key
+// as present — the inert stub loads no catalog, so claiming every key exists would mask a
+// missing-key bug in any code that branches on `te`. Specs asserting i18n behaviour override
+// this with their own spies (e.g. a real catalog lookup).
+vi.stubGlobal('useI18n', () => ({
+  t: (key: string) => key,
+  te: () => false,
+  n: (value: number) => String(value),
+  d: (value: unknown) => String(value),
+}))
+
 // A fresh Pinia per test keeps store state isolated.
 beforeEach(() => {
   setActivePinia(createPinia())

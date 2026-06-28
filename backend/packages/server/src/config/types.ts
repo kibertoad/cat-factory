@@ -278,6 +278,24 @@ export interface BinaryStorageConfig {
   }
 }
 
+/**
+ * Opt-in GitLab VCS provider config (the neutral-VCS abstraction's second backend).
+ * `enabled` is false unless a `GITLAB_TOKEN` is configured. Single-token model (mirrors
+ * local-mode's PAT): one connection per deployment, registered via `registerGitLab` and
+ * resolved through the process-wide VCS registry. The raw token is NOT carried here (the
+ * facade reads it straight from env at wiring time); this holds only the non-secret address
+ * + the webhook secret the neutral ingest route verifies against.
+ */
+export interface GitLabConfig {
+  enabled: boolean
+  /** REST v4 API base, e.g. `https://gitlab.com/api/v4` (per-instance for self-managed). */
+  apiBase: string
+  /** The single connection's id — the `VcsConnectionRef.connectionId` callers resolve on. */
+  connectionId: string
+  /** Shared secret compared against the inbound `X-Gitlab-Token` webhook header; '' when unset. */
+  webhookSecret: string
+}
+
 export interface AppConfig {
   agents: AgentsConfig
   /** The effective model picker catalog (each model's active flavour). */
@@ -287,6 +305,11 @@ export interface AppConfig {
   spend: SpendPricing
   /** GitHub integration config; `enabled` is false unless a GitHub App is set up. */
   github: GitHubConfig
+  /**
+   * GitLab VCS provider config; `enabled` is false unless `GITLAB_TOKEN` is set. Optional so
+   * existing config builders/tests need no change when GitLab is unconfigured.
+   */
+  gitlab?: GitLabConfig
   /** "Login with GitHub" config; `enabled` is false unless an OAuth app is set up. */
   auth: AuthConfig
   /** Document-source integration config; always on where the runtime serves documents. */

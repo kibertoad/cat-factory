@@ -10,6 +10,7 @@ import type {
 import {
   CONFLUENCE_DESCRIPTOR,
   GITHUB_DOCS_DESCRIPTOR,
+  LINEAR_DOCS_DESCRIPTOR,
   NOTION_DESCRIPTOR,
 } from '@cat-factory/integrations'
 
@@ -17,6 +18,7 @@ const DESCRIPTORS: Record<DocumentSourceKind, DocumentSourceDescriptor> = {
   confluence: CONFLUENCE_DESCRIPTOR,
   notion: NOTION_DESCRIPTOR,
   github: GITHUB_DOCS_DESCRIPTOR,
+  linear: LINEAR_DOCS_DESCRIPTOR,
 }
 
 /**

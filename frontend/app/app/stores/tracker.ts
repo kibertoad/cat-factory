@@ -14,6 +14,7 @@ export const useTrackerStore = defineStore('tracker', () => {
   const settings = ref<TrackerSettings>({
     tracker: null,
     jiraProjectKey: null,
+    linearTeamId: null,
     writebackCommentOnPrOpen: false,
     writebackResolveOnMerge: false,
     updatedAt: 0,
@@ -23,6 +24,7 @@ export const useTrackerStore = defineStore('tracker', () => {
     settings.value = value ?? {
       tracker: null,
       jiraProjectKey: null,
+      linearTeamId: null,
       writebackCommentOnPrOpen: false,
       writebackResolveOnMerge: false,
       updatedAt: 0,

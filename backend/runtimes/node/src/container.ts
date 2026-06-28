@@ -9,6 +9,8 @@ import {
   GitHubDocsProvider,
   GitHubIssuesProvider,
   JiraProvider,
+  LinearDocumentProvider,
+  LinearTaskProvider,
   HttpEnvironmentProvider,
   HttpRunnerPoolProvider,
   NotionProvider,
@@ -115,6 +117,7 @@ import {
   wireIncidentEnrichment,
   wirePullRequestReviewProvider,
 } from '@cat-factory/gates'
+import { registerGitLab, StaticGitLabTokenSource } from '@cat-factory/gitlab'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
@@ -975,6 +978,18 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // faked one) — gates read their provider lazily at probe time, so the last write wins.
   clearGateProviders()
 
+  // Opt-in GitLab VCS provider (single-token model, mirroring local-mode's PAT). Registered
+  // in the process-wide VCS registry so the neutral webhook route + any VcsConnectionRef
+  // holder resolves it. A no-op unless GITLAB_TOKEN is set; symmetric with the Worker facade
+  // (and inherited by local) per "keep the runtimes symmetric".
+  if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
+    registerGitLab({
+      tokenSource: new StaticGitLabTokenSource(env.GITLAB_TOKEN, config.gitlab.apiBase),
+      clock,
+      webhookSecret: config.gitlab.webhookSecret || undefined,
+    })
+  }
+
   // Honour the workspace's model presets at run time (block-pinned > the task's
   // selected/default model preset > env routing), uniformly for inline and container
   // kinds. The built-in default preset points every agent kind at Kimi K2.7.
@@ -1252,6 +1267,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
             const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
             if (!baseUrl || !accountEmail || !apiToken) return null
             return { baseUrl, accountEmail, apiToken }
+          },
+          resolveLinearConnection: async (workspaceId: string) => {
+            const connection = await tasks.taskConnectionRepository!.getByWorkspace(
+              workspaceId,
+              'linear',
+            )
+            const apiKey = connection?.credentials?.apiKey
+            return apiKey ? { apiKey } : null
           },
         }
       : {}),
@@ -1574,6 +1597,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
               if (!baseUrl || !accountEmail || !apiToken) return null
               return { baseUrl, accountEmail, apiToken }
             },
+            resolveLinearConnection: async (workspaceId) => {
+              const connection = await tasks.taskConnectionRepository!.getByWorkspace(
+                workspaceId,
+                'linear',
+              )
+              const apiKey = connection?.credentials?.apiKey
+              return apiKey ? { apiKey } : null
+            },
           }
         : {}),
     }),
@@ -1737,8 +1768,8 @@ function selectNodeTasksDeps(
   installations: GitHubInstallationRepository,
 ): { deps: Partial<CoreDependencies>; taskConnectionRepository?: TaskConnectionRepository } {
   if (!config.tasks.enabled || !config.tasks.encryptionKey) return { deps: {} }
-  // Jira is always registered (its credentials are per-workspace, entered in the UI).
-  const providers: TaskSourceProvider[] = [new JiraProvider()]
+  // Jira and Linear are always registered (their credentials are per-workspace, entered in the UI).
+  const providers: TaskSourceProvider[] = [new JiraProvider(), new LinearTaskProvider()]
   // GitHub Issues reuse the workspace's installed GitHub App, so this provider is
   // wired whenever a GitHub client is available (the App is configured) — it has no
   // credentials of its own and resolves the installation per issue. Mirrors the
@@ -1788,6 +1819,7 @@ function selectNodeDocumentsDeps(
   const providers: DocumentSourceProvider[] = []
   if (config.documents.sources.includes('confluence')) providers.push(new ConfluenceProvider())
   if (config.documents.sources.includes('notion')) providers.push(new NotionProvider())
+  if (config.documents.sources.includes('linear')) providers.push(new LinearDocumentProvider())
   if (config.documents.sources.includes('github') && githubClient) {
     providers.push(new GitHubDocsProvider({ githubClient, installations }))
   }

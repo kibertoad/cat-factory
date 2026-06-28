@@ -23,6 +23,7 @@ function makeSettings(over: Partial<TrackerSettings>): TrackerSettings {
   return {
     tracker: null,
     jiraProjectKey: null,
+    linearTeamId: null,
     writebackCommentOnPrOpen: false,
     writebackResolveOnMerge: false,
     updatedAt: 0,
@@ -94,6 +95,54 @@ describe('TicketTrackerService', () => {
         accountEmail: 'a',
         apiToken: 'b',
       }),
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        text: async () => '',
+        json: async () => ({}),
+      }),
+    })
+    expect(await svc.createTicket(request)).toBeNull()
+  })
+
+  it('files a Linear issue via GraphQL with the configured team id', async () => {
+    let captured: { url: string; init: { headers: Record<string, string>; body?: string } } | null =
+      null
+    const fetchImpl: FetchLike = async (url, init) => {
+      captured = { url, init }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => '',
+        json: async () => ({
+          data: {
+            issueCreate: { success: true, issue: { identifier: 'ENG-9', url: 'https://lin/9' } },
+          },
+        }),
+      }
+    }
+    const svc = new TicketTrackerService({
+      trackerSettingsRepository: settingsRepo(
+        makeSettings({ tracker: 'linear', linearTeamId: 'team_1' }),
+      ),
+      resolveLinearConnection: async () => ({ apiKey: 'lin_api_x' }),
+      fetchImpl,
+    })
+
+    const result = await svc.createTicket(request)
+    expect(result).toEqual({ externalId: 'ENG-9', url: 'https://lin/9' })
+    expect(captured!.url).toBe('https://api.linear.app/graphql')
+    expect(captured!.init.headers.authorization).toBe('lin_api_x')
+    const payload = JSON.parse(captured!.init.body ?? '')
+    expect(payload.variables.input.teamId).toBe('team_1')
+  })
+
+  it('passes through linear when no team id / connection is set', async () => {
+    const svc = new TicketTrackerService({
+      trackerSettingsRepository: settingsRepo(
+        makeSettings({ tracker: 'linear', linearTeamId: null }),
+      ),
+      resolveLinearConnection: async () => ({ apiKey: 'lin_api_x' }),
       fetchImpl: async () => ({
         ok: true,
         status: 200,

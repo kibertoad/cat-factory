@@ -10,6 +10,7 @@ import { type AgentsConfig, loadAgentsConfig } from './agents'
 import { type ExecutionConfig, loadExecutionConfig } from './execution'
 import { loadSpendPricing } from './spending'
 import { type GitHubConfig, loadGitHubConfig } from './github'
+import { loadGitLabConfig } from './gitlab'
 import { type AuthConfig, loadAuthConfig } from './auth'
 import { type DocumentsConfig, loadDocumentsConfig } from './documents'
 import { type TasksConfig, loadTasksConfig } from './tasks'
@@ -68,6 +69,7 @@ export function loadConfig(env: Env): AppConfig {
     execution: loadExecutionConfig(env),
     spend,
     github: loadGitHubConfig(env),
+    gitlab: loadGitLabConfig(env),
     auth: loadAuthConfig(env),
     documents: loadDocumentsConfig(env),
     tasks: loadTasksConfig(env),

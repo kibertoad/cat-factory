@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/app",
-  "version": "0.41.0",
+  "version": "0.43.0",
   "description": "Reusable Nuxt layer for the Agent Architecture Board SPA (components, stores, composables, pages). Consume it from a thin deployment app via `extends: ['@cat-factory/app']` and point it at your backend with NUXT_PUBLIC_API_BASE. See deploy/frontend for an example.",
   "repository": {
     "type": "git",
@@ -9,6 +9,7 @@
   },
   "files": [
     "app",
+    "i18n",
     "nuxt.config.ts"
   ],
   "type": "module",
@@ -25,6 +26,7 @@
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
     "@nuxt/ui": "^4.9.0",
+    "@nuxtjs/i18n": "^10.4.0",
     "@pinia/nuxt": "^0.11.3",
     "@toad-contracts/core": "0.3.1",
     "@toad-contracts/frontend-http-client": "0.3.1",
