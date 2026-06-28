@@ -3,10 +3,20 @@
 '@cat-factory/kernel': minor
 '@cat-factory/agents': minor
 '@cat-factory/orchestration': minor
+'@cat-factory/server': minor
 '@cat-factory/app': minor
 ---
 
 Add a document-authoring pipeline and a richer document task definition.
+
+**Reviewers now read the real repository.** The `reviewer` (code) and `doc-reviewer`
+companions run as read-only container reviewers: they clone the producer's PR branch and
+read the ACTUAL changed files / committed document with tools before rating, instead of
+grading the producer's summary reply (a review of a summary is worthless). They are
+dispatched through the same async container path the coder/merger use and return their
+verdict as structured JSON, resolved by the same threshold / rework-loop / human-gate
+handling as before. Inline companions (`architect-companion` / `spec-companion`) are
+unchanged. A container companion is gated on a wired sandbox like any other container kind.
 
 A new forward-authoring track produces an in-repo Markdown document (PRD / RFC / design
 doc / ADR / technical reference / runbook / research report) shipped as a pull request —

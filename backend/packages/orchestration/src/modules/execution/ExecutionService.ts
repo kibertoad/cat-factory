@@ -28,6 +28,7 @@ import {
   companionFor,
   companionTargets,
   isCompanionKind,
+  isContainerBackedCompanion,
   registeredAgentStep,
   registeredPreOps,
   registeredPostOps,
@@ -1504,7 +1505,14 @@ export class ExecutionService {
     // A companion step grades the nearest preceding producer of one of its target
     // kinds, looping it back for automatic rework below the threshold (and failing
     // the run once the budget is spent) before any human gate. See evaluateCompanion.
-    if (isCompanionKind(step.agentKind)) {
+    //
+    // INLINE companions (architect-companion / spec-companion) run their LLM grading right
+    // here. CONTAINER-backed companions (reviewer / doc-reviewer) instead fall through to the
+    // generic async container dispatch below — they clone the producer's PR branch and review
+    // the REAL repository — and their verdict is resolved in `recordStepResult` via
+    // `companionController.resolveContainerVerdict` (which runs the SAME threshold / rework
+    // loop). A summary-only review is useless; the container reviewer reads the actual diff.
+    if (isCompanionKind(step.agentKind) && !isContainerBackedCompanion(step.agentKind)) {
       return this.companionController.evaluate(
         workspaceId,
         instance,
@@ -2214,6 +2222,25 @@ export class ExecutionService {
       await this.executionRepository.upsert(workspaceId, instance)
       await this.emitInstance(workspaceId, instance)
       return { kind: 'awaiting_decision', decisionId: step.decision.id }
+    }
+
+    // A container-backed companion (reviewer / doc-reviewer) just finished reviewing the
+    // real repository on the producer's PR branch and returned its verdict as `result.custom`.
+    // Hand it to the companion loop, which parses the verdict and applies the SAME threshold /
+    // rework / human-gate handling an inline companion gets. Routed here (not the normal step
+    // completion) so the verdict drives the loop instead of being recorded as plain output.
+    if (isCompanionKind(step.agentKind) && isContainerBackedCompanion(step.agentKind)) {
+      const companionBlock = await this.blockRepository.get(workspaceId, instance.blockId)
+      if (companionBlock) {
+        return this.companionController.resolveContainerVerdict(
+          workspaceId,
+          instance,
+          step,
+          companionBlock,
+          isFinalStep,
+          result,
+        )
+      }
     }
 
     // A `tester` step returned a structured report. On a withheld greenlight we do

@@ -1,4 +1,5 @@
 import type { AgentRunContext, DocKind } from '@cat-factory/kernel'
+import { CONTEXT_BUDGET, estimateTokens } from '@cat-factory/kernel'
 import type { AgentKindDefinition } from './registry.js'
 import { registerAgentKinds } from './registry.js'
 import { linkedContextSection } from '../prompts/standard.js'
@@ -112,12 +113,35 @@ function docBriefSection(context: AgentRunContext, opts: { materialized?: boolea
   return lines.join('\n')
 }
 
-/** Render the prior steps' work (the research brief, the approved outline) for a later step. */
+/**
+ * Render the prior steps' work (the research brief, the approved outline) for a later step,
+ * trimmed to a shared token budget so a long research brief + outline + writer summary +
+ * reviewer feedback can't bloat the prompt unbounded (the writer/finalizer also receive the
+ * materialised linked context, which is budgeted separately). Each section is clamped to what
+ * remains, oldest-first, with a marker when truncated.
+ */
 function priorWorkSection(context: AgentRunContext): string {
   if (!context.priorOutputs.length) return ''
   const lines = ['', 'Work from earlier steps in this pipeline (build on it, do not repeat it):']
-  for (const p of context.priorOutputs) lines.push(`### ${p.agentKind}`, p.output)
+  let remaining = CONTEXT_BUDGET.inlineBodyTokens
+  for (const p of context.priorOutputs) {
+    if (remaining <= 0) {
+      lines.push('### (earlier steps omitted — prior-work budget reached)')
+      break
+    }
+    const body = clampToBudget(p.output ?? '', remaining)
+    remaining -= estimateTokens(body)
+    lines.push(`### ${p.agentKind}`, body)
+  }
   return lines.join('\n')
+}
+
+/** Clamp text to roughly `maxTokens`, appending an ellipsis marker when it was cut. */
+function clampToBudget(text: string, maxTokens: number): string {
+  if (estimateTokens(text) <= maxTokens) return text
+  // estimateTokens is ~chars/4, so budget the character slice the same way.
+  const maxChars = Math.max(0, maxTokens * 4)
+  return `${text.slice(0, maxChars).trimEnd()}\n…(truncated)`
 }
 
 const DOC_RESEARCHER_SYSTEM_PROMPT =

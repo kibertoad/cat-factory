@@ -133,6 +133,7 @@ export {
   isCompanionKind,
   companionFor,
   companionTargets,
+  isContainerBackedCompanion,
 } from './agents/kinds/companions.js'
 export { companionSystemPrompt } from './agents/prompts/companion.js'
 // The document-authoring agent kinds (doc-researcher / doc-outliner / doc-writer /

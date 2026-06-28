@@ -1,7 +1,13 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
+import { isSafeDocPath } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import { systemPromptFor, userPromptFor } from '../catalog.js'
-import { companionFor, companionTargets, isCompanionKind } from './companions.js'
+import {
+  companionFor,
+  companionTargets,
+  isCompanionKind,
+  isContainerBackedCompanion,
+} from './companions.js'
 import {
   DOC_FINALIZER_KIND,
   DOC_OUTLINER_KIND,
@@ -54,6 +60,18 @@ describe('document agent kinds', () => {
     expect(companionFor(DOC_REVIEWER_KIND)?.targets).toEqual([DOC_WRITER_KIND])
   })
 
+  it('runs doc-reviewer in a container so it reads the actual document, not a summary', () => {
+    // The writer's deliverable is the committed Markdown, so its reviewer must clone the PR
+    // branch and read it — an inline review of the writer's summary reply is worthless.
+    expect(isContainerBackedCompanion(DOC_REVIEWER_KIND)).toBe(true)
+    // The system prompt tells it to read the checkout rather than judge from the reply.
+    const prompt = systemPromptFor(DOC_REVIEWER_KIND)
+    expect(prompt).toContain('read-only checkout')
+    expect(prompt).toContain('Do NOT judge from the')
+    // It still emits the structured verdict JSON the engine parses.
+    expect(prompt).toContain('"rating"')
+  })
+
   it("specialises the writer's prompt on the task's docKind and target path", () => {
     const prompt = userPromptFor(ctx(), { materialized: true })
     // The kind-specific structure guidance + the default target path are woven in.
@@ -86,5 +104,19 @@ describe('document agent kinds', () => {
     expect(systemPromptFor(DOC_OUTLINER_KIND)).toContain(
       'Your deliverable is the text of your FINAL reply',
     )
+  })
+
+  it('constrains a document targetPath to a safe relative Markdown path', () => {
+    // Accept normal relative .md paths.
+    expect(isSafeDocPath('docs/rfcs/0001-foo.md')).toBe(true)
+    expect(isSafeDocPath('README.md')).toBe(true)
+    // Reject traversal, absolute, backslash, non-.md and empty — these could escape the repo
+    // or clobber non-document files when used verbatim as the writer's commit path.
+    expect(isSafeDocPath('../../package.json')).toBe(false)
+    expect(isSafeDocPath('../secrets.md')).toBe(false)
+    expect(isSafeDocPath('/etc/passwd.md')).toBe(false)
+    expect(isSafeDocPath('docs\\win.md')).toBe(false)
+    expect(isSafeDocPath('docs/notes.txt')).toBe(false)
+    expect(isSafeDocPath('   ')).toBe(false)
   })
 })

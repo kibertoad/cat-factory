@@ -11,7 +11,8 @@
 // button is disabled with a hint. Linking needs the block id,
 // so chosen items are staged locally and import-and-linked once the task is created
 // (see useContextLinking) — the same context the agents see for every step of the run.
-import type { CreateTaskType, TaskSourceKind, TaskTypeFields } from '~/types/domain'
+import type { CreateTaskType, DocKind, TaskSourceKind, TaskTypeFields } from '~/types/domain'
+import { DOC_KINDS } from '~/types/domain'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 import { mergePresetOptionLabel, mergePresetThresholds } from '~/utils/mergePreset'
@@ -64,35 +65,13 @@ const isRecurring = computed(() => taskType.value === 'recurring')
 const severity = ref<'low' | 'medium' | 'high' | 'critical' | ''>('')
 const stepsToReproduce = ref('')
 const timeboxHours = ref<number | undefined>(undefined)
-const docKind = ref<
-  | 'prd'
-  | 'rfc'
-  | 'adr'
-  | 'design'
-  | 'technical'
-  | 'api'
-  | 'runbook'
-  | 'research'
-  | 'reference'
-  | 'other'
-  | ''
->('')
+// `DOC_KINDS` (and the `DocKind` type) are owned by the contracts package — re-exported via
+// `~/types/domain` — so the picker and the create payload can't drift from the backend list.
+const docKind = ref<DocKind | ''>('')
 const docAudience = ref('')
 const docTargetPath = ref('')
 const docOutlineHints = ref('')
 const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
-const DOC_KINDS = [
-  'prd',
-  'rfc',
-  'adr',
-  'design',
-  'technical',
-  'api',
-  'runbook',
-  'research',
-  'reference',
-  'other',
-] as const
 
 function buildTypeFields(): TaskTypeFields | undefined {
   if (taskType.value === 'bug') {

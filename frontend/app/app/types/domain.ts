@@ -22,6 +22,7 @@ export type {
   TaskType,
   CreateTaskType,
   TaskTypeFields,
+  DocKind,
   Block,
   PullRequestRef,
   CloudProvider,
@@ -51,6 +52,10 @@ export type {
 } from '@cat-factory/contracts'
 
 import type { AgentCategory, AgentKind } from '@cat-factory/contracts'
+
+// The document-kind list is a runtime value (used to render the picker), so it is re-exported
+// as a value — the single source of truth lives in the contracts package.
+export { DOC_KINDS } from '@cat-factory/contracts'
 
 /** A draggable agent definition shown in the agent palette. Frontend-only. */
 export interface AgentArchetype {

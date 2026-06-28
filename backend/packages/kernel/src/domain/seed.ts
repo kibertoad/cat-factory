@@ -519,10 +519,13 @@ export function seedPipelines(): Pipeline[] {
       gates: [false, true, false, true, false, false, false, false],
     },
     {
-      // A lean document pipeline for a small / low-stakes doc: draft, auto-review loop, merge.
+      // A lean document pipeline for a small / low-stakes doc: draft, auto-review loop, then
+      // the standard mergeability / CI / merge tail — so even a quick doc can't merge over a
+      // conflict or a red build, just without the research / outline / finalize stages and
+      // their human gates.
       id: 'pl_document_quick',
       name: 'Quick document',
-      agentKinds: ['doc-writer', 'doc-reviewer', 'merger'],
+      agentKinds: ['doc-writer', 'doc-reviewer', 'conflicts', 'ci', 'merger'],
     },
   ]
   // Every curated catalog pipeline is a read-only template: it can be cloned into an
