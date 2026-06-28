@@ -9,10 +9,12 @@ import { clearRegisteredAgentKinds, registerAgentKind } from '@cat-factory/agent
 import { CompositeAgentExecutor } from '../../src/infrastructure/ai/CompositeAgentExecutor'
 
 // CompositeAgentExecutor must send the repo-operating steps — implementation
-// (`coder`), the mock builder (`mocker`) and the Playwright e2e writer
-// (`playwright`) — to the container, leaving every other agent kind (including
-// the `acceptance` scenario writer) on the inline executor. With no container
-// wired, the repo-operating kinds must throw rather than fall back to inline.
+// (`coder`), the mock builder (`mocker`), the Playwright e2e writer (`playwright`)
+// and the container-backed reviewers (`reviewer` / `doc-reviewer`, which clone the
+// PR branch to review the real repository) — to the container, leaving every other
+// agent kind (the inline companions, the `acceptance` scenario writer, …) on the
+// inline executor. With no container wired, the repo-operating kinds must throw
+// rather than fall back to inline.
 
 class Tagged implements AgentExecutor {
   constructor(private readonly tag: string) {}
@@ -63,19 +65,26 @@ describe('CompositeAgentExecutor', () => {
     // `architect` runs in a container too (read-only repo exploration before proposing).
     // `tester`/`fixer` clone the PR branch (run the suite / push fixes), so both are
     // container kinds — the Tester→Fixer loop dispatches both through this executor.
-    for (const kind of ['coder', 'mocker', 'playwright', 'architect', 'tester-api', 'fixer']) {
+    // `reviewer`/`doc-reviewer` are container-backed companions: they clone the producer's
+    // PR branch and review the REAL repository (a summary-only review is worthless).
+    for (const kind of [
+      'coder',
+      'mocker',
+      'playwright',
+      'architect',
+      'tester-api',
+      'fixer',
+      'reviewer',
+      'doc-reviewer',
+    ]) {
       expect((await composite.run(ctx(kind))).output).toBe('container')
     }
   })
 
   it('routes other kinds to the inline executor', async () => {
-    for (const kind of [
-      'reviewer',
-      'architect-companion',
-      'spec-companion',
-      'documenter',
-      'custom-x',
-    ]) {
+    // The INLINE companions (architect-companion / spec-companion) review prose output and
+    // stay inline; the container-backed reviewers are asserted above.
+    for (const kind of ['architect-companion', 'spec-companion', 'documenter', 'custom-x']) {
       expect((await composite.run(ctx(kind))).output).toBe('inline')
     }
   })
@@ -91,6 +100,9 @@ describe('CompositeAgentExecutor', () => {
       'architect',
       'tester-api',
       'fixer',
+      // Container-backed companions need a checkout like any other container kind.
+      'reviewer',
+      'doc-reviewer',
     ]) {
       // pick() throws synchronously, so run()/runsAsync()/startJob() all throw.
       expect(() => noSandbox.run(ctx(kind))).toThrow(/needs a real checkout/)
