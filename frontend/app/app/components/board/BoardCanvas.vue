@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { VueFlow, useVueFlow, type NodeMouseEvent } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
-import { MiniMap } from '@vue-flow/minimap'
 import BlockNode from './nodes/BlockNode.vue'
 import EpicNode from './nodes/EpicNode.vue'
 import TaskDependencyEdges from './TaskDependencyEdges.vue'
 import DependencyConnectOverlay from './DependencyConnectOverlay.vue'
-import { STATUS_META } from '~/utils/catalog'
 import { readDndPayload, blockIdFromEvent } from '~/utils/dnd'
 import { BOARD_FLOW_ID } from '~/composables/useBoardFlow'
 import { useTaskExpansion } from '~/composables/useTaskExpansion'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameStacking } from '~/composables/useFrameStacking'
+import { useViewport } from '~/composables/useViewport'
+import { boardPanMode } from '~/utils/boardPanMode'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -23,6 +23,17 @@ const toast = useToast()
 const { onNodeDragStop, onViewportChange, screenToFlowCoordinate } = useVueFlow(BOARD_FLOW_ID)
 const { draggingId } = useBlockDrag()
 const { hoveredFrameId } = useFrameStacking()
+// Touch drives the canvas gestures: a touch-capable surface needs one-finger pan.
+// We gate on `hasTouch` (any-pointer: coarse), not `isTouch` (the *primary* pointer),
+// so a touchscreen laptop / 2-in-1 — whose primary pointer is the trackpad — still
+// gets finger-panning.
+const { hasTouch } = useViewport()
+
+// See `boardPanMode`: the button-array form ([0, 2]) silently blocks one-finger
+// touch panning (a touch `touchstart` has no `event.button`), so we widen it to
+// `true` on any touch-capable surface and keep the precise-pointer restriction on
+// pure-mouse desktops. Extracted as a pure helper so the fix has a unit guard.
+const panOnDrag = computed<boolean | number[]>(() => boardPanMode(hasTouch.value))
 
 // Gate which task cards expand their pipeline list on deep zoom: on-screen, and the
 // centre-most of any that would overlap (see useTaskExpansion). Service frames have no
@@ -97,11 +108,6 @@ function onPaneClick() {
   ui.select(null)
 }
 
-function minimapColor(node: { id: string }) {
-  const b = board.getBlock(node.id)
-  return b ? STATUS_META[board.frameStatus(b.id)].color : '#475569'
-}
-
 // ---- palette drag & drop onto the canvas ----------------------------------
 function onDragOver(event: DragEvent) {
   event.preventDefault()
@@ -166,7 +172,7 @@ async function onDrop(event: DragEvent) {
       :min-zoom="0.2"
       :max-zoom="3"
       :default-viewport="{ x: 40, y: 20, zoom: 0.85 }"
-      :pan-on-drag="[0, 2]"
+      :pan-on-drag="panOnDrag"
       :elevate-nodes-on-select="false"
       fit-view-on-init
       @node-click="onNodeClick"
@@ -175,7 +181,10 @@ async function onDrop(event: DragEvent) {
       @contextmenu.prevent
     >
       <Background pattern-color="#1e293b" :gap="22" :size="1.4" />
-      <MiniMap pannable zoomable :node-color="minimapColor" class="!bg-slate-900/80" />
+      <!-- No minimap: it's a precise-pointer affordance (too small to hit on touch,
+           eats scarce width on narrow windows) that earned its keep on neither
+           desktop nor mobile. The toolbar's zoom-in/out + fit-view controls are the
+           camera navigation on every viewport. -->
 
       <template #node-block="props">
         <BlockNode :id="props.id" />

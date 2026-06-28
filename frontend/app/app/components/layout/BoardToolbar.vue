@@ -89,6 +89,7 @@ const decisionItems = computed(() =>
       color="neutral"
       variant="ghost"
       size="sm"
+      data-testid="board-zoom-out"
       @click="zoomOut()"
     />
     <!-- The zoom %/LOD readout is the first thing to drop on narrow viewports. -->
@@ -96,12 +97,20 @@ const decisionItems = computed(() =>
       {{ zoomPct }}%
       <div class="text-[9px] uppercase tracking-wide text-slate-500">{{ lodLabel }}</div>
     </div>
-    <UButton icon="i-lucide-zoom-in" color="neutral" variant="ghost" size="sm" @click="zoomIn()" />
+    <UButton
+      icon="i-lucide-zoom-in"
+      color="neutral"
+      variant="ghost"
+      size="sm"
+      data-testid="board-zoom-in"
+      @click="zoomIn()"
+    />
     <UButton
       icon="i-lucide-maximize"
       color="neutral"
       variant="ghost"
       size="sm"
+      data-testid="board-fit-view"
       @click="fitView({ padding: 0.2 })"
     />
 

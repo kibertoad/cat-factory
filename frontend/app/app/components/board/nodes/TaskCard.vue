@@ -210,7 +210,7 @@ function selectTask() {
       <!-- drag-to-connect handle: drag onto another task to make it depend on this one -->
       <button
         type="button"
-        class="nodrag shrink-0 cursor-crosshair rounded-full p-0.5 text-slate-500 hover:bg-slate-800 hover:text-amber-400 pointer-coarse:p-2.5"
+        class="nodrag shrink-0 cursor-crosshair touch-none rounded-full p-0.5 text-slate-500 hover:bg-slate-800 hover:text-amber-400 pointer-coarse:p-2.5"
         title="Drag onto another task to make it depend on this one"
         @pointerdown.stop="startConnect(task.id, $event)"
         @click.stop

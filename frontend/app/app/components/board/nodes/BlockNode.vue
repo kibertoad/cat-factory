@@ -388,7 +388,7 @@ const ITEM_ICON: Record<string, string> = {
              falls through to the pane (the parent drops `space-y-3` to avoid doubling
              the gap). -->
         <div
-          class="nopan cursor-grab space-y-3 pb-3 active:cursor-grabbing"
+          class="nopan cursor-grab touch-none space-y-3 pb-3 active:cursor-grabbing"
           title="Drag service"
           @pointerdown="onFrameHandle"
         >
@@ -485,17 +485,17 @@ const ITEM_ICON: Record<string, string> = {
                `nopan` (alongside `nodrag`) so the pane doesn't pan while resizing —
                same reason as the header handle above. -->
           <div
-            class="nodrag nopan absolute right-0 top-0 h-full w-2 cursor-ew-resize hover:bg-sky-400/20 pointer-coarse:w-4"
+            class="nodrag nopan absolute right-0 top-0 h-full w-2 cursor-ew-resize touch-none hover:bg-sky-400/20 pointer-coarse:w-4"
             title="Drag to resize"
             @pointerdown="onResize($event, 'e')"
           />
           <div
-            class="nodrag nopan absolute bottom-0 left-0 h-2 w-full cursor-ns-resize hover:bg-sky-400/20 pointer-coarse:h-4"
+            class="nodrag nopan absolute bottom-0 left-0 h-2 w-full cursor-ns-resize touch-none hover:bg-sky-400/20 pointer-coarse:h-4"
             title="Drag to resize"
             @pointerdown="onResize($event, 's')"
           />
           <div
-            class="nodrag nopan absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize pointer-coarse:h-11 pointer-coarse:w-11"
+            class="nodrag nopan absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize touch-none pointer-coarse:h-11 pointer-coarse:w-11"
             title="Drag to resize"
             @pointerdown="onResize($event, 'se')"
           >
