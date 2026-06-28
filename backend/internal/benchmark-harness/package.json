@@ -25,11 +25,11 @@
     "@cat-factory/orchestration": "workspace:*",
     "@cat-factory/spend": "workspace:*",
     "ai": "^6.0.209",
-    "valibot": "^1.4.1",
-    "workers-ai-provider": "^3.2.0"
+    "valibot": "^1.4.2",
+    "workers-ai-provider": "^3.2.1"
   },
   "devDependencies": {
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.0.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   }

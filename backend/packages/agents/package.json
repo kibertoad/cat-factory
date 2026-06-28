@@ -39,7 +39,7 @@
     "@cat-factory/prompt-fragments": "workspace:*",
     "ai": "^6.0.209",
     "handlebars": "^4.7.9",
-    "valibot": "^1.4.1"
+    "valibot": "^1.4.2"
   },
   "devDependencies": {
     "typescript": "7.0.1-rc",

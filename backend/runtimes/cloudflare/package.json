@@ -62,15 +62,15 @@
     "ai": "^6.0.209",
     "hono": "^4.12.27",
     "pino": "^10.3.1",
-    "valibot": "^1.4.1",
-    "workers-ai-provider": "^3.2.0"
+    "valibot": "^1.4.2",
+    "workers-ai-provider": "^3.2.1"
   },
   "devDependencies": {
     "@cat-factory/conformance": "workspace:*",
-    "@cloudflare/vitest-pool-workers": "^0.16.19",
-    "@cloudflare/workers-types": "^4.20260623.1",
+    "@cloudflare/vitest-pool-workers": "^0.16.20",
+    "@cloudflare/workers-types": "^4.20260628.1",
     "typescript": "7.0.1-rc",
     "vitest": "^4.1.9",
-    "wrangler": "^4.104.0"
+    "wrangler": "^4.105.0"
   }
 }
