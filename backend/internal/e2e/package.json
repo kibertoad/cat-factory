@@ -9,6 +9,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
+    "test:e2e:merge": "playwright merge-reports --reporter html ./all-blob-reports",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
