@@ -21,13 +21,21 @@ export class RecordingEventPublisher implements ExecutionEventPublisher {
   readonly emits: ExecutionInstance[] = []
   /** Every compact `llmCall` activity the proxy pushed (via `llmCallObserved`), in order. */
   readonly llmCalls: LlmCallActivity[] = []
+  /**
+   * Every coarse `boardChanged` the engine/board service pushed, in order — so the suite can
+   * assert a human board mutation (add/rename/move/reparent/delete) emits a real-time signal on
+   * every runtime, not just returns over REST.
+   */
+  readonly boardEvents: { workspaceId: string; reason: string; blockId: string | null }[] = []
 
   async executionChanged(_workspaceId: string, instance: ExecutionInstance): Promise<void> {
     // Clone so the engine's later in-place mutations don't rewrite recorded history.
     this.emits.push(structuredClone(instance))
   }
 
-  async boardChanged(): Promise<void> {}
+  async boardChanged(workspaceId: string, reason: string, blockId?: string | null): Promise<void> {
+    this.boardEvents.push({ workspaceId, reason, blockId: blockId ?? null })
+  }
   async bootstrapChanged(): Promise<void> {}
   async notificationChanged(): Promise<void> {}
   async llmCallObserved(_workspaceId: string, activity: LlmCallActivity): Promise<void> {
@@ -82,6 +90,12 @@ export interface ConformanceApp {
    * transitions `drive`'s final state can't show. Optionally filtered to one block.
    */
   executionEmits(blockId?: string): ExecutionInstance[]
+  /**
+   * Every coarse `boardChanged` the board service pushed (via `boardChanged`), in order —
+   * so the suite can assert a human board mutation emits a real-time signal on every runtime.
+   * Optionally filtered to events naming a specific block.
+   */
+  boardEmits(blockId?: string): { workspaceId: string; reason: string; blockId: string | null }[]
   /**
    * Seed an already-"incorporated" requirements review for a block straight into the
    * facade's real review store, so the suite can assert the engine substitutes the

@@ -206,6 +206,12 @@ export function makeConformanceApp(
     return blockId ? recorder.emits.filter((e) => e.blockId === blockId) : recorder.emits
   }
 
+  function boardEmits(blockId?: string) {
+    return blockId
+      ? recorder.boardEvents.filter((e) => e.blockId === blockId)
+      : recorder.boardEvents
+  }
+
   async function driveBootstrap(
     workspaceId: string,
     jobId: string,
@@ -251,6 +257,7 @@ export function makeConformanceApp(
     drive,
     driveBootstrap,
     executionEmits,
+    boardEmits,
     seedIncorporatedReview,
     seedReadyReview,
     seedIncorporatedClarityReview,
