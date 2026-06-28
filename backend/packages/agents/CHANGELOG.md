@@ -1,5 +1,13 @@
 # @cat-factory/agents
 
+## 0.20.3
+
+### Patch Changes
+
+- Updated dependencies [bbafec9]
+- Updated dependencies [bbafec9]
+  - @cat-factory/kernel@0.43.0
+
 ## 0.20.2
 
 ### Patch Changes
