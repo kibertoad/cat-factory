@@ -1,5 +1,13 @@
 # @cat-factory/local-server
 
+## 0.18.9
+
+### Patch Changes
+
+- Updated dependencies [7d219ab]
+  - @cat-factory/server@0.39.6
+  - @cat-factory/node-server@0.34.6
+
 ## 0.18.8
 
 ### Patch Changes
