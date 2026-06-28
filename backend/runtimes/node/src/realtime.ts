@@ -52,15 +52,19 @@ const WS_EVENTS_PATH = /^\/workspaces\/([^/]+)\/events$/
  */
 export class NodeRealtimeHub {
   private readonly rooms = new Map<string, Set<WebSocket>>()
+  // The `?cid=` each socket connected with — used to skip echoing a board mutation back to
+  // the connection that caused it (the Node analogue of the DO's serialized attachment).
+  private readonly connectionIds = new WeakMap<WebSocket, string>()
 
   /** Add a socket to a workspace's room; it is reaped on close/error. */
-  subscribe(workspaceId: string, socket: WebSocket): void {
+  subscribe(workspaceId: string, socket: WebSocket, connectionId?: string | null): void {
     let room = this.rooms.get(workspaceId)
     if (!room) {
       room = new Set()
       this.rooms.set(workspaceId, room)
     }
     room.add(socket)
+    if (connectionId) this.connectionIds.set(socket, connectionId)
     const drop = () => this.unsubscribe(workspaceId, socket)
     socket.on('close', drop)
     socket.on('error', drop)
@@ -73,12 +77,18 @@ export class NodeRealtimeHub {
     if (room.size === 0) this.rooms.delete(workspaceId)
   }
 
-  /** Fan a pre-serialised JSON event out to every socket on a workspace's stream. */
-  broadcast(workspaceId: string, payload: string): void {
+  /**
+   * Fan a pre-serialised JSON event out to every socket on a workspace's stream. When
+   * `originConnectionId` is given, the socket that connected with that `?cid=` is skipped:
+   * it caused the change and already holds the authoritative REST result, so re-delivering
+   * the echo would only make it refresh off (and fight) its own move.
+   */
+  broadcast(workspaceId: string, payload: string, originConnectionId?: string | null): void {
     const room = this.rooms.get(workspaceId)
     if (!room) return
     for (const socket of room) {
       if (socket.readyState !== WebSocket.OPEN) continue
+      if (originConnectionId && this.connectionIds.get(socket) === originConnectionId) continue
       try {
         socket.send(payload)
       } catch {
@@ -112,8 +122,15 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
     })
   }
 
-  async boardChanged(workspaceId: string, reason: string, _blockId?: string | null): Promise<void> {
-    this.publish(workspaceId, { type: 'board', reason, at: Date.now() })
+  async boardChanged(
+    workspaceId: string,
+    reason: string,
+    _blockId?: string | null,
+    originConnectionId?: string | null,
+  ): Promise<void> {
+    // Pass the origin connection through so the hub skips echoing this board mutation back to
+    // the connection that caused it (see {@link NodeRealtimeHub.broadcast}).
+    this.publish(workspaceId, { type: 'board', reason, at: Date.now() }, originConnectionId)
   }
 
   async bootstrapChanged(
@@ -152,9 +169,13 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
     this.publish(workspaceId, { type: 'kaizen', grading, at: Date.now() })
   }
 
-  private publish(workspaceId: string, event: WorkspaceEvent): void {
+  private publish(
+    workspaceId: string,
+    event: WorkspaceEvent,
+    originConnectionId?: string | null,
+  ): void {
     try {
-      this.hub.broadcast(workspaceId, JSON.stringify(event))
+      this.hub.broadcast(workspaceId, JSON.stringify(event), originConnectionId)
     } catch {
       // No subscribers / serialisation hiccup — the DB write is authoritative and the
       // client's reconnect-resync covers any missed event.
@@ -192,6 +213,9 @@ export function attachRealtime(
     }
     const workspaceId = decodeURIComponent(match[1]!)
     const ticket = url.searchParams.get('ticket') ?? undefined
+    // The tab's stable connection id (see the SPA's `utils/connectionId.ts`), so the hub can
+    // skip echoing a board mutation back to the connection that caused it.
+    const cid = url.searchParams.get('cid')
 
     void authorizeWsUpgrade(auth, ticket, workspaceId).then((verdict) => {
       if (!verdict.ok) {
@@ -201,7 +225,7 @@ export function attachRealtime(
         return
       }
       wss.handleUpgrade(request, socket, head, (ws) => {
-        hub.subscribe(workspaceId, ws)
+        hub.subscribe(workspaceId, ws, cid)
         wss.emit('connection', ws, request)
       })
     })

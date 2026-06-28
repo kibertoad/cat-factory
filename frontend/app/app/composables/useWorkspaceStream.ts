@@ -119,7 +119,11 @@ export function useWorkspaceStream() {
     // A workspace switch (or stop()) may have happened while awaiting the mint.
     if (stopped || workspace.workspaceId !== workspaceId) return
 
-    const query = ticket ? `?ticket=${encodeURIComponent(ticket)}` : ''
+    // Carry this tab's stable connection id so the backend can suppress echoing a board
+    // mutation's coarse event back to the connection that caused it (same id the api
+    // client sends as `X-Connection-Id`) — see `utils/connectionId.ts`.
+    const cid = `cid=${encodeURIComponent(connectionId())}`
+    const query = ticket ? `?ticket=${encodeURIComponent(ticket)}&${cid}` : `?${cid}`
     socket = new WebSocket(`${wsBase}/workspaces/${workspaceId}/events${query}`)
 
     socket.onopen = () => {

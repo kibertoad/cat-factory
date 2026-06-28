@@ -13,7 +13,12 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
   const HOME = 'ws_home' // the workspace that physically homes the shared service's blocks
   const SERVICE_ID = 'svc_shared'
 
-  type Emit = { workspaceId: string; reason: string; blockId: string | null }
+  type Emit = {
+    workspaceId: string
+    reason: string
+    blockId: string | null
+    originConnectionId: string | null
+  }
 
   function build(blocks: Block[]) {
     const emits: Emit[] = []
@@ -33,6 +38,8 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
         listByWorkspace: async (ws: string) => (ws === HOME ? blocks : []),
         update: async () => {},
         insert: async () => {},
+        setService: async () => {},
+        deleteMany: async () => {},
       },
       // Sharing is wired: the acting workspace mounts the home's service.
       serviceRepository: { getByFrameBlock: async () => ({ id: SERVICE_ID }) },
@@ -45,8 +52,18 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
       clock: { now: () => 0 },
       executionEventPublisher: {
         async executionChanged() {},
-        async boardChanged(workspaceId: string, reason: string, blockId?: string | null) {
-          emits.push({ workspaceId, reason, blockId: blockId ?? null })
+        async boardChanged(
+          workspaceId: string,
+          reason: string,
+          blockId?: string | null,
+          originConnectionId?: string | null,
+        ) {
+          emits.push({
+            workspaceId,
+            reason,
+            blockId: blockId ?? null,
+            originConnectionId: originConnectionId ?? null,
+          })
         },
         async bootstrapChanged() {},
         async notificationChanged() {},
@@ -93,6 +110,32 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
     expect(e).toBeDefined()
     expect(e?.workspaceId).toBe(HOME)
     expect(e?.blockId).toBe(created.id)
+  })
+
+  it('moveBlock forwards the origin connection id so the transport can suppress the self-echo', async () => {
+    const { service, emits } = build([task('blk_shared', 'frame_shared')])
+    await service.moveBlock(ACTING, 'blk_shared', { x: 5, y: 9 }, 'cid-abc')
+    const e = emits.find((x) => x.reason === 'block-moved')
+    expect(e).toBeDefined()
+    expect(e?.workspaceId).toBe(HOME)
+    expect(e?.originConnectionId).toBe('cid-abc')
+  })
+
+  it('reparent forwards the origin connection id', async () => {
+    const { service, emits } = build([
+      frame('frame_shared'),
+      frame('frame_dest'),
+      task('blk_shared', 'frame_shared'),
+    ])
+    await service.reparent(
+      ACTING,
+      'blk_shared',
+      { parentId: 'frame_dest', position: { x: 1, y: 2 } },
+      'cid-xyz',
+    )
+    const e = emits.find((x) => x.reason === 'block-reparented')
+    expect(e).toBeDefined()
+    expect(e?.originConnectionId).toBe('cid-xyz')
   })
 
   it('toggleDependency emits with the home workspace of the target task', async () => {
