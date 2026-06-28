@@ -16,7 +16,14 @@ import { blockTypeSchema } from './primitives.js'
 // ---------------------------------------------------------------------------
 
 /** The external document sources cat-factory can link to. */
-export const documentSourceKindSchema = v.picklist(['confluence', 'notion', 'github', 'figma'])
+export const documentSourceKindSchema = v.picklist([
+  'confluence',
+  'notion',
+  'github',
+  'figma',
+  'linear',
+  'claude-design',
+])
 export type DocumentSourceKind = v.InferOutput<typeof documentSourceKindSchema>
 
 // ---- Provider self-description (drives the generic connect UI) ------------

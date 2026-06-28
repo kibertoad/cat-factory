@@ -31,6 +31,8 @@ import {
   GitHubDocsProvider,
   GitHubIssuesProvider,
   JiraProvider,
+  LinearDocumentProvider,
+  LinearTaskProvider,
   HttpEnvironmentProvider,
   NotionProvider,
   EMAIL_CIPHER_INFO,
@@ -193,6 +195,7 @@ import {
   wireIncidentEnrichment,
   wirePullRequestReviewProvider,
 } from '@cat-factory/gates'
+import { registerGitLab, StaticGitLabTokenSource } from '@cat-factory/gitlab'
 import { GitHubPullRequestReviewProvider } from '@cat-factory/server'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
@@ -942,6 +945,13 @@ function selectRecurringDeps(
     }
     trackerDeps.resolveJiraConnection = resolveJiraConnection
     writebackDeps.resolveJiraConnection = resolveJiraConnection
+    const resolveLinearConnection = async (workspaceId: string) => {
+      const connection = await taskConnectionRepository.getByWorkspace(workspaceId, 'linear')
+      const apiKey = connection?.credentials?.apiKey
+      return apiKey ? { apiKey } : null
+    }
+    trackerDeps.resolveLinearConnection = resolveLinearConnection
+    writebackDeps.resolveLinearConnection = resolveLinearConnection
   }
   return {
     pipelineScheduleRepository: new D1PipelineScheduleRepository({ db }),
@@ -1319,6 +1329,7 @@ function selectDocumentsDeps(
   if (config.documents.sources.includes('notion')) providers.push(new NotionProvider())
   // Figma authenticates with a per-workspace PAT (no GitHub client needed), like Notion/Confluence.
   if (config.documents.sources.includes('figma')) providers.push(new FigmaProvider())
+  if (config.documents.sources.includes('linear')) providers.push(new LinearDocumentProvider())
   // GitHub repo docs reuse the workspace's installed GitHub App, so this provider
   // is wired only when the GitHub integration is also configured — it has no
   // credentials of its own and resolves the installation per file (mirrors the
@@ -1373,8 +1384,8 @@ function selectTasksDeps(
   clock: Clock,
   idGenerator: IdGenerator,
 ): Partial<CoreDependencies> {
-  // Jira is always registered (its credentials are per-workspace, entered in the UI).
-  const providers: TaskSourceProvider[] = [new JiraProvider()]
+  // Jira and Linear are always registered (their credentials are per-workspace, entered in the UI).
+  const providers: TaskSourceProvider[] = [new JiraProvider(), new LinearTaskProvider()]
   // GitHub Issues reuse the workspace's installed GitHub App, so this provider is
   // wired whenever the GitHub integration is configured — it has no credentials of
   // its own and resolves the installation per issue. Whether a workspace OFFERS it
@@ -1642,6 +1653,19 @@ export function buildContainer(
   // provider survives the per-request rebuild, and so a deployment that ALSO wires a real provider
   // can't clobber the test's. Gates read their provider lazily at probe time, so the last write wins.
   clearGateProviders()
+
+  // Opt-in GitLab VCS provider (single-token model, mirroring local-mode's PAT). Registered
+  // in the process-wide VCS registry — like a gate provider, a deployment-global handle reset
+  // each build — so the neutral webhook route + any VcsConnectionRef holder resolves it. A
+  // no-op unless GITLAB_TOKEN is set; symmetric with the Node facade (local inherits it) per
+  // "keep the runtimes symmetric".
+  if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
+    registerGitLab({
+      tokenSource: new StaticGitLabTokenSource(env.GITLAB_TOKEN, config.gitlab.apiBase),
+      clock,
+      webhookSecret: config.gitlab.webhookSecret || undefined,
+    })
+  }
 
   // The unified provisioning event log lives in a SEPARATE D1 database (its own
   // binding + migrations) to isolate its high write churn. When wired, build the

@@ -11,9 +11,11 @@ import type {
   BinaryStorageConfig,
   DocumentsConfig,
   EmailConfig,
+  GitLabConfig,
   PrivilegedAppConfig,
   TasksConfig,
 } from '@cat-factory/server'
+import { GITLAB_PUBLIC_API_BASE } from '@cat-factory/gitlab'
 import { DEFAULT_SPEND_PRICING, modelCostResolver } from '@cat-factory/spend'
 
 // Translate the Node process environment into the shared AppConfig contract. This is
@@ -45,6 +47,23 @@ function loadPrivilegedApp(env: NodeJS.ProcessEnv): PrivilegedAppConfig | undefi
   const appId = env.GITHUB_PRIVILEGED_APP_ID?.trim() ?? ''
   if (appId === '' || !env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY?.trim()) return undefined
   return { appId }
+}
+
+/**
+ * Opt-in GitLab VCS provider config (single-token model, mirroring local-mode's PAT).
+ * Enabled as soon as a `GITLAB_TOKEN` is present; the token is read from env at wiring time,
+ * so this carries only the non-secret address + the webhook secret. Mirrors the Worker's
+ * `loadGitLabConfig` (per "keep the runtimes symmetric").
+ */
+function loadGitLabConfig(env: NodeJS.ProcessEnv): GitLabConfig | undefined {
+  const token = env.GITLAB_TOKEN?.trim()
+  if (!token) return undefined
+  return {
+    enabled: true,
+    apiBase: env.GITLAB_API_BASE?.trim() || GITLAB_PUBLIC_API_BASE,
+    connectionId: env.GITLAB_CONNECTION_ID?.trim() || 'gitlab',
+    webhookSecret: env.GITLAB_WEBHOOK_SECRET ?? '',
+  }
 }
 
 /**
@@ -87,6 +106,8 @@ const ALL_DOCUMENT_SOURCES: readonly DocumentSourceKind[] = [
   'notion',
   'github',
   'figma',
+  'linear',
+  'claude-design',
 ]
 
 /** Parse the comma-separated `DOCUMENT_SOURCES` allow-list, defaulting to all. */
@@ -296,6 +317,7 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       webhookSecret: env.GITHUB_WEBHOOK_SECRET ?? '',
       privilegedApp: loadPrivilegedApp(env),
     },
+    gitlab: loadGitLabConfig(env),
     auth: {
       enabled: githubEnabled || googleEnabled || passwordEnabled,
       devOpen,

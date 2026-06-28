@@ -4,7 +4,14 @@ import type { Env } from '../env'
 
 export type { DocumentsConfig }
 
-const ALL_SOURCES: readonly DocumentSourceKind[] = ['confluence', 'notion', 'github', 'figma']
+const ALL_SOURCES: readonly DocumentSourceKind[] = [
+  'confluence',
+  'notion',
+  'github',
+  'figma',
+  'linear',
+  'claude-design',
+]
 
 /** Parse the comma-separated `DOCUMENT_SOURCES` allow-list, defaulting to all. */
 function parseSources(raw: string | undefined): DocumentSourceKind[] {

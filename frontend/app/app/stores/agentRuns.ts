@@ -109,7 +109,7 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
         await ws.refresh()
       })
     } catch (e) {
-      runErrors.present(e, 'Retry failed')
+      runErrors.present(e, 'errors.action.retryFailed')
     }
   }
 

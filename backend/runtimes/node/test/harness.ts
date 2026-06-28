@@ -128,7 +128,7 @@ export function makeConformanceApp(
     // Swap the config-wired real Jira provider for a deterministic fake (the Drizzle
     // task repos stay), so the shared suite asserts create-task-from-issue against
     // Postgres without hitting the network. Override wins over the config providers.
-    taskSourceProviders: [new FakeTaskSourceProvider('jira')],
+    taskSourceProviders: [new FakeTaskSourceProvider('jira'), new FakeTaskSourceProvider('linear')],
     // Inject the engine's run-repo resolver (a fake in the suite) so the registered
     // custom kind's pre/post-op hooks run + commit identically to a real GitHub-wired facade.
     ...(opts?.resolveRunRepoContext ? { resolveRunRepoContext: opts.resolveRunRepoContext } : {}),
@@ -190,6 +190,12 @@ export function makeConformanceApp(
     return blockId ? recorder.emits.filter((e) => e.blockId === blockId) : recorder.emits
   }
 
+  function boardEmits(blockId?: string) {
+    return blockId
+      ? recorder.boardEvents.filter((e) => e.blockId === blockId)
+      : recorder.boardEvents
+  }
+
   // Poll a bootstrap run to terminal directly (production drives this via pg-boss).
   async function driveBootstrap(
     workspaceId: string,
@@ -232,6 +238,7 @@ export function makeConformanceApp(
     drive,
     driveBootstrap,
     executionEmits,
+    boardEmits,
     seedIncorporatedReview,
     seedReadyReview,
     seedIncorporatedClarityReview,

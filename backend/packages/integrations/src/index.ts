@@ -57,6 +57,20 @@ export { ConfluenceProvider, ConfluenceApiError } from './modules/documents/Conf
 export { NotionProvider, NotionApiError } from './modules/documents/NotionProvider.js'
 export { GitHubDocsProvider } from './modules/documents/GitHubDocsProvider.js'
 export { FigmaProvider, FigmaApiError } from './modules/documents/FigmaProvider.js'
+export { LinearDocumentProvider } from './modules/documents/LinearDocumentProvider.js'
+export * as linearDocsLogic from './modules/documents/linear-docs.logic.js'
+export { LINEAR_DOCS_DESCRIPTOR } from './modules/documents/linear-docs.logic.js'
+// The shared Linear GraphQL transport (host-pinned, OAuth-ready) every Linear
+// consumer — the document + task sources, ticket filing and PR writeback — uses.
+export {
+  LinearGraphqlClient,
+  LinearApiError,
+  LINEAR_GRAPHQL_URL,
+  linearAuthHeader,
+  unwrapLinearData,
+  type LinearAuth,
+  type LinearFetchLike,
+} from './modules/shared/linear.client.js'
 
 export {
   TaskConnectionService,
@@ -80,14 +94,20 @@ export {
 export * as tasksLogic from './modules/tasks/tasks.logic.js'
 export * as jiraLogic from './modules/tasks/jira.logic.js'
 export { JIRA_DESCRIPTOR } from './modules/tasks/jira.logic.js'
+export * as linearTasksLogic from './modules/tasks/linear.logic.js'
+export { LINEAR_TASK_DESCRIPTOR } from './modules/tasks/linear.logic.js'
+export { LinearTaskProvider } from './modules/tasks/LinearTaskProvider.js'
 export {
   TicketTrackerService,
   type TicketTrackerServiceDependencies,
   type JiraConnection,
+  type LinearConnection,
   type FetchLike,
 } from './modules/tracker/TicketTrackerService.js'
 export * as jiraCreateLogic from './modules/tracker/jira.create.logic.js'
 export * as jiraWritebackLogic from './modules/tracker/jira.writeback.logic.js'
+export * as linearCreateLogic from './modules/tracker/linear.create.logic.js'
+export * as linearWritebackLogic from './modules/tracker/linear.writeback.logic.js'
 export { extractReferences, type ExtractedReferences } from './modules/corpus/references.logic.js'
 export {
   IssueWritebackService,

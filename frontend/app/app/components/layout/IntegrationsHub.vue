@@ -29,10 +29,11 @@ const workspace = useWorkspaceStore()
 // nothing becomes unreachable.
 const personalHubReachable = computed(() => !!auth.user)
 
-// The selected filing tracker, as a badge label ("GitHub Issues" / "Jira").
+// The selected filing tracker, as a badge label ("GitHub Issues" / "Jira" / "Linear").
 const trackerLabel = computed(() => {
   if (tracker.settings.tracker === 'github') return 'GitHub Issues'
   if (tracker.settings.tracker === 'jira') return 'Jira'
+  if (tracker.settings.tracker === 'linear') return 'Linear'
   return undefined
 })
 

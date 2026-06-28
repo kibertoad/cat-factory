@@ -1,0 +1,253 @@
+import type {
+  CommitFilesInput,
+  GitHubBranch,
+  GitHubCheckRun,
+  GitHubCommit,
+  GitHubIssue,
+  GitHubPullRequest,
+  GitHubRepo,
+  MergePullRequestInput,
+  OpenPullRequestInput,
+} from '../domain/types.js'
+import type { VcsConnectionRef, VcsRepoRef } from '../domain/vcs-types.js'
+// The supporting value-shaped interfaces are provider-neutral already (a page of
+// results, a directory entry, a review thread, …), so the neutral client reuses them
+// from the GitHub port rather than re-declaring them. Phase 1 of the VCS-abstraction
+// work folds the GitHub-named entity types (GitHubRepo, …) into neutral names too;
+// until then they are reused as-is (their shapes are not GitHub-specific).
+import type {
+  CommitFilesResult,
+  GitHubCodeSearchHit,
+  GitHubIssueComment,
+  GitHubIssueDetail,
+  GitHubIssueSearchHit,
+  GitHubPullRequestComment,
+  GitHubPullRequestReview,
+  GitHubReviewThread,
+  GitHubSubIssue,
+  ListOptions,
+  Paged,
+  RepoContentEntry,
+  RepoEntry,
+  RepoFileContent,
+} from './github-client.js'
+
+export type {
+  CommitFilesResult,
+  GitHubCodeSearchHit,
+  GitHubIssueComment,
+  GitHubIssueDetail,
+  GitHubIssueSearchHit,
+  GitHubPullRequestComment,
+  GitHubPullRequestReview,
+  GitHubReviewThread,
+  GitHubSubIssue,
+  ListOptions,
+  Paged,
+  RepoContentEntry,
+  RepoEntry,
+  RepoFileContent,
+}
+
+// ---------------------------------------------------------------------------
+// VcsClient port: the provider-neutral slice of a VCS host's API the integration
+// needs (repo/branch/PR/issue/CI reads + writes), expressed as a domain interface so
+// the core never imports an HTTP client. Each concrete provider (`github`, `gitlab`)
+// ships an adapter, registered in the VCS provider registry (`vcs-registry.ts`) and
+// resolved through the {@link VcsConnectionRef} a caller holds.
+//
+// This is the neutral successor to `GitHubClient`: every method is keyed by a
+// `VcsConnectionRef` (which connection's credentials to use) plus a `VcsRepoRef`
+// (which repo), instead of GitHub's `installationId: number` + `{ owner, repo }`.
+// Optional (`?`) methods may be omitted by a provider that lacks the native concept
+// (e.g. GitLab has no GitHub-style sub-issues); the caller degrades gracefully.
+// ---------------------------------------------------------------------------
+
+export interface VcsClient {
+  // ---- reads --------------------------------------------------------------
+  /** List every repository the connection can access (for backfill/reconcile). */
+  listRepos(connection: VcsConnectionRef): Promise<Paged<GitHubRepo>>
+  getRepo(connection: VcsConnectionRef, ref: VcsRepoRef): Promise<GitHubRepo>
+  /** Whether the connection actually has push (write) access to a repo. */
+  canPush(connection: VcsConnectionRef, ref: VcsRepoRef): Promise<boolean>
+  listBranches(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    etag?: string,
+  ): Promise<Paged<GitHubBranch>>
+  /** Resolve a single branch's head commit sha, or null when the branch does not exist. */
+  branchHeadSha(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    branch: string,
+  ): Promise<string | null>
+  /** List a repository's root-level entries (empty array for an empty repository). */
+  listRootEntries(connection: VcsConnectionRef, ref: VcsRepoRef): Promise<RepoEntry[]>
+  /** List a directory's entries on a ref, each with its blob/tree sha. */
+  listDirectory(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    path: string,
+    gitRef?: string,
+  ): Promise<RepoContentEntry[]>
+  /** Read a file's decoded UTF-8 content + blob sha on a ref, or null if absent. */
+  getFileContent(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    path: string,
+    gitRef?: string,
+  ): Promise<RepoFileContent | null>
+  listPullRequests(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    opts?: ListOptions,
+  ): Promise<Paged<GitHubPullRequest>>
+  listIssues(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    opts?: ListOptions,
+  ): Promise<Paged<GitHubIssue>>
+  /** Fetch a single issue's full content (body + comments) for linking it to a block. */
+  getIssue(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    issueNumber: number,
+  ): Promise<GitHubIssueDetail>
+  /** List an issue's native sub-issues (parent→child). Optional. */
+  listSubIssues?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    issueNumber: number,
+  ): Promise<GitHubSubIssue[]>
+  /** Search issues visible to the connection by free text. */
+  searchIssues(
+    connection: VcsConnectionRef,
+    query: string,
+    limit?: number,
+  ): Promise<GitHubIssueSearchHit[]>
+  /** Code-search files visible to the connection. */
+  searchCode(
+    connection: VcsConnectionRef,
+    query: string,
+    limit?: number,
+  ): Promise<GitHubCodeSearchHit[]>
+  listCommits(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    opts?: ListOptions & { sha?: string },
+  ): Promise<Paged<GitHubCommit>>
+  listCheckRuns(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    sha: string,
+  ): Promise<Paged<GitHubCheckRun>>
+  /** List the logins of a PR's currently-requested reviewers. Optional. */
+  listRequestedReviewers?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<string[]>
+  /** List a PR's submitted reviews, oldest→newest. Optional. */
+  listPullRequestReviews?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<GitHubPullRequestReview[]>
+  /** List a PR's general conversation comments, oldest→newest. Optional. */
+  listIssueComments?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<GitHubPullRequestComment[]>
+  /** The number of approving reviews branch protection requires on `branch`. Optional. */
+  getRequiredApprovingReviewCount?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    branch: string,
+  ): Promise<number>
+  /** The branch a PR actually targets, or null when the PR can't be read. Optional. */
+  getPullRequestBaseRef?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<string | null>
+  /** List a PR's review threads with resolved state + anchor + comments. Optional. */
+  listReviewThreads?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<GitHubReviewThread[]>
+  /** Post a reply on a review thread. Optional. */
+  replyToReviewThread?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    threadId: string,
+    body: string,
+  ): Promise<void>
+  /** Resolve a review thread. Optional. */
+  resolveReviewThread?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    threadId: string,
+  ): Promise<void>
+
+  // ---- writes -------------------------------------------------------------
+  createBranch(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    name: string,
+    fromSha: string,
+  ): Promise<void>
+  /** Create a commit on a branch (blob → tree → commit → ref). */
+  commitFiles(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    input: CommitFilesInput,
+  ): Promise<CommitFilesResult>
+  /** Create an issue; returns the new issue's number + canonical web URL. */
+  createIssue(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    input: { title: string; body: string },
+  ): Promise<{ number: number; url: string }>
+  /** Close an issue as resolved (idempotent from the caller's view). */
+  closeIssue(connection: VcsConnectionRef, ref: VcsRepoRef, number: number): Promise<void>
+  openPullRequest(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    input: OpenPullRequestInput,
+  ): Promise<GitHubPullRequest>
+  updatePullRequest(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+    patch: { title?: string; body?: string; state?: 'open' | 'closed'; base?: string },
+  ): Promise<GitHubPullRequest>
+  /** Read a PR's lazily-computed mergeability (the gate normalises the result). */
+  getPullRequestMergeability(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<{ mergeable: boolean | null; mergeableState: string; headSha: string | null }>
+  mergePullRequest(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+    input?: MergePullRequestInput,
+  ): Promise<void>
+  /** Delete a branch (idempotent: a missing branch is not an error). */
+  deleteBranch(connection: VcsConnectionRef, ref: VcsRepoRef, branch: string): Promise<void>
+  /** Add a comment to an issue or pull request. */
+  comment(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    issueOrPrNumber: number,
+    body: string,
+  ): Promise<void>
+  /** Merge one branch into another server-side; maps to a verdict. */
+  mergeBranch(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    input: { base: string; head: string },
+  ): Promise<'merged' | 'noop' | 'conflict'>
+}
