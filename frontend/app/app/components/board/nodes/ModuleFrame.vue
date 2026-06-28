@@ -86,7 +86,7 @@ function onResize(e: PointerEvent, edge: 'e' | 's' | 'se') {
       @pointerdown="onResize($event, 's')"
     />
     <div
-      class="nodrag nopan absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize pointer-coarse:h-7 pointer-coarse:w-7"
+      class="nodrag nopan absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize pointer-coarse:h-11 pointer-coarse:w-11"
       title="Drag to resize"
       @pointerdown="onResize($event, 'se')"
     >

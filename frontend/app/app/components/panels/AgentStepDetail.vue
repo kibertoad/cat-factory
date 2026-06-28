@@ -176,7 +176,7 @@ async function copyOutput() {
       <div
         v-if="open && step && agent"
         data-testid="step-detail"
-        class="fixed inset-0 z-50 flex bg-slate-950/96 backdrop-blur-sm"
+        class="fixed inset-0 z-50 flex max-h-[100dvh] bg-slate-950/96 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
       >

@@ -55,14 +55,18 @@ passes.
   the composable rather than the CSS variant).
 - ☑ Modals/panels fit small screens using `dvh`. The hand-rolled overlay windows are capped
   to the dynamic viewport — the five centred review windows (requirements / clarity / spec /
-  consensus / brainstorm) swap `h-[90vh]`→`h-[90dvh]`, and every `fixed inset-0` overlay
+  consensus / brainstorm) swap `h-[90vh]`→`max-h-[90dvh]` (a `max-h` so a tiny landscape
+  viewport can't push the top of the window out of reach), and every `fixed inset-0` overlay
   (those five plus the `items-stretch` result views: follow-up, test-report,
   visual-confirmation, gate, generic-structured, human-test) gains `max-h-[100dvh]` so its
   controls clear the mobile browser chrome. The Pipeline builder stacks its three columns and
-  scrolls as one below `lg` (independent per-column scroll on `lg:`); `ModelConfigurationPanel`
-  (the one custom full-screen settings panel) gains `max-h-[100dvh]`; the rest of `settings/*`
-  are `UModal`s, already height-capped by Nuxt UI's default `max-h-[calc(100dvh-2rem)]`. Also
-  swapped the phase-1 `AgentStepDetail` mobile review-rail sheet `max-h-[70vh]`→`max-h-[70dvh]`.
+  scrolls as one below `lg` (independent per-column scroll on `lg:`); the two custom
+  full-screen panels — `ModelConfigurationPanel` and `AgentStepDetail` — gain `max-h-[100dvh]`
+  (on `AgentStepDetail` this is what actually lifts the phase-1 review-rail bottom sheet, an
+  `absolute bottom-0` child, above the mobile chrome — capping its height alone didn't move its
+  anchor); the rest of `settings/*` are `UModal`s, already height-capped by Nuxt UI's default
+  `max-h-[calc(100dvh-2rem)]`. Also swapped the phase-1 `AgentStepDetail` mobile review-rail
+  sheet `max-h-[70vh]`→`max-h-[70dvh]`.
 - ☑ Patch changeset (`.changeset/mobile-touch-targets.md`).
 
 ## Phase 3 — Board canvas touch gestures — PR 3

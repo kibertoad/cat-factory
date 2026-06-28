@@ -71,7 +71,7 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
       @click.self="close"
     >
       <div
-        class="flex h-[90dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
+        class="flex max-h-[90dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
       >
         <!-- header -->
         <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">
