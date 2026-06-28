@@ -1,4 +1,4 @@
-import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
+import type { AgentRunResult, Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
 import type { AdvanceResult, AdvanceOptions } from './advance.js'
 
 // The per-step-kind handler abstraction — the engine-internal counterpart to the public
@@ -60,3 +60,44 @@ export interface StepHandler {
  * above any specific handler's order so specific handlers always shadow it.
  */
 export const FALLTHROUGH_STEP_HANDLER_ORDER = Number.MAX_SAFE_INTEGER
+
+// ---------------------------------------------------------------------------
+// Step-completion interceptors
+// ---------------------------------------------------------------------------
+//
+// The completion-path sibling of {@link StepHandler}. A handful of step kinds DON'T just
+// finish-and-advance when their agent returns: a container-backed companion applies its
+// verdict's threshold/rework/human-gate loop, and a Tester re-runs its `fixer` on a
+// withheld greenlight. These run at the TOP of `recordStepResult` and SHORT-CIRCUIT it,
+// returning a full {@link AdvanceResult} (park / loop / fail) instead of letting the normal
+// completion spine run.
+//
+// They can't use the kernel {@link StepCompletionResolver} seam: that returns a
+// `StepResolution` (reshape output / own terminal status), whereas these decide run FLOW and
+// yield an orchestration-local `AdvanceResult`. So, like {@link StepHandler}, an interceptor
+// is engine-internal — built in-engine closing over the controllers — and there is no public
+// registration seam. `intercept` returns the short-circuit outcome, or `null` to let the
+// normal completion continue (a Tester greenlight falls through this way).
+
+/** Inputs to a {@link StepCompletionInterceptor}, at the point its step's agent finished. */
+export interface StepCompletionContext {
+  workspaceId: string
+  instance: ExecutionInstance
+  step: PipelineStep
+  isFinalStep: boolean
+  /** The finished agent's structured result. */
+  result: AgentRunResult
+}
+
+/**
+ * An engine-internal short-circuit on the completion path, keyed on `step.agentKind` via
+ * `canIntercept`. The first interceptor that claims the step and returns a non-null
+ * `AdvanceResult` short-circuits `recordStepResult`; returning `null` lets the normal
+ * finish/advance spine run.
+ */
+export interface StepCompletionInterceptor {
+  readonly kind: string
+  readonly order: number
+  canIntercept(ctx: StepCompletionContext): boolean
+  intercept(ctx: StepCompletionContext): Promise<AdvanceResult | null>
+}

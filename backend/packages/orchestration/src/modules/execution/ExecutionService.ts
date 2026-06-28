@@ -103,6 +103,8 @@ import {
   FALLTHROUGH_STEP_HANDLER_ORDER,
   type StepHandler,
   type StepHandlerContext,
+  type StepCompletionContext,
+  type StepCompletionInterceptor,
 } from './step-handler-registry.js'
 import type {
   GateContext,
@@ -503,6 +505,17 @@ export interface BlueprintReconciler {
 }
 
 /**
+ * The inline review/brainstorm gate kinds, all driven through the {@link ReviewGateController}
+ * by the engine's `review-gate` StepHandler. Kept in sync with the handler's `switch`.
+ */
+const REVIEW_GATE_AGENT_KINDS: ReadonlySet<string> = new Set([
+  REQUIREMENTS_REVIEW_AGENT_KIND,
+  CLARITY_REVIEW_AGENT_KIND,
+  REQUIREMENTS_BRAINSTORM_AGENT_KIND,
+  ARCHITECTURE_BRAINSTORM_AGENT_KIND,
+])
+
+/**
  * The execution engine. It orchestrates a pipeline of agent-performed steps and
  * is fully deterministic: `advanceInstance` moves one run forward by exactly one
  * step, delegating the actual work — and the choice of whether to pause for a
@@ -599,6 +612,11 @@ export class ExecutionService {
    * and {@link StepHandler}. Engine-internal (no public registration seam).
    */
   private stepHandlerCache?: StepHandler[]
+  /**
+   * Lazily-built, order-sorted completion-path interceptor list (companion/tester verdict
+   * short-circuits). See {@link dispatchStepCompletionInterceptor}. Engine-internal.
+   */
+  private stepCompletionInterceptorCache?: StepCompletionInterceptor[]
 
   constructor({
     workspaceRepository,
@@ -1422,7 +1440,7 @@ export class ExecutionService {
 
     // The fixed run-lifecycle preamble is done; hand the per-kind work to the
     // engine-internal StepHandler registry (the first handler whose `canHandle` claims
-    // this step). See {@link dispatchStepHandler} / {@link runStepBody}.
+    // this step). See {@link dispatchStepHandler} / {@link handleAgentStep}.
     return this.dispatchStepHandler({
       workspaceId,
       instance,
@@ -1434,126 +1452,16 @@ export class ExecutionService {
   }
 
   /**
-   * The per-step-kind body run by the StepHandler registry once {@link stepInstance}'s
-   * preamble has completed. Phase 0 of the ExecutionService split: a single fallthrough
-   * handler delegates the ENTIRE body here unchanged (so dispatch is wired with zero
-   * behaviour change); later phases lift each branch below into its own handler and shrink
-   * this method until only the generic container/inline-agent tail remains.
+   * The generic container/inline-agent step — the lowest-priority StepHandler, claiming
+   * every step no more-specific handler did (coder, architect, spec-writer, merger,
+   * task-estimator, the container-backed companions, …). Builds the agent context, runs the
+   * kind's pre-ops, then either dispatches an async container job and parks (the durable
+   * driver polls between sleeps) or runs the inline LLM call and records the result. This is
+   * what the dispatch chain falls through to; all the deterministic / gate / inline-review
+   * kinds are claimed earlier by their own handlers (see {@link buildStepHandlerRegistry}).
    */
-  private async runStepBody(ctx: StepHandlerContext): Promise<AdvanceResult> {
+  private async handleAgentStep(ctx: StepHandlerContext): Promise<AdvanceResult> {
     const { workspaceId, instance, step, block, isFinalStep, options } = ctx
-
-    // (The `deployer` and `tracker` steps are handled by their own StepHandlers — see
-    // {@link buildStepHandlerRegistry} — so they no longer branch here.)
-
-    // A `requirements-review` step runs the inline reviewer and parks for the dedicated
-    // review window, driving the iterative answer → incorporate → re-review loop. NOT a
-    // container/prose agent. Pass-through when the reviewer isn't wired. The clarity gate
-    // shares the SAME flow (only the subject + persisted doc differ); both run through the
-    // {@link ReviewGateController}, parameterised by their {@link ReviewKind}.
-    if (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND) {
-      return this.reviewGate.evaluate(
-        this.requirementsKind,
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-      )
-    }
-
-    // A `clarity-review` step triages the block's bug report (optionally enriched by an
-    // upstream `bug-investigator` step) and parks for the dedicated review window, driving
-    // the same iterative loop as the requirements gate. NOT a container/prose agent.
-    // Pass-through when the reviewer isn't wired.
-    if (step.agentKind === CLARITY_REVIEW_AGENT_KIND) {
-      return this.reviewGate.evaluate(
-        this.clarityKind,
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-      )
-    }
-
-    // The two brainstorm (structured-dialogue) gates run the inline option-generator and park
-    // for the dedicated brainstorm window, driving the same iterative loop as the requirements
-    // gate. NOT container/prose agents. Pass-through when the brainstorm module isn't wired.
-    if (step.agentKind === REQUIREMENTS_BRAINSTORM_AGENT_KIND) {
-      return this.reviewGate.evaluate(
-        this.requirementsBrainstormKind,
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-      )
-    }
-    if (step.agentKind === ARCHITECTURE_BRAINSTORM_AGENT_KIND) {
-      return this.reviewGate.evaluate(
-        this.architectureBrainstormKind,
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-      )
-    }
-
-    // A `human-test` gate spins up an ephemeral environment and PARKS for a human to
-    // validate the change in a live URL before the run continues — NOT a container/prose
-    // agent and NOT a programmatic polling gate (the human is the verdict). It also drives
-    // the same helpers the other gates use on demand: the Tester's `fixer` (from findings)
-    // and the `conflict-resolver` (after a conflicting pull-main). Degrades to a manual
-    // (no-env) mode when no ephemeral-environment provider is wired. See {@link HumanTestController}.
-    if (step.agentKind === HUMAN_TEST_AGENT_KIND) {
-      return this.humanTestController.evaluate(workspaceId, instance, step, block, isFinalStep)
-    }
-
-    // A `visual-confirmation` gate gathers the UI tester's screenshots + the uploaded
-    // reference designs and PARKS for a human to review actual-vs-reference, then on demand
-    // dispatches the Tester's `fixer`. Passes through (auto-advances) when no binary-artifact
-    // store is wired. See {@link VisualConfirmationController}.
-    if (step.agentKind === VISUAL_CONFIRM_AGENT_KIND) {
-      return this.visualConfirmationController.evaluate(
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-      )
-    }
-
-    // A polling gate step (`ci` / `conflicts`) runs a programmatic precheck and only
-    // escalates to a helper container agent (`ci-fixer` / `conflict-resolver`) on a
-    // negative verdict — no LLM of its own. Pass-through when the gate's provider is
-    // not wired. One generic machine drives every gate; see {@link evaluateGate}.
-    const gate = this.gateFor(step.agentKind)
-    if (gate) {
-      return this.evaluateGate(workspaceId, instance, step, block, isFinalStep, gate)
-    }
-
-    // A companion step grades the nearest preceding producer of one of its target
-    // kinds, looping it back for automatic rework below the threshold (and failing
-    // the run once the budget is spent) before any human gate. See evaluateCompanion.
-    //
-    // INLINE companions (architect-companion / spec-companion) run their LLM grading right
-    // here. CONTAINER-backed companions (reviewer / doc-reviewer) instead fall through to the
-    // generic async container dispatch below — they clone the producer's PR branch and review
-    // the REAL repository — and their verdict is resolved in `recordStepResult` via
-    // `companionController.resolveContainerVerdict` (which runs the SAME threshold / rework
-    // loop). A summary-only review is useless; the container reviewer reads the actual diff.
-    if (isCompanionKind(step.agentKind) && !isContainerBackedCompanion(step.agentKind)) {
-      return this.companionController.evaluate(
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-        options,
-      )
-    }
 
     // Async (container) steps don't block: dispatch the job and park. The durable
     // driver polls `pollAgentJob` between sleeps so the run can span far longer
@@ -2256,38 +2164,20 @@ export class ExecutionService {
       return { kind: 'awaiting_decision', decisionId: step.decision.id }
     }
 
-    // A container-backed companion (reviewer / doc-reviewer) just finished reviewing the
-    // real repository on the producer's PR branch and returned its verdict as `result.custom`.
-    // Hand it to the companion loop, which parses the verdict and applies the SAME threshold /
-    // rework / human-gate handling an inline companion gets. Routed here (not the normal step
-    // completion) so the verdict drives the loop instead of being recorded as plain output.
-    if (isCompanionKind(step.agentKind) && isContainerBackedCompanion(step.agentKind)) {
-      const companionBlock = await this.blockRepository.get(workspaceId, instance.blockId)
-      if (companionBlock) {
-        return this.companionController.resolveContainerVerdict(
-          workspaceId,
-          instance,
-          step,
-          companionBlock,
-          isFinalStep,
-          result,
-        )
-      }
-    }
-
-    // A `tester` step returned a structured report. On a withheld greenlight we do
-    // NOT finish the step: we loop the `fixer` (within the attempt budget) and
-    // re-test, mirroring the CI gate. A greenlight (or no provider) falls through to
-    // the normal finish/advance below. Records the report on the step either way.
-    if (isTesterKind(step.agentKind) && result.testReport !== undefined) {
-      const looped = await this.testerController.resolveTesterResult(
-        workspaceId,
-        instance,
-        step,
-        result,
-      )
-      if (looped) return looped
-    }
+    // Completion-path interceptors short-circuit before the normal finish/advance for the
+    // few kinds whose verdict drives run flow: a container-backed companion applies its
+    // threshold/rework/human-gate loop, and a Tester re-runs its `fixer` on a withheld
+    // greenlight. A non-null outcome replaces the normal completion; null (a Tester
+    // greenlight, or a companion whose block can't be loaded) falls through. See
+    // {@link buildStepCompletionInterceptors}.
+    const intercepted = await this.dispatchStepCompletionInterceptor({
+      workspaceId,
+      instance,
+      step,
+      isFinalStep,
+      result,
+    })
+    if (intercepted) return intercepted
 
     // The step completed.
     step.output = result.output ?? ''
@@ -2334,45 +2224,26 @@ export class ExecutionService {
       }
     }
 
-    // A Blueprinter step produced a fresh service decomposition. Validate it with
-    // the authoritative schema (a bad payload must never touch the board), then
-    // reconcile it in place onto the run's service frame.
-    if (result.blueprintService !== undefined) {
-      await this.ingestBlueprint(workspaceId, instance.blockId, result.blueprintService)
-    }
-
-    // A spec-writer step produced the service's unified specification (`spec.json`)
-    // and committed it to the implementation branch. Strict-validate it (a bad payload
-    // must never be trusted), then nudge clients to refresh.
-    if (result.spec !== undefined) {
-      await this.ingestSpec(workspaceId, result.spec)
-    }
-
-    // Record the spec-writer's BUSINESS-vs-TECHNICAL determination on the step. "No
-    // business specs" (a purely technical task) is a valid outcome; the spec-companion's
-    // convergence — the one point both signals coexist — combines this with the
-    // companion's `technicalCorroborated` verdict to infer the block's `technical` label
-    // (see CompanionController). Recorded even when false so a re-run reflects the latest.
-    if (step.agentKind === SPEC_WRITER_AGENT_KIND) {
-      step.noBusinessSpecs = result.noBusinessSpecs === true
-    }
-
-    // A `task-estimator` step emits a JSON triage (complexity/risk/impact). Parse it
-    // tolerantly, persist it on the block (used to gate consensus steps + surfaced in
-    // the UI), and replace the raw JSON output with a readable summary. An unparseable
-    // estimate leaves the block untouched and keeps the raw output (no run failure).
-    // The estimate works the same whether the single-actor estimator or the consensus
-    // ranked-scoring variant produced the JSON — both land here.
-    if (step.agentKind === TASK_ESTIMATOR_AGENT_KIND) {
-      const estimate = coerceTaskEstimate(
-        step.output,
-        result.model ?? step.model ?? null,
-        this.clock.now(),
-      )
-      if (estimate) {
-        await this.blockRepository.update(workspaceId, instance.blockId, { estimate })
-        step.output = summarizeEstimate(estimate)
-      }
+    // Run any POST-COMPLETION resolver registered for this step kind (blueprint/spec
+    // ingestion, task-estimate persistence). It reshapes the agent's structured result into
+    // domain state and may replace `step.output` (the estimator's readable summary). Its
+    // POSITION is load-bearing — it runs after the output is recorded but BEFORE the
+    // reviewable-output rendering and the follow-up/approval gates read `step.output`, so it
+    // sits exactly where the old inline ingestion branches did. See
+    // {@link buildStepResolverRegistry} and {@link StepCompletionResolver.phase}.
+    const postCompletionResolver = this.stepResolverFor(step.agentKind)
+    if (
+      postCompletionResolver?.phase === 'post-completion' &&
+      (postCompletionResolver.applies?.(result) ?? true)
+    ) {
+      const resolution = await postCompletionResolver.resolve({
+        workspaceId,
+        instance,
+        step,
+        result,
+        isFinalStep,
+      })
+      if (resolution?.output !== undefined) step.output = resolution.output
     }
 
     // A producer that emits a STRUCTURED ARTIFACT (the spec doc, the blueprint tree, …)
@@ -2434,7 +2305,11 @@ export class ExecutionService {
     // tells `finalizeBlock` to leave it alone.
     const resolver = this.stepResolverFor(step.agentKind)
     let resolverOwnsTerminalStatus = false
-    if (resolver && (resolver.applies?.(result) ?? true)) {
+    if (
+      resolver &&
+      (resolver.phase ?? 'terminal') === 'terminal' &&
+      (resolver.applies?.(result) ?? true)
+    ) {
       const resolution = await resolver.resolve({
         workspaceId,
         instance,
@@ -2907,16 +2782,208 @@ export class ExecutionService {
           return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
         },
       },
-      // The generic container/inline-agent fallthrough — claims every step no more-specific
-      // handler did (today's `runStepBody` tail). Highest order so it always runs last.
+      // The `requirements-review` / `clarity-review` / `requirements-brainstorm` /
+      // `architecture-brainstorm` steps are inline reviewers that park for their dedicated
+      // window and drive the iterative answer → incorporate → re-review loop — NOT
+      // container/prose agents. All four run through the {@link ReviewGateController},
+      // parameterised by their {@link ReviewKind} (the per-case `switch` binds each kind's
+      // review type so `evaluate`'s generic infers). Pass-through when the service isn't wired.
       {
-        kind: '*',
+        kind: 'review-gate',
+        order: 120,
+        canHandle: ({ step }) => REVIEW_GATE_AGENT_KINDS.has(step.agentKind),
+        handle: ({ workspaceId, instance, step, block, isFinalStep }) => {
+          switch (step.agentKind) {
+            case REQUIREMENTS_REVIEW_AGENT_KIND:
+              return this.reviewGate.evaluate(
+                this.requirementsKind,
+                workspaceId,
+                instance,
+                step,
+                block,
+                isFinalStep,
+              )
+            case CLARITY_REVIEW_AGENT_KIND:
+              return this.reviewGate.evaluate(
+                this.clarityKind,
+                workspaceId,
+                instance,
+                step,
+                block,
+                isFinalStep,
+              )
+            case REQUIREMENTS_BRAINSTORM_AGENT_KIND:
+              return this.reviewGate.evaluate(
+                this.requirementsBrainstormKind,
+                workspaceId,
+                instance,
+                step,
+                block,
+                isFinalStep,
+              )
+            case ARCHITECTURE_BRAINSTORM_AGENT_KIND:
+              return this.reviewGate.evaluate(
+                this.architectureBrainstormKind,
+                workspaceId,
+                instance,
+                step,
+                block,
+                isFinalStep,
+              )
+            // `canHandle` admits only the kinds in REVIEW_GATE_AGENT_KINDS, so every member
+            // must have an explicit case above. Throw loudly if the two ever drift (a new
+            // review kind added to the Set without a case here) rather than silently routing
+            // it to the wrong reviewer.
+            default:
+              throw new Error(`Unhandled review-gate agentKind "${step.agentKind}"`)
+          }
+        },
+      },
+      // A `human-test` gate spins up an ephemeral environment and PARKS for a human to
+      // validate the change in a live URL — NOT a container/prose agent and NOT a
+      // programmatic polling gate (the human is the verdict). Degrades to a manual (no-env)
+      // mode when no ephemeral-environment provider is wired. See {@link HumanTestController}.
+      {
+        kind: HUMAN_TEST_AGENT_KIND,
+        order: 130,
+        canHandle: ({ step }) => step.agentKind === HUMAN_TEST_AGENT_KIND,
+        handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
+          this.humanTestController.evaluate(workspaceId, instance, step, block, isFinalStep),
+      },
+      // A `visual-confirmation` gate gathers the UI tester's screenshots + uploaded reference
+      // designs and PARKS for a human to review actual-vs-reference, then on demand dispatches
+      // the Tester's `fixer`. Passes through when no binary-artifact store is wired.
+      // See {@link VisualConfirmationController}.
+      {
+        kind: VISUAL_CONFIRM_AGENT_KIND,
+        order: 140,
+        canHandle: ({ step }) => step.agentKind === VISUAL_CONFIRM_AGENT_KIND,
+        handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
+          this.visualConfirmationController.evaluate(
+            workspaceId,
+            instance,
+            step,
+            block,
+            isFinalStep,
+          ),
+      },
+      // A polling gate step (`ci` / `conflicts` / `post-release-health` / `human-review`) runs
+      // a programmatic precheck and only escalates to a helper container agent on a negative
+      // verdict — no LLM of its own. Pass-through when the gate's provider is not wired. One
+      // generic machine drives every gate; see {@link evaluateGate}. `canHandle` is the gate
+      // registry lookup, so this claims exactly the registered gate kinds.
+      {
+        kind: 'polling-gate',
+        order: 150,
+        canHandle: ({ step }) => this.gateFor(step.agentKind) !== undefined,
+        handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
+          this.evaluateGate(
+            workspaceId,
+            instance,
+            step,
+            block,
+            isFinalStep,
+            this.gateFor(step.agentKind)!,
+          ),
+      },
+      // An INLINE companion (architect-companion / spec-companion) grades the nearest
+      // preceding producer right here and loops it back for automatic rework below the
+      // threshold before any human gate. CONTAINER-backed companions (reviewer / doc-reviewer)
+      // do NOT match — they fall through to the generic async container dispatch and have their
+      // verdict resolved by the completion interceptor instead. See {@link CompanionController}.
+      {
+        kind: 'inline-companion',
+        order: 160,
+        canHandle: ({ step }) =>
+          isCompanionKind(step.agentKind) && !isContainerBackedCompanion(step.agentKind),
+        handle: ({ workspaceId, instance, step, block, isFinalStep, options }) =>
+          this.companionController.evaluate(
+            workspaceId,
+            instance,
+            step,
+            block,
+            isFinalStep,
+            options,
+          ),
+      },
+      // The generic container/inline-agent step — claims every step no more-specific handler
+      // did. Highest order so it always runs last. See {@link handleAgentStep}.
+      {
+        kind: 'agent',
         order: FALLTHROUGH_STEP_HANDLER_ORDER,
         canHandle: () => true,
-        handle: (ctx) => this.runStepBody(ctx),
+        handle: (ctx) => this.handleAgentStep(ctx),
       },
     ]
     return handlers.sort((a, b) => a.order - b.order)
+  }
+
+  /**
+   * Run the first completion-path interceptor that claims this finished step, returning its
+   * short-circuit {@link AdvanceResult} (the companion verdict loop / tester re-test) or
+   * `null` to let `recordStepResult`'s normal finish/advance spine run. Engine-internal,
+   * mirroring {@link dispatchStepHandler}.
+   */
+  private async dispatchStepCompletionInterceptor(
+    ctx: StepCompletionContext,
+  ): Promise<AdvanceResult | null> {
+    if (!this.stepCompletionInterceptorCache) {
+      this.stepCompletionInterceptorCache = this.buildStepCompletionInterceptors()
+    }
+    for (const interceptor of this.stepCompletionInterceptorCache) {
+      if (interceptor.canIntercept(ctx)) {
+        const outcome = await interceptor.intercept(ctx)
+        if (outcome) return outcome
+      }
+    }
+    return null
+  }
+
+  /**
+   * Build the order-sorted completion-path interceptors (companion / tester verdict
+   * short-circuits), mirroring {@link buildStepHandlerRegistry} — built-ins constructed
+   * inline closing over `this`, no public registration seam.
+   */
+  private buildStepCompletionInterceptors(): StepCompletionInterceptor[] {
+    const interceptors: StepCompletionInterceptor[] = [
+      // A container-backed companion (reviewer / doc-reviewer) just finished reviewing the
+      // real repository on the producer's PR branch and returned its verdict as
+      // `result.custom`. Hand it to the companion loop, which parses the verdict and applies
+      // the SAME threshold / rework / human-gate handling an inline companion gets. Routed
+      // here (not the normal step completion) so the verdict drives the loop instead of being
+      // recorded as plain output. Falls through (returns null) when the block can't be loaded.
+      {
+        kind: 'companion-verdict',
+        order: 100,
+        canIntercept: ({ step }) =>
+          isCompanionKind(step.agentKind) && isContainerBackedCompanion(step.agentKind),
+        intercept: async ({ workspaceId, instance, step, isFinalStep, result }) => {
+          const companionBlock = await this.blockRepository.get(workspaceId, instance.blockId)
+          if (!companionBlock) return null
+          return this.companionController.resolveContainerVerdict(
+            workspaceId,
+            instance,
+            step,
+            companionBlock,
+            isFinalStep,
+            result,
+          )
+        },
+      },
+      // A `tester` step returned a structured report. On a withheld greenlight we do NOT
+      // finish the step: loop the `fixer` (within the attempt budget) and re-test, mirroring
+      // the CI gate. A greenlight (or no provider) returns null and falls through to the
+      // normal finish/advance below. Records the report on the step either way.
+      {
+        kind: 'tester-verdict',
+        order: 110,
+        canIntercept: ({ step, result }) =>
+          isTesterKind(step.agentKind) && result.testReport !== undefined,
+        intercept: ({ workspaceId, instance, step, result }) =>
+          this.testerController.resolveTesterResult(workspaceId, instance, step, result),
+      },
+    ]
+    return interceptors.sort((a, b) => a.order - b.order)
   }
 
   private stepResolverFor(agentKind: string): StepCompletionResolver | undefined {
@@ -2941,6 +3008,58 @@ export class ExecutionService {
             this.mergeResolver.resolveMergerStep(workspaceId, instance, result.mergeAssessment),
           )
           return { ownsTerminalStatus: true }
+        },
+      },
+      // POST-COMPLETION resolvers — run at the early slot (after output is recorded, before
+      // the follow-up/approval gates), reshaping the agent's structured result into domain
+      // state. Lifted verbatim from the old inline `recordStepResult` branches.
+      //
+      // A Blueprinter step produced a fresh service decomposition. Validate it with the
+      // authoritative schema (a bad payload must never touch the board), then reconcile it
+      // in place onto the run's service frame.
+      {
+        kind: BLUEPRINTS_AGENT_KIND,
+        phase: 'post-completion',
+        resolve: async ({ workspaceId, instance, result }) => {
+          if (result.blueprintService !== undefined) {
+            await this.ingestBlueprint(workspaceId, instance.blockId, result.blueprintService)
+          }
+        },
+      },
+      // A spec-writer step produced the service's unified specification (`spec.json`) and
+      // committed it to the implementation branch — strict-validate it then nudge clients —
+      // and reports its BUSINESS-vs-TECHNICAL determination. "No business specs" (a purely
+      // technical task) is a valid outcome the spec-companion's convergence later combines
+      // with its `technicalCorroborated` verdict; recorded even when false so a re-run
+      // reflects the latest.
+      {
+        kind: SPEC_WRITER_AGENT_KIND,
+        phase: 'post-completion',
+        resolve: async ({ workspaceId, step, result }) => {
+          if (result.spec !== undefined) await this.ingestSpec(workspaceId, result.spec)
+          step.noBusinessSpecs = result.noBusinessSpecs === true
+        },
+      },
+      // A `task-estimator` step emits a JSON triage (complexity/risk/impact). Parse it
+      // tolerantly, persist it on the block (used to gate consensus steps + surfaced in the
+      // UI), and replace the raw JSON output with a readable summary. An unparseable estimate
+      // leaves the block untouched and keeps the raw output (no run failure). Works the same
+      // whether the single-actor estimator or the consensus ranked-scoring variant produced
+      // the JSON. Running at the post-completion slot keeps the summary in `step.output`
+      // before the approval gate reads it as the proposal.
+      {
+        kind: TASK_ESTIMATOR_AGENT_KIND,
+        phase: 'post-completion',
+        resolve: async ({ workspaceId, instance, step, result }) => {
+          const estimate = coerceTaskEstimate(
+            step.output ?? '',
+            result.model ?? step.model ?? null,
+            this.clock.now(),
+          )
+          if (estimate) {
+            await this.blockRepository.update(workspaceId, instance.blockId, { estimate })
+            return { output: summarizeEstimate(estimate) }
+          }
         },
       },
     ]
