@@ -40,6 +40,7 @@ external organizations swap that for the published npm version (see each
 ```sh
 pnpm install            # one install for the whole workspace
 pnpm build              # build the publishable libraries (dist)
+pnpm build:all          # also build the SPA + internal harnesses
 pnpm typecheck          # typecheck every package
 pnpm test               # run the unit/integration suites
 pnpm lint               # oxlint + oxfmt (repo-wide)
@@ -47,6 +48,18 @@ pnpm dev:backend        # run the worker locally (deploy/backend)
 pnpm dev:node           # run the Node.js service locally (deploy/node; needs DATABASE_URL)
 pnpm dev:frontend       # run the SPA locally (deploy/frontend)
 ```
+
+The cross-package task graph (build/typecheck/test/generate/deploy/dev) is
+orchestrated by [Turborepo](https://turbo.build) (`turbo.json`): each task declares
+`dependsOn: ["^build"]`, so a task never runs ahead of its workspace dependencies —
+e.g. `@cat-factory/contracts` is always compiled before the frontend `nuxt generate`
+resolves it. This replaces the per-package `pre*` build hooks the deploy packages
+used to carry. The scripts above are thin wrappers over `turbo run …`, so unchanged
+packages are served from Turbo's cache. The TypeScript libraries are still each
+compiled by their own `tsc -b` project-reference build; Turbo only decides *which*
+packages run and *in what order*. `pnpm build` is scoped to the backend libraries;
+use `pnpm build:all` (or `turbo run build`) to also build the SPA and the internal
+harnesses, and `pnpm build:tsc` for the raw `tsc -b` solution build.
 
 ## Changesets (REQUIRED)
 

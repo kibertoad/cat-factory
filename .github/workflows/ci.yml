@@ -161,6 +161,13 @@ jobs:
       - name: Typecheck frontend layer
         run: pnpm --filter @cat-factory/app run typecheck
 
+      # i18n drift guard (tier 3): fail if a `t('…')` references a key absent from the
+      # catalog. Complements the typed-message-keys typecheck above (tier 1), which can't
+      # see a runtime-built key. Unused keys are reported but non-blocking — see the
+      # script header and CLAUDE.md → Internationalization.
+      - name: Check i18n keys
+        run: pnpm --filter @cat-factory/app run i18n:check
+
       # Actually COMPILE the SPA. `vue-tsc` (above) is lenient about template-expression
       # syntax, so an SFC that the real Vue/Vite build rejects (e.g. a multi-statement
       # inline handler) used to slip through every check — nothing in CI built the
