@@ -8,15 +8,20 @@ const execution = useExecutionStore()
 const workspace = useWorkspaceStore()
 const services = useServicesStore()
 const toast = useToast()
+const { t, n } = useI18n()
 const { fitView, zoomIn, zoomOut } = useBoardFlow()
 
 async function mountService(serviceId: string, title: string) {
   try {
     await services.mount(serviceId)
-    toast.add({ title: `Added ${title}`, icon: 'i-lucide-box', color: 'success' })
+    toast.add({
+      title: t('board.toolbar.serviceAdded', { title }),
+      icon: 'i-lucide-box',
+      color: 'success',
+    })
   } catch (e) {
     toast.add({
-      title: 'Could not add service',
+      title: t('board.toolbar.serviceAddFailed'),
       description: e instanceof Error ? e.message : String(e),
       color: 'error',
     })
@@ -38,16 +43,16 @@ const mountableItems = computed(() =>
 )
 
 const zoomPct = computed(() => Math.round(ui.zoom * 100))
-const lodLabel = computed(
-  () =>
-    ({
-      far: 'Overview',
-      mid: 'Summary',
-      close: 'Detail',
-      steps: 'Build steps',
-      subtasks: 'Subtasks',
-    })[ui.lod],
-)
+// Exhaustive (tier-2) map from level-of-detail → its label key, so adding an LOD
+// without a label fails the typecheck rather than leaking a raw key.
+const LOD_LABEL_KEYS = {
+  far: 'board.toolbar.lod.far',
+  mid: 'board.toolbar.lod.mid',
+  close: 'board.toolbar.lod.close',
+  steps: 'board.toolbar.lod.steps',
+  subtasks: 'board.toolbar.lod.subtasks',
+} as const
+const lodLabel = computed(() => t(LOD_LABEL_KEYS[ui.lod]))
 
 // Live spend indicator: shown once any tokens have been metered this period.
 const spend = computed(() => workspace.spend)
@@ -55,11 +60,11 @@ const showSpend = computed(() => !!spend.value && spend.value.costSpent > 0)
 const spendLabel = computed(() => {
   const s = spend.value
   if (!s) return ''
-  const fmt = (n: number) => {
+  const fmt = (value: number) => {
     try {
-      return new Intl.NumberFormat(undefined, { style: 'currency', currency: s.currency }).format(n)
+      return n(value, { key: 'currency', currency: s.currency })
     } catch {
-      return `${n.toFixed(2)} ${s.currency}`
+      return `${value.toFixed(2)} ${s.currency}`
     }
   }
   return `${fmt(s.costSpent)} / ${fmt(s.costLimit)}`
@@ -70,7 +75,7 @@ const decisionItems = computed(() =>
   execution.openDecisions.map((d) => {
     const b = board.getBlock(d.blockId)
     return {
-      label: b?.title ?? 'Block',
+      label: b?.title ?? t('common.block'),
       description: d.decision.question,
       icon: 'i-lucide-circle-help',
       onSelect: () => ui.openDecision(d.instanceId, d.decision.id),
@@ -127,7 +132,7 @@ const decisionItems = computed(() =>
       >
         {{ execution.pendingDecisionCount
         }}<span class="hidden sm:inline"
-          >&nbsp;{{ $t('board.toolbar.decisionWord', execution.pendingDecisionCount) }}</span
+          >&nbsp;{{ t('board.toolbar.decisionWord', execution.pendingDecisionCount) }}</span
         >
       </UButton>
     </UDropdownMenu>
@@ -135,7 +140,7 @@ const decisionItems = computed(() =>
     <!-- in-org sharing: add an existing org service to this board -->
     <UDropdownMenu v-if="mountableItems.length" :items="mountableItems">
       <UButton color="neutral" variant="ghost" size="sm" icon="i-lucide-plus-circle">
-        <span class="hidden sm:inline">{{ $t('board.toolbar.addService') }}</span>
+        <span class="hidden sm:inline">{{ t('board.toolbar.addService') }}</span>
       </UButton>
     </UDropdownMenu>
 
@@ -149,7 +154,9 @@ const decisionItems = computed(() =>
       variant="soft"
       size="sm"
       icon="i-lucide-wallet"
-      :title="spend?.exceeded ? 'Spend limit reached — runs paused' : 'Token spend this month'"
+      :title="
+        spend?.exceeded ? t('board.toolbar.spendLimitReached') : t('board.toolbar.spendTitle')
+      "
     >
       <span class="hidden sm:inline">{{ spendLabel }}</span>
     </UButton>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-withDefaults(
+const props = withDefaults(
   defineProps<{
     count?: number
     compact?: boolean
@@ -7,9 +7,12 @@ withDefaults(
     label?: string
     icon?: string
   }>(),
-  { label: 'Decision needed', icon: 'i-lucide-circle-help' },
+  { icon: 'i-lucide-circle-help' },
 )
 defineEmits<{ (e: 'open'): void }>()
+
+const { t } = useI18n()
+const displayLabel = computed(() => props.label ?? t('board.decisionBadge.decisionNeeded'))
 </script>
 
 <template>
@@ -19,7 +22,7 @@ defineEmits<{ (e: 'open'): void }>()
     @click.stop="$emit('open')"
   >
     <UIcon :name="icon" class="h-3.5 w-3.5" />
-    <span v-if="!compact">{{ label }}</span>
+    <span v-if="!compact">{{ displayLabel }}</span>
     <span v-if="count && count > 1" class="rounded-full bg-amber-950/30 px-1">
       {{ count }}
     </span>

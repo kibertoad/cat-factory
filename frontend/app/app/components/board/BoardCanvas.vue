@@ -19,6 +19,7 @@ const execution = useExecutionStore()
 const ui = useUiStore()
 const github = useGitHubStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const { onNodeDragStop, onViewportChange, screenToFlowCoordinate } = useVueFlow(BOARD_FLOW_ID)
 const { draggingId } = useBlockDrag()
@@ -126,8 +127,8 @@ async function onDrop(event: DragEvent) {
       ui.select(block.id)
     } catch {
       toast.add({
-        title: 'Could not add block',
-        description: 'The backend rejected the request.',
+        title: t('board.canvas.addBlockFailedTitle'),
+        description: t('board.canvas.addBlockFailedBody'),
         color: 'error',
       })
     }
@@ -143,13 +144,16 @@ async function onDrop(event: DragEvent) {
     if (!target || !pipeline) return
     if (target.level !== 'task') {
       toast.add({
-        title: 'Drop onto a task',
-        description: 'Pipelines run against tasks, not services.',
+        title: t('board.canvas.dropOntoTaskTitle'),
+        description: t('board.canvas.dropOntoTaskBody'),
       })
       return
     }
     if (!board.isRunnable(target.id)) {
-      toast.add({ title: 'Task is blocked', description: 'Its dependencies haven’t merged yet.' })
+      toast.add({
+        title: t('board.canvas.taskBlockedTitle'),
+        description: t('board.canvas.taskBlockedBody'),
+      })
       return
     }
     execution.start(target.id, pipeline)
@@ -204,14 +208,14 @@ async function onDrop(event: DragEvent) {
     >
       <UIcon name="i-lucide-layout-dashboard" class="h-10 w-10 text-slate-600" />
       <div>
-        <h2 class="text-base font-semibold text-slate-300">Your board is empty</h2>
+        <h2 class="text-base font-semibold text-slate-300">{{ t('board.canvas.emptyTitle') }}</h2>
         <p class="mt-1 max-w-sm text-sm text-slate-500">
-          Add a service to get started: bootstrap a fresh repo or pull in one you already have.
+          {{ t('board.canvas.emptyBody') }}
         </p>
       </div>
       <div class="pointer-events-auto flex flex-wrap items-center justify-center gap-2">
         <UButton color="primary" icon="i-lucide-git-branch-plus" @click="ui.openBootstrap()">
-          Bootstrap repo
+          {{ t('nav.bootstrapRepo') }}
         </UButton>
         <UButton
           v-if="github.available"
@@ -220,7 +224,7 @@ async function onDrop(event: DragEvent) {
           icon="i-lucide-folder-git-2"
           @click="ui.openAddService()"
         >
-          Add from existing repo
+          {{ t('nav.addFromRepo') }}
         </UButton>
       </div>
     </div>

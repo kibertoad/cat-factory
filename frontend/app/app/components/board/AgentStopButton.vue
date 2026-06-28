@@ -16,12 +16,15 @@ const props = withDefaults(
     variant?: 'solid' | 'soft' | 'ghost' | 'subtle' | 'outline'
     label?: string
   }>(),
-  { size: 'xs', variant: 'soft', label: 'Stop' },
+  { size: 'xs', variant: 'soft' },
 )
 
+const { t } = useI18n()
 const agentRuns = useAgentRunsStore()
 const toast = useToast()
 const stopping = ref(false)
+
+const displayLabel = computed(() => props.label ?? t('board.stop.label'))
 
 async function stop() {
   if (stopping.value) return
@@ -29,14 +32,14 @@ async function stop() {
   try {
     const kind = await agentRuns.stop(props.runId)
     toast.add({
-      title: kind === 'bootstrap' ? 'Bootstrap stopped' : 'Run stopped',
-      description: 'The container was killed and the run was cancelled.',
+      title: kind === 'bootstrap' ? t('board.stop.bootstrapStopped') : t('board.stop.runStopped'),
+      description: t('board.stop.stoppedDescription'),
       icon: 'i-lucide-circle-stop',
       color: 'warning',
     })
   } catch (e) {
     toast.add({
-      title: 'Stop failed',
+      title: t('board.stop.stopFailed'),
       description: e instanceof Error ? e.message : String(e),
       color: 'error',
     })
@@ -56,6 +59,6 @@ async function stop() {
     :loading="stopping"
     @click.stop="stop"
   >
-    {{ label }}
+    {{ displayLabel }}
   </UButton>
 </template>
