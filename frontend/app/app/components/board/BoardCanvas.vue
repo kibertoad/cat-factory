@@ -12,6 +12,7 @@ import { BOARD_FLOW_ID } from '~/composables/useBoardFlow'
 import { useTaskExpansion } from '~/composables/useTaskExpansion'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameStacking } from '~/composables/useFrameStacking'
+import { useViewport } from '~/composables/useViewport'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -23,6 +24,17 @@ const toast = useToast()
 const { onNodeDragStop, onViewportChange, screenToFlowCoordinate } = useVueFlow(BOARD_FLOW_ID)
 const { draggingId } = useBlockDrag()
 const { hoveredFrameId } = useFrameStacking()
+// Touch drives the canvas gestures: a coarse pointer needs one-finger pan, and the
+// minimap is too small to hit (and steals scarce width) on phones. `isCompact`
+// (< lg) hides the minimap; `isTouch` switches the pan modality below.
+const { isCompact, isTouch } = useViewport()
+
+// Vue Flow's d3-zoom filter restricts `panOnDrag` to the listed mouse buttons, and a
+// touch `touchstart` carries no `event.button` — so the button-array form ([0, 2] =
+// left/right-drag, never middle) blocks one-finger touch panning. On a coarse pointer
+// we therefore widen it to `true` (any pointer pans the pane; pinch-zoom is on by
+// default), keeping the precise-pointer button restriction on mouse desktops.
+const panOnDrag = computed<boolean | number[]>(() => (isTouch.value ? true : [0, 2]))
 
 // Gate which task cards expand their pipeline list on deep zoom: on-screen, and the
 // centre-most of any that would overlap (see useTaskExpansion). Service frames have no
@@ -166,7 +178,7 @@ async function onDrop(event: DragEvent) {
       :min-zoom="0.2"
       :max-zoom="3"
       :default-viewport="{ x: 40, y: 20, zoom: 0.85 }"
-      :pan-on-drag="[0, 2]"
+      :pan-on-drag="panOnDrag"
       :elevate-nodes-on-select="false"
       fit-view-on-init
       @node-click="onNodeClick"
@@ -175,7 +187,17 @@ async function onDrop(event: DragEvent) {
       @contextmenu.prevent
     >
       <Background pattern-color="#1e293b" :gap="22" :size="1.4" />
-      <MiniMap pannable zoomable :node-color="minimapColor" class="!bg-slate-900/80" />
+      <!-- The minimap is a precise-pointer affordance: it's too small to hit on a
+           phone and eats scarce width, so it's hidden below `lg`. The toolbar's
+           zoom-in/out + fit-view controls remain the camera fallback on mobile. -->
+      <MiniMap
+        v-if="!isCompact"
+        pannable
+        zoomable
+        :node-color="minimapColor"
+        class="!bg-slate-900/80"
+        data-testid="board-minimap"
+      />
 
       <template #node-block="props">
         <BlockNode :id="props.id" />

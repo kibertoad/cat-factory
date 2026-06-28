@@ -40,6 +40,7 @@ LIVE pushed UI updates** (no reloads, no fragile canvas drag/zoom). Shared setup
 | `approval-gate.spec.ts` | A per-step human **approval** gate parks the run; Approve in the full-screen step-detail rail and it advances. (Distinct from the agent-raised decision in `run.spec`.)                                                                                     |
 | `reset-run.spec.ts`     | The destructive run-lifecycle control: **Reset** a parked run from the task inspector → the `cancelExecution` path discards it and the task returns to `planned` live. (The dual of resolving/approving — nothing else covers cancel/reset.)                |
 | `mobile-shell.spec.ts`  | The responsive shell at a phone viewport (390×844): the sidebar is an off-canvas drawer toggled by the hamburger (open via the trigger, close via the backdrop), the inspector opens as a bottom sheet, and the board chrome doesn't overflow horizontally. |
+| `mobile-canvas.spec.ts` | The board canvas at a phone viewport (390×844): the precise-pointer minimap is hidden below `lg`, while the toolbar's zoom-out / zoom-in / fit-view camera fallback stays reachable. (Touch pan/pinch themselves are a Vue Flow config; not driven here.)   |
 
 ## Mocking other externals (when a spec needs a real outbound call)
 

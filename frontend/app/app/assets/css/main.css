@@ -31,6 +31,16 @@ body {
   background-color: var(--board-bg);
 }
 
+/* Touch: let the pane own one-finger pan + pinch-zoom rather than the browser
+ * treating the drag as a page scroll (which fires `pointercancel` and aborts the
+ * gesture mid-flight). The board is full-screen with `body { overflow: hidden }`,
+ * so there is nothing to scroll away anyway. The custom drag/resize/connect handles
+ * set their own `touch-action: none` (Tailwind `touch-none`) so a handle drag is
+ * likewise never stolen by the browser. */
+.vue-flow__pane {
+  touch-action: none;
+}
+
 /* Status-pulse used by blocked / decision-needed blocks */
 @keyframes board-pulse {
   0%,

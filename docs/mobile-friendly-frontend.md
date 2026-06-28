@@ -71,15 +71,39 @@ passes.
 
 ## Phase 3 — Board canvas touch gestures — PR 3
 
-- ☐ Configure/verify Vue Flow pinch-zoom + one-finger pan; `touch-action: none` on pane.
-- ☐ Reconcile block/frame drag vs. pan on touch (`useBlockDrag.ts`, `useFrameResize.ts`).
-- ☐ Hide minimap on `< lg`; ensure toolbar zoom/fit fallback reachable.
-- ☐ Patch changeset.
+- ☑ Vue Flow pinch-zoom + one-finger pan. `zoomOnPinch` is on by default; `panOnDrag` is now
+  computed from `useViewport().isTouch` — `true` on a coarse pointer, the precise-pointer
+  button list `[0, 2]` (left/right-drag, never middle) on mouse. The button-array form
+  silently blocked single-finger panning: Vue Flow's d3-zoom filter rejects a `touchstart`
+  whose `event.button` (undefined on touch) isn't in the array, so a touch could only pan
+  once `panOnDrag` is `true`/unbounded. `.vue-flow__pane` gets `touch-action: none`
+  (`assets/css/main.css`) so the browser never reinterprets a pane drag as a page scroll.
+- ☑ Reconcile block/frame drag vs. pan on touch. The custom pointer-driven affordances
+  (`useBlockDrag` / `useFrameResize` / `useDependencyConnect`) already kept the pane from
+  panning via the `nopan` class; the missing piece on touch was the browser stealing the
+  gesture as a scroll (firing `pointercancel`). Every handle — the task drag grip
+  (`DraggableTask`), the service + module header drag and resize edges/corner (`BlockNode`,
+  `ModuleFrame`), and the drag-to-connect handle (`TaskCard`) — now carries `touch-none`
+  (`touch-action: none`), so the gesture stays with our pointer handlers. (No composable
+  logic changed — they're already `PointerEvent`-based, so they cover touch once the browser
+  stops pre-empting them.)
+- ☑ Hide minimap on `< lg` (`v-if="!isCompact"` on `<MiniMap>` in `BoardCanvas`); the toolbar
+  zoom-out / zoom-in / fit-view controls are the camera fallback (now tagged
+  `board-zoom-out` / `board-zoom-in` / `board-fit-view` for the e2e).
+- ☑ `mobile-canvas.spec.ts` e2e: at a phone viewport the minimap is hidden and the toolbar
+  camera fallback stays reachable. (Touch pan/pinch is Vue Flow config, not driven in e2e.)
+- ☑ Patch changeset (`.changeset/mobile-canvas-touch.md`).
 
 ---
 
 ## Changelog
 
+- **Phase 3 complete** — board canvas touch gestures: one-finger pan via a touch-aware
+  `panOnDrag` (the `[0, 2]` button list blocked single-finger panning), pinch-zoom on by
+  default, `touch-action: none` on the pane and on every custom drag/resize/connect handle so
+  the browser can't steal a gesture mid-drag, and the precise-pointer minimap hidden below
+  `lg` with the toolbar zoom/fit controls as the camera fallback. e2e spec + patch changeset
+  added. This completes the three-phase mobile-friendly track.
 - **Phase 2 complete** — touch targets + modal/panel responsiveness: coarse-pointer hit-target
   enlargement (grip, resize edges, connect handle, frame-header buttons) via the
   `pointer-coarse:` variant, every hand-rolled overlay window + the Pipeline builder + the
