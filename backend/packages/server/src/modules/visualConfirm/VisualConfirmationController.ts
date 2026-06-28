@@ -22,7 +22,7 @@ export function visualConfirmationController(): Hono<AppEnv> {
   buildHonoRoute(app, approveVisualConfirmContract, async (c) => {
     const instance = await c
       .get('container')
-      .executionService.approveVisualConfirm(param(c, 'workspaceId'), c.req.valid('param').blockId)
+      .executionService.visualConfirm.approve(param(c, 'workspaceId'), c.req.valid('param').blockId)
     return c.json(instance, 200)
   })
 
@@ -30,7 +30,7 @@ export function visualConfirmationController(): Hono<AppEnv> {
   buildHonoRoute(app, requestVisualConfirmFixContract, async (c) => {
     const instance = await c
       .get('container')
-      .executionService.requestVisualConfirmFix(
+      .executionService.visualConfirm.requestFix(
         param(c, 'workspaceId'),
         c.req.valid('param').blockId,
         c.req.valid('json').findings,
@@ -42,7 +42,7 @@ export function visualConfirmationController(): Hono<AppEnv> {
   buildHonoRoute(app, recaptureVisualConfirmContract, async (c) => {
     const instance = await c
       .get('container')
-      .executionService.recaptureVisualConfirm(
+      .executionService.visualConfirm.recapture(
         param(c, 'workspaceId'),
         c.req.valid('param').blockId,
       )

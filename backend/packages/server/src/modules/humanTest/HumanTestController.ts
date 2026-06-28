@@ -25,7 +25,7 @@ export function humanTestController(): Hono<AppEnv> {
   buildHonoRoute(app, confirmHumanTestContract, async (c) => {
     const instance = await c
       .get('container')
-      .executionService.confirmHumanTest(param(c, 'workspaceId'), c.req.valid('param').blockId)
+      .executionService.humanTest.confirm(param(c, 'workspaceId'), c.req.valid('param').blockId)
     return c.json(instance, 200)
   })
 
@@ -33,7 +33,7 @@ export function humanTestController(): Hono<AppEnv> {
   buildHonoRoute(app, requestHumanTestFixContract, async (c) => {
     const instance = await c
       .get('container')
-      .executionService.requestHumanTestFix(
+      .executionService.humanTest.requestFix(
         param(c, 'workspaceId'),
         c.req.valid('param').blockId,
         c.req.valid('json').findings,
@@ -46,7 +46,7 @@ export function humanTestController(): Hono<AppEnv> {
   buildHonoRoute(app, pullMainHumanTestContract, async (c) => {
     const instance = await c
       .get('container')
-      .executionService.pullMainHumanTest(param(c, 'workspaceId'), c.req.valid('param').blockId)
+      .executionService.humanTest.pullMain(param(c, 'workspaceId'), c.req.valid('param').blockId)
     return c.json(instance, 200)
   })
 
@@ -54,7 +54,10 @@ export function humanTestController(): Hono<AppEnv> {
   buildHonoRoute(app, recreateHumanTestEnvContract, async (c) => {
     const instance = await c
       .get('container')
-      .executionService.recreateHumanTestEnv(param(c, 'workspaceId'), c.req.valid('param').blockId)
+      .executionService.humanTest.recreateEnvironment(
+        param(c, 'workspaceId'),
+        c.req.valid('param').blockId,
+      )
     return c.json(instance, 200)
   })
 
@@ -62,7 +65,10 @@ export function humanTestController(): Hono<AppEnv> {
   buildHonoRoute(app, destroyHumanTestEnvContract, async (c) => {
     const instance = await c
       .get('container')
-      .executionService.destroyHumanTestEnv(param(c, 'workspaceId'), c.req.valid('param').blockId)
+      .executionService.humanTest.destroyEnvironment(
+        param(c, 'workspaceId'),
+        c.req.valid('param').blockId,
+      )
     return c.json(instance, 200)
   })
 

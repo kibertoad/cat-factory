@@ -54,7 +54,7 @@ export function brainstormController(): Hono<AppEnv> {
     const { blockId, stage } = c.req.valid('param')
     const session = await c
       .get('container')
-      .executionService.reviewBrainstorm(param(c, 'workspaceId'), blockId, stage)
+      .executionService.brainstorm.review(param(c, 'workspaceId'), blockId, stage)
     return c.json(session, 201)
   })
 
@@ -93,7 +93,7 @@ export function brainstormController(): Hono<AppEnv> {
     const { blockId, stage } = c.req.valid('param')
     const session = await c
       .get('container')
-      .executionService.incorporateBrainstorm(
+      .executionService.brainstorm.incorporate(
         param(c, 'workspaceId'),
         blockId,
         stage,
@@ -109,7 +109,7 @@ export function brainstormController(): Hono<AppEnv> {
     const { blockId, stage } = c.req.valid('param')
     const session = await c
       .get('container')
-      .executionService.reReviewBrainstorm(param(c, 'workspaceId'), blockId, stage)
+      .executionService.brainstorm.reReview(param(c, 'workspaceId'), blockId, stage)
     return c.json(session, 200)
   })
 
@@ -120,7 +120,7 @@ export function brainstormController(): Hono<AppEnv> {
     const { blockId, stage } = c.req.valid('param')
     const session = await c
       .get('container')
-      .executionService.proceedBrainstorm(param(c, 'workspaceId'), blockId, stage)
+      .executionService.brainstorm.proceed(param(c, 'workspaceId'), blockId, stage)
     return c.json(session, 200)
   })
 
@@ -131,7 +131,7 @@ export function brainstormController(): Hono<AppEnv> {
     const { blockId, stage } = c.req.valid('param')
     const session = await c
       .get('container')
-      .executionService.resolveBrainstormExceeded(
+      .executionService.brainstorm.resolveExceeded(
         param(c, 'workspaceId'),
         blockId,
         stage,
