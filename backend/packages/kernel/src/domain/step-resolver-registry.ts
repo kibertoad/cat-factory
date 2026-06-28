@@ -68,6 +68,21 @@ export interface StepCompletionResolver {
   /** Matches the step's `agentKind` (e.g. `merger`). */
   kind: string
   /**
+   * WHEN in `recordStepResult` this resolver runs:
+   *   - `terminal` (default, also when omitted) — at the LATE slot, just before the
+   *     step finalizes/advances. The right place for a resolver that owns the block's
+   *     terminal status or acts on the settled step (the `merger`'s real merge). This is
+   *     where deployment-registered custom resolvers run, preserving today's behaviour.
+   *   - `post-completion` — at the EARLY slot, immediately after the step's output is
+   *     recorded and BEFORE the follow-up / approval gates. The right place for a resolver
+   *     that reshapes the agent's structured result into domain state the gates (or the
+   *     reviewable-output rendering) then read — e.g. ingesting a blueprint/spec, or
+   *     persisting a task estimate and replacing the step output with its summary (so an
+   *     approval proposal shows the summary, not the raw JSON). A `post-completion`
+   *     resolver MUST NOT own terminal status or park/loop the run.
+   */
+  phase?: 'post-completion' | 'terminal'
+  /**
    * Whether this resolver applies to the finished step's result — lets a resolver no-op
    * when its agent produced nothing to act on (e.g. the merger returned no assessment).
    * Defaults to always-applies when omitted.

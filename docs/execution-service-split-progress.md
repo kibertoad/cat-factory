@@ -27,7 +27,7 @@ conformance suite (both Cloudflare D1 and Node Postgres).
 | -- | ------------------------------------------------------- | ------ |
 | 0  | StepHandler registry scaffolding (fallthrough, no-op)   | ✅     |
 | 1  | Deterministic one-shot step handlers (deployer/tracker)  | ✅     |
-| 2  | Artifact ingestion resolvers (blueprint/spec/writeback) | ⬜     |
+| 2  | Post-completion resolvers (blueprint/spec/estimate)     | ✅     |
 | 3  | Verdict resolvers (tester/companion, `control` field)   | ⬜     |
 | 4  | Decision/polling/companion gate step handlers           | ⬜     |
 | 5  | Container-agent default handler + cleanup               | ⬜     |
@@ -64,6 +64,29 @@ spec ingestion already lives (and spec-writer can be migrated atomically).
 
 - **Phase 1 done.** Green on both runtimes: Cloudflare conformance 126 ✓; Node execution 40 +
   durable-execution 1 + integration (covers deployer/tracker) 32 = 73 ✓.
+
+## Phase 2 — post-completion resolvers
+
+**Design:** added a `phase` discriminator to the kernel `StepCompletionResolver` seam —
+`'terminal'` (default, the existing LATE dispatch slot just before finalize/advance, where the
+merger and any deployment-registered resolver run) vs `'post-completion'` (a new EARLY dispatch
+slot, run right after the step output is recorded and BEFORE the reviewable-output rendering +
+follow-up/approval gates read `step.output`). The early slot sits exactly where the old inline
+ingestion branches were, so ordering is preserved.
+
+**Migrated to `post-completion` resolvers** (lifted verbatim from inline `recordStepResult`
+branches): `blueprints` (blueprint ingest/reconcile), `spec-writer` (spec ingest + `noBusinessSpecs`
+flag — spec-writer now migrated atomically), `task-estimator` (estimate persist + `step.output`
+summary; the early slot is what keeps the summary in the approval proposal, resolving the Phase-1
+ordering finding).
+
+**Deliberately left inline** (kind-agnostic, keyed on result shape, not `agentKind` — the plan's
+"cross-cutting stays inline" rule): PR-open + issue writeback (`result.pullRequest`) and the
+reviewable-artifact output replacement (`reviewableArtifactOutput(result)`). A per-`agentKind`
+resolver is the wrong tool for these; revisit only if a verdict-gate-style abstraction emerges.
+
+- **Phase 2 done.** Green on both runtimes: Cloudflare conformance 126 ✓; Node conformance (all
+  six specs) + durable-execution 127 ✓; orchestration execution/registry/estimation unit 161 ✓.
 
 ## Notes / running log
 

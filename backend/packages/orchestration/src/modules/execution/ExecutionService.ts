@@ -2334,45 +2334,26 @@ export class ExecutionService {
       }
     }
 
-    // A Blueprinter step produced a fresh service decomposition. Validate it with
-    // the authoritative schema (a bad payload must never touch the board), then
-    // reconcile it in place onto the run's service frame.
-    if (result.blueprintService !== undefined) {
-      await this.ingestBlueprint(workspaceId, instance.blockId, result.blueprintService)
-    }
-
-    // A spec-writer step produced the service's unified specification (`spec.json`)
-    // and committed it to the implementation branch. Strict-validate it (a bad payload
-    // must never be trusted), then nudge clients to refresh.
-    if (result.spec !== undefined) {
-      await this.ingestSpec(workspaceId, result.spec)
-    }
-
-    // Record the spec-writer's BUSINESS-vs-TECHNICAL determination on the step. "No
-    // business specs" (a purely technical task) is a valid outcome; the spec-companion's
-    // convergence — the one point both signals coexist — combines this with the
-    // companion's `technicalCorroborated` verdict to infer the block's `technical` label
-    // (see CompanionController). Recorded even when false so a re-run reflects the latest.
-    if (step.agentKind === SPEC_WRITER_AGENT_KIND) {
-      step.noBusinessSpecs = result.noBusinessSpecs === true
-    }
-
-    // A `task-estimator` step emits a JSON triage (complexity/risk/impact). Parse it
-    // tolerantly, persist it on the block (used to gate consensus steps + surfaced in
-    // the UI), and replace the raw JSON output with a readable summary. An unparseable
-    // estimate leaves the block untouched and keeps the raw output (no run failure).
-    // The estimate works the same whether the single-actor estimator or the consensus
-    // ranked-scoring variant produced the JSON — both land here.
-    if (step.agentKind === TASK_ESTIMATOR_AGENT_KIND) {
-      const estimate = coerceTaskEstimate(
-        step.output,
-        result.model ?? step.model ?? null,
-        this.clock.now(),
-      )
-      if (estimate) {
-        await this.blockRepository.update(workspaceId, instance.blockId, { estimate })
-        step.output = summarizeEstimate(estimate)
-      }
+    // Run any POST-COMPLETION resolver registered for this step kind (blueprint/spec
+    // ingestion, task-estimate persistence). It reshapes the agent's structured result into
+    // domain state and may replace `step.output` (the estimator's readable summary). Its
+    // POSITION is load-bearing — it runs after the output is recorded but BEFORE the
+    // reviewable-output rendering and the follow-up/approval gates read `step.output`, so it
+    // sits exactly where the old inline ingestion branches did. See
+    // {@link buildStepResolverRegistry} and {@link StepCompletionResolver.phase}.
+    const postCompletionResolver = this.stepResolverFor(step.agentKind)
+    if (
+      postCompletionResolver?.phase === 'post-completion' &&
+      (postCompletionResolver.applies?.(result) ?? true)
+    ) {
+      const resolution = await postCompletionResolver.resolve({
+        workspaceId,
+        instance,
+        step,
+        result,
+        isFinalStep,
+      })
+      if (resolution?.output !== undefined) step.output = resolution.output
     }
 
     // A producer that emits a STRUCTURED ARTIFACT (the spec doc, the blueprint tree, …)
@@ -2434,7 +2415,11 @@ export class ExecutionService {
     // tells `finalizeBlock` to leave it alone.
     const resolver = this.stepResolverFor(step.agentKind)
     let resolverOwnsTerminalStatus = false
-    if (resolver && (resolver.applies?.(result) ?? true)) {
+    if (
+      resolver &&
+      (resolver.phase ?? 'terminal') === 'terminal' &&
+      (resolver.applies?.(result) ?? true)
+    ) {
       const resolution = await resolver.resolve({
         workspaceId,
         instance,
@@ -2941,6 +2926,58 @@ export class ExecutionService {
             this.mergeResolver.resolveMergerStep(workspaceId, instance, result.mergeAssessment),
           )
           return { ownsTerminalStatus: true }
+        },
+      },
+      // POST-COMPLETION resolvers — run at the early slot (after output is recorded, before
+      // the follow-up/approval gates), reshaping the agent's structured result into domain
+      // state. Lifted verbatim from the old inline `recordStepResult` branches.
+      //
+      // A Blueprinter step produced a fresh service decomposition. Validate it with the
+      // authoritative schema (a bad payload must never touch the board), then reconcile it
+      // in place onto the run's service frame.
+      {
+        kind: BLUEPRINTS_AGENT_KIND,
+        phase: 'post-completion',
+        resolve: async ({ workspaceId, instance, result }) => {
+          if (result.blueprintService !== undefined) {
+            await this.ingestBlueprint(workspaceId, instance.blockId, result.blueprintService)
+          }
+        },
+      },
+      // A spec-writer step produced the service's unified specification (`spec.json`) and
+      // committed it to the implementation branch — strict-validate it then nudge clients —
+      // and reports its BUSINESS-vs-TECHNICAL determination. "No business specs" (a purely
+      // technical task) is a valid outcome the spec-companion's convergence later combines
+      // with its `technicalCorroborated` verdict; recorded even when false so a re-run
+      // reflects the latest.
+      {
+        kind: SPEC_WRITER_AGENT_KIND,
+        phase: 'post-completion',
+        resolve: async ({ workspaceId, step, result }) => {
+          if (result.spec !== undefined) await this.ingestSpec(workspaceId, result.spec)
+          step.noBusinessSpecs = result.noBusinessSpecs === true
+        },
+      },
+      // A `task-estimator` step emits a JSON triage (complexity/risk/impact). Parse it
+      // tolerantly, persist it on the block (used to gate consensus steps + surfaced in the
+      // UI), and replace the raw JSON output with a readable summary. An unparseable estimate
+      // leaves the block untouched and keeps the raw output (no run failure). Works the same
+      // whether the single-actor estimator or the consensus ranked-scoring variant produced
+      // the JSON. Running at the post-completion slot keeps the summary in `step.output`
+      // before the approval gate reads it as the proposal.
+      {
+        kind: TASK_ESTIMATOR_AGENT_KIND,
+        phase: 'post-completion',
+        resolve: async ({ workspaceId, instance, step, result }) => {
+          const estimate = coerceTaskEstimate(
+            step.output ?? '',
+            result.model ?? step.model ?? null,
+            this.clock.now(),
+          )
+          if (estimate) {
+            await this.blockRepository.update(workspaceId, instance.blockId, { estimate })
+            return { output: summarizeEstimate(estimate) }
+          }
         },
       },
     ]
