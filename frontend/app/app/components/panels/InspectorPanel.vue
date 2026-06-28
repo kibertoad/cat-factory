@@ -204,13 +204,16 @@ const showOriginalDescription = ref(false)
 <template>
   <div
     v-if="block && statusMeta && typeMeta"
-    class="absolute right-4 top-4 z-20 w-80 overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur"
+    data-testid="inspector-panel"
+    class="fixed inset-x-0 bottom-0 z-30 overflow-hidden rounded-t-2xl border border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur lg:absolute lg:inset-x-auto lg:bottom-auto lg:right-4 lg:top-4 lg:z-20 lg:w-80 lg:rounded-2xl"
   >
     <div class="h-1.5 w-full" :style="{ backgroundColor: statusMeta.color }" />
     <!-- A tall task (execution steps + scenarios + docs) can overflow the
          viewport; cap the body height and let it scroll so the lower controls
-         (Run / Focus / Delete) stay reachable. The status bar above stays put. -->
-    <div class="max-h-[calc(100vh-5rem)] space-y-4 overflow-y-auto p-4">
+         (Run / Focus / Delete) stay reachable. The status bar above stays put.
+         On compact viewports the panel is a bottom sheet capped to the visible
+         height (dvh excludes mobile browser chrome). -->
+    <div class="max-h-[80dvh] space-y-4 overflow-y-auto p-4 lg:max-h-[calc(100vh-5rem)]">
       <!-- header -->
       <div class="flex items-start justify-between gap-2">
         <div class="flex items-center gap-2">

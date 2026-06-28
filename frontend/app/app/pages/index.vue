@@ -231,6 +231,18 @@ watch(
       <SideBar />
       <main class="relative min-w-0 flex-1">
         <BoardCanvas />
+        <!-- Compact-viewport navbar trigger: the SideBar is an off-canvas drawer below
+             lg, so surface a hamburger to open it. Hidden on lg+ (static sidebar). -->
+        <UButton
+          class="absolute left-3 top-3 z-20 lg:hidden"
+          icon="i-lucide-menu"
+          color="neutral"
+          variant="soft"
+          size="sm"
+          :aria-label="$t('nav.openMenu')"
+          data-testid="mobile-nav-toggle"
+          @click="ui.toggleMobileNav()"
+        />
         <BoardToolbar />
         <SpendWarningBanner />
         <InspectorPanel />

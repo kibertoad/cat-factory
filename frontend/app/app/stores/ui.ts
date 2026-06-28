@@ -85,6 +85,11 @@ export const useUiStore = defineStore('ui', () => {
   // Command bar (⌘K) — searchable launcher for every navbar action.
   const commandBarOpen = ref(false)
 
+  // Mobile navigation drawer: on compact (< lg) viewports the SideBar is an
+  // off-canvas drawer toggled by a hamburger; on lg+ it is a static aside and this
+  // flag is ignored. Closed on any nav action so the board is revealed immediately.
+  const mobileNavOpen = ref(false)
+
   // Integrations hub: a single modal listing every external system the workspace
   // can enable/link (GitHub, Slack, document + task sources, Datadog, LLM vendors,
   // local runners, OpenRouter). Replaces the per-integration navbar buttons; each
@@ -393,6 +398,15 @@ export const useUiStore = defineStore('ui', () => {
   function toggleCommandBar() {
     commandBarOpen.value = !commandBarOpen.value
   }
+  function openMobileNav() {
+    mobileNavOpen.value = true
+  }
+  function closeMobileNav() {
+    mobileNavOpen.value = false
+  }
+  function toggleMobileNav() {
+    mobileNavOpen.value = !mobileNavOpen.value
+  }
   // Clear BOTH hub came-from markers. Every direct `open*` below calls this so that a
   // panel opened outside the hubs never grows a dead Back control, and so switching from
   // one hub's panel to the other's clears the stale marker.
@@ -638,6 +652,7 @@ export const useUiStore = defineStore('ui', () => {
     slackOpen,
     fragmentLibraryOpen,
     commandBarOpen,
+    mobileNavOpen,
     integrationsOpen,
     cameFromIntegrations,
     personalSetupOpen,
@@ -707,6 +722,9 @@ export const useUiStore = defineStore('ui', () => {
     openCommandBar,
     closeCommandBar,
     toggleCommandBar,
+    openMobileNav,
+    closeMobileNav,
+    toggleMobileNav,
     openIntegrations,
     closeIntegrations,
     openFromIntegrations,

@@ -174,7 +174,7 @@ function revealDecision(n: Notification) {
     </UButton>
 
     <template #content>
-      <div class="max-h-[28rem] w-96 overflow-y-auto p-2">
+      <div class="max-h-[28rem] w-[min(24rem,92vw)] overflow-y-auto p-2">
         <div class="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           Needs your attention
         </div>

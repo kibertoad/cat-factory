@@ -3,7 +3,13 @@
     "save": "Save",
     "cancel": "Cancel",
     "retry": "Retry",
-    "actionFailed": "Action failed"
+    "actionFailed": "Action failed",
+    "close": "Close"
+  },
+  "nav": {
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "more": "More"
   },
   "errors": {
     "action": {
