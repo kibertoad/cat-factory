@@ -74,6 +74,15 @@ migrations_dir = "node_modules/@cat-factory/worker/sandbox-migrations"
 [ai]
 binding = "AI"
 
+# R2 bucket for binary artifacts (UI screenshots + reference design images) used by
+# the visual-confirmation gate. The blob bytes go to R2 (D1 can't hold large values);
+# the queryable metadata lives in the main DB. Optional: omit to disable the
+# binary-artifact store (the visual-confirmation gate then has nowhere to store
+# screenshots). Create the bucket with `wrangler r2 bucket create cat-factory-artifacts`.
+[[r2_buckets]]
+binding = "ARTIFACT_BUCKET"
+bucket_name = "cat-factory-artifacts"
+
 # Durable execution engine. Each pipeline run becomes one Workflows instance
 # (ExecutionWorkflow) — the only path that drives runs, so this binding is always
 # used in a real deployment.

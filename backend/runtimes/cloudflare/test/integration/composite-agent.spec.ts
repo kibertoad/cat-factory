@@ -63,7 +63,7 @@ describe('CompositeAgentExecutor', () => {
     // `architect` runs in a container too (read-only repo exploration before proposing).
     // `tester`/`fixer` clone the PR branch (run the suite / push fixes), so both are
     // container kinds — the Tester→Fixer loop dispatches both through this executor.
-    for (const kind of ['coder', 'mocker', 'playwright', 'architect', 'tester', 'fixer']) {
+    for (const kind of ['coder', 'mocker', 'playwright', 'architect', 'tester-api', 'fixer']) {
       expect((await composite.run(ctx(kind))).output).toBe('container')
     }
   })
@@ -89,7 +89,7 @@ describe('CompositeAgentExecutor', () => {
       'blueprints',
       'business-documenter',
       'architect',
-      'tester',
+      'tester-api',
       'fixer',
     ]) {
       // pick() throws synchronously, so run()/runsAsync()/startJob() all throw.

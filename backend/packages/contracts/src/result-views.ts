@@ -20,6 +20,7 @@ export const RESULT_VIEW_IDS = [
   'brainstorm',
   'tester',
   'human-test',
+  'visual-confirm',
   'gate',
   'consensus-session',
   'generic-structured',

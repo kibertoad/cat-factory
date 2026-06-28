@@ -182,7 +182,7 @@ export function seedPipelines(): Pipeline[] {
         // `mocker` stands up the external-dependency mocks the tester needs to run
         // the suite locally, so it always runs immediately before `tester`.
         'mocker',
-        'tester',
+        'tester-api',
         'conflicts',
         'ci',
         'merger',
@@ -276,7 +276,7 @@ export function seedPipelines(): Pipeline[] {
         'reviewer',
         'blueprints',
         'business-documenter',
-        'tester',
+        'tester-api',
         'playwright',
         'documenter',
         'conflicts',
@@ -364,7 +364,7 @@ export function seedPipelines(): Pipeline[] {
     {
       id: 'pl_quick',
       name: 'Quick implement',
-      agentKinds: ['coder', 'blueprints', 'mocker', 'tester', 'conflicts', 'ci', 'merger'],
+      agentKinds: ['coder', 'blueprints', 'mocker', 'tester-api', 'conflicts', 'ci', 'merger'],
     },
     // The leanest end-to-end build: implement → review → test, then the standard
     // mergeability / CI / merge tail. The `coder` (Implementer) writes the change,
@@ -375,12 +375,12 @@ export function seedPipelines(): Pipeline[] {
     {
       id: 'pl_simple',
       name: 'Simple',
-      agentKinds: ['coder', 'reviewer', 'mocker', 'tester', 'conflicts', 'ci', 'merger'],
+      agentKinds: ['coder', 'reviewer', 'mocker', 'tester-api', 'conflicts', 'ci', 'merger'],
     },
     {
       id: 'pl_integrate',
       name: 'Integrate & ship',
-      agentKinds: ['integrator', 'mocker', 'tester', 'documenter'],
+      agentKinds: ['integrator', 'mocker', 'tester-api', 'documenter'],
     },
     // A human-in-the-loop build: implement → review, then a `human-test` gate that spins up an
     // ephemeral environment and PARKS for a person to validate the change in a live URL before
@@ -408,10 +408,40 @@ export function seedPipelines(): Pipeline[] {
         'reviewer',
         'blueprints',
         'mocker',
-        'tester',
+        'tester-api',
         'conflicts',
         'ci',
         'human-review',
+        'merger',
+      ],
+    },
+    // A UI-focused build: implement → review → mock → the UI tester drives a browser through
+    // the new screens (capturing a screenshot of each distinct view), then a
+    // `visual-confirmation` gate PARKS for a person to review those screenshots against the
+    // uploaded reference designs before the standard mergeability / CI / merge tail. From the
+    // gate the human approves or requests a fix (the Tester's `fixer`). Opt-in — it needs a
+    // human present, the UI-tester image, and a binary-artifact store, so it is NOT folded into
+    // the always-on defaults; the gate passes through when no store is wired.
+    //
+    // EXPERIMENTAL (labelled as such): `tester-ui` auto-capture is not wired end-to-end yet —
+    // routing a job into the dedicated UI-tester image and the harness env-passthrough are the
+    // remaining deploy-time steps (see the visual-confirmation handover doc). Until they land,
+    // the `tester-ui` step has no browser and the gate is driven in MANUAL mode (a human uploads
+    // the reference designs + screenshots and reviews them). The `experimental` label keeps the
+    // pipeline discoverable but clearly flagged in the library so it isn't picked expecting
+    // automatic capture.
+    {
+      id: 'pl_visual',
+      name: 'Build & visual confirmation',
+      labels: ['experimental'],
+      agentKinds: [
+        'coder',
+        'reviewer',
+        'mocker',
+        'tester-ui',
+        'visual-confirmation',
+        'conflicts',
+        'ci',
         'merger',
       ],
     },
@@ -428,7 +458,7 @@ export function seedPipelines(): Pipeline[] {
         'reviewer',
         'blueprints',
         'mocker',
-        'tester',
+        'tester-api',
         'conflicts',
         'ci',
         'merger',
@@ -444,7 +474,7 @@ export function seedPipelines(): Pipeline[] {
         'reviewer',
         'blueprints',
         'mocker',
-        'tester',
+        'tester-api',
         'conflicts',
         'ci',
         'merger',

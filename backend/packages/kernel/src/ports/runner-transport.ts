@@ -98,6 +98,14 @@ export interface RunnerDispatchOptions {
    * instance-type id.
    */
   instanceSize?: InstanceSize
+  /**
+   * Which executor image variant this job needs. `default` is the standard harness
+   * image; `ui` is the heavier UI-tester image that bundles Playwright + a browser
+   * (the `tester-ui` kind needs it, and only it — every other kind uses `default`, so
+   * the browser never bloats their cold-start). A transport maps this to a distinct
+   * container class (Cloudflare) or image tag (a self-hosted pool / local Docker).
+   */
+  image?: 'default' | 'ui'
 }
 
 /** A job's current state, as the harness/pool reports it. */

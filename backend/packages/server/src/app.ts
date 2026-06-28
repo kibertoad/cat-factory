@@ -2,6 +2,8 @@ import type { Hono } from 'hono'
 import type { AppEnv } from './http/env.js'
 import { accountController } from './modules/accounts/AccountController.js'
 import { agentRunController } from './modules/agentRuns/AgentRunController.js'
+import { artifactController } from './modules/artifacts/ArtifactController.js'
+import { harnessArtifactController } from './modules/artifacts/HarnessArtifactController.js'
 import { authController } from './modules/auth/AuthController.js'
 import { boardController } from './modules/board/BoardController.js'
 import { bootstrapController } from './modules/bootstrap/BootstrapController.js'
@@ -31,6 +33,7 @@ import { requirementReviewController } from './modules/requirements/RequirementR
 import { followUpController } from './modules/followUp/FollowUpController.js'
 import { kaizenController } from './modules/kaizen/KaizenController.js'
 import { humanTestController } from './modules/humanTest/HumanTestController.js'
+import { visualConfirmationController } from './modules/visualConfirm/VisualConfirmationController.js'
 import { humanReviewController } from './modules/humanReview/HumanReviewController.js'
 import { consensusController } from './modules/consensus/ConsensusController.js'
 import { clarityReviewController } from './modules/clarity/ClarityReviewController.js'
@@ -65,6 +68,9 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   // OpenAI-compatible LLM proxy for implementation containers (authenticated by a
   // signed, model-locked container token; upstream/in-process via the llmUpstream gateway).
   app.route('/', llmProxyController())
+  // In-container screenshot ingest for the UI tester (same container session token as the
+  // LLM proxy; reachable at `${proxyBaseUrl}/artifacts/ingest`). 503 when no blob storage.
+  app.route('/', harnessArtifactController())
   // SearXNG-compatible web-search proxy for implementation containers (same
   // model-locked container token; the search runs server-side under the deployment's
   // own key via the `webSearch` gateway, so no provider key reaches the sandbox). A
@@ -102,10 +108,14 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', workspaceApiKeyController())
   app.route('/workspaces/:workspaceId', bootstrapController())
   app.route('/workspaces/:workspaceId', agentRunController())
+  // Binary-artifact API (screenshots + reference uploads) for the visual-confirmation
+  // gate; 503 when no blob storage is configured.
+  app.route('/workspaces/:workspaceId', artifactController())
   app.route('/workspaces/:workspaceId', requirementReviewController())
   app.route('/workspaces/:workspaceId', followUpController())
   app.route('/workspaces/:workspaceId', kaizenController())
   app.route('/workspaces/:workspaceId', humanTestController())
+  app.route('/workspaces/:workspaceId', visualConfirmationController())
   app.route('/workspaces/:workspaceId', humanReviewController())
   app.route('/workspaces/:workspaceId', consensusController())
   app.route('/workspaces/:workspaceId', clarityReviewController())
