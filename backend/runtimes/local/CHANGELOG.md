@@ -1,5 +1,79 @@
 # @cat-factory/local-server
 
+## 0.19.0
+
+### Minor Changes
+
+- 8727f2b: Filesystem blob backend + UI-managed, per-account content storage.
+
+  - New `FilesystemBinaryBlobBackend` (Node/local) stores binary artifacts (UI-tester
+    screenshots, reference designs) on disk under a base path (default `.file-storage`,
+    git-ignored). Added `'fs'` to `BinaryArtifactStorageKind`.
+  - Content-storage configuration moves entirely into the UI, scoped per **account**
+    (Account → Deployment settings), stored in `account_settings` (no DB migration; the
+    S3 access keys are sealed in the existing secrets blob). The blob backend is now
+    resolved per request/run from the account's settings via the new
+    `makeResolveBinaryArtifactStore` seam (`@cat-factory/server`), replacing the static
+    `binaryArtifactStore` on the container with a `resolveBinaryArtifactStore(workspaceId)`.
+  - Available backends per runtime: **Node/local** offer `fs` / `s3` / `db`, **Cloudflare**
+    offers `r2` only (S3 is deliberately not offered on the Worker — the AWS SDK does not belong
+    in the Worker bundle). Defaults when an account hasn't configured storage: **local** defaults
+    to the filesystem backend (works out of the box); **Node** defaults to off (storage requires
+    explicit configuration); **Cloudflare** defaults to its R2 bucket.
+
+  BREAKING: the env-var content-storage configuration is removed — `BINARY_STORAGE_BACKEND`,
+  `S3_ARTIFACT_*`, and `AppConfig.binaryStorage`/`BinaryStorageConfig` no longer exist.
+  Configure storage per-account in the UI instead. Switching an account's backend orphans its
+  previously-stored artifacts (no migration of existing bytes), which is acceptable pre-1.0.
+
+- 56e6ce6: Local mode: sign in with a source-control PAT (GitHub or GitLab) or email/password.
+
+  Local mode previously ran fully anonymous (dev-open, no user), so per-user features —
+  personal subscriptions, your own API keys — failed with 401 ("Sign in to manage …") with
+  no way to sign in. Local mode now establishes a real identity:
+
+  - A new provider-agnostic `VcsIdentityResolver` port (kernel) turns a raw PAT into a
+    neutral identity (the provider's stable numeric user id — the SAME subject GitHub OAuth
+    uses, so a PAT login and an OAuth login resolve to one canonical user). GitHub and GitLab
+    resolvers ship in `@cat-factory/server` / `@cat-factory/gitlab`; adding an Nth provider is
+    one more resolver entry, no endpoint or UI changes.
+  - A new `POST /auth/pat` endpoint (served only where resolvers are wired — local mode)
+    mints a session for the account a PAT belongs to. The local login screen offers one-click
+    "Continue with GitHub/GitLab" when a `GITHUB_PAT`/`GITLAB_PAT` is configured, an inline
+    "paste a PAT" form otherwise, and email/password sign-in (enabled by default in local
+    mode, with open signup on the developer's own machine).
+  - The SPA now requires sign-in in local mode (anonymous use can't store per-user
+    credentials); the session is honored even though the API otherwise runs dev-open.
+  - `'gitlab'` is now an identity provider. Identities remain collision-safe via the
+    `(provider, subject)` key: a GitHub user and a GitLab user with the same numeric id, and
+    a password account (keyed on email), are always distinct.
+
+  Also adds a guard on the per-user credential forms (personal subscriptions, your own API
+  keys): when there is genuinely no signed-in user (a non-local deployment running with auth
+  disabled), the inputs are blocked with a clear notice instead of accepting data that can't
+  be saved.
+
+  BREAKING (local mode only): existing anonymously-created local boards have no owner, so
+  after upgrading they become inaccessible once sign-in is required — recreate them under
+  your signed-in account. (Pre-1.0, no data migration.)
+
+### Patch Changes
+
+- Updated dependencies [764c05b]
+- Updated dependencies [764c05b]
+- Updated dependencies [764c05b]
+- Updated dependencies [764c05b]
+- Updated dependencies [8727f2b]
+- Updated dependencies [56e6ce6]
+  - @cat-factory/orchestration@0.37.0
+  - @cat-factory/kernel@0.46.0
+  - @cat-factory/contracts@0.44.0
+  - @cat-factory/integrations@0.27.0
+  - @cat-factory/server@0.40.0
+  - @cat-factory/node-server@0.35.0
+  - @cat-factory/gitlab@0.2.0
+  - @cat-factory/agents@0.21.7
+
 ## 0.18.11
 
 ### Patch Changes

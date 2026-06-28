@@ -1,5 +1,70 @@
 # @cat-factory/orchestration
 
+## 0.37.0
+
+### Minor Changes
+
+- 8727f2b: Filesystem blob backend + UI-managed, per-account content storage.
+
+  - New `FilesystemBinaryBlobBackend` (Node/local) stores binary artifacts (UI-tester
+    screenshots, reference designs) on disk under a base path (default `.file-storage`,
+    git-ignored). Added `'fs'` to `BinaryArtifactStorageKind`.
+  - Content-storage configuration moves entirely into the UI, scoped per **account**
+    (Account → Deployment settings), stored in `account_settings` (no DB migration; the
+    S3 access keys are sealed in the existing secrets blob). The blob backend is now
+    resolved per request/run from the account's settings via the new
+    `makeResolveBinaryArtifactStore` seam (`@cat-factory/server`), replacing the static
+    `binaryArtifactStore` on the container with a `resolveBinaryArtifactStore(workspaceId)`.
+  - Available backends per runtime: **Node/local** offer `fs` / `s3` / `db`, **Cloudflare**
+    offers `r2` only (S3 is deliberately not offered on the Worker — the AWS SDK does not belong
+    in the Worker bundle). Defaults when an account hasn't configured storage: **local** defaults
+    to the filesystem backend (works out of the box); **Node** defaults to off (storage requires
+    explicit configuration); **Cloudflare** defaults to its R2 bucket.
+
+  BREAKING: the env-var content-storage configuration is removed — `BINARY_STORAGE_BACKEND`,
+  `S3_ARTIFACT_*`, and `AppConfig.binaryStorage`/`BinaryStorageConfig` no longer exist.
+  Configure storage per-account in the UI instead. Switching an account's backend orphans its
+  previously-stored artifacts (no migration of existing bytes), which is acceptable pre-1.0.
+
+### Patch Changes
+
+- 764c05b: ExecutionService split, phase 5 (final): rename the temporary `runStepBody` fallthrough to
+  `handleAgentStep` — the legitimate generic container/inline-agent StepHandler (`kind: 'agent'`,
+  lowest priority) — now that every specific kind is claimed by its own handler. `stepInstance`
+  is now just the fixed run-lifecycle preamble plus a single `dispatchStepHandler` call; the
+  old ~290-line implicit-ordering `if`/early-return chain is gone, replaced by explicit
+  `order`-driven handler dispatch. No behaviour change.
+- 764c05b: ExecutionService split, phase 4: lift the remaining `stepInstance` dispatch branches
+  (the four review/brainstorm gates, human-test, visual-confirm, the polling gates, and
+  inline companions) into dedicated `StepHandler`s with explicit `order` preserving the
+  original precedence. `runStepBody` now holds only the generic container/inline-agent
+  fallthrough. Behaviour-preserving; verified on both runtimes.
+- 764c05b: ExecutionService split, phase 2: add a `phase` discriminator to the `StepCompletionResolver`
+  seam (`terminal` default vs a new `post-completion` early slot) and migrate the inline
+  blueprint/spec/task-estimate ingestion branches of `recordStepResult` into `post-completion`
+  resolvers. The early slot runs before the follow-up/approval gates read `step.output`, so the
+  task-estimate summary still drives the approval proposal. The kind-agnostic PR-writeback and
+  reviewable-artifact-output branches stay inline. Behaviour-preserving; verified on both runtimes.
+- 764c05b: ExecutionService split, phase 3: lift the container-companion and tester verdict
+  short-circuits out of `recordStepResult`'s inline top into an engine-internal
+  `StepCompletionInterceptor` seam (`canIntercept` + `intercept → AdvanceResult | null`,
+  sibling to `StepHandler`), dispatched at the top of `recordStepResult`. Remove the
+  unused `control` field from the kernel `StepResolution` (superseded by the interceptor,
+  which returns a full `AdvanceResult` the bare enum couldn't carry). Behaviour-preserving;
+  verified on both runtimes.
+- Updated dependencies [764c05b]
+- Updated dependencies [764c05b]
+- Updated dependencies [8727f2b]
+- Updated dependencies [56e6ce6]
+  - @cat-factory/kernel@0.46.0
+  - @cat-factory/contracts@0.44.0
+  - @cat-factory/integrations@0.27.0
+  - @cat-factory/agents@0.21.7
+  - @cat-factory/sandbox@0.8.30
+  - @cat-factory/spend@0.10.22
+  - @cat-factory/workspaces@0.9.13
+  - @cat-factory/prompt-fragments@0.8.4
+
 ## 0.36.5
 
 ### Patch Changes
