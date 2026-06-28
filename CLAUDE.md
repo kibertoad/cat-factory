@@ -1012,7 +1012,7 @@ a mapping lives in `@cat-factory/contracts` (e.g. `ConflictReason`), so the SPA 
 SAME source of truth the backend throws against.
 
 **Drift guards (the repo lints with oxlint only, so the ESLint `@intlify/.../no-raw-text`
-rule is unavailable — these two tiers replace it):**
+rule is unavailable — these tiers replace it):**
 
 1. **Typed message keys** (`i18n.experimental.typedOptionsAndMessages`) make a _statically
    written_ unknown `t('literal.key')` a `nuxt typecheck` failure (a CI gate). This does
@@ -1025,10 +1025,20 @@ string>`** keyed off the source-of-truth union (e.g. `CONFLICT_TITLE_KEYS` in
    rather than leaking a raw key if a locale omits one. **Never rely on tier 1 alone for a
    reason/status-keyed lookup.**
 
-A `vue-i18n-extract` missing/unused-key CI check is the planned secondary guard. Migration
-is incremental — `usePipelineErrorToast` is the pilot; most components still hold inline
-strings, so **when you touch a component, lift its visible copy into the catalog** rather
-than adding more raw text.
+3. A `vue-i18n-extract` CI check is the secondary guard for keys the typecheck can't see
+   (runtime-built lookups) and for catalog staleness. It runs in CI's `build-typecheck`
+   job via `pnpm --filter @cat-factory/app run i18n:check` (the wrapper
+   `frontend/app/scripts/i18n-check.mjs`, which drives the `createI18NReport` programmatic
+   API). It **hard-fails on MISSING keys** (a `t('…')` whose key is absent from the
+   catalog — a raw-key leak) and **reports UNUSED keys as non-blocking warnings**: the
+   catalog seeds keys ahead of use (`common.save|cancel|retry`) and references many
+   indirectly (the `CONFLICT_TITLE_KEYS` Record, keys passed as string literals to
+   `usePipelineErrorToast().present(...)`), which the scanner can't see as used — so an
+   unused-key hard gate would fail spuriously and fight the incremental migration.
+
+Migration is incremental — `usePipelineErrorToast` is the pilot; most components still hold
+inline strings, so **when you touch a component, lift its visible copy into the catalog**
+rather than adding more raw text.
 
 ## Conventions
 
