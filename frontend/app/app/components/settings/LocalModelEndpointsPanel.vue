@@ -9,6 +9,7 @@ import { computed, ref, watch } from 'vue'
 import { LOCAL_RUNNER_DEFAULTS, LOCAL_RUNNER_LABELS, type LocalRunner } from '~/types/localModels'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
+const { t } = useI18n()
 const ui = useUiStore()
 const store = useLocalModelsStore()
 const toast = useToast()
@@ -95,7 +96,7 @@ async function test() {
       selected.value = keep.length ? keep : [...result.models]
       testError.value = null
     } else {
-      testError.value = result.error ?? 'Could not reach the runner.'
+      testError.value = result.error ?? t('settings.localModelEndpoints.unreachable')
     }
   } catch (e) {
     testError.value = e instanceof Error ? e.message : String(e)
@@ -125,12 +126,14 @@ async function save() {
     })
     apiKey.value = ''
     toast.add({
-      title: `${LOCAL_RUNNER_LABELS[provider.value]} saved`,
+      title: t('settings.localModelEndpoints.toast.saved', {
+        name: LOCAL_RUNNER_LABELS[provider.value],
+      }),
       icon: 'i-lucide-check',
       color: 'success',
     })
   } catch (e) {
-    notifyError('Could not save runner', e)
+    notifyError(t('settings.localModelEndpoints.toast.saveFailed'), e)
   } finally {
     busy.value = false
   }
@@ -147,9 +150,9 @@ async function remove(p: LocalRunner) {
       selected.value = []
       tested.value = false
     }
-    toast.add({ title: 'Runner removed', icon: 'i-lucide-check' })
+    toast.add({ title: t('settings.localModelEndpoints.toast.removed'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError('Could not remove runner', e)
+    notifyError(t('settings.localModelEndpoints.toast.removeFailed'), e)
   } finally {
     busy.value = false
   }
@@ -157,18 +160,27 @@ async function remove(p: LocalRunner) {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="My local runners" :ui="{ content: 'max-w-2xl' }">
+  <UModal
+    v-model:open="open"
+    :title="t('settings.localModelEndpoints.title')"
+    :ui="{ content: 'max-w-2xl' }"
+  >
     <template #title>
-      <IntegrationBackTitle title="My local runners" @back="back" />
+      <IntegrationBackTitle :title="t('settings.localModelEndpoints.title')" @back="back" />
     </template>
     <template #body>
       <div class="space-y-4">
         <p class="text-xs text-slate-400">
-          Point agents at an LLM running on <strong>your own machine</strong> — Ollama, LM Studio,
-          llama.cpp, vLLM, or any OpenAI-compatible server. A runner is stored
-          <span class="text-slate-300">just for you</span> (a runner lives on your box), and the
-          models you enable appear automatically in the model picker. The API key (most runners
-          ignore it) is write-only and never shown again.
+          <i18n-t keypath="settings.localModelEndpoints.intro" tag="span" scope="global">
+            <template #ownMachine>
+              <strong>{{ t('settings.localModelEndpoints.introOwnMachine') }}</strong>
+            </template>
+            <template #justForYou>
+              <span class="text-slate-300">{{
+                t('settings.localModelEndpoints.introJustForYou')
+              }}</span>
+            </template>
+          </i18n-t>
         </p>
 
         <!-- connected endpoints -->
@@ -181,8 +193,17 @@ async function remove(p: LocalRunner) {
             <span class="font-medium text-slate-200">{{ e.label }}</span>
             <span class="ml-2 text-xs text-slate-500">{{ LOCAL_RUNNER_LABELS[e.provider] }}</span>
             <div class="text-[11px] text-slate-500">
-              {{ e.baseUrl }} · {{ e.models.length }} model{{ e.models.length === 1 ? '' : 's' }}
-              <template v-if="e.hasApiKey"> · key set</template>
+              {{ e.baseUrl }} ·
+              {{
+                t(
+                  'settings.localModelEndpoints.modelCount',
+                  { count: e.models.length },
+                  e.models.length,
+                )
+              }}
+              <template v-if="e.hasApiKey">
+                · {{ t('settings.localModelEndpoints.keySet') }}</template
+              >
             </div>
           </div>
           <div class="flex items-center gap-1">
@@ -192,7 +213,7 @@ async function remove(p: LocalRunner) {
               variant="ghost"
               size="xs"
               :disabled="busy"
-              title="Edit"
+              :title="t('settings.localModelEndpoints.edit')"
               @click="provider = e.provider"
             />
             <UButton
@@ -209,29 +230,45 @@ async function remove(p: LocalRunner) {
         <!-- add / edit form -->
         <div class="rounded-lg border border-dashed border-slate-700 p-3 space-y-3">
           <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            {{ existing ? 'Edit runner' : 'Add a runner' }}
+            {{
+              existing
+                ? t('settings.localModelEndpoints.editRunner')
+                : t('settings.localModelEndpoints.addRunner')
+            }}
           </p>
 
           <div class="flex flex-wrap items-end gap-3">
-            <UFormField label="Runner type">
+            <UFormField :label="t('settings.localModelEndpoints.runnerType')">
               <USelect v-model="provider" :items="RUNNERS" value-key="value" class="w-48" />
             </UFormField>
-            <UFormField label="Label (optional)" class="flex-1 min-w-40">
-              <UInput v-model="label" :placeholder="`My ${LOCAL_RUNNER_LABELS[provider]}`" />
+            <UFormField
+              :label="t('settings.localModelEndpoints.labelOptional')"
+              class="flex-1 min-w-40"
+            >
+              <UInput
+                v-model="label"
+                :placeholder="
+                  t('settings.localModelEndpoints.labelPlaceholder', {
+                    name: LOCAL_RUNNER_LABELS[provider],
+                  })
+                "
+              />
             </UFormField>
           </div>
 
-          <UFormField label="Base URL">
+          <UFormField :label="t('settings.localModelEndpoints.baseUrl')">
             <UInput v-model="baseUrl" class="font-mono" placeholder="http://localhost:11434/v1" />
           </UFormField>
 
-          <UFormField label="API key (optional)">
+          <UFormField :label="t('settings.localModelEndpoints.apiKeyOptional')">
             <UInput
               v-model="apiKey"
               type="password"
               class="font-mono"
               :placeholder="
-                existing?.hasApiKey ? 'leave blank to keep stored key' : 'most runners ignore this'
+                existing?.hasApiKey
+                  ? t('settings.localModelEndpoints.apiKeyKeepPlaceholder')
+                  : t('settings.localModelEndpoints.apiKeyIgnorePlaceholder')
               "
             />
           </UFormField>
@@ -246,19 +283,27 @@ async function remove(p: LocalRunner) {
               :disabled="!baseUrl.trim()"
               @click="test()"
             >
-              Test connection
+              {{ t('settings.localModelEndpoints.testConnection') }}
             </UButton>
             <span v-if="testError" class="text-xs text-rose-400">{{ testError }}</span>
             <span v-else-if="tested && discovered.length" class="text-xs text-emerald-400">
-              Reachable · {{ discovered.length }} model{{ discovered.length === 1 ? '' : 's' }}
+              {{
+                t(
+                  'settings.localModelEndpoints.reachable',
+                  { count: discovered.length },
+                  discovered.length,
+                )
+              }}
             </span>
-            <span v-else-if="tested" class="text-xs text-slate-500">No models reported.</span>
+            <span v-else-if="tested" class="text-xs text-slate-500">{{
+              t('settings.localModelEndpoints.noModels')
+            }}</span>
           </div>
 
           <!-- discovered models multi-select -->
           <div v-if="discovered.length" class="space-y-1.5">
             <span class="block text-[10px] uppercase tracking-wide text-slate-500">
-              Enable models
+              {{ t('settings.localModelEndpoints.enableModels') }}
             </span>
             <div class="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
               <label
@@ -285,7 +330,7 @@ async function remove(p: LocalRunner) {
               :disabled="!baseUrl.trim() || !selected.length"
               @click="save()"
             >
-              {{ existing ? 'Save' : 'Add runner' }}
+              {{ existing ? t('common.save') : t('settings.localModelEndpoints.addRunner') }}
             </UButton>
           </div>
         </div>

@@ -14,6 +14,7 @@ import IssueTrackerPanel from '~/components/settings/IssueTrackerPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
+const { t, te } = useI18n()
 const ui = useUiStore()
 const store = useWorkspaceSettingsStore()
 const toast = useToast()
@@ -31,35 +32,63 @@ const activeTab = computed({
   set: (v: string) => ui.setWorkspaceSettingsTab(v),
 })
 
-const tabs = [
+const tabs = computed(() => [
   {
     value: 'workspace',
-    label: 'Workspace',
+    label: t('settings.workspaceSettings.tabs.workspace'),
     icon: 'i-lucide-sliders-horizontal',
     slot: 'workspace',
   },
-  { value: 'budget', label: 'Budget', icon: 'i-lucide-wallet', slot: 'budget' },
-  { value: 'merge', label: 'Merge thresholds', icon: 'i-lucide-git-merge', slot: 'merge' },
+  {
+    value: 'budget',
+    label: t('settings.workspaceSettings.tabs.budget'),
+    icon: 'i-lucide-wallet',
+    slot: 'budget',
+  },
+  {
+    value: 'merge',
+    label: t('settings.workspaceSettings.tabs.merge'),
+    icon: 'i-lucide-git-merge',
+    slot: 'merge',
+  },
   {
     value: 'tracker',
-    label: 'Issue tracker',
+    label: t('settings.workspaceSettings.tabs.tracker'),
     icon: 'i-lucide-list-checks',
     slot: 'tracker',
   },
   {
     value: 'fragments',
-    label: 'Service best practices',
+    label: t('settings.workspaceSettings.tabs.fragments'),
     icon: 'i-lucide-book-open-check',
     slot: 'fragments',
   },
-]
+])
 
 const TASK_TYPES: CreateTaskType[] = ['feature', 'bug', 'document', 'spike']
-const MODES: { value: TaskLimitMode; label: string }[] = [
-  { value: 'off', label: 'No limit' },
-  { value: 'shared', label: 'Shared across all types' },
-  { value: 'per_type', label: 'Per task type' },
-]
+
+// Per-task-type label for the "Max {type} tasks" inputs. An exhaustive Record keyed off
+// the CreateTaskType union (a missing member fails the typecheck); each value is a LITERAL
+// catalog key so the typed-message-keys check sees it. Leaf keys mirror the enum verbatim.
+const TASK_TYPE_KEYS: Record<CreateTaskType, string> = {
+  feature: 'settings.workspaceSettings.taskTypes.feature',
+  bug: 'settings.workspaceSettings.taskTypes.bug',
+  document: 'settings.workspaceSettings.taskTypes.document',
+  spike: 'settings.workspaceSettings.taskTypes.spike',
+}
+
+const MODES = computed<{ value: TaskLimitMode; label: string }[]>(() => [
+  { value: 'off', label: t('settings.workspaceSettings.taskLimit.modes.off') },
+  { value: 'shared', label: t('settings.workspaceSettings.taskLimit.modes.shared') },
+  { value: 'per_type', label: t('settings.workspaceSettings.taskLimit.modes.per_type') },
+])
+
+/** The localized "Max {type} tasks" label for a per-type running-task limit input. */
+function maxTaskTypeLabel(type: CreateTaskType): string {
+  const key = TASK_TYPE_KEYS[type]
+  const typeLabel = te(key) ? t(key) : type
+  return t('settings.workspaceSettings.taskLimit.maxPerType', { type: typeLabel })
+}
 
 // Local editable copy, kept in sync with the store's settings.
 const draft = reactive({
@@ -116,10 +145,14 @@ async function save() {
       artifactRetentionDays: draft.artifactRetentionDays,
       kaizenEnabled: draft.kaizenEnabled,
     })
-    toast.add({ title: 'Settings saved', icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('settings.workspaceSettings.toast.saved'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
     toast.add({
-      title: 'Could not save settings',
+      title: t('settings.workspaceSettings.toast.saveFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -142,10 +175,14 @@ async function saveBudget() {
       spendCurrency: draft.spendCurrency.trim() ? draft.spendCurrency.trim().toUpperCase() : null,
       spendMonthlyLimit: monthlyLimit,
     })
-    toast.add({ title: 'Budget saved', icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('settings.workspaceSettings.toast.budgetSaved'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
     toast.add({
-      title: 'Could not save budget',
+      title: t('settings.workspaceSettings.toast.budgetSaveFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -157,9 +194,13 @@ async function saveBudget() {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Workspace settings" :ui="{ content: 'max-w-3xl' }">
+  <UModal
+    v-model:open="open"
+    :title="t('settings.workspaceSettings.title')"
+    :ui="{ content: 'max-w-3xl' }"
+  >
     <template #title>
-      <IntegrationBackTitle title="Workspace settings" @back="back" />
+      <IntegrationBackTitle :title="t('settings.workspaceSettings.title')" @back="back" />
     </template>
     <template #body>
       <UTabs
@@ -173,15 +214,21 @@ async function saveBudget() {
           <div class="space-y-6">
             <!-- Run-timing escalation -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">Waiting for a human</h3>
+              <h3 class="text-sm font-semibold text-slate-200">
+                {{ t('settings.workspaceSettings.waiting.heading') }}
+              </h3>
               <p class="text-[11px] text-slate-400">
-                A run parked on a human decision (a review, an approval, a merge) waits as long as
-                it needs — it is never cancelled. After this many minutes its notification turns red
-                and is flagged <span class="text-error-400">Overdue</span> in the inbox.
+                <i18n-t keypath="settings.workspaceSettings.waiting.body" tag="span" scope="global">
+                  <template #overdue>
+                    <span class="text-error-400">{{
+                      t('settings.workspaceSettings.waiting.overdue')
+                    }}</span>
+                  </template>
+                </i18n-t>
               </p>
               <label class="block w-48">
                 <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                  Escalate after (minutes)
+                  {{ t('settings.workspaceSettings.waiting.escalateAfter') }}
                 </span>
                 <UInput
                   v-model.number="draft.waitingEscalationMinutes"
@@ -194,15 +241,16 @@ async function saveBudget() {
 
             <!-- Per-service running-task limit -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">Running tasks per service</h3>
+              <h3 class="text-sm font-semibold text-slate-200">
+                {{ t('settings.workspaceSettings.taskLimit.heading') }}
+              </h3>
               <p class="text-[11px] text-slate-400">
-                Cap how many tasks may run at once under one service. Starting a task over the limit
-                is refused with a clear message until a running task finishes.
+                {{ t('settings.workspaceSettings.taskLimit.body') }}
               </p>
               <label class="block w-64">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
-                  >Mode</span
-                >
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">{{
+                  t('settings.workspaceSettings.taskLimit.mode')
+                }}</span>
                 <USelect
                   v-model="draft.taskLimitMode"
                   :items="MODES"
@@ -214,48 +262,53 @@ async function saveBudget() {
 
               <label v-if="draft.taskLimitMode === 'shared'" class="block w-48">
                 <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                  Max running tasks
+                  {{ t('settings.workspaceSettings.taskLimit.maxRunning') }}
                 </span>
                 <UInput v-model.number="draft.taskLimitShared" type="number" :min="1" size="sm" />
               </label>
 
               <div v-else-if="draft.taskLimitMode === 'per_type'" class="grid grid-cols-2 gap-3">
-                <label v-for="t in TASK_TYPES" :key="t" class="block">
+                <label v-for="taskType in TASK_TYPES" :key="taskType" class="block">
                   <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                    Max {{ t }} tasks
+                    {{ maxTaskTypeLabel(taskType) }}
                   </span>
-                  <UInput v-model.number="draft.perType[t]" type="number" :min="1" size="sm" />
+                  <UInput
+                    v-model.number="draft.perType[taskType]"
+                    type="number"
+                    :min="1"
+                    size="sm"
+                  />
                 </label>
               </div>
             </section>
 
             <!-- Agent observability -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">Agent observability</h3>
+              <h3 class="text-sm font-semibold text-slate-200">
+                {{ t('settings.workspaceSettings.observability.heading') }}
+              </h3>
               <p class="text-[11px] text-slate-400">
-                Store the complete context provided to each agent — the composed prompts, the
-                best-practice fragments folded in, and the full content of the files injected into
-                its container — so it can be inspected later in the observability view. The bodies
-                are kept for the same window as the per-call LLM telemetry. Turn off to stop storing
-                it (existing snapshots are pruned by retention).
+                {{ t('settings.workspaceSettings.observability.body') }}
               </p>
               <label class="flex items-center gap-2">
                 <USwitch v-model="draft.storeAgentContext" size="sm" />
-                <span class="text-sm text-slate-200">Store full agent context</span>
+                <span class="text-sm text-slate-200">{{
+                  t('settings.workspaceSettings.observability.toggle')
+                }}</span>
               </label>
             </section>
 
             <!-- Visual-confirmation artifact retention -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">Screenshot retention</h3>
+              <h3 class="text-sm font-semibold text-slate-200">
+                {{ t('settings.workspaceSettings.retention.heading') }}
+              </h3>
               <p class="text-[11px] text-slate-400">
-                How long to keep the UI tester’s captured screenshots and the reference design
-                images they’re reviewed against (the visual-confirmation gate). A daily cleanup job
-                deletes both the image bytes and their metadata once they age past this window.
+                {{ t('settings.workspaceSettings.retention.body') }}
               </p>
               <label class="block w-48">
                 <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                  Retention (days)
+                  {{ t('settings.workspaceSettings.retention.days') }}
                 </span>
                 <UInput
                   v-model.number="draft.artifactRetentionDays"
@@ -269,18 +322,17 @@ async function saveBudget() {
 
             <!-- Kaizen agent -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">Kaizen agent</h3>
+              <h3 class="text-sm font-semibold text-slate-200">
+                {{ t('settings.workspaceSettings.kaizen.heading') }}
+              </h3>
               <p class="text-[11px] text-slate-400">
-                After each run completes, the Kaizen agent grades how every agent step went — smooth
-                and efficient vs confused and chaotic — and recommends prompt/model improvements. A
-                prompt + agent + model combination that grades highly with no recommendations five
-                times in a row is marked verified and is no longer graded. Grading runs in the
-                background and is shown inside run details and the Kaizen screen. Set the grader's
-                model in Model Configuration (the “Kaizen” agent).
+                {{ t('settings.workspaceSettings.kaizen.body') }}
               </p>
               <label class="flex items-center gap-2">
                 <USwitch v-model="draft.kaizenEnabled" size="sm" />
-                <span class="text-sm text-slate-200">Grade agent runs with Kaizen</span>
+                <span class="text-sm text-slate-200">{{
+                  t('settings.workspaceSettings.kaizen.toggle')
+                }}</span>
               </label>
             </section>
 
@@ -292,7 +344,7 @@ async function saveBudget() {
                 :loading="saving"
                 @click="save"
               >
-                Save
+                {{ t('common.save') }}
               </UButton>
             </div>
           </div>
@@ -302,28 +354,28 @@ async function saveBudget() {
         <template #budget>
           <div class="space-y-6">
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">Monthly spend budget</h3>
+              <h3 class="text-sm font-semibold text-slate-200">
+                {{ t('settings.workspaceSettings.budget.heading') }}
+              </h3>
               <p class="text-[11px] text-slate-400">
-                Token usage is metered per LLM call, priced, and gated by this budget — when
-                reached, runs in this workspace pause and the board shows a warning. Leave blank to
-                inherit the built-in default (~100&nbsp;EUR/month).
+                {{ t('settings.workspaceSettings.budget.body') }}
               </p>
               <div class="grid grid-cols-2 gap-3">
                 <label class="block">
                   <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                    Monthly limit
+                    {{ t('settings.workspaceSettings.budget.monthlyLimit') }}
                   </span>
                   <UInput
                     v-model="draft.spendMonthlyLimit"
                     type="number"
                     :min="0"
-                    placeholder="Default"
+                    :placeholder="t('settings.workspaceSettings.budget.defaultPlaceholder')"
                     size="sm"
                   />
                 </label>
                 <label class="block">
                   <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                    Currency (ISO 4217)
+                    {{ t('settings.workspaceSettings.budget.currency') }}
                   </span>
                   <UInput
                     v-model="draft.spendCurrency"
@@ -344,7 +396,7 @@ async function saveBudget() {
                 :loading="savingBudget"
                 @click="saveBudget"
               >
-                Save budget
+                {{ t('settings.workspaceSettings.budget.save') }}
               </UButton>
             </div>
           </div>

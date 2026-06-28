@@ -4,16 +4,28 @@
 // resolved preset). Full CRUD over the mergePresets store — the same library the
 // task inspector's "Merge policy" dropdown selects from. Exactly one preset is the
 // default; it cannot be deleted or un-defaulted (the backend enforces this too).
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import type { MergeThresholdPreset, RequirementConcernLevel } from '~/types/merge'
 
+const { t } = useI18n()
+
+// Per-concern-level label. An exhaustive Record keyed off the union (a missing member fails
+// the typecheck); each value is a LITERAL catalog key so the typed-message-keys check sees
+// it. Leaf keys mirror the enum value verbatim.
+const CONCERN_LABEL_KEYS: Record<RequirementConcernLevel, string> = {
+  none: 'settings.mergeThresholds.concern.none',
+  low: 'settings.mergeThresholds.concern.low',
+  medium: 'settings.mergeThresholds.concern.medium',
+  high: 'settings.mergeThresholds.concern.high',
+}
+
 // Concern-level options for the requirements auto-pass threshold (none < low < medium < high).
-const CONCERN_LEVELS: { value: RequirementConcernLevel; label: string }[] = [
-  { value: 'none', label: 'None (always stop)' },
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High (never stop)' },
-]
+const CONCERN_LEVELS = computed<{ value: RequirementConcernLevel; label: string }[]>(() => [
+  { value: 'none', label: t(CONCERN_LABEL_KEYS.none) },
+  { value: 'low', label: t(CONCERN_LABEL_KEYS.low) },
+  { value: 'medium', label: t(CONCERN_LABEL_KEYS.medium) },
+  { value: 'high', label: t(CONCERN_LABEL_KEYS.high) },
+])
 
 const store = useMergePresetsStore()
 const toast = useToast()
@@ -77,9 +89,13 @@ async function save(p: MergeThresholdPreset) {
       maxRequirementIterations: d.maxRequirementIterations,
       maxRequirementConcernAllowed: d.maxRequirementConcernAllowed,
     })
-    toast.add({ title: 'Preset saved', icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('settings.mergeThresholds.toast.saved'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
-    notifyError('Could not save preset', e)
+    notifyError(t('settings.mergeThresholds.toast.saveFailed'), e)
   } finally {
     busy.value = null
   }
@@ -90,7 +106,7 @@ async function makeDefault(p: MergeThresholdPreset) {
   try {
     await store.update(p.id, { isDefault: true })
   } catch (e) {
-    notifyError('Could not set default', e)
+    notifyError(t('settings.mergeThresholds.toast.defaultFailed'), e)
   } finally {
     busy.value = null
   }
@@ -101,7 +117,7 @@ async function remove(p: MergeThresholdPreset) {
   try {
     await store.remove(p.id)
   } catch (e) {
-    notifyError('Could not delete preset', e)
+    notifyError(t('settings.mergeThresholds.toast.deleteFailed'), e)
   } finally {
     busy.value = null
   }
@@ -133,9 +149,13 @@ async function create() {
       maxRequirementConcernAllowed: draft.maxRequirementConcernAllowed,
     })
     draft.name = ''
-    toast.add({ title: 'Preset created', icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('settings.mergeThresholds.toast.created'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
-    notifyError('Could not create preset', e)
+    notifyError(t('settings.mergeThresholds.toast.createFailed'), e)
   } finally {
     creating.value = false
   }
@@ -144,13 +164,16 @@ async function create() {
 
 <template>
   <div class="space-y-4">
-    <p class="text-xs text-slate-400">
-      Named auto-merge policies a task can choose. After CI passes, the
-      <span class="text-slate-300">merger</span> agent scores the PR on complexity, risk and impact
-      (0–100%); the PR auto-merges only when every score is at or below the preset's ceilings —
-      otherwise a review notification is raised. The default preset governs any task that picks
-      none.
-    </p>
+    <i18n-t
+      keypath="settings.mergeThresholds.intro"
+      tag="p"
+      class="text-xs text-slate-400"
+      scope="global"
+    >
+      <template #merger>
+        <span class="text-slate-300">{{ t('settings.mergeThresholds.mergerAgent') }}</span>
+      </template>
+    </i18n-t>
 
     <div
       v-for="p in store.presets"
@@ -158,8 +181,15 @@ async function create() {
       class="rounded-lg border border-slate-700 bg-slate-800/40 p-3"
     >
       <div class="mb-3 flex items-center gap-2">
-        <UInput v-model="drafts[p.id]!.name" size="sm" class="flex-1" placeholder="Preset name" />
-        <UBadge v-if="p.isDefault" color="primary" variant="subtle" size="sm">Default</UBadge>
+        <UInput
+          v-model="drafts[p.id]!.name"
+          size="sm"
+          class="flex-1"
+          :placeholder="t('settings.mergeThresholds.presetNamePlaceholder')"
+        />
+        <UBadge v-if="p.isDefault" color="primary" variant="subtle" size="sm">
+          {{ t('settings.mergeThresholds.default') }}
+        </UBadge>
         <UButton
           v-else
           color="neutral"
@@ -169,7 +199,7 @@ async function create() {
           :loading="busy === p.id"
           @click="makeDefault(p)"
         >
-          Make default
+          {{ t('settings.mergeThresholds.makeDefault') }}
         </UButton>
         <UButton
           color="error"
@@ -177,7 +207,11 @@ async function create() {
           size="xs"
           icon="i-lucide-trash-2"
           :disabled="p.isDefault || busy === p.id"
-          :title="p.isDefault ? 'The default preset cannot be deleted' : 'Delete preset'"
+          :title="
+            p.isDefault
+              ? t('settings.mergeThresholds.deleteDefaultBlocked')
+              : t('settings.mergeThresholds.deletePreset')
+          "
           @click="remove(p)"
         />
       </div>
@@ -185,7 +219,7 @@ async function create() {
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <label class="block">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            Max complexity %
+            {{ t('settings.mergeThresholds.field.maxComplexity') }}
           </span>
           <UInput
             v-model.number="drafts[p.id]!.maxComplexity"
@@ -197,7 +231,7 @@ async function create() {
         </label>
         <label class="block">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            Max risk %
+            {{ t('settings.mergeThresholds.field.maxRisk') }}
           </span>
           <UInput
             v-model.number="drafts[p.id]!.maxRisk"
@@ -209,7 +243,7 @@ async function create() {
         </label>
         <label class="block">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            Max impact %
+            {{ t('settings.mergeThresholds.field.maxImpact') }}
           </span>
           <UInput
             v-model.number="drafts[p.id]!.maxImpact"
@@ -221,7 +255,7 @@ async function create() {
         </label>
         <label class="block">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            CI-fix attempts
+            {{ t('settings.mergeThresholds.field.ciMaxAttempts') }}
           </span>
           <UInput
             v-model.number="drafts[p.id]!.ciMaxAttempts"
@@ -233,7 +267,7 @@ async function create() {
         </label>
         <label class="block">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            Requirement iterations
+            {{ t('settings.mergeThresholds.field.maxRequirementIterations') }}
           </span>
           <UInput
             v-model.number="drafts[p.id]!.maxRequirementIterations"
@@ -245,7 +279,7 @@ async function create() {
         </label>
         <label class="block">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            Auto-pass concerns ≤
+            {{ t('settings.mergeThresholds.field.maxRequirementConcernAllowed') }}
           </span>
           <USelect
             v-model="drafts[p.id]!.maxRequirementConcernAllowed"
@@ -265,7 +299,7 @@ async function create() {
           :loading="busy === p.id"
           @click="save(p)"
         >
-          Save
+          {{ t('common.save') }}
         </UButton>
       </div>
     </div>
@@ -273,15 +307,23 @@ async function create() {
     <!-- create -->
     <div class="rounded-lg border border-dashed border-slate-700 p-3">
       <p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        New preset
+        {{ t('settings.mergeThresholds.newPreset') }}
       </p>
       <div class="flex flex-wrap items-end gap-3">
         <label class="block min-w-40 flex-1">
-          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">Name</span>
-          <UInput v-model="draft.name" size="sm" placeholder="e.g. Cautious" />
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+            {{ t('settings.mergeThresholds.create.name') }}
+          </span>
+          <UInput
+            v-model="draft.name"
+            size="sm"
+            :placeholder="t('settings.mergeThresholds.create.namePlaceholder')"
+          />
         </label>
         <label class="block w-20">
-          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">Cmplx%</span>
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+            {{ t('settings.mergeThresholds.create.complexity') }}
+          </span>
           <UInput
             v-model.number="draft.maxComplexity"
             type="number"
@@ -291,21 +333,27 @@ async function create() {
           />
         </label>
         <label class="block w-20">
-          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">Risk%</span>
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+            {{ t('settings.mergeThresholds.create.risk') }}
+          </span>
           <UInput v-model.number="draft.maxRisk" type="number" :min="0" :max="100" size="sm" />
         </label>
         <label class="block w-20">
-          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">Impact%</span>
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+            {{ t('settings.mergeThresholds.create.impact') }}
+          </span>
           <UInput v-model.number="draft.maxImpact" type="number" :min="0" :max="100" size="sm" />
         </label>
         <label class="block w-20">
-          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">CI-fix</span>
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+            {{ t('settings.mergeThresholds.create.ciFix') }}
+          </span>
           <UInput v-model.number="draft.ciMaxAttempts" type="number" :min="0" :max="50" size="sm" />
         </label>
         <label class="block w-20">
-          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
-            >Req iter</span
-          >
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+            {{ t('settings.mergeThresholds.create.reqIter') }}
+          </span>
           <UInput
             v-model.number="draft.maxRequirementIterations"
             type="number"
@@ -315,9 +363,9 @@ async function create() {
           />
         </label>
         <label class="block w-32">
-          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
-            >Auto-pass ≤</span
-          >
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+            {{ t('settings.mergeThresholds.create.autoPass') }}
+          </span>
           <USelect
             v-model="draft.maxRequirementConcernAllowed"
             :items="CONCERN_LEVELS"
@@ -333,7 +381,7 @@ async function create() {
           :disabled="!draft.name.trim()"
           @click="create"
         >
-          Add
+          {{ t('settings.mergeThresholds.add') }}
         </UButton>
       </div>
     </div>

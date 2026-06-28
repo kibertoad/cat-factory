@@ -9,6 +9,7 @@
 // started after the save.
 import { reactive, ref, watch } from 'vue'
 
+const { t } = useI18n()
 const ui = useUiStore()
 const store = useLocalSettingsStore()
 const toast = useToast()
@@ -68,10 +69,14 @@ async function save() {
       },
       checkout: { workspaceRoot: draft.workspaceRoot.trim() || '/workspace', cleanKeep },
     })
-    toast.add({ title: 'Local settings saved', icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('settings.localMode.toast.saved'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
     toast.add({
-      title: 'Could not save local settings',
+      title: t('settings.localMode.toast.saveFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -83,43 +88,69 @@ async function save() {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Local mode" :ui="{ content: 'max-w-2xl' }">
+  <UModal v-model:open="open" :title="t('settings.localMode.title')" :ui="{ content: 'max-w-2xl' }">
     <template #body>
       <div class="space-y-6">
-        <p class="text-xs text-slate-400">
-          Tuning for the local container runner — stored on this machine's deployment (it replaced
-          the <code>LOCAL_POOL_*</code> / <code>HARNESS_*</code> env vars). Saving resizes the warm
-          pool live — no restart needed; in-flight runs keep the container they already hold.
-        </p>
+        <i18n-t
+          keypath="settings.localMode.intro"
+          tag="p"
+          class="text-xs text-slate-400"
+          scope="global"
+        >
+          <template #poolVars>
+            <code>LOCAL_POOL_*</code>
+          </template>
+          <template #harnessVars>
+            <code>HARNESS_*</code>
+          </template>
+        </i18n-t>
 
         <!-- Warm container pool -->
         <section class="space-y-3">
           <div>
-            <h4 class="text-sm font-semibold text-slate-200">Warm container pool</h4>
-            <p class="text-[11px] text-slate-400">
-              Keep idle harness containers ready and re-lease one (preferring a container that
-              already holds the run's repo) instead of cold-starting per run. Pool size 0 disables
-              it. Requires a Docker-family runtime (Docker/Podman/OrbStack/Colima); ignored on Apple
-              <code>container</code>.
-            </p>
+            <h4 class="text-sm font-semibold text-slate-200">
+              {{ t('settings.localMode.pool.heading') }}
+            </h4>
+            <i18n-t
+              keypath="settings.localMode.pool.description"
+              tag="p"
+              class="text-[11px] text-slate-400"
+              scope="global"
+            >
+              <template #appleContainer>
+                <code>container</code>
+              </template>
+            </i18n-t>
           </div>
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <UFormField label="Pool size" help="Max idle warm containers. 0 = pooling off.">
+            <UFormField
+              :label="t('settings.localMode.pool.size.label')"
+              :help="t('settings.localMode.pool.size.help')"
+            >
               <UInput v-model.number="draft.size" type="number" :min="0" size="sm" />
             </UFormField>
-            <UFormField label="Pre-warm at boot" help="Containers started when the service boots.">
+            <UFormField
+              :label="t('settings.localMode.pool.minWarm.label')"
+              :help="t('settings.localMode.pool.minWarm.help')"
+            >
               <UInput v-model.number="draft.minWarm" type="number" :min="0" size="sm" />
             </UFormField>
-            <UFormField label="Max containers" help="Hard cap (leased + idle). Blank = pool size.">
+            <UFormField
+              :label="t('settings.localMode.pool.max.label')"
+              :help="t('settings.localMode.pool.max.help')"
+            >
               <UInput
                 v-model.number="draft.max"
                 type="number"
                 :min="0"
                 size="sm"
-                placeholder="(pool size)"
+                :placeholder="t('settings.localMode.pool.max.placeholder')"
               />
             </UFormField>
-            <UFormField label="Idle timeout (minutes)" help="Evict an idle pooled container after.">
+            <UFormField
+              :label="t('settings.localMode.pool.idleTimeout.label')"
+              :help="t('settings.localMode.pool.idleTimeout.help')"
+            >
               <UInput v-model.number="draft.idleMinutes" type="number" :min="0" size="sm" />
             </UFormField>
           </div>
@@ -128,21 +159,22 @@ async function save() {
         <!-- Checkout reuse -->
         <section class="space-y-3 border-t border-slate-800 pt-6">
           <div>
-            <h4 class="text-sm font-semibold text-slate-200">Checkout reuse</h4>
+            <h4 class="text-sm font-semibold text-slate-200">
+              {{ t('settings.localMode.checkout.heading') }}
+            </h4>
             <p class="text-[11px] text-slate-400">
-              When a warm container already holds the run's repo, the harness reuses its per-repo
-              checkout (clean sweep + fetch + switch branch) instead of cloning fresh.
+              {{ t('settings.localMode.checkout.description') }}
             </p>
           </div>
           <UFormField
-            label="Workspace root"
-            help="Absolute in-container directory the reused checkout lives under."
+            :label="t('settings.localMode.checkout.workspaceRoot.label')"
+            :help="t('settings.localMode.checkout.workspaceRoot.help')"
           >
             <UInput v-model="draft.workspaceRoot" size="sm" placeholder="/workspace" />
           </UFormField>
           <UFormField
-            label="Keep on clean (comma-separated)"
-            help="Dependency-cache directories the per-run clean sweep preserves."
+            :label="t('settings.localMode.checkout.cleanKeep.label')"
+            :help="t('settings.localMode.checkout.cleanKeep.help')"
           >
             <UInput
               v-model="draft.cleanKeep"
@@ -154,7 +186,7 @@ async function save() {
 
         <div class="flex justify-end">
           <UButton color="primary" icon="i-lucide-save" :loading="saving" @click="save">
-            Save
+            {{ t('common.save') }}
           </UButton>
         </div>
       </div>

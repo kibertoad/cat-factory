@@ -1158,5 +1158,461 @@
         }
       }
     }
+  },
+  "settings": {
+    "modelConfiguration": {
+      "title": "Model Configuration",
+      "subtitle": "Presets that map a model to every agent. A task picks one; tasks default to the workspace default preset.",
+      "back": "Back",
+      "closeEsc": "Close (Esc)",
+      "quota": "quota",
+      "list": {
+        "intro": "Each preset sets a {baseModel} for every agent, with optional per-agent overrides. A model pinned on an individual task still overrides the preset.",
+        "introBaseModel": "base model",
+        "newPreset": "New preset",
+        "loadingCatalog": "Loading model catalog…",
+        "default": "Default",
+        "setDefaultTitle": "Set as workspace default",
+        "editTitle": "Edit preset",
+        "deleteDisabledTitle": "The default preset cannot be deleted",
+        "deleteTitle": "Delete preset",
+        "basePrefix": "Base:",
+        "overrideCount": "{count} override | {count} overrides",
+        "empty": "No presets yet. Create one to map models to your agents."
+      },
+      "editor": {
+        "useBaseModel": "Use base model",
+        "baseModel": "Base model",
+        "nameLabel": "Name",
+        "namePlaceholder": "e.g. Kimi K2.7",
+        "baseModelLabel": "Base model (applied to every agent)",
+        "makeDefault": "Make this the workspace default",
+        "perAgentOverrides": "Per-agent overrides",
+        "filterPlaceholder": "Filter agents…",
+        "noAgentsMatch": "No agents match \"{filter}\".",
+        "saveChanges": "Save changes",
+        "createPreset": "Create preset"
+      },
+      "toast": {
+        "setDefaultFailed": "Could not set the default preset",
+        "deleteFailed": "Could not delete the preset",
+        "nameRequiredTitle": "Name required",
+        "nameRequiredBody": "Give the preset a name.",
+        "saveFailed": "Could not save the preset"
+      }
+    },
+    "account": {
+      "title": "Account settings",
+      "noAccount": "No account selected.",
+      "tabs": {
+        "team": "Team & access",
+        "fragments": "Context fragments"
+      }
+    },
+    "providerConnection": {
+      "fallbackTitle": "Provider",
+      "kind": {
+        "environment": {
+          "title": "Ephemeral environment provider",
+          "blurb": "Where the Tester agent runs against a live preview environment. Configure the per-workspace settings and credentials your provider needs."
+        },
+        "runner-pool": {
+          "title": "Self-hosted runner pool",
+          "blurb": "Where the coding agents run when not using Cloudflare Containers. Configure the pool scheduler endpoint and credentials."
+        }
+      },
+      "delegation": {
+        "title": "Local delegation",
+        "intro": "By default this machine runs everything locally — container agents on host Docker, the Tester's infrastructure via in-container docker-compose. Opt in below to delegate either concern to an external service instead. Applies only in local mode.",
+        "agentsToggle": "Run container agents on the runner pool",
+        "agentsHint": "Dispatch every container agent (coder, tester, merger, bootstrap, …) to this workspace's self-hosted runner pool instead of host Docker.",
+        "registerPoolPrompt": "{link} first to enable this.",
+        "registerPoolLink": "Register a runner pool",
+        "envToggle": "Provision Tester environments via the provider",
+        "envHint": "Stand the Tester's preview environment up through the environment provider configured below instead of in-container docker-compose. Connect a provider first to enable this.",
+        "updateFailed": "Could not update delegation"
+      },
+      "runnerPoolLocalHint": "Register your pool here, then enable \"Run container agents on the runner pool\" on the {link} screen to route this workspace's agents to it.",
+      "ephemeralEnvironments": "Ephemeral environments",
+      "viewLogs": "View logs",
+      "hideLogs": "Hide logs",
+      "connectedAt": "Connected · {baseUrl}",
+      "missingConfig": "Missing required config: {fields}",
+      "manifestEditorUnavailable": "This provider is configured by authoring a manifest. The in-app manifest editor isn't available yet — register it via the API for now.",
+      "form": {
+        "updateConfiguration": "Update configuration",
+        "connect": "Connect",
+        "reenterSecrets": "Re-enter the secret field to save changes — stored secrets are write-only and aren't shown. | Re-enter the secret fields to save changes — stored secrets are write-only and aren't shown.",
+        "@reenterSecrets": {
+          "description": "Count-based: how many write-only secret fields the user must re-supply before re-saving (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
+        },
+        "optionalLabel": "{label} (optional)"
+      },
+      "field": {
+        "defaultsTo": "Defaults to {value}"
+      },
+      "test": {
+        "button": "Test connection",
+        "ok": "Connection OK",
+        "failed": "Connection failed"
+      },
+      "toast": {
+        "saved": "{title} saved",
+        "saveFailed": "Could not save the connection",
+        "removed": "Connection removed",
+        "removeFailed": "Could not remove the connection"
+      }
+    },
+    "serviceFragmentDefaults": {
+      "intro": "Pick the best-practice fragments every new service starts with. Their guidance is folded into the prompt of every code-aware agent (coder, reviewer, architect, fixers) on the service's tasks. You can refine the set per service in its inspector; changing this default does not affect services that already exist.",
+      "defaultFragments": "Default fragments",
+      "addFragment": "Add fragment",
+      "empty": "None — new services start with no service-level fragments.",
+      "saveFailed": "Could not save default fragments",
+      "footer": {
+        "question": "Need to add or edit the fragments themselves (hand-authored, linked docs, repos)?",
+        "manageBoard": "Manage this board's fragment library →",
+        "manageAccount": "Manage account fragments →"
+      }
+    },
+    "issueTracker": {
+      "filing": {
+        "heading": "Where tickets are filed",
+        "description": "The tech-debt recurring pipeline raises an issue before implementation and files it in this tracker. Choose {none} to skip filing.",
+        "none": "None",
+        "githubHint": "GitHub Issues rides your installed GitHub App, which isn't connected yet. Install it under {link} — filing stays off until then.",
+        "githubHintLink": "Integrations → GitHub",
+        "jiraHint": "Jira isn't connected yet. {link} to file and link issues.",
+        "linearHint": "Linear isn't connected yet. {link} to file and link issues.",
+        "connectLink": "Connect it",
+        "jiraProjectKey": "Jira project key",
+        "jiraProjectKeyHelp": "New tickets are filed under this project.",
+        "linearTeamId": "Linear team id",
+        "linearTeamIdHelp": "New issues are created under this team (Linear requires a team to create an issue)."
+      },
+      "vendor": {
+        "github": "GitHub Issues",
+        "jira": "Jira",
+        "linear": "Linear"
+      },
+      "linking": {
+        "heading": "Link issues as context",
+        "description": "When a source is offered you can import its issues and attach them to a task, so agents see the issue description and comments while implementing. This is independent of the filing tracker above.",
+        "github": {
+          "available": "Rides your installed GitHub App — no credentials needed.",
+          "unavailable": "Install the GitHub App (Integrations → GitHub) to offer this source."
+        },
+        "checkSetup": "Check setup",
+        "install": "Install",
+        "connected": "Connected.",
+        "jira": {
+          "connectHint": "Connect with a Jira account and API token."
+        },
+        "linear": {
+          "connectHint": "Connect with a Linear personal API key."
+        },
+        "connect": "Connect"
+      },
+      "writeback": {
+        "heading": "Writeback",
+        "description": "Write back to a task's linked issue(s) as its pull request progresses. Each toggle is the workspace default and can be overridden per task in the inspector. GitHub issues close natively; Jira issues transition to the first status in their {done} category.",
+        "done": "Done",
+        "commentOnOpen": {
+          "label": "Comment when a PR opens",
+          "help": "Post a comment on the linked issue with the new pull request's link."
+        },
+        "resolveOnMerge": {
+          "label": "Close as resolved when a PR merges",
+          "help": "Comment that the PR merged, then close / resolve the linked issue."
+        }
+      },
+      "probeFailure": {
+        "title": "Issue tracking isn't available",
+        "disabled": "The task-source integration is turned off on this deployment (its encryption key is not configured). Set ENCRYPTION_KEY on the backend to enable issue tracking.",
+        "serverError": "The issue-tracker service returned an error (HTTP {status}): {message}. This usually means the backend isn't fully migrated/configured.",
+        "loadFailedStatus": "Couldn't load issue-tracker settings (HTTP {status}): {message}",
+        "loadFailed": "Couldn't load issue-tracker settings: {message}"
+      },
+      "toast": {
+        "saved": "Issue tracker saved",
+        "saveFailed": "Could not save settings",
+        "updateFailed": "Could not update",
+        "checkFailed": "Check failed"
+      }
+    },
+    "userSecrets": {
+      "title": "My GitHub token",
+      "intro": "Store a personal access token used for the runs {you} start — pushes, pull requests, the CI gate and merges are attributed to your GitHub access. Stored {scope}; the token is write-only and never shown again.",
+      "introYou": "you",
+      "introScope": "just for you",
+      "connectedStored": "Connected · token stored",
+      "replaceToken": "Replace token",
+      "addToken": "Add token",
+      "labelField": "Label (optional)",
+      "optionalField": "{label} (optional)",
+      "testConnection": "Test connection",
+      "tokenValid": "Token valid",
+      "tokenRejected": "Token rejected",
+      "secretFallback": "Secret",
+      "toast": {
+        "saved": "{label} saved",
+        "saveFailed": "Could not save secret",
+        "removed": "Secret removed",
+        "removeFailed": "Could not remove secret"
+      }
+    },
+    "mergeThresholds": {
+      "intro": "Named auto-merge policies a task can choose. After CI passes, the {merger} agent scores the PR on complexity, risk and impact (0-100%); the PR auto-merges only when every score is at or below the preset's ceilings, otherwise a review notification is raised. The default preset governs any task that picks none.",
+      "mergerAgent": "merger",
+      "concern": {
+        "none": "None (always stop)",
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High (never stop)"
+      },
+      "presetNamePlaceholder": "Preset name",
+      "default": "Default",
+      "makeDefault": "Make default",
+      "deleteDefaultBlocked": "The default preset cannot be deleted",
+      "deletePreset": "Delete preset",
+      "field": {
+        "maxComplexity": "Max complexity %",
+        "maxRisk": "Max risk %",
+        "maxImpact": "Max impact %",
+        "ciMaxAttempts": "CI-fix attempts",
+        "maxRequirementIterations": "Requirement iterations",
+        "maxRequirementConcernAllowed": "Auto-pass concerns at or below"
+      },
+      "newPreset": "New preset",
+      "create": {
+        "name": "Name",
+        "namePlaceholder": "e.g. Cautious",
+        "complexity": "Cmplx%",
+        "risk": "Risk%",
+        "impact": "Impact%",
+        "ciFix": "CI-fix",
+        "reqIter": "Req iter",
+        "autoPass": "Auto-pass at or below"
+      },
+      "add": "Add",
+      "toast": {
+        "saved": "Preset saved",
+        "saveFailed": "Could not save preset",
+        "created": "Preset created",
+        "createFailed": "Could not create preset",
+        "defaultFailed": "Could not set default",
+        "deleteFailed": "Could not delete preset"
+      }
+    },
+    "observabilityConnection": {
+      "title": "Post-release health",
+      "intro": "After a release ships, the {gate} gate watches the configured observability monitors/SLOs. On a regression it spawns an on-call agent to investigate (a human decides whether to revert). Map which monitors/SLOs a service watches from that service's inspector.",
+      "connection": {
+        "heading": "Connection",
+        "provider": "Provider"
+      },
+      "datadog": {
+        "site": "Datadog site",
+        "apiKey": "API key",
+        "appKey": "Application key"
+      },
+      "saveConnection": "Save connection",
+      "disconnect": "Disconnect",
+      "incident": {
+        "heading": "Incident enrichment",
+        "configured": "Configured",
+        "notSet": "Not set",
+        "description": "Optional. On a regression, the on-call investigation is posted onto an incident these systems ALREADY opened from the same signals (annotate, never re-alert). Secrets are write-only: blank leaves a stored value unchanged.",
+        "pagerDutyToken": "PagerDuty API token",
+        "pagerDutyFromEmail": "PagerDuty From email",
+        "incidentIoKey": "incident.io API key",
+        "clear": "Clear"
+      },
+      "status": {
+        "notConnected": "Not connected",
+        "connected": "Connected",
+        "connectedWithSite": "Connected ({site})"
+      },
+      "toast": {
+        "loadFailed": "Could not load observability settings",
+        "incidentCredsRequired": "Enter PagerDuty or incident.io credentials",
+        "incidentSaved": "Incident enrichment saved",
+        "incidentSaveFailed": "Could not save incident enrichment",
+        "incidentDisconnectFailed": "Could not disconnect incident enrichment",
+        "connected": "Observability connected",
+        "connectFailed": "Could not save the connection",
+        "disconnectFailed": "Could not disconnect"
+      }
+    },
+    "localMode": {
+      "title": "Local mode",
+      "intro": "Tuning for the local container runner, stored on this machine's deployment (it replaced the {poolVars} / {harnessVars} env vars). Saving resizes the warm pool live, no restart needed; in-flight runs keep the container they already hold.",
+      "pool": {
+        "heading": "Warm container pool",
+        "description": "Keep idle harness containers ready and re-lease one (preferring a container that already holds the run's repo) instead of cold-starting per run. Pool size 0 disables it. Requires a Docker-family runtime (Docker/Podman/OrbStack/Colima); ignored on Apple {appleContainer}.",
+        "size": {
+          "label": "Pool size",
+          "help": "Max idle warm containers. 0 = pooling off."
+        },
+        "minWarm": {
+          "label": "Pre-warm at boot",
+          "help": "Containers started when the service boots."
+        },
+        "max": {
+          "label": "Max containers",
+          "help": "Hard cap (leased + idle). Blank = pool size.",
+          "placeholder": "(pool size)"
+        },
+        "idleTimeout": {
+          "label": "Idle timeout (minutes)",
+          "help": "Evict an idle pooled container after."
+        }
+      },
+      "checkout": {
+        "heading": "Checkout reuse",
+        "description": "When a warm container already holds the run's repo, the harness reuses its per-repo checkout (clean sweep + fetch + switch branch) instead of cloning fresh.",
+        "workspaceRoot": {
+          "label": "Workspace root",
+          "help": "Absolute in-container directory the reused checkout lives under."
+        },
+        "cleanKeep": {
+          "label": "Keep on clean (comma-separated)",
+          "help": "Dependency-cache directories the per-run clean sweep preserves."
+        }
+      },
+      "toast": {
+        "saved": "Local settings saved",
+        "saveFailed": "Could not save local settings"
+      }
+    },
+    "openRouterCatalog": {
+      "intro": "Reach {models} through one gateway. Add your OpenRouter key below, then enable the models you want. They appear in the model picker with their context window and price, and meter against your spend budget.",
+      "introModels": "300+ models",
+      "connectHeading": "Connect your OpenRouter key",
+      "step1": "Open {link} and create an API key.",
+      "step1Link": "openrouter.ai → Keys ↗",
+      "step2": "Copy the key (starts with {prefix}) and paste it below.",
+      "scope": "Scope",
+      "scopeWorkspace": "This workspace",
+      "scopeUser": "My keys (only me)",
+      "labelOptional": "Label (optional)",
+      "labelPlaceholder": "e.g. team key",
+      "apiKey": "API key",
+      "connectAndBrowse": "Connect & browse",
+      "keyConnected": "OpenRouter key connected",
+      "manageKeys": "Manage in Vendors & keys",
+      "refresh": "Refresh catalog",
+      "enableRecommended": "Enable recommended",
+      "filterPlaceholder": "Filter by name or slug…",
+      "empty": "No models yet. Hit {action} to load OpenRouter's live list.",
+      "enabledCount": "no models enabled | {count} enabled | {count} enabled",
+      "context": "{value} ctx",
+      "contextThousands": "{value}K ctx",
+      "price": "{input}/{output} per Mtok",
+      "toast": {
+        "connected": "OpenRouter key connected",
+        "connectFailed": "Could not connect key",
+        "rejected": "OpenRouter rejected the key.",
+        "unreachable": "Could not reach OpenRouter",
+        "connectFirst": "Connect an OpenRouter key first.",
+        "saved": "OpenRouter catalog saved",
+        "saveFailed": "Could not save catalog"
+      }
+    },
+    "workspaceSettings": {
+      "title": "Workspace settings",
+      "tabs": {
+        "workspace": "Workspace",
+        "budget": "Budget",
+        "merge": "Merge thresholds",
+        "tracker": "Issue tracker",
+        "fragments": "Service best practices"
+      },
+      "waiting": {
+        "heading": "Waiting for a human",
+        "body": "A run parked on a human decision (a review, an approval, a merge) waits as long as it needs and is never cancelled. After this many minutes its notification turns red and is flagged {overdue} in the inbox.",
+        "overdue": "Overdue",
+        "escalateAfter": "Escalate after (minutes)"
+      },
+      "taskLimit": {
+        "heading": "Running tasks per service",
+        "body": "Cap how many tasks may run at once under one service. Starting a task over the limit is refused with a clear message until a running task finishes.",
+        "mode": "Mode",
+        "maxRunning": "Max running tasks",
+        "maxPerType": "Max {type} tasks",
+        "modes": {
+          "off": "No limit",
+          "shared": "Shared across all types",
+          "per_type": "Per task type"
+        }
+      },
+      "taskTypes": {
+        "feature": "feature",
+        "bug": "bug",
+        "document": "document",
+        "spike": "spike"
+      },
+      "observability": {
+        "heading": "Agent observability",
+        "body": "Store the complete context provided to each agent: the composed prompts, the best-practice fragments folded in, and the full content of the files injected into its container, so it can be inspected later in the observability view. The bodies are kept for the same window as the per-call LLM telemetry. Turn off to stop storing it (existing snapshots are pruned by retention).",
+        "toggle": "Store full agent context"
+      },
+      "retention": {
+        "heading": "Screenshot retention",
+        "body": "How long to keep the UI tester's captured screenshots and the reference design images they're reviewed against (the visual-confirmation gate). A daily cleanup job deletes both the image bytes and their metadata once they age past this window.",
+        "days": "Retention (days)"
+      },
+      "kaizen": {
+        "heading": "Kaizen agent",
+        "body": "After each run completes, the Kaizen agent grades how every agent step went, from smooth and efficient to confused and chaotic, and recommends prompt/model improvements. A prompt + agent + model combination that grades highly with no recommendations five times in a row is marked verified and is no longer graded. Grading runs in the background and is shown inside run details and the Kaizen screen. Set the grader's model in Model Configuration (the \"Kaizen\" agent).",
+        "@body": {
+          "description": "\"Kaizen\" is a product feature name; keep it verbatim in every locale."
+        },
+        "toggle": "Grade agent runs with Kaizen"
+      },
+      "budget": {
+        "heading": "Monthly spend budget",
+        "body": "Token usage is metered per LLM call, priced, and gated by this budget. When reached, runs in this workspace pause and the board shows a warning. Leave blank to inherit the built-in default (about 100 EUR/month).",
+        "monthlyLimit": "Monthly limit",
+        "defaultPlaceholder": "Default",
+        "currency": "Currency (ISO 4217)",
+        "save": "Save budget"
+      },
+      "toast": {
+        "saved": "Settings saved",
+        "saveFailed": "Could not save settings",
+        "budgetSaved": "Budget saved",
+        "budgetSaveFailed": "Could not save budget"
+      }
+    },
+    "localModelEndpoints": {
+      "title": "My local runners",
+      "intro": "Point agents at an LLM running on {ownMachine} (Ollama, LM Studio, llama.cpp, vLLM, or any OpenAI-compatible server). A runner is stored {justForYou} (a runner lives on your box), and the models you enable appear automatically in the model picker. The API key (most runners ignore it) is write-only and never shown again.",
+      "introOwnMachine": "your own machine",
+      "introJustForYou": "just for you",
+      "modelCount": "no models | {count} model | {count} models",
+      "keySet": "key set",
+      "edit": "Edit",
+      "editRunner": "Edit runner",
+      "addRunner": "Add a runner",
+      "runnerType": "Runner type",
+      "labelOptional": "Label (optional)",
+      "labelPlaceholder": "My {name}",
+      "baseUrl": "Base URL",
+      "apiKeyOptional": "API key (optional)",
+      "apiKeyKeepPlaceholder": "leave blank to keep stored key",
+      "apiKeyIgnorePlaceholder": "most runners ignore this",
+      "testConnection": "Test connection",
+      "unreachable": "Could not reach the runner.",
+      "reachable": "Reachable · no models | Reachable · {count} model | Reachable · {count} models",
+      "noModels": "No models reported.",
+      "enableModels": "Enable models",
+      "toast": {
+        "saved": "{name} saved",
+        "saveFailed": "Could not save runner",
+        "removed": "Runner removed",
+        "removeFailed": "Could not remove runner"
+      }
+    }
   }
 }

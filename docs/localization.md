@@ -29,7 +29,7 @@ it only records **what is done and what is left**.
 |     1 | **Board**                                                       | `board/**` (15 components)                                                                                                             | `board.*`                                                                | ✅ merged (#393)         |
 |     2 | **Inspector + step/observability panels**                       | `panels/**` + `panels/inspector/**` + `observability/**` (23 components)                                                               | `inspector.*`, `panels.*`, `observability.*`                             | ✅ merged (#395)         |
 |     3 | **Layout + auth**                                               | `layout/**` (14) + `auth/**` (4)                                                                                                       | `layout.*`, `nav.*`, `auth.*`                                            | ✅ merged (#398)         |
-|     4 | Settings                                                        | `settings/**` (12)                                                                                                                     | `settings.*`                                                             | ⬜ planned               |
+|     4 | **Settings**                                                    | `settings/**` (12)                                                                                                                     | `settings.*`                                                             | ✅ merged (#401)         |
 |     5 | Providers + AI onboarding                                       | `providers/**` (5), provider banners                                                                                                   | `providers.*`                                                            | ⬜ planned               |
 |     6 | Integrations: GitHub / Slack / documents / tasks                | `github/**`, `slack/**`, `documents/**`, `tasks/**`                                                                                    | `github.*`, `slack.*`, `documents.*`, `tasks.*`                          | ⬜ planned               |
 |     7 | Pipeline + palette + gates                                      | `pipeline/**`, `palettes/**`, `gates/**`                                                                                               | `pipeline.*`, `palette.*`, `gates.*`                                     | ⬜ planned               |
@@ -37,8 +37,8 @@ it only records **what is done and what is left**.
 |     9 | Remaining surfaces                                              | `bootstrap/`, `environments/`, `fragments/`, `kaizen/`, `sandbox/`, `recurring/`, `media/`, `provisioning/`                            | per-feature                                                              | ⬜ planned               |
 |     X | Cross-cutting                                                   | `app/utils/catalog.ts` (status/agent-kind/block-type labels), `app/pages/*.vue`                                                        | `catalog.*` etc.                                                         | ⬜ planned               |
 
-Rough scale: **~121 SPA components**; ~57 already resolve copy through i18n after
-phases 0–3. The remaining work is the bulk of phases 4–X below.
+Rough scale: **~121 SPA components**; ~69 already resolve copy through i18n after
+phases 0–4. The remaining work is the bulk of phases 5–X below.
 
 ### Done
 
@@ -66,23 +66,21 @@ phases 0–3. The remaining work is the bulk of phases 4–X below.
   and the personal-setup modal. `SideBar.vue` is now fully migrated (switched off the
   global `$t` to the destructured `t`). New keys under `auth.*` and `layout.*`, in all
   five bundled locales.
+- **Phase 4 (settings, #401):** the model-configuration presets editor, account
+  settings tabs, the provider-connection panel (environment + runner-pool, local
+  delegation), service fragment defaults, the issue-tracker panel (filing / linking /
+  writeback), user secrets, merge-threshold presets, the observability connection +
+  incident enrichment, local-mode tuning (warm pool + checkout reuse), the OpenRouter
+  catalog, the workspace settings (waiting / task-limit / observability / retention /
+  Kaizen / budget), and the local model endpoints. 314 keys under `settings.*` in all
+  five locales (enum-keyed lookups via exhaustive `Record` maps; spend currency via the
+  number formatter).
 
 The four board/panels components with **no** user-facing text — `AgentChip`,
 `TaskDependencyEdges`, `DependencyConnectOverlay`, `StepResultViewHost` — need no
 migration and are intentionally skipped.
 
 ### Remaining (by area)
-
-**Settings** (phase 4)
-
-```
-settings/AccountSettingsPanel.vue, settings/IssueTrackerPanel.vue,
-settings/LocalModeSettingsPanel.vue, settings/LocalModelEndpointsPanel.vue,
-settings/MergeThresholdsPanel.vue, settings/ModelConfigurationPanel.vue,
-settings/ObservabilityConnectionPanel.vue, settings/OpenRouterCatalogPanel.vue,
-settings/ProviderConnectionPanel.vue, settings/ServiceFragmentDefaultsPanel.vue,
-settings/UserSecretsSection.vue, settings/WorkspaceSettingsPanel.vue
-```
 
 **Providers** (phase 5)
 

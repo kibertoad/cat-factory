@@ -8,6 +8,7 @@
 import AccountTeamSettings from '~/components/layout/AccountTeamSettings.vue'
 import AccountFragmentSettings from '~/components/layout/AccountFragmentSettings.vue'
 
+const { t } = useI18n()
 const ui = useUiStore()
 const accounts = useAccountsStore()
 
@@ -23,21 +24,23 @@ const activeTab = computed({
   set: (v: string) => ui.setAccountSettingsTab(v),
 })
 
-const tabs = [
-  { value: 'team', label: 'Team & access', icon: 'i-lucide-users', slot: 'team' },
+const tabs = computed(() => [
+  { value: 'team', label: t('settings.account.tabs.team'), icon: 'i-lucide-users', slot: 'team' },
   {
     value: 'fragments',
-    label: 'Context fragments',
+    label: t('settings.account.tabs.fragments'),
     icon: 'i-lucide-book-marked',
     slot: 'fragments',
   },
-]
+])
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Account settings" :ui="{ content: 'max-w-3xl' }">
+  <UModal v-model:open="open" :title="t('settings.account.title')" :ui="{ content: 'max-w-3xl' }">
     <template #body>
-      <p v-if="!accounts.activeAccountId" class="text-sm text-slate-400">No account selected.</p>
+      <p v-if="!accounts.activeAccountId" class="text-sm text-slate-400">
+        {{ t('settings.account.noAccount') }}
+      </p>
       <UTabs
         v-else
         v-model="activeTab"

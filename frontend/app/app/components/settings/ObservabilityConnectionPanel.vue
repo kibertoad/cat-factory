@@ -8,6 +8,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import type { ObservabilityProviderKind } from '~/types/releaseHealth'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
+const { t } = useI18n()
 const ui = useUiStore()
 const store = useReleaseHealthStore()
 const toast = useToast()
@@ -53,7 +54,7 @@ watch(
       if (site) datadog.site = site
       await store.loadIncident()
     } catch (e) {
-      notifyError('Could not load observability settings', e)
+      notifyError(t('settings.observabilityConnection.toast.loadFailed'), e)
     }
   },
   { immediate: true },
@@ -71,16 +72,23 @@ async function saveIncident() {
     }
     if (incidentIo.apiKey.trim()) input.incidentIo = { apiKey: incidentIo.apiKey.trim() }
     if (!input.pagerDuty && !input.incidentIo) {
-      toast.add({ title: 'Enter PagerDuty or incident.io credentials', color: 'error' })
+      toast.add({
+        title: t('settings.observabilityConnection.toast.incidentCredsRequired'),
+        color: 'error',
+      })
       return
     }
     await store.saveIncident(input)
     pagerDuty.apiToken = ''
     pagerDuty.fromEmail = ''
     incidentIo.apiKey = ''
-    toast.add({ title: 'Incident enrichment saved', icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('settings.observabilityConnection.toast.incidentSaved'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
-    notifyError('Could not save incident enrichment', e)
+    notifyError(t('settings.observabilityConnection.toast.incidentSaveFailed'), e)
   } finally {
     incidentBusy.value = false
   }
@@ -91,7 +99,7 @@ async function disconnectIncident() {
   try {
     await store.removeIncident()
   } catch (e) {
-    notifyError('Could not disconnect incident enrichment', e)
+    notifyError(t('settings.observabilityConnection.toast.incidentDisconnectFailed'), e)
   } finally {
     incidentBusy.value = false
   }
@@ -106,9 +114,13 @@ async function saveConnection() {
     })
     datadog.apiKey = ''
     datadog.appKey = ''
-    toast.add({ title: 'Observability connected', icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('settings.observabilityConnection.toast.connected'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
-    notifyError('Could not save the connection', e)
+    notifyError(t('settings.observabilityConnection.toast.connectFailed'), e)
   } finally {
     busy.value = false
   }
@@ -119,50 +131,62 @@ async function disconnect() {
   try {
     await store.removeConnection()
   } catch (e) {
-    notifyError('Could not disconnect', e)
+    notifyError(t('settings.observabilityConnection.toast.disconnectFailed'), e)
   } finally {
     busy.value = false
   }
 }
 
 const connectedLabel = computed(() => {
-  if (!store.connection.connected) return 'Not connected'
+  if (!store.connection.connected) return t('settings.observabilityConnection.status.notConnected')
   const site = store.connection.summary?.site
-  return site ? `Connected (${site})` : 'Connected'
+  return site
+    ? t('settings.observabilityConnection.status.connectedWithSite', { site })
+    : t('settings.observabilityConnection.status.connected')
 })
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Post-release health" :ui="{ content: 'max-w-lg' }">
+  <UModal
+    v-model:open="open"
+    :title="t('settings.observabilityConnection.title')"
+    :ui="{ content: 'max-w-lg' }"
+  >
     <template #title>
-      <IntegrationBackTitle title="Post-release health" @back="back" />
+      <IntegrationBackTitle :title="t('settings.observabilityConnection.title')" @back="back" />
     </template>
     <template #body>
       <div class="space-y-4">
-        <p class="text-sm text-slate-400">
-          After a release ships, the <code>post-release-health</code> gate watches the configured
-          observability monitors/SLOs. On a regression it spawns an on-call agent to investigate (a
-          human decides whether to revert). Map which monitors/SLOs a service watches from that
-          service's inspector.
-        </p>
+        <i18n-t
+          keypath="settings.observabilityConnection.intro"
+          tag="p"
+          class="text-sm text-slate-400"
+          scope="global"
+        >
+          <template #gate>
+            <code>post-release-health</code>
+          </template>
+        </i18n-t>
 
         <section class="space-y-3 rounded-lg border border-slate-700 p-3">
           <div class="flex items-center justify-between">
-            <h3 class="text-sm font-semibold">Connection</h3>
+            <h3 class="text-sm font-semibold">
+              {{ t('settings.observabilityConnection.connection.heading') }}
+            </h3>
             <UBadge :color="store.connection.connected ? 'success' : 'neutral'" variant="soft">
               {{ connectedLabel }}
             </UBadge>
           </div>
 
-          <UFormField label="Provider">
+          <UFormField :label="t('settings.observabilityConnection.connection.provider')">
             <USelect v-model="provider" :items="PROVIDERS" value-key="value" class="w-full" />
           </UFormField>
 
           <template v-if="provider === 'datadog'">
-            <UFormField label="Datadog site">
+            <UFormField :label="t('settings.observabilityConnection.datadog.site')">
               <UInput v-model="datadog.site" placeholder="datadoghq.com" class="w-full" />
             </UFormField>
-            <UFormField label="API key">
+            <UFormField :label="t('settings.observabilityConnection.datadog.apiKey')">
               <UInput
                 v-model="datadog.apiKey"
                 type="password"
@@ -170,7 +194,7 @@ const connectedLabel = computed(() => {
                 class="w-full"
               />
             </UFormField>
-            <UFormField label="Application key">
+            <UFormField :label="t('settings.observabilityConnection.datadog.appKey')">
               <UInput
                 v-model="datadog.appKey"
                 type="password"
@@ -186,7 +210,7 @@ const connectedLabel = computed(() => {
               :disabled="!datadog.apiKey || !datadog.appKey"
               @click="saveConnection"
             >
-              Save connection
+              {{ t('settings.observabilityConnection.saveConnection') }}
             </UButton>
             <UButton
               v-if="store.connection.connected"
@@ -195,7 +219,7 @@ const connectedLabel = computed(() => {
               :loading="busy"
               @click="disconnect"
             >
-              Disconnect
+              {{ t('settings.observabilityConnection.disconnect') }}
             </UButton>
           </div>
         </section>
@@ -207,21 +231,25 @@ const connectedLabel = computed(() => {
           class="space-y-3 rounded-lg border border-slate-700 p-3"
         >
           <div class="flex items-center justify-between">
-            <h3 class="text-sm font-semibold">Incident enrichment</h3>
+            <h3 class="text-sm font-semibold">
+              {{ t('settings.observabilityConnection.incident.heading') }}
+            </h3>
             <UBadge :color="store.incident.connected ? 'success' : 'neutral'" variant="soft">
-              {{ store.incident.connected ? 'Configured' : 'Not set' }}
+              {{
+                store.incident.connected
+                  ? t('settings.observabilityConnection.incident.configured')
+                  : t('settings.observabilityConnection.incident.notSet')
+              }}
             </UBadge>
           </div>
           <p class="text-[11px] text-slate-400">
-            Optional. On a regression, the on-call investigation is posted onto an incident these
-            systems ALREADY opened from the same signals (annotate, never re-alert). Secrets are
-            write-only — blank leaves a stored value unchanged.
+            {{ t('settings.observabilityConnection.incident.description') }}
           </p>
 
-          <UFormField label="PagerDuty API token">
+          <UFormField :label="t('settings.observabilityConnection.incident.pagerDutyToken')">
             <UInput v-model="pagerDuty.apiToken" type="password" class="w-full" />
           </UFormField>
-          <UFormField label="PagerDuty From email">
+          <UFormField :label="t('settings.observabilityConnection.incident.pagerDutyFromEmail')">
             <UInput
               v-model="pagerDuty.fromEmail"
               type="email"
@@ -229,12 +257,14 @@ const connectedLabel = computed(() => {
               class="w-full"
             />
           </UFormField>
-          <UFormField label="incident.io API key">
+          <UFormField :label="t('settings.observabilityConnection.incident.incidentIoKey')">
             <UInput v-model="incidentIo.apiKey" type="password" class="w-full" />
           </UFormField>
 
           <div class="flex gap-2">
-            <UButton :loading="incidentBusy" @click="saveIncident">Save</UButton>
+            <UButton :loading="incidentBusy" @click="saveIncident">
+              {{ t('common.save') }}
+            </UButton>
             <UButton
               v-if="store.incident.connected"
               color="error"
@@ -242,7 +272,7 @@ const connectedLabel = computed(() => {
               :loading="incidentBusy"
               @click="disconnectIncident"
             >
-              Clear
+              {{ t('settings.observabilityConnection.incident.clear') }}
             </UButton>
           </div>
         </section>

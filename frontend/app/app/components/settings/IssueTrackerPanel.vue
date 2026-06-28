@@ -17,6 +17,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import type { TaskSourceDiagnosticStatus, TaskSourceKind, TrackerKind } from '~/types/domain'
 
+const { t } = useI18n()
 const tracker = useTrackerStore()
 const tasks = useTasksStore()
 const ui = useUiStore()
@@ -78,10 +79,14 @@ async function save() {
       writebackCommentOnPrOpen: commentOnPrOpen.value,
       writebackResolveOnMerge: resolveOnMerge.value,
     })
-    toast.add({ title: 'Issue tracker saved', icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('settings.issueTracker.toast.saved'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
     toast.add({
-      title: 'Could not save settings',
+      title: t('settings.issueTracker.toast.saveFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -100,7 +105,7 @@ async function toggleSource(source: TaskSourceKind, enabled: boolean) {
     await tasks.setEnabled(source, enabled)
   } catch (e) {
     toast.add({
-      title: 'Could not update',
+      title: t('settings.issueTracker.toast.updateFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -118,12 +123,20 @@ const probeFailureHint = computed(() => {
   const err = tasks.probeError
   if (tasks.available !== false || !err) return null
   if (err.status === 503) {
-    return 'The task-source integration is turned off on this deployment (its encryption key is not configured). Set ENCRYPTION_KEY on the backend to enable issue tracking.'
+    return t('settings.issueTracker.probeFailure.disabled')
   }
   if (err.status && err.status >= 500) {
-    return `The issue-tracker service returned an error (HTTP ${err.status}): ${err.message}. This usually means the backend isn't fully migrated/configured.`
+    return t('settings.issueTracker.probeFailure.serverError', {
+      status: err.status,
+      message: err.message,
+    })
   }
-  return `Couldn't load issue-tracker settings${err.status ? ` (HTTP ${err.status})` : ''}: ${err.message}`
+  return err.status
+    ? t('settings.issueTracker.probeFailure.loadFailedStatus', {
+        status: err.status,
+        message: err.message,
+      })
+    : t('settings.issueTracker.probeFailure.loadFailed', { message: err.message })
 })
 
 async function checkSetup(source: TaskSourceKind) {
@@ -131,7 +144,7 @@ async function checkSetup(source: TaskSourceKind) {
     await tasks.checkSetup(source)
   } catch (e) {
     toast.add({
-      title: 'Check failed',
+      title: t('settings.issueTracker.toast.checkFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -163,17 +176,22 @@ const STATUS_UI: Record<
       color="error"
       variant="subtle"
       icon="i-lucide-triangle-alert"
-      title="Issue tracking isn't available"
+      :title="t('settings.issueTracker.probeFailure.title')"
       :description="probeFailureHint"
     />
 
     <!-- 1. Filing tracker ----------------------------------------------------->
     <section class="space-y-3">
       <div>
-        <h3 class="text-sm font-semibold text-slate-200">Where tickets are filed</h3>
+        <h3 class="text-sm font-semibold text-slate-200">
+          {{ t('settings.issueTracker.filing.heading') }}
+        </h3>
         <p class="mt-1 text-[11px] text-slate-400">
-          The tech-debt recurring pipeline raises an issue before implementation and files it in
-          this tracker. Choose <span class="text-slate-300">None</span> to skip filing.
+          <i18n-t keypath="settings.issueTracker.filing.description" tag="span" scope="global">
+            <template #none>
+              <span class="text-slate-300">{{ t('settings.issueTracker.filing.none') }}</span>
+            </template>
+          </i18n-t>
         </p>
       </div>
 
@@ -185,7 +203,7 @@ const STATUS_UI: Record<
           :variant="trackerKind === null ? 'solid' : 'subtle'"
           @click="trackerKind = null"
         >
-          None
+          {{ t('settings.issueTracker.filing.none') }}
         </UButton>
         <UButton
           icon="i-lucide-github"
@@ -194,7 +212,7 @@ const STATUS_UI: Record<
           :variant="trackerKind === 'github' ? 'solid' : 'subtle'"
           @click="trackerKind = 'github'"
         >
-          GitHub Issues
+          {{ t('settings.issueTracker.vendor.github') }}
         </UButton>
         <UButton
           icon="i-lucide-trello"
@@ -218,36 +236,58 @@ const STATUS_UI: Record<
 
       <!-- Inline readiness hints for the picked tracker. -->
       <p v-if="trackerKind === 'github' && !githubAvailable" class="text-[11px] text-amber-400">
-        GitHub Issues rides your installed GitHub App, which isn't connected yet. Install it under
-        <button class="underline" @click="ui.openGitHub()">Integrations → GitHub</button> — filing
-        stays off until then.
+        <i18n-t keypath="settings.issueTracker.filing.githubHint" tag="span" scope="global">
+          <template #link>
+            <button class="underline" @click="ui.openGitHub()">
+              {{ t('settings.issueTracker.filing.githubHintLink') }}
+            </button>
+          </template>
+        </i18n-t>
       </p>
       <p v-else-if="trackerKind === 'jira' && !jiraConnected" class="text-[11px] text-amber-400">
-        Jira isn't connected yet.
-        <button class="underline" @click="ui.openTaskConnect('jira')">Connect it</button> to file
-        and link issues.
+        <i18n-t keypath="settings.issueTracker.filing.jiraHint" tag="span" scope="global">
+          <template #link>
+            <button class="underline" @click="ui.openTaskConnect('jira')">
+              {{ t('settings.issueTracker.filing.connectLink') }}
+            </button>
+          </template>
+        </i18n-t>
       </p>
       <p
         v-else-if="trackerKind === 'linear' && !linearConnected"
         class="text-[11px] text-amber-400"
       >
-        Linear isn't connected yet.
-        <button class="underline" @click="ui.openTaskConnect('linear')">Connect it</button> to file
-        and link issues.
+        <i18n-t keypath="settings.issueTracker.filing.linearHint" tag="span" scope="global">
+          <template #link>
+            <button class="underline" @click="ui.openTaskConnect('linear')">
+              {{ t('settings.issueTracker.filing.connectLink') }}
+            </button>
+          </template>
+        </i18n-t>
       </p>
 
-      <UFormField v-if="trackerKind === 'jira'" label="Jira project key" class="w-48">
+      <UFormField
+        v-if="trackerKind === 'jira'"
+        :label="t('settings.issueTracker.filing.jiraProjectKey')"
+        class="w-48"
+      >
         <UInput v-model="jiraProjectKey" placeholder="ENG" size="sm" class="w-full" />
         <template #help>
-          <span class="text-[11px] text-slate-500">New tickets are filed under this project.</span>
+          <span class="text-[11px] text-slate-500">
+            {{ t('settings.issueTracker.filing.jiraProjectKeyHelp') }}
+          </span>
         </template>
       </UFormField>
 
-      <UFormField v-if="trackerKind === 'linear'" label="Linear team id" class="w-64">
+      <UFormField
+        v-if="trackerKind === 'linear'"
+        :label="t('settings.issueTracker.filing.linearTeamId')"
+        class="w-64"
+      >
         <UInput v-model="linearTeamId" placeholder="team_…" size="sm" class="w-full" />
         <template #help>
           <span class="text-[11px] text-slate-500">
-            New issues are created under this team (Linear requires a team to create an issue).
+            {{ t('settings.issueTracker.filing.linearTeamIdHelp') }}
           </span>
         </template>
       </UFormField>
@@ -256,11 +296,11 @@ const STATUS_UI: Record<
     <!-- 2. Linking sources ---------------------------------------------------->
     <section class="space-y-3">
       <div>
-        <h3 class="text-sm font-semibold text-slate-200">Link issues as context</h3>
+        <h3 class="text-sm font-semibold text-slate-200">
+          {{ t('settings.issueTracker.linking.heading') }}
+        </h3>
         <p class="mt-1 text-[11px] text-slate-400">
-          When a source is offered you can import its issues and attach them to a task, so agents
-          see the issue description and comments while implementing. This is independent of the
-          filing tracker above.
+          {{ t('settings.issueTracker.linking.description') }}
         </p>
       </div>
 
@@ -270,12 +310,14 @@ const STATUS_UI: Record<
           <div class="flex min-w-0 items-center gap-2.5">
             <UIcon name="i-lucide-github" class="h-5 w-5 shrink-0 text-slate-300" />
             <div class="min-w-0">
-              <div class="text-sm font-medium text-slate-200">GitHub Issues</div>
+              <div class="text-sm font-medium text-slate-200">
+                {{ t('settings.issueTracker.vendor.github') }}
+              </div>
               <div class="text-[11px] text-slate-500">
                 {{
                   githubAvailable
-                    ? 'Rides your installed GitHub App — no credentials needed.'
-                    : 'Install the GitHub App (Integrations → GitHub) to offer this source.'
+                    ? t('settings.issueTracker.linking.github.available')
+                    : t('settings.issueTracker.linking.github.unavailable')
                 }}
               </div>
             </div>
@@ -289,7 +331,7 @@ const STATUS_UI: Record<
               :loading="tasks.checking === 'github'"
               @click="checkSetup('github')"
             >
-              Check setup
+              {{ t('settings.issueTracker.linking.checkSetup') }}
             </UButton>
             <USwitch
               v-if="githubAvailable"
@@ -305,7 +347,7 @@ const STATUS_UI: Record<
               icon="i-lucide-github"
               @click="ui.openGitHub()"
             >
-              Install
+              {{ t('settings.issueTracker.linking.install') }}
             </UButton>
           </div>
         </div>
@@ -329,9 +371,15 @@ const STATUS_UI: Record<
           <div class="flex min-w-0 items-center gap-2.5">
             <UIcon name="i-lucide-trello" class="h-5 w-5 shrink-0 text-slate-300" />
             <div class="min-w-0">
-              <div class="text-sm font-medium text-slate-200">Jira</div>
+              <div class="text-sm font-medium text-slate-200">
+                {{ t('settings.issueTracker.vendor.jira') }}
+              </div>
               <div class="text-[11px] text-slate-500">
-                {{ jiraConnected ? 'Connected.' : 'Connect with a Jira account and API token.' }}
+                {{
+                  jiraConnected
+                    ? t('settings.issueTracker.linking.connected')
+                    : t('settings.issueTracker.linking.jira.connectHint')
+                }}
               </div>
             </div>
           </div>
@@ -345,7 +393,7 @@ const STATUS_UI: Record<
               :loading="tasks.checking === 'jira'"
               @click="checkSetup('jira')"
             >
-              Check setup
+              {{ t('settings.issueTracker.linking.checkSetup') }}
             </UButton>
             <USwitch
               v-if="jira?.available"
@@ -361,7 +409,7 @@ const STATUS_UI: Record<
               icon="i-lucide-plug"
               @click="ui.openTaskConnect('jira')"
             >
-              Connect
+              {{ t('settings.issueTracker.linking.connect') }}
             </UButton>
           </div>
         </div>
@@ -385,9 +433,15 @@ const STATUS_UI: Record<
           <div class="flex min-w-0 items-center gap-2.5">
             <UIcon name="i-lucide-square-kanban" class="h-5 w-5 shrink-0 text-slate-300" />
             <div class="min-w-0">
-              <div class="text-sm font-medium text-slate-200">Linear</div>
+              <div class="text-sm font-medium text-slate-200">
+                {{ t('settings.issueTracker.vendor.linear') }}
+              </div>
               <div class="text-[11px] text-slate-500">
-                {{ linearConnected ? 'Connected.' : 'Connect with a Linear personal API key.' }}
+                {{
+                  linearConnected
+                    ? t('settings.issueTracker.linking.connected')
+                    : t('settings.issueTracker.linking.linear.connectHint')
+                }}
               </div>
             </div>
           </div>
@@ -401,7 +455,7 @@ const STATUS_UI: Record<
               :loading="tasks.checking === 'linear'"
               @click="checkSetup('linear')"
             >
-              Check setup
+              {{ t('settings.issueTracker.linking.checkSetup') }}
             </UButton>
             <USwitch
               v-if="linear?.available"
@@ -417,7 +471,7 @@ const STATUS_UI: Record<
               icon="i-lucide-plug"
               @click="ui.openTaskConnect('linear')"
             >
-              Connect
+              {{ t('settings.issueTracker.linking.connect') }}
             </UButton>
           </div>
         </div>
@@ -439,21 +493,26 @@ const STATUS_UI: Record<
     <!-- 3. Writeback ---------------------------------------------------------->
     <section class="space-y-3">
       <div>
-        <h3 class="text-sm font-semibold text-slate-200">Writeback</h3>
+        <h3 class="text-sm font-semibold text-slate-200">
+          {{ t('settings.issueTracker.writeback.heading') }}
+        </h3>
         <p class="mt-1 text-[11px] text-slate-400">
-          Write back to a task's linked issue(s) as its pull request progresses. Each toggle is the
-          workspace default and can be overridden per task in the inspector. GitHub issues close
-          natively; Jira issues transition to the first status in their
-          <span class="text-slate-300">Done</span> category.
+          <i18n-t keypath="settings.issueTracker.writeback.description" tag="span" scope="global">
+            <template #done>
+              <span class="text-slate-300">{{ t('settings.issueTracker.writeback.done') }}</span>
+            </template>
+          </i18n-t>
         </p>
       </div>
 
       <label class="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-800/40 p-3">
         <USwitch v-model="commentOnPrOpen" />
         <span class="text-sm">
-          <span class="block text-slate-200">Comment when a PR opens</span>
+          <span class="block text-slate-200">
+            {{ t('settings.issueTracker.writeback.commentOnOpen.label') }}
+          </span>
           <span class="block text-xs text-slate-500">
-            Post a comment on the linked issue with the new pull request's link.
+            {{ t('settings.issueTracker.writeback.commentOnOpen.help') }}
           </span>
         </span>
       </label>
@@ -461,9 +520,11 @@ const STATUS_UI: Record<
       <label class="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-800/40 p-3">
         <USwitch v-model="resolveOnMerge" />
         <span class="text-sm">
-          <span class="block text-slate-200">Close as resolved when a PR merges</span>
+          <span class="block text-slate-200">
+            {{ t('settings.issueTracker.writeback.resolveOnMerge.label') }}
+          </span>
           <span class="block text-xs text-slate-500">
-            Comment that the PR merged, then close / resolve the linked issue.
+            {{ t('settings.issueTracker.writeback.resolveOnMerge.help') }}
           </span>
         </span>
       </label>
@@ -478,7 +539,7 @@ const STATUS_UI: Record<
         :disabled="!canSave"
         @click="save"
       >
-        Save
+        {{ t('common.save') }}
       </UButton>
     </div>
   </div>

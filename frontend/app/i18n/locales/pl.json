@@ -1119,5 +1119,455 @@
         }
       }
     }
+  },
+  "settings": {
+    "modelConfiguration": {
+      "title": "Konfiguracja modeli",
+      "subtitle": "Ustawienia, które przypisują model do każdego agenta. Zadanie wybiera jedno z nich; domyślnie zadania korzystają z domyślnego ustawienia obszaru roboczego.",
+      "back": "Wstecz",
+      "closeEsc": "Zamknij (Esc)",
+      "quota": "limit",
+      "list": {
+        "intro": "Każde ustawienie wybiera {baseModel} dla każdego agenta, z opcjonalnymi nadpisaniami dla poszczególnych agentów. Model przypięty do pojedynczego zadania nadal ma pierwszeństwo przed ustawieniem.",
+        "introBaseModel": "model bazowy",
+        "newPreset": "Nowe ustawienie",
+        "loadingCatalog": "Wczytywanie katalogu modeli…",
+        "default": "Domyślne",
+        "setDefaultTitle": "Ustaw jako domyślne dla obszaru roboczego",
+        "editTitle": "Edytuj ustawienie",
+        "deleteDisabledTitle": "Domyślnego ustawienia nie można usunąć",
+        "deleteTitle": "Usuń ustawienie",
+        "basePrefix": "Bazowy:",
+        "overrideCount": "{count} nadpisanie | {count} nadpisania | {count} nadpisań",
+        "empty": "Brak ustawień. Utwórz jedno, aby przypisać modele do swoich agentów."
+      },
+      "editor": {
+        "useBaseModel": "Użyj modelu bazowego",
+        "baseModel": "Model bazowy",
+        "nameLabel": "Nazwa",
+        "namePlaceholder": "np. Kimi K2.7",
+        "baseModelLabel": "Model bazowy (stosowany do każdego agenta)",
+        "makeDefault": "Ustaw jako domyślne dla obszaru roboczego",
+        "perAgentOverrides": "Nadpisania dla poszczególnych agentów",
+        "filterPlaceholder": "Filtruj agentów…",
+        "noAgentsMatch": "Żaden agent nie pasuje do \"{filter}\".",
+        "saveChanges": "Zapisz zmiany",
+        "createPreset": "Utwórz ustawienie"
+      },
+      "toast": {
+        "setDefaultFailed": "Nie udało się ustawić domyślnego ustawienia",
+        "deleteFailed": "Nie udało się usunąć ustawienia",
+        "nameRequiredTitle": "Wymagana nazwa",
+        "nameRequiredBody": "Nadaj ustawieniu nazwę.",
+        "saveFailed": "Nie udało się zapisać ustawienia"
+      }
+    },
+    "account": {
+      "title": "Ustawienia konta",
+      "noAccount": "Nie wybrano konta.",
+      "tabs": {
+        "team": "Zespół i dostęp",
+        "fragments": "Fragmenty kontekstu"
+      }
+    },
+    "providerConnection": {
+      "fallbackTitle": "Dostawca",
+      "kind": {
+        "environment": {
+          "title": "Dostawca środowisk efemerycznych",
+          "blurb": "Tam, gdzie agent Tester działa na żywym środowisku podglądowym. Skonfiguruj ustawienia dla obszaru roboczego oraz poświadczenia wymagane przez dostawcę."
+        },
+        "runner-pool": {
+          "title": "Samodzielnie hostowana pula wykonawców",
+          "blurb": "Tam, gdzie działają agenci kodujący, gdy nie są używane kontenery Cloudflare. Skonfiguruj punkt końcowy harmonogramu puli oraz poświadczenia."
+        }
+      },
+      "delegation": {
+        "title": "Delegowanie lokalne",
+        "intro": "Domyślnie ta maszyna uruchamia wszystko lokalnie — agentów kontenerowych na Dockerze hosta, a infrastrukturę Testera przez docker-compose wewnątrz kontenera. Włącz poniższe opcje, aby przekazać dowolne z tych zadań do usługi zewnętrznej. Dotyczy wyłącznie trybu lokalnego.",
+        "agentsToggle": "Uruchamiaj agentów kontenerowych w puli wykonawców",
+        "agentsHint": "Wysyłaj każdego agenta kontenerowego (koder, tester, scalający, bootstrap, …) do samodzielnie hostowanej puli wykonawców tego obszaru roboczego zamiast na Dockera hosta.",
+        "registerPoolPrompt": "Najpierw {link}, aby to włączyć.",
+        "registerPoolLink": "Zarejestruj pulę wykonawców",
+        "envToggle": "Udostępniaj środowiska Testera przez dostawcę",
+        "envHint": "Uruchom środowisko podglądowe Testera przez dostawcę środowisk skonfigurowanego poniżej zamiast przez docker-compose wewnątrz kontenera. Najpierw połącz dostawcę, aby to włączyć.",
+        "updateFailed": "Nie udało się zaktualizować delegowania"
+      },
+      "runnerPoolLocalHint": "Zarejestruj tutaj swoją pulę, a następnie włącz „Uruchamiaj agentów kontenerowych w puli wykonawców” na ekranie {link}, aby kierować do niej agentów tego obszaru roboczego.",
+      "ephemeralEnvironments": "Środowiska efemeryczne",
+      "viewLogs": "Pokaż dzienniki",
+      "hideLogs": "Ukryj dzienniki",
+      "connectedAt": "Połączono · {baseUrl}",
+      "missingConfig": "Brakuje wymaganej konfiguracji: {fields}",
+      "manifestEditorUnavailable": "Tego dostawcę konfiguruje się, redagując manifest. Wbudowany edytor manifestu nie jest jeszcze dostępny — na razie zarejestruj go przez API.",
+      "form": {
+        "updateConfiguration": "Zaktualizuj konfigurację",
+        "connect": "Połącz",
+        "reenterSecrets": "Wprowadź ponownie pole sekretne, aby zapisać zmiany — przechowywane sekrety są tylko do zapisu i nie są wyświetlane. | Wprowadź ponownie pola sekretne, aby zapisać zmiany — przechowywane sekrety są tylko do zapisu i nie są wyświetlane. | Wprowadź ponownie pola sekretne, aby zapisać zmiany — przechowywane sekrety są tylko do zapisu i nie są wyświetlane.",
+        "optionalLabel": "{label} (opcjonalne)"
+      },
+      "field": {
+        "defaultsTo": "Wartość domyślna: {value}"
+      },
+      "test": {
+        "button": "Przetestuj połączenie",
+        "ok": "Połączenie poprawne",
+        "failed": "Połączenie nieudane"
+      },
+      "toast": {
+        "saved": "Zapisano: {title}",
+        "saveFailed": "Nie udało się zapisać połączenia",
+        "removed": "Połączenie usunięte",
+        "removeFailed": "Nie udało się usunąć połączenia"
+      }
+    },
+    "serviceFragmentDefaults": {
+      "intro": "Wybierz fragmenty z dobrymi praktykami, od których startuje każda nowa usługa. Ich wskazówki są wplatane w prompt każdego agenta pracującego z kodem (koder, recenzent, architekt, poprawiacze) przy zadaniach usługi. Zestaw możesz dopracować osobno dla każdej usługi w jej inspektorze; zmiana tej wartości domyślnej nie wpływa na już istniejące usługi.",
+      "defaultFragments": "Domyślne fragmenty",
+      "addFragment": "Dodaj fragment",
+      "empty": "Brak — nowe usługi startują bez fragmentów na poziomie usługi.",
+      "saveFailed": "Nie udało się zapisać domyślnych fragmentów",
+      "footer": {
+        "question": "Chcesz dodać lub edytować same fragmenty (redagowane ręcznie, powiązane dokumenty, repozytoria)?",
+        "manageBoard": "Zarządzaj biblioteką fragmentów tej tablicy →",
+        "manageAccount": "Zarządzaj fragmentami konta →"
+      }
+    },
+    "issueTracker": {
+      "filing": {
+        "heading": "Gdzie są zgłaszane zgłoszenia",
+        "description": "Cykliczny potok długu technicznego tworzy zgłoszenie przed implementacją i rejestruje je w tym systemie. Wybierz {none}, aby pominąć rejestrowanie.",
+        "none": "Brak",
+        "githubHint": "GitHub Issues korzysta z zainstalowanej aplikacji GitHub App, która nie jest jeszcze połączona. Zainstaluj ją w {link} — rejestrowanie pozostaje wyłączone do tego czasu.",
+        "githubHintLink": "Integracje → GitHub",
+        "jiraHint": "Jira nie jest jeszcze połączona. {link}, aby rejestrować i wiązać zgłoszenia.",
+        "linearHint": "Linear nie jest jeszcze połączony. {link}, aby rejestrować i wiązać zgłoszenia.",
+        "connectLink": "Połącz",
+        "jiraProjectKey": "Klucz projektu Jira",
+        "jiraProjectKeyHelp": "Nowe zgłoszenia są rejestrowane w tym projekcie.",
+        "linearTeamId": "Identyfikator zespołu Linear",
+        "linearTeamIdHelp": "Nowe zgłoszenia są tworzone w tym zespole (Linear wymaga zespołu do utworzenia zgłoszenia)."
+      },
+      "vendor": {
+        "github": "GitHub Issues",
+        "jira": "Jira",
+        "linear": "Linear"
+      },
+      "linking": {
+        "heading": "Wiąż zgłoszenia jako kontekst",
+        "description": "Gdy źródło jest dostępne, możesz zaimportować jego zgłoszenia i dołączyć je do zadania, aby agenci widzieli opis zgłoszenia i komentarze podczas implementacji. Jest to niezależne od systemu rejestrowania powyżej.",
+        "github": {
+          "available": "Korzysta z zainstalowanej aplikacji GitHub App — bez poświadczeń.",
+          "unavailable": "Zainstaluj aplikację GitHub App (Integracje → GitHub), aby udostępnić to źródło."
+        },
+        "checkSetup": "Sprawdź konfigurację",
+        "install": "Zainstaluj",
+        "connected": "Połączono.",
+        "jira": {
+          "connectHint": "Połącz za pomocą konta Jira i tokenu API."
+        },
+        "linear": {
+          "connectHint": "Połącz za pomocą osobistego klucza API Linear."
+        },
+        "connect": "Połącz"
+      },
+      "writeback": {
+        "heading": "Zapis zwrotny",
+        "description": "Zapisuj zwrotnie do powiązanych zgłoszeń zadania w miarę postępu jego pull requesta. Każde przełączenie to wartość domyślna obszaru roboczego i można je nadpisać dla zadania w inspektorze. Zgłoszenia GitHub zamykają się natywnie; zgłoszenia Jira przechodzą do pierwszego statusu w swojej kategorii {done}.",
+        "done": "Gotowe",
+        "commentOnOpen": {
+          "label": "Komentuj, gdy otwiera się PR",
+          "help": "Opublikuj komentarz w powiązanym zgłoszeniu z linkiem do nowego pull requesta."
+        },
+        "resolveOnMerge": {
+          "label": "Zamknij jako rozwiązane, gdy PR zostanie scalony",
+          "help": "Skomentuj, że PR został scalony, a następnie zamknij / rozwiąż powiązane zgłoszenie."
+        }
+      },
+      "probeFailure": {
+        "title": "Śledzenie zgłoszeń jest niedostępne",
+        "disabled": "Integracja źródeł zadań jest wyłączona w tym wdrożeniu (jej klucz szyfrowania nie jest skonfigurowany). Ustaw ENCRYPTION_KEY na backendzie, aby włączyć śledzenie zgłoszeń.",
+        "serverError": "Usługa śledzenia zgłoszeń zwróciła błąd (HTTP {status}): {message}. Zwykle oznacza to, że backend nie jest w pełni zmigrowany/skonfigurowany.",
+        "loadFailedStatus": "Nie udało się wczytać ustawień systemu zgłoszeń (HTTP {status}): {message}",
+        "loadFailed": "Nie udało się wczytać ustawień systemu zgłoszeń: {message}"
+      },
+      "toast": {
+        "saved": "System zgłoszeń zapisany",
+        "saveFailed": "Nie udało się zapisać ustawień",
+        "updateFailed": "Nie udało się zaktualizować",
+        "checkFailed": "Sprawdzenie nie powiodło się"
+      }
+    },
+    "userSecrets": {
+      "title": "Mój token GitHub",
+      "intro": "Przechowuj osobisty token dostępu używany do uruchomień, które {you} rozpoczynasz — pushe, pull requesty, bramka CI i scalania są przypisywane do Twojego dostępu GitHub. Przechowywany {scope}; token jest tylko do zapisu i nigdy nie jest ponownie pokazywany.",
+      "introYou": "Ty",
+      "introScope": "tylko dla Ciebie",
+      "connectedStored": "Połączono · token zapisany",
+      "replaceToken": "Zamień token",
+      "addToken": "Dodaj token",
+      "labelField": "Etykieta (opcjonalnie)",
+      "optionalField": "{label} (opcjonalnie)",
+      "testConnection": "Testuj połączenie",
+      "tokenValid": "Token prawidłowy",
+      "tokenRejected": "Token odrzucony",
+      "secretFallback": "Sekret",
+      "toast": {
+        "saved": "Zapisano {label}",
+        "saveFailed": "Nie udało się zapisać sekretu",
+        "removed": "Sekret usunięty",
+        "removeFailed": "Nie udało się usunąć sekretu"
+      }
+    },
+    "mergeThresholds": {
+      "intro": "Nazwane zasady automatycznego scalania, które zadanie może wybrać. Po przejściu CI agent {merger} ocenia PR pod kątem złożoności, ryzyka i wpływu (0-100%); PR jest scalany automatycznie tylko wtedy, gdy każdy wynik jest równy lub niższy od limitów ustawienia, w przeciwnym razie zgłaszane jest powiadomienie o przeglądzie. Ustawienie domyślne obowiązuje dla każdego zadania, które nie wybierze żadnego.",
+      "mergerAgent": "merger",
+      "concern": {
+        "none": "Brak (zawsze zatrzymaj)",
+        "low": "Niski",
+        "medium": "Średni",
+        "high": "Wysoki (nigdy nie zatrzymuj)"
+      },
+      "presetNamePlaceholder": "Nazwa ustawienia",
+      "default": "Domyślne",
+      "makeDefault": "Ustaw jako domyślne",
+      "deleteDefaultBlocked": "Nie można usunąć ustawienia domyślnego",
+      "deletePreset": "Usuń ustawienie",
+      "field": {
+        "maxComplexity": "Maks. złożoność %",
+        "maxRisk": "Maks. ryzyko %",
+        "maxImpact": "Maks. wpływ %",
+        "ciMaxAttempts": "Próby naprawy CI",
+        "maxRequirementIterations": "Iteracje wymagań",
+        "maxRequirementConcernAllowed": "Automatyczne zaliczenie zastrzeżeń do"
+      },
+      "newPreset": "Nowe ustawienie",
+      "create": {
+        "name": "Nazwa",
+        "namePlaceholder": "np. Ostrożne",
+        "complexity": "Złoż.%",
+        "risk": "Ryzyko%",
+        "impact": "Wpływ%",
+        "ciFix": "Napr. CI",
+        "reqIter": "Iter. wym.",
+        "autoPass": "Auto-zalicz do"
+      },
+      "add": "Dodaj",
+      "toast": {
+        "saved": "Ustawienie zapisane",
+        "saveFailed": "Nie można zapisać ustawienia",
+        "created": "Ustawienie utworzone",
+        "createFailed": "Nie można utworzyć ustawienia",
+        "defaultFailed": "Nie można ustawić jako domyślne",
+        "deleteFailed": "Nie można usunąć ustawienia"
+      }
+    },
+    "observabilityConnection": {
+      "title": "Kondycja po wydaniu",
+      "intro": "Po wdrożeniu wydania bramka {gate} obserwuje skonfigurowane monitory/SLO obserwowalności. Przy regresji uruchamia agenta dyżurnego do zbadania (człowiek decyduje, czy wycofać). Przypisz, które monitory/SLO obserwuje usługa, w inspektorze tej usługi.",
+      "connection": {
+        "heading": "Połączenie",
+        "provider": "Dostawca"
+      },
+      "datadog": {
+        "site": "Witryna Datadog",
+        "apiKey": "Klucz API",
+        "appKey": "Klucz aplikacji"
+      },
+      "saveConnection": "Zapisz połączenie",
+      "disconnect": "Rozłącz",
+      "incident": {
+        "heading": "Wzbogacanie incydentów",
+        "configured": "Skonfigurowano",
+        "notSet": "Nie ustawiono",
+        "description": "Opcjonalne. Przy regresji wynik badania dyżurnego jest publikowany w incydencie, który te systemy JUŻ otworzyły na podstawie tych samych sygnałów (adnotacja, nigdy ponowny alarm). Sekrety są tylko do zapisu: pozostawienie pustego pola zachowuje zapisaną wartość bez zmian.",
+        "pagerDutyToken": "Token API PagerDuty",
+        "pagerDutyFromEmail": "E-mail nadawcy PagerDuty",
+        "incidentIoKey": "Klucz API incident.io",
+        "clear": "Wyczyść"
+      },
+      "status": {
+        "notConnected": "Nie połączono",
+        "connected": "Połączono",
+        "connectedWithSite": "Połączono ({site})"
+      },
+      "toast": {
+        "loadFailed": "Nie można wczytać ustawień obserwowalności",
+        "incidentCredsRequired": "Wprowadź dane uwierzytelniające PagerDuty lub incident.io",
+        "incidentSaved": "Wzbogacanie incydentów zapisane",
+        "incidentSaveFailed": "Nie można zapisać wzbogacania incydentów",
+        "incidentDisconnectFailed": "Nie można rozłączyć wzbogacania incydentów",
+        "connected": "Obserwowalność połączona",
+        "connectFailed": "Nie można zapisać połączenia",
+        "disconnectFailed": "Nie można rozłączyć"
+      }
+    },
+    "localMode": {
+      "title": "Tryb lokalny",
+      "intro": "Strojenie lokalnego uruchamiacza kontenerów, przechowywane we wdrożeniu tej maszyny (zastąpiło zmienne środowiskowe {poolVars} / {harnessVars}). Zapisanie zmienia rozmiar ciepłej puli na żywo, bez potrzeby restartu; trwające uruchomienia zachowują kontener, który już mają.",
+      "pool": {
+        "heading": "Ciepła pula kontenerów",
+        "description": "Trzymaj bezczynne kontenery uprzęży gotowe i przydzielaj ponownie jeden (preferując kontener, który już ma repozytorium uruchomienia) zamiast zimnego startu na każde uruchomienie. Rozmiar puli 0 ją wyłącza. Wymaga środowiska z rodziny Docker (Docker/Podman/OrbStack/Colima); ignorowane na Apple {appleContainer}.",
+        "size": {
+          "label": "Rozmiar puli",
+          "help": "Maks. bezczynnych ciepłych kontenerów. 0 = pulowanie wyłączone."
+        },
+        "minWarm": {
+          "label": "Wstępne rozgrzanie przy starcie",
+          "help": "Kontenery uruchamiane przy starcie usługi."
+        },
+        "max": {
+          "label": "Maks. kontenerów",
+          "help": "Twardy limit (przydzielone + bezczynne). Puste = rozmiar puli.",
+          "placeholder": "(rozmiar puli)"
+        },
+        "idleTimeout": {
+          "label": "Limit bezczynności (minuty)",
+          "help": "Usuń bezczynny kontener z puli po upływie."
+        }
+      },
+      "checkout": {
+        "heading": "Ponowne użycie kopii roboczej",
+        "description": "Gdy ciepły kontener ma już repozytorium uruchomienia, uprząż ponownie używa jego kopii roboczej dla repozytorium (czyszczenie + pobranie + przełączenie gałęzi) zamiast klonowania od nowa.",
+        "workspaceRoot": {
+          "label": "Katalog główny obszaru roboczego",
+          "help": "Bezwzględny katalog w kontenerze, w którym znajduje się ponownie używana kopia robocza."
+        },
+        "cleanKeep": {
+          "label": "Zachowaj przy czyszczeniu (oddzielone przecinkami)",
+          "help": "Katalogi pamięci podręcznej zależności, które czyszczenie na uruchomienie zachowuje."
+        }
+      },
+      "toast": {
+        "saved": "Ustawienia lokalne zapisane",
+        "saveFailed": "Nie można zapisać ustawień lokalnych"
+      }
+    },
+    "openRouterCatalog": {
+      "intro": "Uzyskaj dostęp do {models} przez jedną bramę. Dodaj poniżej swój klucz OpenRouter, a następnie włącz wybrane modele. Pojawiają się one w selektorze modeli wraz z oknem kontekstu i ceną oraz są wliczane do Twojego budżetu wydatków.",
+      "introModels": "ponad 300 modeli",
+      "connectHeading": "Połącz swój klucz OpenRouter",
+      "step1": "Otwórz {link} i utwórz klucz API.",
+      "step1Link": "openrouter.ai → Klucze ↗",
+      "step2": "Skopiuj klucz (zaczyna się od {prefix}) i wklej go poniżej.",
+      "scope": "Zakres",
+      "scopeWorkspace": "Ten obszar roboczy",
+      "scopeUser": "Moje klucze (tylko ja)",
+      "labelOptional": "Etykieta (opcjonalnie)",
+      "labelPlaceholder": "np. klucz zespołu",
+      "apiKey": "Klucz API",
+      "connectAndBrowse": "Połącz i przeglądaj",
+      "keyConnected": "Klucz OpenRouter połączony",
+      "manageKeys": "Zarządzaj w Dostawcy i klucze",
+      "refresh": "Odśwież katalog",
+      "enableRecommended": "Włącz rekomendowane",
+      "filterPlaceholder": "Filtruj według nazwy lub sluga…",
+      "empty": "Brak modeli. Naciśnij {action}, aby załadować aktualną listę z OpenRouter.",
+      "enabledCount": "włączono {count} model | włączono {count} modele | włączono {count} modeli",
+      "context": "{value} ctx",
+      "contextThousands": "{value}K ctx",
+      "price": "{input}/{output} za Mtok",
+      "toast": {
+        "connected": "Klucz OpenRouter połączony",
+        "connectFailed": "Nie udało się połączyć klucza",
+        "rejected": "OpenRouter odrzucił klucz.",
+        "unreachable": "Nie udało się połączyć z OpenRouter",
+        "connectFirst": "Najpierw połącz klucz OpenRouter.",
+        "saved": "Katalog OpenRouter zapisany",
+        "saveFailed": "Nie udało się zapisać katalogu"
+      }
+    },
+    "workspaceSettings": {
+      "title": "Ustawienia obszaru roboczego",
+      "tabs": {
+        "workspace": "Obszar roboczy",
+        "budget": "Budżet",
+        "merge": "Progi scalania",
+        "tracker": "System zgłoszeń",
+        "fragments": "Dobre praktyki usługi"
+      },
+      "waiting": {
+        "heading": "Oczekiwanie na człowieka",
+        "body": "Uruchomienie wstrzymane na decyzji człowieka (przegląd, zatwierdzenie, scalenie) czeka tak długo, jak potrzeba, i nigdy nie jest anulowane. Po upływie tylu minut jego powiadomienie staje się czerwone i jest oznaczane jako {overdue} w skrzynce odbiorczej.",
+        "overdue": "Zaległe",
+        "escalateAfter": "Eskaluj po (minuty)"
+      },
+      "taskLimit": {
+        "heading": "Uruchomione zadania na usługę",
+        "body": "Ogranicz, ile zadań może być uruchomionych jednocześnie w ramach jednej usługi. Uruchomienie zadania ponad limit jest odrzucane z czytelnym komunikatem, dopóki uruchomione zadanie się nie zakończy.",
+        "mode": "Tryb",
+        "maxRunning": "Maksymalna liczba uruchomionych zadań",
+        "maxPerType": "Maksymalna liczba zadań typu {type}",
+        "modes": {
+          "off": "Bez limitu",
+          "shared": "Wspólny dla wszystkich typów",
+          "per_type": "Na typ zadania"
+        }
+      },
+      "taskTypes": {
+        "feature": "funkcja",
+        "bug": "błąd",
+        "document": "dokument",
+        "spike": "spike"
+      },
+      "observability": {
+        "heading": "Obserwowalność agenta",
+        "body": "Przechowuj pełny kontekst przekazany każdemu agentowi: złożone prompty, włączone fragmenty dobrych praktyk oraz pełną treść plików wstrzykniętych do jego kontenera, aby można było je później sprawdzić w widoku obserwowalności. Treści są przechowywane przez to samo okno co telemetria LLM dla poszczególnych wywołań. Wyłącz, aby przestać je przechowywać (istniejące migawki są usuwane przez retencję).",
+        "toggle": "Przechowuj pełny kontekst agenta"
+      },
+      "retention": {
+        "heading": "Retencja zrzutów ekranu",
+        "body": "Jak długo przechowywać zrzuty ekranu z testera UI oraz referencyjne obrazy projektowe, z którymi są porównywane (weryfikacja wizualna). Codzienne zadanie czyszczące usuwa zarówno bajty obrazów, jak i ich metadane, gdy przekroczą to okno.",
+        "days": "Retencja (dni)"
+      },
+      "kaizen": {
+        "heading": "Agent Kaizen",
+        "body": "Po zakończeniu każdego uruchomienia agent Kaizen ocenia, jak przebiegł każdy krok agenta, od płynnego i wydajnego po chaotyczny i zagmatwany, oraz rekomenduje usprawnienia promptu/modelu. Kombinacja prompt + agent + model, która pięć razy z rzędu uzyska wysoką ocenę bez rekomendacji, jest oznaczana jako zweryfikowana i nie jest już oceniana. Ocenianie działa w tle i jest pokazywane w szczegółach uruchomienia oraz na ekranie Kaizen. Ustaw model oceniającego w Konfiguracji modeli (agent \"Kaizen\").",
+        "toggle": "Oceniaj uruchomienia agentów za pomocą Kaizen"
+      },
+      "budget": {
+        "heading": "Miesięczny budżet wydatków",
+        "body": "Zużycie tokenów jest mierzone na wywołanie LLM, wyceniane i ograniczane tym budżetem. Po jego osiągnięciu uruchomienia w tym obszarze roboczym są wstrzymywane, a tablica pokazuje ostrzeżenie. Pozostaw puste, aby odziedziczyć wbudowaną wartość domyślną (około 100 EUR/miesiąc).",
+        "monthlyLimit": "Limit miesięczny",
+        "defaultPlaceholder": "Domyślny",
+        "currency": "Waluta (ISO 4217)",
+        "save": "Zapisz budżet"
+      },
+      "toast": {
+        "saved": "Ustawienia zapisane",
+        "saveFailed": "Nie udało się zapisać ustawień",
+        "budgetSaved": "Budżet zapisany",
+        "budgetSaveFailed": "Nie udało się zapisać budżetu"
+      }
+    },
+    "localModelEndpoints": {
+      "title": "Moje lokalne runnery",
+      "intro": "Skieruj agentów do modelu LLM działającego na {ownMachine} (Ollama, LM Studio, llama.cpp, vLLM lub dowolny serwer zgodny z OpenAI). Runner jest przechowywany {justForYou} (runner działa na Twoim komputerze), a włączone modele pojawiają się automatycznie w selektorze modeli. Klucz API (większość runnerów go ignoruje) jest tylko do zapisu i nigdy nie jest ponownie pokazywany.",
+      "introOwnMachine": "Twoim własnym komputerze",
+      "introJustForYou": "tylko dla Ciebie",
+      "modelCount": "{count} model | {count} modele | {count} modeli",
+      "keySet": "klucz ustawiony",
+      "edit": "Edytuj",
+      "editRunner": "Edytuj runner",
+      "addRunner": "Dodaj runner",
+      "runnerType": "Typ runnera",
+      "labelOptional": "Etykieta (opcjonalnie)",
+      "labelPlaceholder": "Mój {name}",
+      "baseUrl": "Bazowy adres URL",
+      "apiKeyOptional": "Klucz API (opcjonalnie)",
+      "apiKeyKeepPlaceholder": "pozostaw puste, aby zachować zapisany klucz",
+      "apiKeyIgnorePlaceholder": "większość runnerów to ignoruje",
+      "testConnection": "Testuj połączenie",
+      "unreachable": "Nie udało się połączyć z runnerem.",
+      "reachable": "Osiągalny · {count} model | Osiągalny · {count} modele | Osiągalny · {count} modeli",
+      "noModels": "Nie zgłoszono żadnych modeli.",
+      "enableModels": "Włącz modele",
+      "toast": {
+        "saved": "Zapisano {name}",
+        "saveFailed": "Nie udało się zapisać runnera",
+        "removed": "Runner usunięty",
+        "removeFailed": "Nie udało się usunąć runnera"
+      }
+    }
   }
 }

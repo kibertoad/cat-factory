@@ -8,6 +8,7 @@ import { computed, ref, watch } from 'vue'
 import type { ProviderConfigField, UserSecretKind } from '~/types/userSecrets'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
+const { t } = useI18n()
 const ui = useUiStore()
 const store = useUserSecretsStore()
 const toast = useToast()
@@ -102,12 +103,14 @@ async function save() {
     values.value[secretField.value!.key] = ''
     testResult.value = null
     toast.add({
-      title: `${descriptor.value?.label ?? 'Secret'} saved`,
+      title: t('settings.userSecrets.toast.saved', {
+        label: descriptor.value?.label ?? t('settings.userSecrets.secretFallback'),
+      }),
       icon: 'i-lucide-check',
       color: 'success',
     })
   } catch (e) {
-    notifyError('Could not save secret', e)
+    notifyError(t('settings.userSecrets.toast.saveFailed'), e)
   } finally {
     busy.value = false
   }
@@ -118,9 +121,9 @@ async function remove() {
   try {
     await store.remove(kind.value)
     resetDraft()
-    toast.add({ title: 'Secret removed', icon: 'i-lucide-check' })
+    toast.add({ title: t('settings.userSecrets.toast.removed'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError('Could not remove secret', e)
+    notifyError(t('settings.userSecrets.toast.removeFailed'), e)
   } finally {
     busy.value = false
   }
@@ -128,17 +131,25 @@ async function remove() {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="My GitHub token" :ui="{ content: 'max-w-xl' }">
+  <UModal
+    v-model:open="open"
+    :title="t('settings.userSecrets.title')"
+    :ui="{ content: 'max-w-xl' }"
+  >
     <template #title>
-      <IntegrationBackTitle title="My GitHub token" @back="back" />
+      <IntegrationBackTitle :title="t('settings.userSecrets.title')" @back="back" />
     </template>
     <template #body>
       <div class="space-y-4">
         <p class="text-xs text-slate-400">
-          Store a personal access token used for the runs <strong>you</strong> start — pushes, pull
-          requests, the CI gate and merges are attributed to your GitHub access. Stored
-          <span class="text-slate-300">just for you</span>; the token is write-only and never shown
-          again.
+          <i18n-t keypath="settings.userSecrets.intro" tag="span" scope="global">
+            <template #you>
+              <strong>{{ t('settings.userSecrets.introYou') }}</strong>
+            </template>
+            <template #scope>
+              <span class="text-slate-300">{{ t('settings.userSecrets.introScope') }}</span>
+            </template>
+          </i18n-t>
         </p>
 
         <div
@@ -147,7 +158,9 @@ async function remove() {
         >
           <div>
             <span class="font-medium text-slate-200">{{ status.label }}</span>
-            <div class="text-[11px] text-emerald-400">Connected · token stored</div>
+            <div class="text-[11px] text-emerald-400">
+              {{ t('settings.userSecrets.connectedStored') }}
+            </div>
           </div>
           <UButton
             icon="i-lucide-trash-2"
@@ -164,17 +177,23 @@ async function remove() {
           class="rounded-lg border border-dashed border-slate-700 p-3 space-y-3"
         >
           <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            {{ status ? 'Replace token' : 'Add a token' }}
+            {{
+              status ? t('settings.userSecrets.replaceToken') : t('settings.userSecrets.addToken')
+            }}
           </p>
 
-          <UFormField label="Label (optional)">
+          <UFormField :label="t('settings.userSecrets.labelField')">
             <UInput v-model="labelDraft" :placeholder="descriptor.label" />
           </UFormField>
 
           <UFormField
             v-for="field in descriptor.configFields"
             :key="field.key"
-            :label="field.label + (field.required ? '' : ' (optional)')"
+            :label="
+              field.required
+                ? field.label
+                : t('settings.userSecrets.optionalField', { label: field.label })
+            "
             :help="field.help"
           >
             <UInput
@@ -195,13 +214,13 @@ async function remove() {
               :disabled="!buildPayload()"
               @click="test()"
             >
-              Test connection
+              {{ t('settings.userSecrets.testConnection') }}
             </UButton>
             <span v-if="testResult && testResult.ok" class="text-xs text-emerald-400">
-              {{ testResult.message ?? 'Token valid' }}
+              {{ testResult.message ?? t('settings.userSecrets.tokenValid') }}
             </span>
             <span v-else-if="testResult" class="text-xs text-rose-400">
-              {{ testResult.message ?? 'Token rejected' }}
+              {{ testResult.message ?? t('settings.userSecrets.tokenRejected') }}
             </span>
           </div>
 
@@ -213,7 +232,7 @@ async function remove() {
               :disabled="!buildPayload()"
               @click="save()"
             >
-              {{ status ? 'Save' : 'Add token' }}
+              {{ status ? t('common.save') : t('settings.userSecrets.addToken') }}
             </UButton>
           </div>
         </div>

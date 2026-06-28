@@ -1119,5 +1119,455 @@
         }
       }
     }
+  },
+  "settings": {
+    "modelConfiguration": {
+      "title": "Configuration des modèles",
+      "subtitle": "Des préréglages qui associent un modèle à chaque agent. Une tâche en choisit un ; par défaut, les tâches utilisent le préréglage par défaut de l'espace de travail.",
+      "back": "Retour",
+      "closeEsc": "Fermer (Échap)",
+      "quota": "quota",
+      "list": {
+        "intro": "Chaque préréglage définit un {baseModel} pour chaque agent, avec des remplacements facultatifs par agent. Un modèle épinglé sur une tâche individuelle prévaut tout de même sur le préréglage.",
+        "introBaseModel": "modèle de base",
+        "newPreset": "Nouveau préréglage",
+        "loadingCatalog": "Chargement du catalogue de modèles…",
+        "default": "Par défaut",
+        "setDefaultTitle": "Définir comme préréglage par défaut de l'espace de travail",
+        "editTitle": "Modifier le préréglage",
+        "deleteDisabledTitle": "Le préréglage par défaut ne peut pas être supprimé",
+        "deleteTitle": "Supprimer le préréglage",
+        "basePrefix": "Base :",
+        "overrideCount": "{count} remplacement | {count} remplacements",
+        "empty": "Aucun préréglage pour l'instant. Créez-en un pour associer des modèles à vos agents."
+      },
+      "editor": {
+        "useBaseModel": "Utiliser le modèle de base",
+        "baseModel": "Modèle de base",
+        "nameLabel": "Nom",
+        "namePlaceholder": "p. ex. Kimi K2.7",
+        "baseModelLabel": "Modèle de base (appliqué à chaque agent)",
+        "makeDefault": "En faire le préréglage par défaut de l'espace de travail",
+        "perAgentOverrides": "Remplacements par agent",
+        "filterPlaceholder": "Filtrer les agents…",
+        "noAgentsMatch": "Aucun agent ne correspond à \"{filter}\".",
+        "saveChanges": "Enregistrer les modifications",
+        "createPreset": "Créer le préréglage"
+      },
+      "toast": {
+        "setDefaultFailed": "Impossible de définir le préréglage par défaut",
+        "deleteFailed": "Impossible de supprimer le préréglage",
+        "nameRequiredTitle": "Nom requis",
+        "nameRequiredBody": "Donnez un nom au préréglage.",
+        "saveFailed": "Impossible d'enregistrer le préréglage"
+      }
+    },
+    "account": {
+      "title": "Paramètres du compte",
+      "noAccount": "Aucun compte sélectionné.",
+      "tabs": {
+        "team": "Équipe et accès",
+        "fragments": "Fragments de contexte"
+      }
+    },
+    "providerConnection": {
+      "fallbackTitle": "Fournisseur",
+      "kind": {
+        "environment": {
+          "title": "Fournisseur d'environnements éphémères",
+          "blurb": "Là où l'agent Tester s'exécute contre un environnement d'aperçu en direct. Configurez les paramètres par espace de travail et les identifiants dont votre fournisseur a besoin."
+        },
+        "runner-pool": {
+          "title": "Pool d'exécuteurs auto-hébergé",
+          "blurb": "Là où les agents de codage s'exécutent lorsque les conteneurs Cloudflare ne sont pas utilisés. Configurez le point de terminaison du planificateur du pool et les identifiants."
+        }
+      },
+      "delegation": {
+        "title": "Délégation locale",
+        "intro": "Par défaut, cette machine exécute tout en local : les agents de conteneur sur le Docker de l'hôte, l'infrastructure du Tester via docker-compose dans le conteneur. Activez les options ci-dessous pour déléguer l'une ou l'autre de ces tâches à un service externe. S'applique uniquement en mode local.",
+        "agentsToggle": "Exécuter les agents de conteneur sur le pool d'exécuteurs",
+        "agentsHint": "Envoyez chaque agent de conteneur (codeur, tester, fusionneur, bootstrap, …) au pool d'exécuteurs auto-hébergé de cet espace de travail plutôt qu'au Docker de l'hôte.",
+        "registerPoolPrompt": "{link} d'abord pour activer cette option.",
+        "registerPoolLink": "Enregistrez un pool d'exécuteurs",
+        "envToggle": "Provisionner les environnements du Tester via le fournisseur",
+        "envHint": "Montez l'environnement d'aperçu du Tester via le fournisseur d'environnements configuré ci-dessous plutôt que via docker-compose dans le conteneur. Connectez d'abord un fournisseur pour activer cette option.",
+        "updateFailed": "Impossible de mettre à jour la délégation"
+      },
+      "runnerPoolLocalHint": "Enregistrez votre pool ici, puis activez « Exécuter les agents de conteneur sur le pool d'exécuteurs » sur l'écran {link} pour y router les agents de cet espace de travail.",
+      "ephemeralEnvironments": "Environnements éphémères",
+      "viewLogs": "Voir les journaux",
+      "hideLogs": "Masquer les journaux",
+      "connectedAt": "Connecté · {baseUrl}",
+      "missingConfig": "Configuration requise manquante : {fields}",
+      "manifestEditorUnavailable": "Ce fournisseur se configure en rédigeant un manifeste. L'éditeur de manifeste intégré n'est pas encore disponible ; enregistrez-le via l'API pour le moment.",
+      "form": {
+        "updateConfiguration": "Mettre à jour la configuration",
+        "connect": "Connecter",
+        "reenterSecrets": "Saisissez à nouveau le champ secret pour enregistrer les modifications : les secrets stockés sont en écriture seule et ne sont pas affichés. | Saisissez à nouveau les champs secrets pour enregistrer les modifications : les secrets stockés sont en écriture seule et ne sont pas affichés.",
+        "optionalLabel": "{label} (facultatif)"
+      },
+      "field": {
+        "defaultsTo": "Valeur par défaut : {value}"
+      },
+      "test": {
+        "button": "Tester la connexion",
+        "ok": "Connexion réussie",
+        "failed": "Échec de la connexion"
+      },
+      "toast": {
+        "saved": "{title} enregistré",
+        "saveFailed": "Impossible d'enregistrer la connexion",
+        "removed": "Connexion supprimée",
+        "removeFailed": "Impossible de supprimer la connexion"
+      }
+    },
+    "serviceFragmentDefaults": {
+      "intro": "Choisissez les fragments de bonnes pratiques avec lesquels chaque nouveau service démarre. Leurs recommandations sont intégrées au prompt de chaque agent travaillant avec le code (codeur, relecteur, architecte, correcteurs) sur les tâches du service. Vous pouvez affiner l'ensemble par service dans son inspecteur ; modifier cette valeur par défaut n'affecte pas les services déjà existants.",
+      "defaultFragments": "Fragments par défaut",
+      "addFragment": "Ajouter un fragment",
+      "empty": "Aucun : les nouveaux services démarrent sans fragment au niveau du service.",
+      "saveFailed": "Impossible d'enregistrer les fragments par défaut",
+      "footer": {
+        "question": "Besoin d'ajouter ou de modifier les fragments eux-mêmes (rédigés à la main, documents liés, dépôts) ?",
+        "manageBoard": "Gérer la bibliothèque de fragments de ce tableau →",
+        "manageAccount": "Gérer les fragments du compte →"
+      }
+    },
+    "issueTracker": {
+      "filing": {
+        "heading": "Où les tickets sont créés",
+        "description": "Le pipeline récurrent de dette technique ouvre un ticket avant l'implémentation et le crée dans ce suivi. Choisissez {none} pour ne pas créer de ticket.",
+        "none": "Aucun",
+        "githubHint": "GitHub Issues s'appuie sur votre GitHub App installée, qui n'est pas encore connectée. Installez-la dans {link} : la création de tickets reste désactivée jusque-là.",
+        "githubHintLink": "Intégrations → GitHub",
+        "jiraHint": "Jira n'est pas encore connecté. {link} pour créer et lier des tickets.",
+        "linearHint": "Linear n'est pas encore connecté. {link} pour créer et lier des tickets.",
+        "connectLink": "Connectez-le",
+        "jiraProjectKey": "Clé de projet Jira",
+        "jiraProjectKeyHelp": "Les nouveaux tickets sont créés dans ce projet.",
+        "linearTeamId": "Id d'équipe Linear",
+        "linearTeamIdHelp": "Les nouveaux tickets sont créés dans cette équipe (Linear exige une équipe pour créer un ticket)."
+      },
+      "vendor": {
+        "github": "GitHub Issues",
+        "jira": "Jira",
+        "linear": "Linear"
+      },
+      "linking": {
+        "heading": "Lier des tickets comme contexte",
+        "description": "Lorsqu'une source est proposée, vous pouvez importer ses tickets et les rattacher à une tâche, afin que les agents voient la description du ticket et les commentaires pendant l'implémentation. C'est indépendant du suivi de création ci-dessus.",
+        "github": {
+          "available": "S'appuie sur votre GitHub App installée : aucun identifiant nécessaire.",
+          "unavailable": "Installez la GitHub App (Intégrations → GitHub) pour proposer cette source."
+        },
+        "checkSetup": "Vérifier la configuration",
+        "install": "Installer",
+        "connected": "Connecté.",
+        "jira": {
+          "connectHint": "Connectez-vous avec un compte Jira et un jeton d'API."
+        },
+        "linear": {
+          "connectHint": "Connectez-vous avec une clé d'API personnelle Linear."
+        },
+        "connect": "Connecter"
+      },
+      "writeback": {
+        "heading": "Écriture en retour",
+        "description": "Écrivez en retour sur le ou les tickets liés à une tâche au fur et à mesure que sa pull request progresse. Chaque option est la valeur par défaut de l'espace de travail et peut être remplacée par tâche dans l'inspecteur. Les tickets GitHub se ferment nativement ; les tickets Jira passent au premier statut de leur catégorie {done}.",
+        "done": "Terminé",
+        "commentOnOpen": {
+          "label": "Commenter à l'ouverture d'une PR",
+          "help": "Publie un commentaire sur le ticket lié avec le lien de la nouvelle pull request."
+        },
+        "resolveOnMerge": {
+          "label": "Clore comme résolu à la fusion d'une PR",
+          "help": "Commente que la PR a été fusionnée, puis ferme / résout le ticket lié."
+        }
+      },
+      "probeFailure": {
+        "title": "Le suivi des tickets n'est pas disponible",
+        "disabled": "L'intégration des sources de tâches est désactivée sur ce déploiement (sa clé de chiffrement n'est pas configurée). Définissez ENCRYPTION_KEY sur le backend pour activer le suivi des tickets.",
+        "serverError": "Le service de suivi des tickets a renvoyé une erreur (HTTP {status}) : {message}. Cela signifie généralement que le backend n'est pas entièrement migré/configuré.",
+        "loadFailedStatus": "Impossible de charger les paramètres du suivi des tickets (HTTP {status}) : {message}",
+        "loadFailed": "Impossible de charger les paramètres du suivi des tickets : {message}"
+      },
+      "toast": {
+        "saved": "Suivi des tickets enregistré",
+        "saveFailed": "Impossible d'enregistrer les paramètres",
+        "updateFailed": "Impossible de mettre à jour",
+        "checkFailed": "Échec de la vérification"
+      }
+    },
+    "userSecrets": {
+      "title": "Mon jeton GitHub",
+      "intro": "Stockez un jeton d'accès personnel utilisé pour les exécutions que {you} lancez : les pushes, les pull requests, la barrière de CI et les fusions sont attribués à votre accès GitHub. Stocké {scope} ; le jeton est en écriture seule et n'est plus jamais affiché.",
+      "introYou": "vous",
+      "introScope": "rien que pour vous",
+      "connectedStored": "Connecté · jeton stocké",
+      "replaceToken": "Remplacer le jeton",
+      "addToken": "Ajouter un jeton",
+      "labelField": "Libellé (facultatif)",
+      "optionalField": "{label} (facultatif)",
+      "testConnection": "Tester la connexion",
+      "tokenValid": "Jeton valide",
+      "tokenRejected": "Jeton rejeté",
+      "secretFallback": "Secret",
+      "toast": {
+        "saved": "{label} enregistré",
+        "saveFailed": "Impossible d'enregistrer le secret",
+        "removed": "Secret supprimé",
+        "removeFailed": "Impossible de supprimer le secret"
+      }
+    },
+    "mergeThresholds": {
+      "intro": "Politiques de fusion automatique nommées qu'une tâche peut choisir. Une fois la CI réussie, l'agent {merger} note la PR sur la complexité, le risque et l'impact (0-100%); la PR est fusionnée automatiquement uniquement lorsque chaque note est inférieure ou égale aux plafonds du préréglage, sinon une notification de revue est levée. Le préréglage par défaut régit toute tâche qui n'en choisit aucun.",
+      "mergerAgent": "merger",
+      "concern": {
+        "none": "Aucun (toujours arrêter)",
+        "low": "Faible",
+        "medium": "Moyen",
+        "high": "Élevé (ne jamais arrêter)"
+      },
+      "presetNamePlaceholder": "Nom du préréglage",
+      "default": "Par défaut",
+      "makeDefault": "Définir par défaut",
+      "deleteDefaultBlocked": "Le préréglage par défaut ne peut pas être supprimé",
+      "deletePreset": "Supprimer le préréglage",
+      "field": {
+        "maxComplexity": "Complexité max %",
+        "maxRisk": "Risque max %",
+        "maxImpact": "Impact max %",
+        "ciMaxAttempts": "Tentatives de correction CI",
+        "maxRequirementIterations": "Itérations d'exigences",
+        "maxRequirementConcernAllowed": "Validation auto. des préoccupations jusqu'à"
+      },
+      "newPreset": "Nouveau préréglage",
+      "create": {
+        "name": "Nom",
+        "namePlaceholder": "p. ex. Prudent",
+        "complexity": "Cmplx%",
+        "risk": "Risque%",
+        "impact": "Impact%",
+        "ciFix": "Corr. CI",
+        "reqIter": "Itér. exig.",
+        "autoPass": "Valid. auto. jusqu'à"
+      },
+      "add": "Ajouter",
+      "toast": {
+        "saved": "Préréglage enregistré",
+        "saveFailed": "Impossible d'enregistrer le préréglage",
+        "created": "Préréglage créé",
+        "createFailed": "Impossible de créer le préréglage",
+        "defaultFailed": "Impossible de définir par défaut",
+        "deleteFailed": "Impossible de supprimer le préréglage"
+      }
+    },
+    "observabilityConnection": {
+      "title": "Santé post-publication",
+      "intro": "Après la publication d'une version, la barrière {gate} surveille les moniteurs/SLO d'observabilité configurés. En cas de régression, elle lance un agent d'astreinte pour enquêter (un humain décide s'il faut annuler). Indiquez quels moniteurs/SLO un service surveille depuis l'inspecteur de ce service.",
+      "connection": {
+        "heading": "Connexion",
+        "provider": "Fournisseur"
+      },
+      "datadog": {
+        "site": "Site Datadog",
+        "apiKey": "Clé d'API",
+        "appKey": "Clé d'application"
+      },
+      "saveConnection": "Enregistrer la connexion",
+      "disconnect": "Déconnecter",
+      "incident": {
+        "heading": "Enrichissement d'incident",
+        "configured": "Configuré",
+        "notSet": "Non défini",
+        "description": "Facultatif. En cas de régression, l'investigation d'astreinte est publiée sur un incident que ces systèmes ont DÉJÀ ouvert à partir des mêmes signaux (annoter, jamais réalerter). Les secrets sont en écriture seule : les laisser vides conserve la valeur stockée inchangée.",
+        "pagerDutyToken": "Jeton d'API PagerDuty",
+        "pagerDutyFromEmail": "E-mail expéditeur PagerDuty",
+        "incidentIoKey": "Clé d'API incident.io",
+        "clear": "Effacer"
+      },
+      "status": {
+        "notConnected": "Non connecté",
+        "connected": "Connecté",
+        "connectedWithSite": "Connecté ({site})"
+      },
+      "toast": {
+        "loadFailed": "Impossible de charger les paramètres d'observabilité",
+        "incidentCredsRequired": "Saisissez les identifiants PagerDuty ou incident.io",
+        "incidentSaved": "Enrichissement d'incident enregistré",
+        "incidentSaveFailed": "Impossible d'enregistrer l'enrichissement d'incident",
+        "incidentDisconnectFailed": "Impossible de déconnecter l'enrichissement d'incident",
+        "connected": "Observabilité connectée",
+        "connectFailed": "Impossible d'enregistrer la connexion",
+        "disconnectFailed": "Impossible de déconnecter"
+      }
+    },
+    "localMode": {
+      "title": "Mode local",
+      "intro": "Réglage de l'exécuteur de conteneurs local, stocké sur le déploiement de cette machine (il a remplacé les variables d'environnement {poolVars} / {harnessVars}). L'enregistrement redimensionne le pool à chaud en direct, sans redémarrage nécessaire; les exécutions en cours conservent le conteneur qu'elles détiennent déjà.",
+      "pool": {
+        "heading": "Pool de conteneurs à chaud",
+        "description": "Gardez des conteneurs de harnais inactifs prêts et réaffectez-en un (en privilégiant un conteneur qui détient déjà le dépôt de l'exécution) au lieu d'un démarrage à froid par exécution. Une taille de pool de 0 le désactive. Nécessite un environnement de la famille Docker (Docker/Podman/OrbStack/Colima); ignoré sur Apple {appleContainer}.",
+        "size": {
+          "label": "Taille du pool",
+          "help": "Maximum de conteneurs à chaud inactifs. 0 = mise en pool désactivée."
+        },
+        "minWarm": {
+          "label": "Préchauffer au démarrage",
+          "help": "Conteneurs démarrés au lancement du service."
+        },
+        "max": {
+          "label": "Max de conteneurs",
+          "help": "Plafond strict (affectés + inactifs). Vide = taille du pool.",
+          "placeholder": "(taille du pool)"
+        },
+        "idleTimeout": {
+          "label": "Délai d'inactivité (minutes)",
+          "help": "Évincer un conteneur en pool inactif après."
+        }
+      },
+      "checkout": {
+        "heading": "Réutilisation de la copie de travail",
+        "description": "Lorsqu'un conteneur à chaud détient déjà le dépôt de l'exécution, le harnais réutilise sa copie de travail par dépôt (nettoyage + récupération + changement de branche) au lieu de cloner à neuf.",
+        "workspaceRoot": {
+          "label": "Racine de l'espace de travail",
+          "help": "Répertoire absolu dans le conteneur où réside la copie de travail réutilisée."
+        },
+        "cleanKeep": {
+          "label": "Conserver au nettoyage (séparés par des virgules)",
+          "help": "Répertoires de cache de dépendances que le nettoyage par exécution préserve."
+        }
+      },
+      "toast": {
+        "saved": "Paramètres locaux enregistrés",
+        "saveFailed": "Impossible d'enregistrer les paramètres locaux"
+      }
+    },
+    "openRouterCatalog": {
+      "intro": "Accédez à {models} via une seule passerelle. Ajoutez votre clé OpenRouter ci-dessous, puis activez les modèles souhaités. Ils apparaissent dans le sélecteur de modèles avec leur fenêtre de contexte et leur prix, et sont décomptés de votre budget de dépenses.",
+      "introModels": "plus de 300 modèles",
+      "connectHeading": "Connectez votre clé OpenRouter",
+      "step1": "Ouvrez {link} et créez une clé d'API.",
+      "step1Link": "openrouter.ai → Clés ↗",
+      "step2": "Copiez la clé (commence par {prefix}) et collez-la ci-dessous.",
+      "scope": "Portée",
+      "scopeWorkspace": "Cet espace de travail",
+      "scopeUser": "Mes clés (moi uniquement)",
+      "labelOptional": "Libellé (facultatif)",
+      "labelPlaceholder": "ex. clé d'équipe",
+      "apiKey": "Clé d'API",
+      "connectAndBrowse": "Connecter et parcourir",
+      "keyConnected": "Clé OpenRouter connectée",
+      "manageKeys": "Gérer dans Fournisseurs et clés",
+      "refresh": "Actualiser le catalogue",
+      "enableRecommended": "Activer les recommandés",
+      "filterPlaceholder": "Filtrer par nom ou slug…",
+      "empty": "Aucun modèle pour l'instant. Appuyez sur {action} pour charger la liste en direct d'OpenRouter.",
+      "enabledCount": "aucun modèle activé | {count} activé | {count} activés",
+      "context": "{value} ctx",
+      "contextThousands": "{value}K ctx",
+      "price": "{input}/{output} par Mtok",
+      "toast": {
+        "connected": "Clé OpenRouter connectée",
+        "connectFailed": "Impossible de connecter la clé",
+        "rejected": "OpenRouter a rejeté la clé.",
+        "unreachable": "Impossible de joindre OpenRouter",
+        "connectFirst": "Connectez d'abord une clé OpenRouter.",
+        "saved": "Catalogue OpenRouter enregistré",
+        "saveFailed": "Impossible d'enregistrer le catalogue"
+      }
+    },
+    "workspaceSettings": {
+      "title": "Paramètres de l'espace de travail",
+      "tabs": {
+        "workspace": "Espace de travail",
+        "budget": "Budget",
+        "merge": "Seuils de fusion",
+        "tracker": "Suivi des tickets",
+        "fragments": "Bonnes pratiques du service"
+      },
+      "waiting": {
+        "heading": "En attente d'un humain",
+        "body": "Une exécution mise en pause sur une décision humaine (une revue, une approbation, une fusion) attend aussi longtemps que nécessaire et n'est jamais annulée. Passé ce nombre de minutes, sa notification devient rouge et est signalée comme {overdue} dans la boîte de réception.",
+        "overdue": "En retard",
+        "escalateAfter": "Escalader après (minutes)"
+      },
+      "taskLimit": {
+        "heading": "Tâches en cours par service",
+        "body": "Limitez le nombre de tâches pouvant s'exécuter en même temps sous un service. Démarrer une tâche au-delà de la limite est refusé avec un message clair jusqu'à ce qu'une tâche en cours se termine.",
+        "mode": "Mode",
+        "maxRunning": "Maximum de tâches en cours",
+        "maxPerType": "Maximum de tâches de type {type}",
+        "modes": {
+          "off": "Aucune limite",
+          "shared": "Partagé entre tous les types",
+          "per_type": "Par type de tâche"
+        }
+      },
+      "taskTypes": {
+        "feature": "fonctionnalité",
+        "bug": "bug",
+        "document": "document",
+        "spike": "spike"
+      },
+      "observability": {
+        "heading": "Observabilité de l'agent",
+        "body": "Stockez le contexte complet fourni à chaque agent : les prompts composés, les fragments de bonnes pratiques intégrés et le contenu intégral des fichiers injectés dans son conteneur, afin de pouvoir l'inspecter plus tard dans la vue d'observabilité. Les corps sont conservés pendant la même fenêtre que la télémétrie LLM par appel. Désactivez pour cesser de le stocker (les instantanés existants sont supprimés par la rétention).",
+        "toggle": "Stocker le contexte complet de l'agent"
+      },
+      "retention": {
+        "heading": "Rétention des captures d'écran",
+        "body": "Combien de temps conserver les captures d'écran du testeur d'UI et les images de conception de référence auxquelles elles sont comparées (la vérification visuelle). Un nettoyage quotidien supprime à la fois les octets des images et leurs métadonnées une fois qu'ils dépassent cette fenêtre.",
+        "days": "Rétention (jours)"
+      },
+      "kaizen": {
+        "heading": "Agent Kaizen",
+        "body": "À la fin de chaque exécution, l'agent Kaizen évalue le déroulement de chaque étape de l'agent, de fluide et efficace à confus et chaotique, et recommande des améliorations de prompt/modèle. Une combinaison prompt + agent + modèle bien notée sans recommandation cinq fois de suite est marquée comme vérifiée et n'est plus évaluée. L'évaluation s'exécute en arrière-plan et s'affiche dans les détails de l'exécution et l'écran Kaizen. Définissez le modèle de l'évaluateur dans Configuration des modèles (l'agent \"Kaizen\").",
+        "toggle": "Évaluer les exécutions d'agents avec Kaizen"
+      },
+      "budget": {
+        "heading": "Budget de dépenses mensuel",
+        "body": "L'utilisation des jetons est décomptée par appel LLM, valorisée et plafonnée par ce budget. Une fois atteint, les exécutions de cet espace de travail sont mises en pause et le tableau affiche un avertissement. Laissez vide pour hériter de la valeur par défaut intégrée (environ 100 EUR/mois).",
+        "monthlyLimit": "Limite mensuelle",
+        "defaultPlaceholder": "Par défaut",
+        "currency": "Devise (ISO 4217)",
+        "save": "Enregistrer le budget"
+      },
+      "toast": {
+        "saved": "Paramètres enregistrés",
+        "saveFailed": "Impossible d'enregistrer les paramètres",
+        "budgetSaved": "Budget enregistré",
+        "budgetSaveFailed": "Impossible d'enregistrer le budget"
+      }
+    },
+    "localModelEndpoints": {
+      "title": "Mes runners locaux",
+      "intro": "Pointez les agents vers un LLM exécuté sur {ownMachine} (Ollama, LM Studio, llama.cpp, vLLM ou tout serveur compatible OpenAI). Un runner est stocké {justForYou} (un runner vit sur votre machine), et les modèles que vous activez apparaissent automatiquement dans le sélecteur de modèles. La clé d'API (que la plupart des runners ignorent) est en écriture seule et n'est plus jamais affichée.",
+      "introOwnMachine": "votre propre machine",
+      "introJustForYou": "rien que pour vous",
+      "modelCount": "aucun modèle | {count} modèle | {count} modèles",
+      "keySet": "clé définie",
+      "edit": "Modifier",
+      "editRunner": "Modifier le runner",
+      "addRunner": "Ajouter un runner",
+      "runnerType": "Type de runner",
+      "labelOptional": "Libellé (facultatif)",
+      "labelPlaceholder": "Mon {name}",
+      "baseUrl": "URL de base",
+      "apiKeyOptional": "Clé d'API (facultatif)",
+      "apiKeyKeepPlaceholder": "laissez vide pour conserver la clé enregistrée",
+      "apiKeyIgnorePlaceholder": "la plupart des runners l'ignorent",
+      "testConnection": "Tester la connexion",
+      "unreachable": "Impossible de joindre le runner.",
+      "reachable": "Joignable · aucun modèle | Joignable · {count} modèle | Joignable · {count} modèles",
+      "noModels": "Aucun modèle signalé.",
+      "enableModels": "Activer les modèles",
+      "toast": {
+        "saved": "{name} enregistré",
+        "saveFailed": "Impossible d'enregistrer le runner",
+        "removed": "Runner supprimé",
+        "removeFailed": "Impossible de supprimer le runner"
+      }
+    }
   }
 }

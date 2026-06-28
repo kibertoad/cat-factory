@@ -17,6 +17,7 @@ import type { ModelPreset } from '~/types/model-presets'
 import { MODEL_CONFIGURABLE_SYSTEM_KINDS } from '~/utils/catalog'
 import { cachingLabel, contextLabel, costLabel, displayFlavor, isSelectable } from '~/stores/models'
 
+const { t } = useI18n()
 const ui = useUiStore()
 const models = useModelsStore()
 const presets = useModelPresetsStore()
@@ -83,7 +84,9 @@ const selectableModels = computed(() => {
     .map((m) => {
       const flavor = displayFlavor(m, configured)
       const ctx = contextLabel(flavor.contextTokens)
-      const price = costLabel(flavor) ?? (flavor.quotaBased ? 'quota' : undefined)
+      const price =
+        costLabel(flavor) ??
+        (flavor.quotaBased ? t('settings.modelConfiguration.quota') : undefined)
       // Surface caching in the suffix: a cache-less flavour (the Workers-AI hot path)
       // re-bills its whole growing prompt every turn, which the user can act on.
       const caching = cachingLabel(flavor)
@@ -134,7 +137,7 @@ async function setDefault(p: ModelPreset) {
   try {
     await presets.update(p.id, { isDefault: true })
   } catch (e) {
-    fail('Could not set the default preset', e)
+    fail(t('settings.modelConfiguration.toast.setDefaultFailed'), e)
   } finally {
     busy.value = false
   }
@@ -145,7 +148,7 @@ async function remove(p: ModelPreset) {
   try {
     await presets.remove(p.id)
   } catch (e) {
-    fail('Could not delete the preset', e)
+    fail(t('settings.modelConfiguration.toast.deleteFailed'), e)
   } finally {
     busy.value = false
   }
@@ -168,7 +171,7 @@ function overrideMenu(kind: AgentKind) {
   return [
     [
       {
-        label: 'Use base model',
+        label: t('settings.modelConfiguration.editor.useBaseModel'),
         icon: 'i-lucide-rotate-ccw',
         onSelect: () => setOverride(kind, null),
       },
@@ -190,14 +193,17 @@ function setOverride(kind: AgentKind, modelId: string | null) {
 /** The label on a kind's override button: its override model, else "Base model". */
 function overrideLabel(kind: AgentKind): string {
   const id = editor.value?.overrides[kind]
-  return id ? modelLabel(id) : 'Base model'
+  return id ? modelLabel(id) : t('settings.modelConfiguration.editor.baseModel')
 }
 
 async function save() {
   const e = editor.value
   if (!e) return
   if (!e.name.trim()) {
-    fail('Name required', new Error('Give the preset a name.'))
+    fail(
+      t('settings.modelConfiguration.toast.nameRequiredTitle'),
+      new Error(t('settings.modelConfiguration.toast.nameRequiredBody')),
+    )
     return
   }
   busy.value = true
@@ -219,7 +225,7 @@ async function save() {
     }
     editor.value = null
   } catch (err) {
-    fail('Could not save the preset', err)
+    fail(t('settings.modelConfiguration.toast.saveFailed'), err)
   } finally {
     busy.value = false
   }
@@ -251,10 +257,11 @@ function fail(title: string, e: unknown) {
             <UIcon name="i-lucide-cpu" class="h-5 w-5 text-indigo-300" />
           </div>
           <div class="min-w-0">
-            <h1 class="truncate text-base font-semibold text-white">Model Configuration</h1>
+            <h1 class="truncate text-base font-semibold text-white">
+              {{ t('settings.modelConfiguration.title') }}
+            </h1>
             <p class="truncate text-xs text-slate-500">
-              Presets that map a model to every agent. A task picks one; tasks default to the
-              workspace default preset.
+              {{ t('settings.modelConfiguration.subtitle') }}
             </p>
           </div>
           <UButton
@@ -266,7 +273,7 @@ function fail(title: string, e: unknown) {
             class="ml-auto"
             @click="editor = null"
           >
-            Back
+            {{ t('settings.modelConfiguration.back') }}
           </UButton>
           <UButton
             icon="i-lucide-x"
@@ -274,7 +281,7 @@ function fail(title: string, e: unknown) {
             variant="ghost"
             size="sm"
             :class="editor ? '' : 'ml-auto'"
-            title="Close (Esc)"
+            :title="t('settings.modelConfiguration.closeEsc')"
             @click="open = false"
           />
         </header>
@@ -285,9 +292,17 @@ function fail(title: string, e: unknown) {
             <template v-if="!editor">
               <div class="flex items-center justify-between">
                 <p class="text-sm leading-relaxed text-slate-400">
-                  Each preset sets a <span class="text-slate-300">base model</span> for every agent,
-                  with optional per-agent overrides. A model pinned on an individual task still
-                  overrides the preset.
+                  <i18n-t
+                    keypath="settings.modelConfiguration.list.intro"
+                    scope="global"
+                    tag="span"
+                  >
+                    <template #baseModel>
+                      <span class="text-slate-300">{{
+                        t('settings.modelConfiguration.list.introBaseModel')
+                      }}</span>
+                    </template>
+                  </i18n-t>
                 </p>
                 <UButton
                   icon="i-lucide-plus"
@@ -296,12 +311,12 @@ function fail(title: string, e: unknown) {
                   class="shrink-0"
                   @click="startCreate"
                 >
-                  New preset
+                  {{ t('settings.modelConfiguration.list.newPreset') }}
                 </UButton>
               </div>
 
               <p v-if="models.models.length === 0" class="py-4 text-center text-sm text-slate-500">
-                Loading model catalog…
+                {{ t('settings.modelConfiguration.list.loadingCatalog') }}
               </p>
 
               <div v-else class="space-y-3">
@@ -313,7 +328,7 @@ function fail(title: string, e: unknown) {
                   <div class="flex items-center gap-2">
                     <span class="truncate text-sm font-semibold text-slate-100">{{ p.name }}</span>
                     <UBadge v-if="p.isDefault" color="primary" variant="subtle" size="xs">
-                      Default
+                      {{ t('settings.modelConfiguration.list.default') }}
                     </UBadge>
                     <div class="ml-auto flex items-center gap-1">
                       <UButton
@@ -323,7 +338,7 @@ function fail(title: string, e: unknown) {
                         color="neutral"
                         icon="i-lucide-star"
                         :loading="busy"
-                        title="Set as workspace default"
+                        :title="t('settings.modelConfiguration.list.setDefaultTitle')"
                         @click="setDefault(p)"
                       />
                       <UButton
@@ -331,7 +346,7 @@ function fail(title: string, e: unknown) {
                         variant="ghost"
                         color="neutral"
                         icon="i-lucide-pencil"
-                        title="Edit preset"
+                        :title="t('settings.modelConfiguration.list.editTitle')"
                         @click="startEdit(p)"
                       />
                       <UButton
@@ -342,19 +357,26 @@ function fail(title: string, e: unknown) {
                         :disabled="p.isDefault"
                         :loading="busy"
                         :title="
-                          p.isDefault ? 'The default preset cannot be deleted' : 'Delete preset'
+                          p.isDefault
+                            ? t('settings.modelConfiguration.list.deleteDisabledTitle')
+                            : t('settings.modelConfiguration.list.deleteTitle')
                         "
                         @click="remove(p)"
                       />
                     </div>
                   </div>
                   <div class="mt-1.5 text-[11px] text-slate-400">
-                    Base: <span class="text-slate-300">{{ modelLabel(p.baseModelId) }}</span>
+                    {{ t('settings.modelConfiguration.list.basePrefix') }}
+                    <span class="text-slate-300">{{ modelLabel(p.baseModelId) }}</span>
                     <span v-if="Object.keys(p.overrides).length">
-                      · {{ Object.keys(p.overrides).length }} override<span
-                        v-if="Object.keys(p.overrides).length !== 1"
-                        >s</span
-                      >
+                      ·
+                      {{
+                        t(
+                          'settings.modelConfiguration.list.overrideCount',
+                          { count: Object.keys(p.overrides).length },
+                          Object.keys(p.overrides).length,
+                        )
+                      }}
                     </span>
                   </div>
                 </div>
@@ -362,7 +384,7 @@ function fail(title: string, e: unknown) {
                   v-if="sortedPresets.length === 0"
                   class="py-6 text-center text-sm text-slate-500"
                 >
-                  No presets yet — create one to map models to your agents.
+                  {{ t('settings.modelConfiguration.list.empty') }}
                 </p>
               </div>
             </template>
@@ -374,11 +396,11 @@ function fail(title: string, e: unknown) {
                   <label
                     class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
                   >
-                    Name
+                    {{ t('settings.modelConfiguration.editor.nameLabel') }}
                   </label>
                   <UInput
                     v-model="editor.name"
-                    placeholder="e.g. Kimi K2.7"
+                    :placeholder="t('settings.modelConfiguration.editor.namePlaceholder')"
                     size="sm"
                     class="w-full"
                   />
@@ -388,7 +410,7 @@ function fail(title: string, e: unknown) {
                   <label
                     class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
                   >
-                    Base model (applied to every agent)
+                    {{ t('settings.modelConfiguration.editor.baseModelLabel') }}
                   </label>
                   <UDropdownMenu
                     :items="baseMenu"
@@ -408,21 +430,21 @@ function fail(title: string, e: unknown) {
 
                 <label class="flex items-center gap-2 text-sm text-slate-300">
                   <UCheckbox v-model="editor.isDefault" />
-                  Make this the workspace default
+                  {{ t('settings.modelConfiguration.editor.makeDefault') }}
                 </label>
               </div>
 
               <div>
                 <div class="mb-1 flex items-center justify-between">
                   <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    Per-agent overrides
+                    {{ t('settings.modelConfiguration.editor.perAgentOverrides') }}
                   </span>
                 </div>
                 <UInput
                   v-model="filter"
                   icon="i-lucide-search"
                   size="sm"
-                  placeholder="Filter agents…"
+                  :placeholder="t('settings.modelConfiguration.editor.filterPlaceholder')"
                   class="mb-3 w-full"
                 />
                 <div
@@ -461,17 +483,21 @@ function fail(title: string, e: unknown) {
                     v-if="filteredKinds.length === 0"
                     class="px-4 py-6 text-center text-sm text-slate-500"
                   >
-                    No agents match "{{ filter }}".
+                    {{ t('settings.modelConfiguration.editor.noAgentsMatch', { filter }) }}
                   </p>
                 </div>
               </div>
 
               <div class="flex items-center justify-end gap-2">
                 <UButton color="neutral" variant="ghost" size="sm" @click="editor = null">
-                  Cancel
+                  {{ t('common.cancel') }}
                 </UButton>
                 <UButton color="primary" size="sm" :loading="busy" @click="save">
-                  {{ editor.id ? 'Save changes' : 'Create preset' }}
+                  {{
+                    editor.id
+                      ? t('settings.modelConfiguration.editor.saveChanges')
+                      : t('settings.modelConfiguration.editor.createPreset')
+                  }}
                 </UButton>
               </div>
             </template>
