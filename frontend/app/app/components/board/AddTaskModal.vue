@@ -26,6 +26,7 @@ const modelPresets = useModelPresetsStore()
 const pipelines = usePipelinesStore()
 const agentConfig = useAgentConfigStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const { linkPending } = useContextLinking()
 
@@ -52,13 +53,13 @@ const technical = ref(false)
 // delegates to <RecurringPipelineModal> instead of creating a one-off task here.
 type TaskTypeChoice = CreateTaskType | 'recurring'
 const taskType = ref<TaskTypeChoice>('feature')
-const TASK_TYPES: { value: TaskTypeChoice; label: string; icon: string }[] = [
-  { value: 'feature', label: 'Feature', icon: 'i-lucide-sparkles' },
-  { value: 'bug', label: 'Bug', icon: 'i-lucide-bug' },
-  { value: 'document', label: 'Document', icon: 'i-lucide-file-text' },
-  { value: 'spike', label: 'Spike', icon: 'i-lucide-flask-conical' },
-  { value: 'recurring', label: 'Recurring', icon: 'i-lucide-repeat' },
-]
+const TASK_TYPES = computed<{ value: TaskTypeChoice; label: string; icon: string }[]>(() => [
+  { value: 'feature', label: t('board.addTask.types.feature'), icon: 'i-lucide-sparkles' },
+  { value: 'bug', label: t('board.addTask.types.bug'), icon: 'i-lucide-bug' },
+  { value: 'document', label: t('board.addTask.types.document'), icon: 'i-lucide-file-text' },
+  { value: 'spike', label: t('board.addTask.types.spike'), icon: 'i-lucide-flask-conical' },
+  { value: 'recurring', label: t('board.addTask.types.recurring'), icon: 'i-lucide-repeat' },
+])
 const isRecurring = computed(() => taskType.value === 'recurring')
 
 // Per-type fields (only the ones relevant to the chosen type are shown / sent).
@@ -114,12 +115,18 @@ const mergePresetId = ref('')
 const modelPresetId = ref('')
 const pipelineId = ref('')
 
+const defaultPresetLabel = computed(() =>
+  mergePresets.defaultPreset
+    ? t('board.addTask.defaultPreset', {
+        name: mergePresets.defaultPreset.name,
+        thresholds: mergePresetThresholds(mergePresets.defaultPreset),
+      })
+    : t('board.addTask.workspaceDefault'),
+)
 const presetMenu = computed(() => [
   [
     {
-      label: mergePresets.defaultPreset
-        ? `Default (${mergePresets.defaultPreset.name}) — ${mergePresetThresholds(mergePresets.defaultPreset)}`
-        : 'Workspace default',
+      label: defaultPresetLabel.value,
       icon: 'i-lucide-rotate-ccw',
       onSelect: () => (mergePresetId.value = ''),
     },
@@ -131,22 +138,21 @@ const presetMenu = computed(() => [
   ],
 ])
 const selectedPresetLabel = computed(() => {
-  if (!mergePresetId.value) {
-    return mergePresets.defaultPreset
-      ? `Default (${mergePresets.defaultPreset.name}) — ${mergePresetThresholds(mergePresets.defaultPreset)}`
-      : 'Workspace default'
-  }
+  if (!mergePresetId.value) return defaultPresetLabel.value
   const picked = mergePresets.presets.find((p) => p.id === mergePresetId.value)
-  return picked ? mergePresetOptionLabel(picked) : 'Workspace default'
+  return picked ? mergePresetOptionLabel(picked) : t('board.addTask.workspaceDefault')
 })
 
 // Model preset: which model each agent runs on. Empty = workspace default preset.
+const defaultModelPresetLabel = computed(() =>
+  modelPresets.defaultPreset
+    ? t('board.addTask.defaultModelPreset', { name: modelPresets.defaultPreset.name })
+    : t('board.addTask.workspaceDefault'),
+)
 const modelPresetMenu = computed(() => [
   [
     {
-      label: modelPresets.defaultPreset
-        ? `Default (${modelPresets.defaultPreset.name})`
-        : 'Workspace default',
+      label: defaultModelPresetLabel.value,
       icon: 'i-lucide-rotate-ccw',
       onSelect: () => (modelPresetId.value = ''),
     },
@@ -158,18 +164,17 @@ const modelPresetMenu = computed(() => [
   ],
 ])
 const selectedModelPresetLabel = computed(() => {
-  if (!modelPresetId.value) {
-    return modelPresets.defaultPreset
-      ? `Default (${modelPresets.defaultPreset.name})`
-      : 'Workspace default'
-  }
-  return modelPresets.presets.find((p) => p.id === modelPresetId.value)?.name ?? 'Workspace default'
+  if (!modelPresetId.value) return defaultModelPresetLabel.value
+  return (
+    modelPresets.presets.find((p) => p.id === modelPresetId.value)?.name ??
+    t('board.addTask.workspaceDefault')
+  )
 })
 
 const pipelineMenu = computed(() => [
   [
     {
-      label: 'Choose at run time',
+      label: t('board.addTask.chooseAtRunTime'),
       icon: 'i-lucide-rotate-ccw',
       onSelect: () => (pipelineId.value = ''),
     },
@@ -181,7 +186,7 @@ const pipelineMenu = computed(() => [
   ],
 ])
 const selectedPipelineLabel = computed(
-  () => pipelines.getPipeline(pipelineId.value)?.name ?? 'Choose at run time',
+  () => pipelines.getPipeline(pipelineId.value)?.name ?? t('board.addTask.chooseAtRunTime'),
 )
 
 // Task-level agent config contributed by the selected pipeline's agents (e.g. the
@@ -362,7 +367,7 @@ async function add() {
       const failed = await linkPending(block.id, pendingContext.value)
       if (failed > 0) {
         toast.add({
-          title: `Task added, but ${failed} attachment${failed === 1 ? '' : 's'} could not be linked`,
+          title: t('board.addTask.linkFailed', { count: failed }, failed),
           icon: 'i-lucide-triangle-alert',
           color: 'warning',
         })
@@ -371,7 +376,7 @@ async function add() {
     ui.closeAddTask()
   } catch (e) {
     toast.add({
-      title: 'Could not add task',
+      title: t('board.addTask.addFailedTitle'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -383,25 +388,29 @@ async function add() {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Add a task">
+  <UModal v-model:open="open" :title="t('board.addTask.title')">
     <template #body>
       <div class="space-y-4" data-testid="add-task-modal">
         <p v-if="container" class="text-xs text-slate-400">
-          New task in <span class="font-medium text-slate-200">{{ container.title }}</span>
+          <i18n-t keypath="board.addTask.newTaskIn" tag="span" scope="global">
+            <template #container>
+              <span class="font-medium text-slate-200">{{ container.title }}</span>
+            </template>
+          </i18n-t>
         </p>
 
-        <UFormField label="Type">
+        <UFormField :label="t('board.addTask.typeLabel')">
           <div class="flex flex-wrap gap-1">
             <UButton
-              v-for="t in TASK_TYPES"
-              :key="t.value"
-              :color="taskType === t.value ? 'primary' : 'neutral'"
-              :variant="taskType === t.value ? 'soft' : 'ghost'"
-              :icon="t.icon"
+              v-for="ty in TASK_TYPES"
+              :key="ty.value"
+              :color="taskType === ty.value ? 'primary' : 'neutral'"
+              :variant="taskType === ty.value ? 'soft' : 'ghost'"
+              :icon="ty.icon"
               size="xs"
-              @click="taskType = t.value"
+              @click="taskType = ty.value"
             >
-              {{ t.label }}
+              {{ ty.label }}
             </UButton>
           </div>
         </UFormField>
@@ -412,20 +421,19 @@ async function add() {
           class="rounded-lg border border-slate-800 p-3 text-[11px] text-slate-400"
         >
           <template v-if="recurringFrameId">
-            A recurring task runs a pipeline on a cadence. Continue to set the schedule + prompt.
+            {{ t('board.addTask.recurringWithFrame') }}
           </template>
           <template v-else>
-            A recurring task must live on a service. Add it from a service frame (or a module inside
-            one).
+            {{ t('board.addTask.recurringNoFrame') }}
           </template>
         </div>
 
         <template v-if="!isRecurring">
-          <UFormField label="Title" required>
+          <UFormField :label="t('board.addTask.titleField')" required>
             <UInput
               v-model="title"
               data-testid="add-task-title"
-              placeholder="What needs to be done?"
+              :placeholder="t('board.addTask.titlePlaceholder')"
               autofocus
               class="w-full"
               @keydown.enter="add"
@@ -438,7 +446,7 @@ async function add() {
           <UFormField
             v-for="issue in linkedIssueBodies"
             :key="issue.key"
-            :label="`${issue.title} (from issue, included)`"
+            :label="t('board.addTask.issueIncluded', { title: issue.title })"
           >
             <UTextarea
               :model-value="issue.body"
@@ -450,18 +458,24 @@ async function add() {
             />
           </UFormField>
           <p v-if="resolvingIssueBodies" class="text-[11px] text-slate-500">
-            Loading the linked issue's description…
+            {{ t('board.addTask.loadingIssue') }}
           </p>
 
-          <UFormField :label="hasLinkedIssueBody ? 'Additional notes' : 'Description'">
+          <UFormField
+            :label="
+              hasLinkedIssueBody
+                ? t('board.addTask.additionalNotes')
+                : t('board.addTask.description')
+            "
+          >
             <UTextarea
               v-model="description"
               :rows="4"
               autoresize
               :placeholder="
                 hasLinkedIssueBody
-                  ? 'Add anything else the agent should know — appended to the issue description above…'
-                  : 'Describe the work — context, acceptance criteria, anything the agent should know…'
+                  ? t('board.addTask.notesPlaceholder')
+                  : t('board.addTask.descriptionPlaceholder')
               "
               class="w-full"
             />
@@ -469,20 +483,18 @@ async function add() {
 
           <UCheckbox v-model="technical" name="technical">
             <template #label>
-              <span class="text-sm text-slate-200">Technical task</span>
+              <span class="text-sm text-slate-200">{{ t('board.addTask.technical') }}</span>
             </template>
             <template #description>
               <span class="text-[11px] text-slate-500">
-                A refactor / non-functional / internal change. The implementer treats the task
-                definition as primary and the spec as a regression reference; leave off to let the
-                spec phase decide.
+                {{ t('board.addTask.technicalHint') }}
               </span>
             </template>
           </UCheckbox>
 
           <!-- Per-type fields. -->
           <div v-if="taskType === 'bug'" class="grid grid-cols-2 gap-3">
-            <UFormField label="Severity">
+            <UFormField :label="t('board.addTask.severity')">
               <div class="flex flex-wrap gap-1">
                 <UButton
                   v-for="s in SEVERITIES"
@@ -497,29 +509,29 @@ async function add() {
                 </UButton>
               </div>
             </UFormField>
-            <UFormField label="Steps to reproduce" class="col-span-2">
+            <UFormField :label="t('board.addTask.stepsToReproduce')" class="col-span-2">
               <UTextarea
                 v-model="stepsToReproduce"
                 :rows="2"
                 autoresize
-                placeholder="Observed vs expected, and how to reproduce…"
+                :placeholder="t('board.addTask.stepsToReproducePlaceholder')"
                 class="w-full"
               />
             </UFormField>
           </div>
 
-          <UFormField v-else-if="taskType === 'spike'" label="Time-box (hours)">
+          <UFormField v-else-if="taskType === 'spike'" :label="t('board.addTask.timebox')">
             <UInput
               v-model.number="timeboxHours"
               type="number"
               min="0"
-              placeholder="e.g. 8"
+              :placeholder="t('board.addTask.timeboxPlaceholder')"
               class="w-full"
             />
           </UFormField>
 
           <div v-else-if="taskType === 'document'" class="space-y-3">
-            <UFormField label="Document kind">
+            <UFormField :label="t('board.addTask.documentKind')">
               <div class="flex flex-wrap gap-1">
                 <UButton
                   v-for="k in DOC_KINDS"
@@ -535,33 +547,39 @@ async function add() {
               </div>
             </UFormField>
             <div class="grid grid-cols-2 gap-3">
-              <UFormField label="Audience" hint="optional">
+              <UFormField :label="t('board.addTask.audience')" :hint="t('board.addTask.optional')">
                 <UInput
                   v-model="docAudience"
-                  placeholder="e.g. platform engineers"
+                  :placeholder="t('board.addTask.audiencePlaceholder')"
                   class="w-full"
                 />
               </UFormField>
-              <UFormField label="Target path" hint="optional">
+              <UFormField
+                :label="t('board.addTask.targetPath')"
+                :hint="t('board.addTask.optional')"
+              >
                 <UInput
                   v-model="docTargetPath"
-                  placeholder="e.g. docs/rfcs/0001-foo.md"
+                  :placeholder="t('board.addTask.targetPathPlaceholder')"
                   class="w-full"
                 />
               </UFormField>
             </div>
-            <UFormField label="Outline hints" hint="optional">
+            <UFormField
+              :label="t('board.addTask.outlineHints')"
+              :hint="t('board.addTask.optional')"
+            >
               <UTextarea
                 v-model="docOutlineHints"
                 :rows="2"
-                placeholder="Sections or points the document should cover"
+                :placeholder="t('board.addTask.outlineHintsPlaceholder')"
                 class="w-full"
               />
             </UFormField>
           </div>
 
           <div class="grid grid-cols-2 gap-3">
-            <UFormField label="Pipeline">
+            <UFormField :label="t('board.addTask.pipeline')">
               <UDropdownMenu :items="pipelineMenu" class="w-full">
                 <UButton
                   color="neutral"
@@ -576,7 +594,7 @@ async function add() {
               </UDropdownMenu>
             </UFormField>
 
-            <UFormField label="Merge policy">
+            <UFormField :label="t('board.addTask.mergePolicy')">
               <UDropdownMenu :items="presetMenu" class="w-full">
                 <UButton
                   color="neutral"
@@ -591,7 +609,7 @@ async function add() {
               </UDropdownMenu>
             </UFormField>
 
-            <UFormField label="Model preset">
+            <UFormField :label="t('board.addTask.modelPreset')">
               <UDropdownMenu :items="modelPresetMenu" class="w-full">
                 <UButton
                   color="neutral"
@@ -609,7 +627,7 @@ async function add() {
 
           <div v-if="configDescriptors.length" class="space-y-3">
             <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Agent configuration
+              {{ t('board.addTask.agentConfiguration') }}
             </span>
             <div v-for="d in configDescriptors" :key="d.id" class="space-y-1">
               <div class="text-[11px] text-slate-400">{{ d.label }}</div>
@@ -633,7 +651,7 @@ async function add() {
           <div class="space-y-2">
             <div class="flex items-center justify-between">
               <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                Context documents
+                {{ t('board.addTask.contextDocuments') }}
               </span>
               <UButton
                 v-if="docsConnected"
@@ -643,7 +661,7 @@ async function add() {
                 :icon="showDocPicker ? 'i-lucide-x' : 'i-lucide-plus'"
                 @click="showDocPicker = !showDocPicker"
               >
-                {{ showDocPicker ? 'Done' : 'Attach' }}
+                {{ showDocPicker ? t('board.addTask.done') : t('board.addTask.attach') }}
               </UButton>
               <UButton
                 v-else
@@ -654,11 +672,11 @@ async function add() {
                 disabled
                 :title="
                   documents.available
-                    ? 'Connect a document source first (Integrations)'
-                    : 'Enable the documents integration first'
+                    ? t('board.addTask.attachDocDisabledConnect')
+                    : t('board.addTask.attachDocDisabledEnable')
                 "
               >
-                Attach
+                {{ t('board.addTask.attach') }}
               </UButton>
             </div>
             <ContextDocumentPicker
@@ -684,7 +702,7 @@ async function add() {
                   size="xs"
                   class="ml-1 shrink-0"
                 >
-                  imports on add
+                  {{ t('board.addTask.importsOnAdd') }}
                 </UBadge>
                 <button
                   type="button"
@@ -696,7 +714,7 @@ async function add() {
               </div>
             </div>
             <p v-else class="text-[11px] text-slate-500">
-              Attach a requirement, RFC or PRD so agents see it while implementing this task.
+              {{ t('board.addTask.noDocsHint') }}
             </p>
           </div>
 
@@ -704,7 +722,7 @@ async function add() {
           <div class="space-y-2">
             <div class="flex items-center justify-between">
               <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                Context issues
+                {{ t('board.addTask.contextIssues') }}
               </span>
               <UButton
                 v-if="issuesConnected"
@@ -714,7 +732,7 @@ async function add() {
                 :icon="showIssuePicker ? 'i-lucide-x' : 'i-lucide-plus'"
                 @click="showIssuePicker = !showIssuePicker"
               >
-                {{ showIssuePicker ? 'Done' : 'Attach' }}
+                {{ showIssuePicker ? t('board.addTask.done') : t('board.addTask.attach') }}
               </UButton>
               <UButton
                 v-else
@@ -725,11 +743,11 @@ async function add() {
                 disabled
                 :title="
                   tasks.available
-                    ? 'Connect an issue tracker first (Integrations)'
-                    : 'Enable the issue-tracker integration first'
+                    ? t('board.addTask.attachIssueDisabledConnect')
+                    : t('board.addTask.attachIssueDisabledEnable')
                 "
               >
-                Attach
+                {{ t('board.addTask.attach') }}
               </UButton>
             </div>
             <ContextIssuePicker
@@ -756,7 +774,7 @@ async function add() {
                   size="xs"
                   class="ml-1 shrink-0"
                 >
-                  imports on add
+                  {{ t('board.addTask.importsOnAdd') }}
                 </UBadge>
                 <button
                   type="button"
@@ -768,14 +786,12 @@ async function add() {
               </div>
             </div>
             <p v-else class="text-[11px] text-slate-500">
-              Attach a tracker issue so agents see its description and comments while implementing
-              this task.
+              {{ t('board.addTask.noIssuesHint') }}
             </p>
           </div>
 
           <p class="text-[11px] text-slate-500">
-            The task is added in a planned state. It won't run until you start a pipeline on it —
-            you can keep editing it until then.
+            {{ t('board.addTask.plannedHint') }}
           </p>
         </template>
       </div>
@@ -783,7 +799,9 @@ async function add() {
 
     <template #footer>
       <div class="flex w-full justify-end gap-2">
-        <UButton color="neutral" variant="ghost" @click="ui.closeAddTask()">Cancel</UButton>
+        <UButton color="neutral" variant="ghost" @click="ui.closeAddTask()">{{
+          t('common.cancel')
+        }}</UButton>
         <UButton
           color="primary"
           data-testid="add-task-submit"
@@ -792,7 +810,7 @@ async function add() {
           :disabled="!canAdd"
           @click="add"
         >
-          {{ isRecurring ? 'Continue' : 'Add task' }}
+          {{ isRecurring ? t('board.addTask.continue') : t('board.addTask.submit') }}
         </UButton>
       </div>
     </template>

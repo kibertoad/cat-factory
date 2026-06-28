@@ -7,6 +7,7 @@ import LoginScreen from '~/components/auth/LoginScreen.vue'
 // inside the default slot, so it only fires once the user is allowed in.
 const auth = useAuthStore()
 const route = useRoute()
+const { t } = useI18n()
 
 // The password-reset page is public: a recipient of an emailed reset link is signed
 // out, so it must render even when auth is required and there's no user.
@@ -21,7 +22,7 @@ onMounted(() => auth.bootstrap())
     class="flex h-screen w-screen flex-col items-center justify-center gap-3 bg-slate-950 text-slate-400"
   >
     <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
-    <span class="text-sm">Loading…</span>
+    <span class="text-sm">{{ t('auth.gate.loading') }}</span>
   </div>
 
   <slot v-else-if="isPublicRoute" />

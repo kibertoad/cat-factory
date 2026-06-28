@@ -4,6 +4,7 @@ import { agentKindMeta } from '~/utils/catalog'
 const execution = useExecutionStore()
 const board = useBoardStore()
 const ui = useUiStore()
+const { t } = useI18n()
 
 const ctx = computed(() => ui.decisionContext)
 
@@ -30,7 +31,7 @@ function choose(option: string) {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Decision required">
+  <UModal v-model:open="open" :title="t('panels.decision.title')">
     <template #body>
       <div v-if="decision && agent" class="space-y-4" data-testid="decision-modal">
         <div class="flex items-center gap-2 text-sm text-slate-400">
@@ -41,9 +42,15 @@ function choose(option: string) {
             <UIcon :name="agent.icon" class="h-4 w-4" :style="{ color: agent.color }" />
           </div>
           <div>
-            <span class="font-medium text-slate-200">{{ agent.label }}</span>
-            <span v-if="block"> on </span>
-            <span v-if="block" class="font-medium text-slate-200">{{ block.title }}</span>
+            <i18n-t v-if="block" keypath="panels.decision.agentOnBlock" tag="span" scope="global">
+              <template #agent>
+                <span class="font-medium text-slate-200">{{ agent.label }}</span>
+              </template>
+              <template #block>
+                <span class="font-medium text-slate-200">{{ block.title }}</span>
+              </template>
+            </i18n-t>
+            <span v-else class="font-medium text-slate-200">{{ agent.label }}</span>
           </div>
         </div>
 
@@ -64,7 +71,7 @@ function choose(option: string) {
           </UButton>
         </div>
         <p class="text-[11px] text-slate-500">
-          This is a visualization — any choice simply resumes the pipeline.
+          {{ t('panels.decision.visualizationHint') }}
         </p>
       </div>
     </template>

@@ -22,6 +22,7 @@ const tasks = useTasksStore()
 const agentRuns = useAgentRunsStore()
 const services = useServicesStore()
 const reviews = useReviewStage()
+const { t } = useI18n()
 const { lod } = useSemanticZoom()
 // Coarse-pointer (touch) bumps the frame-header actions from `xs` to `sm` so
 // they clear a comfortable tap target on phones without affecting mouse desktops.
@@ -57,15 +58,17 @@ const canvas = computed(() => board.containerSize(props.id))
 const frameStatus = computed<BlockStatus>(() => board.frameStatus(props.id))
 const statusMeta = computed(() => STATUS_META[frameStatus.value])
 const accent = computed(() => statusMeta.value.color)
-const FRAME_LABEL: Record<BlockStatus, string> = {
-  planned: 'No tasks',
-  ready: 'Live',
-  in_progress: 'Active',
-  blocked: 'Needs attention',
-  pr_ready: 'Active',
-  done: 'Live',
+// Exhaustive (tier-2) status → label-key map: a new BlockStatus without a label
+// fails the typecheck rather than leaking a raw key into the frame badge.
+const FRAME_LABEL_KEYS: Record<BlockStatus, string> = {
+  planned: 'board.frame.status.planned',
+  ready: 'board.frame.status.ready',
+  in_progress: 'board.frame.status.in_progress',
+  blocked: 'board.frame.status.blocked',
+  pr_ready: 'board.frame.status.pr_ready',
+  done: 'board.frame.status.done',
 }
-const statusLabel = computed(() => FRAME_LABEL[frameStatus.value])
+const statusLabel = computed(() => t(FRAME_LABEL_KEYS[frameStatus.value]))
 
 const selected = computed(() => ui.selectedBlockId === props.id)
 // Services are always expanded to their task canvas, at every zoom level: there is no
@@ -211,7 +214,7 @@ const ITEM_ICON: Record<string, string> = {
         v-if="blockApprovals.length"
         :count="blockApprovals.length"
         :compact="lod === 'far'"
-        label="Approval needed"
+        :label="t('board.decisionBadge.approvalNeeded')"
         icon="i-lucide-shield-check"
         @open="openFirstApproval"
       />
@@ -232,13 +235,13 @@ const ITEM_ICON: Record<string, string> = {
         v-if="bootstrapping"
         name="i-lucide-loader-circle"
         class="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-amber-400"
-        title="Bootstrapping…"
+        :title="t('board.frame.bootstrapping')"
       />
       <UIcon
         v-else-if="runFailed"
         name="i-lucide-alert-triangle"
         class="ml-auto h-3.5 w-3.5 shrink-0 text-rose-400"
-        title="Run failed"
+        :title="t('board.frame.runFailed')"
       />
       <span v-else-if="hasTasks" class="ml-auto shrink-0 text-[11px] text-slate-300">
         {{ mergedTasks }}/{{ taskCount }}
@@ -259,7 +262,7 @@ const ITEM_ICON: Record<string, string> = {
             name="i-lucide-loader-circle"
             class="h-3.5 w-3.5 shrink-0 animate-spin text-amber-400"
           />
-          <span class="text-amber-300">Bootstrapping…</span>
+          <span class="text-amber-300">{{ t('board.frame.bootstrapping') }}</span>
           <span v-if="bootstrapSubtasks" class="ml-auto text-amber-200/80">
             {{ bootstrapSubtasks.completed }}/{{ bootstrapSubtasks.total }}
           </span>
@@ -292,18 +295,18 @@ const ITEM_ICON: Record<string, string> = {
             variant="subtle"
             size="sm"
             class="shrink-0"
-            title="Shared across workspaces in this org"
+            :title="t('board.frame.sharedTitle')"
           >
-            Shared
+            {{ t('board.frame.shared') }}
           </UBadge>
         </div>
         <div class="flex items-center justify-between">
           <UBadge :color="statusMeta.chip as any" variant="subtle" size="sm">{{
             statusLabel
           }}</UBadge>
-          <span class="text-[11px] text-slate-400"
-            >{{ taskCount }} task{{ taskCount === 1 ? '' : 's' }}</span
-          >
+          <span class="text-[11px] text-slate-400">{{
+            t('board.frame.taskCount', { count: taskCount }, taskCount)
+          }}</span>
         </div>
         <button
           type="button"
@@ -311,9 +314,13 @@ const ITEM_ICON: Record<string, string> = {
           @click.stop="toggleExpand"
         >
           <UIcon name="i-lucide-layers" class="h-3 w-3 text-slate-400" />
-          <span v-if="hasTasks">{{ mergedTasks }}/{{ taskCount }} merged</span>
-          <span v-else>No tasks yet</span>
-          <span v-if="prTasks" class="text-emerald-400">· {{ prTasks }} PR</span>
+          <span v-if="hasTasks">{{
+            t('board.frame.mergedOfTotal', { merged: mergedTasks, total: taskCount })
+          }}</span>
+          <span v-else>{{ t('board.frame.noTasksYet') }}</span>
+          <span v-if="prTasks" class="text-emerald-400"
+            >· {{ t('board.frame.prCount', { count: prTasks }) }}</span
+          >
           <UIcon name="i-lucide-chevron-down" class="ml-auto h-3 w-3" />
         </button>
       </div>
@@ -333,9 +340,14 @@ const ITEM_ICON: Record<string, string> = {
             name="i-lucide-loader-circle"
             class="h-4 w-4 shrink-0 animate-spin text-amber-400"
           />
-          <span class="text-amber-300">Bootstrapping repository…</span>
+          <span class="text-amber-300">{{ t('board.frame.bootstrappingRepository') }}</span>
           <span v-if="bootstrapSubtasks" class="ml-auto text-amber-200/80">
-            {{ bootstrapSubtasks.completed }}/{{ bootstrapSubtasks.total }} steps
+            {{
+              t('board.frame.bootstrapStepsCount', {
+                completed: bootstrapSubtasks.completed,
+                total: bootstrapSubtasks.total,
+              })
+            }}
           </span>
         </div>
         <div class="mt-1.5 h-1 w-full overflow-hidden rounded bg-amber-900/40">
@@ -389,7 +401,7 @@ const ITEM_ICON: Record<string, string> = {
              the gap). -->
         <div
           class="nopan cursor-grab touch-none space-y-3 pb-3 active:cursor-grabbing"
-          title="Drag service"
+          :title="t('board.frame.dragService')"
           @pointerdown="onFrameHandle"
         >
           <div class="flex items-start justify-between gap-2">
@@ -420,7 +432,7 @@ const ITEM_ICON: Record<string, string> = {
                 variant="ghost"
                 color="neutral"
                 icon="i-lucide-plus"
-                title="Add task"
+                :title="t('board.frame.addTaskTitle')"
                 @click.stop="addTask"
               />
               <UButton
@@ -430,7 +442,7 @@ const ITEM_ICON: Record<string, string> = {
                 variant="ghost"
                 color="neutral"
                 icon="i-lucide-ticket"
-                title="Create task from issue"
+                :title="t('board.frame.createTaskFromIssueTitle')"
                 @click.stop="createTaskFromIssue"
               />
               <UButton
@@ -439,7 +451,7 @@ const ITEM_ICON: Record<string, string> = {
                 variant="ghost"
                 color="neutral"
                 icon="i-lucide-repeat"
-                title="Add recurring pipeline"
+                :title="t('board.frame.addRecurringTitle')"
                 @click.stop="addRecurring"
               />
               <UButton
@@ -448,18 +460,22 @@ const ITEM_ICON: Record<string, string> = {
                 variant="ghost"
                 color="neutral"
                 icon="i-lucide-chevron-up"
-                title="Collapse"
+                :title="t('board.frame.collapseTitle')"
                 @click.stop="toggleExpand"
               />
             </div>
           </div>
 
           <div class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-slate-500">
-            <span>{{ mergedTasks }}/{{ taskCount }} implemented</span>
+            <span>{{
+              t('board.frame.implemented', { merged: mergedTasks, total: taskCount })
+            }}</span>
             <span v-if="modules.length"
-              >· {{ modules.length }} module{{ modules.length === 1 ? '' : 's' }}</span
+              >· {{ t('board.frame.moduleCount', { count: modules.length }, modules.length) }}</span
             >
-            <span v-if="prTasks" class="text-emerald-400">· {{ prTasks }} PR ready</span>
+            <span v-if="prTasks" class="text-emerald-400"
+              >· {{ t('board.frame.prReadyCount', { count: prTasks }) }}</span
+            >
           </div>
         </div>
 
@@ -478,7 +494,7 @@ const ITEM_ICON: Record<string, string> = {
             class="absolute inset-4 flex items-center justify-center gap-1 rounded-lg border border-dashed border-slate-700 text-[11px] text-slate-500 hover:border-slate-500 hover:text-slate-300"
             @click.stop="addTask"
           >
-            <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" /> Add the first task
+            <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" /> {{ t('board.frame.addFirstTask') }}
           </button>
 
           <!-- resize handles (drag the borders to resize the service, Miro-style).
@@ -486,17 +502,17 @@ const ITEM_ICON: Record<string, string> = {
                same reason as the header handle above. -->
           <div
             class="nodrag nopan absolute right-0 top-0 h-full w-2 cursor-ew-resize touch-none hover:bg-sky-400/20 pointer-coarse:w-4"
-            title="Drag to resize"
+            :title="t('board.frame.dragToResize')"
             @pointerdown="onResize($event, 'e')"
           />
           <div
             class="nodrag nopan absolute bottom-0 left-0 h-2 w-full cursor-ns-resize touch-none hover:bg-sky-400/20 pointer-coarse:h-4"
-            title="Drag to resize"
+            :title="t('board.frame.dragToResize')"
             @pointerdown="onResize($event, 's')"
           />
           <div
             class="nodrag nopan absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize touch-none pointer-coarse:h-11 pointer-coarse:w-11"
-            title="Drag to resize"
+            :title="t('board.frame.dragToResize')"
             @pointerdown="onResize($event, 'se')"
           >
             <span

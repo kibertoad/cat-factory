@@ -8,10 +8,13 @@
 // emits `back` and the host panel closes itself + reopens the right hub.
 defineProps<{ title?: string }>()
 const emit = defineEmits<{ back: [] }>()
+const { t } = useI18n()
 const ui = useUiStore()
 const cameFromHub = computed(() => ui.cameFromIntegrations || ui.cameFromPersonal)
 const backLabel = computed(() =>
-  ui.cameFromPersonal ? 'Back to My setup' : 'Back to Integrations',
+  ui.cameFromPersonal
+    ? t('layout.integrationBack.backToMySetup')
+    : t('layout.integrationBack.backToIntegrations'),
 )
 </script>
 

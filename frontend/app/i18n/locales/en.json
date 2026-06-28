@@ -12,25 +12,14 @@
     "save": "Save",
     "cancel": "Cancel",
     "retry": "Retry",
+    "block": "Block",
+    "@block": {
+      "description": "Generic fallback NOUN for a board item whose title is unknown (a service / module / task node). Not the verb 'to block'."
+    },
     "actionFailed": "Action failed",
     "close": "Close",
     "@close": {
       "description": "Verb meaning dismiss / shut (a panel, drawer, dialog), NOT the adjective 'near'. Used as an aria-label on close affordances - translate as the imperative verb."
-    }
-  },
-  "auth": {
-    "localMode": {
-      "continueWith": "Continue with {provider}",
-      "enterPatTitle": "Or sign in with a personal access token",
-      "tokenPlaceholder": "paste a {provider} token",
-      "createToken": "Create a {provider} token ↗",
-      "submit": "Sign in",
-      "orDivider": "or",
-      "failed": "Sign-in failed. Check the token and try again."
-    },
-    "signInRequired": {
-      "personalSubscriptions": "Personal subscriptions are saved to your account, but this deployment runs without sign-in, so they can't be stored here. Use the workspace pool or a provider API key instead.",
-      "userApiKeys": "Your personal API keys are saved to your account, but this deployment runs without sign-in, so they can't be stored here. Switch the scope to \"This workspace\" to add a shared key."
     }
   },
   "nav": {
@@ -65,7 +54,207 @@
       "decisionWord": "decision | decisions",
       "@decisionWord": {
         "description": "Count-based plural noun rendered AFTER a number, e.g. '3 decisions' (pending human decisions in the run queue). Resolved via t(key, count); count is always 1 or more. Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - and rely on the custom pluralRules wired in i18n.config.ts)."
+      },
+      "lod": {
+        "far": "Overview",
+        "mid": "Summary",
+        "close": "Detail",
+        "steps": "Build steps",
+        "subtasks": "Subtasks"
+      },
+      "spendTitle": "Token spend this month",
+      "spendLimitReached": "Spend limit reached — runs paused",
+      "serviceAdded": "Added {title}",
+      "serviceAddFailed": "Could not add service"
+    },
+    "canvas": {
+      "emptyTitle": "Your board is empty",
+      "emptyBody": "Add a service to get started: bootstrap a fresh repo or pull in one you already have.",
+      "addBlockFailedTitle": "Could not add block",
+      "addBlockFailedBody": "The backend rejected the request.",
+      "dropOntoTaskTitle": "Drop onto a task",
+      "dropOntoTaskBody": "Pipelines run against tasks, not services.",
+      "taskBlockedTitle": "Task is blocked",
+      "taskBlockedBody": "Its dependencies haven't merged yet."
+    },
+    "addTask": {
+      "title": "Add a task",
+      "newTaskIn": "New task in {container}",
+      "typeLabel": "Type",
+      "types": {
+        "feature": "Feature",
+        "bug": "Bug",
+        "document": "Document",
+        "spike": "Spike",
+        "recurring": "Recurring"
+      },
+      "recurringWithFrame": "A recurring task runs a pipeline on a cadence. Continue to set the schedule + prompt.",
+      "recurringNoFrame": "A recurring task must live on a service. Add it from a service frame (or a module inside one).",
+      "titleField": "Title",
+      "titlePlaceholder": "What needs to be done?",
+      "issueIncluded": "{title} (from issue, included)",
+      "loadingIssue": "Loading the linked issue's description…",
+      "additionalNotes": "Additional notes",
+      "description": "Description",
+      "notesPlaceholder": "Add anything else the agent should know — appended to the issue description above…",
+      "descriptionPlaceholder": "Describe the work — context, acceptance criteria, anything the agent should know…",
+      "technical": "Technical task",
+      "technicalHint": "A refactor / non-functional / internal change. The implementer treats the task definition as primary and the spec as a regression reference; leave off to let the spec phase decide.",
+      "severity": "Severity",
+      "stepsToReproduce": "Steps to reproduce",
+      "stepsToReproducePlaceholder": "Observed vs expected, and how to reproduce…",
+      "timebox": "Time-box (hours)",
+      "timeboxPlaceholder": "e.g. 8",
+      "documentKind": "Document kind",
+      "audience": "Audience",
+      "audiencePlaceholder": "e.g. platform engineers",
+      "targetPath": "Target path",
+      "targetPathPlaceholder": "e.g. docs/rfcs/0001-foo.md",
+      "outlineHints": "Outline hints",
+      "outlineHintsPlaceholder": "Sections or points the document should cover",
+      "optional": "optional",
+      "pipeline": "Pipeline",
+      "chooseAtRunTime": "Choose at run time",
+      "mergePolicy": "Merge policy",
+      "workspaceDefault": "Workspace default",
+      "defaultPreset": "Default ({name}) — {thresholds}",
+      "defaultModelPreset": "Default ({name})",
+      "modelPreset": "Model preset",
+      "agentConfiguration": "Agent configuration",
+      "contextDocuments": "Context documents",
+      "contextIssues": "Context issues",
+      "attach": "Attach",
+      "done": "Done",
+      "attachDocDisabledConnect": "Connect a document source first (Integrations)",
+      "attachDocDisabledEnable": "Enable the documents integration first",
+      "attachIssueDisabledConnect": "Connect an issue tracker first (Integrations)",
+      "attachIssueDisabledEnable": "Enable the issue-tracker integration first",
+      "importsOnAdd": "imports on add",
+      "noDocsHint": "Attach a requirement, RFC or PRD so agents see it while implementing this task.",
+      "noIssuesHint": "Attach a tracker issue so agents see its description and comments while implementing this task.",
+      "plannedHint": "The task is added in a planned state. It won't run until you start a pipeline on it — you can keep editing it until then.",
+      "continue": "Continue",
+      "submit": "Add task",
+      "addFailedTitle": "Could not add task",
+      "linkFailed": "Task added, but {count} attachment could not be linked | Task added, but {count} attachments could not be linked",
+      "@linkFailed": {
+        "description": "Count-based: how many context attachments (docs/issues) failed to link after the task was created (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
       }
+    },
+    "recurring": {
+      "title": "Add a recurring pipeline",
+      "on": "Recurring pipeline on {frame}",
+      "name": "Name",
+      "namePlaceholder": "e.g. Weekly dependency updates",
+      "pipeline": "Pipeline",
+      "pickPipeline": "Pick a pipeline",
+      "prompt": "Prompt",
+      "promptPlaceholder": "What should each run do? Describe the work — the same prompt a normal task carries. Leave blank to use the pipeline's default.",
+      "issueTracker": "Issue tracker",
+      "issueTrackerHint": "The tech-debt pipeline files a ticket from its analysis before implementing. Choose where (saved for the whole workspace).",
+      "githubIssues": "GitHub Issues",
+      "jira": "Jira",
+      "linear": "Linear",
+      "jiraProjectKey": "Jira project key",
+      "jiraProjectKeyPlaceholder": "e.g. ENG",
+      "linearTeamId": "Linear team id",
+      "footerHint": "A single recurring task is added inside the service; each run replaces the last. Its run history is visible in the inspector.",
+      "submit": "Add recurring pipeline",
+      "addFailedTitle": "Could not add recurring pipeline"
+    },
+    "failure": {
+      "containerFailedToStart": "Container failed to start",
+      "bootstrapFailed": "Bootstrap failed",
+      "runFailed": "Run failed",
+      "retryBootstrap": "Retry bootstrap",
+      "retryRun": "Retry run",
+      "showDetail": "Show detail",
+      "retrying": "Retrying…"
+    },
+    "stop": {
+      "label": "Stop",
+      "bootstrapStopped": "Bootstrap stopped",
+      "runStopped": "Run stopped",
+      "stoppedDescription": "The container was killed and the run was cancelled.",
+      "stopFailed": "Stop failed"
+    },
+    "frame": {
+      "status": {
+        "planned": "No tasks",
+        "ready": "Live",
+        "in_progress": "Active",
+        "blocked": "Needs attention",
+        "pr_ready": "Active",
+        "done": "Live"
+      },
+      "shared": "Shared",
+      "sharedTitle": "Shared across workspaces in this org",
+      "bootstrapping": "Bootstrapping…",
+      "bootstrappingRepository": "Bootstrapping repository…",
+      "bootstrapStepsCount": "{completed}/{total} steps",
+      "runFailed": "Run failed",
+      "mergedOfTotal": "{merged}/{total} merged",
+      "noTasksYet": "No tasks yet",
+      "prCount": "{count} PR",
+      "implemented": "{merged}/{total} implemented",
+      "prReadyCount": "{count} PR ready",
+      "taskCount": "{count} task | {count} tasks",
+      "@taskCount": {
+        "description": "Count-based task tally rendered as e.g. '3 tasks' (count is always >= 0). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
+      },
+      "moduleCount": "{count} module | {count} modules",
+      "@moduleCount": {
+        "description": "Count-based module tally rendered as e.g. '2 modules' (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
+      },
+      "addTaskTitle": "Add task",
+      "createTaskFromIssueTitle": "Create task from issue",
+      "addRecurringTitle": "Add recurring pipeline",
+      "collapseTitle": "Collapse",
+      "dragService": "Drag service",
+      "dragTask": "Drag task",
+      "dragToResize": "Drag to resize",
+      "addFirstTask": "Add the first task"
+    },
+    "decisionBadge": {
+      "decisionNeeded": "Decision needed",
+      "approvalNeeded": "Approval needed"
+    },
+    "task": {
+      "recurringPipeline": "Recurring pipeline",
+      "recurringPipelinePaused": "Recurring pipeline (paused)",
+      "dragToConnect": "Drag onto another task to make it depend on this one",
+      "failed": "Failed",
+      "decisionNeeded": "Decision needed",
+      "approvalNeeded": "Approval needed",
+      "resolve": "Resolve",
+      "approve": "Approve",
+      "incorporatingAnswers": "Incorporating answers…",
+      "reReviewing": "Re-reviewing…",
+      "recommending": "Recommending…",
+      "starting": "Starting…",
+      "start": "Start",
+      "blocked": "Blocked",
+      "startPipeline": "Start {name}",
+      "pipelineFallback": "pipeline",
+      "waitingOn": "Waiting on: {deps}",
+      "blockedByDependenciesTitle": "Blocked by dependencies",
+      "noPipelineTitle": "No pipeline defined",
+      "noPipelineBody": "Create one in the builder first.",
+      "pr": "PR",
+      "prNumber": "PR #{number}",
+      "openPrOnGithub": "Open {pr} on GitHub",
+      "review": "Review",
+      "merge": "Merge",
+      "implemented": "implemented",
+      "module": "Module: {name}",
+      "buildSteps": "Build steps",
+      "reviewAndApprove": "Review & approve",
+      "clickToViewStep": "Click to view step details & output"
+    },
+    "epic": {
+      "label": "Epic",
+      "activeCount": "{count} active",
+      "noTasksYet": "No tasks yet"
     }
   },
   "errors": {
@@ -153,6 +342,833 @@
         "step1": "Install the Codex CLI and sign in with your ChatGPT account: run `codex login` and complete the browser flow.",
         "step2": "Open the credentials file Codex wrote at ~/.codex/auth.json (on Windows %USERPROFILE%\\.codex\\auth.json).",
         "step3": "Copy the entire contents of auth.json, paste it below, and choose a personal password to protect it."
+      }
+    }
+  },
+  "inspector": {
+    "container": {
+      "modules": "Modules ({count})",
+      "taskCount": "{count} task | {count} tasks",
+      "allTasks": "All tasks ({count})",
+      "tasks": "Tasks ({count})",
+      "addTask": "Add task",
+      "noTasks": "No tasks yet. Add one to start work.",
+      "servicesHint": "Services are long-lived and don't complete. Work happens in their tasks and modules."
+    },
+    "epicChildren": {
+      "title": "Epic tasks",
+      "doneCount": "{done}/{total} done",
+      "empty": "No tasks belong to this epic yet. Import an epic's children, or set a task's epic.",
+      "unassigned": "Unassigned"
+    },
+    "recurring": {
+      "title": "Recurring pipeline",
+      "active": "Active",
+      "paused": "Paused",
+      "intervalDays": "{count}d",
+      "intervalHours": "{count}h",
+      "anyDay": "any day",
+      "cadence": "Every {every} · {days}{window} · {timezone}",
+      "weekdays": {
+        "sun": "Sun",
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat"
+      },
+      "nextRun": "Next run: {time}",
+      "runNow": "Run now",
+      "pause": "Pause",
+      "resume": "Resume",
+      "editCadence": "Edit cadence",
+      "recentRuns": "Recent runs",
+      "runStatus": {
+        "running": "Running",
+        "done": "Done",
+        "failed": "Failed",
+        "skipped": "Skipped"
+      },
+      "updateFailed": "Could not update schedule",
+      "runNowFailed": "Could not run now"
+    },
+    "fragments": {
+      "serviceTitle": "Service best practices",
+      "serviceEmpty": "None. Code-aware agents on this service follow their default guidance."
+    },
+    "releaseHealth": {
+      "title": "Post-release health",
+      "clear": "Clear",
+      "connectPrompt": "Connect an observability integration to watch this service after releases.",
+      "connectFirst": "Connect an observability integration first",
+      "connect": "Connect",
+      "hint": "The monitors and SLOs the gate watches after this service ships. Comma-separate ids.",
+      "monitorIds": "Monitor ids",
+      "sloIds": "SLO ids",
+      "envTag": "Env tag (optional)",
+      "saveMonitoring": "Save monitoring",
+      "savedToast": "Monitoring saved",
+      "saveFailed": "Could not save the mapping",
+      "clearFailed": "Could not clear the mapping"
+    },
+    "testConfig": {
+      "title": "Test infrastructure",
+      "defaultEnv": "Default test environment",
+      "defaultEnvHint": "The default tasks under this service are spawned with. Each task can override it in its agent settings.",
+      "env": {
+        "ephemeral": "Ephemeral environment",
+        "ephemeralHint": "tests run against a provisioned env",
+        "local": "Local (docker-compose)",
+        "localHint": "the Tester stands deps up locally"
+      },
+      "composePath": "docker-compose path",
+      "browseRepo": "Browse the repository for the compose file",
+      "composeHint": "Used by the Tester to stand up the service's dependencies locally.",
+      "selectComposeTitle": "Select the docker-compose file",
+      "selectComposeHint": "Pick the compose file in the repository. Its path is stored relative to the repo root.",
+      "selected": "Selected: {path}",
+      "noFileSelected": "No file selected.",
+      "useThisFile": "Use this file",
+      "noInfra": "No infra dependencies (the Tester spins nothing up)",
+      "missingInfra": "Set a docker-compose path or enable no infra dependencies, otherwise a pipeline with a Tester won't start.",
+      "provisioningTitle": "Ephemeral environment provisioning",
+      "provisioningHint": "A hint for provisioning this service's ephemeral test environment: which cloud provider to deploy to and how large an instance to request. Ignored for local (docker-compose) testing.",
+      "cloudProvider": "Cloud provider",
+      "instanceSize": "Instance size",
+      "providers": {
+        "docker": "Docker (local)",
+        "custom": "Custom"
+      },
+      "sizes": {
+        "small": "Small",
+        "medium": "Medium",
+        "large": "Large",
+        "xlarge": "XLarge"
+      }
+    },
+    "agentConfig": {
+      "title": "Agent configuration",
+      "inherited": "inherited from service",
+      "frozen": "Frozen: the agent has started"
+    },
+    "dependencies": {
+      "title": "Depends on",
+      "merged": "Merged",
+      "notMerged": "Not merged yet",
+      "empty": "No dependencies. Can run any time.",
+      "blocked": "Blocked until dependencies merge."
+    },
+    "estimate": {
+      "title": "Estimate",
+      "complexity": "Complexity",
+      "risk": "Risk",
+      "impact": "Impact"
+    },
+    "execution": {
+      "stage": {
+        "incorporating": "Incorporating…",
+        "reviewing": "Re-reviewing…",
+        "recommending": "Recommending…"
+      },
+      "prNumber": "PR #{number}",
+      "pullRequest": "Pull request",
+      "stepState": {
+        "pending": "Pending",
+        "working": "Working",
+        "waiting_decision": "Needs decision",
+        "done": "Done"
+      },
+      "failed": "Failed",
+      "needsDecision": "Needs decision",
+      "needsApproval": "Needs approval",
+      "spinningUp": "Spinning up…",
+      "stop": "Stop",
+      "stopTooltip": "Stop the run but keep it (readable and retryable)",
+      "reset": "Reset",
+      "resetTooltip": "Discard this run and reset the task to planned",
+      "viewDetailsOutput": "View details and read output",
+      "viewDetails": "View step details",
+      "companion": "Companion",
+      "companionTooltip": "Companion of a producer step",
+      "subtasksProgress": "{completed} of {total} subtasks done, {inProgress} in progress",
+      "subtasksDone": "{completed} of {total} subtasks done",
+      "resolve": "Resolve",
+      "decide": "Decide",
+      "review": "Review",
+      "approve": "Approve",
+      "fragmentsTooltip": "Best-practice fragments folded into this step: {fragments}",
+      "standardsApplied": "{count} standard applied | {count} standards applied",
+      "companionOf": "{label} (companion)",
+      "merged": "Merged",
+      "open": "Open",
+      "mergePr": "Merge PR"
+    },
+    "structure": {
+      "module": "Module",
+      "modulePlaceholder": "e.g. Sessions (created on implement if new)",
+      "bestPractices": "Best practices",
+      "bestPracticesEmpty": "None. Agents follow their default guidance."
+    },
+    "runSettings": {
+      "unassigned": "Unassigned",
+      "workspaceDefault": "Workspace default",
+      "workspaceDefaultParen": "(workspace default)",
+      "defaultPresetThresholds": "Default ({name}): {thresholds}",
+      "defaultPreset": "Default ({name})",
+      "noDefault": "No default",
+      "inheritWorkspace": "Inherit workspace",
+      "on": "On",
+      "off": "Off",
+      "inheritOn": "Inherit (on)",
+      "inheritOff": "Inherit (off)",
+      "technical": {
+        "unset": "Unset (auto-detect)",
+        "technical": "Technical",
+        "business": "Business"
+      },
+      "pipeline": "Pipeline",
+      "pipelineEmpty": "No default. Pick a pipeline when you run this task.",
+      "mergePolicy": "Merge policy",
+      "mergePresetDetail": "{name}: auto-merge when complexity ≤ {complexity}, risk ≤ {risk}, impact ≤ {impact}; up to {attempts} CI-fix attempts.",
+      "mergePresetEmpty": "No preset configured. The merger raises a review notification for every PR.",
+      "modelPreset": "Model preset",
+      "modelPresetBase": "base {model}",
+      "modelPresetOverrides": ", {count} override | , {count} overrides",
+      "modelPresetEmpty": "No preset configured. Agents run on the deployment's default routing.",
+      "unavailableModels": "Not available under the current configuration: {models}. This task would fail on those steps.",
+      "editPresets": "Edit presets",
+      "configureVendors": "Configure vendors",
+      "modelPresetChangeHint": "Changing this affects only steps that haven't started yet.",
+      "taskKind": "Task kind",
+      "technicalHint": {
+        "technical": "Technical: the implementer treats the task definition as primary and the spec as a regression reference; the spec-writer may produce no business specs.",
+        "business": "Business: the specification leads, as usual.",
+        "unset": "Auto-detect: inferred from the spec phase. Set it explicitly to override."
+      },
+      "issueWriteback": "Issue writeback",
+      "commentOnPrOpen": "Comment on PR open",
+      "closeOnMerge": "Close on merge",
+      "writebackHint": "Writes back to this task's linked tracker issue. Overrides the workspace default.",
+      "responsibleProduct": "Responsible product",
+      "responsibleEmpty": "Unassigned. Set a product owner to notify them when requirement review flags this task.",
+      "autoStartDependents": "Auto-start dependents",
+      "autoStartHint": "When this task merges, automatically start the tasks that depend on it (once their other dependencies are also done)."
+    }
+  },
+  "panels": {
+    "decision": {
+      "title": "Decision required",
+      "agentOnBlock": "{agent} on {block}",
+      "visualizationHint": "This is a visualization. Any choice simply resumes the pipeline."
+    },
+    "stepRestart": {
+      "restartFromStep": "Restart pipeline from this step",
+      "restartFromHere": "Restart from here"
+    },
+    "structuredResult": {
+      "fallbackTitle": "Agent result",
+      "titleWithBlock": "{label}: {title}",
+      "fallbackDescription": "Structured agent output",
+      "structuredOutput": "Structured output",
+      "noResult": "No result yet.",
+      "noResultHint": "The structured output appears once this agent finishes. While it runs, the step shows live progress on the board."
+    },
+    "testReport": {
+      "title": "Test report",
+      "greenlit": "Greenlit",
+      "needsFixes": "Needs fixes",
+      "fixAttempts": "{count}/{max} fix attempts",
+      "fixing": "· fixing…",
+      "tested": "Tested",
+      "outcomes": "Outcomes",
+      "concerns": "Concerns"
+    },
+    "stepMeta": {
+      "stateLabel": "State",
+      "duration": "Duration",
+      "elapsed": "elapsed",
+      "step": "Step",
+      "stepOf": "{number} of {total}",
+      "started": "Started",
+      "finished": "Finished",
+      "model": "Model",
+      "notRecorded": "Not recorded",
+      "run": "Run",
+      "clickToCopy": "{id} (click to copy)",
+      "spinningUpContainer": "Spinning up container…",
+      "subtasks": "Subtasks · {completed}/{total}",
+      "standardsApplied": "Standards applied",
+      "decision": "Decision",
+      "awaitingChoice": "Awaiting a human choice",
+      "approvalGate": "Approval gate",
+      "companionReview": "Companion review",
+      "correctionIterations": "{count} correction iteration. | {count} correction iterations.",
+      "state": {
+        "pending": "Pending",
+        "working": "Working",
+        "waiting_decision": "Needs input",
+        "done": "Done",
+        "failed": "Failed"
+      },
+      "approvalStatus": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "changes_requested": "Changes requested",
+        "rejected": "Rejected"
+      }
+    },
+    "stepDetail": {
+      "contents": "Contents",
+      "details": "Details",
+      "approvalRequired": "Approval required",
+      "decisionRequired": "Decision required",
+      "expandAll": "Expand all sections",
+      "collapseAll": "Collapse all sections",
+      "copyRawOutput": "Copy raw output",
+      "closeEsc": "Close (Esc)",
+      "companionCapHeading": "{agent} hit its {attempts}-attempt rework limit, still below the {threshold} bar.",
+      "companionCapDetail": "Do one more automatic rework round, proceed to the next step accepting the current output, or stop and reset the task so you can edit the inputs and resubmit.",
+      "infraAttempts": "Infrastructure attempts",
+      "hideInfraAttempts": "Hide infrastructure attempts",
+      "editingConclusions": "Editing the conclusions",
+      "editConclusionsPlaceholder": "Edit the agent's conclusions; your edits are saved when you approve…",
+      "noProseOutput": "This agent produced no prose output.",
+      "approveWithCorrections": "Approve with corrections",
+      "reviewAndApprove": "Review & approve",
+      "editHint": "Edit the conclusions on the left; your edits are saved when you approve.",
+      "reviewHint": "Click any block in the output to comment on it, or leave overall feedback below.",
+      "editingNotice": "You're editing the conclusions directly. Manual edits can't be combined with per-block comments. Approve to save them, or cancel to return to review.",
+      "commentingOn": "Commenting on",
+      "commentPlaceholder": "Leave a comment on this block…",
+      "addComment": "Add comment",
+      "commentN": "Comment {number}",
+      "removeComment": "Remove comment",
+      "overallFeedback": "Overall feedback / reject reason",
+      "overallFeedbackPlaceholder": "Describe the changes the agent should make (optional if you left per-block comments)…",
+      "approveWithEdits": "Approve with these edits",
+      "cancelEdits": "Cancel edits",
+      "approveAndProceed": "Approve & proceed",
+      "rejectConfirmPrompt": "Reject this proposal and stop the run entirely?",
+      "confirmReject": "Confirm reject",
+      "requestChanges": "Request changes",
+      "reject": "Reject",
+      "requestChangesHint": "Request changes re-runs this step with your feedback & comments. Reject stops the run entirely."
+    },
+    "inspector": {
+      "frameStatus": {
+        "planned": "No tasks",
+        "ready": "Live",
+        "in_progress": "Active",
+        "blocked": "Needs attention",
+        "pr_ready": "Active",
+        "done": "Live"
+      },
+      "deleteRecurringPipeline": "Delete recurring pipeline",
+      "deleteTask": "Delete task",
+      "deleteModule": "Delete module",
+      "deleteService": "Delete service",
+      "titlePlaceholder": "Title…",
+      "reworkedRequirements": "Reworked requirements",
+      "agentStepsUseDocument": "Agent steps use this document.",
+      "open": "Open",
+      "originalDescriptionFrozen": "Original description (frozen)",
+      "noDescription": "No description",
+      "describeBlock": "Describe this block…",
+      "taskStartedLocked": "This task has started. Its details are locked.",
+      "lastIncorporatedRequirements": "Last incorporated requirements",
+      "priorDocHint": "From the previous review. Use it as a base: edit the description above and resubmit.",
+      "bootstrapping": "Bootstrapping…",
+      "importIssue": "Import issue",
+      "connectTracker": "Connect a tracker",
+      "spawnFromDocument": "Spawn from document",
+      "viewRequirements": "View Requirements",
+      "reRun": "Re-run",
+      "run": "Run",
+      "focus": "Focus"
+    }
+  },
+  "observability": {
+    "modelActivity": "Model activity",
+    "viewAllCalls": "View all calls →",
+    "providedContext": "Provided context",
+    "exportJson": "Export JSON",
+    "exportHint": "Download an LLM-friendly JSON export of this run",
+    "closeEsc": "Close (Esc)",
+    "loadingActivity": "Loading model activity…",
+    "loadingContext": "Loading provided context…",
+    "noCalls": "No model calls recorded for this run.",
+    "noContext": "No agent context stored for this run. It is captured per dispatch when the workspace has 'Store full agent context' enabled.",
+    "summary": {
+      "calls": "Calls",
+      "tokensInOut": "Tokens (in / out)",
+      "transportOverhead": "Transport overhead",
+      "modelExecution": "Model execution",
+      "truncated": "{count} truncated | {count} truncated"
+    },
+    "metricsBar": {
+      "calls": "{count} call | {count} calls",
+      "promptCompletionTokens": "Prompt / completion tokens",
+      "cachedTokens": "({tokens} cached)",
+      "cachedTokensHint": "Prompt tokens served from the provider's cache",
+      "errors": "{count} error | {count} errors",
+      "warnings": "{count} warning | {count} warnings",
+      "outputLimit": "Output limit",
+      "truncatedCalls": "{count} call truncated at the limit | {count} calls truncated at the limit",
+      "transportVsExecution": "Transport vs execution",
+      "transportOverhead": "Transport / proxy overhead",
+      "modelExecution": "Model execution"
+    },
+    "call": {
+      "tokensTitle": "{prompt} prompt / {completion} completion tokens",
+      "outputUsedVsLimit": "Output used vs limit",
+      "transportVsExecution": "Transport overhead / model execution",
+      "error": "error",
+      "ok": "ok",
+      "messages": "{count} messages",
+      "tools": "{count} tools",
+      "streamed": "streamed",
+      "buffered": "buffered",
+      "maxTokens": "max_tokens {value}",
+      "promptCached": "{cached}/{prompt} prompt cached",
+      "total": "total {duration}",
+      "prompt": "Prompt",
+      "promptPrefixOmitted": "(new messages only: {count} earlier omitted)",
+      "response": "Response",
+      "reasoning": "Reasoning"
+    },
+    "context": {
+      "injectedFiles": "Injected context files",
+      "bestPracticeFragments": "Best-practice fragments",
+      "filesCount": "{count} files",
+      "fragmentsCount": "{count} fragments",
+      "systemPrompt": "System prompt",
+      "userPrompt": "User prompt",
+      "details": "Details"
+    }
+  },
+  "auth": {
+    "gate": {
+      "loading": "Loading…"
+    },
+    "localMode": {
+      "continueWith": "Continue with {provider}",
+      "enterPatTitle": "Or sign in with a personal access token",
+      "tokenPlaceholder": "paste a {provider} token",
+      "createToken": "Create a {provider} token ↗",
+      "submit": "Sign in",
+      "orDivider": "or",
+      "failed": "Sign-in failed. Check the token and try again."
+    },
+    "signInRequired": {
+      "personalSubscriptions": "Personal subscriptions are saved to your account, but this deployment runs without sign-in, so they can't be stored here. Use the workspace pool or a provider API key instead.",
+      "userApiKeys": "Your personal API keys are saved to your account, but this deployment runs without sign-in, so they can't be stored here. Switch the scope to \"This workspace\" to add a shared key."
+    },
+    "login": {
+      "appTitle": "Architecture Board",
+      "@appTitle": {
+        "description": "The product/app title shown on the login screen. Keep verbatim across every locale - it is a proper-noun-ish product name, do NOT translate it."
+      },
+      "subtitle": "Sign in to continue.",
+      "inviteSubtitle": "Accept your invitation to continue.",
+      "forgotSubtitle": "Reset your password.",
+      "continueWithGithub": "Continue with GitHub",
+      "continueWithGoogle": "Continue with Google",
+      "or": "or",
+      "namePlaceholder": "Name (optional)",
+      "emailPlaceholder": "Email",
+      "passwordPlaceholder": "Password",
+      "createAccount": "Create account",
+      "signIn": "Sign in",
+      "signUp": "Sign up",
+      "needAccount": "Need an account? {signUp}",
+      "haveAccount": "Already have an account? {signIn}",
+      "forgotPassword": "Forgot password?",
+      "forgotSent": "If an account exists for that email, a password reset link is on its way. Check your inbox.",
+      "sendResetLink": "Send reset link",
+      "backToSignIn": "Back to sign in",
+      "signInFailed": "Sign-in failed. Check your details and try again.",
+      "genericError": "Something went wrong. Please try again."
+    },
+    "resetPassword": {
+      "title": "Reset password",
+      "subtitle": "Choose a new password for your account.",
+      "doneBody": "Your password has been reset. You can now sign in with your new password.",
+      "goToSignIn": "Go to sign in",
+      "missingToken": "This reset link is missing its token. Request a new link from the sign-in screen.",
+      "backToSignIn": "Back to sign in",
+      "newPasswordPlaceholder": "New password",
+      "confirmPasswordPlaceholder": "Confirm new password",
+      "submit": "Reset password",
+      "errorTooShort": "Password must be at least 8 characters.",
+      "errorMismatch": "Passwords do not match.",
+      "errorInvalidLink": "This password reset link is invalid or has expired."
+    },
+    "userMenu": {
+      "mySetup": "My setup",
+      "signOut": "Sign out"
+    }
+  },
+  "layout": {
+    "accountDeployment": {
+      "title": "Deployment integrations",
+      "intro": "Credentials shared by every workspace in this account, sealed at rest. Values are never shown after saving; leave a field blank to keep the stored secret.",
+      "configured": "Configured",
+      "notSet": "Not set",
+      "clear": "Clear",
+      "loadFailed": "Could not load deployment settings",
+      "slack": {
+        "title": "Slack app (OAuth)",
+        "description": "Enables the \"Add to Slack\" OAuth flow. Without it, workspaces can still connect Slack by pasting a bot token.",
+        "clientId": "Client ID",
+        "clientSecret": "Client secret",
+        "redirectUrl": "Redirect URL",
+        "validation": "Enter the client id, secret and redirect URL",
+        "saved": "Slack OAuth saved",
+        "saveFailed": "Could not save Slack OAuth",
+        "cleared": "Slack OAuth cleared",
+        "clearFailed": "Could not clear Slack OAuth"
+      },
+      "web": {
+        "title": "Container web search",
+        "description": "The search upstream container agents reach through the backend proxy. Set a Brave key (recommended), or a self-hosted SearXNG URL (with an optional bearer key).",
+        "configured": "Configured ({provider})",
+        "braveKey": "Brave API key",
+        "searxngUrl": "SearXNG URL",
+        "searxngKey": "SearXNG key (optional)",
+        "validation": "Enter a Brave key or a SearXNG URL",
+        "saved": "Web search keys saved",
+        "saveFailed": "Could not save web search keys",
+        "cleared": "Web search keys cleared",
+        "clearFailed": "Could not clear web search keys"
+      }
+    },
+    "accountFragments": {
+      "intro": "Best-practice guidelines shared by every board in this account. Each board inherits these and can override or add its own. Code-aware agents (coder, reviewer, architect, fixers) fold the relevant ones into their prompt."
+    },
+    "accountTeam": {
+      "roles": {
+        "admin": "Admin",
+        "developer": "Developer",
+        "product": "Product"
+      },
+      "org": {
+        "ctaTitle": "Invite teammates & manage roles",
+        "ctaBody": "Members, roles and invitations live on an organization. Create one to invite teammates and manage their roles; your personal boards stay as they are.",
+        "namePlaceholder": "Acme Inc.",
+        "create": "Create organization",
+        "created": "Organization created"
+      },
+      "members": {
+        "title": "Members",
+        "empty": "No members yet."
+      },
+      "invite": {
+        "title": "Invite a teammate",
+        "submit": "Invite",
+        "revoke": "Revoke invitation",
+        "created": "Invitation created",
+        "createdEmailed": "An email was sent (or copy the link from the list below).",
+        "createdShareLink": "Share the accept link with your teammate.",
+        "status": {
+          "pending": "Pending",
+          "accepted": "Accepted",
+          "revoked": "Revoked"
+        }
+      },
+      "email": {
+        "title": "Email sender",
+        "notEnabled": "Email delivery is not enabled on this deployment. Invitations still produce a shareable accept link.",
+        "connectedAs": "Connected via {provider} as {from}",
+        "disconnect": "Disconnect",
+        "connect": "Connect email sender",
+        "connected": "Email sender connected",
+        "fromPlaceholder": "From address",
+        "apiKeyPlaceholder": "Provider API key",
+        "providers": {
+          "resend": "Resend",
+          "sendgrid": "SendGrid"
+        }
+      },
+      "apiKeys": {
+        "title": "Account API keys"
+      },
+      "errors": {
+        "updateRoles": "Could not update roles",
+        "loadSettings": "Could not load team settings",
+        "createOrg": "Could not create organization",
+        "sendInvite": "Could not send invitation",
+        "revokeInvite": "Could not revoke invitation",
+        "connectEmail": "Could not connect email sender",
+        "disconnectEmail": "Could not disconnect email sender"
+      }
+    },
+    "boardSwitcher": {
+      "accountFallback": "Account",
+      "boardFallback": "Board",
+      "providers": {
+        "docker": "Docker (local)",
+        "custom": "Custom"
+      },
+      "account": {
+        "newOrg": "New organization…",
+        "settings": "Account settings…",
+        "defaultProvider": "Default cloud provider"
+      },
+      "board": {
+        "new": "New board…",
+        "rename": "Rename board…",
+        "delete": "Delete board"
+      },
+      "prompt": {
+        "create": "Create",
+        "nameLabel": "Name",
+        "descriptionLabel": "Description",
+        "descriptionHint": "Optional",
+        "descriptionPlaceholder": "What is this board for?",
+        "account": {
+          "title": "New organization",
+          "placeholder": "Acme Inc."
+        },
+        "board": {
+          "title": "New board",
+          "placeholder": "Untitled board"
+        },
+        "rename": {
+          "title": "Board settings",
+          "placeholder": "Board name"
+        }
+      },
+      "toast": {
+        "updateProviderFailed": "Could not update default provider",
+        "switchAccountFailed": "Could not switch account",
+        "openBoardFailed": "Could not open board",
+        "boardDeleted": "Board deleted",
+        "deleteBoardFailed": "Could not delete board"
+      }
+    },
+    "notifications": {
+      "heading": "Needs your attention",
+      "overdue": "Overdue",
+      "openPr": "Open PR",
+      "dismiss": "Dismiss",
+      "action": {
+        "merge_review": "Merge",
+        "pipeline_complete": "Confirm & merge",
+        "ci_failed": "Retry run",
+        "test_failed": "Retry run",
+        "requirement_review": "Mark read",
+        "clarity_review": "Mark read",
+        "release_regression": "Acknowledge",
+        "decision_required": "Mark read",
+        "human_test_ready": "Mark read",
+        "visual_confirmation_ready": "Mark read",
+        "human_review": "Mark read",
+        "followup_pending": "Mark read",
+        "markRead": "Mark read"
+      }
+    },
+    "aiProvidersBanner": {
+      "setup": {
+        "title": "No AI model configured",
+        "body": "Agents need a model to run. AI works out of the box only on a Cloudflare deployment with Workers AI enabled. Otherwise connect a provider key, subscription, proxy, or local runner to continue.",
+        "action": "Configure AI"
+      },
+      "preset": {
+        "title": "Default model preset uses unavailable models",
+        "body": "Tasks using the default preset would fail. Edit the preset or configure the missing provider.",
+        "action": "Review preset"
+      }
+    },
+    "githubPatBanner": {
+      "title": "GitHub PAT not configured",
+      "body": "Local mode reaches GitHub with a personal access token. Without one, agent steps that clone, push, open PRs, gate on CI or merge will fail.",
+      "createToken": "Create a GitHub token (scopes pre-selected)",
+      "thenSet": "Then set {envVar} and restart."
+    },
+    "providerConfigBanner": {
+      "titleMany": "Providers need configuration",
+      "titleOne": {
+        "environment": "Environment provider needs configuration",
+        "runner-pool": "Runner pool needs configuration"
+      },
+      "body": "A provider is wired for this instance but is missing required settings, so it can't run yet. Add the mandatory fields to finish connecting it.",
+      "action": {
+        "environment": "Configure environment provider",
+        "runner-pool": "Configure runner pool"
+      }
+    },
+    "spendWarningBanner": {
+      "title": "Spend limit reached, agent execution paused",
+      "body": "This month's token spend has hit the configured budget, so running pipelines were paused to avoid further cost. Execution resumes automatically when the budget rolls over next month, or once the limit is raised.",
+      "spent": "Spent",
+      "budget": "Budget",
+      "tokens": "Tokens",
+      "resume": "Resume anyway",
+      "resumeHint": "Resuming continues spending; it will pause again if still over budget."
+    },
+    "personalSetup": {
+      "title": "My setup",
+      "intro": "Your personal connections, used for runs you start and visible only to you.",
+      "connected": "Connected",
+      "notConnected": "Not connected",
+      "connectedCount": "no connected | {count} connected | {count} connected",
+      "sourceControl": {
+        "title": "Source control"
+      },
+      "githubToken": {
+        "label": "My GitHub token",
+        "description": "A personal access token used for runs you start (pushes, PRs, CI, merge)."
+      },
+      "models": {
+        "title": "Models"
+      },
+      "localRunners": {
+        "label": "My local runners",
+        "description": "Your own-machine model runners (Ollama, LM Studio, vLLM)."
+      },
+      "subscriptions": {
+        "label": "My subscriptions",
+        "description": "Individual-usage plans you unlock with a personal password (Claude, GLM, Codex)."
+      }
+    },
+    "integrationBack": {
+      "backToMySetup": "Back to My setup",
+      "backToIntegrations": "Back to Integrations"
+    },
+    "commandBar": {
+      "searchPlaceholder": "Search or run a command…",
+      "noMatches": "No matching commands.",
+      "groups": {
+        "create": "Create",
+        "repositories": "Repositories",
+        "integrations": "Integrations",
+        "workspace": "Workspace",
+        "account": "Account"
+      },
+      "cmd": {
+        "newPipeline": "Build a pipeline",
+        "addFromRepo": "Add service from existing repo",
+        "bootstrapRepo": "Bootstrap a new repo",
+        "githubManage": "Manage GitHub connection",
+        "githubConnect": "Connect GitHub",
+        "slackManage": "Manage Slack notifications",
+        "slackConnect": "Connect Slack",
+        "sourceManage": "Manage {source}",
+        "sourceConnect": "Connect {source}",
+        "documentImport": "Import and spawn from documents",
+        "taskImport": "Import issues",
+        "fragments": "Context fragment library",
+        "mergeThresholds": "Merge thresholds",
+        "workspaceSettings": "Workspace settings",
+        "modelConfiguration": "Model configuration",
+        "serviceFragmentDefaults": "Default service best practices",
+        "accountSettings": "Account settings",
+        "localModels": "My local runners",
+        "sandbox": "Open Sandbox"
+      },
+      "keywords": {
+        "newPipeline": "pipeline agents chain",
+        "addFromRepo": "github import existing",
+        "bootstrapRepo": "scaffold create reference architecture",
+        "github": "git repos pull requests issues",
+        "slack": "slack notifications channel mentions",
+        "documentSource": "document source prd rfc",
+        "documentImport": "document import spawn",
+        "taskSource": "task source tracker issues",
+        "taskImport": "task import issues",
+        "fragments": "prompt fragments best practice guidelines context",
+        "mergeThresholds": "merge policy preset auto-merge ci",
+        "workspaceSettings": "limit running tasks per service waiting escalation overdue notification timeout",
+        "modelConfiguration": "model llm routing agent kind default preset configuration",
+        "serviceFragmentDefaults": "fragment best practice guideline service default code-aware",
+        "accountSettings": "account team members roles invitations email api keys fragment best practice library context organization personal",
+        "localModels": "local model runner ollama lm studio llamacpp vllm endpoint",
+        "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate"
+      }
+    },
+    "integrationsHub": {
+      "title": "Integrations",
+      "intro": "Connect and manage the external systems this workspace can link in.",
+      "searchPlaceholder": "Search integrations…",
+      "noMatches": "No integrations match \"{query}\".",
+      "getStarted": {
+        "title": "Get started",
+        "body": "Connect a code source and a model provider to run your first pipeline."
+      },
+      "status": {
+        "connected": "Connected",
+        "keyConnected": "Key connected",
+        "notConnected": "Not connected",
+        "needsAttention": "Needs attention",
+        "disabled": "Disabled",
+        "recommended": "Recommended"
+      },
+      "groups": {
+        "models": "Models and providers",
+        "sourceControl": "Source control",
+        "communication": "Communication",
+        "documents": "Documents",
+        "taskTrackers": "Task trackers",
+        "observability": "Observability",
+        "infrastructure": "Infrastructure",
+        "personal": "Personal (only you)"
+      },
+      "items": {
+        "openrouter": {
+          "description": "One gateway to 300+ models. Add your key and enable models in one place."
+        },
+        "vendors": {
+          "label": "Vendors and keys",
+          "description": "Workspace LLM subscriptions and provider API keys."
+        },
+        "github": {
+          "description": "Connect the workspace's GitHub App, browse repos, PRs and issues."
+        },
+        "slack": {
+          "description": "Route notifications to your team's Slack workspace."
+        },
+        "documentSource": {
+          "description": "Link {source} as a document source for requirements context."
+        },
+        "documentImport": {
+          "label": "Import and spawn",
+          "description": "Pull documents from a connected source and spawn structure."
+        },
+        "taskSource": {
+          "description": "Link {source} to import and reference tracker issues."
+        },
+        "taskImport": {
+          "label": "Import issues",
+          "description": "Pull issues from a connected tracker onto the board."
+        },
+        "trackerSettings": {
+          "label": "Issue tracker settings"
+        },
+        "observability": {
+          "label": "Post-release health",
+          "description": "Watch monitors and SLOs after a release ships (Datadog)."
+        },
+        "environment": {
+          "label": "Ephemeral environments",
+          "description": "Where the Tester agent runs against a live preview environment."
+        },
+        "runnerPool": {
+          "label": "Self-hosted runner pool",
+          "description": "Where the coding agents run when not using Cloudflare Containers."
+        },
+        "localMode": {
+          "label": "Local mode",
+          "description": "Warm container pool plus per-repo checkout reuse for the local runner."
+        },
+        "githubPat": {
+          "label": "My GitHub token",
+          "description": "A personal access token used for runs you start (pushes, PRs, CI, merge)."
+        },
+        "localRunners": {
+          "label": "My local runners",
+          "description": "Your own-machine model runners (Ollama, LM Studio, vLLM…)."
+        }
       }
     }
   }

@@ -13,22 +13,8 @@
     "cancel": "Anuluj",
     "retry": "Ponów",
     "actionFailed": "Akcja nie powiodła się",
-    "close": "Zamknij"
-  },
-  "auth": {
-    "localMode": {
-      "continueWith": "Kontynuuj z {provider}",
-      "enterPatTitle": "Lub zaloguj się za pomocą osobistego tokenu dostępu",
-      "tokenPlaceholder": "wklej token {provider}",
-      "createToken": "Utwórz token {provider} ↗",
-      "submit": "Zaloguj się",
-      "orDivider": "lub",
-      "failed": "Logowanie nie powiodło się. Sprawdź token i spróbuj ponownie."
-    },
-    "signInRequired": {
-      "personalSubscriptions": "Subskrypcje osobiste są zapisywane na Twoim koncie, ale to wdrożenie działa bez logowania, więc nie można ich tutaj przechowywać. Użyj puli obszaru roboczego lub klucza API dostawcy.",
-      "userApiKeys": "Twoje osobiste klucze API są zapisywane na Twoim koncie, ale to wdrożenie działa bez logowania, więc nie można ich tutaj przechowywać. Zmień zakres na „Ten obszar roboczy”, aby dodać współdzielony klucz."
-    }
+    "close": "Zamknij",
+    "block": "Blok"
   },
   "nav": {
     "menu": "Menu nawigacji",
@@ -53,7 +39,198 @@
   "board": {
     "toolbar": {
       "addService": "Dodaj usługę",
-      "decisionWord": "decyzja | decyzje | decyzji"
+      "decisionWord": "decyzja | decyzje | decyzji",
+      "lod": {
+        "far": "Przegląd",
+        "mid": "Podsumowanie",
+        "close": "Szczegóły",
+        "steps": "Kroki budowania",
+        "subtasks": "Podzadania"
+      },
+      "spendTitle": "Wydatki na tokeny w tym miesiącu",
+      "spendLimitReached": "Osiągnięto limit wydatków: uruchomienia wstrzymane",
+      "serviceAdded": "Dodano {title}",
+      "serviceAddFailed": "Nie udało się dodać usługi"
+    },
+    "canvas": {
+      "emptyTitle": "Twoja tablica jest pusta",
+      "emptyBody": "Dodaj usługę, aby zacząć: zainicjuj nowe repozytorium albo dołącz istniejące.",
+      "addBlockFailedTitle": "Nie udało się dodać bloku",
+      "addBlockFailedBody": "Backend odrzucił żądanie.",
+      "dropOntoTaskTitle": "Upuść na zadanie",
+      "dropOntoTaskBody": "Pipeline’y działają na zadaniach, a nie na usługach.",
+      "taskBlockedTitle": "Zadanie jest zablokowane",
+      "taskBlockedBody": "Jego zależności nie zostały jeszcze scalone."
+    },
+    "addTask": {
+      "title": "Dodaj zadanie",
+      "newTaskIn": "Nowe zadanie w {container}",
+      "typeLabel": "Typ",
+      "types": {
+        "feature": "Funkcja",
+        "bug": "Błąd",
+        "document": "Dokument",
+        "spike": "Spike",
+        "recurring": "Cykliczne"
+      },
+      "recurringWithFrame": "Zadanie cykliczne uruchamia pipeline w określonym rytmie. Kontynuuj, aby ustawić harmonogram i prompt.",
+      "recurringNoFrame": "Zadanie cykliczne musi należeć do usługi. Dodaj je z ramki usługi (lub modułu w jej obrębie).",
+      "titleField": "Tytuł",
+      "titlePlaceholder": "Co trzeba zrobić?",
+      "issueIncluded": "{title} (ze zgłoszenia, dołączone)",
+      "loadingIssue": "Wczytywanie opisu powiązanego zgłoszenia…",
+      "additionalNotes": "Dodatkowe uwagi",
+      "description": "Opis",
+      "notesPlaceholder": "Dodaj wszystko, co agent powinien wiedzieć; zostanie dołączone do opisu zgłoszenia powyżej…",
+      "descriptionPlaceholder": "Opisz pracę: kontekst, kryteria akceptacji i wszystko, co agent powinien wiedzieć…",
+      "technical": "Zadanie techniczne",
+      "technicalHint": "Refaktor / zmiana niefunkcjonalna / wewnętrzna. Implementujący traktuje definicję zadania jako nadrzędną, a specyfikację jako odniesienie regresyjne; pozostaw wyłączone, aby zdecydowała faza specyfikacji.",
+      "severity": "Ważność",
+      "stepsToReproduce": "Kroki do odtworzenia",
+      "stepsToReproducePlaceholder": "Zaobserwowane vs oczekiwane oraz jak odtworzyć…",
+      "timebox": "Limit czasu (godziny)",
+      "timeboxPlaceholder": "np. 8",
+      "documentKind": "Rodzaj dokumentu",
+      "audience": "Odbiorcy",
+      "audiencePlaceholder": "np. inżynierowie platformy",
+      "targetPath": "Ścieżka docelowa",
+      "targetPathPlaceholder": "np. docs/rfcs/0001-foo.md",
+      "outlineHints": "Wskazówki do konspektu",
+      "outlineHintsPlaceholder": "Sekcje lub punkty, które dokument powinien obejmować",
+      "optional": "opcjonalne",
+      "pipeline": "Pipeline",
+      "chooseAtRunTime": "Wybierz przy uruchomieniu",
+      "mergePolicy": "Zasady scalania",
+      "workspaceDefault": "Domyślne dla obszaru roboczego",
+      "defaultPreset": "Domyślny ({name}): {thresholds}",
+      "defaultModelPreset": "Domyślny ({name})",
+      "modelPreset": "Preset modelu",
+      "agentConfiguration": "Konfiguracja agenta",
+      "contextDocuments": "Dokumenty kontekstu",
+      "contextIssues": "Zgłoszenia kontekstu",
+      "attach": "Dołącz",
+      "done": "Gotowe",
+      "attachDocDisabledConnect": "Najpierw połącz źródło dokumentów (Integracje)",
+      "attachDocDisabledEnable": "Najpierw włącz integrację dokumentów",
+      "attachIssueDisabledConnect": "Najpierw połącz system zgłoszeń (Integracje)",
+      "attachIssueDisabledEnable": "Najpierw włącz integrację systemu zgłoszeń",
+      "importsOnAdd": "importowane przy dodaniu",
+      "noDocsHint": "Dołącz wymaganie, RFC lub PRD, aby agenci widzieli je podczas realizacji tego zadania.",
+      "noIssuesHint": "Dołącz zgłoszenie z systemu, aby agenci widzieli jego opis i komentarze podczas realizacji tego zadania.",
+      "plannedHint": "Zadanie zostaje dodane w stanie zaplanowanym. Nie uruchomi się, dopóki nie uruchomisz na nim pipeline’u; do tego czasu możesz je edytować.",
+      "continue": "Dalej",
+      "submit": "Dodaj zadanie",
+      "addFailedTitle": "Nie udało się dodać zadania",
+      "linkFailed": "Zadanie dodane, ale nie udało się powiązać {count} załącznika | Zadanie dodane, ale nie udało się powiązać {count} załączników | Zadanie dodane, ale nie udało się powiązać {count} załączników"
+    },
+    "recurring": {
+      "title": "Dodaj cykliczny pipeline",
+      "on": "Cykliczny pipeline w {frame}",
+      "name": "Nazwa",
+      "namePlaceholder": "np. Cotygodniowe aktualizacje zależności",
+      "pipeline": "Pipeline",
+      "pickPipeline": "Wybierz pipeline",
+      "prompt": "Prompt",
+      "promptPlaceholder": "Co ma robić każde uruchomienie? Opisz pracę, ten sam prompt co zwykłe zadanie. Pozostaw puste, aby użyć domyślnego dla pipeline’u.",
+      "issueTracker": "System zgłoszeń",
+      "issueTrackerHint": "Pipeline długu technicznego tworzy zgłoszenie na podstawie swojej analizy przed implementacją. Wybierz gdzie (zapisywane dla całego obszaru roboczego).",
+      "githubIssues": "GitHub Issues",
+      "jira": "Jira",
+      "linear": "Linear",
+      "jiraProjectKey": "Klucz projektu Jira",
+      "jiraProjectKeyPlaceholder": "np. ENG",
+      "linearTeamId": "ID zespołu Linear",
+      "footerHint": "W usłudze dodawane jest jedno cykliczne zadanie; każde uruchomienie zastępuje poprzednie. Jego historia uruchomień jest widoczna w inspektorze.",
+      "submit": "Dodaj cykliczny pipeline",
+      "addFailedTitle": "Nie udało się dodać cyklicznego pipeline’u"
+    },
+    "failure": {
+      "containerFailedToStart": "Nie udało się uruchomić kontenera",
+      "bootstrapFailed": "Inicjalizacja nie powiodła się",
+      "runFailed": "Uruchomienie nie powiodło się",
+      "retryBootstrap": "Ponów inicjalizację",
+      "retryRun": "Ponów uruchomienie",
+      "showDetail": "Pokaż szczegóły",
+      "retrying": "Ponawianie…"
+    },
+    "stop": {
+      "label": "Zatrzymaj",
+      "bootstrapStopped": "Zatrzymano inicjalizację",
+      "runStopped": "Zatrzymano uruchomienie",
+      "stoppedDescription": "Kontener został zabity, a uruchomienie anulowane.",
+      "stopFailed": "Nie udało się zatrzymać"
+    },
+    "frame": {
+      "status": {
+        "planned": "Brak zadań",
+        "ready": "Aktywne",
+        "in_progress": "Aktywne",
+        "blocked": "Wymaga uwagi",
+        "pr_ready": "Aktywne",
+        "done": "Aktywne"
+      },
+      "shared": "Współdzielone",
+      "sharedTitle": "Współdzielone między obszarami roboczymi tej organizacji",
+      "bootstrapping": "Inicjalizacja…",
+      "bootstrappingRepository": "Inicjalizacja repozytorium…",
+      "bootstrapStepsCount": "{completed}/{total} kroków",
+      "runFailed": "Uruchomienie nie powiodło się",
+      "mergedOfTotal": "{merged}/{total} scalonych",
+      "noTasksYet": "Brak zadań",
+      "prCount": "{count} PR",
+      "implemented": "{merged}/{total} wdrożonych",
+      "prReadyCount": "{count} PR gotowych",
+      "taskCount": "{count} zadanie | {count} zadania | {count} zadań",
+      "moduleCount": "{count} moduł | {count} moduły | {count} modułów",
+      "addTaskTitle": "Dodaj zadanie",
+      "createTaskFromIssueTitle": "Utwórz zadanie ze zgłoszenia",
+      "addRecurringTitle": "Dodaj cykliczny pipeline",
+      "collapseTitle": "Zwiń",
+      "dragService": "Przeciągnij usługę",
+      "dragTask": "Przeciągnij zadanie",
+      "dragToResize": "Przeciągnij, aby zmienić rozmiar",
+      "addFirstTask": "Dodaj pierwsze zadanie"
+    },
+    "decisionBadge": {
+      "decisionNeeded": "Wymagana decyzja",
+      "approvalNeeded": "Wymagane zatwierdzenie"
+    },
+    "task": {
+      "recurringPipeline": "Cykliczny pipeline",
+      "recurringPipelinePaused": "Cykliczny pipeline (wstrzymany)",
+      "dragToConnect": "Przeciągnij na inne zadanie, aby uzależnić je od tego",
+      "failed": "Niepowodzenie",
+      "decisionNeeded": "Wymagana decyzja",
+      "approvalNeeded": "Wymagane zatwierdzenie",
+      "resolve": "Rozwiąż",
+      "approve": "Zatwierdź",
+      "incorporatingAnswers": "Włączanie odpowiedzi…",
+      "reReviewing": "Ponowna recenzja…",
+      "recommending": "Rekomendowanie…",
+      "starting": "Uruchamianie…",
+      "start": "Uruchom",
+      "blocked": "Zablokowane",
+      "startPipeline": "Uruchom {name}",
+      "pipelineFallback": "pipeline",
+      "waitingOn": "Oczekiwanie na: {deps}",
+      "blockedByDependenciesTitle": "Zablokowane przez zależności",
+      "noPipelineTitle": "Nie zdefiniowano pipeline’u",
+      "noPipelineBody": "Najpierw utwórz go w kreatorze.",
+      "pr": "PR",
+      "prNumber": "PR #{number}",
+      "openPrOnGithub": "Otwórz {pr} na GitHub",
+      "review": "Przejrzyj",
+      "merge": "Scal",
+      "implemented": "wdrożone",
+      "module": "Moduł: {name}",
+      "buildSteps": "Kroki budowania",
+      "reviewAndApprove": "Przejrzyj i zatwierdź",
+      "clickToViewStep": "Kliknij, aby zobaczyć szczegóły i wynik kroku"
+    },
+    "epic": {
+      "label": "Epik",
+      "activeCount": "{count} aktywnych",
+      "noTasksYet": "Brak zadań"
     }
   },
   "errors": {
@@ -129,6 +306,830 @@
         "step1": "Zainstaluj Codex CLI i zaloguj się na konto ChatGPT: uruchom `codex login` i dokończ proces w przeglądarce.",
         "step2": "Otwórz plik poświadczeń zapisany przez Codex w ~/.codex/auth.json (w systemie Windows %USERPROFILE%\\.codex\\auth.json).",
         "step3": "Skopiuj całą zawartość auth.json, wklej ją poniżej i wybierz osobiste hasło, aby ją chronić."
+      }
+    }
+  },
+  "inspector": {
+    "container": {
+      "modules": "Moduły ({count})",
+      "taskCount": "{count} zadanie | {count} zadania | {count} zadań",
+      "allTasks": "Wszystkie zadania ({count})",
+      "tasks": "Zadania ({count})",
+      "addTask": "Dodaj zadanie",
+      "noTasks": "Brak zadań. Dodaj jedno, aby rozpocząć pracę.",
+      "servicesHint": "Usługi są długowieczne i nie kończą się. Praca odbywa się w ich zadaniach i modułach."
+    },
+    "epicChildren": {
+      "title": "Zadania epiku",
+      "doneCount": "{done}/{total} ukończono",
+      "empty": "Do tego epiku nie należą jeszcze żadne zadania. Zaimportuj zadania podrzędne epiku lub przypisz epik do zadania.",
+      "unassigned": "Nieprzypisane"
+    },
+    "recurring": {
+      "title": "Cykliczny potok",
+      "active": "Aktywny",
+      "paused": "Wstrzymany",
+      "intervalDays": "{count} d",
+      "intervalHours": "{count} h",
+      "anyDay": "dowolny dzień",
+      "cadence": "Co {every} · {days}{window} · {timezone}",
+      "weekdays": {
+        "sun": "niedz.",
+        "mon": "pon.",
+        "tue": "wt.",
+        "wed": "śr.",
+        "thu": "czw.",
+        "fri": "pt.",
+        "sat": "sob."
+      },
+      "nextRun": "Następne uruchomienie: {time}",
+      "runNow": "Uruchom teraz",
+      "pause": "Wstrzymaj",
+      "resume": "Wznów",
+      "editCadence": "Edytuj harmonogram",
+      "recentRuns": "Ostatnie uruchomienia",
+      "runStatus": {
+        "running": "W toku",
+        "done": "Gotowe",
+        "failed": "Niepowodzenie",
+        "skipped": "Pominięto"
+      },
+      "updateFailed": "Nie udało się zaktualizować harmonogramu",
+      "runNowFailed": "Nie udało się uruchomić teraz"
+    },
+    "fragments": {
+      "serviceTitle": "Dobre praktyki usługi",
+      "serviceEmpty": "Brak. Agenci świadomi kodu w tej usłudze stosują swoje domyślne wytyczne."
+    },
+    "releaseHealth": {
+      "title": "Kondycja po wydaniu",
+      "clear": "Wyczyść",
+      "connectPrompt": "Połącz integrację obserwowalności, aby monitorować tę usługę po wydaniach.",
+      "connectFirst": "Najpierw połącz integrację obserwowalności",
+      "connect": "Połącz",
+      "hint": "Monitory i SLO, które bramka obserwuje po wdrożeniu tej usługi. Identyfikatory oddziel przecinkami.",
+      "monitorIds": "Identyfikatory monitorów",
+      "sloIds": "Identyfikatory SLO",
+      "envTag": "Tag środowiska (opcjonalnie)",
+      "saveMonitoring": "Zapisz monitorowanie",
+      "savedToast": "Monitorowanie zapisane",
+      "saveFailed": "Nie udało się zapisać mapowania",
+      "clearFailed": "Nie udało się wyczyścić mapowania"
+    },
+    "testConfig": {
+      "title": "Infrastruktura testowa",
+      "defaultEnv": "Domyślne środowisko testowe",
+      "defaultEnvHint": "Środowisko, z którym uruchamiane są domyślnie zadania w tej usłudze. Każde zadanie może je nadpisać w swoich ustawieniach agenta.",
+      "env": {
+        "ephemeral": "Środowisko efemeryczne",
+        "ephemeralHint": "testy uruchamiane wobec udostępnionego środowiska",
+        "local": "Lokalne (docker-compose)",
+        "localHint": "Tester stawia zależności lokalnie"
+      },
+      "composePath": "Ścieżka docker-compose",
+      "browseRepo": "Przeglądaj repozytorium w poszukiwaniu pliku compose",
+      "composeHint": "Używane przez Testera do lokalnego postawienia zależności usługi.",
+      "selectComposeTitle": "Wybierz plik docker-compose",
+      "selectComposeHint": "Wybierz plik compose w repozytorium. Jego ścieżka jest zapisywana względem katalogu głównego repo.",
+      "selected": "Wybrano: {path}",
+      "noFileSelected": "Nie wybrano pliku.",
+      "useThisFile": "Użyj tego pliku",
+      "noInfra": "Brak zależności infrastrukturalnych (Tester niczego nie stawia)",
+      "missingInfra": "Ustaw ścieżkę docker-compose lub włącz brak zależności infrastrukturalnych, w przeciwnym razie potok z Testerem się nie uruchomi.",
+      "provisioningTitle": "Udostępnianie środowiska efemerycznego",
+      "provisioningHint": "Wskazówka dotycząca udostępniania efemerycznego środowiska testowego tej usługi: do którego dostawcy chmury wdrożyć i jak duży zażądać instancji. Ignorowane przy testach lokalnych (docker-compose).",
+      "cloudProvider": "Dostawca chmury",
+      "instanceSize": "Rozmiar instancji",
+      "providers": {
+        "docker": "Docker (lokalnie)",
+        "custom": "Niestandardowy"
+      },
+      "sizes": {
+        "small": "Mały",
+        "medium": "Średni",
+        "large": "Duży",
+        "xlarge": "Bardzo duży"
+      }
+    },
+    "agentConfig": {
+      "title": "Konfiguracja agenta",
+      "inherited": "odziedziczone z usługi",
+      "frozen": "Zamrożone: agent został uruchomiony"
+    },
+    "dependencies": {
+      "title": "Zależy od",
+      "merged": "Scalone",
+      "notMerged": "Jeszcze nie scalone",
+      "empty": "Brak zależności. Można uruchomić w dowolnym momencie.",
+      "blocked": "Zablokowane do czasu scalenia zależności."
+    },
+    "estimate": {
+      "title": "Szacunek",
+      "complexity": "Złożoność",
+      "risk": "Ryzyko",
+      "impact": "Wpływ"
+    },
+    "execution": {
+      "stage": {
+        "incorporating": "Włączanie…",
+        "reviewing": "Ponowna recenzja…",
+        "recommending": "Rekomendowanie…"
+      },
+      "prNumber": "PR #{number}",
+      "pullRequest": "Pull request",
+      "stepState": {
+        "pending": "Oczekuje",
+        "working": "Praca",
+        "waiting_decision": "Wymaga decyzji",
+        "done": "Gotowe"
+      },
+      "failed": "Niepowodzenie",
+      "needsDecision": "Wymaga decyzji",
+      "needsApproval": "Wymaga zatwierdzenia",
+      "spinningUp": "Uruchamianie…",
+      "stop": "Zatrzymaj",
+      "stopTooltip": "Zatrzymaj uruchomienie, ale zachowaj je (do odczytu i ponownego uruchomienia)",
+      "reset": "Resetuj",
+      "resetTooltip": "Odrzuć to uruchomienie i przywróć zadanie do stanu zaplanowanego",
+      "viewDetailsOutput": "Wyświetl szczegóły i odczytaj wynik",
+      "viewDetails": "Wyświetl szczegóły kroku",
+      "companion": "Towarzysz",
+      "companionTooltip": "Towarzysz kroku produkującego",
+      "subtasksProgress": "Ukończono {completed} z {total} podzadań, {inProgress} w toku",
+      "subtasksDone": "Ukończono {completed} z {total} podzadań",
+      "resolve": "Rozwiąż",
+      "decide": "Zdecyduj",
+      "review": "Recenzuj",
+      "approve": "Zatwierdź",
+      "fragmentsTooltip": "Fragmenty dobrych praktyk wplecione w ten krok: {fragments}",
+      "standardsApplied": "Zastosowano {count} standard | Zastosowano {count} standardy | Zastosowano {count} standardów",
+      "companionOf": "{label} (towarzysz)",
+      "merged": "Scalone",
+      "open": "Otwarty",
+      "mergePr": "Scal PR"
+    },
+    "structure": {
+      "module": "Moduł",
+      "modulePlaceholder": "np. Sesje (tworzone przy implementacji, jeśli nowy)",
+      "bestPractices": "Dobre praktyki",
+      "bestPracticesEmpty": "Brak. Agenci stosują swoje domyślne wytyczne."
+    },
+    "runSettings": {
+      "unassigned": "Nieprzypisane",
+      "workspaceDefault": "Domyślne obszaru roboczego",
+      "workspaceDefaultParen": "(domyślne obszaru roboczego)",
+      "defaultPresetThresholds": "Domyślny ({name}): {thresholds}",
+      "defaultPreset": "Domyślny ({name})",
+      "noDefault": "Brak domyślnego",
+      "inheritWorkspace": "Dziedzicz z obszaru roboczego",
+      "on": "Wł.",
+      "off": "Wył.",
+      "inheritOn": "Dziedzicz (wł.)",
+      "inheritOff": "Dziedzicz (wył.)",
+      "technical": {
+        "unset": "Nieustawione (autodetekcja)",
+        "technical": "Techniczne",
+        "business": "Biznesowe"
+      },
+      "pipeline": "Potok",
+      "pipelineEmpty": "Brak domyślnego. Wybierz potok przy uruchamianiu tego zadania.",
+      "mergePolicy": "Polityka scalania",
+      "mergePresetDetail": "{name}: automatyczne scalanie, gdy złożoność ≤ {complexity}, ryzyko ≤ {risk}, wpływ ≤ {impact}; do {attempts} prób naprawy CI.",
+      "mergePresetEmpty": "Brak skonfigurowanego presetu. Element scalający zgłasza powiadomienie o recenzji dla każdego PR.",
+      "modelPreset": "Preset modelu",
+      "modelPresetBase": "bazowy {model}",
+      "modelPresetOverrides": ", {count} nadpisanie | , {count} nadpisania | , {count} nadpisań",
+      "modelPresetEmpty": "Brak skonfigurowanego presetu. Agenci działają na domyślnym routingu wdrożenia.",
+      "unavailableModels": "Niedostępne w bieżącej konfiguracji: {models}. To zadanie zakończyłoby się niepowodzeniem na tych krokach.",
+      "editPresets": "Edytuj presety",
+      "configureVendors": "Skonfiguruj dostawców",
+      "modelPresetChangeHint": "Zmiana tego wpływa tylko na kroki, które jeszcze się nie rozpoczęły.",
+      "taskKind": "Rodzaj zadania",
+      "technicalHint": {
+        "technical": "Techniczne: implementator traktuje definicję zadania jako nadrzędną, a specyfikację jako odniesienie regresyjne; autor specyfikacji może nie wytworzyć żadnych specyfikacji biznesowych.",
+        "business": "Biznesowe: specyfikacja prowadzi, jak zwykle.",
+        "unset": "Autodetekcja: wywnioskowane z fazy specyfikacji. Ustaw jawnie, aby nadpisać."
+      },
+      "issueWriteback": "Zapis zwrotny do zgłoszenia",
+      "commentOnPrOpen": "Komentarz przy otwarciu PR",
+      "closeOnMerge": "Zamknij przy scaleniu",
+      "writebackHint": "Zapisuje zwrotnie do powiązanego zgłoszenia w trackerze tego zadania. Nadpisuje domyślne obszaru roboczego.",
+      "responsibleProduct": "Odpowiedzialny produkt",
+      "responsibleEmpty": "Nieprzypisane. Ustaw właściciela produktu, aby powiadamiać go, gdy recenzja wymagań oznaczy to zadanie.",
+      "autoStartDependents": "Automatycznie uruchamiaj zależne",
+      "autoStartHint": "Gdy to zadanie zostanie scalone, automatycznie uruchom zadania od niego zależne (gdy ich pozostałe zależności również będą gotowe)."
+    }
+  },
+  "panels": {
+    "decision": {
+      "title": "Wymagana decyzja",
+      "agentOnBlock": "{agent} na {block}",
+      "visualizationHint": "To jest wizualizacja. Każdy wybór po prostu wznawia potok."
+    },
+    "stepRestart": {
+      "restartFromStep": "Uruchom ponownie potok od tego kroku",
+      "restartFromHere": "Uruchom ponownie od tego miejsca"
+    },
+    "structuredResult": {
+      "fallbackTitle": "Wynik agenta",
+      "titleWithBlock": "{label}: {title}",
+      "fallbackDescription": "Ustrukturyzowany wynik agenta",
+      "structuredOutput": "Ustrukturyzowany wynik",
+      "noResult": "Brak wyniku.",
+      "noResultHint": "Ustrukturyzowany wynik pojawia się po zakończeniu pracy tego agenta. W trakcie działania krok pokazuje postęp na żywo na tablicy."
+    },
+    "testReport": {
+      "title": "Raport z testów",
+      "greenlit": "Zatwierdzone",
+      "needsFixes": "Wymaga poprawek",
+      "fixAttempts": "{count}/{max} prób naprawy",
+      "fixing": "· naprawianie…",
+      "tested": "Przetestowano",
+      "outcomes": "Wyniki",
+      "concerns": "Zastrzeżenia"
+    },
+    "stepMeta": {
+      "stateLabel": "Stan",
+      "duration": "Czas trwania",
+      "elapsed": "upłynęło",
+      "step": "Krok",
+      "stepOf": "{number} z {total}",
+      "started": "Rozpoczęto",
+      "finished": "Zakończono",
+      "model": "Model",
+      "notRecorded": "Nie zarejestrowano",
+      "run": "Uruchomienie",
+      "clickToCopy": "{id} (kliknij, aby skopiować)",
+      "spinningUpContainer": "Uruchamianie kontenera…",
+      "subtasks": "Podzadania · {completed}/{total}",
+      "standardsApplied": "Zastosowane standardy",
+      "decision": "Decyzja",
+      "awaitingChoice": "Oczekiwanie na wybór człowieka",
+      "approvalGate": "Bramka zatwierdzenia",
+      "companionReview": "Recenzja towarzysza",
+      "correctionIterations": "{count} iteracja korekty. | {count} iteracje korekty. | {count} iteracji korekty.",
+      "state": {
+        "pending": "Oczekuje",
+        "working": "Praca",
+        "waiting_decision": "Wymaga danych",
+        "done": "Gotowe",
+        "failed": "Niepowodzenie"
+      },
+      "approvalStatus": {
+        "pending": "Oczekuje",
+        "approved": "Zatwierdzone",
+        "changes_requested": "Zażądano zmian",
+        "rejected": "Odrzucone"
+      }
+    },
+    "stepDetail": {
+      "contents": "Zawartość",
+      "details": "Szczegóły",
+      "approvalRequired": "Wymagane zatwierdzenie",
+      "decisionRequired": "Wymagana decyzja",
+      "expandAll": "Rozwiń wszystkie sekcje",
+      "collapseAll": "Zwiń wszystkie sekcje",
+      "copyRawOutput": "Kopiuj surowy wynik",
+      "closeEsc": "Zamknij (Esc)",
+      "companionCapHeading": "{agent} osiągnął limit {attempts} prób przeróbki, wciąż poniżej progu {threshold}.",
+      "companionCapDetail": "Wykonaj jeszcze jedną automatyczną rundę przeróbki, przejdź do następnego kroku akceptując bieżący wynik, albo zatrzymaj i zresetuj zadanie, aby edytować dane wejściowe i przesłać ponownie.",
+      "infraAttempts": "Próby infrastrukturalne",
+      "hideInfraAttempts": "Ukryj próby infrastrukturalne",
+      "editingConclusions": "Edytowanie wniosków",
+      "editConclusionsPlaceholder": "Edytuj wnioski agenta; Twoje zmiany zostaną zapisane po zatwierdzeniu…",
+      "noProseOutput": "Ten agent nie wytworzył wyniku tekstowego.",
+      "approveWithCorrections": "Zatwierdź z poprawkami",
+      "reviewAndApprove": "Recenzuj i zatwierdź",
+      "editHint": "Edytuj wnioski po lewej; Twoje zmiany zostaną zapisane po zatwierdzeniu.",
+      "reviewHint": "Kliknij dowolny blok w wyniku, aby go skomentować, lub zostaw ogólną opinię poniżej.",
+      "editingNotice": "Edytujesz wnioski bezpośrednio. Ręcznych zmian nie można łączyć z komentarzami do poszczególnych bloków. Zatwierdź, aby je zapisać, lub anuluj, aby wrócić do recenzji.",
+      "commentingOn": "Komentowanie",
+      "commentPlaceholder": "Zostaw komentarz do tego bloku…",
+      "addComment": "Dodaj komentarz",
+      "commentN": "Komentarz {number}",
+      "removeComment": "Usuń komentarz",
+      "overallFeedback": "Ogólna opinia / powód odrzucenia",
+      "overallFeedbackPlaceholder": "Opisz zmiany, które agent powinien wprowadzić (opcjonalne, jeśli zostawiono komentarze do bloków)…",
+      "approveWithEdits": "Zatwierdź z tymi zmianami",
+      "cancelEdits": "Anuluj zmiany",
+      "approveAndProceed": "Zatwierdź i kontynuuj",
+      "rejectConfirmPrompt": "Odrzucić tę propozycję i całkowicie zatrzymać uruchomienie?",
+      "confirmReject": "Potwierdź odrzucenie",
+      "requestChanges": "Zażądaj zmian",
+      "reject": "Odrzuć",
+      "requestChangesHint": "Zażądanie zmian uruchamia ten krok ponownie z Twoją opinią i komentarzami. Odrzucenie całkowicie zatrzymuje uruchomienie."
+    },
+    "inspector": {
+      "frameStatus": {
+        "planned": "Brak zadań",
+        "ready": "Na żywo",
+        "in_progress": "Aktywne",
+        "blocked": "Wymaga uwagi",
+        "pr_ready": "Aktywne",
+        "done": "Na żywo"
+      },
+      "deleteRecurringPipeline": "Usuń cykliczny potok",
+      "deleteTask": "Usuń zadanie",
+      "deleteModule": "Usuń moduł",
+      "deleteService": "Usuń usługę",
+      "titlePlaceholder": "Tytuł…",
+      "reworkedRequirements": "Przerobione wymagania",
+      "agentStepsUseDocument": "Kroki agenta używają tego dokumentu.",
+      "open": "Otwórz",
+      "originalDescriptionFrozen": "Pierwotny opis (zamrożony)",
+      "noDescription": "Brak opisu",
+      "describeBlock": "Opisz ten blok…",
+      "taskStartedLocked": "To zadanie zostało rozpoczęte. Jego szczegóły są zablokowane.",
+      "lastIncorporatedRequirements": "Ostatnie włączone wymagania",
+      "priorDocHint": "Z poprzedniej recenzji. Użyj go jako bazy: edytuj opis powyżej i prześlij ponownie.",
+      "bootstrapping": "Inicjowanie…",
+      "importIssue": "Importuj zgłoszenie",
+      "connectTracker": "Połącz tracker",
+      "spawnFromDocument": "Utwórz z dokumentu",
+      "viewRequirements": "Wyświetl wymagania",
+      "reRun": "Uruchom ponownie",
+      "run": "Uruchom",
+      "focus": "Skup"
+    }
+  },
+  "observability": {
+    "modelActivity": "Aktywność modelu",
+    "viewAllCalls": "Wyświetl wszystkie wywołania →",
+    "providedContext": "Dostarczony kontekst",
+    "exportJson": "Eksportuj JSON",
+    "exportHint": "Pobierz przyjazny dla LLM eksport JSON tego uruchomienia",
+    "closeEsc": "Zamknij (Esc)",
+    "loadingActivity": "Ładowanie aktywności modelu…",
+    "loadingContext": "Ładowanie dostarczonego kontekstu…",
+    "noCalls": "Brak zarejestrowanych wywołań modelu dla tego uruchomienia.",
+    "noContext": "Brak zapisanego kontekstu agenta dla tego uruchomienia. Jest on przechwytywany przy każdym wysłaniu, gdy w obszarze roboczym włączono opcję 'Przechowuj pełny kontekst agenta'.",
+    "summary": {
+      "calls": "Wywołania",
+      "tokensInOut": "Tokeny (we / wy)",
+      "transportOverhead": "Narzut transportu",
+      "modelExecution": "Wykonanie modelu",
+      "truncated": "{count} obcięte | {count} obcięte | {count} obciętych"
+    },
+    "metricsBar": {
+      "calls": "{count} wywołanie | {count} wywołania | {count} wywołań",
+      "promptCompletionTokens": "Tokeny promptu / dopełnienia",
+      "cachedTokens": "({tokens} z pamięci podręcznej)",
+      "cachedTokensHint": "Tokeny promptu obsłużone z pamięci podręcznej dostawcy",
+      "errors": "{count} błąd | {count} błędy | {count} błędów",
+      "warnings": "{count} ostrzeżenie | {count} ostrzeżenia | {count} ostrzeżeń",
+      "outputLimit": "Limit wyjścia",
+      "truncatedCalls": "{count} wywołanie obcięte na limicie | {count} wywołania obcięte na limicie | {count} wywołań obciętych na limicie",
+      "transportVsExecution": "Transport a wykonanie",
+      "transportOverhead": "Narzut transportu / proxy",
+      "modelExecution": "Wykonanie modelu"
+    },
+    "call": {
+      "tokensTitle": "{prompt} tokenów promptu / {completion} tokenów dopełnienia",
+      "outputUsedVsLimit": "Użyte wyjście a limit",
+      "transportVsExecution": "Narzut transportu / wykonanie modelu",
+      "error": "błąd",
+      "ok": "ok",
+      "messages": "{count} wiadomości",
+      "tools": "{count} narzędzi",
+      "streamed": "strumieniowane",
+      "buffered": "buforowane",
+      "maxTokens": "max_tokens {value}",
+      "promptCached": "{cached}/{prompt} promptu w pamięci podręcznej",
+      "total": "łącznie {duration}",
+      "prompt": "Prompt",
+      "promptPrefixOmitted": "(tylko nowe wiadomości: {count} wcześniejszych pominięto)",
+      "response": "Odpowiedź",
+      "reasoning": "Rozumowanie"
+    },
+    "context": {
+      "injectedFiles": "Wstrzyknięte pliki kontekstu",
+      "bestPracticeFragments": "Fragmenty dobrych praktyk",
+      "filesCount": "{count} plików",
+      "fragmentsCount": "{count} fragmentów",
+      "systemPrompt": "Prompt systemowy",
+      "userPrompt": "Prompt użytkownika",
+      "details": "Szczegóły"
+    }
+  },
+  "auth": {
+    "gate": {
+      "loading": "Ładowanie…"
+    },
+    "localMode": {
+      "continueWith": "Kontynuuj z {provider}",
+      "enterPatTitle": "Lub zaloguj się za pomocą osobistego tokenu dostępu",
+      "tokenPlaceholder": "wklej token {provider}",
+      "createToken": "Utwórz token {provider} ↗",
+      "submit": "Zaloguj się",
+      "orDivider": "lub",
+      "failed": "Logowanie nie powiodło się. Sprawdź token i spróbuj ponownie."
+    },
+    "signInRequired": {
+      "personalSubscriptions": "Subskrypcje osobiste są zapisywane na Twoim koncie, ale to wdrożenie działa bez logowania, więc nie można ich tutaj przechowywać. Użyj puli obszaru roboczego lub klucza API dostawcy.",
+      "userApiKeys": "Twoje osobiste klucze API są zapisywane na Twoim koncie, ale to wdrożenie działa bez logowania, więc nie można ich tutaj przechowywać. Zmień zakres na „Ten obszar roboczy”, aby dodać współdzielony klucz."
+    },
+    "login": {
+      "appTitle": "Architecture Board",
+      "subtitle": "Zaloguj się, aby kontynuować.",
+      "inviteSubtitle": "Przyjmij zaproszenie, aby kontynuować.",
+      "forgotSubtitle": "Zresetuj hasło.",
+      "continueWithGithub": "Kontynuuj z GitHub",
+      "continueWithGoogle": "Kontynuuj z Google",
+      "or": "lub",
+      "namePlaceholder": "Imię (opcjonalnie)",
+      "emailPlaceholder": "E-mail",
+      "passwordPlaceholder": "Hasło",
+      "createAccount": "Utwórz konto",
+      "signIn": "Zaloguj się",
+      "signUp": "Zarejestruj się",
+      "needAccount": "Potrzebujesz konta? {signUp}",
+      "haveAccount": "Masz już konto? {signIn}",
+      "forgotPassword": "Nie pamiętasz hasła?",
+      "forgotSent": "Jeśli konto powiązane z tym adresem e-mail istnieje, link do zresetowania hasła jest w drodze. Sprawdź swoją skrzynkę odbiorczą.",
+      "sendResetLink": "Wyślij link resetujący",
+      "backToSignIn": "Powrót do logowania",
+      "signInFailed": "Logowanie nie powiodło się. Sprawdź swoje dane i spróbuj ponownie.",
+      "genericError": "Coś poszło nie tak. Spróbuj ponownie."
+    },
+    "resetPassword": {
+      "title": "Zresetuj hasło",
+      "subtitle": "Wybierz nowe hasło do swojego konta.",
+      "doneBody": "Twoje hasło zostało zresetowane. Możesz teraz zalogować się przy użyciu nowego hasła.",
+      "goToSignIn": "Przejdź do logowania",
+      "missingToken": "W tym linku resetującym brakuje tokenu. Poproś o nowy link na ekranie logowania.",
+      "backToSignIn": "Powrót do logowania",
+      "newPasswordPlaceholder": "Nowe hasło",
+      "confirmPasswordPlaceholder": "Potwierdź nowe hasło",
+      "submit": "Zresetuj hasło",
+      "errorTooShort": "Hasło musi mieć co najmniej 8 znaków.",
+      "errorMismatch": "Hasła nie są zgodne.",
+      "errorInvalidLink": "Ten link do resetowania hasła jest nieprawidłowy lub wygasł."
+    },
+    "userMenu": {
+      "mySetup": "Moja konfiguracja",
+      "signOut": "Wyloguj się"
+    }
+  },
+  "layout": {
+    "accountDeployment": {
+      "title": "Integracje wdrożenia",
+      "intro": "Poświadczenia współdzielone przez wszystkie przestrzenie robocze tego konta, szyfrowane w spoczynku. Wartości nigdy nie są pokazywane po zapisaniu; pozostaw pole puste, aby zachować zapisany sekret.",
+      "configured": "Skonfigurowano",
+      "notSet": "Nie ustawiono",
+      "clear": "Wyczyść",
+      "loadFailed": "Nie udało się wczytać ustawień wdrożenia",
+      "slack": {
+        "title": "Aplikacja Slack (OAuth)",
+        "description": "Włącza przepływ OAuth \"Add to Slack\". Bez niego przestrzenie robocze nadal mogą połączyć Slacka, wklejając token bota.",
+        "clientId": "Identyfikator klienta",
+        "clientSecret": "Sekret klienta",
+        "redirectUrl": "Adres URL przekierowania",
+        "validation": "Wprowadź identyfikator klienta, sekret i adres URL przekierowania",
+        "saved": "Zapisano OAuth Slacka",
+        "saveFailed": "Nie udało się zapisać OAuth Slacka",
+        "cleared": "Wyczyszczono OAuth Slacka",
+        "clearFailed": "Nie udało się wyczyścić OAuth Slacka"
+      },
+      "web": {
+        "title": "Wyszukiwanie w sieci w kontenerze",
+        "description": "Dostawca wyszukiwania, do którego agenci w kontenerze sięgają przez proxy backendu. Ustaw klucz Brave (zalecane) lub własny adres URL SearXNG (z opcjonalnym kluczem bearer).",
+        "configured": "Skonfigurowano ({provider})",
+        "braveKey": "Klucz API Brave",
+        "searxngUrl": "Adres URL SearXNG",
+        "searxngKey": "Klucz SearXNG (opcjonalny)",
+        "validation": "Wprowadź klucz Brave lub adres URL SearXNG",
+        "saved": "Zapisano klucze wyszukiwania w sieci",
+        "saveFailed": "Nie udało się zapisać kluczy wyszukiwania w sieci",
+        "cleared": "Wyczyszczono klucze wyszukiwania w sieci",
+        "clearFailed": "Nie udało się wyczyścić kluczy wyszukiwania w sieci"
+      }
+    },
+    "accountFragments": {
+      "intro": "Wytyczne dobrych praktyk współdzielone przez wszystkie tablice tego konta. Każda tablica je dziedziczy i może je nadpisać lub dodać własne. Agenci znający kod (coder, reviewer, architect, fixers) włączają te istotne do swojego promptu."
+    },
+    "accountTeam": {
+      "roles": {
+        "admin": "Administrator",
+        "developer": "Programista",
+        "product": "Produkt"
+      },
+      "org": {
+        "ctaTitle": "Zaproś członków zespołu i zarządzaj rolami",
+        "ctaBody": "Członkowie, role i zaproszenia istnieją w organizacji. Utwórz ją, aby zapraszać członków zespołu i zarządzać ich rolami; Twoje osobiste tablice pozostają bez zmian.",
+        "namePlaceholder": "Acme Inc.",
+        "create": "Utwórz organizację",
+        "created": "Utworzono organizację"
+      },
+      "members": {
+        "title": "Członkowie",
+        "empty": "Brak członków."
+      },
+      "invite": {
+        "title": "Zaproś członka zespołu",
+        "submit": "Zaproś",
+        "revoke": "Odwołaj zaproszenie",
+        "created": "Utworzono zaproszenie",
+        "createdEmailed": "Wysłano e-mail (lub skopiuj link z listy poniżej).",
+        "createdShareLink": "Udostępnij link akceptacji członkowi zespołu.",
+        "status": {
+          "pending": "Oczekujące",
+          "accepted": "Zaakceptowane",
+          "revoked": "Odwołane"
+        }
+      },
+      "email": {
+        "title": "Nadawca e-maili",
+        "notEnabled": "Wysyłka e-maili nie jest włączona w tym wdrożeniu. Zaproszenia nadal generują link akceptacji do udostępnienia.",
+        "connectedAs": "Połączono przez {provider} jako {from}",
+        "disconnect": "Rozłącz",
+        "connect": "Połącz nadawcę e-maili",
+        "connected": "Połączono nadawcę e-maili",
+        "fromPlaceholder": "Adres nadawcy",
+        "apiKeyPlaceholder": "Klucz API dostawcy",
+        "providers": {
+          "resend": "Resend",
+          "sendgrid": "SendGrid"
+        }
+      },
+      "apiKeys": {
+        "title": "Klucze API konta"
+      },
+      "errors": {
+        "updateRoles": "Nie udało się zaktualizować ról",
+        "loadSettings": "Nie udało się wczytać ustawień zespołu",
+        "createOrg": "Nie udało się utworzyć organizacji",
+        "sendInvite": "Nie udało się wysłać zaproszenia",
+        "revokeInvite": "Nie udało się odwołać zaproszenia",
+        "connectEmail": "Nie udało się połączyć nadawcy e-maili",
+        "disconnectEmail": "Nie udało się rozłączyć nadawcy e-maili"
+      }
+    },
+    "boardSwitcher": {
+      "accountFallback": "Konto",
+      "boardFallback": "Tablica",
+      "providers": {
+        "docker": "Docker (lokalnie)",
+        "custom": "Niestandardowy"
+      },
+      "account": {
+        "newOrg": "Nowa organizacja…",
+        "settings": "Ustawienia konta…",
+        "defaultProvider": "Domyślny dostawca chmury"
+      },
+      "board": {
+        "new": "Nowa tablica…",
+        "rename": "Zmień nazwę tablicy…",
+        "delete": "Usuń tablicę"
+      },
+      "prompt": {
+        "create": "Utwórz",
+        "nameLabel": "Nazwa",
+        "descriptionLabel": "Opis",
+        "descriptionHint": "Opcjonalnie",
+        "descriptionPlaceholder": "Do czego służy ta tablica?",
+        "account": {
+          "title": "Nowa organizacja",
+          "placeholder": "Acme Inc."
+        },
+        "board": {
+          "title": "Nowa tablica",
+          "placeholder": "Tablica bez nazwy"
+        },
+        "rename": {
+          "title": "Ustawienia tablicy",
+          "placeholder": "Nazwa tablicy"
+        }
+      },
+      "toast": {
+        "updateProviderFailed": "Nie udało się zaktualizować domyślnego dostawcy",
+        "switchAccountFailed": "Nie udało się przełączyć konta",
+        "openBoardFailed": "Nie udało się otworzyć tablicy",
+        "boardDeleted": "Tablica usunięta",
+        "deleteBoardFailed": "Nie udało się usunąć tablicy"
+      }
+    },
+    "notifications": {
+      "heading": "Wymaga Twojej uwagi",
+      "overdue": "Zaległe",
+      "openPr": "Otwórz PR",
+      "dismiss": "Odrzuć",
+      "action": {
+        "merge_review": "Scal",
+        "pipeline_complete": "Potwierdź i scal",
+        "ci_failed": "Ponów przebieg",
+        "test_failed": "Ponów przebieg",
+        "requirement_review": "Oznacz jako przeczytane",
+        "clarity_review": "Oznacz jako przeczytane",
+        "release_regression": "Potwierdź",
+        "decision_required": "Oznacz jako przeczytane",
+        "human_test_ready": "Oznacz jako przeczytane",
+        "visual_confirmation_ready": "Oznacz jako przeczytane",
+        "human_review": "Oznacz jako przeczytane",
+        "followup_pending": "Oznacz jako przeczytane",
+        "markRead": "Oznacz jako przeczytane"
+      }
+    },
+    "aiProvidersBanner": {
+      "setup": {
+        "title": "Nie skonfigurowano żadnego modelu AI",
+        "body": "Agenci potrzebują modelu do działania. AI działa od ręki tylko we wdrożeniu Cloudflare z włączonym Workers AI. W przeciwnym razie podłącz klucz dostawcy, subskrypcję, proxy lub lokalny silnik, aby kontynuować.",
+        "action": "Skonfiguruj AI"
+      },
+      "preset": {
+        "title": "Domyślny zestaw modeli używa niedostępnych modeli",
+        "body": "Zadania korzystające z domyślnego zestawu zakończyłyby się niepowodzeniem. Edytuj zestaw lub skonfiguruj brakującego dostawcę.",
+        "action": "Przejrzyj zestaw"
+      }
+    },
+    "githubPatBanner": {
+      "title": "Nie skonfigurowano tokenu PAT GitHub",
+      "body": "Tryb lokalny łączy się z GitHub za pomocą osobistego tokenu dostępu. Bez niego kroki agenta, które klonują, wypychają, otwierają PR-y, sprawdzają CI lub scalają, zakończą się niepowodzeniem.",
+      "createToken": "Utwórz token GitHub (zakresy wstępnie wybrane)",
+      "thenSet": "Następnie ustaw {envVar} i uruchom ponownie."
+    },
+    "providerConfigBanner": {
+      "titleMany": "Dostawcy wymagają konfiguracji",
+      "titleOne": {
+        "environment": "Dostawca środowiska wymaga konfiguracji",
+        "runner-pool": "Pula silników wymaga konfiguracji"
+      },
+      "body": "Dostawca jest podłączony do tej instancji, ale brakuje mu wymaganych ustawień, więc nie może jeszcze działać. Dodaj obowiązkowe pola, aby zakończyć jego podłączanie.",
+      "action": {
+        "environment": "Skonfiguruj dostawcę środowiska",
+        "runner-pool": "Skonfiguruj pulę silników"
+      }
+    },
+    "spendWarningBanner": {
+      "title": "Osiągnięto limit wydatków, wykonywanie agentów wstrzymane",
+      "body": "Wydatki na tokeny w tym miesiącu osiągnęły skonfigurowany budżet, dlatego działające potoki zostały wstrzymane, aby uniknąć dalszych kosztów. Wykonywanie wznowi się automatycznie po odnowieniu budżetu w przyszłym miesiącu lub po podniesieniu limitu.",
+      "spent": "Wydano",
+      "budget": "Budżet",
+      "tokens": "Tokeny",
+      "resume": "Wznów mimo to",
+      "resumeHint": "Wznowienie nadal generuje wydatki; zostanie ponownie wstrzymane, jeśli budżet wciąż będzie przekroczony."
+    },
+    "personalSetup": {
+      "title": "Moja konfiguracja",
+      "intro": "Twoje osobiste połączenia, używane do uruchomień, które rozpoczynasz, i widoczne tylko dla Ciebie.",
+      "connected": "Połączono",
+      "notConnected": "Niepołączono",
+      "connectedCount": "{count} połączony | {count} połączone | {count} połączonych",
+      "sourceControl": {
+        "title": "Kontrola wersji"
+      },
+      "githubToken": {
+        "label": "Mój token GitHub",
+        "description": "Osobisty token dostępu używany do uruchomień, które rozpoczynasz (wypchnięcia, PR-y, CI, scalanie)."
+      },
+      "models": {
+        "title": "Modele"
+      },
+      "localRunners": {
+        "label": "Moje lokalne silniki",
+        "description": "Silniki modeli na Twojej własnej maszynie (Ollama, LM Studio, vLLM)."
+      },
+      "subscriptions": {
+        "label": "Moje subskrypcje",
+        "description": "Plany do użytku indywidualnego, które odblokowujesz osobistym hasłem (Claude, GLM, Codex)."
+      }
+    },
+    "integrationBack": {
+      "backToMySetup": "Powrót do Moja konfiguracja",
+      "backToIntegrations": "Powrót do Integracje"
+    },
+    "commandBar": {
+      "searchPlaceholder": "Wyszukaj lub uruchom polecenie…",
+      "noMatches": "Brak pasujących poleceń.",
+      "groups": {
+        "create": "Utwórz",
+        "repositories": "Repozytoria",
+        "integrations": "Integracje",
+        "workspace": "Obszar roboczy",
+        "account": "Konto"
+      },
+      "cmd": {
+        "newPipeline": "Zbuduj potok",
+        "addFromRepo": "Dodaj usługę z istniejącego repozytorium",
+        "bootstrapRepo": "Zainicjuj nowe repozytorium",
+        "githubManage": "Zarządzaj połączeniem GitHub",
+        "githubConnect": "Połącz GitHub",
+        "slackManage": "Zarządzaj powiadomieniami Slack",
+        "slackConnect": "Połącz Slack",
+        "sourceManage": "Zarządzaj {source}",
+        "sourceConnect": "Połącz {source}",
+        "documentImport": "Importuj i utwórz z dokumentów",
+        "taskImport": "Importuj zgłoszenia",
+        "fragments": "Biblioteka fragmentów kontekstu",
+        "mergeThresholds": "Progi scalania",
+        "workspaceSettings": "Ustawienia obszaru roboczego",
+        "modelConfiguration": "Konfiguracja modeli",
+        "serviceFragmentDefaults": "Domyślne dobre praktyki usługi",
+        "accountSettings": "Ustawienia konta",
+        "localModels": "Moje lokalne silniki",
+        "sandbox": "Otwórz piaskownicę"
+      },
+      "keywords": {
+        "newPipeline": "potok agenci łańcuch pipeline",
+        "addFromRepo": "github importuj istniejące",
+        "bootstrapRepo": "rusztowanie utwórz architektura referencyjna",
+        "github": "git repozytoria pull requesty zgłoszenia",
+        "slack": "slack powiadomienia kanał wzmianki",
+        "documentSource": "dokument źródło prd rfc",
+        "documentImport": "dokument importuj utwórz",
+        "taskSource": "zadanie źródło śledzenie zgłoszenia",
+        "taskImport": "zadanie importuj zgłoszenia",
+        "fragments": "prompt fragmenty dobre praktyki wytyczne kontekst",
+        "mergeThresholds": "scalanie polityka preset automatyczne scalanie ci",
+        "workspaceSettings": "limit uruchomione zadania na usługę oczekiwanie eskalacja opóźnienie powiadomienie limit czasu",
+        "modelConfiguration": "model llm routing typ agenta preset domyślny konfiguracja",
+        "serviceFragmentDefaults": "fragment dobre praktyki wytyczna usługa domyślna świadoma kodu",
+        "accountSettings": "konto zespół członkowie role zaproszenia e-mail klucze api fragment dobre praktyki biblioteka kontekst organizacja osobiste",
+        "localModels": "model lokalny silnik ollama lm studio llamacpp vllm endpoint",
+        "sandbox": "piaskownica prompt model test eksperyment sędzia fixture benchmark ocena"
+      }
+    },
+    "integrationsHub": {
+      "title": "Integracje",
+      "intro": "Połącz i zarządzaj zewnętrznymi systemami, które ten obszar roboczy może powiązać.",
+      "searchPlaceholder": "Szukaj integracji…",
+      "noMatches": "Żadna integracja nie pasuje do \"{query}\".",
+      "getStarted": {
+        "title": "Wprowadzenie",
+        "body": "Połącz źródło kodu i dostawcę modeli, aby uruchomić swój pierwszy potok."
+      },
+      "status": {
+        "connected": "Połączono",
+        "keyConnected": "Klucz połączony",
+        "notConnected": "Niepołączono",
+        "needsAttention": "Wymaga uwagi",
+        "disabled": "Wyłączono",
+        "recommended": "Zalecane"
+      },
+      "groups": {
+        "models": "Modele i dostawcy",
+        "sourceControl": "Kontrola wersji",
+        "communication": "Komunikacja",
+        "documents": "Dokumenty",
+        "taskTrackers": "Narzędzia do śledzenia zadań",
+        "observability": "Obserwowalność",
+        "infrastructure": "Infrastruktura",
+        "personal": "Osobiste (tylko Ty)"
+      },
+      "items": {
+        "openrouter": {
+          "description": "Jedna brama do ponad 300 modeli. Dodaj swój klucz i włącz modele w jednym miejscu."
+        },
+        "vendors": {
+          "label": "Dostawcy i klucze",
+          "description": "Subskrypcje LLM obszaru roboczego i klucze API dostawców."
+        },
+        "github": {
+          "description": "Połącz aplikację GitHub App obszaru roboczego, przeglądaj repozytoria, PR-y i zgłoszenia."
+        },
+        "slack": {
+          "description": "Kieruj powiadomienia do przestrzeni Slack Twojego zespołu."
+        },
+        "documentSource": {
+          "description": "Powiąż {source} jako źródło dokumentów dla kontekstu wymagań."
+        },
+        "documentImport": {
+          "label": "Importuj i utwórz",
+          "description": "Pobierz dokumenty z połączonego źródła i utwórz strukturę."
+        },
+        "taskSource": {
+          "description": "Powiąż {source}, aby importować i odwoływać się do zgłoszeń ze śledzenia."
+        },
+        "taskImport": {
+          "label": "Importuj zgłoszenia",
+          "description": "Pobierz zgłoszenia z połączonego narzędzia śledzenia na tablicę."
+        },
+        "trackerSettings": {
+          "label": "Ustawienia narzędzia śledzenia zgłoszeń"
+        },
+        "observability": {
+          "label": "Kondycja po wydaniu",
+          "description": "Obserwuj monitory i SLO po wdrożeniu wydania (Datadog)."
+        },
+        "environment": {
+          "label": "Środowiska efemeryczne",
+          "description": "Gdzie agent Tester działa wobec działającego środowiska podglądu."
+        },
+        "runnerPool": {
+          "label": "Samodzielnie hostowana pula wykonawców",
+          "description": "Gdzie działają agenci kodu, gdy nie używają Cloudflare Containers."
+        },
+        "localMode": {
+          "label": "Tryb lokalny",
+          "description": "Pula ciepłych kontenerów oraz ponowne użycie checkoutu na repozytorium dla lokalnego silnika."
+        },
+        "githubPat": {
+          "label": "Mój token GitHub",
+          "description": "Osobisty token dostępu używany do uruchomień, które rozpoczynasz (pushe, PR-y, CI, scalanie)."
+        },
+        "localRunners": {
+          "label": "Moje lokalne silniki",
+          "description": "Twoje silniki modeli na własnej maszynie (Ollama, LM Studio, vLLM…)."
+        }
       }
     }
   }

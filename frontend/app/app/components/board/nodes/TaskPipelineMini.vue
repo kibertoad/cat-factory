@@ -21,6 +21,7 @@ const execution = useExecutionStore()
 const ui = useUiStore()
 const expansion = useTaskExpansionStore()
 const reviews = useReviewStage()
+const { t } = useI18n()
 const { lod } = useSemanticZoom()
 
 const instance = computed(() => execution.getByBlock(props.taskId))
@@ -75,12 +76,12 @@ const ITEM_ICON: Record<string, string> = {
   <div v-if="showSteps" class="mt-2 space-y-1 border-t border-slate-800 pt-2">
     <div class="flex items-center gap-1 text-[9px] uppercase tracking-wide text-slate-500">
       <UIcon name="i-lucide-workflow" class="h-2.5 w-2.5" />
-      Build steps
+      {{ t('board.task.buildSteps') }}
     </div>
     <div v-for="(s, i) in steps" :key="i" class="rounded bg-slate-900/60 px-1.5 py-1">
       <div
         class="flex cursor-pointer items-center gap-1"
-        :title="`${agentKindMeta(s.agentKind).label} — ${agentKindMeta(s.agentKind).description}\nClick to view step details & output`"
+        :title="`${agentKindMeta(s.agentKind).label} — ${agentKindMeta(s.agentKind).description}\n${t('board.task.clickToViewStep')}`"
         @click.stop="openStep(i)"
       >
         <UIcon
@@ -131,7 +132,7 @@ const ITEM_ICON: Record<string, string> = {
         @click.stop="ui.openApprovalDetail(instance.id, s.approval.id)"
       >
         <UIcon name="i-lucide-shield-check" class="h-2.5 w-2.5" />
-        Review &amp; approve
+        {{ t('board.task.reviewAndApprove') }}
       </button>
 
       <!-- per-step subtask progress bar -->

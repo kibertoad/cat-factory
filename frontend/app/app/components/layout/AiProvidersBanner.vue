@@ -6,6 +6,7 @@
 // live on the ui store, so the auto-open watcher and this banner share one source of truth).
 import { computed } from 'vue'
 
+const { t } = useI18n()
 const ui = useUiStore()
 const { ready, hasUsableModel, defaultPresetBroken } = useAiReadiness()
 
@@ -28,20 +29,20 @@ const show = computed(() => showSetup.value || showPreset.value)
           <UIcon name="i-lucide-cpu" class="mt-0.5 h-9 w-9 shrink-0 text-amber-400" />
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
-              <h2 class="text-lg font-semibold text-amber-100">No AI model configured</h2>
+              <h2 class="text-lg font-semibold text-amber-100">
+                {{ t('layout.aiProvidersBanner.setup.title') }}
+              </h2>
               <UButton
                 color="neutral"
                 variant="ghost"
                 size="xs"
                 icon="i-lucide-x"
-                aria-label="Dismiss"
+                :aria-label="t('common.close')"
                 @click="ui.dismissAiSetup()"
               />
             </div>
             <p class="mt-1 text-sm text-amber-200/90">
-              Agents need a model to run. AI works out of the box only on a Cloudflare deployment
-              with Workers AI enabled — otherwise connect a provider key, subscription, proxy, or
-              local runner to continue.
+              {{ t('layout.aiProvidersBanner.setup.body') }}
             </p>
             <div class="mt-4">
               <UButton
@@ -50,7 +51,7 @@ const show = computed(() => showSetup.value || showPreset.value)
                 icon="i-lucide-settings"
                 @click="ui.openAiProviderSetup()"
               >
-                Configure AI
+                {{ t('layout.aiProvidersBanner.setup.action') }}
               </UButton>
             </div>
           </div>
@@ -68,20 +69,19 @@ const show = computed(() => showSetup.value || showPreset.value)
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
               <h2 class="text-sm font-semibold text-amber-100">
-                Default model preset uses unavailable models
+                {{ t('layout.aiProvidersBanner.preset.title') }}
               </h2>
               <UButton
                 color="neutral"
                 variant="ghost"
                 size="xs"
                 icon="i-lucide-x"
-                aria-label="Dismiss"
+                :aria-label="t('common.close')"
                 @click="ui.dismissAiPresetMismatch()"
               />
             </div>
             <p class="mt-1 text-[13px] text-amber-200/90">
-              Tasks using the default preset would fail. Edit the preset or configure the missing
-              provider.
+              {{ t('layout.aiProvidersBanner.preset.body') }}
             </p>
             <div class="mt-3">
               <UButton
@@ -91,7 +91,7 @@ const show = computed(() => showSetup.value || showPreset.value)
                 icon="i-lucide-cpu"
                 @click="ui.openAiPresetMismatch()"
               >
-                Review preset
+                {{ t('layout.aiProvidersBanner.preset.action') }}
               </UButton>
             </div>
           </div>

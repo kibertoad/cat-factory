@@ -6,6 +6,8 @@ import type { CloudProvider } from '~/types/domain'
 // active board within it, and manages boards (new / rename / delete). The account
 // row is shown only when accounts exist (auth on); in dev it falls back to a plain
 // board switcher over the single unscoped context.
+const { t } = useI18n()
+
 const accounts = useAccountsStore()
 const workspace = useWorkspaceStore()
 const ui = useUiStore()
@@ -23,15 +25,17 @@ function notifyError(title: string, e: unknown) {
 }
 
 // The cloud provider new services in the active account default to (a service may
-// override it per-frame). `docker` is the local Docker/Podman backend.
-const PROVIDERS: { value: CloudProvider; label: string }[] = [
+// override it per-frame). `docker` is the local Docker/Podman backend. The brand
+// names (Cloudflare/AWS/GCP/Azure) are proper nouns kept verbatim; only the
+// `docker`/`custom` labels carry prose, so those are translated.
+const PROVIDERS = computed<{ value: CloudProvider; label: string }[]>(() => [
   { value: 'cloudflare', label: 'Cloudflare' },
-  { value: 'docker', label: 'Docker (local)' },
+  { value: 'docker', label: t('layout.boardSwitcher.providers.docker') },
   { value: 'aws', label: 'AWS' },
   { value: 'gcp', label: 'GCP' },
   { value: 'azure', label: 'Azure' },
-  { value: 'custom', label: 'Custom' },
-]
+  { value: 'custom', label: t('layout.boardSwitcher.providers.custom') },
+])
 
 async function setDefaultProvider(provider: CloudProvider) {
   const id = accounts.activeAccountId
@@ -39,7 +43,7 @@ async function setDefaultProvider(provider: CloudProvider) {
   try {
     await accounts.setDefaultCloudProvider(id, provider)
   } catch (e) {
-    notifyError('Could not update default provider', e)
+    notifyError(t('layout.boardSwitcher.toast.updateProviderFailed'), e)
   }
 }
 
@@ -52,12 +56,16 @@ const accountItems = computed<DropdownMenuItem[][]>(() => [
     onSelect: () => void selectAccount(a.id),
   })),
   [
-    { label: 'New organization…', icon: 'i-lucide-plus', onSelect: () => openPrompt('account') },
+    {
+      label: t('layout.boardSwitcher.account.newOrg'),
+      icon: 'i-lucide-plus',
+      onSelect: () => openPrompt('account'),
+    },
     // Account settings: the unified per-account panel (team + roles + invitations + email
     // sender + account-tier fragment library). The panel itself handles personal accounts
     // (prompting to create an org for the team tab), so this is not gated.
     {
-      label: 'Account settings…',
+      label: t('layout.boardSwitcher.account.settings'),
       icon: 'i-lucide-settings',
       onSelect: () => ui.openAccountSettings(),
     },
@@ -65,9 +73,9 @@ const accountItems = computed<DropdownMenuItem[][]>(() => [
     ...(accounts.activeAccount?.roles?.includes('admin')
       ? [
           {
-            label: 'Default cloud provider',
+            label: t('layout.boardSwitcher.account.defaultProvider'),
             icon: 'i-lucide-cloud',
-            children: PROVIDERS.map((p) => ({
+            children: PROVIDERS.value.map((p) => ({
               label: p.label,
               trailingIcon:
                 (accounts.activeAccount?.defaultCloudProvider ?? 'cloudflare') === p.value
@@ -89,10 +97,18 @@ const boardItems = computed<DropdownMenuItem[][]>(() => [
     onSelect: () => void switchBoard(w.id),
   })),
   [
-    { label: 'New board…', icon: 'i-lucide-plus', onSelect: () => openPrompt('board') },
-    { label: 'Rename board…', icon: 'i-lucide-pencil', onSelect: () => openPrompt('rename') },
     {
-      label: 'Delete board',
+      label: t('layout.boardSwitcher.board.new'),
+      icon: 'i-lucide-plus',
+      onSelect: () => openPrompt('board'),
+    },
+    {
+      label: t('layout.boardSwitcher.board.rename'),
+      icon: 'i-lucide-pencil',
+      onSelect: () => openPrompt('rename'),
+    },
+    {
+      label: t('layout.boardSwitcher.board.delete'),
       icon: 'i-lucide-trash-2',
       color: 'error' as const,
       onSelect: () => void removeBoard(),
@@ -106,7 +122,7 @@ async function selectAccount(id: string) {
   try {
     await workspace.selectAccount(id)
   } catch (e) {
-    notifyError('Could not switch account', e)
+    notifyError(t('layout.boardSwitcher.toast.switchAccountFailed'), e)
   } finally {
     busy.value = false
   }
@@ -117,7 +133,7 @@ async function switchBoard(id: string) {
   try {
     await workspace.switchTo(id)
   } catch (e) {
-    notifyError('Could not open board', e)
+    notifyError(t('layout.boardSwitcher.toast.openBoardFailed'), e)
   } finally {
     busy.value = false
   }
@@ -129,9 +145,9 @@ async function removeBoard() {
   busy.value = true
   try {
     await workspace.remove(id)
-    toast.add({ title: 'Board deleted', icon: 'i-lucide-check' })
+    toast.add({ title: t('layout.boardSwitcher.toast.boardDeleted'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError('Could not delete board', e)
+    notifyError(t('layout.boardSwitcher.toast.deleteBoardFailed'), e)
   } finally {
     busy.value = false
   }
@@ -149,11 +165,25 @@ const promptOpen = computed({
     if (!v) prompt.value = null
   },
 })
-const promptMeta: Record<PromptKind, { title: string; placeholder: string; cta: string }> = {
-  account: { title: 'New organization', placeholder: 'Acme Inc.', cta: 'Create' },
-  board: { title: 'New board', placeholder: 'Untitled board', cta: 'Create' },
-  rename: { title: 'Board settings', placeholder: 'Board name', cta: 'Save' },
-}
+const promptMeta = computed<
+  Record<PromptKind, { title: string; placeholder: string; cta: string }>
+>(() => ({
+  account: {
+    title: t('layout.boardSwitcher.prompt.account.title'),
+    placeholder: t('layout.boardSwitcher.prompt.account.placeholder'),
+    cta: t('layout.boardSwitcher.prompt.create'),
+  },
+  board: {
+    title: t('layout.boardSwitcher.prompt.board.title'),
+    placeholder: t('layout.boardSwitcher.prompt.board.placeholder'),
+    cta: t('layout.boardSwitcher.prompt.create'),
+  },
+  rename: {
+    title: t('layout.boardSwitcher.prompt.rename.title'),
+    placeholder: t('layout.boardSwitcher.prompt.rename.placeholder'),
+    cta: t('common.save'),
+  },
+}))
 /** Whether the current prompt edits a board (so it shows the description field). */
 const promptHasDescription = computed(() => prompt.value === 'board' || prompt.value === 'rename')
 
@@ -184,7 +214,7 @@ async function submitPrompt() {
     }
     prompt.value = null
   } catch (e) {
-    notifyError('Action failed', e)
+    notifyError(t('common.actionFailed'), e)
   } finally {
     busy.value = false
   }
@@ -210,7 +240,7 @@ async function submitPrompt() {
           class="h-3.5 w-3.5 shrink-0 text-slate-400"
         />
         <span class="truncate text-[11px] font-medium uppercase tracking-wide text-slate-400">
-          {{ accounts.activeAccount?.name ?? 'Account' }}
+          {{ accounts.activeAccount?.name ?? t('layout.boardSwitcher.accountFallback') }}
         </span>
         <UIcon
           name="i-lucide-chevrons-up-down"
@@ -228,7 +258,7 @@ async function submitPrompt() {
       >
         <UIcon name="i-lucide-layout-dashboard" class="h-4 w-4 shrink-0 text-indigo-400" />
         <span class="truncate text-sm font-medium text-white">
-          {{ workspace.activeWorkspace?.name ?? 'Board' }}
+          {{ workspace.activeWorkspace?.name ?? t('layout.boardSwitcher.boardFallback') }}
         </span>
         <UIcon name="i-lucide-chevron-down" class="ml-auto h-4 w-4 shrink-0 text-slate-500" />
       </button>
@@ -238,7 +268,7 @@ async function submitPrompt() {
     <UModal v-model:open="promptOpen" :title="prompt ? promptMeta[prompt].title : ''">
       <template #body>
         <form class="space-y-3" @submit.prevent="submitPrompt">
-          <UFormField label="Name">
+          <UFormField :label="t('layout.boardSwitcher.prompt.nameLabel')">
             <UInput
               v-model="promptValue"
               autofocus
@@ -246,17 +276,21 @@ async function submitPrompt() {
               class="w-full"
             />
           </UFormField>
-          <UFormField v-if="promptHasDescription" label="Description" hint="Optional">
+          <UFormField
+            v-if="promptHasDescription"
+            :label="t('layout.boardSwitcher.prompt.descriptionLabel')"
+            :hint="t('layout.boardSwitcher.prompt.descriptionHint')"
+          >
             <UTextarea
               v-model="promptDescription"
               :rows="3"
-              placeholder="What is this board for?"
+              :placeholder="t('layout.boardSwitcher.prompt.descriptionPlaceholder')"
               class="w-full"
             />
           </UFormField>
           <div class="flex justify-end gap-2">
             <UButton color="neutral" variant="ghost" :disabled="busy" @click="prompt = null">
-              Cancel
+              {{ t('common.cancel') }}
             </UButton>
             <UButton type="submit" color="primary" :loading="busy">
               {{ prompt ? promptMeta[prompt].cta : '' }}

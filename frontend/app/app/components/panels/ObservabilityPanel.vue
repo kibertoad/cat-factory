@@ -15,6 +15,7 @@ const ui = useUiStore()
 const execution = useExecutionStore()
 const board = useBoardStore()
 const observability = useObservabilityStore()
+const { t, d } = useI18n()
 
 const executionId = computed(() => ui.observabilityInstanceId)
 const open = computed(() => !!executionId.value)
@@ -110,7 +111,7 @@ function agentMeta(kind: string) {
   return agentKindMeta(kind)
 }
 function clock(ms: number): string {
-  return new Date(ms).toLocaleTimeString()
+  return d(new Date(ms), 'long')
 }
 /** Pretty-print the prompt JSON; fall back to the raw string if it isn't JSON. */
 function prettyPrompt(raw: string): string {
@@ -150,7 +151,9 @@ function exportJson() {
             <UIcon name="i-lucide-activity" class="h-5 w-5 text-sky-400" />
           </div>
           <div class="min-w-0">
-            <h1 class="truncate text-base font-semibold text-white">Model activity</h1>
+            <h1 class="truncate text-base font-semibold text-white">
+              {{ t('observability.modelActivity') }}
+            </h1>
             <p v-if="block" class="truncate text-xs text-slate-500">
               {{ block.title }} · {{ instance?.pipelineName }}
             </p>
@@ -166,7 +169,7 @@ function exportJson() {
                 "
                 @click="view = 'calls'"
               >
-                Model activity
+                {{ t('observability.modelActivity') }}
               </button>
               <button
                 class="rounded-md px-2.5 py-1 transition"
@@ -177,7 +180,7 @@ function exportJson() {
                 "
                 @click="view = 'context'"
               >
-                Provided context
+                {{ t('observability.providedContext') }}
               </button>
             </div>
             <UButton
@@ -188,17 +191,17 @@ function exportJson() {
               size="sm"
               :loading="exporting"
               :disabled="!calls.length"
-              title="Download an LLM-friendly JSON export of this run"
+              :title="t('observability.exportHint')"
               @click="exportJson"
             >
-              Export JSON
+              {{ t('observability.exportJson') }}
             </UButton>
             <UButton
               icon="i-lucide-x"
               color="neutral"
               variant="ghost"
               size="sm"
-              title="Close (Esc)"
+              :title="t('observability.closeEsc')"
               @click="close"
             />
           </div>
@@ -210,12 +213,14 @@ function exportJson() {
             <section class="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
               <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-[13px] sm:grid-cols-4">
                 <div>
-                  <dt class="text-[11px] uppercase tracking-wide text-slate-500">Calls</dt>
+                  <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+                    {{ t('observability.summary.calls') }}
+                  </dt>
                   <dd class="mt-0.5 tabular-nums text-slate-200">{{ totals.calls }}</dd>
                 </div>
                 <div>
                   <dt class="text-[11px] uppercase tracking-wide text-slate-500">
-                    Tokens (in / out)
+                    {{ t('observability.summary.tokensInOut') }}
                   </dt>
                   <dd class="mt-0.5 tabular-nums text-slate-200">
                     {{ formatTokens(totals.promptTokens) }} /
@@ -224,7 +229,7 @@ function exportJson() {
                 </div>
                 <div>
                   <dt class="text-[11px] uppercase tracking-wide text-slate-500">
-                    Transport overhead
+                    {{ t('observability.summary.transportOverhead') }}
                   </dt>
                   <dd class="mt-0.5 tabular-nums text-slate-200">
                     <span v-if="totals.transportPct !== null">
@@ -235,7 +240,7 @@ function exportJson() {
                 </div>
                 <div>
                   <dt class="text-[11px] uppercase tracking-wide text-slate-500">
-                    Model execution
+                    {{ t('observability.summary.modelExecution') }}
                   </dt>
                   <dd class="mt-0.5 tabular-nums text-slate-200">
                     {{ formatMs(totals.upstreamMs) }}
@@ -244,13 +249,27 @@ function exportJson() {
               </dl>
               <div class="mt-3 flex flex-wrap gap-1.5">
                 <UBadge v-if="totals.errors" color="error" variant="subtle" size="sm">
-                  {{ totals.errors }} error{{ totals.errors === 1 ? '' : 's' }}
+                  {{
+                    t('observability.metricsBar.errors', { count: totals.errors }, totals.errors)
+                  }}
                 </UBadge>
                 <UBadge v-if="totals.warnings" color="warning" variant="subtle" size="sm">
-                  {{ totals.warnings }} warning{{ totals.warnings === 1 ? '' : 's' }}
+                  {{
+                    t(
+                      'observability.metricsBar.warnings',
+                      { count: totals.warnings },
+                      totals.warnings,
+                    )
+                  }}
                 </UBadge>
                 <UBadge v-if="totals.truncated" color="error" variant="subtle" size="sm">
-                  {{ totals.truncated }} truncated
+                  {{
+                    t(
+                      'observability.summary.truncated',
+                      { count: totals.truncated },
+                      totals.truncated,
+                    )
+                  }}
                 </UBadge>
               </div>
             </section>
@@ -260,8 +279,8 @@ function exportJson() {
               v-if="loading && !calls.length"
               class="flex items-center gap-2 py-8 text-center text-sm text-slate-500 justify-center"
             >
-              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" /> Loading model
-              activity…
+              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
+              {{ t('observability.loadingActivity') }}
             </p>
             <p
               v-else-if="error"
@@ -273,7 +292,7 @@ function exportJson() {
               v-else-if="!calls.length"
               class="rounded-lg border border-dashed border-slate-800 py-8 text-center text-sm text-slate-500"
             >
-              No model calls recorded for this run.
+              {{ t('observability.noCalls') }}
             </p>
 
             <!-- per-call list -->
@@ -309,18 +328,26 @@ function exportJson() {
                     class="ml-auto flex items-center gap-2.5 text-[11px] tabular-nums text-slate-400"
                   >
                     <span
-                      :title="`${c.promptTokens} prompt / ${c.completionTokens} completion tokens`"
+                      :title="
+                        t('observability.call.tokensTitle', {
+                          prompt: c.promptTokens,
+                          completion: c.completionTokens,
+                        })
+                      "
                     >
                       {{ formatTokens(c.promptTokens) }}↑ {{ formatTokens(c.completionTokens) }}↓
                     </span>
-                    <span v-if="headroomOf(c) !== null" :title="'Output used vs limit'">
+                    <span
+                      v-if="headroomOf(c) !== null"
+                      :title="t('observability.call.outputUsedVsLimit')"
+                    >
                       {{ headroomOf(c) }}%
                     </span>
-                    <span title="Transport overhead / model execution">
+                    <span :title="t('observability.call.transportVsExecution')">
                       {{ formatMs(c.overheadMs) }} / {{ formatMs(c.upstreamMs) }}
                     </span>
                     <UBadge v-if="!c.ok" color="error" variant="subtle" size="sm">
-                      {{ c.httpStatus ?? 'error' }}
+                      {{ c.httpStatus ?? t('observability.call.error') }}
                     </UBadge>
                     <UBadge
                       v-else-if="isWarning(c.finishReason)"
@@ -330,7 +357,9 @@ function exportJson() {
                     >
                       {{ c.finishReason }}
                     </UBadge>
-                    <span v-else class="text-slate-600">{{ c.finishReason ?? 'ok' }}</span>
+                    <span v-else class="text-slate-600">{{
+                      c.finishReason ?? t('observability.call.ok')
+                    }}</span>
                     <span class="hidden text-slate-600 md:inline">{{ clock(c.createdAt) }}</span>
                   </div>
                 </button>
@@ -340,27 +369,40 @@ function exportJson() {
                     {{ c.errorMessage }}
                   </p>
                   <div class="flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-slate-500">
-                    <span>{{ c.messageCount }} messages</span>
-                    <span>{{ c.toolCount }} tools</span>
-                    <span>{{ c.streaming ? 'streamed' : 'buffered' }}</span>
-                    <span v-if="c.requestMaxTokens != null"
-                      >max_tokens {{ c.requestMaxTokens }}</span
-                    >
-                    <span v-if="c.cachedPromptTokens > 0" class="text-emerald-400"
-                      >{{ c.cachedPromptTokens }}/{{ c.promptTokens }} prompt cached</span
-                    >
-                    <span>total {{ formatMs(c.totalMs) }}</span>
+                    <span>{{ t('observability.call.messages', { count: c.messageCount }) }}</span>
+                    <span>{{ t('observability.call.tools', { count: c.toolCount }) }}</span>
+                    <span>{{
+                      c.streaming
+                        ? t('observability.call.streamed')
+                        : t('observability.call.buffered')
+                    }}</span>
+                    <span v-if="c.requestMaxTokens != null">{{
+                      t('observability.call.maxTokens', { value: c.requestMaxTokens })
+                    }}</span>
+                    <span v-if="c.cachedPromptTokens > 0" class="text-emerald-400">{{
+                      t('observability.call.promptCached', {
+                        cached: c.cachedPromptTokens,
+                        prompt: c.promptTokens,
+                      })
+                    }}</span>
+                    <span>{{
+                      t('observability.call.total', { duration: formatMs(c.totalMs) })
+                    }}</span>
                   </div>
                   <div>
                     <div
                       class="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500"
                     >
-                      <span>Prompt</span>
+                      <span>{{ t('observability.call.prompt') }}</span>
                       <span
                         v-if="c.promptPrefixCount > 0"
                         class="normal-case tracking-normal text-slate-600"
                       >
-                        (new messages only — {{ c.promptPrefixCount }} earlier omitted)
+                        {{
+                          t('observability.call.promptPrefixOmitted', {
+                            count: c.promptPrefixCount,
+                          })
+                        }}
                       </span>
                     </div>
                     <pre
@@ -370,7 +412,7 @@ function exportJson() {
                   </div>
                   <div>
                     <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
-                      Response
+                      {{ t('observability.call.response') }}
                     </div>
                     <pre
                       class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
@@ -379,7 +421,7 @@ function exportJson() {
                   </div>
                   <div v-if="c.reasoningText">
                     <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
-                      Reasoning
+                      {{ t('observability.call.reasoning') }}
                     </div>
                     <pre
                       class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-400"
@@ -397,15 +439,14 @@ function exportJson() {
               v-if="contextLoading && !contextSnapshots.length"
               class="flex items-center justify-center gap-2 py-8 text-center text-sm text-slate-500"
             >
-              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" /> Loading provided
-              context…
+              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
+              {{ t('observability.loadingContext') }}
             </p>
             <p
               v-else-if="!contextSnapshots.length"
               class="rounded-lg border border-dashed border-slate-800 py-8 text-center text-sm text-slate-500"
             >
-              No agent context stored for this run. It is captured per dispatch when the workspace
-              has "Store full agent context" enabled.
+              {{ t('observability.noContext') }}
             </p>
 
             <ul v-else class="space-y-2">
@@ -435,10 +476,12 @@ function exportJson() {
                   <div
                     class="ml-auto flex items-center gap-2.5 text-[11px] tabular-nums text-slate-400"
                   >
-                    <span :title="'Injected context files'">{{ s.contextFiles.length }} files</span>
-                    <span :title="'Best-practice fragments'"
-                      >{{ s.fragments.length }} fragments</span
-                    >
+                    <span :title="t('observability.context.injectedFiles')">{{
+                      t('observability.context.filesCount', { count: s.contextFiles.length })
+                    }}</span>
+                    <span :title="t('observability.context.bestPracticeFragments')">{{
+                      t('observability.context.fragmentsCount', { count: s.fragments.length })
+                    }}</span>
                     <span class="hidden text-slate-600 md:inline">{{ clock(s.createdAt) }}</span>
                   </div>
                 </button>
@@ -446,7 +489,7 @@ function exportJson() {
                 <div v-if="expandedCtx[s.id]" class="border-t border-slate-800 px-4 py-3 space-y-3">
                   <div>
                     <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
-                      System prompt
+                      {{ t('observability.context.systemPrompt') }}
                     </div>
                     <pre
                       class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
@@ -455,7 +498,7 @@ function exportJson() {
                   </div>
                   <div>
                     <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
-                      User prompt
+                      {{ t('observability.context.userPrompt') }}
                     </div>
                     <pre
                       class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
@@ -464,7 +507,7 @@ function exportJson() {
                   </div>
                   <div v-if="s.fragments.length">
                     <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
-                      Best-practice fragments
+                      {{ t('observability.context.bestPracticeFragments') }}
                     </div>
                     <div
                       v-for="f in s.fragments"
@@ -480,7 +523,7 @@ function exportJson() {
                   </div>
                   <div v-if="s.contextFiles.length">
                     <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
-                      Injected context files
+                      {{ t('observability.context.injectedFiles') }}
                     </div>
                     <div
                       v-for="file in s.contextFiles"
@@ -499,7 +542,7 @@ function exportJson() {
                   </div>
                   <div>
                     <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
-                      Details
+                      {{ t('observability.context.details') }}
                     </div>
                     <pre
                       class="max-h-48 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-400"

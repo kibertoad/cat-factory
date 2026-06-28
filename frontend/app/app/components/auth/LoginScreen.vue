@@ -106,8 +106,7 @@ async function submitPassword() {
     // Reload so the app boots with the new session.
     if (typeof window !== 'undefined') window.location.assign(window.location.pathname)
   } catch (e) {
-    error.value =
-      apiErrorEnvelope(e)?.message ?? 'Sign-in failed. Check your details and try again.'
+    error.value = apiErrorEnvelope(e)?.message ?? t('auth.login.signInFailed')
   } finally {
     busy.value = false
   }
@@ -121,7 +120,7 @@ async function submitForgot() {
     forgotSent.value = true
   } catch {
     // The request endpoint is generic by design; only an infra error lands here.
-    error.value = 'Something went wrong. Please try again.'
+    error.value = t('auth.login.genericError')
   } finally {
     busy.value = false
   }
@@ -146,11 +145,11 @@ const showOAuthDivider = computed(
     >
       <div class="mb-6 text-center">
         <UIcon name="i-lucide-layout-dashboard" class="mx-auto mb-3 h-10 w-10 text-indigo-400" />
-        <h1 class="mb-1 text-lg font-semibold text-white">Architecture Board</h1>
+        <h1 class="mb-1 text-lg font-semibold text-white">{{ t('auth.login.appTitle') }}</h1>
         <p class="text-sm text-slate-400">
-          <template v-if="mode === 'forgot'">Reset your password.</template>
+          <template v-if="mode === 'forgot'">{{ t('auth.login.forgotSubtitle') }}</template>
           <template v-else>{{
-            invite ? 'Accept your invitation to continue.' : 'Sign in to continue.'
+            invite ? t('auth.login.inviteSubtitle') : t('auth.login.subtitle')
           }}</template>
         </p>
       </div>
@@ -231,7 +230,7 @@ const showOAuthDivider = computed(
           icon="i-lucide-github"
           @click="auth.login(invite)"
         >
-          Continue with GitHub
+          {{ t('auth.login.continueWithGithub') }}
         </UButton>
         <UButton
           v-if="auth.providers.google"
@@ -242,7 +241,7 @@ const showOAuthDivider = computed(
           icon="i-lucide-mail"
           @click="auth.loginWithGoogle(invite)"
         >
-          Continue with Google
+          {{ t('auth.login.continueWithGoogle') }}
         </UButton>
       </div>
 
@@ -250,7 +249,8 @@ const showOAuthDivider = computed(
         v-if="showOAuthDivider && mode !== 'forgot'"
         class="my-4 flex items-center gap-3 text-xs text-slate-500"
       >
-        <span class="h-px flex-1 bg-slate-800" /> or <span class="h-px flex-1 bg-slate-800" />
+        <span class="h-px flex-1 bg-slate-800" /> {{ t('auth.login.or') }}
+        <span class="h-px flex-1 bg-slate-800" />
       </div>
 
       <!-- Email / password -->
@@ -262,7 +262,7 @@ const showOAuthDivider = computed(
         <UInput
           v-if="mode === 'signup'"
           v-model="name"
-          placeholder="Name (optional)"
+          :placeholder="t('auth.login.namePlaceholder')"
           icon="i-lucide-user"
           size="lg"
           class="w-full"
@@ -271,7 +271,7 @@ const showOAuthDivider = computed(
           v-model="email"
           type="email"
           required
-          placeholder="Email"
+          :placeholder="t('auth.login.emailPlaceholder')"
           icon="i-lucide-at-sign"
           size="lg"
           class="w-full"
@@ -280,36 +280,46 @@ const showOAuthDivider = computed(
           v-model="password"
           type="password"
           required
-          placeholder="Password"
+          :placeholder="t('auth.login.passwordPlaceholder')"
           icon="i-lucide-lock"
           size="lg"
           class="w-full"
         />
         <p v-if="error" class="text-sm text-rose-400">{{ error }}</p>
         <UButton block size="lg" color="primary" type="submit" :loading="busy">
-          {{ mode === 'signup' ? 'Create account' : 'Sign in' }}
+          {{ mode === 'signup' ? t('auth.login.createAccount') : t('auth.login.signIn') }}
         </UButton>
         <p class="text-center text-xs text-slate-400">
           <template v-if="mode === 'login'">
-            Need an account?
-            <button
-              type="button"
-              class="text-indigo-400 hover:underline"
-              @click="setMode('signup')"
-            >
-              Sign up
-            </button>
+            <i18n-t keypath="auth.login.needAccount" tag="span" scope="global">
+              <template #signUp>
+                <button
+                  type="button"
+                  class="text-indigo-400 hover:underline"
+                  @click="setMode('signup')"
+                >
+                  {{ t('auth.login.signUp') }}
+                </button>
+              </template>
+            </i18n-t>
           </template>
           <template v-else>
-            Already have an account?
-            <button type="button" class="text-indigo-400 hover:underline" @click="setMode('login')">
-              Sign in
-            </button>
+            <i18n-t keypath="auth.login.haveAccount" tag="span" scope="global">
+              <template #signIn>
+                <button
+                  type="button"
+                  class="text-indigo-400 hover:underline"
+                  @click="setMode('login')"
+                >
+                  {{ t('auth.login.signIn') }}
+                </button>
+              </template>
+            </i18n-t>
           </template>
         </p>
         <p v-if="mode === 'login'" class="text-center text-xs text-slate-400">
           <button type="button" class="text-indigo-400 hover:underline" @click="setMode('forgot')">
-            Forgot password?
+            {{ t('auth.login.forgotPassword') }}
           </button>
         </p>
       </form>
@@ -322,8 +332,7 @@ const showOAuthDivider = computed(
       >
         <template v-if="forgotSent">
           <p class="text-sm text-slate-300">
-            If an account exists for that email, a password reset link is on its way. Check your
-            inbox.
+            {{ t('auth.login.forgotSent') }}
           </p>
         </template>
         <template v-else>
@@ -331,19 +340,19 @@ const showOAuthDivider = computed(
             v-model="email"
             type="email"
             required
-            placeholder="Email"
+            :placeholder="t('auth.login.emailPlaceholder')"
             icon="i-lucide-at-sign"
             size="lg"
             class="w-full"
           />
           <p v-if="error" class="text-sm text-rose-400">{{ error }}</p>
           <UButton block size="lg" color="primary" type="submit" :loading="busy">
-            Send reset link
+            {{ t('auth.login.sendResetLink') }}
           </UButton>
         </template>
         <p class="text-center text-xs text-slate-400">
           <button type="button" class="text-indigo-400 hover:underline" @click="setMode('login')">
-            Back to sign in
+            {{ t('auth.login.backToSignIn') }}
           </button>
         </p>
       </form>
