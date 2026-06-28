@@ -41,6 +41,7 @@
     "ai": "^6.0.209"
   },
   "devDependencies": {
+    "@cat-factory/sandbox-fixtures": "workspace:*",
     "typescript": "7.0.1-rc",
     "vitest": "^4.1.9"
   }

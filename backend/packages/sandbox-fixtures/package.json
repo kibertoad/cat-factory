@@ -34,8 +34,6 @@
     "valibot": "^1.4.1"
   },
   "devDependencies": {
-    "@cat-factory/kernel": "workspace:*",
-    "@cat-factory/orchestration": "workspace:*",
     "typescript": "7.0.1-rc",
     "vitest": "^4.1.9"
   }
