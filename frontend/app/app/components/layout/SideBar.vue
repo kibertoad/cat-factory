@@ -11,6 +11,8 @@ import LanguageSwitcher from '~/components/layout/LanguageSwitcher.vue'
 import UserMenu from '~/components/auth/UserMenu.vue'
 import { useViewport } from '~/composables/useViewport'
 
+const { t } = useI18n()
+
 const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const github = useGitHubStore()
@@ -107,7 +109,7 @@ watch(
       data-testid="sidebar-backdrop"
       role="button"
       tabindex="-1"
-      :aria-label="$t('common.close')"
+      :aria-label="t('common.close')"
       @click="ui.closeMobileNav()"
     />
   </Transition>
@@ -118,7 +120,7 @@ watch(
     tabindex="-1"
     :role="drawerOpen ? 'dialog' : undefined"
     :aria-modal="drawerOpen ? 'true' : undefined"
-    :aria-label="isCompact ? $t('nav.menu') : undefined"
+    :aria-label="isCompact ? t('nav.menu') : undefined"
     :inert="isCompact && !ui.mobileNavOpen"
     class="fixed inset-y-0 left-0 z-40 flex h-full w-64 shrink-0 flex-col gap-4 overflow-y-auto border-r border-slate-800 bg-slate-900/95 p-3 backdrop-blur transition-transform duration-200 focus:outline-none lg:static lg:z-auto lg:translate-x-0 lg:bg-slate-900/80"
     :class="ui.mobileNavOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
@@ -134,13 +136,13 @@ watch(
         @click="ui.openCommandBar()"
       >
         <UIcon name="i-lucide-search" class="h-4 w-4 shrink-0" />
-        <span class="flex-1 truncate">{{ $t('nav.commandBar') }}</span>
+        <span class="flex-1 truncate">{{ t('nav.commandBar') }}</span>
         <UKbd value="⌘K" />
       </button>
 
       <section>
         <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          {{ $t('nav.create') }}
+          {{ t('nav.create') }}
         </h2>
         <div class="space-y-1.5">
           <UButton
@@ -152,7 +154,7 @@ watch(
             class="justify-start"
             @click="ui.openBuilder()"
           >
-            {{ $t('nav.buildPipeline') }}
+            {{ t('nav.buildPipeline') }}
           </UButton>
         </div>
       </section>
@@ -161,7 +163,7 @@ watch(
 
       <section>
         <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          {{ $t('nav.repositories') }}
+          {{ t('nav.repositories') }}
         </h2>
         <div class="space-y-1.5">
           <UButton
@@ -174,7 +176,7 @@ watch(
             class="justify-start"
             @click="ui.openAddService()"
           >
-            {{ $t('nav.addFromRepo') }}
+            {{ t('nav.addFromRepo') }}
           </UButton>
           <UButton
             block
@@ -185,7 +187,7 @@ watch(
             class="justify-start"
             @click="ui.openBootstrap()"
           >
-            {{ $t('nav.bootstrapRepo') }}
+            {{ t('nav.bootstrapRepo') }}
           </UButton>
         </div>
       </section>
@@ -194,7 +196,7 @@ watch(
 
       <section>
         <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          {{ $t('nav.integrations') }}
+          {{ t('nav.integrations') }}
         </h2>
         <div class="space-y-1.5">
           <!-- Every external system the workspace can enable/link now lives behind
@@ -209,7 +211,7 @@ watch(
             class="justify-start"
             @click="ui.openIntegrations()"
           >
-            {{ $t('nav.integrations') }}
+            {{ t('nav.integrations') }}
           </UButton>
           <!-- The Sandbox: try prompt versions/models against graded fixtures, off to the
              side of the board. Opens the on-demand testing window. -->
@@ -222,7 +224,7 @@ watch(
             class="justify-start"
             @click="ui.openSandbox()"
           >
-            {{ $t('nav.sandbox') }}
+            {{ t('nav.sandbox') }}
           </UButton>
           <!-- The Kaizen screen: grading history + verified prompt/agent/model combos. -->
           <UButton
@@ -234,7 +236,7 @@ watch(
             class="justify-start"
             @click="ui.openKaizen()"
           >
-            {{ $t('nav.kaizen') }}
+            {{ t('nav.kaizen') }}
           </UButton>
         </div>
       </section>
@@ -243,7 +245,7 @@ watch(
         <USeparator />
         <section>
           <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            {{ $t('nav.workspaceContext') }}
+            {{ t('nav.workspaceContext') }}
           </h2>
           <UButton
             block
@@ -254,7 +256,7 @@ watch(
             class="justify-start"
             @click="ui.openFragmentLibrary()"
           >
-            {{ $t('nav.contextFragments') }}
+            {{ t('nav.contextFragments') }}
           </UButton>
         </section>
       </template>
@@ -262,7 +264,7 @@ watch(
       <USeparator />
       <section>
         <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          {{ $t('nav.configuration') }}
+          {{ t('nav.configuration') }}
         </h2>
         <div class="space-y-1.5">
           <!-- Merge thresholds, issue writeback and default service best practices are
@@ -276,7 +278,7 @@ watch(
             class="justify-start"
             @click="ui.openWorkspaceSettings()"
           >
-            {{ $t('nav.workspaceSettings') }}
+            {{ t('nav.workspaceSettings') }}
           </UButton>
           <UButton
             block
@@ -287,7 +289,7 @@ watch(
             class="justify-start"
             @click="ui.openModelConfig()"
           >
-            {{ $t('nav.modelConfiguration') }}
+            {{ t('nav.modelConfiguration') }}
           </UButton>
           <!-- Account & team: members + roles, invitations, email sender, account API keys.
              Shown once accounts (auth) are enabled. -->
@@ -301,7 +303,7 @@ watch(
             class="justify-start"
             @click="ui.openAccountSettings()"
           >
-            {{ $t('nav.accountSettings') }}
+            {{ t('nav.accountSettings') }}
           </UButton>
         </div>
       </section>

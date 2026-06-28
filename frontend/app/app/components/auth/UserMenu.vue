@@ -4,20 +4,21 @@ import type { DropdownMenuItem } from '@nuxt/ui'
 // Signed-in identity + per-user actions, shown in the sidebar when auth is enabled.
 const auth = useAuthStore()
 const ui = useUiStore()
+const { t } = useI18n()
 
 const items = computed<DropdownMenuItem[][]>(() => [
   [
     {
       // The user-scoped "My setup" hub (personal GitHub token, local runners, personal
       // subscriptions) — kept out of the workspace Integrations hub, reachable here.
-      label: 'My setup',
+      label: t('auth.userMenu.mySetup'),
       icon: 'i-lucide-user-cog',
       onSelect: () => ui.openPersonalSetup(),
     },
   ],
   [
     {
-      label: 'Sign out',
+      label: t('auth.userMenu.signOut'),
       icon: 'i-lucide-log-out',
       onSelect: () => auth.logout(),
     },

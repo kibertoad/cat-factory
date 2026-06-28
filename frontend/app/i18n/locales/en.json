@@ -746,5 +746,418 @@
       "userPrompt": "User prompt",
       "details": "Details"
     }
+  },
+  "auth": {
+    "gate": {
+      "loading": "Loading…"
+    },
+    "login": {
+      "appTitle": "Architecture Board",
+      "@appTitle": {
+        "description": "The product/app title shown on the login screen. Keep verbatim across every locale - it is a proper-noun-ish product name, do NOT translate it."
+      },
+      "subtitle": "Sign in to continue.",
+      "inviteSubtitle": "Accept your invitation to continue.",
+      "forgotSubtitle": "Reset your password.",
+      "continueWithGithub": "Continue with GitHub",
+      "continueWithGoogle": "Continue with Google",
+      "or": "or",
+      "namePlaceholder": "Name (optional)",
+      "emailPlaceholder": "Email",
+      "passwordPlaceholder": "Password",
+      "createAccount": "Create account",
+      "signIn": "Sign in",
+      "signUp": "Sign up",
+      "needAccount": "Need an account? {signUp}",
+      "haveAccount": "Already have an account? {signIn}",
+      "forgotPassword": "Forgot password?",
+      "forgotSent": "If an account exists for that email, a password reset link is on its way. Check your inbox.",
+      "sendResetLink": "Send reset link",
+      "backToSignIn": "Back to sign in",
+      "signInFailed": "Sign-in failed. Check your details and try again.",
+      "genericError": "Something went wrong. Please try again."
+    },
+    "resetPassword": {
+      "title": "Reset password",
+      "subtitle": "Choose a new password for your account.",
+      "doneBody": "Your password has been reset. You can now sign in with your new password.",
+      "goToSignIn": "Go to sign in",
+      "missingToken": "This reset link is missing its token. Request a new link from the sign-in screen.",
+      "backToSignIn": "Back to sign in",
+      "newPasswordPlaceholder": "New password",
+      "confirmPasswordPlaceholder": "Confirm new password",
+      "submit": "Reset password",
+      "errorTooShort": "Password must be at least 8 characters.",
+      "errorMismatch": "Passwords do not match.",
+      "errorInvalidLink": "This password reset link is invalid or has expired."
+    },
+    "userMenu": {
+      "mySetup": "My setup",
+      "signOut": "Sign out"
+    }
+  },
+  "layout": {
+    "accountDeployment": {
+      "title": "Deployment integrations",
+      "intro": "Credentials shared by every workspace in this account, sealed at rest. Values are never shown after saving; leave a field blank to keep the stored secret.",
+      "configured": "Configured",
+      "notSet": "Not set",
+      "clear": "Clear",
+      "loadFailed": "Could not load deployment settings",
+      "slack": {
+        "title": "Slack app (OAuth)",
+        "description": "Enables the \"Add to Slack\" OAuth flow. Without it, workspaces can still connect Slack by pasting a bot token.",
+        "clientId": "Client ID",
+        "clientSecret": "Client secret",
+        "redirectUrl": "Redirect URL",
+        "validation": "Enter the client id, secret and redirect URL",
+        "saved": "Slack OAuth saved",
+        "saveFailed": "Could not save Slack OAuth",
+        "cleared": "Slack OAuth cleared",
+        "clearFailed": "Could not clear Slack OAuth"
+      },
+      "web": {
+        "title": "Container web search",
+        "description": "The search upstream container agents reach through the backend proxy. Set a Brave key (recommended), or a self-hosted SearXNG URL (with an optional bearer key).",
+        "configured": "Configured ({provider})",
+        "braveKey": "Brave API key",
+        "searxngUrl": "SearXNG URL",
+        "searxngKey": "SearXNG key (optional)",
+        "validation": "Enter a Brave key or a SearXNG URL",
+        "saved": "Web search keys saved",
+        "saveFailed": "Could not save web search keys",
+        "cleared": "Web search keys cleared",
+        "clearFailed": "Could not clear web search keys"
+      }
+    },
+    "accountFragments": {
+      "intro": "Best-practice guidelines shared by every board in this account. Each board inherits these and can override or add its own. Code-aware agents (coder, reviewer, architect, fixers) fold the relevant ones into their prompt."
+    },
+    "accountTeam": {
+      "roles": {
+        "admin": "Admin",
+        "developer": "Developer",
+        "product": "Product"
+      },
+      "org": {
+        "ctaTitle": "Invite teammates & manage roles",
+        "ctaBody": "Members, roles and invitations live on an organization. Create one to invite teammates and manage their roles; your personal boards stay as they are.",
+        "namePlaceholder": "Acme Inc.",
+        "create": "Create organization",
+        "created": "Organization created"
+      },
+      "members": {
+        "title": "Members",
+        "empty": "No members yet."
+      },
+      "invite": {
+        "title": "Invite a teammate",
+        "emailPlaceholder": "teammate@example.com",
+        "submit": "Invite",
+        "revoke": "Revoke invitation",
+        "created": "Invitation created",
+        "createdEmailed": "An email was sent (or copy the link from the list below).",
+        "createdShareLink": "Share the accept link with your teammate.",
+        "status": {
+          "pending": "Pending",
+          "accepted": "Accepted",
+          "revoked": "Revoked"
+        }
+      },
+      "email": {
+        "title": "Email sender",
+        "notEnabled": "Email delivery is not enabled on this deployment. Invitations still produce a shareable accept link.",
+        "connectedAs": "Connected via {provider} as {from}",
+        "disconnect": "Disconnect",
+        "connect": "Connect email sender",
+        "connected": "Email sender connected",
+        "fromPlaceholder": "From address",
+        "apiKeyPlaceholder": "Provider API key",
+        "providers": {
+          "resend": "Resend",
+          "sendgrid": "SendGrid"
+        }
+      },
+      "apiKeys": {
+        "title": "Account API keys"
+      },
+      "errors": {
+        "updateRoles": "Could not update roles",
+        "loadSettings": "Could not load team settings",
+        "createOrg": "Could not create organization",
+        "sendInvite": "Could not send invitation",
+        "revokeInvite": "Could not revoke invitation",
+        "connectEmail": "Could not connect email sender",
+        "disconnectEmail": "Could not disconnect email sender"
+      }
+    },
+    "boardSwitcher": {
+      "accountFallback": "Account",
+      "boardFallback": "Board",
+      "providers": {
+        "docker": "Docker (local)",
+        "custom": "Custom"
+      },
+      "account": {
+        "newOrg": "New organization…",
+        "settings": "Account settings…",
+        "defaultProvider": "Default cloud provider"
+      },
+      "board": {
+        "new": "New board…",
+        "rename": "Rename board…",
+        "delete": "Delete board"
+      },
+      "prompt": {
+        "create": "Create",
+        "nameLabel": "Name",
+        "descriptionLabel": "Description",
+        "descriptionHint": "Optional",
+        "descriptionPlaceholder": "What is this board for?",
+        "account": {
+          "title": "New organization",
+          "placeholder": "Acme Inc."
+        },
+        "board": {
+          "title": "New board",
+          "placeholder": "Untitled board"
+        },
+        "rename": {
+          "title": "Board settings",
+          "placeholder": "Board name"
+        }
+      },
+      "toast": {
+        "updateProviderFailed": "Could not update default provider",
+        "switchAccountFailed": "Could not switch account",
+        "openBoardFailed": "Could not open board",
+        "boardDeleted": "Board deleted",
+        "deleteBoardFailed": "Could not delete board"
+      }
+    },
+    "notifications": {
+      "heading": "Needs your attention",
+      "overdue": "Overdue",
+      "openPr": "Open PR",
+      "dismiss": "Dismiss",
+      "action": {
+        "merge_review": "Merge",
+        "pipeline_complete": "Confirm & merge",
+        "ci_failed": "Retry run",
+        "test_failed": "Retry run",
+        "requirement_review": "Mark read",
+        "clarity_review": "Mark read",
+        "release_regression": "Acknowledge",
+        "decision_required": "Mark read",
+        "human_test_ready": "Mark read",
+        "visual_confirmation_ready": "Mark read",
+        "human_review": "Mark read",
+        "followup_pending": "Mark read",
+        "markRead": "Mark read"
+      }
+    },
+    "aiProvidersBanner": {
+      "setup": {
+        "title": "No AI model configured",
+        "body": "Agents need a model to run. AI works out of the box only on a Cloudflare deployment with Workers AI enabled. Otherwise connect a provider key, subscription, proxy, or local runner to continue.",
+        "action": "Configure AI"
+      },
+      "preset": {
+        "title": "Default model preset uses unavailable models",
+        "body": "Tasks using the default preset would fail. Edit the preset or configure the missing provider.",
+        "action": "Review preset"
+      }
+    },
+    "githubPatBanner": {
+      "title": "GitHub PAT not configured",
+      "body": "Local mode reaches GitHub with a personal access token. Without one, agent steps that clone, push, open PRs, gate on CI or merge will fail.",
+      "createToken": "Create a GitHub token (scopes pre-selected)",
+      "thenSet": "Then set {envVar} and restart."
+    },
+    "providerConfigBanner": {
+      "titleMany": "Providers need configuration",
+      "titleOne": {
+        "environment": "Environment provider needs configuration",
+        "runner-pool": "Runner pool needs configuration"
+      },
+      "body": "A provider is wired for this instance but is missing required settings, so it can't run yet. Add the mandatory fields to finish connecting it.",
+      "action": {
+        "environment": "Configure environment provider",
+        "runner-pool": "Configure runner pool"
+      }
+    },
+    "spendWarningBanner": {
+      "title": "Spend limit reached, agent execution paused",
+      "body": "This month's token spend has hit the configured budget, so running pipelines were paused to avoid further cost. Execution resumes automatically when the budget rolls over next month, or once the limit is raised.",
+      "spent": "Spent",
+      "budget": "Budget",
+      "tokens": "Tokens",
+      "resume": "Resume anyway",
+      "resumeHint": "Resuming continues spending; it will pause again if still over budget."
+    },
+    "personalSetup": {
+      "title": "My setup",
+      "intro": "Your personal connections, used for runs you start and visible only to you.",
+      "connected": "Connected",
+      "notConnected": "Not connected",
+      "connectedCount": "no connected | {count} connected | {count} connected",
+      "sourceControl": {
+        "title": "Source control"
+      },
+      "githubToken": {
+        "label": "My GitHub token",
+        "description": "A personal access token used for runs you start (pushes, PRs, CI, merge)."
+      },
+      "models": {
+        "title": "Models"
+      },
+      "localRunners": {
+        "label": "My local runners",
+        "description": "Your own-machine model runners (Ollama, LM Studio, vLLM)."
+      },
+      "subscriptions": {
+        "label": "My subscriptions",
+        "description": "Individual-usage plans you unlock with a personal password (Claude, GLM, Codex)."
+      }
+    },
+    "integrationBack": {
+      "backToMySetup": "Back to My setup",
+      "backToIntegrations": "Back to Integrations"
+    },
+    "commandBar": {
+      "searchPlaceholder": "Search or run a command…",
+      "noMatches": "No matching commands.",
+      "groups": {
+        "create": "Create",
+        "repositories": "Repositories",
+        "integrations": "Integrations",
+        "workspace": "Workspace",
+        "account": "Account"
+      },
+      "cmd": {
+        "newPipeline": "Build a pipeline",
+        "addFromRepo": "Add service from existing repo",
+        "bootstrapRepo": "Bootstrap a new repo",
+        "githubManage": "Manage GitHub connection",
+        "githubConnect": "Connect GitHub",
+        "slackManage": "Manage Slack notifications",
+        "slackConnect": "Connect Slack",
+        "sourceManage": "Manage {source}",
+        "sourceConnect": "Connect {source}",
+        "documentImport": "Import and spawn from documents",
+        "taskImport": "Import issues",
+        "fragments": "Context fragment library",
+        "mergeThresholds": "Merge thresholds",
+        "workspaceSettings": "Workspace settings",
+        "modelConfiguration": "Model configuration",
+        "serviceFragmentDefaults": "Default service best practices",
+        "accountSettings": "Account settings",
+        "localModels": "My local runners",
+        "sandbox": "Open Sandbox"
+      },
+      "keywords": {
+        "newPipeline": "pipeline agents chain",
+        "addFromRepo": "github import existing",
+        "bootstrapRepo": "scaffold create reference architecture",
+        "github": "git repos pull requests issues",
+        "slack": "slack notifications channel mentions",
+        "documentSource": "document source prd rfc",
+        "documentImport": "document import spawn",
+        "taskSource": "task source tracker issues",
+        "taskImport": "task import issues",
+        "fragments": "prompt fragments best practice guidelines context",
+        "mergeThresholds": "merge policy preset auto-merge ci",
+        "workspaceSettings": "limit running tasks per service waiting escalation overdue notification timeout",
+        "modelConfiguration": "model llm routing agent kind default preset configuration",
+        "serviceFragmentDefaults": "fragment best practice guideline service default code-aware",
+        "accountSettings": "account team members roles invitations email api keys fragment best practice library context organization personal",
+        "localModels": "local model runner ollama lm studio llamacpp vllm endpoint",
+        "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate"
+      }
+    },
+    "integrationsHub": {
+      "title": "Integrations",
+      "intro": "Connect and manage the external systems this workspace can link in.",
+      "searchPlaceholder": "Search integrations…",
+      "noMatches": "No integrations match \"{query}\".",
+      "getStarted": {
+        "title": "Get started",
+        "body": "Connect a code source and a model provider to run your first pipeline."
+      },
+      "status": {
+        "connected": "Connected",
+        "keyConnected": "Key connected",
+        "notConnected": "Not connected",
+        "needsAttention": "Needs attention",
+        "disabled": "Disabled",
+        "recommended": "Recommended"
+      },
+      "groups": {
+        "models": "Models and providers",
+        "sourceControl": "Source control",
+        "communication": "Communication",
+        "documents": "Documents",
+        "taskTrackers": "Task trackers",
+        "observability": "Observability",
+        "infrastructure": "Infrastructure",
+        "personal": "Personal (only you)"
+      },
+      "items": {
+        "openrouter": {
+          "description": "One gateway to 300+ models. Add your key and enable models in one place."
+        },
+        "vendors": {
+          "label": "Vendors and keys",
+          "description": "Workspace LLM subscriptions and provider API keys."
+        },
+        "github": {
+          "description": "Connect the workspace's GitHub App, browse repos, PRs and issues."
+        },
+        "slack": {
+          "description": "Route notifications to your team's Slack workspace."
+        },
+        "documentSource": {
+          "description": "Link {source} as a document source for requirements context."
+        },
+        "documentImport": {
+          "label": "Import and spawn",
+          "description": "Pull documents from a connected source and spawn structure."
+        },
+        "taskSource": {
+          "description": "Link {source} to import and reference tracker issues."
+        },
+        "taskImport": {
+          "label": "Import issues",
+          "description": "Pull issues from a connected tracker onto the board."
+        },
+        "trackerSettings": {
+          "label": "Issue tracker settings"
+        },
+        "observability": {
+          "label": "Post-release health",
+          "description": "Watch monitors and SLOs after a release ships (Datadog)."
+        },
+        "environment": {
+          "label": "Ephemeral environments",
+          "description": "Where the Tester agent runs against a live preview environment."
+        },
+        "runnerPool": {
+          "label": "Self-hosted runner pool",
+          "description": "Where the coding agents run when not using Cloudflare Containers."
+        },
+        "localMode": {
+          "label": "Local mode",
+          "description": "Warm container pool plus per-repo checkout reuse for the local runner."
+        },
+        "githubPat": {
+          "label": "My GitHub token",
+          "description": "A personal access token used for runs you start (pushes, PRs, CI, merge)."
+        },
+        "localRunners": {
+          "label": "My local runners",
+          "description": "Your own-machine model runners (Ollama, LM Studio, vLLM…)."
+        }
+      }
+    }
   }
 }

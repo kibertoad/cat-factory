@@ -710,5 +710,415 @@
       "userPrompt": "Prompt użytkownika",
       "details": "Szczegóły"
     }
+  },
+  "auth": {
+    "gate": {
+      "loading": "Ładowanie…"
+    },
+    "login": {
+      "appTitle": "Architecture Board",
+      "subtitle": "Zaloguj się, aby kontynuować.",
+      "inviteSubtitle": "Przyjmij zaproszenie, aby kontynuować.",
+      "forgotSubtitle": "Zresetuj hasło.",
+      "continueWithGithub": "Kontynuuj z GitHub",
+      "continueWithGoogle": "Kontynuuj z Google",
+      "or": "lub",
+      "namePlaceholder": "Imię (opcjonalnie)",
+      "emailPlaceholder": "E-mail",
+      "passwordPlaceholder": "Hasło",
+      "createAccount": "Utwórz konto",
+      "signIn": "Zaloguj się",
+      "signUp": "Zarejestruj się",
+      "needAccount": "Potrzebujesz konta? {signUp}",
+      "haveAccount": "Masz już konto? {signIn}",
+      "forgotPassword": "Nie pamiętasz hasła?",
+      "forgotSent": "Jeśli konto powiązane z tym adresem e-mail istnieje, link do zresetowania hasła jest w drodze. Sprawdź swoją skrzynkę odbiorczą.",
+      "sendResetLink": "Wyślij link resetujący",
+      "backToSignIn": "Powrót do logowania",
+      "signInFailed": "Logowanie nie powiodło się. Sprawdź swoje dane i spróbuj ponownie.",
+      "genericError": "Coś poszło nie tak. Spróbuj ponownie."
+    },
+    "resetPassword": {
+      "title": "Zresetuj hasło",
+      "subtitle": "Wybierz nowe hasło do swojego konta.",
+      "doneBody": "Twoje hasło zostało zresetowane. Możesz teraz zalogować się przy użyciu nowego hasła.",
+      "goToSignIn": "Przejdź do logowania",
+      "missingToken": "W tym linku resetującym brakuje tokenu. Poproś o nowy link na ekranie logowania.",
+      "backToSignIn": "Powrót do logowania",
+      "newPasswordPlaceholder": "Nowe hasło",
+      "confirmPasswordPlaceholder": "Potwierdź nowe hasło",
+      "submit": "Zresetuj hasło",
+      "errorTooShort": "Hasło musi mieć co najmniej 8 znaków.",
+      "errorMismatch": "Hasła nie są zgodne.",
+      "errorInvalidLink": "Ten link do resetowania hasła jest nieprawidłowy lub wygasł."
+    },
+    "userMenu": {
+      "mySetup": "Moja konfiguracja",
+      "signOut": "Wyloguj się"
+    }
+  },
+  "layout": {
+    "accountDeployment": {
+      "title": "Integracje wdrożenia",
+      "intro": "Poświadczenia współdzielone przez wszystkie przestrzenie robocze tego konta, szyfrowane w spoczynku. Wartości nigdy nie są pokazywane po zapisaniu; pozostaw pole puste, aby zachować zapisany sekret.",
+      "configured": "Skonfigurowano",
+      "notSet": "Nie ustawiono",
+      "clear": "Wyczyść",
+      "loadFailed": "Nie udało się wczytać ustawień wdrożenia",
+      "slack": {
+        "title": "Aplikacja Slack (OAuth)",
+        "description": "Włącza przepływ OAuth \"Add to Slack\". Bez niego przestrzenie robocze nadal mogą połączyć Slacka, wklejając token bota.",
+        "clientId": "Identyfikator klienta",
+        "clientSecret": "Sekret klienta",
+        "redirectUrl": "Adres URL przekierowania",
+        "validation": "Wprowadź identyfikator klienta, sekret i adres URL przekierowania",
+        "saved": "Zapisano OAuth Slacka",
+        "saveFailed": "Nie udało się zapisać OAuth Slacka",
+        "cleared": "Wyczyszczono OAuth Slacka",
+        "clearFailed": "Nie udało się wyczyścić OAuth Slacka"
+      },
+      "web": {
+        "title": "Wyszukiwanie w sieci w kontenerze",
+        "description": "Dostawca wyszukiwania, do którego agenci w kontenerze sięgają przez proxy backendu. Ustaw klucz Brave (zalecane) lub własny adres URL SearXNG (z opcjonalnym kluczem bearer).",
+        "configured": "Skonfigurowano ({provider})",
+        "braveKey": "Klucz API Brave",
+        "searxngUrl": "Adres URL SearXNG",
+        "searxngKey": "Klucz SearXNG (opcjonalny)",
+        "validation": "Wprowadź klucz Brave lub adres URL SearXNG",
+        "saved": "Zapisano klucze wyszukiwania w sieci",
+        "saveFailed": "Nie udało się zapisać kluczy wyszukiwania w sieci",
+        "cleared": "Wyczyszczono klucze wyszukiwania w sieci",
+        "clearFailed": "Nie udało się wyczyścić kluczy wyszukiwania w sieci"
+      }
+    },
+    "accountFragments": {
+      "intro": "Wytyczne dobrych praktyk współdzielone przez wszystkie tablice tego konta. Każda tablica je dziedziczy i może je nadpisać lub dodać własne. Agenci znający kod (coder, reviewer, architect, fixers) włączają te istotne do swojego promptu."
+    },
+    "accountTeam": {
+      "roles": {
+        "admin": "Administrator",
+        "developer": "Programista",
+        "product": "Produkt"
+      },
+      "org": {
+        "ctaTitle": "Zaproś członków zespołu i zarządzaj rolami",
+        "ctaBody": "Członkowie, role i zaproszenia istnieją w organizacji. Utwórz ją, aby zapraszać członków zespołu i zarządzać ich rolami; Twoje osobiste tablice pozostają bez zmian.",
+        "namePlaceholder": "Acme Inc.",
+        "create": "Utwórz organizację",
+        "created": "Utworzono organizację"
+      },
+      "members": {
+        "title": "Członkowie",
+        "empty": "Brak członków."
+      },
+      "invite": {
+        "title": "Zaproś członka zespołu",
+        "emailPlaceholder": "kolega@przyklad.com",
+        "submit": "Zaproś",
+        "revoke": "Odwołaj zaproszenie",
+        "created": "Utworzono zaproszenie",
+        "createdEmailed": "Wysłano e-mail (lub skopiuj link z listy poniżej).",
+        "createdShareLink": "Udostępnij link akceptacji członkowi zespołu.",
+        "status": {
+          "pending": "Oczekujące",
+          "accepted": "Zaakceptowane",
+          "revoked": "Odwołane"
+        }
+      },
+      "email": {
+        "title": "Nadawca e-maili",
+        "notEnabled": "Wysyłka e-maili nie jest włączona w tym wdrożeniu. Zaproszenia nadal generują link akceptacji do udostępnienia.",
+        "connectedAs": "Połączono przez {provider} jako {from}",
+        "disconnect": "Rozłącz",
+        "connect": "Połącz nadawcę e-maili",
+        "connected": "Połączono nadawcę e-maili",
+        "fromPlaceholder": "Adres nadawcy",
+        "apiKeyPlaceholder": "Klucz API dostawcy",
+        "providers": {
+          "resend": "Resend",
+          "sendgrid": "SendGrid"
+        }
+      },
+      "apiKeys": {
+        "title": "Klucze API konta"
+      },
+      "errors": {
+        "updateRoles": "Nie udało się zaktualizować ról",
+        "loadSettings": "Nie udało się wczytać ustawień zespołu",
+        "createOrg": "Nie udało się utworzyć organizacji",
+        "sendInvite": "Nie udało się wysłać zaproszenia",
+        "revokeInvite": "Nie udało się odwołać zaproszenia",
+        "connectEmail": "Nie udało się połączyć nadawcy e-maili",
+        "disconnectEmail": "Nie udało się rozłączyć nadawcy e-maili"
+      }
+    },
+    "boardSwitcher": {
+      "accountFallback": "Konto",
+      "boardFallback": "Tablica",
+      "providers": {
+        "docker": "Docker (lokalnie)",
+        "custom": "Niestandardowy"
+      },
+      "account": {
+        "newOrg": "Nowa organizacja…",
+        "settings": "Ustawienia konta…",
+        "defaultProvider": "Domyślny dostawca chmury"
+      },
+      "board": {
+        "new": "Nowa tablica…",
+        "rename": "Zmień nazwę tablicy…",
+        "delete": "Usuń tablicę"
+      },
+      "prompt": {
+        "create": "Utwórz",
+        "nameLabel": "Nazwa",
+        "descriptionLabel": "Opis",
+        "descriptionHint": "Opcjonalnie",
+        "descriptionPlaceholder": "Do czego służy ta tablica?",
+        "account": {
+          "title": "Nowa organizacja",
+          "placeholder": "Acme Inc."
+        },
+        "board": {
+          "title": "Nowa tablica",
+          "placeholder": "Tablica bez nazwy"
+        },
+        "rename": {
+          "title": "Ustawienia tablicy",
+          "placeholder": "Nazwa tablicy"
+        }
+      },
+      "toast": {
+        "updateProviderFailed": "Nie udało się zaktualizować domyślnego dostawcy",
+        "switchAccountFailed": "Nie udało się przełączyć konta",
+        "openBoardFailed": "Nie udało się otworzyć tablicy",
+        "boardDeleted": "Tablica usunięta",
+        "deleteBoardFailed": "Nie udało się usunąć tablicy"
+      }
+    },
+    "notifications": {
+      "heading": "Wymaga Twojej uwagi",
+      "overdue": "Zaległe",
+      "openPr": "Otwórz PR",
+      "dismiss": "Odrzuć",
+      "action": {
+        "merge_review": "Scal",
+        "pipeline_complete": "Potwierdź i scal",
+        "ci_failed": "Ponów przebieg",
+        "test_failed": "Ponów przebieg",
+        "requirement_review": "Oznacz jako przeczytane",
+        "clarity_review": "Oznacz jako przeczytane",
+        "release_regression": "Potwierdź",
+        "decision_required": "Oznacz jako przeczytane",
+        "human_test_ready": "Oznacz jako przeczytane",
+        "visual_confirmation_ready": "Oznacz jako przeczytane",
+        "human_review": "Oznacz jako przeczytane",
+        "followup_pending": "Oznacz jako przeczytane",
+        "markRead": "Oznacz jako przeczytane"
+      }
+    },
+    "aiProvidersBanner": {
+      "setup": {
+        "title": "Nie skonfigurowano żadnego modelu AI",
+        "body": "Agenci potrzebują modelu do działania. AI działa od ręki tylko we wdrożeniu Cloudflare z włączonym Workers AI. W przeciwnym razie podłącz klucz dostawcy, subskrypcję, proxy lub lokalny silnik, aby kontynuować.",
+        "action": "Skonfiguruj AI"
+      },
+      "preset": {
+        "title": "Domyślny zestaw modeli używa niedostępnych modeli",
+        "body": "Zadania korzystające z domyślnego zestawu zakończyłyby się niepowodzeniem. Edytuj zestaw lub skonfiguruj brakującego dostawcę.",
+        "action": "Przejrzyj zestaw"
+      }
+    },
+    "githubPatBanner": {
+      "title": "Nie skonfigurowano tokenu PAT GitHub",
+      "body": "Tryb lokalny łączy się z GitHub za pomocą osobistego tokenu dostępu. Bez niego kroki agenta, które klonują, wypychają, otwierają PR-y, sprawdzają CI lub scalają, zakończą się niepowodzeniem.",
+      "createToken": "Utwórz token GitHub (zakresy wstępnie wybrane)",
+      "thenSet": "Następnie ustaw {envVar} i uruchom ponownie."
+    },
+    "providerConfigBanner": {
+      "titleMany": "Dostawcy wymagają konfiguracji",
+      "titleOne": {
+        "environment": "Dostawca środowiska wymaga konfiguracji",
+        "runner-pool": "Pula silników wymaga konfiguracji"
+      },
+      "body": "Dostawca jest podłączony do tej instancji, ale brakuje mu wymaganych ustawień, więc nie może jeszcze działać. Dodaj obowiązkowe pola, aby zakończyć jego podłączanie.",
+      "action": {
+        "environment": "Skonfiguruj dostawcę środowiska",
+        "runner-pool": "Skonfiguruj pulę silników"
+      }
+    },
+    "spendWarningBanner": {
+      "title": "Osiągnięto limit wydatków, wykonywanie agentów wstrzymane",
+      "body": "Wydatki na tokeny w tym miesiącu osiągnęły skonfigurowany budżet, dlatego działające potoki zostały wstrzymane, aby uniknąć dalszych kosztów. Wykonywanie wznowi się automatycznie po odnowieniu budżetu w przyszłym miesiącu lub po podniesieniu limitu.",
+      "spent": "Wydano",
+      "budget": "Budżet",
+      "tokens": "Tokeny",
+      "resume": "Wznów mimo to",
+      "resumeHint": "Wznowienie nadal generuje wydatki; zostanie ponownie wstrzymane, jeśli budżet wciąż będzie przekroczony."
+    },
+    "personalSetup": {
+      "title": "Moja konfiguracja",
+      "intro": "Twoje osobiste połączenia, używane do uruchomień, które rozpoczynasz, i widoczne tylko dla Ciebie.",
+      "connected": "Połączono",
+      "notConnected": "Niepołączono",
+      "connectedCount": "{count} połączony | {count} połączone | {count} połączonych",
+      "sourceControl": {
+        "title": "Kontrola wersji"
+      },
+      "githubToken": {
+        "label": "Mój token GitHub",
+        "description": "Osobisty token dostępu używany do uruchomień, które rozpoczynasz (wypchnięcia, PR-y, CI, scalanie)."
+      },
+      "models": {
+        "title": "Modele"
+      },
+      "localRunners": {
+        "label": "Moje lokalne silniki",
+        "description": "Silniki modeli na Twojej własnej maszynie (Ollama, LM Studio, vLLM)."
+      },
+      "subscriptions": {
+        "label": "Moje subskrypcje",
+        "description": "Plany do użytku indywidualnego, które odblokowujesz osobistym hasłem (Claude, GLM, Codex)."
+      }
+    },
+    "integrationBack": {
+      "backToMySetup": "Powrót do Moja konfiguracja",
+      "backToIntegrations": "Powrót do Integracje"
+    },
+    "commandBar": {
+      "searchPlaceholder": "Wyszukaj lub uruchom polecenie…",
+      "noMatches": "Brak pasujących poleceń.",
+      "groups": {
+        "create": "Utwórz",
+        "repositories": "Repozytoria",
+        "integrations": "Integracje",
+        "workspace": "Obszar roboczy",
+        "account": "Konto"
+      },
+      "cmd": {
+        "newPipeline": "Zbuduj potok",
+        "addFromRepo": "Dodaj usługę z istniejącego repozytorium",
+        "bootstrapRepo": "Zainicjuj nowe repozytorium",
+        "githubManage": "Zarządzaj połączeniem GitHub",
+        "githubConnect": "Połącz GitHub",
+        "slackManage": "Zarządzaj powiadomieniami Slack",
+        "slackConnect": "Połącz Slack",
+        "sourceManage": "Zarządzaj {source}",
+        "sourceConnect": "Połącz {source}",
+        "documentImport": "Importuj i utwórz z dokumentów",
+        "taskImport": "Importuj zgłoszenia",
+        "fragments": "Biblioteka fragmentów kontekstu",
+        "mergeThresholds": "Progi scalania",
+        "workspaceSettings": "Ustawienia obszaru roboczego",
+        "modelConfiguration": "Konfiguracja modeli",
+        "serviceFragmentDefaults": "Domyślne dobre praktyki usługi",
+        "accountSettings": "Ustawienia konta",
+        "localModels": "Moje lokalne silniki",
+        "sandbox": "Otwórz piaskownicę"
+      },
+      "keywords": {
+        "newPipeline": "potok agenci łańcuch pipeline",
+        "addFromRepo": "github importuj istniejące",
+        "bootstrapRepo": "rusztowanie utwórz architektura referencyjna",
+        "github": "git repozytoria pull requesty zgłoszenia",
+        "slack": "slack powiadomienia kanał wzmianki",
+        "documentSource": "dokument źródło prd rfc",
+        "documentImport": "dokument importuj utwórz",
+        "taskSource": "zadanie źródło śledzenie zgłoszenia",
+        "taskImport": "zadanie importuj zgłoszenia",
+        "fragments": "prompt fragmenty dobre praktyki wytyczne kontekst",
+        "mergeThresholds": "scalanie polityka preset automatyczne scalanie ci",
+        "workspaceSettings": "limit uruchomione zadania na usługę oczekiwanie eskalacja opóźnienie powiadomienie limit czasu",
+        "modelConfiguration": "model llm routing typ agenta preset domyślny konfiguracja",
+        "serviceFragmentDefaults": "fragment dobre praktyki wytyczna usługa domyślna świadoma kodu",
+        "accountSettings": "konto zespół członkowie role zaproszenia e-mail klucze api fragment dobre praktyki biblioteka kontekst organizacja osobiste",
+        "localModels": "model lokalny silnik ollama lm studio llamacpp vllm endpoint",
+        "sandbox": "piaskownica prompt model test eksperyment sędzia fixture benchmark ocena"
+      }
+    },
+    "integrationsHub": {
+      "title": "Integracje",
+      "intro": "Połącz i zarządzaj zewnętrznymi systemami, które ten obszar roboczy może powiązać.",
+      "searchPlaceholder": "Szukaj integracji…",
+      "noMatches": "Żadna integracja nie pasuje do \"{query}\".",
+      "getStarted": {
+        "title": "Wprowadzenie",
+        "body": "Połącz źródło kodu i dostawcę modeli, aby uruchomić swój pierwszy potok."
+      },
+      "status": {
+        "connected": "Połączono",
+        "keyConnected": "Klucz połączony",
+        "notConnected": "Niepołączono",
+        "needsAttention": "Wymaga uwagi",
+        "disabled": "Wyłączono",
+        "recommended": "Zalecane"
+      },
+      "groups": {
+        "models": "Modele i dostawcy",
+        "sourceControl": "Kontrola wersji",
+        "communication": "Komunikacja",
+        "documents": "Dokumenty",
+        "taskTrackers": "Narzędzia do śledzenia zadań",
+        "observability": "Obserwowalność",
+        "infrastructure": "Infrastruktura",
+        "personal": "Osobiste (tylko Ty)"
+      },
+      "items": {
+        "openrouter": {
+          "description": "Jedna brama do ponad 300 modeli. Dodaj swój klucz i włącz modele w jednym miejscu."
+        },
+        "vendors": {
+          "label": "Dostawcy i klucze",
+          "description": "Subskrypcje LLM obszaru roboczego i klucze API dostawców."
+        },
+        "github": {
+          "description": "Połącz aplikację GitHub App obszaru roboczego, przeglądaj repozytoria, PR-y i zgłoszenia."
+        },
+        "slack": {
+          "description": "Kieruj powiadomienia do przestrzeni Slack Twojego zespołu."
+        },
+        "documentSource": {
+          "description": "Powiąż {source} jako źródło dokumentów dla kontekstu wymagań."
+        },
+        "documentImport": {
+          "label": "Importuj i utwórz",
+          "description": "Pobierz dokumenty z połączonego źródła i utwórz strukturę."
+        },
+        "taskSource": {
+          "description": "Powiąż {source}, aby importować i odwoływać się do zgłoszeń ze śledzenia."
+        },
+        "taskImport": {
+          "label": "Importuj zgłoszenia",
+          "description": "Pobierz zgłoszenia z połączonego narzędzia śledzenia na tablicę."
+        },
+        "trackerSettings": {
+          "label": "Ustawienia narzędzia śledzenia zgłoszeń"
+        },
+        "observability": {
+          "label": "Kondycja po wydaniu",
+          "description": "Obserwuj monitory i SLO po wdrożeniu wydania (Datadog)."
+        },
+        "environment": {
+          "label": "Środowiska efemeryczne",
+          "description": "Gdzie agent Tester działa wobec działającego środowiska podglądu."
+        },
+        "runnerPool": {
+          "label": "Samodzielnie hostowana pula wykonawców",
+          "description": "Gdzie działają agenci kodu, gdy nie używają Cloudflare Containers."
+        },
+        "localMode": {
+          "label": "Tryb lokalny",
+          "description": "Pula ciepłych kontenerów oraz ponowne użycie checkoutu na repozytorium dla lokalnego silnika."
+        },
+        "githubPat": {
+          "label": "Mój token GitHub",
+          "description": "Osobisty token dostępu używany do uruchomień, które rozpoczynasz (pushe, PR-y, CI, scalanie)."
+        },
+        "localRunners": {
+          "label": "Moje lokalne silniki",
+          "description": "Twoje silniki modeli na własnej maszynie (Ollama, LM Studio, vLLM…)."
+        }
+      }
+    }
   }
 }
