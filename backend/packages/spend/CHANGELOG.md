@@ -1,5 +1,13 @@
 # @cat-factory/spend
 
+## 0.10.14
+
+### Patch Changes
+
+- Updated dependencies [bbafec9]
+- Updated dependencies [bbafec9]
+  - @cat-factory/kernel@0.43.0
+
 ## 0.10.13
 
 ### Patch Changes
