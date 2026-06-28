@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server'
 import {
   type AppEnv,
+  CORS_ALLOWED_HEADERS,
   type ServerContainer,
   handleError,
   logger,
@@ -41,7 +42,16 @@ export function createApp(
 ): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.use('*', cors({ origin: (origin) => resolveCorsOrigin(origin, env.CORS_ALLOWED_ORIGINS) }))
+  app.use(
+    '*',
+    cors({
+      origin: (origin) => resolveCorsOrigin(origin, env.CORS_ALLOWED_ORIGINS),
+      // Same shared allow-list the Worker uses, so the facades stay symmetric (Hono
+      // would otherwise echo the requested headers, masking a drift like the missing
+      // X-Connection-Id the Worker hit).
+      allowHeaders: [...CORS_ALLOWED_HEADERS],
+    }),
+  )
   app.use('*', async (c, next) => {
     c.set('container', container)
     await next()
