@@ -19,7 +19,6 @@
     { "path": "../../packages/orchestration/tsconfig.build.json" },
     { "path": "../../packages/prompt-fragments/tsconfig.build.json" },
     { "path": "../../packages/provider-cloudflare/tsconfig.build.json" },
-    { "path": "../../packages/provider-s3/tsconfig.build.json" },
     { "path": "../../packages/server/tsconfig.build.json" },
     { "path": "../../packages/spend/tsconfig.build.json" }
   ]

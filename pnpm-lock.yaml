@@ -105,6 +105,9 @@ importers:
       '@cat-factory/prompt-fragments':
         specifier: workspace:*
         version: link:../../packages/prompt-fragments
+      '@cat-factory/server':
+        specifier: workspace:*
+        version: link:../../packages/server
     devDependencies:
       typescript:
         specifier: 7.0.1-rc
@@ -622,9 +625,6 @@ importers:
       '@cat-factory/provider-cloudflare':
         specifier: workspace:*
         version: link:../../packages/provider-cloudflare
-      '@cat-factory/provider-s3':
-        specifier: workspace:*
-        version: link:../../packages/provider-s3
       '@cat-factory/server':
         specifier: workspace:*
         version: link:../../packages/server

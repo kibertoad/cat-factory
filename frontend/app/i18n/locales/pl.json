@@ -116,5 +116,67 @@
         "step3": "Skopiuj całą zawartość auth.json, wklej ją poniżej i wybierz osobiste hasło, aby ją chronić."
       }
     }
+  },
+  "accountSettings": {
+    "title": "Integracje wdrożenia",
+    "description": "Poświadczenia współdzielone przez wszystkie przestrzenie robocze tego konta, zapieczętowane w spoczynku. Wartości nigdy nie są wyświetlane po zapisaniu; pozostaw pole puste, aby zachować przechowywany sekret.",
+    "loadError": "Nie udało się wczytać ustawień wdrożenia",
+    "clear": "Wyczyść",
+    "status": {
+      "configured": "Skonfigurowano",
+      "notSet": "Nie ustawiono"
+    },
+    "slack": {
+      "title": "Aplikacja Slack (OAuth)",
+      "description": "Włącza przepływ OAuth „Dodaj do Slacka”. Bez niego przestrzenie robocze nadal mogą połączyć Slacka, wklejając token bota.",
+      "clientId": "Identyfikator klienta",
+      "clientSecret": "Sekret klienta",
+      "redirectUrl": "Adres URL przekierowania",
+      "validation": "Wprowadź identyfikator klienta, sekret i adres URL przekierowania",
+      "saved": "Zapisano OAuth Slacka",
+      "saveError": "Nie udało się zapisać OAuth Slacka",
+      "cleared": "Wyczyszczono OAuth Slacka",
+      "clearError": "Nie udało się wyczyścić OAuth Slacka"
+    },
+    "web": {
+      "title": "Wyszukiwanie w sieci z kontenera",
+      "configured": "Skonfigurowano ({provider})",
+      "description": "Dostawca wyszukiwania, do którego agenty kontenerowe sięgają przez proxy backendu. Ustaw klucz Brave (zalecane) lub własny adres URL SearXNG (z opcjonalnym kluczem bearer).",
+      "braveKey": "Klucz API Brave",
+      "searxngUrl": "Adres URL SearXNG",
+      "searxngKey": "Klucz SearXNG (opcjonalny)",
+      "validation": "Wprowadź klucz Brave lub adres URL SearXNG",
+      "saved": "Zapisano klucze wyszukiwania w sieci",
+      "saveError": "Nie udało się zapisać kluczy wyszukiwania w sieci",
+      "cleared": "Wyczyszczono klucze wyszukiwania w sieci",
+      "clearError": "Nie udało się wyczyścić kluczy wyszukiwania w sieci"
+    },
+    "contentStorage": {
+      "title": "Przechowywanie treści",
+      "description": "Gdzie przechowywane są zrzuty ekranu testera UI oraz referencyjne obrazy projektowe dla tego konta. Metadane zawsze znajdują się w bazie danych; do wybranego backendu trafiają tylko bajty plików.",
+      "default": "Domyślnie ({backend})",
+      "backends": {
+        "off": "Wyłączone (przechowywanie wyłączone)",
+        "fs": "Lokalny system plików",
+        "s3": "Amazon S3 / zgodny z S3",
+        "r2": "Cloudflare R2",
+        "db": "Baza danych Postgres"
+      },
+      "basePath": "Ścieżka bazowa (domyślnie: .file-storage)",
+      "region": "Region (np. us-east-1)",
+      "bucket": "Bucket",
+      "prefix": "Prefiks klucza (opcjonalny)",
+      "endpoint": "Endpoint (opcjonalny, zgodny z S3)",
+      "forcePathStyle": "Wymuś adresowanie w stylu ścieżki (większość magazynów zgodnych z S3)",
+      "accessKeys": "Klucze dostępu",
+      "accessKeyId": "Identyfikator klucza dostępu",
+      "secretAccessKey": "Tajny klucz dostępu",
+      "keysHint": "Klucze są zapieczętowane w spoczynku i nigdy nie są wyświetlane po zapisaniu; pozostaw puste, aby zachować przechowywane klucze.",
+      "regionBucketValidation": "Wprowadź region i bucket S3",
+      "bothKeysValidation": "Wprowadź zarówno identyfikator klucza dostępu, jak i sekret",
+      "keysValidation": "Wprowadź identyfikator klucza dostępu i sekret S3",
+      "saved": "Zapisano przechowywanie treści",
+      "saveError": "Nie udało się zapisać przechowywania treści"
+    }
   }
 }

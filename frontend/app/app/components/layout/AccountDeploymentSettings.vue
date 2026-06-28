@@ -12,6 +12,7 @@ const props = defineProps<{ accountId: string }>()
 
 const store = useAccountSettingsStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const slack = reactive({ clientId: '', clientSecret: '', redirectUrl: '' })
 const web = reactive({ braveApiKey: '', searxngUrl: '', searxngApiKey: '' })
@@ -21,18 +22,20 @@ const savingWeb = ref(false)
 const summary = computed(() => store.view?.summary ?? null)
 
 // ---- Content storage (binary artifacts / screenshots) --------------------
-const CONTENT_BACKEND_LABELS: Record<ContentStorageBackend, string> = {
-  off: 'Off (storage disabled)',
-  fs: 'Local filesystem',
-  s3: 'Amazon S3 / S3-compatible',
-  r2: 'Cloudflare R2',
-  db: 'Postgres database',
-}
+// Exhaustive enum→key map (drift guard tier 2): every backend resolves to a static literal
+// `t()` key, so adding a backend without a label fails the typecheck on this Record.
+const contentBackendLabels = computed<Record<ContentStorageBackend, string>>(() => ({
+  off: t('accountSettings.contentStorage.backends.off'),
+  fs: t('accountSettings.contentStorage.backends.fs'),
+  s3: t('accountSettings.contentStorage.backends.s3'),
+  r2: t('accountSettings.contentStorage.backends.r2'),
+  db: t('accountSettings.contentStorage.backends.db'),
+}))
 const storageCapability = computed(() => store.view?.contentStorageCapability ?? null)
 const storageSummary = computed(() => summary.value?.contentStorage ?? null)
 const backendItems = computed(() =>
   (storageCapability.value?.supportedBackends ?? []).map((b) => ({
-    label: CONTENT_BACKEND_LABELS[b],
+    label: contentBackendLabels.value[b],
     value: b,
   })),
 )
@@ -68,7 +71,7 @@ onMounted(async () => {
     hydrateStorage()
   } catch (e) {
     toast.add({
-      title: 'Could not load deployment settings',
+      title: t('accountSettings.loadError'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -84,7 +87,10 @@ async function saveStorage() {
   }
   if (backend === 's3') {
     if (!cs.region.trim() || !cs.bucket.trim()) {
-      toast.add({ title: 'Enter the S3 region and bucket', color: 'error' })
+      toast.add({
+        title: t('accountSettings.contentStorage.regionBucketValidation'),
+        color: 'error',
+      })
       return
     }
     config.s3 = {
@@ -102,10 +108,10 @@ async function saveStorage() {
     if (id && key) {
       input.secrets = { s3: { accessKeyId: id, secretAccessKey: key } }
     } else if (id || key) {
-      toast.add({ title: 'Enter both the access key id and secret', color: 'error' })
+      toast.add({ title: t('accountSettings.contentStorage.bothKeysValidation'), color: 'error' })
       return
     } else if (!storageSummary.value?.s3CredentialsConfigured) {
-      toast.add({ title: 'Enter the S3 access key id and secret', color: 'error' })
+      toast.add({ title: t('accountSettings.contentStorage.keysValidation'), color: 'error' })
       return
     }
     // else: keys already stored and none re-entered → leave them unchanged.
@@ -117,10 +123,14 @@ async function saveStorage() {
   try {
     await store.save(props.accountId, input)
     hydrateStorage()
-    toast.add({ title: 'Content storage saved', icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('accountSettings.contentStorage.saved'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
     toast.add({
-      title: 'Could not save content storage',
+      title: t('accountSettings.contentStorage.saveError'),
       description: e instanceof Error ? e.message : String(e),
       color: 'error',
     })
@@ -131,7 +141,7 @@ async function saveStorage() {
 
 async function saveSlack() {
   if (!slack.clientId.trim() || !slack.clientSecret.trim() || !slack.redirectUrl.trim()) {
-    toast.add({ title: 'Enter the client id, secret and redirect URL', color: 'error' })
+    toast.add({ title: t('accountSettings.slack.validation'), color: 'error' })
     return
   }
   savingSlack.value = true
@@ -148,10 +158,10 @@ async function saveSlack() {
     slack.clientId = ''
     slack.clientSecret = ''
     slack.redirectUrl = ''
-    toast.add({ title: 'Slack OAuth saved', icon: 'i-lucide-check', color: 'success' })
+    toast.add({ title: t('accountSettings.slack.saved'), icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
     toast.add({
-      title: 'Could not save Slack OAuth',
+      title: t('accountSettings.slack.saveError'),
       description: e instanceof Error ? e.message : String(e),
       color: 'error',
     })
@@ -164,10 +174,14 @@ async function clearSlack() {
   savingSlack.value = true
   try {
     await store.save(props.accountId, { secrets: { slackOAuth: null } })
-    toast.add({ title: 'Slack OAuth cleared', icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('accountSettings.slack.cleared'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
     toast.add({
-      title: 'Could not clear Slack OAuth',
+      title: t('accountSettings.slack.clearError'),
       description: e instanceof Error ? e.message : String(e),
       color: 'error',
     })
@@ -180,7 +194,7 @@ async function saveWeb() {
   const brave = web.braveApiKey.trim()
   const searxng = web.searxngUrl.trim()
   if (!brave && !searxng) {
-    toast.add({ title: 'Enter a Brave key or a SearXNG URL', color: 'error' })
+    toast.add({ title: t('accountSettings.web.validation'), color: 'error' })
     return
   }
   savingWeb.value = true
@@ -197,10 +211,10 @@ async function saveWeb() {
     web.braveApiKey = ''
     web.searxngUrl = ''
     web.searxngApiKey = ''
-    toast.add({ title: 'Web search keys saved', icon: 'i-lucide-check', color: 'success' })
+    toast.add({ title: t('accountSettings.web.saved'), icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
     toast.add({
-      title: 'Could not save web search keys',
+      title: t('accountSettings.web.saveError'),
       description: e instanceof Error ? e.message : String(e),
       color: 'error',
     })
@@ -213,10 +227,10 @@ async function clearWeb() {
   savingWeb.value = true
   try {
     await store.save(props.accountId, { secrets: { webSearch: null } })
-    toast.add({ title: 'Web search keys cleared', icon: 'i-lucide-check', color: 'success' })
+    toast.add({ title: t('accountSettings.web.cleared'), icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
     toast.add({
-      title: 'Could not clear web search keys',
+      title: t('accountSettings.web.clearError'),
       description: e instanceof Error ? e.message : String(e),
       color: 'error',
     })
@@ -229,38 +243,44 @@ async function clearWeb() {
 <template>
   <div v-if="store.available !== false" class="space-y-6">
     <div>
-      <h3 class="mb-1 font-semibold text-white">Deployment integrations</h3>
-      <p class="text-[11px] text-slate-400">
-        Credentials shared by every workspace in this account, sealed at rest. Values are never
-        shown after saving; leave a field blank to keep the stored secret.
-      </p>
+      <h3 class="mb-1 font-semibold text-white">{{ t('accountSettings.title') }}</h3>
+      <p class="text-[11px] text-slate-400">{{ t('accountSettings.description') }}</p>
     </div>
 
     <!-- Slack app OAuth -->
     <section class="space-y-2">
       <div class="flex items-center gap-2">
-        <h4 class="text-sm font-semibold text-slate-200">Slack app (OAuth)</h4>
+        <h4 class="text-sm font-semibold text-slate-200">{{ t('accountSettings.slack.title') }}</h4>
         <UBadge
           :color="summary?.slackOAuthConfigured ? 'success' : 'neutral'"
           variant="subtle"
           size="xs"
         >
-          {{ summary?.slackOAuthConfigured ? 'Configured' : 'Not set' }}
+          {{
+            summary?.slackOAuthConfigured
+              ? t('accountSettings.status.configured')
+              : t('accountSettings.status.notSet')
+          }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-slate-400">
-        Enables the "Add to Slack" OAuth flow. Without it, workspaces can still connect Slack by
-        pasting a bot token.
-      </p>
+      <p class="text-[11px] text-slate-400">{{ t('accountSettings.slack.description') }}</p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <UInput v-model="slack.clientId" placeholder="Client ID" size="sm" />
+        <UInput
+          v-model="slack.clientId"
+          :placeholder="t('accountSettings.slack.clientId')"
+          size="sm"
+        />
         <UInput
           v-model="slack.clientSecret"
           type="password"
-          placeholder="Client secret"
+          :placeholder="t('accountSettings.slack.clientSecret')"
           size="sm"
         />
-        <UInput v-model="slack.redirectUrl" placeholder="Redirect URL" size="sm" />
+        <UInput
+          v-model="slack.redirectUrl"
+          :placeholder="t('accountSettings.slack.redirectUrl')"
+          size="sm"
+        />
       </div>
       <div class="flex gap-2">
         <UButton
@@ -270,7 +290,7 @@ async function clearWeb() {
           :loading="savingSlack"
           @click="saveSlack"
         >
-          Save
+          {{ t('common.save') }}
         </UButton>
         <UButton
           v-if="summary?.slackOAuthConfigured"
@@ -280,7 +300,7 @@ async function clearWeb() {
           :loading="savingSlack"
           @click="clearSlack"
         >
-          Clear
+          {{ t('accountSettings.clear') }}
         </UButton>
       </div>
     </section>
@@ -288,22 +308,32 @@ async function clearWeb() {
     <!-- Web search keys -->
     <section class="space-y-2 border-t border-slate-800 pt-6">
       <div class="flex items-center gap-2">
-        <h4 class="text-sm font-semibold text-slate-200">Container web search</h4>
+        <h4 class="text-sm font-semibold text-slate-200">{{ t('accountSettings.web.title') }}</h4>
         <UBadge :color="summary?.webSearch ? 'success' : 'neutral'" variant="subtle" size="xs">
-          {{ summary?.webSearch ? `Configured (${summary.webSearch})` : 'Not set' }}
+          {{
+            summary?.webSearch
+              ? t('accountSettings.web.configured', { provider: summary.webSearch })
+              : t('accountSettings.status.notSet')
+          }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-slate-400">
-        The search upstream container agents reach through the backend proxy. Set a Brave key
-        (recommended), or a self-hosted SearXNG URL (with an optional bearer key).
-      </p>
+      <p class="text-[11px] text-slate-400">{{ t('accountSettings.web.description') }}</p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <UInput v-model="web.braveApiKey" type="password" placeholder="Brave API key" size="sm" />
-        <UInput v-model="web.searxngUrl" placeholder="SearXNG URL" size="sm" />
+        <UInput
+          v-model="web.braveApiKey"
+          type="password"
+          :placeholder="t('accountSettings.web.braveKey')"
+          size="sm"
+        />
+        <UInput
+          v-model="web.searxngUrl"
+          :placeholder="t('accountSettings.web.searxngUrl')"
+          size="sm"
+        />
         <UInput
           v-model="web.searxngApiKey"
           type="password"
-          placeholder="SearXNG key (optional)"
+          :placeholder="t('accountSettings.web.searxngKey')"
           size="sm"
         />
       </div>
@@ -315,7 +345,7 @@ async function clearWeb() {
           :loading="savingWeb"
           @click="saveWeb"
         >
-          Save
+          {{ t('common.save') }}
         </UButton>
         <UButton
           v-if="summary?.webSearch"
@@ -325,7 +355,7 @@ async function clearWeb() {
           :loading="savingWeb"
           @click="clearWeb"
         >
-          Clear
+          {{ t('accountSettings.clear') }}
         </UButton>
       </div>
     </section>
@@ -333,7 +363,9 @@ async function clearWeb() {
     <!-- Content storage (binary artifacts / screenshots) -->
     <section v-if="storageCapability" class="space-y-2 border-t border-slate-800 pt-6">
       <div class="flex items-center gap-2">
-        <h4 class="text-sm font-semibold text-slate-200">Content storage</h4>
+        <h4 class="text-sm font-semibold text-slate-200">
+          {{ t('accountSettings.contentStorage.title') }}
+        </h4>
         <UBadge
           :color="
             storageSummary?.backend && storageSummary.backend !== 'off' ? 'success' : 'neutral'
@@ -343,14 +375,15 @@ async function clearWeb() {
         >
           {{
             storageSummary?.backend
-              ? CONTENT_BACKEND_LABELS[storageSummary.backend]
-              : `Default (${CONTENT_BACKEND_LABELS[storageCapability.defaultBackend]})`
+              ? contentBackendLabels[storageSummary.backend]
+              : t('accountSettings.contentStorage.default', {
+                  backend: contentBackendLabels[storageCapability.defaultBackend],
+                })
           }}
         </UBadge>
       </div>
       <p class="text-[11px] text-slate-400">
-        Where UI-tester screenshots and reference design images for this account are stored. The
-        metadata always lives in the database; only the file bytes go to the chosen backend.
+        {{ t('accountSettings.contentStorage.description') }}
       </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <USelect v-model="csBackend" :items="backendItems" value-key="value" size="sm" />
@@ -358,47 +391,74 @@ async function clearWeb() {
 
       <!-- Filesystem -->
       <div v-if="csBackend === 'fs'" class="grid grid-cols-1 gap-2">
-        <UInput v-model="cs.basePath" placeholder="Base path (default: .file-storage)" size="sm" />
+        <UInput
+          v-model="cs.basePath"
+          :placeholder="t('accountSettings.contentStorage.basePath')"
+          size="sm"
+        />
       </div>
 
       <!-- S3 / S3-compatible -->
       <template v-if="csBackend === 's3'">
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <UInput v-model="cs.region" placeholder="Region (e.g. us-east-1)" size="sm" />
-          <UInput v-model="cs.bucket" placeholder="Bucket" size="sm" />
-          <UInput v-model="cs.prefix" placeholder="Key prefix (optional)" size="sm" />
+          <UInput
+            v-model="cs.region"
+            :placeholder="t('accountSettings.contentStorage.region')"
+            size="sm"
+          />
+          <UInput
+            v-model="cs.bucket"
+            :placeholder="t('accountSettings.contentStorage.bucket')"
+            size="sm"
+          />
+          <UInput
+            v-model="cs.prefix"
+            :placeholder="t('accountSettings.contentStorage.prefix')"
+            size="sm"
+          />
           <UInput
             v-model="cs.endpoint"
-            placeholder="Endpoint (optional, S3-compatible)"
+            :placeholder="t('accountSettings.contentStorage.endpoint')"
             size="sm"
           />
         </div>
         <UCheckbox
           v-model="cs.forcePathStyle"
-          label="Force path-style addressing (most S3-compatible stores)"
+          :label="t('accountSettings.contentStorage.forcePathStyle')"
           size="sm"
         />
         <div class="flex items-center gap-2">
-          <span class="text-[11px] text-slate-400">Access keys</span>
+          <span class="text-[11px] text-slate-400">
+            {{ t('accountSettings.contentStorage.accessKeys') }}
+          </span>
           <UBadge
             :color="storageSummary?.s3CredentialsConfigured ? 'success' : 'neutral'"
             variant="subtle"
             size="xs"
           >
-            {{ storageSummary?.s3CredentialsConfigured ? 'Configured' : 'Not set' }}
+            {{
+              storageSummary?.s3CredentialsConfigured
+                ? t('accountSettings.status.configured')
+                : t('accountSettings.status.notSet')
+            }}
           </UBadge>
         </div>
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <UInput v-model="cs.accessKeyId" type="password" placeholder="Access key ID" size="sm" />
+          <UInput
+            v-model="cs.accessKeyId"
+            type="password"
+            :placeholder="t('accountSettings.contentStorage.accessKeyId')"
+            size="sm"
+          />
           <UInput
             v-model="cs.secretAccessKey"
             type="password"
-            placeholder="Secret access key"
+            :placeholder="t('accountSettings.contentStorage.secretAccessKey')"
             size="sm"
           />
         </div>
         <p class="text-[11px] text-slate-400">
-          Keys are sealed at rest and never shown after saving; leave blank to keep the stored keys.
+          {{ t('accountSettings.contentStorage.keysHint') }}
         </p>
       </template>
 
@@ -410,7 +470,7 @@ async function clearWeb() {
           :loading="savingStorage"
           @click="saveStorage"
         >
-          Save
+          {{ t('common.save') }}
         </UButton>
       </div>
     </section>

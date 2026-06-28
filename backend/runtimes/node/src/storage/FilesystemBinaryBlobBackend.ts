@@ -15,6 +15,11 @@ export const DEFAULT_FILE_STORAGE_PATH = '.file-storage'
  *
  * Configured per-account in the UI (the local facade defaults to it; Node requires it to be
  * selected). The base directory is created up-front so the path exists from boot.
+ *
+ * IMPORTANT: this is local-disk storage. It is correct for local mode and a single-instance
+ * Node deployment backed by a persistent volume, but it is NOT safe for a scaled (multi-replica)
+ * deployment or one with an ephemeral disk: bytes written by one instance are invisible to the
+ * others and are lost on redeploy. Such deployments should configure the `s3` backend instead.
  */
 export class FilesystemBinaryBlobBackend implements BinaryBlobBackend {
   readonly kind = 'fs' as const

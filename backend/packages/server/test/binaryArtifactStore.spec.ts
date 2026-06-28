@@ -147,6 +147,37 @@ describe('makeResolveBinaryArtifactStore', () => {
     expect(builds).toBe(2)
   })
 
+  it('rebuilds the store when the S3 credentials are rotated (same presence, new values)', async () => {
+    let creds = { accessKeyId: 'old', secretAccessKey: 'old-secret' }
+    let builds = 0
+    const resolve = makeResolveBinaryArtifactStore({
+      accountSettings: {
+        resolve: () =>
+          Promise.resolve({
+            config: { contentStorage: { backend: 's3', s3: { region: 'r', bucket: 'b' } } },
+            s3Credentials: creds,
+          }),
+      },
+      accountOf: () => Promise.resolve('acc-1'),
+      metadata,
+      idGenerator,
+      clock,
+      buildBlobBackend: (kind) => {
+        builds += 1
+        return fakeBackend(kind === 's3' ? 's3' : 'fs')
+      },
+      defaultBackend: 'off',
+    })
+    const first = await resolve('ws-1')
+    expect(await resolve('ws-1')).toBe(first) // unchanged creds → cached
+    expect(builds).toBe(1)
+    // Rotate the keys (presence still configured, but the values differ) → rebuild.
+    creds = { accessKeyId: 'new', secretAccessKey: 'new-secret' }
+    const rotated = await resolve('ws-1')
+    expect(rotated).not.toBe(first)
+    expect(builds).toBe(2)
+  })
+
   it('uses the default when a workspace has no account (legacy null)', async () => {
     const accountSettings = { resolve: vi.fn() }
     const resolve = makeResolveBinaryArtifactStore({

@@ -8,7 +8,7 @@ import type { Clock, IdGenerator } from './runtime.js'
 // stored separately: the METADATA always lives in the runtime's relational
 // store (D1 on Cloudflare, Postgres on Node — so it can be listed/joined/pruned
 // like any other row), while the BYTES live in whatever blob backend the
-// account configured (R2 on Cloudflare, S3 via @cat-factory/provider-s3, a
+// account configured (R2 on Cloudflare; S3 via @cat-factory/provider-s3, a
 // Postgres `bytea` table or the local filesystem on Node/local; or anything
 // custom). The backend is chosen per-account in the UI, not at boot.
 //

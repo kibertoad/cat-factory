@@ -22,10 +22,11 @@ Filesystem blob backend + UI-managed, per-account content storage.
   resolved per request/run from the account's settings via the new
   `makeResolveBinaryArtifactStore` seam (`@cat-factory/server`), replacing the static
   `binaryArtifactStore` on the container with a `resolveBinaryArtifactStore(workspaceId)`.
-- Per-runtime defaults when an account hasn't configured storage: **local** defaults to
-  the filesystem backend (works out of the box); **Node** defaults to off (storage requires
-  explicit configuration); **Cloudflare** defaults to its R2 bucket and an account can switch
-  to S3.
+- Available backends per runtime: **Node/local** offer `fs` / `s3` / `db`, **Cloudflare**
+  offers `r2` only (S3 is deliberately not offered on the Worker — the AWS SDK does not belong
+  in the Worker bundle). Defaults when an account hasn't configured storage: **local** defaults
+  to the filesystem backend (works out of the box); **Node** defaults to off (storage requires
+  explicit configuration); **Cloudflare** defaults to its R2 bucket.
 
 BREAKING: the env-var content-storage configuration is removed — `BINARY_STORAGE_BACKEND`,
 `S3_ARTIFACT_*`, and `AppConfig.binaryStorage`/`BinaryStorageConfig` no longer exist.

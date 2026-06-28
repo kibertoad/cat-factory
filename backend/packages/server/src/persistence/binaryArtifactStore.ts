@@ -70,13 +70,32 @@ export interface MakeResolveBinaryArtifactStoreDeps {
 }
 
 /**
+ * A stable, non-reversible fingerprint of the decrypted S3 credentials, folded into the
+ * cache signature so ROTATING the keys (their presence is unchanged, but the values differ)
+ * rebuilds the composed store — otherwise the S3 client memoised inside the `s3` backend
+ * would keep using the old keys until the process restarted. A tiny FNV-1a hash keeps the
+ * raw secret out of the in-memory signature string.
+ */
+function credentialFingerprint(creds?: S3CredentialsSecret): string | null {
+  if (!creds) return null
+  const material = `${creds.accessKeyId}|${creds.secretAccessKey}`
+  let hash = 0x811c9dc5
+  for (let i = 0; i < material.length; i++) {
+    hash ^= material.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16)
+}
+
+/**
  * Compose a {@link ResolveBinaryArtifactStore}: workspace → owning account → that account's
  * configured backend (or the runtime default when unconfigured) → a composed
  * {@link BinaryArtifactStore}. Returns `null` when the effective backend is `off` or the
  * runtime cannot serve it (every consumer treats `null` as "storage unavailable"). The
- * composed store is cached per account keyed by a config signature, so switching an
- * account's backend rebuilds it (and the S3 client memoised inside an `s3` backend survives
- * across requests until the config actually changes).
+ * composed store is cached per account keyed by a config signature (which includes a
+ * fingerprint of the S3 credentials), so switching an account's backend OR rotating its S3
+ * keys rebuilds it — and the S3 client memoised inside an `s3` backend survives across
+ * requests until the config actually changes.
  */
 export function makeResolveBinaryArtifactStore(
   deps: MakeResolveBinaryArtifactStoreDeps,
@@ -104,7 +123,12 @@ export function makeResolveBinaryArtifactStore(
     if (backend === 'off') return null
 
     const cacheKey = accountId ?? '__default__'
-    const signature = JSON.stringify({ backend, fs, s3, hasCreds: Boolean(s3Credentials) })
+    const signature = JSON.stringify({
+      backend,
+      fs,
+      s3,
+      creds: credentialFingerprint(s3Credentials),
+    })
     const cached = cache.get(cacheKey)
     if (cached && cached.signature === signature) return cached.store
 

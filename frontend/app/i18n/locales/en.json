@@ -44,6 +44,68 @@
     "modelConfiguration": "Model configuration",
     "accountSettings": "Account settings"
   },
+  "accountSettings": {
+    "title": "Deployment integrations",
+    "description": "Credentials shared by every workspace in this account, sealed at rest. Values are never shown after saving; leave a field blank to keep the stored secret.",
+    "loadError": "Could not load deployment settings",
+    "clear": "Clear",
+    "status": {
+      "configured": "Configured",
+      "notSet": "Not set"
+    },
+    "slack": {
+      "title": "Slack app (OAuth)",
+      "description": "Enables the \"Add to Slack\" OAuth flow. Without it, workspaces can still connect Slack by pasting a bot token.",
+      "clientId": "Client ID",
+      "clientSecret": "Client secret",
+      "redirectUrl": "Redirect URL",
+      "validation": "Enter the client id, secret and redirect URL",
+      "saved": "Slack OAuth saved",
+      "saveError": "Could not save Slack OAuth",
+      "cleared": "Slack OAuth cleared",
+      "clearError": "Could not clear Slack OAuth"
+    },
+    "web": {
+      "title": "Container web search",
+      "configured": "Configured ({provider})",
+      "description": "The search upstream container agents reach through the backend proxy. Set a Brave key (recommended), or a self-hosted SearXNG URL (with an optional bearer key).",
+      "braveKey": "Brave API key",
+      "searxngUrl": "SearXNG URL",
+      "searxngKey": "SearXNG key (optional)",
+      "validation": "Enter a Brave key or a SearXNG URL",
+      "saved": "Web search keys saved",
+      "saveError": "Could not save web search keys",
+      "cleared": "Web search keys cleared",
+      "clearError": "Could not clear web search keys"
+    },
+    "contentStorage": {
+      "title": "Content storage",
+      "description": "Where UI-tester screenshots and reference design images for this account are stored. The metadata always lives in the database; only the file bytes go to the chosen backend.",
+      "default": "Default ({backend})",
+      "backends": {
+        "off": "Off (storage disabled)",
+        "fs": "Local filesystem",
+        "s3": "Amazon S3 / S3-compatible",
+        "r2": "Cloudflare R2",
+        "db": "Postgres database"
+      },
+      "basePath": "Base path (default: .file-storage)",
+      "region": "Region (e.g. us-east-1)",
+      "bucket": "Bucket",
+      "prefix": "Key prefix (optional)",
+      "endpoint": "Endpoint (optional, S3-compatible)",
+      "forcePathStyle": "Force path-style addressing (most S3-compatible stores)",
+      "accessKeys": "Access keys",
+      "accessKeyId": "Access key ID",
+      "secretAccessKey": "Secret access key",
+      "keysHint": "Keys are sealed at rest and never shown after saving; leave blank to keep the stored keys.",
+      "regionBucketValidation": "Enter the S3 region and bucket",
+      "bothKeysValidation": "Enter both the access key id and secret",
+      "keysValidation": "Enter the S3 access key id and secret",
+      "saved": "Content storage saved",
+      "saveError": "Could not save content storage"
+    }
+  },
   "board": {
     "toolbar": {
       "addService": "Add service",

@@ -47,9 +47,11 @@ binary-artifact storage (the substrate both rely on)
   - **Postgres `bytea`** blob backend (`runtimes/node/src/storage/PostgresBinaryBlobBackend.ts`,
     size-guarded) + Drizzle metadata.
   - **S3** blob backend — opt-in package `backend/packages/provider-s3` (modelled on
-    `provider-bedrock`); accepts explicit UI-entered credentials.
+    `provider-bedrock`); accepts explicit UI-entered credentials. **Node/local only** — S3 is
+    deliberately not offered on the Worker (the AWS SDK does not belong in the Worker bundle).
   - **Filesystem** blob backend (`runtimes/node/src/storage/FilesystemBinaryBlobBackend.ts`):
-    on-disk under a base path (default `.file-storage`, git-ignored). Node/local only.
+    on-disk under a base path (default `.file-storage`, git-ignored). Node/local only, and
+    local-disk only — not for a scaled/ephemeral deployment (use `s3` there).
 - Metadata table `binary_artifacts` mirrored D1 (`migrations/0017_binary_artifacts.sql`) ⇄
   Drizzle (`db/schema.ts` + generated migration); Node-only `binary_artifact_blobs` `bytea`
   table for the `db` backend. `pnpm db:check` is green.

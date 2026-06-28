@@ -55,7 +55,6 @@
     "@cat-factory/orchestration": "workspace:*",
     "@cat-factory/prompt-fragments": "workspace:*",
     "@cat-factory/provider-cloudflare": "workspace:*",
-    "@cat-factory/provider-s3": "workspace:*",
     "@cat-factory/server": "workspace:*",
     "@cat-factory/spend": "workspace:*",
     "@cloudflare/containers": "^0.3.7",

@@ -976,11 +976,19 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const buildNodeBlobBackend: BuildBlobBackend = (kind, opts) => {
     switch (kind) {
       case 'fs':
+        // NOTE: the filesystem backend is local-disk only. It is correct for the local facade
+        // and a single-instance Node deployment with a persistent volume, but NOT for a scaled
+        // (multi-replica) or ephemeral-disk deployment — bytes written on one replica are
+        // invisible to the others and lost on redeploy. Scaled deployments should pick `s3`.
         return new FilesystemBinaryBlobBackend({ basePath: opts.fs?.basePath })
       case 'db':
         return new PostgresBinaryBlobBackend(options.db)
       case 's3':
         if (!opts.s3) return null
+        // Omitting credentials is intentional: the S3 client then falls back to the ambient AWS
+        // credential chain (instance role / `AWS_*` env), which is the right behaviour for a
+        // deployment running on AWS with an attached role. The UI requires explicit keys, so this
+        // path is only reached by a config written through another channel.
         return new S3BinaryBlobBackend({
           ...opts.s3,
           ...(opts.s3Credentials ? { credentials: opts.s3Credentials } : {}),

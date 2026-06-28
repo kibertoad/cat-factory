@@ -1,4 +1,8 @@
-import { defineBinaryArtifactsSuite, MemoryBinaryBlobBackend } from '@cat-factory/conformance'
+import {
+  defineBinaryArtifactsSuite,
+  defineContentStorageResolutionSuite,
+  MemoryBinaryBlobBackend,
+} from '@cat-factory/conformance'
 import { createBinaryArtifactStore } from '@cat-factory/kernel'
 import { describe, it } from 'vitest'
 import { createDrizzleRepositories } from '../src/repositories/drizzle.js'
@@ -24,6 +28,12 @@ if (databaseUrl) {
       clock,
     }),
   )
+  // Per-account store resolution against the same real Postgres metadata store.
+  defineContentStorageResolutionSuite('node', {
+    metadata: createDrizzleRepositories(db, clock).binaryArtifactMetadataStore,
+    idGenerator,
+    clock,
+  })
 } else {
   describe.skip('[node] binary artifacts (set DATABASE_URL to run)', () => {
     it('requires Postgres', () => {})

@@ -162,7 +162,6 @@ import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepositor
 import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
 import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMetadataStore'
 import { R2BinaryBlobBackend } from './storage/R2BinaryBlobBackend'
-import { S3BinaryBlobBackend } from '@cat-factory/provider-s3'
 import type { ContentStorageCapability } from '@cat-factory/contracts'
 import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
 import { D1KaizenGradingRepository } from './repositories/D1KaizenGradingRepository'
@@ -728,32 +727,26 @@ function buildAccountSettings(
 }
 
 /**
- * The Worker's content-storage capability + blob-backend factory: an account keeps the
- * deployment's R2 bucket (the default when ARTIFACT_BUCKET is bound) or switches to its own
- * S3 bucket. `fs`/`db` cannot exist on the Worker. Shared by the container wiring and the
- * retention cron so both build the same backends.
+ * The Worker's content-storage capability + blob-backend factory: on Cloudflare the bytes
+ * always go to the deployment's R2 bucket (the only blob store that makes sense on the
+ * Worker). `fs`/`db` cannot exist on the Worker, and S3 is intentionally NOT offered here —
+ * the AWS SDK does not belong in the Worker bundle, and an account that wants S3 should run
+ * the Node/local facade. Shared by the container wiring and the retention cron so both build
+ * the same backend.
  */
 export function cloudflareContentStorage(env: Env): {
   capability: ContentStorageCapability
   buildBlobBackend: BuildBlobBackend
 } {
   const capability: ContentStorageCapability = {
-    supportedBackends: env.ARTIFACT_BUCKET ? ['off', 'r2', 's3'] : ['off', 's3'],
+    supportedBackends: env.ARTIFACT_BUCKET ? ['off', 'r2'] : ['off'],
     defaultBackend: env.ARTIFACT_BUCKET ? 'r2' : 'off',
   }
-  const buildBlobBackend: BuildBlobBackend = (kind, opts) => {
-    switch (kind) {
-      case 'r2':
-        return env.ARTIFACT_BUCKET ? new R2BinaryBlobBackend({ bucket: env.ARTIFACT_BUCKET }) : null
-      case 's3':
-        if (!opts.s3) return null
-        return new S3BinaryBlobBackend({
-          ...opts.s3,
-          ...(opts.s3Credentials ? { credentials: opts.s3Credentials } : {}),
-        })
-      default:
-        return null
-    }
+  const buildBlobBackend: BuildBlobBackend = (kind) => {
+    // R2 is the only blob backend the Worker serves; anything else ⇒ storage unavailable.
+    return kind === 'r2' && env.ARTIFACT_BUCKET
+      ? new R2BinaryBlobBackend({ bucket: env.ARTIFACT_BUCKET })
+      : null
   }
   return { capability, buildBlobBackend }
 }

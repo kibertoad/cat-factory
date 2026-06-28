@@ -141,7 +141,7 @@ export class VisualConfirmationController {
     await this.deps.stopRunContainer(workspaceId, instance)
     const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
-    vc.pairs = await this.gatherPairs(workspaceId, instance, block)
+    vc.pairs = await this.gatherPairs(workspaceId, instance, block, await this.store(workspaceId))
     // The pairs come from the LAST UI-tester report, which predates this fix — the gate does
     // not auto re-run the UI tester yet (see the handover doc). Flag the staleness so the human
     // knows to recapture (or re-run the UI tester) before judging the screenshots as final,
@@ -200,11 +200,12 @@ export class VisualConfirmationController {
   ): Promise<AdvanceResult> {
     // No store ⇒ nowhere to read screenshots from: pass through so a pipeline that includes
     // the gate still completes (tests / an account without content storage configured).
-    if (!(await this.store(workspaceId))) {
+    const store = await this.store(workspaceId)
+    if (!store) {
       return this.completeStep(workspaceId, instance, step, isFinalStep)
     }
     const maxAttempts = (await this.deps.resolveMergePreset(workspaceId, block)).ciMaxAttempts
-    const pairs = await this.gatherPairs(workspaceId, instance, block)
+    const pairs = await this.gatherPairs(workspaceId, instance, block, store)
     step.visualConfirm = {
       phase: 'awaiting_human',
       pairs,
@@ -241,7 +242,13 @@ export class VisualConfirmationController {
         return this.dispatchFixer(workspaceId, instance, step, block, action.findings ?? '')
       case 'recapture': {
         const vc = step.visualConfirm
-        if (vc) vc.pairs = await this.gatherPairs(workspaceId, instance, block)
+        if (vc)
+          vc.pairs = await this.gatherPairs(
+            workspaceId,
+            instance,
+            block,
+            await this.store(workspaceId),
+          )
         return this.toAwaitingHuman(workspaceId, instance, step, block)
       }
     }
@@ -321,14 +328,18 @@ export class VisualConfirmationController {
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
   }
 
-  /** Gather actual-vs-reference pairs: the latest UI-tester report's screenshots + block references. */
+  /**
+   * Gather actual-vs-reference pairs: the latest UI-tester report's screenshots + block
+   * references. The caller passes the already-resolved per-account store (or null) so the
+   * gate's entry path doesn't resolve it twice.
+   */
   private async gatherPairs(
     workspaceId: string,
     instance: ExecutionInstance,
     block: Block,
+    store: BinaryArtifactStore | null,
   ): Promise<VisualConfirmPair[]> {
     const byView = new Map<string, VisualConfirmPair>()
-    const store = await this.store(workspaceId)
     // The artifact ids the run ACTUALLY uploaded — so a screenshot id the agent reported but
     // that was never stored (a fabricated/typo'd id), or one since removed by the retention
     // sweep, is treated as "not captured" rather than rendered as a dangling/404 gallery image.

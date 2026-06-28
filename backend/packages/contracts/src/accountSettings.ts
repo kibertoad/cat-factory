@@ -13,9 +13,10 @@ import * as v from 'valibot'
 
 /**
  * Where an account's binary artifacts (UI screenshots + reference designs) are stored.
- * `off` disables storage (the visual-confirmation gate passes through). `fs`/`db` are
- * Node/local only; `r2` is Cloudflare only; `s3` works on every runtime. Which of these
- * a runtime actually supports is surfaced to the UI via {@link contentStorageCapabilitySchema}.
+ * `off` disables storage (the visual-confirmation gate passes through). `fs`/`s3`/`db` are
+ * Node/local only (S3 is deliberately not offered on the Worker — the AWS SDK does not belong
+ * in the Worker bundle); `r2` is Cloudflare only. Which of these a runtime actually supports
+ * is surfaced to the UI via {@link contentStorageCapabilitySchema}.
  */
 export const contentStorageBackendSchema = v.picklist(['off', 'fs', 's3', 'r2', 'db'])
 export type ContentStorageBackend = v.InferOutput<typeof contentStorageBackendSchema>

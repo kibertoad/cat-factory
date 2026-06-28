@@ -116,5 +116,67 @@
         "step3": "Copiez tout le contenu de auth.json, collez-le ci-dessous et choisissez un mot de passe personnel pour le protéger."
       }
     }
+  },
+  "accountSettings": {
+    "title": "Intégrations de déploiement",
+    "description": "Identifiants partagés par tous les espaces de travail de ce compte, scellés au repos. Les valeurs ne sont jamais affichées après enregistrement ; laissez un champ vide pour conserver le secret stocké.",
+    "loadError": "Impossible de charger les paramètres de déploiement",
+    "clear": "Effacer",
+    "status": {
+      "configured": "Configuré",
+      "notSet": "Non défini"
+    },
+    "slack": {
+      "title": "Application Slack (OAuth)",
+      "description": "Active le flux OAuth « Ajouter à Slack ». Sans lui, les espaces de travail peuvent toujours connecter Slack en collant un jeton de bot.",
+      "clientId": "ID client",
+      "clientSecret": "Secret client",
+      "redirectUrl": "URL de redirection",
+      "validation": "Saisissez l’id client, le secret et l’URL de redirection",
+      "saved": "OAuth Slack enregistré",
+      "saveError": "Impossible d’enregistrer l’OAuth Slack",
+      "cleared": "OAuth Slack effacé",
+      "clearError": "Impossible d’effacer l’OAuth Slack"
+    },
+    "web": {
+      "title": "Recherche web du conteneur",
+      "configured": "Configuré ({provider})",
+      "description": "Le fournisseur de recherche que les agents de conteneur atteignent via le proxy du backend. Configurez une clé Brave (recommandé) ou une URL SearXNG auto-hébergée (avec une clé bearer facultative).",
+      "braveKey": "Clé API Brave",
+      "searxngUrl": "URL SearXNG",
+      "searxngKey": "Clé SearXNG (facultative)",
+      "validation": "Saisissez une clé Brave ou une URL SearXNG",
+      "saved": "Clés de recherche web enregistrées",
+      "saveError": "Impossible d’enregistrer les clés de recherche web",
+      "cleared": "Clés de recherche web effacées",
+      "clearError": "Impossible d’effacer les clés de recherche web"
+    },
+    "contentStorage": {
+      "title": "Stockage de contenu",
+      "description": "Où sont stockées les captures d’écran du testeur d’UI et les images de design de référence de ce compte. Les métadonnées vivent toujours dans la base de données ; seuls les octets des fichiers vont vers le backend choisi.",
+      "default": "Par défaut ({backend})",
+      "backends": {
+        "off": "Désactivé (stockage désactivé)",
+        "fs": "Système de fichiers local",
+        "s3": "Amazon S3 / compatible S3",
+        "r2": "Cloudflare R2",
+        "db": "Base de données Postgres"
+      },
+      "basePath": "Chemin de base (par défaut : .file-storage)",
+      "region": "Région (p. ex. us-east-1)",
+      "bucket": "Bucket",
+      "prefix": "Préfixe de clé (facultatif)",
+      "endpoint": "Endpoint (facultatif, compatible S3)",
+      "forcePathStyle": "Forcer l’adressage de style chemin (la plupart des stockages compatibles S3)",
+      "accessKeys": "Clés d’accès",
+      "accessKeyId": "ID de clé d’accès",
+      "secretAccessKey": "Clé d’accès secrète",
+      "keysHint": "Les clés sont scellées au repos et ne sont jamais affichées après enregistrement ; laissez vide pour conserver les clés stockées.",
+      "regionBucketValidation": "Saisissez la région et le bucket S3",
+      "bothKeysValidation": "Saisissez à la fois l’id de clé d’accès et le secret",
+      "keysValidation": "Saisissez l’id de clé d’accès et le secret S3",
+      "saved": "Stockage de contenu enregistré",
+      "saveError": "Impossible d’enregistrer le stockage de contenu"
+    }
   }
 }
