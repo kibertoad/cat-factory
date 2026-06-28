@@ -963,6 +963,69 @@ with those fakes injected); the full picture is in [`backend/internal/e2e/README
   an otherwise-green PR. Promote it into `test-gate.needs` only once it has earned trust
   (see the README's promotion checklist).
 
+## Internationalization (i18n)
+
+All user-facing copy in the SPA is translatable via **`@nuxtjs/i18n`** (vue-i18n under
+the hood) and **MUST** go through it — never hard-code a display string in a component.
+The `@cat-factory/app` layer ships the base `en` locale; a downstream deployment
+overrides or adds locales by dropping its own files, so the layer's per-layer
+**deep-merge** is the override seam (consumer wins, key by key).
+
+**Where things live:**
+- `frontend/app/i18n/locales/<locale>.json` — the message catalog (the v9+ `i18n/`
+  `restructureDir` convention; **NOT** `app/locales/`). Today only `en.json` exists.
+- `frontend/app/i18n/i18n.config.ts` — runtime vue-i18n behaviour only (fallback locale +
+  the `numberFormats`/`datetimeFormats`). Messages are deliberately NOT here, so the module
+  can deep-merge catalogs across the `extends` chain. Referenced from `nuxt.config.ts` as
+  the **bare** filename `vueI18n: 'i18n.config.ts'` — the module resolves it per-layer, so
+  do NOT `layerDir`-anchor it the way the css block is anchored.
+- `nuxt.config.ts` `i18n` block — registers locales + `defaultLocale: 'en'`. Pure SPA
+  (`ssr: false`), so a single in-app locale and no URL-prefix routing.
+- `package.json` `files` MUST include `"i18n"` — **release-blocking**: omit it and the
+  locales don't ship in the published layer.
+
+**Adding / changing a translatable string (the day-to-day flow):**
+1. Add the key to `i18n/locales/en.json` under the feature namespace, then resolve it at
+   the call site with `t('feature.area.key')` (template) / `useI18n().t(...)` (script).
+2. Format **numbers, currency, percentages, and dates through vue-i18n**, not raw `Intl`:
+   `$n(value, 'decimal'|'currency'|'percent')` and `$d(value, 'short'|'long')` (the named
+   formats defined in `i18n.config.ts`). `currency` needs a per-call `currency` override
+   (`$n(n, 'currency', { currency: s.currency })`) — the backend supplies the code.
+3. For a brand-new locale, add `i18n/locales/<locale>.json` + register it in the
+   `nuxt.config.ts` `locales` array (and, downstream, just drop the JSON to override).
+
+**Key conventions:**
+- One namespace per feature; resolve with `t('feature.area.key')`.
+- **Leaf keys mirror the enum/code value verbatim** so a dynamic lookup is total — e.g.
+  `errors.conflict.title.<reason>`, `catalog.status.<status>`.
+- **No cross-key concatenation.** A full sentence is ONE key with `{named}` placeholders;
+  plurals use the vue-i18n pipe form (`'no cats | one cat | {count} cats'`).
+
+**Backend / server strings:** the backend does not localize prose. A localizable server
+condition emits a machine-readable `error.details.reason`/`code`, and the SPA maps that
+code to a frontend key (the `usePipelineErrorToast.ts` pattern); the raw backend `message`
+is shown only as an untranslated last-resort fallback. The wire vocabulary that drives such
+a mapping lives in `@cat-factory/contracts` (e.g. `ConflictReason`), so the SPA imports the
+SAME source of truth the backend throws against.
+
+**Drift guards (the repo lints with oxlint only, so the ESLint `@intlify/.../no-raw-text`
+rule is unavailable — these two tiers replace it):**
+1. **Typed message keys** (`i18n.experimental.typedOptionsAndMessages`) make a *statically
+   written* unknown `t('literal.key')` a `nuxt typecheck` failure (a CI gate). This does
+   NOT cover a key assembled at runtime — a `t(\`errors.conflict.title.${reason}\`)` template
+   or a variable key is typed as `string`, so the compiler can't check it.
+2. For those **dynamic enum→key lookups**, guard with an **exhaustive `Record<TheEnum,
+   string>`** keyed off the source-of-truth union (e.g. `CONFLICT_TITLE_KEYS` in
+   `usePipelineErrorToast.ts`, keyed off the contracts `ConflictReason`): adding an enum
+   value without a key fails the typecheck on the map, and a runtime `te()`-guard falls back
+   rather than leaking a raw key if a locale omits one. **Never rely on tier 1 alone for a
+   reason/status-keyed lookup.**
+
+A `vue-i18n-extract` missing/unused-key CI check is the planned secondary guard. Migration
+is incremental — `usePipelineErrorToast` is the pilot; most components still hold inline
+strings, so **when you touch a component, lift its visible copy into the catalog** rather
+than adding more raw text.
+
 ## Conventions
 
 - Hexagonal layering: controllers (`@cat-factory/server`) → services
@@ -970,42 +1033,11 @@ with those fakes injected); the full picture is in [`backend/internal/e2e/README
   facade and implement the ports + the `gateways` seam, wired in that facade's
   `container.ts` via constructor injection of a single `dependencies` object. Opt-in
   integrations (GitHub / environments / bootstrap) wire only when configured.
-- **Frontend i18n (`@cat-factory/app`):** user-facing copy is translatable via
-  **`@nuxtjs/i18n`** (vue-i18n under the hood). The layer is published and `extends`ed, so
-  the module's **per-layer locale deep-merge** is the override seam: messages live in
-  `frontend/app/i18n/locales/<locale>.json` (NOT `app/locales/`), and a downstream
-  deployment overrides/adds keys by dropping its own `i18n/locales/*.json` (consumer wins).
-  Config: `frontend/app/i18n/i18n.config.ts` (fallback + number/datetime formats) referenced
-  from `nuxt.config.ts` as the **bare** filename `vueI18n: 'i18n.config.ts'` (the module
-  resolves it per-layer — do NOT `layerDir`-anchor it like the css block). Adding the `i18n/`
-  dir to `package.json` `files` is **release-blocking** (else locales don't ship). Conventions:
-  resolve copy with `t('feature.area.key')`; **leaf keys mirror the enum/code value verbatim**
-  (`errors.conflict.title.<reason>`, `catalog.status.<status>`); one namespace per feature; no
-  cross-key concatenation (full sentences are one key with `{named}` placeholders); plurals use
-  the vue-i18n pipe form.
-  **Backend error strings** are translated by mapping the machine-readable
-  `error.details.reason`/`code` to a frontend key (the `usePipelineErrorToast.ts` pattern) —
-  raw backend `message` is shown only as an untranslated last-resort fallback; if a server
-  message must be localizable the backend emits a code and the frontend maps it. The wire
-  vocabulary that drives such a mapping lives in `@cat-factory/contracts` (e.g. `ConflictReason`),
-  so the SPA imports the SAME source of truth the backend throws against.
-  **Maintainability guardrail:** the repo lints with oxlint only, so the ESLint
-  `@intlify/.../no-raw-text` rule is unavailable. The drift guard has TWO tiers, because they
-  cover different things:
-  1. **Typed message keys** (`i18n.experimental.typedOptionsAndMessages`) make a **statically
-     written** unknown `t('literal.key')` a `nuxt typecheck` failure (a CI gate). This does NOT
-     cover a key assembled at runtime — a `t(\`errors.conflict.title.${reason}\`)`template or a
-variable key is typed as`string`, so the compiler can't check it.
-  2. For those **dynamic enum→key lookups**, guard with an **exhaustive
-     `Record<TheEnum, string>`** keyed off the source-of-truth union (the
-     `CONFLICT_TITLE_KEYS` map in `usePipelineErrorToast.ts`, keyed off the contracts
-     `ConflictReason`): adding an enum value without a key fails the typecheck on the map, and a
-     runtime `te()`-guard falls back rather than leaking a raw key if a locale omits one. Never
-     rely on tier 1 alone for a reason/status-keyed lookup.
-
-  A `vue-i18n-extract` missing/unused key CI check is the planned secondary guard. (Migration is
-  incremental — `usePipelineErrorToast` is the pilot; most components still hold inline strings.)
-
+- **Frontend i18n (`@cat-factory/app`):** all user-facing copy is translatable via
+  `@nuxtjs/i18n` — never hard-code a display string. See the dedicated
+  **[Internationalization (i18n)](#internationalization-i18n)** section above for where
+  catalogs live, the add-a-string workflow, key conventions, backend-code mapping, and the
+  typecheck drift guards.
 - **Dedicated result-view seam (frontend):** an agent step opens the generic prose panel
   (`AgentStepDetail.vue`) UNLESS its archetype declares a `resultView` id (`app/utils/catalog.ts`).
   The `ui` store's step dispatch (`dispatchStepView`, used by both `openStepDetail` and
