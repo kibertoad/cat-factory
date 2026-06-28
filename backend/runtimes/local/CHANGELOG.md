@@ -1,5 +1,14 @@
 # @cat-factory/local-server
 
+## 0.17.10
+
+### Patch Changes
+
+- Updated dependencies [6903cd7]
+  - @cat-factory/orchestration@0.33.0
+  - @cat-factory/server@0.36.2
+  - @cat-factory/node-server@0.31.2
+
 ## 0.17.9
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @cat-factory/app
 
+## 0.42.1
+
+### Patch Changes
+
+- 5b3fe44: Add `run-stop`/`run-reset` test ids to the task inspector's run-lifecycle controls so the e2e suite can drive the cancel/reset flow.
+
 ## 0.42.0
 
 ### Minor Changes
