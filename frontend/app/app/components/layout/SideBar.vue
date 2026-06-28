@@ -7,6 +7,7 @@
 // default models).
 import { useEventListener, useScrollLock } from '@vueuse/core'
 import BoardSwitcher from '~/components/layout/BoardSwitcher.vue'
+import LanguageSwitcher from '~/components/layout/LanguageSwitcher.vue'
 import UserMenu from '~/components/auth/UserMenu.vue'
 import { useViewport } from '~/composables/useViewport'
 
@@ -306,6 +307,9 @@ watch(
       </section>
     </div>
 
-    <UserMenu class="mt-auto" />
+    <div class="mt-auto space-y-2">
+      <LanguageSwitcher />
+      <UserMenu />
+    </div>
   </aside>
 </template>

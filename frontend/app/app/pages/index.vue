@@ -208,6 +208,8 @@ watch(
 
 <template>
   <div class="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100">
+    <!-- Non-English locale warning (unofficial translation); slim strip above everything. -->
+    <TranslationWarningBanner />
     <!-- Local-mode setup prompt (missing GitHub PAT); floats over whatever is shown below. -->
     <GitHubPatBanner />
     <!-- AI-readiness prompt (no usable model source, or default preset uses unavailable models). -->
