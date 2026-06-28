@@ -46,7 +46,12 @@ function loadPrivilegedApp(env: NodeJS.ProcessEnv): PrivilegedAppConfig | undefi
   return { appId }
 }
 
-const ALL_DOCUMENT_SOURCES: readonly DocumentSourceKind[] = ['confluence', 'notion', 'github']
+const ALL_DOCUMENT_SOURCES: readonly DocumentSourceKind[] = [
+  'confluence',
+  'notion',
+  'github',
+  'linear',
+]
 
 /** Parse the comma-separated `DOCUMENT_SOURCES` allow-list, defaulting to all. */
 function parseDocumentSources(raw: string | undefined): DocumentSourceKind[] {

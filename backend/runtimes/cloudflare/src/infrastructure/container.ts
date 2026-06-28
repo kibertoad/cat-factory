@@ -29,6 +29,8 @@ import {
   GitHubDocsProvider,
   GitHubIssuesProvider,
   JiraProvider,
+  LinearDocumentProvider,
+  LinearTaskProvider,
   HttpEnvironmentProvider,
   NotionProvider,
   EMAIL_CIPHER_INFO,
@@ -938,6 +940,13 @@ function selectRecurringDeps(
     }
     trackerDeps.resolveJiraConnection = resolveJiraConnection
     writebackDeps.resolveJiraConnection = resolveJiraConnection
+    const resolveLinearConnection = async (workspaceId: string) => {
+      const connection = await taskConnectionRepository.getByWorkspace(workspaceId, 'linear')
+      const apiKey = connection?.credentials?.apiKey
+      return apiKey ? { apiKey } : null
+    }
+    trackerDeps.resolveLinearConnection = resolveLinearConnection
+    writebackDeps.resolveLinearConnection = resolveLinearConnection
   }
   return {
     pipelineScheduleRepository: new D1PipelineScheduleRepository({ db }),
@@ -1313,6 +1322,7 @@ function selectDocumentsDeps(
   const providers: DocumentSourceProvider[] = []
   if (config.documents.sources.includes('confluence')) providers.push(new ConfluenceProvider())
   if (config.documents.sources.includes('notion')) providers.push(new NotionProvider())
+  if (config.documents.sources.includes('linear')) providers.push(new LinearDocumentProvider())
   // GitHub repo docs reuse the workspace's installed GitHub App, so this provider
   // is wired only when the GitHub integration is also configured — it has no
   // credentials of its own and resolves the installation per file (mirrors the
@@ -1367,8 +1377,8 @@ function selectTasksDeps(
   clock: Clock,
   idGenerator: IdGenerator,
 ): Partial<CoreDependencies> {
-  // Jira is always registered (its credentials are per-workspace, entered in the UI).
-  const providers: TaskSourceProvider[] = [new JiraProvider()]
+  // Jira and Linear are always registered (their credentials are per-workspace, entered in the UI).
+  const providers: TaskSourceProvider[] = [new JiraProvider(), new LinearTaskProvider()]
   // GitHub Issues reuse the workspace's installed GitHub App, so this provider is
   // wired whenever the GitHub integration is configured — it has no credentials of
   // its own and resolves the installation per issue. Whether a workspace OFFERS it

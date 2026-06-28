@@ -4078,6 +4078,20 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
         const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
         expect(snapshot.body.trackerSettings?.tracker).toBe('jira')
         expect(snapshot.body.trackerSettings?.writebackResolveOnMerge).toBe(true)
+
+        // Switching to Linear persists the team id (the one tracker-settings column the
+        // Linear support adds) and clears the Jira project key — identical on both stores.
+        const linear = await app.call<TrackerSettings>(
+          'PUT',
+          `/workspaces/${wsId}/tracker-settings`,
+          { tracker: 'linear', linearTeamId: 'team_abc123' },
+        )
+        expect(linear.body.tracker).toBe('linear')
+        expect(linear.body.linearTeamId).toBe('team_abc123')
+        expect(linear.body.jiraProjectKey).toBeNull()
+        const linearSnapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        expect(linearSnapshot.body.trackerSettings?.tracker).toBe('linear')
+        expect(linearSnapshot.body.trackerSettings?.linearTeamId).toBe('team_abc123')
       })
 
       it('round-trips the per-task writeback overrides on a block', async () => {

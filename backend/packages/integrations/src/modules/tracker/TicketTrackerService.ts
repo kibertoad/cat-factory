@@ -5,6 +5,12 @@ import type {
   TrackerSettingsRepository,
 } from '@cat-factory/kernel'
 import { buildJiraIssuePayload } from './jira.create.logic.js'
+import {
+  LINEAR_ISSUE_CREATE_MUTATION,
+  buildLinearIssueCreateVariables,
+  parseLinearIssueCreateResponse,
+} from './linear.create.logic.js'
+import { LINEAR_GRAPHQL_URL, linearAuthHeader, unwrapLinearData } from '../shared/linear.client.js'
 import { toBase64 } from './base64.js'
 
 // TicketTrackerService: the runtime-neutral `TicketTrackerProvider` the tech-debt
@@ -24,6 +30,11 @@ export interface JiraConnection {
   apiToken: string
 }
 
+/** Linear credentials (a personal API key against the GraphQL endpoint). */
+export interface LinearConnection {
+  apiKey: string
+}
+
 export interface TicketTrackerServiceDependencies {
   trackerSettingsRepository: TrackerSettingsRepository
   /**
@@ -39,8 +50,14 @@ export interface TicketTrackerServiceDependencies {
    */
   resolveJiraConnection?: (workspaceId: string) => Promise<JiraConnection | null>
   /**
-   * HTTP transport for the Jira create call. Injected by each runtime (both expose
-   * a global `fetch`) so this package needs no DOM lib; absent → Jira passes through.
+   * Resolves the workspace's Linear credentials, or null when Linear isn't
+   * configured. Absent → the Linear tracker passes through.
+   */
+  resolveLinearConnection?: (workspaceId: string) => Promise<LinearConnection | null>
+  /**
+   * HTTP transport for the Jira/Linear create call. Injected by each runtime (both
+   * expose a global `fetch`) so this package needs no DOM lib; absent → those
+   * trackers pass through.
    */
   fetchImpl?: FetchLike
 }
@@ -66,7 +83,38 @@ export class TicketTrackerService implements TicketTrackerProvider {
     if (!settings?.tracker) return null
     if (settings.tracker === 'github') return (await this.deps.fileGitHubIssue?.(request)) ?? null
     if (settings.tracker === 'jira') return this.createJiraIssue(request, settings.jiraProjectKey)
+    if (settings.tracker === 'linear') return this.createLinearIssue(request, settings.linearTeamId)
     return null
+  }
+
+  private async createLinearIssue(
+    request: CreateTicketRequest,
+    teamId: string | null,
+  ): Promise<CreatedTicket | null> {
+    const { resolveLinearConnection, fetchImpl } = this.deps
+    if (!resolveLinearConnection || !fetchImpl || !teamId) return null
+    const connection = await resolveLinearConnection(request.workspaceId)
+    if (!connection?.apiKey) return null
+
+    const res = await fetchImpl(LINEAR_GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        authorization: linearAuthHeader({ apiKey: connection.apiKey }),
+        accept: 'application/json',
+        'content-type': 'application/json',
+        'user-agent': USER_AGENT,
+      },
+      body: JSON.stringify({
+        query: LINEAR_ISSUE_CREATE_MUTATION,
+        variables: buildLinearIssueCreateVariables({
+          teamId,
+          title: request.title,
+          body: request.body,
+        }),
+      }),
+    })
+    const data = unwrapLinearData<unknown>(res.status, res.ok, await res.json().catch(() => null))
+    return parseLinearIssueCreateResponse(data)
   }
 
   private async createJiraIssue(

@@ -840,6 +840,7 @@ export const trackerSettings = pgTable('tracker_settings', {
   workspace_id: text('workspace_id').primaryKey(),
   tracker: text('tracker'),
   jira_project_key: text('jira_project_key'),
+  linear_team_id: text('linear_team_id'),
   // Issue-tracker writeback toggles (0/1): comment on a task's linked issue when its
   // PR opens, and comment + close as resolved when it merges. Per-task overridable.
   writeback_comment_on_pr_open: integer('writeback_comment_on_pr_open').notNull().default(0),

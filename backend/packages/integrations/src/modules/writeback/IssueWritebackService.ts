@@ -8,7 +8,21 @@ import {
   type TrackerSettingsRepository,
 } from '@cat-factory/kernel'
 import { buildJiraCommentPayload, pickDoneTransition } from '../tracker/jira.writeback.logic.js'
-import type { FetchLike, JiraConnection } from '../tracker/TicketTrackerService.js'
+import {
+  LINEAR_COMMENT_CREATE_MUTATION,
+  LINEAR_ISSUE_ID_QUERY,
+  LINEAR_ISSUE_RESOLVE_LOOKUP_QUERY,
+  LINEAR_ISSUE_UPDATE_MUTATION,
+  buildLinearCommentVariables,
+  buildLinearStateUpdateVariables,
+  pickCompletedStateId,
+} from '../tracker/linear.writeback.logic.js'
+import type {
+  FetchLike,
+  JiraConnection,
+  LinearConnection,
+} from '../tracker/TicketTrackerService.js'
+import { LINEAR_GRAPHQL_URL, linearAuthHeader, unwrapLinearData } from '../shared/linear.client.js'
 import { toBase64 } from '../tracker/base64.js'
 
 // IssueWritebackService: the runtime-neutral `IssueWritebackProvider`. As a task's
@@ -44,7 +58,12 @@ export interface IssueWritebackServiceDependencies {
    * Reuses the same seam as `TicketTrackerService`. Absent → Jira writeback passes through.
    */
   resolveJiraConnection?: (workspaceId: string) => Promise<JiraConnection | null>
-  /** HTTP transport for the Jira calls (each runtime exposes a global `fetch`). */
+  /**
+   * Resolve the workspace's Linear credentials, or null when Linear isn't configured.
+   * Reuses the same seam as `TicketTrackerService`. Absent → Linear writeback passes through.
+   */
+  resolveLinearConnection?: (workspaceId: string) => Promise<LinearConnection | null>
+  /** HTTP transport for the Jira/Linear calls (each runtime exposes a global `fetch`). */
   fetchImpl?: FetchLike
 }
 
@@ -98,6 +117,10 @@ export class IssueWritebackService implements IssueWritebackProvider {
         method: 'POST',
         body: buildJiraCommentPayload(body),
       })
+      return
+    }
+    if (issue.source === 'linear') {
+      await this.commentLinear(workspaceId, issue.externalId, body)
     }
   }
 
@@ -108,7 +131,73 @@ export class IssueWritebackService implements IssueWritebackProvider {
     }
     if (issue.source === 'jira') {
       await this.resolveJira(workspaceId, issue.externalId)
+      return
     }
+    if (issue.source === 'linear') {
+      await this.resolveLinear(workspaceId, issue.externalId)
+    }
+  }
+
+  /** Comment on a Linear issue: resolve its UUID by identifier, then `commentCreate`. */
+  private async commentLinear(
+    workspaceId: string,
+    identifier: string,
+    body: string,
+  ): Promise<void> {
+    const lookup = (await this.linearRequest(workspaceId, LINEAR_ISSUE_ID_QUERY, {
+      id: identifier,
+    })) as { issue?: { id?: string } } | null
+    const issueId = lookup?.issue?.id
+    if (!issueId) return
+    await this.linearRequest(
+      workspaceId,
+      LINEAR_COMMENT_CREATE_MUTATION,
+      buildLinearCommentVariables(issueId, body),
+    )
+  }
+
+  /** Resolve a Linear issue: look up its UUID + team states, then transition to completed. */
+  private async resolveLinear(workspaceId: string, identifier: string): Promise<void> {
+    const lookup = (await this.linearRequest(workspaceId, LINEAR_ISSUE_RESOLVE_LOOKUP_QUERY, {
+      id: identifier,
+    })) as { issue?: { id?: string; team?: { states?: { nodes?: unknown[] } } } } | null
+    const issueId = lookup?.issue?.id
+    const stateId = pickCompletedStateId(
+      (lookup?.issue?.team?.states?.nodes ?? []) as Parameters<typeof pickCompletedStateId>[0],
+    )
+    if (!issueId || !stateId) return
+    await this.linearRequest(
+      workspaceId,
+      LINEAR_ISSUE_UPDATE_MUTATION,
+      buildLinearStateUpdateVariables(issueId, stateId),
+    )
+  }
+
+  /**
+   * Issue a Linear GraphQL request for the workspace's connection. Returns the
+   * validated `data` (or null when Linear isn't configured). Throws on a GraphQL /
+   * HTTP error so the per-issue `.catch` in {@link forEachIssue} swallows it.
+   */
+  private async linearRequest(
+    workspaceId: string,
+    document: string,
+    variables: Record<string, unknown>,
+  ): Promise<unknown> {
+    const { resolveLinearConnection, fetchImpl } = this.deps
+    if (!resolveLinearConnection || !fetchImpl) return null
+    const connection = await resolveLinearConnection(workspaceId)
+    if (!connection?.apiKey) return null
+    const res = await fetchImpl(LINEAR_GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        authorization: linearAuthHeader({ apiKey: connection.apiKey }),
+        accept: 'application/json',
+        'content-type': 'application/json',
+        'user-agent': USER_AGENT,
+      },
+      body: JSON.stringify({ query: document, variables }),
+    })
+    return unwrapLinearData<unknown>(res.status, res.ok, await res.json().catch(() => null))
   }
 
   private async resolveJira(workspaceId: string, key: string): Promise<void> {

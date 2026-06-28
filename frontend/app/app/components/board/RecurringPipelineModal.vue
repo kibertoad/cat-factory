@@ -32,8 +32,9 @@ const saving = ref(false)
 const recurrence = ref<Recurrence>(defaultRecurrence())
 
 // Tracker config (only relevant when the tech-debt pipeline is picked).
-const trackerKind = ref<'github' | 'jira' | null>(null)
+const trackerKind = ref<'github' | 'jira' | 'linear' | null>(null)
 const jiraProjectKey = ref('')
+const linearTeamId = ref('')
 
 function defaultRecurrence(): Recurrence {
   return {
@@ -77,6 +78,7 @@ watch(open, (isOpen) => {
   saving.value = false
   trackerKind.value = tracker.settings.tracker
   jiraProjectKey.value = tracker.settings.jiraProjectKey ?? ''
+  linearTeamId.value = tracker.settings.linearTeamId ?? ''
 })
 
 const canAdd = computed(() => name.value.trim().length > 0 && pipelineId.value.length > 0)
@@ -92,6 +94,7 @@ async function add() {
       await tracker.save({
         tracker: trackerKind.value,
         jiraProjectKey: trackerKind.value === 'jira' ? jiraProjectKey.value.trim() : null,
+        linearTeamId: trackerKind.value === 'linear' ? linearTeamId.value.trim() : null,
       })
     }
     await recurring.create({
@@ -188,9 +191,21 @@ async function add() {
             >
               Jira
             </UButton>
+            <UButton
+              size="xs"
+              :color="trackerKind === 'linear' ? 'primary' : 'neutral'"
+              :variant="trackerKind === 'linear' ? 'solid' : 'subtle'"
+              icon="i-lucide-square-kanban"
+              @click="trackerKind = 'linear'"
+            >
+              Linear
+            </UButton>
           </div>
           <UFormField v-if="trackerKind === 'jira'" label="Jira project key">
             <UInput v-model="jiraProjectKey" placeholder="e.g. ENG" class="w-full" />
+          </UFormField>
+          <UFormField v-if="trackerKind === 'linear'" label="Linear team id">
+            <UInput v-model="linearTeamId" placeholder="team_…" class="w-full" />
           </UFormField>
         </div>
 
