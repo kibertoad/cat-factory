@@ -8,6 +8,7 @@ import type {
   PipelineStep,
   Workspace,
 } from '@cat-factory/contracts'
+import { agentFailureKindSchema } from '@cat-factory/contracts'
 
 // Row <-> domain mapping for the D1 (SQLite) tables. JSON-shaped columns are
 // (de)serialised here so the repositories stay focused on SQL.
@@ -494,12 +495,38 @@ interface ExecutionDetail {
   initiatedBy: string | null
 }
 
+// ---------------------------------------------------------------------------
+// LEGACY FAILURE-KIND REPAIR — REMOVE AFTER 2026-07-15
+//
+// `decision_timeout` was removed from `agentFailureKindSchema` when human decisions
+// stopped being timeout-limited (other kinds may follow). A run that failed before then
+// can still carry the obsolete kind in its persisted failure JSON. The wire contract now
+// types the kind as a closed picklist, and the server ships rows WITHOUT validating them,
+// so one stale failure makes the SPA's response validation reject the entire workspace
+// snapshot and the board fails to load with "Can't reach the backend".
+//
+// We drop a failure whose kind is no longer known: the run's `status` + `error` string
+// still describe what happened, and the obsolete kind is meaningless now.
+//
+// After the 2026-07-15 grace cutoff, every project is expected to already be in the new
+// format. DELETE this helper and revert the three failure parsers (here + the two bootstrap
+// repos) to the plain `typeof o.kind === 'string'` check.
+const KNOWN_FAILURE_KINDS: ReadonlySet<string> = new Set(agentFailureKindSchema.options)
+
+/** Whether a persisted failure kind is still part of the current contract picklist. */
+export function isKnownAgentFailureKind(kind: string): boolean {
+  return KNOWN_FAILURE_KINDS.has(kind)
+}
+
 /** Parse the JSON-encoded structured failure column, tolerating null/garbage. */
 function parseAgentFailure(raw: string | null): AgentFailure | null {
   if (!raw) return null
   try {
     const o = JSON.parse(raw) as AgentFailure
-    if (o && typeof o.kind === 'string' && typeof o.message === 'string') return o
+    // LEGACY: drop a failure carrying a removed kind (see the LEGACY FAILURE-KIND REPAIR note).
+    if (o && typeof o.kind === 'string' && typeof o.message === 'string') {
+      return isKnownAgentFailureKind(o.kind) ? o : null
+    }
   } catch {
     // fall through
   }
