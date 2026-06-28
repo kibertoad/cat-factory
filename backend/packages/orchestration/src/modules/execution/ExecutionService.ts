@@ -99,6 +99,11 @@ import { ReviewGateController, type ReviewKind } from './ReviewGateController.js
 import { TesterController } from './TesterController.js'
 import { HumanTestController } from './HumanTestController.js'
 import { VisualConfirmationController } from './VisualConfirmationController.js'
+import {
+  FALLTHROUGH_STEP_HANDLER_ORDER,
+  type StepHandler,
+  type StepHandlerContext,
+} from './step-handler-registry.js'
 import type {
   GateContext,
   GateDefinition,
@@ -159,7 +164,7 @@ import type {
   EnvironmentProvisioningService,
   EnvironmentTeardownService,
 } from '@cat-factory/integrations'
-import { isDeployStep } from '@cat-factory/integrations'
+import { isDeployStep, DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
 import type { BranchUpdater } from '@cat-factory/kernel'
 import {
   dependenciesMet,
@@ -589,6 +594,11 @@ export class ExecutionService {
    * {@link stepResolverFor} and {@link StepCompletionResolver}.
    */
   private stepResolverCache?: Map<string, StepCompletionResolver>
+  /**
+   * Lazily-built, order-sorted per-step-kind handler list. See {@link dispatchStepHandler}
+   * and {@link StepHandler}. Engine-internal (no public registration seam).
+   */
+  private stepHandlerCache?: StepHandler[]
 
   constructor({
     workspaceRepository,
@@ -1410,22 +1420,31 @@ export class ExecutionService {
       return this.skipGatedStep(workspaceId, instance, step, isFinalStep)
     }
 
-    // A `deployer` step provisions an ephemeral environment deterministically via
-    // the provider — no LLM, no token usage — when the integration is wired.
-    // Otherwise it falls through to the normal agent path.
-    if (this.environmentProvisioning && isDeployStep(step.agentKind)) {
-      const result = await this.runDeployer(workspaceId, instance, block, options)
-      return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
-    }
+    // The fixed run-lifecycle preamble is done; hand the per-kind work to the
+    // engine-internal StepHandler registry (the first handler whose `canHandle` claims
+    // this step). See {@link dispatchStepHandler} / {@link runStepBody}.
+    return this.dispatchStepHandler({
+      workspaceId,
+      instance,
+      step,
+      block,
+      isFinalStep,
+      options,
+    })
+  }
 
-    // A `tracker` step files a GitHub issue / Jira ticket from the preceding
-    // `analysis` output (the tech-debt pipeline) — no LLM of its own. It is a
-    // pass-through when no tracker provider is wired or none is configured for the
-    // workspace. See {@link runTracker}.
-    if (step.agentKind === TRACKER_AGENT_KIND) {
-      const result = await this.runTracker(workspaceId, instance, block)
-      return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
-    }
+  /**
+   * The per-step-kind body run by the StepHandler registry once {@link stepInstance}'s
+   * preamble has completed. Phase 0 of the ExecutionService split: a single fallthrough
+   * handler delegates the ENTIRE body here unchanged (so dispatch is wired with zero
+   * behaviour change); later phases lift each branch below into its own handler and shrink
+   * this method until only the generic container/inline-agent tail remains.
+   */
+  private async runStepBody(ctx: StepHandlerContext): Promise<AdvanceResult> {
+    const { workspaceId, instance, step, block, isFinalStep, options } = ctx
+
+    // (The `deployer` and `tracker` steps are handled by their own StepHandlers — see
+    // {@link buildStepHandlerRegistry} — so they no longer branch here.)
 
     // A `requirements-review` step runs the inline reviewer and parks for the dedicated
     // review window, driving the iterative answer → incorporate → re-review loop. NOT a
@@ -2841,6 +2860,65 @@ export class ExecutionService {
    * startup import side effect (see {@link gateFor} for the same caching caveat). See
    * {@link StepCompletionResolver}.
    */
+  /**
+   * Dispatch a step (whose preamble already ran in {@link stepInstance}) to the first
+   * registered {@link StepHandler} whose `canHandle` claims it, ordered by `order`. The
+   * fallthrough handler claims everything, so this always resolves to a handler.
+   */
+  private dispatchStepHandler(ctx: StepHandlerContext): Promise<AdvanceResult> {
+    if (!this.stepHandlerCache) this.stepHandlerCache = this.buildStepHandlerRegistry()
+    const handler = this.stepHandlerCache.find((h) => h.canHandle(ctx))
+    // The fallthrough handler's `canHandle` is unconditional, so this is unreachable; it
+    // exists only to satisfy the type and to fail loudly if that invariant is ever broken.
+    if (!handler) throw new Error(`No step handler for agentKind "${ctx.step.agentKind}"`)
+    return handler.handle(ctx)
+  }
+
+  /**
+   * Build the order-sorted per-step-kind handler list, mirroring
+   * {@link buildStepResolverRegistry} (built-ins constructed inline, closing over `this`).
+   * Engine-internal: there is no public `registerStepHandler` seam. Phase 0 registers only
+   * the generic fallthrough; later phases prepend more-specific handlers with lower `order`.
+   */
+  private buildStepHandlerRegistry(): StepHandler[] {
+    const handlers: StepHandler[] = [
+      // A `deployer` step provisions an ephemeral environment deterministically via the
+      // provider — no LLM, no token usage — when the integration is wired. Unwired, its
+      // `canHandle` is false so the step falls through to the generic agent path.
+      {
+        kind: DEPLOYER_AGENT_KIND,
+        order: 100,
+        canHandle: ({ step }) => !!this.environmentProvisioning && isDeployStep(step.agentKind),
+        handle: async ({ workspaceId, instance, step, block, isFinalStep, options }) => {
+          const result = await this.runDeployer(workspaceId, instance, block, options)
+          return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
+        },
+      },
+      // A `tracker` step files a GitHub issue / Jira ticket from the preceding `analysis`
+      // output (the tech-debt pipeline) — no LLM of its own. It is a pass-through when no
+      // tracker provider is wired or none is configured for the workspace (handled inside
+      // {@link runTracker}, which still records a result), so it always claims the step.
+      {
+        kind: TRACKER_AGENT_KIND,
+        order: 110,
+        canHandle: ({ step }) => step.agentKind === TRACKER_AGENT_KIND,
+        handle: async ({ workspaceId, instance, step, block, isFinalStep }) => {
+          const result = await this.runTracker(workspaceId, instance, block)
+          return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
+        },
+      },
+      // The generic container/inline-agent fallthrough — claims every step no more-specific
+      // handler did (today's `runStepBody` tail). Highest order so it always runs last.
+      {
+        kind: '*',
+        order: FALLTHROUGH_STEP_HANDLER_ORDER,
+        canHandle: () => true,
+        handle: (ctx) => this.runStepBody(ctx),
+      },
+    ]
+    return handlers.sort((a, b) => a.order - b.order)
+  }
+
   private stepResolverFor(agentKind: string): StepCompletionResolver | undefined {
     if (!this.stepResolverCache) this.stepResolverCache = this.buildStepResolverRegistry()
     return this.stepResolverCache.get(agentKind)
