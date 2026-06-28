@@ -81,6 +81,24 @@ export default defineNuxtConfig({
     join(layerDir, 'app/assets/css/main.css'),
   ],
 
+  // Force Vite to pre-bundle `fast-querystring` (a CommonJS dep reached via
+  // @toad-contracts/frontend-http-client). Left un-optimized, Vite serves its raw CJS
+  // from @fs where cjs-module-lexer can't see the named `stringify` export (the module
+  // uses a `module.exports = x; module.exports.stringify = …` reassignment), so the SPA
+  // throws at runtime:
+  //   SyntaxError: … fast-querystring/lib/index.js does not provide an export named 'stringify'
+  // Pre-bundling makes esbuild emit an ESM wrapper with proper CJS interop.
+  //
+  // This config is resolved from the CONSUMER app's root (the deployment that `extends`
+  // this layer), where — under pnpm's strict layout — only this layer (`@cat-factory/app`)
+  // is hoisted; `frontend-http-client`/`fast-querystring` are not. So anchor the nested
+  // `a > b > c` specifier at `@cat-factory/app` and let Vite resolve each hop from there.
+  vite: {
+    optimizeDeps: {
+      include: ['@cat-factory/app > @toad-contracts/frontend-http-client > fast-querystring'],
+    },
+  },
+
   app: {
     head: {
       title: 'Agent Architecture Board',
