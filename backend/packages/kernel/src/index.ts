@@ -123,6 +123,30 @@ export {
   clearProviders,
 } from './domain/provider-registry.js'
 
+// Provider-neutral VCS identity vocabulary + the per-provider adapter registry. The
+// neutral successor to GitHub's `installationId`-keyed surface, selecting a concrete
+// adapter (`github` / `gitlab`) via the {@link VcsProvider} discriminator on the
+// connection. See `domain/vcs-types.ts` / `domain/vcs-registry.ts`.
+export {
+  type VcsProvider,
+  type VcsConnectionRef,
+  type VcsRepoRef,
+  VCS_PROVIDERS,
+  isVcsProvider,
+  githubConnectionRef,
+  githubInstallationId,
+} from './domain/vcs-types.js'
+export {
+  type VcsProviderBundle,
+  registerVcsProvider,
+  getVcsProvider,
+  isVcsProviderRegistered,
+  requireVcsProvider,
+  resolveVcsProvider,
+  registeredVcsProviders,
+  clearVcsProviders,
+} from './domain/vcs-registry.js'
+
 // Pure gate logic + gate/helper agent-kind constants, shared by the built-in gate suite
 // (`@cat-factory/gates`) and the engine. See `domain/gate-logic.ts`.
 export {

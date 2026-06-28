@@ -131,6 +131,13 @@ export type {
   InstallationPermissions,
   ProvisionedRepo,
 } from './github-provisioning.js'
+export type { VcsClient } from './vcs-client.js'
+export type { VcsProvisioningClient } from './vcs-provisioning.js'
+export type {
+  RawWebhookDelivery,
+  VcsWebhookEvent,
+  VcsWebhookMapper,
+} from './vcs-webhook.js'
 export type {
   RepoFiles,
   ResolveRepoFiles,
