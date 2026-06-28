@@ -1,5 +1,13 @@
 # @cat-factory/workspaces
 
+## 0.9.11
+
+### Patch Changes
+
+- Updated dependencies [fb339db]
+  - @cat-factory/contracts@0.43.2
+  - @cat-factory/kernel@0.45.4
+
 ## 0.9.10
 
 ### Patch Changes

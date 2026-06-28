@@ -1,5 +1,14 @@
 # @cat-factory/agents
 
+## 0.21.5
+
+### Patch Changes
+
+- Updated dependencies [fb339db]
+  - @cat-factory/contracts@0.43.2
+  - @cat-factory/kernel@0.45.4
+  - @cat-factory/prompt-fragments@0.8.2
+
 ## 0.21.4
 
 ### Patch Changes

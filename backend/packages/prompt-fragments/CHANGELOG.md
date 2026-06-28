@@ -1,5 +1,12 @@
 # @cat-factory/prompt-fragments
 
+## 0.8.2
+
+### Patch Changes
+
+- Updated dependencies [fb339db]
+  - @cat-factory/contracts@0.43.2
+
 ## 0.8.1
 
 ### Patch Changes

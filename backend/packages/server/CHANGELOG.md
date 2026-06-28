@@ -1,5 +1,18 @@
 # @cat-factory/server
 
+## 0.39.7
+
+### Patch Changes
+
+- Updated dependencies [fb339db]
+  - @cat-factory/contracts@0.43.2
+  - @cat-factory/agents@0.21.5
+  - @cat-factory/integrations@0.26.4
+  - @cat-factory/kernel@0.45.4
+  - @cat-factory/orchestration@0.36.4
+  - @cat-factory/prompt-fragments@0.8.2
+  - @cat-factory/spend@0.10.20
+
 ## 0.39.6
 
 ### Patch Changes
