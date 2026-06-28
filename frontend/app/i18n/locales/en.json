@@ -17,6 +17,7 @@
         "dependencies_unmet": "Blocked by dependencies",
         "task_limit_reached": "Concurrency limit reached",
         "tester_infra_unsupported": "Test infrastructure not configured",
+        "agent_backend_unconfigured": "Agent backend not configured",
         "run_not_retryable": "Run can’t be retried",
         "no_pr_to_merge": "No PR to merge",
         "github_not_connected": "GitHub not connected",

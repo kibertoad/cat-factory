@@ -12,6 +12,7 @@
  * frontend maps it", not "translate arbitrary server prose on the client".
  */
 
+import type { ConflictReason } from '@cat-factory/contracts'
 import { apiErrorEnvelope } from './api/errors'
 
 /** The parsed shape of a backend conflict (`{ error: { code: 'conflict', details } }`). */
@@ -19,6 +20,27 @@ interface ConflictDetails {
   reason?: string
   models?: string[]
   [key: string]: unknown
+}
+
+/**
+ * Per-reason toast title KEYS, keyed off the kernel/contracts `ConflictReason`. Being an
+ * EXHAUSTIVE `Record` over the union is the real drift guard: a new backend conflict reason
+ * fails THIS typecheck until it is mapped here. (The typed-message-keys feature can't see the
+ * `t()` lookup because the key is resolved at runtime via this map, not written as a literal —
+ * so the exhaustiveness of the map, not `t()`, is what makes a missing reason a build error.)
+ * `providers_unconfigured` is excluded: it has bespoke handling + its own `providersUnconfigured.*`
+ * key namespace, so it never reaches the generic lookup below.
+ */
+const CONFLICT_TITLE_KEYS: Record<Exclude<ConflictReason, 'providers_unconfigured'>, string> = {
+  dependencies_unmet: 'errors.conflict.title.dependencies_unmet',
+  task_limit_reached: 'errors.conflict.title.task_limit_reached',
+  tester_infra_unsupported: 'errors.conflict.title.tester_infra_unsupported',
+  agent_backend_unconfigured: 'errors.conflict.title.agent_backend_unconfigured',
+  run_not_retryable: 'errors.conflict.title.run_not_retryable',
+  no_pr_to_merge: 'errors.conflict.title.no_pr_to_merge',
+  github_not_connected: 'errors.conflict.title.github_not_connected',
+  bootstrap_not_retryable: 'errors.conflict.title.bootstrap_not_retryable',
+  bootstrap_reference_missing: 'errors.conflict.title.bootstrap_reference_missing',
 }
 
 /**
@@ -76,11 +98,13 @@ export function usePipelineErrorToast() {
     }
 
     if (conflict) {
-      // Per-reason title key; fall back to the caller's title key when this reason has no
-      // dedicated copy (`te` = translation-exists, so a missing key never leaks as raw text).
-      const reasonKey = `errors.conflict.title.${conflict.reason ?? ''}`
+      // Per-reason title key from the exhaustive map; fall back to the caller's title key when
+      // this reason has no mapped/translated copy (`te` = translation-exists, so a key missing
+      // in the active locale never leaks as raw text). An unknown reason isn't in the map.
+      const reasonKey =
+        CONFLICT_TITLE_KEYS[conflict.reason as Exclude<ConflictReason, 'providers_unconfigured'>]
       toast.add({
-        title: conflict.reason && te(reasonKey) ? t(reasonKey) : t(fallbackTitleKey),
+        title: reasonKey && te(reasonKey) ? t(reasonKey) : t(fallbackTitleKey),
         description: conflict.message ?? t('errors.conflict.fallbackMessage'),
         color: 'warning',
         icon: 'i-lucide-triangle-alert',
