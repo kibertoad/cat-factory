@@ -22,7 +22,7 @@ import type {
   JiraConnection,
   LinearConnection,
 } from '../tracker/TicketTrackerService.js'
-import { LINEAR_GRAPHQL_URL, linearAuthHeader, unwrapLinearData } from '../shared/linear.client.js'
+import { postLinearGraphql } from '../shared/linear.client.js'
 import { toBase64 } from '../tracker/base64.js'
 
 // IssueWritebackService: the runtime-neutral `IssueWritebackProvider`. As a task's
@@ -138,7 +138,14 @@ export class IssueWritebackService implements IssueWritebackProvider {
     }
   }
 
-  /** Comment on a Linear issue: resolve its UUID by identifier, then `commentCreate`. */
+  /**
+   * Comment on a Linear issue: resolve its UUID by identifier, then `commentCreate`.
+   * On merge this runs before {@link resolveLinear}, so the issue is looked up twice
+   * (here for the UUID, there for the UUID + the team's workflow states). That second
+   * lookup is unavoidable — only it carries the states needed to pick the resolved
+   * state — and the duplicated read is one cheap `issue(id:){id}` call, so the seam is
+   * kept uniform with the GitHub/Jira comment/resolve split rather than special-cased.
+   */
   private async commentLinear(
     workspaceId: string,
     identifier: string,
@@ -187,17 +194,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
     if (!resolveLinearConnection || !fetchImpl) return null
     const connection = await resolveLinearConnection(workspaceId)
     if (!connection?.apiKey) return null
-    const res = await fetchImpl(LINEAR_GRAPHQL_URL, {
-      method: 'POST',
-      headers: {
-        authorization: linearAuthHeader({ apiKey: connection.apiKey }),
-        accept: 'application/json',
-        'content-type': 'application/json',
-        'user-agent': USER_AGENT,
-      },
-      body: JSON.stringify({ query: document, variables }),
-    })
-    return unwrapLinearData<unknown>(res.status, res.ok, await res.json().catch(() => null))
+    return postLinearGraphql<unknown>(fetchImpl, { apiKey: connection.apiKey }, document, variables)
   }
 
   private async resolveJira(workspaceId: string, key: string): Promise<void> {

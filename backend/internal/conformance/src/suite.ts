@@ -2309,6 +2309,37 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(after.body.ok).toBe(true)
         expect(after.body.status).toBe('ready')
       })
+
+      it('wires Linear as a task source on every facade (registered, connect, import-gated)', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace({ seed: false })
+        const ws = workspace.id
+
+        // Linear is registered symmetrically across runtimes: it shows up in the source
+        // list (so the connect UI offers it), connects with a personal API key, and lists
+        // back available + enabled — the same lifecycle as Jira, proving the wiring.
+        const listed = await call<{ sources: TaskSourceState[] }>(
+          'GET',
+          `/workspaces/${ws}/task-sources`,
+        )
+        expect(listed.body.sources.some((s) => s.source === 'linear')).toBe(true)
+
+        const connected = await call<{ source: string }>(
+          'POST',
+          `/workspaces/${ws}/task-sources/linear/connect`,
+          { credentials: { apiKey: 'lin_api_secret_key_123' } },
+        )
+        expect(connected.status).toBe(201)
+        expect(JSON.stringify(connected.body)).not.toContain('lin_api_secret_key_123')
+
+        const after = await call<{ sources: TaskSourceState[] }>(
+          'GET',
+          `/workspaces/${ws}/task-sources`,
+        )
+        const linear = after.body.sources.find((s) => s.source === 'linear')
+        expect(linear?.available).toBe(true)
+        expect(linear?.enabled).toBe(true)
+      })
     })
 
     describe('document sources', () => {
@@ -2347,6 +2378,34 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
 
         // Disconnect tombstones it; the list goes empty again.
         const del = await call('DELETE', `${base}/notion/connection`)
+        expect(del.status).toBe(204)
+        const afterDelete = await call<{ connections: unknown[] }>('GET', `${base}/connections`)
+        expect(afterDelete.body.connections).toEqual([])
+      })
+
+      it('wires Linear as a document source on every facade (connect, list, disconnect)', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/document-sources`
+
+        // Linear is registered symmetrically across runtimes: a personal API key
+        // connects, lists back as metadata only, and disconnects — the same lifecycle
+        // as Notion, proving the provider is wired (not 503/404) on this facade.
+        const connected = await call<{ source: string }>('POST', `${base}/linear/connect`, {
+          credentials: { apiKey: 'lin_api_secret_key_123' },
+        })
+        expect(connected.status).toBe(201)
+        expect(connected.body.source).toBe('linear')
+        expect(JSON.stringify(connected.body)).not.toContain('lin_api_secret_key_123')
+
+        const listed = await call<{ connections: { source: string }[] }>(
+          'GET',
+          `${base}/connections`,
+        )
+        expect(listed.body.connections.map((c) => c.source)).toEqual(['linear'])
+        expect(JSON.stringify(listed.body)).not.toContain('lin_api_secret_key_123')
+
+        const del = await call('DELETE', `${base}/linear/connection`)
         expect(del.status).toBe(204)
         const afterDelete = await call<{ connections: unknown[] }>('GET', `${base}/connections`)
         expect(afterDelete.body.connections).toEqual([])

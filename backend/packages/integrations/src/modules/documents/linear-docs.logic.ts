@@ -18,7 +18,9 @@ import type {
 export const LINEAR_DOCS_DESCRIPTOR: DocumentSourceDescriptor = {
   source: 'linear',
   label: 'Linear',
-  icon: 'i-lucide-file-text',
+  // Same Linear glyph the task source + tracker UI use, so the brand is consistent
+  // wherever Linear surfaces (the document picker, the task picker, the tracker).
+  icon: 'i-lucide-square-kanban',
   credentialFields: [
     {
       key: 'apiKey',
@@ -56,9 +58,12 @@ interface LinearDocumentNode {
 
 /**
  * Resolve a Linear document id from raw user input: a bare id, or a
- * `…/document/<slug>` URL whose final path segment is the document's id. Returns
- * the id, or null when nothing parses. Kept lenient (like Notion's ref parsing) —
- * the `document(id:)` query is the final arbiter of whether the id resolves.
+ * `…/document/<slugId>` URL whose final path segment is the document's slug id
+ * (Linear embeds the document's slugId as the trailing segment — the value its
+ * `document(id:)` query accepts alongside the raw UUID). Returns the id, or null
+ * when nothing parses. Kept lenient (like Notion's ref parsing) — the
+ * `document(id:)` query is the final arbiter of whether the id resolves, so a
+ * bare UUID and a copied document URL both work.
  */
 export function parseLinearDocRef(input: string): string | null {
   const trimmed = input.trim()

@@ -10,7 +10,7 @@ import {
   buildLinearIssueCreateVariables,
   parseLinearIssueCreateResponse,
 } from './linear.create.logic.js'
-import { LINEAR_GRAPHQL_URL, linearAuthHeader, unwrapLinearData } from '../shared/linear.client.js'
+import { postLinearGraphql } from '../shared/linear.client.js'
 import { toBase64 } from './base64.js'
 
 // TicketTrackerService: the runtime-neutral `TicketTrackerProvider` the tech-debt
@@ -96,24 +96,16 @@ export class TicketTrackerService implements TicketTrackerProvider {
     const connection = await resolveLinearConnection(request.workspaceId)
     if (!connection?.apiKey) return null
 
-    const res = await fetchImpl(LINEAR_GRAPHQL_URL, {
-      method: 'POST',
-      headers: {
-        authorization: linearAuthHeader({ apiKey: connection.apiKey }),
-        accept: 'application/json',
-        'content-type': 'application/json',
-        'user-agent': USER_AGENT,
-      },
-      body: JSON.stringify({
-        query: LINEAR_ISSUE_CREATE_MUTATION,
-        variables: buildLinearIssueCreateVariables({
-          teamId,
-          title: request.title,
-          body: request.body,
-        }),
+    const data = await postLinearGraphql<unknown>(
+      fetchImpl,
+      { apiKey: connection.apiKey },
+      LINEAR_ISSUE_CREATE_MUTATION,
+      buildLinearIssueCreateVariables({
+        teamId,
+        title: request.title,
+        body: request.body,
       }),
-    })
-    const data = unwrapLinearData<unknown>(res.status, res.ok, await res.json().catch(() => null))
+    )
     return parseLinearIssueCreateResponse(data)
   }
 

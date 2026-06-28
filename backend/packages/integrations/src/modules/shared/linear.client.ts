@@ -81,6 +81,42 @@ export function unwrapLinearData<T>(status: number, ok: boolean, parsed: unknown
   return envelope.data
 }
 
+/** The header set every Linear GraphQL POST sends (API key raw, OAuth `Bearer`). */
+export function linearRequestHeaders(auth: LinearAuth): Record<string, string> {
+  return {
+    authorization: linearAuthHeader(auth),
+    accept: 'application/json',
+    'content-type': 'application/json',
+    'user-agent': USER_AGENT,
+  }
+}
+
+/**
+ * Run a Linear GraphQL operation through a caller-injected `fetch` (the write path:
+ * ticket filing + PR writeback), returning the validated `data`. This is the single
+ * place those services build the request + apply the {@link unwrapLinearData} error
+ * policy, so the header set and error handling can't drift between call sites. The
+ * read/import path uses {@link LinearGraphqlClient} instead (it additionally pins
+ * the host + caps the body on the real `fetch`). `fetchImpl` is injected so the
+ * services stay unit-testable with a fake transport (mirrors the Jira pattern).
+ */
+export async function postLinearGraphql<T>(
+  fetchImpl: (
+    url: string,
+    init: { method: string; headers: Record<string, string>; body?: string },
+  ) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>,
+  auth: LinearAuth,
+  document: string,
+  variables: Record<string, unknown>,
+): Promise<T> {
+  const res = await fetchImpl(LINEAR_GRAPHQL_URL, {
+    method: 'POST',
+    headers: linearRequestHeaders(auth),
+    body: JSON.stringify({ query: document, variables }),
+  })
+  return unwrapLinearData<T>(res.status, res.ok, await res.json().catch(() => null))
+}
+
 /**
  * The Linear API host is fixed, so any redirect must stay on `api.linear.app`
  * over https — a redirect off-host (e.g. to an internal address) is treated as an

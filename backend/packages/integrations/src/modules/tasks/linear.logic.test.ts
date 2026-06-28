@@ -20,6 +20,10 @@ describe('parseLinearRef', () => {
     expect(parseLinearRef('not an issue')).toBeNull()
     expect(parseLinearRef('https://linear.app/acme/document/abc')).toBeNull()
   })
+
+  it('rejects an /issue/<key> path on a non-linear host', () => {
+    expect(parseLinearRef('https://evil.example.com/acme/issue/ENG-42')).toBeNull()
+  })
 })
 
 describe('mapLinearRelations', () => {

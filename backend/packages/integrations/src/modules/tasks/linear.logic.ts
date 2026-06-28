@@ -44,7 +44,6 @@ export const LINEAR_ISSUE_QUERY = `query Issue($id: String!) {
     title
     description
     url
-    priority
     priorityLabel
     state { name type }
     assignee { name }
@@ -74,7 +73,6 @@ interface LinearIssueNode {
   title?: string
   description?: string | null
   url?: string
-  priority?: number
   priorityLabel?: string | null
   state?: { name?: string; type?: string } | null
   assignee?: { name?: string } | null
@@ -94,16 +92,27 @@ interface LinearCommentNode {
 
 /**
  * Resolve a Linear issue identifier from raw user input: a bare identifier
- * (`ENG-123`), or an `/issue/ENG-123` URL. The identifier is upper-cased (Linear
- * keys are canonically upper-case). Returns null when nothing parses.
+ * (`ENG-123`), or a `linear.app/.../issue/ENG-123` URL. The identifier is
+ * upper-cased (Linear keys are canonically upper-case). A URL is only accepted
+ * when it is hosted on `linear.app` — mirroring `parseLinearDocRef`, so a foreign
+ * URL that merely contains an `/issue/<key>`-looking path can't be mistaken for a
+ * Linear reference. Returns null when nothing parses.
  */
 export function parseLinearRef(input: string): string | null {
   const trimmed = input.trim()
   const KEY = /[A-Za-z][A-Za-z0-9]*-\d+/
+  // A bare identifier (anything that is exactly a Linear key).
   if (new RegExp(`^${KEY.source}$`).test(trimmed)) return trimmed.toUpperCase()
-  const issue = trimmed.match(new RegExp(`/issue/(${KEY.source})`))
-  if (issue) return issue[1]!.toUpperCase()
-  return null
+  // Otherwise it must be a linear.app URL whose path carries an `/issue/<key>`.
+  let url: URL
+  try {
+    url = new URL(trimmed)
+  } catch {
+    return null
+  }
+  if (url.hostname.toLowerCase() !== 'linear.app') return null
+  const issue = url.pathname.match(new RegExp(`/issue/(${KEY.source})`))
+  return issue ? issue[1]!.toUpperCase() : null
 }
 
 /** Collapse runaway blank lines in already-Markdown prose. */
