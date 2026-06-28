@@ -1,5 +1,164 @@
 # @cat-factory/node-server
 
+## 0.31.0
+
+### Minor Changes
+
+- 32c653f: Add a runtime-neutral binary-artifact storage abstraction (the foundation for the
+  visual-confirmation gate's UI screenshots + reference design images).
+
+  - New kernel port `BinaryArtifactStore` with a split, mix-and-match seam: a per-runtime
+    `BinaryArtifactMetadataStore` (the queryable metadata) + a pluggable `BinaryBlobBackend`
+    (the bytes — the "custom adapter interface"), composed by `createBinaryArtifactStore`.
+  - Adapters: D1 metadata + R2 blob backend (Cloudflare — D1 can't hold large values, so
+    bytes always go to R2); Drizzle/Postgres metadata + a Postgres `bytea` blob backend
+    (Node/local, size-guarded); and a new opt-in `@cat-factory/provider-s3` package
+    implementing the blob backend over an S3 (or S3-compatible) bucket.
+  - Metadata table `binary_artifacts` mirrored D1 ⇄ Drizzle; a Node-only
+    `binary_artifact_blobs` `bytea` table backs the `db` backend (no D1 equivalent).
+  - `AppConfig.binaryStorage` selects the backend (`db` | `r2` | `s3`); wired in all three
+    facades and surfaced on the request container. New workspace-scoped artifact API
+    (upload reference / stream blob / list a run's artifacts). Cross-runtime conformance
+    suite `defineBinaryArtifactsSuite` asserts store parity on both runtimes.
+
+- 32c653f: Add the Visual Confirmation gate and split the tester into an API + UI tester.
+
+  - **Tester split:** the `tester` kind is renamed to `tester-api` (general/API exploratory
+    testing) and a new `tester-ui` kind drives a real browser (Playwright), captures a
+    non-redundant screenshot of each distinct view, uploads them to the binary-artifact
+    store, and reports them under `TestReport.screenshots[]`. Both share the Tester→Fixer
+    loop and the `tester.environment` infra choice (`isTesterKind`). The UI tester dispatches
+    with `image:'ui'` so a transport can route it to a dedicated Playwright/browser image.
+  - **Visual Confirmation gate** (`visual-confirmation`): a park-on-decision engine gate
+    (modelled on `human-test`) that gathers the UI tester's screenshots + the human-uploaded
+    reference design images (paired by view) and parks for a person to review actual-vs-reference.
+    The human approves (advance), requests a fix (dispatches the Tester's `fixer`, then re-parks),
+    or recaptures. Raises a `visual_confirmation_ready` notification; passes through when no
+    binary-artifact store is wired. New `pl_visual` pipeline (`… tester-ui → visual-confirmation
+→ merger`) and the `GET /blocks/:id/artifacts` + visual-confirmation action endpoints.
+  - Cross-runtime conformance covers the gate's no-store pass-through and the artifact store's
+    `listByBlock`.
+
+  BREAKING: the `tester` agent kind is renamed to `tester-api`. Per this repo's pre-1.0 policy
+  (no backwards-compatibility shims), any persisted state that still names `tester` simply stops
+  matching: a saved/custom pipeline referencing `tester` is detected as outdated and reseeded from
+  the catalog, and an execution that is parked mid-`tester` at upgrade time will no longer be
+  recognised by the tester gate (re-run the task). New runs are unaffected — the seeded pipelines
+  all use `tester-api`.
+
+  NOTE: the dedicated UI-tester container image (Playwright/Chromium) and the per-kind image
+  routing into it (a second Cloudflare container class; image-per-step on the local/pool
+  transports) are a deploy-time follow-up — the `image:'ui'` dispatch seam is in place. Until that
+  routing AND the harness env-passthrough (`ARTIFACT_UPLOAD_URL`/`ARTIFACT_UPLOAD_TOKEN` + a
+  Playwright driver) land, `tester-ui` has no browser and the `pl_visual` gate runs in MANUAL mode
+  (a human uploads references + screenshots and reviews them), which is why `pl_visual` is flagged
+  `experimental`.
+
+- 32c653f: Harden + complete the Visual Confirmation gate / binary-artifact storage after review.
+
+  - **Security (artifact serving):** the artifact upload + blob endpoints now pin the content
+    type to a raster-image allow-list (`png`/`jpeg`/`webp`/`gif`, SVG/HTML rejected `415`) at the
+    write boundary, and serve blobs with `X-Content-Type-Options: nosniff` + a clamped
+    `Content-Type`/`Content-Disposition` — closing a stored-XSS vector where an attacker-controlled
+    type could be served inline same-origin. Shared `imageArtifacts.ts` keeps the workspace upload
+    and the in-container ingest paths consistent.
+  - **Configurable artifact retention (new):** a per-workspace `artifactRetentionDays` setting
+    (default 14, bounded 1–3650), editable in the workspace settings panel. A daily Cloudflare cron
+    / hourly Node timer sweep prunes each workspace's screenshots + reference images past its window
+    — BOTH the metadata rows and the bytes (`BinaryArtifactStore.pruneOlderThan`), so the store no
+    longer grows unbounded. Mirrored D1 ⇄ Drizzle (migration `0018` / a generated Drizzle migration)
+    and asserted by the cross-runtime binary-artifacts conformance suite.
+  - **tester-ui ingest seam (backend half):** `ContainerAgentExecutor` injects an `artifactUpload`
+    `{ url, token }` into the `tester-ui` job body, reusing the run's existing container session
+    token + proxy base URL, and a new container-token-authed `POST ${proxyBaseUrl}/artifacts/ingest`
+    route stores the bytes as a run-scoped `screenshot`. (The UI-tester image routing + harness env
+    passthrough remain the deploy-time follow-up — see the handover doc.)
+  - **Gate UX:** a `request-fix` that can't dispatch (no PR branch / no async executor) now surfaces
+    a reason + records a failed round instead of silently re-parking; after a fix the gate flags that
+    the shown screenshots predate it (recapture to refresh); the unused `headSha` placeholder is
+    dropped; and the gate window revokes its cached screenshot object URLs on unmount.
+
+### Patch Changes
+
+- 32c653f: Second review pass on the Visual Confirmation gate / binary-artifact storage — hardening + a
+  gap-closing follow-up:
+
+  - **Retention no longer orphans bytes.** `BinaryArtifactStore.pruneOlderThan` now keeps a
+    metadata row whenever its blob delete fails (instead of dropping the row and orphaning the
+    bytes forever), so the next sweep retries it; the all-succeeded path still collapses to one
+    bulk delete.
+  - **Upload size guarded before buffering.** Both the workspace upload and the in-container
+    ingest endpoints reject a grossly oversized body from `Content-Length` BEFORE reading it into
+    memory (`exceedsRequestSizeLimit`), with the exact per-file 16 MiB ceiling still enforced after
+    parsing.
+  - **Per-run screenshot ceiling.** The container ingest route caps a single run at 100 uploaded
+    screenshots (`429` past it), so a runaway/compromised container can't fill the blob store.
+  - **Consistent content-type posture.** The harness ingest now rejects a recognised non-image
+    type (`415`) instead of silently storing it mislabelled as PNG, matching the workspace upload
+    endpoint; a typeless upload still defaults to PNG.
+  - **Tighter human-upload scoping.** The workspace artifact endpoint ignores any client-supplied
+    `executionId` (reference images are block-scoped and precede any run; run-scoped captures come
+    through the token-authed ingest, where the run is derived from the verified token).
+  - **`created_at` retention index** added on `binary_artifacts` (D1 `0017` + a generated Drizzle
+    migration) so the per-workspace prune is an indexed range delete.
+  - **`pl_visual` flagged experimental** (`labels: ['experimental']`): until UI-tester image
+    routing + harness env-passthrough land, the gate runs in manual mode — the label keeps the
+    pipeline discoverable without implying automatic screenshot capture.
+  - Removed the unused `capturing` phase from `visualConfirmStepStateSchema` (the auto re-capture
+    loop it anticipated is still deferred), and added a cross-runtime conformance test for the
+    gate's request-fix → fixer → re-park → approve loop.
+
+  Note (breaking, already in this PR): the `tester` agent kind was renamed to `tester-api` (with a
+  new browser-driven `tester-ui` sibling). Per the project's pre-1.0 no-backwards-compat policy,
+  custom pipelines/blocks persisted with the old `tester` kind are not migrated and will need to be
+  re-pointed at `tester-api`.
+
+- 32c653f: Review round 4 (visual-confirmation gate / binary artifacts):
+
+  - **Don't load the AWS SDK unless S3 is actually used.** `@cat-factory/provider-s3` now imports
+    `@aws-sdk/client-s3` lazily (on the first S3 operation) instead of at module load, so a
+    Node/local deployment running the `db` (or no) blob backend no longer pays the SDK's load cost
+    even though the facade statically imports `S3BinaryBlobBackend` to wire its container.
+  - **Guard Approve when the gate flags its screenshots as unreliable.** The visual-confirmation
+    window now requires an explicit "I've reviewed this manually" acknowledgement before Approve is
+    enabled whenever the gate set a `degradedReason` (no capture happened, a fix failed, or a fix
+    landed AFTER the shown screenshots) — so a stale/empty gallery can't be approved in one blind
+    click.
+  - **Cheaper per-run upload cap.** The harness screenshot ingest precheck uses an indexed
+    `countByExecution` (no row materialise) and only runs the post-insert overflow reconcile when the
+    insert could actually cross the cap, so the steady-state upload is one COUNT + one insert.
+  - **Serve a blob in a single metadata read** via `BinaryArtifactStore.getBlobWithMetadata`.
+  - **Drop dangling screenshot refs.** The gate validates the agent-reported screenshot `artifactId`s
+    against what the run actually uploaded, so a fabricated id or one removed by the retention sweep
+    renders as "not captured" rather than a 404 image.
+  - Make the UI-tester prompt honest: it now only instructs an upload when `ARTIFACT_UPLOAD_URL` is
+    provided to the run (manual mode otherwise), and treats the reference-design directory as
+    optional.
+
+  The new `countByExecution` / `getBlobWithMetadata` store methods are mirrored D1 ⇄ Drizzle and
+  asserted by the cross-runtime binary-artifacts conformance suite.
+
+- Updated dependencies [32c653f]
+- Updated dependencies [32c653f]
+- Updated dependencies [32c653f]
+- Updated dependencies [32c653f]
+- Updated dependencies [32c653f]
+- Updated dependencies [32c653f]
+  - @cat-factory/kernel@0.42.0
+  - @cat-factory/server@0.36.0
+  - @cat-factory/provider-s3@0.2.0
+  - @cat-factory/contracts@0.40.0
+  - @cat-factory/agents@0.20.0
+  - @cat-factory/orchestration@0.32.0
+  - @cat-factory/integrations@0.24.0
+  - @cat-factory/consensus@0.7.54
+  - @cat-factory/gates@0.2.6
+  - @cat-factory/observability-langfuse@0.7.50
+  - @cat-factory/provider-bedrock@0.7.54
+  - @cat-factory/provider-cloudflare@0.7.54
+  - @cat-factory/spend@0.10.11
+  - @cat-factory/prompt-fragments@0.7.38
+
 ## 0.30.0
 
 ### Minor Changes

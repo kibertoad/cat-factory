@@ -8,6 +8,7 @@ import {
 import type { DocumentSourceKind } from '@cat-factory/kernel'
 import type {
   AppConfig,
+  BinaryStorageConfig,
   DocumentsConfig,
   EmailConfig,
   PrivilegedAppConfig,
@@ -44,6 +45,41 @@ function loadPrivilegedApp(env: NodeJS.ProcessEnv): PrivilegedAppConfig | undefi
   const appId = env.GITHUB_PRIVILEGED_APP_ID?.trim() ?? ''
   if (appId === '' || !env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY?.trim()) return undefined
   return { appId }
+}
+
+/**
+ * Binary-artifact storage (screenshots) config. Selected by `BINARY_STORAGE_BACKEND`:
+ *  - `db`  (default when unset-but-something-references-it) — Postgres `bytea`; portable.
+ *  - `s3`  — AWS S3 / S3-compatible; requires `S3_ARTIFACT_BUCKET` + `AWS_REGION`.
+ * Absent / unrecognised ⇒ disabled (the visual-confirmation gate is a pass-through).
+ */
+function loadBinaryStorageConfig(env: NodeJS.ProcessEnv): BinaryStorageConfig {
+  const backend = env.BINARY_STORAGE_BACKEND?.trim().toLowerCase()
+  if (backend === 's3') {
+    const region = env.AWS_REGION?.trim() || env.S3_ARTIFACT_REGION?.trim()
+    const bucket = env.S3_ARTIFACT_BUCKET?.trim()
+    if (!region || !bucket) {
+      throw new Error(
+        'BINARY_STORAGE_BACKEND=s3 requires AWS_REGION (or S3_ARTIFACT_REGION) and ' +
+          'S3_ARTIFACT_BUCKET to be set.',
+      )
+    }
+    return {
+      enabled: true,
+      backend: 's3',
+      s3: {
+        region,
+        bucket,
+        prefix: env.S3_ARTIFACT_PREFIX?.trim() || undefined,
+        endpoint: env.S3_ARTIFACT_ENDPOINT?.trim() || undefined,
+        forcePathStyle: env.S3_ARTIFACT_FORCE_PATH_STYLE === 'true',
+      },
+    }
+  }
+  if (backend === 'db') {
+    return { enabled: true, backend: 'db' }
+  }
+  return { enabled: false, backend: 'db' }
 }
 
 const ALL_DOCUMENT_SOURCES: readonly DocumentSourceKind[] = ['confluence', 'notion', 'github']
@@ -344,6 +380,11 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       env.OBSERVABILITY_ENABLED === 'true' && env.ENCRYPTION_KEY?.trim()
         ? { enabled: true, encryptionKey: env.ENCRYPTION_KEY.trim() }
         : { enabled: false },
+    // Binary-artifact storage (screenshots) for the visual-confirmation gate. Selected
+    // by `BINARY_STORAGE_BACKEND` (db | s3); the metadata always lives in Postgres. The
+    // `db` backend stores bytes in a Postgres `bytea` table (the portable default);
+    // `s3` streams them to an S3 bucket. Absent ⇒ disabled (gate is a pass-through).
+    binaryStorage: loadBinaryStorageConfig(env),
     retention: {
       tokenUsageMs: (num(env.TOKEN_USAGE_RETENTION_DAYS) ?? 395) * 24 * 60 * 60 * 1000,
       rateLimitMs: (num(env.GITHUB_RATE_LIMIT_RETENTION_DAYS) ?? 7) * 24 * 60 * 60 * 1000,

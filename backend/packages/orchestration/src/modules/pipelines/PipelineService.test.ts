@@ -150,7 +150,7 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
     await expect(
       svc().create(WS, {
         name: 'Build + gap companion',
-        agentKinds: ['coder', 'tester', 'reviewer'],
+        agentKinds: ['coder', 'tester-api', 'reviewer'],
       }),
     ).rejects.toBeInstanceOf(ValidationError)
   })
