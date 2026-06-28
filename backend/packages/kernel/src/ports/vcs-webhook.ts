@@ -74,7 +74,11 @@ export interface RawWebhookDelivery {
 /**
  * Normalise a raw webhook delivery into a neutral {@link VcsWebhookEvent}, or `null` when
  * the delivery carries nothing to project. Provider-specific; one per adapter.
+ *
+ * The `connection` is resolved by the receiver BEFORE mapping (GitHub derives it from the
+ * payload's `installation.id`; GitLab from the project/secret → connection lookup), so the
+ * mapper only stamps it onto the event rather than having to discover it from the payload.
  */
 export interface VcsWebhookMapper {
-  map(delivery: RawWebhookDelivery): VcsWebhookEvent | null
+  map(connection: VcsConnectionRef, delivery: RawWebhookDelivery): VcsWebhookEvent | null
 }
