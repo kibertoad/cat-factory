@@ -7,9 +7,9 @@
     "close": "Close"
   },
   "nav": {
+    "menu": "Navigation menu",
     "openMenu": "Open menu",
-    "closeMenu": "Close menu",
-    "more": "More"
+    "closeMenu": "Close menu"
   },
   "errors": {
     "action": {

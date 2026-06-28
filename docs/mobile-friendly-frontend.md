@@ -21,14 +21,17 @@ Legend: ☐ not started · ◐ in progress · ☑ done
 - ☑ SideBar → off-canvas drawer on `< lg` (slide-in + backdrop, static `w-64` on `lg:`).
 - ☑ Hamburger trigger (`lg:hidden`) wired to `ui.toggleMobileNav()`.
 - ☑ BoardToolbar reflow — hide zoom-%/LOD label + collapse `Add service`/spend/decision
-      labels to icons on `< sm`; pill capped to `max-w-[calc(100vw-1rem)]`. (Chose
-      label-collapsing over a kebab menu: keeps every control one tap away.)
+  labels to icons on `< sm`; pill capped to `max-w-[calc(100vw-1rem)]`. (Chose
+  label-collapsing over a kebab menu: keeps every control one tap away.)
 - ☑ InspectorPanel → bottom sheet on `< lg` (`max-h-[80dvh]`; existing X is the dismiss),
-      docked `w-80` panel on `lg:`.
+  docked `w-80` panel on `lg:`.
 - ☑ NotificationsInbox popover — capped to `w-[min(24rem,92vw)]`.
 - ☑ Patch changeset for `@cat-factory/app` (`.changeset/mobile-responsive-shell.md`).
 - ☑ Mobile-viewport e2e spec (`backend/internal/e2e/tests/mobile-shell.spec.ts`) +
-      `data-testid`s (`mobile-nav-toggle`, `sidebar`, `sidebar-backdrop`, `inspector-panel`).
+  `data-testid`s (`mobile-nav-toggle`, `sidebar`, `sidebar-backdrop`, `inspector-panel`).
+- ☑ Drawer a11y/hygiene: `useViewport().isCompact` drives Escape-to-close, body-scroll-lock,
+  focus-move-on-open, `role="dialog"`/`aria-modal`/`aria-label`, an accessible backdrop, and a
+  breakpoint-cross reset of `mobileNavOpen`. Hamburger `aria-label` reflects open/closed state.
 
 Verified: `pnpm --filter @cat-factory/app typecheck` clean, `pnpm lint:fix` clean.
 

@@ -5,8 +5,10 @@
 // actions, repository management, integration management, the workspace-wide
 // context-fragment library, and workspace configuration (merge thresholds +
 // default models).
+import { useEventListener, useScrollLock } from '@vueuse/core'
 import BoardSwitcher from '~/components/layout/BoardSwitcher.vue'
 import UserMenu from '~/components/auth/UserMenu.vue'
+import { useViewport } from '~/composables/useViewport'
 
 const documents = useDocumentsStore()
 const tasks = useTasksStore()
@@ -16,6 +18,36 @@ const library = useFragmentLibraryStore()
 const workspace = useWorkspaceStore()
 const accounts = useAccountsStore()
 const ui = useUiStore()
+
+// `isCompact` (< lg) is the breakpoint at which the navbar is an off-canvas drawer;
+// above it the aside is static and the drawer flag is inert.
+const { isCompact } = useViewport()
+
+// The off-canvas drawer is a modal surface on compact viewports, so give it the
+// expected affordances:
+//   • Escape closes it (keyboard parity with the backdrop tap),
+//   • the board behind it is scroll-locked while it's open,
+//   • crossing back to lg+ clears the flag so it can't linger as stale open state,
+//   • focus moves into the drawer on open (so it isn't left on the now-hidden board).
+const aside = ref<HTMLElement>()
+const drawerOpen = computed(() => isCompact.value && ui.mobileNavOpen)
+
+const bodyLocked = useScrollLock(import.meta.client ? document.body : null)
+watchEffect(() => {
+  bodyLocked.value = drawerOpen.value
+})
+
+useEventListener('keydown', (e: KeyboardEvent) => {
+  if (e.key === 'Escape' && ui.mobileNavOpen) ui.closeMobileNav()
+})
+
+watch(isCompact, (compact) => {
+  if (!compact) ui.closeMobileNav()
+})
+
+watch(drawerOpen, (open) => {
+  if (open) void nextTick(() => aside.value?.focus())
+})
 
 // On compact (< lg) viewports the navbar is an off-canvas drawer. Activating any
 // nav control reveals a board-covering panel/modal, so close the drawer on the way
@@ -56,13 +88,21 @@ watch(
       v-if="ui.mobileNavOpen"
       class="fixed inset-0 z-30 bg-slate-950/60 backdrop-blur-sm lg:hidden"
       data-testid="sidebar-backdrop"
+      role="button"
+      tabindex="-1"
+      :aria-label="$t('common.close')"
       @click="ui.closeMobileNav()"
     />
   </Transition>
 
   <aside
+    ref="aside"
     data-testid="sidebar"
-    class="fixed inset-y-0 left-0 z-40 flex h-full w-64 shrink-0 flex-col gap-4 overflow-y-auto border-r border-slate-800 bg-slate-900/95 p-3 backdrop-blur transition-transform duration-200 lg:static lg:z-auto lg:translate-x-0 lg:bg-slate-900/80"
+    tabindex="-1"
+    :role="drawerOpen ? 'dialog' : undefined"
+    :aria-modal="drawerOpen ? 'true' : undefined"
+    :aria-label="isCompact ? $t('nav.menu') : undefined"
+    class="fixed inset-y-0 left-0 z-40 flex h-full w-64 shrink-0 flex-col gap-4 overflow-y-auto border-r border-slate-800 bg-slate-900/95 p-3 backdrop-blur transition-transform duration-200 focus:outline-none lg:static lg:z-auto lg:translate-x-0 lg:bg-slate-900/80"
     :class="ui.mobileNavOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
   >
     <BoardSwitcher />
