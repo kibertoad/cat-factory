@@ -1004,6 +1004,43 @@ overrides or adds locales by dropping its own files, so the layer's per-layer
 - **No cross-key concatenation.** A full sentence is ONE key with `{named}` placeholders;
   plurals use the vue-i18n pipe form (`'no cats | one cat | {count} cats'`).
 
+**Translator descriptions (`@<key>` siblings) — annotate ONLY truly ambiguous keys:**
+
+vue-i18n supports a per-message metadata sibling: alongside a leaf `foo` you may add an
+`@foo` object with a `description` string (e.g. `"close": "Close"` paired with `"@close":
+{ "description": "Verb meaning dismiss/shut, NOT the adjective 'near'…" }`). It is a note
+**to whoever translates the locale**, not runtime data — it never renders and lives ONLY in
+the source `en.json` (the translated catalogs `es/fr/pl/uk.json` carry no `@` siblings).
+
+**Default to NO description.** The overwhelming majority of keys are unambiguous from their
+English value plus their namespace path (`board.toolbar.addService`, `common.save`) and a
+description on them is pure noise — it bloats the catalog, dilutes the signal of the few
+notes that matter, and is one more thing to keep in sync. **Do not** add a description that
+merely restates the string, names the component it appears in, or explains an obviously
+self-evident word. When you add a key, the bar is: _would a competent translator, seeing
+only the English text and the key path, plausibly get it wrong?_ If no, add nothing.
+
+Add a `@<key>.description` ONLY when the English is genuinely ambiguous or carries a
+translation constraint the string alone can't convey — the legitimate cases (all present
+in `en.json` today) are:
+
+- **Homograph / part-of-speech ambiguity** — the word translates differently by sense:
+  `@close` (verb "dismiss", not adjective "near"), `@run_not_retryable` ("run" is the
+  execution NOUN, not the verb).
+- **Proper nouns that must NOT be translated** — `@kaizen` (a product feature name, keep
+  verbatim in every locale). Contrast `@sandbox`, whose note exists precisely to say the
+  opposite — _do_ localize it descriptively — because the reader would otherwise assume it
+  is also a verbatim brand term.
+- **Umbrella strings hiding cases not visible in the text** — `@tester_infra_unsupported`
+  (one title spanning two distinct failure causes; keep it broad).
+- **Placeholder / format constraints** — keep a `{named}` placeholder intact, or note that
+  a runtime value is injected (`@body` for the model-list interpolation).
+- **Plural-form requirements** — a count-driven key that needs more forms than English's
+  two (`@decisionWord`: Polish/Ukrainian need one/few/many via the custom `pluralRules`).
+
+Keep each description to the constraint a translator acts on; don't turn it into prose. When
+in doubt, leave it off — an unannotated key is the norm, an annotated one is the exception.
+
 **Backend / server strings:** the backend does not localize prose. A localizable server
 condition emits a machine-readable `error.details.reason`/`code`, and the SPA maps that
 code to a frontend key (the `usePipelineErrorToast.ts` pattern); the raw backend `message`
