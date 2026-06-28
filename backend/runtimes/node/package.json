@@ -48,6 +48,7 @@
     "@cat-factory/prompt-fragments": "workspace:*",
     "@cat-factory/provider-bedrock": "workspace:*",
     "@cat-factory/provider-cloudflare": "workspace:*",
+    "@cat-factory/provider-s3": "workspace:*",
     "@cat-factory/server": "workspace:*",
     "@cat-factory/spend": "workspace:*",
     "@hono/node-server": "^2.0.6",
