@@ -1088,6 +1088,6 @@ rather than adding more raw text.
   `nuxt typecheck`) bypasses the task graph, so an unbuilt workspace dependency surfaces as
   spurious `TS2307 Cannot find module '@cat-factory/contracts'` errors that don't exist in
   CI. To scope to one package, filter instead of `cd`: `pnpm exec turbo run typecheck
-  --filter=@cat-factory/app` still builds its deps first. (The exception is a task with no
+--filter=@cat-factory/app` still builds its deps first. (The exception is a task with no
   build deps, e.g. the i18n check, which CI itself runs package-local as `pnpm --filter
-  @cat-factory/app run i18n:check`.)
+@cat-factory/app run i18n:check`.)
