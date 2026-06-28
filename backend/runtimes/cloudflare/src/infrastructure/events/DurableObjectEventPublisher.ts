@@ -38,10 +38,17 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
     })
   }
 
-  async boardChanged(workspaceId: string, reason: string, _blockId?: string | null): Promise<void> {
+  async boardChanged(
+    workspaceId: string,
+    reason: string,
+    _blockId?: string | null,
+    originConnectionId?: string | null,
+  ): Promise<void> {
     // `_blockId` is used by the FanOutEventPublisher decorator to resolve which workspaces a
     // shared service's change reaches; the per-workspace publish itself is block-agnostic.
-    await this.publish(workspaceId, { type: 'board', reason, at: Date.now() })
+    // `originConnectionId` (when present) rides as a side-channel header so the hub can skip
+    // the socket that caused the change — the wire event stays identical across all clients.
+    await this.publish(workspaceId, { type: 'board', reason, at: Date.now() }, originConnectionId)
   }
 
   async bootstrapChanged(
@@ -85,12 +92,20 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
     await this.publish(workspaceId, { type: 'kaizen', grading, at: Date.now() })
   }
 
-  private async publish(workspaceId: string, event: WorkspaceEvent): Promise<void> {
+  private async publish(
+    workspaceId: string,
+    event: WorkspaceEvent,
+    originConnectionId?: string | null,
+  ): Promise<void> {
     try {
       const stub = this.namespace.get(this.namespace.idFromName(workspaceId))
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      // The hub drops this event for the socket whose `?cid=` matches, so the connection
+      // that triggered the change never refreshes off its own echo.
+      if (originConnectionId) headers['X-Origin-Cid'] = originConnectionId
       await stub.fetch('http://hub/publish', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(event),
       })
     } catch {

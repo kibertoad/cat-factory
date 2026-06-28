@@ -49,6 +49,13 @@ export function createApiClient(): WretchInstance {
   const apiBase = useRuntimeConfig().public.apiBase
   return wretch(apiBase).middlewares([
     (next) => async (url, opts) => {
+      // Tag every request with this tab's stable connection id (matched to the `?cid=` on
+      // the realtime WebSocket) so the backend can skip echoing a board mutation's coarse
+      // event back to the connection that caused it — see `utils/connectionId.ts`.
+      opts.headers = {
+        ...(opts.headers as Record<string, string> | undefined),
+        'X-Connection-Id': connectionId(),
+      }
       const token = useAuthStore().token
       if (token) {
         opts.headers = {

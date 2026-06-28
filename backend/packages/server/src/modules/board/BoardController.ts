@@ -113,13 +113,15 @@ export function boardController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, moveBlockContract, async (c) => {
-    const block = await c
-      .get('container')
-      .boardService.moveBlock(
-        param(c, 'workspaceId'),
-        c.req.valid('param').blockId,
-        c.req.valid('json').position,
-      )
+    const block = await c.get('container').boardService.moveBlock(
+      param(c, 'workspaceId'),
+      c.req.valid('param').blockId,
+      c.req.valid('json').position,
+      // Skip echoing this move back to the connection that made it (no self-refresh that
+      // snaps an in-flight drag back to a stale position) — see the `X-Connection-Id` /
+      // `?cid=` plumbing in the SPA and the realtime hubs.
+      c.req.header('x-connection-id') ?? null,
+    )
     return c.json(block, 200)
   })
 
@@ -130,6 +132,7 @@ export function boardController(): Hono<AppEnv> {
         param(c, 'workspaceId'),
         c.req.valid('param').blockId,
         c.req.valid('json'),
+        c.req.header('x-connection-id') ?? null,
       )
     return c.json(block, 200)
   })
