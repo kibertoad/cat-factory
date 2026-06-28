@@ -86,7 +86,7 @@ const renewals = computed(() =>
 )
 
 async function connect() {
-  if (!token.value.trim() || password.value.length < 8) return
+  if (!token.value.trim() || password.value.length < 6) return
   busy.value = true
   try {
     await personal.store({
@@ -203,7 +203,7 @@ async function disconnect(v: SubscriptionVendor) {
         />
       </UFormField>
       <div class="flex flex-wrap gap-3">
-        <UFormField label="Personal password (min 8 chars)" class="flex-1">
+        <UFormField label="Personal password (min 6 chars)" class="flex-1">
           <UInput v-model="password" type="password" placeholder="protects your token" />
         </UFormField>
         <UFormField label="Subscription renews on (optional)">
@@ -213,7 +213,7 @@ async function disconnect(v: SubscriptionVendor) {
       <div class="flex justify-end">
         <UButton
           :loading="busy"
-          :disabled="!token.trim() || password.length < 8"
+          :disabled="!token.trim() || password.length < 6"
           icon="i-lucide-shield-check"
           @click="connect()"
         >
