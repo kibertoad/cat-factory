@@ -1176,13 +1176,11 @@
           "label": "Post-release health",
           "description": "Watch monitors and SLOs after a release ships (Datadog)."
         },
-        "environment": {
-          "label": "Ephemeral environments",
-          "description": "Where the Tester agent runs against a live preview environment."
-        },
-        "runnerPool": {
-          "label": "Self-hosted runner pool",
-          "description": "Where the coding agents run when not using Cloudflare Containers."
+        "infrastructure": {
+          "label": "Infrastructure",
+          "description": "Self-hosted runner pool for container agents and ephemeral test environments.",
+          "agents": "Agents: {state}",
+          "envs": "Envs: {state}"
         },
         "localMode": {
           "label": "Local mode",
@@ -1251,6 +1249,12 @@
     },
     "providerConnection": {
       "fallbackTitle": "Provider",
+      "windowTitle": "Infrastructure",
+      "noneAvailable": "No infrastructure providers are enabled on this deployment.",
+      "tabs": {
+        "containerAgents": "Container agents",
+        "testEnvironments": "Test environments"
+      },
       "kind": {
         "environment": {
           "title": "Ephemeral environment provider",
@@ -1260,6 +1264,18 @@
           "title": "Self-hosted runner pool",
           "blurb": "Where the coding agents run when not using Cloudflare Containers. Configure the pool scheduler endpoint and credentials."
         }
+      },
+      "manifestEditor": {
+        "title": "Provider manifest",
+        "jsonLabel": "Manifest (JSON)",
+        "jsonHelp": "Describe your provider's API declaratively: the base URL, auth scheme, request templates, and the response mapping. Validated against the same contract the server enforces.",
+        "invalidJson": "The manifest is not valid JSON.",
+        "invalidShape": "The manifest does not match the expected shape.",
+        "schemaError": "Manifest problem: {message}",
+        "secretsLabel": "Secrets",
+        "noSecrets": "This manifest references no secrets.",
+        "reenterSecrets": "Re-enter every secret to save. Stored secrets are write-only and aren't shown.",
+        "starterHint": "This is a starter example. Edit it to match your provider's API."
       },
       "delegation": {
         "title": "Local delegation",
@@ -1272,13 +1288,10 @@
         "envHint": "Stand the Tester's preview environment up through the environment provider configured below instead of in-container docker-compose. Connect a provider first to enable this.",
         "updateFailed": "Could not update delegation"
       },
-      "runnerPoolLocalHint": "Register your pool here, then enable \"Run container agents on the runner pool\" on the {link} screen to route this workspace's agents to it.",
-      "ephemeralEnvironments": "Ephemeral environments",
       "viewLogs": "View logs",
       "hideLogs": "Hide logs",
       "connectedAt": "Connected · {baseUrl}",
       "missingConfig": "Missing required config: {fields}",
-      "manifestEditorUnavailable": "This provider is configured by authoring a manifest. The in-app manifest editor isn't available yet — register it via the API for now.",
       "form": {
         "updateConfiguration": "Update configuration",
         "connect": "Connect",

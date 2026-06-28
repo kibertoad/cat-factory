@@ -1137,13 +1137,11 @@
           "label": "Kondycja po wydaniu",
           "description": "Obserwuj monitory i SLO po wdrożeniu wydania (Datadog)."
         },
-        "environment": {
-          "label": "Środowiska efemeryczne",
-          "description": "Gdzie agent Tester działa wobec działającego środowiska podglądu."
-        },
-        "runnerPool": {
-          "label": "Samodzielnie hostowana pula wykonawców",
-          "description": "Gdzie działają agenci kodu, gdy nie używają Cloudflare Containers."
+        "infrastructure": {
+          "label": "Infrastruktura",
+          "description": "Samodzielnie hostowana pula wykonawców dla agentów kontenerowych oraz efemeryczne środowiska testowe.",
+          "agents": "Agenci: {state}",
+          "envs": "Środowiska: {state}"
         },
         "localMode": {
           "label": "Tryb lokalny",
@@ -1212,6 +1210,12 @@
     },
     "providerConnection": {
       "fallbackTitle": "Dostawca",
+      "windowTitle": "Infrastruktura",
+      "noneAvailable": "W tym wdrożeniu nie włączono żadnych dostawców infrastruktury.",
+      "tabs": {
+        "containerAgents": "Agenci kontenerowi",
+        "testEnvironments": "Środowiska testowe"
+      },
       "kind": {
         "environment": {
           "title": "Dostawca środowisk efemerycznych",
@@ -1221,6 +1225,18 @@
           "title": "Samodzielnie hostowana pula wykonawców",
           "blurb": "Tam, gdzie działają agenci kodujący, gdy nie są używane kontenery Cloudflare. Skonfiguruj punkt końcowy harmonogramu puli oraz poświadczenia."
         }
+      },
+      "manifestEditor": {
+        "title": "Manifest dostawcy",
+        "jsonLabel": "Manifest (JSON)",
+        "jsonHelp": "Opisz API swojego dostawcy deklaratywnie: bazowy adres URL, schemat uwierzytelniania, szablony żądań oraz mapowanie odpowiedzi. Walidowany według tego samego kontraktu, który egzekwuje serwer.",
+        "invalidJson": "Manifest nie jest prawidłowym formatem JSON.",
+        "invalidShape": "Manifest nie odpowiada oczekiwanemu kształtowi.",
+        "schemaError": "Problem z manifestem — {message}",
+        "secretsLabel": "Sekrety",
+        "noSecrets": "Ten manifest nie odwołuje się do żadnych sekretów.",
+        "reenterSecrets": "Wprowadź ponownie każdy sekret, aby zapisać — przechowywane sekrety są tylko do zapisu i nie są wyświetlane.",
+        "starterHint": "To jest przykład startowy. Zmodyfikuj go, aby pasował do API Twojego dostawcy."
       },
       "delegation": {
         "title": "Delegowanie lokalne",
@@ -1233,13 +1249,10 @@
         "envHint": "Uruchom środowisko podglądowe Testera przez dostawcę środowisk skonfigurowanego poniżej zamiast przez docker-compose wewnątrz kontenera. Najpierw połącz dostawcę, aby to włączyć.",
         "updateFailed": "Nie udało się zaktualizować delegowania"
       },
-      "runnerPoolLocalHint": "Zarejestruj tutaj swoją pulę, a następnie włącz „Uruchamiaj agentów kontenerowych w puli wykonawców” na ekranie {link}, aby kierować do niej agentów tego obszaru roboczego.",
-      "ephemeralEnvironments": "Środowiska efemeryczne",
       "viewLogs": "Pokaż dzienniki",
       "hideLogs": "Ukryj dzienniki",
       "connectedAt": "Połączono · {baseUrl}",
       "missingConfig": "Brakuje wymaganej konfiguracji: {fields}",
-      "manifestEditorUnavailable": "Tego dostawcę konfiguruje się, redagując manifest. Wbudowany edytor manifestu nie jest jeszcze dostępny — na razie zarejestruj go przez API.",
       "form": {
         "updateConfiguration": "Zaktualizuj konfigurację",
         "connect": "Połącz",

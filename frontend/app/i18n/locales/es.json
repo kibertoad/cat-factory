@@ -1137,13 +1137,11 @@
           "label": "Salud posterior al lanzamiento",
           "description": "Vigila los monitores y SLO después de publicar una versión (Datadog)."
         },
-        "environment": {
-          "label": "Entornos efímeros",
-          "description": "Donde el agente Tester se ejecuta contra un entorno de vista previa en vivo."
-        },
-        "runnerPool": {
-          "label": "Grupo de ejecutores autoalojado",
-          "description": "Donde se ejecutan los agentes de código cuando no se usan los Cloudflare Containers."
+        "infrastructure": {
+          "label": "Infraestructura",
+          "description": "Grupo de ejecutores autoalojado para los agentes de contenedor y entornos de prueba efímeros.",
+          "agents": "Agentes: {state}",
+          "envs": "Entornos: {state}"
         },
         "localMode": {
           "label": "Modo local",
@@ -1212,6 +1210,12 @@
     },
     "providerConnection": {
       "fallbackTitle": "Proveedor",
+      "windowTitle": "Infraestructura",
+      "noneAvailable": "No hay proveedores de infraestructura habilitados en este despliegue.",
+      "tabs": {
+        "containerAgents": "Agentes de contenedor",
+        "testEnvironments": "Entornos de prueba"
+      },
       "kind": {
         "environment": {
           "title": "Proveedor de entornos efímeros",
@@ -1221,6 +1225,18 @@
           "title": "Grupo de ejecutores autoalojado",
           "blurb": "Donde se ejecutan los agentes de codificación cuando no se usan los contenedores de Cloudflare. Configura el endpoint del planificador del grupo y las credenciales."
         }
+      },
+      "manifestEditor": {
+        "title": "Manifiesto del proveedor",
+        "jsonLabel": "Manifiesto (JSON)",
+        "jsonHelp": "Describe la API de tu proveedor de forma declarativa: la URL base, el esquema de autenticación, las plantillas de solicitud y el mapeo de la respuesta. Se valida con el mismo contrato que aplica el servidor.",
+        "invalidJson": "El manifiesto no es JSON válido.",
+        "invalidShape": "El manifiesto no coincide con la estructura esperada.",
+        "schemaError": "Problema con el manifiesto — {message}",
+        "secretsLabel": "Secretos",
+        "noSecrets": "Este manifiesto no hace referencia a ningún secreto.",
+        "reenterSecrets": "Vuelve a introducir cada secreto para guardar: los secretos almacenados son de solo escritura y no se muestran.",
+        "starterHint": "Este es un ejemplo inicial. Edítalo para que coincida con la API de tu proveedor."
       },
       "delegation": {
         "title": "Delegación local",
@@ -1233,13 +1249,10 @@
         "envHint": "Levanta el entorno de vista previa del Tester a través del proveedor de entornos configurado abajo en lugar de docker-compose dentro del contenedor. Conecta un proveedor primero para habilitar esto.",
         "updateFailed": "No se pudo actualizar la delegación"
       },
-      "runnerPoolLocalHint": "Registra tu grupo aquí y luego activa \"Ejecutar los agentes de contenedor en el grupo de ejecutores\" en la pantalla {link} para enrutar los agentes de este espacio de trabajo hacia él.",
-      "ephemeralEnvironments": "Entornos efímeros",
       "viewLogs": "Ver registros",
       "hideLogs": "Ocultar registros",
       "connectedAt": "Conectado · {baseUrl}",
       "missingConfig": "Falta configuración obligatoria: {fields}",
-      "manifestEditorUnavailable": "Este proveedor se configura redactando un manifiesto. El editor de manifiestos integrado aún no está disponible; regístralo a través de la API por ahora.",
       "form": {
         "updateConfiguration": "Actualizar configuración",
         "connect": "Conectar",

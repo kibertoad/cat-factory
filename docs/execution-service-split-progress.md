@@ -23,14 +23,14 @@ conformance suite (both Cloudflare D1 and Node Postgres).
 
 ## Phases
 
-| #  | Phase                                                   | Status |
-| -- | ------------------------------------------------------- | ------ |
-| 0  | StepHandler registry scaffolding (fallthrough, no-op)   | ✅     |
-| 1  | Deterministic one-shot step handlers (deployer/tracker)  | ✅     |
-| 2  | Post-completion resolvers (blueprint/spec/estimate)     | ✅     |
-| 3  | Verdict interceptors (tester/companion short-circuits)  | ✅     |
-| 4  | Decision/polling/companion gate step handlers           | ✅     |
-| 5  | Container-agent default handler + cleanup               | ✅     |
+| #   | Phase                                                   | Status |
+| --- | ------------------------------------------------------- | ------ |
+| 0   | StepHandler registry scaffolding (fallthrough, no-op)   | ✅     |
+| 1   | Deterministic one-shot step handlers (deployer/tracker) | ✅     |
+| 2   | Post-completion resolvers (blueprint/spec/estimate)     | ✅     |
+| 3   | Verdict interceptors (tester/companion short-circuits)  | ✅     |
+| 4   | Decision/polling/companion gate step handlers           | ✅     |
+| 5   | Container-agent default handler + cleanup               | ✅     |
 
 ## Phase 0 — scaffolding
 
@@ -91,7 +91,7 @@ resolver is the wrong tool for these; revisit only if a verdict-gate-style abstr
 ## Phase 3 — completion-path verdict interceptors
 
 **Design correction:** the plan slated tester/companion verdicts as `StepCompletionResolver`s
-driven by the Phase-0 `control` enum. But these branches run at the *top* of `recordStepResult`,
+driven by the Phase-0 `control` enum. But these branches run at the _top_ of `recordStepResult`,
 **short-circuit** it, and return a full `AdvanceResult` (park needs a decisionId, loop needs a
 jobId) — which a bare `control` enum can't carry, and which the kernel resolver seam (returns
 `StepResolution`) structurally can't express. So instead I added an engine-internal

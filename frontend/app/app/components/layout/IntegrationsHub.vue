@@ -259,32 +259,43 @@ const groups = computed<IntegrationGroup[]>(() => {
   }
 
   // --- Infrastructure (ephemeral environments + self-hosted runner pool) -----
-  // Each gates on its own availability probe, so a backend with the integration off
-  // shows no dead row. The connected badge reflects a saved connection; the
-  // ProviderConfigBanner handles the louder "missing mandatory fields" warning.
+  // The two providers — container agents (runner pool) and Tester environments — are the
+  // same "bring your own infra" idea and the same custom pool typically backs both, so they
+  // collapse into ONE row opening the tabbed Infrastructure window. The row shows a combined
+  // per-concern summary ("Agents: connected · Envs: not connected"). Each concern still gates
+  // on its own availability probe (a tab whose backend is off simply doesn't render), so the
+  // row appears whenever EITHER is available. The ProviderConfigBanner handles the louder
+  // "missing mandatory fields" warning.
   const infra: IntegrationItem[] = []
-  if (providerConnections.isAvailable('environment')) {
-    const conn = providerConnections.connectionFor('environment')
+  const agentsAvailable = providerConnections.isAvailable('runner-pool')
+  const envsAvailable = providerConnections.isAvailable('environment')
+  if (agentsAvailable || envsAvailable) {
+    const agentsConn = providerConnections.connectionFor('runner-pool')
+    const envsConn = providerConnections.connectionFor('environment')
+    // Combined summary across the available concerns only.
+    const stateWord = (conn: unknown) =>
+      conn
+        ? t('layout.integrationsHub.status.connected')
+        : t('layout.integrationsHub.status.notConnected')
+    const parts: string[] = []
+    if (agentsAvailable)
+      parts.push(
+        t('layout.integrationsHub.items.infrastructure.agents', { state: stateWord(agentsConn) }),
+      )
+    if (envsAvailable)
+      parts.push(
+        t('layout.integrationsHub.items.infrastructure.envs', { state: stateWord(envsConn) }),
+      )
+    // Default the window to the agents tab when available (the common case), else envs.
+    const defaultKind = agentsAvailable ? 'runner-pool' : 'environment'
     infra.push({
-      key: 'environment',
-      icon: 'i-lucide-cloud',
-      label: t('layout.integrationsHub.items.environment.label'),
-      description: t('layout.integrationsHub.items.environment.description'),
-      status: conn ? t('layout.integrationsHub.status.connected') : undefined,
-      connected: !!conn,
-      onClick: () => go(() => ui.openProviderConnection('environment')),
-    })
-  }
-  if (providerConnections.isAvailable('runner-pool')) {
-    const conn = providerConnections.connectionFor('runner-pool')
-    infra.push({
-      key: 'runner-pool',
+      key: 'infrastructure',
       icon: 'i-lucide-server-cog',
-      label: t('layout.integrationsHub.items.runnerPool.label'),
-      description: t('layout.integrationsHub.items.runnerPool.description'),
-      status: conn ? t('layout.integrationsHub.status.connected') : undefined,
-      connected: !!conn,
-      onClick: () => go(() => ui.openProviderConnection('runner-pool')),
+      label: t('layout.integrationsHub.items.infrastructure.label'),
+      description: t('layout.integrationsHub.items.infrastructure.description'),
+      status: parts.join(' · '),
+      connected: !!agentsConn || !!envsConn,
+      onClick: () => go(() => ui.openProviderConnection(defaultKind)),
     })
   }
   // Local-mode-only: the warm-container pool + checkout reuse for the local runner. Shown
