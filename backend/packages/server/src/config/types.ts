@@ -91,6 +91,12 @@ export interface AuthConfig {
   allowedRedirectOrigins: string[]
   /** Whether email/password signup + login is offered. */
   passwordEnabled: boolean
+  /**
+   * Permit password signup WITHOUT an invite or an allowlisted email domain. Local-mode
+   * convenience (a single developer creating their own account on their own machine); the
+   * Node/Cloudflare facades leave it false so hosted signup stays invite/domain-gated.
+   */
+  openSignup: boolean
   /** Google OAuth config, present only when configured. */
   google?: GoogleOAuthConfig
   /**

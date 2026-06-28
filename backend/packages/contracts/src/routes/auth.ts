@@ -32,6 +32,14 @@ const sessionUserViewSchema = v.object({
  * shape: the server's `AppConfig.localMode` derives its type from it (see
  * `@cat-factory/server` config), and the SPA reads the inferred type directly.
  */
+/**
+ * The source-control providers a PAT login can target. Mirrors kernel's `VcsProvider`
+ * (contracts sits below kernel, so it can't import it) — keep the two member lists in
+ * step. Drives the local-mode login UI's provider picker + the `/auth/pat` body.
+ */
+export const vcsProviderSchema = v.picklist(['github', 'gitlab'])
+export type VcsProviderWire = v.InferOutput<typeof vcsProviderSchema>
+
 export const localModeConfigSchema = v.object({
   /** True on the local-mode facade (a single developer running the whole product locally). */
   enabled: v.boolean(),
@@ -40,6 +48,18 @@ export const localModeConfigSchema = v.object({
    * pre-selected so the developer can create one in a click. Absent once a PAT is set.
    */
   githubPatSetupUrl: v.optional(v.string()),
+  /**
+   * Source-control PAT login methods the local facade can serve, so the login screen
+   * renders the right controls without probing. Absent on non-local facades.
+   *  - `configured` — providers with a PAT set server-side (env): one-click "Continue as …".
+   *  - `available`  — providers the user may paste a PAT for inline (a resolver is wired).
+   */
+  patLogin: v.optional(
+    v.object({
+      configured: v.array(vcsProviderSchema),
+      available: v.array(vcsProviderSchema),
+    }),
+  ),
 })
 export type LocalModeConfig = v.InferOutput<typeof localModeConfigSchema>
 
@@ -123,6 +143,22 @@ export const passwordLoginContract = defineApiContract({
   method: 'post',
   pathResolver: () => '/password-login',
   requestBodySchema: passwordLoginSchema,
+  responsesByStatusCode: { 200: loginResultSchema, ...errorResponses },
+})
+
+// ---- Source-control PAT login (local mode) --------------------------------
+
+// Log in as the account a source-control PAT belongs to. `token` omitted ⇒ use the
+// server-configured PAT for that provider (the one-click path); `token` present ⇒ the
+// user pasted one inline. Returns the same `{ token, user }` as password login. Served
+// only where an identity resolver is wired (local mode); 503 otherwise.
+export const patLoginContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/pat',
+  requestBodySchema: v.object({
+    provider: vcsProviderSchema,
+    token: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(4000))),
+  }),
   responsesByStatusCode: { 200: loginResultSchema, ...errorResponses },
 })
 

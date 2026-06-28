@@ -15,6 +15,21 @@
     "actionFailed": "Échec de l’action",
     "close": "Fermer"
   },
+  "auth": {
+    "localMode": {
+      "continueWith": "Continuer avec {provider}",
+      "enterPatTitle": "Ou connectez-vous avec un jeton d'accès personnel",
+      "tokenPlaceholder": "collez un jeton {provider}",
+      "createToken": "Créer un jeton {provider} ↗",
+      "submit": "Se connecter",
+      "orDivider": "ou",
+      "failed": "Échec de la connexion. Vérifiez le jeton et réessayez."
+    },
+    "signInRequired": {
+      "personalSubscriptions": "Les abonnements personnels sont enregistrés sur votre compte, mais ce déploiement fonctionne sans connexion, ils ne peuvent donc pas être stockés ici. Utilisez le pool de l'espace de travail ou une clé d'API de fournisseur.",
+      "userApiKeys": "Vos clés d'API personnelles sont enregistrées sur votre compte, mais ce déploiement fonctionne sans connexion, elles ne peuvent donc pas être stockées ici. Basculez la portée sur « Cet espace de travail » pour ajouter une clé partagée."
+    }
+  },
   "nav": {
     "menu": "Menu de navigation",
     "openMenu": "Ouvrir le menu",

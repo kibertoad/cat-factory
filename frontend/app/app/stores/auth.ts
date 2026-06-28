@@ -37,6 +37,15 @@ export const useAuthStore = defineStore(
     /** May the app render? True when auth is off, or on with a known user. */
     const isAuthenticated = computed(() => !required.value || user.value !== null)
 
+    /**
+     * Whether the SPA must show the login screen before the board. Auth-enabled deployments
+     * gate on a user as before; local mode ALSO gates (even though its API stays dev-open),
+     * because anonymous local use can't store per-user credentials — see the login flow.
+     */
+    const needsLogin = computed(
+      () => (required.value || localMode.value?.enabled === true) && user.value === null,
+    )
+
     /** Pull a token handed back in the post-login URL fragment (#token=…). */
     function consumeRedirectToken() {
       if (typeof window === 'undefined') return
@@ -62,7 +71,11 @@ export const useAuthStore = defineStore(
         return
       }
 
-      if (required.value && token.value) {
+      // Resolve a stored session into a user whenever sign-in applies — auth-enabled
+      // deployments, OR local mode (which mints real sessions via PAT/password even though
+      // its API otherwise runs dev-open). Without this, a local session wouldn't survive a
+      // reload.
+      if ((required.value || localMode.value?.enabled === true) && token.value) {
         try {
           user.value = (await api.getMe()).user
         } catch {
@@ -133,6 +146,15 @@ export const useAuthStore = defineStore(
       applySession(await api.passwordLogin(body))
     }
 
+    /**
+     * Local mode: sign in as the account a source-control PAT belongs to. `token` omitted
+     * uses the server-configured PAT (one-click); otherwise a pasted token. Resolves to the
+     * SAME canonical user as GitHub OAuth would (keyed on the provider's numeric id).
+     */
+    async function patLogin(body: { provider: 'github' | 'gitlab'; token?: string }) {
+      applySession(await api.patLogin(body))
+    }
+
     /** Request a password-reset link by email (always resolves; never reveals existence). */
     async function forgotPassword(email: string) {
       await api.forgotPassword({ email })
@@ -164,11 +186,13 @@ export const useAuthStore = defineStore(
       localMode,
       ready,
       isAuthenticated,
+      needsLogin,
       bootstrap,
       login,
       loginWithGoogle,
       signup,
       passwordLogin,
+      patLogin,
       forgotPassword,
       resetPassword,
       logout,

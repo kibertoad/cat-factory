@@ -9,7 +9,9 @@ import type {
   RateLimitRepository,
   RateLimitSnapshot,
 } from '@cat-factory/kernel'
-import { type AppTokenSource, FetchGitHubClient } from '@cat-factory/server'
+import type { VcsIdentityRegistry, VcsProvider } from '@cat-factory/kernel'
+import { type AppTokenSource, FetchGitHubClient, GitHubIdentityResolver } from '@cat-factory/server'
+import { GitLabIdentityResolver } from '@cat-factory/gitlab'
 import type { PatAccount } from './installations.js'
 
 // PAT-backed GitHub access for local mode. The shared FetchGitHubClient normally mints
@@ -187,6 +189,49 @@ export async function fetchPatAccount(env: NodeJS.ProcessEnv): Promise<PatAccoun
   } catch {
     return fallback
   }
+}
+
+/**
+ * A GitLab "new personal access token" URL with the scopes a coding agent needs
+ * pre-selected, so a developer without a GitLab PAT can click straight through to create
+ * one. `api` covers repo read/write + merge; `read_user` lets the login resolve the
+ * account identity.
+ */
+export function gitlabPatCreationUrl(): string {
+  const params = new URLSearchParams({
+    name: 'cat-factory local mode',
+    'scopes[]': 'api',
+  })
+  return `https://gitlab.com/-/user_settings/personal_access_tokens?${params.toString()}`
+}
+
+/**
+ * Assemble the source-control PAT-login registry from env — the provider-agnostic seam the
+ * `/auth/pat` endpoint resolves through. BOTH providers are always "available" (a developer
+ * may paste a PAT for either); a provider is additionally "configured" (one-click login,
+ * no paste needed) when its PAT is set in env. Adding a third provider is one more entry
+ * here + its resolver, with no change to the endpoint or the UI flow.
+ */
+export function buildVcsIdentityRegistry(env: NodeJS.ProcessEnv): {
+  registry: VcsIdentityRegistry
+  configured: VcsProvider[]
+  available: VcsProvider[]
+} {
+  const githubApiBase = env.GITHUB_API_BASE?.trim() || 'https://api.github.com'
+  const gitlabApiBase = env.GITLAB_API_BASE?.trim() || undefined
+  const registry: VcsIdentityRegistry = {
+    github: {
+      resolver: new GitHubIdentityResolver({ apiBase: githubApiBase }),
+      configuredToken: env.GITHUB_PAT?.trim() || undefined,
+    },
+    gitlab: {
+      resolver: new GitLabIdentityResolver({ apiBase: gitlabApiBase }),
+      configuredToken: env.GITLAB_PAT?.trim() || undefined,
+    },
+  }
+  const available = Object.keys(registry) as VcsProvider[]
+  const configured = available.filter((p) => registry[p]?.configuredToken)
+  return { registry, configured, available }
 }
 
 /**

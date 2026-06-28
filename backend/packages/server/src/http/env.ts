@@ -3,6 +3,7 @@ import type {
   BinaryArtifactStore,
   ConsensusSessionRepository,
   ResolveRunRepoContext,
+  VcsIdentityRegistry,
   VcsWebhookSink,
 } from '@cat-factory/kernel'
 import type {
@@ -132,6 +133,15 @@ export interface ServerContainer extends Core {
    * (projection into provider-aware persistence is the follow-up to the GitHub-keyed tables).
    */
   vcsWebhookSink?: VcsWebhookSink
+  /**
+   * Source-control PAT-login resolvers, keyed by provider. Present only on the local-mode
+   * facade (a developer logs in as the account a GitHub/GitLab PAT belongs to); hosted
+   * facades leave it undefined and the `/auth/pat` endpoint 503s — they authenticate via
+   * OAuth instead. Each entry carries the provider's resolver and, when the deployment set
+   * a PAT in env, the token enabling one-click login. See `@cat-factory/kernel`'s
+   * `VcsIdentityRegistry`.
+   */
+  vcsIdentity?: VcsIdentityRegistry
 }
 
 /** Hono generics shared by the cross-runtime controllers (Variables only — no Bindings). */

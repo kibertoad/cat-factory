@@ -5,10 +5,12 @@ import {
   logoutContract,
   meContract,
   passwordLoginContract,
+  patLoginContract,
   peekInvitationContract,
   resetPasswordContract,
   signupContract,
 } from '@cat-factory/contracts'
+import type { VcsProviderWire } from '@cat-factory/contracts'
 import type { ApiContext } from './context'
 
 /** Auth/session endpoints + the events-WebSocket ticket mint. */
@@ -26,6 +28,11 @@ export function authApi({ http, send, ws }: ApiContext) {
 
     passwordLogin: (body: { email: string; password: string }) =>
       send(passwordLoginContract, { pathPrefix: '/auth', body }),
+
+    // Local mode only: log in as the account a source-control PAT belongs to. `token`
+    // omitted ⇒ use the server-configured PAT (one-click); present ⇒ a pasted token.
+    patLogin: (body: { provider: VcsProviderWire; token?: string }) =>
+      send(patLoginContract, { pathPrefix: '/auth', body }),
 
     // Request a reset link. Always succeeds (204) regardless of whether the email is
     // registered, so the response can't be used to enumerate accounts.

@@ -24,10 +24,15 @@ export function bearerToken<E extends AppEnv>(c: Context<E>): string | null {
   return match ? match[1]! : null
 }
 
-/** Verify the request's bearer token against the configured session secret. */
+/**
+ * Verify the request's bearer token against the configured session secret. Gated on the
+ * SECRET being present, NOT on `cfg.enabled`: local mode can mint a real session (PAT /
+ * password login) while running `devOpen` with auth otherwise "disabled", and that session
+ * must still resolve to its user. With no secret there's nothing to verify against → null.
+ */
 export function verifySession<E extends AppEnv>(c: Context<E>): Promise<SessionPayload | null> {
   const cfg = c.get('container').config.auth
-  if (!cfg.enabled) return Promise.resolve(null)
+  if (!cfg.sessionSecret) return Promise.resolve(null)
   // Pin the `session` audience: a container LLM-proxy token or a WS ticket — both
   // signed with the same secret — must NOT be accepted as a user session.
   return new HmacSigner(cfg.sessionSecret).verify<SessionPayload>(bearerToken(c), {
@@ -45,26 +50,30 @@ export function requireAuth<E extends AppEnv>(): MiddlewareHandler<E> {
   return async (c, next) => {
     if (c.req.method === 'OPTIONS') return next()
     const cfg = c.get('container').config.auth
-    if (!cfg.enabled) {
-      if (cfg.devOpen) return next()
-      return c.json(
-        {
-          error: {
-            code: 'auth_not_configured',
-            message:
-              'Authentication is required but not configured. Set the GitHub OAuth ' +
-              'credentials and AUTH_SESSION_SECRET, or AUTH_DEV_OPEN=true for local dev.',
-          },
-        },
-        503,
-      )
-    }
-
+    // Always try the session first: a valid token resolves to its user even when auth is
+    // otherwise "disabled" (local mode minted it via PAT / password login under devOpen),
+    // so per-user routes work for a signed-in local developer.
     const user = await verifySession(c)
-    if (!user) {
+    if (user) {
+      c.set('user', user)
+      return next()
+    }
+    // No (valid) session. When auth is on, that's a 401. When off, the local-dev escape
+    // hatch passes through anonymously (open API for dev/tests); otherwise fail closed.
+    if (cfg.enabled) {
       return c.json({ error: { code: 'unauthorized', message: 'Authentication required' } }, 401)
     }
-    c.set('user', user)
-    await next()
+    if (cfg.devOpen) return next()
+    return c.json(
+      {
+        error: {
+          code: 'auth_not_configured',
+          message:
+            'Authentication is required but not configured. Set the GitHub OAuth ' +
+            'credentials and AUTH_SESSION_SECRET, or AUTH_DEV_OPEN=true for local dev.',
+        },
+      },
+      503,
+    )
   }
 }

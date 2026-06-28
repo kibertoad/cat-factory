@@ -677,6 +677,9 @@ importers:
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@cat-factory/gitlab':
+        specifier: workspace:*
+        version: link:../../packages/gitlab
       '@cat-factory/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations

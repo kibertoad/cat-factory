@@ -46,6 +46,11 @@ const SEED_CLOCK: Clock = { now: () => Date.now() }
 const TEST_ENV: NodeJS.ProcessEnv = {
   ...process.env,
   AUTH_DEV_OPEN: 'true',
+  // The shared conformance suite calls the API with NO session (it relies on the dev-open
+  // gate), so keep auth genuinely disabled here: opt OUT of the local default that enables
+  // password sign-in (which would flip `enabled` true and 401 the suite's open calls). The
+  // PAT/password login flow has its own dedicated local spec instead.
+  AUTH_PASSWORD_ENABLED: 'false',
   ENVIRONMENT: 'test',
   ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
   // Enable the Slack notification transport so its module + channel wire up through

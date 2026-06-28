@@ -15,6 +15,21 @@
     "actionFailed": "La acción falló",
     "close": "Cerrar"
   },
+  "auth": {
+    "localMode": {
+      "continueWith": "Continuar con {provider}",
+      "enterPatTitle": "O inicia sesión con un token de acceso personal",
+      "tokenPlaceholder": "pega un token de {provider}",
+      "createToken": "Crear un token de {provider} ↗",
+      "submit": "Iniciar sesión",
+      "orDivider": "o",
+      "failed": "Error al iniciar sesión. Comprueba el token e inténtalo de nuevo."
+    },
+    "signInRequired": {
+      "personalSubscriptions": "Las suscripciones personales se guardan en tu cuenta, pero este despliegue se ejecuta sin inicio de sesión, así que no se pueden almacenar aquí. Usa el grupo del espacio de trabajo o una clave de API de proveedor.",
+      "userApiKeys": "Tus claves de API personales se guardan en tu cuenta, pero este despliegue se ejecuta sin inicio de sesión, así que no se pueden almacenar aquí. Cambia el ámbito a «Este espacio de trabajo» para añadir una clave compartida."
+    }
+  },
   "nav": {
     "menu": "Menú de navegación",
     "openMenu": "Abrir menú",

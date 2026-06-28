@@ -21,7 +21,12 @@ import { LocalSettingsService } from '@cat-factory/integrations'
 import type { HarnessKind, RunnerTransport } from '@cat-factory/kernel'
 import { NativeRoutingRunnerTransport } from './NativeRoutingRunnerTransport.js'
 import { applyLocalDefaults } from './config.js'
-import { createLocalGitHubClient, fetchPatAccount, githubPatCreationUrl } from './github.js'
+import {
+  buildVcsIdentityRegistry,
+  createLocalGitHubClient,
+  fetchPatAccount,
+  githubPatCreationUrl,
+} from './github.js'
 import { AutoProvisioningInstallationRepository, type PatAccount } from './installations.js'
 import {
   type LocalContainerRunnerTransport,
@@ -75,6 +80,11 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // those vendors. Default off — the container path is unchanged.
   const nativeHarnesses = parseNativeHarnesses(env.LOCAL_NATIVE_AGENTS)
   const nativeAgents = nativeHarnesses.length > 0
+  // The source-control PAT-login registry (GitHub + GitLab), assembled provider-agnostically
+  // from env. `configured` providers offer one-click "Continue as @you"; `available` ones
+  // also accept a pasted PAT. Advertised on `localMode.patLogin` so the login screen renders
+  // the right controls, and exposed on the container for the `/auth/pat` endpoint.
+  const { registry: vcsIdentity, configured, available } = buildVcsIdentityRegistry(env)
   const config: AppConfig = {
     ...base,
     ...(pat ? { github: { ...base.github, enabled: true } } : {}),
@@ -82,6 +92,7 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     localMode: {
       enabled: true,
       ...(pat ? {} : { githubPatSetupUrl: githubPatCreationUrl() }),
+      patLogin: { configured, available },
     },
   }
 
@@ -336,10 +347,13 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
 
   // Surface the local-mode settings service so the dedicated local-settings panel can
   // read/write the warm-pool + checkout config (the controller 503s when this is absent,
-  // which is the case on every non-local facade).
-  return localSettingsService
-    ? { ...container, localSettings: { service: localSettingsService } }
-    : container
+  // which is the case on every non-local facade). Also expose the PAT-login registry so the
+  // `/auth/pat` endpoint can resolve a GitHub/GitLab identity (local-mode only).
+  return {
+    ...container,
+    vcsIdentity,
+    ...(localSettingsService ? { localSettings: { service: localSettingsService } } : {}),
+  }
 }
 
 /** Values that explicitly DISABLE native mode (so `LOCAL_NATIVE_AGENTS=false` means off). */

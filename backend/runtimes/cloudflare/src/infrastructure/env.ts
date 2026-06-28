@@ -278,6 +278,11 @@ export interface Env {
   AUTH_DEV_OPEN?: string
   /** Set 'true' to offer email/password signup + login (needs a strong session secret). */
   AUTH_PASSWORD_ENABLED?: string
+  /**
+   * Set 'true' to permit password signup WITHOUT an invite / allowlisted email domain.
+   * A local-mode convenience; the Worker leaves it off so hosted signup stays gated.
+   */
+  AUTH_OPEN_SIGNUP?: string
   /** Comma-separated email domains allowed to self-signup without an invite. */
   AUTH_ALLOWED_EMAIL_DOMAINS?: string
   /** Google OAuth credentials (login-with-Google); both required to enable it. */
