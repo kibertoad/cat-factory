@@ -17,6 +17,8 @@ import { FIXER_AGENT_KIND, UI_TESTER_AGENT_KIND, VISUAL_CONFIRM_AGENT_KIND } fro
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
+import type { RunStateMachine } from './RunStateMachine.js'
+import type { StepGraph } from './StepGraph.js'
 
 /** Render the human's findings as the resolved-context block handed to the fixer. */
 function renderFindingsForFixer(findings: string): string {
@@ -49,28 +51,10 @@ export interface VisualConfirmationControllerDeps {
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   /** The task's helper attempt budget (from the resolved merge preset). */
   resolveMergePreset: (workspaceId: string, block: Block) => Promise<{ ciMaxAttempts: number }>
-  // Shared engine step-graph primitives (stay on ExecutionService, injected here).
-  parkStepOnDecision: (
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    proposal?: string,
-  ) => Promise<AdvanceResult>
-  finishStep: (step: PipelineStep) => void
-  startStep: (step: PipelineStep) => void
-  updateBlockProgress: (
-    workspaceId: string,
-    instance: ExecutionInstance,
-    status: 'in_progress' | 'blocked',
-  ) => Promise<void>
-  finalizeBlock: (
-    workspaceId: string,
-    instance: ExecutionInstance,
-    confidence: number | undefined,
-  ) => Promise<void>
-  stopRunContainer: (workspaceId: string, instance: ExecutionInstance) => Promise<void>
-  persistInstance: (workspaceId: string, instance: ExecutionInstance) => Promise<void>
-  emitInstance: (workspaceId: string, instance: ExecutionInstance) => Promise<void>
+  /** The async instance/block spine (park/advance/finalize/persist/emit/progress/stop). */
+  stateMachine: RunStateMachine
+  /** The pure step mutators (start/finish a step). */
+  stepGraph: StepGraph
   clockNow: () => number
 }
 
@@ -108,7 +92,7 @@ export class VisualConfirmationController {
       vc.pendingAction = null
       // Checkpoint the consumed action BEFORE any slow/side-effecting work (a fixer dispatch
       // is a real container), so a retry can't re-consume it and dispatch a second helper.
-      await this.deps.persistInstance(workspaceId, instance)
+      await this.deps.stateMachine.persistInstance(workspaceId, instance)
       return this.handleAction(workspaceId, instance, step, block, isFinalStep, action)
     }
     if (!vc) return this.begin(workspaceId, instance, step, block, isFinalStep)
@@ -116,7 +100,7 @@ export class VisualConfirmationController {
     if (vc.phase === 'fixing' && step.jobId) {
       return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
     }
-    return this.deps.parkStepOnDecision(workspaceId, instance, step, this.proposal(vc))
+    return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step, this.proposal(vc))
   }
 
   /**
@@ -138,7 +122,7 @@ export class VisualConfirmationController {
     step.jobId = undefined
     step.subtasks = undefined
     // Reclaim the finished helper container before re-parking.
-    await this.deps.stopRunContainer(workspaceId, instance)
+    await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
     const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
     vc.pairs = await this.gatherPairs(workspaceId, instance, block, await this.store(workspaceId))
@@ -307,7 +291,7 @@ export class VisualConfirmationController {
     step.subtasks = undefined
     // Leave the parked decision state: while the helper runs the step is `working` with a
     // live job, NOT parked on a stale approval (a re-drive would otherwise abandon the job).
-    this.deps.startStep(step)
+    this.deps.stepGraph.startStep(step)
     step.approval = null
     vc.phase = 'fixing'
     // A fix is now in flight: clear any prior degraded note (e.g. a previous failed dispatch).
@@ -323,8 +307,8 @@ export class VisualConfirmationController {
         at: this.deps.clockNow(),
       },
     ]
-    await this.deps.persistInstance(workspaceId, instance)
-    await this.deps.emitInstance(workspaceId, instance)
+    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
   }
 
@@ -391,7 +375,7 @@ export class VisualConfirmationController {
     const vc = step.visualConfirm!
     vc.phase = 'awaiting_human'
     await this.raiseReadyNotification(workspaceId, instance, block, vc)
-    return this.deps.parkStepOnDecision(workspaceId, instance, step, this.proposal(vc))
+    return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step, this.proposal(vc))
   }
 
   /** Finish the gate step and advance to the next step (or finish the run). */
@@ -401,24 +385,24 @@ export class VisualConfirmationController {
     step: PipelineStep,
     isFinalStep: boolean,
   ): Promise<AdvanceResult> {
-    this.deps.finishStep(step)
+    this.deps.stepGraph.finishStep(step)
     step.progress = 1
     step.subtasks = undefined
     step.approval = null
     if (isFinalStep) {
       instance.status = 'done'
-      await this.deps.finalizeBlock(workspaceId, instance, undefined)
-      await this.deps.persistInstance(workspaceId, instance)
-      await this.deps.emitInstance(workspaceId, instance)
-      await this.deps.stopRunContainer(workspaceId, instance)
+      await this.deps.stateMachine.finalizeBlock(workspaceId, instance, undefined)
+      await this.deps.stateMachine.persistInstance(workspaceId, instance)
+      await this.deps.stateMachine.emitInstance(workspaceId, instance)
+      await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
       return { kind: 'done' }
     }
     instance.currentStep += 1
     const next = instance.steps[instance.currentStep]
-    if (next) this.deps.startStep(next)
-    await this.deps.updateBlockProgress(workspaceId, instance, 'in_progress')
-    await this.deps.persistInstance(workspaceId, instance)
-    await this.deps.emitInstance(workspaceId, instance)
+    if (next) this.deps.stepGraph.startStep(next)
+    await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
+    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
   }
 
@@ -440,8 +424,8 @@ export class VisualConfirmationController {
     }
     vc.pendingAction = action
     if (instance.status === 'blocked') instance.status = 'running'
-    await this.deps.persistInstance(workspaceId, instance)
-    await this.deps.emitInstance(workspaceId, instance)
+    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.emitInstance(workspaceId, instance)
     await this.deps.workRunner.signalDecision(
       workspaceId,
       instance.id,

@@ -1,5 +1,4 @@
 import type {
-  AgentFailure,
   AgentFailureKind,
   ResolveBinaryArtifactStore,
   Block,
@@ -94,6 +93,7 @@ import {
 } from './AgentContextBuilder.js'
 import { CompanionController } from './CompanionController.js'
 import { StepGraph } from './StepGraph.js'
+import { RunStateMachine, type KaizenScheduler } from './RunStateMachine.js'
 import { inferTechnicalLabel } from './technical.logic.js'
 import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
@@ -194,30 +194,6 @@ import {
 } from './tester-infra.logic.js'
 
 /**
- * "What to do next" guidance per failure kind a pipeline run can produce, shown
- * under the failure banner on the board (mirrors bootstrap's FAILURE_HINTS). Only
- * the execution-relevant subset of {@link AgentFailureKind} is keyed.
- */
-const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
-  agent:
-    'An agent step failed after its automatic retries. Review the run, then retry to re-run the pipeline.',
-  job_failed:
-    'The implementation container reported a failure. Inspect its logs (Cloudflare Workers Observability, filtered by the run id), then retry to spin a fresh container.',
-  evicted:
-    'The implementation container kept vanishing mid-run even after automatic fresh-container restarts. Most often this is transient: a deploy / new-version rollout draining the container, in which case simply retrying once the rollout has finished succeeds. If it persists, it points at a memory or crash issue on the run — inspect its logs (Cloudflare Workers Observability, filtered by the run id) and consider a heavier container instance type. Retry to try again.',
-  timeout:
-    'The run exceeded its time budget — a step or the implementation job did not finish in time. Retry to start it again.',
-  rejected:
-    'You rejected this step’s proposal, stopping the run. Retry to re-run the pipeline from the rejected step.',
-  companion_rejected:
-    'A companion agent could not return a usable quality assessment (its reply was truncated or malformed) even after a repair retry. Review the companion’s raw output on the run, then retry.',
-  cancelled: 'You stopped this run; its container was killed. Retry to start it again.',
-  dispatch:
-    'The agent’s container could not be started — the run never began executing. The provider/runtime’s verbatim response is shown below. Most often this is transient (a capacity blip or a new-version rollout); retrying spins a fresh container. If it persists it points at a misconfigured container binding/image or runner pool. Retry to try again.',
-  unknown: 'The run failed for an unclassified reason. Review the run, then retry.',
-}
-
-/**
  * Step kinds whose run details surface the ephemeral-environment lifecycle: the
  * `deployer` provisions it and the `tester`/`playwright` exercise it. Used to gate
  * the per-poll env projection so the `getByBlock` read never hits the hot path for
@@ -239,14 +215,6 @@ function parseRepoFromPullUrl(url: string): { owner: string; repo: string } | un
   const match = /^https?:\/\/[^/]+\/([^/]+)\/([^/]+)\//.exec(url)
   if (!match) return undefined
   return { owner: match[1]!, repo: match[2]! }
-}
-
-/**
- * Structural view of the Kaizen agent's scheduler the engine calls at run completion.
- * Kept minimal so the execution engine doesn't depend on the concrete `KaizenService`.
- */
-export interface KaizenScheduler {
-  scheduleForRun(workspaceId: string, instance: ExecutionInstance): Promise<void>
 }
 
 export interface ExecutionServiceDependencies {
@@ -537,13 +505,14 @@ export class ExecutionService {
   private readonly clock: Clock
   /** The pure step/cursor mutators (start/finish/park/reset + the companion rework loop). */
   private readonly stepGraph: StepGraph
+  /** The async instance/block state-machine spine (persist/emit/park/advance/finalize/fail). */
+  private readonly runStateMachine: RunStateMachine
   private readonly agentExecutor: AgentExecutor
   private readonly workRunner: WorkRunner
   private readonly events: ExecutionEventPublisher
   private readonly board: BoardService
   private readonly spend: SpendService
   private readonly requirementReviewService?: RequirementReviewService
-  private readonly kaizenScheduler?: KaizenScheduler
   private readonly clarityReviewService?: ClarityReviewService
   private readonly brainstormServices?: Record<BrainstormStage, BrainstormService>
   private readonly environmentProvisioning?: EnvironmentProvisioningService
@@ -573,7 +542,6 @@ export class ExecutionService {
   private readonly blueprintReconciler?: BlueprintReconciler
   private readonly notificationService?: NotificationService
   private readonly workspaceSettingsService?: WorkspaceSettingsService
-  private readonly llmObservability?: LlmObservabilityService
   private readonly prMerger?: PullRequestMerger
   private readonly mergePresetRepository?: MergePresetRepository
   private readonly ticketTrackerProvider?: TicketTrackerProvider
@@ -677,13 +645,26 @@ export class ExecutionService {
     this.idGenerator = idGenerator
     this.clock = clock
     this.stepGraph = new StepGraph(clock)
+    this.runStateMachine = new RunStateMachine({
+      executionRepository,
+      blockRepository,
+      events: executionEventPublisher,
+      workRunner,
+      agentExecutor,
+      idGenerator,
+      clock,
+      stepGraph: this.stepGraph,
+      notificationService,
+      kaizenScheduler,
+      subscriptionActivations: subscriptionActivationRepository,
+      llmObservability,
+    })
     this.agentExecutor = agentExecutor
     this.workRunner = workRunner
     this.events = executionEventPublisher
     this.board = boardService
     this.spend = spendService
     this.requirementReviewService = requirementReviewService
-    this.kaizenScheduler = kaizenScheduler
     this.clarityReviewService = clarityReviewService
     this.brainstormServices = brainstormServices
     this.environmentProvisioning = environmentProvisioning
@@ -715,17 +696,8 @@ export class ExecutionService {
       idGenerator,
       previewStepModel: (ctx) => this.previewStepModel(ctx),
       runAgent: (ctx, opts) => this.runAgent(ctx, opts),
-      finishStep: (s) => this.stepGraph.finishStep(s),
-      startStep: (s) => this.stepGraph.startStep(s),
-      pauseStepForInput: (s) => this.stepGraph.pauseStepForInput(s),
-      updateBlockProgress: (ws, i, st) => this.updateBlockProgress(ws, i, st),
-      persistInstance: (ws, i) => this.executionRepository.upsert(ws, i),
-      emitInstance: (ws, i) => this.emitInstance(ws, i),
-      stopRunContainer: (ws, i) => this.stopRunContainer(ws, i),
-      finalizeBlock: (ws, i, c) => this.finalizeBlock(ws, i, c),
-      parkStepOnDecision: (ws, i, s, p) => this.parkStepOnDecision(ws, i, s, p),
-      raiseDecisionRequired: (ws, i) => this.raiseDecisionRequired(ws, i),
-      loopCompanionProducer: (i, ci, rw) => this.stepGraph.loopCompanionProducer(i, ci, rw),
+      stateMachine: this.runStateMachine,
+      stepGraph: this.stepGraph,
       inferTechnicalLabel: (ws, block, producer, companionStep) =>
         this.inferBlockTechnical(ws, block, producer, companionStep),
     })
@@ -735,9 +707,7 @@ export class ExecutionService {
       agentExecutor,
       contextBuilder: this.contextBuilder,
       resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
-      stopRunContainer: (ws, i) => this.stopRunContainer(ws, i),
-      persistInstance: (ws, i) => this.executionRepository.upsert(ws, i),
-      emitInstance: (ws, i) => this.emitInstance(ws, i),
+      stateMachine: this.runStateMachine,
     })
     this.humanTestController = new HumanTestController({
       blockRepository,
@@ -771,14 +741,8 @@ export class ExecutionService {
         : {}),
       ...(branchUpdater ? { branchUpdater } : {}),
       resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
-      parkStepOnDecision: (ws, i, s, p) => this.parkStepOnDecision(ws, i, s, p),
-      finishStep: (s) => this.stepGraph.finishStep(s),
-      startStep: (s) => this.stepGraph.startStep(s),
-      updateBlockProgress: (ws, i, st) => this.updateBlockProgress(ws, i, st),
-      finalizeBlock: (ws, i, c) => this.finalizeBlock(ws, i, c),
-      stopRunContainer: (ws, i) => this.stopRunContainer(ws, i),
-      persistInstance: (ws, i) => this.executionRepository.upsert(ws, i),
-      emitInstance: (ws, i) => this.emitInstance(ws, i),
+      stateMachine: this.runStateMachine,
+      stepGraph: this.stepGraph,
       clockNow: () => this.clock.now(),
     })
     this.visualConfirmationController = new VisualConfirmationController({
@@ -790,33 +754,19 @@ export class ExecutionService {
       notificationService,
       ...(resolveBinaryArtifactStore ? { resolveBinaryArtifactStore } : {}),
       resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
-      parkStepOnDecision: (ws, i, s, p) => this.parkStepOnDecision(ws, i, s, p),
-      finishStep: (s) => this.stepGraph.finishStep(s),
-      startStep: (s) => this.stepGraph.startStep(s),
-      updateBlockProgress: (ws, i, st) => this.updateBlockProgress(ws, i, st),
-      finalizeBlock: (ws, i, c) => this.finalizeBlock(ws, i, c),
-      stopRunContainer: (ws, i) => this.stopRunContainer(ws, i),
-      persistInstance: (ws, i) => this.executionRepository.upsert(ws, i),
-      emitInstance: (ws, i) => this.emitInstance(ws, i),
+      stateMachine: this.runStateMachine,
+      stepGraph: this.stepGraph,
       clockNow: () => this.clock.now(),
     })
     this.reviewGate = new ReviewGateController({
       blockRepository,
       executionRepository,
       workRunner,
+      stateMachine: this.runStateMachine,
+      stepGraph: this.stepGraph,
       resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
-      parkStepOnDecision: (ws, i, s, p) => this.parkStepOnDecision(ws, i, s, p),
-      advancePastResolvedGate: (ws, i, idx) => this.advancePastResolvedGate(ws, i, idx),
       dispatchIterationCap: (ws, blockId, choice, handlers) =>
         this.dispatchIterationCap(ws, blockId, choice, handlers),
-      raiseDecisionRequired: (ws, i) => this.raiseDecisionRequired(ws, i),
-      finishStep: (s) => this.stepGraph.finishStep(s),
-      startStep: (s) => this.stepGraph.startStep(s),
-      updateBlockProgress: (ws, i, st) => this.updateBlockProgress(ws, i, st),
-      finalizeBlock: (ws, i, c) => this.finalizeBlock(ws, i, c),
-      stopRunContainer: (ws, i) => this.stopRunContainer(ws, i),
-      persistInstance: (ws, i) => this.executionRepository.upsert(ws, i),
-      emitInstance: (ws, i) => this.emitInstance(ws, i),
     })
     this.requirementsKind = this.buildRequirementsKind()
     this.clarityKind = this.buildClarityKind()
@@ -831,7 +781,6 @@ export class ExecutionService {
     this.blueprintReconciler = blueprintReconciler
     this.notificationService = notificationService
     this.workspaceSettingsService = workspaceSettingsService
-    this.llmObservability = llmObservability
     this.prMerger = pullRequestMerger
     this.mergePresetRepository = mergePresetRepository
     this.ticketTrackerProvider = ticketTrackerProvider
@@ -1209,7 +1158,7 @@ export class ExecutionService {
     // a browser open. With the no-op runner (tests) this does nothing and the run
     // is advanced directly via advanceInstance.
     await this.workRunner.startRun(workspaceId, instance.id)
-    await this.emitInstance(workspaceId, instance)
+    await this.runStateMachine.emitInstance(workspaceId, instance)
     return instance
   }
 
@@ -1357,9 +1306,9 @@ export class ExecutionService {
     // auto-passed, or the run reached a terminal state) clear that waiting card so the
     // escalation sweep can't later flip a settled decision red ("Overdue").
     if (result.kind === 'awaiting_decision') {
-      await this.ensureWaitingNotification(workspaceId, instance)
+      await this.runStateMachine.ensureWaitingNotification(workspaceId, instance)
     } else {
-      await this.clearWaitingNotification(workspaceId, instance)
+      await this.runStateMachine.clearWaitingNotification(workspaceId, instance)
     }
     return result
   }
@@ -1386,7 +1335,7 @@ export class ExecutionService {
         if (instance.status !== 'paused') {
           instance.status = 'paused'
           await this.executionRepository.upsert(workspaceId, instance)
-          await this.emitInstance(workspaceId, instance)
+          await this.runStateMachine.emitInstance(workspaceId, instance)
         }
         return { kind: 'paused' }
       }
@@ -1423,7 +1372,7 @@ export class ExecutionService {
         if (pendingId) {
           instance.status = 'blocked'
           await this.executionRepository.upsert(workspaceId, instance)
-          await this.emitInstance(workspaceId, instance)
+          await this.runStateMachine.emitInstance(workspaceId, instance)
           return { kind: 'awaiting_decision', decisionId: pendingId }
         }
       }
@@ -1505,7 +1454,7 @@ export class ExecutionService {
         // phase, so a run's details show the env spinning up next to the container.
         await this.attachEnvironmentProjection(workspaceId, instance.blockId, step)
         await this.executionRepository.upsert(workspaceId, instance)
-        await this.emitInstance(workspaceId, instance)
+        await this.runStateMachine.emitInstance(workspaceId, instance)
 
         let handle: AgentJobHandle
         try {
@@ -1518,7 +1467,7 @@ export class ExecutionService {
           // "run failed". A dispatch-time eviction still routes to the evicted framing.
           step.startingContainer = false
           await this.executionRepository.upsert(workspaceId, instance)
-          await this.emitInstance(workspaceId, instance)
+          await this.runStateMachine.emitInstance(workspaceId, instance)
           const message = getErrorMessage(error)
           const evicted = isContainerEvictionError(message)
           return {
@@ -1534,7 +1483,7 @@ export class ExecutionService {
         // The dispatch returned, so the container is up and execution has begun.
         step.startingContainer = false
         await this.executionRepository.upsert(workspaceId, instance)
-        await this.emitInstance(workspaceId, instance)
+        await this.runStateMachine.emitInstance(workspaceId, instance)
       }
       return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
     }
@@ -1546,7 +1495,7 @@ export class ExecutionService {
     if (previewModel && previewModel !== step.model) {
       step.model = previewModel
       await this.executionRepository.upsert(workspaceId, instance)
-      await this.emitInstance(workspaceId, instance)
+      await this.runStateMachine.emitInstance(workspaceId, instance)
     }
 
     const result = await this.runAgent(context, options)
@@ -1689,7 +1638,7 @@ export class ExecutionService {
       }
       if (changed) {
         await this.executionRepository.upsert(workspaceId, instance)
-        await this.emitInstance(workspaceId, instance)
+        await this.runStateMachine.emitInstance(workspaceId, instance)
       }
       return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
     }
@@ -1788,7 +1737,7 @@ export class ExecutionService {
       step.subtasks = undefined
       if (step.gate) step.gate.phase = 'checking'
       await this.executionRepository.upsert(workspaceId, instance)
-      await this.emitInstance(workspaceId, instance)
+      await this.runStateMachine.emitInstance(workspaceId, instance)
       return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
     }
 
@@ -1805,7 +1754,7 @@ export class ExecutionService {
       // Reclaim the finished Fixer container before re-dispatching the Tester so it
       // boots fresh against the just-pushed fixes (rather than re-attaching to the
       // completed job by run id).
-      await this.stopRunContainer(workspaceId, instance)
+      await this.runStateMachine.stopRunContainer(workspaceId, instance)
       return this.testerController.dispatchTester(workspaceId, instance, step, block)
     }
 
@@ -1858,7 +1807,7 @@ export class ExecutionService {
           step.subtasks = undefined
           step.progress = 0
           await this.executionRepository.upsert(workspaceId, instance)
-          await this.emitInstance(workspaceId, instance)
+          await this.runStateMachine.emitInstance(workspaceId, instance)
           return { kind: 'continue' }
         }
         return {
@@ -2052,18 +2001,18 @@ export class ExecutionService {
 
     if (isFinalStep) {
       instance.status = 'done'
-      await this.finalizeBlock(workspaceId, instance, undefined)
+      await this.runStateMachine.finalizeBlock(workspaceId, instance, undefined)
       await this.executionRepository.upsert(workspaceId, instance)
-      await this.emitInstance(workspaceId, instance)
-      await this.stopRunContainer(workspaceId, instance)
+      await this.runStateMachine.emitInstance(workspaceId, instance)
+      await this.runStateMachine.stopRunContainer(workspaceId, instance)
       return { kind: 'done' }
     }
     instance.currentStep += 1
     const next = instance.steps[instance.currentStep]
     if (next) this.stepGraph.startStep(next)
-    await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+    await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
     await this.executionRepository.upsert(workspaceId, instance)
-    await this.emitInstance(workspaceId, instance)
+    await this.runStateMachine.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
   }
 
@@ -2128,9 +2077,9 @@ export class ExecutionService {
       }
       this.stepGraph.pauseStepForInput(step)
       instance.status = 'blocked'
-      await this.updateBlockProgress(workspaceId, instance, 'blocked')
+      await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'blocked')
       await this.executionRepository.upsert(workspaceId, instance)
-      await this.emitInstance(workspaceId, instance)
+      await this.runStateMachine.emitInstance(workspaceId, instance)
       return { kind: 'awaiting_decision', decisionId: step.decision.id }
     }
 
@@ -2252,9 +2201,9 @@ export class ExecutionService {
       }
       this.stepGraph.pauseStepForInput(step)
       instance.status = 'blocked'
-      await this.updateBlockProgress(workspaceId, instance, 'blocked')
+      await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'blocked')
       await this.executionRepository.upsert(workspaceId, instance)
-      await this.emitInstance(workspaceId, instance)
+      await this.runStateMachine.emitInstance(workspaceId, instance)
       return { kind: 'awaiting_decision', decisionId: step.approval.id }
     }
 
@@ -2304,14 +2253,14 @@ export class ExecutionService {
       // POSITION-INDEPENDENTLY: confidence at the top of recordStepResult and the merger's
       // real merge via the step-completion resolver registry (so a trailing
       // post-release-health gate doesn't disable auto-merge). Nothing merge-specific here.
-      await this.finalizeBlock(workspaceId, instance, result.confidence)
+      await this.runStateMachine.finalizeBlock(workspaceId, instance, result.confidence)
       await this.executionRepository.upsert(workspaceId, instance)
-      await this.emitInstance(workspaceId, instance)
+      await this.runStateMachine.emitInstance(workspaceId, instance)
       // The run is finished: reclaim its per-run container now instead of letting it
       // idle out its sleepAfter window (~10 min of billed-but-useless compute). All
       // pipeline steps share the one container keyed by the execution id, so this is
       // only safe on the FINAL step — never between steps. Best-effort/idempotent.
-      await this.stopRunContainer(workspaceId, instance)
+      await this.runStateMachine.stopRunContainer(workspaceId, instance)
       return { kind: 'done' }
     }
     instance.currentStep += 1
@@ -2322,12 +2271,12 @@ export class ExecutionService {
     // advance to a trailing step — refresh progress only, preserving that status. (The
     // final step's `finalizeBlock` then leaves a `done` block alone.)
     if (resolverOwnsTerminalStatus) {
-      await this.refreshBlockProgress(workspaceId, instance)
+      await this.runStateMachine.refreshBlockProgress(workspaceId, instance)
     } else {
-      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+      await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
     }
     await this.executionRepository.upsert(workspaceId, instance)
-    await this.emitInstance(workspaceId, instance)
+    await this.runStateMachine.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
   }
 
@@ -3093,7 +3042,7 @@ export class ExecutionService {
       // Keep polling. Persist the head sha + phase so the board can reflect it.
       step.gate.phase = 'checking'
       await this.executionRepository.upsert(workspaceId, instance)
-      await this.emitInstance(workspaceId, instance)
+      await this.runStateMachine.emitInstance(workspaceId, instance)
       return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
     }
 
@@ -3178,81 +3127,8 @@ export class ExecutionService {
       headSha: step.gate?.headSha ?? null,
     }
     await this.executionRepository.upsert(workspaceId, instance)
-    await this.emitInstance(workspaceId, instance)
+    await this.runStateMachine.emitInstance(workspaceId, instance)
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
-  }
-
-  /**
-   * Raise a `decision_required` notification when a run parks on an iteration-cap gate
-   * after spending its automatic budget — a quality companion at its rework cap or an
-   * iterative reviewer (requirements / clarity) at its iteration cap. Without it the
-   * three-choice decision is reachable only by drilling into the parked step, so the run
-   * looks silently stuck. Best-effort: a missing notification service (tests) or block is
-   * a no-op.
-   */
-  private async raiseDecisionRequired(
-    workspaceId: string,
-    instance: ExecutionInstance,
-  ): Promise<void> {
-    if (!this.notificationService) return
-    const block = await this.blockRepository.get(workspaceId, instance.blockId)
-    if (!block) return
-    await this.notificationService.raise(workspaceId, {
-      type: 'decision_required',
-      blockId: block.id,
-      executionId: instance.id,
-      title: `"${block.title}" ran out of automatic iterations and needs your decision`,
-      body:
-        'An automatic review loop reached its iteration cap without converging. Open the ' +
-        'task to choose: one more round, proceed with the current result, or stop and reset.',
-      payload: { pipelineName: instance.pipelineName },
-    })
-  }
-
-  /**
-   * Ensure an open notification exists for a run that has just parked waiting for a human
-   * (an agent-raised decision, an approval gate, or an iterative review gate). Without
-   * the old decision timeout the run waits indefinitely, so the inbox card — which the
-   * periodic sweep escalates yellow → red — is the only signal a human is needed.
-   *
-   * Non-clobbering: if ANY open notification is already on the block (a more specific
-   * `merge_review`, iteration-cap `decision_required`, etc.), it is left untouched and we
-   * raise nothing — so the richer message wins. Best-effort: no notification service
-   * (tests) or a missing block is a no-op.
-   */
-  private async ensureWaitingNotification(
-    workspaceId: string,
-    instance: ExecutionInstance,
-  ): Promise<void> {
-    const svc = this.notificationService
-    if (!svc) return
-    const open = await svc.listOpen(workspaceId)
-    if (open.some((n) => n.blockId === instance.blockId)) return
-    const block = await this.blockRepository.get(workspaceId, instance.blockId)
-    if (!block) return
-    await svc.raise(workspaceId, {
-      type: 'decision_required',
-      blockId: block.id,
-      executionId: instance.id,
-      title: `"${block.title}" is waiting for your input`,
-      body: 'A pipeline step is parked awaiting a human decision. Open the task to respond.',
-      payload: { pipelineName: instance.pipelineName },
-    })
-  }
-
-  /**
-   * Clear the auto-raised "waiting for a human decision" card once a run advances past
-   * the decision it was parked on (so the escalation sweep can't flip a settled decision
-   * red). Scoped to the `decision_required` type, so the human-actionable cards a stopped
-   * run leaves behind are untouched. Best-effort: no notification service (tests) is a no-op.
-   */
-  private async clearWaitingNotification(
-    workspaceId: string,
-    instance: ExecutionInstance,
-  ): Promise<void> {
-    const svc = this.notificationService
-    if (!svc) return
-    await svc.clearWaitingDecision(workspaceId, instance.blockId)
   }
 
   // ---- Follow-up companion (future-looking Coder) -------------------------
@@ -3304,13 +3180,13 @@ export class ExecutionService {
     if (!state?.enabled) return undefined
     if (hasPendingFollowUps(state)) {
       await this.raiseFollowUpPending(workspaceId, instance, state)
-      return this.parkStepOnDecision(workspaceId, instance, step)
+      return this.runStateMachine.parkStepOnDecision(workspaceId, instance, step)
     }
     if (shouldLoopCoder(state)) {
       this.loopCoderForFollowUps(instance, step)
-      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+      await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
       await this.executionRepository.upsert(workspaceId, instance)
-      await this.emitInstance(workspaceId, instance)
+      await this.runStateMachine.emitInstance(workspaceId, instance)
       return { kind: 'continue' }
     }
     return undefined
@@ -3539,19 +3415,19 @@ export class ExecutionService {
     if (!parkedHere || hasPendingFollowUps(step.followUps!)) {
       // Still collecting decisions (or the run isn't parked on this gate): just record it.
       await this.executionRepository.upsert(workspaceId, instance)
-      await this.emitInstance(workspaceId, instance)
+      await this.runStateMachine.emitInstance(workspaceId, instance)
       return
     }
     // Every item is decided and the run is parked here: clear the waiting card and either
     // loop the Coder for the send-back items or advance past the gate.
-    await this.clearWaitingNotification(workspaceId, instance)
+    await this.runStateMachine.clearWaitingNotification(workspaceId, instance)
     if (shouldLoopCoder(step.followUps!)) {
       const decisionId = step.approval!.id
       this.loopCoderForFollowUps(instance, step)
-      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+      await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
       await this.executionRepository.upsert(workspaceId, instance)
       await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, 'approved')
-      await this.emitInstance(workspaceId, instance)
+      await this.runStateMachine.emitInstance(workspaceId, instance)
       return
     }
     // The follow-up gate is settled and we won't loop. If this step ALSO carries a human
@@ -3566,11 +3442,11 @@ export class ExecutionService {
     if (step.requiresApproval && !isFinalStep && step.approval?.status === 'pending') {
       step.approval = { ...step.approval, proposal: step.output ?? '' }
       await this.executionRepository.upsert(workspaceId, instance)
-      await this.ensureWaitingNotification(workspaceId, instance)
-      await this.emitInstance(workspaceId, instance)
+      await this.runStateMachine.ensureWaitingNotification(workspaceId, instance)
+      await this.runStateMachine.emitInstance(workspaceId, instance)
       return
     }
-    await this.advancePastResolvedGate(workspaceId, instance, index)
+    await this.runStateMachine.advancePastResolvedGate(workspaceId, instance, index)
   }
 
   /** Provision inputs (`{{input.*}}`) derived from the block under deployment. */
@@ -3685,29 +3561,6 @@ export class ExecutionService {
   // state-machine primitives stay here — they are reused by the generic approval path and
   // the companion iteration-cap gate, so they have a single home: {@link parkStepOnDecision},
   // {@link advancePastResolvedGate} and {@link dispatchIterationCap}.
-
-  /**
-   * Park a step on the durable decision-wait the approval gate uses, so a human (or the
-   * dedicated review window) can drive an iterative loop and resume the run. Shared by the
-   * requirements gate and the companion iteration-cap gate: both reuse the SAME parking
-   * mechanism rather than each rolling its own. `proposal` seeds the gate's stored text
-   * (the companion's latest feedback; empty for the requirements window, which renders its
-   * own structured surface via the universal result-view registry).
-   */
-  private async parkStepOnDecision(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    proposal = '',
-  ): Promise<AdvanceResult> {
-    step.approval = { id: this.idGenerator.next('appr'), status: 'pending', proposal }
-    this.stepGraph.pauseStepForInput(step)
-    instance.status = 'blocked'
-    await this.updateBlockProgress(workspaceId, instance, 'blocked')
-    await this.executionRepository.upsert(workspaceId, instance)
-    await this.emitInstance(workspaceId, instance)
-    return { kind: 'awaiting_decision', decisionId: step.approval.id }
-  }
 
   /**
    * Two gates park on a `step.approval` but are NOT generic prose approvals — they are
@@ -4110,10 +3963,10 @@ export class ExecutionService {
           previousProposal: producer?.output ?? '',
           feedback: step.companion!.verdicts.at(-1)?.feedback ?? '',
         })
-        await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+        await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
         await this.executionRepository.upsert(workspaceId, instance)
         await this.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'extra-round')
-        await this.emitInstance(workspaceId, instance)
+        await this.runStateMachine.emitInstance(workspaceId, instance)
       },
       // Proceed: accept the producer's current output and advance past the gate.
       proceed: async () => {
@@ -4129,44 +3982,10 @@ export class ExecutionService {
           const block = await this.blockRepository.get(workspaceId, instance.blockId)
           if (producer && block) await this.inferBlockTechnical(workspaceId, block, producer, step)
         }
-        await this.advancePastResolvedGate(workspaceId, instance, stepIndex)
+        await this.runStateMachine.advancePastResolvedGate(workspaceId, instance, stepIndex)
       },
     })
     return instance
-  }
-
-  /**
-   * Finish a gate step the human just resolved (its `approval` already marked `approved`),
-   * then either finish the run (final step) or advance to the next step, persist, and wake
-   * the parked durable driver. The single advance/finalize/signal path shared by every
-   * gate-resume site — the generic approval ({@link approveStep}), the review gates (via
-   * {@link ReviewGateController}) and the companion iteration-cap proceed
-   * ({@link resolveCompanionExceeded}) — so the logic lives in exactly one place.
-   */
-  private async advancePastResolvedGate(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    stepIndex: number,
-  ): Promise<void> {
-    const step = instance.steps[stepIndex]!
-    const decisionId = step.approval!.id
-    this.stepGraph.finishStep(step)
-    step.progress = 1
-    const isFinalStep = stepIndex === instance.steps.length - 1
-    if (isFinalStep) {
-      instance.status = 'done'
-      await this.finalizeBlock(workspaceId, instance, undefined)
-      await this.stopRunContainer(workspaceId, instance)
-    } else {
-      instance.currentStep = stepIndex + 1
-      const next = instance.steps[instance.currentStep]
-      if (next) this.stepGraph.startStep(next)
-      if (instance.status === 'blocked') instance.status = 'running'
-      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
-    }
-    await this.executionRepository.upsert(workspaceId, instance)
-    await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, 'approved')
-    await this.emitInstance(workspaceId, instance)
   }
 
   // ---- clarity-review context helpers (bug-report triage) ------------------
@@ -4331,179 +4150,12 @@ export class ExecutionService {
     // paused run stays paused.
     if (instance.status === 'blocked') instance.status = 'running'
     await this.executionRepository.upsert(workspaceId, instance)
-    await this.emitInstance(workspaceId, instance)
+    await this.runStateMachine.emitInstance(workspaceId, instance)
     // Ensure a driver is active to consume the pending fix (idempotent for a live run).
     if (instance.status === 'running') {
       await this.workRunner.startRun(workspaceId, instance.id)
     }
     return instance
-  }
-
-  /**
-   * Push the run's latest state to subscribed clients, alongside its rolled-up
-   * block so the board updates without a refetch. Best-effort: the publisher
-   * swallows its own errors, and the persisted run remains the source of truth.
-   */
-  private async emitInstance(workspaceId: string, instance: ExecutionInstance): Promise<void> {
-    // Stamp each step with the run id so a lone step (in a pushed event, a log line, a
-    // detail view) is self-describing for debugging; the value always equals the run id.
-    for (const step of instance.steps) step.runId = instance.id
-    // The metrics rollup and the block fetch are independent, so run them concurrently
-    // — the rollup adds no serial latency to the (frequent) emit path.
-    const [, block] = await Promise.all([
-      this.attachStepMetrics(workspaceId, instance),
-      this.blockRepository.get(workspaceId, instance.blockId),
-    ])
-    await this.events.executionChanged(workspaceId, instance, block)
-    // When a run reaches a terminal state, schedule a post-run Kaizen grading for each
-    // completed agent step (the scheduler skips verified combos + already-graded steps).
-    // Best-effort + idempotent: a failure here must never derail the emit, and a re-emit
-    // of an already-scheduled run is a no-op. The actual LLM grading runs later in the
-    // background sweep, so this only does cheap inserts.
-    if (this.kaizenScheduler && (instance.status === 'done' || instance.status === 'failed')) {
-      try {
-        await this.kaizenScheduler.scheduleForRun(workspaceId, instance)
-      } catch {
-        // Swallow — grading is an observability concern and must never break a run.
-      }
-    }
-    // When a run reaches a terminal state, delete its per-run personal-credential
-    // activation immediately (individual-usage subscriptions) so the system-encrypted
-    // token copy doesn't linger to its TTL. Best-effort + idempotent — a missing repo or
-    // a re-emit of an already-cleared run is a no-op, and a failure here must never
-    // derail the emit.
-    if (
-      this.subscriptionActivations &&
-      (instance.status === 'done' || instance.status === 'failed')
-    ) {
-      try {
-        await this.subscriptionActivations.deleteByExecution(instance.id)
-      } catch {
-        // Swallow — a failure here must never derail the emit. This is not a silent
-        // data-loss path: the TTL sweep reclaims the row as a backstop, and the sweep
-        // (Worker cron / Node retention timer) logs its own errors, so a *systemic*
-        // cleanup failure surfaces there rather than being lost here.
-      }
-    }
-  }
-
-  /**
-   * Roll the run's recorded LLM calls into per-step `metrics` for the board, in
-   * place on the emitted instance. The proxy keys calls by execution + agentKind
-   * (not step index), so the aggregate is per-agent-kind within the run; steps
-   * sharing a kind get the same rollup. Best-effort and a no-op when the sink is
-   * not wired, so it never blocks an emit.
-   */
-  private async attachStepMetrics(workspaceId: string, instance: ExecutionInstance): Promise<void> {
-    if (!this.llmObservability) return
-    try {
-      const summaries = await this.llmObservability.summarizeByExecution(workspaceId, instance.id)
-      if (summaries.length === 0) return
-      const byKind = new Map(summaries.map((s) => [s.agentKind, s]))
-      for (const step of instance.steps) {
-        const s = byKind.get(step.agentKind)
-        if (!s) continue
-        step.metrics = {
-          calls: s.calls,
-          promptTokens: s.promptTokens,
-          cachedPromptTokens: s.cachedPromptTokens,
-          completionTokens: s.completionTokens,
-          peakCompletionTokens: s.peakCompletionTokens,
-          maxOutputTokens: s.maxOutputTokens,
-          truncatedCalls: s.truncatedCalls,
-          upstreamMs: s.upstreamMs,
-          overheadMs: s.overheadMs,
-          errors: s.errors,
-          warnings: s.warnings,
-        }
-      }
-    } catch (error) {
-      // Observability is best-effort; never block an emit on a metrics read.
-      void error
-    }
-  }
-
-  /** Set the block's in-progress/blocked status and step-completion progress. */
-  private async updateBlockProgress(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    status: 'in_progress' | 'blocked',
-  ): Promise<void> {
-    const total = instance.steps.length || 1
-    const done = instance.steps.filter((s) => s.state === 'done').length
-    await this.blockRepository.update(workspaceId, instance.blockId, {
-      status,
-      progress: Math.min(1, done / total),
-    })
-  }
-
-  /**
-   * Advance the block's step PROGRESS without touching its status — used when a step
-   * resolver already owns the block's terminal status (the merger set `done`/`pr_ready`)
-   * and a trailing step still follows, so the bar moves on without downgrading that status.
-   */
-  private async refreshBlockProgress(
-    workspaceId: string,
-    instance: ExecutionInstance,
-  ): Promise<void> {
-    const total = instance.steps.length || 1
-    const done = instance.steps.filter((s) => s.state === 'done').length
-    await this.blockRepository.update(workspaceId, instance.blockId, {
-      progress: Math.min(1, done / total),
-    })
-  }
-
-  /**
-   * A pipeline finished. A frame becomes `done` (a mapping-only run leaves it
-   * `ready`). A *task* never auto-`done`s from a confidence score any more — that
-   * looked merged when the PR was still open with red CI. Instead:
-   *   - if the pipeline has a `merger` step, it already owned the merge/notify
-   *     decision (see {@link resolveMergerStep}); we only backstop a missing one;
-   *   - otherwise the work is complete but unmerged: leave the PR open (`pr_ready`)
-   *     and raise a `pipeline_complete` notification for a human to confirm + merge.
-   * `done` now strictly means the PR was merged (see {@link finalizeMerge}).
-   */
-  private async finalizeBlock(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    confidence: number | undefined,
-  ): Promise<void> {
-    const block = await this.blockRepository.get(workspaceId, instance.blockId)
-    if (!block || block.status === 'done') return
-
-    if ((block.level ?? 'frame') !== 'task') {
-      // A mapping-only run (just the `blueprints` step, e.g. kicked off after a
-      // bootstrap) leaves the service frame `ready` and droppable rather than
-      // marking the whole service "done".
-      const mappingOnly = instance.steps.every((s) => s.agentKind === 'blueprints')
-      await this.blockRepository.update(workspaceId, block.id, {
-        status: mappingOnly ? 'ready' : 'done',
-        progress: 1,
-      })
-      return
-    }
-
-    // Confidence is recorded by the caller (recordStepResult) before any merge, so
-    // it persists on both the merge and review paths; `confidence` is unused here.
-    void confidence
-
-    const hasMerger = instance.steps.some((s) => s.agentKind === MERGER_AGENT_KIND)
-    if (hasMerger) {
-      // The `merger` step already merged (→ `done`) or raised a review (→ `pr_ready`).
-      // Only backstop the case where it produced no decision at all.
-      const fresh = await this.blockRepository.get(workspaceId, block.id)
-      if (fresh && fresh.status !== 'done' && fresh.status !== 'pr_ready') {
-        await this.blockRepository.update(workspaceId, block.id, {
-          status: 'pr_ready',
-          progress: 1,
-        })
-      }
-      return
-    }
-
-    // No merger in this pipeline: complete but unmerged — ask a human to confirm.
-    await this.blockRepository.update(workspaceId, block.id, { status: 'pr_ready', progress: 1 })
-    await this.raisePipelineComplete(workspaceId, instance, block)
   }
 
   /**
@@ -4624,28 +4276,6 @@ export class ExecutionService {
     return DEFAULT_MERGE_PRESET
   }
 
-  /** Raise a `pipeline_complete` notification for a no-merger run awaiting confirmation. */
-  private async raisePipelineComplete(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    block: Block,
-  ): Promise<void> {
-    if (!this.notificationService) return
-    await this.notificationService.raise(workspaceId, {
-      type: 'pipeline_complete',
-      blockId: block.id,
-      executionId: instance.id,
-      title: `Confirm "${block.title}" is complete`,
-      body:
-        `The "${instance.pipelineName}" pipeline finished and opened a PR, but it has no ` +
-        `merger step. Review the work and confirm it as complete (this merges the PR).`,
-      payload: {
-        ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
-        pipelineName: instance.pipelineName,
-      },
-    })
-  }
-
   /**
    * Implementing a task assigned to a module materialises that module: create it
    * in the service if missing, then move the task inside it.
@@ -4697,13 +4327,13 @@ export class ExecutionService {
     step.decision.chosen = choice
     this.stepGraph.startStep(step)
     if (instance.status === 'blocked') instance.status = 'running'
-    await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+    await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
     await this.executionRepository.upsert(workspaceId, instance)
     // Wake the parked durable run, if any. The DB write above remains the source
     // of truth (so the backstop sweeper can still re-drive it); the signal is an
     // optimisation that lets the workflow continue immediately.
     await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, choice)
-    await this.emitInstance(workspaceId, instance)
+    await this.runStateMachine.emitInstance(workspaceId, instance)
     return instance
   }
 
@@ -4740,7 +4370,7 @@ export class ExecutionService {
     }
     step.approval.status = 'approved'
     // A gate is never raised on the final step, but the shared advance stays defensive.
-    await this.advancePastResolvedGate(workspaceId, instance, stepIndex)
+    await this.runStateMachine.advancePastResolvedGate(workspaceId, instance, stepIndex)
     return instance
   }
 
@@ -4817,7 +4447,7 @@ export class ExecutionService {
           approvalId,
           'changes_requested',
         )
-        await this.emitInstance(workspaceId, instance)
+        await this.runStateMachine.emitInstance(workspaceId, instance)
         return instance
       }
     }
@@ -4833,7 +4463,7 @@ export class ExecutionService {
     if (instance.status === 'blocked') instance.status = 'running'
     await this.executionRepository.upsert(workspaceId, instance)
     await this.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'changes_requested')
-    await this.emitInstance(workspaceId, instance)
+    await this.runStateMachine.emitInstance(workspaceId, instance)
     return instance
   }
 
@@ -4909,45 +4539,14 @@ export class ExecutionService {
    * durable driver once a step has exhausted its retries (or a job/decision
    * faulted); `kind` classifies the cause so the right hint is shown.
    */
-  async failRun(
+  failRun(
     workspaceId: string,
     executionId: string,
     message: string,
     kind: AgentFailureKind = 'agent',
     detail: string | null = null,
   ): Promise<void> {
-    const instance = await this.executionRepository.get(workspaceId, executionId)
-    if (!instance) return
-    // Reclaim the per-run container on the failure path too: a failed run otherwise
-    // leaves its container to idle out sleepAfter. This is the single funnel for
-    // every failure kind (job_failed from the driver, the spend/decision timeouts,
-    // and the user-facing stopRun, which already reclaimed — the call is idempotent).
-    await this.stopRunContainer(workspaceId, instance)
-    // The FIRST recorded failure wins: a run already in a terminal `failed` state keeps
-    // its existing (richest) failure rather than being overwritten. An inline gate that
-    // knows the precise kind/detail returns a `job_failed` result the driver funnels here,
-    // so there should only ever be one write — but this guards against a future path that
-    // both records a failure and returns `job_failed`, which would otherwise clobber the
-    // good record with a generic one (the companion-rejected regression).
-    if (instance.status === 'failed') return
-    const failure: AgentFailure = {
-      kind,
-      message,
-      detail,
-      hint: EXECUTION_FAILURE_HINTS[kind] ?? null,
-      occurredAt: this.clock.now(),
-      lastSubtasks: instance.steps[instance.currentStep]?.subtasks ?? null,
-    }
-    await this.executionRepository.markFailed(workspaceId, executionId, failure)
-    // Progress reflects how far the pipeline got before failing.
-    const done = instance.steps.filter((s) => s.state === 'done').length
-    const progress = instance.steps.length > 0 ? done / instance.steps.length : 0
-    await this.blockRepository.update(workspaceId, instance.blockId, {
-      status: 'blocked',
-      progress,
-    })
-    const failed = await this.executionRepository.get(workspaceId, executionId)
-    if (failed) await this.emitInstance(workspaceId, failed)
+    return this.runStateMachine.failRun(workspaceId, executionId, message, kind, detail)
   }
 
   /**
@@ -5027,7 +4626,7 @@ export class ExecutionService {
       executionId: instance.id,
     })
     await this.workRunner.startRun(workspaceId, instance.id)
-    await this.emitInstance(workspaceId, instance)
+    await this.runStateMachine.emitInstance(workspaceId, instance)
     return instance
   }
 
@@ -5088,7 +4687,7 @@ export class ExecutionService {
     // container AND its durable driver — before minting the restart. A `done`/`failed`
     // run is already terminal (a no-op teardown), but a still-`running` run would
     // otherwise leak a container and a live Workflows/pg-boss driver.
-    await this.stopRunContainer(workspaceId, previous)
+    await this.runStateMachine.stopRunContainer(workspaceId, previous)
     await this.workRunner.cancelRun(workspaceId, executionId)
 
     const { steps, currentStep } = planRestartFromStep(previous, fromStepIndex)
@@ -5115,7 +4714,7 @@ export class ExecutionService {
       executionId: instance.id,
     })
     await this.workRunner.startRun(workspaceId, instance.id)
-    await this.emitInstance(workspaceId, instance)
+    await this.runStateMachine.emitInstance(workspaceId, instance)
     return instance
   }
 
@@ -5132,7 +4731,7 @@ export class ExecutionService {
       instance.status = 'running'
       await this.executionRepository.upsert(workspaceId, instance)
       await this.workRunner.startRun(workspaceId, instance.id)
-      await this.emitInstance(workspaceId, instance)
+      await this.runStateMachine.emitInstance(workspaceId, instance)
     }
     return this.executionRepository.listByWorkspace(workspaceId)
   }
@@ -5145,7 +4744,7 @@ export class ExecutionService {
     // the record, so a cancel never leaves a container running until its watchdog.
     const existing = await this.executionRepository.getByBlock(workspaceId, blockId)
     if (existing) {
-      await this.stopRunContainer(workspaceId, existing)
+      await this.runStateMachine.stopRunContainer(workspaceId, existing)
       await this.workRunner.cancelRun(workspaceId, existing.id)
     }
     await this.executionRepository.deleteByBlock(workspaceId, blockId)
@@ -5181,7 +4780,7 @@ export class ExecutionService {
       executionId,
     )
     if (instance.status === 'failed' || instance.status === 'done') return instance
-    await this.stopRunContainer(workspaceId, instance)
+    await this.runStateMachine.stopRunContainer(workspaceId, instance)
     await this.workRunner.cancelRun(workspaceId, executionId)
     await this.failRun(
       workspaceId,
@@ -5207,31 +4806,9 @@ export class ExecutionService {
     for (const blockId of descendantIds(blocks, rootId)) {
       const run = await this.executionRepository.getByBlock(workspaceId, blockId)
       if (!run) continue
-      await this.stopRunContainer(workspaceId, run)
+      await this.runStateMachine.stopRunContainer(workspaceId, run)
       await this.workRunner.cancelRun(workspaceId, run.id)
       await this.executionRepository.deleteByBlock(workspaceId, blockId)
-    }
-  }
-
-  /**
-   * Best-effort: reclaim the per-run container backing an execution. The container is
-   * addressed by the run (execution) id, so a backend that shares one across the run
-   * (Cloudflare, local Docker) tears the whole thing down. A per-job backend (a
-   * self-hosted pool) has no run container, so it cancels the run's IN-FLIGHT step job
-   * instead — hence we pass the current step's job id alongside the run id. A no-op for
-   * inline executors (no `stopJob`) and for an already-gone container/job; never
-   * throws, so it can't derail the teardown that calls it.
-   */
-  private async stopRunContainer(workspaceId: string, instance: ExecutionInstance): Promise<void> {
-    const executor = this.agentExecutor
-    if (!isAsyncAgentExecutor(executor) || !executor.stopJob) return
-    // The in-flight step's job id (when a job is parked), so a per-job backend can
-    // cancel exactly it; the run-container backends ignore it and use the run id.
-    const jobId = instance.steps[instance.currentStep]?.jobId ?? instance.id
-    try {
-      await executor.stopJob({ jobId, runId: instance.id, workspaceId })
-    } catch {
-      // The container may already be gone (eviction/completion) — nothing to reclaim.
     }
   }
 }

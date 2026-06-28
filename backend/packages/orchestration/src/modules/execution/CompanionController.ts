@@ -17,6 +17,8 @@ import type { SpendService } from '@cat-factory/spend'
 import { extractJson } from '../requirements/requirements.logic.js'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
+import type { RunStateMachine } from './RunStateMachine.js'
+import type { StepGraph } from './StepGraph.js'
 
 /** Parse a companion's JSON verdict from a model reply, or `undefined` if it won't parse. */
 function parseCompanionOrUndefined(output: string | undefined): CompanionAssessment | undefined {
@@ -69,34 +71,10 @@ export interface CompanionControllerDeps {
   idGenerator: IdGenerator
   previewStepModel: (context: AgentRunContext) => Promise<string | undefined>
   runAgent: (context: AgentRunContext, options: AdvanceOptions) => Promise<AgentRunResult>
-  finishStep: (step: PipelineStep) => void
-  startStep: (step: PipelineStep) => void
-  pauseStepForInput: (step: PipelineStep) => void
-  updateBlockProgress: (
-    workspaceId: string,
-    instance: ExecutionInstance,
-    status: 'in_progress' | 'blocked',
-  ) => Promise<void>
-  persistInstance: (workspaceId: string, instance: ExecutionInstance) => Promise<void>
-  emitInstance: (workspaceId: string, instance: ExecutionInstance) => Promise<void>
-  stopRunContainer: (workspaceId: string, instance: ExecutionInstance) => Promise<void>
-  finalizeBlock: (
-    workspaceId: string,
-    instance: ExecutionInstance,
-    confidence: number | undefined,
-  ) => Promise<void>
-  parkStepOnDecision: (
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    proposal?: string,
-  ) => Promise<AdvanceResult>
-  raiseDecisionRequired: (workspaceId: string, instance: ExecutionInstance) => Promise<void>
-  loopCompanionProducer: (
-    instance: ExecutionInstance,
-    companionIndex: number,
-    rework: NonNullable<PipelineStep['rework']>,
-  ) => void
+  /** The async instance/block spine (persist/emit/park/finalize/progress/notify/stop). */
+  stateMachine: RunStateMachine
+  /** The pure step mutators (start/finish/park a step + the companion rework loop). */
+  stepGraph: StepGraph
   /**
    * Infer + persist the block's `technical` label from the spec phase when the
    * spec-companion converges. Both signals are read off the persisted steps — the
@@ -263,7 +241,7 @@ export class CompanionController {
     if (producerIndex >= 0 && !assessment) {
       step.output = result.output || ''
       step.companion = companion
-      await this.deps.persistInstance(workspaceId, instance)
+      await this.deps.stateMachine.persistInstance(workspaceId, instance)
       // Hand the precise classification + the raw reply (the whole point of the failure,
       // for triage) to the driver's single `failRun` funnel. Do NOT fail the run here as
       // well: a second `failRun` from the driver would clobber this rich record with a
@@ -311,7 +289,7 @@ export class CompanionController {
 
     // PASS: the producer cleared the bar (and was not force-looped on its first batch).
     if (passed) {
-      this.deps.finishStep(step)
+      this.deps.stepGraph.finishStep(step)
       step.progress = 1
       // The spec-companion just corroborated the spec-writer's business-vs-technical
       // determination: infer the block's `technical` label from the writer's
@@ -336,27 +314,27 @@ export class CompanionController {
           status: 'pending',
           proposal: producer?.output ?? step.output,
         }
-        this.deps.pauseStepForInput(step)
+        this.deps.stepGraph.pauseStepForInput(step)
         instance.status = 'blocked'
-        await this.deps.updateBlockProgress(workspaceId, instance, 'blocked')
-        await this.deps.persistInstance(workspaceId, instance)
-        await this.deps.emitInstance(workspaceId, instance)
+        await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'blocked')
+        await this.deps.stateMachine.persistInstance(workspaceId, instance)
+        await this.deps.stateMachine.emitInstance(workspaceId, instance)
         return { kind: 'awaiting_decision', decisionId: step.approval.id }
       }
       if (isFinalStep) {
         instance.status = 'done'
-        await this.deps.finalizeBlock(workspaceId, instance, undefined)
-        await this.deps.persistInstance(workspaceId, instance)
-        await this.deps.emitInstance(workspaceId, instance)
-        await this.deps.stopRunContainer(workspaceId, instance)
+        await this.deps.stateMachine.finalizeBlock(workspaceId, instance, undefined)
+        await this.deps.stateMachine.persistInstance(workspaceId, instance)
+        await this.deps.stateMachine.emitInstance(workspaceId, instance)
+        await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
         return { kind: 'done' }
       }
       instance.currentStep += 1
       const next = instance.steps[instance.currentStep]
-      if (next) this.deps.startStep(next)
-      await this.deps.updateBlockProgress(workspaceId, instance, 'in_progress')
-      await this.deps.persistInstance(workspaceId, instance)
-      await this.deps.emitInstance(workspaceId, instance)
+      if (next) this.deps.stepGraph.startStep(next)
+      await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
+      await this.deps.stateMachine.persistInstance(workspaceId, instance)
+      await this.deps.stateMachine.emitInstance(workspaceId, instance)
       return { kind: 'continue' }
     }
 
@@ -370,8 +348,13 @@ export class CompanionController {
     if (companion.attempts >= companion.maxAttempts) {
       companion.exceeded = true
       step.companion = companion
-      await this.deps.raiseDecisionRequired(workspaceId, instance)
-      return this.deps.parkStepOnDecision(workspaceId, instance, step, step.output ?? '')
+      await this.deps.stateMachine.raiseDecisionRequired(workspaceId, instance)
+      return this.deps.stateMachine.parkStepOnDecision(
+        workspaceId,
+        instance,
+        step,
+        step.output ?? '',
+      )
     }
 
     // NOT PASSED, budget left → loop the producer back with the feedback folded in (the
@@ -380,14 +363,14 @@ export class CompanionController {
     // loop requires comments on a real producer, and a below-threshold rating requires a
     // parsed verdict against a producer (otherwise rating defaulted to 1 and we passed).
     const producer = instance.steps[producerIndex]!
-    this.deps.loopCompanionProducer(instance, instance.currentStep, {
+    this.deps.stepGraph.loopCompanionProducer(instance, instance.currentStep, {
       previousProposal: producer.output ?? '',
       feedback: assessment?.summary ?? '',
       ...(assessment?.comments?.length ? { comments: assessment.comments } : {}),
     })
-    await this.deps.updateBlockProgress(workspaceId, instance, 'in_progress')
-    await this.deps.persistInstance(workspaceId, instance)
-    await this.deps.emitInstance(workspaceId, instance)
+    await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
+    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
   }
 

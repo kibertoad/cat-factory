@@ -84,27 +84,35 @@ function fakeKind() {
 }
 
 function fakeDeps(over: Partial<ReviewGateControllerDeps> = {}) {
-  const deps = {
-    blockRepository: { get: vi.fn(async () => BLOCK) },
-    executionRepository: { get: vi.fn(async () => null), upsert: vi.fn(async () => {}) },
-    workRunner: { signalDecision: vi.fn(async () => {}) },
-    resolveMergePreset: vi.fn(async () => PRESET),
+  // The spine primitives now come from the cohesive RunStateMachine + StepGraph
+  // collaborators (debagged), so the fakes group under those two objects.
+  const stateMachine = {
     parkStepOnDecision: vi.fn(async (_ws, _i, s: PipelineStep) => {
       s.state = 'waiting_decision'
       return { kind: 'awaiting_decision', decisionId: 'appr_1' } as const
     }),
     advancePastResolvedGate: vi.fn(async () => {}),
-    dispatchIterationCap: vi.fn(async () => {}),
     raiseDecisionRequired: vi.fn(async () => {}),
-    finishStep: vi.fn((s: PipelineStep) => {
-      s.state = 'done'
-    }),
-    startStep: vi.fn(),
     updateBlockProgress: vi.fn(async () => {}),
     finalizeBlock: vi.fn(async () => {}),
     stopRunContainer: vi.fn(async () => {}),
     persistInstance: vi.fn(async () => {}),
     emitInstance: vi.fn(async () => {}),
+  }
+  const stepGraph = {
+    finishStep: vi.fn((s: PipelineStep) => {
+      s.state = 'done'
+    }),
+    startStep: vi.fn(),
+  }
+  const deps = {
+    blockRepository: { get: vi.fn(async () => BLOCK) },
+    executionRepository: { get: vi.fn(async () => null), upsert: vi.fn(async () => {}) },
+    workRunner: { signalDecision: vi.fn(async () => {}) },
+    resolveMergePreset: vi.fn(async () => PRESET),
+    dispatchIterationCap: vi.fn(async () => {}),
+    stateMachine,
+    stepGraph,
     ...over,
   }
   return deps as unknown as ReviewGateControllerDeps & typeof deps
@@ -128,8 +136,8 @@ describe('ReviewGateController.evaluate', () => {
     const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
     expect(result).toEqual({ kind: 'continue' })
     expect(k.kind.review).not.toHaveBeenCalled()
-    expect(deps.finishStep).toHaveBeenCalledWith(s)
-    expect(deps.startStep).toHaveBeenCalledTimes(1)
+    expect(deps.stepGraph.finishStep).toHaveBeenCalledWith(s)
+    expect(deps.stepGraph.startStep).toHaveBeenCalledTimes(1)
     expect(inst.currentStep).toBe(1)
   })
 
@@ -140,8 +148,8 @@ describe('ReviewGateController.evaluate', () => {
     const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, true)
     expect(result).toEqual({ kind: 'done' })
     expect(inst.status).toBe('done')
-    expect(deps.finalizeBlock).toHaveBeenCalled()
-    expect(deps.stopRunContainer).toHaveBeenCalled()
+    expect(deps.stateMachine.finalizeBlock).toHaveBeenCalled()
+    expect(deps.stateMachine.stopRunContainer).toHaveBeenCalled()
   })
 
   it('auto-pass (status incorporated) advances without parking', async () => {
@@ -151,7 +159,7 @@ describe('ReviewGateController.evaluate', () => {
     const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
     expect(result).toEqual({ kind: 'continue' })
     expect(k.kind.review).toHaveBeenCalled()
-    expect(deps.parkStepOnDecision).not.toHaveBeenCalled()
+    expect(deps.stateMachine.parkStepOnDecision).not.toHaveBeenCalled()
   })
 
   it('parks the run when the fresh review raises findings', async () => {
@@ -160,8 +168,8 @@ describe('ReviewGateController.evaluate', () => {
     const inst = instance([s])
     const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
     expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
-    expect(deps.parkStepOnDecision).toHaveBeenCalledWith('ws', inst, s)
-    expect(deps.raiseDecisionRequired).not.toHaveBeenCalled()
+    expect(deps.stateMachine.parkStepOnDecision).toHaveBeenCalledWith('ws', inst, s)
+    expect(deps.stateMachine.raiseDecisionRequired).not.toHaveBeenCalled()
   })
 
   it('raises a decision-required notification when a fresh review hits the cap', async () => {
@@ -169,8 +177,8 @@ describe('ReviewGateController.evaluate', () => {
     const s = step()
     const inst = instance([s])
     const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
-    expect(deps.raiseDecisionRequired).toHaveBeenCalledWith('ws', inst)
-    expect(deps.parkStepOnDecision).toHaveBeenCalled()
+    expect(deps.stateMachine.raiseDecisionRequired).toHaveBeenCalledWith('ws', inst)
+    expect(deps.stateMachine.parkStepOnDecision).toHaveBeenCalled()
     expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
   })
 
@@ -180,8 +188,8 @@ describe('ReviewGateController.evaluate', () => {
     const s = step({ pendingIncorporation: { feedback: 'do X' } })
     const inst = instance([s])
     await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
-    expect(deps.raiseDecisionRequired).toHaveBeenCalledWith('ws', inst)
-    expect(deps.parkStepOnDecision).toHaveBeenCalled()
+    expect(deps.stateMachine.raiseDecisionRequired).toHaveBeenCalledWith('ws', inst)
+    expect(deps.stateMachine.parkStepOnDecision).toHaveBeenCalled()
   })
 
   it('re-entry: a pending incorporation folds + re-reviews, then advances on convergence', async () => {
@@ -198,7 +206,7 @@ describe('ReviewGateController.evaluate', () => {
     expect(k.kind.markReReviewing).toHaveBeenCalled()
     expect(k.kind.reReview).toHaveBeenCalled()
     expect(result).toEqual({ kind: 'continue' })
-    expect(deps.parkStepOnDecision).not.toHaveBeenCalled()
+    expect(deps.stateMachine.parkStepOnDecision).not.toHaveBeenCalled()
   })
 
   it('re-entry: re-parks when the re-review still has findings', async () => {
@@ -208,7 +216,7 @@ describe('ReviewGateController.evaluate', () => {
     const inst = instance([s])
     const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
     expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
-    expect(deps.parkStepOnDecision).toHaveBeenCalled()
+    expect(deps.stateMachine.parkStepOnDecision).toHaveBeenCalled()
   })
 
   it('re-entry with nothing to incorporate settles directly (no fold/re-review LLM calls)', async () => {
@@ -235,9 +243,9 @@ describe('ReviewGateController.evaluate', () => {
     expect(s.pendingRecommendation).toBeNull()
     expect(k.kind.fillRecommendations).toHaveBeenCalledWith('ws', 'blk_1')
     // Recommendations never advance the run — it re-parks for the human to accept/reject.
-    expect(deps.parkStepOnDecision).toHaveBeenCalledWith('ws', inst, s)
+    expect(deps.stateMachine.parkStepOnDecision).toHaveBeenCalledWith('ws', inst, s)
     expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
-    expect(deps.finishStep).not.toHaveBeenCalled()
+    expect(deps.stepGraph.finishStep).not.toHaveBeenCalled()
   })
 })
 
@@ -314,14 +322,14 @@ describe('ReviewGateController public surface', () => {
     })
     deps.executionRepository.get = vi.fn(async () => instance([parkedStep]))
     await ctrl.reReview(k.kind, 'ws', 'blk_1')
-    expect(deps.advancePastResolvedGate).toHaveBeenCalled()
+    expect(deps.stateMachine.advancePastResolvedGate).toHaveBeenCalled()
   })
 
   it('reReview that still has findings does NOT resume', async () => {
     k.set(review({ status: 'merged' }))
     ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockResolvedValue(review({ status: 'ready' }))
     await ctrl.reReview(k.kind, 'ws', 'blk_1')
-    expect(deps.advancePastResolvedGate).not.toHaveBeenCalled()
+    expect(deps.stateMachine.advancePastResolvedGate).not.toHaveBeenCalled()
   })
 
   it('proceed settles the review and resumes the parked run', async () => {
@@ -333,7 +341,7 @@ describe('ReviewGateController public surface', () => {
     deps.executionRepository.get = vi.fn(async () => instance([parkedStep]))
     const out = await ctrl.proceed(k.kind, 'ws', 'blk_1')
     expect(k.kind.markIncorporated).toHaveBeenCalled()
-    expect(deps.advancePastResolvedGate).toHaveBeenCalled()
+    expect(deps.stateMachine.advancePastResolvedGate).toHaveBeenCalled()
     expect(out.status).toBe('incorporated')
   })
 
