@@ -4,7 +4,7 @@ This document tracks the **app-wide internationalization migration** of the
 `@cat-factory/app` Nuxt layer: moving every hard-coded user-facing string into
 `@nuxtjs/i18n` message catalogs so the SPA can ship in multiple languages.
 
-It is a **living status doc**. For the authoritative *how-to* (catalog layout, the
+It is a **living status doc**. For the authoritative _how-to_ (catalog layout, the
 add-a-string workflow, key conventions, plural/date/number rules, translator
 descriptions, and the CI drift guards) see the **Internationalization (i18n)**
 section of [`CLAUDE.md`](../CLAUDE.md) — this file does not duplicate those rules,
@@ -23,22 +23,22 @@ it only records **what is done and what is left**.
 
 ## Progress
 
-| Phase | Area | Components | Namespaces | Status |
-|------:|------|-----------|-----------|--------|
-| 0 | Pilot (error toasts, language switcher, personal subscriptions) | `usePipelineErrorToast`, `LanguageSwitcher`, `TranslationWarningBanner`, `PersonalSubscriptionSection`, `SideBar` (partial, uses `$t`) | `errors.*`, `language.*`, `personalSubscriptions.*`, `nav.*`, `common.*` | ✅ merged (pre-existing) |
-| 1 | **Board** | `board/**` (15 components) | `board.*` | ✅ merged (#393) |
-| 2 | **Inspector + step/observability panels** | `panels/**` + `panels/inspector/**` + `observability/**` (23 components) | `inspector.*`, `panels.*`, `observability.*` | ✅ merged (#395) |
-| 3 | Layout + auth | `layout/**` (remaining), `auth/**` | `layout.*`, `nav.*`, `auth.*` | ⬜ planned |
-| 4 | Settings | `settings/**` (12) | `settings.*` | ⬜ planned |
-| 5 | Providers + AI onboarding | `providers/**` (5), provider banners | `providers.*` | ⬜ planned |
-| 6 | Integrations: GitHub / Slack / documents / tasks | `github/**`, `slack/**`, `documents/**`, `tasks/**` | `github.*`, `slack.*`, `documents.*`, `tasks.*` | ⬜ planned |
-| 7 | Pipeline + palette + gates | `pipeline/**`, `palettes/**`, `gates/**` | `pipeline.*`, `palette.*`, `gates.*` | ⬜ planned |
-| 8 | Agent windows | `requirements/`, `clarity/`, `consensus/`, `brainstorm/`, `spec/`, `followUp/`, `humanTest/`, `testing/`, `visualConfirm/`, `focus/` | per-feature | ⬜ planned |
-| 9 | Remaining surfaces | `bootstrap/`, `environments/`, `fragments/`, `kaizen/`, `sandbox/`, `recurring/`, `media/`, `provisioning/` | per-feature | ⬜ planned |
-| X | Cross-cutting | `app/utils/catalog.ts` (status/agent-kind/block-type labels), `app/pages/*.vue` | `catalog.*` etc. | ⬜ planned |
+| Phase | Area                                                            | Components                                                                                                                             | Namespaces                                                               | Status                   |
+| ----: | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------ |
+|     0 | Pilot (error toasts, language switcher, personal subscriptions) | `usePipelineErrorToast`, `LanguageSwitcher`, `TranslationWarningBanner`, `PersonalSubscriptionSection`, `SideBar` (partial, uses `$t`) | `errors.*`, `language.*`, `personalSubscriptions.*`, `nav.*`, `common.*` | ✅ merged (pre-existing) |
+|     1 | **Board**                                                       | `board/**` (15 components)                                                                                                             | `board.*`                                                                | ✅ merged (#393)         |
+|     2 | **Inspector + step/observability panels**                       | `panels/**` + `panels/inspector/**` + `observability/**` (23 components)                                                               | `inspector.*`, `panels.*`, `observability.*`                             | ✅ merged (#395)         |
+|     3 | **Layout + auth**                                               | `layout/**` (14) + `auth/**` (4)                                                                                                       | `layout.*`, `nav.*`, `auth.*`                                            | ✅ merged (#398)         |
+|     4 | Settings                                                        | `settings/**` (12)                                                                                                                     | `settings.*`                                                             | ⬜ planned               |
+|     5 | Providers + AI onboarding                                       | `providers/**` (5), provider banners                                                                                                   | `providers.*`                                                            | ⬜ planned               |
+|     6 | Integrations: GitHub / Slack / documents / tasks                | `github/**`, `slack/**`, `documents/**`, `tasks/**`                                                                                    | `github.*`, `slack.*`, `documents.*`, `tasks.*`                          | ⬜ planned               |
+|     7 | Pipeline + palette + gates                                      | `pipeline/**`, `palettes/**`, `gates/**`                                                                                               | `pipeline.*`, `palette.*`, `gates.*`                                     | ⬜ planned               |
+|     8 | Agent windows                                                   | `requirements/`, `clarity/`, `consensus/`, `brainstorm/`, `spec/`, `followUp/`, `humanTest/`, `testing/`, `visualConfirm/`, `focus/`   | per-feature                                                              | ⬜ planned               |
+|     9 | Remaining surfaces                                              | `bootstrap/`, `environments/`, `fragments/`, `kaizen/`, `sandbox/`, `recurring/`, `media/`, `provisioning/`                            | per-feature                                                              | ⬜ planned               |
+|     X | Cross-cutting                                                   | `app/utils/catalog.ts` (status/agent-kind/block-type labels), `app/pages/*.vue`                                                        | `catalog.*` etc.                                                         | ⬜ planned               |
 
-Rough scale: **~121 SPA components**; ~39 already resolve copy through i18n after
-phases 0–2. The remaining work is the bulk of phases 3–X below.
+Rough scale: **~121 SPA components**; ~57 already resolve copy through i18n after
+phases 0–3. The remaining work is the bulk of phases 4–X below.
 
 ### Done
 
@@ -57,6 +57,15 @@ phases 0–2. The remaining work is the bulk of phases 3–X below.
   conclusion editing), decision modal, generic structured result view, test report,
   step metadata/run-meta cards, restart control, and the model-activity /
   provided-context observability panels.
+- **Phase 3 (layout + auth, #398):** the auth screens (login / signup / forgot,
+  reset-password, the auth gate, the user menu), and the layout surfaces — the
+  account-level deployment / fragment / team settings, the AI-providers / GitHub-PAT
+  / provider-config / spend-warning banners, the board switcher, the command bar
+  (command labels + search keywords), the integrations hub (status, groups, per-item
+  labels), the integration back-title, the notifications inbox (per-type actions),
+  and the personal-setup modal. `SideBar.vue` is now fully migrated (switched off the
+  global `$t` to the destructured `t`). New keys under `auth.*` and `layout.*`, in all
+  five bundled locales.
 
 The four board/panels components with **no** user-facing text — `AgentChip`,
 `TaskDependencyEdges`, `DependencyConnectOverlay`, `StepResultViewHost` — need no
@@ -64,21 +73,8 @@ migration and are intentionally skipped.
 
 ### Remaining (by area)
 
-> `SideBar.vue` is **partially** migrated: it already resolves `nav.*` keys via the
-> global `$t`. Finishing it means switching to the destructured `t` and lifting any
-> remaining inline copy.
-
-**Layout + auth** (phase 3)
-```
-auth/AuthGate.vue, auth/LoginScreen.vue, auth/ResetPasswordScreen.vue, auth/UserMenu.vue
-layout/AccountDeploymentSettings.vue, layout/AccountFragmentSettings.vue,
-layout/AccountTeamSettings.vue, layout/AiProvidersBanner.vue, layout/BoardSwitcher.vue,
-layout/CommandBar.vue, layout/GitHubPatBanner.vue, layout/IntegrationBackTitle.vue,
-layout/IntegrationsHub.vue, layout/NotificationsInbox.vue, layout/PersonalSetupModal.vue,
-layout/ProviderConfigBanner.vue, layout/SideBar.vue (finish), layout/SpendWarningBanner.vue
-```
-
 **Settings** (phase 4)
+
 ```
 settings/AccountSettingsPanel.vue, settings/IssueTrackerPanel.vue,
 settings/LocalModeSettingsPanel.vue, settings/LocalModelEndpointsPanel.vue,
@@ -89,6 +85,7 @@ settings/UserSecretsSection.vue, settings/WorkspaceSettingsPanel.vue
 ```
 
 **Providers** (phase 5)
+
 ```
 providers/AiPresetMismatchDialog.vue, providers/AiProviderOnboardingModal.vue,
 providers/ApiKeysSection.vue, providers/PersonalCredentialModal.vue,
@@ -96,6 +93,7 @@ providers/VendorCredentialsModal.vue
 ```
 
 **Integrations** (phase 6)
+
 ```
 github/AddServiceFromRepoModal.vue, github/GitHubConnect.vue, github/GitHubOnboarding.vue,
 github/GitHubPanel.vue, github/RepoTreeBrowser.vue
@@ -108,6 +106,7 @@ tasks/TaskSourceConnectModal.vue
 ```
 
 **Pipeline / palette / gates** (phase 7)
+
 ```
 pipeline/AgentKindIcon.vue, pipeline/IterationCapPrompt.vue, pipeline/PipelineBuilder.vue,
 pipeline/PipelineHealthModal.vue, pipeline/PipelineProgress.vue
@@ -116,6 +115,7 @@ gates/GateResultView.vue
 ```
 
 **Agent windows** (phase 8)
+
 ```
 requirements/RequirementsReviewWindow.vue, clarity/ClarityReviewWindow.vue,
 consensus/ConsensusSessionWindow.vue, brainstorm/BrainstormWindow.vue,
@@ -125,6 +125,7 @@ focus/BlockFocusView.vue
 ```
 
 **Remaining surfaces** (phase 9)
+
 ```
 bootstrap/BootstrapModal.vue, environments/EnvironmentStatusPanel.vue,
 fragments/FragmentLibraryManager.vue, fragments/FragmentLibraryPanel.vue,
@@ -134,6 +135,7 @@ provisioning/ProvisioningLogsDrawer.vue
 ```
 
 **Cross-cutting** (phase X)
+
 - `app/utils/catalog.ts` — the shared `STATUS_META`, `agentKindMeta`, `blockTypeMeta`,
   `MODULE_META` label/description tables are rendered across many components but are
   still raw English. Several already-migrated components fall back to these (e.g. a
@@ -162,9 +164,8 @@ For each phase (see `CLAUDE.md` → Internationalization for the full rules):
 
 ## Known issues
 
-- **Pre-existing typecheck breakage on `main` (not from the i18n work):** as of the
-  dependency-update PR #372, `nuxt typecheck` reports ~150 errors in untouched
-  `app/composables/api/*.ts` files (`Type '{ … }' is not assignable to type
-  'undefined'`, from the HTTP-client typings). This is present on a clean `main`
-  checkout and is independent of the localization migration, which adds zero new type
-  errors. It should be fixed separately so the typecheck CI gate is green again.
+- **Pre-existing typecheck breakage on `main` (now resolved):** PR #372 had left
+  `nuxt typecheck` reporting ~150 errors in untouched `app/composables/api/*.ts`
+  files (HTTP-client typings). As of phase 3, a clean `main` checkout typechecks
+  with zero errors again, so the gate is green; the i18n migration continues to add
+  zero new type errors.

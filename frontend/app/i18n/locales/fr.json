@@ -710,5 +710,414 @@
       "userPrompt": "Prompt utilisateur",
       "details": "Détails"
     }
+  },
+  "auth": {
+    "gate": {
+      "loading": "Chargement…"
+    },
+    "login": {
+      "appTitle": "Architecture Board",
+      "subtitle": "Connectez-vous pour continuer.",
+      "inviteSubtitle": "Acceptez votre invitation pour continuer.",
+      "forgotSubtitle": "Réinitialisez votre mot de passe.",
+      "continueWithGithub": "Continuer avec GitHub",
+      "continueWithGoogle": "Continuer avec Google",
+      "or": "ou",
+      "namePlaceholder": "Nom (facultatif)",
+      "emailPlaceholder": "E-mail",
+      "passwordPlaceholder": "Mot de passe",
+      "createAccount": "Créer un compte",
+      "signIn": "Se connecter",
+      "signUp": "S'inscrire",
+      "needAccount": "Besoin d'un compte ? {signUp}",
+      "haveAccount": "Vous avez déjà un compte ? {signIn}",
+      "forgotPassword": "Mot de passe oublié ?",
+      "forgotSent": "Si un compte existe pour cet e-mail, un lien de réinitialisation du mot de passe est en route. Vérifiez votre boîte de réception.",
+      "sendResetLink": "Envoyer le lien de réinitialisation",
+      "backToSignIn": "Retour à la connexion",
+      "signInFailed": "Échec de la connexion. Vérifiez vos informations et réessayez.",
+      "genericError": "Une erreur s'est produite. Veuillez réessayer."
+    },
+    "resetPassword": {
+      "title": "Réinitialiser le mot de passe",
+      "subtitle": "Choisissez un nouveau mot de passe pour votre compte.",
+      "doneBody": "Votre mot de passe a été réinitialisé. Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.",
+      "goToSignIn": "Aller à la connexion",
+      "missingToken": "Il manque le jeton à ce lien de réinitialisation. Demandez un nouveau lien depuis l'écran de connexion.",
+      "backToSignIn": "Retour à la connexion",
+      "newPasswordPlaceholder": "Nouveau mot de passe",
+      "confirmPasswordPlaceholder": "Confirmer le nouveau mot de passe",
+      "submit": "Réinitialiser le mot de passe",
+      "errorTooShort": "Le mot de passe doit comporter au moins 8 caractères.",
+      "errorMismatch": "Les mots de passe ne correspondent pas.",
+      "errorInvalidLink": "Ce lien de réinitialisation du mot de passe est invalide ou a expiré."
+    },
+    "userMenu": {
+      "mySetup": "Ma configuration",
+      "signOut": "Se déconnecter"
+    }
+  },
+  "layout": {
+    "accountDeployment": {
+      "title": "Intégrations du déploiement",
+      "intro": "Identifiants partagés par tous les espaces de travail de ce compte, scellés au repos. Les valeurs ne sont jamais affichées après l'enregistrement ; laissez un champ vide pour conserver le secret stocké.",
+      "configured": "Configuré",
+      "notSet": "Non défini",
+      "clear": "Effacer",
+      "loadFailed": "Impossible de charger les paramètres du déploiement",
+      "slack": {
+        "title": "Application Slack (OAuth)",
+        "description": "Active le flux OAuth \"Add to Slack\". Sans lui, les espaces de travail peuvent quand même connecter Slack en collant un jeton de bot.",
+        "clientId": "ID client",
+        "clientSecret": "Secret client",
+        "redirectUrl": "URL de redirection",
+        "validation": "Saisissez l'id client, le secret et l'URL de redirection",
+        "saved": "OAuth Slack enregistré",
+        "saveFailed": "Impossible d'enregistrer l'OAuth Slack",
+        "cleared": "OAuth Slack effacé",
+        "clearFailed": "Impossible d'effacer l'OAuth Slack"
+      },
+      "web": {
+        "title": "Recherche web du conteneur",
+        "description": "Le fournisseur de recherche que les agents en conteneur atteignent via le proxy du backend. Définissez une clé Brave (recommandé) ou une URL SearXNG auto-hébergée (avec une clé bearer facultative).",
+        "configured": "Configuré ({provider})",
+        "braveKey": "Clé d'API Brave",
+        "searxngUrl": "URL SearXNG",
+        "searxngKey": "Clé SearXNG (facultative)",
+        "validation": "Saisissez une clé Brave ou une URL SearXNG",
+        "saved": "Clés de recherche web enregistrées",
+        "saveFailed": "Impossible d'enregistrer les clés de recherche web",
+        "cleared": "Clés de recherche web effacées",
+        "clearFailed": "Impossible d'effacer les clés de recherche web"
+      }
+    },
+    "accountFragments": {
+      "intro": "Bonnes pratiques partagées par tous les tableaux de ce compte. Chaque tableau en hérite et peut les remplacer ou en ajouter. Les agents qui connaissent le code (coder, reviewer, architect, fixers) intègrent les plus pertinentes dans leur prompt."
+    },
+    "accountTeam": {
+      "roles": {
+        "admin": "Administrateur",
+        "developer": "Développeur",
+        "product": "Produit"
+      },
+      "org": {
+        "ctaTitle": "Invitez des coéquipiers et gérez les rôles",
+        "ctaBody": "Les membres, rôles et invitations vivent dans une organisation. Créez-en une pour inviter des coéquipiers et gérer leurs rôles ; vos tableaux personnels restent inchangés.",
+        "namePlaceholder": "Acme Inc.",
+        "create": "Créer une organisation",
+        "created": "Organisation créée"
+      },
+      "members": {
+        "title": "Membres",
+        "empty": "Aucun membre pour l'instant."
+      },
+      "invite": {
+        "title": "Inviter un coéquipier",
+        "submit": "Inviter",
+        "revoke": "Révoquer l'invitation",
+        "created": "Invitation créée",
+        "createdEmailed": "Un e-mail a été envoyé (ou copiez le lien dans la liste ci-dessous).",
+        "createdShareLink": "Partagez le lien d'acceptation avec votre coéquipier.",
+        "status": {
+          "pending": "En attente",
+          "accepted": "Acceptée",
+          "revoked": "Révoquée"
+        }
+      },
+      "email": {
+        "title": "Expéditeur des e-mails",
+        "notEnabled": "L'envoi d'e-mails n'est pas activé sur ce déploiement. Les invitations produisent quand même un lien d'acceptation partageable.",
+        "connectedAs": "Connecté via {provider} en tant que {from}",
+        "disconnect": "Déconnecter",
+        "connect": "Connecter l'expéditeur des e-mails",
+        "connected": "Expéditeur des e-mails connecté",
+        "fromPlaceholder": "Adresse de l'expéditeur",
+        "apiKeyPlaceholder": "Clé d'API du fournisseur",
+        "providers": {
+          "resend": "Resend",
+          "sendgrid": "SendGrid"
+        }
+      },
+      "apiKeys": {
+        "title": "Clés d'API du compte"
+      },
+      "errors": {
+        "updateRoles": "Impossible de mettre à jour les rôles",
+        "loadSettings": "Impossible de charger les paramètres de l'équipe",
+        "createOrg": "Impossible de créer l'organisation",
+        "sendInvite": "Impossible d'envoyer l'invitation",
+        "revokeInvite": "Impossible de révoquer l'invitation",
+        "connectEmail": "Impossible de connecter l'expéditeur des e-mails",
+        "disconnectEmail": "Impossible de déconnecter l'expéditeur des e-mails"
+      }
+    },
+    "boardSwitcher": {
+      "accountFallback": "Compte",
+      "boardFallback": "Tableau",
+      "providers": {
+        "docker": "Docker (local)",
+        "custom": "Personnalisé"
+      },
+      "account": {
+        "newOrg": "Nouvelle organisation…",
+        "settings": "Paramètres du compte…",
+        "defaultProvider": "Fournisseur cloud par défaut"
+      },
+      "board": {
+        "new": "Nouveau tableau…",
+        "rename": "Renommer le tableau…",
+        "delete": "Supprimer le tableau"
+      },
+      "prompt": {
+        "create": "Créer",
+        "nameLabel": "Nom",
+        "descriptionLabel": "Description",
+        "descriptionHint": "Facultatif",
+        "descriptionPlaceholder": "À quoi sert ce tableau ?",
+        "account": {
+          "title": "Nouvelle organisation",
+          "placeholder": "Acme Inc."
+        },
+        "board": {
+          "title": "Nouveau tableau",
+          "placeholder": "Tableau sans titre"
+        },
+        "rename": {
+          "title": "Paramètres du tableau",
+          "placeholder": "Nom du tableau"
+        }
+      },
+      "toast": {
+        "updateProviderFailed": "Impossible de mettre à jour le fournisseur par défaut",
+        "switchAccountFailed": "Impossible de changer de compte",
+        "openBoardFailed": "Impossible d'ouvrir le tableau",
+        "boardDeleted": "Tableau supprimé",
+        "deleteBoardFailed": "Impossible de supprimer le tableau"
+      }
+    },
+    "notifications": {
+      "heading": "Nécessite votre attention",
+      "overdue": "En retard",
+      "openPr": "Ouvrir la PR",
+      "dismiss": "Ignorer",
+      "action": {
+        "merge_review": "Fusionner",
+        "pipeline_complete": "Confirmer et fusionner",
+        "ci_failed": "Relancer l'exécution",
+        "test_failed": "Relancer l'exécution",
+        "requirement_review": "Marquer comme lu",
+        "clarity_review": "Marquer comme lu",
+        "release_regression": "Accuser réception",
+        "decision_required": "Marquer comme lu",
+        "human_test_ready": "Marquer comme lu",
+        "visual_confirmation_ready": "Marquer comme lu",
+        "human_review": "Marquer comme lu",
+        "followup_pending": "Marquer comme lu",
+        "markRead": "Marquer comme lu"
+      }
+    },
+    "aiProvidersBanner": {
+      "setup": {
+        "title": "Aucun modèle d'IA configuré",
+        "body": "Les agents ont besoin d'un modèle pour s'exécuter. L'IA fonctionne immédiatement uniquement sur un déploiement Cloudflare avec Workers AI activé. Sinon, connectez une clé de fournisseur, un abonnement, un proxy ou un exécuteur local pour continuer.",
+        "action": "Configurer l'IA"
+      },
+      "preset": {
+        "title": "Le préréglage de modèle par défaut utilise des modèles indisponibles",
+        "body": "Les tâches utilisant le préréglage par défaut échoueraient. Modifiez le préréglage ou configurez le fournisseur manquant.",
+        "action": "Vérifier le préréglage"
+      }
+    },
+    "githubPatBanner": {
+      "title": "PAT GitHub non configuré",
+      "body": "Le mode local accède à GitHub avec un jeton d'accès personnel. Sans lui, les étapes d'agent qui clonent, poussent, ouvrent des PR, contrôlent la CI ou fusionnent échoueront.",
+      "createToken": "Créer un jeton GitHub (portées présélectionnées)",
+      "thenSet": "Définissez ensuite {envVar} et redémarrez."
+    },
+    "providerConfigBanner": {
+      "titleMany": "Les fournisseurs nécessitent une configuration",
+      "titleOne": {
+        "environment": "Le fournisseur d'environnement nécessite une configuration",
+        "runner-pool": "Le pool d'exécuteurs nécessite une configuration"
+      },
+      "body": "Un fournisseur est connecté pour cette instance mais il manque des réglages obligatoires, il ne peut donc pas encore s'exécuter. Ajoutez les champs obligatoires pour terminer sa connexion.",
+      "action": {
+        "environment": "Configurer le fournisseur d'environnement",
+        "runner-pool": "Configurer le pool d'exécuteurs"
+      }
+    },
+    "spendWarningBanner": {
+      "title": "Limite de dépense atteinte, exécution des agents en pause",
+      "body": "La dépense en jetons de ce mois a atteint le budget configuré, les pipelines en cours ont donc été mis en pause pour éviter des coûts supplémentaires. L'exécution reprend automatiquement au renouvellement du budget le mois prochain, ou dès que la limite est relevée.",
+      "spent": "Dépensé",
+      "budget": "Budget",
+      "tokens": "Jetons",
+      "resume": "Reprendre quand même",
+      "resumeHint": "Reprendre continue à générer des dépenses ; cela se mettra de nouveau en pause si vous dépassez encore le budget."
+    },
+    "personalSetup": {
+      "title": "Ma configuration",
+      "intro": "Vos connexions personnelles, utilisées pour les exécutions que vous lancez et visibles uniquement par vous.",
+      "connected": "Connecté",
+      "notConnected": "Non connecté",
+      "connectedCount": "aucun connecté | {count} connecté | {count} connectés",
+      "sourceControl": {
+        "title": "Gestion de versions"
+      },
+      "githubToken": {
+        "label": "Mon jeton GitHub",
+        "description": "Un jeton d'accès personnel utilisé pour les exécutions que vous lancez (push, PR, CI, fusion)."
+      },
+      "models": {
+        "title": "Modèles"
+      },
+      "localRunners": {
+        "label": "Mes exécuteurs locaux",
+        "description": "Vos exécuteurs de modèles sur votre propre machine (Ollama, LM Studio, vLLM)."
+      },
+      "subscriptions": {
+        "label": "Mes abonnements",
+        "description": "Plans à usage individuel que vous déverrouillez avec un mot de passe personnel (Claude, GLM, Codex)."
+      }
+    },
+    "integrationBack": {
+      "backToMySetup": "Retour à Ma configuration",
+      "backToIntegrations": "Retour aux Intégrations"
+    },
+    "commandBar": {
+      "searchPlaceholder": "Rechercher ou exécuter une commande…",
+      "noMatches": "Aucune commande correspondante.",
+      "groups": {
+        "create": "Créer",
+        "repositories": "Dépôts",
+        "integrations": "Intégrations",
+        "workspace": "Espace de travail",
+        "account": "Compte"
+      },
+      "cmd": {
+        "newPipeline": "Créer un pipeline",
+        "addFromRepo": "Ajouter un service depuis un dépôt existant",
+        "bootstrapRepo": "Initialiser un nouveau dépôt",
+        "githubManage": "Gérer la connexion GitHub",
+        "githubConnect": "Connecter GitHub",
+        "slackManage": "Gérer les notifications Slack",
+        "slackConnect": "Connecter Slack",
+        "sourceManage": "Gérer {source}",
+        "sourceConnect": "Connecter {source}",
+        "documentImport": "Importer et générer depuis des documents",
+        "taskImport": "Importer des tickets",
+        "fragments": "Bibliothèque de fragments de contexte",
+        "mergeThresholds": "Seuils de fusion",
+        "workspaceSettings": "Paramètres de l'espace de travail",
+        "modelConfiguration": "Configuration des modèles",
+        "serviceFragmentDefaults": "Bonnes pratiques de service par défaut",
+        "accountSettings": "Paramètres du compte",
+        "localModels": "Mes exécuteurs locaux",
+        "sandbox": "Ouvrir le bac à sable"
+      },
+      "keywords": {
+        "newPipeline": "pipeline agents chaîne",
+        "addFromRepo": "github importer existant",
+        "bootstrapRepo": "échafaudage créer architecture de référence",
+        "github": "git dépôts pull requests tickets",
+        "slack": "slack notifications canal mentions",
+        "documentSource": "document source prd rfc",
+        "documentImport": "document importer générer",
+        "taskSource": "tâche source suivi tickets",
+        "taskImport": "tâche importer tickets",
+        "fragments": "prompt fragments bonnes pratiques directives contexte",
+        "mergeThresholds": "fusion politique préréglage fusion automatique ci",
+        "workspaceSettings": "limite tâches en cours par service attente escalade retard notification délai",
+        "modelConfiguration": "modèle llm routage type d'agent préréglage par défaut configuration",
+        "serviceFragmentDefaults": "fragment bonnes pratiques directive service par défaut sensible au code",
+        "accountSettings": "compte équipe membres rôles invitations e-mail clés api fragment bonnes pratiques bibliothèque contexte organisation personnel",
+        "localModels": "modèle local exécuteur ollama lm studio llamacpp vllm endpoint",
+        "sandbox": "bac à sable prompt modèle test expérience juge fixture benchmark évaluer"
+      }
+    },
+    "integrationsHub": {
+      "title": "Intégrations",
+      "intro": "Connectez et gérez les systèmes externes que cet espace de travail peut relier.",
+      "searchPlaceholder": "Rechercher des intégrations…",
+      "noMatches": "Aucune intégration ne correspond à \"{query}\".",
+      "getStarted": {
+        "title": "Pour commencer",
+        "body": "Connectez une source de code et un fournisseur de modèles pour exécuter votre premier pipeline."
+      },
+      "status": {
+        "connected": "Connecté",
+        "keyConnected": "Clé connectée",
+        "notConnected": "Non connecté",
+        "needsAttention": "Nécessite une intervention",
+        "disabled": "Désactivé",
+        "recommended": "Recommandé"
+      },
+      "groups": {
+        "models": "Modèles et fournisseurs",
+        "sourceControl": "Gestion de code source",
+        "communication": "Communication",
+        "documents": "Documents",
+        "taskTrackers": "Outils de suivi des tâches",
+        "observability": "Observabilité",
+        "infrastructure": "Infrastructure",
+        "personal": "Personnel (vous uniquement)"
+      },
+      "items": {
+        "openrouter": {
+          "description": "Une seule passerelle vers plus de 300 modèles. Ajoutez votre clé et activez des modèles au même endroit."
+        },
+        "vendors": {
+          "label": "Fournisseurs et clés",
+          "description": "Abonnements LLM de l'espace de travail et clés API des fournisseurs."
+        },
+        "github": {
+          "description": "Connectez la GitHub App de l'espace de travail, parcourez dépôts, PR et tickets."
+        },
+        "slack": {
+          "description": "Acheminez les notifications vers l'espace Slack de votre équipe."
+        },
+        "documentSource": {
+          "description": "Reliez {source} comme source de documents pour le contexte des exigences."
+        },
+        "documentImport": {
+          "label": "Importer et générer",
+          "description": "Récupérez des documents depuis une source connectée et générez la structure."
+        },
+        "taskSource": {
+          "description": "Reliez {source} pour importer et référencer les tickets du suivi."
+        },
+        "taskImport": {
+          "label": "Importer des tickets",
+          "description": "Récupérez les tickets d'un outil de suivi connecté sur le tableau."
+        },
+        "trackerSettings": {
+          "label": "Paramètres de l'outil de suivi"
+        },
+        "observability": {
+          "label": "Santé après publication",
+          "description": "Surveillez les moniteurs et les SLO après la publication d'une version (Datadog)."
+        },
+        "environment": {
+          "label": "Environnements éphémères",
+          "description": "Là où l'agent Tester s'exécute contre un environnement d'aperçu en direct."
+        },
+        "runnerPool": {
+          "label": "Pool d'exécuteurs auto-hébergé",
+          "description": "Là où les agents de code s'exécutent quand les Cloudflare Containers ne sont pas utilisés."
+        },
+        "localMode": {
+          "label": "Mode local",
+          "description": "Pool de conteneurs à chaud et réutilisation du checkout par dépôt pour l'exécuteur local."
+        },
+        "githubPat": {
+          "label": "Mon jeton GitHub",
+          "description": "Un jeton d'accès personnel utilisé pour les exécutions que vous lancez (pushes, PR, CI, fusion)."
+        },
+        "localRunners": {
+          "label": "Mes exécuteurs locaux",
+          "description": "Vos exécuteurs de modèles sur votre propre machine (Ollama, LM Studio, vLLM…)."
+        }
+      }
+    }
   }
 }

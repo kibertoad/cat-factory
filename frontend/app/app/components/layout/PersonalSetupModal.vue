@@ -5,6 +5,7 @@
 // previously sat, confusingly, among the workspace-wide integrations. Each row reuses the
 // existing per-panel handlers via `ui.openFromPersonal(...)`, so opening one closes this
 // hub, reveals that panel, and gives it a "Back to My setup" control (IntegrationBackTitle).
+const { t } = useI18n()
 const ui = useUiStore()
 const userSecrets = useUserSecretsStore()
 const localModels = useLocalModelsStore()
@@ -54,14 +55,14 @@ const groups = computed<PersonalGroup[]>(() => {
   // --- Source control --------------------------------------------------------
   const pat = !!userSecrets.statusFor('github_pat')
   out.push({
-    title: 'Source control',
+    title: t('layout.personalSetup.sourceControl.title'),
     items: [
       {
         key: 'github-pat',
         icon: 'i-lucide-key-round',
-        label: 'My GitHub token',
-        description: 'A personal access token used for runs you start (pushes, PRs, CI, merge).',
-        status: pat ? 'Connected' : undefined,
+        label: t('layout.personalSetup.githubToken.label'),
+        description: t('layout.personalSetup.githubToken.description'),
+        status: pat ? t('layout.personalSetup.connected') : undefined,
         connected: pat,
         onClick: () => go(ui.openUserSecrets),
       },
@@ -72,24 +73,27 @@ const groups = computed<PersonalGroup[]>(() => {
   const runnerCount = localModels.endpoints.length
   const subCount = personalSubs.subscriptions.length
   out.push({
-    title: 'Models',
+    title: t('layout.personalSetup.models.title'),
     items: [
       {
         key: 'local-runners',
         icon: 'i-lucide-server',
-        label: 'My local runners',
-        description: 'Your own-machine model runners (Ollama, LM Studio, vLLM…).',
-        status: runnerCount ? `${runnerCount} connected` : undefined,
+        label: t('layout.personalSetup.localRunners.label'),
+        description: t('layout.personalSetup.localRunners.description'),
+        status: runnerCount
+          ? t('layout.personalSetup.connectedCount', { count: runnerCount }, runnerCount)
+          : undefined,
         connected: runnerCount > 0,
         onClick: () => go(ui.openLocalModels),
       },
       {
         key: 'personal-subs',
         icon: 'i-lucide-user',
-        label: 'My subscriptions',
-        description:
-          'Individual-usage plans you unlock with a personal password (Claude, GLM, Codex).',
-        status: subCount ? `${subCount} connected` : undefined,
+        label: t('layout.personalSetup.subscriptions.label'),
+        description: t('layout.personalSetup.subscriptions.description'),
+        status: subCount
+          ? t('layout.personalSetup.connectedCount', { count: subCount }, subCount)
+          : undefined,
         connected: subCount > 0,
         onClick: () => go(() => ui.openVendorCredentials('personal')),
       },
@@ -101,11 +105,15 @@ const groups = computed<PersonalGroup[]>(() => {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="My setup" :ui="{ content: 'max-w-xl' }">
+  <UModal
+    v-model:open="open"
+    :title="t('layout.personalSetup.title')"
+    :ui="{ content: 'max-w-xl' }"
+  >
     <template #body>
       <div class="space-y-5">
         <p class="text-xs text-slate-400">
-          Your personal connections — used for runs you start, and visible only to you.
+          {{ t('layout.personalSetup.intro') }}
         </p>
 
         <section v-for="group in groups" :key="group.title">
@@ -125,9 +133,11 @@ const groups = computed<PersonalGroup[]>(() => {
                 <div class="flex items-center gap-2">
                   <span class="truncate text-sm font-medium text-slate-100">{{ item.label }}</span>
                   <UBadge v-if="item.connected" color="success" variant="subtle" size="sm">
-                    {{ item.status || 'Connected' }}
+                    {{ item.status || t('layout.personalSetup.connected') }}
                   </UBadge>
-                  <span v-else class="text-[11px] text-slate-500">Not connected</span>
+                  <span v-else class="text-[11px] text-slate-500">
+                    {{ t('layout.personalSetup.notConnected') }}
+                  </span>
                 </div>
                 <p class="truncate text-xs text-slate-400">{{ item.description }}</p>
               </div>

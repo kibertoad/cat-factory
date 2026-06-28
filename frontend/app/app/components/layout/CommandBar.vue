@@ -16,6 +16,7 @@ interface Command {
   run: () => void | Promise<void>
 }
 
+const { t } = useI18n()
 const ui = useUiStore()
 const github = useGitHubStore()
 const slack = useSlackStore()
@@ -34,13 +35,19 @@ const activeIndex = ref(0)
 const commands = computed<Command[]>(() => {
   const list: Command[] = []
 
+  const groupCreate = t('layout.commandBar.groups.create')
+  const groupRepositories = t('layout.commandBar.groups.repositories')
+  const groupIntegrations = t('layout.commandBar.groups.integrations')
+  const groupWorkspace = t('layout.commandBar.groups.workspace')
+  const groupAccount = t('layout.commandBar.groups.account')
+
   // ---- Create -------------------------------------------------------------
   list.push({
     id: 'new-pipeline',
-    label: 'Build a pipeline',
-    group: 'Create',
+    label: t('layout.commandBar.cmd.newPipeline'),
+    group: groupCreate,
     icon: 'i-lucide-workflow',
-    keywords: 'pipeline agents chain',
+    keywords: t('layout.commandBar.keywords.newPipeline'),
     run: () => ui.openBuilder(),
   })
 
@@ -48,19 +55,19 @@ const commands = computed<Command[]>(() => {
   if (github.available) {
     list.push({
       id: 'add-from-repo',
-      label: 'Add service from existing repo',
-      group: 'Repositories',
+      label: t('layout.commandBar.cmd.addFromRepo'),
+      group: groupRepositories,
       icon: 'i-lucide-folder-git-2',
-      keywords: 'github import existing',
+      keywords: t('layout.commandBar.keywords.addFromRepo'),
       run: () => ui.openAddService(),
     })
   }
   list.push({
     id: 'bootstrap-repo',
-    label: 'Bootstrap a new repo',
-    group: 'Repositories',
+    label: t('layout.commandBar.cmd.bootstrapRepo'),
+    group: groupRepositories,
     icon: 'i-lucide-git-branch-plus',
-    keywords: 'scaffold create reference architecture',
+    keywords: t('layout.commandBar.keywords.bootstrapRepo'),
     run: () => ui.openBootstrap(),
   })
 
@@ -68,20 +75,24 @@ const commands = computed<Command[]>(() => {
   if (github.available) {
     list.push({
       id: 'github',
-      label: github.connected ? 'Manage GitHub connection' : 'Connect GitHub',
-      group: 'Integrations',
+      label: github.connected
+        ? t('layout.commandBar.cmd.githubManage')
+        : t('layout.commandBar.cmd.githubConnect'),
+      group: groupIntegrations,
       icon: 'i-lucide-github',
-      keywords: 'git repos pull requests issues',
+      keywords: t('layout.commandBar.keywords.github'),
       run: () => ui.openGitHub(),
     })
   }
   if (slack.available) {
     list.push({
       id: 'slack',
-      label: slack.connected ? 'Manage Slack notifications' : 'Connect Slack',
-      group: 'Integrations',
+      label: slack.connected
+        ? t('layout.commandBar.cmd.slackManage')
+        : t('layout.commandBar.cmd.slackConnect'),
+      group: groupIntegrations,
       icon: 'i-lucide-slack',
-      keywords: 'slack notifications channel mentions',
+      keywords: t('layout.commandBar.keywords.slack'),
       run: () => ui.openSlack(),
     })
   }
@@ -89,20 +100,22 @@ const commands = computed<Command[]>(() => {
     for (const src of documents.sources) {
       list.push({
         id: `doc-connect-${src.source}`,
-        label: documents.isConnected(src.source) ? `Manage ${src.label}` : `Connect ${src.label}`,
-        group: 'Integrations',
+        label: documents.isConnected(src.source)
+          ? t('layout.commandBar.cmd.sourceManage', { source: src.label })
+          : t('layout.commandBar.cmd.sourceConnect', { source: src.label }),
+        group: groupIntegrations,
         icon: src.icon,
-        keywords: 'document source prd rfc',
+        keywords: t('layout.commandBar.keywords.documentSource'),
         run: () => ui.openDocumentConnect(src.source),
       })
     }
     if (documents.anyConnected) {
       list.push({
         id: 'doc-import',
-        label: 'Import & spawn from documents',
-        group: 'Integrations',
+        label: t('layout.commandBar.cmd.documentImport'),
+        group: groupIntegrations,
         icon: 'i-lucide-file-down',
-        keywords: 'document import spawn',
+        keywords: t('layout.commandBar.keywords.documentImport'),
         run: () => ui.openDocumentImport(null),
       })
     }
@@ -111,20 +124,22 @@ const commands = computed<Command[]>(() => {
     for (const src of tasks.sources) {
       list.push({
         id: `task-connect-${src.source}`,
-        label: src.available ? `Manage ${src.label}` : `Connect ${src.label}`,
-        group: 'Integrations',
+        label: src.available
+          ? t('layout.commandBar.cmd.sourceManage', { source: src.label })
+          : t('layout.commandBar.cmd.sourceConnect', { source: src.label }),
+        group: groupIntegrations,
         icon: src.icon,
-        keywords: 'task source tracker issues',
+        keywords: t('layout.commandBar.keywords.taskSource'),
         run: () => ui.openTaskConnect(src.source),
       })
     }
     if (tasks.anyOffered) {
       list.push({
         id: 'task-import',
-        label: 'Import issues',
-        group: 'Integrations',
+        label: t('layout.commandBar.cmd.taskImport'),
+        group: groupIntegrations,
         icon: 'i-lucide-file-down',
-        keywords: 'task import issues',
+        keywords: t('layout.commandBar.keywords.taskImport'),
         run: () => ui.openTaskImport(null),
       })
     }
@@ -134,68 +149,67 @@ const commands = computed<Command[]>(() => {
   if (library.available) {
     list.push({
       id: 'fragments',
-      label: 'Context fragment library',
-      group: 'Workspace',
+      label: t('layout.commandBar.cmd.fragments'),
+      group: groupWorkspace,
       icon: 'i-lucide-book-marked',
-      keywords: 'prompt fragments best practice guidelines context',
+      keywords: t('layout.commandBar.keywords.fragments'),
       run: () => ui.openFragmentLibrary(),
     })
   }
   list.push({
     id: 'merge-thresholds',
-    label: 'Merge thresholds',
-    group: 'Workspace',
+    label: t('layout.commandBar.cmd.mergeThresholds'),
+    group: groupWorkspace,
     icon: 'i-lucide-git-merge',
-    keywords: 'merge policy preset auto-merge ci',
+    keywords: t('layout.commandBar.keywords.mergeThresholds'),
     run: () => ui.openWorkspaceSettings('merge'),
   })
   list.push({
     id: 'workspace-settings',
-    label: 'Workspace settings',
-    group: 'Workspace',
+    label: t('layout.commandBar.cmd.workspaceSettings'),
+    group: groupWorkspace,
     icon: 'i-lucide-sliders-horizontal',
-    keywords: 'limit running tasks per service waiting escalation overdue notification timeout',
+    keywords: t('layout.commandBar.keywords.workspaceSettings'),
     run: () => ui.openWorkspaceSettings(),
   })
   list.push({
     id: 'model-configuration',
-    label: 'Model Configuration',
-    group: 'Workspace',
+    label: t('layout.commandBar.cmd.modelConfiguration'),
+    group: groupWorkspace,
     icon: 'i-lucide-cpu',
-    keywords: 'model llm routing agent kind default preset configuration',
+    keywords: t('layout.commandBar.keywords.modelConfiguration'),
     run: () => ui.openModelConfig(),
   })
   list.push({
     id: 'service-fragment-defaults',
-    label: 'Default service best practices',
-    group: 'Workspace',
+    label: t('layout.commandBar.cmd.serviceFragmentDefaults'),
+    group: groupWorkspace,
     icon: 'i-lucide-book-open-check',
-    keywords: 'fragment best practice guideline service default code-aware',
+    keywords: t('layout.commandBar.keywords.serviceFragmentDefaults'),
     run: () => ui.openWorkspaceSettings('fragments'),
   })
   list.push({
     id: 'account-settings',
-    label: 'Account settings',
-    group: 'Account',
+    label: t('layout.commandBar.cmd.accountSettings'),
+    group: groupAccount,
     icon: 'i-lucide-settings',
-    keywords:
-      'account team members roles invitations email api keys fragment best practice library context organization personal',
+    keywords: t('layout.commandBar.keywords.accountSettings'),
     run: () => ui.openAccountSettings(),
   })
   list.push({
     id: 'local-models',
-    label: 'My local runners',
-    group: 'Workspace',
+    label: t('layout.commandBar.cmd.localModels'),
+    group: groupWorkspace,
     icon: 'i-lucide-server',
-    keywords: 'local model runner ollama lm studio llamacpp vllm endpoint',
+    keywords: t('layout.commandBar.keywords.localModels'),
     run: () => ui.openLocalModels(),
   })
   list.push({
     id: 'sandbox',
-    label: 'Open Sandbox',
-    group: 'Workspace',
+    label: t('layout.commandBar.cmd.sandbox'),
+    group: groupWorkspace,
     icon: 'i-lucide-flask-conical',
-    keywords: 'sandbox prompt model test experiment judge fixture benchmark evaluate',
+    keywords: t('layout.commandBar.keywords.sandbox'),
     run: () => ui.openSandbox(),
   })
 
@@ -285,7 +299,7 @@ function indexOf(cmd: Command) {
             ref="inputRef"
             v-model="query"
             variant="none"
-            placeholder="Search or run a command…"
+            :placeholder="t('layout.commandBar.searchPlaceholder')"
             class="w-full"
             :ui="{ base: 'py-3 text-sm' }"
           />
@@ -294,7 +308,7 @@ function indexOf(cmd: Command) {
 
         <div class="max-h-80 overflow-y-auto p-1.5">
           <p v-if="filtered.length === 0" class="px-3 py-6 text-center text-sm text-slate-500">
-            No matching commands.
+            {{ t('layout.commandBar.noMatches') }}
           </p>
 
           <div v-for="group in groups" :key="group.name" class="mb-1">

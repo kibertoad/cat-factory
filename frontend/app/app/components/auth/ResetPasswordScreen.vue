@@ -5,6 +5,7 @@ import { computed, ref } from 'vue'
 // (`/reset-password?token=…`). It is a public route (see AuthGate), so a recipient who
 // is signed out can still set a new password. On success we send them to the login.
 const auth = useAuthStore()
+const { t } = useI18n()
 
 const token = computed(() => {
   if (typeof window === 'undefined') return ''
@@ -20,11 +21,11 @@ const done = ref(false)
 async function submit() {
   error.value = null
   if (password.value.length < 8) {
-    error.value = 'Password must be at least 8 characters.'
+    error.value = t('auth.resetPassword.errorTooShort')
     return
   }
   if (password.value !== confirm.value) {
-    error.value = 'Passwords do not match.'
+    error.value = t('auth.resetPassword.errorMismatch')
     return
   }
   busy.value = true
@@ -34,7 +35,7 @@ async function submit() {
   } catch (e) {
     error.value =
       (e as { data?: { error?: { message?: string } } })?.data?.error?.message ??
-      'This password reset link is invalid or has expired.'
+      t('auth.resetPassword.errorInvalidLink')
   } finally {
     busy.value = false
   }
@@ -52,23 +53,25 @@ function goToLogin() {
     >
       <div class="mb-6 text-center">
         <UIcon name="i-lucide-key-round" class="mx-auto mb-3 h-10 w-10 text-indigo-400" />
-        <h1 class="mb-1 text-lg font-semibold text-white">Reset password</h1>
-        <p class="text-sm text-slate-400">Choose a new password for your account.</p>
+        <h1 class="mb-1 text-lg font-semibold text-white">{{ t('auth.resetPassword.title') }}</h1>
+        <p class="text-sm text-slate-400">{{ t('auth.resetPassword.subtitle') }}</p>
       </div>
 
       <template v-if="done">
         <p class="mb-4 text-sm text-slate-300">
-          Your password has been reset. You can now sign in with your new password.
+          {{ t('auth.resetPassword.doneBody') }}
         </p>
-        <UButton block size="lg" color="primary" @click="goToLogin">Go to sign in</UButton>
+        <UButton block size="lg" color="primary" @click="goToLogin">{{
+          t('auth.resetPassword.goToSignIn')
+        }}</UButton>
       </template>
 
       <template v-else-if="!token">
         <p class="mb-4 text-sm text-rose-400">
-          This reset link is missing its token. Request a new link from the sign-in screen.
+          {{ t('auth.resetPassword.missingToken') }}
         </p>
         <UButton block size="lg" color="neutral" variant="subtle" @click="goToLogin">
-          Back to sign in
+          {{ t('auth.resetPassword.backToSignIn') }}
         </UButton>
       </template>
 
@@ -77,7 +80,7 @@ function goToLogin() {
           v-model="password"
           type="password"
           required
-          placeholder="New password"
+          :placeholder="t('auth.resetPassword.newPasswordPlaceholder')"
           icon="i-lucide-lock"
           size="lg"
           class="w-full"
@@ -86,18 +89,18 @@ function goToLogin() {
           v-model="confirm"
           type="password"
           required
-          placeholder="Confirm new password"
+          :placeholder="t('auth.resetPassword.confirmPasswordPlaceholder')"
           icon="i-lucide-lock"
           size="lg"
           class="w-full"
         />
         <p v-if="error" class="text-sm text-rose-400">{{ error }}</p>
         <UButton block size="lg" color="primary" type="submit" :loading="busy">
-          Reset password
+          {{ t('auth.resetPassword.submit') }}
         </UButton>
         <p class="text-center text-xs text-slate-400">
           <button type="button" class="text-indigo-400 hover:underline" @click="goToLogin">
-            Back to sign in
+            {{ t('auth.resetPassword.backToSignIn') }}
           </button>
         </p>
       </form>
