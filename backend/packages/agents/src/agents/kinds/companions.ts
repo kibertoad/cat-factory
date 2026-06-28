@@ -45,6 +45,17 @@ export const COMPANIONS: CompanionDefinition[] = [
     defaultThreshold: DEFAULT_COMPANION_THRESHOLD,
     reviews: 'code change for correctness, quality, security and risk',
   },
+  {
+    // `doc-reviewer` is the document writer's companion: it rates the drafted document and
+    // loops the `doc-writer` back for rework below the threshold (the AI-to-AI convergence
+    // loop of the document-authoring pipeline, before the human gate on this step).
+    kind: 'doc-reviewer',
+    targets: ['doc-writer'],
+    defaultThreshold: DEFAULT_COMPANION_THRESHOLD,
+    reviews:
+      'document draft for completeness against the brief, clarity, accuracy and fitness of its ' +
+      'structure for the document kind',
+  },
 ]
 
 const BY_KIND = new Map<string, CompanionDefinition>(COMPANIONS.map((c) => [c.kind, c]))

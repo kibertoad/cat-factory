@@ -64,9 +64,35 @@ const isRecurring = computed(() => taskType.value === 'recurring')
 const severity = ref<'low' | 'medium' | 'high' | 'critical' | ''>('')
 const stepsToReproduce = ref('')
 const timeboxHours = ref<number | undefined>(undefined)
-const docKind = ref<'prd' | 'rfc' | 'runbook' | 'reference' | 'other' | ''>('')
+const docKind = ref<
+  | 'prd'
+  | 'rfc'
+  | 'adr'
+  | 'design'
+  | 'technical'
+  | 'api'
+  | 'runbook'
+  | 'research'
+  | 'reference'
+  | 'other'
+  | ''
+>('')
+const docAudience = ref('')
+const docTargetPath = ref('')
+const docOutlineHints = ref('')
 const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
-const DOC_KINDS = ['prd', 'rfc', 'runbook', 'reference', 'other'] as const
+const DOC_KINDS = [
+  'prd',
+  'rfc',
+  'adr',
+  'design',
+  'technical',
+  'api',
+  'runbook',
+  'research',
+  'reference',
+  'other',
+] as const
 
 function buildTypeFields(): TaskTypeFields | undefined {
   if (taskType.value === 'bug') {
@@ -85,7 +111,12 @@ function buildTypeFields(): TaskTypeFields | undefined {
       : undefined
   }
   if (taskType.value === 'document') {
-    return docKind.value ? { docKind: docKind.value } : undefined
+    const f: TaskTypeFields = {}
+    if (docKind.value) f.docKind = docKind.value
+    if (docAudience.value.trim()) f.audience = docAudience.value.trim()
+    if (docTargetPath.value.trim()) f.targetPath = docTargetPath.value.trim()
+    if (docOutlineHints.value.trim()) f.outlineHints = docOutlineHints.value.trim()
+    return Object.keys(f).length ? f : undefined
   }
   return undefined
 }
@@ -284,6 +315,9 @@ watch(open, (isOpen) => {
   stepsToReproduce.value = ''
   timeboxHours.value = undefined
   docKind.value = ''
+  docAudience.value = ''
+  docTargetPath.value = ''
+  docOutlineHints.value = ''
   mergePresetId.value = ''
   modelPresetId.value = ''
   pipelineId.value = ''
@@ -505,21 +539,47 @@ async function add() {
             />
           </UFormField>
 
-          <UFormField v-else-if="taskType === 'document'" label="Document kind">
-            <div class="flex flex-wrap gap-1">
-              <UButton
-                v-for="k in DOC_KINDS"
-                :key="k"
-                :color="docKind === k ? 'primary' : 'neutral'"
-                :variant="docKind === k ? 'soft' : 'ghost'"
-                size="xs"
-                class="uppercase"
-                @click="docKind = docKind === k ? '' : k"
-              >
-                {{ k }}
-              </UButton>
+          <div v-else-if="taskType === 'document'" class="space-y-3">
+            <UFormField label="Document kind">
+              <div class="flex flex-wrap gap-1">
+                <UButton
+                  v-for="k in DOC_KINDS"
+                  :key="k"
+                  :color="docKind === k ? 'primary' : 'neutral'"
+                  :variant="docKind === k ? 'soft' : 'ghost'"
+                  size="xs"
+                  class="uppercase"
+                  @click="docKind = docKind === k ? '' : k"
+                >
+                  {{ k }}
+                </UButton>
+              </div>
+            </UFormField>
+            <div class="grid grid-cols-2 gap-3">
+              <UFormField label="Audience" hint="optional">
+                <UInput
+                  v-model="docAudience"
+                  placeholder="e.g. platform engineers"
+                  class="w-full"
+                />
+              </UFormField>
+              <UFormField label="Target path" hint="optional">
+                <UInput
+                  v-model="docTargetPath"
+                  placeholder="e.g. docs/rfcs/0001-foo.md"
+                  class="w-full"
+                />
+              </UFormField>
             </div>
-          </UFormField>
+            <UFormField label="Outline hints" hint="optional">
+              <UTextarea
+                v-model="docOutlineHints"
+                :rows="2"
+                placeholder="Sections or points the document should cover"
+                class="w-full"
+              />
+            </UFormField>
+          </div>
 
           <div class="grid grid-cols-2 gap-3">
             <UFormField label="Pipeline">

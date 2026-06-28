@@ -135,6 +135,19 @@ export {
   companionTargets,
 } from './agents/kinds/companions.js'
 export { companionSystemPrompt } from './agents/prompts/companion.js'
+// The document-authoring agent kinds (doc-researcher / doc-outliner / doc-writer /
+// doc-finalizer), registered as a SIDE EFFECT of importing this module so they are
+// first-class kinds in every deployment (Worker / Node / local). `doc-reviewer` — the
+// writer's companion — lives in the COMPANIONS catalog above.
+export {
+  DOC_RESEARCHER_KIND,
+  DOC_OUTLINER_KIND,
+  DOC_WRITER_KIND,
+  DOC_FINALIZER_KIND,
+  DOC_REVIEWER_KIND,
+  DOCUMENT_AGENT_KINDS,
+  registerDocumentAgents,
+} from './agents/kinds/document.js'
 export {
   READ_ONLY_AGENT_KINDS,
   READ_ONLY_GUARDRAIL,

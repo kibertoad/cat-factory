@@ -251,6 +251,14 @@ export const COMPANION_ARCHETYPES: AgentArchetype[] = [
     description:
       'Reviews the spec — especially acceptance-scenario coverage — rating it and looping the Spec Writer back for automatic rework below the threshold, instead of requiring a human review.',
   },
+  {
+    kind: 'doc-reviewer',
+    label: 'Doc Reviewer',
+    icon: 'i-lucide-file-search',
+    color: '#818cf8',
+    description:
+      'Reviews the drafted document for completeness, clarity, accuracy and structure, looping the Doc Writer back for automatic rework below the threshold.',
+  },
 ]
 
 /**
@@ -262,6 +270,7 @@ export const COMPANION_FOR_PRODUCER: Record<string, AgentKind> = {
   coder: 'reviewer',
   architect: 'architect-companion',
   'spec-writer': 'spec-companion',
+  'doc-writer': 'doc-reviewer',
 }
 
 const COMPANION_KINDS: ReadonlySet<string> = new Set(COMPANION_ARCHETYPES.map((a) => a.kind))
