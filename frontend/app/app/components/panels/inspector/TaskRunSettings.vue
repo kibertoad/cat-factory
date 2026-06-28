@@ -15,6 +15,7 @@ const accounts = useAccountsStore()
 const tracker = useTrackerStore()
 const ui = useUiStore()
 const { ready, unavailableInPreset } = useAiReadiness()
+const { t, n } = useI18n()
 
 // ---- responsible product person --------------------------------------------
 // The account member (a `product` role-holder) accountable for this task; they are
@@ -34,7 +35,11 @@ const responsibleLabel = computed(() => {
 })
 const responsibleMenu = computed(() => [
   [
-    { label: 'Unassigned', icon: 'i-lucide-user-x', onSelect: () => setResponsible('') },
+    {
+      label: t('inspector.runSettings.unassigned'),
+      icon: 'i-lucide-user-x',
+      onSelect: () => setResponsible(''),
+    },
     ...productMembers.value.map((m) => ({
       label: m.name || m.email || m.userId,
       icon: 'i-lucide-user',
@@ -62,8 +67,11 @@ const presetMenu = computed(() => [
   [
     {
       label: mergePresets.defaultPreset
-        ? `Default (${mergePresets.defaultPreset.name}) — ${mergePresetThresholds(mergePresets.defaultPreset)}`
-        : 'Workspace default',
+        ? t('inspector.runSettings.defaultPresetThresholds', {
+            name: mergePresets.defaultPreset.name,
+            thresholds: mergePresetThresholds(mergePresets.defaultPreset),
+          })
+        : t('inspector.runSettings.workspaceDefault'),
       icon: 'i-lucide-rotate-ccw',
       onSelect: () => setPreset(''),
     },
@@ -99,8 +107,8 @@ const modelPresetMenu = computed(() => [
   [
     {
       label: modelPresets.defaultPreset
-        ? `Default (${modelPresets.defaultPreset.name})`
-        : 'Workspace default',
+        ? t('inspector.runSettings.defaultPreset', { name: modelPresets.defaultPreset.name })
+        : t('inspector.runSettings.workspaceDefault'),
       icon: 'i-lucide-rotate-ccw',
       onSelect: () => setModelPreset(''),
     },
@@ -124,7 +132,7 @@ const selectedPipeline = computed(() =>
 const pipelineMenu = computed(() => [
   [
     {
-      label: 'No default',
+      label: t('inspector.runSettings.noDefault'),
       icon: 'i-lucide-rotate-ccw',
       onSelect: () => setPipeline(''),
     },
@@ -151,9 +159,13 @@ function setResolveOnMerge(value: WritebackOverride | null) {
 function writebackMenu(set: (value: WritebackOverride | null) => void) {
   return [
     [
-      { label: 'Inherit workspace', icon: 'i-lucide-rotate-ccw', onSelect: () => set(null) },
-      { label: 'On', icon: 'i-lucide-check', onSelect: () => set('on') },
-      { label: 'Off', icon: 'i-lucide-x', onSelect: () => set('off') },
+      {
+        label: t('inspector.runSettings.inheritWorkspace'),
+        icon: 'i-lucide-rotate-ccw',
+        onSelect: () => set(null),
+      },
+      { label: t('inspector.runSettings.on'), icon: 'i-lucide-check', onSelect: () => set('on') },
+      { label: t('inspector.runSettings.off'), icon: 'i-lucide-x', onSelect: () => set('off') },
     ],
   ]
 }
@@ -162,9 +174,9 @@ function writebackLabel(
   override: WritebackOverride | null | undefined,
   wsDefault: boolean,
 ): string {
-  if (override === 'on') return 'On'
-  if (override === 'off') return 'Off'
-  return `Inherit (${wsDefault ? 'on' : 'off'})`
+  if (override === 'on') return t('inspector.runSettings.on')
+  if (override === 'off') return t('inspector.runSettings.off')
+  return wsDefault ? t('inspector.runSettings.inheritOn') : t('inspector.runSettings.inheritOff')
 }
 
 const commentOnPrOpenLabel = computed(() =>
@@ -182,21 +194,29 @@ const resolveOnMergeLabel = computed(() =>
 function setTechnical(value: boolean | null) {
   board.updateBlock(props.block.id, { technical: value })
 }
-const technicalMenu = [
+const technicalMenu = computed(() => [
   [
     {
-      label: 'Unset (auto-detect)',
+      label: t('inspector.runSettings.technical.unset'),
       icon: 'i-lucide-rotate-ccw',
       onSelect: () => setTechnical(null),
     },
-    { label: 'Technical', icon: 'i-lucide-wrench', onSelect: () => setTechnical(true) },
-    { label: 'Business', icon: 'i-lucide-briefcase', onSelect: () => setTechnical(false) },
+    {
+      label: t('inspector.runSettings.technical.technical'),
+      icon: 'i-lucide-wrench',
+      onSelect: () => setTechnical(true),
+    },
+    {
+      label: t('inspector.runSettings.technical.business'),
+      icon: 'i-lucide-briefcase',
+      onSelect: () => setTechnical(false),
+    },
   ],
-]
+])
 const technicalLabel = computed(() => {
-  if (props.block.technical === true) return 'Technical'
-  if (props.block.technical === false) return 'Business'
-  return 'Unset (auto-detect)'
+  if (props.block.technical === true) return t('inspector.runSettings.technical.technical')
+  if (props.block.technical === false) return t('inspector.runSettings.technical.business')
+  return t('inspector.runSettings.technical.unset')
 })
 </script>
 
@@ -206,7 +226,7 @@ const technicalLabel = computed(() => {
     <div>
       <div class="mb-1 flex items-center justify-between">
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          Pipeline
+          {{ t('inspector.runSettings.pipeline') }}
         </span>
         <UDropdownMenu :items="pipelineMenu">
           <UButton
@@ -230,7 +250,7 @@ const technicalLabel = computed(() => {
         </UBadge>
       </div>
       <div v-else class="text-[11px] text-slate-500">
-        No default — pick a pipeline when you run this task.
+        {{ t('inspector.runSettings.pipelineEmpty') }}
       </div>
     </div>
 
@@ -238,7 +258,7 @@ const technicalLabel = computed(() => {
     <div>
       <div class="mb-1 flex items-center justify-between">
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          Merge policy
+          {{ t('inspector.runSettings.mergePolicy') }}
         </span>
         <UDropdownMenu :items="presetMenu">
           <UButton
@@ -251,15 +271,21 @@ const technicalLabel = computed(() => {
         </UDropdownMenu>
       </div>
       <div v-if="selectedPreset" class="text-[11px] text-slate-400">
-        <span class="text-slate-300">{{ selectedPreset.name }}</span>
-        — auto-merge when complexity ≤ {{ Math.round(selectedPreset.maxComplexity * 100) }}%, risk ≤
-        {{ Math.round(selectedPreset.maxRisk * 100) }}%, impact ≤
-        {{ Math.round(selectedPreset.maxImpact * 100) }}%; up to
-        {{ selectedPreset.ciMaxAttempts }} CI-fix attempts.
-        <span v-if="!block.mergePresetId" class="text-slate-500">(workspace default)</span>
+        <i18n-t keypath="inspector.runSettings.mergePresetDetail" tag="span" scope="global">
+          <template #name>
+            <span class="text-slate-300">{{ selectedPreset.name }}</span>
+          </template>
+          <template #complexity>{{ n(selectedPreset.maxComplexity, { key: 'percent' }) }}</template>
+          <template #risk>{{ n(selectedPreset.maxRisk, { key: 'percent' }) }}</template>
+          <template #impact>{{ n(selectedPreset.maxImpact, { key: 'percent' }) }}</template>
+          <template #attempts>{{ selectedPreset.ciMaxAttempts }}</template>
+        </i18n-t>
+        <span v-if="!block.mergePresetId" class="text-slate-500">{{
+          t('inspector.runSettings.workspaceDefaultParen')
+        }}</span>
       </div>
       <div v-else class="text-[11px] text-slate-500">
-        No preset configured — the merger raises a review notification for every PR.
+        {{ t('inspector.runSettings.mergePresetEmpty') }}
       </div>
     </div>
 
@@ -267,7 +293,7 @@ const technicalLabel = computed(() => {
     <div>
       <div class="mb-1 flex items-center justify-between">
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          Model preset
+          {{ t('inspector.runSettings.modelPreset') }}
         </span>
         <UDropdownMenu :items="modelPresetMenu">
           <UButton
@@ -281,14 +307,21 @@ const technicalLabel = computed(() => {
       </div>
       <div v-if="selectedModelPreset" class="text-[11px] text-slate-400">
         <span class="text-slate-300">{{ selectedModelPreset.name }}</span>
-        — base {{ selectedModelPreset.baseModelId
-        }}<span v-if="Object.keys(selectedModelPreset.overrides).length">
-          , {{ Object.keys(selectedModelPreset.overrides).length }} override(s)</span
+        {{ t('inspector.runSettings.modelPresetBase', { model: selectedModelPreset.baseModelId })
+        }}<span v-if="Object.keys(selectedModelPreset.overrides).length">{{
+          t(
+            'inspector.runSettings.modelPresetOverrides',
+            { count: Object.keys(selectedModelPreset.overrides).length },
+            Object.keys(selectedModelPreset.overrides).length,
+          )
+        }}</span
         >.
-        <span v-if="!block.modelPresetId" class="text-slate-500">(workspace default)</span>
+        <span v-if="!block.modelPresetId" class="text-slate-500">{{
+          t('inspector.runSettings.workspaceDefaultParen')
+        }}</span>
       </div>
       <div v-else class="text-[11px] text-slate-500">
-        No preset configured — agents run on the deployment's default routing.
+        {{ t('inspector.runSettings.modelPresetEmpty') }}
       </div>
       <div
         v-if="unavailablePresetModels.length"
@@ -301,29 +334,31 @@ const technicalLabel = computed(() => {
           />
           <div class="min-w-0">
             <p>
-              Not available under the current configuration:
-              <span class="text-amber-100">{{ unavailablePresetModels.join(', ') }}</span
-              >. This task would fail on those steps.
+              <i18n-t keypath="inspector.runSettings.unavailableModels" tag="span" scope="global">
+                <template #models>
+                  <span class="text-amber-100">{{ unavailablePresetModels.join(', ') }}</span>
+                </template>
+              </i18n-t>
             </p>
             <div class="mt-1.5 flex flex-wrap gap-2">
               <button
                 class="font-medium text-amber-100 underline-offset-2 hover:underline"
                 @click="ui.openModelConfig()"
               >
-                Edit presets
+                {{ t('inspector.runSettings.editPresets') }}
               </button>
               <button
                 class="font-medium text-amber-100 underline-offset-2 hover:underline"
                 @click="ui.openVendorCredentials()"
               >
-                Configure vendors
+                {{ t('inspector.runSettings.configureVendors') }}
               </button>
             </div>
           </div>
         </div>
       </div>
       <p class="mt-1 text-[11px] text-slate-500">
-        Changing this affects only steps that haven't started yet.
+        {{ t('inspector.runSettings.modelPresetChangeHint') }}
       </p>
     </div>
 
@@ -331,7 +366,7 @@ const technicalLabel = computed(() => {
     <div>
       <div class="mb-1 flex items-center justify-between">
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          Task kind
+          {{ t('inspector.runSettings.taskKind') }}
         </span>
         <UDropdownMenu :items="technicalMenu">
           <UButton
@@ -347,14 +382,13 @@ const technicalLabel = computed(() => {
       </div>
       <div class="text-[11px] text-slate-500">
         <template v-if="block.technical === true">
-          Technical — the implementer treats the task definition as primary and the spec as a
-          regression reference; the spec-writer may produce no business specs.
+          {{ t('inspector.runSettings.technicalHint.technical') }}
         </template>
         <template v-else-if="block.technical === false">
-          Business — the specification leads, as usual.
+          {{ t('inspector.runSettings.technicalHint.business') }}
         </template>
         <template v-else>
-          Auto-detect — inferred from the spec phase. Set it explicitly to override.
+          {{ t('inspector.runSettings.technicalHint.unset') }}
         </template>
       </div>
     </div>
@@ -363,12 +397,14 @@ const technicalLabel = computed(() => {
     <div>
       <div class="mb-1 flex items-center justify-between">
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          Issue writeback
+          {{ t('inspector.runSettings.issueWriteback') }}
         </span>
       </div>
       <div class="space-y-1.5">
         <div class="flex items-center justify-between">
-          <span class="text-[11px] text-slate-400">Comment on PR open</span>
+          <span class="text-[11px] text-slate-400">{{
+            t('inspector.runSettings.commentOnPrOpen')
+          }}</span>
           <UDropdownMenu :items="writebackMenu(setCommentOnPrOpen)">
             <UButton
               size="xs"
@@ -381,7 +417,9 @@ const technicalLabel = computed(() => {
           </UDropdownMenu>
         </div>
         <div class="flex items-center justify-between">
-          <span class="text-[11px] text-slate-400">Close on merge</span>
+          <span class="text-[11px] text-slate-400">{{
+            t('inspector.runSettings.closeOnMerge')
+          }}</span>
           <UDropdownMenu :items="writebackMenu(setResolveOnMerge)">
             <UButton
               size="xs"
@@ -395,7 +433,7 @@ const technicalLabel = computed(() => {
         </div>
       </div>
       <div class="mt-1 text-[11px] text-slate-500">
-        Writes back to this task's linked tracker issue. Overrides the workspace default.
+        {{ t('inspector.runSettings.writebackHint') }}
       </div>
     </div>
 
@@ -403,7 +441,7 @@ const technicalLabel = computed(() => {
     <div>
       <div class="mb-1 flex items-center justify-between">
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          Responsible product
+          {{ t('inspector.runSettings.responsibleProduct') }}
         </span>
         <UDropdownMenu :items="responsibleMenu">
           <UButton
@@ -427,7 +465,7 @@ const technicalLabel = computed(() => {
         </UBadge>
       </div>
       <div v-else class="text-[11px] text-slate-500">
-        Unassigned — set a product owner to notify them when requirement review flags this task.
+        {{ t('inspector.runSettings.responsibleEmpty') }}
       </div>
     </div>
 
@@ -435,7 +473,7 @@ const technicalLabel = computed(() => {
     <div>
       <div class="flex items-center justify-between gap-2">
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          Auto-start dependents
+          {{ t('inspector.runSettings.autoStartDependents') }}
         </span>
         <USwitch
           size="sm"
@@ -444,8 +482,7 @@ const technicalLabel = computed(() => {
         />
       </div>
       <div class="mt-1 text-[11px] text-slate-500">
-        When this task merges, automatically start the tasks that depend on it (once their other
-        dependencies are also done).
+        {{ t('inspector.runSettings.autoStartHint') }}
       </div>
     </div>
   </div>

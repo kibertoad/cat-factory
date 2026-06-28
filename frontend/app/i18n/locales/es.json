@@ -308,5 +308,407 @@
         "step3": "Copia todo el contenido de auth.json, pégalo abajo y elige una contraseña personal para protegerlo."
       }
     }
+  },
+  "inspector": {
+    "container": {
+      "modules": "Módulos ({count})",
+      "taskCount": "{count} tarea | {count} tareas",
+      "allTasks": "Todas las tareas ({count})",
+      "tasks": "Tareas ({count})",
+      "addTask": "Añadir tarea",
+      "noTasks": "Aún no hay tareas. Añade una para empezar a trabajar.",
+      "servicesHint": "Los servicios son de larga duración y no se completan. El trabajo ocurre en sus tareas y módulos."
+    },
+    "epicChildren": {
+      "title": "Tareas de la épica",
+      "doneCount": "{done}/{total} completadas",
+      "empty": "Aún no hay tareas en esta épica. Importa las hijas de una épica o asigna la épica de una tarea.",
+      "unassigned": "Sin asignar"
+    },
+    "recurring": {
+      "title": "Pipeline recurrente",
+      "active": "Activo",
+      "paused": "Pausado",
+      "intervalDays": "{count}d",
+      "intervalHours": "{count}h",
+      "anyDay": "cualquier día",
+      "cadence": "Cada {every} · {days}{window} · {timezone}",
+      "weekdays": {
+        "sun": "Dom",
+        "mon": "Lun",
+        "tue": "Mar",
+        "wed": "Mié",
+        "thu": "Jue",
+        "fri": "Vie",
+        "sat": "Sáb"
+      },
+      "nextRun": "Próxima ejecución: {time}",
+      "runNow": "Ejecutar ahora",
+      "pause": "Pausar",
+      "resume": "Reanudar",
+      "editCadence": "Editar cadencia",
+      "recentRuns": "Ejecuciones recientes",
+      "runStatus": {
+        "running": "En ejecución",
+        "done": "Completada",
+        "failed": "Fallida",
+        "skipped": "Omitida"
+      },
+      "updateFailed": "No se pudo actualizar la programación",
+      "runNowFailed": "No se pudo ejecutar ahora"
+    },
+    "fragments": {
+      "serviceTitle": "Buenas prácticas del servicio",
+      "serviceEmpty": "Ninguna. Los agentes que conocen el código en este servicio siguen su guía predeterminada."
+    },
+    "releaseHealth": {
+      "title": "Salud posterior al lanzamiento",
+      "clear": "Limpiar",
+      "connectPrompt": "Conecta una integración de observabilidad para vigilar este servicio tras los lanzamientos.",
+      "connectFirst": "Conecta primero una integración de observabilidad",
+      "connect": "Conectar",
+      "hint": "Los monitores y SLO que la verificación vigila después de que este servicio se publique. Separa los ids con comas.",
+      "monitorIds": "Ids de monitores",
+      "sloIds": "Ids de SLO",
+      "envTag": "Etiqueta de entorno (opcional)",
+      "saveMonitoring": "Guardar monitoreo",
+      "savedToast": "Monitoreo guardado",
+      "saveFailed": "No se pudo guardar la asignación",
+      "clearFailed": "No se pudo limpiar la asignación"
+    },
+    "testConfig": {
+      "title": "Infraestructura de pruebas",
+      "defaultEnv": "Entorno de pruebas predeterminado",
+      "defaultEnvHint": "El entorno predeterminado con el que se generan las tareas de este servicio. Cada tarea puede anularlo en su configuración de agente.",
+      "env": {
+        "ephemeral": "Entorno efímero",
+        "ephemeralHint": "las pruebas se ejecutan contra un entorno aprovisionado",
+        "local": "Local (docker-compose)",
+        "localHint": "el Tester levanta las dependencias localmente"
+      },
+      "composePath": "Ruta de docker-compose",
+      "browseRepo": "Explorar el repositorio en busca del archivo de compose",
+      "composeHint": "Lo usa el Tester para levantar localmente las dependencias del servicio.",
+      "selectComposeTitle": "Selecciona el archivo docker-compose",
+      "selectComposeHint": "Elige el archivo de compose en el repositorio. Su ruta se guarda relativa a la raíz del repo.",
+      "selected": "Seleccionado: {path}",
+      "noFileSelected": "Ningún archivo seleccionado.",
+      "useThisFile": "Usar este archivo",
+      "noInfra": "Sin dependencias de infraestructura (el Tester no levanta nada)",
+      "missingInfra": "Define una ruta de docker-compose o habilita sin dependencias de infraestructura; de lo contrario, un pipeline con un Tester no se iniciará.",
+      "provisioningTitle": "Aprovisionamiento del entorno efímero",
+      "provisioningHint": "Una indicación para aprovisionar el entorno de pruebas efímero de este servicio: en qué proveedor de nube desplegar y qué tamaño de instancia solicitar. Se ignora en las pruebas locales (docker-compose).",
+      "cloudProvider": "Proveedor de nube",
+      "instanceSize": "Tamaño de instancia",
+      "providers": {
+        "docker": "Docker (local)",
+        "custom": "Personalizado"
+      },
+      "sizes": {
+        "small": "Pequeño",
+        "medium": "Mediano",
+        "large": "Grande",
+        "xlarge": "Extra grande"
+      }
+    },
+    "agentConfig": {
+      "title": "Configuración del agente",
+      "inherited": "heredado del servicio",
+      "frozen": "Congelado: el agente ya ha comenzado"
+    },
+    "dependencies": {
+      "title": "Depende de",
+      "merged": "Fusionado",
+      "notMerged": "Aún sin fusionar",
+      "empty": "Sin dependencias. Puede ejecutarse en cualquier momento.",
+      "blocked": "Bloqueado hasta que se fusionen las dependencias."
+    },
+    "estimate": {
+      "title": "Estimación",
+      "complexity": "Complejidad",
+      "risk": "Riesgo",
+      "impact": "Impacto"
+    },
+    "execution": {
+      "stage": {
+        "incorporating": "Incorporando…",
+        "reviewing": "Revisando de nuevo…",
+        "recommending": "Recomendando…"
+      },
+      "prNumber": "PR n.º {number}",
+      "pullRequest": "Pull request",
+      "stepState": {
+        "pending": "Pendiente",
+        "working": "Trabajando",
+        "waiting_decision": "Requiere decisión",
+        "done": "Completado"
+      },
+      "failed": "Fallido",
+      "needsDecision": "Requiere decisión",
+      "needsApproval": "Requiere aprobación",
+      "spinningUp": "Iniciando…",
+      "stop": "Detener",
+      "stopTooltip": "Detener la ejecución pero conservarla (legible y reintentable)",
+      "reset": "Restablecer",
+      "resetTooltip": "Descartar esta ejecución y restablecer la tarea a planificada",
+      "viewDetailsOutput": "Ver detalles y leer la salida",
+      "viewDetails": "Ver detalles del paso",
+      "companion": "Acompañante",
+      "companionTooltip": "Acompañante de un paso productor",
+      "subtasksProgress": "{completed} de {total} subtareas completadas, {inProgress} en progreso",
+      "subtasksDone": "{completed} de {total} subtareas completadas",
+      "resolve": "Resolver",
+      "decide": "Decidir",
+      "review": "Revisar",
+      "approve": "Aprobar",
+      "fragmentsTooltip": "Fragmentos de buenas prácticas incorporados en este paso: {fragments}",
+      "standardsApplied": "{count} estándar aplicado | {count} estándares aplicados",
+      "companionOf": "{label} (acompañante)",
+      "merged": "Fusionado",
+      "open": "Abierto",
+      "mergePr": "Fusionar PR"
+    },
+    "structure": {
+      "module": "Módulo",
+      "modulePlaceholder": "p. ej. Sesiones (creado al implementar si es nuevo)",
+      "bestPractices": "Buenas prácticas",
+      "bestPracticesEmpty": "Ninguna. Los agentes siguen su guía predeterminada."
+    },
+    "runSettings": {
+      "unassigned": "Sin asignar",
+      "workspaceDefault": "Predeterminado del espacio de trabajo",
+      "workspaceDefaultParen": "(predeterminado del espacio de trabajo)",
+      "defaultPresetThresholds": "Predeterminado ({name}): {thresholds}",
+      "defaultPreset": "Predeterminado ({name})",
+      "noDefault": "Sin predeterminado",
+      "inheritWorkspace": "Heredar del espacio de trabajo",
+      "on": "Activado",
+      "off": "Desactivado",
+      "inheritOn": "Heredar (activado)",
+      "inheritOff": "Heredar (desactivado)",
+      "technical": {
+        "unset": "Sin definir (detección automática)",
+        "technical": "Técnica",
+        "business": "De negocio"
+      },
+      "pipeline": "Pipeline",
+      "pipelineEmpty": "Sin predeterminado. Elige un pipeline cuando ejecutes esta tarea.",
+      "mergePolicy": "Política de fusión",
+      "mergePresetDetail": "{name}: fusión automática cuando complejidad ≤ {complexity}, riesgo ≤ {risk}, impacto ≤ {impact}; hasta {attempts} intentos de corrección de CI.",
+      "mergePresetEmpty": "No hay preajuste configurado. El fusionador genera una notificación de revisión para cada PR.",
+      "modelPreset": "Preajuste de modelo",
+      "modelPresetBase": "base {model}",
+      "modelPresetOverrides": ", {count} anulación | , {count} anulaciones",
+      "modelPresetEmpty": "No hay preajuste configurado. Los agentes se ejecutan con el enrutamiento predeterminado del despliegue.",
+      "unavailableModels": "No disponibles con la configuración actual: {models}. Esta tarea fallaría en esos pasos.",
+      "editPresets": "Editar preajustes",
+      "configureVendors": "Configurar proveedores",
+      "modelPresetChangeHint": "Cambiar esto solo afecta a los pasos que aún no han comenzado.",
+      "taskKind": "Tipo de tarea",
+      "technicalHint": {
+        "technical": "Técnica: el implementador trata la definición de la tarea como principal y la especificación como referencia de regresión; el spec-writer puede no producir especificaciones de negocio.",
+        "business": "De negocio: la especificación lidera, como es habitual.",
+        "unset": "Detección automática: se infiere de la fase de especificación. Defínela explícitamente para anularla."
+      },
+      "issueWriteback": "Reescritura de incidencias",
+      "commentOnPrOpen": "Comentar al abrir el PR",
+      "closeOnMerge": "Cerrar al fusionar",
+      "writebackHint": "Reescribe en la incidencia del tracker vinculada a esta tarea. Anula el valor predeterminado del espacio de trabajo.",
+      "responsibleProduct": "Producto responsable",
+      "responsibleEmpty": "Sin asignar. Define un responsable de producto para notificarle cuando la revisión de requisitos marque esta tarea.",
+      "autoStartDependents": "Iniciar dependientes automáticamente",
+      "autoStartHint": "Cuando esta tarea se fusione, inicia automáticamente las tareas que dependen de ella (una vez que sus otras dependencias también estén completas)."
+    }
+  },
+  "panels": {
+    "decision": {
+      "title": "Se requiere una decisión",
+      "agentOnBlock": "{agent} en {block}",
+      "visualizationHint": "Esto es una visualización. Cualquier elección simplemente reanuda el pipeline."
+    },
+    "stepRestart": {
+      "restartFromStep": "Reiniciar el pipeline desde este paso",
+      "restartFromHere": "Reiniciar desde aquí"
+    },
+    "structuredResult": {
+      "fallbackTitle": "Resultado del agente",
+      "titleWithBlock": "{label}: {title}",
+      "fallbackDescription": "Salida estructurada del agente",
+      "structuredOutput": "Salida estructurada",
+      "noResult": "Aún no hay resultado.",
+      "noResultHint": "La salida estructurada aparece cuando este agente termina. Mientras se ejecuta, el paso muestra el progreso en vivo en el tablero."
+    },
+    "testReport": {
+      "title": "Informe de pruebas",
+      "greenlit": "Aprobado",
+      "needsFixes": "Requiere correcciones",
+      "fixAttempts": "{count}/{max} intentos de corrección",
+      "fixing": "· corrigiendo…",
+      "tested": "Probado",
+      "outcomes": "Resultados",
+      "concerns": "Inquietudes"
+    },
+    "stepMeta": {
+      "stateLabel": "Estado",
+      "duration": "Duración",
+      "elapsed": "transcurrido",
+      "step": "Paso",
+      "stepOf": "{number} de {total}",
+      "started": "Iniciado",
+      "finished": "Finalizado",
+      "model": "Modelo",
+      "notRecorded": "No registrado",
+      "run": "Ejecución",
+      "clickToCopy": "{id} (haz clic para copiar)",
+      "spinningUpContainer": "Iniciando contenedor…",
+      "subtasks": "Subtareas · {completed}/{total}",
+      "standardsApplied": "Estándares aplicados",
+      "decision": "Decisión",
+      "awaitingChoice": "Esperando una elección humana",
+      "approvalGate": "Verificación de aprobación",
+      "companionReview": "Revisión del acompañante",
+      "correctionIterations": "{count} iteración de corrección. | {count} iteraciones de corrección.",
+      "state": {
+        "pending": "Pendiente",
+        "working": "Trabajando",
+        "waiting_decision": "Requiere entrada",
+        "done": "Completado",
+        "failed": "Fallido"
+      },
+      "approvalStatus": {
+        "pending": "Pendiente",
+        "approved": "Aprobado",
+        "changes_requested": "Cambios solicitados",
+        "rejected": "Rechazado"
+      }
+    },
+    "stepDetail": {
+      "contents": "Contenidos",
+      "details": "Detalles",
+      "approvalRequired": "Se requiere aprobación",
+      "decisionRequired": "Se requiere una decisión",
+      "expandAll": "Expandir todas las secciones",
+      "collapseAll": "Contraer todas las secciones",
+      "copyRawOutput": "Copiar salida sin procesar",
+      "closeEsc": "Cerrar (Esc)",
+      "companionCapHeading": "{agent} alcanzó su límite de {attempts} intentos de reelaboración, aún por debajo del umbral de {threshold}.",
+      "companionCapDetail": "Haz una ronda más de reelaboración automática, avanza al siguiente paso aceptando la salida actual, o detén y restablece la tarea para que puedas editar las entradas y reenviarla.",
+      "infraAttempts": "Intentos de infraestructura",
+      "hideInfraAttempts": "Ocultar intentos de infraestructura",
+      "editingConclusions": "Editando las conclusiones",
+      "editConclusionsPlaceholder": "Edita las conclusiones del agente; tus cambios se guardan cuando apruebas…",
+      "noProseOutput": "Este agente no produjo salida en prosa.",
+      "approveWithCorrections": "Aprobar con correcciones",
+      "reviewAndApprove": "Revisar y aprobar",
+      "editHint": "Edita las conclusiones a la izquierda; tus cambios se guardan cuando apruebas.",
+      "reviewHint": "Haz clic en cualquier bloque de la salida para comentarlo, o deja comentarios generales abajo.",
+      "editingNotice": "Estás editando las conclusiones directamente. Las ediciones manuales no se pueden combinar con comentarios por bloque. Aprueba para guardarlas, o cancela para volver a la revisión.",
+      "commentingOn": "Comentando en",
+      "commentPlaceholder": "Deja un comentario en este bloque…",
+      "addComment": "Añadir comentario",
+      "commentN": "Comentario {number}",
+      "removeComment": "Quitar comentario",
+      "overallFeedback": "Comentarios generales / motivo del rechazo",
+      "overallFeedbackPlaceholder": "Describe los cambios que el agente debe hacer (opcional si dejaste comentarios por bloque)…",
+      "approveWithEdits": "Aprobar con estas ediciones",
+      "cancelEdits": "Cancelar ediciones",
+      "approveAndProceed": "Aprobar y continuar",
+      "rejectConfirmPrompt": "¿Rechazar esta propuesta y detener la ejecución por completo?",
+      "confirmReject": "Confirmar rechazo",
+      "requestChanges": "Solicitar cambios",
+      "reject": "Rechazar",
+      "requestChangesHint": "Solicitar cambios vuelve a ejecutar este paso con tus comentarios y observaciones. Rechazar detiene la ejecución por completo."
+    },
+    "inspector": {
+      "frameStatus": {
+        "planned": "Sin tareas",
+        "ready": "En vivo",
+        "in_progress": "Activo",
+        "blocked": "Requiere atención",
+        "pr_ready": "Activo",
+        "done": "En vivo"
+      },
+      "deleteRecurringPipeline": "Eliminar pipeline recurrente",
+      "deleteTask": "Eliminar tarea",
+      "deleteModule": "Eliminar módulo",
+      "deleteService": "Eliminar servicio",
+      "titlePlaceholder": "Título…",
+      "reworkedRequirements": "Requisitos reelaborados",
+      "agentStepsUseDocument": "Los pasos del agente usan este documento.",
+      "open": "Abrir",
+      "originalDescriptionFrozen": "Descripción original (congelada)",
+      "noDescription": "Sin descripción",
+      "describeBlock": "Describe este bloque…",
+      "taskStartedLocked": "Esta tarea ha comenzado. Sus detalles están bloqueados.",
+      "lastIncorporatedRequirements": "Últimos requisitos incorporados",
+      "priorDocHint": "De la revisión anterior. Úsalo como base: edita la descripción de arriba y reenvíala.",
+      "bootstrapping": "Inicializando…",
+      "importIssue": "Importar incidencia",
+      "connectTracker": "Conectar un tracker",
+      "spawnFromDocument": "Generar desde documento",
+      "viewRequirements": "Ver requisitos",
+      "reRun": "Reejecutar",
+      "run": "Ejecutar",
+      "focus": "Enfocar"
+    }
+  },
+  "observability": {
+    "modelActivity": "Actividad del modelo",
+    "viewAllCalls": "Ver todas las llamadas →",
+    "providedContext": "Contexto proporcionado",
+    "exportJson": "Exportar JSON",
+    "exportHint": "Descarga una exportación JSON de esta ejecución, apta para LLM",
+    "closeEsc": "Cerrar (Esc)",
+    "loadingActivity": "Cargando actividad del modelo…",
+    "loadingContext": "Cargando contexto proporcionado…",
+    "noCalls": "No se registraron llamadas al modelo en esta ejecución.",
+    "noContext": "No se almacenó contexto del agente para esta ejecución. Se captura por despacho cuando el espacio de trabajo tiene activado 'Almacenar contexto completo del agente'.",
+    "summary": {
+      "calls": "Llamadas",
+      "tokensInOut": "Tokens (entrada / salida)",
+      "transportOverhead": "Sobrecarga de transporte",
+      "modelExecution": "Ejecución del modelo",
+      "truncated": "{count} truncada | {count} truncadas"
+    },
+    "metricsBar": {
+      "calls": "{count} llamada | {count} llamadas",
+      "promptCompletionTokens": "Tokens de prompt / completado",
+      "cachedTokens": "({tokens} en caché)",
+      "cachedTokensHint": "Tokens de prompt servidos desde la caché del proveedor",
+      "errors": "{count} error | {count} errores",
+      "warnings": "{count} advertencia | {count} advertencias",
+      "outputLimit": "Límite de salida",
+      "truncatedCalls": "{count} llamada truncada en el límite | {count} llamadas truncadas en el límite",
+      "transportVsExecution": "Transporte frente a ejecución",
+      "transportOverhead": "Sobrecarga de transporte / proxy",
+      "modelExecution": "Ejecución del modelo"
+    },
+    "call": {
+      "tokensTitle": "{prompt} tokens de prompt / {completion} de completado",
+      "outputUsedVsLimit": "Salida usada frente al límite",
+      "transportVsExecution": "Sobrecarga de transporte / ejecución del modelo",
+      "error": "error",
+      "ok": "ok",
+      "messages": "{count} mensajes",
+      "tools": "{count} herramientas",
+      "streamed": "en streaming",
+      "buffered": "en búfer",
+      "maxTokens": "max_tokens {value}",
+      "promptCached": "{cached}/{prompt} de prompt en caché",
+      "total": "total {duration}",
+      "prompt": "Prompt",
+      "promptPrefixOmitted": "(solo mensajes nuevos: {count} anteriores omitidos)",
+      "response": "Respuesta",
+      "reasoning": "Razonamiento"
+    },
+    "context": {
+      "injectedFiles": "Archivos de contexto inyectados",
+      "bestPracticeFragments": "Fragmentos de buenas prácticas",
+      "filesCount": "{count} archivos",
+      "fragmentsCount": "{count} fragmentos",
+      "systemPrompt": "Prompt del sistema",
+      "userPrompt": "Prompt del usuario",
+      "details": "Detalles"
+    }
   }
 }

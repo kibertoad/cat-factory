@@ -28,6 +28,7 @@ const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
 const recurring = useRecurringPipelinesStore()
 const requirements = useRequirementsStore()
+const { t } = useI18n()
 
 // When the selected task block backs a recurring pipeline, the inspector shows the
 // schedule controls + history, and "Delete" removes the schedule (block + history).
@@ -58,20 +59,20 @@ const instance = computed(() => execution.getInstance(block.value?.executionId))
 const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) : null))
 
 // Containers show a derived activity status (never "done"); tasks use their own.
-const FRAME_LABEL: Record<BlockStatus, string> = {
-  planned: 'No tasks',
-  ready: 'Live',
-  in_progress: 'Active',
-  blocked: 'Needs attention',
-  pr_ready: 'Active',
-  done: 'Live',
+const FRAME_LABEL_KEYS: Record<BlockStatus, string> = {
+  planned: 'panels.inspector.frameStatus.planned',
+  ready: 'panels.inspector.frameStatus.ready',
+  in_progress: 'panels.inspector.frameStatus.in_progress',
+  blocked: 'panels.inspector.frameStatus.blocked',
+  pr_ready: 'panels.inspector.frameStatus.pr_ready',
+  done: 'panels.inspector.frameStatus.done',
 }
 const effectiveStatus = computed<BlockStatus>(() =>
   isContainer.value ? board.frameStatus(block.value!.id) : block.value!.status,
 )
 const statusMeta = computed(() => (block.value ? STATUS_META[effectiveStatus.value] : null))
 const statusLabel = computed(() =>
-  isContainer.value ? FRAME_LABEL[effectiveStatus.value] : statusMeta.value!.label,
+  isContainer.value ? t(FRAME_LABEL_KEYS[effectiveStatus.value]) : statusMeta.value!.label,
 )
 
 const runnable = computed(() => (block.value ? board.isRunnable(block.value.id) : false))
@@ -80,12 +81,12 @@ const runnable = computed(() => (block.value ? board.isRunnable(block.value.id) 
 // reads as "Delete task" rather than ambiguously removing the whole service.
 const deleteLabel = computed(() =>
   schedule.value
-    ? 'Delete recurring pipeline'
+    ? t('panels.inspector.deleteRecurringPipeline')
     : isTask.value
-      ? 'Delete task'
+      ? t('panels.inspector.deleteTask')
       : level.value === 'module'
-        ? 'Delete module'
-        : 'Delete service',
+        ? t('panels.inspector.deleteModule')
+        : t('panels.inspector.deleteService'),
 )
 
 // A task is "started" once a pipeline has been launched on it (it has an
@@ -252,7 +253,7 @@ const showOriginalDescription = ref(false)
           v-model="block.title"
           size="sm"
           class="w-full"
-          placeholder="Title…"
+          :placeholder="t('panels.inspector.titlePlaceholder')"
           @change="saveTitle"
           @blur="saveTitle"
         />
@@ -265,13 +266,15 @@ const showOriginalDescription = ref(false)
               class="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-400"
             >
               <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
-              Reworked requirements
+              {{ t('panels.inspector.reworkedRequirements') }}
             </div>
             <p class="line-clamp-5 whitespace-pre-line text-[13px] leading-relaxed text-slate-300">
               {{ reqReworkedText }}
             </p>
             <div class="mt-2 flex items-center justify-between gap-2">
-              <p class="text-[11px] text-slate-500">Agent steps use this document.</p>
+              <p class="text-[11px] text-slate-500">
+                {{ t('panels.inspector.agentStepsUseDocument') }}
+              </p>
               <UButton
                 color="neutral"
                 variant="link"
@@ -279,7 +282,7 @@ const showOriginalDescription = ref(false)
                 icon="i-lucide-maximize-2"
                 @click="ui.openRequirementReview(block.id)"
               >
-                Open
+                {{ t('panels.inspector.open') }}
               </UButton>
             </div>
           </div>
@@ -290,7 +293,7 @@ const showOriginalDescription = ref(false)
             :icon="showOriginalDescription ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
             @click="showOriginalDescription = !showOriginalDescription"
           >
-            Original description (frozen)
+            {{ t('panels.inspector.originalDescriptionFrozen') }}
           </UButton>
           <UTextarea
             v-if="showOriginalDescription"
@@ -300,7 +303,7 @@ const showOriginalDescription = ref(false)
             size="sm"
             class="w-full"
             disabled
-            placeholder="No description"
+            :placeholder="t('panels.inspector.noDescription')"
           />
         </template>
 
@@ -313,13 +316,13 @@ const showOriginalDescription = ref(false)
             size="sm"
             class="w-full"
             :disabled="!editable"
-            placeholder="Describe this block…"
+            :placeholder="t('panels.inspector.describeBlock')"
             @change="saveDescription"
             @blur="saveDescription"
           />
           <p v-if="isTask && !editable" class="flex items-center gap-1 text-[11px] text-slate-500">
             <UIcon name="i-lucide-lock" class="h-3 w-3" />
-            This task has started — its details are locked.
+            {{ t('panels.inspector.taskStartedLocked') }}
           </p>
 
           <!-- prior incorporated requirements kept as a base after a review-driven reset -->
@@ -328,13 +331,13 @@ const showOriginalDescription = ref(false)
               class="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
             >
               <UIcon name="i-lucide-history" class="h-3.5 w-3.5" />
-              Last incorporated requirements
+              {{ t('panels.inspector.lastIncorporatedRequirements') }}
             </div>
             <p class="line-clamp-5 whitespace-pre-line text-[13px] leading-relaxed text-slate-300">
               {{ reqReworkedText }}
             </p>
             <p class="mt-2 text-[11px] text-slate-500">
-              From the previous review. Use it as a base — edit the description above and resubmit.
+              {{ t('panels.inspector.priorDocHint') }}
             </p>
           </div>
         </template>
@@ -350,7 +353,7 @@ const showOriginalDescription = ref(false)
       >
         <span class="flex items-center gap-1.5 text-xs text-amber-300">
           <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
-          Bootstrapping…
+          {{ t('panels.inspector.bootstrapping') }}
         </span>
         <AgentStopButton :run-id="runningRun.runId" :kind="runningRun.kind" size="xs" />
       </div>
@@ -391,7 +394,11 @@ const showOriginalDescription = ref(false)
           icon="i-lucide-ticket"
           @click="ui.openTaskImport()"
         >
-          {{ tasks.anyOffered ? 'Import issue' : 'Connect a tracker' }}
+          {{
+            tasks.anyOffered
+              ? t('panels.inspector.importIssue')
+              : t('panels.inspector.connectTracker')
+          }}
         </UButton>
         <UButton
           v-if="isContainer && documents.available && documents.anyConnected"
@@ -401,7 +408,7 @@ const showOriginalDescription = ref(false)
           icon="i-lucide-wand-sparkles"
           @click="spawnFromDocument"
         >
-          Spawn from document
+          {{ t('panels.inspector.spawnFromDocument') }}
         </UButton>
       </div>
 
@@ -422,7 +429,7 @@ const showOriginalDescription = ref(false)
         icon="i-lucide-scroll-text"
         @click="ui.openServiceSpec(block.id)"
       >
-        View Requirements
+        {{ t('panels.inspector.viewRequirements') }}
       </UButton>
 
       <!-- service / module: tasks summary -->
@@ -461,7 +468,7 @@ const showOriginalDescription = ref(false)
             trailing-icon="i-lucide-chevron-down"
             :disabled="!runnable"
           >
-            {{ instance ? 'Re-run' : 'Run' }}
+            {{ instance ? t('panels.inspector.reRun') : t('panels.inspector.run') }}
           </UButton>
         </UDropdownMenu>
         <UButton
@@ -472,7 +479,7 @@ const showOriginalDescription = ref(false)
           icon="i-lucide-maximize-2"
           @click="ui.focus(block.id)"
         >
-          Focus
+          {{ t('panels.inspector.focus') }}
         </UButton>
         <UButton
           color="error"

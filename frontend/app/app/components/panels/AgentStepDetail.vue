@@ -27,6 +27,7 @@ const execution = useExecutionStore()
 const board = useBoardStore()
 const models = useModelsStore()
 const workspace = useWorkspaceStore()
+const { t } = useI18n()
 
 onMounted(() => models.ensureLoaded(workspace.workspaceId ?? undefined))
 
@@ -187,7 +188,7 @@ async function copyOutput() {
         >
           <div class="border-b border-slate-800 px-4 py-3">
             <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              Contents
+              {{ t('panels.stepDetail.contents') }}
             </div>
           </div>
           <nav class="flex-1 space-y-0.5 overflow-auto px-2 py-3">
@@ -200,7 +201,7 @@ async function copyOutput() {
               "
               @click="goTo('step-details')"
             >
-              Details
+              {{ t('panels.stepDetail.details') }}
             </button>
             <button
               v-for="s in tocSections"
@@ -242,7 +243,7 @@ async function copyOutput() {
                 class="mr-1"
               >
                 <UIcon name="i-lucide-shield-check" class="mr-1 h-3 w-3" />
-                Approval required
+                {{ t('panels.stepDetail.approvalRequired') }}
               </UBadge>
               <UBadge
                 v-else-if="companionExceeded"
@@ -252,7 +253,7 @@ async function copyOutput() {
                 class="mr-1"
               >
                 <UIcon name="i-lucide-alert-triangle" class="mr-1 h-3 w-3" />
-                Decision required
+                {{ t('panels.stepDetail.decisionRequired') }}
               </UBadge>
               <UButton
                 v-if="outline.sections.length"
@@ -260,7 +261,11 @@ async function copyOutput() {
                 color="neutral"
                 variant="ghost"
                 size="sm"
-                :title="allCollapsed ? 'Expand all sections' : 'Collapse all sections'"
+                :title="
+                  allCollapsed
+                    ? t('panels.stepDetail.expandAll')
+                    : t('panels.stepDetail.collapseAll')
+                "
                 @click="setAll(!allCollapsed)"
               />
               <UButton
@@ -269,7 +274,7 @@ async function copyOutput() {
                 color="neutral"
                 variant="ghost"
                 size="sm"
-                title="Copy raw output"
+                :title="t('panels.stepDetail.copyRawOutput')"
                 @click="copyOutput"
               />
               <!-- Restart the pipeline from this step (shared two-click confirm; resetting
@@ -286,7 +291,7 @@ async function copyOutput() {
                 color="neutral"
                 variant="ghost"
                 size="sm"
-                title="Close (Esc)"
+                :title="t('panels.stepDetail.closeEsc')"
                 @click="close"
               />
             </div>
@@ -323,8 +328,14 @@ async function copyOutput() {
                    (one more round / proceed with the current output / stop & reset) -->
               <IterationCapPrompt
                 v-if="companionExceeded"
-                :heading="`${agent.label} hit its ${step.companion?.maxAttempts}-attempt rework limit, still below the ${pctOf(latestVerdict?.threshold ?? 0)} bar.`"
-                detail="Do one more automatic rework round, proceed to the next step accepting the current output, or stop and reset the task so you can edit the inputs and resubmit."
+                :heading="
+                  t('panels.stepDetail.companionCapHeading', {
+                    agent: agent.label,
+                    attempts: step.companion?.maxAttempts,
+                    threshold: pctOf(latestVerdict?.threshold ?? 0),
+                  })
+                "
+                :detail="t('panels.stepDetail.companionCapDetail')"
                 :loading="resolvingCap"
                 @resolve="resolveCompanionCap"
               />
@@ -344,7 +355,9 @@ async function copyOutput() {
                   @click="showProvisioning = !showProvisioning"
                 >
                   {{
-                    showProvisioning ? 'Hide infrastructure attempts' : 'Infrastructure attempts'
+                    showProvisioning
+                      ? t('panels.stepDetail.hideInfraAttempts')
+                      : t('panels.stepDetail.infraAttempts')
                   }}
                 </UButton>
                 <ProvisioningLogsDrawer
@@ -363,7 +376,9 @@ async function copyOutput() {
               <section v-if="editing" class="scroll-mt-4">
                 <div class="mb-2 flex items-center gap-1.5 text-[11px] text-amber-400">
                   <UIcon name="i-lucide-pencil" class="h-3.5 w-3.5" />
-                  <span class="font-semibold uppercase tracking-wide">Editing the conclusions</span>
+                  <span class="font-semibold uppercase tracking-wide">{{
+                    t('panels.stepDetail.editingConclusions')
+                  }}</span>
                 </div>
                 <UTextarea
                   v-model="draftProposal"
@@ -372,7 +387,7 @@ async function copyOutput() {
                   size="sm"
                   class="w-full"
                   :ui="{ base: 'font-mono text-[12px] leading-relaxed' }"
-                  placeholder="Edit the agent's conclusions; your edits are saved when you approve…"
+                  :placeholder="t('panels.stepDetail.editConclusionsPlaceholder')"
                 />
               </section>
 
@@ -419,7 +434,7 @@ async function copyOutput() {
                 v-else
                 class="rounded-lg border border-dashed border-slate-800 py-6 text-center text-sm text-slate-500"
               >
-                This agent produced no prose output.
+                {{ t('panels.stepDetail.noProseOutput') }}
               </p>
             </div>
           </div>
@@ -434,14 +449,14 @@ async function copyOutput() {
         >
           <div class="border-b border-slate-800 px-4 py-3">
             <div class="text-[11px] font-semibold uppercase tracking-wide text-amber-400">
-              {{ editing ? 'Approve with corrections' : 'Review & approve' }}
-            </div>
-            <p class="mt-1 text-[12px] text-slate-400">
               {{
                 editing
-                  ? 'Edit the conclusions on the left; your edits are saved when you approve.'
-                  : 'Click any block in the output to comment on it, or leave overall feedback below.'
+                  ? t('panels.stepDetail.approveWithCorrections')
+                  : t('panels.stepDetail.reviewAndApprove')
               }}
+            </div>
+            <p class="mt-1 text-[12px] text-slate-400">
+              {{ editing ? t('panels.stepDetail.editHint') : t('panels.stepDetail.reviewHint') }}
             </p>
           </div>
 
@@ -450,8 +465,7 @@ async function copyOutput() {
               v-if="editing"
               class="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-[12px] leading-relaxed text-amber-200/90"
             >
-              You're editing the conclusions directly. Manual edits can't be combined with per-block
-              comments — approve to save them, or cancel to return to review.
+              {{ t('panels.stepDetail.editingNotice') }}
             </p>
             <template v-else>
               <!-- composer for the block the human just clicked -->
@@ -460,7 +474,7 @@ async function copyOutput() {
                 class="rounded-lg border border-indigo-500/40 bg-indigo-500/5 p-3"
               >
                 <div class="mb-1 text-[10px] uppercase tracking-wide text-indigo-300">
-                  Commenting on
+                  {{ t('panels.stepDetail.commentingOn') }}
                 </div>
                 <pre
                   class="mb-2 max-h-24 overflow-auto whitespace-pre-wrap rounded bg-slate-950/60 p-2 text-[11px] text-slate-300"
@@ -472,11 +486,11 @@ async function copyOutput() {
                   autoresize
                   size="sm"
                   class="w-full"
-                  placeholder="Leave a comment on this block…"
+                  :placeholder="t('panels.stepDetail.commentPlaceholder')"
                 />
                 <div class="mt-2 flex justify-end gap-2">
                   <UButton color="neutral" variant="ghost" size="xs" @click="cancelDraft">
-                    Cancel
+                    {{ t('common.cancel') }}
                   </UButton>
                   <UButton
                     color="primary"
@@ -484,7 +498,7 @@ async function copyOutput() {
                     :disabled="!draftBody.trim()"
                     @click="addDraftComment"
                   >
-                    Add comment
+                    {{ t('panels.stepDetail.addComment') }}
                   </UButton>
                 </div>
               </div>
@@ -497,11 +511,11 @@ async function copyOutput() {
               >
                 <div class="mb-1 flex items-start justify-between gap-2">
                   <div class="text-[10px] uppercase tracking-wide text-slate-500">
-                    Comment {{ idx + 1 }}
+                    {{ t('panels.stepDetail.commentN', { number: idx + 1 }) }}
                   </div>
                   <button
                     class="text-slate-500 transition hover:text-rose-400"
-                    title="Remove comment"
+                    :title="t('panels.stepDetail.removeComment')"
                     @click="removeComment(idx)"
                   >
                     <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
@@ -518,7 +532,7 @@ async function copyOutput() {
                 <label
                   class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
                 >
-                  Overall feedback / reject reason
+                  {{ t('panels.stepDetail.overallFeedback') }}
                 </label>
                 <UTextarea
                   v-model="feedback"
@@ -526,7 +540,7 @@ async function copyOutput() {
                   autoresize
                   size="sm"
                   class="w-full"
-                  placeholder="Describe the changes the agent should make (optional if you left per-block comments)…"
+                  :placeholder="t('panels.stepDetail.overallFeedbackPlaceholder')"
                 />
               </div>
             </template>
@@ -542,7 +556,7 @@ async function copyOutput() {
               :loading="submitting"
               @click="approveWithEdits"
             >
-              Approve with these edits
+              {{ t('panels.stepDetail.approveWithEdits') }}
             </UButton>
             <UButton
               color="neutral"
@@ -552,7 +566,7 @@ async function copyOutput() {
               :disabled="submitting"
               @click="cancelEditing"
             >
-              Cancel edits
+              {{ t('panels.stepDetail.cancelEdits') }}
             </UButton>
           </div>
 
@@ -567,7 +581,7 @@ async function copyOutput() {
               :loading="submitting"
               @click="approve"
             >
-              Approve &amp; proceed
+              {{ t('panels.stepDetail.approveAndProceed') }}
             </UButton>
             <UButton
               color="primary"
@@ -578,7 +592,7 @@ async function copyOutput() {
               :disabled="rejectArmed || submitting"
               @click="startEditing"
             >
-              Approve with corrections
+              {{ t('panels.stepDetail.approveWithCorrections') }}
             </UButton>
 
             <!-- destructive: a two-step inline confirm instead of a native dialog -->
@@ -587,7 +601,7 @@ async function copyOutput() {
               class="rounded-lg border border-rose-500/40 bg-rose-500/5 p-2.5"
             >
               <p class="mb-2 text-[11px] text-rose-200">
-                Reject this proposal and stop the run entirely?
+                {{ t('panels.stepDetail.rejectConfirmPrompt') }}
               </p>
               <div class="flex gap-2">
                 <UButton
@@ -598,7 +612,7 @@ async function copyOutput() {
                   :disabled="submitting"
                   @click="disarmReject"
                 >
-                  Cancel
+                  {{ t('common.cancel') }}
                 </UButton>
                 <UButton
                   color="error"
@@ -608,7 +622,7 @@ async function copyOutput() {
                   :loading="submitting"
                   @click="reject"
                 >
-                  Confirm reject
+                  {{ t('panels.stepDetail.confirmReject') }}
                 </UButton>
               </div>
             </div>
@@ -623,7 +637,7 @@ async function copyOutput() {
                 :loading="submitting"
                 @click="requestChanges"
               >
-                Request changes
+                {{ t('panels.stepDetail.requestChanges') }}
               </UButton>
               <UButton
                 color="error"
@@ -634,12 +648,11 @@ async function copyOutput() {
                 :disabled="submitting"
                 @click="armReject"
               >
-                Reject
+                {{ t('panels.stepDetail.reject') }}
               </UButton>
             </div>
             <p class="text-[10px] text-slate-500">
-              Request changes re-runs this step with your feedback &amp; comments. Reject stops the
-              run entirely.
+              {{ t('panels.stepDetail.requestChangesHint') }}
             </p>
           </div>
         </aside>

@@ -9,6 +9,7 @@ const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
 const fragments = useFragmentsStore()
+const { t } = useI18n()
 
 onMounted(() => fragments.ensureLoaded())
 
@@ -49,7 +50,7 @@ function removeFragment(id: string) {
   <div>
     <div class="mb-1 flex items-center justify-between">
       <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        Service best practices
+        {{ t('inspector.fragments.serviceTitle') }}
       </span>
       <UDropdownMenu v-if="fragmentMenu.length" :items="fragmentMenu">
         <UButton
@@ -76,7 +77,7 @@ function removeFragment(id: string) {
       </UBadge>
     </div>
     <div v-else class="text-[11px] text-slate-500">
-      None — code-aware agents on this service follow their default guidance.
+      {{ t('inspector.fragments.serviceEmpty') }}
     </div>
   </div>
 </template>

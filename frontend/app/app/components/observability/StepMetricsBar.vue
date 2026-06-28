@@ -19,6 +19,8 @@ import {
 const props = defineProps<{ metrics: StepMetrics; clickable?: boolean }>()
 defineEmits<{ inspect: [] }>()
 
+const { t } = useI18n()
+
 const m = computed(() => props.metrics)
 const headroom = computed(() => headroomRatio(m.value))
 const transport = computed(() => transportRatio(m.value))
@@ -38,24 +40,33 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
     <!-- header line: call count + tokens + warning/error badges -->
     <div class="flex items-center gap-2">
       <UIcon name="i-lucide-activity" class="h-3.5 w-3.5 shrink-0 text-slate-500" />
-      <span class="text-slate-300"> {{ m.calls }} {{ m.calls === 1 ? 'call' : 'calls' }} </span>
+      <span class="text-slate-300">
+        {{ t('observability.metricsBar.calls', { count: m.calls }, m.calls) }}
+      </span>
       <span class="text-slate-500">·</span>
-      <span class="tabular-nums text-slate-400" title="Prompt / completion tokens">
+      <span
+        class="tabular-nums text-slate-400"
+        :title="t('observability.metricsBar.promptCompletionTokens')"
+      >
         {{ formatTokens(m.promptTokens) }}↑ {{ formatTokens(m.completionTokens) }}↓
       </span>
       <span
         v-if="(m.cachedPromptTokens ?? 0) > 0"
         class="tabular-nums text-emerald-400/80"
-        title="Prompt tokens served from the provider's cache"
+        :title="t('observability.metricsBar.cachedTokensHint')"
       >
-        ({{ formatTokens(m.cachedPromptTokens ?? 0) }} cached)
+        {{
+          t('observability.metricsBar.cachedTokens', {
+            tokens: formatTokens(m.cachedPromptTokens ?? 0),
+          })
+        }}
       </span>
       <div class="ml-auto flex items-center gap-1">
         <UBadge v-if="m.errors > 0" color="error" variant="subtle" size="sm">
-          {{ m.errors }} error{{ m.errors === 1 ? '' : 's' }}
+          {{ t('observability.metricsBar.errors', { count: m.errors }, m.errors) }}
         </UBadge>
         <UBadge v-if="m.warnings > 0" color="warning" variant="subtle" size="sm">
-          {{ m.warnings }} warning{{ m.warnings === 1 ? '' : 's' }}
+          {{ t('observability.metricsBar.warnings', { count: m.warnings }, m.warnings) }}
         </UBadge>
         <UIcon v-if="clickable" name="i-lucide-chevron-right" class="h-3.5 w-3.5 text-slate-600" />
       </div>
@@ -64,7 +75,7 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
     <!-- output-limit headroom -->
     <div v-if="headroom !== null" class="mt-2">
       <div class="flex items-center justify-between text-[11px]">
-        <span class="text-slate-500">Output limit</span>
+        <span class="text-slate-500">{{ t('observability.metricsBar.outputLimit') }}</span>
         <span class="tabular-nums" :class="headroomTone">
           {{ formatTokens(m.peakCompletionTokens) }} /
           {{ formatTokens(m.maxOutputTokens ?? 0) }} ({{ pct(headroom) }}%)
@@ -84,14 +95,20 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
         />
       </div>
       <p v-if="m.truncatedCalls > 0" class="mt-1 text-[11px] text-rose-400">
-        {{ m.truncatedCalls }} call{{ m.truncatedCalls === 1 ? '' : 's' }} truncated at the limit
+        {{
+          t(
+            'observability.metricsBar.truncatedCalls',
+            { count: m.truncatedCalls },
+            m.truncatedCalls,
+          )
+        }}
       </p>
     </div>
 
     <!-- transport overhead vs model execution -->
     <div v-if="transport !== null" class="mt-2">
       <div class="flex items-center justify-between text-[11px]">
-        <span class="text-slate-500">Transport vs execution</span>
+        <span class="text-slate-500">{{ t('observability.metricsBar.transportVsExecution') }}</span>
         <span class="tabular-nums text-slate-400">
           {{ formatMs(m.overheadMs) }} / {{ formatMs(m.upstreamMs) }}
         </span>
@@ -100,9 +117,12 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
         <div
           class="h-full bg-sky-400/80"
           :style="{ width: `${pct(transport)}%` }"
-          title="Transport / proxy overhead"
+          :title="t('observability.metricsBar.transportOverhead')"
         />
-        <div class="h-full bg-indigo-400/80 flex-1" title="Model execution" />
+        <div
+          class="h-full bg-indigo-400/80 flex-1"
+          :title="t('observability.metricsBar.modelExecution')"
+        />
       </div>
     </div>
   </div>
