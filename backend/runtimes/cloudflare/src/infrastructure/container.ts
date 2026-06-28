@@ -194,6 +194,7 @@ import {
   wireIncidentEnrichment,
   wirePullRequestReviewProvider,
 } from '@cat-factory/gates'
+import { registerGitLab, StaticGitLabTokenSource } from '@cat-factory/gitlab'
 import { GitHubPullRequestReviewProvider } from '@cat-factory/server'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
@@ -1649,6 +1650,19 @@ export function buildContainer(
   // provider survives the per-request rebuild, and so a deployment that ALSO wires a real provider
   // can't clobber the test's. Gates read their provider lazily at probe time, so the last write wins.
   clearGateProviders()
+
+  // Opt-in GitLab VCS provider (single-token model, mirroring local-mode's PAT). Registered
+  // in the process-wide VCS registry — like a gate provider, a deployment-global handle reset
+  // each build — so the neutral webhook route + any VcsConnectionRef holder resolves it. A
+  // no-op unless GITLAB_TOKEN is set; symmetric with the Node facade (local inherits it) per
+  // "keep the runtimes symmetric".
+  if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
+    registerGitLab({
+      tokenSource: new StaticGitLabTokenSource(env.GITLAB_TOKEN, config.gitlab.apiBase),
+      clock,
+      webhookSecret: config.gitlab.webhookSecret || undefined,
+    })
+  }
 
   // The unified provisioning event log lives in a SEPARATE D1 database (its own
   // binding + migrations) to isolate its high write churn. When wired, build the

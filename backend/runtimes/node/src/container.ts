@@ -117,6 +117,7 @@ import {
   wireIncidentEnrichment,
   wirePullRequestReviewProvider,
 } from '@cat-factory/gates'
+import { registerGitLab, StaticGitLabTokenSource } from '@cat-factory/gitlab'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
@@ -976,6 +977,18 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // wiring below (local mode wires a PAT-backed CI provider here that would otherwise clobber a
   // faked one) — gates read their provider lazily at probe time, so the last write wins.
   clearGateProviders()
+
+  // Opt-in GitLab VCS provider (single-token model, mirroring local-mode's PAT). Registered
+  // in the process-wide VCS registry so the neutral webhook route + any VcsConnectionRef
+  // holder resolves it. A no-op unless GITLAB_TOKEN is set; symmetric with the Worker facade
+  // (and inherited by local) per "keep the runtimes symmetric".
+  if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
+    registerGitLab({
+      tokenSource: new StaticGitLabTokenSource(env.GITLAB_TOKEN, config.gitlab.apiBase),
+      clock,
+      webhookSecret: config.gitlab.webhookSecret || undefined,
+    })
+  }
 
   // Honour the workspace's model presets at run time (block-pinned > the task's
   // selected/default model preset > env routing), uniformly for inline and container
