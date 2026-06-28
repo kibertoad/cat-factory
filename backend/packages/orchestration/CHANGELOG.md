@@ -1,5 +1,28 @@
 # @cat-factory/orchestration
 
+## 0.36.1
+
+### Patch Changes
+
+- 5363166: ExecutionService split, phase 1: lift the `deployer` and `tracker` step branches out of
+  `stepInstance`'s per-kind body into dedicated `StepHandler`s (built inline in the engine,
+  each delegating to the existing `runDeployer`/`runTracker` paths). Behaviour-preserving;
+  verified on both runtimes via the cross-runtime conformance suite.
+- 5363166: Begin splitting the `ExecutionService` god class (refactoring candidate #8). Phase 0:
+  introduce an engine-internal `StepHandler` registry that `stepInstance` dispatches to after
+  its fixed run-lifecycle preamble, with a single fallthrough handler delegating the entire
+  per-kind body unchanged (zero behaviour change — the safety net for the incremental,
+  conformance-gated migration that follows). Adds an optional `control` field to the kernel
+  `StepResolution` seam (consumed from a later phase; resolvers that omit it keep today's
+  advance-on-completion behaviour).
+- Updated dependencies [5363166]
+  - @cat-factory/kernel@0.45.1
+  - @cat-factory/agents@0.21.2
+  - @cat-factory/integrations@0.26.1
+  - @cat-factory/sandbox@0.8.25
+  - @cat-factory/spend@0.10.17
+  - @cat-factory/workspaces@0.9.8
+
 ## 0.36.0
 
 ### Minor Changes
