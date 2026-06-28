@@ -12,23 +12,28 @@ import type { ProviderConnectionKind } from '~/types/providerConnections'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 
+const { t } = useI18n()
 const ui = useUiStore()
 const store = useProviderConnectionsStore()
 const toast = useToast()
 
-const META: Record<ProviderConnectionKind, { title: string; icon: string; blurb: string }> = {
-  environment: {
-    title: 'Ephemeral environment provider',
-    icon: 'i-lucide-cloud',
-    blurb:
-      'Where the Tester agent runs against a live preview environment. Configure the per-workspace settings and credentials your provider needs.',
-  },
-  'runner-pool': {
-    title: 'Self-hosted runner pool',
-    icon: 'i-lucide-server-cog',
-    blurb:
-      'Where the coding agents run when not using Cloudflare Containers. Configure the pool scheduler endpoint and credentials.',
-  },
+// Per-kind icon (display-only). The title + blurb copy resolve through the i18n catalog
+// via literal keys keyed off the provider-connection kind (see TITLE_KEYS / BLURB_KEYS).
+const ICONS: Record<ProviderConnectionKind, string> = {
+  environment: 'i-lucide-cloud',
+  'runner-pool': 'i-lucide-server-cog',
+}
+
+// Exhaustive Record keyed off the provider-connection-kind union (a missing member fails
+// the typecheck); each value is a LITERAL catalog key so the typed-message-keys check sees
+// it. Leaf keys mirror the kind verbatim.
+const TITLE_KEYS: Record<ProviderConnectionKind, string> = {
+  environment: 'settings.providerConnection.kind.environment.title',
+  'runner-pool': 'settings.providerConnection.kind.runner-pool.title',
+}
+const BLURB_KEYS: Record<ProviderConnectionKind, string> = {
+  environment: 'settings.providerConnection.kind.environment.blurb',
+  'runner-pool': 'settings.providerConnection.kind.runner-pool.blurb',
 }
 
 const kind = computed<ProviderConnectionKind | null>(() => ui.providerConnectionKind)
@@ -40,7 +45,15 @@ const open = computed({
 })
 const back = useIntegrationBack(open)
 
-const meta = computed(() => (kind.value ? META[kind.value] : null))
+const meta = computed(() =>
+  kind.value
+    ? {
+        title: t(TITLE_KEYS[kind.value]),
+        icon: ICONS[kind.value],
+        blurb: t(BLURB_KEYS[kind.value]),
+      }
+    : null,
+)
 const descriptor = computed(() => (kind.value ? store.descriptorFor(kind.value) : null))
 const connection = computed(() => (kind.value ? store.connectionFor(kind.value) : null))
 
@@ -69,7 +82,7 @@ async function setDelegation(patch: {
   try {
     await settings.update(patch)
   } catch (e) {
-    notifyError('Could not update delegation', e)
+    notifyError(t('settings.providerConnection.delegation.updateFailed'), e)
   } finally {
     savingDelegation.value = false
   }
@@ -226,9 +239,13 @@ async function save() {
       await store.updateSecrets(kind.value, buildSecretsOnly())
     }
     resetDraft()
-    toast.add({ title: `${meta.value?.title} saved`, icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('settings.providerConnection.toast.saved', { title: meta.value?.title ?? '' }),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
-    notifyError('Could not save the connection', e)
+    notifyError(t('settings.providerConnection.toast.saveFailed'), e)
   } finally {
     busy.value = false
   }
@@ -240,9 +257,9 @@ async function remove() {
   try {
     await store.remove(kind.value)
     resetDraft()
-    toast.add({ title: 'Connection removed', icon: 'i-lucide-check' })
+    toast.add({ title: t('settings.providerConnection.toast.removed'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError('Could not remove the connection', e)
+    notifyError(t('settings.providerConnection.toast.removeFailed'), e)
   } finally {
     busy.value = false
   }
@@ -254,16 +271,24 @@ function fieldHelp(key: string): string | undefined {
   if (!f) return undefined
   const filled = (values.value[key] ?? '').trim()
   if (f.default !== undefined && !filled) {
-    return f.help ? `${f.help} · Defaults to ${f.default}` : `Defaults to ${f.default}`
+    const defaulted = t('settings.providerConnection.field.defaultsTo', { value: f.default })
+    return f.help ? `${f.help} · ${defaulted}` : defaulted
   }
   return f.help
 }
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="meta?.title ?? 'Provider'" :ui="{ content: 'max-w-xl' }">
+  <UModal
+    v-model:open="open"
+    :title="meta?.title ?? t('settings.providerConnection.fallbackTitle')"
+    :ui="{ content: 'max-w-xl' }"
+  >
     <template #title>
-      <IntegrationBackTitle :title="meta?.title ?? 'Provider'" @back="back" />
+      <IntegrationBackTitle
+        :title="meta?.title ?? t('settings.providerConnection.fallbackTitle')"
+        @back="back"
+      />
     </template>
     <template #body>
       <!-- Local-mode infrastructure delegation: the local-vs-external choice for BOTH
@@ -273,11 +298,11 @@ function fieldHelp(key: string): string | undefined {
         class="mb-4 space-y-3 rounded-lg border border-slate-700 bg-slate-900/40 p-3"
       >
         <div>
-          <h3 class="text-sm font-semibold text-slate-200">Local delegation</h3>
+          <h3 class="text-sm font-semibold text-slate-200">
+            {{ t('settings.providerConnection.delegation.title') }}
+          </h3>
           <p class="mt-1 text-[11px] text-slate-400">
-            By default this machine runs everything locally — container agents on host Docker, the
-            Tester's infrastructure via in-container docker-compose. Opt in below to delegate either
-            concern to an external service instead. Applies only in local mode.
+            {{ t('settings.providerConnection.delegation.intro') }}
           </p>
         </div>
 
@@ -290,20 +315,28 @@ function fieldHelp(key: string): string | undefined {
               :disabled="savingDelegation || !runnerPoolRegistered"
               @update:model-value="(v) => setDelegation({ delegateAgentsToRunnerPool: v })"
             />
-            <span class="text-sm text-slate-200">Run container agents on the runner pool</span>
+            <span class="text-sm text-slate-200">
+              {{ t('settings.providerConnection.delegation.agentsToggle') }}
+            </span>
           </label>
           <p class="pl-9 text-[11px] text-slate-400">
-            Dispatch every container agent (coder, tester, merger, bootstrap, …) to this workspace's
-            self-hosted runner pool instead of host Docker.
+            {{ t('settings.providerConnection.delegation.agentsHint') }}
             <template v-if="!runnerPoolRegistered">
-              <button
-                type="button"
-                class="text-sky-400 underline underline-offset-2 hover:text-sky-300"
-                @click="openRunnerPoolPanel"
+              <i18n-t
+                keypath="settings.providerConnection.delegation.registerPoolPrompt"
+                tag="span"
+                scope="global"
               >
-                Register a runner pool
-              </button>
-              first to enable this.
+                <template #link>
+                  <button
+                    type="button"
+                    class="text-sky-400 underline underline-offset-2 hover:text-sky-300"
+                    @click="openRunnerPoolPanel"
+                  >
+                    {{ t('settings.providerConnection.delegation.registerPoolLink') }}
+                  </button>
+                </template>
+              </i18n-t>
             </template>
           </p>
         </div>
@@ -318,12 +351,11 @@ function fieldHelp(key: string): string | undefined {
               @update:model-value="(v) => setDelegation({ delegateTestEnvToProvider: v })"
             />
             <span class="text-sm text-slate-200">
-              Provision Tester environments via the provider
+              {{ t('settings.providerConnection.delegation.envToggle') }}
             </span>
           </label>
           <p class="pl-9 text-[11px] text-slate-400">
-            Stand the Tester's preview environment up through the environment provider configured
-            below instead of in-container docker-compose. Connect a provider first to enable this.
+            {{ t('settings.providerConnection.delegation.envHint') }}
           </p>
         </div>
       </section>
@@ -334,15 +366,17 @@ function fieldHelp(key: string): string | undefined {
         v-if="isLocal && kind === 'runner-pool'"
         class="mb-4 rounded-md border border-slate-700 bg-slate-900/40 px-3 py-2 text-[11px] text-slate-400"
       >
-        Register your pool here, then enable "Run container agents on the runner pool" on the
-        <button
-          type="button"
-          class="text-sky-400 underline underline-offset-2 hover:text-sky-300"
-          @click="ui.openProviderConnection('environment')"
-        >
-          Ephemeral environments
-        </button>
-        screen to route this workspace's agents to it.
+        <i18n-t keypath="settings.providerConnection.runnerPoolLocalHint" tag="span" scope="global">
+          <template #link>
+            <button
+              type="button"
+              class="text-sky-400 underline underline-offset-2 hover:text-sky-300"
+              @click="ui.openProviderConnection('environment')"
+            >
+              {{ t('settings.providerConnection.ephemeralEnvironments') }}
+            </button>
+          </template>
+        </i18n-t>
       </p>
 
       <div v-if="descriptor" class="space-y-4">
@@ -355,7 +389,11 @@ function fieldHelp(key: string): string | undefined {
             class="shrink-0"
             @click="showLogs = !showLogs"
           >
-            {{ showLogs ? 'Hide logs' : 'View logs' }}
+            {{
+              showLogs
+                ? t('settings.providerConnection.hideLogs')
+                : t('settings.providerConnection.viewLogs')
+            }}
           </UButton>
         </div>
 
@@ -369,7 +407,9 @@ function fieldHelp(key: string): string | undefined {
         >
           <div>
             <span class="font-medium text-slate-200">{{ connection.label }}</span>
-            <div class="text-[11px] text-emerald-400">Connected · {{ connection.baseUrl }}</div>
+            <div class="text-[11px] text-emerald-400">
+              {{ t('settings.providerConnection.connectedAt', { baseUrl: connection.baseUrl }) }}
+            </div>
           </div>
           <UButton
             icon="i-lucide-trash-2"
@@ -386,7 +426,11 @@ function fieldHelp(key: string): string | undefined {
           v-if="descriptor.missingRequired.length"
           class="rounded-md border border-amber-500/40 bg-amber-950/40 px-3 py-2 text-xs text-amber-200"
         >
-          Missing required config: {{ descriptor.missingRequired.join(', ') }}
+          {{
+            t('settings.providerConnection.missingConfig', {
+              fields: descriptor.missingRequired.join(', '),
+            })
+          }}
         </div>
 
         <!-- Generic, descriptor-driven field form -->
@@ -395,7 +439,11 @@ function fieldHelp(key: string): string | undefined {
           class="rounded-lg border border-dashed border-slate-700 p-3 space-y-3"
         >
           <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            {{ connection ? 'Update configuration' : 'Connect' }}
+            {{
+              connection
+                ? t('settings.providerConnection.form.updateConfiguration')
+                : t('settings.providerConnection.form.connect')
+            }}
           </p>
           <!-- A native re-register replaces the whole manifest; secrets are write-only so they
                must be re-supplied. Non-secret config is prefilled, so it survives a save. -->
@@ -403,15 +451,22 @@ function fieldHelp(key: string): string | undefined {
             v-if="connection && canAuthor && hasSecretFields"
             class="text-[11px] text-amber-300/80"
           >
-            Re-enter the secret field{{ secretFieldCount > 1 ? 's' : '' }} to save changes — stored
-            secrets are write-only and aren't shown.
+            {{
+              t(
+                'settings.providerConnection.form.reenterSecrets',
+                { count: secretFieldCount },
+                secretFieldCount,
+              )
+            }}
           </p>
 
           <UFormField
             v-for="field in descriptor.configFields"
             :key="field.key"
             :label="
-              field.label + (field.required && field.default === undefined ? '' : ' (optional)')
+              field.required && field.default === undefined
+                ? field.label
+                : t('settings.providerConnection.form.optionalLabel', { label: field.label })
             "
             :help="fieldHelp(field.key)"
           >
@@ -439,19 +494,19 @@ function fieldHelp(key: string): string | undefined {
               :loading="testing"
               @click="test()"
             >
-              Test connection
+              {{ t('settings.providerConnection.test.button') }}
             </UButton>
             <span v-if="testResult && testResult.ok" class="text-xs text-emerald-400">
-              {{ testResult.message ?? 'Connection OK' }}
+              {{ testResult.message ?? t('settings.providerConnection.test.ok') }}
             </span>
             <span v-else-if="testResult" class="text-xs text-rose-400">
-              {{ testResult.message ?? 'Connection failed' }}
+              {{ testResult.message ?? t('settings.providerConnection.test.failed') }}
             </span>
           </div>
 
           <div class="flex justify-end">
             <UButton color="primary" size="sm" :loading="busy" :disabled="!canSave" @click="save()">
-              {{ connection ? 'Save' : 'Connect' }}
+              {{ connection ? t('common.save') : t('settings.providerConnection.form.connect') }}
             </UButton>
           </div>
         </div>
@@ -461,8 +516,7 @@ function fieldHelp(key: string): string | undefined {
           v-else
           class="rounded-md border border-slate-700 bg-slate-900/40 px-3 py-3 text-xs text-slate-400"
         >
-          This provider is configured by authoring a manifest. The in-app manifest editor isn't
-          available yet — register it via the API for now.
+          {{ t('settings.providerConnection.manifestEditorUnavailable') }}
         </div>
       </div>
     </template>

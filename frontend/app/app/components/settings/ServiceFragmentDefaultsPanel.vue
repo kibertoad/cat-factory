@@ -6,6 +6,7 @@
 // serviceFragmentDefaults store (the backend replaces the whole list on each change).
 import { onMounted, ref } from 'vue'
 
+const { t } = useI18n()
 const fragments = useFragmentsStore()
 const defaults = useServiceFragmentDefaultsStore()
 const ui = useUiStore()
@@ -41,7 +42,7 @@ async function save(ids: string[]) {
     await defaults.set(ids)
   } catch (e) {
     toast.add({
-      title: 'Could not save default fragments',
+      title: t('settings.serviceFragmentDefaults.saveFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -64,16 +65,12 @@ function remove(id: string) {
 <template>
   <div class="space-y-4">
     <p class="text-xs text-slate-400">
-      Pick the best-practice fragments every <span class="text-slate-300">new</span> service starts
-      with. Their guidance is folded into the prompt of every
-      <span class="text-slate-300">code-aware</span> agent (coder, reviewer, architect, fixers) on
-      the service's tasks. You can refine the set per service in its inspector; changing this
-      default does not affect services that already exist.
+      {{ t('settings.serviceFragmentDefaults.intro') }}
     </p>
 
     <div class="flex items-center justify-between">
       <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        Default fragments
+        {{ t('settings.serviceFragmentDefaults.defaultFragments') }}
       </span>
       <UDropdownMenu v-if="menu.length" :items="menu" :ui="{ content: 'max-h-72 overflow-y-auto' }">
         <UButton
@@ -84,7 +81,7 @@ function remove(id: string) {
           trailing-icon="i-lucide-chevron-down"
           :loading="busy"
         >
-          Add fragment
+          {{ t('settings.serviceFragmentDefaults.addFragment') }}
         </UButton>
       </UDropdownMenu>
     </div>
@@ -104,26 +101,26 @@ function remove(id: string) {
       </UBadge>
     </div>
     <p v-else class="text-[11px] text-slate-500">
-      None — new services start with no service-level fragments.
+      {{ t('settings.serviceFragmentDefaults.empty') }}
     </p>
 
     <div class="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-800 pt-3 text-[11px]">
       <span class="text-slate-500">
-        Need to add or edit the fragments themselves (hand-authored, linked docs, repos)?
+        {{ t('settings.serviceFragmentDefaults.footer.question') }}
       </span>
       <button
         type="button"
         class="font-medium text-primary-400 hover:underline"
         @click="ui.openFragmentLibrary()"
       >
-        Manage this board's fragment library →
+        {{ t('settings.serviceFragmentDefaults.footer.manageBoard') }}
       </button>
       <button
         type="button"
         class="font-medium text-primary-400 hover:underline"
         @click="ui.openAccountSettings('fragments')"
       >
-        Manage account fragments →
+        {{ t('settings.serviceFragmentDefaults.footer.manageAccount') }}
       </button>
     </div>
   </div>

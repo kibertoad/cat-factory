@@ -11,6 +11,7 @@ import { computed, ref, watch } from 'vue'
 import type { OpenRouterModelMeta } from '~/types/openrouter'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
+const { t } = useI18n()
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
 const store = useOpenRouterStore()
@@ -89,11 +90,16 @@ const recommendedAvailable = computed(() => {
 
 function contextLabel(tokens: number | undefined): string {
   if (!tokens) return ''
-  return tokens >= 1000 ? `${Math.round(tokens / 1000)}K ctx` : `${tokens} ctx`
+  return tokens >= 1000
+    ? t('settings.openRouterCatalog.contextThousands', { value: Math.round(tokens / 1000) })
+    : t('settings.openRouterCatalog.context', { value: tokens })
 }
 
 function priceLabel(m: OpenRouterModelMeta): string {
-  return `${m.inputPerMillion}/${m.outputPerMillion} per Mtok`
+  return t('settings.openRouterCatalog.price', {
+    input: m.inputPerMillion,
+    output: m.outputPerMillion,
+  })
 }
 
 function toggle(id: string, on: boolean) {
@@ -132,8 +138,8 @@ async function connectKey() {
         else await apiKeys.removeUserKey(created.id).catch(() => {})
       }
       toast.add({
-        title: 'Could not connect key',
-        description: store.refreshError ?? 'OpenRouter rejected the key.',
+        title: t('settings.openRouterCatalog.toast.connectFailed'),
+        description: store.refreshError ?? t('settings.openRouterCatalog.toast.rejected'),
         icon: 'i-lucide-triangle-alert',
         color: 'error',
       })
@@ -141,10 +147,14 @@ async function connectKey() {
     }
     keyValue.value = ''
     keyLabel.value = ''
-    toast.add({ title: 'OpenRouter key connected', icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('settings.openRouterCatalog.toast.connected'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
     toast.add({
-      title: 'Could not connect key',
+      title: t('settings.openRouterCatalog.toast.connectFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -159,8 +169,8 @@ async function refresh() {
   const result = await store.refresh(workspace.workspaceId)
   if (!result.reachable) {
     toast.add({
-      title: 'Could not reach OpenRouter',
-      description: store.refreshError ?? 'Connect an OpenRouter key first.',
+      title: t('settings.openRouterCatalog.toast.unreachable'),
+      description: store.refreshError ?? t('settings.openRouterCatalog.toast.connectFirst'),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
     })
@@ -179,10 +189,14 @@ async function save() {
     await store.save(workspace.workspaceId, models2)
     // Reflect newly-enabled models in the picker immediately.
     await models.refresh(workspace.workspaceId)
-    toast.add({ title: 'OpenRouter catalog saved', icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('settings.openRouterCatalog.toast.saved'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
     toast.add({
-      title: 'Could not save catalog',
+      title: t('settings.openRouterCatalog.toast.saveFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -206,9 +220,11 @@ function manageKeys() {
     <template #body>
       <div class="space-y-4">
         <p class="text-xs text-slate-400">
-          Reach <strong>300+ models</strong> through one gateway. Add your OpenRouter key below,
-          then enable the models you want — they appear in the model picker with their context
-          window and price, and meter against your spend budget.
+          <i18n-t keypath="settings.openRouterCatalog.intro" tag="span" scope="global">
+            <template #models>
+              <strong>{{ t('settings.openRouterCatalog.introModels') }}</strong>
+            </template>
+          </i18n-t>
         </p>
 
         <!-- Step 1: connect a key (inline) — hidden once a key is connected -->
@@ -217,40 +233,49 @@ function manageKeys() {
           class="space-y-3 rounded-lg border border-slate-700 bg-slate-900/60 p-4"
         >
           <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Connect your OpenRouter key
+            {{ t('settings.openRouterCatalog.connectHeading') }}
           </h4>
           <ol class="list-decimal space-y-1 pl-5 text-sm text-slate-300">
             <li>
-              Open
-              <a
-                href="https://openrouter.ai/keys"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="text-primary-400 underline"
-                >openrouter.ai → Keys ↗</a
-              >
-              and create an API key.
+              <i18n-t keypath="settings.openRouterCatalog.step1" tag="span" scope="global">
+                <template #link>
+                  <a
+                    href="https://openrouter.ai/keys"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-primary-400 underline"
+                    >{{ t('settings.openRouterCatalog.step1Link') }}</a
+                  >
+                </template>
+              </i18n-t>
             </li>
             <li>
-              Copy the key (starts with <span class="font-mono">sk-or-…</span>) and paste it below.
+              <i18n-t keypath="settings.openRouterCatalog.step2" tag="span" scope="global">
+                <template #prefix>
+                  <span class="font-mono">sk-or-…</span>
+                </template>
+              </i18n-t>
             </li>
           </ol>
           <div class="flex flex-wrap items-end gap-3">
-            <UFormField label="Scope">
+            <UFormField :label="t('settings.openRouterCatalog.scope')">
               <USelect
                 v-model="keyScope"
                 :items="[
-                  { label: 'This workspace', value: 'workspace' },
-                  { label: 'My keys (only me)', value: 'user' },
+                  { label: t('settings.openRouterCatalog.scopeWorkspace'), value: 'workspace' },
+                  { label: t('settings.openRouterCatalog.scopeUser'), value: 'user' },
                 ]"
                 class="w-48"
               />
             </UFormField>
-            <UFormField label="Label (optional)" class="flex-1">
-              <UInput v-model="keyLabel" placeholder="e.g. team key" />
+            <UFormField :label="t('settings.openRouterCatalog.labelOptional')" class="flex-1">
+              <UInput
+                v-model="keyLabel"
+                :placeholder="t('settings.openRouterCatalog.labelPlaceholder')"
+              />
             </UFormField>
           </div>
-          <UFormField label="API key">
+          <UFormField :label="t('settings.openRouterCatalog.apiKey')">
             <UTextarea
               v-model="keyValue"
               :rows="2"
@@ -265,7 +290,7 @@ function manageKeys() {
               icon="i-lucide-plus"
               @click="connectKey()"
             >
-              Connect & browse
+              {{ t('settings.openRouterCatalog.connectAndBrowse') }}
             </UButton>
           </div>
         </div>
@@ -277,10 +302,10 @@ function manageKeys() {
         >
           <span class="flex items-center gap-2 text-slate-300">
             <UIcon name="i-lucide-check-circle" class="h-4 w-4 text-emerald-400" />
-            OpenRouter key connected
+            {{ t('settings.openRouterCatalog.keyConnected') }}
           </span>
           <UButton color="neutral" variant="ghost" size="xs" @click="manageKeys()">
-            Manage in Vendors & keys
+            {{ t('settings.openRouterCatalog.manageKeys') }}
           </UButton>
         </div>
 
@@ -295,7 +320,7 @@ function manageKeys() {
               :loading="store.refreshing"
               @click="refresh()"
             >
-              Refresh catalog
+              {{ t('settings.openRouterCatalog.refresh') }}
             </UButton>
             <UButton
               v-if="recommendedAvailable.length"
@@ -305,14 +330,14 @@ function manageKeys() {
               icon="i-lucide-sparkles"
               @click="enableRecommended()"
             >
-              Enable recommended
+              {{ t('settings.openRouterCatalog.enableRecommended') }}
             </UButton>
             <UInput
               v-model="filter"
               size="sm"
               class="flex-1"
               icon="i-lucide-search"
-              placeholder="Filter by name or slug…"
+              :placeholder="t('settings.openRouterCatalog.filterPlaceholder')"
             />
           </div>
 
@@ -341,12 +366,17 @@ function manageKeys() {
             </label>
           </div>
           <p v-else class="text-xs text-slate-500">
-            No models yet — hit <span class="text-slate-300">Refresh catalog</span> to load
-            OpenRouter's live list.
+            <i18n-t keypath="settings.openRouterCatalog.empty" tag="span" scope="global">
+              <template #action>
+                <span class="text-slate-300">{{ t('settings.openRouterCatalog.refresh') }}</span>
+              </template>
+            </i18n-t>
           </p>
 
           <div class="flex items-center justify-between">
-            <span class="text-xs text-slate-500">{{ selectedCount }} enabled</span>
+            <span class="text-xs text-slate-500">{{
+              t('settings.openRouterCatalog.enabledCount', { count: selectedCount }, selectedCount)
+            }}</span>
             <UButton
               color="primary"
               variant="soft"
@@ -355,7 +385,7 @@ function manageKeys() {
               :loading="busy"
               @click="save()"
             >
-              Save
+              {{ t('common.save') }}
             </UButton>
           </div>
         </template>

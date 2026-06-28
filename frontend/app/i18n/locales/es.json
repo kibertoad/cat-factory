@@ -1119,5 +1119,455 @@
         }
       }
     }
+  },
+  "settings": {
+    "modelConfiguration": {
+      "title": "Configuración de modelos",
+      "subtitle": "Ajustes preestablecidos que asignan un modelo a cada agente. Una tarea elige uno; las tareas usan por defecto el ajuste predeterminado del espacio de trabajo.",
+      "back": "Atrás",
+      "closeEsc": "Cerrar (Esc)",
+      "quota": "cuota",
+      "list": {
+        "intro": "Cada ajuste establece un {baseModel} para cada agente, con anulaciones opcionales por agente. Un modelo fijado en una tarea individual sigue prevaleciendo sobre el ajuste.",
+        "introBaseModel": "modelo base",
+        "newPreset": "Nuevo ajuste",
+        "loadingCatalog": "Cargando el catálogo de modelos…",
+        "default": "Predeterminado",
+        "setDefaultTitle": "Establecer como predeterminado del espacio de trabajo",
+        "editTitle": "Editar ajuste",
+        "deleteDisabledTitle": "El ajuste predeterminado no se puede eliminar",
+        "deleteTitle": "Eliminar ajuste",
+        "basePrefix": "Base:",
+        "overrideCount": "{count} anulación | {count} anulaciones",
+        "empty": "Aún no hay ajustes. Crea uno para asignar modelos a tus agentes."
+      },
+      "editor": {
+        "useBaseModel": "Usar el modelo base",
+        "baseModel": "Modelo base",
+        "nameLabel": "Nombre",
+        "namePlaceholder": "p. ej. Kimi K2.7",
+        "baseModelLabel": "Modelo base (aplicado a cada agente)",
+        "makeDefault": "Hacer que este sea el predeterminado del espacio de trabajo",
+        "perAgentOverrides": "Anulaciones por agente",
+        "filterPlaceholder": "Filtrar agentes…",
+        "noAgentsMatch": "Ningún agente coincide con \"{filter}\".",
+        "saveChanges": "Guardar cambios",
+        "createPreset": "Crear ajuste"
+      },
+      "toast": {
+        "setDefaultFailed": "No se pudo establecer el ajuste predeterminado",
+        "deleteFailed": "No se pudo eliminar el ajuste",
+        "nameRequiredTitle": "Nombre obligatorio",
+        "nameRequiredBody": "Dale un nombre al ajuste.",
+        "saveFailed": "No se pudo guardar el ajuste"
+      }
+    },
+    "account": {
+      "title": "Configuración de la cuenta",
+      "noAccount": "Ninguna cuenta seleccionada.",
+      "tabs": {
+        "team": "Equipo y acceso",
+        "fragments": "Fragmentos de contexto"
+      }
+    },
+    "providerConnection": {
+      "fallbackTitle": "Proveedor",
+      "kind": {
+        "environment": {
+          "title": "Proveedor de entornos efímeros",
+          "blurb": "Donde el agente Tester se ejecuta contra un entorno de vista previa en vivo. Configura los ajustes por espacio de trabajo y las credenciales que necesita tu proveedor."
+        },
+        "runner-pool": {
+          "title": "Grupo de ejecutores autoalojado",
+          "blurb": "Donde se ejecutan los agentes de codificación cuando no se usan los contenedores de Cloudflare. Configura el endpoint del planificador del grupo y las credenciales."
+        }
+      },
+      "delegation": {
+        "title": "Delegación local",
+        "intro": "De forma predeterminada, esta máquina ejecuta todo localmente: los agentes de contenedor en Docker del host y la infraestructura del Tester mediante docker-compose dentro del contenedor. Activa las opciones de abajo para delegar cualquiera de estas tareas en un servicio externo. Solo se aplica en modo local.",
+        "agentsToggle": "Ejecutar los agentes de contenedor en el grupo de ejecutores",
+        "agentsHint": "Envía cada agente de contenedor (codificador, tester, fusionador, bootstrap, …) al grupo de ejecutores autoalojado de este espacio de trabajo en lugar de a Docker del host.",
+        "registerPoolPrompt": "{link} primero para habilitar esto.",
+        "registerPoolLink": "Registra un grupo de ejecutores",
+        "envToggle": "Aprovisionar los entornos del Tester mediante el proveedor",
+        "envHint": "Levanta el entorno de vista previa del Tester a través del proveedor de entornos configurado abajo en lugar de docker-compose dentro del contenedor. Conecta un proveedor primero para habilitar esto.",
+        "updateFailed": "No se pudo actualizar la delegación"
+      },
+      "runnerPoolLocalHint": "Registra tu grupo aquí y luego activa \"Ejecutar los agentes de contenedor en el grupo de ejecutores\" en la pantalla {link} para enrutar los agentes de este espacio de trabajo hacia él.",
+      "ephemeralEnvironments": "Entornos efímeros",
+      "viewLogs": "Ver registros",
+      "hideLogs": "Ocultar registros",
+      "connectedAt": "Conectado · {baseUrl}",
+      "missingConfig": "Falta configuración obligatoria: {fields}",
+      "manifestEditorUnavailable": "Este proveedor se configura redactando un manifiesto. El editor de manifiestos integrado aún no está disponible; regístralo a través de la API por ahora.",
+      "form": {
+        "updateConfiguration": "Actualizar configuración",
+        "connect": "Conectar",
+        "reenterSecrets": "Vuelve a introducir el campo secreto para guardar los cambios: los secretos almacenados son de solo escritura y no se muestran. | Vuelve a introducir los campos secretos para guardar los cambios: los secretos almacenados son de solo escritura y no se muestran.",
+        "optionalLabel": "{label} (opcional)"
+      },
+      "field": {
+        "defaultsTo": "Por defecto: {value}"
+      },
+      "test": {
+        "button": "Probar conexión",
+        "ok": "Conexión correcta",
+        "failed": "Falló la conexión"
+      },
+      "toast": {
+        "saved": "{title} guardado",
+        "saveFailed": "No se pudo guardar la conexión",
+        "removed": "Conexión eliminada",
+        "removeFailed": "No se pudo eliminar la conexión"
+      }
+    },
+    "serviceFragmentDefaults": {
+      "intro": "Elige los fragmentos de buenas prácticas con los que arranca cada servicio nuevo. Su orientación se integra en el prompt de cada agente que trabaja con código (codificador, revisor, arquitecto, correctores) en las tareas del servicio. Puedes ajustar el conjunto por servicio en su inspector; cambiar este valor predeterminado no afecta a los servicios que ya existen.",
+      "defaultFragments": "Fragmentos predeterminados",
+      "addFragment": "Añadir fragmento",
+      "empty": "Ninguno: los servicios nuevos arrancan sin fragmentos a nivel de servicio.",
+      "saveFailed": "No se pudieron guardar los fragmentos predeterminados",
+      "footer": {
+        "question": "¿Necesitas añadir o editar los fragmentos en sí (redactados a mano, documentos enlazados, repos)?",
+        "manageBoard": "Gestionar la biblioteca de fragmentos de este tablero →",
+        "manageAccount": "Gestionar los fragmentos de la cuenta →"
+      }
+    },
+    "issueTracker": {
+      "filing": {
+        "heading": "Dónde se registran los tickets",
+        "description": "La canalización recurrente de deuda técnica crea una incidencia antes de la implementación y la registra en este gestor. Elige {none} para omitir el registro.",
+        "none": "Ninguno",
+        "githubHint": "GitHub Issues usa tu GitHub App instalada, que aún no está conectada. Instálala en {link}: el registro permanece desactivado hasta entonces.",
+        "githubHintLink": "Integraciones → GitHub",
+        "jiraHint": "Jira aún no está conectado. {link} para registrar y vincular incidencias.",
+        "linearHint": "Linear aún no está conectado. {link} para registrar y vincular incidencias.",
+        "connectLink": "Conéctalo",
+        "jiraProjectKey": "Clave de proyecto de Jira",
+        "jiraProjectKeyHelp": "Los nuevos tickets se registran en este proyecto.",
+        "linearTeamId": "Id de equipo de Linear",
+        "linearTeamIdHelp": "Las nuevas incidencias se crean en este equipo (Linear requiere un equipo para crear una incidencia)."
+      },
+      "vendor": {
+        "github": "GitHub Issues",
+        "jira": "Jira",
+        "linear": "Linear"
+      },
+      "linking": {
+        "heading": "Vincular incidencias como contexto",
+        "description": "Cuando se ofrece una fuente, puedes importar sus incidencias y adjuntarlas a una tarea, para que los agentes vean la descripción de la incidencia y los comentarios mientras implementan. Esto es independiente del gestor de registro de arriba.",
+        "github": {
+          "available": "Usa tu GitHub App instalada: no se necesitan credenciales.",
+          "unavailable": "Instala la GitHub App (Integraciones → GitHub) para ofrecer esta fuente."
+        },
+        "checkSetup": "Comprobar configuración",
+        "install": "Instalar",
+        "connected": "Conectado.",
+        "jira": {
+          "connectHint": "Conecta con una cuenta de Jira y un token de API."
+        },
+        "linear": {
+          "connectHint": "Conecta con una clave de API personal de Linear."
+        },
+        "connect": "Conectar"
+      },
+      "writeback": {
+        "heading": "Escritura de vuelta",
+        "description": "Escribe de vuelta en la incidencia o incidencias vinculadas a una tarea a medida que avanza su pull request. Cada opción es el valor predeterminado del espacio de trabajo y puede anularse por tarea en el inspector. Las incidencias de GitHub se cierran de forma nativa; las de Jira pasan al primer estado de su categoría {done}.",
+        "done": "Hecho",
+        "commentOnOpen": {
+          "label": "Comentar cuando se abre un PR",
+          "help": "Publica un comentario en la incidencia vinculada con el enlace del nuevo pull request."
+        },
+        "resolveOnMerge": {
+          "label": "Cerrar como resuelta cuando se fusiona un PR",
+          "help": "Comenta que el PR se fusionó y luego cierra / resuelve la incidencia vinculada."
+        }
+      },
+      "probeFailure": {
+        "title": "El seguimiento de incidencias no está disponible",
+        "disabled": "La integración de fuentes de tareas está desactivada en este despliegue (su clave de cifrado no está configurada). Define ENCRYPTION_KEY en el backend para habilitar el seguimiento de incidencias.",
+        "serverError": "El servicio de seguimiento de incidencias devolvió un error (HTTP {status}): {message}. Esto suele significar que el backend no está totalmente migrado/configurado.",
+        "loadFailedStatus": "No se pudo cargar la configuración del gestor de incidencias (HTTP {status}): {message}",
+        "loadFailed": "No se pudo cargar la configuración del gestor de incidencias: {message}"
+      },
+      "toast": {
+        "saved": "Gestor de incidencias guardado",
+        "saveFailed": "No se pudo guardar la configuración",
+        "updateFailed": "No se pudo actualizar",
+        "checkFailed": "La comprobación falló"
+      }
+    },
+    "userSecrets": {
+      "title": "Mi token de GitHub",
+      "intro": "Almacena un token de acceso personal usado para las ejecuciones que {you} inicias: los pushes, los pull requests, la puerta de CI y las fusiones se atribuyen a tu acceso de GitHub. Almacenado {scope}; el token es de solo escritura y nunca se vuelve a mostrar.",
+      "introYou": "tú",
+      "introScope": "solo para ti",
+      "connectedStored": "Conectado · token almacenado",
+      "replaceToken": "Reemplazar token",
+      "addToken": "Añadir token",
+      "labelField": "Etiqueta (opcional)",
+      "optionalField": "{label} (opcional)",
+      "testConnection": "Probar conexión",
+      "tokenValid": "Token válido",
+      "tokenRejected": "Token rechazado",
+      "secretFallback": "Secreto",
+      "toast": {
+        "saved": "{label} guardado",
+        "saveFailed": "No se pudo guardar el secreto",
+        "removed": "Secreto eliminado",
+        "removeFailed": "No se pudo eliminar el secreto"
+      }
+    },
+    "mergeThresholds": {
+      "intro": "Políticas de fusión automática con nombre que una tarea puede elegir. Cuando CI pasa, el agente {merger} puntúa el PR en complejidad, riesgo e impacto (0-100%); el PR se fusiona automáticamente solo cuando cada puntuación está en o por debajo de los límites del ajuste, de lo contrario se genera una notificación de revisión. El ajuste predeterminado rige cualquier tarea que no elija ninguno.",
+      "mergerAgent": "merger",
+      "concern": {
+        "none": "Ninguno (detener siempre)",
+        "low": "Bajo",
+        "medium": "Medio",
+        "high": "Alto (nunca detener)"
+      },
+      "presetNamePlaceholder": "Nombre del ajuste",
+      "default": "Predeterminado",
+      "makeDefault": "Hacer predeterminado",
+      "deleteDefaultBlocked": "El ajuste predeterminado no se puede eliminar",
+      "deletePreset": "Eliminar ajuste",
+      "field": {
+        "maxComplexity": "Complejidad máx. %",
+        "maxRisk": "Riesgo máx. %",
+        "maxImpact": "Impacto máx. %",
+        "ciMaxAttempts": "Intentos de corrección de CI",
+        "maxRequirementIterations": "Iteraciones de requisitos",
+        "maxRequirementConcernAllowed": "Aprobación automática de inquietudes hasta"
+      },
+      "newPreset": "Nuevo ajuste",
+      "create": {
+        "name": "Nombre",
+        "namePlaceholder": "p. ej. Cauteloso",
+        "complexity": "Cmplj%",
+        "risk": "Riesgo%",
+        "impact": "Impacto%",
+        "ciFix": "Corr. CI",
+        "reqIter": "Iter. req.",
+        "autoPass": "Aprob. auto. hasta"
+      },
+      "add": "Añadir",
+      "toast": {
+        "saved": "Ajuste guardado",
+        "saveFailed": "No se pudo guardar el ajuste",
+        "created": "Ajuste creado",
+        "createFailed": "No se pudo crear el ajuste",
+        "defaultFailed": "No se pudo establecer el predeterminado",
+        "deleteFailed": "No se pudo eliminar el ajuste"
+      }
+    },
+    "observabilityConnection": {
+      "title": "Salud posterior al lanzamiento",
+      "intro": "Después de que se publica un lanzamiento, la puerta {gate} vigila los monitores/SLO de observabilidad configurados. Ante una regresión, genera un agente de guardia para investigar (una persona decide si revertir). Asigna qué monitores/SLO vigila un servicio desde el inspector de ese servicio.",
+      "connection": {
+        "heading": "Conexión",
+        "provider": "Proveedor"
+      },
+      "datadog": {
+        "site": "Sitio de Datadog",
+        "apiKey": "Clave de API",
+        "appKey": "Clave de aplicación"
+      },
+      "saveConnection": "Guardar conexión",
+      "disconnect": "Desconectar",
+      "incident": {
+        "heading": "Enriquecimiento de incidentes",
+        "configured": "Configurado",
+        "notSet": "Sin establecer",
+        "description": "Opcional. Ante una regresión, la investigación de guardia se publica en un incidente que estos sistemas YA abrieron a partir de las mismas señales (anotar, nunca volver a alertar). Los secretos son de solo escritura: dejarlos en blanco mantiene el valor almacenado sin cambios.",
+        "pagerDutyToken": "Token de API de PagerDuty",
+        "pagerDutyFromEmail": "Correo remitente de PagerDuty",
+        "incidentIoKey": "Clave de API de incident.io",
+        "clear": "Borrar"
+      },
+      "status": {
+        "notConnected": "Sin conectar",
+        "connected": "Conectado",
+        "connectedWithSite": "Conectado ({site})"
+      },
+      "toast": {
+        "loadFailed": "No se pudo cargar la configuración de observabilidad",
+        "incidentCredsRequired": "Introduce las credenciales de PagerDuty o incident.io",
+        "incidentSaved": "Enriquecimiento de incidentes guardado",
+        "incidentSaveFailed": "No se pudo guardar el enriquecimiento de incidentes",
+        "incidentDisconnectFailed": "No se pudo desconectar el enriquecimiento de incidentes",
+        "connected": "Observabilidad conectada",
+        "connectFailed": "No se pudo guardar la conexión",
+        "disconnectFailed": "No se pudo desconectar"
+      }
+    },
+    "localMode": {
+      "title": "Modo local",
+      "intro": "Ajustes del ejecutor de contenedores local, almacenados en el despliegue de esta máquina (reemplazó las variables de entorno {poolVars} / {harnessVars}). Guardar redimensiona el grupo en caliente en vivo, sin necesidad de reiniciar; las ejecuciones en curso conservan el contenedor que ya tienen.",
+      "pool": {
+        "heading": "Grupo de contenedores en caliente",
+        "description": "Mantén contenedores de arnés inactivos listos y vuelve a asignar uno (prefiriendo un contenedor que ya tenga el repositorio de la ejecución) en lugar de iniciar en frío por ejecución. Tamaño de grupo 0 lo desactiva. Requiere un entorno de la familia Docker (Docker/Podman/OrbStack/Colima); se ignora en Apple {appleContainer}.",
+        "size": {
+          "label": "Tamaño del grupo",
+          "help": "Máximo de contenedores en caliente inactivos. 0 = agrupación desactivada."
+        },
+        "minWarm": {
+          "label": "Precalentar al arrancar",
+          "help": "Contenedores iniciados cuando arranca el servicio."
+        },
+        "max": {
+          "label": "Máx. de contenedores",
+          "help": "Límite estricto (asignados + inactivos). En blanco = tamaño del grupo.",
+          "placeholder": "(tamaño del grupo)"
+        },
+        "idleTimeout": {
+          "label": "Tiempo de inactividad (minutos)",
+          "help": "Expulsar un contenedor agrupado inactivo después de."
+        }
+      },
+      "checkout": {
+        "heading": "Reutilización de la copia de trabajo",
+        "description": "Cuando un contenedor en caliente ya tiene el repositorio de la ejecución, el arnés reutiliza su copia de trabajo por repositorio (limpieza + obtención + cambio de rama) en lugar de clonar de nuevo.",
+        "workspaceRoot": {
+          "label": "Raíz del espacio de trabajo",
+          "help": "Directorio absoluto dentro del contenedor donde vive la copia de trabajo reutilizada."
+        },
+        "cleanKeep": {
+          "label": "Conservar al limpiar (separado por comas)",
+          "help": "Directorios de caché de dependencias que la limpieza por ejecución conserva."
+        }
+      },
+      "toast": {
+        "saved": "Configuración local guardada",
+        "saveFailed": "No se pudo guardar la configuración local"
+      }
+    },
+    "openRouterCatalog": {
+      "intro": "Accede a {models} a través de una única pasarela. Añade tu clave de OpenRouter abajo y luego habilita los modelos que quieras. Aparecen en el selector de modelos con su ventana de contexto y su precio, y se contabilizan en tu presupuesto de gasto.",
+      "introModels": "más de 300 modelos",
+      "connectHeading": "Conecta tu clave de OpenRouter",
+      "step1": "Abre {link} y crea una clave de API.",
+      "step1Link": "openrouter.ai → Claves ↗",
+      "step2": "Copia la clave (empieza por {prefix}) y pégala abajo.",
+      "scope": "Ámbito",
+      "scopeWorkspace": "Este espacio de trabajo",
+      "scopeUser": "Mis claves (solo yo)",
+      "labelOptional": "Etiqueta (opcional)",
+      "labelPlaceholder": "p. ej. clave del equipo",
+      "apiKey": "Clave de API",
+      "connectAndBrowse": "Conectar y explorar",
+      "keyConnected": "Clave de OpenRouter conectada",
+      "manageKeys": "Gestionar en Proveedores y claves",
+      "refresh": "Actualizar catálogo",
+      "enableRecommended": "Habilitar recomendados",
+      "filterPlaceholder": "Filtrar por nombre o slug…",
+      "empty": "Aún no hay modelos. Pulsa {action} para cargar la lista en vivo de OpenRouter.",
+      "enabledCount": "ningún modelo habilitado | {count} habilitado | {count} habilitados",
+      "context": "{value} ctx",
+      "contextThousands": "{value}K ctx",
+      "price": "{input}/{output} por Mtok",
+      "toast": {
+        "connected": "Clave de OpenRouter conectada",
+        "connectFailed": "No se pudo conectar la clave",
+        "rejected": "OpenRouter rechazó la clave.",
+        "unreachable": "No se pudo contactar con OpenRouter",
+        "connectFirst": "Conecta primero una clave de OpenRouter.",
+        "saved": "Catálogo de OpenRouter guardado",
+        "saveFailed": "No se pudo guardar el catálogo"
+      }
+    },
+    "workspaceSettings": {
+      "title": "Configuración del espacio de trabajo",
+      "tabs": {
+        "workspace": "Espacio de trabajo",
+        "budget": "Presupuesto",
+        "merge": "Umbrales de fusión",
+        "tracker": "Gestor de incidencias",
+        "fragments": "Buenas prácticas del servicio"
+      },
+      "waiting": {
+        "heading": "Esperando a una persona",
+        "body": "Una ejecución detenida a la espera de una decisión humana (una revisión, una aprobación, una fusión) espera todo lo que haga falta y nunca se cancela. Pasados estos minutos, su notificación se pone en rojo y se marca como {overdue} en la bandeja de entrada.",
+        "overdue": "Vencida",
+        "escalateAfter": "Escalar después de (minutos)"
+      },
+      "taskLimit": {
+        "heading": "Tareas en ejecución por servicio",
+        "body": "Limita cuántas tareas pueden ejecutarse a la vez bajo un servicio. Iniciar una tarea por encima del límite se rechaza con un mensaje claro hasta que termine una tarea en ejecución.",
+        "mode": "Modo",
+        "maxRunning": "Máximo de tareas en ejecución",
+        "maxPerType": "Máximo de tareas de tipo {type}",
+        "modes": {
+          "off": "Sin límite",
+          "shared": "Compartido entre todos los tipos",
+          "per_type": "Por tipo de tarea"
+        }
+      },
+      "taskTypes": {
+        "feature": "función",
+        "bug": "error",
+        "document": "documento",
+        "spike": "spike"
+      },
+      "observability": {
+        "heading": "Observabilidad del agente",
+        "body": "Almacena el contexto completo proporcionado a cada agente: los prompts compuestos, los fragmentos de buenas prácticas incorporados y el contenido íntegro de los archivos inyectados en su contenedor, para poder inspeccionarlo después en la vista de observabilidad. Los cuerpos se conservan durante la misma ventana que la telemetría de LLM por llamada. Desactívalo para dejar de almacenarlo (las instantáneas existentes se eliminan por retención).",
+        "toggle": "Almacenar el contexto completo del agente"
+      },
+      "retention": {
+        "heading": "Retención de capturas de pantalla",
+        "body": "Cuánto tiempo conservar las capturas de pantalla del probador de UI y las imágenes de diseño de referencia con las que se comparan (la verificación visual). Un trabajo de limpieza diario elimina tanto los bytes de las imágenes como sus metadatos cuando superan esta ventana.",
+        "days": "Retención (días)"
+      },
+      "kaizen": {
+        "heading": "Agente Kaizen",
+        "body": "Al completarse cada ejecución, el agente Kaizen evalúa cómo fue cada paso del agente, desde fluido y eficiente hasta confuso y caótico, y recomienda mejoras de prompt/modelo. Una combinación de prompt + agente + modelo que obtiene una buena nota sin recomendaciones cinco veces seguidas se marca como verificada y deja de evaluarse. La evaluación se ejecuta en segundo plano y se muestra en los detalles de la ejecución y en la pantalla de Kaizen. Configura el modelo del evaluador en Configuración de modelos (el agente \"Kaizen\").",
+        "toggle": "Evaluar ejecuciones de agentes con Kaizen"
+      },
+      "budget": {
+        "heading": "Presupuesto de gasto mensual",
+        "body": "El uso de tokens se contabiliza por llamada al LLM, se valora y se limita con este presupuesto. Al alcanzarlo, las ejecuciones de este espacio de trabajo se pausan y el tablero muestra una advertencia. Déjalo en blanco para heredar el valor predeterminado integrado (unos 100 EUR/mes).",
+        "monthlyLimit": "Límite mensual",
+        "defaultPlaceholder": "Predeterminado",
+        "currency": "Moneda (ISO 4217)",
+        "save": "Guardar presupuesto"
+      },
+      "toast": {
+        "saved": "Configuración guardada",
+        "saveFailed": "No se pudo guardar la configuración",
+        "budgetSaved": "Presupuesto guardado",
+        "budgetSaveFailed": "No se pudo guardar el presupuesto"
+      }
+    },
+    "localModelEndpoints": {
+      "title": "Mis runners locales",
+      "intro": "Apunta los agentes a un LLM que se ejecuta en {ownMachine} (Ollama, LM Studio, llama.cpp, vLLM o cualquier servidor compatible con OpenAI). Un runner se almacena {justForYou} (un runner vive en tu equipo), y los modelos que habilites aparecen automáticamente en el selector de modelos. La clave de API (la mayoría de los runners la ignoran) es de solo escritura y nunca se vuelve a mostrar.",
+      "introOwnMachine": "tu propia máquina",
+      "introJustForYou": "solo para ti",
+      "modelCount": "ningún modelo | {count} modelo | {count} modelos",
+      "keySet": "clave establecida",
+      "edit": "Editar",
+      "editRunner": "Editar runner",
+      "addRunner": "Añadir un runner",
+      "runnerType": "Tipo de runner",
+      "labelOptional": "Etiqueta (opcional)",
+      "labelPlaceholder": "Mi {name}",
+      "baseUrl": "URL base",
+      "apiKeyOptional": "Clave de API (opcional)",
+      "apiKeyKeepPlaceholder": "déjalo en blanco para conservar la clave guardada",
+      "apiKeyIgnorePlaceholder": "la mayoría de los runners la ignoran",
+      "testConnection": "Probar conexión",
+      "unreachable": "No se pudo contactar con el runner.",
+      "reachable": "Accesible · ningún modelo | Accesible · {count} modelo | Accesible · {count} modelos",
+      "noModels": "No se informó de ningún modelo.",
+      "enableModels": "Habilitar modelos",
+      "toast": {
+        "saved": "{name} guardado",
+        "saveFailed": "No se pudo guardar el runner",
+        "removed": "Runner eliminado",
+        "removeFailed": "No se pudo eliminar el runner"
+      }
+    }
   }
 }
