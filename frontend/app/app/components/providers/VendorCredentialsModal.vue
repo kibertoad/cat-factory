@@ -9,6 +9,7 @@ import { computed, ref, watch } from 'vue'
 import type { SubscriptionVendor } from '~/types/domain'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
+const { t, n } = useI18n()
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
 const creds = useVendorCredentialsStore()
@@ -25,27 +26,51 @@ const back = useIntegrationBack(open)
 // Initialised from the ui store so a caller can deep-link to a tab — the user-scoped
 // "My subscriptions" entry opens straight onto the `personal` tab.
 const activeTab = ref(ui.vendorCredentialsTab)
-const tabs = [
-  { value: 'pool', label: 'Workspace pool', icon: 'i-lucide-users', slot: 'pool' },
-  { value: 'direct', label: 'Direct providers', icon: 'i-lucide-key-round', slot: 'direct' },
-  { value: 'proxy', label: 'Proxies', icon: 'i-lucide-route', slot: 'proxy' },
+const tabs = computed(() => [
+  {
+    value: 'pool',
+    label: t('providers.vendorCredentials.tabs.pool'),
+    icon: 'i-lucide-users',
+    slot: 'pool',
+  },
+  {
+    value: 'direct',
+    label: t('providers.vendorCredentials.tabs.direct'),
+    icon: 'i-lucide-key-round',
+    slot: 'direct',
+  },
+  {
+    value: 'proxy',
+    label: t('providers.vendorCredentials.tabs.proxy'),
+    icon: 'i-lucide-route',
+    slot: 'proxy',
+  },
   {
     value: 'personal',
-    label: 'Personal subscriptions',
+    label: t('providers.vendorCredentials.tabs.personal'),
     icon: 'i-lucide-user',
     slot: 'personal',
   },
-]
+])
 
 // Only commercial coding-plan vendors that permit team/organization use are poolable here.
 // Claude, GLM and ChatGPT/Codex are licensed for individual use only, so they are connected
 // per-user in the "Personal subscriptions" section below (PersonalSubscriptionSection).
-const VENDORS: { value: SubscriptionVendor; label: string; harness: string }[] = [
-  { value: 'kimi', label: 'Kimi — Moonshot coding plan', harness: 'Claude Code' },
-  { value: 'deepseek', label: 'DeepSeek — coding plan', harness: 'Claude Code' },
-]
+// Labels resolve through i18n (reactive to the locale) via literal keys.
+const VENDORS = computed<{ value: SubscriptionVendor; label: string; harness: string }[]>(() => [
+  {
+    value: 'kimi',
+    label: t('providers.vendorCredentials.vendors.kimi.label'),
+    harness: 'Claude Code',
+  },
+  {
+    value: 'deepseek',
+    label: t('providers.vendorCredentials.vendors.deepseek.label'),
+    harness: 'Claude Code',
+  },
+])
 
-const visibleVendors = computed(() => VENDORS)
+const visibleVendors = computed(() => VENDORS.value)
 
 const vendor = ref<SubscriptionVendor>('kimi')
 const label = ref('')
@@ -68,22 +93,22 @@ const steps = computed<string[]>(() => {
   switch (vendor.value) {
     case 'kimi':
       return [
-        'Open your Moonshot (Kimi) coding-plan console and create an API key for the Anthropic-compatible endpoint.',
-        'Copy the API key. Agent steps will run via Claude Code against Moonshot’s Anthropic endpoint with full context.',
-        'Paste the key below.',
+        t('providers.vendorCredentials.vendors.kimi.step1'),
+        t('providers.vendorCredentials.vendors.kimi.step2'),
+        t('providers.vendorCredentials.vendors.kimi.step3'),
       ]
     case 'deepseek':
       return [
-        'Open your DeepSeek coding-plan console and create an API key for the Anthropic-compatible endpoint.',
-        'Copy the API key. Agent steps will run via Claude Code against DeepSeek’s Anthropic endpoint with full context.',
-        'Paste the key below.',
+        t('providers.vendorCredentials.vendors.deepseek.step1'),
+        t('providers.vendorCredentials.vendors.deepseek.step2'),
+        t('providers.vendorCredentials.vendors.deepseek.step3'),
       ]
     default:
       return []
   }
 })
 
-const tokenPlaceholder = computed(() => 'your coding-plan API key')
+const tokenPlaceholder = computed(() => t('providers.vendorCredentials.tokenPlaceholder'))
 
 async function add() {
   if (!token.value.trim()) return
@@ -91,15 +116,21 @@ async function add() {
   try {
     await creds.add({
       vendor: vendor.value,
-      label: label.value.trim() || `${vendor.value} token`,
+      label:
+        label.value.trim() ||
+        t('providers.vendorCredentials.defaultLabel', { vendor: vendor.value }),
       token: token.value.trim(),
     })
     token.value = ''
     label.value = ''
-    toast.add({ title: 'Token connected', icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('providers.vendorCredentials.toast.connected'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
     toast.add({
-      title: 'Could not connect token',
+      title: t('providers.vendorCredentials.toast.connectFailed'),
       description: e instanceof Error ? e.message : String(e),
       color: 'error',
     })
@@ -113,7 +144,7 @@ async function remove(id: string) {
     await creds.remove(id)
   } catch (e) {
     toast.add({
-      title: 'Could not remove token',
+      title: t('providers.vendorCredentials.toast.removeFailed'),
       description: e instanceof Error ? e.message : String(e),
       color: 'error',
     })
@@ -121,14 +152,18 @@ async function remove(id: string) {
 }
 
 function vendorLabel(v: SubscriptionVendor): string {
-  return VENDORS.find((x) => x.value === v)?.label ?? v
+  return VENDORS.value.find((x) => x.value === v)?.label ?? v
 }
 </script>
 
 <template>
-  <UModal v-model:open="open" title="LLM Vendors" :ui="{ content: 'max-w-2xl' }">
+  <UModal
+    v-model:open="open"
+    :title="t('providers.vendorCredentials.title')"
+    :ui="{ content: 'max-w-2xl' }"
+  >
     <template #title>
-      <IntegrationBackTitle title="LLM Vendors" @back="back" />
+      <IntegrationBackTitle :title="t('providers.vendorCredentials.title')" @back="back" />
     </template>
     <template #body>
       <UTabs
@@ -141,17 +176,12 @@ function vendorLabel(v: SubscriptionVendor): string {
         <template #pool>
           <div class="space-y-5">
             <p class="text-sm text-slate-400">
-              Connect a <strong>commercial</strong> coding-plan subscription (Kimi, DeepSeek) that
-              permits team/organization use to run agent steps on the Claude Code harness instead of
-              an API key. Tokens are stored encrypted, pooled, and rotated by usage. Subscription
-              models are flat-rate quota — they don’t draw on your spend budget. Individual-use
-              subscriptions (Claude, GLM, ChatGPT/Codex) are connected per-user in the Personal
-              subscriptions tab.
+              {{ t('providers.vendorCredentials.poolIntro') }}
             </p>
 
             <!-- vendor picker -->
             <div class="flex flex-wrap items-end gap-3">
-              <UFormField label="Vendor">
+              <UFormField :label="t('providers.vendorCredentials.vendorField')">
                 <USelect
                   v-model="vendor"
                   :items="visibleVendors.map((v) => ({ label: v.label, value: v.value }))"
@@ -169,10 +199,13 @@ function vendorLabel(v: SubscriptionVendor): string {
 
             <!-- add form -->
             <div class="space-y-2">
-              <UFormField label="Label (optional)">
-                <UInput v-model="label" placeholder="e.g. work account" />
+              <UFormField :label="t('providers.vendorCredentials.labelField')">
+                <UInput
+                  v-model="label"
+                  :placeholder="t('providers.vendorCredentials.labelPlaceholder')"
+                />
               </UFormField>
-              <UFormField label="Token">
+              <UFormField :label="t('providers.vendorCredentials.tokenField')">
                 <UTextarea
                   v-model="token"
                   :rows="3"
@@ -187,7 +220,7 @@ function vendorLabel(v: SubscriptionVendor): string {
                   icon="i-lucide-plus"
                   @click="add()"
                 >
-                  Connect
+                  {{ t('providers.vendorCredentials.connect') }}
                 </UButton>
               </div>
             </div>
@@ -195,7 +228,9 @@ function vendorLabel(v: SubscriptionVendor): string {
             <!-- connected pool -->
             <div v-if="creds.credentials.length" class="space-y-2">
               <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Connected ({{ creds.credentials.length }})
+                {{
+                  t('providers.vendorCredentials.connected', { count: creds.credentials.length })
+                }}
               </h4>
               <div
                 v-for="c in creds.credentials"
@@ -206,8 +241,16 @@ function vendorLabel(v: SubscriptionVendor): string {
                   <span class="font-medium text-slate-200">{{ c.label }}</span>
                   <span class="ml-2 text-xs text-slate-500">{{ vendorLabel(c.vendor) }}</span>
                   <div class="text-[11px] tabular-nums text-slate-500">
-                    {{ (c.inputTokens + c.outputTokens).toLocaleString() }} tok this window ·
-                    {{ c.requestCount }} run{{ c.requestCount === 1 ? '' : 's' }}
+                    {{
+                      t(
+                        'providers.vendorCredentials.usage',
+                        {
+                          tokens: n(c.inputTokens + c.outputTokens, 'decimal'),
+                          count: c.requestCount,
+                        },
+                        c.requestCount,
+                      )
+                    }}
                   </div>
                 </div>
                 <UButton

@@ -21,12 +21,12 @@ const props = withDefaults(defineProps<{ accountId?: string; category?: 'direct'
   category: 'direct',
 })
 
+const { t, n } = useI18n()
 const workspace = useWorkspaceStore()
 const keys = useApiKeysStore()
 const models = useModelsStore()
 const auth = useAuthStore()
 const toast = useToast()
-const { t } = useI18n()
 
 /** Account-wide mode (single account scope) vs the default workspace/user toggle. */
 const isAccount = computed(() => !!props.accountId)
@@ -50,84 +50,89 @@ interface ProviderMeta {
   caches?: boolean
 }
 
+// Provider metadata. Labels + step instructions resolve through i18n (reactive to the
+// locale), so each `t(...)` uses a literal key (kept tier-1 typed-key checkable); only the
+// `value`/`url`/`caches` differentiators stay inline.
 /** Direct vendors: the key reaches that one vendor's own endpoint. */
-const DIRECT_PROVIDERS: ProviderMeta[] = [
+const DIRECT_PROVIDERS = computed<ProviderMeta[]>(() => [
   {
     value: 'openai',
-    label: 'OpenAI',
+    label: t('providers.apiKeys.providers.openai.label'),
     url: 'https://platform.openai.com/api-keys',
     steps: [
-      'Open platform.openai.com → API keys and create a new secret key.',
-      'Copy the key (starts with sk-…); it is shown only once.',
+      t('providers.apiKeys.providers.openai.step1'),
+      t('providers.apiKeys.providers.openai.step2'),
     ],
     caches: true,
   },
   {
     value: 'anthropic',
-    label: 'Anthropic (Claude API)',
+    label: t('providers.apiKeys.providers.anthropic.label'),
     url: 'https://console.anthropic.com/settings/keys',
     steps: [
-      'Open console.anthropic.com → Settings → API Keys and create a key.',
-      'Copy the key (starts with sk-ant-…).',
+      t('providers.apiKeys.providers.anthropic.step1'),
+      t('providers.apiKeys.providers.anthropic.step2'),
     ],
     caches: true,
   },
   {
     value: 'qwen',
-    label: 'Qwen (Alibaba DashScope)',
+    label: t('providers.apiKeys.providers.qwen.label'),
     url: 'https://dashscope.console.aliyun.com/apiKey',
     steps: [
-      'Open the DashScope console (international) → API-KEY and create a key.',
-      'Copy the key; it authenticates the OpenAI-compatible Qwen endpoint.',
+      t('providers.apiKeys.providers.qwen.step1'),
+      t('providers.apiKeys.providers.qwen.step2'),
     ],
     caches: true,
   },
   {
     value: 'deepseek',
-    label: 'DeepSeek',
+    label: t('providers.apiKeys.providers.deepseek.label'),
     url: 'https://platform.deepseek.com/api_keys',
     steps: [
-      'Open platform.deepseek.com → API keys and create a key.',
-      'Copy the key (starts with sk-…).',
+      t('providers.apiKeys.providers.deepseek.step1'),
+      t('providers.apiKeys.providers.deepseek.step2'),
     ],
     caches: true,
   },
   {
     value: 'moonshot',
-    label: 'Moonshot (Kimi API)',
+    label: t('providers.apiKeys.providers.moonshot.label'),
     url: 'https://platform.moonshot.ai/console/api-keys',
     steps: [
-      'Open platform.moonshot.ai → API Keys and create a key.',
-      'Copy the key; it authenticates the OpenAI-compatible Moonshot endpoint.',
+      t('providers.apiKeys.providers.moonshot.step1'),
+      t('providers.apiKeys.providers.moonshot.step2'),
     ],
   },
-]
+])
 
 /** Proxies / gateways: one key fronts many vendors. These are intermediaries, not vendors. */
-const PROXY_PROVIDERS: ProviderMeta[] = [
+const PROXY_PROVIDERS = computed<ProviderMeta[]>(() => [
   {
     value: 'openrouter',
-    label: 'OpenRouter',
+    label: t('providers.apiKeys.providers.openrouter.label'),
     url: 'https://openrouter.ai/keys',
     steps: [
-      'Open openrouter.ai → Keys and create an API key.',
-      'Copy the key (starts with sk-or-…); it reaches 300+ models through one gateway.',
+      t('providers.apiKeys.providers.openrouter.step1'),
+      t('providers.apiKeys.providers.openrouter.step2'),
     ],
   },
   {
     value: 'litellm',
-    label: 'LiteLLM (self-hosted gateway)',
+    label: t('providers.apiKeys.providers.litellm.label'),
     url: 'https://docs.litellm.ai/docs/proxy/virtual_keys',
     steps: [
-      'Generate a virtual key on your LiteLLM gateway (or use its master key).',
-      "The gateway's base URL is set by your deployment operator (LITELLM_BASE_URL), not here.",
+      t('providers.apiKeys.providers.litellm.step1'),
+      t('providers.apiKeys.providers.litellm.step2'),
     ],
   },
-]
+])
 
 /** Providers for the requested category; labels everywhere fall back to the full set. */
-const PROVIDERS = computed(() => (props.category === 'proxy' ? PROXY_PROVIDERS : DIRECT_PROVIDERS))
-const ALL_PROVIDERS = [...DIRECT_PROVIDERS, ...PROXY_PROVIDERS]
+const PROVIDERS = computed(() =>
+  props.category === 'proxy' ? PROXY_PROVIDERS.value : DIRECT_PROVIDERS.value,
+)
+const ALL_PROVIDERS = computed(() => [...DIRECT_PROVIDERS.value, ...PROXY_PROVIDERS.value])
 
 const scope = ref<'workspace' | 'user'>('workspace')
 const provider = ref<ApiKeyProvider>(props.category === 'proxy' ? 'openrouter' : 'openai')
@@ -167,7 +172,7 @@ const connected = computed<ApiKey[]>(() => {
 })
 
 function providerLabel(p: ApiKeyProvider): string {
-  return ALL_PROVIDERS.find((x) => x.value === p)?.label ?? p
+  return ALL_PROVIDERS.value.find((x) => x.value === p)?.label ?? p
 }
 
 async function add() {
@@ -176,7 +181,8 @@ async function add() {
   try {
     const input = {
       provider: provider.value,
-      label: label.value.trim() || `${provider.value} key`,
+      label:
+        label.value.trim() || t('providers.apiKeys.defaultLabel', { provider: provider.value }),
       key: key.value.trim(),
     }
     if (isAccount.value) await keys.addAccountKey(input)
@@ -186,10 +192,14 @@ async function add() {
     label.value = ''
     // The picker's selectability depends on configured keys — refresh it.
     if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
-    toast.add({ title: 'API key connected', icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('providers.apiKeys.toast.connected'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
     toast.add({
-      title: 'Could not connect key',
+      title: t('providers.apiKeys.toast.connectFailed'),
       description: e instanceof Error ? e.message : String(e),
       color: 'error',
     })
@@ -206,7 +216,7 @@ async function remove(k: ApiKey) {
     if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
   } catch (e) {
     toast.add({
-      title: 'Could not remove key',
+      title: t('providers.apiKeys.toast.removeFailed'),
       description: e instanceof Error ? e.message : String(e),
       color: 'error',
     })
@@ -218,49 +228,49 @@ async function remove(k: ApiKey) {
   <div class="space-y-4">
     <div>
       <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
-        {{ category === 'proxy' ? 'Proxy / gateway API keys' : 'Direct provider API keys' }}
+        {{
+          category === 'proxy'
+            ? t('providers.apiKeys.proxyHeading')
+            : t('providers.apiKeys.directHeading')
+        }}
       </h4>
       <template v-if="category === 'proxy'">
         <p v-if="isAccount" class="mt-1 text-sm text-slate-400">
-          Connect a <strong>proxy</strong> key (OpenRouter, LiteLLM) shared by
-          <strong>every workspace</strong> in this account. A proxy is an intermediary that fronts
-          many vendors behind a single key. Keys are stored encrypted, pooled, and rotated by usage.
+          {{ t('providers.apiKeys.proxyAccountIntro') }}
         </p>
         <p v-else class="mt-1 text-sm text-slate-400">
-          Connect a <strong>proxy</strong> key (OpenRouter, LiteLLM). A proxy is an intermediary
-          that reaches many vendors' models through a single gateway, rather than one vendor
-          directly. Keys are stored encrypted, pooled, and rotated by usage. Scope a key to this
-          <strong>workspace</strong> (shared with the team) or to <strong>you</strong> (your own
-          pool, usable anywhere).
+          {{ t('providers.apiKeys.proxyIntro') }}
         </p>
       </template>
       <template v-else>
         <p v-if="isAccount" class="mt-1 text-sm text-slate-400">
-          Connect a vendor API key shared by <strong>every workspace</strong> in this account. Keys
-          are stored encrypted, pooled, and rotated by usage. Account keys are admin-managed.
+          {{ t('providers.apiKeys.directAccountIntro') }}
         </p>
         <p v-else class="mt-1 text-sm text-slate-400">
-          Connect a vendor API key so models run directly on that provider. Keys are stored
-          encrypted, pooled, and rotated by usage. Scope a key to this
-          <strong>workspace</strong> (shared with the team) or to <strong>you</strong> (your own
-          pool, usable anywhere).
+          {{ t('providers.apiKeys.directIntro') }}
         </p>
       </template>
     </div>
 
     <!-- scope + provider -->
     <div class="flex flex-wrap items-end gap-3">
-      <UFormField v-if="!isAccount" label="Scope">
+      <UFormField v-if="!isAccount" :label="t('providers.apiKeys.scopeField')">
         <USelect
           v-model="scope"
           :items="[
-            { label: 'This workspace', value: 'workspace' },
-            { label: 'My keys (only me)', value: 'user' },
+            { label: t('providers.apiKeys.scopeWorkspace'), value: 'workspace' },
+            { label: t('providers.apiKeys.scopeUser'), value: 'user' },
           ]"
           class="w-48"
         />
       </UFormField>
-      <UFormField :label="category === 'proxy' ? 'Proxy' : 'Provider'">
+      <UFormField
+        :label="
+          category === 'proxy'
+            ? t('providers.apiKeys.proxyField')
+            : t('providers.apiKeys.providerField')
+        "
+      >
         <USelect
           v-model="provider"
           :items="PROVIDERS.map((p) => ({ label: p.label, value: p.value }))"
@@ -287,7 +297,7 @@ async function remove(k: ApiKey) {
           rel="noopener noreferrer"
           class="text-primary-400 underline"
         >
-          Open {{ selected.label }} keys ↗
+          {{ t('providers.apiKeys.openKeys', { provider: selected.label }) }}
         </a>
       </li>
     </ol>
@@ -296,21 +306,24 @@ async function remove(k: ApiKey) {
          the caching flavour, so long agentic runs stop re-billing the whole prompt. -->
     <p v-if="selected.caches" class="flex items-center gap-1.5 text-[12px] text-emerald-400/90">
       <UIcon name="i-lucide-zap" class="h-3.5 w-3.5 shrink-0" />
-      Enables prompt caching for {{ selected.label }} models — a long multi-turn run reuses its
-      cached prompt prefix instead of re-sending it every turn.
+      {{ t('providers.apiKeys.cachingNote', { provider: selected.label }) }}
     </p>
 
     <!-- add form -->
     <div class="space-y-2">
-      <UFormField label="Label (optional)">
-        <UInput v-model="label" :disabled="needsSignIn" placeholder="e.g. team key" />
+      <UFormField :label="t('providers.apiKeys.labelField')">
+        <UInput
+          v-model="label"
+          :disabled="needsSignIn"
+          :placeholder="t('providers.apiKeys.labelPlaceholder')"
+        />
       </UFormField>
-      <UFormField label="API key">
+      <UFormField :label="t('providers.apiKeys.keyField')">
         <UTextarea
           v-model="key"
           :rows="2"
           :disabled="needsSignIn"
-          placeholder="paste the API key"
+          :placeholder="t('providers.apiKeys.keyPlaceholder')"
           class="font-mono"
         />
       </UFormField>
@@ -321,7 +334,7 @@ async function remove(k: ApiKey) {
           icon="i-lucide-plus"
           @click="add()"
         >
-          Connect
+          {{ t('providers.apiKeys.connect') }}
         </UButton>
       </div>
     </div>
@@ -329,7 +342,7 @@ async function remove(k: ApiKey) {
     <!-- connected keys for the selected scope -->
     <div v-if="connected.length" class="space-y-2">
       <h5 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
-        Connected ({{ connected.length }})
+        {{ t('providers.apiKeys.connected', { count: connected.length }) }}
       </h5>
       <div
         v-for="k in connected"
@@ -340,8 +353,13 @@ async function remove(k: ApiKey) {
           <span class="font-medium text-slate-200">{{ k.label }}</span>
           <span class="ml-2 text-xs text-slate-500">{{ providerLabel(k.provider) }}</span>
           <div class="text-[11px] tabular-nums text-slate-500">
-            {{ (k.inputTokens + k.outputTokens).toLocaleString() }} tok this window ·
-            {{ k.requestCount }} call{{ k.requestCount === 1 ? '' : 's' }}
+            {{
+              t(
+                'providers.apiKeys.usage',
+                { tokens: n(k.inputTokens + k.outputTokens, 'decimal'), count: k.requestCount },
+                k.requestCount,
+              )
+            }}
           </div>
         </div>
         <UButton

@@ -30,15 +30,15 @@ it only records **what is done and what is left**.
 |     2 | **Inspector + step/observability panels**                       | `panels/**` + `panels/inspector/**` + `observability/**` (23 components)                                                               | `inspector.*`, `panels.*`, `observability.*`                             | ✅ merged (#395)         |
 |     3 | **Layout + auth**                                               | `layout/**` (14) + `auth/**` (4)                                                                                                       | `layout.*`, `nav.*`, `auth.*`                                            | ✅ merged (#398)         |
 |     4 | **Settings**                                                    | `settings/**` (12)                                                                                                                     | `settings.*`                                                             | ✅ merged (#401)         |
-|     5 | Providers + AI onboarding                                       | `providers/**` (5), provider banners                                                                                                   | `providers.*`                                                            | ⬜ planned               |
+|     5 | **Providers + AI onboarding**                                   | `providers/**` (5)                                                                                                                     | `providers.*`                                                            | ✅ done (this PR)        |
 |     6 | Integrations: GitHub / Slack / documents / tasks                | `github/**`, `slack/**`, `documents/**`, `tasks/**`                                                                                    | `github.*`, `slack.*`, `documents.*`, `tasks.*`                          | ⬜ planned               |
 |     7 | Pipeline + palette + gates                                      | `pipeline/**`, `palettes/**`, `gates/**`                                                                                               | `pipeline.*`, `palette.*`, `gates.*`                                     | ⬜ planned               |
 |     8 | Agent windows                                                   | `requirements/`, `clarity/`, `consensus/`, `brainstorm/`, `spec/`, `followUp/`, `humanTest/`, `testing/`, `visualConfirm/`, `focus/`   | per-feature                                                              | ⬜ planned               |
 |     9 | Remaining surfaces                                              | `bootstrap/`, `environments/`, `fragments/`, `kaizen/`, `sandbox/`, `recurring/`, `media/`, `provisioning/`                            | per-feature                                                              | ⬜ planned               |
 |     X | Cross-cutting                                                   | `app/utils/catalog.ts` (status/agent-kind/block-type labels), `app/pages/*.vue`                                                        | `catalog.*` etc.                                                         | ⬜ planned               |
 
-Rough scale: **~121 SPA components**; ~69 already resolve copy through i18n after
-phases 0–4. The remaining work is the bulk of phases 5–X below.
+Rough scale: **~121 SPA components**; ~74 already resolve copy through i18n after
+phases 0–5. The remaining work is the bulk of phases 6–X below.
 
 ### Done
 
@@ -76,19 +76,21 @@ phases 0–4. The remaining work is the bulk of phases 5–X below.
   five locales (enum-keyed lookups via exhaustive `Record` maps; spend currency via the
   number formatter).
 
+- **Phase 5 (providers, this PR):** the default-preset mismatch dialog and the AI-provider
+  onboarding modal (the provider-keys / OpenRouter / local-runner routes), the personal
+  individual-usage credential prompt (reason-keyed title + connect-vs-unlock flows), the
+  direct/proxy provider API-keys section (per-vendor labels + guided steps, scope/provider
+  pickers, the caching note, connected-key usage), and the pooled LLM-vendor credentials
+  modal (tabs, pool intro, per-vendor guided steps, connected-token usage). New keys under
+  `providers.*` in all five bundled locales; connected-key/token usage uses plural forms
+  (3-form for pl/uk) with the number formatter, and per-vendor labels/steps resolve via
+  literal `t(...)` keys to keep the typed-key drift guard live.
+
 The four board/panels components with **no** user-facing text — `AgentChip`,
 `TaskDependencyEdges`, `DependencyConnectOverlay`, `StepResultViewHost` — need no
 migration and are intentionally skipped.
 
 ### Remaining (by area)
-
-**Providers** (phase 5)
-
-```
-providers/AiPresetMismatchDialog.vue, providers/AiProviderOnboardingModal.vue,
-providers/ApiKeysSection.vue, providers/PersonalCredentialModal.vue,
-providers/VendorCredentialsModal.vue
-```
 
 **Integrations** (phase 6)
 

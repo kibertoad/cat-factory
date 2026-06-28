@@ -1654,5 +1654,172 @@
         "removeFailed": "Could not remove runner"
       }
     }
+  },
+  "providers": {
+    "presetMismatch": {
+      "title": "Preset uses unavailable models",
+      "intro": "The workspace default model preset \"{name}\" assigns models that aren't available under the current configuration. Tasks that use this preset would fail when they reach those steps.",
+      "unavailable": "Unavailable",
+      "advice": "Either repoint the preset at models you have configured, or add the missing provider.",
+      "later": "Later",
+      "configureVendors": "Configure vendors",
+      "editPresets": "Edit presets",
+      "defaultPresetName": "default preset"
+    },
+    "onboarding": {
+      "title": "Set up an AI model provider",
+      "noModelTitle": "No AI model is available on this workspace yet.",
+      "noModelBody": "Agents need a model to run. AI works out of the box only on a Cloudflare deployment with Workers AI enabled; otherwise connect at least one source below.",
+      "operatorNote": "AWS Bedrock and Cloudflare Workers AI are enabled by the deployment operator via environment configuration, not from this screen.",
+      "routes": {
+        "keys": {
+          "title": "Provider keys & subscriptions",
+          "body": "Add a direct provider API key (OpenAI, Anthropic, Qwen, …) or connect a commercial coding-plan subscription (Kimi, DeepSeek) or a personal one (Claude, GLM, Codex).",
+          "cta": "Open LLM vendors"
+        },
+        "openrouter": {
+          "title": "OpenRouter gateway",
+          "body": "Enable models through the OpenRouter gateway with a single key. Browse and turn on the models you want.",
+          "cta": "Browse OpenRouter models"
+        },
+        "local": {
+          "title": "My local runners",
+          "body": "Point cat-factory at a model you run yourself (Ollama, LM Studio, llama.cpp, vLLM, …). No API key, no spend.",
+          "cta": "Configure local runners"
+        }
+      }
+    },
+    "personalCredential": {
+      "titleWrongPassword": "Incorrect personal password",
+      "titleNoSubscription": "Connect your {vendor} subscription",
+      "titleExpired": "Your {vendor} subscription expired",
+      "titleDefault": "Enter your personal password",
+      "fallbackVendor": "subscription",
+      "connectBody": "This task uses a {vendor} model, which runs on your own {vendor} subscription. Connect (or renew) it first, then start the run again.",
+      "connectCta": "Connect subscription",
+      "passwordBody": "Enter the personal password that protects your {vendor} subscription. It unlocks your credential for this run only and is cached in this browser so you won't be asked again for a while.",
+      "passwordField": "Personal password",
+      "passwordPlaceholder": "your personal password",
+      "submit": "Unlock & run",
+      "cancel": "Cancel",
+      "toast": {
+        "started": "Run started",
+        "startFailed": "Could not start the run"
+      },
+      "vendors": {
+        "claude": "Claude",
+        "glm": "GLM (Z.ai)",
+        "codex": "ChatGPT (Codex)"
+      }
+    },
+    "apiKeys": {
+      "directHeading": "Direct provider API keys",
+      "proxyHeading": "Proxy / gateway API keys",
+      "directAccountIntro": "Connect a vendor API key shared by every workspace in this account. Keys are stored encrypted, pooled, and rotated by usage. Account keys are admin-managed.",
+      "directIntro": "Connect a vendor API key so models run directly on that provider. Keys are stored encrypted, pooled, and rotated by usage. Scope a key to this workspace (shared with the team) or to you (your own pool, usable anywhere).",
+      "proxyAccountIntro": "Connect a proxy key (OpenRouter, LiteLLM) shared by every workspace in this account. A proxy is an intermediary that fronts many vendors behind a single key. Keys are stored encrypted, pooled, and rotated by usage.",
+      "proxyIntro": "Connect a proxy key (OpenRouter, LiteLLM). A proxy is an intermediary that reaches many vendors' models through a single gateway, rather than one vendor directly. Keys are stored encrypted, pooled, and rotated by usage. Scope a key to this workspace (shared with the team) or to you (your own pool, usable anywhere).",
+      "scopeField": "Scope",
+      "scopeWorkspace": "This workspace",
+      "scopeUser": "My keys (only me)",
+      "providerField": "Provider",
+      "proxyField": "Proxy",
+      "openKeys": "Open {provider} keys ↗",
+      "cachingNote": "Enables prompt caching for {provider} models, so a long multi-turn run reuses its cached prompt prefix instead of re-sending it every turn.",
+      "labelField": "Label (optional)",
+      "labelPlaceholder": "e.g. team key",
+      "defaultLabel": "{provider} key",
+      "keyField": "API key",
+      "keyPlaceholder": "paste the API key",
+      "connect": "Connect",
+      "connected": "Connected ({count})",
+      "usage": "{tokens} tok this window · {count} call | {tokens} tok this window · {count} calls",
+      "@usage": {
+        "description": "Usage readout for a connected API key. {tokens} is a preformatted token count; {count} is the number of API calls in the window and drives the plural. Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
+      },
+      "toast": {
+        "connected": "API key connected",
+        "connectFailed": "Could not connect key",
+        "removeFailed": "Could not remove key"
+      },
+      "providers": {
+        "openai": {
+          "label": "OpenAI",
+          "step1": "Open platform.openai.com → API keys and create a new secret key.",
+          "step2": "Copy the key (starts with sk-…); it is shown only once."
+        },
+        "anthropic": {
+          "label": "Anthropic (Claude API)",
+          "step1": "Open console.anthropic.com → Settings → API Keys and create a key.",
+          "step2": "Copy the key (starts with sk-ant-…)."
+        },
+        "qwen": {
+          "label": "Qwen (Alibaba DashScope)",
+          "step1": "Open the DashScope console (international) → API-KEY and create a key.",
+          "step2": "Copy the key; it authenticates the OpenAI-compatible Qwen endpoint."
+        },
+        "deepseek": {
+          "label": "DeepSeek",
+          "step1": "Open platform.deepseek.com → API keys and create a key.",
+          "step2": "Copy the key (starts with sk-…)."
+        },
+        "moonshot": {
+          "label": "Moonshot (Kimi API)",
+          "step1": "Open platform.moonshot.ai → API Keys and create a key.",
+          "step2": "Copy the key; it authenticates the OpenAI-compatible Moonshot endpoint."
+        },
+        "openrouter": {
+          "label": "OpenRouter",
+          "step1": "Open openrouter.ai → Keys and create an API key.",
+          "step2": "Copy the key (starts with sk-or-…); it reaches 300+ models through one gateway."
+        },
+        "litellm": {
+          "label": "LiteLLM (self-hosted gateway)",
+          "step1": "Generate a virtual key on your LiteLLM gateway (or use its master key).",
+          "step2": "The gateway's base URL is set by your deployment operator (LITELLM_BASE_URL), not here."
+        }
+      }
+    },
+    "vendorCredentials": {
+      "title": "LLM Vendors",
+      "tabs": {
+        "pool": "Workspace pool",
+        "direct": "Direct providers",
+        "proxy": "Proxies",
+        "personal": "Personal subscriptions"
+      },
+      "poolIntro": "Connect a commercial coding-plan subscription (Kimi, DeepSeek) that permits team/organization use to run agent steps on the Claude Code harness instead of an API key. Tokens are stored encrypted, pooled, and rotated by usage. Subscription models are flat-rate quota, so they don't draw on your spend budget. Individual-use subscriptions (Claude, GLM, ChatGPT/Codex) are connected per-user in the Personal subscriptions tab.",
+      "vendorField": "Vendor",
+      "labelField": "Label (optional)",
+      "labelPlaceholder": "e.g. work account",
+      "defaultLabel": "{vendor} token",
+      "tokenField": "Token",
+      "tokenPlaceholder": "your coding-plan API key",
+      "connect": "Connect",
+      "connected": "Connected ({count})",
+      "usage": "{tokens} tok this window · {count} run | {tokens} tok this window · {count} runs",
+      "@usage": {
+        "description": "Usage readout for a connected subscription token. {tokens} is a preformatted token count; {count} is the number of runs in the window and drives the plural. Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
+      },
+      "toast": {
+        "connected": "Token connected",
+        "connectFailed": "Could not connect token",
+        "removeFailed": "Could not remove token"
+      },
+      "vendors": {
+        "kimi": {
+          "label": "Kimi (Moonshot coding plan)",
+          "step1": "Open your Moonshot (Kimi) coding-plan console and create an API key for the Anthropic-compatible endpoint.",
+          "step2": "Copy the API key. Agent steps will run via Claude Code against Moonshot's Anthropic endpoint with full context.",
+          "step3": "Paste the key below."
+        },
+        "deepseek": {
+          "label": "DeepSeek (coding plan)",
+          "step1": "Open your DeepSeek coding-plan console and create an API key for the Anthropic-compatible endpoint.",
+          "step2": "Copy the API key. Agent steps will run via Claude Code against DeepSeek's Anthropic endpoint with full context.",
+          "step3": "Paste the key below."
+        }
+      }
+    }
   }
 }

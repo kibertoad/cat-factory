@@ -1609,5 +1609,166 @@
         "removeFailed": "Impossible de supprimer le runner"
       }
     }
+  },
+  "providers": {
+    "presetMismatch": {
+      "title": "Le préréglage utilise des modèles indisponibles",
+      "intro": "Le préréglage de modèle par défaut de l'espace de travail \"{name}\" affecte des modèles indisponibles avec la configuration actuelle. Les tâches qui utilisent ce préréglage échoueraient en atteignant ces étapes.",
+      "unavailable": "Indisponibles",
+      "advice": "Réorientez le préréglage vers des modèles que vous avez configurés, ou ajoutez le fournisseur manquant.",
+      "later": "Plus tard",
+      "configureVendors": "Configurer les fournisseurs",
+      "editPresets": "Modifier les préréglages",
+      "defaultPresetName": "préréglage par défaut"
+    },
+    "onboarding": {
+      "title": "Configurer un fournisseur de modèles d'IA",
+      "noModelTitle": "Aucun modèle d'IA n'est encore disponible sur cet espace de travail.",
+      "noModelBody": "Les agents ont besoin d'un modèle pour s'exécuter. L'IA fonctionne d'emblée uniquement sur un déploiement Cloudflare avec Workers AI activé ; sinon, connectez au moins une source ci-dessous.",
+      "operatorNote": "AWS Bedrock et Cloudflare Workers AI sont activés par l'opérateur du déploiement via la configuration de l'environnement, pas depuis cet écran.",
+      "routes": {
+        "keys": {
+          "title": "Clés et abonnements des fournisseurs",
+          "body": "Ajoutez une clé d'API directe d'un fournisseur (OpenAI, Anthropic, Qwen, …) ou connectez un abonnement commercial à un plan de codage (Kimi, DeepSeek) ou personnel (Claude, GLM, Codex).",
+          "cta": "Ouvrir les fournisseurs de LLM"
+        },
+        "openrouter": {
+          "title": "Passerelle OpenRouter",
+          "body": "Activez des modèles via la passerelle OpenRouter avec une seule clé. Parcourez et activez les modèles que vous voulez.",
+          "cta": "Parcourir les modèles OpenRouter"
+        },
+        "local": {
+          "title": "Mes exécuteurs locaux",
+          "body": "Pointez cat-factory vers un modèle que vous exécutez vous-même (Ollama, LM Studio, llama.cpp, vLLM, …). Sans clé d'API ni dépense.",
+          "cta": "Configurer les exécuteurs locaux"
+        }
+      }
+    },
+    "personalCredential": {
+      "titleWrongPassword": "Mot de passe personnel incorrect",
+      "titleNoSubscription": "Connectez votre abonnement {vendor}",
+      "titleExpired": "Votre abonnement {vendor} a expiré",
+      "titleDefault": "Saisissez votre mot de passe personnel",
+      "fallbackVendor": "abonnement",
+      "connectBody": "Cette tâche utilise un modèle {vendor}, qui s'exécute sur votre propre abonnement {vendor}. Connectez-le (ou renouvelez-le) d'abord, puis relancez l'exécution.",
+      "connectCta": "Connecter l'abonnement",
+      "passwordBody": "Saisissez le mot de passe personnel qui protège votre abonnement {vendor}. Il déverrouille votre identifiant pour cette exécution uniquement et est mis en cache dans ce navigateur un certain temps pour ne pas vous le redemander tout de suite.",
+      "passwordField": "Mot de passe personnel",
+      "passwordPlaceholder": "votre mot de passe personnel",
+      "submit": "Déverrouiller et exécuter",
+      "cancel": "Annuler",
+      "toast": {
+        "started": "Exécution démarrée",
+        "startFailed": "Impossible de démarrer l'exécution"
+      },
+      "vendors": {
+        "claude": "Claude",
+        "glm": "GLM (Z.ai)",
+        "codex": "ChatGPT (Codex)"
+      }
+    },
+    "apiKeys": {
+      "directHeading": "Clés d'API des fournisseurs directs",
+      "proxyHeading": "Clés d'API de proxy / passerelle",
+      "directAccountIntro": "Connectez une clé d'API de fournisseur partagée par tous les espaces de travail de ce compte. Les clés sont stockées chiffrées, mutualisées et alternées selon l'usage. Les clés de compte sont gérées par un administrateur.",
+      "directIntro": "Connectez une clé d'API de fournisseur pour que les modèles s'exécutent directement chez ce fournisseur. Les clés sont stockées chiffrées, mutualisées et alternées selon l'usage. Définissez la portée d'une clé sur cet espace de travail (partagée avec l'équipe) ou sur vous (votre propre pool, utilisable partout).",
+      "proxyAccountIntro": "Connectez une clé de proxy (OpenRouter, LiteLLM) partagée par tous les espaces de travail de ce compte. Un proxy est un intermédiaire qui donne accès à de nombreux fournisseurs derrière une seule clé. Les clés sont stockées chiffrées, mutualisées et alternées selon l'usage.",
+      "proxyIntro": "Connectez une clé de proxy (OpenRouter, LiteLLM). Un proxy est un intermédiaire qui atteint les modèles de nombreux fournisseurs via une seule passerelle, plutôt qu'un fournisseur direct. Les clés sont stockées chiffrées, mutualisées et alternées selon l'usage. Définissez la portée d'une clé sur cet espace de travail (partagée avec l'équipe) ou sur vous (votre propre pool, utilisable partout).",
+      "scopeField": "Portée",
+      "scopeWorkspace": "Cet espace de travail",
+      "scopeUser": "Mes clés (moi uniquement)",
+      "providerField": "Fournisseur",
+      "proxyField": "Proxy",
+      "openKeys": "Ouvrir les clés {provider} ↗",
+      "cachingNote": "Active la mise en cache du prompt pour les modèles {provider}, de sorte qu'une longue exécution multi-tours réutilise son préfixe de prompt en cache au lieu de le renvoyer à chaque tour.",
+      "labelField": "Libellé (facultatif)",
+      "labelPlaceholder": "p. ex. clé de l'équipe",
+      "defaultLabel": "Clé {provider}",
+      "keyField": "Clé d'API",
+      "keyPlaceholder": "collez la clé d'API",
+      "connect": "Connecter",
+      "connected": "Connectées ({count})",
+      "usage": "{tokens} tok cette fenêtre · {count} appel | {tokens} tok cette fenêtre · {count} appels",
+      "toast": {
+        "connected": "Clé d'API connectée",
+        "connectFailed": "Impossible de connecter la clé",
+        "removeFailed": "Impossible de supprimer la clé"
+      },
+      "providers": {
+        "openai": {
+          "label": "OpenAI",
+          "step1": "Ouvrez platform.openai.com → API keys et créez une nouvelle clé secrète.",
+          "step2": "Copiez la clé (commence par sk-…) ; elle n'est affichée qu'une seule fois."
+        },
+        "anthropic": {
+          "label": "Anthropic (API Claude)",
+          "step1": "Ouvrez console.anthropic.com → Settings → API Keys et créez une clé.",
+          "step2": "Copiez la clé (commence par sk-ant-…)."
+        },
+        "qwen": {
+          "label": "Qwen (Alibaba DashScope)",
+          "step1": "Ouvrez la console DashScope (internationale) → API-KEY et créez une clé.",
+          "step2": "Copiez la clé ; elle authentifie l'endpoint Qwen compatible OpenAI."
+        },
+        "deepseek": {
+          "label": "DeepSeek",
+          "step1": "Ouvrez platform.deepseek.com → API keys et créez une clé.",
+          "step2": "Copiez la clé (commence par sk-…)."
+        },
+        "moonshot": {
+          "label": "Moonshot (API Kimi)",
+          "step1": "Ouvrez platform.moonshot.ai → API Keys et créez une clé.",
+          "step2": "Copiez la clé ; elle authentifie l'endpoint Moonshot compatible OpenAI."
+        },
+        "openrouter": {
+          "label": "OpenRouter",
+          "step1": "Ouvrez openrouter.ai → Keys et créez une clé d'API.",
+          "step2": "Copiez la clé (commence par sk-or-…) ; elle atteint plus de 300 modèles via une seule passerelle."
+        },
+        "litellm": {
+          "label": "LiteLLM (passerelle auto-hébergée)",
+          "step1": "Générez une clé virtuelle sur votre passerelle LiteLLM (ou utilisez sa clé maîtresse).",
+          "step2": "L'URL de base de la passerelle est définie par l'opérateur de votre déploiement (LITELLM_BASE_URL), pas ici."
+        }
+      }
+    },
+    "vendorCredentials": {
+      "title": "Fournisseurs de LLM",
+      "tabs": {
+        "pool": "Pool de l'espace de travail",
+        "direct": "Fournisseurs directs",
+        "proxy": "Proxys",
+        "personal": "Abonnements personnels"
+      },
+      "poolIntro": "Connectez un abonnement commercial à un plan de codage (Kimi, DeepSeek) qui autorise un usage équipe/organisation pour exécuter les étapes d'agent sur le harness Claude Code au lieu d'une clé d'API. Les tokens sont stockés chiffrés, mutualisés et alternés selon l'usage. Les modèles d'abonnement sont à quota forfaitaire, donc ils n'entament pas votre budget de dépense. Les abonnements à usage individuel (Claude, GLM, ChatGPT/Codex) se connectent par utilisateur dans l'onglet Abonnements personnels.",
+      "vendorField": "Fournisseur",
+      "labelField": "Libellé (facultatif)",
+      "labelPlaceholder": "p. ex. compte pro",
+      "defaultLabel": "Token {vendor}",
+      "tokenField": "Token",
+      "tokenPlaceholder": "votre clé d'API de plan de codage",
+      "connect": "Connecter",
+      "connected": "Connectés ({count})",
+      "usage": "{tokens} tok cette fenêtre · {count} exécution | {tokens} tok cette fenêtre · {count} exécutions",
+      "toast": {
+        "connected": "Token connecté",
+        "connectFailed": "Impossible de connecter le token",
+        "removeFailed": "Impossible de supprimer le token"
+      },
+      "vendors": {
+        "kimi": {
+          "label": "Kimi (plan de codage Moonshot)",
+          "step1": "Ouvrez la console de votre plan de codage Moonshot (Kimi) et créez une clé d'API pour l'endpoint compatible Anthropic.",
+          "step2": "Copiez la clé d'API. Les étapes d'agent s'exécuteront via Claude Code sur l'endpoint Anthropic de Moonshot avec le contexte complet.",
+          "step3": "Collez la clé ci-dessous."
+        },
+        "deepseek": {
+          "label": "DeepSeek (plan de codage)",
+          "step1": "Ouvrez la console de votre plan de codage DeepSeek et créez une clé d'API pour l'endpoint compatible Anthropic.",
+          "step2": "Copiez la clé d'API. Les étapes d'agent s'exécuteront via Claude Code sur l'endpoint Anthropic de DeepSeek avec le contexte complet.",
+          "step3": "Collez la clé ci-dessous."
+        }
+      }
+    }
   }
 }

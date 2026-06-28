@@ -1609,5 +1609,166 @@
         "removeFailed": "Nie udało się usunąć runnera"
       }
     }
+  },
+  "providers": {
+    "presetMismatch": {
+      "title": "Preset używa niedostępnych modeli",
+      "intro": "Domyślny preset modeli przestrzeni roboczej \"{name}\" przypisuje modele niedostępne w obecnej konfiguracji. Zadania korzystające z tego presetu zakończyłyby się błędem po dotarciu do tych kroków.",
+      "unavailable": "Niedostępne",
+      "advice": "Przekieruj preset na skonfigurowane modele albo dodaj brakującego dostawcę.",
+      "later": "Później",
+      "configureVendors": "Skonfiguruj dostawców",
+      "editPresets": "Edytuj presety",
+      "defaultPresetName": "domyślny preset"
+    },
+    "onboarding": {
+      "title": "Skonfiguruj dostawcę modeli AI",
+      "noModelTitle": "W tej przestrzeni roboczej nie ma jeszcze dostępnego modelu AI.",
+      "noModelBody": "Agenci potrzebują modelu do działania. AI działa od razu tylko we wdrożeniu Cloudflare z włączonym Workers AI; w przeciwnym razie podłącz poniżej co najmniej jedno źródło.",
+      "operatorNote": "AWS Bedrock i Cloudflare Workers AI włącza operator wdrożenia w konfiguracji środowiska, a nie z tego ekranu.",
+      "routes": {
+        "keys": {
+          "title": "Klucze i subskrypcje dostawców",
+          "body": "Dodaj bezpośredni klucz API dostawcy (OpenAI, Anthropic, Qwen, …) albo podłącz komercyjną subskrypcję planu programistycznego (Kimi, DeepSeek) lub osobistą (Claude, GLM, Codex).",
+          "cta": "Otwórz dostawców LLM"
+        },
+        "openrouter": {
+          "title": "Brama OpenRouter",
+          "body": "Włącz modele przez bramę OpenRouter jednym kluczem. Przeglądaj i włączaj modele, których chcesz.",
+          "cta": "Przeglądaj modele OpenRouter"
+        },
+        "local": {
+          "title": "Moje lokalne wykonawcze",
+          "body": "Wskaż cat-factory model, który uruchamiasz samodzielnie (Ollama, LM Studio, llama.cpp, vLLM, …). Bez klucza API, bez kosztów.",
+          "cta": "Skonfiguruj lokalne wykonawcze"
+        }
+      }
+    },
+    "personalCredential": {
+      "titleWrongPassword": "Nieprawidłowe hasło osobiste",
+      "titleNoSubscription": "Podłącz swoją subskrypcję {vendor}",
+      "titleExpired": "Twoja subskrypcja {vendor} wygasła",
+      "titleDefault": "Wprowadź swoje hasło osobiste",
+      "fallbackVendor": "subskrypcja",
+      "connectBody": "To zadanie używa modelu {vendor}, który działa na Twojej własnej subskrypcji {vendor}. Najpierw ją podłącz (lub odnów), a następnie uruchom ponownie.",
+      "connectCta": "Podłącz subskrypcję",
+      "passwordBody": "Wprowadź hasło osobiste chroniące Twoją subskrypcję {vendor}. Odblokowuje ono Twoje poświadczenie tylko dla tego uruchomienia i jest buforowane w tej przeglądarce przez pewien czas, aby nie pytać Cię ponownie zbyt szybko.",
+      "passwordField": "Hasło osobiste",
+      "passwordPlaceholder": "Twoje hasło osobiste",
+      "submit": "Odblokuj i uruchom",
+      "cancel": "Anuluj",
+      "toast": {
+        "started": "Uruchomienie rozpoczęte",
+        "startFailed": "Nie udało się rozpocząć uruchomienia"
+      },
+      "vendors": {
+        "claude": "Claude",
+        "glm": "GLM (Z.ai)",
+        "codex": "ChatGPT (Codex)"
+      }
+    },
+    "apiKeys": {
+      "directHeading": "Klucze API dostawców bezpośrednich",
+      "proxyHeading": "Klucze API proxy / bramy",
+      "directAccountIntro": "Podłącz klucz API dostawcy współdzielony przez wszystkie przestrzenie robocze na tym koncie. Klucze są przechowywane zaszyfrowane, łączone w pulę i rotowane według użycia. Kluczami konta zarządza administrator.",
+      "directIntro": "Podłącz klucz API dostawcy, aby modele działały bezpośrednio u tego dostawcy. Klucze są przechowywane zaszyfrowane, łączone w pulę i rotowane według użycia. Określ zakres klucza dla tej przestrzeni roboczej (współdzielony z zespołem) lub dla Ciebie (Twoja własna pula, używalna wszędzie).",
+      "proxyAccountIntro": "Podłącz klucz proxy (OpenRouter, LiteLLM) współdzielony przez wszystkie przestrzenie robocze na tym koncie. Proxy to pośrednik dający dostęp do wielu dostawców za jednym kluczem. Klucze są przechowywane zaszyfrowane, łączone w pulę i rotowane według użycia.",
+      "proxyIntro": "Podłącz klucz proxy (OpenRouter, LiteLLM). Proxy to pośrednik docierający do modeli wielu dostawców przez jedną bramę, zamiast jednego dostawcy bezpośrednio. Klucze są przechowywane zaszyfrowane, łączone w pulę i rotowane według użycia. Określ zakres klucza dla tej przestrzeni roboczej (współdzielony z zespołem) lub dla Ciebie (Twoja własna pula, używalna wszędzie).",
+      "scopeField": "Zakres",
+      "scopeWorkspace": "Ta przestrzeń robocza",
+      "scopeUser": "Moje klucze (tylko ja)",
+      "providerField": "Dostawca",
+      "proxyField": "Proxy",
+      "openKeys": "Otwórz klucze {provider} ↗",
+      "cachingNote": "Włącza buforowanie promptu dla modeli {provider}, dzięki czemu długie wielokrokowe uruchomienie ponownie wykorzystuje zbuforowany prefiks promptu zamiast wysyłać go ponownie w każdej turze.",
+      "labelField": "Etykieta (opcjonalnie)",
+      "labelPlaceholder": "np. klucz zespołu",
+      "defaultLabel": "Klucz {provider}",
+      "keyField": "Klucz API",
+      "keyPlaceholder": "wklej klucz API",
+      "connect": "Podłącz",
+      "connected": "Podłączone ({count})",
+      "usage": "{tokens} tok w tym oknie · {count} wywołanie | {tokens} tok w tym oknie · {count} wywołania | {tokens} tok w tym oknie · {count} wywołań",
+      "toast": {
+        "connected": "Klucz API podłączony",
+        "connectFailed": "Nie udało się podłączyć klucza",
+        "removeFailed": "Nie udało się usunąć klucza"
+      },
+      "providers": {
+        "openai": {
+          "label": "OpenAI",
+          "step1": "Otwórz platform.openai.com → API keys i utwórz nowy tajny klucz.",
+          "step2": "Skopiuj klucz (zaczyna się od sk-…); jest pokazywany tylko raz."
+        },
+        "anthropic": {
+          "label": "Anthropic (API Claude)",
+          "step1": "Otwórz console.anthropic.com → Settings → API Keys i utwórz klucz.",
+          "step2": "Skopiuj klucz (zaczyna się od sk-ant-…)."
+        },
+        "qwen": {
+          "label": "Qwen (Alibaba DashScope)",
+          "step1": "Otwórz konsolę DashScope (międzynarodową) → API-KEY i utwórz klucz.",
+          "step2": "Skopiuj klucz; uwierzytelnia on zgodny z OpenAI endpoint Qwen."
+        },
+        "deepseek": {
+          "label": "DeepSeek",
+          "step1": "Otwórz platform.deepseek.com → API keys i utwórz klucz.",
+          "step2": "Skopiuj klucz (zaczyna się od sk-…)."
+        },
+        "moonshot": {
+          "label": "Moonshot (API Kimi)",
+          "step1": "Otwórz platform.moonshot.ai → API Keys i utwórz klucz.",
+          "step2": "Skopiuj klucz; uwierzytelnia on zgodny z OpenAI endpoint Moonshot."
+        },
+        "openrouter": {
+          "label": "OpenRouter",
+          "step1": "Otwórz openrouter.ai → Keys i utwórz klucz API.",
+          "step2": "Skopiuj klucz (zaczyna się od sk-or-…); sięga ponad 300 modeli przez jedną bramę."
+        },
+        "litellm": {
+          "label": "LiteLLM (brama self-hosted)",
+          "step1": "Wygeneruj klucz wirtualny na swojej bramie LiteLLM (lub użyj jej klucza głównego).",
+          "step2": "Bazowy URL bramy ustawia operator Twojego wdrożenia (LITELLM_BASE_URL), nie tutaj."
+        }
+      }
+    },
+    "vendorCredentials": {
+      "title": "Dostawcy LLM",
+      "tabs": {
+        "pool": "Pula przestrzeni roboczej",
+        "direct": "Dostawcy bezpośredni",
+        "proxy": "Proxy",
+        "personal": "Subskrypcje osobiste"
+      },
+      "poolIntro": "Podłącz komercyjną subskrypcję planu programistycznego (Kimi, DeepSeek) zezwalającą na użycie zespołowe/organizacyjne, aby uruchamiać kroki agenta na harnessie Claude Code zamiast klucza API. Tokeny są przechowywane zaszyfrowane, łączone w pulę i rotowane według użycia. Modele subskrypcyjne mają ryczałtowy limit, więc nie obciążają Twojego budżetu wydatków. Subskrypcje do użytku indywidualnego (Claude, GLM, ChatGPT/Codex) podłącza się per użytkownik na karcie Subskrypcje osobiste.",
+      "vendorField": "Dostawca",
+      "labelField": "Etykieta (opcjonalnie)",
+      "labelPlaceholder": "np. konto służbowe",
+      "defaultLabel": "Token {vendor}",
+      "tokenField": "Token",
+      "tokenPlaceholder": "Twój klucz API planu programistycznego",
+      "connect": "Podłącz",
+      "connected": "Podłączone ({count})",
+      "usage": "{tokens} tok w tym oknie · {count} uruchomienie | {tokens} tok w tym oknie · {count} uruchomienia | {tokens} tok w tym oknie · {count} uruchomień",
+      "toast": {
+        "connected": "Token podłączony",
+        "connectFailed": "Nie udało się podłączyć tokenu",
+        "removeFailed": "Nie udało się usunąć tokenu"
+      },
+      "vendors": {
+        "kimi": {
+          "label": "Kimi (plan programistyczny Moonshot)",
+          "step1": "Otwórz konsolę swojego planu programistycznego Moonshot (Kimi) i utwórz klucz API dla endpointu zgodnego z Anthropic.",
+          "step2": "Skopiuj klucz API. Kroki agenta będą działać przez Claude Code na endpoincie Anthropic firmy Moonshot z pełnym kontekstem.",
+          "step3": "Wklej klucz poniżej."
+        },
+        "deepseek": {
+          "label": "DeepSeek (plan programistyczny)",
+          "step1": "Otwórz konsolę swojego planu programistycznego DeepSeek i utwórz klucz API dla endpointu zgodnego z Anthropic.",
+          "step2": "Skopiuj klucz API. Kroki agenta będą działać przez Claude Code na endpoincie Anthropic firmy DeepSeek z pełnym kontekstem.",
+          "step3": "Wklej klucz poniżej."
+        }
+      }
+    }
   }
 }

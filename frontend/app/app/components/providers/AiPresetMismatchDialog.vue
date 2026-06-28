@@ -8,6 +8,7 @@
 // fixed (or all its models become available).
 import { computed } from 'vue'
 
+const { t } = useI18n()
 const ui = useUiStore()
 const models = useModelsStore()
 const modelPresets = useModelPresetsStore()
@@ -18,7 +19,9 @@ const open = computed({
   set: (v: boolean) => (v ? ui.openAiPresetMismatch() : ui.closeAiPresetMismatch()),
 })
 
-const presetName = computed(() => modelPresets.defaultPreset?.name ?? 'default preset')
+const presetName = computed(
+  () => modelPresets.defaultPreset?.name ?? t('providers.presetMismatch.defaultPresetName'),
+)
 
 /** Readable labels for the unavailable model ids (catalog label, else the raw id). */
 const unavailableLabels = computed(() =>
@@ -32,19 +35,27 @@ function go(action: () => void) {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Preset uses unavailable models" :ui="{ content: 'max-w-xl' }">
+  <UModal
+    v-model:open="open"
+    :title="t('providers.presetMismatch.title')"
+    :ui="{ content: 'max-w-xl' }"
+  >
     <template #body>
       <div class="space-y-5">
-        <p class="text-sm text-slate-300">
-          The workspace default model preset
-          <span class="font-medium text-slate-100">“{{ presetName }}”</span>
-          assigns models that aren't available under the current configuration. Tasks that use this
-          preset would fail when they reach those steps.
-        </p>
+        <i18n-t
+          keypath="providers.presetMismatch.intro"
+          tag="p"
+          class="text-sm text-slate-300"
+          scope="global"
+        >
+          <template #name>
+            <span class="font-medium text-slate-100">{{ presetName }}</span>
+          </template>
+        </i18n-t>
 
         <div class="rounded-lg border border-slate-700 bg-slate-900/50 p-3">
           <p class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            Unavailable
+            {{ t('providers.presetMismatch.unavailable') }}
           </p>
           <div class="flex flex-wrap gap-1.5">
             <UBadge
@@ -60,11 +71,13 @@ function go(action: () => void) {
         </div>
 
         <p class="text-[13px] text-slate-400">
-          Either repoint the preset at models you have configured, or add the missing provider.
+          {{ t('providers.presetMismatch.advice') }}
         </p>
 
         <div class="flex flex-wrap justify-end gap-2">
-          <UButton color="neutral" variant="ghost" size="sm" @click="open = false"> Later </UButton>
+          <UButton color="neutral" variant="ghost" size="sm" @click="open = false">
+            {{ t('providers.presetMismatch.later') }}
+          </UButton>
           <UButton
             color="neutral"
             variant="subtle"
@@ -72,10 +85,10 @@ function go(action: () => void) {
             icon="i-lucide-key-round"
             @click="go(ui.openVendorCredentials)"
           >
-            Configure vendors
+            {{ t('providers.presetMismatch.configureVendors') }}
           </UButton>
           <UButton color="primary" size="sm" icon="i-lucide-cpu" @click="go(ui.openModelConfig)">
-            Edit presets
+            {{ t('providers.presetMismatch.editPresets') }}
           </UButton>
         </div>
       </div>

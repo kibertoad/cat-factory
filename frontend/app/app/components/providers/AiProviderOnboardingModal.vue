@@ -7,6 +7,7 @@
 // the banner, disappears automatically the moment a usable source exists.
 import { computed } from 'vue'
 
+const { t } = useI18n()
 const ui = useUiStore()
 
 const open = computed({
@@ -32,30 +33,34 @@ interface Route {
 const routes = computed<Route[]>(() => [
   {
     icon: 'i-lucide-key-round',
-    title: 'Provider keys & subscriptions',
-    body: 'Add a direct provider API key (OpenAI, Anthropic, Qwen, …) or connect a commercial coding-plan subscription (Kimi, DeepSeek) or a personal one (Claude, GLM, Codex).',
-    cta: 'Open LLM vendors',
+    title: t('providers.onboarding.routes.keys.title'),
+    body: t('providers.onboarding.routes.keys.body'),
+    cta: t('providers.onboarding.routes.keys.cta'),
     onSelect: () => go(ui.openVendorCredentials),
   },
   {
     icon: 'i-lucide-route',
-    title: 'OpenRouter gateway',
-    body: 'Enable models through the OpenRouter gateway with a single key — browse and turn on the models you want.',
-    cta: 'Browse OpenRouter models',
+    title: t('providers.onboarding.routes.openrouter.title'),
+    body: t('providers.onboarding.routes.openrouter.body'),
+    cta: t('providers.onboarding.routes.openrouter.cta'),
     onSelect: () => go(ui.openOpenRouter),
   },
   {
     icon: 'i-lucide-server',
-    title: 'My local runners',
-    body: 'Point cat-factory at a model you run yourself (Ollama, LM Studio, llama.cpp, vLLM, …). No API key, no spend.',
-    cta: 'Configure local runners',
+    title: t('providers.onboarding.routes.local.title'),
+    body: t('providers.onboarding.routes.local.body'),
+    cta: t('providers.onboarding.routes.local.cta'),
     onSelect: () => go(ui.openLocalModels),
   },
 ])
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Set up an AI model provider" :ui="{ content: 'max-w-2xl' }">
+  <UModal
+    v-model:open="open"
+    :title="t('providers.onboarding.title')"
+    :ui="{ content: 'max-w-2xl' }"
+  >
     <template #body>
       <div class="space-y-5">
         <div
@@ -64,11 +69,10 @@ const routes = computed<Route[]>(() => [
           <UIcon name="i-lucide-cpu" class="mt-0.5 h-6 w-6 shrink-0 text-amber-400" />
           <div class="min-w-0 text-sm text-amber-100/90">
             <p class="font-medium text-amber-100">
-              No AI model is available on this workspace yet.
+              {{ t('providers.onboarding.noModelTitle') }}
             </p>
             <p class="mt-1">
-              Agents need a model to run. AI works out of the box only on a Cloudflare deployment
-              with Workers AI enabled — otherwise connect at least one source below.
+              {{ t('providers.onboarding.noModelBody') }}
             </p>
           </div>
         </div>
@@ -97,8 +101,7 @@ const routes = computed<Route[]>(() => [
         </div>
 
         <p class="text-[11px] leading-relaxed text-slate-500">
-          AWS Bedrock and Cloudflare Workers AI are enabled by the deployment operator via
-          environment configuration, not from this screen.
+          {{ t('providers.onboarding.operatorNote') }}
         </p>
       </div>
     </template>
