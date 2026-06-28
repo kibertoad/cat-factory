@@ -1,5 +1,79 @@
 # @cat-factory/agents
 
+## 0.20.0
+
+### Minor Changes
+
+- 32c653f: Add the Visual Confirmation gate and split the tester into an API + UI tester.
+
+  - **Tester split:** the `tester` kind is renamed to `tester-api` (general/API exploratory
+    testing) and a new `tester-ui` kind drives a real browser (Playwright), captures a
+    non-redundant screenshot of each distinct view, uploads them to the binary-artifact
+    store, and reports them under `TestReport.screenshots[]`. Both share the Tester→Fixer
+    loop and the `tester.environment` infra choice (`isTesterKind`). The UI tester dispatches
+    with `image:'ui'` so a transport can route it to a dedicated Playwright/browser image.
+  - **Visual Confirmation gate** (`visual-confirmation`): a park-on-decision engine gate
+    (modelled on `human-test`) that gathers the UI tester's screenshots + the human-uploaded
+    reference design images (paired by view) and parks for a person to review actual-vs-reference.
+    The human approves (advance), requests a fix (dispatches the Tester's `fixer`, then re-parks),
+    or recaptures. Raises a `visual_confirmation_ready` notification; passes through when no
+    binary-artifact store is wired. New `pl_visual` pipeline (`… tester-ui → visual-confirmation
+→ merger`) and the `GET /blocks/:id/artifacts` + visual-confirmation action endpoints.
+  - Cross-runtime conformance covers the gate's no-store pass-through and the artifact store's
+    `listByBlock`.
+
+  BREAKING: the `tester` agent kind is renamed to `tester-api`. Per this repo's pre-1.0 policy
+  (no backwards-compatibility shims), any persisted state that still names `tester` simply stops
+  matching: a saved/custom pipeline referencing `tester` is detected as outdated and reseeded from
+  the catalog, and an execution that is parked mid-`tester` at upgrade time will no longer be
+  recognised by the tester gate (re-run the task). New runs are unaffected — the seeded pipelines
+  all use `tester-api`.
+
+  NOTE: the dedicated UI-tester container image (Playwright/Chromium) and the per-kind image
+  routing into it (a second Cloudflare container class; image-per-step on the local/pool
+  transports) are a deploy-time follow-up — the `image:'ui'` dispatch seam is in place. Until that
+  routing AND the harness env-passthrough (`ARTIFACT_UPLOAD_URL`/`ARTIFACT_UPLOAD_TOKEN` + a
+  Playwright driver) land, `tester-ui` has no browser and the `pl_visual` gate runs in MANUAL mode
+  (a human uploads references + screenshots and reviews them), which is why `pl_visual` is flagged
+  `experimental`.
+
+### Patch Changes
+
+- 32c653f: Review round 4 (visual-confirmation gate / binary artifacts):
+
+  - **Don't load the AWS SDK unless S3 is actually used.** `@cat-factory/provider-s3` now imports
+    `@aws-sdk/client-s3` lazily (on the first S3 operation) instead of at module load, so a
+    Node/local deployment running the `db` (or no) blob backend no longer pays the SDK's load cost
+    even though the facade statically imports `S3BinaryBlobBackend` to wire its container.
+  - **Guard Approve when the gate flags its screenshots as unreliable.** The visual-confirmation
+    window now requires an explicit "I've reviewed this manually" acknowledgement before Approve is
+    enabled whenever the gate set a `degradedReason` (no capture happened, a fix failed, or a fix
+    landed AFTER the shown screenshots) — so a stale/empty gallery can't be approved in one blind
+    click.
+  - **Cheaper per-run upload cap.** The harness screenshot ingest precheck uses an indexed
+    `countByExecution` (no row materialise) and only runs the post-insert overflow reconcile when the
+    insert could actually cross the cap, so the steady-state upload is one COUNT + one insert.
+  - **Serve a blob in a single metadata read** via `BinaryArtifactStore.getBlobWithMetadata`.
+  - **Drop dangling screenshot refs.** The gate validates the agent-reported screenshot `artifactId`s
+    against what the run actually uploaded, so a fabricated id or one removed by the retention sweep
+    renders as "not captured" rather than a 404 image.
+  - Make the UI-tester prompt honest: it now only instructs an upload when `ARTIFACT_UPLOAD_URL` is
+    provided to the run (manual mode otherwise), and treats the reference-design directory as
+    optional.
+
+  The new `countByExecution` / `getBlobWithMetadata` store methods are mirrored D1 ⇄ Drizzle and
+  asserted by the cross-runtime binary-artifacts conformance suite.
+
+- Updated dependencies [32c653f]
+- Updated dependencies [32c653f]
+- Updated dependencies [32c653f]
+- Updated dependencies [32c653f]
+- Updated dependencies [32c653f]
+- Updated dependencies [32c653f]
+  - @cat-factory/kernel@0.42.0
+  - @cat-factory/contracts@0.40.0
+  - @cat-factory/prompt-fragments@0.7.38
+
 ## 0.19.0
 
 ### Minor Changes
