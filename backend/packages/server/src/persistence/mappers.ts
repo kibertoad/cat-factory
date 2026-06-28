@@ -118,6 +118,47 @@ function toSnake(prop: string): string {
   return prop.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
 }
 
+// ---------------------------------------------------------------------------
+// LEGACY USER-ID REPAIR — REMOVE AFTER 2026-07-15
+//
+// PR #94 re-keyed every user id (block `createdBy`, execution `initiatedBy`, account
+// membership, personal subscriptions) from the GitHub *numeric* id to the canonical
+// `usr_*` *string*, with NO data migration (backwards compatibility is a non-goal here).
+// Rows written before that still hold a number. The wire contract now types these fields
+// as `string | null`, and the server ships rows WITHOUT validating them against the
+// contract — so a single pre-#94 row makes the SPA's response validation reject the entire
+// workspace snapshot, bricking the whole board with "Can't reach the backend".
+//
+// We repair on read: a non-string id is dropped to null. The stale number is an old GitHub
+// id that matches no `usr_*` user, so it is useless for creator/initiator routing anyway —
+// dropping it loses nothing real and lets the board load.
+//
+// After the 2026-07-15 grace cutoff, every project is expected to already be in the new
+// format. DELETE this block and its callers: read `createdBy` straight through with
+// `optField(prop, { patchable: false })`, and use `detail.initiatedBy ?? null` in
+// `rowToExecution`.
+function legacyUserId(value: unknown): string | null {
+  return typeof value === 'string' ? value : null
+}
+
+/**
+ * A legacy user-id column. Identical to a non-patchable {@link optField} except it drops a
+ * non-string (pre-#94 numeric) value to null on read. See the LEGACY USER-ID REPAIR note.
+ */
+function legacyUserIdField<D, P>(prop: string, column = toSnake(prop)): FieldMapper<D, P> {
+  return {
+    read: (row, out) => {
+      const v = legacyUserId(row[column])
+      if (v != null) out[prop] = v
+    },
+    insert: (d, out) => {
+      out[column] = (d as AnyRow)[prop] ?? null
+    },
+    // Insert-only, never patched (matches the previous `optField(..., { patchable: false })`).
+    patch: () => {},
+  }
+}
+
 /**
  * A required scalar present on both the row and the domain (including always-present
  * nullables like `executionId`): read/insert pass the value straight through, patch
@@ -339,8 +380,9 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   optField('defaultTestEnvironment'),
   optField('cloudProvider'),
   optField('instanceSize'),
-  // `createdBy` is set at insert time and never patched.
-  optField('createdBy', { patchable: false }),
+  // `createdBy` is set at insert time and never patched. LEGACY: a pre-#94 numeric id is
+  // dropped to null on read (see the LEGACY USER-ID REPAIR note; remove after 2026-07-15).
+  legacyUserIdField('createdBy'),
   // The responsible product person; an empty string clears the assignment.
   optField('responsibleProductUserId', { clearOnEmpty: true }),
   // The task-estimator's triage; a falsy value clears it.
@@ -482,7 +524,9 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
     currentStep: detail.currentStep ?? 0,
     status: row.status as ExecutionStatus,
     failure: parseAgentFailure(row.failure),
-    initiatedBy: detail.initiatedBy ?? null,
+    // LEGACY: drop a pre-#94 numeric initiator id to null (see the LEGACY USER-ID REPAIR
+    // note; after 2026-07-15 revert to `detail.initiatedBy ?? null`).
+    initiatedBy: legacyUserId(detail.initiatedBy),
   }
 }
 
