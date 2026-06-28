@@ -1,5 +1,126 @@
 # @cat-factory/contracts
 
+## 0.40.0
+
+### Minor Changes
+
+- 32c653f: Add the Visual Confirmation gate and split the tester into an API + UI tester.
+
+  - **Tester split:** the `tester` kind is renamed to `tester-api` (general/API exploratory
+    testing) and a new `tester-ui` kind drives a real browser (Playwright), captures a
+    non-redundant screenshot of each distinct view, uploads them to the binary-artifact
+    store, and reports them under `TestReport.screenshots[]`. Both share the Tester→Fixer
+    loop and the `tester.environment` infra choice (`isTesterKind`). The UI tester dispatches
+    with `image:'ui'` so a transport can route it to a dedicated Playwright/browser image.
+  - **Visual Confirmation gate** (`visual-confirmation`): a park-on-decision engine gate
+    (modelled on `human-test`) that gathers the UI tester's screenshots + the human-uploaded
+    reference design images (paired by view) and parks for a person to review actual-vs-reference.
+    The human approves (advance), requests a fix (dispatches the Tester's `fixer`, then re-parks),
+    or recaptures. Raises a `visual_confirmation_ready` notification; passes through when no
+    binary-artifact store is wired. New `pl_visual` pipeline (`… tester-ui → visual-confirmation
+→ merger`) and the `GET /blocks/:id/artifacts` + visual-confirmation action endpoints.
+  - Cross-runtime conformance covers the gate's no-store pass-through and the artifact store's
+    `listByBlock`.
+
+  BREAKING: the `tester` agent kind is renamed to `tester-api`. Per this repo's pre-1.0 policy
+  (no backwards-compatibility shims), any persisted state that still names `tester` simply stops
+  matching: a saved/custom pipeline referencing `tester` is detected as outdated and reseeded from
+  the catalog, and an execution that is parked mid-`tester` at upgrade time will no longer be
+  recognised by the tester gate (re-run the task). New runs are unaffected — the seeded pipelines
+  all use `tester-api`.
+
+  NOTE: the dedicated UI-tester container image (Playwright/Chromium) and the per-kind image
+  routing into it (a second Cloudflare container class; image-per-step on the local/pool
+  transports) are a deploy-time follow-up — the `image:'ui'` dispatch seam is in place. Until that
+  routing AND the harness env-passthrough (`ARTIFACT_UPLOAD_URL`/`ARTIFACT_UPLOAD_TOKEN` + a
+  Playwright driver) land, `tester-ui` has no browser and the `pl_visual` gate runs in MANUAL mode
+  (a human uploads references + screenshots and reviews them), which is why `pl_visual` is flagged
+  `experimental`.
+
+- 32c653f: Harden + complete the Visual Confirmation gate / binary-artifact storage after review.
+
+  - **Security (artifact serving):** the artifact upload + blob endpoints now pin the content
+    type to a raster-image allow-list (`png`/`jpeg`/`webp`/`gif`, SVG/HTML rejected `415`) at the
+    write boundary, and serve blobs with `X-Content-Type-Options: nosniff` + a clamped
+    `Content-Type`/`Content-Disposition` — closing a stored-XSS vector where an attacker-controlled
+    type could be served inline same-origin. Shared `imageArtifacts.ts` keeps the workspace upload
+    and the in-container ingest paths consistent.
+  - **Configurable artifact retention (new):** a per-workspace `artifactRetentionDays` setting
+    (default 14, bounded 1–3650), editable in the workspace settings panel. A daily Cloudflare cron
+    / hourly Node timer sweep prunes each workspace's screenshots + reference images past its window
+    — BOTH the metadata rows and the bytes (`BinaryArtifactStore.pruneOlderThan`), so the store no
+    longer grows unbounded. Mirrored D1 ⇄ Drizzle (migration `0018` / a generated Drizzle migration)
+    and asserted by the cross-runtime binary-artifacts conformance suite.
+  - **tester-ui ingest seam (backend half):** `ContainerAgentExecutor` injects an `artifactUpload`
+    `{ url, token }` into the `tester-ui` job body, reusing the run's existing container session
+    token + proxy base URL, and a new container-token-authed `POST ${proxyBaseUrl}/artifacts/ingest`
+    route stores the bytes as a run-scoped `screenshot`. (The UI-tester image routing + harness env
+    passthrough remain the deploy-time follow-up — see the handover doc.)
+  - **Gate UX:** a `request-fix` that can't dispatch (no PR branch / no async executor) now surfaces
+    a reason + records a failed round instead of silently re-parking; after a fix the gate flags that
+    the shown screenshots predate it (recapture to refresh); the unused `headSha` placeholder is
+    dropped; and the gate window revokes its cached screenshot object URLs on unmount.
+
+### Patch Changes
+
+- 32c653f: Second review pass on the Visual Confirmation gate / binary-artifact storage — hardening + a
+  gap-closing follow-up:
+
+  - **Retention no longer orphans bytes.** `BinaryArtifactStore.pruneOlderThan` now keeps a
+    metadata row whenever its blob delete fails (instead of dropping the row and orphaning the
+    bytes forever), so the next sweep retries it; the all-succeeded path still collapses to one
+    bulk delete.
+  - **Upload size guarded before buffering.** Both the workspace upload and the in-container
+    ingest endpoints reject a grossly oversized body from `Content-Length` BEFORE reading it into
+    memory (`exceedsRequestSizeLimit`), with the exact per-file 16 MiB ceiling still enforced after
+    parsing.
+  - **Per-run screenshot ceiling.** The container ingest route caps a single run at 100 uploaded
+    screenshots (`429` past it), so a runaway/compromised container can't fill the blob store.
+  - **Consistent content-type posture.** The harness ingest now rejects a recognised non-image
+    type (`415`) instead of silently storing it mislabelled as PNG, matching the workspace upload
+    endpoint; a typeless upload still defaults to PNG.
+  - **Tighter human-upload scoping.** The workspace artifact endpoint ignores any client-supplied
+    `executionId` (reference images are block-scoped and precede any run; run-scoped captures come
+    through the token-authed ingest, where the run is derived from the verified token).
+  - **`created_at` retention index** added on `binary_artifacts` (D1 `0017` + a generated Drizzle
+    migration) so the per-workspace prune is an indexed range delete.
+  - **`pl_visual` flagged experimental** (`labels: ['experimental']`): until UI-tester image
+    routing + harness env-passthrough land, the gate runs in manual mode — the label keeps the
+    pipeline discoverable without implying automatic screenshot capture.
+  - Removed the unused `capturing` phase from `visualConfirmStepStateSchema` (the auto re-capture
+    loop it anticipated is still deferred), and added a cross-runtime conformance test for the
+    gate's request-fix → fixer → re-park → approve loop.
+
+  Note (breaking, already in this PR): the `tester` agent kind was renamed to `tester-api` (with a
+  new browser-driven `tester-ui` sibling). Per the project's pre-1.0 no-backwards-compat policy,
+  custom pipelines/blocks persisted with the old `tester` kind are not migrated and will need to be
+  re-pointed at `tester-api`.
+
+- 32c653f: Third review pass on the Visual Confirmation gate / binary-artifact storage:
+
+  - **Frontend build fix.** `VisualConfirmationWindow.vue` still referenced the `capturing`
+    phase that round 2 removed from `visualConfirmStepStateSchema` (a TS2353 excess-property
+    on `PHASE_LABEL` and a TS2367 no-overlap comparison in `working`), which broke
+    `nuxt typecheck`. Dropped both.
+  - **Reference re-upload now wins.** `VisualConfirmationController.gatherPairs` kept the
+    OLDEST reference image per view (`?? ref.id`), so a human re-uploading a corrected
+    reference for a view they already populated never saw it. References are now assigned
+    last-writer (newest), matching the oldest-first `listByBlock` ordering.
+  - **Upload buffering is now actually bounded.** The `Content-Length` precheck was
+    bypassable by a chunked / header-less body, after which `formData()` buffered the whole
+    request into memory before the per-file ceiling ran. Both upload routes (workspace +
+    in-container ingest) now wrap the body in `hono/body-limit`, which counts bytes as the
+    stream is read, so a missing/spoofed `Content-Length` can't buffer past the ceiling.
+  - **Per-run screenshot cap holds under concurrency.** The container-ingest cap was a
+    check-then-act race; concurrent ingests could each pass it before any row landed. A
+    post-insert reconcile now rolls back (deletes) any insert that lands in the overflow
+    tail, so the store is bounded to exactly the cap per run without dropping earlier shots.
+  - **Removed the vestigial `headSha`** from `visualConfirmStepStateSchema` (and its
+    `begin()` initializer) — it was always null and never read; round 1 claimed it was
+    dropped but it wasn't.
+  - **Reuse:** the harness ingest route now uses the exported `bearerToken` helper instead
+    of a fourth private copy of the `Bearer` parser.
+
 ## 0.39.0
 
 ### Minor Changes
