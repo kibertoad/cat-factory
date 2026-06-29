@@ -64,6 +64,11 @@ export function useWorkspaceStream() {
       // or a failed badge) without a full refresh.
       agentRuns.upsertBootstrap(event.job)
       if (event.block) board.upsert(event.block)
+    } else if (event.type === 'env-config-repair') {
+      // A provider config-repair run advanced — patch its live status/subtasks/outcome so
+      // the infrastructure-providers window's "repairing…" indicator updates in place
+      // (then flips to ok / residual issues / a failure) without a refetch. No board block.
+      agentRuns.upsertEnvConfigRepair(event.job)
     } else if (event.type === 'notification') {
       // A PR needs a merge decision, a pipeline finished, or CI gave up — patch the
       // inbox + per-block badge in place (resolved ones drop out of the inbox).

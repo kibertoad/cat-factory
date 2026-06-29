@@ -79,6 +79,12 @@ export interface Env {
    * auto-driven — the cron sweep re-drives any job left running.
    */
   BOOTSTRAP_WORKFLOW?: Workflow
+  /**
+   * Workflows binding that durably drives each environment-provider config-repair run's
+   * poll loop (see EnvConfigRepairWorkflow). Without it a repair still dispatches but
+   * isn't auto-driven — the cron sweep re-drives any run left running.
+   */
+  ENV_CONFIG_REPAIR_WORKFLOW?: Workflow
   /** How long a run may park on a human decision before expiring, e.g. "24h". */
   DECISION_TIMEOUT?: string
   /**

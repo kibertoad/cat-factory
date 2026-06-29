@@ -4,6 +4,7 @@ import type {
   BrainstormSession,
   ConsensusSession,
   ClarityReview,
+  EnvConfigRepairJob,
   ExecutionEventPublisher,
   ExecutionInstance,
   LlmCallActivity,
@@ -79,6 +80,12 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
     for (const ws of await this.targets(workspaceId, block?.id ?? job.blockId)) {
       await this.inner.bootstrapChanged?.(ws, job, block)
     }
+  }
+
+  // A repair run has no board block, so there's no shared-service fan-out — it is purely
+  // workspace-scoped. Forward straight to the inner publisher for this workspace.
+  async envConfigRepairChanged(workspaceId: string, job: EnvConfigRepairJob): Promise<void> {
+    await this.inner.envConfigRepairChanged?.(workspaceId, job)
   }
 
   async notificationChanged(workspaceId: string, notification: Notification): Promise<void> {

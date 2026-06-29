@@ -2,6 +2,7 @@ import {
   AsyncFakeAgentExecutor,
   type ConformanceHarness,
   FakeAgentExecutor,
+  FakeEnvConfigRepairer,
   FakeRepoBootstrapper,
   RecordingEventPublisher,
   defineConformanceSuite,
@@ -41,6 +42,10 @@ const harness: ConformanceHarness = {
       {
         executionEventPublisher: recorder,
         repoBootstrapper: new FakeRepoBootstrapper(),
+        // A deterministic env-config-repairer so the shared suite can drive the repair
+        // dispatch→poll→re-validate lifecycle against D1 without a real container (driven via
+        // driveEnvConfigRepair); the module only builds when an env provider is also wired.
+        envConfigRepairer: new FakeEnvConfigRepairer(),
         // Inject the engine's run-repo resolver (a fake in the suite) so a registered
         // custom kind's pre/post-op hooks run + commit identically to a real GitHub-wired facade.
         ...(opts?.resolveRunRepoContext

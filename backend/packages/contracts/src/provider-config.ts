@@ -137,6 +137,11 @@ export type RepoValidationResult = v.InferOutput<typeof repoValidationResultSche
  * now satisfies the provider (`ok`), whether anything was written (`committed`), where
  * (`branch`/`prUrl`), whether the agent fallback ran (`usedAgent`), and any residual
  * issues. Never throws to the client.
+ *
+ * When the agent fallback is taken the repair runs ASYNCHRONOUSLY (a durable
+ * `env-config-repair` agent run), so the call returns immediately with `usedAgent:true`,
+ * `repairJobId` set, and `ok:false` (not yet re-validated): the caller tracks the repair
+ * job (snapshot + `env-config-repair` events) for the post-repair outcome.
  */
 export const bootstrapRepoResultSchema = v.object({
   ok: v.boolean(),
@@ -144,6 +149,11 @@ export const bootstrapRepoResultSchema = v.object({
   branch: v.optional(v.string()),
   prUrl: v.optional(v.string()),
   usedAgent: v.optional(v.boolean()),
+  /**
+   * Set when the async repair agent was dispatched: the id of the `env-config-repair`
+   * run to track for the post-repair re-validation outcome. Absent ⇒ no agent ran.
+   */
+  repairJobId: v.optional(v.string()),
   issues: v.array(repoValidationIssueSchema),
 })
 export type BootstrapRepoResult = v.InferOutput<typeof bootstrapRepoResultSchema>

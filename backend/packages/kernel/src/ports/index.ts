@@ -286,6 +286,17 @@ export type {
 } from './repo-bootstrapper.js'
 export { type BootstrapRunner, NoopBootstrapRunner } from './bootstrap-runner.js'
 export type {
+  EnvConfigRepairJobRecord,
+  EnvConfigRepairJobRecordPatch,
+  EnvConfigRepairJobRepository,
+  EnvConfigRepairRequest,
+  EnvConfigRepairHandle,
+  EnvConfigRepairUpdate,
+  EnvConfigRepairer,
+  EnvConfigRepairRunner,
+} from './env-config-repair.js'
+export { NoopEnvConfigRepairRunner } from './env-config-repair.js'
+export type {
   RunnerDispatchKind,
   RunnerDispatchOptions,
   RunnerJobProgress,

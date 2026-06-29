@@ -20,6 +20,7 @@ import { escalateStaleNotifications } from '@cat-factory/server'
 import { CryptoIdGenerator, SystemClock } from './infrastructure/runtime'
 import { WorkflowsWorkRunner } from './infrastructure/workflows/WorkflowsWorkRunner'
 import { WorkflowsBootstrapRunner } from './infrastructure/workflows/WorkflowsBootstrapRunner'
+import { WorkflowsEnvConfigRepairRunner } from './infrastructure/workflows/WorkflowsEnvConfigRepairRunner'
 import { sweepRetention } from './infrastructure/workflows/retention'
 import { WorkflowsLookup, sweepStuckRuns } from './infrastructure/workflows/sweeper'
 import { handleGitHubSyncBatch, reconcileStaleRepos } from './infrastructure/github/sync-consumer'
@@ -38,6 +39,7 @@ import { D1WorkspaceSettingsRepository } from './infrastructure/repositories/D1W
 export { ExecutionWorkflow } from './infrastructure/workflows/ExecutionWorkflow'
 export { GitHubBackfillWorkflow } from './infrastructure/workflows/GitHubBackfillWorkflow'
 export { BootstrapWorkflow } from './infrastructure/workflows/BootstrapWorkflow'
+export { EnvConfigRepairWorkflow } from './infrastructure/workflows/EnvConfigRepairWorkflow'
 // Container-enabled Durable Object backing per-run implementation containers.
 export { ExecutionContainer } from './infrastructure/containers/ExecutionContainer'
 // Per-workspace WebSocket fan-out hub (real-time execution/board events).
@@ -205,25 +207,38 @@ export default {
     // Frequent pass (every 2 min): time-sensitive backstops.
     // Re-drive any agent run — execution OR bootstrap — whose Workflows instance
     // died. One sweep over the unified agent_runs table dispatches by kind.
-    if (env.EXECUTION_WORKFLOW || env.BOOTSTRAP_WORKFLOW) {
+    if (env.EXECUTION_WORKFLOW || env.BOOTSTRAP_WORKFLOW || env.ENV_CONFIG_REPAIR_WORKFLOW) {
       const execLookup = env.EXECUTION_WORKFLOW ? new WorkflowsLookup(env.EXECUTION_WORKFLOW) : null
       const bootLookup = env.BOOTSTRAP_WORKFLOW ? new WorkflowsLookup(env.BOOTSTRAP_WORKFLOW) : null
+      const repairLookup = env.ENV_CONFIG_REPAIR_WORKFLOW
+        ? new WorkflowsLookup(env.ENV_CONFIG_REPAIR_WORKFLOW)
+        : null
       const execRunner = env.EXECUTION_WORKFLOW
         ? new WorkflowsWorkRunner({ workflow: env.EXECUTION_WORKFLOW, queue: env.EXECUTION_QUEUE })
         : null
       const bootRunner = env.BOOTSTRAP_WORKFLOW
         ? new WorkflowsBootstrapRunner(env.BOOTSTRAP_WORKFLOW)
         : null
+      const repairRunner = env.ENV_CONFIG_REPAIR_WORKFLOW
+        ? new WorkflowsEnvConfigRepairRunner(env.ENV_CONFIG_REPAIR_WORKFLOW)
+        : null
       ctx.waitUntil(
         sweepStuckRuns({
           agentRunRepository: new D1AgentRunRepository({ db: env.DB }),
           instanceState: (ref) => {
-            const lookup = ref.kind === 'bootstrap' ? bootLookup : execLookup
+            const lookup =
+              ref.kind === 'bootstrap'
+                ? bootLookup
+                : ref.kind === 'env-config-repair'
+                  ? repairLookup
+                  : execLookup
             // No binding for this kind → can't classify, so treat as alive (skip).
             return lookup ? lookup.instanceState(ref.id) : Promise.resolve('alive' as const)
           },
           redrive: async (ref) => {
             if (ref.kind === 'bootstrap') await bootRunner?.startRun(ref.workspaceId, ref.id)
+            else if (ref.kind === 'env-config-repair')
+              await repairRunner?.startRun(ref.workspaceId, ref.id)
             else await execRunner?.startRun(ref.workspaceId, ref.id)
           },
           // The durable instance is terminal and can't be recreated → finalize the
@@ -236,6 +251,13 @@ export default {
             if (ref.kind === 'bootstrap') {
               if (container.bootstrap) {
                 await container.bootstrap.service.stop(ref.workspaceId, ref.id, {
+                  reason,
+                  kind: 'unknown',
+                })
+              }
+            } else if (ref.kind === 'env-config-repair') {
+              if (container.envConfigRepair) {
+                await container.envConfigRepair.service.stop(ref.workspaceId, ref.id, {
                   reason,
                   kind: 'unknown',
                 })

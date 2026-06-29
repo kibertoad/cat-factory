@@ -19,6 +19,7 @@ import { migrate } from './db/migrate.js'
 import { executionRuntime } from './execution/config.js'
 import { startExecutionWorker, startStaleRunSweeper } from './execution/pgBossRunner.js'
 import { startBootstrapWorker } from './execution/bootstrapRunner.js'
+import { startEnvConfigRepairWorker } from './execution/envConfigRepairRunner.js'
 import { startEnvironmentSweeper } from './environments.js'
 import { startScheduleSweeper } from './recurring.js'
 import { startKaizenSweeper } from './kaizen.js'
@@ -145,6 +146,11 @@ export async function start(
   // Durably drive bootstrap runs too (the Worker uses a per-run BootstrapWorkflow);
   // a no-op queue when the bootstrap module isn't wired.
   await startBootstrapWorker(boss, container, runtime.drive, logger, {
+    concurrency: runtime.concurrency,
+  })
+  // Durably drive env-config-repair runs (the Worker uses a per-run EnvConfigRepairWorkflow);
+  // a no-op queue when the repair module isn't wired.
+  await startEnvConfigRepairWorker(boss, container, runtime.drive, logger, {
     concurrency: runtime.concurrency,
   })
   const stopSweeper = startStaleRunSweeper(boss, container, runtime.sweeper, runtime.queue, logger)

@@ -8,7 +8,7 @@ import type {
   WebhookVerifier,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
-import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
+import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import { driveWorkspace } from '@cat-factory/conformance'
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { CoreDependencies } from '@cat-factory/orchestration'
@@ -84,6 +84,10 @@ export function makeApp(
     // bootstrap in the test pool (the binding is present). Specs drive the
     // bootstrap poll loop deterministically via `driveBootstrap`.
     bootstrapRunner: new NoopBootstrapRunner(),
+    // Like bootstrapRunner: avoid spawning a real Cloudflare Workflows instance for an
+    // env-config-repair run in the test pool (the binding is present). Specs drive the
+    // repair poll loop deterministically via `driveEnvConfigRepair`.
+    envConfigRepairRunner: new NoopEnvConfigRepairRunner(),
     ...overrides,
   }
   const app = createApp({ overrides: coreOverrides, ...appOptions })
@@ -147,7 +151,30 @@ export function makeApp(
     return maxPolls
   }
 
-  return { call, createWorkspace, createOrgWorkspace, drive, driveBootstrap }
+  async function driveEnvConfigRepair(
+    workspaceId: string,
+    jobId: string,
+    maxPolls = 50,
+  ): Promise<number> {
+    const c = buildContainer(env, coreOverrides, { gateProviders: appOptions.gateProviders })
+    if (!c.envConfigRepair) {
+      throw new Error('env-config-repair module is not configured in this app')
+    }
+    for (let p = 0; p < maxPolls; p++) {
+      const result = await c.envConfigRepair.service.pollJob(workspaceId, jobId)
+      if (result.state !== 'running') return p + 1
+    }
+    return maxPolls
+  }
+
+  return {
+    call,
+    createWorkspace,
+    createOrgWorkspace,
+    drive,
+    driveBootstrap,
+    driveEnvConfigRepair,
+  }
 }
 
 /**

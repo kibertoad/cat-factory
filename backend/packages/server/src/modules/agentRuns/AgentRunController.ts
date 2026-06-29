@@ -43,6 +43,30 @@ export function agentRunController(): Hono<AppEnv> {
       return c.json({ kind: ref.kind, run }, 201)
     }
 
+    if (ref.kind === 'env-config-repair') {
+      const repair = container.envConfigRepair
+      if (!repair || !repair.service.canRepair) {
+        return unavailable(c, 'Environment config repair is not configured')
+      }
+      // No same-id re-drive (unlike bootstrap/execution): a repair run is a one-shot
+      // clone→fix→push, so retry STARTS a fresh run from the failed job's coords. The old
+      // failed row stays as the audit trail. Only a terminally-failed run can be retried.
+      const previous = await repair.service.getJob(workspaceId, id)
+      if (previous.status !== 'failed') {
+        return c.json(
+          { error: { code: 'conflict', message: 'Only a failed repair run can be retried' } },
+          409,
+        )
+      }
+      const run = await repair.service.start(workspaceId, {
+        owner: previous.owner,
+        repo: previous.repo,
+        gitRef: previous.branch,
+        issues: previous.issues,
+      })
+      return c.json({ kind: ref.kind, run }, 201)
+    }
+
     // Individual-usage models (Claude) require the retrying user's personal
     // subscription: resolve the initiator + activation closure (throws 428 when a
     // password is needed). The password rides on the X-Personal-Password header. A
@@ -76,6 +100,13 @@ export function agentRunController(): Hono<AppEnv> {
       const bootstrap = container.bootstrap
       if (!bootstrap) return unavailable(c, 'Repo bootstrap is not configured')
       const run = await bootstrap.service.stop(workspaceId, id)
+      return c.json({ kind: ref.kind, run }, 200)
+    }
+
+    if (ref.kind === 'env-config-repair') {
+      const repair = container.envConfigRepair
+      if (!repair) return unavailable(c, 'Environment config repair is not configured')
+      const run = await repair.service.stop(workspaceId, id)
       return c.json({ kind: ref.kind, run }, 200)
     }
 

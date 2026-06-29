@@ -3,6 +3,7 @@ import {
   type ConformanceApp,
   FakeAgentExecutor,
   type FakeAgentOptions,
+  FakeEnvConfigRepairer,
   FakeRepoBootstrapper,
   FakeTaskSourceProvider,
   RecordingEventPublisher,
@@ -15,7 +16,7 @@ import {
 } from '@cat-factory/conformance'
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
-import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
+import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type {
   LocalRunner,
   UpsertLocalModelEndpointInput,
@@ -130,6 +131,11 @@ export function makeConformanceApp(
     // A deterministic bootstrapper so the suite can drive the dispatch→poll→finalise
     // lifecycle without GitHub or a container (the suite drives it via driveBootstrap).
     repoBootstrapper: new FakeRepoBootstrapper(),
+    // A deterministic env-config-repairer + no-op runner so the suite can drive the
+    // repair dispatch→poll→re-validate lifecycle without GitHub or a container (driven via
+    // driveEnvConfigRepair). The module only builds when an env provider is also wired.
+    envConfigRepairer: new FakeEnvConfigRepairer(),
+    envConfigRepairRunner: new NoopEnvConfigRepairRunner(),
     executionEventPublisher: recorder,
     // Swap the config-wired real Jira provider for a deterministic fake (the Drizzle
     // task repos stay), so the shared suite asserts create-task-from-issue against
@@ -226,6 +232,22 @@ export function makeConformanceApp(
     return maxPolls
   }
 
+  // Poll an env-config-repair run to terminal directly (production drives this via pg-boss).
+  async function driveEnvConfigRepair(
+    workspaceId: string,
+    jobId: string,
+    maxPolls = 50,
+  ): Promise<number> {
+    if (!container.envConfigRepair) {
+      throw new Error('env-config-repair module is not configured in this app')
+    }
+    for (let p = 0; p < maxPolls; p++) {
+      const result = await container.envConfigRepair.service.pollJob(workspaceId, jobId)
+      if (result.state !== 'running') return p + 1
+    }
+    return maxPolls
+  }
+
   function seedIncorporatedReview(workspaceId: string, blockId: string, requirements: string) {
     return new DrizzleRequirementReviewRepository(db).upsert(
       workspaceId,
@@ -253,6 +275,7 @@ export function makeConformanceApp(
     createOrgWorkspace,
     drive,
     driveBootstrap,
+    driveEnvConfigRepair,
     executionEmits,
     boardEmits,
     seedIncorporatedReview,

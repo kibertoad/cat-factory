@@ -4,6 +4,7 @@ import type {
   BrainstormSession,
   ConsensusSession,
   ClarityReview,
+  EnvConfigRepairJob,
   ExecutionInstance,
   KaizenGrading,
   LlmCallActivity,
@@ -53,6 +54,13 @@ export interface ExecutionEventPublisher {
    * publishers/tests that predate bootstrap progress need no change.
    */
   bootstrapChanged?(workspaceId: string, job: BootstrapJob, block?: Block | null): Promise<void>
+  /**
+   * An environment-provider config-repair run advanced: push the updated job (live
+   * `subtasks`, terminal `ok`/`issues`/`failure`) so the infrastructure-providers window
+   * patches its "repairing…" indicator and outcome without a refetch. There is no board
+   * block. Optional so publishers/tests that predate it need no change.
+   */
+  envConfigRepairChanged?(workspaceId: string, job: EnvConfigRepairJob): Promise<void>
   /**
    * A human-actionable notification was raised or resolved: push it so the board
    * surfaces/clears its badge and inbox entry live. Optional so publishers/tests
@@ -114,6 +122,7 @@ export class NoopEventPublisher implements ExecutionEventPublisher {
   async executionChanged(): Promise<void> {}
   async boardChanged(): Promise<void> {}
   async bootstrapChanged(): Promise<void> {}
+  async envConfigRepairChanged(): Promise<void> {}
   async notificationChanged(): Promise<void> {}
   async llmCallObserved(): Promise<void> {}
   async requirementReviewChanged(): Promise<void> {}

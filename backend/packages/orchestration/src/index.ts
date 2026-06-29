@@ -173,6 +173,13 @@ export {
 } from './modules/bootstrap/BootstrapService.js'
 
 export {
+  EnvConfigRepairService,
+  type EnvConfigRepairServiceDependencies,
+  type EnvConfigRepairPollResult,
+  type StartEnvConfigRepairInput,
+} from './modules/envConfigRepair/EnvConfigRepairService.js'
+
+export {
   BoardScanService,
   type BoardScanServiceDependencies,
 } from './modules/boardScan/BoardScanService.js'

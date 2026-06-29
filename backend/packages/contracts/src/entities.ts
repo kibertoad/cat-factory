@@ -603,8 +603,10 @@ export type StepApproval = v.InferOutput<typeof stepApprovalSchema>
  * lifecycle, progress and failure the board surfaces uniformly):
  *   - `bootstrap`  — a "bootstrap repo" run that scaffolds/adapts a new repo.
  *   - `execution`  — a task pipeline run that implements a board task.
+ *   - `env-config-repair` — a coding agent that repairs an environment-provider
+ *     config file in an existing repo (no board block; surfaced on the infra window).
  */
-export const agentRunKindSchema = v.picklist(['bootstrap', 'execution'])
+export const agentRunKindSchema = v.picklist(['bootstrap', 'execution', 'env-config-repair'])
 export type AgentRunKind = v.InferOutput<typeof agentRunKindSchema>
 
 /**

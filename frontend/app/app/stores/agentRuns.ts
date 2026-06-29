@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { AgentFailure, AgentRunKind, BootstrapJob, StepSubtasks } from '~/types/domain'
+import type {
+  AgentFailure,
+  AgentRunKind,
+  BootstrapJob,
+  EnvConfigRepairJob,
+  StepSubtasks,
+} from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useExecutionStore } from '~/stores/execution'
 
@@ -45,9 +51,38 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
   /** Bootstrap runs for this workspace, newest-first. */
   const bootstrapJobs = ref<BootstrapJob[]>([])
 
+  /**
+   * Env-config-repair runs for this workspace, newest-first. These have NO board block —
+   * they're surfaced only on the infrastructure-providers window (looked up by the
+   * `repairJobId` the `bootstrapRepo` response returned), so they're held separately and
+   * NOT merged into {@link byBlock}.
+   */
+  const envConfigRepairJobs = ref<EnvConfigRepairJob[]>([])
+
   /** Replace the cached bootstrap runs with a server snapshot. */
   function hydrate(jobs: BootstrapJob[]) {
     bootstrapJobs.value = [...jobs].sort((a, b) => b.createdAt - a.createdAt)
+  }
+
+  /** Replace the cached env-config-repair runs with a server snapshot. */
+  function hydrateEnvConfigRepair(jobs: EnvConfigRepairJob[]) {
+    envConfigRepairJobs.value = [...jobs].sort((a, b) => b.createdAt - a.createdAt)
+  }
+
+  /**
+   * Patch an env-config-repair run from a real-time `env-config-repair` event (or after
+   * launching one): replace it in place by id, else prepend it. Keeps the infra window's
+   * "repairing…" indicator reactive to live progress / outcome without a refetch.
+   */
+  function upsertEnvConfigRepair(job: EnvConfigRepairJob) {
+    const i = envConfigRepairJobs.value.findIndex((j) => j.id === job.id)
+    if (i >= 0) envConfigRepairJobs.value[i] = job
+    else envConfigRepairJobs.value.unshift(job)
+  }
+
+  /** Look up a single env-config-repair run by id (the infra window tracks one by `repairJobId`). */
+  function envConfigRepairById(id: string): EnvConfigRepairJob | undefined {
+    return envConfigRepairJobs.value.find((j) => j.id === id)
   }
 
   /**
@@ -126,5 +161,16 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
     return kind
   }
 
-  return { bootstrapJobs, hydrate, upsertBootstrap, byBlock, retry, stop }
+  return {
+    bootstrapJobs,
+    hydrate,
+    upsertBootstrap,
+    envConfigRepairJobs,
+    hydrateEnvConfigRepair,
+    upsertEnvConfigRepair,
+    envConfigRepairById,
+    byBlock,
+    retry,
+    stop,
+  }
 })

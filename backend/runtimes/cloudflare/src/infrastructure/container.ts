@@ -126,6 +126,7 @@ import { ContainerSessionService } from './containers/ContainerSessionService'
 import { DurableObjectEventPublisher } from './events/DurableObjectEventPublisher'
 import { WorkflowsWorkRunner } from './workflows/WorkflowsWorkRunner'
 import { WorkflowsBootstrapRunner } from './workflows/WorkflowsBootstrapRunner'
+import { WorkflowsEnvConfigRepairRunner } from './workflows/WorkflowsEnvConfigRepairRunner'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1ExecutionRepository } from './repositories/D1ExecutionRepository'
 import { D1PipelineRepository } from './repositories/D1PipelineRepository'
@@ -162,6 +163,7 @@ import { D1EnvironmentConnectionRepository } from './repositories/D1EnvironmentC
 import { D1EnvironmentRegistryRepository } from './repositories/D1EnvironmentRegistryRepository'
 import { D1ReferenceArchitectureRepository } from './repositories/D1ReferenceArchitectureRepository'
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
+import { D1EnvConfigRepairJobRepository } from './repositories/D1EnvConfigRepairJobRepository'
 import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
 import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMetadataStore'
 import { R2BinaryBlobBackend } from './storage/R2BinaryBlobBackend'
@@ -1667,7 +1669,6 @@ function selectEnvConfigRepairer(
   config: AppConfig,
   db: D1Database,
   clock: Clock,
-  idGenerator: IdGenerator,
   resolveTransport: ResolveRunnerTransport | null,
   environmentProvider: CoreDependencies['environmentProvider'],
 ): ContainerEnvConfigRepairer | undefined {
@@ -1703,7 +1704,6 @@ function selectEnvConfigRepairer(
     installationRepository: new D1GitHubInstallationRepository({ db }),
     mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
-    idGenerator,
     environmentProvider,
     model,
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
@@ -1970,6 +1970,14 @@ export function buildContainer(
     bootstrapRunner: env.BOOTSTRAP_WORKFLOW
       ? new WorkflowsBootstrapRunner(env.BOOTSTRAP_WORKFLOW)
       : undefined,
+    // Env-config-repair runs share the unified `agent_runs` table (kind-scoped). The
+    // job repository is wired unconditionally; the repairer (the agent fallback) is wired
+    // post-overrides below over the FINAL provider, and the durable runner when its
+    // Workflows binding is present (else the cron sweep re-drives a run left running).
+    envConfigRepairJobRepository: new D1EnvConfigRepairJobRepository({ db }),
+    envConfigRepairRunner: env.ENV_CONFIG_REPAIR_WORKFLOW
+      ? new WorkflowsEnvConfigRepairRunner(env.ENV_CONFIG_REPAIR_WORKFLOW)
+      : undefined,
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
     ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
     ...selectReleaseHealthDeps(env, config, db),
@@ -2016,12 +2024,13 @@ export function buildContainer(
     config,
     db,
     clock,
-    idGenerator,
     resolveTransport,
     dependencies.environmentProvider,
   )
-  if (envConfigRepairer) {
-    dependencies.dispatchEnvConfigRepair = (input) => envConfigRepairer.repair(input)
+  // Don't clobber an override-provided repairer (e.g. the conformance suite's fake): an
+  // explicit `overrides.envConfigRepairer` wins, exactly like `repoBootstrapper`.
+  if (envConfigRepairer && !dependencies.envConfigRepairer) {
+    dependencies.envConfigRepairer = envConfigRepairer
   }
 
   // Apply any test-injected gate providers LAST, so they override the config wiring done by the

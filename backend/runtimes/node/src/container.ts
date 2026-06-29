@@ -129,6 +129,7 @@ import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
 import { executionRuntime } from './execution/config.js'
 import { PgBossBootstrapRunner } from './execution/bootstrapRunner.js'
+import { PgBossEnvConfigRepairRunner } from './execution/envConfigRepairRunner.js'
 import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
 import { baseUrlForNode, createNodeModelProviderResolver } from './modelProvider.js'
@@ -165,6 +166,7 @@ import {
   DrizzleBootstrapJobRepository,
   DrizzleReferenceArchitectureRepository,
 } from './repositories/bootstrap.js'
+import { DrizzleEnvConfigRepairJobRepository } from './repositories/envConfigRepair.js'
 import {
   DrizzleDocumentConnectionRepository,
   DrizzleDocumentRepository,
@@ -773,7 +775,6 @@ function selectNodeEnvConfigRepairer(deps: {
   resolveTransport: ResolveRunnerTransport | null
   installationRepository: GitHubInstallationRepository
   mintInstallationToken: ((installationId: number) => Promise<string>) | undefined
-  idGenerator: CoreDependencies['idGenerator']
   environmentProvider: CoreDependencies['environmentProvider']
 }): ContainerEnvConfigRepairer | undefined {
   const publicUrl = deps.env.PUBLIC_URL?.trim()
@@ -808,7 +809,6 @@ function selectNodeEnvConfigRepairer(deps: {
     installationRepository: deps.installationRepository,
     mintInstallationToken: deps.mintInstallationToken,
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
-    idGenerator: deps.idGenerator,
     environmentProvider: deps.environmentProvider,
     model,
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
@@ -1766,6 +1766,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
             options.boss,
             executionRuntime(config, env).queue,
           ),
+          // The durable env-config-repair driver (analogue of the Worker's
+          // EnvConfigRepairWorkflow): start enqueues a drive job that polls the run to terminal.
+          envConfigRepairRunner: new PgBossEnvConfigRepairRunner(
+            options.boss,
+            executionRuntime(config, env).queue,
+          ),
         }
       : {}),
     ...githubGateDeps,
@@ -1779,6 +1785,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     referenceArchitectureRepository: new DrizzleReferenceArchitectureRepository(options.db),
     bootstrapJobRepository,
     ...(repoBootstrapper ? { repoBootstrapper } : {}),
+    // Env-config-repair runs share the unified agent_runs table (kind-scoped). The job
+    // repository is wired unconditionally; the repairer (agent fallback) is wired
+    // post-overrides below over the FINAL provider, and the durable runner in the
+    // `options.boss` block above — parity with the Worker's EnvConfigRepairWorkflow.
+    envConfigRepairJobRepository: new DrizzleEnvConfigRepairJobRepository(options.db),
     // Document sources (Confluence / Notion / GitHub docs): wired from the shared
     // integration providers exactly like the Worker, so a workspace can connect a
     // source and import requirement/PRD/RFC pages as agent context.
@@ -1843,11 +1854,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     resolveTransport,
     installationRepository: githubInstallationRepository,
     mintInstallationToken: bootstrapMintInstallationToken,
-    idGenerator,
     environmentProvider: dependencies.environmentProvider,
   })
-  if (envConfigRepairer) {
-    dependencies.dispatchEnvConfigRepair = (input) => envConfigRepairer.repair(input)
+  // Don't clobber an override-provided repairer (e.g. the conformance suite's fake): an
+  // explicit `overrides.envConfigRepairer` wins, exactly like `repoBootstrapper`.
+  if (envConfigRepairer && !dependencies.envConfigRepairer) {
+    dependencies.envConfigRepairer = envConfigRepairer
   }
 
   return {

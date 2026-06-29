@@ -17,6 +17,8 @@ export type {
   TaskTypeFields,
   DocKind,
   Decision,
+  EnvConfigRepairJob,
+  EnvConfigRepairStatus,
   ExecutionInstance,
   ExecutionStatus,
   Pipeline,

@@ -13,6 +13,7 @@ export {
   type TestResponse,
 } from './harness.js'
 export { FakeRepoBootstrapper } from './FakeRepoBootstrapper.js'
+export { FakeEnvConfigRepairer } from './FakeEnvConfigRepairer.js'
 export { FakeTaskSourceProvider } from './FakeTaskSourceProvider.js'
 export {
   makeOnboardingProbe,
