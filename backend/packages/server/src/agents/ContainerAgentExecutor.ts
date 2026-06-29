@@ -726,11 +726,18 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     }))
     const followUps = streamedFollowUps.length > 0 ? { followUps: streamedFollowUps } : {}
     if (view.state === 'running') {
-      // Forward the latest subtask counts (if any) so the engine can surface
-      // live "N/M done" progress on the step; the shapes match field-for-field.
+      // Forward the latest subtask counts (if any) so the engine can surface live
+      // "N/M done" progress on the step; the shapes match field-for-field. Also forward
+      // the container's current lifecycle phase (clone / agent / push, from the harness)
+      // and its identity/address (id + url, from the transport) so the engine can show
+      // what the container is doing and where it lives — not just a blank "working".
+      const containerMeta = {
+        ...(view.phase ? { phase: view.phase } : {}),
+        ...(view.container ? { container: view.container } : {}),
+      }
       return view.progress
-        ? { state: 'running', subtasks: view.progress, ...followUps }
-        : { state: 'running', ...followUps }
+        ? { state: 'running', subtasks: view.progress, ...followUps, ...containerMeta }
+        : { state: 'running', ...followUps, ...containerMeta }
     }
     // The harness's structured failure cause + extended diagnostic, forwarded so the engine
     // classifies the failure without regex-matching `error`. Absent on an older image.

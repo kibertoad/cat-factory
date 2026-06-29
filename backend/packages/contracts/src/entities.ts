@@ -873,6 +873,41 @@ export const runEnvironmentSchema = v.object({
 })
 export type RunEnvironment = v.InferOutput<typeof runEnvironmentSchema>
 
+/**
+ * The lifecycle status of the per-run container backing a container agent step:
+ * `starting` (dispatching / cold-booting), `up` (running the agent's job),
+ * `errored` (the container failed to start, was evicted, or its job faulted), and
+ * `destroyed` (the run's container has been reclaimed). The SPA additionally derives
+ * `destroyed` for a finished run's container steps (the container is reclaimed as a
+ * unit when the run terminates), so the backend only ever persists the first three.
+ */
+export const runContainerStatusSchema = v.picklist(['starting', 'up', 'errored', 'destroyed'])
+export type RunContainerStatus = v.InferOutput<typeof runContainerStatusSchema>
+
+/**
+ * The compact, non-secret projection of the per-run container a container agent step
+ * runs in, so a run's details can show WHAT the container is doing and WHERE it lives
+ * instead of a step's "spinning up container…" badge vanishing into a blank "working"
+ * state once the container is up. Populated by the engine across the dispatch + poll
+ * lifecycle of an async (container) step; only ever set on container-backed steps.
+ */
+export const runContainerSchema = v.object({
+  /** The container lifecycle status; see {@link runContainerStatusSchema}. */
+  status: runContainerStatusSchema,
+  /**
+   * The coarse phase the agent's job is in while the container is `up` (`clone` →
+   * `agent` → `push`, seeded `starting`), forwarded from the harness. Lets the details
+   * distinguish "still preparing the checkout" from "the agent is making calls". Absent
+   * until the first poll, or when the runner doesn't report a phase.
+   */
+  phase: v.optional(v.nullable(v.string())),
+  /** Provider container/runner id (Cloudflare DO id, docker container id), when known. */
+  id: v.optional(v.nullable(v.string())),
+  /** A reachable address for the running container (the local docker host URL), when one exists. */
+  url: v.optional(v.nullable(v.string())),
+})
+export type RunContainer = v.InferOutput<typeof runContainerSchema>
+
 export const humanTestEnvironmentSchema = v.object({
   /** The `environments` row id, so the window can fetch access creds / re-poll status. */
   id: v.string(),
@@ -1111,6 +1146,16 @@ export const pipelineStepSchema = v.object({
    * "working" state. Only ever set on async (container) steps.
    */
   startingContainer: v.optional(v.boolean()),
+  /**
+   * The per-run container this async (container) step runs in — its lifecycle status
+   * (starting / up / errored), the agent's current phase (clone / agent / push), and
+   * the container's id + reachable URL once up. Lets a run's details surface what the
+   * container is doing and where it lives, rather than the cold-boot badge vanishing
+   * into a blank "working" state. The richer successor to {@link startingContainer} for
+   * the main agent flow; absent on non-container steps and steps not yet dispatched.
+   * See {@link runContainerSchema}.
+   */
+  container: v.optional(v.nullable(runContainerSchema)),
   decision: v.nullable(decisionSchema),
   /**
    * Whether a human approval gate fires after this step completes. Copied from

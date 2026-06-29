@@ -35,6 +35,8 @@ export type {
   TesterStepState,
   HumanTestEnvironment,
   RunEnvironment,
+  RunContainer,
+  RunContainerStatus,
   HumanTestRound,
   HumanTestStepState,
   VisualConfirmStepState,

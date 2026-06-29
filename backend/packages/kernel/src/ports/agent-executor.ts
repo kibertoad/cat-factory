@@ -388,9 +388,17 @@ export type AgentJobUpdate =
    * "N/M done" progress on the step between polls. `followUps`, when present,
    * carries the forward-looking items the Coder streamed since the last poll
    * (drain-on-read) so the engine can append them to the run's step live (the
-   * Follow-up companion).
+   * Follow-up companion). `phase` carries the container's current lifecycle phase
+   * (clone / agent / push) and `container` its identity/address (id, url) once up,
+   * so the engine can surface what the container is doing + where it's running.
    */
-  | { state: 'running'; subtasks?: StepSubtasks; followUps?: StreamedFollowUp[] }
+  | {
+      state: 'running'
+      subtasks?: StepSubtasks
+      followUps?: StreamedFollowUp[]
+      phase?: string
+      container?: { id?: string; url?: string }
+    }
   /**
    * Finished successfully; `result` carries the work product. `followUps`, when present,
    * carries any final burst of streamed items the harness drained on the SAME poll that

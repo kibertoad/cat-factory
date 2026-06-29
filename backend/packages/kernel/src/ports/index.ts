@@ -297,6 +297,7 @@ export { NoopEnvConfigRepairRunner } from './env-config-repair.js'
 export type {
   RunnerDispatchKind,
   RunnerDispatchOptions,
+  RunnerJobContainer,
   RunnerJobProgress,
   RunnerJobRef,
   RunnerJobResult,
