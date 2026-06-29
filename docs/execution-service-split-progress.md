@@ -193,12 +193,13 @@ dependency count dropping _together_.
 | 2   | `RunStateMachine` — async instance/block spine        | ✅             |
 | —   | XState evaluation (spike + decision)                  | ✅ (rejected)  |
 | 3   | Debag the 5 gate controllers onto the spine           | ✅             |
-| 4   | Move handlers/interceptors out of the file            | ⏭️ deferred    |
+| 4   | Extract `RunDispatcher` (dispatch + completion spine)  | ✅             |
 | 5   | Gate-action sub-facades + re-point server controllers | ✅             |
 | 6   | Trim constructor + final cleanup                      | 🟡 partial     |
 
-`ExecutionService.ts`: **5,346 → 4,620 lines** so far. Every phase landed as its own commit,
-green on both runtimes (Cloudflare conformance 126, Node full suite 202, orchestration unit 298).
+`ExecutionService.ts`: **5,346 → 2,480 lines** (Phase 4 moved ~2,140 lines into the new
+`RunDispatcher.ts`). Every phase landed as its own commit, green on both runtimes (Cloudflare
+worker suite 523, Node full suite 203, orchestration unit 298).
 
 - **Phase 1 — `StepGraph`** (`execution/StepGraph.ts`, constructed with just a `Clock`): the
   pure step/cursor mutators (`startStep` / `finishStep` / `pauseStepForInput` /
@@ -250,44 +251,59 @@ state-machine logic and are the engine's core run-control API, not thin gate-win
 
 - **Phase 5 done.** Cloudflare conformance 126 ✓; Node full suite 202 ✓; orchestration unit 298 ✓.
 
+## Phase 4 — `RunDispatcher` (the dispatch + completion spine) (done)
+
+Extracted the per-step dispatch + completion spine into a new collaborator,
+`execution/RunDispatcher.ts` (~2,420 lines), composing the existing collaborators
+(`RunStateMachine` / `StepGraph` / the five gate controllers / `MergeResolver`) plus the leaf
+deps. `RunDispatcher` OWNS: the four registries (`buildStepHandlerRegistry` /
+`buildStepCompletionInterceptors` / `buildStepResolverRegistry` / `buildGateRegistry` +
+`makeGateContext` / `makeResolverContext` + the lazy caches + `dispatchStepHandler` /
+`dispatchStepCompletionInterceptor` / `stepResolverFor` / `gateFor`), the completion hub
+(`recordStepResult` / `handleAgentStep` + `runAgent` / `previewStepModel` /
+`currentStepIsNonMetered` / `skipGatedStep` / `attachEnvironmentProjection`), the gate machinery
+(`evaluateGate` / `dispatchGateHelper` / `pollGate` / `resolveGatePollExhaustion`), the
+deterministic `runDeployer` / `runTracker` (+ `deployInputs` / `deployContext`), the registered
+pre/post-op cluster (`runRegisteredPreOps` / `runRegisteredPostOps` / `builtInPostOps` /
+`builtInRepoOpBranch` / `resolveRepoOpBranch` / `ensureWorkBranch` / `resolveRunRepo`), the
+structured-artifact ingest (`ingestBlueprint` / `ingestSpec`), and the whole follow-up companion
+gate + its human-action API (`evaluateFollowUpGate` + helpers + `fileFollowUp` / `queueFollowUp` /
+`answerFollowUp` / `dismissFollowUp` / `getFollowUps`).
+
+**The boundary turned out clean — much smaller than the scoping finding feared.** Only TWO
+callbacks cross it (`resolveMergePreset`, `modelIdIsMetered`); everything else is a composed
+collaborator. The merge/auto-start subgraph (`finalizeMerge` / `resolveMergePreset` /
+`autoStartDependents` / `applyModuleAssignment`) deliberately STAYS on the engine, reached only
+through that one `resolveMergePreset` callback + the `MergeResolver` (which itself closes over the
+engine's `finalizeMerge`). `ExecutionService.stepInstance` keeps the run-lifecycle preamble and
+delegates the per-kind work via `runDispatcher.dispatchStepHandler`; `pollAgentJob` / `pollGate` /
+`resolveGatePollExhaustion` + the five follow-up methods are thin pass-throughs (the public API is
+unchanged, so the runtimes stay symmetric and no composition root changed). The controllers'
+`runAgent` / `previewStepModel` / `deployInputs` / `deployContext` closures resolve lazily through
+`this.runDispatcher`, so its construction trailing theirs is safe. No behaviour change: methods
+moved verbatim (field names kept identical so the bodies needed no edits).
+
+- **Phase 4 done.** Green on both runtimes: Cloudflare worker suite 523 ✓; Node full suite 203 ✓
+  (all conformance specs + durable-execution + local mode); orchestration unit 298 ✓.
+
 ## Phase 6 — constructor trim (partial)
 
-Phase 5 frees no constructor deps on its own (the facades close over `reviewGate` / the kinds /
-the controllers, all of which the step handlers still use), so the substantial constructor trim
-remains gated on Phase 4. What landed independently: three **write-only** fields surfaced after
+Phase 5 froze no constructor deps on its own. What has landed: three **write-only** fields from
 the Phase 1–3 extractions — `accountRepository`, `environmentTeardown`, `branchUpdater` — were
-removed. Each is now consumed only via its destructured constructor param when building a
-sub-collaborator (`AgentContextBuilder` / `HumanTestController`), never through `this.`. The
-public `ExecutionServiceDependencies` shape is unchanged.
+removed (each consumed only via its destructured constructor param when building a
+sub-collaborator). Phase 4 then dropped three more fields whose only consumers moved to
+`RunDispatcher`: `blueprintReconciler`, `notificationService`, `ticketTrackerProvider` are no
+longer stored on the engine — the constructor forwards the destructured params straight to
+`RunDispatcher` / the controllers / `RunStateMachine`. The public `ExecutionServiceDependencies`
+shape is unchanged.
 
 ## Remaining work (deferred follow-ups)
 
-- **Phase 4 — move the handlers/interceptors out of the file (`buildStepHandlerRegistry` /
-  `buildStepCompletionInterceptors`).** SCOPING FINDING (refined): the handler registry is a thin
-  _dispatch table_ whose bodies call ~13 engine internals (`recordStepResult`,
-  `handleAgentStep`, `evaluateGate` / `dispatchGateHelper`, `runDeployer`, `runTracker`,
-  `gateFor`, pre/post-ops) plus the five controllers and the review kinds. Relocating it as-is
-  would re-create the callback-bag smell. Doing it well requires **first extracting a second
-  collaborator, `RunDispatcher`** — the per-step dispatch + completion spine — so the handlers
-  depend on a cohesive surface. A move on par with Phase 2 in size/risk; not a thin relocation,
-  so schedule it as its own dedicated effort. Concretely, `RunDispatcher` would OWN: the four
-  registries (`buildStepHandlerRegistry` / `buildStepCompletionInterceptors` /
-  `buildStepResolverRegistry` / `buildGateRegistry` + `makeGateContext` / `makeResolverContext`),
-  the completion hub `recordStepResult` + `handleAgentStep` (+ `runAgent` / `previewStepModel` /
-  `currentStepIsNonMetered` / `skipGatedStep` / `attachEnvironmentProjection`), the gate machinery
-  (`evaluateGate` / `dispatchGateHelper` / `pollGate` / `resolveGatePollExhaustion` / `gateFor`),
-  `runDeployer` / `runTracker` (+ `deployInputs` / `deployContext`), the pre/post-op cluster
-  (`runRegisteredPreOps` / `runRegisteredPostOps` / `builtInPostOps` / `builtInRepoOpBranch` /
-  `resolveRepoOpBranch` / `ensureWorkBranch` / `resolveRunRepo`), the ingest helpers
-  (`ingestBlueprint` / `ingestSpec`) and the follow-up gate (`evaluateFollowUpGate` + helpers).
-  `ExecutionService.stepInstance` / `pollAgentJob` / `pollGate` then delegate to it. It composes
-  the existing collaborators (`RunStateMachine` / `StepGraph` / the five controllers /
-  `MergeResolver`) the same structured-deps way `RunStateMachine` does — the merge subgraph
-  (`finalizeMerge` / `resolveMergePreset` / `autoStartDependents` / `applyModuleAssignment`)
-  deliberately STAYS on the engine, threaded in as the one or two cross-cutting callbacks
-  `MergeResolver` already takes, NOT a per-method bag.
-- **Phase 6 (remainder) — finish the constructor trim** once Phase 4 lands: the deps then owned
-  by `RunDispatcher` (the gate/resolver wiring, `ticketTrackerProvider`, `issueWriteback`,
-  `blueprintReconciler`, `prMerger`, the model/capability resolvers, …) drop off
-  `ExecutionService`, mirroring how `kaizenScheduler` / `llmObservability` already moved to
-  `RunStateMachine` in phase 2.
+- **Phase 6 (remainder) — finish the constructor trim.** Several deps the engine still stores are
+  now used only to BUILD `RunDispatcher` (and could be forwarded directly instead): the
+  gate/resolver wiring, `issueWriteback`, `resolveProviderCapabilities`, etc. Several others are
+  genuinely shared with stays-on-engine methods (`prMerger`/`mergePresetRepository` via
+  `resolveMergePreset` + `mergePr`, `environmentProvisioning` via the start gate,
+  `subscriptionActivations` via the start/retry gate) and legitimately stay. The remaining trim is
+  cosmetic (fewer `this.` fields, same inputs), lower-value than the spine extraction, and can be
+  done opportunistically.
