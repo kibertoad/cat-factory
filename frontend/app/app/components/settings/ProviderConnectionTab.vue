@@ -13,7 +13,18 @@ import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor
 import KubernetesRunnerForm from '~/components/settings/KubernetesRunnerForm.vue'
 import KubernetesEnvironmentForm from '~/components/settings/KubernetesEnvironmentForm.vue'
 
-const props = defineProps<{ kind: ProviderConnectionKind }>()
+const props = defineProps<{
+  kind: ProviderConnectionKind
+  /** The selected backend-kind slug — chosen by the parent picker's radio, not a local
+   *  dropdown. Built-in (`manifest`/`kubernetes`) or a deployment-registered custom kind. */
+  backendKind: string
+  /** A low-config preset to prefill the Kubernetes form (today: local k3s). */
+  preset?: 'k3s'
+  /** The deployment's executor image, used to prefill the k3s preset's image field. */
+  suggestedImage?: string
+}>()
+
+const emit = defineEmits<{ connected: [] }>()
 
 const { t } = useI18n()
 const store = useProviderConnectionsStore()
@@ -31,7 +42,7 @@ const title = computed(() => t(`settings.providerConnection.kind.${props.kind}.t
 
 watch(
   () => props.kind,
-  (k) => void store.loadKind(k).then(resetDraft),
+  (k) => void store.loadKind(k, props.backendKind).then(resetDraft),
   { immediate: true },
 )
 
@@ -109,7 +120,7 @@ function buildManifestPayload(): {
   if (Object.keys(providerConfig).length) manifest.providerConfig = providerConfig
   // Carry the selected kind so a CUSTOM backend's flat-form save is tagged with its slug
   // (not silently wrapped into the built-in `manifest` backend).
-  return { manifest, secrets, backendKind: backendKind.value }
+  return { manifest, secrets, backendKind: props.backendKind }
 }
 
 function notifyError(title: string, e: unknown) {
@@ -149,6 +160,7 @@ async function saveNative() {
   try {
     const payload = buildManifestPayload()
     if (payload) await store.register(props.kind, payload)
+    emit('connected')
     resetDraft()
     toastSaved()
   } catch (e) {
@@ -168,7 +180,7 @@ async function testManifest(payload: {
   testing.value = true
   testResult.value = null
   try {
-    testResult.value = await store.test(props.kind, { ...payload, backendKind: backendKind.value })
+    testResult.value = await store.test(props.kind, { ...payload, backendKind: props.backendKind })
   } catch (e) {
     testResult.value = { ok: false, message: e instanceof Error ? e.message : String(e) }
   } finally {
@@ -182,7 +194,8 @@ async function saveManifest(payload: {
 }) {
   busy.value = true
   try {
-    await store.register(props.kind, { ...payload, backendKind: backendKind.value })
+    await store.register(props.kind, { ...payload, backendKind: props.backendKind })
+    emit('connected')
     toastSaved()
   } catch (e) {
     notifyError(t('settings.providerConnection.toast.saveFailed'), e)
@@ -191,53 +204,19 @@ async function saveManifest(payload: {
   }
 }
 
-// --- Backend selector -----------------------------------------------------------------
-// Each infrastructure tab configures one of the backend KINDS registered for its subsystem:
-// the built-in BYO `manifest` backend, the native `kubernetes` backend, or any CUSTOM kind a
-// deployment registered programmatically. The list is snapshot-driven (built-in fallback in
-// the store until it loads); the two K8s backends have bespoke forms, every other kind
-// (manifest + custom) uses the descriptor-driven flat form. Defaults to the saved kind.
-const backendKind = ref<string>('manifest')
-const backendSelectorLabel = computed(() =>
-  t(
-    props.kind === 'environment'
-      ? 'settings.providerConnection.backend.environmentSelectorLabel'
-      : 'settings.providerConnection.backend.selectorLabel',
-  ),
-)
-// Built-in kinds keep their localized labels; a custom kind shows its snapshot displayLabel.
-function backendKindLabel(option: { kind: string; label: string }): string {
-  if (option.kind === 'kubernetes') return t('settings.providerConnection.backend.kubernetes')
-  if (option.kind === 'manifest') {
-    return t(
-      props.kind === 'environment'
-        ? 'settings.providerConnection.backend.environmentManifest'
-        : 'settings.providerConnection.backend.manifest',
-    )
-  }
-  return option.label
-}
-const backendKindItems = computed(() =>
-  store.backendKindsFor(props.kind).map((o) => ({ label: backendKindLabel(o), value: o.kind })),
-)
+// --- Backend connect forms ------------------------------------------------------------
+// Which backend kind to configure (the built-in `manifest`/`kubernetes` backends or any
+// CUSTOM kind a deployment registered) is decided by the parent picker's unified radio and
+// passed in as `backendKind` — there is no longer a local dropdown here. The two K8s
+// backends have bespoke forms; every other kind (manifest + custom) uses the descriptor-
+// driven flat form / raw manifest editor. Switching the kind re-probes ONLY that kind's
+// descriptor (so a not-yet-connected custom kind's connect form renders) WITHOUT re-fetching
+// the stored connection — using `loadDescriptor` (not `loadKind`) avoids bouncing the
+// picker's selection back to the stored kind via a connection re-read.
 watch(
-  () => connection.value,
-  (c) => {
-    if (c?.kind) backendKind.value = c.kind
-  },
-  { immediate: true },
+  () => props.backendKind,
+  (k) => void store.loadDescriptor(props.kind, k).then(resetDraft),
 )
-
-// Switching the backend kind re-probes ONLY that kind's descriptor (so a not-yet-connected
-// custom kind's connect form renders). Always pass the explicit kind — including `manifest`,
-// so picking it describes the manifest backend rather than falling back to the stored kind —
-// and use `loadDescriptor` (not `loadKind`) so the stored connection isn't re-fetched and the
-// selector isn't bounced back to the stored kind by the `connection` watch.
-async function onBackendKindChange(k: string) {
-  backendKind.value = k
-  await store.loadDescriptor(props.kind, k)
-  resetDraft()
-}
 
 async function testConfig(payload: {
   config: Record<string, unknown>
@@ -261,6 +240,7 @@ async function saveConfig(payload: {
   busy.value = true
   try {
     await store.register(props.kind, payload)
+    emit('connected')
     toastSaved()
   } catch (e) {
     notifyError(t('settings.providerConnection.toast.saveFailed'), e)
@@ -350,20 +330,12 @@ function fieldHelp(key: string): string | undefined {
       }}
     </div>
 
-    <!-- Backend selector: the BYO manifest backend, a native Kubernetes backend, or a
-         programmatically-registered custom kind. -->
-    <UFormField :label="backendSelectorLabel">
-      <USelect
-        v-model="backendKind"
-        :items="backendKindItems"
-        @update:model-value="onBackendKindChange(String($event))"
-      />
-    </UFormField>
-
     <!-- Native Kubernetes runner backend (runner-pool). -->
     <KubernetesRunnerForm
       v-if="kind === 'runner-pool' && backendKind === 'kubernetes'"
       :connection="connection"
+      :preset="preset"
+      :suggested-image="suggestedImage"
       :supports-test="descriptor.supportsTest"
       :testing="testing"
       :busy="busy"
@@ -463,31 +435,20 @@ function fieldHelp(key: string): string | undefined {
       </div>
     </div>
 
-    <!-- MANIFEST-driven provider: the raw JSON manifest editor. Collapsed by default — it's
-         the advanced path, needed ONLY to integrate a custom API-based scheduler. The common
-         backends (local Docker, Cloudflare Containers, Kubernetes) don't need it. -->
-    <details
+    <!-- MANIFEST-driven provider: the raw JSON manifest editor. The radio already selected
+         "custom HTTP" so it's shown expanded — no extra disclosure. -->
+    <ProviderManifestEditor
       v-else
-      class="rounded-lg border border-slate-700 bg-slate-900/40 p-3"
-      :open="!!connection"
-    >
-      <summary class="cursor-pointer text-sm font-medium text-slate-200">
-        {{ t('settings.providerConnection.advancedManifest.summary') }}
-      </summary>
-      <p class="mt-2 mb-3 text-[11px] text-slate-400">
-        {{ t('settings.providerConnection.advancedManifest.intro') }}
-      </p>
-      <ProviderManifestEditor
-        :kind="kind"
-        :saved-manifest="descriptor.savedManifest"
-        :connected="!!connection"
-        :supports-test="descriptor.supportsTest"
-        :testing="testing"
-        :busy="busy"
-        :test-result="testResult"
-        @test="testManifest"
-        @save="saveManifest"
-      />
-    </details>
+      :kind="kind"
+      :saved-manifest="descriptor.savedManifest"
+      :connected="!!connection"
+      :stored-secret-keys="connection?.secretKeys ?? []"
+      :supports-test="descriptor.supportsTest"
+      :testing="testing"
+      :busy="busy"
+      :test-result="testResult"
+      @test="testManifest"
+      @save="saveManifest"
+    />
   </div>
 </template>

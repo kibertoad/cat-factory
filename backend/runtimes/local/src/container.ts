@@ -349,7 +349,12 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // runtime can nest containers — Apple `container` can't, so it's omitted there (the one
   // legitimate per-runtime asymmetry, gated by `localTestInfraSupported`/`localDind`).
   config.infrastructure = buildInfrastructureCapabilities({
-    execution: { available: ['local-docker', 'runner-pool'], active: 'local-docker' },
+    execution: {
+      available: ['local-docker', 'runner-pool'],
+      active: 'local-docker',
+      // Prefill the image of a low-config k3s runner preset — local mode knows its harness ref.
+      suggestedExecutorImage: env.LOCAL_HARNESS_IMAGE?.trim() || undefined,
+    },
     testEnv: {
       available: localTestInfraSupported
         ? ['local-compose', 'environment-provider']

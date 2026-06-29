@@ -11,8 +11,7 @@
 // backend integration is disabled (503) simply doesn't render.
 import { computed, ref, watch } from 'vue'
 import type { ProviderConnectionKind } from '~/types/providerConnections'
-import ProviderConnectionTab from '~/components/settings/ProviderConnectionTab.vue'
-import ExecutionBackendSelector from '~/components/settings/ExecutionBackendSelector.vue'
+import InfrastructureBackendPicker from '~/components/settings/InfrastructureBackendPicker.vue'
 import LocalContainerPoolSettings from '~/components/settings/LocalContainerPoolSettings.vue'
 
 const { t } = useI18n()
@@ -103,10 +102,9 @@ watch([tabs, () => store.loaded], () => {
         >
           <template #runner-pool>
             <div class="space-y-4">
-              <!-- Where agent containers run (writable in local mode; read-only elsewhere). -->
-              <ExecutionBackendSelector axis="execution" />
-              <!-- The runner-pool connect form only when that integration is enabled. -->
-              <ProviderConnectionTab v-if="store.isAvailable('runner-pool')" kind="runner-pool" />
+              <!-- One unified list of where agent containers run; the selected pool/cluster
+                   reveals its connect form inline. -->
+              <InfrastructureBackendPicker axis="execution" />
               <!-- Local mode: the warm-pool + checkout reuse ARE the host agent-container
                    runtime, so they live here rather than in a separate menu. -->
               <section v-if="isLocal" class="border-t border-slate-800 pt-4">
@@ -119,10 +117,8 @@ watch([tabs, () => store.loaded], () => {
           </template>
           <template #environment>
             <div class="space-y-4">
-              <!-- Where Tester environments run (writable in local mode; read-only elsewhere). -->
-              <ExecutionBackendSelector axis="testEnv" />
-              <!-- The environment-provider connect form only when that integration is enabled. -->
-              <ProviderConnectionTab v-if="store.isAvailable('environment')" kind="environment" />
+              <!-- One unified list of where the Tester's ephemeral environments run. -->
+              <InfrastructureBackendPicker axis="testEnv" />
             </div>
           </template>
         </UTabs>

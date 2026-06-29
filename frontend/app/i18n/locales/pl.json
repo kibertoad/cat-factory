@@ -1256,6 +1256,7 @@
         "schemaError": "Problem z manifestem — {message}",
         "secretsLabel": "Sekrety",
         "noSecrets": "Ten manifest nie odwołuje się do żadnych sekretów.",
+        "stored": "Obecnie przechowywane: {keys}",
         "reenterSecrets": "Wprowadź ponownie każdy sekret, aby zapisać — przechowywane sekrety są tylko do zapisu i nie są wyświetlane.",
         "starterHint": "To jest przykład startowy. Zmodyfikuj go, aby pasował do API Twojego dostawcy."
       },
@@ -1282,13 +1283,6 @@
         "saveFailed": "Nie udało się zapisać połączenia",
         "removed": "Połączenie usunięte",
         "removeFailed": "Nie udało się usunąć połączenia"
-      },
-      "backend": {
-        "selectorLabel": "Backend wykonawczy",
-        "manifest": "Własny pool (manifest)",
-        "kubernetes": "Kubernetes",
-        "environmentSelectorLabel": "Backend środowiska",
-        "environmentManifest": "Własne API HTTP (manifest)"
       },
       "kubernetesEnv": {
         "label": "Nazwa",
@@ -1340,11 +1334,9 @@
         "apiTokenHelp": "Token bearer z uprawnieniami RBAC do tworzenia, odczytu i usuwania podów oraz pods/proxy w namespace. Przechowywany w postaci zaszyfrowanej; nie jest ponownie pokazywany.",
         "caCertPem": "Certyfikat CA klastra (PEM)",
         "caCertPemHelp": "Wklej pakiet CA klastra, aby certyfikat TLS apiservera został zweryfikowany. Pomiń tylko dla publicznie zaufanego CA.",
+        "insecureSkipTlsVerify": "Pomiń weryfikację TLS",
+        "insecureSkipTlsVerifyHelp": "Zdecydowanie odradzane. Wyłącza weryfikację TLS apiservera; używaj tylko dla lokalnych klastrów k3s/kind/dev.",
         "harnessPort": "Port harnessa"
-      },
-      "advancedManifest": {
-        "summary": "Zaawansowane: niestandardowy harmonogram oparty na API",
-        "intro": "Potrzebne tylko do zintegrowania niestandardowego harmonogramu opartego na API. Typowe backendy (lokalny Docker, Cloudflare Containers i Kubernetes) tego nie wymagają; opisz tutaj API HTTP własnego harmonogramu tylko, jeśli go używasz."
       }
     },
     "serviceFragmentDefaults": {

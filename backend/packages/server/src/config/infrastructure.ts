@@ -16,11 +16,19 @@ import type {
  * contract comment on `infrastructureCapabilitiesSchema`).
  */
 export function buildInfrastructureCapabilities(input: {
-  execution: { available: ExecutionBackendKind[]; active: ExecutionBackendKind }
+  execution: {
+    available: ExecutionBackendKind[]
+    active: ExecutionBackendKind
+    suggestedExecutorImage?: string
+  }
   testEnv: { available: TestEnvBackendKind[]; active: TestEnvBackendKind }
 }): InfrastructureCapabilities {
   return {
-    execution: { available: input.execution.available, active: input.execution.active },
+    execution: {
+      available: input.execution.available,
+      active: input.execution.active,
+      suggestedExecutorImage: input.execution.suggestedExecutorImage,
+    },
     testEnv: { available: input.testEnv.available, active: input.testEnv.active },
   }
 }
