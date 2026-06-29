@@ -361,7 +361,9 @@
     },
     "fragments": {
       "serviceTitle": "Buenas prácticas del servicio",
-      "serviceEmpty": "Ninguna. Los agentes que conocen el código en este servicio siguen su guía predeterminada."
+      "serviceEmpty": "Ninguna. Los agentes que conocen el código en este servicio siguen su guía predeterminada.",
+      "manageBoard": "Gestionar la biblioteca de fragmentos de este tablero…",
+      "manageAccount": "Gestionar los fragmentos de la cuenta…"
     },
     "releaseHealth": {
       "title": "Salud posterior al lanzamiento",

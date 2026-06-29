@@ -361,7 +361,9 @@
     },
     "fragments": {
       "serviceTitle": "Dobre praktyki usługi",
-      "serviceEmpty": "Brak. Agenci świadomi kodu w tej usłudze stosują swoje domyślne wytyczne."
+      "serviceEmpty": "Brak. Agenci świadomi kodu w tej usłudze stosują swoje domyślne wytyczne.",
+      "manageBoard": "Zarządzaj biblioteką fragmentów tej tablicy…",
+      "manageAccount": "Zarządzaj fragmentami konta…"
     },
     "releaseHealth": {
       "title": "Kondycja po wydaniu",
