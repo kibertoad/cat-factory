@@ -1,5 +1,80 @@
 # @cat-factory/kernel
 
+## 0.55.0
+
+### Minor Changes
+
+- d5a0637: Close the GitLab-vs-GitHub provider parity gaps so a GitLab deployment behaves like a GitHub
+  one across every runtime facade.
+
+  - **Facade parity (the showstopper):** the engine's CI / mergeability / PR-review gate
+    providers, the PR merger, the branch updater and the checkout-free `RepoFiles` resolvers are
+    now wired from a GitLab-backed client on the **Node and Cloudflare** facades too — previously
+    only local mode bridged GitLab into the gates, so a stock GitLab-only Node/CF deployment did
+    not gate on real CI or merge for real. Both facades now build the engine VCS client via the
+    shared `buildGitLabEngineClient` (GitHub App wins when both are configured).
+  - **Review provider:** `FetchGitLabClient` now implements the human-review reads
+    (`getPullRequestBaseRef`, `listRequestedReviewers`, `listPullRequestReviews` +
+    `getRequiredApprovingReviewCount` from GitLab approvals, `listReviewThreads` /
+    `replyToReviewThread` / `resolveReviewThread` over resolvable MR discussions, plus
+    `listIssueComments`).
+  - **Branch update:** new optional `VcsClient.rebasePullRequest` / `GitHubClient.rebasePullRequest`
+    — GitLab has no server-side merge-branch-into-branch endpoint, so the conflicts / human-testing
+    gate's "pull latest base" action advances a GitLab MR branch by rebasing it; `GitHubBranchUpdater`
+    prefers rebase when the client exposes it and falls back to `mergeBranch` (GitHub) otherwise.
+  - **Conformance:** the cross-provider VCS client suite now asserts GitHub and GitLab normalise the
+    human-review gate inputs identically and exposes the correct branch-advancing capability per
+    provider; a reusable `FakeVcsClient` drives the real gate / merge / branch-update providers
+    through the GitLab-backed adapter.
+  - **Rebase verdict robustness:** the GitLab MR-rebase poll now sleeps before each status read (so
+    a not-yet-started async rebase is never mistaken for a finished one) and decides the outcome by
+    whether the source-branch head actually advanced, ignoring the persisted `merge_error` field
+    (shared with merge attempts) unless the branch did not move. Covered by poll-transition,
+    stale-`merge_error`, conflict and up-to-date tests.
+  - **Accurate required-approval count:** `getRequiredApprovingReviewCount` now reads the effective
+    per-MR `approvals_required` (it accounts for the rule on the MR's target branch) when the PR
+    number is known, falling back to the project default; the port carries the PR number alongside
+    the branch (GitHub still reads branch protection and ignores it).
+  - **Node facade wiring:** the GitLab-backed engine client feeds only the gate / merge / RepoFiles
+    seams; GitHub-issue-specific consumers (the GitHub Issues task source, issue writeback) stay
+    gated on a real GitHub client, so a GitLab-only Node deployment no longer offers a
+    non-functional "GitHub Issues" task source (parity with the Worker).
+
+- 915861c: Surface the Tester's in-container docker-compose dependency stand-up logs on the test report
+  window.
+
+  A `local`-infra Tester stands the service's dependencies up inside its container with
+  `docker compose up --wait` before running. Until now that command's output was written only
+  to the harness's own logs — so when the dependencies failed to come up (a port clash, an
+  image pull-auth failure, a healthcheck timeout, a service that exits immediately) the run
+  showed an opaque failure and the single highest-signal artifact for diagnosing it was
+  unreachable from the UI. This was flagged as the natural follow-up to the container-lifecycle
+  observability work (the orchestrator-side provisioning logs can't see it — the stand-up runs
+  _inside_ the container).
+
+  - **Harness.** `standUpInfra` now captures the `docker compose up` stdout+stderr (on success
+    _and_ failure), redacts credentials (the shared `redact` now also scrubs credential-named
+    `KEY=value` / `KEY: value` assignments — e.g. a dependency echoing `POSTGRES_PASSWORD=…` —
+    which are neither a token shape nor a known value), tail-bounds it, and returns an
+    `infraSetup` record
+    (started / compose path / duration / logs / error) on the agent result.
+  - **Propagation.** The record rides the existing `RunnerJobResult` → `AgentRunResult` path
+    (forwarded verbatim by both transports) and the engine persists it on the Tester step as
+    `step.test.infraSetup`, refreshed on each Tester round.
+  - **UI.** The test report window's Infrastructure section now shows a "Dependency stand-up"
+    panel — the outcome, the compose file, how long it took, the verbatim error on failure, and
+    the captured stand-up logs behind a toggle.
+  - **Parity.** The cross-runtime conformance suite asserts the record round-trips onto
+    `step.test.infraSetup` identically on D1 and Postgres.
+
+  Bumps the `@cat-factory/executor-harness` image to `1.26.0` (the harness `src/` changed) and
+  the matching tag in `deploy/backend`.
+
+### Patch Changes
+
+- Updated dependencies [915861c]
+  - @cat-factory/contracts@0.54.0
+
 ## 0.54.0
 
 ### Minor Changes

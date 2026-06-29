@@ -1,5 +1,14 @@
 # @cat-factory/spend
 
+## 0.10.34
+
+### Patch Changes
+
+- Updated dependencies [d5a0637]
+- Updated dependencies [915861c]
+  - @cat-factory/kernel@0.55.0
+  - @cat-factory/contracts@0.54.0
+
 ## 0.10.33
 
 ### Patch Changes
