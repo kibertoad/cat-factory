@@ -1,16 +1,23 @@
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type { EnvironmentRecord, EnvironmentRegistryRepository } from '@cat-factory/kernel'
 import type {
+  EnvironmentManifest,
   EnvironmentProvider,
   ProvisionContext,
   ProvisionedEnvironment,
+  ResolveRunRepoContext,
+  SecretResolver,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { EnvironmentAccessHandle, EnvironmentHandle } from '@cat-factory/kernel'
-import { assertFound, STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
+import { assertFound, STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
-import { assertSafeEnvironmentUrl, recordToHandle } from './environments.logic.js'
+import {
+  assertSafeEnvironmentUrl,
+  recordToHandle,
+  stringifyProviderConfig,
+} from './environments.logic.js'
 import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningLogService.js'
 
 // EnvironmentProvisioningService: orchestrates provisioning an environment from a
@@ -29,6 +36,14 @@ export interface EnvironmentProvisioningServiceDependencies {
   urlPolicy?: UrlSafetyPolicy
   /** Best-effort provisioning-event log; absent ⇒ provisioning is unchanged. */
   provisioningLog?: ProvisioningLogRecorder
+  /**
+   * Resolve the VCS-neutral, run-repo-bound RepoFiles for a block, so provisioning can
+   * pre-flight `provider.validateRepo` (e.g. that a Kargo `.kargo.yml` exists + is valid)
+   * BEFORE calling the provider — failing fast with a clear error instead of an async
+   * failed environment. The same resolver the engine uses for pre/post-ops. Absent (or a
+   * provider without `validateRepo`, or a block-less manual provision) ⇒ no gate.
+   */
+  resolveRunRepoContext?: ResolveRunRepoContext
 }
 
 export interface ProvisionArgs {
@@ -70,6 +85,12 @@ export class EnvironmentProvisioningService {
     const { workspaceId } = args
     const { manifest } = await this.deps.connectionService.requireConnection(workspaceId)
     const resolveSecret = await this.deps.connectionService.resolveSecrets(workspaceId)
+
+    // Pre-flight gate: if the provider declares repo-config expectations (e.g. Kargo's
+    // `.kargo.yml`), verify them against the block's repo BEFORE provisioning, so a
+    // missing/malformed config fails synchronously here instead of as an async failed
+    // environment. Skipped for a block-less manual provision or an unconfigured workspace.
+    await this.preflightValidateRepo(args, manifest, resolveSecret)
 
     // Expose the block id as `{{input.blockId}}` even on a manual provision, so a
     // manifest can template against it without the caller having to repeat it. The
@@ -158,6 +179,52 @@ export class EnvironmentProvisioningService {
       detail: JSON.stringify({ status: provisioned.status }),
     })
     return recordToHandle(record)
+  }
+
+  /**
+   * Run the provider's repo-config validation as a provision pre-flight. Throws a
+   * {@link ValidationError} (and logs a failure) when the repo does not satisfy the
+   * provider. No-op when the provider has no `validateRepo`, no run-repo resolver is
+   * wired, the provision is block-less, or the repo can't be resolved (unconfigured).
+   */
+  private async preflightValidateRepo(
+    args: ProvisionArgs,
+    manifest: EnvironmentManifest,
+    resolveSecret: SecretResolver,
+  ): Promise<void> {
+    const provider = this.deps.environmentProvider
+    if (!provider.validateRepo || !this.deps.resolveRunRepoContext || !args.blockId) return
+    const bound = await this.deps.resolveRunRepoContext(args.workspaceId, args.blockId)
+    if (!bound) return
+    const gitRef = args.context?.branch ?? bound.baseBranch
+    const config = stringifyProviderConfig(manifest.providerConfig)
+    const result = await provider.validateRepo({
+      readRepoFile: (path, ref) => bound.repo.getFile(path, ref ?? gitRef),
+      defaultGitRef: gitRef,
+      ...(args.context?.repoOwner ? { repoOwner: args.context.repoOwner } : {}),
+      ...(args.context?.repoName ? { repoName: args.context.repoName } : {}),
+      ...(config ? { config } : {}),
+      resolveSecret,
+    })
+    if (result.ok) return
+    const summary =
+      result.issues
+        .filter((i) => i.severity === 'error')
+        .map((i) => (i.path ? `${i.path}: ` : '') + i.message)
+        .join('; ') || 'repo does not satisfy the provider configuration'
+    await this.deps.provisioningLog?.record({
+      workspaceId: args.workspaceId,
+      subsystem: 'environment',
+      operation: 'provision',
+      targetId: null,
+      providerId: manifest.providerId,
+      blockId: args.blockId ?? null,
+      executionId: args.executionId ?? null,
+      outcome: 'failure',
+      error: `Repo validation failed: ${summary}`,
+      detail: null,
+    })
+    throw new ValidationError(`Repo validation failed: ${summary}`)
   }
 
   /** Re-poll the provider for an environment's status and persist any change. */

@@ -71,6 +71,7 @@ import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
   makeResolveRunRepoContext,
+  makeResolveRepoFilesForCoords,
   makeResolveBinaryArtifactStore,
   type BuildBlobBackend,
   ensureWorkBranchViaRest,
@@ -1342,6 +1343,13 @@ function selectGitHubDeps(
     // this checkout-free RepoFiles resolver (installation + repo + default branch),
     // composed from the same client + repo-target walk the container executor uses.
     resolveRunRepoContext: makeResolveRunRepoContext(githubClient, buildResolveRepoTarget(db)),
+    // Block-less repo resolver for the environments module's on-demand repo validation /
+    // config bootstrap (operator names owner+repo).
+    resolveRepoFilesForCoords: makeResolveRepoFilesForCoords(
+      githubClient,
+      githubInstallationRepository,
+      new D1RepoProjectionRepository({ db }),
+    ),
     githubInstallationRepository,
     repoProjectionRepository: new D1RepoProjectionRepository({ db }),
     branchProjectionRepository: new D1BranchProjectionRepository({ db }),

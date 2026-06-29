@@ -3,8 +3,10 @@ import type {
   BlockRepository,
   ExecutionRepository,
   PipelineRepository,
+  RepoValidationResult,
   ResolveRunRepoContext,
   RunInitiatorScope,
+  RunRepoContext,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { getFragment } from '@cat-factory/prompt-fragments'
@@ -158,7 +160,7 @@ import { SandboxRunService } from './modules/sandbox/SandboxRunService.js'
 import { WorkspaceSettingsService } from './modules/settings/WorkspaceSettingsService.js'
 import { ReleaseHealthService } from './modules/releaseHealth/ReleaseHealthService.js'
 import { IncidentEnrichmentService } from './modules/incidentEnrichment/IncidentEnrichmentService.js'
-import type { AccountSettingsService } from '@cat-factory/integrations'
+import type { AccountSettingsService, ConfigRepairDispatch } from '@cat-factory/integrations'
 import {
   ModelPresetService,
   resolvePresetModelForKind,
@@ -232,6 +234,24 @@ export interface CoreDependencies {
    * skips every kind's pre/post-ops, exactly as a built-in kind has none.
    */
   resolveRunRepoContext?: ResolveRunRepoContext
+  /**
+   * Optional: resolve a VCS-neutral, repo-bound {@link RepoFiles} from explicit repo
+   * coordinates (no block context), so the environments module can validate / bootstrap
+   * a provider's config file in a repo the operator names. A facade composes it from its
+   * wired `GitHubClient` + the workspace's installation/repo projection
+   * (`makeResolveRepoFilesForCoords`). Absent → repo validation/bootstrap report "no VCS
+   * connection".
+   */
+  resolveRepoFilesForCoords?: (
+    workspaceId: string,
+    coords: { owner: string; repo: string; provider?: 'github' | 'gitlab' },
+  ) => Promise<RunRepoContext | null>
+  /**
+   * Optional: dispatch a coding agent to repair a malformed/partial environment-provider
+   * config (the `env-config-repair` kind), returning the post-repair validation. Wired by
+   * a facade that has the agent runtime. Absent → the bootstrap op has no agent fallback.
+   */
+  dispatchEnvConfigRepair?: (input: ConfigRepairDispatch) => Promise<RepoValidationResult>
   /**
    * Optional: runs the engine's gate-probe / merge GitHub reads under the run
    * initiator's ambient context so a per-user PAT is preferred (see
@@ -1127,6 +1147,11 @@ function createEnvironmentsModule(
     ...(deps.environmentProviderId ? { providerId: deps.environmentProviderId } : {}),
     ...(deps.environmentProviderLabel ? { providerLabel: deps.environmentProviderLabel } : {}),
     ...(deps.environmentUrlSafetyPolicy ? { urlPolicy: deps.environmentUrlSafetyPolicy } : {}),
+    ...(deps.resolveRepoFilesForCoords
+      ? { resolveRepoFilesForWorkspace: deps.resolveRepoFilesForCoords }
+      : {}),
+    ...(deps.dispatchEnvConfigRepair ? { dispatchConfigRepair: deps.dispatchEnvConfigRepair } : {}),
+    ...(provisioningLog ? { provisioningLog } : {}),
   })
   const provisioningService = new EnvironmentProvisioningService({
     connectionService,
@@ -1136,6 +1161,7 @@ function createEnvironmentsModule(
     idGenerator: deps.idGenerator,
     clock: deps.clock,
     ...(deps.environmentUrlSafetyPolicy ? { urlPolicy: deps.environmentUrlSafetyPolicy } : {}),
+    ...(deps.resolveRunRepoContext ? { resolveRunRepoContext: deps.resolveRunRepoContext } : {}),
     ...(provisioningLog ? { provisioningLog } : {}),
   })
   const teardownService = new EnvironmentTeardownService({

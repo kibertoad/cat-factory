@@ -1,9 +1,12 @@
 import type {
   GitHubClient,
+  GitHubInstallationRepository,
   GitHubRepoRef,
   RepoFiles,
+  RepoProjectionRepository,
   ResolveRepoFiles,
   ResolveRunRepoContext,
+  RunRepoContext,
 } from '@cat-factory/kernel'
 import type { ResolveRepoTarget } from './ContainerAgentExecutor.js'
 
@@ -65,6 +68,44 @@ export function makeResolveRunRepoContext(
         repo: target.name,
       }),
       baseBranch: target.baseBranch,
+    }
+  }
+}
+
+/**
+ * Resolve a checkout-free {@link RunRepoContext} from explicit repo COORDINATES (owner +
+ * repo), with no block context — the block-less sibling of {@link makeResolveRunRepoContext}
+ * the environments module uses to validate/bootstrap a provider's config file in a repo the
+ * operator names. Matches the workspace's projected repos by owner+name; returns null when
+ * GitHub isn't connected (no installation / no repos) or the named repo isn't projected, so
+ * the caller degrades cleanly to "no VCS connection".
+ *
+ * VCS-neutrality note: bound over the wired {@link GitHubClient} today; the provider never
+ * sees it — it only gets a `readRepoFile`. When GitLab lands, resolve a `VcsClient` via the
+ * VCS registry here instead; the provider code is unchanged.
+ */
+export function makeResolveRepoFilesForCoords(
+  client: GitHubClient,
+  installationRepository: Pick<GitHubInstallationRepository, 'getByWorkspace'>,
+  repoProjectionRepository: Pick<RepoProjectionRepository, 'list'>,
+): (
+  workspaceId: string,
+  coords: { owner: string; repo: string; provider?: 'github' | 'gitlab' },
+) => Promise<RunRepoContext | null> {
+  return async (workspaceId, { owner, repo, provider }) => {
+    // Only GitHub is resolvable today. A caller that explicitly asks for another VCS
+    // (e.g. `gitlab`) must NOT be silently bound to the GitHub installation/projection —
+    // that could read the wrong repo or report a misleading match. Bail cleanly until a
+    // VcsClient is resolved here per `provider`.
+    if (provider && provider !== 'github') return null
+    const installation = await installationRepository.getByWorkspace(workspaceId)
+    if (!installation) return null
+    const repos = await repoProjectionRepository.list(workspaceId)
+    const match = repos.find((r) => r.owner === owner && r.name === repo)
+    if (!match) return null
+    return {
+      repo: makeRepoFiles(client, installation.installationId, { owner, repo }),
+      baseBranch: match.defaultBranch ?? 'main',
     }
   }
 }

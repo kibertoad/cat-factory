@@ -6,6 +6,8 @@ import type {
   EnvironmentRegistryRepository,
   ProvisionEnvironmentRequest,
   ProvisionedEnvironment,
+  RepoValidationResult,
+  ResolveRunRepoContext,
   SecretCipher,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
@@ -162,6 +164,107 @@ describe('EnvironmentProvisioningService — provision context', () => {
     await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
     // The provider's arbitrary `fields` (here a Kargo-style ref) round-trip encrypted.
     expect(registry.records[0]!.provisionFieldsCipher).toBe(`enc:${JSON.stringify(READY.fields)}`)
+  })
+})
+
+describe('EnvironmentProvisioningService — repo-config pre-flight gate', () => {
+  // A run-repo resolver that always binds to an empty fake repo (the validateRepo fake
+  // here ignores the bytes — it returns whatever `result` we pass).
+  function gateResolver(): ResolveRunRepoContext {
+    return async () => ({
+      repo: {
+        getFile: async () => null,
+        listDirectory: async () => [],
+        headSha: async () => 'sha',
+        createBranch: async () => {},
+        commitFiles: async () => ({ sha: 'c' }),
+        openPullRequest: async () => ({ number: 1 }) as never,
+      },
+      baseBranch: 'main',
+    })
+  }
+
+  function gatedProvider(
+    result: RepoValidationResult,
+  ): EnvironmentProvider & { provisionCalled: boolean } {
+    const provider: EnvironmentProvider & { provisionCalled: boolean } = {
+      provisionCalled: false,
+      async validateRepo() {
+        return result
+      },
+      async provision(_req) {
+        provider.provisionCalled = true
+        return READY
+      },
+      async status() {
+        return READY
+      },
+      async teardown() {
+        return { status: 'torn_down' }
+      },
+    }
+    return provider
+  }
+
+  function makeGatedService(
+    provider: EnvironmentProvider,
+    registry: EnvironmentRegistryRepository,
+    resolveRunRepoContext?: ResolveRunRepoContext,
+  ) {
+    const connectionService = {
+      requireConnection: async () => ({ record: {} as never, manifest: MANIFEST }),
+      resolveSecrets: async () => () => undefined,
+    } as unknown as EnvironmentConnectionService
+    let n = 0
+    return new EnvironmentProvisioningService({
+      connectionService,
+      environmentProvider: provider,
+      environmentRegistryRepository: registry,
+      secretCipher: fakeCipher,
+      idGenerator: { next: (prefix: string) => `${prefix}_${++n}` },
+      clock: { now: () => 1_700_000_000_000 },
+      ...(resolveRunRepoContext ? { resolveRunRepoContext } : {}),
+    })
+  }
+
+  it('throws ValidationError BEFORE calling provider.provision when validation fails', async () => {
+    const provider = gatedProvider({
+      ok: false,
+      issues: [{ severity: 'error', message: 'no jobs', path: '.kargo.yml' }],
+    })
+    const service = makeGatedService(provider, fakeRegistry(), gateResolver())
+
+    await expect(service.provision({ workspaceId: 'ws1', blockId: 'blk1' })).rejects.toThrow(
+      /Repo validation failed/,
+    )
+    expect(provider.provisionCalled).toBe(false)
+  })
+
+  it('proceeds to provision when validation passes', async () => {
+    const provider = gatedProvider({ ok: true, issues: [] })
+    const registry = fakeRegistry()
+    const service = makeGatedService(provider, registry, gateResolver())
+
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    expect(provider.provisionCalled).toBe(true)
+    expect(registry.records).toHaveLength(1)
+  })
+
+  it('skips the gate for a block-less manual provision', async () => {
+    const provider = gatedProvider({ ok: false, issues: [{ severity: 'error', message: 'x' }] })
+    const service = makeGatedService(provider, fakeRegistry(), gateResolver())
+
+    // No blockId ⇒ no run-repo binding ⇒ gate skipped, provision proceeds.
+    await service.provision({ workspaceId: 'ws1' })
+    expect(provider.provisionCalled).toBe(true)
+  })
+
+  it('skips the gate when no run-repo resolver is wired', async () => {
+    const provider = gatedProvider({ ok: false, issues: [{ severity: 'error', message: 'x' }] })
+    const service = makeGatedService(provider, fakeRegistry())
+
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    expect(provider.provisionCalled).toBe(true)
   })
 })
 

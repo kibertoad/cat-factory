@@ -1,9 +1,11 @@
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type {
+  EnvironmentProvider,
   ExecutionEventPublisher,
   ExecutionInstance,
   LlmCallActivity,
   ResolveRunRepoContext,
+  RunRepoContext,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import type { FakeAgentOptions } from './FakeAgentExecutor.js'
@@ -233,4 +235,18 @@ export interface ConformanceAppOptions {
    * `@cat-factory/gates` CI gate over a controlled verdict on every runtime.
    */
   gateProviders?: GateProviderOverrides
+  /**
+   * Inject a native environment provider (carrying the optional repo-config lifecycle
+   * capabilities) plus the block-less coords→RepoFiles resolver, so the suite can assert
+   * the on-demand `validate-repo` route end-to-end — provider expectations + the wired
+   * `resolveRepoFilesForCoords` → real controller/service → real store — on EVERY runtime
+   * without a real GitHub connection. Each facade harness threads both into its core
+   * overrides exactly as a real facade composes them (the worker/node `environmentProvider`
+   * seam + the GitHub-derived coords resolver).
+   */
+  environmentProvider?: EnvironmentProvider
+  resolveRepoFilesForCoords?: (
+    workspaceId: string,
+    coords: { owner: string; repo: string; provider?: 'github' | 'gitlab' },
+  ) => Promise<RunRepoContext | null>
 }
