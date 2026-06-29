@@ -4,7 +4,7 @@
 // These mirror `@cat-factory/local-server`'s `githubPatCreationUrl` / `gitlabPatCreationUrl`
 // (backend/runtimes/local/src/github.ts) so the token the developer mints here carries exactly
 // the scopes the local-mode agent containers need. They are duplicated rather than imported to
-// keep the CLI dependency-free (no backend stack pulled into a scaffolder).
+// keep the backend stack out of a scaffolder (the CLI's only runtime dep is @clack/prompts).
 
 export type VcsProvider = 'github' | 'gitlab'
 

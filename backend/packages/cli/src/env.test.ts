@@ -19,6 +19,7 @@ describe('buildLocalEnv', () => {
     harnessImage: 'ghcr.io/x/y:latest',
     port: 8787,
     corsAllowedOrigins: 'http://localhost:3000',
+    containerRuntime: 'docker' as const,
   }
 
   it('writes the github token under GITHUB_PAT', () => {
@@ -40,6 +41,11 @@ describe('buildLocalEnv', () => {
   it('leaves the token blank when none is supplied', () => {
     const out = buildLocalEnv({ ...base, provider: 'github' })
     expect(out).toMatch(/^GITHUB_PAT=$/m)
+  })
+
+  it('writes the chosen container runtime', () => {
+    const out = buildLocalEnv({ ...base, provider: 'github', containerRuntime: 'orbstack' })
+    expect(out).toContain('LOCAL_CONTAINER_RUNTIME=orbstack')
   })
 })
 

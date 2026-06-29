@@ -1,3 +1,4 @@
+import { CONTAINER_RUNTIMES, type ContainerRuntime } from './templates.js'
 import { patEnvVar, providerLabel, type VcsProvider } from './vcs.js'
 
 /** One line of an `.env` file: a key/value pair with an optional leading comment block. */
@@ -30,6 +31,8 @@ export interface LocalEnvInput {
   port: number
   corsAllowedOrigins: string
   provider: VcsProvider
+  /** Container runtime that spawns agent jobs (`LOCAL_CONTAINER_RUNTIME`). */
+  containerRuntime: ContainerRuntime
   /** The pasted PAT, or empty/undefined to leave the var present-but-blank. */
   token?: string
 }
@@ -90,11 +93,9 @@ export function buildLocalEnv(input: LocalEnvInput): string {
       value: input.harnessImage,
     },
     {
-      comment: [
-        'Container runtime used to spawn agent jobs: docker | podman | orbstack | colima | apple.',
-      ],
+      comment: [`Container runtime used to spawn agent jobs: ${CONTAINER_RUNTIMES.join(' | ')}.`],
       key: 'LOCAL_CONTAINER_RUNTIME',
-      value: 'docker',
+      value: input.containerRuntime,
     },
     {
       comment: [

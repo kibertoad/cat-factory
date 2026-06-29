@@ -21,23 +21,27 @@ function memFs(seed: Record<string, string> = {}): FileSystem & { files: Map<str
   }
 }
 
-/** Scripted Io: answers/secrets come from queues; openBrowser is recorded. */
+/** Scripted Io: answers/secrets/selects come from queues; openBrowser is recorded. */
 function scriptIo(
   answers: string[] = [],
   secrets: string[] = [],
   confirms: boolean[] = [],
+  selects: string[] = [],
 ): Io & {
   opened: string[]
 } {
   const a = [...answers]
   const s = [...secrets]
   const c = [...confirms]
+  const sel = [...selects]
   const opened: string[] = []
   return {
     opened,
     info: () => {},
     warn: () => {},
     question: (_p, d) => Promise.resolve(a.shift() ?? d ?? ''),
+    select: <T extends string>(_p: string, _o: readonly { value: T }[], d: T) =>
+      Promise.resolve((sel.shift() as T | undefined) ?? d),
     secret: () => Promise.resolve(s.shift() ?? ''),
     confirm: (_p, d) => Promise.resolve(c.shift() ?? d),
     openBrowser: (url) => {
@@ -72,22 +76,60 @@ describe('bootstrap (non-interactive)', () => {
     // No browser opened, no prompts in --yes mode.
     expect(io.opened).toEqual([])
   })
+
+  it('derives the SPA api-base from a non-default --port', async () => {
+    const fs = memFs()
+    await bootstrap(opts({ yes: true, token: 't', dir: 'out', port: 9000 }), {
+      io: scriptIo(),
+      fs,
+      cwd: '/work',
+      randomBytes: fixedBytes,
+    })
+    expect(fs.files.get('/work/out/frontend/.env')).toContain(
+      'NUXT_PUBLIC_API_BASE=http://localhost:9000',
+    )
+    expect(fs.files.get('/work/out/local/.env')).toContain('PORT=9000')
+  })
+
+  it('slugifies a free-text project name for the npm package names and dir', async () => {
+    const fs = memFs()
+    const dir = await bootstrap(opts({ yes: true, token: 't', projectName: 'My Cats' }), {
+      io: scriptIo(),
+      fs,
+      cwd: '/work',
+      randomBytes: fixedBytes,
+    })
+    expect(dir).toBe('/work/my-cats')
+    expect(fs.files.get('/work/my-cats/local/package.json')).toContain('"name": "my-cats-local"')
+  })
+
+  it('threads --container-runtime into the env', async () => {
+    const fs = memFs()
+    await bootstrap(opts({ yes: true, token: 't', dir: 'out', containerRuntime: 'podman' }), {
+      io: scriptIo(),
+      fs,
+      cwd: '/work',
+      randomBytes: fixedBytes,
+    })
+    expect(fs.files.get('/work/out/local/.env')).toContain('LOCAL_CONTAINER_RUNTIME=podman')
+  })
 })
 
 describe('bootstrap (interactive PAT flow)', () => {
   it('opens the browser at the pre-scoped URL and writes the pasted token', async () => {
     const fs = memFs()
-    // question order: project name, app title, provider, db url, api base; confirm: open browser; secret: token
+    // question order: project name, app title, db url, api base; select: provider, runtime;
+    // confirm: open browser; secret: token.
     const io = scriptIo(
       [
         'my-cats',
         'My Cats',
-        'github',
         'postgres://cat:cat@localhost:5432/catfactory',
         'http://localhost:8787',
       ],
       ['ghp_pasted'],
       [true],
+      ['github', 'docker'],
     )
     await bootstrap(opts({}), { io, fs, cwd: '/work', randomBytes: fixedBytes })
     expect(io.opened).toHaveLength(1)
@@ -99,9 +141,10 @@ describe('bootstrap (interactive PAT flow)', () => {
   it('does not open the browser with --no-open', async () => {
     const fs = memFs()
     const io = scriptIo(
-      ['p', 't', 'gitlab', 'postgres://cat:cat@localhost:5432/catfactory', 'http://localhost:8787'],
+      ['p', 't', 'postgres://cat:cat@localhost:5432/catfactory', 'http://localhost:8787'],
       ['glpat-x'],
       [],
+      ['gitlab', 'docker'],
     )
     await bootstrap(opts({ noOpen: true }), { io, fs, cwd: '/w', randomBytes: fixedBytes })
     expect(io.opened).toEqual([])

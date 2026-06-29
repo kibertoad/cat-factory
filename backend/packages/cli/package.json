@@ -41,6 +41,9 @@
     "test": "vitest",
     "test:run": "vitest run"
   },
+  "dependencies": {
+    "@clack/prompts": "^1.6.0"
+  },
   "devDependencies": {
     "@types/node": "^26.0.1",
     "typescript": "7.0.1-rc",

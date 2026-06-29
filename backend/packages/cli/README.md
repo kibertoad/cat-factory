@@ -28,8 +28,10 @@ pnpm dlx @cat-factory/cli
 npx  @cat-factory/cli
 ```
 
-Interactive by default — it asks for the project name, app title, source-control provider,
-database URL and API base, opens the browser to create the token, and prompts you to paste it.
+Interactive by default (powered by [`@clack/prompts`](https://www.npmjs.com/package/@clack/prompts))
+— it asks for the project name and app title, lets you pick the source-control provider and
+container runtime from a menu, asks for the database URL and API base, opens the browser to create
+the token, and reads it back via a masked password prompt. Ctrl-C cancels cleanly at any step.
 
 ### Non-interactive
 
@@ -47,22 +49,23 @@ npx @cat-factory/cli init \
 
 ### Options
 
-| Flag                    | Default                                 | Meaning                                            |
-| ----------------------- | --------------------------------------- | -------------------------------------------------- |
-| `-d, --dir <path>`      | `./<name>`                              | Target directory.                                  |
-| `--name <name>`         | `cat-factory`                           | Project name slug (used for the scaffolded names). |
-| `--title <title>`       | `Agent Architecture Board`              | Frontend app title.                                |
-| `--provider <p>`        | `github`                                | Source control: `github` or `gitlab`.              |
-| `--token <token>`       | (prompted)                              | PAT value; skips the browser/paste flow.           |
-| `--db-url <url>`        | `postgres://cat:cat@…`                  | Postgres `DATABASE_URL`.                           |
-| `--api-base <url>`      | `http://localhost:8787`                 | Backend API base baked into the SPA.               |
-| `--port <n>`            | `8787`                                  | Backend HTTP port.                                 |
-| `--harness-image <ref>` | `ghcr.io/…/cat-factory-executor:latest` | Executor-harness image agent jobs run as.          |
-| `--no-open`             | off                                     | Print the token URL but don't open the browser.    |
-| `-y, --yes`             | off                                     | Non-interactive: use defaults/flags, never prompt. |
-| `-f, --force`           | off                                     | Overwrite existing files.                          |
-| `-h, --help`            |                                         | Show help.                                         |
-| `-v, --version`         |                                         | Show the CLI version.                              |
+| Flag                      | Default                                 | Meaning                                                       |
+| ------------------------- | --------------------------------------- | ------------------------------------------------------------- |
+| `-d, --dir <path>`        | `./<name>`                              | Target directory.                                             |
+| `--name <name>`           | `cat-factory`                           | Project name slug (used for the scaffolded names).            |
+| `--title <title>`         | `Agent Architecture Board`              | Frontend app title.                                           |
+| `--provider <p>`          | `github`                                | Source control: `github` or `gitlab`.                         |
+| `--token <token>`         | (prompted)                              | PAT value; skips the browser/paste flow.                      |
+| `--db-url <url>`          | `postgres://cat:cat@…`                  | Postgres `DATABASE_URL`.                                      |
+| `--api-base <url>`        | `http://localhost:<port>`               | Backend API base baked into the SPA.                          |
+| `--port <n>`              | `8787`                                  | Backend HTTP port (also sets the SPA's api-base).             |
+| `--harness-image <ref>`   | `ghcr.io/…/cat-factory-executor:latest` | Executor-harness image agent jobs run as.                     |
+| `--container-runtime <r>` | `docker`                                | Agent runtime: `docker`/`podman`/`orbstack`/`colima`/`apple`. |
+| `--no-open`               | off                                     | Print the token URL but don't open the browser.               |
+| `-y, --yes`               | off                                     | Non-interactive: use defaults/flags, never prompt.            |
+| `-f, --force`             | off                                     | Overwrite existing files.                                     |
+| `-h, --help`              |                                         | Show help.                                                    |
+| `-v, --version`           |                                         | Show the CLI version.                                         |
 
 ## What it scaffolds
 

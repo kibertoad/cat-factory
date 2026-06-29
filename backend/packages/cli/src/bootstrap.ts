@@ -4,6 +4,8 @@ import { type CliOptions, OPTION_DEFAULTS } from './args.js'
 import { createConsoleIo, type Io } from './io.js'
 import { buildPlan, type PlannedFile } from './plan.js'
 import { generateSecrets, type RandomBytes } from './secrets.js'
+import { slugifyProjectName } from './slug.js'
+import { CONTAINER_RUNTIMES, type ContainerRuntime } from './templates.js'
 import { patCreationUrl, providerLabel, VCS_PROVIDERS, type VcsProvider } from './vcs.js'
 
 /** The filesystem operations the writer needs — injectable so the flow is testable. */
@@ -42,11 +44,17 @@ export async function bootstrap(options: CliOptions, deps: BootstrapDeps = {}): 
 
   io.info('\ncat-factory — scaffold a local deployment\n')
 
-  const projectName =
+  const rawProjectName =
     options.projectName ??
     (options.yes
       ? OPTION_DEFAULTS.projectName
       : await io.question('Project name', OPTION_DEFAULTS.projectName))
+
+  // The name is used verbatim as the generated packages' npm `name`, so it must be a valid slug.
+  const projectName = slugifyProjectName(rawProjectName, OPTION_DEFAULTS.projectName)
+  if (projectName !== rawProjectName) {
+    io.warn(`Using "${projectName}" as the project slug (npm package names must be lowercased).`)
+  }
 
   const targetDir = resolve(cwd, options.dir ?? projectName)
 
@@ -64,14 +72,18 @@ export async function bootstrap(options: CliOptions, deps: BootstrapDeps = {}): 
       ? OPTION_DEFAULTS.databaseUrl
       : await io.question('Postgres DATABASE_URL', OPTION_DEFAULTS.databaseUrl))
 
+  // Resolve the port first: the SPA's api-base defaults to it, so a non-default --port can't
+  // silently leave the frontend pointed at the wrong backend.
+  const port = options.port ?? OPTION_DEFAULTS.port
+  const defaultApiBase = `http://localhost:${port}`
   const apiBase =
     options.apiBase ??
     (options.yes
-      ? OPTION_DEFAULTS.apiBase
-      : await io.question('Backend API base (for the SPA)', OPTION_DEFAULTS.apiBase))
+      ? defaultApiBase
+      : await io.question('Backend API base (for the SPA)', defaultApiBase))
 
-  const port = options.port ?? OPTION_DEFAULTS.port
   const harnessImage = options.harnessImage ?? OPTION_DEFAULTS.harnessImage
+  const containerRuntime = await resolveContainerRuntime(options, io)
   const corsAllowedOrigins = 'http://localhost:3000'
 
   const token = await resolveToken(options, provider, io)
@@ -94,6 +106,7 @@ export async function bootstrap(options: CliOptions, deps: BootstrapDeps = {}): 
     port,
     corsAllowedOrigins,
     harnessImage,
+    containerRuntime,
     authSessionSecret: secrets.authSessionSecret,
     encryptionKey: secrets.encryptionKey,
     existingGitignore,
@@ -115,12 +128,21 @@ export async function bootstrap(options: CliOptions, deps: BootstrapDeps = {}): 
 async function resolveProvider(options: CliOptions, io: Io): Promise<VcsProvider> {
   if (options.provider) return options.provider
   if (options.yes) return OPTION_DEFAULTS.provider
-  const answer = (
-    await io.question(`Source control (${VCS_PROVIDERS.join('/')})`, OPTION_DEFAULTS.provider)
-  ).toLowerCase()
-  if ((VCS_PROVIDERS as readonly string[]).includes(answer)) return answer as VcsProvider
-  io.warn(`Unrecognized provider "${answer}", defaulting to ${OPTION_DEFAULTS.provider}.`)
-  return OPTION_DEFAULTS.provider
+  return io.select(
+    'Source control',
+    VCS_PROVIDERS.map((value) => ({ value, label: providerLabel(value) })),
+    OPTION_DEFAULTS.provider,
+  )
+}
+
+async function resolveContainerRuntime(options: CliOptions, io: Io): Promise<ContainerRuntime> {
+  if (options.containerRuntime) return options.containerRuntime
+  if (options.yes) return OPTION_DEFAULTS.containerRuntime
+  return io.select(
+    'Container runtime that spawns agent jobs',
+    CONTAINER_RUNTIMES.map((value) => ({ value, label: value })),
+    OPTION_DEFAULTS.containerRuntime,
+  )
 }
 
 /**

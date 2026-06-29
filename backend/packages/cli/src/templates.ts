@@ -2,8 +2,12 @@
 // `deploy/frontend` in this repo, but depend on the PUBLISHED libraries (not `workspace:*`) so
 // the generated project works standalone outside the monorepo.
 
-/** npm dist-tag / range the scaffolded project depends on. `latest` tracks the newest release. */
-export const LIB_VERSION = 'latest'
+// Pinned library versions the scaffolded project depends on. Pinned (not the `latest` dist-tag)
+// so a scaffold is reproducible and the backend/frontend can't resolve to skewed releases; the
+// caret allows in-range patch/minor pickups. Bump these when cutting a CLI release against newer
+// libraries. (`@cat-factory/local-server` and `@cat-factory/app` version independently.)
+export const LOCAL_SERVER_VERSION = '^0.19.5'
+export const APP_VERSION = '^0.47.7'
 export const NUXT_VERSION = '^4.4.8'
 export const TYPES_NODE_VERSION = '^26.0.1'
 export const TYPESCRIPT_VERSION = '7.0.1-rc'
@@ -11,6 +15,10 @@ export const WRANGLER_VERSION = '^4.105.0'
 
 /** Default executor-harness image agent jobs run as per-run containers. */
 export const DEFAULT_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor:latest'
+
+/** The container runtimes the local facade understands (`LOCAL_CONTAINER_RUNTIME`). */
+export const CONTAINER_RUNTIMES = ['docker', 'podman', 'orbstack', 'colima', 'apple'] as const
+export type ContainerRuntime = (typeof CONTAINER_RUNTIMES)[number]
 
 export const localPackageJson = (projectName: string): string =>
   `${JSON.stringify(
@@ -20,14 +28,23 @@ export const localPackageJson = (projectName: string): string =>
       private: true,
       description: 'Local-mode backend deployment of @cat-factory/local-server.',
       type: 'module',
+      engines: {
+        // The entry (src/main.ts) runs via Node's TypeScript type stripping; --env-file-if-exists
+        // also needs a recent Node. 24+ covers both.
+        node: '>=24',
+      },
       scripts: {
-        start: 'node --env-file-if-exists=.env node_modules/@cat-factory/local-server/dist/main.js',
-        dev: 'node --watch --env-file-if-exists=.env node_modules/@cat-factory/local-server/dist/main.js',
+        start: 'node --env-file-if-exists=.env src/main.ts',
+        dev: 'node --watch --env-file-if-exists=.env src/main.ts',
         'db:up': 'docker compose up -d postgres',
         'db:down': 'docker compose down',
       },
       dependencies: {
-        '@cat-factory/local-server': LIB_VERSION,
+        '@cat-factory/local-server': LOCAL_SERVER_VERSION,
+      },
+      devDependencies: {
+        '@types/node': TYPES_NODE_VERSION,
+        typescript: TYPESCRIPT_VERSION,
       },
     },
     null,
@@ -39,7 +56,9 @@ export const localMainTs = `// Local-mode backend entry point.
 // Calls the reusable @cat-factory/local-server library's startLocal(): connect to the local
 // Postgres (DATABASE_URL), run the schema migration, boot pg-boss + the durable execution
 // worker, and serve the shared Hono app. Agent jobs run as per-run local containers and GitHub
-// is reached via the PAT in .env. Node 24+ runs this TypeScript directly via type stripping.
+// is reached via the PAT in .env. Node 24+ runs this TypeScript directly via type stripping
+// (npm start = \`node --env-file-if-exists=.env src/main.ts\`), so edits here take effect with no
+// build step.
 import { startLocal } from '@cat-factory/local-server'
 
 startLocal().catch((err: unknown) => {
@@ -89,7 +108,15 @@ volumes:
 `
 }
 
-export const localEnvExample = `# Example env for the local-mode backend. Copy to \`.env\` (gitignored) and fill in.
+export const localEnvExample = (
+  provider: 'github' | 'gitlab' = 'github',
+  containerRuntime: ContainerRuntime = 'docker',
+): string => {
+  // Show the chosen provider's PAT var active and the other commented, so the example matches
+  // the populated `.env` the CLI writes for that provider.
+  const tokenLines =
+    provider === 'gitlab' ? ['# GITHUB_PAT=', 'GITLAB_PAT='] : ['GITHUB_PAT=', '# GITLAB_PAT=']
+  return `# Example env for the local-mode backend. Copy to \`.env\` (gitignored) and fill in.
 # \`cat-factory init\` generates a populated \`.env\` for you; this is the documented template.
 DATABASE_URL=postgres://cat:cat@localhost:5432/catfactory
 PORT=8787
@@ -99,16 +126,17 @@ AUTH_SESSION_SECRET=
 # Generate with: openssl rand -base64 32
 ENCRYPTION_KEY=
 # A GitHub (classic, scopes: repo,workflow) or GitLab (scope: api) personal access token.
-GITHUB_PAT=
-# GITLAB_PAT=
+${tokenLines.join('\n')}
 LOCAL_HARNESS_IMAGE=${DEFAULT_HARNESS_IMAGE}
-LOCAL_CONTAINER_RUNTIME=docker
+# Container runtime that spawns agent jobs: ${CONTAINER_RUNTIMES.join(' | ')}.
+LOCAL_CONTAINER_RUNTIME=${containerRuntime}
 # At least one model provider (Cloudflare Workers AI over REST shown; or a direct vendor key):
 # CLOUDFLARE_ACCOUNT_ID=
 # CLOUDFLARE_API_TOKEN=
 # ANTHROPIC_API_KEY=
 # OPENAI_API_KEY=
 `
+}
 
 export const frontendPackageJson = (projectName: string): string =>
   `${JSON.stringify(
@@ -127,7 +155,7 @@ export const frontendPackageJson = (projectName: string): string =>
         deploy: 'wrangler pages deploy',
       },
       dependencies: {
-        '@cat-factory/app': LIB_VERSION,
+        '@cat-factory/app': APP_VERSION,
         nuxt: NUXT_VERSION,
       },
       devDependencies: {

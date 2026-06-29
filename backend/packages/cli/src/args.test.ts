@@ -39,6 +39,12 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--port', 'abc'])).toThrow(ArgError)
   })
 
+  it('parses and validates --container-runtime', () => {
+    expect(parseArgs(['--container-runtime', 'podman']).containerRuntime).toBe('podman')
+    expect(parseArgs(['--container-runtime=apple']).containerRuntime).toBe('apple')
+    expect(() => parseArgs(['--container-runtime', 'lxc'])).toThrow(ArgError)
+  })
+
   it('rejects an unknown flag and a missing value', () => {
     expect(() => parseArgs(['--bogus'])).toThrow(ArgError)
     expect(() => parseArgs(['--dir'])).toThrow(/Missing value/)

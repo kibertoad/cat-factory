@@ -11,6 +11,7 @@ import {
   localPackageJson,
   tsconfigJson,
 } from './templates.js'
+import type { ContainerRuntime } from './templates.js'
 import { patCreationUrl, patEnvVar, providerLabel, type VcsProvider } from './vcs.js'
 
 /** A single file the CLI will write, as a path relative to the project root + its content. */
@@ -32,6 +33,7 @@ export interface BootstrapInput {
   port: number
   corsAllowedOrigins: string
   harnessImage: string
+  containerRuntime: ContainerRuntime
   authSessionSecret: string
   encryptionKey: string
   /** Existing root `.gitignore` content, if the target dir already has one (rules are merged in). */
@@ -48,6 +50,7 @@ export function buildPlan(input: BootstrapInput): PlannedFile[] {
     port: input.port,
     corsAllowedOrigins: input.corsAllowedOrigins,
     provider: input.provider,
+    containerRuntime: input.containerRuntime,
     token: input.token,
   })
   const frontendEnv = buildFrontendEnv({ apiBase: input.apiBase })
@@ -65,7 +68,10 @@ export function buildPlan(input: BootstrapInput): PlannedFile[] {
     { path: 'local/src/main.ts', content: localMainTs },
     { path: 'local/docker-compose.yml', content: dockerCompose(input.databaseUrl) },
     { path: 'local/tsconfig.json', content: tsconfigJson },
-    { path: 'local/.env.example', content: localEnvExample },
+    {
+      path: 'local/.env.example',
+      content: localEnvExample(input.provider, input.containerRuntime),
+    },
     { path: 'local/.env', content: localEnv, secret: true },
 
     // Frontend SPA.

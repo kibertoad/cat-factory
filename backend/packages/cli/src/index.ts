@@ -14,6 +14,8 @@ export { buildGitignore, mergeGitignore, REQUIRED_GITIGNORE_RULES } from './giti
 export { type Io, createConsoleIo } from './io.js'
 export { type BootstrapInput, buildPlan, type PlannedFile } from './plan.js'
 export { generateSecrets, type GeneratedSecrets, type RandomBytes } from './secrets.js'
+export { slugifyProjectName } from './slug.js'
+export { CONTAINER_RUNTIMES, type ContainerRuntime, DEFAULT_HARNESS_IMAGE } from './templates.js'
 export {
   githubPatCreationUrl,
   gitlabPatCreationUrl,

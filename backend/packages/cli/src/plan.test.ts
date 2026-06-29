@@ -11,6 +11,7 @@ const input: BootstrapInput = {
   port: 8787,
   corsAllowedOrigins: 'http://localhost:3000',
   harnessImage: 'ghcr.io/x/y:latest',
+  containerRuntime: 'docker',
   authSessionSecret: 'sess',
   encryptionKey: 'enc',
 }
@@ -84,5 +85,19 @@ describe('buildPlan', () => {
   it('uses the gitlab env var for a gitlab project', () => {
     const env = plan({ provider: 'gitlab' }).byPath.get('local/.env')?.content ?? ''
     expect(env).toContain('GITLAB_PAT=ghp_secret')
+  })
+
+  it('threads the chosen container runtime into local/.env and its example', () => {
+    const { byPath } = plan({ containerRuntime: 'podman' })
+    expect(byPath.get('local/.env')?.content ?? '').toContain('LOCAL_CONTAINER_RUNTIME=podman')
+    expect(byPath.get('local/.env.example')?.content ?? '').toContain(
+      'LOCAL_CONTAINER_RUNTIME=podman',
+    )
+  })
+
+  it('makes the .env.example match the chosen provider', () => {
+    const example = plan({ provider: 'gitlab' }).byPath.get('local/.env.example')?.content ?? ''
+    expect(example).toContain('\nGITLAB_PAT=')
+    expect(example).toContain('# GITHUB_PAT=')
   })
 })

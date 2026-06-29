@@ -1,15 +1,31 @@
 import { spawn } from 'node:child_process'
-import { createInterface } from 'node:readline'
+import {
+  cancel,
+  confirm as clackConfirm,
+  isCancel,
+  log,
+  type Option,
+  password,
+  select as clackSelect,
+  text,
+} from '@clack/prompts'
 
 /**
- * Terminal I/O seam. The orchestrator depends on this interface (never on `process`/`readline`
- * directly), so the whole interactive flow can be driven by a fake in tests.
+ * Terminal I/O seam. The orchestrator depends on this interface (never on `@clack/prompts` or
+ * `process` directly), so the whole interactive flow can be driven by a fake in tests. The real
+ * implementation ({@link createConsoleIo}) is clack-backed; tests inject their own.
  */
 export interface Io {
   info(message: string): void
   warn(message: string): void
-  /** Free-text prompt with an optional default (shown in brackets, used when the reply is empty). */
+  /** Free-text prompt with an optional default (used when the reply is empty). */
   question(prompt: string, defaultValue?: string): Promise<string>
+  /** A single-choice menu; returns the chosen option's value. */
+  select<T extends string>(
+    prompt: string,
+    options: readonly { value: T; label: string }[],
+    defaultValue: T,
+  ): Promise<T>
   /** Like {@link question} but does not echo the typed characters (for secrets/tokens). */
   secret(prompt: string): Promise<string>
   /** Yes/no prompt. */
@@ -31,56 +47,57 @@ function openCommand(url: string): { cmd: string; args: string[] } {
   }
 }
 
-/** The real, console-backed {@link Io}. */
-export function createConsoleIo(): Io {
-  const rl = () => createInterface({ input: process.stdin, output: process.stdout })
+/** A clack prompt resolved to a cancel symbol (Ctrl-C / Esc): print a notice and exit cleanly. */
+function bailIfCancelled<T>(value: T | symbol): T {
+  if (isCancel(value)) {
+    cancel('Cancelled.')
+    process.exit(130)
+  }
+  return value
+}
 
+/** The real, console-backed {@link Io}, implemented with `@clack/prompts`. */
+export function createConsoleIo(): Io {
   return {
     info(message) {
-      process.stdout.write(`${message}\n`)
+      // Callers pad messages with leading/trailing newlines for plain-console spacing; clack adds
+      // its own, so strip the padding to avoid empty bar lines.
+      log.message(message.replace(/^\n+|\n+$/g, ''))
     },
     warn(message) {
-      process.stderr.write(`${message}\n`)
+      log.warn(message.replace(/^\n+|\n+$/g, ''))
     },
-    question(prompt, defaultValue) {
-      const suffix = defaultValue ? ` [${defaultValue}]` : ''
-      const iface = rl()
-      return new Promise<string>((resolve) => {
-        iface.question(`${prompt}${suffix}: `, (answer) => {
-          iface.close()
-          const trimmed = answer.trim()
-          resolve(trimmed.length > 0 ? trimmed : (defaultValue ?? ''))
-        })
-      })
+    async question(prompt, defaultValue) {
+      const value = bailIfCancelled(
+        await text({ message: prompt, placeholder: defaultValue, defaultValue }),
+      )
+      const trimmed = (value ?? '').trim()
+      return trimmed.length > 0 ? trimmed : (defaultValue ?? '')
     },
-    secret(prompt) {
-      const iface = rl()
-      // Mute the output so typed characters (the token) aren't echoed to the terminal.
-      const muted = iface as unknown as { _writeToOutput?: (s: string) => void }
-      const original = muted._writeToOutput?.bind(iface)
-      let muting = false
-      muted._writeToOutput = (s: string) => {
-        if (muting) {
-          // Still emit newlines so the cursor advances when the user hits enter.
-          if (s.includes('\n')) process.stdout.write('\n')
-          return
-        }
-        process.stdout.write(s)
-      }
-      return new Promise<string>((resolve) => {
-        iface.question(`${prompt}: `, (answer) => {
-          if (original) muted._writeToOutput = original
-          iface.close()
-          resolve(answer.trim())
-        })
-        muting = true
-      })
+    async select<T extends string>(
+      prompt: string,
+      options: readonly { value: T; label: string }[],
+      defaultValue: T,
+    ) {
+      // clack's `Option<Value>` is a conditional type TS can't match against our concrete
+      // `{ value, label }` while `Value` is still the generic `T`; the shapes are identical for
+      // string values, so cast the option list to satisfy it.
+      const value = bailIfCancelled(
+        await clackSelect<T>({
+          message: prompt,
+          options: [...options] as Option<T>[],
+          initialValue: defaultValue,
+        }),
+      )
+      return value
+    },
+    async secret(prompt) {
+      // clack's password input masks the typed characters — no readline poking needed.
+      const value = bailIfCancelled(await password({ message: prompt }))
+      return (value ?? '').trim()
     },
     async confirm(prompt, defaultValue) {
-      const hint = defaultValue ? 'Y/n' : 'y/N'
-      const answer = (await this.question(`${prompt} (${hint})`)).toLowerCase()
-      if (answer === '') return defaultValue
-      return answer === 'y' || answer === 'yes'
+      return bailIfCancelled(await clackConfirm({ message: prompt, initialValue: defaultValue }))
     },
     openBrowser(url) {
       return new Promise<void>((resolve) => {

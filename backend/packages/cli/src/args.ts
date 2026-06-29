@@ -1,4 +1,4 @@
-import { DEFAULT_HARNESS_IMAGE } from './templates.js'
+import { CONTAINER_RUNTIMES, type ContainerRuntime, DEFAULT_HARNESS_IMAGE } from './templates.js'
 import { VCS_PROVIDERS, type VcsProvider } from './vcs.js'
 
 /** Parsed, validated CLI options. Unset optionals are resolved later (defaults / prompts). */
@@ -14,6 +14,8 @@ export interface CliOptions {
   apiBase?: string
   port?: number
   harnessImage?: string
+  /** Container runtime that spawns agent jobs (`LOCAL_CONTAINER_RUNTIME`). */
+  containerRuntime?: ContainerRuntime
   /** Skip opening the browser at the token-creation URL (still prints it). */
   noOpen: boolean
   /** Non-interactive: never prompt; use defaults/flags. Fails if a required value is missing. */
@@ -96,6 +98,9 @@ export function parseArgs(argv: string[]): CliOptions {
       case '--harness-image':
         opts.harnessImage = takeValue(flag, inline, queue)
         break
+      case '--container-runtime':
+        opts.containerRuntime = parseContainerRuntime(takeValue(flag, inline, queue))
+        break
       case '--no-open':
         opts.noOpen = true
         break
@@ -120,6 +125,14 @@ function parseProvider(value: string): VcsProvider {
   throw new ArgError(`Invalid --provider "${value}" (expected: ${VCS_PROVIDERS.join(' | ')})`)
 }
 
+function parseContainerRuntime(value: string): ContainerRuntime {
+  const v = value.toLowerCase()
+  if ((CONTAINER_RUNTIMES as readonly string[]).includes(v)) return v as ContainerRuntime
+  throw new ArgError(
+    `Invalid --container-runtime "${value}" (expected: ${CONTAINER_RUNTIMES.join(' | ')})`,
+  )
+}
+
 function parsePort(value: string): number {
   const n = Number(value)
   if (!Number.isInteger(n) || n < 1 || n > 65535) {
@@ -137,6 +150,7 @@ export const OPTION_DEFAULTS = {
   apiBase: 'http://localhost:8787',
   port: 8787,
   harnessImage: DEFAULT_HARNESS_IMAGE,
+  containerRuntime: 'docker' as ContainerRuntime,
 } as const
 
 export const HELP_TEXT = `cat-factory — bootstrap a local cat-factory deployment
@@ -155,9 +169,10 @@ Options:
       --provider <p>      Source control: github | gitlab (default: github)
       --token <token>     PAT value (skips the browser/paste flow)
       --db-url <url>      Postgres DATABASE_URL
-      --api-base <url>   Backend API base for the SPA (default: http://localhost:8787)
-      --port <n>          Backend HTTP port (default: 8787)
+      --api-base <url>   Backend API base for the SPA (default: http://localhost:<port>)
+      --port <n>          Backend HTTP port (default: 8787; also sets the SPA's api-base)
       --harness-image <ref>  Executor-harness image (default: ghcr.io ...:latest)
+      --container-runtime <r>  Agent container runtime: docker | podman | orbstack | colima | apple
       --no-open           Don't open the browser (just print the token URL)
   -y, --yes               Non-interactive: use defaults/flags, never prompt
   -f, --force             Overwrite existing files
