@@ -482,14 +482,12 @@ export interface NodeContainerOptions {
    */
   realtimeHub?: NodeRealtimeHub
   /**
-   * Override the self-hosted runner-pool provider. When provided it REPLACES the default
-   * manifest-driven `HttpRunnerPoolProvider` for BOTH the dispatch transport (so jobs
-   * actually run through it) AND the connection-management UI (`describeConfig` /
-   * `testConnection`) — fully symmetric with {@link NodeContainerOptions.environmentProvider}.
-   * A trusted in-house adapter (one implementing `RunnerPoolProvider` for an internal
-   * orchestration platform, e.g. Kargo) thus serves agents without forking the facade. The
-   * per-workspace runner-pool connection (manifest + secrets) still configures it.
-   * Undefined → the default HTTP provider.
+   * Override the shared HTTP provider the built-in `manifest` runner backend dispatches/tests
+   * through (its OAuth cache reused), e.g. for tests. This is NOT the custom-kind seam: a
+   * bespoke runner backend is registered programmatically via `registerRunnerBackend` (an
+   * import side effect) and selected per-workspace by its `kind`, exactly like a custom
+   * environment backend (`registerEnvironmentBackend`). The per-workspace runner-pool
+   * connection (manifest + secrets) still configures it. Undefined → the default HTTP provider.
    */
   runnerPoolProvider?: RunnerPoolProvider
   /**
@@ -522,9 +520,9 @@ export function buildNodeResolveTransport(
   runnerPoolConnectionRepository: DrizzleRunnerPoolConnectionRepository,
   workspaceRepository: CoreDependencies['workspaceRepository'],
   clock: Clock,
-  // An injected native pool adapter (e.g. a Kargo runner adapter implementing
-  // `RunnerPoolProvider`) drives the actual dispatch when supplied — symmetric with the
-  // `environmentProvider` seam. Absent → the generic manifest-driven HTTP provider.
+  // The shared HTTP provider the built-in `manifest` backend reuses when supplied (e.g.
+  // tests). NOT the custom-kind seam — a bespoke runner backend is a registered `kind`
+  // (`registerRunnerBackend`). Absent → the generic manifest-driven HTTP provider.
   injectedPoolProvider?: RunnerPoolProvider,
 ): ResolveRunnerTransport | null {
   if (!config.runners.enabled || !config.runners.encryptionKey) return null
@@ -770,11 +768,11 @@ function selectNodeRepoBootstrapper(deps: {
 
 /**
  * Build the live ENVIRONMENT-PROVIDER CONFIG REPAIR agent (PR #416 increment 2) when its
- * prerequisites are met — the same container prerequisites as the bootstrapper PLUS an
- * injected provider that supports agent repair (`describeRepairAgent`). The stock manifest
- * provider has no repair support, so this stays undefined there; it wires only when a
- * native adapter is injected via the `environmentProvider` seam (so local inherits it too).
- * NOT the repo bootstrapper: an ordinary clone→edit→push coding job, no history reset.
+ * prerequisites are met — the same container prerequisites as the bootstrapper PLUS a
+ * registered backend that supports agent repair (`describeRepairAgent`). The stock manifest
+ * provider has no repair support, so this stays undefined there; it wires only when a custom
+ * backend registered via `registerEnvironmentBackend` implements repair (so local inherits it
+ * too). NOT the repo bootstrapper: an ordinary clone→edit→push coding job, no history reset.
  */
 function selectNodeEnvConfigRepairer(deps: {
   env: NodeJS.ProcessEnv
@@ -2042,11 +2040,12 @@ function selectNodeDocumentsDeps(
 
 /**
  * Wire the ephemeral-environment integration for the Node facade when enabled,
- * mirroring the Worker's `selectEnvironmentsDeps`: the environment provider (the default
- * manifest-driven `HttpEnvironmentProvider`, or an injected in-house adapter via the
- * `environmentProvider` seam), the Drizzle connection + registry repos, and the
- * environment-scoped `SecretCipher`. Per-tenant management-API secrets are encrypted at
- * rest with the shared ENCRYPTION_KEY. Disabled → `{}` and the module stays off.
+ * mirroring the Worker's `selectEnvironmentsDeps`: the Drizzle connection + registry repos
+ * and the environment-scoped `SecretCipher`. The provider itself is resolved per-workspace
+ * from the env-backend registry by the stored `kind` (built-in `manifest`/`kubernetes`, or a
+ * deployment's programmatically-registered custom kind), so nothing is injected here.
+ * Per-tenant management-API secrets are encrypted at rest with the shared ENCRYPTION_KEY.
+ * Disabled → `{}` and the module stays off.
  */
 function selectNodeEnvironmentsDeps(config: AppConfig, db: DrizzleDb): Partial<CoreDependencies> {
   if (!config.environments.enabled || !config.environments.encryptionKey) return {}

@@ -21,6 +21,7 @@ import { useClarityStore } from '~/stores/clarity'
 import { useBrainstormStore } from '~/stores/brainstorm'
 import { useConsensusStore } from '~/stores/consensus'
 import { useGitHubStore } from '~/stores/github'
+import { useProviderConnectionsStore } from '~/stores/providerConnections'
 
 /**
  * Owns the active workspace and bootstraps the app against the backend. On load
@@ -98,6 +99,13 @@ export const useWorkspaceStore = defineStore(
       // Merge the deployment's registered custom agent kinds into the palette catalog so a
       // proprietary kind renders as a first-class block + result view (idempotent on reload).
       useAgentsStore().registerCustomKinds(snapshot.customAgentKinds ?? [])
+      // Seed the connect form's backend-kind selectors (built-in + any custom backend a
+      // deployment registered), so a programmatically-registered env/runner backend is a
+      // first-class connect option instead of a hardcoded manifest/kubernetes list.
+      useProviderConnectionsStore().registerBackendKinds({
+        environment: snapshot.environmentBackendKinds,
+        'runner-pool': snapshot.runnerBackendKinds,
+      })
     }
 
     /** Resolve accounts + boards, then open the right board for the active account. */

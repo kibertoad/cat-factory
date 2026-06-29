@@ -173,12 +173,13 @@ dispatch/poll/release plumbing (`RunnerJobClient` / `RunnerTransport`):
 | Seam type (`void`)  | `packages/orchestration/src/container.ts` (`CoreDependencies.dispatchEnvConfigRepair`)                                                                                        |
 | Runtime wiring      | `runtimes/cloudflare/.../container.ts` (`selectEnvConfigRepairer`), `runtimes/node/src/container.ts` (`selectNodeEnvConfigRepairer`); local inherits via `buildNodeContainer` |
 
-A facade wires the dispatcher only when the container prerequisites are met **and** the injected
-provider actually supports agent repair (`describeRepairAgent`) — so a stock deployment running the
+A facade wires the dispatcher only when the container prerequisites are met **and** a registered
+backend actually supports agent repair (`describeRepairAgent`) — so a stock deployment running the
 generic manifest provider is unchanged (no `describeRepairAgent` ⇒ the service guard skips the
-fallback). It is built over the **final** provider (post-overrides), so a native adapter injected
-via the `environmentProvider` seam is the one the dispatcher repairs through. The repair agent runs
-on the `coder` kind's routing model.
+fallback). The repairer is built over the first repair-capable provider in the env-backend registry
+(`findRepairCapableProvider`), so a custom backend registered via `registerEnvironmentBackend` that
+implements `describeRepairAgent` is the one the dispatcher repairs through. The repair agent runs on
+the `coder` kind's routing model.
 
 **Bonus / stretch — true in-container validation:** package `validateRepo` as a runnable the
 harness injects into the container so the agent self-checks _before_ pushing. Requires an

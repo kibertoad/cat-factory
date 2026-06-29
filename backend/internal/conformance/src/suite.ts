@@ -25,6 +25,12 @@ import {
   registerPromptFragment,
 } from '@cat-factory/prompt-fragments'
 import { clearRegisteredAgentKinds, registerAgentKind } from '@cat-factory/agents'
+import {
+  registerEnvironmentBackend,
+  registerRunnerBackend,
+  type EnvironmentBackendProvider,
+  type RunnerBackendProvider,
+} from '@cat-factory/integrations'
 // The built-in gate suite lives in its own package and registers via the public seam (the
 // dogfood). The suite imports it so the runtime-neutral assertions run with the SAME gates a
 // real deployment ships, and so a test that clears the registry can restore them.
@@ -2122,6 +2128,180 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const afterManifest = await call<{ connection: RunnerConnection | null }>('GET', base)
         expect(afterManifest.body.connection?.kind).toBe('manifest')
         expect(afterManifest.body.connection?.config?.kind).toBe('manifest')
+      })
+    })
+
+    describe('custom backend kinds (programmatic registration)', () => {
+      // A single-tenant / self-hosted deployment registers a bespoke environment or runner
+      // backend programmatically (an import side effect) — the public extension seam that
+      // replaced the removed deployment-wide provider injection. A custom kind rides the
+      // contract's generic manifest member (NO new config variant), so it must: pass connect
+      // validation, round-trip its kind+config through the store, be describable BEFORE the
+      // first connect, and be advertised in the snapshot — identically on every runtime. A
+      // facade that didn't open its repos/validation to a custom kind fails here.
+      //
+      // Registered at suite-collection time (process-global registry, idempotent, survives the
+      // per-request container rebuilds) — exactly how a real deployment registers on import.
+      // The kinds don't collide with the built-ins, so they need no teardown.
+      const ENV_KIND = 'conformance-env'
+      const RUNNER_KIND = 'conformance-runner'
+
+      const customEnvBackend: EnvironmentBackendProvider = {
+        kind: ENV_KIND,
+        displayLabel: 'Conformance Env',
+        referencedSecretKeys: () => ['ENV_TOKEN'],
+        connectionMeta: (config) => ({
+          providerId: ENV_KIND,
+          label: 'manifest' in config ? config.manifest.label : 'Conformance Env',
+          baseUrl: 'manifest' in config ? config.manifest.baseUrl : '',
+        }),
+        assertConfigSafe: () => {},
+        toManifest: (config) => {
+          if (!('manifest' in config)) throw new Error('expected a manifest-shaped custom config')
+          return config.manifest
+        },
+        fromManifest: (manifest) => ({ kind: ENV_KIND, manifest }),
+        // describeProvider builds this to read describeConfig (absent here ⇒ no flat fields).
+        buildProvider: () => ({
+          provision: async () => ({
+            externalId: 'e1',
+            url: 'https://env.test',
+            status: 'ready',
+            expiresAt: null,
+            access: null,
+            fields: {},
+          }),
+          status: async () => ({
+            externalId: 'e1',
+            url: 'https://env.test',
+            status: 'ready',
+            expiresAt: null,
+            access: null,
+            fields: {},
+          }),
+          teardown: async () => ({ status: 'torn_down' }),
+        }),
+      }
+
+      const customRunnerBackend: RunnerBackendProvider = {
+        kind: RUNNER_KIND,
+        displayLabel: 'Conformance Runner',
+        referencedSecretKeys: () => ['POOL_TOKEN'],
+        connectionMeta: (config) => ({
+          providerId: RUNNER_KIND,
+          label: 'manifest' in config ? config.manifest.label : 'Conformance Runner',
+          baseUrl: 'manifest' in config ? config.manifest.baseUrl : '',
+        }),
+        assertConfigSafe: () => {},
+        // Never dispatched in this test (the connect/describe/snapshot paths don't build it).
+        buildTransport: () => {
+          throw new Error('custom runner transport not dispatched in conformance')
+        },
+        testConnection: async () => ({ ok: true, message: 'ok' }),
+      }
+
+      registerEnvironmentBackend(customEnvBackend)
+      registerRunnerBackend(customRunnerBackend)
+
+      const envManifest = {
+        providerId: ENV_KIND,
+        label: 'Bespoke Envs',
+        baseUrl: 'https://bespoke.test/api',
+        auth: { type: 'bearer', secretRef: { key: 'ENV_TOKEN' } },
+        provision: { method: 'POST', pathTemplate: '/environments' },
+        response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
+        providerConfig: { region: 'eu' },
+      }
+      const runnerManifest = {
+        providerId: RUNNER_KIND,
+        label: 'Bespoke Pool',
+        baseUrl: 'https://bespoke.test/pool',
+        auth: { type: 'bearer', secretRef: { key: 'POOL_TOKEN' } },
+        dispatch: { method: 'POST', pathTemplate: '/jobs', bodyTemplate: '{}' },
+        poll: { method: 'GET', pathTemplate: '/jobs/{{input.jobId}}' },
+        response: { statusPath: 'state' },
+      }
+
+      it('connects + round-trips a custom ENVIRONMENT backend kind through the store', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/environments`
+
+        const registered = await call<{ kind: string; secretKeys: string[] }>(
+          'POST',
+          `${base}/connection`,
+          { config: { kind: ENV_KIND, manifest: envManifest }, secrets: { ENV_TOKEN: 'tok' } },
+        )
+        expect(registered.status).toBe(201)
+        expect(registered.body.kind).toBe(ENV_KIND)
+        expect(registered.body.secretKeys).toContain('ENV_TOKEN')
+
+        const got = await call<{ connection: { kind: string } | null }>('GET', `${base}/connection`)
+        expect(got.body.connection?.kind).toBe(ENV_KIND)
+
+        // The custom kind is describable while connected (and its kind drives the native form).
+        const descr = await call<{ kind: string }>('GET', `${base}/provider?kind=${ENV_KIND}`)
+        expect(descr.status).toBe(200)
+        expect(descr.body.kind).toBe('native')
+      })
+
+      it('describes a registered custom kind BEFORE the first connect', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        // No connection yet — the registry still resolves the kind so the SPA can render its form.
+        const descr = await call<{ providerId: string; kind: string }>(
+          'GET',
+          `/workspaces/${workspace.id}/environments/provider?kind=${ENV_KIND}`,
+        )
+        expect(descr.status).toBe(200)
+        expect(descr.body.providerId).toBe(ENV_KIND)
+      })
+
+      it('connects + round-trips a custom RUNNER backend kind through the store', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/runner-pool/connection`
+
+        const registered = await call<{ kind: string; secretKeys: string[] }>('POST', base, {
+          config: { kind: RUNNER_KIND, manifest: runnerManifest },
+          secrets: { POOL_TOKEN: 'tok' },
+        })
+        expect(registered.status).toBe(201)
+        expect(registered.body.kind).toBe(RUNNER_KIND)
+
+        const got = await call<{ connection: { kind: string; config?: { kind: string } } | null }>(
+          'GET',
+          base,
+        )
+        expect(got.body.connection?.kind).toBe(RUNNER_KIND)
+        expect(got.body.connection?.config?.kind).toBe(RUNNER_KIND)
+      })
+
+      it('advertises the registered backend kinds in the workspace snapshot', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const snap = await call<{
+          environmentBackendKinds?: { kind: string }[]
+          runnerBackendKinds?: { kind: string }[]
+        }>('GET', `/workspaces/${workspace.id}`)
+        expect(snap.body.environmentBackendKinds?.map((k) => k.kind)).toEqual(
+          expect.arrayContaining(['manifest', 'kubernetes', ENV_KIND]),
+        )
+        expect(snap.body.runnerBackendKinds?.map((k) => k.kind)).toEqual(
+          expect.arrayContaining(['manifest', 'kubernetes', RUNNER_KIND]),
+        )
+      })
+
+      it('rejects a config whose kind collides with a reserved built-in (guard)', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        // A `kubernetes` kind carrying a manifest body (the wrong shape) must be REJECTED by
+        // the reserved-kind guard, not silently accepted as the generic custom member.
+        const res = await call('POST', `/workspaces/${workspace.id}/environments/connection`, {
+          config: { kind: 'kubernetes', manifest: envManifest },
+          secrets: { ENV_TOKEN: 'tok' },
+        })
+        expect(res.status).toBeGreaterThanOrEqual(400)
       })
     })
 

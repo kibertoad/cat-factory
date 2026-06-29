@@ -252,16 +252,32 @@ export class MyEnvironmentProvider implements EnvironmentProvider {
 
 The adapter still registers a connection (so secrets are encrypted at rest and the
 module assembles), but the `manifest`'s request templates are ignored in favour of
-your code — the `secrets`, `providerId`, and `label` still apply. Wire it per
-facade:
+your code — the `secrets`, `providerId`, and `label` still apply. **Register it**
+programmatically (an import side effect) under a custom `kind`, on every facade at once:
 
-- **Node / local facade:** pass it to `buildNodeContainer({ environmentProvider:
-new MyEnvironmentProvider(...) })`. It replaces the default
-  `HttpEnvironmentProvider`; the env repos + secret cipher still wire from config, so
-  `ENVIRONMENTS_ENABLED` + `ENCRYPTION_KEY` are still required.
-- **Cloudflare Worker facade:** inject it through `buildContainer`'s `overrides`
-  (spread last over the default deps), e.g. `{ environmentProvider: new
-MyEnvironmentProvider(...) }`.
+```ts
+import { registerEnvironmentBackend } from '@cat-factory/integrations'
+
+registerEnvironmentBackend({
+  kind: 'my-platform', // a lower-kebab slug, not a reserved built-in
+  displayLabel: 'My Platform',
+  referencedSecretKeys: () => ['API_TOKEN'],
+  connectionMeta: (c) => ({
+    providerId: 'my-platform',
+    label: c.manifest.label,
+    baseUrl: c.manifest.baseUrl,
+  }),
+  assertConfigSafe: () => {},
+  toManifest: (c) => c.manifest, // a custom kind rides the generic manifest member
+  fromManifest: (manifest) => ({ kind: 'my-platform', manifest }),
+  buildProvider: (ctx) => new MyEnvironmentProvider(ctx),
+})
+```
+
+There is **no facade injection option** (the old `buildNodeContainer({ environmentProvider })`
+/ `buildContainer` override is gone): the registry resolves a workspace's stored `kind` to
+your backend on Worker / Node / local alike. Full model + the single-tenant-vs-multi-tenant
+rationale: [`native-environment-adapter.md`](./native-environment-adapter.md).
 
 Because the adapter is code you install and run, the URL it returns is still
 SSRF-guarded by the engine. To let it reach an internal platform, widen the URL

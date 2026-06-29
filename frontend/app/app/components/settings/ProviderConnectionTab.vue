@@ -88,6 +88,7 @@ const canSave = computed(() => {
 function buildManifestPayload(): {
   manifest: Record<string, unknown>
   secrets: Record<string, string>
+  backendKind: string
 } | null {
   const template = descriptor.value?.manifestTemplate
   if (!template) return null
@@ -106,7 +107,9 @@ function buildManifestPayload(): {
     else providerConfig[f.key] = val
   }
   if (Object.keys(providerConfig).length) manifest.providerConfig = providerConfig
-  return { manifest, secrets }
+  // Carry the selected kind so a CUSTOM backend's flat-form save is tagged with its slug
+  // (not silently wrapped into the built-in `manifest` backend).
+  return { manifest, secrets, backendKind: backendKind.value }
 }
 
 function notifyError(title: string, e: unknown) {
@@ -156,6 +159,8 @@ async function saveNative() {
 }
 
 // --- Manifest-editor actions (emitted from ProviderManifestEditor) ------------------
+// Tag the raw-manifest save/test with the selected backend kind too, so a CUSTOM kind that
+// ships no flat-form template (and thus uses the raw editor) isn't mis-tagged as `manifest`.
 async function testManifest(payload: {
   manifest: Record<string, unknown>
   secrets: Record<string, string>
@@ -163,7 +168,7 @@ async function testManifest(payload: {
   testing.value = true
   testResult.value = null
   try {
-    testResult.value = await store.test(props.kind, payload)
+    testResult.value = await store.test(props.kind, { ...payload, backendKind: backendKind.value })
   } catch (e) {
     testResult.value = { ok: false, message: e instanceof Error ? e.message : String(e) }
   } finally {
@@ -177,7 +182,7 @@ async function saveManifest(payload: {
 }) {
   busy.value = true
   try {
-    await store.register(props.kind, payload)
+    await store.register(props.kind, { ...payload, backendKind: backendKind.value })
     toastSaved()
   } catch (e) {
     notifyError(t('settings.providerConnection.toast.saveFailed'), e)
@@ -187,14 +192,12 @@ async function saveManifest(payload: {
 }
 
 // --- Backend selector -----------------------------------------------------------------
-// Both infrastructure tabs can configure either the BYO manifest backend OR a native
-// Kubernetes backend (a runner cluster for runner-pool, per-PR namespaces for environment).
-// The two K8s backends have different config shapes, so each kind renders its own form.
-// Defaults to the saved connection's kind.
-const BACKEND_KINDS = ['manifest', 'kubernetes'] as const
-type BackendKind = (typeof BACKEND_KINDS)[number]
-const backendKind = ref<BackendKind>('manifest')
-const showBackendSelector = computed(() => true)
+// Each infrastructure tab configures one of the backend KINDS registered for its subsystem:
+// the built-in BYO `manifest` backend, the native `kubernetes` backend, or any CUSTOM kind a
+// deployment registered programmatically. The list is snapshot-driven (built-in fallback in
+// the store until it loads); the two K8s backends have bespoke forms, every other kind
+// (manifest + custom) uses the descriptor-driven flat form. Defaults to the saved kind.
+const backendKind = ref<string>('manifest')
 const backendSelectorLabel = computed(() =>
   t(
     props.kind === 'environment'
@@ -202,24 +205,39 @@ const backendSelectorLabel = computed(() =>
       : 'settings.providerConnection.backend.selectorLabel',
   ),
 )
-function backendKindLabel(k: BackendKind): string {
-  if (k === 'kubernetes') return t('settings.providerConnection.backend.kubernetes')
-  return t(
-    props.kind === 'environment'
-      ? 'settings.providerConnection.backend.environmentManifest'
-      : 'settings.providerConnection.backend.manifest',
-  )
+// Built-in kinds keep their localized labels; a custom kind shows its snapshot displayLabel.
+function backendKindLabel(option: { kind: string; label: string }): string {
+  if (option.kind === 'kubernetes') return t('settings.providerConnection.backend.kubernetes')
+  if (option.kind === 'manifest') {
+    return t(
+      props.kind === 'environment'
+        ? 'settings.providerConnection.backend.environmentManifest'
+        : 'settings.providerConnection.backend.manifest',
+    )
+  }
+  return option.label
 }
 const backendKindItems = computed(() =>
-  BACKEND_KINDS.map((k) => ({ label: backendKindLabel(k), value: k })),
+  store.backendKindsFor(props.kind).map((o) => ({ label: backendKindLabel(o), value: o.kind })),
 )
 watch(
   () => connection.value,
   (c) => {
-    if (c?.kind === 'kubernetes' || c?.kind === 'manifest') backendKind.value = c.kind
+    if (c?.kind) backendKind.value = c.kind
   },
   { immediate: true },
 )
+
+// Switching the backend kind re-probes ONLY that kind's descriptor (so a not-yet-connected
+// custom kind's connect form renders). Always pass the explicit kind — including `manifest`,
+// so picking it describes the manifest backend rather than falling back to the stored kind —
+// and use `loadDescriptor` (not `loadKind`) so the stored connection isn't re-fetched and the
+// selector isn't bounced back to the stored kind by the `connection` watch.
+async function onBackendKindChange(k: string) {
+  backendKind.value = k
+  await store.loadDescriptor(props.kind, k)
+  resetDraft()
+}
 
 async function testConfig(payload: {
   config: Record<string, unknown>
@@ -332,9 +350,14 @@ function fieldHelp(key: string): string | undefined {
       }}
     </div>
 
-    <!-- Backend selector: the BYO manifest backend or a native Kubernetes backend. -->
-    <UFormField v-if="showBackendSelector" :label="backendSelectorLabel">
-      <USelect v-model="backendKind" :items="backendKindItems" />
+    <!-- Backend selector: the BYO manifest backend, a native Kubernetes backend, or a
+         programmatically-registered custom kind. -->
+    <UFormField :label="backendSelectorLabel">
+      <USelect
+        v-model="backendKind"
+        :items="backendKindItems"
+        @update:model-value="onBackendKindChange(String($event))"
+      />
     </UFormField>
 
     <!-- Native Kubernetes runner backend (runner-pool). -->

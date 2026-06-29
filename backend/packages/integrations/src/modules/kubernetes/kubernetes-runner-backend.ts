@@ -13,9 +13,14 @@ import type { RunnerBackendProvider } from '../runners/runner-backends.js'
 
 export const kubernetesRunnerBackend: RunnerBackendProvider = {
   kind: 'kubernetes',
-  referencedSecretKeys: (config) => (config.kind === 'kubernetes' ? [KUBERNETES_TOKEN_KEY] : []),
+  displayLabel: 'Kubernetes',
+  // Structural (`'kubernetes' in config`) narrowing, not `config.kind === 'kubernetes'`: the
+  // open contract union now carries a generic `{ kind: string, manifest }` custom member whose
+  // `kind` can equal `'kubernetes'`, so a kind-equality check no longer narrows it away. The
+  // registry routes by slug, so this backend only ever sees its own config.
+  referencedSecretKeys: (config) => ('kubernetes' in config ? [KUBERNETES_TOKEN_KEY] : []),
   connectionMeta: (config) => {
-    if (config.kind !== 'kubernetes') throw new Error('Expected a kubernetes runner config')
+    if (!('kubernetes' in config)) throw new Error('Expected a kubernetes runner config')
     return {
       providerId: 'kubernetes',
       label: config.kubernetes.label,
@@ -23,7 +28,7 @@ export const kubernetesRunnerBackend: RunnerBackendProvider = {
     }
   },
   assertConfigSafe: (config, opts) => {
-    if (config.kind !== 'kubernetes') return
+    if (!('kubernetes' in config)) return
     assertApiServerUrlSafe(config.kubernetes.apiServerUrl)
     // Custom TLS trust material is honored only on a runtime with undici (Node/local).
     // Reject it up front on a runtime that can't (the Cloudflare Worker) so the
@@ -40,11 +45,11 @@ export const kubernetesRunnerBackend: RunnerBackendProvider = {
     }
   },
   buildTransport: (config, ctx) => {
-    if (config.kind !== 'kubernetes') throw new Error('Expected a kubernetes runner config')
+    if (!('kubernetes' in config)) throw new Error('Expected a kubernetes runner config')
     return new KubernetesRunnerTransport(config.kubernetes, ctx.resolveSecret)
   },
   testConnection: (config, ctx) => {
-    if (config.kind !== 'kubernetes') {
+    if (!('kubernetes' in config)) {
       return Promise.resolve({ ok: false, message: 'Expected a kubernetes runner config' })
     }
     return new KubernetesRunnerTransport(config.kubernetes, ctx.resolveSecret).testConnection()

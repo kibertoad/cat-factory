@@ -10,9 +10,10 @@ import {
   registeredAgentKinds,
   registeredKindRequiresContainer,
 } from '@cat-factory/agents'
+import { environmentBackendKinds, runnerBackendKinds } from '@cat-factory/integrations'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
-import type { CustomAgentKind, WorkspaceSnapshot } from '@cat-factory/contracts'
+import type { BackendKindOption, CustomAgentKind, WorkspaceSnapshot } from '@cat-factory/contracts'
 import type { AgentRouting } from '@cat-factory/agents'
 import type { ModelRef } from '@cat-factory/kernel'
 
@@ -49,6 +50,24 @@ function snapshotCustomAgentKinds(): CustomAgentKind[] | undefined {
       container: registeredKindRequiresContainer(def.kind),
     }))
   return kinds.length > 0 ? kinds : undefined
+}
+
+/**
+ * The registered ephemeral-environment / runner-pool backend kinds (built-in + any a
+ * deployment registered via `registerEnvironmentBackend` / `registerRunnerBackend`), as the
+ * `{ kind, label }` options the SPA drives its provider-connect backend selector from. Built
+ * here (not in the shared `WorkspaceService.snapshot()`) because the registries live in
+ * `@cat-factory/integrations`, which the `workspaces` package doesn't depend on. Static
+ * (process-global registry) ⇒ identical per workspace + facade.
+ */
+function snapshotBackendKinds(): {
+  environmentBackendKinds: BackendKindOption[]
+  runnerBackendKinds: BackendKindOption[]
+} {
+  return {
+    environmentBackendKinds: environmentBackendKinds(),
+    runnerBackendKinds: runnerBackendKinds(),
+  }
 }
 
 function deploymentModelDefaults(routing: AgentRouting) {
@@ -118,6 +137,7 @@ export function workspaceController(): Hono<AppEnv> {
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
+        ...snapshotBackendKinds(),
       },
       201,
     )
@@ -205,6 +225,7 @@ export function workspaceController(): Hono<AppEnv> {
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
+        ...snapshotBackendKinds(),
       },
       200,
     )

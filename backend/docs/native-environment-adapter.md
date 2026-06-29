@@ -11,15 +11,15 @@ PREnvs are keyed by project + git ref and whose links/status need provider-speci
 you write a **native adapter** instead — a hand-written `EnvironmentProvider`. This document
 is the contract for writing one.
 
-> **Wiring (updated):** a native adapter is no longer injected by replacing a deployment-wide
-> provider singleton. The env subsystem now uses a per-workspace **backend registry** keyed by
+> **Wiring in one line:** the env subsystem uses a per-workspace **backend registry** keyed by
 > a `kind` discriminator (mirroring the runner-pool backends): you register an
 > `EnvironmentBackendProvider` via `registerEnvironmentBackend(...)` as an import side effect,
 > and a workspace selects your `kind` at connect time. The built-in `kubernetes` backend
 > (`backend/packages/integrations/src/modules/environments/environment-backends.ts`) is the
-> worked example. The old `buildNodeContainer({ environmentProvider })` /
-> `startLocal({ environmentProvider })` injection option has been removed. The `EnvironmentProvider`
-> port below is unchanged — your registered backend's `buildProvider` returns one.
+> worked example. There is no facade injection option (the old
+> `buildNodeContainer({ environmentProvider })` / `startLocal({ environmentProvider })`
+> singletons were removed). The `EnvironmentProvider` port below is unchanged — your registered
+> backend's `buildProvider` returns one. Full detail in [Registering the backend](#registering-the-backend).
 
 ## The port
 
@@ -68,31 +68,59 @@ Every call receives the per-workspace `manifest` plus a `resolveSecret(key)` cal
 `blockId`) derived from the block under deployment. `status`/`teardown` get the `externalId`
 and the `provisionFields` captured at provision time.
 
-## The injection contract
+## Registering the backend
 
-An injected provider is a **deployment-wide singleton**:
+A native backend is **registered programmatically** as an import side effect — the same
+seam the built-in `manifest` and `kubernetes` backends use, and the analogue of custom agent
+kinds / gates / model providers. There is **no facade injection option** (the old
+`buildNodeContainer({ environmentProvider })` / `startLocal({ environmentProvider })`
+deployment-wide singletons were removed): you register an `EnvironmentBackendProvider`, which
+maps a discriminated connect config → an `EnvironmentProvider`.
 
 ```ts
-// Node facade:
-buildNodeContainer({ db, environmentProvider: new KargoEnvironmentProvider() })
+// my-org-backends.ts — imported for side effect by the deployment's entry module.
+import { registerEnvironmentBackend } from '@cat-factory/integrations'
 
-// Local facade (keeps local-mode preflight + differentiators):
-startLocal({ environmentProvider: new KargoEnvironmentProvider() })
+registerEnvironmentBackend({
+  kind: 'kargo', // any lower-kebab slug that isn't a reserved built-in
+  displayLabel: 'Kargo PREnvs', // shown in the connect-form backend selector
+  referencedSecretKeys: () => ['kargo_token'],
+  connectionMeta: (config) => ({
+    providerId: 'kargo',
+    label: 'manifest' in config ? config.manifest.label : 'Kargo',
+    baseUrl: 'manifest' in config ? config.manifest.baseUrl : '',
+  }),
+  assertConfigSafe: () => {}, // SSRF-guard any URL you read out of providerConfig (see below)
+  toManifest: (config) => {
+    if (!('manifest' in config)) throw new Error('expected a manifest-shaped kargo config')
+    return config.manifest
+  },
+  fromManifest: (manifest) => ({ kind: 'kargo', manifest }),
+  buildProvider: (ctx) => new KargoEnvironmentProvider(ctx.urlPolicy),
+})
 ```
 
-It **replaces** the default `HttpEnvironmentProvider` (`selectNodeEnvironmentsDeps(config,
-db, override)` uses `override ?? new HttpEnvironmentProvider(...)`). The local facade's
-`startLocal({ environmentProvider })` seam threads it through `buildLocalContainer` →
-`buildNodeContainer` while preserving local mode's orphan reaping, PAT/auth warnings, the
-local container transport, and the PAT-backed GitHub client. (`buildContainer` is
-deliberately not exposed on `startLocal` — overriding it would discard those
-differentiators.)
+This works on **every** runtime (Worker / Node / local): `EnvironmentConnectionService`
+resolves a workspace's stored connection `kind` to the registered backend and builds its
+provider. So one seam serves both a **single-tenant** install (register one bespoke backend)
+and a **multi-tenant** deployment (each workspace selects a `kind`). Registering code is
+something only a deployment OWNER can do — you can't let an arbitrary tenant inject a
+provider — which is exactly why it is the self-hosted / single-tenant extension path; a
+multi-tenant SaaS still offers the built-in `manifest` / `kubernetes` kinds per workspace.
 
-### Per-workspace config rides the manifest, not the constructor
+A custom kind rides the contract's **generic manifest member**
+(`environmentBackendConfigSchema`), so it needs **no new config variant**, no new table,
+service, controller, or UI window. It becomes a first-class option in the connect form,
+advertised to the SPA via the workspace snapshot's `environmentBackendKinds`; the form is
+the descriptor-driven flat fields when your provider implements
+`describeConfig`/`describeManifestTemplate`, else the raw manifest editor.
 
-Because the provider is a singleton, the **only** per-workspace data it ever sees is the
-per-call `manifest` (+ `inputs` / `provisionContext`). So per-workspace settings — e.g. the
-**Kargo project** — must travel on the manifest, via the opaque **`providerConfig`** bag
+### Per-workspace config rides the manifest
+
+A backend's provider is built once per `kind` from the registry and is stateless, so the
+**only** per-workspace data it ever sees is the per-call `manifest` (+ `inputs` /
+`provisionContext`). So per-workspace settings — e.g. the **Kargo project** — must travel on
+the manifest, via the opaque **`providerConfig`** bag
 (`backend/packages/contracts/src/environments.ts`):
 
 ```ts
@@ -125,10 +153,12 @@ So a native adapter's connection is **not** a dummy. Map the manifest fields lik
 | `provision`/`status`/`teardown` request **templates** | **the only** fields a native adapter legitimately ignores        |
 | `response`, `defaultTtlMs`                            | optional — the adapter may honour or ignore them                 |
 
-> We considered letting an injected provider declare "I need no manifest/connection" so the
-> module could assemble from deployment env alone. We rejected it: that loses per-workspace
-> tokens and config and adds a divergent assembly path. The `providerConfig` bag gives the
-> same flexibility while keeping a single assembly path.
+> We considered letting a registered backend declare "I need no manifest/connection" so the
+> module could assemble from deployment env alone (a zero-connection single-tenant default).
+> We rejected it: that loses per-workspace tokens and config and adds a divergent assembly
+> path. The `providerConfig` bag gives the same flexibility while keeping a single assembly
+> path — so even a single-tenant install registers its backend (code) and connects one
+> workspace (secrets) rather than relying on an implicit deployment-wide provider.
 
 ## Environment port vs runner port — don't confuse them
 
@@ -137,9 +167,21 @@ So a native adapter's connection is **not** a dummy. Map the manifest fields lik
   coding agents run** (coder, mocker, merger, …).
 
 Kargo PREnvs are **environments** — implement `EnvironmentProvider`. A Kargo-backed
-_runner_ (mapping Kargo CI jobs / AI sandboxes onto the executor-harness via the
-`resolveTransport` seam) is a separate, larger piece and is **out of scope** until there is
-a Kargo ↔ executor-harness story.
+_runner_ (mapping Kargo CI jobs / AI sandboxes onto the executor-harness) is a separate
+piece — but it uses the **exact same extension pattern**: see [Custom runner backends](#custom-runner-backends).
+
+## Custom runner backends
+
+The self-hosted runner-pool subsystem is the mirror image of this one, so a custom runner
+backend is registered the same way: `registerRunnerBackend(provider)` (from
+`@cat-factory/integrations`), where `provider` is a `RunnerBackendProvider` — the analogue of
+`EnvironmentBackendProvider`, with `buildTransport(config, ctx) → RunnerTransport` and
+`testConnection` in place of `buildProvider`. It rides the generic
+`runnerBackendConfigSchema` manifest member (no new config variant), is advertised to the SPA
+via the snapshot's `runnerBackendKinds`, and is selectable per workspace in the same connect
+form (under "container agents → runner pool"). The same single-tenant-vs-multi-tenant story
+applies. (The `runnerPoolProvider` facade option is unrelated — it only swaps the HTTP client
+the built-in `manifest` pool reuses, not a custom-kind seam.)
 
 ## Teardown & TTL
 
@@ -170,6 +212,10 @@ from `@cat-factory/integrations` (`environmentsLogic.assertSafeEnvironmentUrl`).
 > `assertSafeEnvironmentUrl` before fetching it.
 
 ## Reference: a native Kargo adapter (sketch)
+
+This is the `EnvironmentProvider` (the port) that
+[`buildProvider`](#registering-the-backend) returns — register it with
+`registerEnvironmentBackend({ kind: 'kargo', …, buildProvider: (ctx) => new KargoEnvironmentProvider(ctx.urlPolicy) })`.
 
 ```ts
 import type {

@@ -63,6 +63,10 @@ export const unregisterEnvironmentProviderContract = defineApiContract({
 export const describeEnvironmentProviderContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/environments/provider',
+  // Optional `kind` describes a REGISTERED backend that isn't connected yet (so the SPA can
+  // render a custom kind's connect form pre-connection). Omitted ⇒ the stored kind, else the
+  // default `manifest` backend.
+  requestQuerySchema: v.object({ kind: v.optional(v.string()) }),
   responsesByStatusCode: { 200: providerDescriptorSchema, ...errorResponses },
 })
 
