@@ -626,6 +626,10 @@ export type AgentRunKind = v.InferOutput<typeof agentRunKindSchema>
 export const agentFailureKindSchema = v.picklist([
   'preflight',
   'dispatch',
+  // A `deployer` step's ephemeral-environment provisioning failed (the EnvironmentProvider
+  // threw or returned `status:'failed'`) — distinct from `dispatch` (a container/runner
+  // never accepting the job). The provider's verbatim error rides the failure `detail`.
+  'environment',
   'evicted',
   'timeout',
   'agent',
