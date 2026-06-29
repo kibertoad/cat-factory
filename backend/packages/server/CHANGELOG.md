@@ -1,5 +1,18 @@
 # @cat-factory/server
 
+## 0.46.2
+
+### Patch Changes
+
+- Updated dependencies [40f687d]
+  - @cat-factory/contracts@0.50.0
+  - @cat-factory/kernel@0.51.0
+  - @cat-factory/integrations@0.34.0
+  - @cat-factory/orchestration@0.41.0
+  - @cat-factory/agents@0.21.14
+  - @cat-factory/prompt-fragments@0.9.1
+  - @cat-factory/spend@0.10.29
+
 ## 0.46.1
 
 ### Patch Changes
