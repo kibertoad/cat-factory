@@ -122,7 +122,26 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          # Full history so the runner-image-tag guard below can diff against the PR base
+          # (origin/${{ github.base_ref }}) and read the base's wrangler.toml.
+          fetch-depth: 0
           persist-credentials: false
+
+      # Guard the executor-harness runner image tag BEFORE the expensive build: the harness
+      # version and the cat-factory-executor:<tag> pins in deploy/backend/{package.json,
+      # wrangler.toml} must stay in lockstep, and an image-source change must bump the tag.
+      # deploy.yml runs the same check post-merge on main; this catches the mistake on the PR
+      # instead of turning main red. BASE_REF is empty off PRs (push/dispatch) → the script
+      # runs the consistency check only. Pure node + git; no install needed.
+      - name: Guard runner image tag
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            node scripts/check-runner-image-tag.mjs --since "origin/${BASE_REF}"
+          else
+            node scripts/check-runner-image-tag.mjs
+          fi
 
       - name: Install pnpm
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
