@@ -187,15 +187,15 @@ dependency count dropping _together_.
 
 ## Status (take 2)
 
-| #   | Phase                                                 | Status         |
-| --- | ----------------------------------------------------- | -------------- |
-| 1   | `StepGraph` — pure sync step/cursor mutators          | ✅             |
-| 2   | `RunStateMachine` — async instance/block spine        | ✅             |
-| —   | XState evaluation (spike + decision)                  | ✅ (rejected)  |
-| 3   | Debag the 5 gate controllers onto the spine           | ✅             |
-| 4   | Move handlers/interceptors out of the file            | ⏭️ deferred    |
-| 5   | Gate-action sub-facades + re-point server controllers | ✅             |
-| 6   | Trim constructor + final cleanup                      | 🟡 partial     |
+| #   | Phase                                                 | Status        |
+| --- | ----------------------------------------------------- | ------------- |
+| 1   | `StepGraph` — pure sync step/cursor mutators          | ✅            |
+| 2   | `RunStateMachine` — async instance/block spine        | ✅            |
+| —   | XState evaluation (spike + decision)                  | ✅ (rejected) |
+| 3   | Debag the 5 gate controllers onto the spine           | ✅            |
+| 4   | Move handlers/interceptors out of the file            | ⏭️ deferred   |
+| 5   | Gate-action sub-facades + re-point server controllers | ✅            |
+| 6   | Trim constructor + final cleanup                      | 🟡 partial    |
 
 `ExecutionService.ts`: **5,346 → 4,620 lines** so far. Every phase landed as its own commit,
 green on both runtimes (Cloudflare conformance 126, Node full suite 202, orchestration unit 298).

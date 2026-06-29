@@ -1886,9 +1886,10 @@
       "repository": "Repozytorium",
       "repositoryHint": "Repozytoria, do których aplikacja GitHub ma dostęp. Nie widzisz swojego? Przyznaj aplikacji dostęp poniżej, a następnie odśwież.",
       "noReposAvailable": "Brak dostępnych repozytoriów. Przyznaj aplikacji dostęp do jednego poniżej, a następnie odśwież.",
-      "filterPlaceholder": "Filtruj według właściciela/nazwy…",
-      "clearFilter": "Wyczyść filtr",
-      "chooseRepository": "Wybierz repozytorium",
+      "searchPlaceholder": "Szukaj repozytoriów według właściciela lub nazwy…",
+      "searchMinChars": "Wpisz co najmniej {min} znak, aby wyszukać. | Wpisz co najmniej {min} znaki, aby wyszukać. | Wpisz co najmniej {min} znaków, aby wyszukać.",
+      "noMatches": "Nie znaleziono repozytoriów dla {query}.",
+      "clearSelection": "Wyczyść wybór",
       "showingCount": "Wyświetlanie {shown} z {total} repozytoriów.",
       "repoLabel": {
         "private": " (prywatne)",
@@ -2327,5 +2328,552 @@
       "gatedCommit": "Commit z bramką",
       "footer": "Bramka wykonuje programowe wstępne sprawdzenie i uruchamia {helper} tylko, gdy się nie powiedzie; zielone sprawdzenie przechodzi dalej bez uruchamiania czegokolwiek."
     }
+  },
+  "requirements": {
+    "title": "Przegląd wymagań",
+    "iteration": "Iteracja {current} / {max}",
+    "intro": "Recenzent AI przeanalizował zebrane wymagania tego elementu ({level}) — jego opis oraz powiązane dokumenty PRD i zgłoszenia — i zgłosił poniższe uwagi. {answer} na istotne i {dismiss} nieistotne, a następnie włącz je; recenzent powtarza przegląd, aż wymagania będą jasne.",
+    "levelFallback": "element",
+    "answerVerb": "Odpowiedz",
+    "dismissVerb": "odrzuć",
+    "empty": "Brak przeglądu. Recenzent uruchamia się automatycznie jako pierwszy krok po starcie potoku tego zadania.",
+    "loadingReview": "Ładowanie przeglądu…",
+    "reviewing": "Przeglądanie wymagań…",
+    "settled": "Wymagania są ustalone. Poniższy dokument jest tym, którego używa każdy kolejny krok agenta.",
+    "exceeded": {
+      "heading": "Osiągnięto limit {max} iteracji, a uwagi wciąż są otwarte.",
+      "detail": "Wykonaj jeszcze jedną rundę przeglądu, przejdź mimo to do następnej fazy z ostatnimi włączonymi wymaganiami albo zatrzymaj i zresetuj zadanie, aby przerobić wymagania i przesłać je ponownie."
+    },
+    "working": {
+      "incorporating": "Włączanie Twoich odpowiedzi do dokumentu wymagań… Możesz to zamknąć — powiadomimy Cię tylko, jeśli będą potrzebne dodatkowe informacje.",
+      "reReviewing": "Ponowne przeglądanie zaktualizowanych wymagań… Możesz to zamknąć — powiadomimy Cię tylko, jeśli będą potrzebne dodatkowe informacje."
+    },
+    "severity": {
+      "high": "wysoka",
+      "medium": "średnia",
+      "low": "niska"
+    },
+    "category": {
+      "gap": "luka",
+      "clarification": "wyjaśnienie",
+      "assumption": "założenie",
+      "risk": "ryzyko",
+      "question": "pytanie"
+    },
+    "itemStatus": {
+      "open": "otwarte",
+      "answered": "odpowiedziane",
+      "resolved": "rozwiązane",
+      "dismissed": "odrzucone",
+      "recommend_requested": "poproszono o rekomendację"
+    },
+    "answerLabel": "Odpowiedź",
+    "answerPlaceholder": "Odpowiedz na tę uwagę…",
+    "dismissIrrelevant": "Odrzuć jako nieistotne",
+    "markedForRecommendation": "Oznaczone do rekomendacji",
+    "recommendSomething": "Zarekomenduj coś",
+    "recommendationRequested": "Poproszono o rekomendację — sprawdź sugestię poniżej.",
+    "reopen": "Otwórz ponownie",
+    "recommendedAnswers": "Rekomendowane odpowiedzi",
+    "recommendationProgress": "{ready} / {total} gotowych",
+    "generatingSuggestion": "Generowanie ugruntowanej sugestii…",
+    "currentStandard": "Aktualny standard: {title}",
+    "accept": "Akceptuj",
+    "reject": "Odrzuć",
+    "reRequestPlaceholder": "Poproś o inną rekomendację…",
+    "reRequest": "Poproś ponownie",
+    "finalRequirements": "Ostateczne wymagania",
+    "incorporatedDraft": "Włączone wymagania (wersja robocza)",
+    "stats": {
+      "findings": "Uwagi",
+      "open": "Otwarte",
+      "answered": "Odpowiedziane",
+      "model": "Model"
+    },
+    "actions": {
+      "proceedNothing": "Kontynuuj (nic do włączenia)",
+      "incorporateAnswers": "Włącz odpowiedzi",
+      "requestRecommendations": "Poproś o {count} rekomendację | Poproś o {count} rekomendacje | Poproś o {count} rekomendacji",
+      "reReview": "Wygląda dobrze — przejrzyj ponownie",
+      "reReviewing": "Ponowne przeglądanie…",
+      "redoIncorporation": "Powtórz włączanie",
+      "redoWithDirection": "Powtórz z tą wskazówką"
+    },
+    "help": {
+      "canProceed": "Wszystkie uwagi są odrzucone — przejdź do następnej fazy bez przerabiania.",
+      "canIncorporate": "Łączy Twoje odpowiedzi w jeden dokument o standardowym formacie, a następnie automatycznie go ponownie przegląda.",
+      "answerAll": "Odpowiedz na każdą uwagę lub ją odrzuć, aby kontynuować.",
+      "merged": "Ponowny przegląd uruchamia recenzenta na tym dokumencie. Jeśli nie odpowiada Ci sposób połączenia, powtórz je z komentarzem."
+    },
+    "redoPlaceholder": "Co połączenie powinno zrobić inaczej?",
+    "settledFooter": "Wymagania ustalone — potok kontynuuje pracę z dokumentem po lewej.",
+    "toast": {
+      "preparingRecommendations": "Przygotowywanie {count} rekomendacji w tle | Przygotowywanie {count} rekomendacji w tle | Przygotowywanie {count} rekomendacji w tle",
+      "preparingRecommendationsDescription": "Twoje odpowiedzi są zapisane — możesz to zamknąć; powiadomimy Cię, gdy będą gotowe.",
+      "recommendationsReady": "{count} rekomendacja gotowa | {count} rekomendacje gotowe | {count} rekomendacji gotowych",
+      "incorporating": "Włączanie Twoich odpowiedzi w tle",
+      "incorporatingDescription": "Wróciłeś do tablicy — powiadomimy Cię tylko, jeśli będą potrzebne dodatkowe informacje.",
+      "reviewerSatisfied": "Recenzent jest zadowolony — kontynuowanie potoku",
+      "iterationLimitReached": "Osiągnięto limit iteracji — wybierz, jak kontynuować",
+      "newFindings": "brak nowych uwag do rozpatrzenia | {count} nowa uwaga do rozpatrzenia | {count} nowych uwag do rozpatrzenia",
+      "proceeding": "Przechodzenie do następnej fazy",
+      "taskReset": "Zadanie zresetowane — edytuj wymagania i prześlij ponownie",
+      "extraRoundGranted": "Przyznano jeszcze jedną rundę przeglądu"
+    },
+    "errors": {
+      "saveAnswer": "Nie udało się zapisać odpowiedzi",
+      "updateFinding": "Nie udało się zaktualizować uwagi",
+      "requestRecommendations": "Nie udało się poprosić o rekomendacje",
+      "acceptRecommendation": "Nie udało się zaakceptować rekomendacji",
+      "rejectRecommendation": "Nie udało się odrzucić rekomendacji",
+      "reRequestRecommendation": "Nie udało się ponownie poprosić o rekomendację",
+      "incorporate": "Nie udało się włączyć odpowiedzi",
+      "reReview": "Nie udało się ponownie przejrzeć wymagań",
+      "proceed": "Nie udało się kontynuować",
+      "resolveReview": "Nie udało się rozstrzygnąć przeglądu"
+    }
+  },
+  "clarity": {
+    "title": "Klasyfikacja zgłoszenia błędu",
+    "iteration": "Iteracja {current} / {max}",
+    "intro": "Recenzent AI sklasyfikował zgłoszenie błędu tego {level} pod kątem możliwości naprawy, jego opis wraz z powiązanym kontekstem, i postawił poniższe pytania. {answer} na istotne i {dismiss} nieistotne, a następnie je uwzględnij; recenzent przegląda ponownie, aż zgłoszenie będzie wystarczająco jasne, by je naprawić.",
+    "itemFallback": "element",
+    "introAnswer": "Odpowiedz",
+    "introDismiss": "odrzuć",
+    "empty": "Brak recenzji. Recenzent uruchamia się automatycznie jako pierwszy krok przy starcie potoku tego zadania.",
+    "loadingReview": "Wczytywanie recenzji…",
+    "triaging": "Klasyfikowanie zgłoszenia błędu…",
+    "converged": "Zgłoszenie błędu jest doprecyzowane. Poniższy raport jest tym, czego używa każdy kolejny krok agenta.",
+    "capHeading": "Osiągnięto limit {max} iteracji z wciąż otwartymi uwagami.",
+    "capDetail": "Wykonaj jeszcze jedną rundę recenzji, przejdź do następnej fazy z ostatnim doprecyzowanym zgłoszeniem błędu mimo to, albo zatrzymaj i zresetuj zadanie, aby przerobić zgłoszenie i przesłać je ponownie.",
+    "incorporatingStage": "Uwzględnianie Twoich odpowiedzi w doprecyzowanym zgłoszeniu błędu… Możesz to zamknąć, powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje.",
+    "reReviewingStage": "Ponowna recenzja zaktualizowanego zgłoszenia błędu… Możesz to zamknąć, powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje.",
+    "answerLabel": "Odpowiedź",
+    "answerPlaceholder": "Odpowiedz na tę uwagę…",
+    "refineAnswerPlaceholder": "Dopracuj swoją odpowiedź…",
+    "saveAnswer": "Zapisz odpowiedź",
+    "dismissIrrelevant": "Odrzuć jako nieistotne",
+    "reopen": "Otwórz ponownie",
+    "docHeading": "Doprecyzowane zgłoszenie błędu",
+    "docHeadingDraft": "Doprecyzowane zgłoszenie błędu (wersja robocza)",
+    "rail": {
+      "findings": "Uwagi",
+      "open": "Otwarte",
+      "answered": "Z odpowiedzią",
+      "model": "Model"
+    },
+    "proceedNothing": "Przejdź dalej (nic do uwzględnienia)",
+    "incorporateAnswers": "Uwzględnij odpowiedzi",
+    "hint": {
+      "proceed": "Wszystkie uwagi odrzucone, przejdź do następnej fazy bez przerabiania.",
+      "incorporate": "Składa Twoje odpowiedzi w jedno doprecyzowane zgłoszenie błędu, a następnie automatycznie je ponownie recenzuje.",
+      "answerAll": "Odpowiedz na każdą uwagę lub ją odrzuć, aby kontynuować."
+    },
+    "reReviewing": "Ponowna recenzja…",
+    "looksGoodReReview": "Wygląda dobrze — zrecenzuj ponownie",
+    "redoIncorporation": "Powtórz uwzględnianie",
+    "redoPlaceholder": "Co scalanie powinno zrobić inaczej?",
+    "redoWithDirection": "Powtórz z tą wskazówką",
+    "redoHint": "Ponowna recenzja uruchamia recenzenta na tym raporcie. Jeśli nie odpowiada Ci sposób scalenia, zamiast tego powtórz je z komentarzem.",
+    "incorporatedFooter": "Zgłoszenie błędu doprecyzowane, potok kontynuuje z raportem po lewej.",
+    "severity": {
+      "low": "niski",
+      "medium": "średni",
+      "high": "wysoki"
+    },
+    "category": {
+      "gap": "luka",
+      "clarification": "doprecyzowanie",
+      "assumption": "założenie",
+      "risk": "ryzyko",
+      "question": "pytanie"
+    },
+    "itemStatus": {
+      "open": "otwarte",
+      "answered": "z odpowiedzią",
+      "resolved": "rozwiązane",
+      "dismissed": "odrzucone",
+      "recommend_requested": "poproszono o rekomendację"
+    },
+    "toast": {
+      "clarifyingTitle": "Doprecyzowywanie zgłoszenia błędu w tle",
+      "clarifyingDescription": "Wróciłeś do tablicy, powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje.",
+      "reReviewSatisfied": "Recenzent jest zadowolony — kontynuacja potoku",
+      "reReviewExceeded": "Osiągnięto limit iteracji — wybierz, jak postąpić",
+      "reReviewNewFindings": "jedna nowa uwaga do rozpatrzenia | {count} nowe uwagi do rozpatrzenia | {count} nowych uwag do rozpatrzenia",
+      "proceeding": "Przechodzenie do następnej fazy",
+      "taskReset": "Zadanie zresetowane — edytuj zgłoszenie błędu i prześlij ponownie",
+      "extraRoundGranted": "Przyznano jeszcze jedną rundę recenzji"
+    },
+    "error": {
+      "saveAnswer": "Nie udało się zapisać odpowiedzi",
+      "updateFinding": "Nie udało się zaktualizować uwagi",
+      "incorporate": "Nie udało się uwzględnić odpowiedzi",
+      "reReview": "Nie udało się ponownie zrecenzować zgłoszenia błędu",
+      "proceed": "Nie udało się przejść dalej",
+      "resolve": "Nie udało się rozstrzygnąć recenzji"
+    }
+  },
+  "consensus": {
+    "titlePrefix": "Konsensus",
+    "participantCount": "jeden uczestnik | {count} uczestnicy | {count} uczestników",
+    "loading": "Ładowanie sesji konsensusu…",
+    "empty": "Dla tego kroku nie uruchomiono jeszcze żadnej sesji konsensusu.",
+    "failed": "Konsensus nie powiódł się: {error}",
+    "unknownError": "nieznany błąd",
+    "synthesizedResult": "Zsyntetyzowany wynik",
+    "confidence": "pewność {pct}",
+    "panel": "Panel",
+    "topScore": "najwyższy {label} {pct}",
+    "expert": "Ekspert {letter}",
+    "participant": "Uczestnik",
+    "strategy": {
+      "specialistPanel": "Panel specjalistów",
+      "debate": "Debata",
+      "rankedVoting": "Głosowanie rankingowe"
+    },
+    "round": {
+      "heading": "Runda {n}",
+      "contributions": "Wkłady",
+      "draft": "Niezależne wersje robocze",
+      "critique": "Krytyka i poprawki",
+      "score": "Ocenianie"
+    },
+    "status": {
+      "running": "W toku",
+      "synthesizing": "Synteza",
+      "done": "Gotowe",
+      "failed": "Niepowodzenie"
+    }
+  },
+  "brainstorm": {
+    "title": {
+      "architecture": "Burza mózgów nad architekturą",
+      "requirements": "Burza mózgów nad wymaganiami"
+    },
+    "subjectNoun": {
+      "architecture": "podejścia",
+      "requirements": "wymagań"
+    },
+    "docNoun": {
+      "architecture": "podejście techniczne",
+      "requirements": "kierunek wymagań"
+    },
+    "iteration": "Iteracja {current} / {max}",
+    "intro": "Partner AI zaproponował poniższe opcje {subject}, każdą z jej kompromisami. {choose} te, których chcesz (i pokieruj nimi), a {dismiss} resztę, a następnie scal; proces uruchamia się ponownie, aż osiągniesz {doc}.",
+    "introChoose": "Wybierz",
+    "introDismiss": "odrzuć",
+    "empty": "Jeszcze nie ma burzy mózgów. Uruchamia się automatycznie, gdy pipeline tego zadania osiągnie krok burzy mózgów.",
+    "loading": "Wczytywanie burzy mózgów…",
+    "generating": "Generowanie opcji…",
+    "settledBanner": "{doc} jest ustalony. Dokument poniżej jest tym, czego używa następny etap.",
+    "exceeded": {
+      "heading": "Osiągnięto limit {max} iteracji przy wciąż otwartych opcjach.",
+      "detail": "Wykonaj jeszcze jedną rundę burzy mózgów, przejdź do następnego etapu z ostatnim kierunkiem mimo to, albo zatrzymaj i zresetuj zadanie, aby móc je edytować i przesłać ponownie."
+    },
+    "working": {
+      "incorporating": "Scalanie Twoich wyborów w {doc}… Możesz to zamknąć — powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje.",
+      "reReviewing": "Ponowne uruchamianie burzy mózgów na zaktualizowanym kierunku… Możesz to zamknąć — powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje."
+    },
+    "severity": {
+      "low": "niski",
+      "medium": "średni",
+      "high": "wysoki"
+    },
+    "category": {
+      "gap": "luka",
+      "clarification": "wyjaśnienie",
+      "assumption": "założenie",
+      "risk": "ryzyko",
+      "question": "pytanie"
+    },
+    "itemStatus": {
+      "open": "otwarta",
+      "answered": "odpowiedziana",
+      "resolved": "rozwiązana",
+      "dismissed": "odrzucona",
+      "recommend_requested": "poproszono o rekomendację"
+    },
+    "yourChoice": "Twój wybór",
+    "replyPlaceholder": {
+      "refine": "Doprecyzuj swój wybór…",
+      "choose": "Wybierz / pokieruj tą opcją…"
+    },
+    "saveChoice": "Zapisz wybór",
+    "dismiss": "Odrzuć",
+    "reopen": "Otwórz ponownie",
+    "docDraft": "{doc} (szkic)",
+    "rail": {
+      "options": "Opcje",
+      "open": "Otwarte",
+      "chosen": "Wybrane",
+      "model": "Model"
+    },
+    "proceedNothing": "Kontynuuj (nic do scalenia)",
+    "incorporateChoices": "Scal wybory",
+    "hint": {
+      "allDismissed": "Wszystkie opcje są odrzucone — przejdź do następnego etapu bez kierunku.",
+      "incorporate": "Scala Twoje wybory w jeden {doc}, a następnie automatycznie uruchamia burzę mózgów ponownie.",
+      "chooseAll": "Wybierz lub odrzuć każdą opcję, aby kontynuować."
+    },
+    "reRunning": "Ponowne uruchamianie…",
+    "reRun": "Wygląda dobrze — uruchom ponownie",
+    "redoIncorporation": "Ponów scalanie",
+    "redoPlaceholder": "Co kierunek powinien zrobić inaczej?",
+    "redoWithDirection": "Ponów z tym kierunkiem",
+    "mergedHint": "Ponowne uruchomienie uruchamia agenta na tym kierunku. Jeśli nie jesteś zadowolony ze sposobu scalenia, zamiast tego ponów je z komentarzem.",
+    "incorporatedFooter": "Kierunek ustalony — pipeline kontynuuje pracę z dokumentem po lewej.",
+    "toast": {
+      "saveChoiceError": "Nie udało się zapisać wyboru",
+      "updateOptionError": "Nie udało się zaktualizować opcji",
+      "incorporateError": "Nie udało się scalić wyborów",
+      "draftingTitle": "Tworzenie {doc} w tle",
+      "draftingDescription": "Wróciłeś do tablicy — powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje.",
+      "reReviewSettled": "Kierunek ustalony — kontynuowanie pipeline'u",
+      "reReviewExceeded": "Osiągnięto limit iteracji — wybierz, jak kontynuować",
+      "reReviewNewOptions": "jedna nowa opcja do rozpatrzenia | {count} nowe opcje do rozpatrzenia | {count} nowych opcji do rozpatrzenia",
+      "reReviewError": "Nie udało się ponownie uruchomić burzy mózgów",
+      "proceeding": "Przechodzenie do następnego etapu",
+      "proceedError": "Nie udało się kontynuować",
+      "taskReset": "Zadanie zresetowane — edytuj je i prześlij ponownie",
+      "extraRoundGranted": "Przyznano jeszcze jedną rundę burzy mózgów",
+      "resolveError": "Nie udało się rozwiązać burzy mózgów"
+    }
+  },
+  "spec": {
+    "title": "Wymagania",
+    "loading": "Ładowanie specyfikacji…",
+    "error": "Nie udało się załadować specyfikacji. Spróbuj otworzyć to okno ponownie.",
+    "overview": "Przegląd",
+    "noFeatureGroups": "Brak grup funkcji",
+    "noSummary": "Brak podsumowania usługi.",
+    "noGherkinForGroup": "Brak scenariuszy Gherkin dla tej grupy.",
+    "noRequirements": "Brak wymagań w tej grupie.",
+    "domainRules": "Reguły domeny",
+    "ruleRationale": " — {rationale}",
+    "moduleHint": "brak modułów. Wybierz grupę funkcji po lewej, aby zobaczyć jej wymagania. | 1 moduł. Wybierz grupę funkcji po lewej, aby zobaczyć jej wymagania. | {count} modułów. Wybierz grupę funkcji po lewej, aby zobaczyć jej wymagania.",
+    "moduleHintGherkin": "brak modułów. Wybierz grupę funkcji po lewej, aby zobaczyć jej wymagania, lub przełącz się na scenariusze Gherkin. | 1 moduł. Wybierz grupę funkcji po lewej, aby zobaczyć jej wymagania, lub przełącz się na scenariusze Gherkin. | {count} modułów. Wybierz grupę funkcji po lewej, aby zobaczyć jej wymagania, lub przełącz się na scenariusze Gherkin.",
+    "mode": {
+      "structured": "Strukturalny",
+      "gherkin": "Gherkin",
+      "gherkinTooltip": "Scenariusze Gherkin",
+      "gherkinNone": "Brak jeszcze scenariuszy na main"
+    },
+    "empty": {
+      "title": "Brak jeszcze specyfikacji",
+      "description": "Ta usługa nie ma specyfikacji na swojej domyślnej gałęzi. Specyfikacja jest generowana w miarę jak zadania uruchamiają swoje pipeline'y; gdy trafi na main, pojawi się tutaj wraz ze scenariuszami Gherkin."
+    },
+    "priority": {
+      "must": "Konieczne",
+      "should": "Zalecane",
+      "could": "Opcjonalne"
+    },
+    "kind": {
+      "functional": "Funkcjonalne",
+      "nonfunctional": "Niefunkcjonalne",
+      "constraint": "Ograniczenie"
+    },
+    "acceptance": {
+      "given": "Given",
+      "when": "When",
+      "then": "Then"
+    }
+  },
+  "followUp": {
+    "title": "Działania następcze",
+    "titleWithBlock": "Działania następcze — {title}",
+    "subtitle": "Perspektywiczne działania następcze i pytania zgłoszone przez Codera. Pipeline kontynuuje, gdy każdy element zostanie rozstrzygnięty.",
+    "badge": {
+      "toDecide": "{count} do rozstrzygnięcia | {count} do rozstrzygnięcia | {count} do rozstrzygnięcia",
+      "allDecided": "Wszystko rozstrzygnięte"
+    },
+    "empty": {
+      "title": "Brak działań następczych.",
+      "hint": "W trakcie pracy Coder przesyła tu nierozwiązane wątki, zadania poboczne i pytania. Pojawiają się na żywo, więc możesz na nie reagować jeszcze zanim Coder skończy."
+    },
+    "suggested": "Sugerowane:",
+    "viewIssue": "Zobacz zgłoszenie",
+    "yourAnswer": "Twoja odpowiedź:",
+    "answerPlaceholder": "Odpowiedz na to pytanie — zostanie uwzględnione w kolejnym przebiegu Codera…",
+    "status": {
+      "pending": "Wymaga decyzji",
+      "filed": "Zgłoszone jako zgłoszenie",
+      "queued": "Wysłane do Codera",
+      "answered": "Odpowiedziano",
+      "dismissed": "Odrzucone"
+    },
+    "actions": {
+      "answerAndSend": "Odpowiedz i odeślij",
+      "dismiss": "Odrzuć",
+      "fileAsIssue": "Zgłoś jako zgłoszenie",
+      "sendToCoder": "Wyślij do Codera"
+    },
+    "footer": {
+      "summary": "{count} element · {undecided} nierozstrzygniętych | {count} elementy · {undecided} nierozstrzygniętych | {count} elementów · {undecided} nierozstrzygniętych",
+      "loops": "Wykorzystane cykle Codera: {loops} / {max}"
+    }
+  },
+  "humanTest": {
+    "title": "Testy ręczne",
+    "titleWithBlock": "Testy ręczne — {title}",
+    "subtitle": "Zweryfikuj zmianę w działającym środowisku",
+    "notStarted": "Ten krok jeszcze się nie rozpoczął.",
+    "confirm": "Wygląda dobrze — kontynuuj",
+    "phase": {
+      "provisioning": "Tworzenie środowiska…",
+      "awaitingHuman": "Oczekiwanie na Twoją weryfikację",
+      "fixing": "Naprawiacz zajmuje się Twoimi uwagami…",
+      "resolvingConflicts": "Rozwiązywanie konfliktów z main…",
+      "passed": "Zaliczono"
+    },
+    "envStatus": {
+      "provisioning": "Tworzenie…",
+      "ready": "Gotowe",
+      "failed": "Niepowodzenie",
+      "expired": "Wygasło",
+      "tearingDown": "Usuwanie…",
+      "tornDown": "Zniszczono"
+    },
+    "environment": {
+      "heading": "Środowisko tymczasowe",
+      "noUrl": "Brak adresu URL.",
+      "expires": "Wygasa {date}",
+      "none": "Brak działającego środowiska."
+    },
+    "actions": {
+      "recreate": "Utwórz ponownie",
+      "destroy": "Zniszcz",
+      "pullMain": "Pobierz main i wdróż ponownie"
+    },
+    "fix": {
+      "heading": "Znalazłeś problem?",
+      "cancel": "Anuluj",
+      "requestFix": "Poproś o poprawkę",
+      "placeholder": "Opisz, co poszło nie tak — agent naprawiający otrzyma to jako kontekst, a następnie środowisko zostanie odbudowane do ponownych testów.",
+      "send": "Wyślij do naprawiacza"
+    },
+    "history": {
+      "heading": "Historia (jedna runda) | Historia ({count} rundy) | Historia ({count} rund)",
+      "fixRequested": "Poproszono o poprawkę",
+      "pulledMain": "Pobrano main"
+    },
+    "roundOutcome": {
+      "completed": "zakończono",
+      "failed": "niepowodzenie",
+      "inProgress": "w toku"
+    }
+  },
+  "testing": {
+    "title": "Raport z testów",
+    "subtitle": "Testy eksploracyjne i regresyjne zmiany",
+    "badge": {
+      "greenlit": "Zatwierdzony",
+      "needsFixes": "Wymaga poprawek"
+    },
+    "fixerAttempts": "Próby naprawy",
+    "fixCount": "{attempts}/{max} naprawa",
+    "fixingSuffix": "· naprawianie…",
+    "empty": {
+      "title": "Brak raportu z testów.",
+      "hint": "Raport pojawi się, gdy Tester zakończy przebieg. W trakcie działania krok pokazuje postęp na żywo na tablicy."
+    },
+    "scenariosOutcomes": "Scenariusze i wyniki",
+    "otherChecks": "Inne kontrole",
+    "checks": "Kontrole",
+    "screenshotCount": "{count} zrzut ekranu | {count} zrzuty ekranu | {count} zrzutów ekranu",
+    "checkCount": "{count} kontrola | {count} kontrole | {count} kontroli",
+    "concernCount": "{count} zastrzeżenie | {count} zastrzeżenia | {count} zastrzeżeń",
+    "noDiscreteCheck": "Nie zarejestrowano żadnej konkretnej kontroli dla tego scenariusza.",
+    "severity": {
+      "critical": "krytyczne",
+      "high": "wysokie",
+      "medium": "średnie",
+      "low": "niskie"
+    },
+    "status": {
+      "passed": "Zaliczony",
+      "failed": "Niezaliczony",
+      "skipped": "Pominięty"
+    },
+    "shot": {
+      "failed": "Błąd",
+      "failedToLoad": "Błąd ładowania",
+      "loading": "Ładowanie…"
+    },
+    "screenshotAlt": "{view} (zrzut ekranu)",
+    "screenshots": "Zrzuty ekranu",
+    "verdict": {
+      "heading": "Werdykt",
+      "safe": "Można wydać",
+      "withheld": "Wstrzymano"
+    },
+    "outcomes": {
+      "heading": "Wyniki",
+      "passed": "Zaliczone",
+      "failed": "Niezaliczone",
+      "skipped": "Pominięte",
+      "concerns": "Zastrzeżenia",
+      "blocking": "({count} blokujące) | ({count} blokujące) | ({count} blokujących)"
+    },
+    "environment": "Środowisko",
+    "footer": "Scenariusze to obszary, które Tester postanowił sprawdzić (jego scenariusze akceptacyjne ze specyfikacji). Wyniki i zastrzeżenia są pod nimi grupowane według nazwy."
+  },
+  "visualConfirm": {
+    "ariaLabel": "Potwierdzenie wizualne",
+    "title": "Potwierdzenie wizualne",
+    "titleWithBlock": "Potwierdzenie wizualne — {title}",
+    "subtitle": "Porównaj interfejs z projektami referencyjnymi",
+    "notStarted": "Ten krok jeszcze się nie rozpoczął.",
+    "noScreenshots": "Nie zarejestrowano zrzutów ekranu. Sprawdź zmianę ręcznie lub prześlij referencję poniżej.",
+    "noteIssue": "Zgłoś problem z {view}",
+    "noted": "zanotowano",
+    "notePlaceholder": "Co wygląda źle na {view}?",
+    "reviewedManually": "Sprawdziłem to ręcznie",
+    "recapture": "Przechwyć ponownie",
+    "approve": "Zatwierdź — kontynuuj",
+    "phase": {
+      "awaiting_human": "Oczekiwanie na Twoją recenzję",
+      "fixing": "Naprawiacz zajmuje się Twoimi uwagami…",
+      "approved": "Zatwierdzono"
+    },
+    "outcome": {
+      "completed": "ukończono",
+      "failed": "niepowodzenie",
+      "inProgress": "w toku"
+    },
+    "lightbox": {
+      "actualLabel": "{view} — rzeczywisty",
+      "actualAlt": "{view} (rzeczywisty)",
+      "referenceLabel": "{view} — referencja",
+      "referenceAlt": "{view} (referencja)"
+    },
+    "upload": {
+      "heading": "Prześlij projekt referencyjny",
+      "viewPlaceholder": "Nazwa widoku (np. login)",
+      "tipReady": "Wskazówka: przeciągnij obraz bezpośrednio na parę powyżej, aby ustawić jej referencję.",
+      "tipNeedView": "Najpierw wpisz nazwę widoku, a potem wybierz plik. Albo przeciągnij obraz bezpośrednio na parę powyżej."
+    },
+    "requestFix": {
+      "heading": "Poproś o poprawkę",
+      "placeholder": "Cokolwiek jeszcze Naprawiacz powinien wiedzieć (oprócz uwag dla poszczególnych widoków powyżej).",
+      "foldedHint": "Uwagi dla poszczególnych widoków są dołączane automatycznie.",
+      "send": "Wyślij do Naprawiacza"
+    },
+    "history": {
+      "heading": "Historia ({count} runda) | Historia ({count} rundy) | Historia ({count} rund)",
+      "fixRequested": "Poproszono o poprawkę"
+    }
+  },
+  "focus": {
+    "board": "Tablica",
+    "typeSubtitle": "{type} · widok szczegółowy",
+    "runPipeline": "Uruchom potok",
+    "rerunPipeline": "Uruchom potok ponownie",
+    "noPipelineRunning": "Brak działającego potoku",
+    "emptyPipelineHint": "Uruchom potok, aby zobaczyć agentów pracujących nad tym blokiem.",
+    "description": "Opis",
+    "overallProgress": "Ogólny postęp",
+    "dependencies": "Zależności",
+    "noDependencies": "Brak"
   }
 }

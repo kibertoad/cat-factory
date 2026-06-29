@@ -18,6 +18,7 @@ import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 const board = useBoardStore()
 const execution = useExecutionStore()
 const visualConfirm = useVisualConfirmStore()
+const { t } = useI18n()
 
 // Per-window blob cache; release the cached screenshot/reference object URLs when the window
 // goes away, so the (potentially large) blob bytes don't linger for the rest of the session.
@@ -41,11 +42,18 @@ const busy = computed(() => (blockId.value ? visualConfirm.isBusy(blockId.value)
 const awaitingHuman = computed(() => phase.value === 'awaiting_human')
 const working = computed(() => phase.value === 'fixing')
 
-const PHASE_LABEL: Record<NonNullable<VisualConfirmStepState['phase']>, string> = {
-  awaiting_human: 'Awaiting your review',
-  fixing: 'Fixer is addressing your findings…',
-  approved: 'Approved',
-}
+const PHASE_LABEL = computed<Record<NonNullable<VisualConfirmStepState['phase']>, string>>(() => ({
+  awaiting_human: t('visualConfirm.phase.awaiting_human'),
+  fixing: t('visualConfirm.phase.fixing'),
+  approved: t('visualConfirm.phase.approved'),
+}))
+
+// Exhaustive map of a round's outcome enum → label (literal keys keep the typed-key drift
+// guard live, vs a runtime-built `visualConfirm.outcome.${outcome}`).
+const OUTCOME_LABELS = computed<Record<'completed' | 'failed', string>>(() => ({
+  completed: t('visualConfirm.outcome.completed'),
+  failed: t('visualConfirm.outcome.failed'),
+}))
 
 // Resolve every pair's artifacts (the gallery + the lightbox share this one cache).
 watch(
@@ -66,14 +74,14 @@ const lightboxItems = computed(() => {
     if (p.actualArtifactId)
       items.push({
         artifactId: p.actualArtifactId,
-        label: `${p.view} — actual`,
-        alt: `${p.view} (actual)`,
+        label: t('visualConfirm.lightbox.actualLabel', { view: p.view }),
+        alt: t('visualConfirm.lightbox.actualAlt', { view: p.view }),
       })
     if (p.referenceArtifactId)
       items.push({
         artifactId: p.referenceArtifactId,
-        label: `${p.view} — reference`,
-        alt: `${p.view} (reference)`,
+        label: t('visualConfirm.lightbox.referenceLabel', { view: p.view }),
+        alt: t('visualConfirm.lightbox.referenceAlt', { view: p.view }),
       })
   }
   return items
@@ -189,7 +197,7 @@ const canApprove = computed(
         tabindex="-1"
         role="dialog"
         aria-modal="true"
-        aria-label="Visual confirmation"
+        :aria-label="t('visualConfirm.ariaLabel')"
         class="m-4 flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl focus:outline-none"
       >
         <header class="flex items-center gap-3 border-b border-slate-800 px-5 py-3">
@@ -200,10 +208,14 @@ const canApprove = computed(
           </span>
           <div class="min-w-0 flex-1">
             <h2 class="truncate text-sm font-semibold text-slate-100">
-              Visual confirmation{{ block ? ` — ${block.title}` : '' }}
+              {{
+                block
+                  ? t('visualConfirm.titleWithBlock', { title: block.title })
+                  : t('visualConfirm.title')
+              }}
             </h2>
             <p class="truncate text-[11px] text-slate-400">
-              {{ phase ? PHASE_LABEL[phase] : 'Review the UI against the reference designs' }}
+              {{ phase ? PHASE_LABEL[phase] : t('visualConfirm.subtitle') }}
             </p>
           </div>
           <button
@@ -220,7 +232,7 @@ const canApprove = computed(
             class="flex flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
           >
             <UIcon name="i-lucide-image-play" class="h-8 w-8 opacity-40" />
-            <p class="text-sm">This step hasn't started yet.</p>
+            <p class="text-sm">{{ t('visualConfirm.notStarted') }}</p>
           </div>
 
           <template v-else>
@@ -262,38 +274,37 @@ const canApprove = computed(
                       :name="noteOpen[p.view] ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
                       class="h-3 w-3"
                     />
-                    Note an issue with {{ p.view }}
+                    {{ t('visualConfirm.noteIssue', { view: p.view }) }}
                     <span
                       v-if="perViewNotes[p.view]?.trim()"
                       class="rounded-full bg-amber-500/15 px-1.5 text-[9px] text-amber-300"
-                      >noted</span
+                      >{{ t('visualConfirm.noted') }}</span
                     >
                   </button>
                   <textarea
                     v-if="noteOpen[p.view]"
                     v-model="perViewNotes[p.view]"
                     rows="2"
-                    :placeholder="`What looks wrong on ${p.view}?`"
+                    :placeholder="t('visualConfirm.notePlaceholder', { view: p.view })"
                     class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-[12px] text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none"
                   />
                 </div>
               </div>
             </section>
             <p v-else class="text-[12px] italic text-slate-500">
-              No screenshots were captured — review the change manually, or upload a reference
-              below.
+              {{ t('visualConfirm.noScreenshots') }}
             </p>
 
             <!-- Upload a reference for any view -->
             <section class="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
               <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Upload a reference design
+                {{ t('visualConfirm.upload.heading') }}
               </h3>
               <div class="flex flex-wrap items-center gap-2">
                 <input
                   v-model="uploadView"
                   list="vc-views"
-                  placeholder="View name (e.g. login)"
+                  :placeholder="t('visualConfirm.upload.viewPlaceholder')"
                   class="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[12px] text-slate-200 placeholder:text-slate-600"
                 />
                 <datalist id="vc-views">
@@ -311,8 +322,8 @@ const canApprove = computed(
               <p class="mt-1.5 text-[10px] text-slate-600">
                 {{
                   uploadView.trim()
-                    ? 'Tip: drop an image straight onto a pair above to set its reference.'
-                    : 'Enter a view name first, then choose a file. Or drop an image straight onto a pair above.'
+                    ? t('visualConfirm.upload.tipReady')
+                    : t('visualConfirm.upload.tipNeedView')
                 }}
               </p>
             </section>
@@ -323,17 +334,17 @@ const canApprove = computed(
               class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
             >
               <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Request a fix
+                {{ t('visualConfirm.requestFix.heading') }}
               </h3>
               <textarea
                 v-model="globalFindings"
                 rows="3"
-                placeholder="Anything else the Fixer should know (in addition to any per-view notes above)."
+                :placeholder="t('visualConfirm.requestFix.placeholder')"
                 class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-[13px] text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none"
               />
               <div class="mt-2 flex items-center justify-between">
                 <span class="text-[11px] text-slate-500">
-                  Per-view notes are folded in automatically.
+                  {{ t('visualConfirm.requestFix.foldedHint') }}
                 </span>
                 <UButton
                   size="sm"
@@ -343,7 +354,7 @@ const canApprove = computed(
                   :disabled="busy || !hasFindings"
                   @click="submitFix"
                 >
-                  Send to Fixer
+                  {{ t('visualConfirm.requestFix.send') }}
                 </UButton>
               </div>
             </section>
@@ -354,7 +365,7 @@ const canApprove = computed(
               class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
             >
               <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                History ({{ vc.attempts }} round{{ vc.attempts === 1 ? '' : 's' }})
+                {{ t('visualConfirm.history.heading', { count: vc.attempts }, vc.attempts) }}
               </h3>
               <ol class="space-y-2">
                 <li v-for="(r, i) in vc.rounds" :key="i" class="flex items-start gap-2 text-[12px]">
@@ -363,7 +374,9 @@ const canApprove = computed(
                     class="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400"
                   />
                   <div class="min-w-0 flex-1">
-                    <span class="text-slate-200">Fix requested</span>
+                    <span class="text-slate-200">{{
+                      t('visualConfirm.history.fixRequested')
+                    }}</span>
                     <span
                       class="ml-1.5 rounded px-1 text-[10px] uppercase"
                       :class="
@@ -374,7 +387,11 @@ const canApprove = computed(
                             : 'bg-slate-500/15 text-slate-300'
                       "
                     >
-                      {{ r.outcome ?? 'in progress' }}
+                      {{
+                        r.outcome
+                          ? OUTCOME_LABELS[r.outcome]
+                          : t('visualConfirm.outcome.inProgress')
+                      }}
                     </span>
                     <p v-if="r.findings" class="whitespace-pre-wrap leading-snug text-slate-400">
                       {{ r.findings }}
@@ -405,7 +422,7 @@ const canApprove = computed(
               class="flex items-center gap-1.5 text-[11px] text-amber-300/90"
             >
               <input v-model="ackDegraded" type="checkbox" class="accent-amber-500" />
-              I've reviewed this manually
+              {{ t('visualConfirm.reviewedManually') }}
             </label>
             <UButton
               size="sm"
@@ -416,7 +433,7 @@ const canApprove = computed(
               :disabled="busy || !awaitingHuman"
               @click="recapture"
             >
-              Recapture
+              {{ t('visualConfirm.recapture') }}
             </UButton>
             <UButton
               color="primary"
@@ -425,7 +442,7 @@ const canApprove = computed(
               :disabled="!canApprove"
               @click="approve"
             >
-              Approve — continue
+              {{ t('visualConfirm.approve') }}
             </UButton>
           </div>
         </footer>

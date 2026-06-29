@@ -1937,9 +1937,13 @@
       "repository": "Repository",
       "repositoryHint": "Repositories the GitHub App can access. Don't see yours? Grant the App access below, then refresh.",
       "noReposAvailable": "No repositories available yet. Grant the App access to one below, then refresh.",
-      "filterPlaceholder": "Filter by owner/name…",
-      "clearFilter": "Clear filter",
-      "chooseRepository": "Choose a repository",
+      "searchPlaceholder": "Search repositories by owner or name…",
+      "searchMinChars": "Type at least {min} character to search. | Type at least {min} characters to search.",
+      "@searchMinChars": {
+        "description": "Shown when a large repo list needs a typed query before searching. Resolved via t(key, { min }, min) so {min} also drives the plural choice; min is always 2 or more. Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - and rely on the custom pluralRules wired in i18n.config.ts)."
+      },
+      "noMatches": "No repositories found for {query}.",
+      "clearSelection": "Clear selection",
       "showingCount": "Showing {shown} of {total} repositories.",
       "repoLabel": {
         "private": " (private)",
@@ -2381,5 +2385,585 @@
       "gatedCommit": "Gated commit",
       "footer": "A gate runs a programmatic precheck and only spins up the {helper} when it fails; a green check advances with nothing spun up."
     }
+  },
+  "requirements": {
+    "title": "Requirements review",
+    "iteration": "Iteration {current} / {max}",
+    "intro": "An AI reviewer inspected this {level}'s collected requirements — its description plus any linked PRDs and tracker issues — and raised the findings below. {answer} the relevant ones and {dismiss} the irrelevant, then incorporate them; the reviewer re-reviews until the requirements are clear.",
+    "levelFallback": "item",
+    "answerVerb": "Answer",
+    "dismissVerb": "dismiss",
+    "empty": "No review yet. The reviewer runs automatically as the first step when this task's pipeline starts.",
+    "loadingReview": "Loading the review…",
+    "reviewing": "Reviewing the requirements…",
+    "settled": "The requirements are settled. The document below is what every downstream agent step uses.",
+    "exceeded": {
+      "heading": "Reached the {max}-iteration limit with findings still open.",
+      "detail": "Do one more review round, proceed to the next phase with the last incorporated requirements anyway, or stop and reset the task so you can rework the requirements and resubmit."
+    },
+    "working": {
+      "incorporating": "Incorporating your answers into a requirements document… You can close this — we'll notify you only if more input is needed.",
+      "reReviewing": "Re-reviewing the updated requirements… You can close this — we'll notify you only if more input is needed."
+    },
+    "severity": {
+      "high": "high",
+      "medium": "medium",
+      "low": "low"
+    },
+    "category": {
+      "gap": "gap",
+      "clarification": "clarification",
+      "assumption": "assumption",
+      "risk": "risk",
+      "question": "question"
+    },
+    "itemStatus": {
+      "open": "open",
+      "answered": "answered",
+      "resolved": "resolved",
+      "dismissed": "dismissed",
+      "recommend_requested": "recommend requested"
+    },
+    "answerLabel": "Answer",
+    "answerPlaceholder": "Answer this finding…",
+    "dismissIrrelevant": "Dismiss as irrelevant",
+    "markedForRecommendation": "Marked for recommendation",
+    "recommendSomething": "Recommend something",
+    "recommendationRequested": "Recommendation requested — review the suggestion below.",
+    "reopen": "Reopen",
+    "recommendedAnswers": "Recommended answers",
+    "recommendationProgress": "{ready} / {total} ready",
+    "generatingSuggestion": "Generating a grounded suggestion…",
+    "currentStandard": "Current standard: {title}",
+    "accept": "Accept",
+    "reject": "Reject",
+    "reRequestPlaceholder": "Ask for a different recommendation…",
+    "reRequest": "Re-request",
+    "finalRequirements": "Final requirements",
+    "incorporatedDraft": "Incorporated requirements (draft)",
+    "stats": {
+      "findings": "Findings",
+      "open": "Open",
+      "answered": "Answered",
+      "model": "Model"
+    },
+    "actions": {
+      "proceedNothing": "Proceed (nothing to incorporate)",
+      "incorporateAnswers": "Incorporate answers",
+      "requestRecommendations": "Request {count} recommendation | Request {count} recommendation | Request {count} recommendations",
+      "reReview": "Looks good — re-review",
+      "reReviewing": "Re-reviewing…",
+      "redoIncorporation": "Redo incorporation",
+      "redoWithDirection": "Redo with this direction"
+    },
+    "help": {
+      "canProceed": "Every finding is dismissed — proceed to the next phase without reworking.",
+      "canIncorporate": "Folds your answers into one standard-format document, then re-reviews it automatically.",
+      "answerAll": "Answer or dismiss every finding to continue.",
+      "merged": "Re-review runs the reviewer against this document. If you're unhappy with how it was merged, redo it with a comment instead."
+    },
+    "redoPlaceholder": "What should the merge do differently?",
+    "settledFooter": "Requirements settled — the pipeline is continuing with the document on the left.",
+    "toast": {
+      "preparingRecommendations": "Preparing {count} recommendation in the background | Preparing {count} recommendation in the background | Preparing {count} recommendations in the background",
+      "preparingRecommendationsDescription": "Your answers are saved — close this if you like; we'll notify you when they're ready.",
+      "recommendationsReady": "{count} recommendation ready | {count} recommendation ready | {count} recommendations ready",
+      "incorporating": "Incorporating your answers in the background",
+      "incorporatingDescription": "You're back on the board — we'll notify you only if more input is needed.",
+      "reviewerSatisfied": "Reviewer is satisfied — continuing the pipeline",
+      "iterationLimitReached": "Iteration limit reached — choose how to proceed",
+      "newFindings": "no new findings to react to | {count} new finding to react to | {count} new findings to react to",
+      "proceeding": "Proceeding to the next phase",
+      "taskReset": "Task reset — edit the requirements and resubmit",
+      "extraRoundGranted": "One more review round granted"
+    },
+    "errors": {
+      "saveAnswer": "Could not save the answer",
+      "updateFinding": "Could not update the finding",
+      "requestRecommendations": "Could not request recommendations",
+      "acceptRecommendation": "Could not accept the recommendation",
+      "rejectRecommendation": "Could not reject the recommendation",
+      "reRequestRecommendation": "Could not re-request the recommendation",
+      "incorporate": "Could not incorporate the answers",
+      "reReview": "Could not re-review the requirements",
+      "proceed": "Could not proceed",
+      "resolveReview": "Could not resolve the review"
+    }
+  },
+  "clarity": {
+    "title": "Bug-report triage",
+    "iteration": "Iteration {current} / {max}",
+    "intro": "An AI reviewer triaged this {level}'s bug report for fixability, its description plus any linked context, and raised the questions below. {answer} the relevant ones and {dismiss} the irrelevant, then incorporate them; the reviewer re-reviews until the bug report is clear enough to fix.",
+    "@intro": {
+      "description": "Sentence with named slots: {level} is the block type (frame/module/task or 'item'), {answer} and {dismiss} are styled verb spans rendered via i18n-t. Keep {answer}/{dismiss} as the imperative verbs."
+    },
+    "itemFallback": "item",
+    "introAnswer": "Answer",
+    "@introAnswer": {
+      "description": "Imperative verb 'answer' (respond to a question), used as an inline emphasized span in the intro sentence."
+    },
+    "introDismiss": "dismiss",
+    "@introDismiss": {
+      "description": "Imperative verb 'dismiss' (wave off as irrelevant), used as an inline emphasized span in the intro sentence."
+    },
+    "empty": "No review yet. The reviewer runs automatically as the first step when this task's pipeline starts.",
+    "loadingReview": "Loading the review…",
+    "triaging": "Triaging the bug report…",
+    "converged": "The bug report is clarified. The report below is what every downstream agent step uses.",
+    "capHeading": "Reached the {max}-iteration limit with findings still open.",
+    "capDetail": "Do one more review round, proceed to the next phase with the last clarified bug report anyway, or stop and reset the task so you can rework the bug report and resubmit.",
+    "incorporatingStage": "Incorporating your answers into a clarified bug report… You can close this, we'll notify you only if more input is needed.",
+    "reReviewingStage": "Re-reviewing the updated bug report… You can close this, we'll notify you only if more input is needed.",
+    "answerLabel": "Answer",
+    "@answerLabel": {
+      "description": "Noun label heading the recorded reply to a finding (the answer that was given), not the verb."
+    },
+    "answerPlaceholder": "Answer this finding…",
+    "refineAnswerPlaceholder": "Refine your answer…",
+    "saveAnswer": "Save answer",
+    "dismissIrrelevant": "Dismiss as irrelevant",
+    "reopen": "Reopen",
+    "docHeading": "Clarified bug report",
+    "docHeadingDraft": "Clarified bug report (draft)",
+    "rail": {
+      "findings": "Findings",
+      "open": "Open",
+      "answered": "Answered",
+      "model": "Model"
+    },
+    "proceedNothing": "Proceed (nothing to incorporate)",
+    "incorporateAnswers": "Incorporate answers",
+    "hint": {
+      "proceed": "Every finding is dismissed, proceed to the next phase without reworking.",
+      "incorporate": "Folds your answers into one clarified bug report, then re-reviews it automatically.",
+      "answerAll": "Answer or dismiss every finding to continue."
+    },
+    "reReviewing": "Re-reviewing…",
+    "looksGoodReReview": "Looks good — re-review",
+    "redoIncorporation": "Redo incorporation",
+    "redoPlaceholder": "What should the merge do differently?",
+    "redoWithDirection": "Redo with this direction",
+    "redoHint": "Re-review runs the reviewer against this report. If you're unhappy with how it was merged, redo it with a comment instead.",
+    "incorporatedFooter": "Bug report clarified, the pipeline is continuing with the report on the left.",
+    "severity": {
+      "low": "low",
+      "medium": "medium",
+      "high": "high"
+    },
+    "category": {
+      "gap": "gap",
+      "clarification": "clarification",
+      "assumption": "assumption",
+      "risk": "risk",
+      "question": "question"
+    },
+    "itemStatus": {
+      "open": "open",
+      "answered": "answered",
+      "resolved": "resolved",
+      "dismissed": "dismissed",
+      "recommend_requested": "recommend requested"
+    },
+    "toast": {
+      "clarifyingTitle": "Clarifying the bug report in the background",
+      "clarifyingDescription": "You're back on the board, we'll notify you only if more input is needed.",
+      "reReviewSatisfied": "Reviewer is satisfied — continuing the pipeline",
+      "reReviewExceeded": "Iteration limit reached — choose how to proceed",
+      "reReviewNewFindings": "no new findings to react to | one new finding to react to | {count} new findings to react to",
+      "@reReviewNewFindings": {
+        "description": "Plural by {count} of newly raised findings after a re-review. Polish/Ukrainian need three forms (one/few/many)."
+      },
+      "proceeding": "Proceeding to the next phase",
+      "taskReset": "Task reset — edit the bug report and resubmit",
+      "extraRoundGranted": "One more review round granted"
+    },
+    "error": {
+      "saveAnswer": "Could not save the answer",
+      "updateFinding": "Could not update the finding",
+      "incorporate": "Could not incorporate the answers",
+      "reReview": "Could not re-review the bug report",
+      "proceed": "Could not proceed",
+      "resolve": "Could not resolve the review"
+    }
+  },
+  "consensus": {
+    "titlePrefix": "Consensus",
+    "participantCount": "no participants | one participant | {count} participants",
+    "loading": "Loading consensus session…",
+    "empty": "No consensus session has run for this step yet.",
+    "failed": "Consensus failed: {error}",
+    "unknownError": "unknown error",
+    "synthesizedResult": "Synthesized result",
+    "confidence": "confidence {pct}",
+    "panel": "Panel",
+    "topScore": "top {label} {pct}",
+    "expert": "Expert {letter}",
+    "participant": "Participant",
+    "strategy": {
+      "specialistPanel": "Specialist panel",
+      "debate": "Debate",
+      "rankedVoting": "Ranked voting"
+    },
+    "round": {
+      "heading": "Round {n}",
+      "contributions": "Contributions",
+      "draft": "Independent drafts",
+      "critique": "Critique & revision",
+      "score": "Scoring"
+    },
+    "status": {
+      "running": "Running",
+      "synthesizing": "Synthesizing",
+      "done": "Done",
+      "failed": "Failed"
+    }
+  },
+  "brainstorm": {
+    "title": {
+      "architecture": "Architecture brainstorm",
+      "requirements": "Requirements brainstorm"
+    },
+    "subjectNoun": {
+      "architecture": "approach",
+      "requirements": "requirements"
+    },
+    "docNoun": {
+      "architecture": "technical approach",
+      "requirements": "requirements direction"
+    },
+    "iteration": "Iteration {current} / {max}",
+    "intro": "An AI partner proposed the {subject} options below, each with its trade-offs. {choose} the ones you want (and steer them) and {dismiss} the rest, then incorporate; it re-runs until you converge on a {doc}.",
+    "introChoose": "Choose",
+    "introDismiss": "dismiss",
+    "empty": "No brainstorm yet. It runs automatically when this task's pipeline reaches the brainstorm step.",
+    "loading": "Loading the brainstorm…",
+    "generating": "Generating options…",
+    "settledBanner": "The {doc} is settled. The document below is what the next stage uses.",
+    "exceeded": {
+      "heading": "Reached the {max}-iteration limit with options still open.",
+      "detail": "Do one more brainstorm round, proceed to the next phase with the last direction anyway, or stop and reset the task so you can edit it and resubmit."
+    },
+    "working": {
+      "incorporating": "Folding your choices into a {doc}… You can close this — we'll notify you only if more input is needed.",
+      "reReviewing": "Re-running the brainstorm on the updated direction… You can close this — we'll notify you only if more input is needed."
+    },
+    "severity": {
+      "low": "low",
+      "medium": "medium",
+      "high": "high"
+    },
+    "category": {
+      "gap": "gap",
+      "clarification": "clarification",
+      "assumption": "assumption",
+      "risk": "risk",
+      "question": "question"
+    },
+    "itemStatus": {
+      "open": "open",
+      "answered": "answered",
+      "resolved": "resolved",
+      "dismissed": "dismissed",
+      "recommend_requested": "recommendation requested"
+    },
+    "yourChoice": "Your choice",
+    "replyPlaceholder": {
+      "refine": "Refine your choice…",
+      "choose": "Choose / steer this option…"
+    },
+    "saveChoice": "Save choice",
+    "dismiss": "Dismiss",
+    "reopen": "Reopen",
+    "docDraft": "{doc} (draft)",
+    "rail": {
+      "options": "Options",
+      "open": "Open",
+      "chosen": "Chosen",
+      "model": "Model"
+    },
+    "proceedNothing": "Proceed (nothing to incorporate)",
+    "incorporateChoices": "Incorporate choices",
+    "hint": {
+      "allDismissed": "Every option is dismissed — proceed to the next phase without a direction.",
+      "incorporate": "Folds your choices into one {doc}, then re-runs the brainstorm automatically.",
+      "chooseAll": "Choose or dismiss every option to continue."
+    },
+    "reRunning": "Re-running…",
+    "reRun": "Looks good — re-run",
+    "redoIncorporation": "Redo incorporation",
+    "redoPlaceholder": "What should the direction do differently?",
+    "redoWithDirection": "Redo with this direction",
+    "mergedHint": "Re-run runs the agent against this direction. If you're unhappy with how it was merged, redo it with a comment instead.",
+    "incorporatedFooter": "Direction settled — the pipeline is continuing with the document on the left.",
+    "toast": {
+      "saveChoiceError": "Could not save the choice",
+      "updateOptionError": "Could not update the option",
+      "incorporateError": "Could not incorporate the choices",
+      "draftingTitle": "Drafting the {doc} in the background",
+      "draftingDescription": "You're back on the board — we'll notify you only if more input is needed.",
+      "reReviewSettled": "Direction settled — continuing the pipeline",
+      "reReviewExceeded": "Iteration limit reached — choose how to proceed",
+      "reReviewNewOptions": "no new options to react to | one new option to react to | {count} new options to react to",
+      "@reReviewNewOptions": {
+        "description": "Count of newly raised brainstorm options the user must react to; uses plural forms."
+      },
+      "reReviewError": "Could not re-run the brainstorm",
+      "proceeding": "Proceeding to the next phase",
+      "proceedError": "Could not proceed",
+      "taskReset": "Task reset — edit it and resubmit",
+      "extraRoundGranted": "One more brainstorm round granted",
+      "resolveError": "Could not resolve the brainstorm"
+    }
+  },
+  "spec": {
+    "title": "Requirements",
+    "loading": "Loading the specification…",
+    "error": "Could not load the specification. Try reopening this window.",
+    "overview": "Overview",
+    "noFeatureGroups": "No feature groups",
+    "noSummary": "No service summary.",
+    "noGherkinForGroup": "No Gherkin scenarios for this group.",
+    "noRequirements": "No requirements in this group.",
+    "domainRules": "Domain rules",
+    "ruleRationale": " — {rationale}",
+    "moduleHint": "no modules. Select a feature group on the left to view its requirements. | 1 module. Select a feature group on the left to view its requirements. | {count} modules. Select a feature group on the left to view its requirements.",
+    "moduleHintGherkin": "no modules. Select a feature group on the left to view its requirements or switch to the Gherkin scenarios. | 1 module. Select a feature group on the left to view its requirements or switch to the Gherkin scenarios. | {count} modules. Select a feature group on the left to view its requirements or switch to the Gherkin scenarios.",
+    "mode": {
+      "structured": "Structured",
+      "gherkin": "Gherkin",
+      "gherkinTooltip": "Gherkin scenarios",
+      "gherkinNone": "No scenarios on main yet"
+    },
+    "empty": {
+      "title": "No specification yet",
+      "description": "This service has no spec on its default branch. A specification is generated as tasks run their pipelines; once it lands on main it will appear here, with its Gherkin scenarios."
+    },
+    "priority": {
+      "must": "Must",
+      "should": "Should",
+      "could": "Could"
+    },
+    "kind": {
+      "functional": "Functional",
+      "nonfunctional": "Non-functional",
+      "constraint": "Constraint"
+    },
+    "acceptance": {
+      "given": "Given",
+      "@given": {
+        "description": "Gherkin keyword that opens a precondition clause. Keep verbatim — it is literal Gherkin syntax, not prose."
+      },
+      "when": "When",
+      "@when": {
+        "description": "Gherkin keyword that opens an action clause. Keep verbatim — it is literal Gherkin syntax, not prose."
+      },
+      "then": "Then",
+      "@then": {
+        "description": "Gherkin keyword that opens an expected-outcome clause. Keep verbatim — it is literal Gherkin syntax, not prose."
+      }
+    }
+  },
+  "followUp": {
+    "title": "Follow-ups",
+    "titleWithBlock": "Follow-ups — {title}",
+    "subtitle": "Forward-looking follow-ups and questions the Coder surfaced. The pipeline continues once every item is decided.",
+    "badge": {
+      "toDecide": "{count} to decide | {count} to decide | {count} to decide",
+      "allDecided": "All decided"
+    },
+    "empty": {
+      "title": "No follow-ups yet.",
+      "hint": "As the Coder works it streams loose ends, side-tasks and questions here. They appear live, so you can act on them before the Coder even finishes."
+    },
+    "suggested": "Suggested:",
+    "viewIssue": "View issue",
+    "yourAnswer": "Your answer:",
+    "answerPlaceholder": "Answer this question — it's folded into the Coder's next pass…",
+    "status": {
+      "pending": "Needs a decision",
+      "filed": "Filed as issue",
+      "queued": "Sent to Coder",
+      "answered": "Answered",
+      "dismissed": "Dismissed"
+    },
+    "actions": {
+      "answerAndSend": "Answer & send back",
+      "dismiss": "Dismiss",
+      "fileAsIssue": "File as issue",
+      "sendToCoder": "Send to Coder"
+    },
+    "footer": {
+      "summary": "{count} item · {undecided} undecided | {count} items · {undecided} undecided",
+      "loops": "Coder loops used: {loops} / {max}"
+    },
+    "@footer.summary": {
+      "description": "Item count drives the plural form; {undecided} is a separate interpolated count of still-undecided items, not the plural driver."
+    }
+  },
+  "humanTest": {
+    "title": "Human testing",
+    "titleWithBlock": "Human testing — {title}",
+    "subtitle": "Validate the change in a live environment",
+    "notStarted": "This step hasn't started yet.",
+    "confirm": "Looks good — continue",
+    "phase": {
+      "provisioning": "Provisioning environment…",
+      "awaitingHuman": "Awaiting your validation",
+      "fixing": "Fixer is addressing your findings…",
+      "resolvingConflicts": "Resolving conflicts with main…",
+      "passed": "Passed"
+    },
+    "envStatus": {
+      "provisioning": "Provisioning…",
+      "ready": "Ready",
+      "failed": "Failed",
+      "expired": "Expired",
+      "tearingDown": "Tearing down…",
+      "tornDown": "Destroyed"
+    },
+    "environment": {
+      "heading": "Ephemeral environment",
+      "noUrl": "No URL yet.",
+      "expires": "Expires {date}",
+      "none": "No live environment."
+    },
+    "actions": {
+      "recreate": "Recreate",
+      "destroy": "Destroy",
+      "pullMain": "Pull main + redeploy"
+    },
+    "fix": {
+      "heading": "Found a problem?",
+      "cancel": "Cancel",
+      "requestFix": "Request a fix",
+      "placeholder": "Describe what went wrong — the Fixer agent gets this as context, then the environment is rebuilt for re-testing.",
+      "send": "Send to Fixer"
+    },
+    "history": {
+      "heading": "History (no rounds) | History (one round) | History ({count} rounds)",
+      "fixRequested": "Fix requested",
+      "pulledMain": "Pulled main"
+    },
+    "roundOutcome": {
+      "completed": "completed",
+      "failed": "failed",
+      "inProgress": "in progress"
+    }
+  },
+  "testing": {
+    "title": "Test report",
+    "subtitle": "Exploratory + regression testing of the change",
+    "badge": {
+      "greenlit": "Greenlit",
+      "needsFixes": "Needs fixes"
+    },
+    "fixerAttempts": "Fixer attempts",
+    "fixCount": "{attempts}/{max} fix",
+    "fixingSuffix": "· fixing…",
+    "empty": {
+      "title": "No test report yet.",
+      "hint": "The report appears once the Tester finishes a pass. While it runs, the step shows live progress on the board."
+    },
+    "scenariosOutcomes": "Scenarios & outcomes",
+    "otherChecks": "Other checks",
+    "checks": "Checks",
+    "screenshotCount": "{count} screenshot | {count} screenshots",
+    "checkCount": "{count} check | {count} checks",
+    "concernCount": "{count} concern | {count} concerns",
+    "noDiscreteCheck": "No discrete check recorded for this scenario.",
+    "severity": {
+      "critical": "critical",
+      "high": "high",
+      "medium": "medium",
+      "low": "low"
+    },
+    "status": {
+      "passed": "Passed",
+      "failed": "Failed",
+      "skipped": "Skipped"
+    },
+    "shot": {
+      "failed": "Failed",
+      "failedToLoad": "Failed to load",
+      "loading": "Loading…"
+    },
+    "screenshotAlt": "{view} (screenshot)",
+    "screenshots": "Screenshots",
+    "verdict": {
+      "heading": "Verdict",
+      "safe": "Safe to release",
+      "withheld": "Withheld"
+    },
+    "outcomes": {
+      "heading": "Outcomes",
+      "passed": "Passed",
+      "failed": "Failed",
+      "skipped": "Skipped",
+      "concerns": "Concerns",
+      "blocking": "({count} blocking) | ({count} blocking)"
+    },
+    "environment": "Environment",
+    "footer": "Scenarios are the areas the Tester chose to exercise (its spec acceptance scenarios). Outcomes and concerns are grouped under them by name.",
+    "@screenshotAlt": {
+      "description": "Alt text for a captured screenshot thumbnail; {view} is the screen/view name. The literal word 'screenshot' should be localized."
+    }
+  },
+  "visualConfirm": {
+    "ariaLabel": "Visual confirmation",
+    "title": "Visual confirmation",
+    "titleWithBlock": "Visual confirmation — {title}",
+    "subtitle": "Review the UI against the reference designs",
+    "notStarted": "This step hasn't started yet.",
+    "noScreenshots": "No screenshots were captured. Review the change manually, or upload a reference below.",
+    "noteIssue": "Note an issue with {view}",
+    "noted": "noted",
+    "notePlaceholder": "What looks wrong on {view}?",
+    "reviewedManually": "I've reviewed this manually",
+    "recapture": "Recapture",
+    "approve": "Approve — continue",
+    "phase": {
+      "awaiting_human": "Awaiting your review",
+      "fixing": "Fixer is addressing your findings…",
+      "approved": "Approved"
+    },
+    "outcome": {
+      "completed": "completed",
+      "failed": "failed",
+      "inProgress": "in progress"
+    },
+    "lightbox": {
+      "actualLabel": "{view} — actual",
+      "actualAlt": "{view} (actual)",
+      "referenceLabel": "{view} — reference",
+      "referenceAlt": "{view} (reference)"
+    },
+    "upload": {
+      "heading": "Upload a reference design",
+      "viewPlaceholder": "View name (e.g. login)",
+      "tipReady": "Tip: drop an image straight onto a pair above to set its reference.",
+      "tipNeedView": "Enter a view name first, then choose a file. Or drop an image straight onto a pair above."
+    },
+    "requestFix": {
+      "heading": "Request a fix",
+      "placeholder": "Anything else the Fixer should know (in addition to any per-view notes above).",
+      "foldedHint": "Per-view notes are folded in automatically.",
+      "send": "Send to Fixer"
+    },
+    "history": {
+      "heading": "History (no rounds) | History ({count} round) | History ({count} rounds)",
+      "fixRequested": "Fix requested"
+    }
+  },
+  "focus": {
+    "board": "Board",
+    "typeSubtitle": "{type} · focus view",
+    "runPipeline": "Run pipeline",
+    "rerunPipeline": "Re-run pipeline",
+    "noPipelineRunning": "No pipeline running",
+    "emptyPipelineHint": "Run a pipeline to visualize the agents working on this block.",
+    "description": "Description",
+    "overallProgress": "Overall progress",
+    "dependencies": "Dependencies",
+    "noDependencies": "None"
   }
 }

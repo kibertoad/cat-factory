@@ -9,6 +9,7 @@ packages (`backend/internal/*`), and example **deployments** (`deploy/*`):
 
 | Path                                    | Package                             | Published?                      |
 | --------------------------------------- | ----------------------------------- | ------------------------------- |
+| `backend/packages/cli`                  | `@cat-factory/cli`                  | npm (bootstrap CLI)             |
 | `backend/packages/contracts`            | `@cat-factory/contracts`            | npm                             |
 | `backend/packages/prompt-fragments`     | `@cat-factory/prompt-fragments`     | npm                             |
 | `backend/packages/kernel`               | `@cat-factory/kernel`               | npm                             |

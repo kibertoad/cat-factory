@@ -33,12 +33,12 @@ it only records **what is done and what is left**.
 |     5 | **Providers + AI onboarding**                                   | `providers/**` (5)                                                                                                                     | `providers.*`                                                            | ✅ merged (#403)         |
 |     6 | **Integrations: GitHub / Slack / documents / tasks**            | `github/**` (5), `slack/**` (1), `documents/**` (5), `tasks/**` (4)                                                                    | `github.*`, `slack.*`, `documents.*`, `tasks.*`                          | ✅ merged (#411)         |
 |     7 | **Pipeline + palette + gates**                                  | `pipeline/**` (5), `palettes/**` (1), `gates/**` (1)                                                                                   | `pipeline.*`, `palette.*`, `gates.*`                                     | ✅ done (this PR)        |
-|     8 | Agent windows                                                   | `requirements/`, `clarity/`, `consensus/`, `brainstorm/`, `spec/`, `followUp/`, `humanTest/`, `testing/`, `visualConfirm/`, `focus/`   | per-feature                                                              | ⬜ planned               |
+|     8 | **Agent windows**                                               | `requirements/`, `clarity/`, `consensus/`, `brainstorm/`, `spec/`, `followUp/`, `humanTest/`, `testing/`, `visualConfirm/`, `focus/`   | per-feature                                                              | ✅ done (this PR)        |
 |     9 | Remaining surfaces                                              | `bootstrap/`, `environments/`, `fragments/`, `kaizen/`, `sandbox/`, `recurring/`, `media/`, `provisioning/`                            | per-feature                                                              | ⬜ planned               |
 |     X | Cross-cutting                                                   | `app/utils/catalog.ts` (status/agent-kind/block-type labels), `app/pages/*.vue`                                                        | `catalog.*` etc.                                                         | ⬜ planned               |
 
-Rough scale: **~121 SPA components**; ~96 already resolve copy through i18n after
-phases 0–7. The remaining work is the bulk of phases 8–X below.
+Rough scale: **~121 SPA components**; ~106 already resolve copy through i18n after
+phases 0–8. The remaining work is phases 9–X below.
 
 ### Done
 
@@ -119,21 +119,28 @@ phases 0–7. The remaining work is the bulk of phases 8–X below.
   `usePipelineHealth` problem messages stay English for now (they mirror backend validation
   and are out of the component scope; their unit test asserts on `type`, not text).
 
+- **Phase 8 (agent windows, this PR):** the ten dedicated agent result/decision windows —
+  the requirements-review window (the answer/dismiss → incorporate → re-review/redo →
+  proceed loop, "Iteration N / M", the exceeded 3-choice prompt via the shared
+  `IterationCapPrompt`), the clarity and brainstorm review loops (intro emphasis via
+  `<i18n-t>` slots, severity/category/status badges, re-review toasts), the consensus
+  session view (strategy/round/status enums, anonymized "Expert A" labels, confidence
+  percentage), the service-spec window (view-mode toggle, priority/kind chips, Gherkin
+  keywords kept verbatim, module-count plurals), the follow-up companion, the human-test
+  and visual-confirmation gates (phase/outcome/env-status enums, round-history plurals,
+  expiry dates via `d(...)`), the test-report window (status/severity enums, screenshot /
+  check / concern count plurals), and the block focus view. New keys under `requirements.*`,
+  `clarity.*`, `consensus.*`, `brainstorm.*`, `spec.*`, `followUp.*`, `humanTest.*`,
+  `testing.*`, `visualConfirm.*` and `focus.*` in all five bundled locales (full parity);
+  plural readouts use 3 forms for pl/uk, enum lookups resolve via exhaustive `Record` maps
+  of literal `t()` keys, percentages via `n(..., 'percent')`. `catalog.ts`-sourced
+  status/type labels rendered in these windows stay deferred to phase X.
+
 The four board/panels components with **no** user-facing text — `AgentChip`,
 `TaskDependencyEdges`, `DependencyConnectOverlay`, `StepResultViewHost` — need no
 migration and are intentionally skipped.
 
 ### Remaining (by area)
-
-**Agent windows** (phase 8)
-
-```
-requirements/RequirementsReviewWindow.vue, clarity/ClarityReviewWindow.vue,
-consensus/ConsensusSessionWindow.vue, brainstorm/BrainstormWindow.vue,
-spec/ServiceSpecWindow.vue, followUp/FollowUpWindow.vue, humanTest/HumanTestWindow.vue,
-testing/TestReportWindow.vue, visualConfirm/VisualConfirmationWindow.vue,
-focus/BlockFocusView.vue
-```
 
 **Remaining surfaces** (phase 9)
 

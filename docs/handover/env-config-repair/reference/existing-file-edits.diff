@@ -1,0 +1,176 @@
+diff --git a/backend/packages/contracts/src/entities.ts b/backend/packages/contracts/src/entities.ts
+index ecabf60..1c2e1d3 100644
+--- a/backend/packages/contracts/src/entities.ts
++++ b/backend/packages/contracts/src/entities.ts
+@@ -603,8 +603,10 @@ export type StepApproval = v.InferOutput<typeof stepApprovalSchema>
+  * lifecycle, progress and failure the board surfaces uniformly):
+  *   - `bootstrap`  — a "bootstrap repo" run that scaffolds/adapts a new repo.
+  *   - `execution`  — a task pipeline run that implements a board task.
++ *   - `env-config-repair` — a coding agent that repairs an environment-provider
++ *     config file in an existing repo (no board block; surfaced on the infra window).
+  */
+-export const agentRunKindSchema = v.picklist(['bootstrap', 'execution'])
++export const agentRunKindSchema = v.picklist(['bootstrap', 'execution', 'env-config-repair'])
+ export type AgentRunKind = v.InferOutput<typeof agentRunKindSchema>
+ 
+ /**
+diff --git a/backend/packages/contracts/src/events.ts b/backend/packages/contracts/src/events.ts
+index aafa73a..1a9616f 100644
+--- a/backend/packages/contracts/src/events.ts
++++ b/backend/packages/contracts/src/events.ts
+@@ -1,5 +1,6 @@
+ import type { Block, ExecutionInstance } from './entities.js'
+ import type { BootstrapJob } from './bootstrap.js'
++import type { EnvConfigRepairJob } from './env-config-repair.js'
+ import type { Notification } from './notifications.js'
+ import type { LlmCallActivity } from './observability.js'
+ import type { RequirementReview } from './requirements.js'
+@@ -32,6 +33,13 @@ export type WorkspaceEvent =
+    * vanished between the transition and the publish.
+    */
+   | { type: 'bootstrap'; job: BootstrapJob; block: Block | null; at: number }
++  /**
++   * An environment-provider config-repair run advanced. Carries the updated job
++   * (live `subtasks`, terminal `ok`/`issues`/`failure`) so the infrastructure-providers
++   * window patches the "repairing…" indicator and its final outcome without a refetch.
++   * There is no board block — this run is surfaced only on the infra window.
++   */
++  | { type: 'env-config-repair'; job: EnvConfigRepairJob; at: number }
+   /**
+    * A human-actionable notification was raised or resolved (a PR needs review, a
+    * pipeline finished and wants confirmation, CI fixing gave up). The client
+diff --git a/backend/packages/contracts/src/index.ts b/backend/packages/contracts/src/index.ts
+index a93cb1e..54a8e09 100644
+--- a/backend/packages/contracts/src/index.ts
++++ b/backend/packages/contracts/src/index.ts
+@@ -15,6 +15,7 @@ export * from './tasks.js'
+ export * from './environments.js'
+ export * from './runners.js'
+ export * from './bootstrap.js'
++export * from './env-config-repair.js'
+ export * from './snapshot.js'
+ export * from './board-scan.js'
+ export * from './iteration-cap.js'
+diff --git a/backend/packages/contracts/src/provider-config.ts b/backend/packages/contracts/src/provider-config.ts
+index ad9cc82..5f4179e 100644
+--- a/backend/packages/contracts/src/provider-config.ts
++++ b/backend/packages/contracts/src/provider-config.ts
+@@ -137,6 +137,11 @@ export type RepoValidationResult = v.InferOutput<typeof repoValidationResultSche
+  * now satisfies the provider (`ok`), whether anything was written (`committed`), where
+  * (`branch`/`prUrl`), whether the agent fallback ran (`usedAgent`), and any residual
+  * issues. Never throws to the client.
++ *
++ * When the agent fallback is taken the repair runs ASYNCHRONOUSLY (a durable
++ * `env-config-repair` agent run), so the call returns immediately with `usedAgent:true`,
++ * `repairJobId` set, and `ok:false` (not yet re-validated): the caller tracks the repair
++ * job (snapshot + `env-config-repair` events) for the post-repair outcome.
+  */
+ export const bootstrapRepoResultSchema = v.object({
+   ok: v.boolean(),
+@@ -144,6 +149,11 @@ export const bootstrapRepoResultSchema = v.object({
+   branch: v.optional(v.string()),
+   prUrl: v.optional(v.string()),
+   usedAgent: v.optional(v.boolean()),
++  /**
++   * Set when the async repair agent was dispatched: the id of the `env-config-repair`
++   * run to track for the post-repair re-validation outcome. Absent ⇒ no agent ran.
++   */
++  repairJobId: v.optional(v.string()),
+   issues: v.array(repoValidationIssueSchema),
+ })
+ export type BootstrapRepoResult = v.InferOutput<typeof bootstrapRepoResultSchema>
+diff --git a/backend/packages/contracts/src/snapshot.ts b/backend/packages/contracts/src/snapshot.ts
+index d7d77d7..3e5b7e9 100644
+--- a/backend/packages/contracts/src/snapshot.ts
++++ b/backend/packages/contracts/src/snapshot.ts
+@@ -7,6 +7,7 @@ import {
+   workspaceSchema,
+ } from './entities.js'
+ import { bootstrapJobSchema } from './bootstrap.js'
++import { envConfigRepairJobSchema } from './env-config-repair.js'
+ import { notificationSchema } from './notifications.js'
+ import { mergeThresholdPresetSchema } from './merge.js'
+ import { agentConfigCatalogSchema } from './agent-config.js'
+@@ -35,6 +36,13 @@ export const workspaceSnapshotSchema = v.object({
+    * could fail independently. Attached by the worker, so optional on the wire.
+    */
+   bootstrapJobs: v.optional(v.array(bootstrapJobSchema)),
++  /**
++   * Environment-provider config-repair runs for this workspace (the unified
++   * `agent_runs` table's `env-config-repair` rows). Carried so the infrastructure
++   * window can render a repair's live progress / outcome on load. Attached by the
++   * facade, so optional on the wire.
++   */
++  envConfigRepairJobs: v.optional(v.array(envConfigRepairJobSchema)),
+   /**
+    * The current spend-safeguard status. Attached by the worker (it depends on
+    * deployment-wide pricing/budget config), so it is optional on the wire.
+diff --git a/backend/packages/kernel/src/domain/types.ts b/backend/packages/kernel/src/domain/types.ts
+index a4a0fa3..05dddea 100644
+--- a/backend/packages/kernel/src/domain/types.ts
++++ b/backend/packages/kernel/src/domain/types.ts
+@@ -17,6 +17,8 @@ export type {
+   TaskTypeFields,
+   DocKind,
+   Decision,
++  EnvConfigRepairJob,
++  EnvConfigRepairStatus,
+   ExecutionInstance,
+   ExecutionStatus,
+   Pipeline,
+diff --git a/backend/packages/kernel/src/ports/execution-events.ts b/backend/packages/kernel/src/ports/execution-events.ts
+index 1f2629b..cb10c78 100644
+--- a/backend/packages/kernel/src/ports/execution-events.ts
++++ b/backend/packages/kernel/src/ports/execution-events.ts
+@@ -4,6 +4,7 @@ import type {
+   BrainstormSession,
+   ConsensusSession,
+   ClarityReview,
++  EnvConfigRepairJob,
+   ExecutionInstance,
+   KaizenGrading,
+   LlmCallActivity,
+@@ -53,6 +54,13 @@ export interface ExecutionEventPublisher {
+    * publishers/tests that predate bootstrap progress need no change.
+    */
+   bootstrapChanged?(workspaceId: string, job: BootstrapJob, block?: Block | null): Promise<void>
++  /**
++   * An environment-provider config-repair run advanced: push the updated job (live
++   * `subtasks`, terminal `ok`/`issues`/`failure`) so the infrastructure-providers window
++   * patches its "repairing…" indicator and outcome without a refetch. There is no board
++   * block. Optional so publishers/tests that predate it need no change.
++   */
++  envConfigRepairChanged?(workspaceId: string, job: EnvConfigRepairJob): Promise<void>
+   /**
+    * A human-actionable notification was raised or resolved: push it so the board
+    * surfaces/clears its badge and inbox entry live. Optional so publishers/tests
+@@ -114,6 +122,7 @@ export class NoopEventPublisher implements ExecutionEventPublisher {
+   async executionChanged(): Promise<void> {}
+   async boardChanged(): Promise<void> {}
+   async bootstrapChanged(): Promise<void> {}
++  async envConfigRepairChanged(): Promise<void> {}
+   async notificationChanged(): Promise<void> {}
+   async llmCallObserved(): Promise<void> {}
+   async requirementReviewChanged(): Promise<void> {}
+diff --git a/backend/packages/kernel/src/ports/index.ts b/backend/packages/kernel/src/ports/index.ts
+index adb4d40..861003e 100644
+--- a/backend/packages/kernel/src/ports/index.ts
++++ b/backend/packages/kernel/src/ports/index.ts
+@@ -285,6 +285,17 @@ export type {
+   RepoBootstrapper,
+ } from './repo-bootstrapper.js'
+ export { type BootstrapRunner, NoopBootstrapRunner } from './bootstrap-runner.js'
++export type {
++  EnvConfigRepairJobRecord,
++  EnvConfigRepairJobRecordPatch,
++  EnvConfigRepairJobRepository,
++  EnvConfigRepairRequest,
++  EnvConfigRepairHandle,
++  EnvConfigRepairUpdate,
++  EnvConfigRepairer,
++  EnvConfigRepairRunner,
++} from './env-config-repair.js'
++export { NoopEnvConfigRepairRunner } from './env-config-repair.js'
+ export type {
+   RunnerDispatchKind,
+   RunnerDispatchOptions,

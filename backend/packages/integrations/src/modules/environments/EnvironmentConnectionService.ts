@@ -86,11 +86,13 @@ export interface EnvironmentConnectionServiceDependencies {
     coords: { owner: string; repo: string; provider?: 'github' | 'gitlab' },
   ) => Promise<RunRepoContext | null>
   /**
-   * Dispatch a coding agent to repair a malformed/partial provider config, returning
-   * the post-repair validation. Wired by orchestration over the `env-config-repair`
-   * agent kind + the provider's `describeRepairAgent`. Absent ⇒ no agent fallback.
+   * Dispatch a coding agent to repair a malformed/partial provider config — it pushes the
+   * fix back onto the target branch and resolves once the agent finishes (throwing on a
+   * hard failure). The SERVICE re-validates afterward (it owns the decrypted secrets +
+   * manifest config), so this just performs the push. Wired by a runtime over the shared
+   * runner transport + the provider's `describeRepairAgent`. Absent ⇒ no agent fallback.
    */
-  dispatchConfigRepair?: (input: ConfigRepairDispatch) => Promise<RepoValidationResult>
+  dispatchConfigRepair?: (input: ConfigRepairDispatch) => Promise<void>
   /** Best-effort provisioning-event log; absent ⇒ no logging. */
   provisioningLog?: ProvisioningLogRecorder
 }
@@ -397,7 +399,33 @@ export class EnvironmentConnectionService {
       this.deps.dispatchConfigRepair
     ) {
       usedAgent = true
-      validation = await this.deps.dispatchConfigRepair({
+      // PR mode: the agent must push its fix to the PR branch, NOT straight to the target
+      // branch. The mechanical path only switches `writeBranch` to the PR branch when it
+      // actually committed generated files; on the `needsAgent` path it never did, so
+      // `writeBranch` is still the target branch here. Establish the PR branch (create it off
+      // the target head + open the PR) before dispatch, so the agent's push lands on the PR
+      // branch and re-validation reads it — otherwise `openPr` would be silently bypassed and
+      // the fix committed directly onto e.g. `main`.
+      if (input.openPr && writeBranch === targetBranch) {
+        const prBranchHead = await bound.repo.headSha(BOOTSTRAP_CONFIG_BRANCH)
+        if (!prBranchHead) {
+          const base = await bound.repo.headSha(targetBranch)
+          if (base) {
+            await bound.repo.createBranch(BOOTSTRAP_CONFIG_BRANCH, base)
+            await bound.repo.openPullRequest({
+              title: 'chore: repair environment provider config',
+              head: BOOTSTRAP_CONFIG_BRANCH,
+              base: targetBranch,
+              body: 'Automated provider configuration repair.',
+            })
+          }
+        }
+        writeBranch = BOOTSTRAP_CONFIG_BRANCH
+      }
+      // The agent pushes its fix back onto `writeBranch`; we then re-validate here, where
+      // the decrypted secrets + manifest config live (the dispatcher is pure container
+      // plumbing). A dispatch failure throws and surfaces to the caller.
+      await this.deps.dispatchConfigRepair({
         workspaceId,
         owner: input.owner,
         repo: input.repo,
@@ -405,6 +433,14 @@ export class EnvironmentConnectionService {
         issues: validation.issues,
         inputs: input.inputs,
       })
+      validation = await this.runProviderValidate(
+        bound,
+        writeBranch,
+        input.owner,
+        input.repo,
+        config,
+        resolveSecret,
+      )
     }
 
     await this.deps.provisioningLog?.record({

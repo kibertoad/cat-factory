@@ -1886,9 +1886,10 @@
       "repository": "Repositorio",
       "repositoryHint": "Repositorios a los que la GitHub App puede acceder. ¿No ves el tuyo? Concede acceso a la App abajo y luego actualiza.",
       "noReposAvailable": "Aún no hay repositorios disponibles. Concede acceso a la App a uno abajo y luego actualiza.",
-      "filterPlaceholder": "Filtrar por propietario/nombre…",
-      "clearFilter": "Borrar filtro",
-      "chooseRepository": "Elige un repositorio",
+      "searchPlaceholder": "Busca repositorios por propietario o nombre…",
+      "searchMinChars": "Escribe al menos {min} carácter para buscar. | Escribe al menos {min} caracteres para buscar.",
+      "noMatches": "No se encontraron repositorios para {query}.",
+      "clearSelection": "Borrar selección",
       "showingCount": "Mostrando {shown} de {total} repositorios.",
       "repoLabel": {
         "private": " (privado)",
@@ -2327,5 +2328,552 @@
       "gatedCommit": "Commit con compuerta",
       "footer": "Una compuerta ejecuta una comprobación previa programática y solo pone en marcha el {helper} cuando falla; una comprobación en verde avanza sin poner nada en marcha."
     }
+  },
+  "requirements": {
+    "title": "Revisión de requisitos",
+    "iteration": "Iteración {current} / {max}",
+    "intro": "Un revisor de IA inspeccionó los requisitos recopilados de este {level} — su descripción más cualquier PRD y ticket vinculados — y planteó los hallazgos siguientes. {answer} los relevantes y {dismiss} los irrelevantes, luego incorpóralos; el revisor vuelve a revisar hasta que los requisitos queden claros.",
+    "levelFallback": "elemento",
+    "answerVerb": "Responde",
+    "dismissVerb": "descarta",
+    "empty": "Aún no hay revisión. El revisor se ejecuta automáticamente como primer paso cuando se inicia la canalización de esta tarea.",
+    "loadingReview": "Cargando la revisión…",
+    "reviewing": "Revisando los requisitos…",
+    "settled": "Los requisitos están definidos. El documento siguiente es el que usa cada paso de agente posterior.",
+    "exceeded": {
+      "heading": "Se alcanzó el límite de {max} iteraciones con hallazgos aún abiertos.",
+      "detail": "Haz una ronda más de revisión, continúa a la siguiente fase con los últimos requisitos incorporados de todos modos, o detén y reinicia la tarea para poder rehacer los requisitos y volver a enviarlos."
+    },
+    "working": {
+      "incorporating": "Incorporando tus respuestas en un documento de requisitos… Puedes cerrar esto; te avisaremos solo si se necesita más información.",
+      "reReviewing": "Volviendo a revisar los requisitos actualizados… Puedes cerrar esto; te avisaremos solo si se necesita más información."
+    },
+    "severity": {
+      "high": "alta",
+      "medium": "media",
+      "low": "baja"
+    },
+    "category": {
+      "gap": "laguna",
+      "clarification": "aclaración",
+      "assumption": "supuesto",
+      "risk": "riesgo",
+      "question": "pregunta"
+    },
+    "itemStatus": {
+      "open": "abierto",
+      "answered": "respondido",
+      "resolved": "resuelto",
+      "dismissed": "descartado",
+      "recommend_requested": "recomendación solicitada"
+    },
+    "answerLabel": "Respuesta",
+    "answerPlaceholder": "Responde a este hallazgo…",
+    "dismissIrrelevant": "Descartar como irrelevante",
+    "markedForRecommendation": "Marcado para recomendación",
+    "recommendSomething": "Recomendar algo",
+    "recommendationRequested": "Recomendación solicitada — revisa la sugerencia más abajo.",
+    "reopen": "Reabrir",
+    "recommendedAnswers": "Respuestas recomendadas",
+    "recommendationProgress": "{ready} / {total} listas",
+    "generatingSuggestion": "Generando una sugerencia fundamentada…",
+    "currentStandard": "Estándar actual: {title}",
+    "accept": "Aceptar",
+    "reject": "Rechazar",
+    "reRequestPlaceholder": "Pide una recomendación diferente…",
+    "reRequest": "Volver a pedir",
+    "finalRequirements": "Requisitos finales",
+    "incorporatedDraft": "Requisitos incorporados (borrador)",
+    "stats": {
+      "findings": "Hallazgos",
+      "open": "Abiertos",
+      "answered": "Respondidos",
+      "model": "Modelo"
+    },
+    "actions": {
+      "proceedNothing": "Continuar (nada que incorporar)",
+      "incorporateAnswers": "Incorporar respuestas",
+      "requestRecommendations": "Pedir {count} recomendación | Pedir {count} recomendaciones",
+      "reReview": "Se ve bien — volver a revisar",
+      "reReviewing": "Volviendo a revisar…",
+      "redoIncorporation": "Rehacer la incorporación",
+      "redoWithDirection": "Rehacer con esta indicación"
+    },
+    "help": {
+      "canProceed": "Todos los hallazgos están descartados — continúa a la siguiente fase sin rehacer nada.",
+      "canIncorporate": "Reúne tus respuestas en un único documento de formato estándar y luego lo vuelve a revisar automáticamente.",
+      "answerAll": "Responde o descarta cada hallazgo para continuar.",
+      "merged": "La nueva revisión ejecuta el revisor sobre este documento. Si no estás conforme con cómo se combinó, rehazlo con un comentario en su lugar."
+    },
+    "redoPlaceholder": "¿Qué debería hacer la combinación de forma diferente?",
+    "settledFooter": "Requisitos definidos — la canalización continúa con el documento de la izquierda.",
+    "toast": {
+      "preparingRecommendations": "Preparando {count} recomendación en segundo plano | Preparando {count} recomendaciones en segundo plano",
+      "preparingRecommendationsDescription": "Tus respuestas están guardadas — ciérralo si quieres; te avisaremos cuando estén listas.",
+      "recommendationsReady": "{count} recomendación lista | {count} recomendaciones listas",
+      "incorporating": "Incorporando tus respuestas en segundo plano",
+      "incorporatingDescription": "Has vuelto al tablero — te avisaremos solo si se necesita más información.",
+      "reviewerSatisfied": "El revisor está conforme — continuando la canalización",
+      "iterationLimitReached": "Se alcanzó el límite de iteraciones — elige cómo continuar",
+      "newFindings": "sin nuevos hallazgos a los que reaccionar | {count} nuevo hallazgo al que reaccionar | {count} nuevos hallazgos a los que reaccionar",
+      "proceeding": "Continuando a la siguiente fase",
+      "taskReset": "Tarea reiniciada — edita los requisitos y vuelve a enviarlos",
+      "extraRoundGranted": "Se concedió una ronda más de revisión"
+    },
+    "errors": {
+      "saveAnswer": "No se pudo guardar la respuesta",
+      "updateFinding": "No se pudo actualizar el hallazgo",
+      "requestRecommendations": "No se pudieron solicitar las recomendaciones",
+      "acceptRecommendation": "No se pudo aceptar la recomendación",
+      "rejectRecommendation": "No se pudo rechazar la recomendación",
+      "reRequestRecommendation": "No se pudo volver a solicitar la recomendación",
+      "incorporate": "No se pudieron incorporar las respuestas",
+      "reReview": "No se pudieron volver a revisar los requisitos",
+      "proceed": "No se pudo continuar",
+      "resolveReview": "No se pudo resolver la revisión"
+    }
+  },
+  "clarity": {
+    "title": "Clasificación del informe de error",
+    "iteration": "Iteración {current} / {max}",
+    "intro": "Un revisor de IA clasificó el informe de error de este {level} según su corregibilidad, su descripción más cualquier contexto vinculado, y planteó las preguntas siguientes. {answer} las relevantes y {dismiss} las irrelevantes, luego incorpóralas; el revisor vuelve a revisar hasta que el informe de error sea suficientemente claro para corregirlo.",
+    "itemFallback": "elemento",
+    "introAnswer": "Responde",
+    "introDismiss": "descarta",
+    "empty": "Aún no hay revisión. El revisor se ejecuta automáticamente como primer paso cuando arranca la canalización de esta tarea.",
+    "loadingReview": "Cargando la revisión…",
+    "triaging": "Clasificando el informe de error…",
+    "converged": "El informe de error está aclarado. El informe de abajo es lo que usa cada paso de agente posterior.",
+    "capHeading": "Se alcanzó el límite de {max} iteraciones con hallazgos aún abiertos.",
+    "capDetail": "Haz una ronda de revisión más, avanza a la siguiente fase con el último informe de error aclarado de todos modos, o detén y reinicia la tarea para que puedas reelaborar el informe de error y reenviarlo.",
+    "incorporatingStage": "Incorporando tus respuestas en un informe de error aclarado… Puedes cerrar esto, te avisaremos solo si se necesita más información.",
+    "reReviewingStage": "Volviendo a revisar el informe de error actualizado… Puedes cerrar esto, te avisaremos solo si se necesita más información.",
+    "answerLabel": "Respuesta",
+    "answerPlaceholder": "Responde a este hallazgo…",
+    "refineAnswerPlaceholder": "Refina tu respuesta…",
+    "saveAnswer": "Guardar respuesta",
+    "dismissIrrelevant": "Descartar por irrelevante",
+    "reopen": "Reabrir",
+    "docHeading": "Informe de error aclarado",
+    "docHeadingDraft": "Informe de error aclarado (borrador)",
+    "rail": {
+      "findings": "Hallazgos",
+      "open": "Abiertos",
+      "answered": "Respondidos",
+      "model": "Modelo"
+    },
+    "proceedNothing": "Avanzar (nada que incorporar)",
+    "incorporateAnswers": "Incorporar respuestas",
+    "hint": {
+      "proceed": "Todos los hallazgos están descartados, avanza a la siguiente fase sin reelaborar.",
+      "incorporate": "Integra tus respuestas en un único informe de error aclarado y luego lo vuelve a revisar automáticamente.",
+      "answerAll": "Responde o descarta cada hallazgo para continuar."
+    },
+    "reReviewing": "Volviendo a revisar…",
+    "looksGoodReReview": "Se ve bien — volver a revisar",
+    "redoIncorporation": "Rehacer la incorporación",
+    "redoPlaceholder": "¿Qué debería hacer la fusión de forma diferente?",
+    "redoWithDirection": "Rehacer con esta indicación",
+    "redoHint": "La nueva revisión ejecuta al revisor sobre este informe. Si no estás conforme con cómo se fusionó, rehazlo con un comentario en su lugar.",
+    "incorporatedFooter": "Informe de error aclarado, la canalización continúa con el informe de la izquierda.",
+    "severity": {
+      "low": "baja",
+      "medium": "media",
+      "high": "alta"
+    },
+    "category": {
+      "gap": "carencia",
+      "clarification": "aclaración",
+      "assumption": "suposición",
+      "risk": "riesgo",
+      "question": "pregunta"
+    },
+    "itemStatus": {
+      "open": "abierto",
+      "answered": "respondido",
+      "resolved": "resuelto",
+      "dismissed": "descartado",
+      "recommend_requested": "recomendación solicitada"
+    },
+    "toast": {
+      "clarifyingTitle": "Aclarando el informe de error en segundo plano",
+      "clarifyingDescription": "Has vuelto al tablero, te avisaremos solo si se necesita más información.",
+      "reReviewSatisfied": "El revisor está conforme — continuando la canalización",
+      "reReviewExceeded": "Límite de iteraciones alcanzado — elige cómo proceder",
+      "reReviewNewFindings": "ningún hallazgo nuevo al que reaccionar | un hallazgo nuevo al que reaccionar | {count} hallazgos nuevos a los que reaccionar",
+      "proceeding": "Avanzando a la siguiente fase",
+      "taskReset": "Tarea reiniciada — edita el informe de error y reenvíalo",
+      "extraRoundGranted": "Concedida una ronda de revisión más"
+    },
+    "error": {
+      "saveAnswer": "No se pudo guardar la respuesta",
+      "updateFinding": "No se pudo actualizar el hallazgo",
+      "incorporate": "No se pudieron incorporar las respuestas",
+      "reReview": "No se pudo volver a revisar el informe de error",
+      "proceed": "No se pudo avanzar",
+      "resolve": "No se pudo resolver la revisión"
+    }
+  },
+  "consensus": {
+    "titlePrefix": "Consenso",
+    "participantCount": "sin participantes | un participante | {count} participantes",
+    "loading": "Cargando sesión de consenso…",
+    "empty": "Aún no se ha ejecutado ninguna sesión de consenso para este paso.",
+    "failed": "El consenso falló: {error}",
+    "unknownError": "error desconocido",
+    "synthesizedResult": "Resultado sintetizado",
+    "confidence": "confianza {pct}",
+    "panel": "Panel",
+    "topScore": "máximo {label} {pct}",
+    "expert": "Experto {letter}",
+    "participant": "Participante",
+    "strategy": {
+      "specialistPanel": "Panel de especialistas",
+      "debate": "Debate",
+      "rankedVoting": "Votación por clasificación"
+    },
+    "round": {
+      "heading": "Ronda {n}",
+      "contributions": "Contribuciones",
+      "draft": "Borradores independientes",
+      "critique": "Crítica y revisión",
+      "score": "Puntuación"
+    },
+    "status": {
+      "running": "En curso",
+      "synthesizing": "Sintetizando",
+      "done": "Completado",
+      "failed": "Fallido"
+    }
+  },
+  "brainstorm": {
+    "title": {
+      "architecture": "Lluvia de ideas de arquitectura",
+      "requirements": "Lluvia de ideas de requisitos"
+    },
+    "subjectNoun": {
+      "architecture": "enfoque",
+      "requirements": "requisitos"
+    },
+    "docNoun": {
+      "architecture": "enfoque técnico",
+      "requirements": "dirección de requisitos"
+    },
+    "iteration": "Iteración {current} / {max}",
+    "intro": "Un asistente de IA propuso las opciones de {subject} a continuación, cada una con sus ventajas y desventajas. {choose} las que quieras (y oriéntalas) y {dismiss} el resto; luego incorpóralas y se ejecutará de nuevo hasta que converjas en una {doc}.",
+    "introChoose": "Elige",
+    "introDismiss": "descarta",
+    "empty": "Aún no hay lluvia de ideas. Se ejecuta automáticamente cuando el pipeline de esta tarea llega al paso de lluvia de ideas.",
+    "loading": "Cargando la lluvia de ideas…",
+    "generating": "Generando opciones…",
+    "settledBanner": "La {doc} está definida. El documento de abajo es lo que usa la siguiente fase.",
+    "exceeded": {
+      "heading": "Se alcanzó el límite de {max} iteraciones con opciones aún abiertas.",
+      "detail": "Realiza una ronda más de lluvia de ideas, continúa a la siguiente fase con la última dirección de todos modos, o detén y reinicia la tarea para poder editarla y reenviarla."
+    },
+    "working": {
+      "incorporating": "Integrando tus elecciones en una {doc}… Puedes cerrar esto; te avisaremos solo si se necesita más información.",
+      "reReviewing": "Volviendo a ejecutar la lluvia de ideas sobre la dirección actualizada… Puedes cerrar esto; te avisaremos solo si se necesita más información."
+    },
+    "severity": {
+      "low": "baja",
+      "medium": "media",
+      "high": "alta"
+    },
+    "category": {
+      "gap": "carencia",
+      "clarification": "aclaración",
+      "assumption": "suposición",
+      "risk": "riesgo",
+      "question": "pregunta"
+    },
+    "itemStatus": {
+      "open": "abierta",
+      "answered": "respondida",
+      "resolved": "resuelta",
+      "dismissed": "descartada",
+      "recommend_requested": "recomendación solicitada"
+    },
+    "yourChoice": "Tu elección",
+    "replyPlaceholder": {
+      "refine": "Refina tu elección…",
+      "choose": "Elige / orienta esta opción…"
+    },
+    "saveChoice": "Guardar elección",
+    "dismiss": "Descartar",
+    "reopen": "Reabrir",
+    "docDraft": "{doc} (borrador)",
+    "rail": {
+      "options": "Opciones",
+      "open": "Abiertas",
+      "chosen": "Elegidas",
+      "model": "Modelo"
+    },
+    "proceedNothing": "Continuar (nada que incorporar)",
+    "incorporateChoices": "Incorporar elecciones",
+    "hint": {
+      "allDismissed": "Todas las opciones están descartadas; continúa a la siguiente fase sin una dirección.",
+      "incorporate": "Integra tus elecciones en una sola {doc} y luego vuelve a ejecutar la lluvia de ideas automáticamente.",
+      "chooseAll": "Elige o descarta cada opción para continuar."
+    },
+    "reRunning": "Volviendo a ejecutar…",
+    "reRun": "Se ve bien — volver a ejecutar",
+    "redoIncorporation": "Rehacer incorporación",
+    "redoPlaceholder": "¿Qué debería hacer la dirección de manera diferente?",
+    "redoWithDirection": "Rehacer con esta dirección",
+    "mergedHint": "Volver a ejecutar lanza el agente sobre esta dirección. Si no te gusta cómo se integró, rehazla con un comentario en su lugar.",
+    "incorporatedFooter": "Dirección definida; el pipeline continúa con el documento de la izquierda.",
+    "toast": {
+      "saveChoiceError": "No se pudo guardar la elección",
+      "updateOptionError": "No se pudo actualizar la opción",
+      "incorporateError": "No se pudieron incorporar las elecciones",
+      "draftingTitle": "Redactando la {doc} en segundo plano",
+      "draftingDescription": "Estás de vuelta en el tablero; te avisaremos solo si se necesita más información.",
+      "reReviewSettled": "Dirección definida — continuando el pipeline",
+      "reReviewExceeded": "Se alcanzó el límite de iteraciones — elige cómo proceder",
+      "reReviewNewOptions": "no hay opciones nuevas a las que reaccionar | una opción nueva a la que reaccionar | {count} opciones nuevas a las que reaccionar",
+      "reReviewError": "No se pudo volver a ejecutar la lluvia de ideas",
+      "proceeding": "Continuando a la siguiente fase",
+      "proceedError": "No se pudo continuar",
+      "taskReset": "Tarea reiniciada — edítala y reenvíala",
+      "extraRoundGranted": "Se concedió una ronda más de lluvia de ideas",
+      "resolveError": "No se pudo resolver la lluvia de ideas"
+    }
+  },
+  "spec": {
+    "title": "Requisitos",
+    "loading": "Cargando la especificación…",
+    "error": "No se pudo cargar la especificación. Intenta reabrir esta ventana.",
+    "overview": "Resumen",
+    "noFeatureGroups": "Sin grupos de funcionalidades",
+    "noSummary": "Sin resumen del servicio.",
+    "noGherkinForGroup": "No hay escenarios Gherkin para este grupo.",
+    "noRequirements": "No hay requisitos en este grupo.",
+    "domainRules": "Reglas de dominio",
+    "ruleRationale": " — {rationale}",
+    "moduleHint": "sin módulos. Selecciona un grupo de funcionalidades a la izquierda para ver sus requisitos. | 1 módulo. Selecciona un grupo de funcionalidades a la izquierda para ver sus requisitos. | {count} módulos. Selecciona un grupo de funcionalidades a la izquierda para ver sus requisitos.",
+    "moduleHintGherkin": "sin módulos. Selecciona un grupo de funcionalidades a la izquierda para ver sus requisitos o cambia a los escenarios Gherkin. | 1 módulo. Selecciona un grupo de funcionalidades a la izquierda para ver sus requisitos o cambia a los escenarios Gherkin. | {count} módulos. Selecciona un grupo de funcionalidades a la izquierda para ver sus requisitos o cambia a los escenarios Gherkin.",
+    "mode": {
+      "structured": "Estructurado",
+      "gherkin": "Gherkin",
+      "gherkinTooltip": "Escenarios Gherkin",
+      "gherkinNone": "Aún no hay escenarios en main"
+    },
+    "empty": {
+      "title": "Aún no hay especificación",
+      "description": "Este servicio no tiene especificación en su rama por defecto. La especificación se genera a medida que las tareas ejecutan sus pipelines; cuando llegue a main aparecerá aquí, con sus escenarios Gherkin."
+    },
+    "priority": {
+      "must": "Obligatorio",
+      "should": "Recomendado",
+      "could": "Opcional"
+    },
+    "kind": {
+      "functional": "Funcional",
+      "nonfunctional": "No funcional",
+      "constraint": "Restricción"
+    },
+    "acceptance": {
+      "given": "Given",
+      "when": "When",
+      "then": "Then"
+    }
+  },
+  "followUp": {
+    "title": "Seguimientos",
+    "titleWithBlock": "Seguimientos — {title}",
+    "subtitle": "Seguimientos y preguntas prospectivos que el Coder ha planteado. El pipeline continúa una vez que se decide cada elemento.",
+    "badge": {
+      "toDecide": "{count} por decidir | {count} por decidir | {count} por decidir",
+      "allDecided": "Todo decidido"
+    },
+    "empty": {
+      "title": "Aún no hay seguimientos.",
+      "hint": "A medida que el Coder trabaja, va transmitiendo aquí cabos sueltos, tareas secundarias y preguntas. Aparecen en vivo, así que puedes actuar sobre ellos antes de que el Coder termine."
+    },
+    "suggested": "Sugerido:",
+    "viewIssue": "Ver incidencia",
+    "yourAnswer": "Tu respuesta:",
+    "answerPlaceholder": "Responde a esta pregunta; se integrará en la próxima pasada del Coder…",
+    "status": {
+      "pending": "Requiere una decisión",
+      "filed": "Registrado como incidencia",
+      "queued": "Enviado al Coder",
+      "answered": "Respondido",
+      "dismissed": "Descartado"
+    },
+    "actions": {
+      "answerAndSend": "Responder y devolver",
+      "dismiss": "Descartar",
+      "fileAsIssue": "Registrar como incidencia",
+      "sendToCoder": "Enviar al Coder"
+    },
+    "footer": {
+      "summary": "{count} elemento · {undecided} sin decidir | {count} elementos · {undecided} sin decidir",
+      "loops": "Ciclos del Coder usados: {loops} / {max}"
+    }
+  },
+  "humanTest": {
+    "title": "Pruebas humanas",
+    "titleWithBlock": "Pruebas humanas — {title}",
+    "subtitle": "Valida el cambio en un entorno en vivo",
+    "notStarted": "Este paso aún no ha comenzado.",
+    "confirm": "Todo bien, continuar",
+    "phase": {
+      "provisioning": "Aprovisionando entorno…",
+      "awaitingHuman": "Esperando tu validación",
+      "fixing": "El reparador está atendiendo tus observaciones…",
+      "resolvingConflicts": "Resolviendo conflictos con main…",
+      "passed": "Aprobado"
+    },
+    "envStatus": {
+      "provisioning": "Aprovisionando…",
+      "ready": "Listo",
+      "failed": "Falló",
+      "expired": "Caducado",
+      "tearingDown": "Desmontando…",
+      "tornDown": "Destruido"
+    },
+    "environment": {
+      "heading": "Entorno efímero",
+      "noUrl": "Aún no hay URL.",
+      "expires": "Caduca {date}",
+      "none": "No hay entorno en vivo."
+    },
+    "actions": {
+      "recreate": "Recrear",
+      "destroy": "Destruir",
+      "pullMain": "Traer main y redesplegar"
+    },
+    "fix": {
+      "heading": "¿Encontraste un problema?",
+      "cancel": "Cancelar",
+      "requestFix": "Solicitar una corrección",
+      "placeholder": "Describe qué salió mal: el agente reparador recibe esto como contexto y luego el entorno se reconstruye para volver a probar.",
+      "send": "Enviar al reparador"
+    },
+    "history": {
+      "heading": "Historial (sin rondas) | Historial (una ronda) | Historial ({count} rondas)",
+      "fixRequested": "Corrección solicitada",
+      "pulledMain": "Main traído"
+    },
+    "roundOutcome": {
+      "completed": "completado",
+      "failed": "fallido",
+      "inProgress": "en curso"
+    }
+  },
+  "testing": {
+    "title": "Informe de pruebas",
+    "subtitle": "Pruebas exploratorias y de regresión del cambio",
+    "badge": {
+      "greenlit": "Aprobado",
+      "needsFixes": "Necesita correcciones"
+    },
+    "fixerAttempts": "Intentos del corrector",
+    "fixCount": "{attempts}/{max} corrección",
+    "fixingSuffix": "· corrigiendo…",
+    "empty": {
+      "title": "Aún no hay informe de pruebas.",
+      "hint": "El informe aparece cuando el Tester termina una pasada. Mientras se ejecuta, el paso muestra el progreso en vivo en el tablero."
+    },
+    "scenariosOutcomes": "Escenarios y resultados",
+    "otherChecks": "Otras comprobaciones",
+    "checks": "Comprobaciones",
+    "screenshotCount": "{count} captura | {count} capturas",
+    "checkCount": "{count} comprobación | {count} comprobaciones",
+    "concernCount": "{count} incidencia | {count} incidencias",
+    "noDiscreteCheck": "No se registró ninguna comprobación concreta para este escenario.",
+    "severity": {
+      "critical": "crítica",
+      "high": "alta",
+      "medium": "media",
+      "low": "baja"
+    },
+    "status": {
+      "passed": "Superado",
+      "failed": "Fallido",
+      "skipped": "Omitido"
+    },
+    "shot": {
+      "failed": "Error",
+      "failedToLoad": "Error al cargar",
+      "loading": "Cargando…"
+    },
+    "screenshotAlt": "{view} (captura)",
+    "screenshots": "Capturas",
+    "verdict": {
+      "heading": "Veredicto",
+      "safe": "Seguro para publicar",
+      "withheld": "Retenido"
+    },
+    "outcomes": {
+      "heading": "Resultados",
+      "passed": "Superados",
+      "failed": "Fallidos",
+      "skipped": "Omitidos",
+      "concerns": "Incidencias",
+      "blocking": "({count} bloqueante) | ({count} bloqueantes)"
+    },
+    "environment": "Entorno",
+    "footer": "Los escenarios son las áreas que el Tester decidió ejercitar (sus escenarios de aceptación de la especificación). Los resultados y las incidencias se agrupan bajo ellos por nombre."
+  },
+  "visualConfirm": {
+    "ariaLabel": "Confirmación visual",
+    "title": "Confirmación visual",
+    "titleWithBlock": "Confirmación visual — {title}",
+    "subtitle": "Revisa la interfaz frente a los diseños de referencia",
+    "notStarted": "Este paso aún no ha comenzado.",
+    "noScreenshots": "No se capturaron capturas de pantalla. Revisa el cambio manualmente o sube una referencia abajo.",
+    "noteIssue": "Anotar un problema con {view}",
+    "noted": "anotado",
+    "notePlaceholder": "¿Qué se ve mal en {view}?",
+    "reviewedManually": "Lo he revisado manualmente",
+    "recapture": "Volver a capturar",
+    "approve": "Aprobar — continuar",
+    "phase": {
+      "awaiting_human": "Esperando tu revisión",
+      "fixing": "El reparador está atendiendo tus observaciones…",
+      "approved": "Aprobado"
+    },
+    "outcome": {
+      "completed": "completado",
+      "failed": "fallido",
+      "inProgress": "en curso"
+    },
+    "lightbox": {
+      "actualLabel": "{view} — real",
+      "actualAlt": "{view} (real)",
+      "referenceLabel": "{view} — referencia",
+      "referenceAlt": "{view} (referencia)"
+    },
+    "upload": {
+      "heading": "Subir un diseño de referencia",
+      "viewPlaceholder": "Nombre de la vista (p. ej. login)",
+      "tipReady": "Consejo: arrastra una imagen directamente sobre un par de arriba para establecer su referencia.",
+      "tipNeedView": "Introduce primero un nombre de vista y luego elige un archivo. O arrastra una imagen directamente sobre un par de arriba."
+    },
+    "requestFix": {
+      "heading": "Solicitar una corrección",
+      "placeholder": "Cualquier otra cosa que el Reparador deba saber (además de las notas por vista de arriba).",
+      "foldedHint": "Las notas por vista se incluyen automáticamente.",
+      "send": "Enviar al Reparador"
+    },
+    "history": {
+      "heading": "Historial (sin rondas) | Historial ({count} ronda) | Historial ({count} rondas)",
+      "fixRequested": "Corrección solicitada"
+    }
+  },
+  "focus": {
+    "board": "Tablero",
+    "typeSubtitle": "{type} · vista de enfoque",
+    "runPipeline": "Ejecutar canalización",
+    "rerunPipeline": "Reejecutar canalización",
+    "noPipelineRunning": "Ninguna canalización en ejecución",
+    "emptyPipelineHint": "Ejecuta una canalización para visualizar los agentes trabajando en este bloque.",
+    "description": "Descripción",
+    "overallProgress": "Progreso general",
+    "dependencies": "Dependencias",
+    "noDependencies": "Ninguna"
   }
 }
