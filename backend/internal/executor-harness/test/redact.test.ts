@@ -52,6 +52,25 @@ describe('redact (pattern rules)', () => {
     expect(redacted).not.toContain(token)
     expect(redacted).toContain('Repository not found')
   })
+
+  it('scrubs plaintext credential-named assignments a compose stand-up echoes', () => {
+    // The high-signal docker-compose stand-up failure case: a dependency prints its own
+    // env in the clear. These are neither a token shape nor a known value, so only this
+    // rule catches them. Covers both `=` (shell/env) and `:` (yaml/logfmt) separators and
+    // a prefixed/quoted value.
+    expect(redact('db-1 | POSTGRES_PASSWORD=hunter2 FATAL')).not.toContain('hunter2')
+    expect(redact('app-1 | DATABASE_PASSWORD: s3cr3t-value')).not.toContain('s3cr3t-value')
+    expect(redact('env DB_ACCESS_KEY=AKIA1234567890 set')).not.toContain('AKIA1234567890')
+    expect(redact('config api_key="abcdef123456"')).not.toContain('abcdef123456')
+    // The non-secret context survives.
+    const redacted = redact('db-1 | POSTGRES_PASSWORD=hunter2 FATAL: boom')
+    expect(redacted).toContain('FATAL: boom')
+  })
+
+  it('does not clobber a git Author line (the key is not credential-named)', () => {
+    const line = 'Author: Jane Doe <jane@example.com>'
+    expect(redact(line)).toBe(line)
+  })
 })
 
 describe('redact (known values)', () => {

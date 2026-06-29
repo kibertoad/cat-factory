@@ -20,7 +20,10 @@ observability work (the orchestrator-side provisioning logs can't see it — the
 _inside_ the container).
 
 - **Harness.** `standUpInfra` now captures the `docker compose up` stdout+stderr (on success
-  _and_ failure), redacts credentials, tail-bounds it, and returns an `infraSetup` record
+  _and_ failure), redacts credentials (the shared `redact` now also scrubs credential-named
+  `KEY=value` / `KEY: value` assignments — e.g. a dependency echoing `POSTGRES_PASSWORD=…` —
+  which are neither a token shape nor a known value), tail-bounds it, and returns an
+  `infraSetup` record
   (started / compose path / duration / logs / error) on the agent result.
 - **Propagation.** The record rides the existing `RunnerJobResult` → `AgentRunResult` path
   (forwarded verbatim by both transports) and the engine persists it on the Tester step as

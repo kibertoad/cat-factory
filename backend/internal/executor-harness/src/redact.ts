@@ -2,8 +2,10 @@
 // EVERY redaction so no error path can scrub one class of secret and leak the other:
 //
 //  - PATTERN-based: scrubs credential SHAPES (URL userinfo, `x-access-token:<tok>`,
-//    bare GitHub token prefixes) even when the exact value isn't known ahead of time
-//    — this is what catches a freshly-minted installation token in a git error.
+//    bare GitHub token prefixes, and `KEY=value` / `KEY: value` assignments whose key
+//    names a credential) even when the exact value isn't known ahead of time — this is
+//    what catches a freshly-minted installation token in a git error, or a plaintext
+//    `POSTGRES_PASSWORD=…` echoed by a docker-compose dependency stand-up.
 //  - VALUE-based: scrubs a list of KNOWN secret strings (the leased subscription
 //    token + any token-like JSON leaf harvested from a credential blob).
 //
@@ -21,17 +23,29 @@ const MIN_REDACT_LEN = 6
 // floor below which a value is not a credential.
 const MIN_HARVEST_LEN = 12
 
+// `KEY=value` / `KEY: value` assignments whose key NAMES a credential. Catches plaintext
+// secrets the shape rules above miss — e.g. a docker-compose dependency echoing
+// `POSTGRES_PASSWORD=hunter2` or `DATABASE_PASSWORD: hunter2` on a failed stand-up, which
+// is not a token shape and is not in the known-value list (the harness never sees the
+// service's own secrets). The key token is matched within a surrounding identifier so
+// `DB_ACCESS_KEY`/`api_key` are covered; `auth` is deliberately excluded so it can't
+// clobber a git `Author:` line. The value is the first whitespace-delimited run.
+const CREDENTIAL_ASSIGNMENT =
+  /\b([A-Za-z0-9_]*(?:password|passwd|pwd|secret|token|key|credential)[A-Za-z0-9_]*\s*[:=]\s*)\S+/gi
+
 /**
  * Strip credentials out of any string before it is logged or stored. Applies the
  * pattern rules (URL userinfo `https://user:pass@host`, `x-access-token:<token>`, bare
- * `ghs_`/`ghp_`/`gho_`/`github_pat_` shapes) and then scrubs every supplied
- * known-secret value. Idempotent — safe to call on already-redacted text.
+ * `ghs_`/`ghp_`/`gho_`/`github_pat_` shapes, and credential-named `KEY=value` / `KEY:
+ * value` assignments) and then scrubs every supplied known-secret value. Idempotent —
+ * safe to call on already-redacted text.
  */
 export function redact(input: string, knownSecrets: readonly string[] = []): string {
   let out = input
     .replace(/(https?:\/\/)[^@\s/]*@/gi, '$1***@')
     .replace(/x-access-token:[^@\s]+/gi, 'x-access-token:***')
     .replace(/\b(gh[pso]_|github_pat_)[A-Za-z0-9_]+/g, '$1***')
+    .replace(CREDENTIAL_ASSIGNMENT, '$1***')
   for (const secret of knownSecrets) {
     // Guard against scrubbing trivially-short values that would mangle output.
     if (secret.length >= MIN_REDACT_LEN) out = out.split(secret).join('***')
