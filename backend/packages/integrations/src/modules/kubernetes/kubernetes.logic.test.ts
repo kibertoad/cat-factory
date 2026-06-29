@@ -84,6 +84,11 @@ describe('classifyPodStartupFailure', () => {
     expect(classifyPodStartupFailure(waiting('CreateContainerConfigError', 'secret missing'))).toBe(
       'CreateContainerConfigError: secret missing',
     )
+    // A failed lifecycle hook / image-inspect error is just as terminal as a bad image.
+    expect(classifyPodStartupFailure(waiting('PreStartHookError', 'hook exited 1'))).toBe(
+      'PreStartHookError: hook exited 1',
+    )
+    expect(classifyPodStartupFailure(waiting('ImageInspectError'))).toBe('ImageInspectError')
   })
 
   it('returns null for the normal transient waiting reasons (still coming up)', () => {

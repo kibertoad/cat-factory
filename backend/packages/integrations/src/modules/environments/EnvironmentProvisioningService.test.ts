@@ -296,8 +296,16 @@ describe('EnvironmentProvisioningService — failed provisioning is stored', () 
     expect(rec.lastError).toMatch(/ECONNREFUSED/)
   })
 
-  it('persists a `failed` record when the provider RETURNS status:failed (no throw)', async () => {
-    const failed: ProvisionedEnvironment = { ...READY, status: 'failed', url: null }
+  it('persists the provider VERBATIM error when it RETURNS status:failed (no throw)', async () => {
+    // A provider that maps a real upstream error onto `status:'failed'` (rather than throwing)
+    // carries the reason on `provisioned.error` — it must surface verbatim, not collapse to a
+    // generic "Provisioning failed", so the deployer step's Environment panel shows the cause.
+    const failed: ProvisionedEnvironment = {
+      ...READY,
+      status: 'failed',
+      url: null,
+      error: 'quota exceeded: no free preview slots',
+    }
     const registry = fakeRegistry()
     const service = makeService(recordingProvider(failed), registry)
 
@@ -305,7 +313,16 @@ describe('EnvironmentProvisioningService — failed provisioning is stored', () 
     expect(handle.status).toBe('failed')
     expect(registry.records).toHaveLength(1)
     expect(registry.records[0]!.status).toBe('failed')
-    expect(registry.records[0]!.lastError).toBeTruthy()
+    expect(registry.records[0]!.lastError).toBe('quota exceeded: no free preview slots')
+  })
+
+  it('falls back to a generic message when a returned-`failed` provider gives no error', async () => {
+    const failed: ProvisionedEnvironment = { ...READY, status: 'failed', url: null }
+    const registry = fakeRegistry()
+    const service = makeService(recordingProvider(failed), registry)
+
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    expect(registry.records[0]!.lastError).toBe('Provisioning failed')
   })
 })
 

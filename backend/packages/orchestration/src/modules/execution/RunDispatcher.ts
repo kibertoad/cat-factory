@@ -1156,6 +1156,15 @@ export class RunDispatcher {
    * is stamped with the errored env (its `lastError` renders in the step's Environment panel)
    * and a structured `environment` failure is returned (the board's failure card). A deployer
    * that can't provision IS failed — the downstream tester/coder steps need that environment.
+   *
+   * The failure is TERMINAL and surfaced for a human/`Retry`, NOT auto-retried by the durable
+   * driver — DELIBERATELY, and symmetric with {@link handleAgentStep}'s dispatch-failure path
+   * (a container that never started is likewise terminal regardless of `rethrowAgentErrors`).
+   * Environment provisioning is infra spin-up, not agent execution: treating it like the
+   * `dispatch` failure (surface the verbatim cause + one-click retry) keeps the `environment`
+   * classification and the provider's real error visible, where rethrowing for the driver's
+   * per-step retry would re-collapse it into a generic `agent` failure on exhaustion and bury
+   * the root cause. So do NOT reintroduce a `rethrowAgentErrors` branch here.
    */
   private async runDeployerStep(
     workspaceId: string,

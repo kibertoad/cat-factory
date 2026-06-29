@@ -17,6 +17,7 @@ import {
   harnessHealthy,
   pollHarnessJob,
   postHarnessJob,
+  waitForHarnessHealth,
 } from './harnessHttp.js'
 import {
   type ContainerEndpoint,
@@ -626,28 +627,30 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     }
   }
 
-  private async waitForHealth(endpoint: ContainerEndpoint, containerId: string): Promise<void> {
-    const deadline = Date.now() + this.readyTimeoutMs
-    for (;;) {
-      if (await harnessHealthy(this.fetchImpl, endpoint, this.requestTimeoutMs)) return
-      // Not healthy YET. Fail fast only if the container has actually died — otherwise it is
-      // still booting, so keep waiting until the deadline. (The old behaviour spun the whole
-      // ready timeout against a dead container, then threw a generic, root-cause-less error.)
-      if (!(await this.adapter.isRunning(this.exec, containerId))) {
-        throw new Error(
-          await this.startupFailure(containerId, 'exited before the harness became healthy'),
-        )
-      }
-      if (Date.now() >= deadline) {
-        throw new Error(
-          await this.startupFailure(
-            containerId,
-            `harness at ${endpoint.host}:${endpoint.port} did not become healthy before the start timeout`,
-          ),
-        )
-      }
-      await delay(300)
-    }
+  private waitForHealth(endpoint: ContainerEndpoint, containerId: string): Promise<void> {
+    // Reuse the shared `/health` poll loop (it checks liveness BEFORE each probe, so a dead
+    // container fails fast instead of waiting out a slow `/health`). The container-specific
+    // bits are injected: `isDead` consults the runtime, and the error messages are lazy thunks
+    // that fold in the container's own boot logs — composed ONLY on the failure branch so a
+    // healthy boot never pays the extra `logs` CLI call. The old behaviour spun the whole ready
+    // timeout against a dead container, then threw a generic, root-cause-less error.
+    return waitForHarnessHealth({
+      fetchImpl: this.fetchImpl,
+      endpoint,
+      readyTimeoutMs: this.readyTimeoutMs,
+      requestTimeoutMs: this.requestTimeoutMs,
+      // Probe `/health` first: a serving harness is accepted even if `docker inspect` lags, and
+      // a genuine death surfaces at the job poll. Only consult liveness when `/health` is NOT ok,
+      // and then fail fast with the container's own boot logs instead of waiting out the timeout.
+      probeFirst: true,
+      isDead: async () => !(await this.adapter.isRunning(this.exec, containerId)),
+      deadError: () => this.startupFailure(containerId, 'exited before the harness became healthy'),
+      timeoutError: () =>
+        this.startupFailure(
+          containerId,
+          `harness at ${endpoint.host}:${endpoint.port} did not become healthy before the start timeout`,
+        ),
+    })
   }
 
   /**

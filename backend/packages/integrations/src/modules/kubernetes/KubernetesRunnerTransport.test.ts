@@ -93,7 +93,12 @@ describe('KubernetesRunnerTransport.dispatch', () => {
       return undefined
     })
     const transport = new KubernetesRunnerTransport(config, resolveSecret)
-    const err = await transport.dispatch(ref, {}, 'agent').catch((e) => e as Error)
+    const err: Error = await transport.dispatch(ref, {}, 'agent').then(
+      () => {
+        throw new Error('dispatch unexpectedly resolved')
+      },
+      (e) => e as Error,
+    )
     expect(err).toBeInstanceOf(Error)
     expect(err.message).toMatch(/failed to start: ImagePullBackOff: Back-off pulling image/)
     // NOT tagged recoverable — a bad image never self-heals, so it must hard-fail.

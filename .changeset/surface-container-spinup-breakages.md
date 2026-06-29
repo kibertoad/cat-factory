@@ -1,9 +1,10 @@
 ---
-"@cat-factory/contracts": minor
-"@cat-factory/integrations": minor
-"@cat-factory/orchestration": minor
-"@cat-factory/local-server": minor
-"@cat-factory/app": minor
+'@cat-factory/contracts': minor
+'@cat-factory/kernel': minor
+'@cat-factory/integrations': minor
+'@cat-factory/orchestration': minor
+'@cat-factory/local-server': minor
+'@cat-factory/app': minor
 ---
 
 Surface container/environment spin-up breakages on the agent step instead of hanging or hiding them.
@@ -30,6 +31,11 @@ Surface container/environment spin-up breakages on the agent step instead of han
   step failure: the errored environment (with the provider's verbatim `lastError`) is
   persisted and stamped onto the step, and the run records a new `environment`
   `AgentFailureKind` — instead of a green step with the error buried in its prose output.
+  A provider that reports `status:'failed'` WITHOUT throwing can now carry its verbatim
+  reason on the new optional `ProvisionedEnvironment.error` field (`@cat-factory/kernel`),
+  which surfaces as the step's `lastError` instead of a generic "Provisioning failed". The
+  failure is terminal + surfaced for one-click retry (NOT auto-retried), deliberately
+  symmetric with the `dispatch` (container-failed-to-start) failure.
 
 **Breaking shape change:** `agentFailureKindSchema` gains the `environment` member.
 Pre-1.0, no migration — stale failure rows simply don't use the new kind.

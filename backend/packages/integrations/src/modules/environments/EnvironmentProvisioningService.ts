@@ -154,7 +154,12 @@ export class EnvironmentProvisioningService {
       ),
       createdAt: now,
       expiresAt: this.resolveExpiry(provisioned, manifest.defaultTtlMs, now),
-      lastError: provisioned.status === 'failed' ? 'Provisioning failed' : null,
+      // A provider that reports `status:'failed'` without throwing still carries its real
+      // reason on `provisioned.error` — surface that verbatim (not a generic literal) so the
+      // deployer step's Environment panel shows the actual root cause; fall back only when the
+      // provider gave none.
+      lastError:
+        provisioned.status === 'failed' ? provisioned.error?.trim() || 'Provisioning failed' : null,
       deletedAt: null,
     }
     await this.deps.environmentRegistryRepository.insert(record)
@@ -350,7 +355,10 @@ export class EnvironmentProvisioningService {
    * Persist a `failed` environment record (superseding any prior live one) so a broken
    * provision is STORED and projectable onto the deployer step's details — even when the
    * provider threw before returning anything. Best-effort: its own persistence failure must
-   * not mask the original provisioning error, so it swallows errors.
+   * not mask the original provisioning error, so it swallows errors — but it records the
+   * swallow in the provisioning log so a broken registry (DB outage / schema drift) is
+   * OBSERVABLE rather than silently dropping the very root-cause projection it exists to
+   * provide.
    */
   private async persistFailedEnvironment(
     workspaceId: string,
@@ -378,8 +386,27 @@ export class EnvironmentProvisioningService {
         deletedAt: null,
       }
       await this.deps.environmentRegistryRepository.insert(record)
-    } catch {
-      // best-effort — never mask the original provisioning error
+    } catch (persistError) {
+      // best-effort — never mask the original provisioning error, but leave a breadcrumb so a
+      // broken registry doesn't silently swallow the failed-env record (which would render the
+      // deployer step's lastError empty with no signal). Doubly-guarded: the log is itself
+      // best-effort and must not throw out of the catch.
+      await this.deps.provisioningLog
+        ?.record({
+          workspaceId,
+          subsystem: 'environment',
+          operation: 'provision',
+          targetId: null,
+          providerId: manifest.providerId,
+          blockId: args.blockId ?? null,
+          executionId: args.executionId ?? null,
+          outcome: 'failure',
+          error: `failed to persist the failed-environment record: ${
+            persistError instanceof Error ? persistError.message : String(persistError)
+          }`,
+          detail: null,
+        })
+        .catch(() => undefined)
     }
   }
 

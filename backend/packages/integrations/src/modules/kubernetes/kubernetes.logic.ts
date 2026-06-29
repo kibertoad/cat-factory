@@ -167,20 +167,34 @@ export function classifyPodReadiness(pod: unknown): PodReadiness {
 
 /**
  * Container `state.waiting.reason`s that will NOT self-heal within the readiness window:
- * a bad/unpullable image, a malformed container config, or a container that keeps
- * crashing on boot. These are deterministic — re-driving the same pod just hangs the
- * full window again — so the transport must FAIL FAST and NON-recoverably on them (a
- * `dispatch` failure with the root cause), not poll until the generic timeout and then
- * mis-tag it as a recoverable eviction. (`ContainerCreating` / `PodInitializing` are the
- * normal transient waiting reasons and are deliberately NOT here.)
+ * a bad/unpullable image, a malformed container config, a failed lifecycle hook, or a
+ * container that keeps crashing on boot. These are deterministic — re-driving the same pod
+ * just hangs the full window again — so the transport must FAIL FAST and NON-recoverably on
+ * them (a `dispatch` failure with the root cause), not poll until the generic timeout and
+ * then mis-tag it as a recoverable eviction.
+ *
+ * This is an explicit ALLOW-LIST of known-terminal kubelet reasons, NOT a deny-list of the
+ * transient ones, ON PURPOSE: the genuinely-transient set is just `ContainerCreating` /
+ * `PodInitializing`, but inverting (treat every other reason as terminal) would kill pods on
+ * any unrecognised or genuinely-transient reason a newer kubelet introduces. A reason we fail
+ * to enumerate here degrades GRACEFULLY — it falls through to the readiness DEADLINE, which
+ * still bounds the wait (it just costs the full window before failing, rather than failing at
+ * once) — whereas a false-terminal would mis-kill a pod that would have recovered. So keep
+ * this list current as kubelet adds reasons, but a miss is a latency cost, not a correctness
+ * bug.
  */
 const TERMINAL_WAITING_REASONS = new Set([
   'ImagePullBackOff',
   'ErrImagePull',
   'ErrImageNeverPull',
+  'ErrInvalidImageName',
   'InvalidImageName',
+  'ImageInspectError',
+  'RegistryUnavailable',
   'CreateContainerConfigError',
   'CreateContainerError',
+  'PreStartHookError',
+  'PostStartHookError',
   'CrashLoopBackOff',
   'RunContainerError',
 ])
