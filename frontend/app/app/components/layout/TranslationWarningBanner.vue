@@ -1,22 +1,26 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { useLocalStorage } from '@vueuse/core'
+import { computed } from 'vue'
 
 // Shown whenever the active locale is NOT English: the non-English catalogs are
 // community/AI-provided and may be inaccurate, so warn the user and point them at the
 // repository to report mistakes or open a fix PR. Rendered as a slim full-width strip at
 // the very top (distinct from the centered config-warning cards below it, so they don't
-// overlap). Dismissible per session; re-appears the next time the user switches locale.
+// overlap). Dismissal is persisted per-locale in localStorage: once dismissed for a locale
+// it stays hidden across reloads, but switching to a different (separately-translated)
+// locale shows it again, since that catalog is a fresh, independently-translated context.
 const REPO_URL = 'https://github.com/kibertoad/cat-factory'
 
 const { t, locale } = useI18n()
 
-const dismissed = ref(false)
-const show = computed(() => locale.value !== 'en' && !dismissed.value)
+const dismissedLocales = useLocalStorage<string[]>('cat-factory:translation-warning-dismissed', [])
+const show = computed(() => locale.value !== 'en' && !dismissedLocales.value.includes(locale.value))
 
-// A fresh switch is a new context for the warning, so un-dismiss on every locale change.
-watch(locale, () => {
-  dismissed.value = false
-})
+function dismiss() {
+  if (!dismissedLocales.value.includes(locale.value)) {
+    dismissedLocales.value = [...dismissedLocales.value, locale.value]
+  }
+}
 </script>
 
 <template>
@@ -51,7 +55,7 @@ watch(locale, () => {
         size="xs"
         icon="i-lucide-x"
         :aria-label="t('language.warning.dismiss')"
-        @click="dismissed = true"
+        @click="dismiss"
       />
     </div>
   </Transition>
