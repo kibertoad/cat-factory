@@ -46,6 +46,15 @@ const harness: ConformanceHarness = {
         ...(opts?.resolveRunRepoContext
           ? { resolveRunRepoContext: opts.resolveRunRepoContext }
           : {}),
+        // Inject a native environment provider + the block-less coords resolver (both
+        // fakes in the suite) so the on-demand repo-config validate route is asserted
+        // end-to-end against real D1, identically to Node.
+        ...(opts?.environmentProvider
+          ? { environmentProvider: opts.environmentProvider, environmentProviderKind: 'native' }
+          : {}),
+        ...(opts?.resolveRepoFilesForCoords
+          ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
+          : {}),
         ...fragmentLibraryDeps(),
         // A deterministic task source (fake 'jira') over the real D1 task repos, so the
         // shared suite can assert create-task-from-issue parity against D1 too.

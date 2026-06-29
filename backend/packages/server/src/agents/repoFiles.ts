@@ -92,7 +92,12 @@ export function makeResolveRepoFilesForCoords(
   workspaceId: string,
   coords: { owner: string; repo: string; provider?: 'github' | 'gitlab' },
 ) => Promise<RunRepoContext | null> {
-  return async (workspaceId, { owner, repo }) => {
+  return async (workspaceId, { owner, repo, provider }) => {
+    // Only GitHub is resolvable today. A caller that explicitly asks for another VCS
+    // (e.g. `gitlab`) must NOT be silently bound to the GitHub installation/projection —
+    // that could read the wrong repo or report a misleading match. Bail cleanly until a
+    // VcsClient is resolved here per `provider`.
+    if (provider && provider !== 'github') return null
     const installation = await installationRepository.getByWorkspace(workspaceId)
     if (!installation) return null
     const repos = await repoProjectionRepository.list(workspaceId)

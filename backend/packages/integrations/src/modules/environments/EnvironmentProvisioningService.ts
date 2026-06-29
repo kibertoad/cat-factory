@@ -13,7 +13,11 @@ import type { SecretCipher } from '@cat-factory/kernel'
 import type { EnvironmentAccessHandle, EnvironmentHandle } from '@cat-factory/kernel'
 import { assertFound, STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
-import { assertSafeEnvironmentUrl, recordToHandle } from './environments.logic.js'
+import {
+  assertSafeEnvironmentUrl,
+  recordToHandle,
+  stringifyProviderConfig,
+} from './environments.logic.js'
 import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningLogService.js'
 
 // EnvironmentProvisioningService: orchestrates provisioning an environment from a
@@ -40,14 +44,6 @@ export interface EnvironmentProvisioningServiceDependencies {
    * provider without `validateRepo`, or a block-less manual provision) ⇒ no gate.
    */
   resolveRunRepoContext?: ResolveRunRepoContext
-}
-
-/** Stringify a manifest's opaque `providerConfig` bag for a native adapter. */
-function stringifyProviderConfig(
-  config: Record<string, unknown> | undefined,
-): Record<string, string> | undefined {
-  if (!config) return undefined
-  return Object.fromEntries(Object.entries(config).map(([k, v]) => [k, String(v)]))
 }
 
 export interface ProvisionArgs {

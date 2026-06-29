@@ -31,10 +31,13 @@ import { clearRegisteredAgentKinds, registerAgentKind } from '@cat-factory/agent
 import { clearGateProviders, registerBuiltinGates } from '@cat-factory/gates'
 import type {
   CiStatusProvider,
+  EnvironmentProvider,
   GateProbe,
   PullRequestReviewProvider,
   PullRequestReviewSnapshot,
   RepoFiles,
+  RepoValidationResult,
+  RunRepoContext,
 } from '@cat-factory/kernel'
 import {
   clearRegisteredGates,
@@ -2625,6 +2628,94 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         })
         // A validation failure (the SSRF/internal-host guard), not a 201.
         expect(res.status).toBeGreaterThanOrEqual(400)
+      })
+
+      it('runs a native provider repo-config validation through the wired coords resolver', async () => {
+        // The repo-config lifecycle (PR #416): a native provider declares repo
+        // expectations via `validateRepo`, and the facade wires `resolveRepoFilesForCoords`
+        // so the on-demand `POST /connection/validate-repo` route reads the named repo
+        // through a checkout-free RepoFiles and returns the provider's verdict. This must
+        // behave identically on D1 and Postgres — a facade that forgot to wire the coords
+        // resolver (or the controller route) fails here. The provider + resolver are fakes
+        // (an in-memory path→content map), so no real GitHub connection is needed; the
+        // route degrades to "no VCS connection" when the resolver is absent.
+        const seed = (files: Record<string, string>) => {
+          const store = new Map(Object.entries(files))
+          const repo = {
+            getFile: async (path: string) => {
+              const content = store.get(path)
+              return content != null ? { content, sha: `sha:${path}` } : null
+            },
+            listDirectory: async () => [],
+            headSha: async () => 'base-sha',
+            createBranch: async () => {},
+            commitFiles: async () => ({ sha: 'c' }),
+            openPullRequest: async () => ({ number: 1 }) as never,
+          }
+          return { repo, baseBranch: 'main' }
+        }
+        // A native provider that requires a `.kargo.yml` carrying a `jobs:` line.
+        const provider = {
+          provision: async () => ({ externalId: 'e', status: 'ready', url: null }) as never,
+          status: async () => ({ externalId: 'e', status: 'ready', url: null }) as never,
+          teardown: async () => ({ status: 'torn_down' }) as never,
+          validateRepo: async (req: {
+            readRepoFile: (p: string) => Promise<{ content: string } | null>
+          }) => {
+            const file = await req.readRepoFile('.kargo.yml')
+            const ok = !!file && file.content.includes('jobs')
+            return ok
+              ? { ok: true, issues: [] }
+              : {
+                  ok: false,
+                  issues: [
+                    {
+                      severity: 'error' as const,
+                      message: file ? 'missing jobs' : 'missing .kargo.yml',
+                      path: '.kargo.yml',
+                    },
+                  ],
+                }
+          },
+        }
+
+        // A repo WITHOUT a valid config → the route surfaces the provider's error issues.
+        const invalid = harness.makeApp(undefined, {
+          environmentProvider: provider as unknown as EnvironmentProvider,
+          resolveRepoFilesForCoords: async () =>
+            seed({ '.kargo.yml': 'name: x\n' }) as unknown as RunRepoContext,
+        })
+        const wsBad = (await invalid.createWorkspace()).workspace
+        // The descriptor advertises the capability identically on every runtime.
+        const desc = await invalid.call<{ supportsRepoValidation?: boolean }>(
+          'GET',
+          `/workspaces/${wsBad.id}/environments/provider`,
+        )
+        expect(desc.body.supportsRepoValidation).toBe(true)
+        const bad = await invalid.call<RepoValidationResult>(
+          'POST',
+          `/workspaces/${wsBad.id}/environments/connection/validate-repo`,
+          { owner: 'acme', repo: 'widgets' },
+        )
+        expect(bad.status).toBe(200)
+        expect(bad.body.ok).toBe(false)
+        expect(bad.body.issues[0]?.path).toBe('.kargo.yml')
+
+        // A repo WITH a valid config → ok with no issues (no connection registered first:
+        // the route must not 409 when nothing is registered — the on-demand contract).
+        const valid = harness.makeApp(undefined, {
+          environmentProvider: provider as unknown as EnvironmentProvider,
+          resolveRepoFilesForCoords: async () =>
+            seed({ '.kargo.yml': 'name: x\njobs: [build]\n' }) as unknown as RunRepoContext,
+        })
+        const wsGood = (await valid.createWorkspace()).workspace
+        const good = await valid.call<RepoValidationResult>(
+          'POST',
+          `/workspaces/${wsGood.id}/environments/connection/validate-repo`,
+          { owner: 'acme', repo: 'widgets' },
+        )
+        expect(good.status).toBe(200)
+        expect(good.body).toEqual({ ok: true, issues: [] })
       })
     })
 

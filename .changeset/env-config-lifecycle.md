@@ -1,11 +1,11 @@
 ---
-"@cat-factory/kernel": minor
-"@cat-factory/contracts": minor
-"@cat-factory/integrations": minor
-"@cat-factory/server": minor
-"@cat-factory/orchestration": minor
-"@cat-factory/node-server": patch
-"@cat-factory/worker": patch
+'@cat-factory/kernel': minor
+'@cat-factory/contracts': minor
+'@cat-factory/integrations': minor
+'@cat-factory/server': minor
+'@cat-factory/orchestration': minor
+'@cat-factory/node-server': patch
+'@cat-factory/worker': patch
 ---
 
 Environment provider repo-config lifecycle: validate + bootstrap (+ agent-repair seam)

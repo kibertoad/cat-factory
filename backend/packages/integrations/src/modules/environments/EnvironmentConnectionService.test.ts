@@ -226,6 +226,10 @@ function fakeRepoFiles(seed: Record<string, string> = {}): RepoFiles & {
 } {
   const store = new Map(Object.entries(seed))
   const commits: { branch: string; files: { path: string; content: string }[] }[] = []
+  // Model branch existence faithfully: the default branch exists, an unknown branch has
+  // no head (null) until created. The PR-mode bootstrap keys idempotency off this, so a
+  // fake that pretended every branch existed would hide the duplicate-PR regression.
+  const branches = new Set(['main'])
   let prs = 0
   return {
     store,
@@ -240,10 +244,12 @@ function fakeRepoFiles(seed: Record<string, string> = {}): RepoFiles & {
     async listDirectory() {
       return []
     },
-    async headSha() {
-      return 'base-sha'
+    async headSha(branch) {
+      return branches.has(branch) ? `head:${branch}` : null
     },
-    async createBranch() {},
+    async createBranch(branch) {
+      branches.add(branch)
+    },
     async commitFiles(input) {
       commits.push({ branch: input.branch, files: input.files })
       for (const f of input.files) store.set(f.path, f.content)
@@ -281,6 +287,31 @@ describe('EnvironmentConnectionService — validateRepo', () => {
     const result = await service.validateRepo('ws1', { owner: 'o', repo: 'r' })
     expect(result.ok).toBe(false)
     expect(result.issues[0]?.message).toMatch(/no vcs connection/i)
+  })
+
+  it('validates without throwing when no environment connection is registered', async () => {
+    // The on-demand route is documented to never throw to the client. With a provider +
+    // VCS resolver wired but NO connection registered yet, it must still delegate (config
+    // simply absent), not surface the requireConnection 409.
+    const repo = fakeRepoFiles({ '.kargo.yml': 'name: x\njobs: [a]\n' })
+    let captured: RepoValidationRequest | undefined
+    const service = new EnvironmentConnectionService({
+      environmentConnectionRepository: fakeConnections(),
+      workspaceRepository: fakeWorkspaces,
+      secretCipher: fakeCipher,
+      clock,
+      environmentProvider: {
+        validateRepo: async (req: RepoValidationRequest) => {
+          captured = req
+          return { ok: true, issues: [] }
+        },
+      } as unknown as EnvironmentProvider,
+      resolveRepoFilesForWorkspace: async () => repoCtx(repo),
+    })
+
+    const result = await service.validateRepo('ws1', { owner: 'o', repo: 'r' })
+    expect(result).toEqual({ ok: true, issues: [] })
+    expect(captured?.config).toBeUndefined()
   })
 
   it('delegates to the provider with a VCS-neutral reader, forwarding providerConfig + gitRef', async () => {
@@ -434,6 +465,34 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
     })
     expect(result.committed).toBe(true)
     expect(result.branch).toBe('cat-factory/env-config')
+    expect(repo.prs).toBe(1)
+  })
+
+  it('openPr re-run is idempotent: no duplicate commit or PR when content is unchanged', async () => {
+    const repo = fakeRepoFiles()
+    const service = serviceWith(bootstrapProvider(), repo)
+    await service.register('ws1', { manifest: baseManifest, secrets: {} })
+
+    const first = await service.bootstrapRepo('ws1', {
+      owner: 'o',
+      repo: 'r',
+      inputs: {},
+      openPr: true,
+    })
+    expect(first.committed).toBe(true)
+    expect(repo.prs).toBe(1)
+
+    // Re-running with identical generated content must compare against the (already
+    // populated) PR branch — not the still-unmerged target — so nothing is re-committed
+    // and no second PR is opened against the same head.
+    const second = await service.bootstrapRepo('ws1', {
+      owner: 'o',
+      repo: 'r',
+      inputs: {},
+      openPr: true,
+    })
+    expect(second.committed).toBe(false)
+    expect(repo.commits).toHaveLength(1)
     expect(repo.prs).toBe(1)
   })
 

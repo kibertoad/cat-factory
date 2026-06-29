@@ -22,7 +22,11 @@ import type {
 import { ConflictError, STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
-import { assertSafeEnvironmentUrl, missingRequiredConfigKeys } from './environments.logic.js'
+import {
+  assertSafeEnvironmentUrl,
+  missingRequiredConfigKeys,
+  stringifyProviderConfig,
+} from './environments.logic.js'
 import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningLogService.js'
 
 /**
@@ -38,14 +42,6 @@ export interface ConfigRepairDispatch {
   gitRef: string
   issues: RepoValidationIssue[]
   inputs?: Record<string, string>
-}
-
-/** Stringify a manifest's opaque `providerConfig` bag for a native adapter. */
-function stringifyProviderConfig(
-  config: Record<string, unknown> | undefined,
-): Record<string, string> | undefined {
-  if (!config) return undefined
-  return Object.fromEntries(Object.entries(config).map(([k, v]) => [k, String(v)]))
 }
 
 /** Deterministic head branch for the PR-mode config bootstrap (idempotent re-runs). */
@@ -276,7 +272,7 @@ export class EnvironmentConnectionService {
         ],
       }
     }
-    const { manifest } = await this.requireConnection(workspaceId)
+    const manifest = await this.optionalManifest(workspaceId)
     const resolveSecret = await this.resolveSecrets(workspaceId)
     const gitRef = input.gitRef ?? bound.baseBranch
     return this.runProviderValidate(
@@ -284,7 +280,7 @@ export class EnvironmentConnectionService {
       gitRef,
       input.owner,
       input.repo,
-      stringifyProviderConfig(manifest.providerConfig),
+      stringifyProviderConfig(manifest?.providerConfig),
       resolveSecret,
     )
   }
@@ -321,9 +317,9 @@ export class EnvironmentConnectionService {
         },
       ])
     }
-    const { manifest } = await this.requireConnection(workspaceId)
+    const manifest = await this.optionalManifest(workspaceId)
     const resolveSecret = await this.resolveSecrets(workspaceId)
-    const config = stringifyProviderConfig(manifest.providerConfig)
+    const config = stringifyProviderConfig(manifest?.providerConfig)
     const targetBranch = input.gitRef ?? bound.baseBranch
     const readRepoFile = (path: string, ref?: string) =>
       bound.repo.getFile(path, ref ?? targetBranch)
@@ -341,28 +337,42 @@ export class EnvironmentConnectionService {
     let committed = false
     let writeBranch = targetBranch
     if (!generated.needsAgent && generated.files.length) {
+      const prMode = !!input.openPr
+      // In PR mode we write to (and re-validate against) a deterministic branch; a re-run
+      // must compare against THAT branch (not the still-unmerged target) so identical
+      // content is a no-op and we never re-commit / open a duplicate PR. First run: the PR
+      // branch doesn't exist yet, so the base/target branch is the correct compare ref.
+      let prBranchHead: string | null = null
+      if (prMode) {
+        writeBranch = BOOTSTRAP_CONFIG_BRANCH
+        prBranchHead = await bound.repo.headSha(writeBranch)
+      }
+      const compareBranch = prMode && prBranchHead ? writeBranch : targetBranch
+
       // Idempotent: only write files whose content actually changes.
       const changed: { path: string; content: string }[] = []
       for (const file of generated.files) {
-        const existing = await readRepoFile(file.path, targetBranch)
+        const existing = await readRepoFile(file.path, compareBranch)
         if (!existing || existing.content !== file.content) changed.push(file)
       }
       if (changed.length) {
         const message = generated.commitMessage ?? 'chore: bootstrap environment provider config'
-        if (input.openPr) {
-          writeBranch = BOOTSTRAP_CONFIG_BRANCH
-          const head = await bound.repo.headSha(writeBranch)
-          if (!head) {
+        if (prMode) {
+          if (!prBranchHead) {
             const base = await bound.repo.headSha(targetBranch)
             if (base) await bound.repo.createBranch(writeBranch, base)
           }
           await bound.repo.commitFiles({ branch: writeBranch, message, files: changed })
-          await bound.repo.openPullRequest({
-            title: message,
-            head: writeBranch,
-            base: targetBranch,
-            body: 'Automated provider configuration bootstrap.',
-          })
+          // Only open a PR when we just created the branch; a re-run commits onto the
+          // existing branch and its already-open PR picks the new commit up.
+          if (!prBranchHead) {
+            await bound.repo.openPullRequest({
+              title: message,
+              head: writeBranch,
+              base: targetBranch,
+              body: 'Automated provider configuration bootstrap.',
+            })
+          }
         } else {
           await bound.repo.commitFiles({ branch: writeBranch, message, files: changed })
         }
@@ -402,7 +412,7 @@ export class EnvironmentConnectionService {
       subsystem: 'environment',
       operation: 'provision',
       targetId: null,
-      providerId: manifest.providerId,
+      providerId: manifest?.providerId ?? null,
       blockId: null,
       executionId: null,
       outcome: validation.ok ? 'success' : 'failure',
@@ -410,12 +420,16 @@ export class EnvironmentConnectionService {
       detail: JSON.stringify({ committed, usedAgent, branch: writeBranch }),
     })
 
+    // Surface the provider's own bootstrap diagnostics (e.g. why it bailed with
+    // `needsAgent`) on the mechanical path; once the agent ran, `validation` is the
+    // fresh post-repair result so the stale generation issues no longer apply.
+    const generatedIssues = usedAgent ? [] : (generated.issues ?? [])
     return {
       ok: validation.ok,
       committed,
       branch: writeBranch,
       ...(usedAgent ? { usedAgent } : {}),
-      issues: validation.issues,
+      issues: [...generatedIssues, ...validation.issues],
     }
   }
 
@@ -462,6 +476,18 @@ export class EnvironmentConnectionService {
     if (!record) return null
     const keys = Object.keys(await this.decryptSecrets(record))
     return this.toConnection(record, keys)
+  }
+
+  /**
+   * Resolve the parsed manifest if the workspace has a registered connection, else
+   * undefined — the non-throwing sibling of {@link requireConnection}. The on-demand
+   * repo validate/bootstrap routes are documented to never throw to the client, so they
+   * degrade to "no per-workspace config" rather than a 409 when nothing is registered.
+   */
+  async optionalManifest(workspaceId: string): Promise<EnvironmentManifest | undefined> {
+    const record = await this.deps.environmentConnectionRepository.getByWorkspace(workspaceId)
+    if (!record) return undefined
+    return JSON.parse(record.manifestJson) as EnvironmentManifest
   }
 
   /** Resolve the live connection + parsed manifest, or throw if not registered. */

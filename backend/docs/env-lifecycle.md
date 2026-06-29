@@ -25,9 +25,9 @@ provision. The motivating case is **Kargo**: to spin up a PR environment (or a T
   `apps/server/internal/config/sandboxconfig/sandboxconfig.go`.
 
 Critically, **Kargo has no validate / dry-run endpoint** — it only reads `.kargo.yml` from the
-VCS host internally, *during provision*. So a missing or malformed config fails
+VCS host internally, _during provision_. So a missing or malformed config fails
 **asynchronously** (the PREnv lands in `status: failed`) with no early, actionable signal. These
-capabilities move that check **up front** and give operators a way to *create* and *fix* the
+capabilities move that check **up front** and give operators a way to _create_ and _fix_ the
 config without hand-editing the repo.
 
 ## The three capabilities
@@ -37,11 +37,11 @@ All live on the `EnvironmentProvider` port
 provider implements only what it needs; the generic `HttpEnvironmentProvider` implements none of
 them, so nothing changes for manifest-driven providers.
 
-| Capability | Method(s) | What the provider supplies | What the engine supplies |
-| --- | --- | --- | --- |
-| **Validate** | `validateRepo` | the expectations (which files, what must be in them) | a VCS-neutral `readRepoFile` |
-| **Bootstrap** | `describeBootstrapInputs` + `bootstrapProviderConfiguration` | the form fields + the generated file bytes | the read + the commit/PR write |
-| **Repair** | `describeRepairAgent` | the agent prompt | the agent runtime + a re-validate |
+| Capability    | Method(s)                                                    | What the provider supplies                           | What the engine supplies          |
+| ------------- | ------------------------------------------------------------ | ---------------------------------------------------- | --------------------------------- |
+| **Validate**  | `validateRepo`                                               | the expectations (which files, what must be in them) | a VCS-neutral `readRepoFile`      |
+| **Bootstrap** | `describeBootstrapInputs` + `bootstrapProviderConfiguration` | the form fields + the generated file bytes           | the read + the commit/PR write    |
+| **Repair**    | `describeRepairAgent`                                        | the agent prompt                                     | the agent runtime + a re-validate |
 
 The provider stays **pure and VCS-neutral**: it never sees a VCS host, a token, an
 installation id, or a `VcsConnectionRef`. It only receives a `readRepoFile(path, gitRef?)`
@@ -71,7 +71,7 @@ Two entry points, both workspace-scoped (mounted under `/workspaces/:workspaceId
   - `POST /environments/connection/validate-repo` — body `{ owner, repo, gitRef?, provider? }` →
     `{ ok, issues[] }`. Mirrors `testConnection`; nothing persisted.
   - `POST /environments/connection/bootstrap-repo` — body `{ owner, repo, gitRef?, provider?,
-    inputs, openPr?, allowAgentFallback? }` → `{ ok, committed, branch?, usedAgent?, issues[] }`.
+inputs, openPr?, allowAgentFallback? }` → `{ ok, committed, branch?, usedAgent?, issues[] }`.
 - **Pre-flight gate** — `EnvironmentProvisioningService.provision()` runs `validateRepo` against
   the block's repo **before** calling `provider.provision()`. On failure it logs and throws a
   `ValidationError` synchronously (instead of letting the PREnv fail later). The gate is skipped
@@ -101,16 +101,17 @@ provider code is unchanged because it only ever sees `readRepoFile`.
 
 ## What's implemented (increment 1)
 
-| Area | File(s) |
-| --- | --- |
-| Port types + methods | `packages/kernel/src/ports/environment-provider.ts`, re-exported from `ports/index.ts` |
-| Wire schemas + routes | `packages/contracts/src/provider-config.ts`, `environments.ts`, `routes/environments.ts` |
-| Service logic | `packages/integrations/src/modules/environments/EnvironmentConnectionService.ts` (`validateRepo`, `bootstrapRepo`), `EnvironmentProvisioningService.ts` (pre-flight gate) |
-| Controller routes | `packages/server/src/modules/environments/EnvironmentController.ts` |
-| Block-less repo resolver | `packages/server/src/agents/repoFiles.ts` (`makeResolveRepoFilesForCoords`) |
+| Area                     | File(s)                                                                                                                                                                                                        |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Port types + methods     | `packages/kernel/src/ports/environment-provider.ts`, re-exported from `ports/index.ts`                                                                                                                         |
+| Wire schemas + routes    | `packages/contracts/src/provider-config.ts`, `environments.ts`, `routes/environments.ts`                                                                                                                       |
+| Service logic            | `packages/integrations/src/modules/environments/EnvironmentConnectionService.ts` (`validateRepo`, `bootstrapRepo`), `EnvironmentProvisioningService.ts` (pre-flight gate)                                      |
+| Controller routes        | `packages/server/src/modules/environments/EnvironmentController.ts`                                                                                                                                            |
+| Block-less repo resolver | `packages/server/src/agents/repoFiles.ts` (`makeResolveRepoFilesForCoords`)                                                                                                                                    |
 | Container/runtime wiring | `packages/orchestration/src/container.ts` (`createEnvironmentsModule` + `CoreDependencies`), `runtimes/node/src/container.ts`, `runtimes/cloudflare/src/infrastructure/container.ts` (local delegates to node) |
 
 Behavioural notes:
+
 - **Bootstrap is idempotent**: each generated file is read-compared and only committed when it
   changes; an already-correct repo reports `committed: false`.
 - **Write target**: the default path commits straight to the target branch (the ref the provider
@@ -120,6 +121,7 @@ Behavioural notes:
   existing `provisioningLog`.
 
 Tests:
+
 - `EnvironmentConnectionService.test.ts` — validate (provider-absent, no-VCS, pass-through,
   providerConfig→config, gitRef defaulting) + bootstrap (commit, idempotent skip, openPr,
   needsAgent→agent fallback, no-opt-in).
@@ -138,6 +140,7 @@ sandbox; not touched by this change.)
 ### Increment 2 — the live repair agent (scaffolded, not wired)
 
 The repair **seam is complete and unit-tested with a fake dispatcher**:
+
 - port method `describeRepairAgent`,
 - service dep `dispatchConfigRepair` on `EnvironmentConnectionService`,
 - the `bootstrapRepo` fallback that calls it when `needsAgent` (or post-commit validation still
@@ -149,6 +152,7 @@ Today, with no dispatcher wired, a `needsAgent` bootstrap returns the issues ins
 auto-repairing — the mechanical path is fully functional regardless.
 
 **Remaining work:**
+
 1. Register an `env-config-repair` agent kind via `registerAgentKind`
    (`packages/agents/src/agents/kinds/registry.ts`): `surface: 'container-coding'`,
    `userPrompt(ctx)` sourced from `provider.describeRepairAgent(...)`, and a `revalidate` post-op
@@ -163,16 +167,17 @@ pipeline-driven kinds), so step 2 needs its own design pass (create execution + 
 to completion, surface the result). That's why it's a separate increment.
 
 **Bonus / stretch — true in-container validation:** package `validateRepo` as a runnable the
-harness injects into the container so the agent self-checks *before* pushing. Requires an
+harness injects into the container so the agent self-checks _before_ pushing. Requires an
 executor-harness change (job-body payload + a write+exec hook, like the existing
 `docker compose up` infra hook) plus the validator shipped as an executable. Not planned for
 increment 2; the backend post-op re-validation gives the same guarantee from the engine's side.
 
 ### Part B — the Kargo adapter (separate repo, blocked on a release)
 
-The adapter that *implements* these three methods lives in the wrapper repo
+The adapter that _implements_ these three methods lives in the wrapper repo
 (`packages/kargo-adapter` in `cat-factory-wrapper`) and is **blocked on a `@cat-factory/kernel`
 release** carrying the new port members. Once released and the adapter is bumped:
+
 - `validateRepo`: read `.kargo.yml` (fallback `.pre.yml`), YAML-parse, emit errors for empty
   `name`/`jobs` and (when present) `sandbox` rule violations; warn when no `sandbox` block.
 - `describeBootstrapInputs` + `bootstrapProviderConfiguration`: declare the variables (service
