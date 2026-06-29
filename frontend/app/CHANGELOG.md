@@ -1,5 +1,80 @@
 # @cat-factory/app
 
+## 0.51.0
+
+### Minor Changes
+
+- 48a3df6: Surface the per-run container's live lifecycle in a container agent's details, and bring
+  the API Tester window to parity with the Coder.
+
+  Previously a container-backed step showed a "Spinning up container…" badge that simply
+  **vanished** once the container was up, leaving a blank "working" state — you couldn't tell
+  whether the agent was still preparing the checkout or already making model calls, and there
+  was no way to see which container the run was on or whether it was up / errored / gone.
+
+  - **Live phase.** The executor-harness now exposes its current lifecycle phase
+    (`starting` → `clone` → `agent` → `push`) on the running job view — the same marker that
+    already drove the stuck-run breadcrumb. The engine threads it through
+    (`RunnerJobView` / `AgentJobUpdate`) onto the step so the details show WHAT the container
+    is doing: "Preparing workspace" vs "Agent running" vs "Pushing changes".
+  - **Container identity + address.** The transport now attaches the container's id (the
+    Cloudflare Durable Object id; the local Docker container id) and, where one exists, its
+    reachable URL (the local host URL) — so a run's details name WHERE it runs.
+  - **Explicit lifecycle status.** Steps carry a `container` projection
+    (`starting` / `up` / `errored`, with `destroyed` derived once the run's container is
+    reclaimed), so the details say whether the container is spinning up, running, errored, or
+    gone — instead of inferring it from a run-level failure.
+  - **API Tester parity.** The Tester result window now reuses the same observability the
+    Coder's step detail shows — the container lifecycle (status / phase / id / url), the
+    ephemeral environment status, and the run's infrastructure attempts + logs — alongside its
+    test report, instead of the report alone. The Tester (and the human-test / visual-confirm
+    gate helpers) now surface the cold-boot `starting` window before the agent comes up, like
+    the Coder, rather than jumping straight to "running".
+  - **The legacy `startingContainer` boolean is removed** in favour of the richer `container`
+    projection everywhere (no dual-signal path): every container-backed step — including the
+    gate helpers — now reports its lifecycle through `container`. (Stale persisted steps simply
+    drop the field; backwards compatibility is a non-goal.)
+
+  Bumps the `@cat-factory/executor-harness` image to `1.24.0` (and the matching tag in
+  `deploy/backend`).
+
+- 48a3df6: Fix the Tester→Fixer loop, make fixer runs inspectable, and let the Tester abort a run.
+
+  Three related issues in the API/UI Tester flow:
+
+  - **The Tester never actually re-ran after a Fixer round, so the step was marked "done"
+    regardless of the outcome.** The harness keys each job by `run + agentKind` and re-attaches
+    to an existing entry rather than re-running (replay idempotency). A container-reusing
+    transport (a warm local pool / a self-hosted runner pool) keeps that registry alive across
+    rounds — reclaiming a pooled member does NOT destroy it — so a re-dispatched Tester
+    re-attached to its FIRST round's completed job and silently replayed the stale report. Each
+    re-dispatch within a run now carries a per-round **dispatch epoch** folded into the harness
+    job id (`AgentRunContext.dispatchEpoch`), so the re-test always runs anew. Also covers the
+    CI/conflicts gate fixer loops, which share the same re-dispatch shape. Defensively, a report
+    with any failed outcome can no longer be greenlit (a failed check is treated as a blocker).
+    The conformance suite now models a pooled container so the loop is exercised faithfully.
+
+  - **Fixer companion runs were opaque.** A Tester step now keeps an append-only `attemptLog`
+    of its fixer rounds (what each round was handed + how it ended), rendered as an inspectable
+    timeline in the test report window instead of only a bare "N/M fix" count.
+
+  - **The Tester can now ABORT a run instead of looping the fixer.** When the change cannot be
+    meaningfully tested — its ephemeral environment never came up, a required dependency is
+    missing — the Tester sets `abort: { reason }` on its report (or the engine auto-aborts when
+    the step's ephemeral environment is in a `failed` state). The run stops, the block is left
+    blocked (retryable), and a human-actionable notification is raised — the fixer is NOT
+    dispatched, since it cannot provision infrastructure.
+
+  This is a breaking change to the persisted Tester step state and the test-report wire shape
+  (new `attemptLog` / `abort` fields); per the project's pre-1.0 policy, stale in-flight runs
+  may simply break rather than migrate.
+
+### Patch Changes
+
+- Updated dependencies [48a3df6]
+- Updated dependencies [48a3df6]
+  - @cat-factory/contracts@0.53.0
+
 ## 0.50.1
 
 ### Patch Changes
