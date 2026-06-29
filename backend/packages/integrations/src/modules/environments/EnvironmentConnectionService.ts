@@ -86,11 +86,13 @@ export interface EnvironmentConnectionServiceDependencies {
     coords: { owner: string; repo: string; provider?: 'github' | 'gitlab' },
   ) => Promise<RunRepoContext | null>
   /**
-   * Dispatch a coding agent to repair a malformed/partial provider config, returning
-   * the post-repair validation. Wired by orchestration over the `env-config-repair`
-   * agent kind + the provider's `describeRepairAgent`. Absent ⇒ no agent fallback.
+   * Dispatch a coding agent to repair a malformed/partial provider config — it pushes the
+   * fix back onto the target branch and resolves once the agent finishes (throwing on a
+   * hard failure). The SERVICE re-validates afterward (it owns the decrypted secrets +
+   * manifest config), so this just performs the push. Wired by a runtime over the shared
+   * runner transport + the provider's `describeRepairAgent`. Absent ⇒ no agent fallback.
    */
-  dispatchConfigRepair?: (input: ConfigRepairDispatch) => Promise<RepoValidationResult>
+  dispatchConfigRepair?: (input: ConfigRepairDispatch) => Promise<void>
   /** Best-effort provisioning-event log; absent ⇒ no logging. */
   provisioningLog?: ProvisioningLogRecorder
 }
@@ -397,7 +399,10 @@ export class EnvironmentConnectionService {
       this.deps.dispatchConfigRepair
     ) {
       usedAgent = true
-      validation = await this.deps.dispatchConfigRepair({
+      // The agent pushes its fix back onto `writeBranch`; we then re-validate here, where
+      // the decrypted secrets + manifest config live (the dispatcher is pure container
+      // plumbing). A dispatch failure throws and surfaces to the caller.
+      await this.deps.dispatchConfigRepair({
         workspaceId,
         owner: input.owner,
         repo: input.repo,
@@ -405,6 +410,14 @@ export class EnvironmentConnectionService {
         issues: validation.issues,
         inputs: input.inputs,
       })
+      validation = await this.runProviderValidate(
+        bound,
+        writeBranch,
+        input.owner,
+        input.repo,
+        config,
+        resolveSecret,
+      )
     }
 
     await this.deps.provisioningLog?.record({

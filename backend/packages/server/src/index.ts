@@ -71,6 +71,10 @@ export {
   type ContainerRepoBootstrapperDependencies,
 } from './agents/ContainerRepoBootstrapper.js'
 export {
+  ContainerEnvConfigRepairer,
+  type ContainerEnvConfigRepairerDependencies,
+} from './agents/ContainerEnvConfigRepairer.js'
+export {
   buildResolveRepoTarget,
   type ResolveRepoTargetDependencies,
 } from './agents/resolveRepoTarget.js'

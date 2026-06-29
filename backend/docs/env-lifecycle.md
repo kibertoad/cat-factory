@@ -6,8 +6,8 @@ file inside the deployed repo** — validate it, mechanically generate it, and (
 have a coding agent repair it. It complements [`native-environment-adapter.md`](./native-environment-adapter.md),
 which covers the base provision/status/teardown port.
 
-> Status: **increment 1 (validate + bootstrap) is implemented, wired, and tested.** The live
-> agent-repair dispatch (increment 2) is **scaffolded but not yet wired** — see
+> Status: **increments 1 (validate + bootstrap) and 2 (live agent-repair) are implemented,
+> wired, and tested.** Only the native Kargo adapter (Part B, a separate repo) remains — see
 > [What's left](#whats-left).
 
 ## Why this exists
@@ -137,40 +137,54 @@ sandbox; not touched by this change.)
 
 ## What's left
 
-### Increment 2 — the live repair agent (scaffolded, not wired)
+### Increment 2 — the live repair agent (implemented)
 
-The repair **seam is complete and unit-tested with a fake dispatcher**:
+When mechanical bootstrap can't produce a valid config (`needsAgent`, or the post-commit
+re-validation still fails) **and** the caller passed `allowAgentFallback`, the engine dispatches a
+coding agent to fix the config in place, then re-validates.
 
-- port method `describeRepairAgent`,
-- service dep `dispatchConfigRepair` on `EnvironmentConnectionService`,
-- the `bootstrapRepo` fallback that calls it when `needsAgent` (or post-commit validation still
-  fails) **and** `allowAgentFallback` is set,
-- `CoreDependencies.dispatchEnvConfigRepair` (declared and read in `createEnvironmentsModule`),
-  **not yet set by any runtime**.
+**How it works (direct runner dispatch, NOT an ad-hoc engine run).** The repair is triggered from
+`EnvironmentConnectionService.bootstrapRepo`, which carries only `{workspaceId, owner, repo, gitRef,
+issues, inputs}` — there is **no board block**, so the block+pipeline-centric `ExecutionService.start`
+is the wrong tool. Instead the runtime wires `dispatchEnvConfigRepair` to a
+**`ContainerEnvConfigRepairer`** (`@cat-factory/server`) that mirrors the bootstrap flow's
+dispatch/poll/release plumbing (`RunnerJobClient` / `RunnerTransport`):
 
-Today, with no dispatcher wired, a `needsAgent` bootstrap returns the issues instead of
-auto-repairing — the mechanical path is fully functional regardless.
+1. It dispatches a **plain `coding` job** (kind `agent`) that clones the repo at `gitRef`, has the
+   agent make `provider.describeRepairAgent(...)`'s requested fix, and **pushes back onto the same
+   branch** — **no `bootstrap`/`mergeBase` block** (so the harness takes its ordinary
+   clone→edit→push path, never the bootstrapper's history-reinit force-push), **no PR**, and a no-op
+   is a clean non-event (`noChangesIsError: false`).
+2. It **awaits** the job in-process (poll loop, bounded), throwing on a hard failure.
+3. **Re-validation lives in `EnvironmentConnectionService`**, not the dispatcher: after the agent
+   pushes, the service re-runs `provider.validateRepo` against `writeBranch` using the decrypted
+   secrets + manifest config it already holds. So the seam (`dispatchConfigRepair` /
+   `dispatchEnvConfigRepair`) is pure container plumbing and returns `void`.
 
-**Remaining work:**
+> ⚠️ This is deliberately **not** the "bootstrap repo" task (`BootstrapService` /
+> `ContainerRepoBootstrapper` / the `bootstrap_jobs` table), which force-pushes a fresh history
+> into an empty repo to scaffold a new service. The config repairer only edits an existing repo's
+> provider config in place. They share only the runner dispatch/poll plumbing.
 
-1. Register an `env-config-repair` agent kind via `registerAgentKind`
-   (`packages/agents/src/agents/kinds/registry.ts`): `surface: 'container-coding'`,
-   `userPrompt(ctx)` sourced from `provider.describeRepairAgent(...)`, and a `revalidate` post-op
-   that re-runs `provider.validateRepo` against the agent's branch (the backend, checkout-free
-   "did they fix it?" self-check — agents run offline, so this is the realistic equivalent of the
-   "run validation in-container" bonus).
-2. Implement a runtime `dispatchEnvConfigRepair` that creates and **awaits** an ad-hoc run of
-   that kind, returning the post-repair validation.
+| Area                | File(s)                                                                                                                                                                       |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repair dispatcher   | `packages/server/src/agents/ContainerEnvConfigRepairer.ts` (+ `index.ts` export)                                                                                              |
+| Service re-validate | `packages/integrations/src/modules/environments/EnvironmentConnectionService.ts`                                                                                              |
+| Seam type (`void`)  | `packages/orchestration/src/container.ts` (`CoreDependencies.dispatchEnvConfigRepair`)                                                                                        |
+| Runtime wiring      | `runtimes/cloudflare/.../container.ts` (`selectEnvConfigRepairer`), `runtimes/node/src/container.ts` (`selectNodeEnvConfigRepairer`); local inherits via `buildNodeContainer` |
 
-This is the heaviest piece: cat-factory has **no existing one-off / ad-hoc agent dispatch** (only
-pipeline-driven kinds), so step 2 needs its own design pass (create execution + run + step, drive
-to completion, surface the result). That's why it's a separate increment.
+A facade wires the dispatcher only when the container prerequisites are met **and** the injected
+provider actually supports agent repair (`describeRepairAgent`) — so a stock deployment running the
+generic manifest provider is unchanged (no `describeRepairAgent` ⇒ the service guard skips the
+fallback). It is built over the **final** provider (post-overrides), so a native adapter injected
+via the `environmentProvider` seam is the one the dispatcher repairs through. The repair agent runs
+on the `coder` kind's routing model.
 
 **Bonus / stretch — true in-container validation:** package `validateRepo` as a runnable the
 harness injects into the container so the agent self-checks _before_ pushing. Requires an
 executor-harness change (job-body payload + a write+exec hook, like the existing
-`docker compose up` infra hook) plus the validator shipped as an executable. Not planned for
-increment 2; the backend post-op re-validation gives the same guarantee from the engine's side.
+`docker compose up` infra hook) plus the validator shipped as an executable. Not done in
+increment 2; the service's post-repair re-validation gives the same guarantee from the engine's side.
 
 ### Part B — the Kargo adapter (separate repo, blocked on a release)
 

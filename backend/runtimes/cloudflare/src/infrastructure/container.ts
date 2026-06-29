@@ -70,6 +70,7 @@ import {
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
+  ContainerEnvConfigRepairer,
   makeResolveRunRepoContext,
   makeResolveRepoFilesForCoords,
   makeResolveBinaryArtifactStore,
@@ -1651,6 +1652,51 @@ function selectRepoBootstrapper(
 }
 
 /**
+ * Build the live ENVIRONMENT-PROVIDER CONFIG REPAIR agent (PR #416 increment 2) when its
+ * prerequisites are met — the same container prerequisites as the bootstrapper PLUS an
+ * injected provider that actually supports agent repair (`describeRepairAgent`). A stock
+ * deployment runs the generic manifest provider (no repair support), so this stays
+ * undefined there; it wires only when a native adapter (e.g. Kargo) is injected. Built
+ * over the FINAL provider (post-overrides), so the dispatcher repairs through the same
+ * provider the engine validates with. NOT to be confused with the repo bootstrapper: this
+ * is an ordinary clone→edit→push coding job (no history reset / force-push).
+ */
+function selectEnvConfigRepairer(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+  clock: Clock,
+  idGenerator: IdGenerator,
+  resolveTransport: ResolveRunnerTransport | null,
+  environmentProvider: CoreDependencies['environmentProvider'],
+): ContainerEnvConfigRepairer | undefined {
+  if (
+    !resolveTransport ||
+    !environmentProvider ||
+    typeof environmentProvider.describeRepairAgent !== 'function' ||
+    !config.github.enabled ||
+    !env.GITHUB_APP_PRIVATE_KEY ||
+    !env.WORKER_PUBLIC_URL ||
+    !env.AUTH_SESSION_SECRET
+  ) {
+    return undefined
+  }
+  const registry = buildAppRegistry(env, config, db, clock)
+  return new ContainerEnvConfigRepairer({
+    resolveTransport,
+    installationRepository: new D1GitHubInstallationRepository({ db }),
+    mintInstallationToken: (id) => registry.installationToken(id),
+    sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
+    idGenerator,
+    environmentProvider,
+    // A config fix is coding work, so it follows the `coder` kind's routing.
+    model: resolveAgentConfig(config.agents.routing, 'coder').ref,
+    proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
+    githubApiBase: config.github.apiBase,
+  })
+}
+
+/**
  * Build the prompt-fragment library's concrete ports when opted in (ADR 0006):
  * the two D1 repositories, the relevance selector (LLM when configured, else the
  * core deterministic matcher via `fragmentSelector: undefined`), and the
@@ -1944,6 +1990,23 @@ export function buildContainer(
     // context, so a per-user PAT (when set) is preferred over the App token.
     runInitiatorScope: runWithInitiator,
     ...overrides,
+  }
+
+  // Wire the live env-config repair agent over the FINAL environment provider (after the
+  // `...overrides` above), so a native adapter injected via overrides — not the default
+  // manifest provider — is the one the repair dispatcher uses. Unwired on a stock deployment
+  // (the generic provider has no `describeRepairAgent`), exactly like the service guard.
+  const envConfigRepairer = selectEnvConfigRepairer(
+    env,
+    config,
+    db,
+    clock,
+    idGenerator,
+    resolveTransport,
+    dependencies.environmentProvider,
+  )
+  if (envConfigRepairer) {
+    dependencies.dispatchEnvConfigRepair = (input) => envConfigRepairer.repair(input)
   }
 
   // Apply any test-injected gate providers LAST, so they override the config wiring done by the
