@@ -43,6 +43,9 @@ request (a ~20-minute in-request poll loop that could not survive on the Cloudfl
   to `succeeded` with the post-repair validation recorded on both D1 and Postgres. Gated on the
   container prerequisites plus a provider that supports `describeRepairAgent`, so a stock
   deployment running the generic manifest provider is unchanged.
+- The original bootstrap `inputs` (which shape the repair agent's prompt) are persisted on the
+  run record (internal, never on the wire), so a retry re-dispatches a fresh run with the SAME
+  prompt context via `EnvConfigRepairService.retry` instead of dropping them.
 
 Breaking (pre-1.0, no migration): the `dispatchConfigRepair` /
 `CoreDependencies.dispatchEnvConfigRepair` seam is replaced by the `EnvConfigRepairer` /

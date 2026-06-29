@@ -36,6 +36,12 @@ export interface EnvConfigRepairJobRecord {
   ok: boolean | null
   /** Residual validation issues from the post-repair re-validation. */
   issues: RepoValidationIssue[]
+  /**
+   * The bootstrap form inputs that triggered the repair, persisted so a retry can
+   * re-dispatch with the same prompt context. Internal (never sent to the client, as
+   * the values can be sensitive); null when the original dispatch had none.
+   */
+  inputs: Record<string, string> | null
   /** Live subtask counts from the repair agent, or null until it reports. */
   subtasks: StepSubtasks | null
   error: string | null

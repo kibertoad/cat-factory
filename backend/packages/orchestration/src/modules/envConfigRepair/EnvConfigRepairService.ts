@@ -14,7 +14,13 @@ import type {
   StepSubtasks,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { assertFound, getErrorMessage, requireWorkspace, sameSubtasks } from '@cat-factory/kernel'
+import {
+  assertFound,
+  ConflictError,
+  getErrorMessage,
+  requireWorkspace,
+  sameSubtasks,
+} from '@cat-factory/kernel'
 
 /** The poll's terminal-ness, returned to the durable driver so it knows when to stop. */
 export interface EnvConfigRepairPollResult {
@@ -132,6 +138,8 @@ export class EnvConfigRepairService {
       status: 'running',
       ok: null,
       issues: [],
+      // Persisted so a retry re-dispatches with the same prompt context (see `retry`).
+      inputs: input.inputs ?? null,
       subtasks: null,
       error: null,
       failure: null,
@@ -170,6 +178,36 @@ export class EnvConfigRepairService {
     const job = toJob(record)
     await this.emit(workspaceId, job)
     return job
+  }
+
+  /**
+   * Retry a terminally-failed repair by STARTING a fresh run from the old job's coords
+   * (a repair is a one-shot clone→fix→push, so there's no same-id re-drive). The original
+   * `inputs` are recovered from the persisted record so the new run gets the same prompt
+   * context — they live only on the record (never on the wire), so this is the only path
+   * that can re-thread them. The old failed row stays as the audit trail.
+   */
+  async retry(workspaceId: string, jobId: string): Promise<EnvConfigRepairJob> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const previous = assertFound(
+      await this.deps.envConfigRepairJobRepository.get(workspaceId, jobId),
+      'Environment config repair job',
+      jobId,
+    )
+    if (previous.status !== 'failed') {
+      throw new ConflictError(
+        `Only a failed repair run can be retried (run is '${previous.status}').`,
+        'run_not_retryable',
+        { status: previous.status },
+      )
+    }
+    return this.start(workspaceId, {
+      owner: previous.owner,
+      repo: previous.repo,
+      gitRef: previous.branch,
+      issues: previous.issues,
+      ...(previous.inputs ? { inputs: previous.inputs } : {}),
+    })
   }
 
   /**

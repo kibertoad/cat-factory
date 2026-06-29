@@ -24,6 +24,8 @@ interface EnvConfigRepairDetail {
   branch: string
   ok: boolean | null
   issues: RepoValidationIssue[]
+  /** The original bootstrap form inputs, kept so a retry re-dispatches the same prompt. */
+  inputs: Record<string, string> | null
 }
 
 function parseSubtasks(raw: string | null): StepSubtasks | null {
@@ -72,6 +74,16 @@ function parseFailure(raw: string | null): AgentFailure | null {
   return null
 }
 
+/** Coerce a parsed `inputs` value to a string→string record, tolerating null/garbage. */
+function parseInputs(raw: unknown): Record<string, string> | null {
+  if (!raw || typeof raw !== 'object') return null
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === 'string') out[k] = v
+  }
+  return Object.keys(out).length ? out : null
+}
+
 function parseDetail(raw: string): EnvConfigRepairDetail {
   try {
     const o = JSON.parse(raw) as Partial<EnvConfigRepairDetail>
@@ -81,9 +93,10 @@ function parseDetail(raw: string): EnvConfigRepairDetail {
       branch: o.branch ?? '',
       ok: typeof o.ok === 'boolean' ? o.ok : null,
       issues: Array.isArray(o.issues) ? o.issues : [],
+      inputs: parseInputs(o.inputs),
     }
   } catch {
-    return { owner: '', repo: '', branch: '', ok: null, issues: [] }
+    return { owner: '', repo: '', branch: '', ok: null, issues: [], inputs: null }
   }
 }
 
@@ -98,6 +111,7 @@ function rowToRecord(row: typeof agentRuns.$inferSelect): EnvConfigRepairJobReco
     status: row.status as EnvConfigRepairJobRecord['status'],
     ok: detail.ok,
     issues: detail.issues,
+    inputs: detail.inputs,
     subtasks: parseSubtasks(row.subtasks ?? null),
     error: row.error,
     failure: parseFailure(row.failure ?? null),
@@ -117,6 +131,7 @@ export class DrizzleEnvConfigRepairJobRepository implements EnvConfigRepairJobRe
       branch: record.branch,
       ok: record.ok,
       issues: record.issues,
+      inputs: record.inputs,
     }
     await this.db.insert(agentRuns).values({
       workspace_id: record.workspaceId,

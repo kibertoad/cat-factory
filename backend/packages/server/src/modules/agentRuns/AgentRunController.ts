@@ -49,21 +49,10 @@ export function agentRunController(): Hono<AppEnv> {
         return unavailable(c, 'Environment config repair is not configured')
       }
       // No same-id re-drive (unlike bootstrap/execution): a repair run is a one-shot
-      // clone→fix→push, so retry STARTS a fresh run from the failed job's coords. The old
-      // failed row stays as the audit trail. Only a terminally-failed run can be retried.
-      const previous = await repair.service.getJob(workspaceId, id)
-      if (previous.status !== 'failed') {
-        return c.json(
-          { error: { code: 'conflict', message: 'Only a failed repair run can be retried' } },
-          409,
-        )
-      }
-      const run = await repair.service.start(workspaceId, {
-        owner: previous.owner,
-        repo: previous.repo,
-        gitRef: previous.branch,
-        issues: previous.issues,
-      })
+      // clone→fix→push, so retry STARTS a fresh run from the failed job's coords (recovering
+      // the original prompt inputs). The old failed row stays as the audit trail. The service
+      // throws a ConflictError (→ 409) when the run isn't terminally failed.
+      const run = await repair.service.retry(workspaceId, id)
       return c.json({ kind: ref.kind, run }, 201)
     }
 

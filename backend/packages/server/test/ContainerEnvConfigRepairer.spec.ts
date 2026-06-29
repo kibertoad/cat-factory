@@ -111,10 +111,12 @@ describe('ContainerEnvConfigRepairer', () => {
   it('pollRepair maps a running view to a progress update', async () => {
     const repairer = makeRepairer({
       dispatch: vi.fn(),
-      poll: vi.fn(async (): Promise<RunnerJobView> => ({
-        state: 'running',
-        progress: { completed: 1, inProgress: 1, total: 3 },
-      })),
+      poll: vi.fn(
+        async (): Promise<RunnerJobView> => ({
+          state: 'running',
+          progress: { completed: 1, inProgress: 1, total: 3 },
+        }),
+      ),
       release: vi.fn(),
     } as unknown as RunnerTransport)
 
@@ -138,7 +140,10 @@ describe('ContainerEnvConfigRepairer', () => {
     const repairer = makeRepairer({
       dispatch: vi.fn(),
       poll: vi.fn(
-        async (): Promise<RunnerJobView> => ({ state: 'failed', error: 'container evicted or crashed' }),
+        async (): Promise<RunnerJobView> => ({
+          state: 'failed',
+          error: 'container evicted or crashed',
+        }),
       ),
       release: vi.fn(),
     } as unknown as RunnerTransport)

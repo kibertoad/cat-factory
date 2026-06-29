@@ -542,12 +542,22 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
     await service.register('ws1', { manifest: baseManifest, secrets: {} })
 
     // Still invalid → ok:false.
-    const before = await service.revalidate({ workspaceId: 'ws1', owner: 'o', repo: 'r', gitRef: 'main' })
+    const before = await service.revalidate({
+      workspaceId: 'ws1',
+      owner: 'o',
+      repo: 'r',
+      gitRef: 'main',
+    })
     expect(before.ok).toBe(false)
 
     // The agent's fix landed → ok:true on re-validation.
     repo.store.set('.kargo.yml', VALID)
-    const after = await service.revalidate({ workspaceId: 'ws1', owner: 'o', repo: 'r', gitRef: 'main' })
+    const after = await service.revalidate({
+      workspaceId: 'ws1',
+      owner: 'o',
+      repo: 'r',
+      gitRef: 'main',
+    })
     expect(after.ok).toBe(true)
   })
 
