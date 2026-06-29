@@ -2113,5 +2113,217 @@
       "updateConnection": "Zaktualizuj połączenie",
       "connect": "Połącz"
     }
+  },
+  "pipeline": {
+    "iterationCap": {
+      "extraRound": "Jeszcze jedna runda",
+      "proceed": "Kontynuuj mimo to",
+      "stopReset": "Zatrzymaj i zresetuj zadanie"
+    },
+    "builder": {
+      "title": "Kreator pipeline'ów",
+      "agentPalette": "Paleta agentów",
+      "addAgent": "Dodaj agenta",
+      "pipeline": "Pipeline",
+      "configureModels": "Skonfiguruj modele",
+      "configureModelsTooltip": "Zarządzaj presetami modeli (jaki model uruchamia każdy agent)",
+      "namePlaceholder": "Nazwa pipeline'u",
+      "labelPlaceholder": "+ etykieta",
+      "gatingNeedsEstimator": "Krok z bramką wymaga wcześniejszego Task Estimatora. Dodaj go albo pipeline się nie zapisze.",
+      "emptyDraft": "Kliknij agentów po lewej, aby zbudować liniowy pipeline.",
+      "companionAdd": "Dodaj {companion} (recenzuje ten krok, ponawia go poniżej progu)",
+      "companionRemove": "Usuń {companion} z tego kroku",
+      "disableTooltip": "Wyłącz ten krok (pozostaje w pipelinie, ale jest pomijany przy uruchomieniu)",
+      "enableTooltip": "Krok wyłączony (pomijany przy uruchomieniu). Kliknij, aby włączyć.",
+      "approvalAddTooltip": "Wymagaj zatwierdzenia przez człowieka po tym kroku",
+      "approvalRemoveTooltip": "Zatwierdzenie wymagane po tym kroku. Kliknij, aby usunąć bramkę.",
+      "consensusEnableTooltip": "Włącz konsensus (panel/debata/głosowanie wielu modeli) dla tego kroku",
+      "consensusRevertTooltip": "Konsensus włączony. Kliknij, aby wrócić do pojedynczego agenta.",
+      "followUpEnableTooltip": "Towarzysz uzupełniający wyłączony. Kliknij, aby włączyć (Coder wykrywa niedokończone wątki / pytania).",
+      "followUpDisableTooltip": "Towarzysz uzupełniający włączony. Coder wykrywa niedokończone wątki / podzadania / pytania; kliknij, aby wyłączyć.",
+      "moveUp": "Przesuń krok w górę",
+      "moveDown": "Przesuń krok w dół",
+      "removeStep": "Usuń ten krok z pipeline'u",
+      "gateOnEstimate": "Bramka według szacunku",
+      "companionGateTooltip": "Uruchamiaj tego towarzysza tylko, gdy szacunek zadania przekroczy próg (wymaga wcześniejszego Task Estimatora)",
+      "consensusGateTooltip": "Uruchamiaj konsensus tylko, gdy szacunek zadania przekroczy próg (w przeciwnym razie uruchamia się standardowy agent)",
+      "runWhenAny": "uruchom, gdy (którekolwiek):",
+      "complexityThreshold": "złożoność ≥",
+      "riskThreshold": "ryzyko ≥",
+      "impactThreshold": "wpływ ≥",
+      "strategy": "Strategia",
+      "rounds": "Rundy",
+      "strategyOption": {
+        "specialist-panel": "Panel specjalistów",
+        "debate": "Debata",
+        "ranked-voting": "Głosowanie rankingowe"
+      },
+      "rolePlaceholder": "Rola",
+      "modelIdPlaceholder": "Id modelu (opcjonalnie)",
+      "removeParticipant": "Usuń uczestnika (min. 2)",
+      "addParticipant": "Dodaj uczestnika",
+      "savedPipelines": "Zapisane pipeline'y",
+      "hideArchived": "Ukryj zarchiwizowane",
+      "archivedCount": "Zarchiwizowane ({count})",
+      "allLabels": "Wszystkie",
+      "defaultBadge": "domyślny",
+      "stepCount": "{count} krok | {count} kroki | {count} kroków",
+      "unarchive": "Przywróć z archiwum",
+      "archive": "Archiwizuj (ukryj z widoku domyślnego)",
+      "cloneDefault": "Sklonuj ten domyślny do edytowalnej kopii",
+      "clone": "Sklonuj",
+      "edit": "Edytuj ten pipeline",
+      "delete": "Usuń ten pipeline",
+      "disabledStepTooltip": "Wyłączony, pomijany przy uruchomieniu",
+      "cancelEdit": "Anuluj edycję",
+      "clear": "Wyczyść",
+      "update": "Zaktualizuj pipeline",
+      "save": "Zapisz pipeline",
+      "addAgentModal": {
+        "title": "Dodaj agenta",
+        "name": "Nazwa",
+        "namePlaceholder": "np. Audytor bezpieczeństwa",
+        "description": "Opis",
+        "descriptionPlaceholder": "Co robi ten agent?",
+        "linkDoc": "Powiąż dokument kontekstowy",
+        "create": "Utwórz agenta"
+      },
+      "toast": {
+        "added": "Dodano agenta \"{name}\"",
+        "placeholderTitle": "Element zastępczy",
+        "updated": "Zaktualizowano \"{name}\"",
+        "saved": "Zapisano \"{name}\"",
+        "addOneFirst": "Najpierw dodaj co najmniej jednego agenta",
+        "saveFailed": "Nie udało się zapisać pipeline'u",
+        "cloned": "Sklonowano \"{name}\" — trwa edycja \"{copy}\"",
+        "cloneFailed": "Nie udało się sklonować pipeline'u",
+        "updateFailed": "Nie udało się zaktualizować pipeline'u"
+      }
+    },
+    "progress": {
+      "status": {
+        "running": "W toku",
+        "blocked": "Wymaga Ciebie",
+        "paused": "Wstrzymano (budżet)",
+        "done": "Ukończono",
+        "failed": "Niepowodzenie"
+      },
+      "state": {
+        "pending": "Oczekuje",
+        "working": "Praca",
+        "waiting_decision": "Wymaga decyzji",
+        "done": "Gotowe"
+      },
+      "stage": {
+        "incorporating": "Włączanie…",
+        "reviewing": "Ponowna recenzja…",
+        "recommending": "Rekomendowanie…"
+      },
+      "followUp": {
+        "watching": "Obserwowanie…",
+        "toDecide": "{count} do decyzji",
+        "allDecided": "Wszystko rozstrzygnięte"
+      },
+      "agentsComplete": "{completed} / {total} agentów ukończono",
+      "currently": "obecnie {agent}",
+      "percent": "{value}%",
+      "companion": "Towarzysz",
+      "companionTooltip": "Towarzysz kroku produkującego",
+      "companionSuffix": "(towarzysz)",
+      "stepOf": "Krok {current} z {total}",
+      "viewDetailsOutput": "Zobacz szczegóły i przeczytaj wynik",
+      "viewDetails": "Zobacz szczegóły kroku",
+      "restartTooltip": "Uruchom pipeline ponownie od tego kroku",
+      "restartFromHere": "Uruchom ponownie stąd",
+      "spinningUpContainer": "Uruchamianie kontenera…",
+      "subtasks": "{completed}/{total} podzadań",
+      "subtasksInProgress": "· {count} w toku",
+      "clickToRead": "Kliknij, aby przeczytać wynik tego agenta",
+      "reviewApprove": "Przejrzyj i zatwierdź propozycję agenta {agent}",
+      "resolve": "Rozstrzygnij: {question}"
+    },
+    "health": {
+      "title": "Stan pipeline'ów",
+      "allValid": "Wszystkie pipeline'y są prawidłowe i aktualne.",
+      "invalidHeading": "Nieprawidłowe pipeline'y",
+      "invalidDescription": "Odwołują się do brakującego agenta lub są źle skonfigurowane, więc zawiodłyby (lub wykonałyby się błędnie) przy starcie. Usuń pipeline niestandardowy albo zregeneruj wbudowany, aby przywrócić jego definicję z katalogu.",
+      "builtinBadge": "wbudowany",
+      "reseed": "Zregeneruj",
+      "delete": "Usuń",
+      "updatesHeading": "Dostępne aktualizacje",
+      "updatesDescription": "Pojawiła się nowsza wersja tych wbudowanych pipeline'ów. Zregeneruj je, aby ją przyjąć (Twoje etykiety i stan archiwum zostaną zachowane).",
+      "reseedAll": "Zregeneruj wszystkie ({count})",
+      "dismiss": "Odrzuć",
+      "done": "Gotowe",
+      "toast": {
+        "reseedFailed": "Nie udało się zregenerować pipeline'u",
+        "deleteFailed": "Nie udało się usunąć pipeline'u"
+      }
+    }
+  },
+  "palette": {
+    "hint": "Kliknij agenta, aby dodać go do pipeline'u.",
+    "customAgents": "Agenci niestandardowi"
+  },
+  "gates": {
+    "subtitle": {
+      "humanReview": "Czeka na recenzję kodu przez człowieka na PR, ponawiając korektora po komentarzach",
+      "ci": "Blokuje PR do zielonego CI, ponawiając korektora CI przy niepowodzeniu",
+      "conflicts": "Blokuje PR do czystego scalenia, ponawiając rozwiązywacza przy konfliktach"
+    },
+    "status": {
+      "passed": "Zaliczono",
+      "gaveUp": "Poddano się",
+      "fixing": "Naprawianie",
+      "failing": "Niepowodzenie",
+      "pending": "Oczekuje",
+      "checking": "Sprawdzanie"
+    },
+    "conflict": {
+      "mergeable": "Można scalić",
+      "computing": "Obliczanie możliwości scalenia…",
+      "conflicts": "Konflikty z bazą",
+      "unknown": "Nieznane"
+    },
+    "noActivity": "Brak aktywności bramki.",
+    "noActivityHint": "Wstępne sprawdzenie uruchamia się po otwarciu PR. Podczas odpytywania krok pokazuje stan na żywo na tablicy.",
+    "passedCi": "CI jest zielone.",
+    "passedConflicts": "PR scala się czysto ze swoją bazą.",
+    "humanReview": {
+      "approvals": "{approved} / {required} zatwierdzenie | {approved} / {required} zatwierdzenia | {approved} / {required} zatwierdzeń",
+      "suffixFixing": "· korektor obsługuje komentarze…",
+      "suffixFailing": "· komentarze recenzji do obsłużenia",
+      "suffixAwaiting": "· oczekiwanie na recenzję",
+      "reviewPr": "Przejrzyj pull request na GitHub",
+      "requestFixHeading": "Poproś o poprawkę",
+      "requestFixDescription": "Opisz zmianę, którą korektor ma teraz wprowadzić na gałęzi PR (poza komentarzami recenzji, które obsługuje automatycznie).",
+      "requestFixPlaceholder": "np. zmień nazwę helpera i dodaj test jednostkowy dla przypadku pustego wejścia",
+      "requestFix": "Poproś o poprawkę"
+    },
+    "ci": {
+      "failingChecks": "Niepowodzenia sprawdzeń",
+      "openOnGithub": "Otwórz {name} na GitHub",
+      "conclusionFallback": "niepowodzenie",
+      "failureFallback": "CI nie zgłosiło niepowodzenia na tym commicie."
+    },
+    "conflicts": {
+      "mergeability": "Możliwość scalenia",
+      "viewPr": "Zobacz pull request na GitHub"
+    },
+    "attemptsHeading": "Próby: {helper}",
+    "attempt": "Próba {number}",
+    "outcome": {
+      "completed": "ukończono",
+      "failed": "niepowodzenie"
+    },
+    "sidebar": {
+      "state": "Stan",
+      "fixRounds": "{count} runda poprawek | {count} rundy poprawek | {count} rund poprawek",
+      "attempts": "{attempts}/{max} próba | {attempts}/{max} próby | {attempts}/{max} prób",
+      "suffixRunning": "· w toku…",
+      "suffixNotNeeded": "· jeszcze niepotrzebne",
+      "gatedCommit": "Commit z bramką",
+      "footer": "Bramka wykonuje programowe wstępne sprawdzenie i uruchamia {helper} tylko, gdy się nie powiedzie; zielone sprawdzenie przechodzi dalej bez uruchamiania czegokolwiek."
+    }
   }
 }

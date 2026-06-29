@@ -9,12 +9,13 @@ import type { ConsensusStrategy } from '~/types/consensus'
 type DraftUnit = { index: number; kind: AgentKind; companionIndex: number | null }
 
 const pipelines = usePipelinesStore()
+const { t } = useI18n()
 
-const CONSENSUS_STRATEGIES: { value: ConsensusStrategy; label: string }[] = [
-  { value: 'specialist-panel', label: 'Specialist panel' },
-  { value: 'debate', label: 'Debate' },
-  { value: 'ranked-voting', label: 'Ranked voting' },
-]
+const CONSENSUS_STRATEGIES = computed<{ value: ConsensusStrategy; label: string }[]>(() => [
+  { value: 'specialist-panel', label: t('pipeline.builder.strategyOption.specialist-panel') },
+  { value: 'debate', label: t('pipeline.builder.strategyOption.debate') },
+  { value: 'ranked-voting', label: t('pipeline.builder.strategyOption.ranked-voting') },
+])
 
 /** Add a blank participant to the draft step's consensus config. */
 function addParticipant(i: number) {
@@ -82,12 +83,20 @@ function createAgent() {
     label: newAgentName.value,
     description: newAgentDesc.value,
   })
-  toast.add({ title: `Added agent “${agent.label}”`, color: 'success', icon: 'i-lucide-check' })
+  toast.add({
+    title: t('pipeline.builder.toast.added', { name: agent.label }),
+    color: 'success',
+    icon: 'i-lucide-check',
+  })
   addAgentOpen.value = false
 }
 
 function placeholder(what: string) {
-  toast.add({ title: 'Placeholder', description: what, icon: 'i-lucide-construction' })
+  toast.add({
+    title: t('pipeline.builder.toast.placeholderTitle'),
+    description: what,
+    icon: 'i-lucide-construction',
+  })
 }
 
 async function save() {
@@ -96,19 +105,21 @@ async function save() {
     const saved = await pipelines.saveDraft()
     if (saved) {
       toast.add({
-        title: wasEditing ? `Updated “${saved.name}”` : `Saved “${saved.name}”`,
+        title: wasEditing
+          ? t('pipeline.builder.toast.updated', { name: saved.name })
+          : t('pipeline.builder.toast.saved', { name: saved.name }),
         color: 'success',
         icon: 'i-lucide-check',
       })
       ui.builderOpen = false
     } else {
-      toast.add({ title: 'Add at least one agent first', color: 'warning' })
+      toast.add({ title: t('pipeline.builder.toast.addOneFirst'), color: 'warning' })
     }
   } catch (e) {
     // Surface the backend reason (e.g. post-release-health rejected without an
     // observability integration) rather than a generic failure.
     toast.add({
-      title: 'Could not save pipeline',
+      title: t('pipeline.builder.toast.saveFailed'),
       description: e instanceof Error ? e.message : undefined,
       color: 'error',
     })
@@ -178,7 +189,7 @@ async function toggleArchive(p: Pipeline) {
     if (p.archived) await pipelines.unarchive(p.id)
     else await pipelines.archive(p.id)
   } catch {
-    toast.add({ title: 'Could not update pipeline', color: 'error' })
+    toast.add({ title: t('pipeline.builder.toast.updateFailed'), color: 'error' })
   }
 }
 
@@ -192,12 +203,12 @@ async function clone(p: Pipeline) {
   try {
     const copy = await pipelines.clonePipeline(p.id)
     toast.add({
-      title: `Cloned “${p.name}” — now editing “${copy.name}”`,
+      title: t('pipeline.builder.toast.cloned', { name: p.name, copy: copy.name }),
       color: 'success',
       icon: 'i-lucide-copy',
     })
   } catch {
-    toast.add({ title: 'Could not clone pipeline', color: 'error' })
+    toast.add({ title: t('pipeline.builder.toast.cloneFailed'), color: 'error' })
   }
 }
 </script>
@@ -205,7 +216,7 @@ async function clone(p: Pipeline) {
 <template>
   <USlideover
     v-model:open="open"
-    title="Pipeline builder"
+    :title="t('pipeline.builder.title')"
     side="left"
     :ui="{ content: 'max-w-[90vw] sm:max-w-2xl lg:max-w-5xl xl:max-w-6xl' }"
   >
@@ -218,7 +229,7 @@ async function clone(p: Pipeline) {
         <div class="flex flex-col lg:min-h-0 lg:overflow-hidden">
           <div class="mb-2 flex shrink-0 items-center justify-between gap-2">
             <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Agent palette
+              {{ t('pipeline.builder.agentPalette') }}
             </h3>
             <UButton
               color="primary"
@@ -227,7 +238,7 @@ async function clone(p: Pipeline) {
               icon="i-lucide-plus"
               @click="openAddAgent"
             >
-              Add agent
+              {{ t('pipeline.builder.addAgent') }}
             </UButton>
           </div>
           <div class="flex-1 pr-1 lg:min-h-0 lg:overflow-y-auto">
@@ -238,21 +249,23 @@ async function clone(p: Pipeline) {
         <!-- draft chain -->
         <div class="flex flex-col lg:min-h-0 lg:overflow-hidden">
           <div class="mb-2 flex items-center justify-between gap-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">Pipeline</h3>
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              {{ t('pipeline.builder.pipeline') }}
+            </h3>
             <UButton
               color="neutral"
               variant="soft"
               size="xs"
               icon="i-lucide-cpu"
-              title="Manage model presets (which model each agent runs on)"
+              :title="t('pipeline.builder.configureModelsTooltip')"
               @click="ui.openModelConfig()"
             >
-              Configure models
+              {{ t('pipeline.builder.configureModels') }}
             </UButton>
           </div>
           <UInput
             v-model="pipelines.draftName"
-            placeholder="Pipeline name"
+            :placeholder="t('pipeline.builder.namePlaceholder')"
             size="sm"
             class="mb-2"
           />
@@ -274,7 +287,7 @@ async function clone(p: Pipeline) {
             </UBadge>
             <input
               v-model="newLabel"
-              placeholder="+ label"
+              :placeholder="t('pipeline.builder.labelPlaceholder')"
               class="w-20 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[11px] text-slate-200 focus:w-28"
               @keydown.enter.prevent="addLabel"
               @blur="addLabel"
@@ -286,14 +299,14 @@ async function clone(p: Pipeline) {
             class="mb-2 flex items-center gap-1.5 rounded-md border border-amber-800/50 bg-amber-950/30 px-2 py-1 text-[11px] text-amber-300"
           >
             <UIcon name="i-lucide-alert-triangle" class="h-3.5 w-3.5 shrink-0" />
-            A gated step needs a Task Estimator before it — add one or the pipeline won't save.
+            {{ t('pipeline.builder.gatingNeedsEstimator') }}
           </p>
 
           <div
             v-if="pipelines.draft.length === 0"
             class="flex flex-1 items-center justify-center rounded-lg border border-dashed border-slate-700 p-4 text-center text-xs text-slate-500"
           >
-            Click agents on the left to assemble a linear pipeline.
+            {{ t('pipeline.builder.emptyDraft') }}
           </div>
 
           <ol v-else class="flex-1 space-y-2 pr-1 lg:min-h-0 lg:overflow-y-auto">
@@ -327,8 +340,12 @@ async function clone(p: Pipeline) {
                     size="xs"
                     :title="
                       unit.companionIndex !== null
-                        ? `Remove the ${companionLabel(unit.kind)} for this step`
-                        : `Add the ${companionLabel(unit.kind)} (reviews this step, loops it back below threshold)`
+                        ? t('pipeline.builder.companionRemove', {
+                            companion: companionLabel(unit.kind),
+                          })
+                        : t('pipeline.builder.companionAdd', {
+                            companion: companionLabel(unit.kind),
+                          })
                     "
                     @click="pipelines.toggleCompanion(unit.index)"
                   />
@@ -344,8 +361,8 @@ async function clone(p: Pipeline) {
                     size="xs"
                     :title="
                       pipelines.draftEnabled[unit.index] === false
-                        ? 'Step disabled (skipped at run) — click to enable'
-                        : 'Disable this step (kept in the pipeline but skipped at run)'
+                        ? t('pipeline.builder.enableTooltip')
+                        : t('pipeline.builder.disableTooltip')
                     "
                     @click="toggleEnabled(unit)"
                   />
@@ -360,8 +377,8 @@ async function clone(p: Pipeline) {
                     size="xs"
                     :title="
                       pipelines.draftGates[unit.index]
-                        ? 'Approval required after this step — click to remove the gate'
-                        : 'Require human approval after this step'
+                        ? t('pipeline.builder.approvalRemoveTooltip')
+                        : t('pipeline.builder.approvalAddTooltip')
                     "
                     @click="pipelines.toggleDraftGate(unit.index)"
                   />
@@ -379,8 +396,8 @@ async function clone(p: Pipeline) {
                     size="xs"
                     :title="
                       pipelines.draftConsensus[unit.index]?.enabled
-                        ? 'Consensus enabled — click to revert to a single agent'
-                        : 'Enable consensus (multi-model panel/debate/voting) for this step'
+                        ? t('pipeline.builder.consensusRevertTooltip')
+                        : t('pipeline.builder.consensusEnableTooltip')
                     "
                     @click="pipelines.toggleDraftConsensus(unit.index)"
                   />
@@ -400,8 +417,8 @@ async function clone(p: Pipeline) {
                     size="xs"
                     :title="
                       pipelines.draftFollowUps[unit.index] === false
-                        ? 'Follow-up companion disabled — click to enable (Coder surfaces loose ends / questions)'
-                        : 'Follow-up companion enabled — Coder surfaces loose ends / side-tasks / questions; click to disable'
+                        ? t('pipeline.builder.followUpEnableTooltip')
+                        : t('pipeline.builder.followUpDisableTooltip')
                     "
                     @click="pipelines.toggleDraftFollowUps(unit.index)"
                   />
@@ -410,6 +427,7 @@ async function clone(p: Pipeline) {
                     color="neutral"
                     variant="ghost"
                     size="xs"
+                    :title="t('pipeline.builder.moveUp')"
                     :disabled="vi === 0"
                     @click="pipelines.moveUnit(vi, vi - 1)"
                   />
@@ -418,6 +436,7 @@ async function clone(p: Pipeline) {
                     color="neutral"
                     variant="ghost"
                     size="xs"
+                    :title="t('pipeline.builder.moveDown')"
                     :disabled="vi === pipelines.units.length - 1"
                     @click="pipelines.moveUnit(vi, vi + 1)"
                   />
@@ -426,7 +445,7 @@ async function clone(p: Pipeline) {
                     color="error"
                     variant="ghost"
                     size="xs"
-                    title="Remove this step from the pipeline"
+                    :title="t('pipeline.builder.removeStep')"
                     @click="removeUnit(unit)"
                   />
                 </div>
@@ -458,8 +477,8 @@ async function clone(p: Pipeline) {
                     "
                     variant="ghost"
                     size="xs"
-                    label="Gate on estimate"
-                    title="Only run this companion when the task estimate clears a threshold (needs a Task Estimator earlier)"
+                    :label="t('pipeline.builder.gateOnEstimate')"
+                    :title="t('pipeline.builder.companionGateTooltip')"
                     @click="pipelines.toggleDraftGating(unit.companionIndex)"
                   />
                 </div>
@@ -467,8 +486,12 @@ async function clone(p: Pipeline) {
                   v-if="pipelines.draftGating[unit.companionIndex]?.enabled"
                   class="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2"
                 >
-                  <span class="text-[10px] text-slate-500">run when (any):</span>
-                  <label class="text-slate-400">complexity ≥</label>
+                  <span class="text-[10px] text-slate-500">{{
+                    t('pipeline.builder.runWhenAny')
+                  }}</span>
+                  <label class="text-slate-400">{{
+                    t('pipeline.builder.complexityThreshold')
+                  }}</label>
                   <input
                     v-model.number="pipelines.draftGating[unit.companionIndex]!.minComplexity"
                     type="number"
@@ -477,7 +500,7 @@ async function clone(p: Pipeline) {
                     step="0.1"
                     class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
                   />
-                  <label class="text-slate-400">risk ≥</label>
+                  <label class="text-slate-400">{{ t('pipeline.builder.riskThreshold') }}</label>
                   <input
                     v-model.number="pipelines.draftGating[unit.companionIndex]!.minRisk"
                     type="number"
@@ -486,7 +509,7 @@ async function clone(p: Pipeline) {
                     step="0.1"
                     class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
                   />
-                  <label class="text-slate-400">impact ≥</label>
+                  <label class="text-slate-400">{{ t('pipeline.builder.impactThreshold') }}</label>
                   <input
                     v-model.number="pipelines.draftGating[unit.companionIndex]!.minImpact"
                     type="number"
@@ -504,7 +527,7 @@ async function clone(p: Pipeline) {
                 class="ml-6 space-y-2 rounded-md border border-emerald-800/40 bg-emerald-950/20 p-2 text-xs"
               >
                 <div class="flex items-center gap-2">
-                  <label class="text-slate-400">Strategy</label>
+                  <label class="text-slate-400">{{ t('pipeline.builder.strategy') }}</label>
                   <select
                     v-model="pipelines.draftConsensus[unit.index]!.strategy"
                     class="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
@@ -516,7 +539,7 @@ async function clone(p: Pipeline) {
                   <label
                     v-if="pipelines.draftConsensus[unit.index]!.strategy === 'debate'"
                     class="ml-2 text-slate-400"
-                    >Rounds</label
+                    >{{ t('pipeline.builder.rounds') }}</label
                   >
                   <input
                     v-if="pipelines.draftConsensus[unit.index]!.strategy === 'debate'"
@@ -538,12 +561,12 @@ async function clone(p: Pipeline) {
                   >
                     <input
                       v-model="p.role"
-                      placeholder="Role"
+                      :placeholder="t('pipeline.builder.rolePlaceholder')"
                       class="w-28 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
                     />
                     <input
                       v-model="p.modelId"
-                      placeholder="Model id (optional)"
+                      :placeholder="t('pipeline.builder.modelIdPlaceholder')"
                       class="flex-1 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-300"
                     />
                     <UButton
@@ -552,7 +575,7 @@ async function clone(p: Pipeline) {
                       variant="ghost"
                       size="xs"
                       :disabled="pipelines.draftConsensus[unit.index]!.participants.length <= 2"
-                      title="Remove participant (min 2)"
+                      :title="t('pipeline.builder.removeParticipant')"
                       @click="removeParticipant(unit.index, pIdx)"
                     />
                   </div>
@@ -561,7 +584,7 @@ async function clone(p: Pipeline) {
                     color="neutral"
                     variant="ghost"
                     size="xs"
-                    label="Add participant"
+                    :label="t('pipeline.builder.addParticipant')"
                     @click="addParticipant(unit.index)"
                   />
                 </div>
@@ -579,12 +602,12 @@ async function clone(p: Pipeline) {
                     "
                     variant="ghost"
                     size="xs"
-                    label="Gate on estimate"
-                    title="Only run consensus when the task estimate clears a threshold (else the standard agent runs)"
+                    :label="t('pipeline.builder.gateOnEstimate')"
+                    :title="t('pipeline.builder.consensusGateTooltip')"
                     @click="toggleGating(unit.index)"
                   />
                   <template v-if="pipelines.draftConsensus[unit.index]!.gating?.enabled">
-                    <label class="text-slate-400">risk ≥</label>
+                    <label class="text-slate-400">{{ t('pipeline.builder.riskThreshold') }}</label>
                     <input
                       v-model.number="pipelines.draftConsensus[unit.index]!.gating!.minRisk"
                       type="number"
@@ -593,7 +616,9 @@ async function clone(p: Pipeline) {
                       step="0.1"
                       class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
                     />
-                    <label class="text-slate-400">impact ≥</label>
+                    <label class="text-slate-400">{{
+                      t('pipeline.builder.impactThreshold')
+                    }}</label>
                     <input
                       v-model.number="pipelines.draftConsensus[unit.index]!.gating!.minImpact"
                       type="number"
@@ -614,7 +639,7 @@ async function clone(p: Pipeline) {
         <div v-if="pipelines.pipelines.length" class="flex flex-col lg:min-h-0 lg:overflow-hidden">
           <div class="mb-2 flex shrink-0 items-center justify-between gap-2">
             <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Saved pipelines
+              {{ t('pipeline.builder.savedPipelines') }}
             </h3>
             <UButton
               v-if="archivedCount"
@@ -624,7 +649,11 @@ async function clone(p: Pipeline) {
               size="xs"
               @click="showArchived = !showArchived"
             >
-              {{ showArchived ? 'Hide archived' : `Archived (${archivedCount})` }}
+              {{
+                showArchived
+                  ? t('pipeline.builder.hideArchived')
+                  : t('pipeline.builder.archivedCount', { count: archivedCount })
+              }}
             </UButton>
           </div>
 
@@ -637,7 +666,7 @@ async function clone(p: Pipeline) {
               class="cursor-pointer"
               @click="labelFilter = null"
             >
-              All
+              {{ t('pipeline.builder.allLabels') }}
             </UBadge>
             <UBadge
               v-for="l in allLabels"
@@ -689,10 +718,16 @@ async function clone(p: Pipeline) {
                     size="xs"
                     class="shrink-0"
                   >
-                    default
+                    {{ t('pipeline.builder.defaultBadge') }}
                   </UBadge>
                   <span class="shrink-0 text-[10px] text-slate-500">
-                    {{ p.agentKinds.length }} {{ p.agentKinds.length === 1 ? 'step' : 'steps' }}
+                    {{
+                      t(
+                        'pipeline.builder.stepCount',
+                        { count: p.agentKinds.length },
+                        p.agentKinds.length,
+                      )
+                    }}
                   </span>
                 </button>
                 <div
@@ -705,7 +740,9 @@ async function clone(p: Pipeline) {
                     color="neutral"
                     variant="ghost"
                     size="xs"
-                    :title="p.archived ? 'Unarchive' : 'Archive (hide from the default view)'"
+                    :title="
+                      p.archived ? t('pipeline.builder.unarchive') : t('pipeline.builder.archive')
+                    "
                     @click="toggleArchive(p)"
                   />
                   <!-- Clone is available on every pipeline — it's how a read-only
@@ -715,7 +752,9 @@ async function clone(p: Pipeline) {
                     color="neutral"
                     variant="ghost"
                     size="xs"
-                    :title="p.builtin ? 'Clone this default into an editable copy' : 'Clone'"
+                    :title="
+                      p.builtin ? t('pipeline.builder.cloneDefault') : t('pipeline.builder.clone')
+                    "
                     @click="clone(p)"
                   />
                   <!-- Built-in templates are read-only; only custom pipelines edit in place. -->
@@ -725,7 +764,7 @@ async function clone(p: Pipeline) {
                     color="neutral"
                     variant="ghost"
                     size="xs"
-                    title="Edit this pipeline"
+                    :title="t('pipeline.builder.edit')"
                     @click="edit(p)"
                   />
                   <!-- Built-in templates are read-only — they can be cloned but not
@@ -736,6 +775,7 @@ async function clone(p: Pipeline) {
                     color="neutral"
                     variant="ghost"
                     size="xs"
+                    :title="t('pipeline.builder.delete')"
                     @click="pipelines.removePipeline(p.id)"
                   />
                 </div>
@@ -751,7 +791,9 @@ async function clone(p: Pipeline) {
                   :key="i"
                   class="flex items-center gap-2"
                   :class="{ 'opacity-50 line-through': p.enabled?.[i] === false }"
-                  :title="p.enabled?.[i] === false ? 'Disabled — skipped at run' : undefined"
+                  :title="
+                    p.enabled?.[i] === false ? t('pipeline.builder.disabledStepTooltip') : undefined
+                  "
                 >
                   <span class="w-4 shrink-0 text-center text-[10px] text-slate-500">{{
                     i + 1
@@ -768,7 +810,7 @@ async function clone(p: Pipeline) {
     <template #footer>
       <div class="flex w-full items-center justify-between">
         <UButton color="neutral" variant="ghost" size="sm" @click="pipelines.clearDraft()">
-          {{ pipelines.editingId ? 'Cancel edit' : 'Clear' }}
+          {{ pipelines.editingId ? t('pipeline.builder.cancelEdit') : t('pipeline.builder.clear') }}
         </UButton>
         <UButton
           color="primary"
@@ -777,25 +819,25 @@ async function clone(p: Pipeline) {
           :disabled="pipelines.draft.length === 0"
           @click="save"
         >
-          {{ pipelines.editingId ? 'Update pipeline' : 'Save pipeline' }}
+          {{ pipelines.editingId ? t('pipeline.builder.update') : t('pipeline.builder.save') }}
         </UButton>
       </div>
     </template>
   </USlideover>
 
   <!-- Add-agent form -->
-  <UModal v-model:open="addAgentOpen" title="Add agent">
+  <UModal v-model:open="addAgentOpen" :title="t('pipeline.builder.addAgentModal.title')">
     <template #body>
       <div class="space-y-3">
         <div>
           <label
             class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
           >
-            Name
+            {{ t('pipeline.builder.addAgentModal.name') }}
           </label>
           <UInput
             v-model="newAgentName"
-            placeholder="e.g. Security Auditor"
+            :placeholder="t('pipeline.builder.addAgentModal.namePlaceholder')"
             size="sm"
             class="w-full"
           />
@@ -804,7 +846,7 @@ async function clone(p: Pipeline) {
           <label
             class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
           >
-            Description
+            {{ t('pipeline.builder.addAgentModal.description') }}
           </label>
           <UTextarea
             v-model="newAgentDesc"
@@ -812,7 +854,7 @@ async function clone(p: Pipeline) {
             autoresize
             size="sm"
             class="w-full"
-            placeholder="What does this agent do?"
+            :placeholder="t('pipeline.builder.addAgentModal.descriptionPlaceholder')"
           />
         </div>
         <UButton
@@ -821,9 +863,9 @@ async function clone(p: Pipeline) {
           size="xs"
           icon="i-lucide-file-text"
           block
-          @click="placeholder('Link context document')"
+          @click="placeholder(t('pipeline.builder.addAgentModal.linkDoc'))"
         >
-          Link context document
+          {{ t('pipeline.builder.addAgentModal.linkDoc') }}
         </UButton>
       </div>
     </template>
@@ -831,7 +873,7 @@ async function clone(p: Pipeline) {
     <template #footer>
       <div class="flex w-full items-center justify-end gap-2">
         <UButton color="neutral" variant="ghost" size="sm" @click="addAgentOpen = false">
-          Cancel
+          {{ t('common.cancel') }}
         </UButton>
         <UButton
           color="primary"
@@ -840,7 +882,7 @@ async function clone(p: Pipeline) {
           :disabled="!newAgentName.trim()"
           @click="createAgent"
         >
-          Create agent
+          {{ t('pipeline.builder.addAgentModal.create') }}
         </UButton>
       </div>
     </template>
