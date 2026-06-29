@@ -150,7 +150,9 @@ describe('buildFigmaDesignContext + renderDesignContext', () => {
       previewUrl: 'https://api.figma.com/preview.png',
     })
     expect(renderDesignContext(ctx)).toContain('### References')
-    expect(renderDesignContext(ctx)).toContain('- Rendered preview: https://api.figma.com/preview.png')
+    expect(renderDesignContext(ctx)).toContain(
+      '- Rendered preview: https://api.figma.com/preview.png',
+    )
   })
 })
 

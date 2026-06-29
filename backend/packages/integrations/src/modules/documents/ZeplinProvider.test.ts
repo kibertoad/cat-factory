@@ -58,13 +58,14 @@ describe('ZeplinProvider.fetchDocument', () => {
     expect(doc.body).toContain('- Colors › primary = #ff0000')
   })
 
-  it('drops an unreadable section (best-effort) instead of failing the whole import', async () => {
+  it('drops an unreadable SUPPLEMENTARY section (tokens) instead of failing the import', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
         if (url.endsWith('/projects/p1')) return jsonResponse({ name: 'Acme' })
+        if (url.includes('/screens')) return jsonResponse([{ id: 's1', name: 'Home' }])
         if (url.includes('/components')) return jsonResponse([{ name: 'Button' }])
-        // screens + design_tokens fail
+        // design_tokens (a supplementary, plan-gated section) fails
         return new Response('nope', { status: 500 })
       }),
     )
@@ -74,8 +75,56 @@ describe('ZeplinProvider.fetchDocument', () => {
     expect(doc.body).not.toContain('### Design tokens')
   })
 
+  it('fails the import when the PRIMARY screens read fails (not a silent empty success)', async () => {
+    // Screens are the primary design content: a transient/permission failure must surface
+    // as an error, not persist an empty-but-"successful" import (unlike the supplementary
+    // components/tokens sections, which are best-effort).
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/projects/p1')) return jsonResponse({ name: 'Acme' })
+        if (url.includes('/screens')) return new Response('nope', { status: 500 })
+        return jsonResponse([])
+      }),
+    )
+    await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1')).rejects.toBeInstanceOf(
+      ZeplinApiError,
+    )
+  })
+
+  it('throws when a project renders no design content at all (no empty import)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/projects/p1')) return jsonResponse({ name: 'Acme' })
+        // an empty project: screens/components/tokens all read but carry nothing
+        return jsonResponse([])
+      }),
+    )
+    await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1')).rejects.toBeInstanceOf(
+      ZeplinApiError,
+    )
+  })
+
+  it('unwraps a single-screen { screen: {...} } envelope like the list/array reads', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/projects/p1')) return jsonResponse({ name: 'Acme' })
+        if (url.includes('/screens/s1')) return jsonResponse({ screen: { id: 's1', name: 'Home' } })
+        return jsonResponse([])
+      }),
+    )
+    const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1:s1')
+    expect(doc.title).toBe('Acme — Home')
+    expect(doc.body).toContain('## Home')
+  })
+
   it('throws a ZeplinApiError when the project read fails (bad token)', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('unauthorized', { status: 401 })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('unauthorized', { status: 401 })),
+    )
     await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1')).rejects.toBeInstanceOf(
       ZeplinApiError,
     )

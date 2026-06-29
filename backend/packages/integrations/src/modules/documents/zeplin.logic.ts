@@ -1,5 +1,11 @@
 import type { DocumentSourceDescriptor } from '@cat-factory/kernel'
-import type { DesignBlock, DesignComponent, DesignContext, DesignToken } from './design.logic.js'
+import {
+  dimensionMeta,
+  type DesignBlock,
+  type DesignComponent,
+  type DesignContext,
+  type DesignToken,
+} from './design.logic.js'
 import { assertHostPinned } from './http.js'
 
 // Zeplin-specific pure logic, kept out of the provider shell so it is unit-testable
@@ -98,6 +104,31 @@ export function zeplinUrlFor(externalId: string): string {
   return screenId ? `${base}/screen/${screenId}` : base
 }
 
+// ---- Response envelope unwrapping -----------------------------------------
+
+// Zeplin's REST responses are inconsistent about wrapping collections/objects in a named
+// envelope (`{ screens: [...] }` / `{ screen: {...} }`) vs returning them bare, so every
+// read normalises through these. Pure + exported so the provider shell stays a thin fetch
+// layer and the unwrap is unit-testable without a network.
+
+/** Accept either a bare array or a `{ <key>: [...] }` envelope, else an empty array. */
+export function unwrapArray<T>(value: unknown, key: string): T[] {
+  if (Array.isArray(value)) return value as T[]
+  if (value && typeof value === 'object') {
+    const inner = (value as Record<string, unknown>)[key]
+    if (Array.isArray(inner)) return inner as T[]
+  }
+  return []
+}
+
+/** Accept either a bare object or a `{ <key>: {...} }` envelope, else null. */
+export function unwrapObject<T>(value: unknown, key: string): T | null {
+  if (!value || typeof value !== 'object') return null
+  const inner = (value as Record<string, unknown>)[key]
+  if (inner && typeof inner === 'object') return inner as T
+  return value as T
+}
+
 // ---- Zeplin JSON → DesignContext ------------------------------------------
 
 export interface ZeplinScreen {
@@ -142,12 +173,16 @@ export interface ZeplinDesignTokens {
   measurements?: ZeplinSpacing[]
 }
 
-const MAX_SCREENS = 40
+/**
+ * The single source of truth for how many screens a whole-project import pulls and
+ * renders: {@link ZeplinProvider} builds its `?limit=` query from this, and
+ * {@link zeplinScreensToBlocks} bounds the rendered blocks by it, so the fetch and the
+ * render can't drift.
+ */
+export const MAX_SCREENS = 40
 
 function screenMeta(screen: ZeplinScreen): string | undefined {
-  const w = screen.image?.width
-  const h = screen.image?.height
-  return w != null && h != null ? ` (${Math.round(w)}×${Math.round(h)})` : undefined
+  return dimensionMeta(screen.image?.width, screen.image?.height)
 }
 
 /** Map Zeplin screens into source-neutral blocks (name + an optional description line). */

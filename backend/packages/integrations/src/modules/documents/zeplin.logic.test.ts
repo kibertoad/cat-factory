@@ -5,6 +5,8 @@ import {
   buildZeplinDesignContext,
   parseZeplinRef,
   splitZeplinExternalId,
+  unwrapArray,
+  unwrapObject,
   zeplinTokens,
   zeplinUrlFor,
 } from './zeplin.logic.js'
@@ -64,7 +66,9 @@ describe('assertSafeZeplinUrl (SSRF host pin)', () => {
       /disallowed host/,
     )
     expect(() => assertSafeZeplinUrl('http://api.zeplin.dev/v1/projects/p')).toThrow(/https/)
-    expect(() => assertSafeZeplinUrl('https://api.zeplin.dev.evil.com/x')).toThrow(/disallowed host/)
+    expect(() => assertSafeZeplinUrl('https://api.zeplin.dev.evil.com/x')).toThrow(
+      /disallowed host/,
+    )
     expect(() => assertSafeZeplinUrl('not a url')).toThrow(/invalid/)
   })
 })
@@ -74,7 +78,14 @@ describe('buildZeplinDesignContext + renderDesignContext', () => {
     const ctx = buildZeplinDesignContext({
       externalId: 'proj1:scr1',
       projectName: 'Acme App',
-      screens: [{ id: 'scr1', name: 'Login', description: 'Sign-in screen', image: { width: 390, height: 844 } }],
+      screens: [
+        {
+          id: 'scr1',
+          name: 'Login',
+          description: 'Sign-in screen',
+          image: { width: 390, height: 844 },
+        },
+      ],
       components: [
         { name: 'Primary Button', section: { name: 'Actions' }, description: '3 sizes' },
         { name: 'Text Field', section: { name: 'Forms' } },
@@ -126,5 +137,21 @@ describe('zeplinTokens', () => {
       { collection: 'Typography', name: 'body', value: 'Inter 14px' },
     ])
     expect(zeplinTokens(undefined)).toEqual([])
+  })
+})
+
+describe('unwrapArray / unwrapObject (Zeplin response envelopes)', () => {
+  it('reads a bare array or a { key: [...] } envelope, else []', () => {
+    expect(unwrapArray([{ a: 1 }], 'screens')).toEqual([{ a: 1 }])
+    expect(unwrapArray({ screens: [{ a: 1 }] }, 'screens')).toEqual([{ a: 1 }])
+    expect(unwrapArray({ other: [1] }, 'screens')).toEqual([])
+    expect(unwrapArray(null, 'screens')).toEqual([])
+  })
+
+  it('reads a bare object or a { key: {...} } envelope, else null', () => {
+    expect(unwrapObject({ id: 's1' }, 'screen')).toEqual({ id: 's1' })
+    expect(unwrapObject({ screen: { id: 's1' } }, 'screen')).toEqual({ id: 's1' })
+    expect(unwrapObject(null, 'screen')).toBeNull()
+    expect(unwrapObject('nope', 'screen')).toBeNull()
   })
 })

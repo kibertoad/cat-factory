@@ -1,13 +1,13 @@
 ---
-"@cat-factory/contracts": minor
-"@cat-factory/kernel": minor
-"@cat-factory/integrations": minor
-"@cat-factory/prompt-fragments": minor
-"@cat-factory/worker": minor
-"@cat-factory/node-server": minor
-"@cat-factory/server": patch
-"@cat-factory/orchestration": patch
-"@cat-factory/app": patch
+'@cat-factory/contracts': minor
+'@cat-factory/kernel': minor
+'@cat-factory/integrations': minor
+'@cat-factory/prompt-fragments': minor
+'@cat-factory/worker': minor
+'@cat-factory/node-server': minor
+'@cat-factory/server': patch
+'@cat-factory/orchestration': patch
+'@cat-factory/app': patch
 ---
 
 Design-context sources: add Zeplin, generalize the abstraction, drop the Claude Design backend connector.

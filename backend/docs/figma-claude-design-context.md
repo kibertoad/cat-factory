@@ -40,14 +40,15 @@ Both Figma and Zeplin are **`DocumentSourceProvider`s** (`source='figma'`, `sour
 reusing the entire documents integration — the `document_connections` / `documents` tables, the
 generic `DocumentConnectionService` / `DocumentImportService` / link plumbing, the controller, and
 the `.cat-context/` materialization. The only per-source code is `normalizeConnection` + `parseRef`
-+ `fetchDocument`, and the fetched data is mapped into a **shared, source-neutral model** before
-rendering:
 
-- `documents/design.logic.ts` — `DesignContext` (`blocks` = frames/screens, `components`, `tokens`,
+- `fetchDocument`, and the fetched data is mapped into a **shared, source-neutral model** before
+  rendering:
+
+* `documents/design.logic.ts` — `DesignContext` (`blocks` = frames/screens, `components`, `tokens`,
   `references`) + `renderDesignContext`, which emits `## <block>` sections, a global `### Components`,
   `### Design tokens`, and optional `### References`. Each provider only maps its own API into this
   shape; the renderer is shared, so the output isn't Figma-shaped.
-- `documents/http.ts` — the shared host-pinned fetch + SSRF guard + capped read every fixed-host
+* `documents/http.ts` — the shared host-pinned fetch + SSRF guard + capped read every fixed-host
   provider reuses (`createHostPinnedFetch` / `assertHostPinned` / `readCappedText`).
 
 One **best-practice prompt fragment** serves all design sources: `design.context`
@@ -74,11 +75,11 @@ current API when touched — treat them as the intended shape, not a frozen cont
 
 - **Auth:** a per-workspace Zeplin PAT (`Authorization: Bearer`), sealed like Figma.
 - **Fetch:** `GET /v1/projects/:id` (name), `/projects/:id/screens` (→ blocks), `/projects/:id/
-  components` (→ grouped components), `/projects/:id/design_tokens` (→ colours/typography/spacing).
+components` (→ grouped components), `/projects/:id/design_tokens` (→ colours/typography/spacing).
   The screens/components/tokens reads are best-effort (a single failing section is dropped, not
   fatal), exactly like Figma's variables.
 - **Why Zeplin (and not just Figma):** Zeplin is the design→dev **handoff** tool, so its content
-  model is *screens + a design system*, NOT Figma's node tree. Having a second provider with a
+  model is _screens + a design system_, NOT Figma's node tree. Having a second provider with a
   genuinely different model is what proves the `DesignContext` abstraction isn't Figma-shaped. It
   rides the same provider port + shared renderer with zero engine changes.
 
@@ -116,11 +117,11 @@ table, link plumbing, controller, and renderer are all reused.
 
 ## Out of scope (deliberately)
 
-- **Pixels / visual confirmation.** Inlining design *images* is the separate binary-artifact +
+- **Pixels / visual confirmation.** Inlining design _images_ is the separate binary-artifact +
   Visual Confirmation surface (#323; see [`visual-confirmation.md`](./visual-confirmation.md)) — a
   Figma frame's rendered PNG could land there as a `kind:'reference'` artifact. The textual context
   this doc covers does not depend on the agent ever fetching pixels.
-- **Code → canvas (the reverse flow).** Turning generated code *into* editable design layers is
+- **Code → canvas (the reverse flow).** Turning generated code _into_ editable design layers is
   design-authoring driven from an interactive client, the opposite direction from
   design→agent-context, and not something a headless backend consumes.
 

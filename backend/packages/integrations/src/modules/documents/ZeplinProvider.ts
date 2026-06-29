@@ -8,11 +8,14 @@ import {
 import { renderDesignContext } from './design.logic.js'
 import { DocumentHttpError, createHostPinnedFetch, readCappedText } from './http.js'
 import {
+  MAX_SCREENS,
   ZEPLIN_API_HOST,
   ZEPLIN_DESCRIPTOR,
   buildZeplinDesignContext,
   parseZeplinRef,
   splitZeplinExternalId,
+  unwrapArray,
+  unwrapObject,
   type ZeplinComponent,
   type ZeplinDesignTokens,
   type ZeplinScreen,
@@ -34,8 +37,6 @@ const API_BASE = `https://${ZEPLIN_API_HOST}/v1`
 const USER_AGENT = 'cat-factory'
 /** Hard cap on the bytes read off any response body, to protect the isolate. */
 const MAX_RESPONSE_BYTES = 5_000_000
-/** Bound how many screens we pull for a whole-project import. */
-const MAX_SCREENS = 40
 
 /** Carries the HTTP status so callers can surface a meaningful error. */
 export class ZeplinApiError extends Error {
@@ -81,8 +82,10 @@ export class ZeplinProvider implements DocumentSourceProvider {
       `/projects/${encodeURIComponent(projectId)}`,
     )
 
-    // The screens, components and tokens are best-effort: a single unreadable section is
-    // dropped from the rendered context rather than failing the whole import.
+    // Screens are the PRIMARY design content, so their read is mandatory: a failed fetch
+    // throws and fails the import rather than silently producing an empty success (an
+    // empty project legitimately returns []). Components and tokens are supplementary
+    // (often plan-gated), so a single unreadable section is dropped, not fatal.
     const screens = await this.fetchScreens(credentials, projectId, screenId)
     const components = await this.bestEffort(() =>
       this.get<ZeplinComponent[] | { components?: ZeplinComponent[] }>(
@@ -101,15 +104,23 @@ export class ZeplinProvider implements DocumentSourceProvider {
       externalId,
       projectName: project.name ?? projectId,
       screens,
-      components: asArray<ZeplinComponent>(components, 'components'),
+      components: unwrapArray<ZeplinComponent>(components, 'components'),
       designTokens,
     })
+
+    const body = renderDesignContext(context)
+    if (!body.trim()) {
+      // The project read succeeded but nothing renderable came back (no screens, and
+      // components/tokens unavailable). Surface it as an error instead of persisting an
+      // empty "successful" import the user would mistake for real design context.
+      throw new ZeplinApiError(404, `Zeplin import '${externalId}' produced no design content`)
+    }
 
     return {
       externalId,
       title: context.title,
       url: context.url,
-      body: renderDesignContext(context),
+      body,
     }
   }
 
@@ -120,21 +131,20 @@ export class ZeplinProvider implements DocumentSourceProvider {
     screenId: string | undefined,
   ): Promise<ZeplinScreen[]> {
     if (screenId) {
-      const screen = await this.bestEffort(() =>
-        this.get<ZeplinScreen>(
+      const screen = unwrapObject<ZeplinScreen>(
+        await this.get<unknown>(
           credentials,
           `/projects/${encodeURIComponent(projectId)}/screens/${encodeURIComponent(screenId)}`,
         ),
+        'screen',
       )
       return screen ? [screen] : []
     }
-    const listed = await this.bestEffort(() =>
-      this.get<ZeplinScreen[] | { screens?: ZeplinScreen[] }>(
-        credentials,
-        `/projects/${encodeURIComponent(projectId)}/screens?limit=${MAX_SCREENS}`,
-      ),
+    const listed = await this.get<unknown>(
+      credentials,
+      `/projects/${encodeURIComponent(projectId)}/screens?limit=${MAX_SCREENS}`,
     )
-    return asArray<ZeplinScreen>(listed, 'screens')
+    return unwrapArray<ZeplinScreen>(listed, 'screens')
   }
 
   private async bestEffort<T>(fn: () => Promise<T>): Promise<T | null> {
@@ -164,7 +174,10 @@ export class ZeplinProvider implements DocumentSourceProvider {
     }
     if (!res.ok) {
       const text = await readCappedText(res, MAX_RESPONSE_BYTES, 'Zeplin').catch(() => '')
-      throw new ZeplinApiError(res.status, `Zeplin GET ${url} → ${res.status}: ${text.slice(0, 300)}`)
+      throw new ZeplinApiError(
+        res.status,
+        `Zeplin GET ${url} → ${res.status}: ${text.slice(0, 300)}`,
+      )
     }
     const text = await readCappedText(res, MAX_RESPONSE_BYTES, 'Zeplin')
     try {
@@ -173,14 +186,4 @@ export class ZeplinProvider implements DocumentSourceProvider {
       throw new ZeplinApiError(502, `Zeplin returned an unparseable body for ${path}`)
     }
   }
-}
-
-/** Accept either a bare array or a `{ <key>: [...] }` envelope, else an empty array. */
-function asArray<T>(value: unknown, key: string): T[] {
-  if (Array.isArray(value)) return value as T[]
-  if (value && typeof value === 'object') {
-    const inner = (value as Record<string, unknown>)[key]
-    if (Array.isArray(inner)) return inner as T[]
-  }
-  return []
 }

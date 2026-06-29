@@ -1,5 +1,11 @@
 import type { DocumentSourceDescriptor } from '@cat-factory/kernel'
-import type { DesignBlock, DesignComponent, DesignContext, DesignToken } from './design.logic.js'
+import {
+  dimensionMeta,
+  type DesignBlock,
+  type DesignComponent,
+  type DesignContext,
+  type DesignToken,
+} from './design.logic.js'
 import { assertHostPinned } from './http.js'
 
 // Figma-specific pure logic, kept out of the provider shell so it is unit-testable
@@ -143,9 +149,7 @@ const MAX_TREE_DEPTH = 6
 const MAX_TREE_NODES = 400
 
 function dimensionLabel(node: FigmaNode): string {
-  const box = node.absoluteBoundingBox
-  if (!box || box.width == null || box.height == null) return ''
-  return ` (${Math.round(box.width)}×${Math.round(box.height)})`
+  return dimensionMeta(node.absoluteBoundingBox?.width, node.absoluteBoundingBox?.height) ?? ''
 }
 
 /**
@@ -326,8 +330,6 @@ export function buildFigmaDesignContext(input: FigmaContextInput): DesignContext
     blocks: figmaBlocks(input.roots),
     components: figmaComponents(input.roots, input.components),
     tokens: figmaTokens(input.variablesMeta),
-    references: input.previewUrl
-      ? [{ label: 'Rendered preview', url: input.previewUrl }]
-      : [],
+    references: input.previewUrl ? [{ label: 'Rendered preview', url: input.previewUrl }] : [],
   }
 }
