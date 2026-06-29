@@ -1936,9 +1936,9 @@
       "repository": "Repository",
       "repositoryHint": "Repositories the GitHub App can access. Don't see yours? Grant the App access below, then refresh.",
       "noReposAvailable": "No repositories available yet. Grant the App access to one below, then refresh.",
-      "filterPlaceholder": "Filter by owner/name…",
-      "clearFilter": "Clear filter",
-      "chooseRepository": "Choose a repository",
+      "searchPlaceholder": "Search repositories by owner or name…",
+      "searchMinChars": "Type at least {min} characters to search.",
+      "noMatches": "No repositories found for {query}.",
       "showingCount": "Showing {shown} of {total} repositories.",
       "repoLabel": {
         "private": " (private)",

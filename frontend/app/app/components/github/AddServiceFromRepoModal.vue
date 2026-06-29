@@ -10,6 +10,7 @@
 // pinned to a subdirectory. When the selected repo is a monorepo, the user
 // browses its tree and picks the service's directory before adding (and may add
 // more than one, a subset of the repo's services).
+import { refDebounced } from '@vueuse/core'
 import GitHubConnect from '~/components/github/GitHubConnect.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
@@ -76,14 +77,31 @@ const repoItems = computed(() =>
   }),
 )
 
-// The PAT (or a wide App install) can expose hundreds of repos, too many for a plain
-// dropdown — filter by owner/name. The currently selected repo is always kept in the
-// list so a selection doesn't vanish when the query no longer matches it.
+// The PAT (or a wide App install) can expose hundreds of repos, far too many for a plain
+// dropdown — so the picker is a typeahead combobox. The user types and matching repos
+// surface: matching is a debounced, case-insensitive substring over `owner/name` (so any
+// part of either matches), and it only kicks in once at least MIN_SEARCH_LEN characters
+// are typed, to keep early keystrokes from listing hundreds of rows.
+const MIN_SEARCH_LEN = 3
 const repoSearch = ref('')
-const filteredRepoItems = computed(() => {
-  const q = repoSearch.value.trim().toLowerCase()
-  if (!q) return repoItems.value
-  return repoItems.value.filter((r) => r.search.includes(q) || r.value === selectedRepoId.value)
+const repoSearchDebounced = refDebounced(repoSearch, 250)
+const repoQuery = computed(() => repoSearchDebounced.value.trim().toLowerCase())
+
+// Matches for the current query — empty until the user passes the min length.
+const queryMatches = computed(() => {
+  if (repoQuery.value.length < MIN_SEARCH_LEN) return []
+  return repoItems.value.filter((r) => r.search.includes(repoQuery.value))
+})
+
+// Items fed to the combobox: the query matches plus the current selection kept present,
+// so the menu can still render the selected repo's label once the (reset) search term no
+// longer matches it.
+const repoMenuItems = computed(() => {
+  const matches = queryMatches.value
+  if (selectedRepoId.value === undefined) return matches
+  if (matches.some((r) => r.value === selectedRepoId.value)) return matches
+  const selected = repoItems.value.find((r) => r.value === selectedRepoId.value)
+  return selected ? [selected, ...matches] : matches
 })
 
 const hasRepos = computed(() => github.availableRepos.length > 0)
@@ -236,37 +254,36 @@ function done() {
               {{ t('github.addService.noReposAvailable') }}
             </div>
             <div v-else class="space-y-1.5">
-              <UInput
-                v-model="repoSearch"
-                icon="i-lucide-search"
-                :placeholder="t('github.addService.filterPlaceholder')"
-                class="w-full"
-                :ui="{ trailing: 'pe-1' }"
-              >
-                <template v-if="repoSearch" #trailing>
-                  <UButton
-                    color="neutral"
-                    variant="link"
-                    size="sm"
-                    icon="i-lucide-x"
-                    :aria-label="t('github.addService.clearFilter')"
-                    @click="repoSearch = ''"
-                  />
-                </template>
-              </UInput>
-              <USelect
+              <UInputMenu
                 v-model="selectedRepoId"
-                :items="filteredRepoItems"
-                :placeholder="t('github.addService.chooseRepository')"
+                v-model:search-term="repoSearch"
+                :items="repoMenuItems"
+                :ignore-filter="true"
+                value-key="value"
+                :loading="github.loadingAvailable"
+                icon="i-lucide-search"
+                :placeholder="t('github.addService.searchPlaceholder')"
                 class="w-full"
-              />
+              >
+                <template #empty>
+                  <span v-if="repoQuery.length < MIN_SEARCH_LEN">
+                    {{ t('github.addService.searchMinChars', { min: MIN_SEARCH_LEN }) }}
+                  </span>
+                  <span v-else>{{ t('github.addService.noMatches', { query: repoQuery }) }}</span>
+                </template>
+              </UInputMenu>
               <p class="text-xs text-slate-500">
-                {{
-                  t('github.addService.showingCount', {
-                    shown: filteredRepoItems.length,
-                    total: repoItems.length,
-                  })
-                }}
+                <template v-if="repoQuery.length < MIN_SEARCH_LEN">
+                  {{ t('github.addService.searchMinChars', { min: MIN_SEARCH_LEN }) }}
+                </template>
+                <template v-else>
+                  {{
+                    t('github.addService.showingCount', {
+                      shown: queryMatches.length,
+                      total: repoItems.length,
+                    })
+                  }}
+                </template>
               </p>
             </div>
           </UFormField>
