@@ -67,9 +67,15 @@ A workspace's runner connection is a **discriminated "agent runner backend"**
   namespace (allow only the apiserver/kubelet) so the harness is reachable solely via
   the proxy.
 
-Adding a further backend (e.g. EKS-specific provisioning) is a single
-`registerRunnerBackend` entry plus a config variant — no new table, service,
-controller, or window. The rest of this document covers the **`manifest`** kind.
+Beyond the built-ins, a deployment can register its **own** runner backend kind
+programmatically (an import side effect via `registerRunnerBackend`, mirroring custom
+agent kinds / gates / env backends). A custom kind rides the contract's **generic
+manifest member** (`runnerBackendConfigSchema`), so it needs **no new config variant** and
+no new table, service, controller, or window — it becomes a first-class option in the same
+connect form (advertised to the SPA via the workspace snapshot's `runnerBackendKinds`, with
+an optional `displayLabel`) and is selectable per workspace by its `kind`. See
+[Custom runner backends](./native-environment-adapter.md#custom-runner-backends) for the
+`RunnerBackendProvider` shape. The rest of this document covers the **`manifest`** kind.
 
 The work splits cleanly across two teams:
 
