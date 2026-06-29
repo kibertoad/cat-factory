@@ -4,6 +4,7 @@
 // `{ kind: 'kubernetes', kubernetes }` config + the `apiToken` secret bundle and emits
 // test/save to the parent tab (which calls the shared provider-connections store).
 import { computed, reactive, ref, watch } from 'vue'
+import { KUBERNETES_RUNNER_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
 import type { ProviderConnection } from '~/types/providerConnections'
 
 const props = defineProps<{
@@ -73,12 +74,12 @@ function buildPayload(): { config: Record<string, unknown>; secrets: Record<stri
     image: form.image.trim(),
   }
   if (form.imageUi.trim()) kubernetes.imageUi = form.imageUi.trim()
-  if (form.caCertPem.trim()) kubernetes.caCertPem = form.caCertPem
+  if (form.caCertPem.trim()) kubernetes.caCertPem = form.caCertPem.trim()
   const port = Number(form.harnessPort)
   if (form.harnessPort.trim() && Number.isFinite(port)) kubernetes.harnessPort = port
   return {
     config: { kind: 'kubernetes', kubernetes },
-    secrets: { apiToken: apiToken.value.trim() },
+    secrets: { [KUBERNETES_RUNNER_TOKEN_SECRET_KEY]: apiToken.value.trim() },
   }
 }
 </script>

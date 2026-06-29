@@ -36,8 +36,7 @@ export class DrizzleRunnerPoolConnectionRepository implements RunnerPoolConnecti
     if (!row) return null
     return {
       workspaceId: row.workspace_id,
-      // Rows predating the discriminated backend are the manifest pool.
-      kind: row.kind ?? 'manifest',
+      kind: row.kind,
       providerId: row.provider_id,
       label: row.label,
       baseUrl: row.base_url,

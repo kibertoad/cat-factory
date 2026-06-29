@@ -19,9 +19,7 @@ interface RunnerPoolConnectionRow {
 function rowToRecord(row: RunnerPoolConnectionRow): RunnerPoolConnectionRecord {
   return {
     workspaceId: row.workspace_id,
-    // Rows predating the discriminated backend are the manifest pool (mirrors the
-    // migration's column default).
-    kind: row.kind ?? 'manifest',
+    kind: row.kind,
     providerId: row.provider_id,
     label: row.label,
     baseUrl: row.base_url,
