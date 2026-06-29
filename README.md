@@ -186,6 +186,7 @@ Each capability has a deeper write-up; start here and follow the link.
   per run. [ADR 0006](./backend/docs/adr/0006-prompt-fragment-library.md).
 - **Self-hosted runner pool** — run coding jobs on your own infra.
   [Operator guide](./backend/docs/runner-pool-integration.md) ·
+  [Kubernetes topology](./backend/docs/kubernetes-topology.md) ·
   [ADR 0004](./backend/docs/adr/0004-self-hosted-runner-pool.md).
 - **Storage & retention** — the D1 data model's retention sweeps.
   [`docs/storage-and-retention.md`](./backend/docs/storage-and-retention.md).
@@ -214,7 +215,8 @@ Each capability has a deeper write-up; start here and follow the link.
 - [Document sources](./backend/docs/document-sources.md)
 - [Ephemeral environments](./backend/docs/environments-integration.md) ·
   [native adapters](./backend/docs/native-environment-adapter.md)
-- [Self-hosted runner pool](./backend/docs/runner-pool-integration.md)
+- [Self-hosted runner pool](./backend/docs/runner-pool-integration.md) ·
+  [Kubernetes topology](./backend/docs/kubernetes-topology.md)
 
 **Operations**
 
