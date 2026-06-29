@@ -1,5 +1,45 @@
 # @cat-factory/node-server
 
+## 0.35.4
+
+### Patch Changes
+
+- 4b5d267: Environment provider repo-config lifecycle: validate + bootstrap (+ agent-repair seam)
+
+  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. a future Kargo
+  adapter) can manage its config file inside the deployed repo:
+
+  - `validateRepo` — mechanical repo-config validation, run on-demand
+    (`POST /environments/connection/validate-repo`) and as a provision pre-flight gate that
+    fails synchronously before `provider.provision()` instead of as an async failed environment.
+  - `describeBootstrapInputs` + `bootstrapProviderConfiguration` — mechanically generate the
+    config file from UI-collected variables; the engine commits it (idempotent; optional PR) and
+    re-validates (`POST /environments/connection/bootstrap-repo`).
+  - `describeRepairAgent` — agent-repair prompt + dispatch seam (the live engine dispatch is
+    scaffolded but not yet wired; see `backend/docs/env-lifecycle.md`).
+
+  All repo I/O flows through the existing VCS-neutral `RepoFiles` abstraction, so the provider
+  never sees a VCS host or token (GitHub today, GitLab later). The provider descriptor now
+  carries `supportsRepoValidation` / `supportsRepoBootstrap` / `bootstrapInputs`. The generic
+  `HttpEnvironmentProvider` implements none of these, so manifest-driven providers are unchanged.
+
+- Updated dependencies [4b5d267]
+  - @cat-factory/kernel@0.47.0
+  - @cat-factory/contracts@0.45.0
+  - @cat-factory/integrations@0.28.0
+  - @cat-factory/server@0.41.0
+  - @cat-factory/orchestration@0.38.0
+  - @cat-factory/agents@0.21.8
+  - @cat-factory/consensus@0.7.66
+  - @cat-factory/gates@0.2.18
+  - @cat-factory/gitlab@0.2.1
+  - @cat-factory/observability-langfuse@0.7.62
+  - @cat-factory/provider-bedrock@0.7.66
+  - @cat-factory/provider-cloudflare@0.7.66
+  - @cat-factory/provider-s3@0.2.12
+  - @cat-factory/spend@0.10.23
+  - @cat-factory/prompt-fragments@0.8.5
+
 ## 0.35.3
 
 ### Patch Changes
