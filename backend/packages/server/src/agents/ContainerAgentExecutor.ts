@@ -148,9 +148,20 @@ export type RecordSubscriptionUsage = (
  * job registries by it, and two steps sharing an id alias there (the bug where an
  * `architect` /explore poll read back the `spec-writer`'s /spec result). The run is
  * addressed separately by the execution id (the {@link RunnerJobRef.runId}).
+ *
+ * A step RE-dispatched within the run (the Tester→Fixer loop's re-test, a fixer round, a
+ * polling gate's helper retry) carries a non-zero `dispatchEpoch` so each round gets a
+ * distinct id. The harness re-attaches to an EXISTING job id rather than re-running (replay
+ * idempotency), and a container-reusing transport (a warm local pool / a self-hosted runner
+ * pool) keeps that registry alive across rounds — reclaiming a pooled member does NOT
+ * destroy it — so without the epoch a re-test would replay the first round's stale report
+ * (the bug where the Tester appeared to "pass regardless" and never actually re-ran). Epoch
+ * 0 (a step dispatched once) keeps the original unsuffixed id, so single-dispatch steps are
+ * unaffected. See {@link AgentRunContext.dispatchEpoch}.
  */
-function stepJobId(executionId: string, agentKind: string): string {
-  return `${executionId}-${agentKind}`
+function stepJobId(executionId: string, agentKind: string, dispatchEpoch = 0): string {
+  const base = `${executionId}-${agentKind}`
+  return dispatchEpoch > 0 ? `${base}-${dispatchEpoch}` : base
 }
 
 /**
@@ -880,8 +891,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   }> {
     const { workspaceId, executionId, blockId } = this.requireIds(context)
     // Per-STEP harness job id: unique within the run so this step's job never aliases
-    // a sibling step's in the (shared) per-run container's job registries.
-    const jobId = stepJobId(executionId, context.agentKind)
+    // a sibling step's in the (shared) per-run container's job registries — and unique
+    // per RE-dispatch round (the dispatch epoch) so a Tester re-test / fixer round never
+    // re-attaches to the prior round's completed job on a container-reusing transport.
+    const jobId = stepJobId(executionId, context.agentKind, context.dispatchEpoch)
 
     // "Subscriptions always win": a subscription-only model carries its harness; a
     // dual-mode GLM/Kimi step pinned to its Cloudflare base is auto-routed to Claude
@@ -1746,8 +1759,24 @@ function coerceTestReport(raw: unknown, summary: string | undefined): unknown {
             : {}),
         }))
     : []
+  // An abort signal: the Tester reported it can't run a meaningful test at all (its env never
+  // came up, a dependency is missing). Carry the reason through and force the greenlight off —
+  // an abort is never release-ready, and the engine routes it to a human instead of the fixer.
+  // The presence of the `abort` object IS the signal: never let a blank/oversized `reason`
+  // downgrade that intent back into a (pointless) fixer loop, so fall back to a generic reason
+  // and cap it like `summary` (the reason is shown to the human + stored on the step verbatim).
+  const abortRaw = (typeof o.abort === 'object' && o.abort !== null ? o.abort : null) as Record<
+    string,
+    unknown
+  > | null
+  const abortReason = abortRaw
+    ? (typeof abortRaw.reason === 'string' && abortRaw.reason.trim()
+        ? abortRaw.reason.trim()
+        : 'the Tester could not run a meaningful test'
+      ).slice(0, 2000)
+    : undefined
   return {
-    greenlight: o.greenlight === true && !blocking,
+    greenlight: o.greenlight === true && !blocking && !abortReason,
     summary:
       typeof o.summary === 'string' && o.summary ? o.summary : (summary?.slice(0, 2000) ?? ''),
     tested: Array.isArray(o.tested)
@@ -1757,6 +1786,7 @@ function coerceTestReport(raw: unknown, summary: string | undefined): unknown {
     concerns,
     ...(environment ? { environment } : {}),
     ...(screenshots.length ? { screenshots } : {}),
+    ...(abortReason ? { abort: { reason: abortReason } } : {}),
   }
 }
 

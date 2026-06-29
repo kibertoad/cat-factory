@@ -2822,6 +2822,12 @@
     "fixerAttempts": "Tentatives du correcteur",
     "fixCount": "{attempts}/{max} correction",
     "fixingSuffix": "· correction…",
+    "fixerTimeline": {
+      "attempt": "Tentative {n}",
+      "completed": "Terminé",
+      "failed": "Échec",
+      "addressed": "Corrige"
+    },
     "empty": {
       "title": "Aucun rapport de tests pour l'instant.",
       "hint": "Le rapport apparaît une fois que le Testeur a terminé une passe. Pendant son exécution, l'étape affiche la progression en direct sur le tableau."

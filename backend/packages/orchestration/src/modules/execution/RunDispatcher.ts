@@ -649,6 +649,16 @@ export class RunDispatcher {
     // `testing`, and re-dispatch the Tester against the (now-fixed) branch — its
     // fresh report then drives greenlight-or-loop again. Mirrors the CI gate.
     if (isTesterKind(step.agentKind) && step.test?.phase === 'fixing') {
+      // Record this fixer round (what it was handed + how it ended) so the test window can
+      // show an inspectable timeline of the otherwise-opaque fixer sub-jobs. Persisted as
+      // part of the re-dispatch below.
+      this.testerController.recordFixerOutcome(
+        step,
+        update.state === 'done'
+          ? { state: 'done', output: update.result.output ?? null }
+          : { state: 'failed', error: update.error ?? null },
+        this.clock.now(),
+      )
       step.jobId = undefined
       step.subtasks = undefined
       step.test.phase = 'testing'

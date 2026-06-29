@@ -8,7 +8,7 @@ import type {
   PipelineStep,
 } from '@cat-factory/kernel'
 import { DEFAULT_MERGE_PRESET, isAsyncAgentExecutor } from '@cat-factory/kernel'
-import { type TestReport, parseTestReport } from '@cat-factory/contracts'
+import { type TestReport, type TesterAttempt, parseTestReport } from '@cat-factory/contracts'
 import { FIXER_AGENT_KIND, TESTER_AGENT_KIND } from './ci.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { AdvanceResult } from './advance.js'
@@ -20,14 +20,31 @@ function hasBlockingConcerns(report: TestReport): boolean {
   return report.concerns.some((c) => c.severity === 'high' || c.severity === 'critical')
 }
 
+/** Whether a Tester report recorded any check that outright FAILED (not skipped). */
+function hasFailedOutcome(report: TestReport): boolean {
+  return report.outcomes.some((o) => o.status === 'failed')
+}
+
+/**
+ * Ensure a free-text fragment ends with sentence-terminating punctuation so it can be
+ * concatenated into a notification body without running into the following sentence.
+ */
+function endWithStop(text: string): string {
+  const trimmed = text.trim()
+  if (!trimmed) return trimmed
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`
+}
+
 /**
  * The engine's release verdict for a Tester report: greenlit only when the Tester
- * said so AND it raised no blocking (high/critical) concern. Defensive against a
- * harness that greenlights with open blockers — low/medium concerns are advisory
- * and do not, on their own, withhold the greenlight or loop the fixer.
+ * said so AND it raised no blocking (high/critical) concern AND no check failed.
+ * Defensive against a harness that greenlights with open blockers or red checks — a
+ * failed outcome is itself a blocker, so it loops the fixer regardless of the
+ * greenlight flag; low/medium concerns are advisory and do not, on their own, withhold
+ * the greenlight or loop the fixer.
  */
 function isGreenlit(report: TestReport): boolean {
-  return report.greenlight === true && !hasBlockingConcerns(report)
+  return report.greenlight === true && !hasBlockingConcerns(report) && !hasFailedOutcome(report)
 }
 
 /** One-line, human-readable summary of a Tester report's concerns, for failure messages. */
@@ -110,6 +127,27 @@ export class TesterController {
     step.test.phase = 'testing'
     step.subtasks = undefined
 
+    // Auto-abort: the Tester was configured for an ephemeral environment that never came up
+    // (provisioning failed), so there is nothing to meaningfully test and no point looping the
+    // fixer — it can't provision infrastructure. Stop the run for a human regardless of what
+    // (if anything) the report says, BEFORE the unparseable / greenlight checks below.
+    if (step.environment?.status === 'failed') {
+      return this.abortTester(
+        workspaceId,
+        instance,
+        step,
+        block,
+        step.environment.lastError ??
+          'the ephemeral test environment failed to provision, so the change could not be tested',
+      )
+    }
+
+    // Report-driven abort: the Tester itself decided it cannot run a meaningful test (and set
+    // `abort`), so STOP the run for a human instead of looping the fixer over a non-bug.
+    if (report?.abort) {
+      return this.abortTester(workspaceId, instance, step, block, report.abort.reason)
+    }
+
     // An unparseable report can't gate a release — fail loudly rather than silently
     // greenlighting or looping forever.
     if (!report) {
@@ -132,7 +170,7 @@ export class TesterController {
     // check still protects every round against a harness that greenlights with blockers.
     const firstRound = step.test.attempts === 0
     const accepted = firstRound
-      ? report.greenlight === true && report.concerns.length === 0
+      ? report.greenlight === true && report.concerns.length === 0 && !hasFailedOutcome(report)
       : isGreenlit(report)
     if (accepted) return null
 
@@ -194,6 +232,31 @@ export class TesterController {
   }
 
   /**
+   * Append the just-finished `fixer` round to the Tester step's inspectable history, so the
+   * test window can show what each attempt set out to fix (the concerns it was handed) and how
+   * it ended — a fixer run is otherwise an opaque sub-job behind only a bare attempt count.
+   * Called from the driver's fixer-completion branch BEFORE the Tester is re-dispatched.
+   * Mutation only; the caller persists + emits as part of the re-dispatch.
+   */
+  recordFixerOutcome(
+    step: PipelineStep,
+    outcome: { state: 'done' | 'failed'; output?: string | null; error?: string | null },
+    now: number,
+  ): void {
+    if (!step.test) return
+    const summary = outcome.state === 'done' ? outcome.output : outcome.error
+    const concerns = step.test.lastReport?.concerns
+    const entry: TesterAttempt = {
+      attempt: step.test.attempts,
+      at: now,
+      outcome: outcome.state === 'done' ? 'completed' : 'failed',
+      ...(summary ? { summary } : {}),
+      ...(concerns && concerns.length ? { concerns } : {}),
+    }
+    step.test.attemptLog = [...(step.test.attemptLog ?? []), entry]
+  }
+
+  /**
    * Give up on a Tester gate that can't be greenlit. Persists the step (left
    * un-`done`, like the CI gate — never falsely completed), raises a human-actionable
    * `test_failed` notification, and fails the run for human attention. Returns the
@@ -217,6 +280,56 @@ export class TesterController {
     return { kind: 'job_failed', failureKind: 'agent', error, detail: output || undefined }
   }
 
+  /**
+   * Abort the run from the Tester WITHOUT looping the fixer: the test couldn't run at all
+   * (its ephemeral environment never came up, or the Tester reported it can't exercise the
+   * change). Records the reason, raises a human-actionable notification, and fails the run as
+   * a (retryable) `agent` failure so the block lands `blocked` for a human — never the fixer,
+   * which can't provision infrastructure. Mirrors {@link failTester}'s funnel.
+   */
+  private async abortTester(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block | null,
+    reason: string,
+  ): Promise<AdvanceResult> {
+    step.output = reason
+    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.raiseTestAborted(workspaceId, instance, block, reason)
+    return {
+      kind: 'job_failed',
+      failureKind: 'agent',
+      error: `Testing could not run: ${reason}`,
+      detail: reason,
+    }
+  }
+
+  /** Raise a `test_failed` notification when the Tester aborts the run (no fix attempted). */
+  private async raiseTestAborted(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block | null,
+    reason: string,
+  ): Promise<void> {
+    if (!this.deps.notificationService || !block) return
+    await this.deps.notificationService.raise(workspaceId, {
+      type: 'test_failed',
+      blockId: block.id,
+      executionId: instance.id,
+      title: `Testing could not run for "${block.title}"`,
+      // Punctuate the reason so it doesn't run into the next sentence (the reason comes from
+      // the Tester / env error and may not end with terminal punctuation).
+      body:
+        `The Tester stopped the run without attempting a fix: ${endWithStop(reason)} ` +
+        `Resolve the cause, then retry the run.`,
+      payload: {
+        ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
+        pipelineName: instance.pipelineName,
+      },
+    })
+  }
+
   /** Raise a `test_failed` notification when the Tester gate gives up. */
   private async raiseTestFailed(
     workspaceId: string,
@@ -232,7 +345,7 @@ export class TesterController {
       executionId: instance.id,
       title: `Tests are still failing for "${block.title}"`,
       body:
-        `The Fixer agent tried ${attempts} time(s) but the Tester still won't greenlight. ${summary} ` +
+        `The Fixer agent tried ${attempts} time(s) but the Tester still won't greenlight. ${endWithStop(summary)} ` +
         `Take a look and retry the run once fixed.`,
       payload: {
         ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
@@ -302,6 +415,9 @@ export class TesterController {
       attempts: (step.test?.attempts ?? 0) + 1,
       maxAttempts: step.test?.maxAttempts ?? DEFAULT_MERGE_PRESET.ciMaxAttempts,
       lastReport: report,
+      // Preserve the inspectable fixer history across the rebuild — this round's entry is
+      // appended when the fixer finishes (see recordFixerOutcome).
+      ...(step.test?.attemptLog ? { attemptLog: step.test.attemptLog } : {}),
     }
     await this.deps.stateMachine.persistInstance(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)

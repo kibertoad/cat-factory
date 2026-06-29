@@ -2822,6 +2822,12 @@
     "fixerAttempts": "Próby naprawy",
     "fixCount": "{attempts}/{max} naprawa",
     "fixingSuffix": "· naprawianie…",
+    "fixerTimeline": {
+      "attempt": "Próba {n}",
+      "completed": "Ukończono",
+      "failed": "Niepowodzenie",
+      "addressed": "Naprawia"
+    },
     "empty": {
       "title": "Brak raportu z testów.",
       "hint": "Raport pojawi się, gdy Tester zakończy przebieg. W trakcie działania krok pokazuje postęp na żywo na tablicy."

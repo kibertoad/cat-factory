@@ -78,7 +78,7 @@ export type TestScreenshot = v.InferOutput<typeof testScreenshotSchema>
  * requirements plus best-judgement regression of related ones); `outcomes` are the
  * per-area results; `concerns` are the bugs/risks to fix before re-testing.
  */
-export const testReportSchema = v.object({
+const testReportObjectSchema = v.object({
   /** The gate verdict: release-ready (true) or needs fixing (false). */
   greenlight: v.boolean(),
   /** Plain-prose overall summary of the testing session. */
@@ -101,7 +101,29 @@ export const testReportSchema = v.object({
    * the visual-confirmation gate's actual-vs-reference review.
    */
   screenshots: v.optional(v.array(testScreenshotSchema)),
+  /**
+   * Set when the Tester could NOT run a meaningful test at all and the run must STOP for a
+   * human rather than loop the fixer — e.g. the ephemeral environment it was configured to
+   * use never came up, a required dependency was unavailable, or the change simply can't be
+   * exercised in this setup. The engine then blocks the task (retryable) and raises a
+   * notification WITHOUT dispatching the `fixer` (which can't fix missing infrastructure).
+   * This is distinct from a withheld greenlight (bugs were found → loop the fixer); when
+   * `abort` is set, `greenlight` MUST be false. The `reason` is shown to the human verbatim.
+   */
+  abort: v.optional(v.nullable(v.object({ reason: v.string() }))),
 })
+
+/**
+ * Enforce the `abort ⇒ greenlight === false` invariant at the schema boundary so it can't
+ * depend on every caller getting the ordering right: a report that signals `abort` is never
+ * release-ready, so normalise `greenlight` to false whenever an `abort` reason is present.
+ * (The container executor's `coerceTestReport` already forces this on the dispatch path; the
+ * transform makes it hold for every parse — e.g. re-validating persisted step state too.)
+ */
+export const testReportSchema = v.pipe(
+  testReportObjectSchema,
+  v.transform((report) => (report.abort?.reason ? { ...report, greenlight: false } : report)),
+)
 export type TestReport = v.InferOutput<typeof testReportSchema>
 
 /** Parse-or-throw a test report payload an agent returned (the engine validates it). */
