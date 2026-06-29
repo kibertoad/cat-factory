@@ -139,8 +139,7 @@ export class EnvironmentProvisioningService {
     await this.supersedePriorEnvironment(workspaceId, args.blockId ?? null)
 
     const now = this.deps.clock.now()
-    const record: EnvironmentRecord = {
-      id: this.deps.idGenerator.next('env'),
+    const record = this.buildEnvironmentRecord({
       workspaceId,
       blockId: args.blockId ?? null,
       executionId: args.executionId ?? null,
@@ -160,8 +159,7 @@ export class EnvironmentProvisioningService {
       // provider gave none.
       lastError:
         provisioned.status === 'failed' ? provisioned.error?.trim() || 'Provisioning failed' : null,
-      deletedAt: null,
-    }
+    })
     await this.deps.environmentRegistryRepository.insert(record)
     // A provider that returns `status:'failed'` (rather than throwing) is still a
     // failed spin-up — log it as such with the captured `lastError`.
@@ -335,6 +333,18 @@ export class EnvironmentProvisioningService {
     return this.deps.secretCipher.encrypt(JSON.stringify(access))
   }
 
+  /**
+   * Build an {@link EnvironmentRecord} from its discriminating fields, owning the shared
+   * scaffolding (a fresh id + `deletedAt: null`) ONCE so the success path and the
+   * failed-provision path can't drift when the record shape gains a column — a new field on
+   * `EnvironmentRecord` becomes a compile error at both call sites instead of a silent miss.
+   */
+  private buildEnvironmentRecord(
+    fields: Omit<EnvironmentRecord, 'id' | 'deletedAt'>,
+  ): EnvironmentRecord {
+    return { id: this.deps.idGenerator.next('env'), deletedAt: null, ...fields }
+  }
+
   /** A block holds at most one live environment: tombstone any prior one. No-op block-less. */
   private async supersedePriorEnvironment(
     workspaceId: string,
@@ -368,9 +378,7 @@ export class EnvironmentProvisioningService {
   ): Promise<void> {
     try {
       await this.supersedePriorEnvironment(workspaceId, args.blockId ?? null)
-      const now = this.deps.clock.now()
-      const record: EnvironmentRecord = {
-        id: this.deps.idGenerator.next('env'),
+      const record = this.buildEnvironmentRecord({
         workspaceId,
         blockId: args.blockId ?? null,
         executionId: args.executionId ?? null,
@@ -380,11 +388,10 @@ export class EnvironmentProvisioningService {
         status: 'failed',
         accessCipher: null,
         provisionFieldsCipher: null,
-        createdAt: now,
+        createdAt: this.deps.clock.now(),
         expiresAt: null,
         lastError,
-        deletedAt: null,
-      }
+      })
       await this.deps.environmentRegistryRepository.insert(record)
     } catch (persistError) {
       // best-effort — never mask the original provisioning error, but leave a breadcrumb so a

@@ -2,6 +2,7 @@ import {
   type ContainerEndpoint,
   type ContainerExec,
   type ContainerRuntimeAdapter,
+  formatContainerLogs,
   HARNESS_PORT,
   type RunContainerSpec,
 } from './containerRuntime.js'
@@ -190,12 +191,8 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
   async logs(exec: ContainerExec, containerId: string): Promise<string> {
     try {
       const { stdout, stderr } = await exec(['logs', containerId])
-      const out = [stdout, stderr]
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .join('\n')
-      // Keep only a short tail — Apple `container logs` has no `--tail` flag, so trim here.
-      return out.split('\n').slice(-50).join('\n')
+      // Apple `container logs` has no `--tail` flag, so trim the tail client-side.
+      return formatContainerLogs(stdout, stderr, 50)
     } catch {
       return ''
     }

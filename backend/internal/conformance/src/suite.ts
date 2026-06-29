@@ -2649,6 +2649,69 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(afterDelete.body.connection).toBeNull()
       })
 
+      it('surfaces a deployer EnvironmentProvider failure as an `environment` run failure on every facade', async () => {
+        // Parity for the deployer spin-up surfacing (PR #446): when a `deployer` step's
+        // EnvironmentProvider fails to provision, the engine must record an `environment`
+        // run failure carrying the provider's verbatim error AND persist a `failed`
+        // EnvironmentRecord that projects back onto the step (`step.environment.lastError`)
+        // — not a green step with the error buried in prose. The failed-record round-trip
+        // crosses each facade's own registry repo (D1 ⇄ Drizzle), so a runtime that maps
+        // the `failed`/`lastError` columns differently — or forgot to wire the failed-record
+        // persistence — diverges here instead of shipping silently.
+        const provider = {
+          provision: async () => {
+            throw new Error('env API unreachable: ECONNREFUSED')
+          },
+          status: async () => ({ externalId: 'e', status: 'ready', url: null }) as never,
+          teardown: async () => ({ status: 'torn_down' }) as never,
+        }
+        const app = harness.makeApp(undefined, {
+          environmentProvider: provider as unknown as EnvironmentProvider,
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // A registered connection gives `provision` its manifest, so the call reaches the
+        // (throwing) provider rather than failing earlier on "no connection".
+        const manifest = {
+          providerId: 'acme-envs',
+          label: 'Acme Ephemeral Envs',
+          baseUrl: 'https://envs.test/api',
+          auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
+          provision: { method: 'POST', pathTemplate: '/environments' },
+          response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
+        }
+        const registered = await app.call('POST', `/workspaces/${wsId}/environments/connection`, {
+          manifest,
+          secrets: { API_TOKEN: 'super-secret-env-token' },
+        })
+        expect(registered.status).toBe(201)
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Deploy only',
+          agentKinds: ['deployer'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        // A real, classified `environment` failure carrying the provider's verbatim error —
+        // not a generic run failure, and not a falsely-green step.
+        expect(exec.status).toBe('failed')
+        expect(exec.failure?.kind).toBe('environment')
+        expect(exec.failure?.detail).toContain('ECONNREFUSED')
+        const deployStep = exec.steps.find((s) => s.agentKind === 'deployer')!
+        expect(deployStep.state).not.toBe('done')
+        // The failed EnvironmentRecord round-tripped through the facade's registry repo and
+        // projects onto the step — the cross-runtime persistence + column-mapping assertion.
+        expect(deployStep.environment?.status).toBe('failed')
+        expect(deployStep.environment?.lastError).toContain('ECONNREFUSED')
+      })
+
       it('describes the provider config + missingRequired identically on every facade', async () => {
         // `GET /provider` self-describes the connect form (configFields) and reports which
         // required-without-default fields the workspace still owes (`missingRequired`, the

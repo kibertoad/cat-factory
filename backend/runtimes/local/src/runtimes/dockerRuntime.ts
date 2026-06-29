@@ -2,6 +2,7 @@ import {
   type ContainerEndpoint,
   type ContainerExec,
   type ContainerRuntimeAdapter,
+  formatContainerLogs,
   HARNESS_PORT,
   type RunContainerSpec,
   type RuntimeId,
@@ -109,10 +110,7 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
   async logs(exec: ContainerExec, containerId: string): Promise<string> {
     try {
       const { stdout, stderr } = await exec(['logs', '--tail', '50', containerId])
-      return [stdout, stderr]
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .join('\n')
+      return formatContainerLogs(stdout, stderr)
     } catch {
       return ''
     }

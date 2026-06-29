@@ -221,6 +221,59 @@ function waitingOf(cs: Record<string, unknown>): { reason?: string; message?: st
   }
 }
 
+/** Format a kubelet `reason`/`message` pair as `"<reason>: <message>"` (bare reason if no message). */
+function joinReasonMessage(reason: string, message?: string): string {
+  return message ? `${reason}: ${message}` : reason
+}
+
+/**
+ * One pass over a pod's container statuses + conditions, yielding BOTH readings the readiness
+ * loop needs so the pod JSON isn't walked (and the two views aren't kept in sync) twice:
+ * - `terminal`: the first container whose `state.waiting.reason` is a known-unrecoverable
+ *   start-up failure (bad image / config / crash loop), formatted as `"<reason>: <message>"`,
+ *   else null — drives the transport's fail-fast path.
+ * - `detail`: a short human-readable reason the pod isn't ready (the first waiting/terminated
+ *   container reason, else a failed pod condition), '' when nothing useful is present — enriches
+ *   an otherwise root-cause-less "terminated"/"not ready in time" error.
+ */
+export function analyzePodStatus(pod: unknown): { terminal: string | null; detail: string } {
+  const status = statusOf(pod)
+  let terminal: string | null = null
+  let detail = ''
+  for (const cs of containerStatuses(status)) {
+    const waiting = waitingOf(cs)
+    if (waiting?.reason) {
+      const formatted = joinReasonMessage(waiting.reason, waiting.message)
+      if (!detail) detail = formatted
+      if (!terminal && TERMINAL_WAITING_REASONS.has(waiting.reason)) terminal = formatted
+      continue
+    }
+    if (!detail) {
+      const terminated = (cs.state as { terminated?: Record<string, unknown> } | undefined)
+        ?.terminated
+      if (terminated && typeof terminated.reason === 'string') {
+        const msg = typeof terminated.message === 'string' ? terminated.message : undefined
+        detail = joinReasonMessage(terminated.reason, msg)
+      }
+    }
+  }
+  if (!detail) {
+    const conditions = Array.isArray(status?.conditions)
+      ? (status.conditions as Array<Record<string, unknown>>)
+      : []
+    const failing = conditions.find(
+      (c) => c.status === 'False' && typeof c.message === 'string' && c.message,
+    )
+    if (failing && typeof failing.message === 'string') {
+      detail =
+        typeof failing.reason === 'string'
+          ? `${failing.reason}: ${failing.message}`
+          : failing.message
+    }
+  }
+  return { terminal, detail }
+}
+
 /**
  * A terminal, unrecoverable container start-up failure (a bad image / config / crash
  * loop), formatted as `"<reason>: <message>"`, or null when the pod is just still coming
@@ -229,13 +282,7 @@ function waitingOf(cs: Record<string, unknown>): { reason?: string; message?: st
  * 120s readiness timeout.
  */
 export function classifyPodStartupFailure(pod: unknown): string | null {
-  for (const cs of containerStatuses(statusOf(pod))) {
-    const waiting = waitingOf(cs)
-    if (waiting?.reason && TERMINAL_WAITING_REASONS.has(waiting.reason)) {
-      return waiting.message ? `${waiting.reason}: ${waiting.message}` : waiting.reason
-    }
-  }
-  return null
+  return analyzePodStatus(pod).terminal
 }
 
 /**
@@ -245,30 +292,7 @@ export function classifyPodStartupFailure(pod: unknown): string | null {
  * '' when nothing useful is present.
  */
 export function describePodStatus(pod: unknown): string {
-  const status = statusOf(pod)
-  for (const cs of containerStatuses(status)) {
-    const waiting = waitingOf(cs)
-    if (waiting?.reason)
-      return waiting.message ? `${waiting.reason}: ${waiting.message}` : waiting.reason
-    const terminated = (cs.state as { terminated?: Record<string, unknown> } | undefined)
-      ?.terminated
-    if (terminated && typeof terminated.reason === 'string') {
-      const msg = typeof terminated.message === 'string' ? terminated.message : undefined
-      return msg ? `${terminated.reason}: ${msg}` : terminated.reason
-    }
-  }
-  const conditions = Array.isArray(status?.conditions)
-    ? (status.conditions as Array<Record<string, unknown>>)
-    : []
-  const failing = conditions.find(
-    (c) => c.status === 'False' && typeof c.message === 'string' && c.message,
-  )
-  if (failing && typeof failing.message === 'string') {
-    return typeof failing.reason === 'string'
-      ? `${failing.reason}: ${failing.message}`
-      : failing.message
-  }
-  return ''
+  return analyzePodStatus(pod).detail
 }
 
 /**

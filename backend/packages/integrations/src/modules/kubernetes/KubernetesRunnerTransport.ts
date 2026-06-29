@@ -9,11 +9,10 @@ import type {
   SecretResolver,
 } from '@cat-factory/kernel'
 import {
+  analyzePodStatus,
   apiBase,
   buildPodManifest,
   classifyPodReadiness,
-  classifyPodStartupFailure,
-  describePodStatus,
   KUBERNETES_TOKEN_KEY,
   podName,
   podUrl,
@@ -172,16 +171,17 @@ export class KubernetesRunnerTransport implements RunnerTransport {
       }
       if (res.ok) {
         const pod = await res.json()
+        // One walk of the pod status yields both readings (fatal start-up reason + the
+        // enrichment detail), so the JSON isn't parsed twice per poll.
+        const { terminal: fatal, detail } = analyzePodStatus(pod)
         // Fail fast + NON-recoverably on a deterministic start-up failure (bad/unpullable
         // image, bad container config, crash loop): re-driving the same pod would just hang
         // the whole window again, so surface the real reason as a `dispatch` failure (the
         // message deliberately omits the "evicted or crashed" marker so the engine does NOT
         // treat it as recoverable). This is the K8s analogue of the local Docker fail-fast.
-        const fatal = classifyPodStartupFailure(pod)
         if (fatal) {
           throw new Error(`Runner pod '${name}' failed to start: ${fatal}`)
         }
-        const detail = describePodStatus(pod)
         if (detail) lastDetail = detail
         const readiness = classifyPodReadiness(pod)
         if (readiness === 'ready') return
