@@ -6,6 +6,7 @@
   // their `.tsbuildinfo` instead of recompiled on every `pnpm build`.
   "files": [],
   "references": [
+    { "path": "packages/cli/tsconfig.build.json" },
     { "path": "packages/contracts/tsconfig.build.json" },
     { "path": "packages/sandbox-fixtures/tsconfig.build.json" },
     { "path": "packages/prompt-fragments/tsconfig.build.json" },

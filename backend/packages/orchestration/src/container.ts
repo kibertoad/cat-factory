@@ -3,7 +3,6 @@ import type {
   BlockRepository,
   ExecutionRepository,
   PipelineRepository,
-  RepoValidationResult,
   ResolveRunRepoContext,
   RunInitiatorScope,
   RunRepoContext,
@@ -248,10 +247,11 @@ export interface CoreDependencies {
   ) => Promise<RunRepoContext | null>
   /**
    * Optional: dispatch a coding agent to repair a malformed/partial environment-provider
-   * config (the `env-config-repair` kind), returning the post-repair validation. Wired by
-   * a facade that has the agent runtime. Absent → the bootstrap op has no agent fallback.
+   * config — it pushes the fix back onto the target branch and resolves once the agent
+   * finishes (the environments module re-validates afterward). Wired by a facade that has
+   * the agent runtime. Absent → the bootstrap op has no agent fallback.
    */
-  dispatchEnvConfigRepair?: (input: ConfigRepairDispatch) => Promise<RepoValidationResult>
+  dispatchEnvConfigRepair?: (input: ConfigRepairDispatch) => Promise<void>
   /**
    * Optional: runs the engine's gate-probe / merge GitHub reads under the run
    * initiator's ambient context so a per-user PAT is preferred (see

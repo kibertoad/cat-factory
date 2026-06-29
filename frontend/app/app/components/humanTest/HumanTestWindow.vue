@@ -5,12 +5,20 @@
 // stream), surfaces the ephemeral environment URL, and drives the human actions: confirm
 // (pass + tear down + advance), request a fix from findings (the Tester's fixer), pull latest
 // main into the branch + redeploy (conflict → conflict-resolver), recreate, or destroy the env.
-import type { HumanTestEnvironmentStatus, HumanTestStepState } from '~/types/execution'
+import type {
+  HumanTestEnvironmentStatus,
+  HumanTestRound,
+  HumanTestStepState,
+} from '~/types/execution'
+
+// The round outcome union (contracts state it inline, so derive it off the round type).
+type HumanTestRoundOutcome = NonNullable<HumanTestRound['outcome']>
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
 const humanTest = useHumanTestStore()
+const { t, d } = useI18n()
 
 // Shared seam contract (open/blockId/close + Escape). No `onOpen` loader: the gate state
 // rides on the execution step, pushed over the stream.
@@ -38,21 +46,36 @@ const working = computed(
     phase.value === 'resolving_conflicts',
 )
 
-const ENV_STATUS_META: Record<HumanTestEnvironmentStatus, { label: string; color: string }> = {
-  provisioning: { label: 'Provisioning…', color: 'text-amber-300' },
-  ready: { label: 'Ready', color: 'text-emerald-300' },
-  failed: { label: 'Failed', color: 'text-rose-300' },
-  expired: { label: 'Expired', color: 'text-slate-400' },
-  tearing_down: { label: 'Tearing down…', color: 'text-slate-400' },
-  torn_down: { label: 'Destroyed', color: 'text-slate-400' },
+// Exhaustive enum→label maps of literal keys (keeps the typed-key drift guard live vs a
+// runtime-built `humanTest.envStatus.${status}`). The colour stays a component constant.
+const ENV_STATUS_LABEL: Record<HumanTestEnvironmentStatus, string> = {
+  provisioning: 'humanTest.envStatus.provisioning',
+  ready: 'humanTest.envStatus.ready',
+  failed: 'humanTest.envStatus.failed',
+  expired: 'humanTest.envStatus.expired',
+  tearing_down: 'humanTest.envStatus.tearingDown',
+  torn_down: 'humanTest.envStatus.tornDown',
+}
+const ENV_STATUS_COLOR: Record<HumanTestEnvironmentStatus, string> = {
+  provisioning: 'text-amber-300',
+  ready: 'text-emerald-300',
+  failed: 'text-rose-300',
+  expired: 'text-slate-400',
+  tearing_down: 'text-slate-400',
+  torn_down: 'text-slate-400',
 }
 
 const PHASE_LABEL: Record<NonNullable<HumanTestStepState['phase']>, string> = {
-  provisioning: 'Provisioning environment…',
-  awaiting_human: 'Awaiting your validation',
-  fixing: 'Fixer is addressing your findings…',
-  resolving_conflicts: 'Resolving conflicts with main…',
-  passed: 'Passed',
+  provisioning: 'humanTest.phase.provisioning',
+  awaiting_human: 'humanTest.phase.awaitingHuman',
+  fixing: 'humanTest.phase.fixing',
+  resolving_conflicts: 'humanTest.phase.resolvingConflicts',
+  passed: 'humanTest.phase.passed',
+}
+
+const ROUND_OUTCOME_LABEL: Record<HumanTestRoundOutcome, string> = {
+  completed: 'humanTest.roundOutcome.completed',
+  failed: 'humanTest.roundOutcome.failed',
 }
 
 const findings = ref('')
@@ -115,10 +138,12 @@ const canDestroy = computed(
           </span>
           <div class="min-w-0 flex-1">
             <h2 class="truncate text-sm font-semibold text-slate-100">
-              Human testing{{ block ? ` — ${block.title}` : '' }}
+              {{
+                block ? t('humanTest.titleWithBlock', { title: block.title }) : t('humanTest.title')
+              }}
             </h2>
             <p class="truncate text-[11px] text-slate-400">
-              {{ phase ? PHASE_LABEL[phase] : 'Validate the change in a live environment' }}
+              {{ phase ? t(PHASE_LABEL[phase]) : t('humanTest.subtitle') }}
             </p>
           </div>
           <button
@@ -135,24 +160,24 @@ const canDestroy = computed(
             class="flex flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
           >
             <UIcon name="i-lucide-user-check" class="h-8 w-8 opacity-40" />
-            <p class="text-sm">This step hasn't started yet.</p>
+            <p class="text-sm">{{ t('humanTest.notStarted') }}</p>
           </div>
 
           <template v-else>
             <!-- Environment -->
             <section class="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
               <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Ephemeral environment
+                {{ t('humanTest.environment.heading') }}
               </h3>
               <div v-if="env" class="space-y-2">
                 <div class="flex items-center gap-2 text-[13px]">
                   <UIcon
                     name="i-lucide-circle-dot"
                     class="h-3.5 w-3.5"
-                    :class="ENV_STATUS_META[env.status].color"
+                    :class="ENV_STATUS_COLOR[env.status]"
                   />
-                  <span :class="ENV_STATUS_META[env.status].color">{{
-                    ENV_STATUS_META[env.status].label
+                  <span :class="ENV_STATUS_COLOR[env.status]">{{
+                    t(ENV_STATUS_LABEL[env.status])
                   }}</span>
                 </div>
                 <a
@@ -165,13 +190,17 @@ const canDestroy = computed(
                   <UIcon name="i-lucide-external-link" class="h-3.5 w-3.5 shrink-0" />
                   {{ env.url }}
                 </a>
-                <p v-else class="text-[12px] italic text-slate-500">No URL yet.</p>
+                <p v-else class="text-[12px] italic text-slate-500">
+                  {{ t('humanTest.environment.noUrl') }}
+                </p>
                 <p v-if="env.expiresAt" class="text-[11px] text-slate-500">
-                  Expires {{ new Date(env.expiresAt).toLocaleString() }}
+                  {{
+                    t('humanTest.environment.expires', { date: d(new Date(env.expiresAt), 'long') })
+                  }}
                 </p>
               </div>
               <p v-else class="text-[12px] text-amber-300/90">
-                {{ ht.degradedReason ?? 'No live environment.' }}
+                {{ ht.degradedReason ?? t('humanTest.environment.none') }}
               </p>
               <p v-if="env && ht.degradedReason" class="mt-2 text-[12px] text-amber-300/90">
                 {{ ht.degradedReason }}
@@ -188,7 +217,7 @@ const canDestroy = computed(
                   :disabled="busy || !canManageEnv"
                   @click="recreate"
                 >
-                  Recreate
+                  {{ t('humanTest.actions.recreate') }}
                 </UButton>
                 <UButton
                   size="xs"
@@ -198,7 +227,7 @@ const canDestroy = computed(
                   :disabled="busy || !canDestroy"
                   @click="destroy"
                 >
-                  Destroy
+                  {{ t('humanTest.actions.destroy') }}
                 </UButton>
                 <UButton
                   size="xs"
@@ -209,7 +238,7 @@ const canDestroy = computed(
                   :disabled="busy || !canManageEnv"
                   @click="pullMain"
                 >
-                  Pull main + redeploy
+                  {{ t('humanTest.actions.pullMain') }}
                 </UButton>
               </div>
             </section>
@@ -220,7 +249,7 @@ const canDestroy = computed(
               class="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-[12px] text-slate-300"
             >
               <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 animate-spin text-amber-300" />
-              {{ phase ? PHASE_LABEL[phase] : '' }}
+              {{ phase ? t(PHASE_LABEL[phase]) : '' }}
             </p>
 
             <!-- Findings / fix -->
@@ -230,20 +259,20 @@ const canDestroy = computed(
             >
               <div class="flex items-center justify-between">
                 <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Found a problem?
+                  {{ t('humanTest.fix.heading') }}
                 </h3>
                 <button
                   class="text-[12px] text-slate-400 hover:text-slate-200"
                   @click="showFindings = !showFindings"
                 >
-                  {{ showFindings ? 'Cancel' : 'Request a fix' }}
+                  {{ showFindings ? t('humanTest.fix.cancel') : t('humanTest.fix.requestFix') }}
                 </button>
               </div>
               <div v-if="showFindings" class="mt-2 space-y-2">
                 <textarea
                   v-model="findings"
                   rows="4"
-                  placeholder="Describe what went wrong — the Fixer agent gets this as context, then the environment is rebuilt for re-testing."
+                  :placeholder="t('humanTest.fix.placeholder')"
                   class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-[13px] text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none"
                 />
                 <UButton
@@ -254,7 +283,7 @@ const canDestroy = computed(
                   :disabled="busy || !findings.trim()"
                   @click="submitFix"
                 >
-                  Send to Fixer
+                  {{ t('humanTest.fix.send') }}
                 </UButton>
               </div>
             </section>
@@ -265,7 +294,7 @@ const canDestroy = computed(
               class="rounded-lg border border-slate-800 bg-slate-900/60 p-4"
             >
               <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                History ({{ ht.attempts }} round{{ ht.attempts === 1 ? '' : 's' }})
+                {{ t('humanTest.history.heading', { count: ht.attempts }, ht.attempts) }}
               </h3>
               <ol class="space-y-2">
                 <li v-for="(r, i) in ht.rounds" :key="i" class="flex items-start gap-2 text-[12px]">
@@ -275,7 +304,9 @@ const canDestroy = computed(
                   />
                   <div class="min-w-0 flex-1">
                     <span class="text-slate-200">{{
-                      r.kind === 'fix' ? 'Fix requested' : 'Pulled main'
+                      r.kind === 'fix'
+                        ? t('humanTest.history.fixRequested')
+                        : t('humanTest.history.pulledMain')
                     }}</span>
                     <span
                       class="ml-1.5 rounded px-1 text-[10px] uppercase"
@@ -287,7 +318,11 @@ const canDestroy = computed(
                             : 'bg-slate-500/15 text-slate-300'
                       "
                     >
-                      {{ r.outcome ?? 'in progress' }}
+                      {{
+                        r.outcome
+                          ? t(ROUND_OUTCOME_LABEL[r.outcome])
+                          : t('humanTest.roundOutcome.inProgress')
+                      }}
                     </span>
                     <p v-if="r.findings" class="leading-snug text-slate-400">{{ r.findings }}</p>
                   </div>
@@ -318,7 +353,7 @@ const canDestroy = computed(
             :disabled="busy || !awaitingHuman"
             @click="confirm"
           >
-            Looks good — continue
+            {{ t('humanTest.confirm') }}
           </UButton>
         </footer>
       </div>

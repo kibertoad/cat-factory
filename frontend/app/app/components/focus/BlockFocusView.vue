@@ -11,6 +11,8 @@ const ui = useUiStore()
 const models = useModelsStore()
 const workspace = useWorkspaceStore()
 
+const { t, n } = useI18n()
+
 onMounted(() => models.ensureLoaded(workspace.workspaceId ?? undefined))
 
 const block = computed<Block | undefined>(() =>
@@ -64,7 +66,7 @@ function openApprovalFor(approvalId: string) {
           size="sm"
           @click="close"
         >
-          Board
+          {{ t('focus.board') }}
         </UButton>
         <UIcon name="i-lucide-chevron-right" class="h-4 w-4 text-slate-600" />
         <div
@@ -75,7 +77,9 @@ function openApprovalFor(approvalId: string) {
         </div>
         <div>
           <h1 class="text-lg font-semibold text-white">{{ block.title }}</h1>
-          <div class="text-xs text-slate-500">{{ typeMeta.label }} · focus view</div>
+          <div class="text-xs text-slate-500">
+            {{ t('focus.typeSubtitle', { type: typeMeta.label }) }}
+          </div>
         </div>
         <UBadge :color="statusMeta.chip as any" variant="subtle" class="ml-2">
           {{ statusMeta.label }}
@@ -89,7 +93,7 @@ function openApprovalFor(approvalId: string) {
               icon="i-lucide-play"
               trailing-icon="i-lucide-chevron-down"
             >
-              {{ instance ? 'Re-run pipeline' : 'Run pipeline' }}
+              {{ instance ? t('focus.rerunPipeline') : t('focus.runPipeline') }}
             </UButton>
           </UDropdownMenu>
           <UButton icon="i-lucide-x" color="neutral" variant="ghost" @click="close" />
@@ -104,7 +108,7 @@ function openApprovalFor(approvalId: string) {
           <div class="mb-4 flex items-center gap-2">
             <UIcon name="i-lucide-workflow" class="h-4 w-4 text-slate-500" />
             <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-400">
-              {{ instance ? instance.pipelineName : 'No pipeline running' }}
+              {{ instance ? instance.pipelineName : t('focus.noPipelineRunning') }}
             </h2>
           </div>
 
@@ -119,7 +123,7 @@ function openApprovalFor(approvalId: string) {
             v-else
             class="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-700 text-sm text-slate-500"
           >
-            Run a pipeline to visualize the agents working on this block.
+            {{ t('focus.emptyPipelineHint') }}
           </div>
         </section>
 
@@ -129,29 +133,29 @@ function openApprovalFor(approvalId: string) {
         >
           <div>
             <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Description
+              {{ t('focus.description') }}
             </div>
             <p class="text-sm text-slate-300">{{ block.description }}</p>
           </div>
           <div v-if="instance">
             <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Overall progress
+              {{ t('focus.overallProgress') }}
             </div>
             <UProgress :model-value="Math.round(block.progress * 100)" />
             <div class="mt-1 text-[11px] text-slate-400">
-              {{ Math.round(block.progress * 100) }}%
+              {{ n(block.progress, 'percent') }}
             </div>
           </div>
           <div>
             <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Dependencies
+              {{ t('focus.dependencies') }}
             </div>
             <div v-if="deps.length" class="flex flex-wrap gap-1">
               <UBadge v-for="d in deps" :key="d.id" color="neutral" variant="subtle" size="sm">
                 {{ d.title }}
               </UBadge>
             </div>
-            <div v-else class="text-[11px] text-slate-500">None</div>
+            <div v-else class="text-[11px] text-slate-500">{{ t('focus.noDependencies') }}</div>
           </div>
         </aside>
       </div>
