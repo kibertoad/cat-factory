@@ -93,11 +93,11 @@ export const useAuthStore = defineStore(
       }
 
       // Local mode: if no live session resolved but the user previously signed in with a
-      // configured env PAT, silently re-mint a session from it — so a server restart (which
-      // rotates the session secret) or an expired token never forces the login screen again.
-      // The token itself stays server-side; we only remembered the provider choice. Guard on
-      // the provider STILL being configured (PAT could have been removed) and clear the
-      // choice on failure so we fall back to the login screen instead of looping.
+      // configured env PAT, silently re-mint a session from it — so an expired/rotated token
+      // never forces the login screen again. The token itself stays server-side; we only
+      // remembered the provider choice. Guard on the provider STILL being configured (PAT could
+      // have been removed) and clear the choice on failure so we fall back to the login screen
+      // instead of looping.
       if (
         localMode.value?.enabled === true &&
         user.value === null &&
@@ -204,11 +204,16 @@ export const useAuthStore = defineStore(
       autoLoginProvider.value = null
     }
 
-    /** Called by the API client when a request comes back 401. */
+    /**
+     * Called by the API client when a request comes back 401. Drops the dead session but KEEPS
+     * the remembered provider (unlike logout): a 401 from an expired/rotated token or a
+     * transient blip should let the next load silently re-mint from the env PAT, not force the
+     * login screen. The guarded re-mint in `bootstrap` clears the choice itself if it genuinely
+     * fails (PAT removed/revoked), so there's no re-login loop.
+     */
     function handleUnauthorized() {
       token.value = null
       user.value = null
-      autoLoginProvider.value = null
     }
 
     return {
