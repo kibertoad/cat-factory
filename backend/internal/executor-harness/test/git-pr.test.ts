@@ -194,7 +194,7 @@ function stubFetchSequence(
       i++
       return new Response(r.body === undefined ? null : JSON.stringify(r.body), {
         status: r.status ?? 200,
-        headers: { 'content-type': 'application/json', ...(r.headers ?? {}) },
+        headers: { 'content-type': 'application/json', ...r.headers },
       })
     }),
   )

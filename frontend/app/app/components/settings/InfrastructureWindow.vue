@@ -1,25 +1,24 @@
 <script setup lang="ts">
-// The single tabbed "Infrastructure" window. It merges what used to be two separate
-// Integrations-Hub entries — the self-hosted runner pool (container agents) and the
-// ephemeral-environment provider (Tester environments) — into one surface, because the
-// same custom pool typically backs both jobs, so configuring them together reflects
-// reality. Each provider gets its own tab (ProviderConnectionTab); a tab whose backend
-// integration is disabled (503) simply doesn't render.
-//
-// The local-mode delegation toggles are cross-cutting (one per concern), so they live at
-// the TOP of the window rather than buried in one tab — removing the old awkward
-// cross-link hint that pointed from the runner-pool screen back to the env screen.
+// The single tabbed "Infrastructure" window — now a TOP-LEVEL navbar destination (no longer
+// reached through the Integrations hub). Two topical tabs:
+//   - "Agent containers" — where repo-operating agent containers run. Shows the execution
+//     backend selector, the runner-pool connection (ProviderConnectionTab), and — in local
+//     mode — the warm-container-pool + checkout-reuse settings (the local agent-container
+//     runtime, folded in from the former LocalModeSettingsPanel).
+//   - "Test environments" — where the Tester's ephemeral environments run. Shows the test-env
+//     backend selector and the environment-provider connection.
+// Local-specific affordances render inline, gated on `auth.localMode?.enabled`. A tab whose
+// backend integration is disabled (503) simply doesn't render.
 import { computed, ref, watch } from 'vue'
 import type { ProviderConnectionKind } from '~/types/providerConnections'
-import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import ProviderConnectionTab from '~/components/settings/ProviderConnectionTab.vue'
+import ExecutionBackendSelector from '~/components/settings/ExecutionBackendSelector.vue'
+import LocalContainerPoolSettings from '~/components/settings/LocalContainerPoolSettings.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
 const store = useProviderConnectionsStore()
 const auth = useAuthStore()
-const settings = useWorkspaceSettingsStore()
-const toast = useToast()
 
 const open = computed({
   get: () => ui.infrastructureOpen,
@@ -27,7 +26,8 @@ const open = computed({
     if (!v) ui.closeProviderConnection()
   },
 })
-const back = useIntegrationBack(open)
+
+const isLocal = computed(() => auth.localMode?.enabled === true)
 
 // Each concern gates on its own availability probe; an unavailable tab isn't offered.
 const agentsAvailable = computed(() => store.isAvailable('runner-pool'))
@@ -38,7 +38,7 @@ const tabs = computed(() => {
   if (agentsAvailable.value)
     out.push({
       value: 'runner-pool',
-      label: t('settings.providerConnection.tabs.containerAgents'),
+      label: t('settings.providerConnection.tabs.agentContainers'),
       icon: 'i-lucide-server-cog',
       slot: 'runner-pool',
     })
@@ -54,8 +54,8 @@ const tabs = computed(() => {
 
 const activeTab = ref<ProviderConnectionKind>(ui.infrastructureTab)
 
-// Honour the deep-linked tab each time the window opens (e.g. the banner's per-kind
-// "Configure…" button), falling back to the first available tab if the requested one is off.
+// Honour the deep-linked tab each time the window opens, falling back to the first available
+// tab if the requested one is off.
 watch(
   open,
   (isOpen) => {
@@ -69,9 +69,7 @@ watch(
 )
 // When availability resolves after open, re-pin onto a valid tab — but keep honouring the
 // deep-linked request. The two availability probes resolve independently, so `tabs` can pass
-// through a transient single-tab list (e.g. the runner-pool probe lands a tick before the
-// environment one). We must NOT let that transient list steal focus from a still-loading
-// requested tab, so only fall back to the first tab once loading has fully settled.
+// through a transient single-tab list; only fall back to the first tab once loading settled.
 watch([tabs, () => store.loaded], () => {
   const list = tabs.value
   if (list.some((x) => x.value === activeTab.value)) return
@@ -82,38 +80,6 @@ watch([tabs, () => store.loaded], () => {
     activeTab.value = list[0]!.value
   }
 })
-
-// --- Local-mode infrastructure delegation (cross-cutting; shown only in local mode) ---
-// In local mode this is where a developer chooses, per workspace, whether to run on this
-// machine (host Docker for agents, in-container docker-compose for the Tester) or delegate
-// to an external service. Each toggle is enabled only once its provider is registered.
-const isLocal = computed(() => auth.localMode?.enabled === true)
-const runnerPoolRegistered = computed(() => !!store.connectionFor('runner-pool'))
-const envRegistered = computed(() => !!store.connectionFor('environment'))
-const savingDelegation = ref(false)
-
-async function setDelegation(patch: {
-  delegateAgentsToRunnerPool?: boolean
-  delegateTestEnvToProvider?: boolean
-}) {
-  savingDelegation.value = true
-  try {
-    await settings.update(patch)
-  } catch (e) {
-    toast.add({
-      title: t('settings.providerConnection.delegation.updateFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
-  } finally {
-    savingDelegation.value = false
-  }
-}
-
-function selectTab(kind: ProviderConnectionKind) {
-  activeTab.value = kind
-}
 </script>
 
 <template>
@@ -122,80 +88,8 @@ function selectTab(kind: ProviderConnectionKind) {
     :title="t('settings.providerConnection.windowTitle')"
     :ui="{ content: 'max-w-xl' }"
   >
-    <template #title>
-      <IntegrationBackTitle :title="t('settings.providerConnection.windowTitle')" @back="back" />
-    </template>
     <template #body>
       <div class="space-y-4">
-        <!-- Local-mode delegation: the local-vs-external choice for BOTH container agents
-             AND the Tester's ephemeral environments, made once here at the top. -->
-        <section
-          v-if="isLocal"
-          class="space-y-3 rounded-lg border border-slate-700 bg-slate-900/40 p-3"
-        >
-          <div>
-            <h3 class="text-sm font-semibold text-slate-200">
-              {{ t('settings.providerConnection.delegation.title') }}
-            </h3>
-            <p class="mt-1 text-[11px] text-slate-400">
-              {{ t('settings.providerConnection.delegation.intro') }}
-            </p>
-          </div>
-
-          <!-- Container agents → self-hosted runner pool -->
-          <div class="space-y-1">
-            <label class="flex items-center gap-2">
-              <USwitch
-                size="sm"
-                :model-value="settings.settings.delegateAgentsToRunnerPool"
-                :disabled="savingDelegation || !runnerPoolRegistered"
-                @update:model-value="(v) => setDelegation({ delegateAgentsToRunnerPool: v })"
-              />
-              <span class="text-sm text-slate-200">
-                {{ t('settings.providerConnection.delegation.agentsToggle') }}
-              </span>
-            </label>
-            <p class="pl-9 text-[11px] text-slate-400">
-              {{ t('settings.providerConnection.delegation.agentsHint') }}
-              <template v-if="!runnerPoolRegistered">
-                <i18n-t
-                  keypath="settings.providerConnection.delegation.registerPoolPrompt"
-                  tag="span"
-                  scope="global"
-                >
-                  <template #link>
-                    <button
-                      type="button"
-                      class="text-sky-400 underline underline-offset-2 hover:text-sky-300"
-                      @click="selectTab('runner-pool')"
-                    >
-                      {{ t('settings.providerConnection.delegation.registerPoolLink') }}
-                    </button>
-                  </template>
-                </i18n-t>
-              </template>
-            </p>
-          </div>
-
-          <!-- Tester environments → environment provider -->
-          <div class="space-y-1">
-            <label class="flex items-center gap-2">
-              <USwitch
-                size="sm"
-                :model-value="settings.settings.delegateTestEnvToProvider"
-                :disabled="savingDelegation || !envRegistered"
-                @update:model-value="(v) => setDelegation({ delegateTestEnvToProvider: v })"
-              />
-              <span class="text-sm text-slate-200">
-                {{ t('settings.providerConnection.delegation.envToggle') }}
-              </span>
-            </label>
-            <p class="pl-9 text-[11px] text-slate-400">
-              {{ t('settings.providerConnection.delegation.envHint') }}
-            </p>
-          </div>
-        </section>
-
         <UTabs
           v-if="tabs.length"
           v-model="activeTab"
@@ -205,10 +99,26 @@ function selectTab(kind: ProviderConnectionKind) {
           data-testid="infrastructure-tabs"
         >
           <template #runner-pool>
-            <ProviderConnectionTab kind="runner-pool" />
+            <div class="space-y-4">
+              <!-- Where agent containers run (writable in local mode; read-only elsewhere). -->
+              <ExecutionBackendSelector axis="execution" />
+              <ProviderConnectionTab kind="runner-pool" />
+              <!-- Local mode: the warm-pool + checkout reuse ARE the host agent-container
+                   runtime, so they live here rather than in a separate menu. -->
+              <section v-if="isLocal" class="border-t border-slate-800 pt-4">
+                <h3 class="mb-3 text-sm font-semibold text-slate-200">
+                  {{ t('settings.localMode.title') }}
+                </h3>
+                <LocalContainerPoolSettings />
+              </section>
+            </div>
           </template>
           <template #environment>
-            <ProviderConnectionTab kind="environment" />
+            <div class="space-y-4">
+              <!-- Where Tester environments run (writable in local mode; read-only elsewhere). -->
+              <ExecutionBackendSelector axis="testEnv" />
+              <ProviderConnectionTab kind="environment" />
+            </div>
           </template>
         </UTabs>
 

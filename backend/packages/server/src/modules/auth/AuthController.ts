@@ -222,7 +222,7 @@ export function authController(): Hono<AppEnv> {
   // setup banner when the GitHub PAT is missing.
   buildHonoRoute(app, authConfigContract, (c) => {
     const cfg = authConfig(c)
-    const { localMode } = c.get('container').config
+    const { localMode, infrastructure } = c.get('container').config
     return c.json(
       {
         enabled: cfg.enabled,
@@ -232,6 +232,7 @@ export function authController(): Hono<AppEnv> {
           google: !!cfg.google,
         },
         ...(localMode ? { localMode } : {}),
+        ...(infrastructure ? { infrastructure } : {}),
       },
       200,
     )

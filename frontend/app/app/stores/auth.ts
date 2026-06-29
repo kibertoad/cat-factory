@@ -1,4 +1,4 @@
-import type { LocalModeConfig } from '@cat-factory/contracts'
+import type { InfrastructureCapabilities, LocalModeConfig } from '@cat-factory/contracts'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { AuthUser } from '~/types/domain'
@@ -31,6 +31,13 @@ export const useAuthStore = defineStore(
      * setup banner). Null on every other facade.
      */
     const localMode = ref<LocalModeConfig | null>(null)
+    /**
+     * The deployment's infrastructure execution backends (which agent-container runtime + test
+     * environment options exist, and the deployment default active one). Drives the
+     * Infrastructure window's backend selector. Null until the auth handshake resolves / on a
+     * facade that doesn't report it.
+     */
+    const infrastructure = ref<InfrastructureCapabilities | null>(null)
     /**
      * Local mode only: the source-control provider the user last chose to sign in with
      * (its PAT lives server-side in env — this is just the non-secret choice). Persisted, so
@@ -72,6 +79,7 @@ export const useAuthStore = defineStore(
         required.value = config.enabled
         if (config.providers) providers.value = config.providers
         localMode.value = config.localMode ?? null
+        infrastructure.value = config.infrastructure ?? null
       } catch {
         // Backend unreachable — let the board's own error UI handle it.
         required.value = false
@@ -222,6 +230,7 @@ export const useAuthStore = defineStore(
       required,
       providers,
       localMode,
+      infrastructure,
       autoLoginProvider,
       ready,
       isAuthenticated,
