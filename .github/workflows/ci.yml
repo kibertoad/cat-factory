@@ -641,10 +641,24 @@ jobs:
       # would collide with the env suite's own port-80 LoadBalancer Service (its svclb pods
       # could not bind 80, so the Service would never get an address and the URL would never
       # resolve). With Traefik gone, port 80 is free for the test workload.
+      # Retry cluster creation: `k3d cluster create` pulls the k3d-proxy / k3d-tools images
+      # from ghcr.io, and a transient registry timeout there (`context deadline exceeded`)
+      # otherwise fails this required job through no fault of the code under test. Re-pull +
+      # retry up to 3 times (clearing any partial cluster first); the k3s image is cached
+      # after the first attempt, so a retry is fast.
       - name: Create k3d cluster
         run: |
-          k3d cluster create cf-it --api-port 127.0.0.1:6443 \
-            --k3s-arg "--disable=traefik@server:*" --wait --timeout 180s
+          for attempt in 1 2 3; do
+            if k3d cluster create cf-it --api-port 127.0.0.1:6443 \
+              --k3s-arg "--disable=traefik@server:*" --wait --timeout 180s; then
+              exit 0
+            fi
+            echo "::warning::k3d cluster create failed (attempt ${attempt}/3); cleaning up and retrying"
+            k3d cluster delete cf-it || true
+            sleep 5
+          done
+          echo "::error::k3d cluster create failed after 3 attempts"
+          exit 1
 
       # Build the tiny mock-harness image (the in-pod HTTP server the runner suite drives) and
       # pre-pull nginx (the env suite's workload), then import BOTH into the cluster so no pod
