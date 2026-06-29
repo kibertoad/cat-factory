@@ -40,13 +40,13 @@ no board frame, no service/mount, no repo projection, no reference architectures
 These were written, then set aside (the partial tree wouldn't build on its own). Re-apply them as
 the starting point. Exact contents are under [`./env-config-repair/reference/`](./env-config-repair/reference/):
 
-| Reference file | Lands at | What it is |
-| --- | --- | --- |
-| `contracts__env-config-repair.ts.txt` | `backend/packages/contracts/src/env-config-repair.ts` | `envConfigRepairStatusSchema` + `envConfigRepairJobSchema` (+ `EnvConfigRepairJob` type) |
-| `kernel__ports__env-config-repair.ts.txt` | `backend/packages/kernel/src/ports/env-config-repair.ts` | `EnvConfigRepairer` (start/poll/stop), `EnvConfigRepairRunner` (+Noop), repair-job record/patch/repository, request/handle/update types |
-| `orchestration__EnvConfigRepairService.ts.txt` | `backend/packages/orchestration/src/modules/envConfigRepair/EnvConfigRepairService.ts` | the durable lifecycle owner: `start`/`pollJob`/`stop`/`listJobs`/`getJob`, re-validate-on-success, event emit |
-| `server__ContainerEnvConfigRepairer.reworked.ts.txt` | `backend/packages/server/src/agents/ContainerEnvConfigRepairer.ts` | the in-request `repair()` reworked into the `EnvConfigRepairer` port (`startRepair`/`pollRepair`/`stopRepair`, no blocking loop) |
-| `existing-file-edits.diff` | (apply) | the small additive edits to contracts (`index`, `entities` AgentRunKind, `events`, `snapshot`, `provider-config` `repairJobId`) + kernel (`ports/index`, `domain/types`, `execution-events` `envConfigRepairChanged` + Noop) |
+| Reference file                                       | Lands at                                                                               | What it is                                                                                                                                                                                                                   |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contracts__env-config-repair.ts.txt`                | `backend/packages/contracts/src/env-config-repair.ts`                                  | `envConfigRepairStatusSchema` + `envConfigRepairJobSchema` (+ `EnvConfigRepairJob` type)                                                                                                                                     |
+| `kernel__ports__env-config-repair.ts.txt`            | `backend/packages/kernel/src/ports/env-config-repair.ts`                               | `EnvConfigRepairer` (start/poll/stop), `EnvConfigRepairRunner` (+Noop), repair-job record/patch/repository, request/handle/update types                                                                                      |
+| `orchestration__EnvConfigRepairService.ts.txt`       | `backend/packages/orchestration/src/modules/envConfigRepair/EnvConfigRepairService.ts` | the durable lifecycle owner: `start`/`pollJob`/`stop`/`listJobs`/`getJob`, re-validate-on-success, event emit                                                                                                                |
+| `server__ContainerEnvConfigRepairer.reworked.ts.txt` | `backend/packages/server/src/agents/ContainerEnvConfigRepairer.ts`                     | the in-request `repair()` reworked into the `EnvConfigRepairer` port (`startRepair`/`pollRepair`/`stopRepair`, no blocking loop)                                                                                             |
+| `existing-file-edits.diff`                           | (apply)                                                                                | the small additive edits to contracts (`index`, `entities` AgentRunKind, `events`, `snapshot`, `provider-config` `repairJobId`) + kernel (`ports/index`, `domain/types`, `execution-events` `envConfigRepairChanged` + Noop) |
 
 > The reference `.ts.txt` files are verbatim TypeScript (`.txt` only so nothing tries to compile
 > them from `docs/`). `existing-file-edits.diff` was `git diff` against PR #424's HEAD
@@ -58,11 +58,13 @@ Bottom-up; verify `pnpm typecheck` + `pnpm build` (Turbo, from repo root) before
 commit. Analogue paths are the bootstrap files to clone from.
 
 ### 1. Foundation (re-apply the preserved files above)
+
 Contracts, kernel ports, the orchestration service, and the reworked server repairer. Export the
 orchestration service + `EnvConfigRepairPollResult` from `backend/packages/orchestration/src/index.ts`
 (mirror how `BootstrapService`/`BootstrapPollResult` are exported).
 
 ### 2. Integrations — `EnvironmentConnectionService` (`backend/packages/integrations/.../EnvironmentConnectionService.ts`)
+
 - Change the `dispatchConfigRepair?` seam return type from `Promise<void>` to
   `Promise<{ jobId: string }>` (it now **starts** the durable run and returns its id; it does NOT
   await or re-validate).
@@ -86,6 +88,7 @@ orchestration service + `EnvConfigRepairPollResult` from `backend/packages/orche
   repair service / conformance, not `bootstrapRepo`.
 
 ### 3. Orchestration container (`backend/packages/orchestration/src/container.ts`)
+
 - `CoreDependencies`: drop the old `dispatchEnvConfigRepair?` (its `void`/`RepoValidationResult`
   shape); add `envConfigRepairJobRepository?`, `envConfigRepairer?: EnvConfigRepairer`,
   `envConfigRepairRunner?: EnvConfigRepairRunner`.
@@ -97,7 +100,9 @@ orchestration service + `EnvConfigRepairPollResult` from `backend/packages/orche
   controller can reach `pollJob`/`listJobs`/`stop`. Mirror `Core.bootstrap`.
 
 ### 4. Cloudflare runtime (`backend/runtimes/cloudflare/`)
+
 Clone the bootstrap analogues:
+
 - `src/infrastructure/workflows/EnvConfigRepairWorkflow.ts` ← `BootstrapWorkflow.ts` (calls
   `container.envConfigRepair.service.pollJob`).
 - `src/infrastructure/workflows/WorkflowsEnvConfigRepairRunner.ts` ← `WorkflowsBootstrapRunner.ts`.
@@ -115,6 +120,7 @@ Clone the bootstrap analogues:
   `describeRepairAgent`); see finding #5 note below.
 
 ### 5. Node runtime (`backend/runtimes/node/`)
+
 - `src/execution/envConfigRepairRunner.ts` ← `bootstrapRunner.ts` (`driveEnvConfigRepair`,
   `PgBossEnvConfigRepairRunner`, `startEnvConfigRepairWorker`, `reenqueueStaleEnvConfigRepair`;
   queue `env-config-repair.advance`, policy `exclusive`).
@@ -125,6 +131,7 @@ Clone the bootstrap analogues:
 - Local inherits via `buildNodeContainer` (no extra wiring), same as today.
 
 ### 6. Controller + snapshot (`backend/packages/server/`)
+
 - `WorkspaceController`: attach `envConfigRepairJobs = await container.envConfigRepair?.service.listJobs(ws)`
   to the snapshot.
 - `AgentRunController` (retry/stop): route `kind === 'env-config-repair'` to
@@ -132,6 +139,7 @@ Clone the bootstrap analogues:
   owner/repo/branch, or omit retry in v1 and document it).
 
 ### 7. Frontend (`frontend/app/`) — `@cat-factory/app`
+
 - `app/stores/envConfigRepair.ts` (small): `hydrate(snapshot.envConfigRepairJobs)` + `upsert(job)`,
   keyed by id.
 - `app/composables/useWorkspaceStream.ts`: handle `event.type === 'env-config-repair'` → `upsert`.
@@ -142,12 +150,14 @@ Clone the bootstrap analogues:
   `@cat-factory/app`.
 
 ### 8. Conformance (`backend/internal/conformance/`)
+
 - Add an assertion that a config-repair run drives to a terminal state on BOTH runtimes (mirror the
   bootstrap `driveBootstrap` test). The harness already exposes `call`/`createWorkspace`; add a
   `driveEnvConfigRepair` helper analogous to `driveBootstrap`, and use a fake `EnvConfigRepairer`
   (the canonical fake-agent pattern) so wiring drift on either facade fails a test.
 
 ### 9. Changeset
+
 The existing `.changeset/live-repair-agent.md` already bumps the affected packages (server,
 integrations, orchestration, worker, node-server, local-server) as `minor`. Update its body to
 describe the durable-async shape, and add `@cat-factory/app` if the frontend lands here.
