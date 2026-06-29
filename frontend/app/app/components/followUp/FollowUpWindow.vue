@@ -17,6 +17,8 @@ const execution = useExecutionStore()
 const board = useBoardStore()
 const followUps = useFollowUpsStore()
 
+const { t } = useI18n()
+
 const { open, blockId, instanceId, stepIndex, close } = useResultView('follow-ups')
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
@@ -57,15 +59,25 @@ async function onDismiss(item: FollowUpItem) {
   if (id) await followUps.dismissItem(id, item.id).catch(() => {})
 }
 
+// Exhaustive map of the item status enum → label key (literal keys keep the typed-key
+// drift guard live, vs a runtime-built `followUp.status.${status}`).
+const STATUS_LABEL_KEYS: Record<FollowUpItem['status'], string> = {
+  pending: 'followUp.status.pending',
+  filed: 'followUp.status.filed',
+  queued: 'followUp.status.queued',
+  answered: 'followUp.status.answered',
+  dismissed: 'followUp.status.dismissed',
+}
+
 const STATUS_META: Record<
   FollowUpItem['status'],
-  { label: string; badge: 'neutral' | 'info' | 'success' | 'warning'; text: string }
+  { badge: 'neutral' | 'info' | 'success' | 'warning'; text: string }
 > = {
-  pending: { label: 'Needs a decision', badge: 'warning', text: 'text-amber-300' },
-  filed: { label: 'Filed as issue', badge: 'success', text: 'text-emerald-300' },
-  queued: { label: 'Sent to Coder', badge: 'info', text: 'text-sky-300' },
-  answered: { label: 'Answered', badge: 'info', text: 'text-sky-300' },
-  dismissed: { label: 'Dismissed', badge: 'neutral', text: 'text-slate-400' },
+  pending: { badge: 'warning', text: 'text-amber-300' },
+  filed: { badge: 'success', text: 'text-emerald-300' },
+  queued: { badge: 'info', text: 'text-sky-300' },
+  answered: { badge: 'info', text: 'text-sky-300' },
+  dismissed: { badge: 'neutral', text: 'text-slate-400' },
 }
 </script>
 
@@ -88,15 +100,20 @@ const STATUS_META: Record<
           </span>
           <div class="min-w-0 flex-1">
             <h2 class="truncate text-sm font-semibold text-slate-100">
-              {{ FOLLOW_UP_COMPANION_META.label }}{{ block ? ` — ${block.title}` : '' }}
+              {{
+                block ? t('followUp.titleWithBlock', { title: block.title }) : t('followUp.title')
+              }}
             </h2>
             <p class="truncate text-[11px] text-slate-400">
-              Forward-looking follow-ups & questions the Coder surfaced. The pipeline continues once
-              every item is decided.
+              {{ t('followUp.subtitle') }}
             </p>
           </div>
           <UBadge :color="pendingCount > 0 ? 'warning' : 'success'" variant="subtle" size="sm">
-            {{ pendingCount > 0 ? `${pendingCount} to decide` : 'All decided' }}
+            {{
+              pendingCount > 0
+                ? t('followUp.badge.toDecide', { count: pendingCount }, pendingCount)
+                : t('followUp.badge.allDecided')
+            }}
           </UBadge>
           <button
             class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
@@ -113,10 +130,9 @@ const STATUS_META: Record<
             class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
           >
             <UIcon :name="FOLLOW_UP_COMPANION_META.icon" class="h-8 w-8 opacity-40" />
-            <p class="text-sm">No follow-ups yet.</p>
+            <p class="text-sm">{{ t('followUp.empty.title') }}</p>
             <p class="max-w-sm text-[11px] text-slate-500">
-              As the Coder works it streams loose ends, side-tasks and questions here. They appear
-              live — you can act on them before the Coder even finishes.
+              {{ t('followUp.empty.hint') }}
             </p>
           </div>
 
@@ -146,14 +162,15 @@ const STATUS_META: Record<
                       {{ item.title }}
                     </h3>
                     <UBadge :color="STATUS_META[item.status].badge" variant="subtle" size="sm">
-                      {{ STATUS_META[item.status].label }}
+                      {{ t(STATUS_LABEL_KEYS[item.status]) }}
                     </UBadge>
                   </div>
                   <p v-if="item.detail" class="mt-1 whitespace-pre-wrap text-[12px] text-slate-300">
                     {{ item.detail }}
                   </p>
                   <p v-if="item.suggestedAction" class="mt-1 text-[11px] text-slate-400">
-                    <span class="text-slate-500">Suggested:</span> {{ item.suggestedAction }}
+                    <span class="text-slate-500">{{ t('followUp.suggested') }}</span>
+                    {{ item.suggestedAction }}
                   </p>
                   <p v-if="item.status === 'filed' && item.ticketUrl" class="mt-1 text-[11px]">
                     <a
@@ -162,14 +179,15 @@ const STATUS_META: Record<
                       rel="noopener"
                       class="text-emerald-300 hover:underline"
                     >
-                      {{ item.ticketExternalId ?? 'View issue' }}
+                      {{ item.ticketExternalId ?? t('followUp.viewIssue') }}
                     </a>
                   </p>
                   <p
                     v-if="item.status === 'answered' && item.answer"
                     class="mt-1 text-[11px] text-slate-300"
                   >
-                    <span class="text-slate-500">Your answer:</span> {{ item.answer }}
+                    <span class="text-slate-500">{{ t('followUp.yourAnswer') }}</span>
+                    {{ item.answer }}
                   </p>
 
                   <!-- Actions (only while the item is still undecided) -->
@@ -179,7 +197,7 @@ const STATUS_META: Record<
                       <textarea
                         v-model="drafts[item.id]"
                         rows="2"
-                        placeholder="Answer this question — it's folded into the Coder's next pass…"
+                        :placeholder="t('followUp.answerPlaceholder')"
                         class="w-full resize-y rounded-md border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-[12px] text-slate-100 placeholder:text-slate-600 focus:border-sky-500 focus:outline-none"
                       />
                       <div class="flex items-center gap-2">
@@ -190,7 +208,7 @@ const STATUS_META: Record<
                           :disabled="!(drafts[item.id] ?? '').trim()"
                           @click="onAnswer(item)"
                         >
-                          Answer & send back
+                          {{ t('followUp.actions.answerAndSend') }}
                         </UButton>
                         <UButton
                           size="xs"
@@ -199,7 +217,7 @@ const STATUS_META: Record<
                           :loading="followUps.isActing(item.id)"
                           @click="onDismiss(item)"
                         >
-                          Dismiss
+                          {{ t('followUp.actions.dismiss') }}
                         </UButton>
                       </div>
                     </div>
@@ -213,7 +231,7 @@ const STATUS_META: Record<
                         :loading="followUps.isActing(item.id)"
                         @click="onFile(item)"
                       >
-                        File as issue
+                        {{ t('followUp.actions.fileAsIssue') }}
                       </UButton>
                       <UButton
                         size="xs"
@@ -223,7 +241,7 @@ const STATUS_META: Record<
                         :loading="followUps.isActing(item.id)"
                         @click="onQueue(item)"
                       >
-                        Send to Coder
+                        {{ t('followUp.actions.sendToCoder') }}
                       </UButton>
                       <UButton
                         size="xs"
@@ -232,7 +250,7 @@ const STATUS_META: Record<
                         :loading="followUps.isActing(item.id)"
                         @click="onDismiss(item)"
                       >
-                        Dismiss
+                        {{ t('followUp.actions.dismiss') }}
                       </UButton>
                     </div>
                   </div>
@@ -246,10 +264,17 @@ const STATUS_META: Record<
           class="flex items-center justify-between border-t border-slate-800 px-5 py-2.5 text-[11px] text-slate-400"
         >
           <span>
-            {{ items.length }} item{{ items.length === 1 ? '' : 's' }} ·
-            {{ pendingCount }} undecided
+            {{
+              t(
+                'followUp.footer.summary',
+                { count: items.length, undecided: pendingCount },
+                items.length,
+              )
+            }}
           </span>
-          <span v-if="maxLoops > 0">Coder loops used: {{ loops }} / {{ maxLoops }}</span>
+          <span v-if="maxLoops > 0">{{
+            t('followUp.footer.loops', { loops, max: maxLoops })
+          }}</span>
         </footer>
       </div>
     </div>

@@ -20,6 +20,7 @@ import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
+const { t } = useI18n()
 
 // Per-window blob cache for the captured screenshots; revoked on unmount.
 const blobs = useArtifactBlobs()
@@ -52,11 +53,30 @@ watch(
   { immediate: true },
 )
 
-const STATUS_META: Record<TestOutcome['status'], { icon: string; text: string; label: string }> = {
-  passed: { icon: 'i-lucide-circle-check', text: 'text-emerald-400', label: 'Passed' },
-  failed: { icon: 'i-lucide-circle-x', text: 'text-rose-400', label: 'Failed' },
-  skipped: { icon: 'i-lucide-circle-minus', text: 'text-slate-500', label: 'Skipped' },
-}
+const STATUS_META = computed<
+  Record<TestOutcome['status'], { icon: string; text: string; label: string }>
+>(() => ({
+  passed: {
+    icon: 'i-lucide-circle-check',
+    text: 'text-emerald-400',
+    label: t('testing.status.passed'),
+  },
+  failed: { icon: 'i-lucide-circle-x', text: 'text-rose-400', label: t('testing.status.failed') },
+  skipped: {
+    icon: 'i-lucide-circle-minus',
+    text: 'text-slate-500',
+    label: t('testing.status.skipped'),
+  },
+}))
+
+// Exhaustive enum→key map for the concern severity chip label (literal keys keep the
+// typed-key drift guard live).
+const SEVERITY_LABELS = computed<Record<TestConcern['severity'], string>>(() => ({
+  critical: t('testing.severity.critical'),
+  high: t('testing.severity.high'),
+  medium: t('testing.severity.medium'),
+  low: t('testing.severity.low'),
+}))
 
 const SEVERITY_META: Record<TestConcern['severity'], { text: string; chip: string; rank: number }> =
   {
@@ -150,7 +170,7 @@ const scenarioLayout = computed<{ groups: ScenarioGroup[]; ungrouped: TestScreen
   if (leftoverOutcomes.length || leftoverConcerns.length) {
     out.push({
       key: 'other',
-      title: r.tested.length ? 'Other checks' : 'Checks',
+      title: r.tested.length ? t('testing.otherChecks') : t('testing.checks'),
       other: true,
       outcomes: leftoverOutcomes,
       concerns: leftoverConcerns,
@@ -169,7 +189,7 @@ const lightboxItems = computed(() =>
   screenshots.value.map((s) => ({
     artifactId: s.artifactId,
     label: s.view,
-    alt: `${s.view} (screenshot)`,
+    alt: t('testing.screenshotAlt', { view: s.view }),
   })),
 )
 const lightboxOpen = ref(false)
@@ -238,7 +258,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
         tabindex="-1"
         role="dialog"
         aria-modal="true"
-        aria-label="Test report"
+        :aria-label="t('testing.title')"
         class="m-4 flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl focus:outline-none"
       >
         <!-- Header -->
@@ -250,10 +270,10 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
           </span>
           <div class="min-w-0 flex-1">
             <h2 class="truncate text-sm font-semibold text-slate-100">
-              Test report{{ block ? ` — ${block.title}` : '' }}
+              {{ t('testing.title') }}{{ block ? ` — ${block.title}` : '' }}
             </h2>
             <p class="truncate text-[11px] text-slate-400">
-              Exploratory + regression testing of the change
+              {{ t('testing.subtitle') }}
             </p>
           </div>
           <UBadge
@@ -262,15 +282,19 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
             variant="subtle"
             size="sm"
           >
-            {{ report.greenlight ? 'Greenlit' : 'Needs fixes' }}
+            {{ report.greenlight ? t('testing.badge.greenlit') : t('testing.badge.needsFixes') }}
           </UBadge>
           <span
             v-if="testState && testState.attempts > 0"
             class="text-[11px] text-slate-400"
-            :title="'Fixer attempts'"
+            :title="t('testing.fixerAttempts')"
           >
-            {{ testState.attempts }}/{{ testState.maxAttempts }} fix
-            <template v-if="testState.phase === 'fixing'"> · fixing…</template>
+            {{
+              t('testing.fixCount', { attempts: testState.attempts, max: testState.maxAttempts })
+            }}
+            <template v-if="testState.phase === 'fixing'">
+              {{ t('testing.fixingSuffix') }}</template
+            >
           </span>
           <StepRestartControl
             :instance-id="instanceId"
@@ -293,10 +317,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
               class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
             >
               <UIcon name="i-lucide-flask-conical" class="h-8 w-8 opacity-40" />
-              <p class="text-sm">No test report yet.</p>
+              <p class="text-sm">{{ t('testing.empty.title') }}</p>
               <p class="max-w-sm text-[11px] text-slate-500">
-                The report appears once the Tester finishes a pass. While it runs, the step shows
-                live progress on the board.
+                {{ t('testing.empty.hint') }}
               </p>
             </div>
 
@@ -307,7 +330,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
               </p>
 
               <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Scenarios &amp; outcomes
+                {{ t('testing.scenariosOutcomes') }}
               </h3>
               <ul class="space-y-2">
                 <li
@@ -340,12 +363,21 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                       v-if="g.screenshots.length"
                       name="i-lucide-camera"
                       class="h-3.5 w-3.5 shrink-0 text-slate-500"
-                      :title="`${g.screenshots.length} screenshot${g.screenshots.length === 1 ? '' : 's'}`"
+                      :title="
+                        t(
+                          'testing.screenshotCount',
+                          { count: g.screenshots.length },
+                          g.screenshots.length,
+                        )
+                      "
                     />
                     <span class="shrink-0 text-[11px] text-slate-500">
-                      {{ g.outcomes.length }} check{{ g.outcomes.length === 1 ? '' : 's' }}
+                      {{ t('testing.checkCount', { count: g.outcomes.length }, g.outcomes.length) }}
                       <template v-if="g.concerns.length">
-                        · {{ g.concerns.length }} concern{{ g.concerns.length === 1 ? '' : 's' }}
+                        ·
+                        {{
+                          t('testing.concernCount', { count: g.concerns.length }, g.concerns.length)
+                        }}
                       </template>
                     </span>
                   </button>
@@ -370,7 +402,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                       </div>
                     </div>
                     <p v-if="!g.outcomes.length" class="py-0.5 text-[12px] italic text-slate-500">
-                      No discrete check recorded for this scenario.
+                      {{ t('testing.noDiscreteCheck') }}
                     </p>
 
                     <!-- Concerns linked to this scenario -->
@@ -391,7 +423,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                             class="rounded px-1 text-[10px] uppercase"
                             :class="SEVERITY_META[c.severity].chip"
                           >
-                            {{ c.severity }}
+                            {{ SEVERITY_LABELS[c.severity] }}
                           </span>
                         </div>
                         <p v-if="c.detail" class="text-[12px] leading-snug text-slate-400">
@@ -412,14 +444,18 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                         <img
                           v-if="blobs.urlFor(s.artifactId)"
                           :src="blobs.urlFor(s.artifactId)"
-                          :alt="`${s.view} (screenshot)`"
+                          :alt="t('testing.screenshotAlt', { view: s.view })"
                           class="h-full w-full object-cover object-top"
                         />
                         <span
                           v-else
                           class="flex h-full w-full items-center justify-center text-[10px] text-slate-600"
                         >
-                          {{ blobs.statusFor(s.artifactId) === 'error' ? 'Failed' : 'Loading…' }}
+                          {{
+                            blobs.statusFor(s.artifactId) === 'error'
+                              ? t('testing.shot.failed')
+                              : t('testing.shot.loading')
+                          }}
                         </span>
                         <span
                           class="absolute inset-x-0 bottom-0 truncate bg-slate-950/80 px-1 py-0.5 text-[9px] text-slate-300"
@@ -434,7 +470,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
               <!-- Standalone gallery: any captures not mapped to a scenario above -->
               <section v-if="ungroupedScreenshots.length" class="mt-5">
                 <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Screenshots
+                  {{ t('testing.screenshots') }}
                 </h3>
                 <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   <button
@@ -447,7 +483,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                     <img
                       v-if="blobs.urlFor(s.artifactId)"
                       :src="blobs.urlFor(s.artifactId)"
-                      :alt="`${s.view} (screenshot)`"
+                      :alt="t('testing.screenshotAlt', { view: s.view })"
                       class="h-full w-full object-cover object-top"
                     />
                     <span
@@ -455,7 +491,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                       class="flex h-full w-full items-center justify-center text-[11px] text-slate-600"
                     >
                       {{
-                        blobs.statusFor(s.artifactId) === 'error' ? 'Failed to load' : 'Loading…'
+                        blobs.statusFor(s.artifactId) === 'error'
+                          ? t('testing.shot.failedToLoad')
+                          : t('testing.shot.loading')
                       }}
                     </span>
                     <span
@@ -474,7 +512,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
           >
             <div v-if="report">
               <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Verdict
+                {{ t('testing.verdict.heading') }}
               </h4>
               <div class="flex items-center gap-2 text-[13px]">
                 <UIcon
@@ -483,33 +521,39 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                   :class="report.greenlight ? 'text-emerald-400' : 'text-rose-400'"
                 />
                 <span :class="report.greenlight ? 'text-emerald-300' : 'text-rose-300'">
-                  {{ report.greenlight ? 'Safe to release' : 'Withheld' }}
+                  {{
+                    report.greenlight ? t('testing.verdict.safe') : t('testing.verdict.withheld')
+                  }}
                 </span>
               </div>
             </div>
 
             <div v-if="report">
               <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Outcomes
+                {{ t('testing.outcomes.heading') }}
               </h4>
               <dl class="space-y-1 text-[12px]">
                 <div class="flex items-center justify-between">
-                  <dt class="text-slate-400">Passed</dt>
+                  <dt class="text-slate-400">{{ t('testing.outcomes.passed') }}</dt>
                   <dd class="text-emerald-300">{{ counts.passed }}</dd>
                 </div>
                 <div class="flex items-center justify-between">
-                  <dt class="text-slate-400">Failed</dt>
+                  <dt class="text-slate-400">{{ t('testing.outcomes.failed') }}</dt>
                   <dd class="text-rose-300">{{ counts.failed }}</dd>
                 </div>
                 <div class="flex items-center justify-between">
-                  <dt class="text-slate-400">Skipped</dt>
+                  <dt class="text-slate-400">{{ t('testing.outcomes.skipped') }}</dt>
                   <dd class="text-slate-300">{{ counts.skipped }}</dd>
                 </div>
                 <div class="flex items-center justify-between border-t border-slate-800 pt-1">
-                  <dt class="text-slate-400">Concerns</dt>
+                  <dt class="text-slate-400">{{ t('testing.outcomes.concerns') }}</dt>
                   <dd class="text-amber-300">
                     {{ counts.concerns
-                    }}<template v-if="counts.blocking"> ({{ counts.blocking }} blocking)</template>
+                    }}<template v-if="counts.blocking">
+                      {{
+                        t('testing.outcomes.blocking', { count: counts.blocking }, counts.blocking)
+                      }}</template
+                    >
                   </dd>
                 </div>
               </dl>
@@ -517,7 +561,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
 
             <div v-if="report?.environment">
               <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Environment
+                {{ t('testing.environment') }}
               </h4>
               <p class="text-[12px] capitalize text-slate-300">{{ report.environment }}</p>
             </div>
@@ -535,8 +579,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
             />
 
             <p class="mt-auto text-[10px] leading-relaxed text-slate-600">
-              Scenarios are the areas the Tester chose to exercise (its spec acceptance scenarios).
-              Outcomes and concerns are grouped under them by name.
+              {{ t('testing.footer') }}
             </p>
           </aside>
         </div>

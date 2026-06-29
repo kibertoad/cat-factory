@@ -8,10 +8,12 @@
 import type {
   RequirementGroup,
   RequirementItem,
+  RequirementKind,
   RequirementPriority,
   SpecModule,
 } from '~/types/spec'
 
+const { t } = useI18n()
 const board = useBoardStore()
 const serviceSpec = useServiceSpecStore()
 
@@ -86,10 +88,19 @@ function selectGroup(m: number, g: number) {
   selected.value = { m, g }
 }
 
+// Exhaustive priority → label/chip map. Literal `t()` keys keep the typed-key drift
+// guard live, vs a runtime-built `spec.priority.${value}`.
 const PRIORITY_META: Record<RequirementPriority, { label: string; chip: string }> = {
-  must: { label: 'Must', chip: 'error' },
-  should: { label: 'Should', chip: 'warning' },
-  could: { label: 'Could', chip: 'neutral' },
+  must: { label: t('spec.priority.must'), chip: 'error' },
+  should: { label: t('spec.priority.should'), chip: 'warning' },
+  could: { label: t('spec.priority.could'), chip: 'neutral' },
+}
+
+// Exhaustive requirement-kind → label map (closed union from the contracts).
+const KIND_LABELS: Record<RequirementKind, string> = {
+  functional: t('spec.kind.functional'),
+  nonfunctional: t('spec.kind.nonfunctional'),
+  constraint: t('spec.kind.constraint'),
 }
 
 function reqCount(group: RequirementGroup): number {
@@ -97,6 +108,9 @@ function reqCount(group: RequirementGroup): number {
 }
 function priorityMeta(item: RequirementItem) {
   return PRIORITY_META[item.priority] ?? PRIORITY_META.could
+}
+function kindLabel(item: RequirementItem): string {
+  return KIND_LABELS[item.kind] ?? item.kind
 }
 </script>
 
@@ -118,7 +132,7 @@ function priorityMeta(item: RequirementItem) {
             <UIcon name="i-lucide-scroll-text" class="h-5 w-5 text-indigo-300" />
           </div>
           <div class="min-w-0">
-            <h1 class="truncate text-base font-semibold text-white">Requirements</h1>
+            <h1 class="truncate text-base font-semibold text-white">{{ t('spec.title') }}</h1>
             <p v-if="block" class="truncate text-xs text-slate-500">
               {{ spec?.service || block.title }}
             </p>
@@ -133,7 +147,7 @@ function priorityMeta(item: RequirementItem) {
                 icon="i-lucide-list-tree"
                 @click="mode = 'structured'"
               >
-                Structured
+                {{ t('spec.mode.structured') }}
               </UButton>
               <UButton
                 :color="mode === 'gherkin' ? 'primary' : 'neutral'"
@@ -141,10 +155,10 @@ function priorityMeta(item: RequirementItem) {
                 size="xs"
                 icon="i-lucide-square-check-big"
                 :disabled="!hasGherkin"
-                :title="hasGherkin ? 'Gherkin scenarios' : 'No scenarios on main yet'"
+                :title="hasGherkin ? t('spec.mode.gherkinTooltip') : t('spec.mode.gherkinNone')"
                 @click="mode = 'gherkin'"
               >
-                Gherkin
+                {{ t('spec.mode.gherkin') }}
               </UButton>
             </div>
             <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="close" />
@@ -157,7 +171,7 @@ function priorityMeta(item: RequirementItem) {
           class="flex flex-1 items-center justify-center gap-2 text-sm text-slate-400"
         >
           <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-          Loading the specification…
+          {{ t('spec.loading') }}
         </div>
 
         <!-- error -->
@@ -166,7 +180,7 @@ function priorityMeta(item: RequirementItem) {
           class="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-sm text-slate-400"
         >
           <UIcon name="i-lucide-triangle-alert" class="h-6 w-6 text-amber-400" />
-          Could not load the specification. Try reopening this window.
+          {{ t('spec.error') }}
         </div>
 
         <!-- empty: no spec on the repo's default branch yet -->
@@ -176,11 +190,9 @@ function priorityMeta(item: RequirementItem) {
         >
           <UIcon name="i-lucide-scroll-text" class="h-8 w-8 text-slate-600" />
           <div>
-            <p class="text-sm font-medium text-slate-300">No specification yet</p>
+            <p class="text-sm font-medium text-slate-300">{{ t('spec.empty.title') }}</p>
             <p class="mx-auto mt-1 max-w-md text-xs text-slate-500">
-              This service has no spec on its default branch. A specification is generated as tasks
-              run their pipelines; once it lands on main it will appear here, with its Gherkin
-              scenarios.
+              {{ t('spec.empty.description') }}
             </p>
           </div>
         </div>
@@ -198,7 +210,7 @@ function priorityMeta(item: RequirementItem) {
               icon="i-lucide-info"
               @click="selected = null"
             >
-              Overview
+              {{ t('spec.overview') }}
             </UButton>
             <div v-for="(mod, mi) in modules" :key="mi" class="mb-3">
               <div
@@ -226,7 +238,7 @@ function priorityMeta(item: RequirementItem) {
                   v-if="(mod.groups?.length ?? 0) === 0"
                   class="px-2 py-1 text-[11px] italic text-slate-600"
                 >
-                  No feature groups
+                  {{ t('spec.noFeatureGroups') }}
                 </li>
               </ul>
             </div>
@@ -240,10 +252,13 @@ function priorityMeta(item: RequirementItem) {
               <p v-if="spec?.summary" class="mt-2 whitespace-pre-line text-sm text-slate-300">
                 {{ spec.summary }}
               </p>
-              <p v-else class="mt-2 text-sm text-slate-500">No service summary.</p>
+              <p v-else class="mt-2 text-sm text-slate-500">{{ t('spec.noSummary') }}</p>
               <p class="mt-4 text-xs text-slate-500">
-                {{ modules.length }} module(s). Select a feature group on the left to view its
-                requirements{{ hasGherkin ? ' or switch to the Gherkin scenarios' : '' }}.
+                {{
+                  hasGherkin
+                    ? t('spec.moduleHintGherkin', { count: modules.length }, modules.length)
+                    : t('spec.moduleHint', { count: modules.length }, modules.length)
+                }}
               </p>
             </template>
 
@@ -267,14 +282,14 @@ function priorityMeta(item: RequirementItem) {
                   v-else
                   class="mt-4 rounded-lg border border-dashed border-slate-700 p-6 text-center text-sm text-slate-500"
                 >
-                  No Gherkin scenarios for this group.
+                  {{ t('spec.noGherkinForGroup') }}
                 </div>
               </template>
 
               <!-- STRUCTURED view: requirements + acceptance + domain rules -->
               <template v-else>
                 <div v-if="reqCount(selectedGroup) === 0" class="mt-4 text-sm text-slate-500">
-                  No requirements in this group.
+                  {{ t('spec.noRequirements') }}
                 </div>
                 <ul class="mt-4 space-y-4">
                   <li
@@ -288,7 +303,9 @@ function priorityMeta(item: RequirementItem) {
                         <UBadge :color="priorityMeta(req).chip as any" variant="subtle" size="sm">
                           {{ priorityMeta(req).label }}
                         </UBadge>
-                        <UBadge color="neutral" variant="subtle" size="sm">{{ req.kind }}</UBadge>
+                        <UBadge color="neutral" variant="subtle" size="sm">{{
+                          kindLabel(req)
+                        }}</UBadge>
                       </div>
                     </div>
                     <p
@@ -304,13 +321,22 @@ function priorityMeta(item: RequirementItem) {
                         class="rounded-md border border-slate-800 bg-slate-950/50 px-3 py-2 text-[12.5px] leading-relaxed"
                       >
                         <p class="text-slate-300">
-                          <span class="font-semibold text-emerald-400">Given</span> {{ ac.given }}
+                          <span class="font-semibold text-emerald-400">{{
+                            t('spec.acceptance.given')
+                          }}</span>
+                          {{ ac.given }}
                         </p>
                         <p class="text-slate-300">
-                          <span class="font-semibold text-sky-400">When</span> {{ ac.when }}
+                          <span class="font-semibold text-sky-400">{{
+                            t('spec.acceptance.when')
+                          }}</span>
+                          {{ ac.when }}
                         </p>
                         <p class="text-slate-300">
-                          <span class="font-semibold text-violet-400">Then</span> {{ ac.outcome }}
+                          <span class="font-semibold text-violet-400">{{
+                            t('spec.acceptance.then')
+                          }}</span>
+                          {{ ac.outcome }}
                         </p>
                       </div>
                     </div>
@@ -323,7 +349,7 @@ function priorityMeta(item: RequirementItem) {
                     class="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
                   >
                     <UIcon name="i-lucide-shield-check" class="h-3.5 w-3.5" />
-                    Domain rules
+                    {{ t('spec.domainRules') }}
                   </div>
                   <ul class="space-y-1.5">
                     <li
@@ -332,9 +358,9 @@ function priorityMeta(item: RequirementItem) {
                       class="rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-[13px] text-slate-300"
                     >
                       {{ rule.rule }}
-                      <span v-if="rule.rationale" class="text-slate-500">
-                        — {{ rule.rationale }}</span
-                      >
+                      <span v-if="rule.rationale" class="text-slate-500">{{
+                        t('spec.ruleRationale', { rationale: rule.rationale })
+                      }}</span>
                     </li>
                   </ul>
                 </div>
