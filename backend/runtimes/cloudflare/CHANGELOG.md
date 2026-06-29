@@ -1,5 +1,24 @@
 # @cat-factory/worker
 
+## 0.39.2
+
+### Patch Changes
+
+- Updated dependencies [29d8b5d]
+  - @cat-factory/kernel@0.52.0
+  - @cat-factory/contracts@0.50.1
+  - @cat-factory/server@0.46.3
+  - @cat-factory/orchestration@0.41.1
+  - @cat-factory/integrations@0.34.1
+  - @cat-factory/agents@0.21.15
+  - @cat-factory/consensus@0.7.73
+  - @cat-factory/gates@0.2.25
+  - @cat-factory/gitlab@0.3.6
+  - @cat-factory/observability-langfuse@0.7.69
+  - @cat-factory/provider-cloudflare@0.7.73
+  - @cat-factory/spend@0.10.30
+  - @cat-factory/prompt-fragments@0.9.2
+
 ## 0.39.1
 
 ### Patch Changes
