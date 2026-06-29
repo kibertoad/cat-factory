@@ -23,6 +23,7 @@ const board = useBoardStore()
 const brainstorm = useBrainstormStore()
 const ui = useUiStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const drafts = ref<Record<string, string>>({})
 const redoComment = ref('')
@@ -42,9 +43,15 @@ const { open, blockId, stage, close } = useResultView('brainstorm', {
 })
 const activeStage = computed<BrainstormStage>(() => stage.value ?? 'requirements')
 const isArchitecture = computed(() => activeStage.value === 'architecture')
-const subjectNoun = computed(() => (isArchitecture.value ? 'approach' : 'requirements'))
+const subjectNoun = computed(() =>
+  isArchitecture.value
+    ? t('brainstorm.subjectNoun.architecture')
+    : t('brainstorm.subjectNoun.requirements'),
+)
 const docNoun = computed(() =>
-  isArchitecture.value ? 'technical approach' : 'requirements direction',
+  isArchitecture.value
+    ? t('brainstorm.docNoun.architecture')
+    : t('brainstorm.docNoun.requirements'),
 )
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
@@ -117,6 +124,28 @@ const STATUS_COLOR = {
   recommend_requested: 'primary',
 } as const satisfies Record<ReviewItemStatus, string>
 
+// Exhaustive enum→label maps of literal keys (keeps the typed-key drift guard live vs a
+// runtime-built `brainstorm.severity.${value}`).
+const SEVERITY_LABELS: Record<ReviewItemSeverity, string> = {
+  low: 'brainstorm.severity.low',
+  medium: 'brainstorm.severity.medium',
+  high: 'brainstorm.severity.high',
+}
+const CATEGORY_LABELS: Record<ReviewItemCategory, string> = {
+  gap: 'brainstorm.category.gap',
+  clarification: 'brainstorm.category.clarification',
+  assumption: 'brainstorm.category.assumption',
+  risk: 'brainstorm.category.risk',
+  question: 'brainstorm.category.question',
+}
+const STATUS_LABELS: Record<ReviewItemStatus, string> = {
+  open: 'brainstorm.itemStatus.open',
+  answered: 'brainstorm.itemStatus.answered',
+  resolved: 'brainstorm.itemStatus.resolved',
+  dismissed: 'brainstorm.itemStatus.dismissed',
+  recommend_requested: 'brainstorm.itemStatus.recommend_requested',
+}
+
 function notifyError(title: string, e: unknown) {
   toast.add({
     title,
@@ -134,7 +163,7 @@ async function submitReply(item: BrainstormItem) {
     await brainstorm.reply(session.value, item.id, text)
     drafts.value = { ...drafts.value, [item.id]: '' }
   } catch (e) {
-    notifyError('Could not save the choice', e)
+    notifyError(t('brainstorm.toast.saveChoiceError'), e)
   }
 }
 
@@ -143,7 +172,7 @@ async function setStatus(item: BrainstormItem, itemStatus: BrainstormItemStatus)
   try {
     await brainstorm.setItemStatus(session.value, item.id, itemStatus)
   } catch (e) {
-    notifyError('Could not update the option', e)
+    notifyError(t('brainstorm.toast.updateOptionError'), e)
   }
 }
 
@@ -152,14 +181,14 @@ async function incorporate(feedback?: string) {
   try {
     await brainstorm.incorporate(session.value, feedback)
   } catch (e) {
-    notifyError('Could not incorporate the choices', e)
+    notifyError(t('brainstorm.toast.incorporateError'), e)
     return
   }
   redoComment.value = ''
   showRedo.value = false
   toast.add({
-    title: `Drafting the ${docNoun.value} in the background`,
-    description: "You're back on the board — we'll notify you only if more input is needed.",
+    title: t('brainstorm.toast.draftingTitle', { doc: docNoun.value }),
+    description: t('brainstorm.toast.draftingDescription'),
     icon: 'i-lucide-wand-sparkles',
   })
   close()
@@ -169,17 +198,18 @@ async function reReview() {
   if (!blockId.value) return
   try {
     const updated = await brainstorm.reReview(blockId.value, activeStage.value)
+    const newCount = brainstorm.openCount(updated)
     toast.add({
       title:
         updated.status === 'incorporated'
-          ? 'Direction settled — continuing the pipeline'
+          ? t('brainstorm.toast.reReviewSettled')
           : updated.status === 'exceeded'
-            ? 'Iteration limit reached — choose how to proceed'
-            : `${brainstorm.openCount(updated)} new option(s) to react to`,
+            ? t('brainstorm.toast.reReviewExceeded')
+            : t('brainstorm.toast.reReviewNewOptions', { count: newCount }, newCount),
       icon: 'i-lucide-sparkles',
     })
   } catch (e) {
-    notifyError('Could not re-run the brainstorm', e)
+    notifyError(t('brainstorm.toast.reReviewError'), e)
   }
 }
 
@@ -188,9 +218,9 @@ async function proceed() {
   acting.value = true
   try {
     await brainstorm.proceed(blockId.value, activeStage.value)
-    toast.add({ title: 'Proceeding to the next phase', icon: 'i-lucide-arrow-right' })
+    toast.add({ title: t('brainstorm.toast.proceeding'), icon: 'i-lucide-arrow-right' })
   } catch (e) {
-    notifyError('Could not proceed', e)
+    notifyError(t('brainstorm.toast.proceedError'), e)
   } finally {
     acting.value = false
   }
@@ -202,15 +232,15 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
   try {
     await brainstorm.resolveExceeded(blockId.value, activeStage.value, choice)
     if (choice === 'stop-reset') {
-      toast.add({ title: 'Task reset — edit it and resubmit', icon: 'i-lucide-undo' })
+      toast.add({ title: t('brainstorm.toast.taskReset'), icon: 'i-lucide-undo' })
       close()
     } else if (choice === 'proceed') {
-      toast.add({ title: 'Proceeding to the next phase', icon: 'i-lucide-arrow-right' })
+      toast.add({ title: t('brainstorm.toast.proceeding'), icon: 'i-lucide-arrow-right' })
     } else {
-      toast.add({ title: 'One more brainstorm round granted', icon: 'i-lucide-rotate-cw' })
+      toast.add({ title: t('brainstorm.toast.extraRoundGranted'), icon: 'i-lucide-rotate-cw' })
     }
   } catch (e) {
-    notifyError('Could not resolve the brainstorm', e)
+    notifyError(t('brainstorm.toast.resolveError'), e)
   } finally {
     acting.value = false
   }
@@ -237,13 +267,17 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           </div>
           <div class="min-w-0">
             <h1 class="truncate text-base font-semibold text-white">
-              {{ isArchitecture ? 'Architecture brainstorm' : 'Requirements brainstorm' }}
+              {{
+                isArchitecture
+                  ? t('brainstorm.title.architecture')
+                  : t('brainstorm.title.requirements')
+              }}
             </h1>
             <p v-if="block" class="truncate text-xs text-slate-500">{{ block.title }}</p>
           </div>
           <div class="ml-auto flex items-center gap-1.5">
             <UBadge v-if="session" color="neutral" variant="subtle" size="sm">
-              Iteration {{ iteration }} / {{ maxIterations }}
+              {{ t('brainstorm.iteration', { current: iteration, max: maxIterations }) }}
             </UBadge>
             <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="close" />
           </div>
@@ -253,10 +287,16 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           <!-- main column -->
           <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
             <p class="mb-4 text-sm text-slate-400">
-              An AI partner proposed the {{ subjectNoun }} options below, each with its trade-offs.
-              <span class="text-slate-300">Choose</span> the ones you want (and steer them) and
-              <span class="text-slate-300">dismiss</span> the rest, then incorporate; it re-runs
-              until you converge on a {{ docNoun }}.
+              <i18n-t keypath="brainstorm.intro" tag="span" scope="global">
+                <template #subject>{{ subjectNoun }}</template>
+                <template #doc>{{ docNoun }}</template>
+                <template #choose>
+                  <span class="text-slate-300">{{ t('brainstorm.introChoose') }}</span>
+                </template>
+                <template #dismiss>
+                  <span class="text-slate-300">{{ t('brainstorm.introDismiss') }}</span>
+                </template>
+              </i18n-t>
             </p>
 
             <!-- empty state -->
@@ -264,8 +304,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               v-if="!session && !busy && !loading"
               class="rounded-lg border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500"
             >
-              No brainstorm yet. It runs automatically when this task's pipeline reaches the
-              brainstorm step.
+              {{ t('brainstorm.empty') }}
             </div>
 
             <!-- working state (initial fetch on open, or an agent pass running) -->
@@ -274,7 +313,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               class="flex items-center justify-center gap-2 p-8 text-sm text-slate-400"
             >
               <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-              {{ loading && !busy ? 'Loading the brainstorm…' : 'Generating options…' }}
+              {{ loading && !busy ? t('brainstorm.loading') : t('brainstorm.generating') }}
             </div>
 
             <template v-else-if="session">
@@ -284,15 +323,15 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 class="mb-4 flex items-center gap-2 rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-4 text-sm text-emerald-300"
               >
                 <UIcon name="i-lucide-circle-check" class="h-5 w-5 shrink-0" />
-                The {{ docNoun }} is settled. The document below is what the next stage uses.
+                {{ t('brainstorm.settledBanner', { doc: docNoun }) }}
               </div>
 
               <!-- iteration cap hit -->
               <IterationCapPrompt
                 v-else-if="exceeded"
                 class="mb-4"
-                :heading="`Reached the ${maxIterations}-iteration limit with options still open.`"
-                detail="Do one more brainstorm round, proceed to the next phase with the last direction anyway, or stop and reset the task so you can edit it and resubmit."
+                :heading="t('brainstorm.exceeded.heading', { max: maxIterations })"
+                :detail="t('brainstorm.exceeded.detail')"
                 :loading="acting"
                 @resolve="resolveExceeded"
               />
@@ -304,12 +343,10 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               >
                 <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
                 <span v-if="incorporating">
-                  Folding your choices into a {{ docNoun }}… You can close this — we’ll notify you
-                  only if more input is needed.
+                  {{ t('brainstorm.working.incorporating', { doc: docNoun }) }}
                 </span>
                 <span v-else>
-                  Re-running the brainstorm on the updated direction… You can close this — we’ll
-                  notify you only if more input is needed.
+                  {{ t('brainstorm.working.reReviewing') }}
                 </span>
               </div>
 
@@ -330,10 +367,10 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                       <div class="flex flex-wrap items-center gap-1.5">
                         <span class="text-sm font-medium text-white">{{ item.title }}</span>
                         <UBadge size="xs" variant="subtle" :color="SEVERITY_COLOR[item.severity]">
-                          {{ item.severity }}
+                          {{ t(SEVERITY_LABELS[item.severity]) }}
                         </UBadge>
                         <UBadge size="xs" variant="outline" color="neutral">
-                          {{ item.category }}
+                          {{ t(CATEGORY_LABELS[item.category]) }}
                         </UBadge>
                         <UBadge
                           size="xs"
@@ -341,7 +378,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           :color="STATUS_COLOR[item.status]"
                           class="ml-auto"
                         >
-                          {{ item.status }}
+                          {{ t(STATUS_LABELS[item.status]) }}
                         </UBadge>
                       </div>
                       <p class="mt-1 whitespace-pre-line text-sm text-slate-400">
@@ -354,7 +391,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                         class="mt-2 rounded-md border-l-2 border-slate-700 bg-slate-950/40 px-3 py-1.5 text-sm text-slate-300"
                       >
                         <span class="text-[10px] uppercase tracking-wide text-slate-500">
-                          Your choice
+                          {{ t('brainstorm.yourChoice') }}
                         </span>
                         <p class="whitespace-pre-line">{{ item.reply }}</p>
                       </div>
@@ -368,7 +405,9 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           size="sm"
                           class="mt-2 w-full"
                           :placeholder="
-                            item.reply ? 'Refine your choice…' : 'Choose / steer this option…'
+                            item.reply
+                              ? t('brainstorm.replyPlaceholder.refine')
+                              : t('brainstorm.replyPlaceholder.choose')
                           "
                           :disabled="frozen"
                         />
@@ -381,7 +420,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                             :disabled="!(drafts[item.id] ?? '').trim() || frozen"
                             @click="submitReply(item)"
                           >
-                            Save choice
+                            {{ t('brainstorm.saveChoice') }}
                           </UButton>
                           <UButton
                             color="neutral"
@@ -391,7 +430,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                             :disabled="frozen"
                             @click="setStatus(item, 'dismissed')"
                           >
-                            Dismiss
+                            {{ t('brainstorm.dismiss') }}
                           </UButton>
                         </div>
                       </template>
@@ -406,7 +445,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           :disabled="frozen"
                           @click="setStatus(item, 'open')"
                         >
-                          Reopen
+                          {{ t('brainstorm.reopen') }}
                         </UButton>
                       </div>
                     </div>
@@ -419,7 +458,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 <div class="mb-3 flex items-center gap-1.5 text-[11px] text-emerald-400">
                   <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
                   <span class="font-semibold uppercase tracking-wide">
-                    {{ incorporated ? docNoun : `${docNoun} (draft)` }}
+                    {{ incorporated ? docNoun : t('brainstorm.docDraft', { doc: docNoun }) }}
                   </span>
                 </div>
                 <div v-for="s in outline.sections" :key="s.id" class="mb-2">
@@ -454,19 +493,19 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             <div class="flex flex-col gap-4 px-4 py-5">
               <div v-if="session" class="space-y-2 text-xs text-slate-400">
                 <div class="flex items-center justify-between">
-                  <span>Options</span>
+                  <span>{{ t('brainstorm.rail.options') }}</span>
                   <span class="text-slate-300">{{ session.items.length }}</span>
                 </div>
                 <div class="flex items-center justify-between">
-                  <span>Open</span>
+                  <span>{{ t('brainstorm.rail.open') }}</span>
                   <span class="text-slate-300">{{ openCount }}</span>
                 </div>
                 <div class="flex items-center justify-between">
-                  <span>Chosen</span>
+                  <span>{{ t('brainstorm.rail.chosen') }}</span>
                   <span class="text-slate-300">{{ answeredCount }}</span>
                 </div>
                 <div v-if="session.model" class="flex items-center justify-between">
-                  <span>Model</span>
+                  <span>{{ t('brainstorm.rail.model') }}</span>
                   <span class="truncate pl-2 text-slate-500">{{ session.model }}</span>
                 </div>
               </div>
@@ -485,7 +524,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   :loading="acting"
                   @click="proceed"
                 >
-                  Proceed (nothing to incorporate)
+                  {{ t('brainstorm.proceedNothing') }}
                 </UButton>
                 <UButton
                   v-else
@@ -497,17 +536,16 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   :disabled="!canIncorporate"
                   @click="incorporate()"
                 >
-                  Incorporate choices
+                  {{ t('brainstorm.incorporateChoices') }}
                 </UButton>
                 <p class="text-[11px] leading-relaxed text-slate-500">
                   <template v-if="canProceed">
-                    Every option is dismissed — proceed to the next phase without a direction.
+                    {{ t('brainstorm.hint.allDismissed') }}
                   </template>
                   <template v-else-if="canIncorporate">
-                    Folds your choices into one {{ docNoun }}, then re-runs the brainstorm
-                    automatically.
+                    {{ t('brainstorm.hint.incorporate', { doc: docNoun }) }}
                   </template>
-                  <template v-else> Choose or dismiss every option to continue. </template>
+                  <template v-else> {{ t('brainstorm.hint.chooseAll') }} </template>
                 </p>
               </div>
 
@@ -521,7 +559,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   :loading="busy"
                   @click="reReview"
                 >
-                  {{ busy ? 'Re-running…' : 'Looks good — re-run' }}
+                  {{ busy ? t('brainstorm.reRunning') : t('brainstorm.reRun') }}
                 </UButton>
                 <UButton
                   color="neutral"
@@ -531,7 +569,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   icon="i-lucide-pencil"
                   @click="showRedo = !showRedo"
                 >
-                  Redo incorporation
+                  {{ t('brainstorm.redoIncorporation') }}
                 </UButton>
                 <div v-if="showRedo" class="space-y-2">
                   <UTextarea
@@ -540,7 +578,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                     autoresize
                     size="sm"
                     class="w-full"
-                    placeholder="What should the direction do differently?"
+                    :placeholder="t('brainstorm.redoPlaceholder')"
                   />
                   <UButton
                     color="primary"
@@ -552,12 +590,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                     :disabled="!redoComment.trim()"
                     @click="incorporate(redoComment.trim())"
                   >
-                    Redo with this direction
+                    {{ t('brainstorm.redoWithDirection') }}
                   </UButton>
                 </div>
                 <p class="text-[11px] leading-relaxed text-slate-500">
-                  Re-run runs the agent against this direction. If you’re unhappy with how it was
-                  merged, redo it with a comment instead.
+                  {{ t('brainstorm.mergedHint') }}
                 </p>
               </div>
 
@@ -565,7 +602,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 v-if="session && incorporated"
                 class="border-t border-slate-800 pt-4 text-[11px] leading-relaxed text-slate-500"
               >
-                Direction settled — the pipeline is continuing with the document on the left.
+                {{ t('brainstorm.incorporatedFooter') }}
               </div>
             </div>
           </aside>

@@ -22,6 +22,7 @@ import type {
 const board = useBoardStore()
 const requirements = useRequirementsStore()
 const toast = useToast()
+const { t } = useI18n()
 
 // Draft replies, keyed by item id, so editing one item doesn't disturb others.
 const drafts = ref<Record<string, string>>({})
@@ -126,6 +127,28 @@ const STATUS_COLOR = {
   recommend_requested: 'primary',
 } as const satisfies Record<ReviewItemStatus, string>
 
+// Exhaustive enum→label maps of literal keys, so the typed-key drift guard sees each key
+// (vs a runtime-built `requirements.severity.${value}`).
+const SEVERITY_LABELS = computed<Record<ReviewItemSeverity, string>>(() => ({
+  high: t('requirements.severity.high'),
+  medium: t('requirements.severity.medium'),
+  low: t('requirements.severity.low'),
+}))
+const CATEGORY_LABELS = computed<Record<ReviewItemCategory, string>>(() => ({
+  gap: t('requirements.category.gap'),
+  clarification: t('requirements.category.clarification'),
+  assumption: t('requirements.category.assumption'),
+  risk: t('requirements.category.risk'),
+  question: t('requirements.category.question'),
+}))
+const STATUS_LABELS = computed<Record<ReviewItemStatus, string>>(() => ({
+  open: t('requirements.itemStatus.open'),
+  answered: t('requirements.itemStatus.answered'),
+  resolved: t('requirements.itemStatus.resolved'),
+  dismissed: t('requirements.itemStatus.dismissed'),
+  recommend_requested: t('requirements.itemStatus.recommend_requested'),
+}))
+
 function notifyError(title: string, e: unknown) {
   toast.add({
     title,
@@ -146,7 +169,7 @@ async function persistDraft(item: RequirementReviewItem) {
   try {
     await requirements.reply(review.value, item.id, text)
   } catch (e) {
-    notifyError('Could not save the answer', e)
+    notifyError(t('requirements.errors.saveAnswer'), e)
   }
 }
 
@@ -207,7 +230,7 @@ async function setStatus(item: RequirementReviewItem, itemStatus: ReviewItemStat
   try {
     await requirements.setItemStatus(review.value, item.id, itemStatus)
   } catch (e) {
-    notifyError('Could not update the finding', e)
+    notifyError(t('requirements.errors.updateFinding'), e)
   }
 }
 
@@ -255,7 +278,6 @@ async function requestRecommendations() {
     const updated = await requirements.requestRecommendations(blockId.value, ids)
     markedForRecommend.value = new Set()
     const n = ids.length
-    const plural = n === 1 ? '' : 's'
     // On a parked run the request returns at once with `pending` placeholders the durable driver
     // fills in the background; off-path (no active pipeline) there is no driver, so the Writer
     // ran inline and the recommendations are already settled. Tell the human which actually
@@ -264,18 +286,17 @@ async function requestRecommendations() {
     toast.add(
       stillGenerating
         ? {
-            title: `Preparing ${n} recommendation${plural} in the background`,
-            description:
-              "Your answers are saved — close this if you like; we'll notify you when they're ready.",
+            title: t('requirements.toast.preparingRecommendations', { count: n }, n),
+            description: t('requirements.toast.preparingRecommendationsDescription'),
             icon: 'i-lucide-sparkles',
           }
         : {
-            title: `${n} recommendation${plural} ready`,
+            title: t('requirements.toast.recommendationsReady', { count: n }, n),
             icon: 'i-lucide-sparkles',
           },
     )
   } catch (e) {
-    notifyError('Could not request recommendations', e)
+    notifyError(t('requirements.errors.requestRecommendations'), e)
   }
 }
 
@@ -284,7 +305,7 @@ async function acceptRecommendation(rec: RequirementRecommendation) {
   try {
     await requirements.acceptRecommendation(review.value, rec.id)
   } catch (e) {
-    notifyError('Could not accept the recommendation', e)
+    notifyError(t('requirements.errors.acceptRecommendation'), e)
   }
 }
 
@@ -293,7 +314,7 @@ async function rejectRecommendation(rec: RequirementRecommendation) {
   try {
     await requirements.rejectRecommendation(review.value, rec.id)
   } catch (e) {
-    notifyError('Could not reject the recommendation', e)
+    notifyError(t('requirements.errors.rejectRecommendation'), e)
   }
 }
 
@@ -305,7 +326,7 @@ async function reRequestRecommendation(rec: RequirementRecommendation) {
     await requirements.reRequestRecommendation(review.value, rec.id, note)
     reRequestNotes.value = { ...reRequestNotes.value, [rec.id]: '' }
   } catch (e) {
-    notifyError('Could not re-request the recommendation', e)
+    notifyError(t('requirements.errors.reRequestRecommendation'), e)
   }
 }
 
@@ -315,7 +336,7 @@ async function incorporate(feedback?: string) {
     await flushDrafts()
     await requirements.incorporate(review.value, feedback)
   } catch (e) {
-    notifyError('Could not incorporate the answers', e)
+    notifyError(t('requirements.errors.incorporate'), e)
     return
   }
   redoComment.value = ''
@@ -323,8 +344,8 @@ async function incorporate(feedback?: string) {
   // The fold + re-review now run in the durable driver. Hand the user back to the board;
   // a notification calls them back only if the re-review needs more input.
   toast.add({
-    title: 'Incorporating your answers in the background',
-    description: "You're back on the board — we'll notify you only if more input is needed.",
+    title: t('requirements.toast.incorporating'),
+    description: t('requirements.toast.incorporatingDescription'),
     icon: 'i-lucide-wand-sparkles',
   })
   close()
@@ -334,17 +355,18 @@ async function reReview() {
   if (!blockId.value) return
   try {
     const updated = await requirements.reReview(blockId.value)
+    const newFindings = requirements.openCount(updated)
     toast.add({
       title:
         updated.status === 'incorporated'
-          ? 'Reviewer is satisfied — continuing the pipeline'
+          ? t('requirements.toast.reviewerSatisfied')
           : updated.status === 'exceeded'
-            ? 'Iteration limit reached — choose how to proceed'
-            : `${requirements.openCount(updated)} new finding(s) to react to`,
+            ? t('requirements.toast.iterationLimitReached')
+            : t('requirements.toast.newFindings', { count: newFindings }, newFindings),
       icon: 'i-lucide-sparkles',
     })
   } catch (e) {
-    notifyError('Could not re-review the requirements', e)
+    notifyError(t('requirements.errors.reReview'), e)
   }
 }
 
@@ -354,9 +376,9 @@ async function proceed() {
   try {
     await flushDrafts()
     await requirements.proceed(blockId.value)
-    toast.add({ title: 'Proceeding to the next phase', icon: 'i-lucide-arrow-right' })
+    toast.add({ title: t('requirements.toast.proceeding'), icon: 'i-lucide-arrow-right' })
   } catch (e) {
-    notifyError('Could not proceed', e)
+    notifyError(t('requirements.errors.proceed'), e)
   } finally {
     acting.value = false
   }
@@ -368,15 +390,15 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
   try {
     await requirements.resolveExceeded(blockId.value, choice)
     if (choice === 'stop-reset') {
-      toast.add({ title: 'Task reset — edit the requirements and resubmit', icon: 'i-lucide-undo' })
+      toast.add({ title: t('requirements.toast.taskReset'), icon: 'i-lucide-undo' })
       close()
     } else if (choice === 'proceed') {
-      toast.add({ title: 'Proceeding to the next phase', icon: 'i-lucide-arrow-right' })
+      toast.add({ title: t('requirements.toast.proceeding'), icon: 'i-lucide-arrow-right' })
     } else {
-      toast.add({ title: 'One more review round granted', icon: 'i-lucide-rotate-cw' })
+      toast.add({ title: t('requirements.toast.extraRoundGranted'), icon: 'i-lucide-rotate-cw' })
     }
   } catch (e) {
-    notifyError('Could not resolve the review', e)
+    notifyError(t('requirements.errors.resolveReview'), e)
   } finally {
     acting.value = false
   }
@@ -401,12 +423,14 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             <UIcon name="i-lucide-clipboard-check" class="h-5 w-5 text-indigo-300" />
           </div>
           <div class="min-w-0">
-            <h1 class="truncate text-base font-semibold text-white">Requirements review</h1>
+            <h1 class="truncate text-base font-semibold text-white">
+              {{ t('requirements.title') }}
+            </h1>
             <p v-if="block" class="truncate text-xs text-slate-500">{{ block.title }}</p>
           </div>
           <div class="ml-auto flex items-center gap-1.5">
             <UBadge v-if="review" color="neutral" variant="subtle" size="sm">
-              Iteration {{ iteration }} / {{ maxIterations }}
+              {{ t('requirements.iteration', { current: iteration, max: maxIterations }) }}
             </UBadge>
             <StepRestartControl
               :instance-id="instanceId"
@@ -420,13 +444,20 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
         <div class="flex min-h-0 flex-1">
           <!-- main column -->
           <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
-            <p class="mb-4 text-sm text-slate-400">
-              An AI reviewer inspected this {{ block?.level ?? 'item' }}’s collected requirements —
-              its description plus any linked PRDs and tracker issues — and raised the findings
-              below. <span class="text-slate-300">Answer</span> the relevant ones and
-              <span class="text-slate-300">dismiss</span> the irrelevant, then incorporate them; the
-              reviewer re-reviews until the requirements are clear.
-            </p>
+            <i18n-t
+              keypath="requirements.intro"
+              tag="p"
+              class="mb-4 text-sm text-slate-400"
+              scope="global"
+            >
+              <template #level>{{ block?.level ?? t('requirements.levelFallback') }}</template>
+              <template #answer
+                ><span class="text-slate-300">{{ t('requirements.answerVerb') }}</span></template
+              >
+              <template #dismiss
+                ><span class="text-slate-300">{{ t('requirements.dismissVerb') }}</span></template
+              >
+            </i18n-t>
 
             <!-- empty state — the reviewer runs automatically as the first pipeline
                  gate step, so there's nothing to do here until then -->
@@ -434,8 +465,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               v-if="!review && !busy && !loading"
               class="rounded-lg border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500"
             >
-              No review yet. The reviewer runs automatically as the first step when this task's
-              pipeline starts.
+              {{ t('requirements.empty') }}
             </div>
 
             <!-- working state (initial fetch on open, or a reviewer pass running) -->
@@ -444,7 +474,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               class="flex items-center justify-center gap-2 p-8 text-sm text-slate-400"
             >
               <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-              {{ loading && !busy ? 'Loading the review…' : 'Reviewing the requirements…' }}
+              {{ loading && !busy ? t('requirements.loadingReview') : t('requirements.reviewing') }}
             </div>
 
             <template v-else-if="review">
@@ -454,16 +484,15 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 class="mb-4 flex items-center gap-2 rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-4 text-sm text-emerald-300"
               >
                 <UIcon name="i-lucide-circle-check" class="h-5 w-5 shrink-0" />
-                The requirements are settled. The document below is what every downstream agent step
-                uses.
+                {{ t('requirements.settled') }}
               </div>
 
               <!-- iteration cap hit -->
               <IterationCapPrompt
                 v-else-if="exceeded"
                 class="mb-4"
-                :heading="`Reached the ${maxIterations}-iteration limit with findings still open.`"
-                detail="Do one more review round, proceed to the next phase with the last incorporated requirements anyway, or stop and reset the task so you can rework the requirements and resubmit."
+                :heading="t('requirements.exceeded.heading', { max: maxIterations })"
+                :detail="t('requirements.exceeded.detail')"
                 :loading="acting"
                 @resolve="resolveExceeded"
               />
@@ -476,12 +505,10 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               >
                 <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
                 <span v-if="incorporating">
-                  Incorporating your answers into a requirements document… You can close this —
-                  we’ll notify you only if more input is needed.
+                  {{ t('requirements.working.incorporating') }}
                 </span>
                 <span v-else>
-                  Re-reviewing the updated requirements… You can close this — we’ll notify you only
-                  if more input is needed.
+                  {{ t('requirements.working.reReviewing') }}
                 </span>
               </div>
 
@@ -502,10 +529,10 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                       <div class="flex flex-wrap items-center gap-1.5">
                         <span class="text-sm font-medium text-white">{{ item.title }}</span>
                         <UBadge size="xs" variant="subtle" :color="SEVERITY_COLOR[item.severity]">
-                          {{ item.severity }}
+                          {{ SEVERITY_LABELS[item.severity] }}
                         </UBadge>
                         <UBadge size="xs" variant="outline" color="neutral">
-                          {{ item.category }}
+                          {{ CATEGORY_LABELS[item.category] }}
                         </UBadge>
                         <UBadge
                           size="xs"
@@ -513,7 +540,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           :color="STATUS_COLOR[item.status]"
                           class="ml-auto"
                         >
-                          {{ item.status }}
+                          {{ STATUS_LABELS[item.status] }}
                         </UBadge>
                       </div>
                       <p class="mt-1 whitespace-pre-line text-sm text-slate-400">
@@ -527,7 +554,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                         class="mt-2 rounded-md border-l-2 border-slate-700 bg-slate-950/40 px-3 py-1.5 text-sm text-slate-300"
                       >
                         <span class="text-[10px] uppercase tracking-wide text-slate-500">
-                          Answer
+                          {{ t('requirements.answerLabel') }}
                         </span>
                         <p class="whitespace-pre-line">{{ item.reply }}</p>
                       </div>
@@ -542,7 +569,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           autoresize
                           size="sm"
                           class="mt-2 w-full"
-                          placeholder="Answer this finding…"
+                          :placeholder="t('requirements.answerPlaceholder')"
                           :disabled="frozen"
                           @blur="persistDraft(item)"
                         />
@@ -555,7 +582,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                             :disabled="frozen"
                             @click="setStatus(item, 'dismissed')"
                           >
-                            Dismiss as irrelevant
+                            {{ t('requirements.dismissIrrelevant') }}
                           </UButton>
                           <UButton
                             :color="isMarkedForRecommend(item) ? 'primary' : 'neutral'"
@@ -567,8 +594,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           >
                             {{
                               isMarkedForRecommend(item)
-                                ? 'Marked for recommendation'
-                                : 'Recommend something'
+                                ? t('requirements.markedForRecommendation')
+                                : t('requirements.recommendSomething')
                             }}
                           </UButton>
                         </div>
@@ -580,7 +607,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                         class="mt-2 flex items-center gap-1.5 text-xs text-indigo-300"
                       >
                         <UIcon name="i-lucide-wand-2" class="h-3.5 w-3.5" />
-                        Recommendation requested — review the suggestion below.
+                        {{ t('requirements.recommendationRequested') }}
                       </div>
 
                       <!-- reopen a dismissed finding -->
@@ -593,7 +620,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           :disabled="frozen"
                           @click="setStatus(item, 'open')"
                         >
-                          Reopen
+                          {{ t('requirements.reopen') }}
                         </UButton>
                       </div>
                     </div>
@@ -609,13 +636,20 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               >
                 <div class="mb-3 flex items-center gap-2 text-[11px] text-indigo-300">
                   <UIcon name="i-lucide-wand-2" class="h-3.5 w-3.5" />
-                  <span class="font-semibold uppercase tracking-wide">Recommended answers</span>
+                  <span class="font-semibold uppercase tracking-wide">{{
+                    t('requirements.recommendedAnswers')
+                  }}</span>
                   <span
                     v-if="recommendationProgress"
                     class="ml-auto flex items-center gap-1.5 normal-case text-indigo-300/80"
                   >
                     <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
-                    {{ recommendationProgress.ready }} / {{ recommendationProgress.total }} ready
+                    {{
+                      t('requirements.recommendationProgress', {
+                        ready: recommendationProgress.ready,
+                        total: recommendationProgress.total,
+                      })
+                    }}
                   </span>
                 </div>
 
@@ -634,7 +668,9 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                       <span class="text-sm font-medium text-white">{{
                         rec.sourceFinding.title
                       }}</span>
-                      <p class="text-xs text-indigo-300/70">Generating a grounded suggestion…</p>
+                      <p class="text-xs text-indigo-300/70">
+                        {{ t('requirements.generatingSuggestion') }}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -656,7 +692,9 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                         color="success"
                         icon="i-lucide-badge-check"
                       >
-                        Current standard: {{ rec.groundedInFragment.title }}
+                        {{
+                          t('requirements.currentStandard', { title: rec.groundedInFragment.title })
+                        }}
                       </UBadge>
                     </div>
                     <p class="mt-2 whitespace-pre-line text-sm text-slate-300">
@@ -671,7 +709,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                         :disabled="frozen"
                         @click="acceptRecommendation(rec)"
                       >
-                        Accept
+                        {{ t('requirements.accept') }}
                       </UButton>
                       <UButton
                         color="neutral"
@@ -681,7 +719,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                         :disabled="frozen"
                         @click="rejectRecommendation(rec)"
                       >
-                        Reject
+                        {{ t('requirements.reject') }}
                       </UButton>
                     </div>
                     <!-- re-request with a note (an alternative to rejecting outright) -->
@@ -692,7 +730,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                         autoresize
                         size="sm"
                         class="flex-1"
-                        placeholder="Ask for a different recommendation…"
+                        :placeholder="t('requirements.reRequestPlaceholder')"
                         :disabled="frozen || recommending"
                       />
                       <UButton
@@ -704,7 +742,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                         :disabled="!(reRequestNotes[rec.id] ?? '').trim() || frozen"
                         @click="reRequestRecommendation(rec)"
                       >
-                        Re-request
+                        {{ t('requirements.reRequest') }}
                       </UButton>
                     </div>
                   </div>
@@ -716,7 +754,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 <div class="mb-3 flex items-center gap-1.5 text-[11px] text-emerald-400">
                   <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
                   <span class="font-semibold uppercase tracking-wide">
-                    {{ incorporated ? 'Final requirements' : 'Incorporated requirements (draft)' }}
+                    {{
+                      incorporated
+                        ? t('requirements.finalRequirements')
+                        : t('requirements.incorporatedDraft')
+                    }}
                   </span>
                 </div>
                 <div v-for="s in outline.sections" :key="s.id" class="mb-2">
@@ -751,19 +793,19 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             <div class="flex flex-col gap-4 px-4 py-5">
               <div v-if="review" class="space-y-2 text-xs text-slate-400">
                 <div class="flex items-center justify-between">
-                  <span>Findings</span>
+                  <span>{{ t('requirements.stats.findings') }}</span>
                   <span class="text-slate-300">{{ review.items.length }}</span>
                 </div>
                 <div class="flex items-center justify-between">
-                  <span>Open</span>
+                  <span>{{ t('requirements.stats.open') }}</span>
                   <span class="text-slate-300">{{ openCount }}</span>
                 </div>
                 <div class="flex items-center justify-between">
-                  <span>Answered</span>
+                  <span>{{ t('requirements.stats.answered') }}</span>
                   <span class="text-slate-300">{{ answeredCount }}</span>
                 </div>
                 <div v-if="review.model" class="flex items-center justify-between">
-                  <span>Model</span>
+                  <span>{{ t('requirements.stats.model') }}</span>
                   <span class="truncate pl-2 text-slate-500">{{ review.model }}</span>
                 </div>
               </div>
@@ -782,7 +824,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   :loading="acting"
                   @click="proceed"
                 >
-                  Proceed (nothing to incorporate)
+                  {{ t('requirements.actions.proceedNothing') }}
                 </UButton>
                 <UButton
                   v-else
@@ -794,7 +836,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   :disabled="!canIncorporate"
                   @click="incorporate()"
                 >
-                  Incorporate answers
+                  {{ t('requirements.actions.incorporateAnswers') }}
                 </UButton>
                 <UButton
                   v-if="markedForRecommend.size > 0"
@@ -806,19 +848,22 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   :loading="recommending"
                   @click="requestRecommendations"
                 >
-                  Request {{ markedForRecommend.size }} recommendation{{
-                    markedForRecommend.size === 1 ? '' : 's'
+                  {{
+                    t(
+                      'requirements.actions.requestRecommendations',
+                      { count: markedForRecommend.size },
+                      markedForRecommend.size,
+                    )
                   }}
                 </UButton>
                 <p class="text-[11px] leading-relaxed text-slate-500">
                   <template v-if="canProceed">
-                    Every finding is dismissed — proceed to the next phase without reworking.
+                    {{ t('requirements.help.canProceed') }}
                   </template>
                   <template v-else-if="canIncorporate">
-                    Folds your answers into one standard-format document, then re-reviews it
-                    automatically.
+                    {{ t('requirements.help.canIncorporate') }}
                   </template>
-                  <template v-else> Answer or dismiss every finding to continue. </template>
+                  <template v-else> {{ t('requirements.help.answerAll') }} </template>
                 </p>
               </div>
 
@@ -832,7 +877,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   :loading="busy"
                   @click="reReview"
                 >
-                  {{ busy ? 'Re-reviewing…' : 'Looks good — re-review' }}
+                  {{
+                    busy
+                      ? t('requirements.actions.reReviewing')
+                      : t('requirements.actions.reReview')
+                  }}
                 </UButton>
                 <UButton
                   color="neutral"
@@ -842,7 +891,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   icon="i-lucide-pencil"
                   @click="showRedo = !showRedo"
                 >
-                  Redo incorporation
+                  {{ t('requirements.actions.redoIncorporation') }}
                 </UButton>
                 <div v-if="showRedo" class="space-y-2">
                   <UTextarea
@@ -851,7 +900,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                     autoresize
                     size="sm"
                     class="w-full"
-                    placeholder="What should the merge do differently?"
+                    :placeholder="t('requirements.redoPlaceholder')"
                   />
                   <UButton
                     color="primary"
@@ -863,12 +912,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                     :disabled="!redoComment.trim()"
                     @click="incorporate(redoComment.trim())"
                   >
-                    Redo with this direction
+                    {{ t('requirements.actions.redoWithDirection') }}
                   </UButton>
                 </div>
                 <p class="text-[11px] leading-relaxed text-slate-500">
-                  Re-review runs the reviewer against this document. If you’re unhappy with how it
-                  was merged, redo it with a comment instead.
+                  {{ t('requirements.help.merged') }}
                 </p>
               </div>
 
@@ -876,7 +924,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 v-if="review && incorporated"
                 class="border-t border-slate-800 pt-4 text-[11px] leading-relaxed text-slate-500"
               >
-                Requirements settled — the pipeline is continuing with the document on the left.
+                {{ t('requirements.settledFooter') }}
               </div>
             </div>
           </aside>
