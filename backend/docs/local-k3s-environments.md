@@ -54,6 +54,19 @@ Local mode widens the environment URL-safety policy by default (`ENVIRONMENTS_AL
   / ingress-host URL the provider returns is accepted. Add more hosts via
   `ENVIRONMENTS_ALLOW_URL_HOSTS`. Hosted facades keep the strict public-https default.
 
+## Running AGENTS on a local k3s (runner backend)
+
+The same cluster can also back the **agent runner** (not just Tester environments): connect a
+native `kubernetes` runner backend so each agent run is a pod in the cluster. Local mode
+surfaces a one-click **Local Kubernetes (k3s)** preset for this in the Infrastructure window's
+"Agent containers" list — it prefills the runner form for a local cluster
+(`apiServerUrl: https://127.0.0.1:6443`, `namespace: cat-factory`, `insecureSkipTlsVerify`, and
+the executor `image` from the deployment's `LOCAL_HARNESS_IMAGE`), so the operator only pastes a
+ServiceAccount token. No backend change is needed: the apiserver-URL validator already permits
+loopback/private hosts (it only requires `https` and blocks the cloud-metadata endpoint), and
+Node/local honors `insecureSkipTlsVerify`/`caCertPem` via undici. The token needs RBAC to
+create/get/delete `pods` and `pods/proxy` in the namespace.
+
 ## Future: managed local k3s lifecycle
 
 Today local mode points at an **existing** cluster. A follow-up could have local mode manage the

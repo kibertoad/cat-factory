@@ -1256,6 +1256,7 @@
         "schemaError": "Problème de manifeste — {message}",
         "secretsLabel": "Secrets",
         "noSecrets": "Ce manifeste ne référence aucun secret.",
+        "stored": "Actuellement stockés : {keys}",
         "reenterSecrets": "Saisissez à nouveau chaque secret pour enregistrer : les secrets stockés sont en écriture seule et ne sont pas affichés.",
         "starterHint": "Ceci est un exemple de départ. Modifiez-le pour qu'il corresponde à l'API de votre fournisseur."
       },
@@ -1340,6 +1341,8 @@
         "apiTokenHelp": "Un jeton bearer avec les droits RBAC pour créer, lire et supprimer les pods et pods/proxy dans le namespace. Stocké chiffré ; jamais réaffiché.",
         "caCertPem": "Certificat CA du cluster (PEM)",
         "caCertPemHelp": "Collez le bundle CA du cluster pour que le certificat TLS de l'apiserver soit vérifié. À omettre uniquement pour une CA publiquement approuvée.",
+        "insecureSkipTlsVerify": "Ignorer la vérification TLS",
+        "insecureSkipTlsVerifyHelp": "Fortement déconseillé. Désactive la vérification TLS de l'apiserver ; à utiliser uniquement pour des clusters locaux k3s/kind/dev.",
         "harnessPort": "Port du harness"
       },
       "advancedManifest": {

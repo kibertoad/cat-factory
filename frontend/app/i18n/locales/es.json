@@ -1256,6 +1256,7 @@
         "schemaError": "Problema con el manifiesto — {message}",
         "secretsLabel": "Secretos",
         "noSecrets": "Este manifiesto no hace referencia a ningún secreto.",
+        "stored": "Almacenados actualmente: {keys}",
         "reenterSecrets": "Vuelve a introducir cada secreto para guardar: los secretos almacenados son de solo escritura y no se muestran.",
         "starterHint": "Este es un ejemplo inicial. Edítalo para que coincida con la API de tu proveedor."
       },
@@ -1340,6 +1341,8 @@
         "apiTokenHelp": "Un token bearer con permisos RBAC para crear, obtener y eliminar pods y pods/proxy en el namespace. Se almacena cifrado; no se vuelve a mostrar.",
         "caCertPem": "Certificado CA del clúster (PEM)",
         "caCertPemHelp": "Pega el bundle CA del clúster para que el certificado TLS del apiserver se verifique. Omítelo solo para una CA de confianza pública.",
+        "insecureSkipTlsVerify": "Omitir verificación TLS",
+        "insecureSkipTlsVerifyHelp": "Muy desaconsejado. Desactiva la verificación TLS del apiserver; úsalo solo para clústeres locales k3s/kind/dev.",
         "harnessPort": "Puerto del harness"
       },
       "advancedManifest": {

@@ -25,6 +25,9 @@ const props = defineProps<{
   savedManifest?: Record<string, unknown>
   /** Whether a connection already exists (drives the re-enter-secrets hint + button label). */
   connected: boolean
+  /** The secret keys already stored for this connection (names only) — shown next to the
+   *  write-only inputs so it's obvious what exists without scrolling to the summary. */
+  storedSecretKeys?: string[]
   /** Whether the provider exposes a connection test the UI can call. */
   supportsTest: boolean
   /** Bubbled-up busy state from the tab's store calls (so the editor shows loading). */
@@ -235,9 +238,22 @@ function onSave() {
       <p v-if="!secretKeys.length" class="text-[11px] text-slate-500">
         {{ t('settings.providerConnection.manifestEditor.noSecrets') }}
       </p>
-      <p v-else-if="connected" class="text-[11px] text-amber-300/80">
-        {{ t('settings.providerConnection.manifestEditor.reenterSecrets') }}
-      </p>
+      <template v-else-if="connected">
+        <p
+          v-if="storedSecretKeys && storedSecretKeys.length"
+          class="text-[11px] text-slate-400"
+          data-testid="manifest-editor-stored"
+        >
+          {{
+            t('settings.providerConnection.manifestEditor.stored', {
+              keys: storedSecretKeys.join(', '),
+            })
+          }}
+        </p>
+        <p class="text-[11px] text-amber-300/80">
+          {{ t('settings.providerConnection.manifestEditor.reenterSecrets') }}
+        </p>
+      </template>
       <UFormField v-for="key in secretKeys" :key="key" :label="key">
         <UInput
           v-model="secrets[key]"

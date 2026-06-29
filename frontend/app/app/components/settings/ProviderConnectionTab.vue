@@ -13,7 +13,17 @@ import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor
 import KubernetesRunnerForm from '~/components/settings/KubernetesRunnerForm.vue'
 import KubernetesEnvironmentForm from '~/components/settings/KubernetesEnvironmentForm.vue'
 
-const props = defineProps<{ kind: ProviderConnectionKind }>()
+const props = defineProps<{
+  kind: ProviderConnectionKind
+  /** Which connect form to show — chosen by the parent picker's radio, not a local dropdown. */
+  backendKind: 'manifest' | 'kubernetes'
+  /** A low-config preset to prefill the Kubernetes form (today: local k3s). */
+  preset?: 'k3s'
+  /** The deployment's executor image, used to prefill the k3s preset's image field. */
+  suggestedImage?: string
+}>()
+
+const emit = defineEmits<{ connected: [] }>()
 
 const { t } = useI18n()
 const store = useProviderConnectionsStore()
@@ -146,6 +156,7 @@ async function saveNative() {
   try {
     const payload = buildManifestPayload()
     if (payload) await store.register(props.kind, payload)
+    emit('connected')
     resetDraft()
     toastSaved()
   } catch (e) {
@@ -178,6 +189,7 @@ async function saveManifest(payload: {
   busy.value = true
   try {
     await store.register(props.kind, payload)
+    emit('connected')
     toastSaved()
   } catch (e) {
     notifyError(t('settings.providerConnection.toast.saveFailed'), e)
@@ -186,41 +198,10 @@ async function saveManifest(payload: {
   }
 }
 
-// --- Backend selector -----------------------------------------------------------------
-// Both infrastructure tabs can configure either the BYO manifest backend OR a native
-// Kubernetes backend (a runner cluster for runner-pool, per-PR namespaces for environment).
-// The two K8s backends have different config shapes, so each kind renders its own form.
-// Defaults to the saved connection's kind.
-const BACKEND_KINDS = ['manifest', 'kubernetes'] as const
-type BackendKind = (typeof BACKEND_KINDS)[number]
-const backendKind = ref<BackendKind>('manifest')
-const showBackendSelector = computed(() => true)
-const backendSelectorLabel = computed(() =>
-  t(
-    props.kind === 'environment'
-      ? 'settings.providerConnection.backend.environmentSelectorLabel'
-      : 'settings.providerConnection.backend.selectorLabel',
-  ),
-)
-function backendKindLabel(k: BackendKind): string {
-  if (k === 'kubernetes') return t('settings.providerConnection.backend.kubernetes')
-  return t(
-    props.kind === 'environment'
-      ? 'settings.providerConnection.backend.environmentManifest'
-      : 'settings.providerConnection.backend.manifest',
-  )
-}
-const backendKindItems = computed(() =>
-  BACKEND_KINDS.map((k) => ({ label: backendKindLabel(k), value: k })),
-)
-watch(
-  () => connection.value,
-  (c) => {
-    if (c?.kind === 'kubernetes' || c?.kind === 'manifest') backendKind.value = c.kind
-  },
-  { immediate: true },
-)
-
+// --- Backend connect forms ------------------------------------------------------------
+// Which form to render (the native Kubernetes form or the BYO manifest editor) is decided
+// by the parent picker's radio and passed in as `backendKind` — there is no longer a local
+// dropdown here.
 async function testConfig(payload: {
   config: Record<string, unknown>
   secrets: Record<string, string>
@@ -243,6 +224,7 @@ async function saveConfig(payload: {
   busy.value = true
   try {
     await store.register(props.kind, payload)
+    emit('connected')
     toastSaved()
   } catch (e) {
     notifyError(t('settings.providerConnection.toast.saveFailed'), e)
@@ -332,15 +314,12 @@ function fieldHelp(key: string): string | undefined {
       }}
     </div>
 
-    <!-- Backend selector: the BYO manifest backend or a native Kubernetes backend. -->
-    <UFormField v-if="showBackendSelector" :label="backendSelectorLabel">
-      <USelect v-model="backendKind" :items="backendKindItems" />
-    </UFormField>
-
     <!-- Native Kubernetes runner backend (runner-pool). -->
     <KubernetesRunnerForm
       v-if="kind === 'runner-pool' && backendKind === 'kubernetes'"
       :connection="connection"
+      :preset="preset"
+      :suggested-image="suggestedImage"
       :supports-test="descriptor.supportsTest"
       :testing="testing"
       :busy="busy"
@@ -440,31 +419,20 @@ function fieldHelp(key: string): string | undefined {
       </div>
     </div>
 
-    <!-- MANIFEST-driven provider: the raw JSON manifest editor. Collapsed by default — it's
-         the advanced path, needed ONLY to integrate a custom API-based scheduler. The common
-         backends (local Docker, Cloudflare Containers, Kubernetes) don't need it. -->
-    <details
+    <!-- MANIFEST-driven provider: the raw JSON manifest editor. The radio already selected
+         "custom HTTP" so it's shown expanded — no extra disclosure. -->
+    <ProviderManifestEditor
       v-else
-      class="rounded-lg border border-slate-700 bg-slate-900/40 p-3"
-      :open="!!connection"
-    >
-      <summary class="cursor-pointer text-sm font-medium text-slate-200">
-        {{ t('settings.providerConnection.advancedManifest.summary') }}
-      </summary>
-      <p class="mt-2 mb-3 text-[11px] text-slate-400">
-        {{ t('settings.providerConnection.advancedManifest.intro') }}
-      </p>
-      <ProviderManifestEditor
-        :kind="kind"
-        :saved-manifest="descriptor.savedManifest"
-        :connected="!!connection"
-        :supports-test="descriptor.supportsTest"
-        :testing="testing"
-        :busy="busy"
-        :test-result="testResult"
-        @test="testManifest"
-        @save="saveManifest"
-      />
-    </details>
+      :kind="kind"
+      :saved-manifest="descriptor.savedManifest"
+      :connected="!!connection"
+      :stored-secret-keys="connection?.secretKeys ?? []"
+      :supports-test="descriptor.supportsTest"
+      :testing="testing"
+      :busy="busy"
+      :test-result="testResult"
+      @test="testManifest"
+      @save="saveManifest"
+    />
   </div>
 </template>

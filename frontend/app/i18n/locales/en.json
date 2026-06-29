@@ -1275,13 +1275,24 @@
       "executionBackend": {
         "label": "Where agents run",
         "local-docker": "Local Docker (host)",
+        "local-dockerDesc": "Run each agent in a container on this machine's Docker daemon.",
         "cloudflare-containers": "Cloudflare Containers (built-in)",
-        "runner-pool": "Self-hosted runner pool"
+        "cloudflare-containersDesc": "Run agents on Cloudflare's built-in per-run container platform.",
+        "kubernetes": "Kubernetes cluster",
+        "kubernetesDesc": "Run each agent as a pod in a Kubernetes cluster you operate.",
+        "runner-pool": "Custom runner pool (HTTP)",
+        "runner-poolDesc": "Dispatch agents to your own scheduler behind an HTTP manifest API.",
+        "k3s": "Local Kubernetes (k3s)",
+        "k3sDesc": "Prefilled for a local k3s/k3d cluster on this machine — just paste a token."
       },
       "testEnvBackend": {
         "label": "Where test environments run",
         "local-compose": "In-container docker-compose",
-        "environment-provider": "Environment provider"
+        "local-composeDesc": "Stand the Tester's dependencies up with docker-compose inside the run's container.",
+        "kubernetes": "Kubernetes cluster",
+        "kubernetesDesc": "Provision a per-PR namespace in a Kubernetes cluster you operate.",
+        "environment-provider": "Custom HTTP provider",
+        "environment-providerDesc": "Provision ephemeral environments through your own HTTP management API."
       }
     },
     "providerConnection": {
@@ -1301,13 +1312,6 @@
           "title": "Agent runner backend",
           "blurb": "Where the coding agents run when not using Cloudflare Containers. Choose a self-hosted runner pool (your own scheduler) or a Kubernetes cluster, then configure its endpoint and credentials."
         }
-      },
-      "backend": {
-        "selectorLabel": "Runner backend",
-        "manifest": "Self-hosted pool (manifest)",
-        "kubernetes": "Kubernetes",
-        "environmentSelectorLabel": "Environment backend",
-        "environmentManifest": "Custom HTTP API (manifest)"
       },
       "kubernetesEnv": {
         "label": "Name",
@@ -1359,6 +1363,8 @@
         "apiTokenHelp": "A bearer token with RBAC to create, get and delete pods and pods/proxy in the namespace. Stored encrypted; never shown again.",
         "caCertPem": "Cluster CA certificate (PEM)",
         "caCertPemHelp": "Paste the cluster CA bundle so the apiserver's TLS certificate verifies. Omit only for a publicly-trusted CA.",
+        "insecureSkipTlsVerify": "Skip TLS verification",
+        "insecureSkipTlsVerifyHelp": "Strongly discouraged. Disables apiserver TLS verification; use only for local k3s/kind/dev clusters.",
         "harnessPort": "Harness port"
       },
       "manifestEditor": {
@@ -1370,12 +1376,9 @@
         "schemaError": "Manifest problem: {message}",
         "secretsLabel": "Secrets",
         "noSecrets": "This manifest references no secrets.",
+        "stored": "Currently stored: {keys}",
         "reenterSecrets": "Re-enter every secret to save. Stored secrets are write-only and aren't shown.",
         "starterHint": "This is a starter example. Edit it to match your provider's API."
-      },
-      "advancedManifest": {
-        "summary": "Advanced: custom API-based scheduler",
-        "intro": "Only needed to integrate a custom API-based scheduler. The common backends (local Docker, Cloudflare Containers and Kubernetes) don't need this; describe your own scheduler's HTTP API here only if you run one."
       },
       "viewLogs": "View logs",
       "hideLogs": "Hide logs",

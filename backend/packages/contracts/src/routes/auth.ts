@@ -99,6 +99,13 @@ export const infrastructureCapabilitiesSchema = v.object({
   execution: v.object({
     available: v.array(executionBackendKindSchema),
     active: executionBackendKindSchema,
+    /**
+     * The deployment's executor-harness image ref, when it can be known (the local
+     * facade's `LOCAL_HARNESS_IMAGE`). Surfaced so the SPA can prefill the image field of
+     * a low-config Kubernetes/k3s runner preset; undefined on facades that can't know it
+     * (the Worker/Node pools supply their own image per connection).
+     */
+    suggestedExecutorImage: v.optional(v.string()),
   }),
   testEnv: v.object({
     available: v.array(testEnvBackendKindSchema),

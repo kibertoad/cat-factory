@@ -9,6 +9,10 @@ import type { ProviderConnection } from '~/types/providerConnections'
 
 const props = defineProps<{
   connection: ProviderConnection | null
+  /** A low-config preset to seed the form with (today: local k3s). */
+  preset?: 'k3s'
+  /** The deployment's executor image, used to prefill the k3s preset's image field. */
+  suggestedImage?: string
   supportsTest: boolean
   testing: boolean
   busy: boolean
@@ -30,6 +34,7 @@ const form = reactive({
   imageUi: '',
   caCertPem: '',
   harnessPort: '',
+  insecureSkipTlsVerify: false,
 })
 const apiToken = ref('')
 
@@ -52,7 +57,24 @@ watch(
       form.imageUi = typeof k.imageUi === 'string' ? k.imageUi : ''
       form.caCertPem = typeof k.caCertPem === 'string' ? k.caCertPem : ''
       form.harnessPort = typeof k.harnessPort === 'number' ? String(k.harnessPort) : ''
+      form.insecureSkipTlsVerify = k.insecureSkipTlsVerify === true
     }
+  },
+  { immediate: true },
+)
+
+// Low-config k3s preset: seed the local-cluster defaults so the operator only pastes a
+// ServiceAccount token (and an image, unless the deployment surfaced one). Only seeds a
+// fresh form — never clobbers an existing connection's config on edit.
+watch(
+  () => props.preset,
+  (preset) => {
+    if (preset !== 'k3s' || props.connection) return
+    form.label = 'Local k3s'
+    form.apiServerUrl = 'https://127.0.0.1:6443'
+    form.namespace = 'cat-factory'
+    form.insecureSkipTlsVerify = true
+    if (props.suggestedImage) form.image = props.suggestedImage
   },
   { immediate: true },
 )
@@ -75,6 +97,7 @@ function buildPayload(): { config: Record<string, unknown>; secrets: Record<stri
   }
   if (form.imageUi.trim()) kubernetes.imageUi = form.imageUi.trim()
   if (form.caCertPem.trim()) kubernetes.caCertPem = form.caCertPem.trim()
+  if (form.insecureSkipTlsVerify) kubernetes.insecureSkipTlsVerify = true
   const port = Number(form.harnessPort)
   if (form.harnessPort.trim() && Number.isFinite(port)) kubernetes.harnessPort = port
   return {
@@ -153,6 +176,13 @@ function buildPayload(): { config: Record<string, unknown>; secrets: Record<stri
         :rows="3"
         class="font-mono"
         placeholder="-----BEGIN CERTIFICATE-----"
+      />
+    </UFormField>
+
+    <UFormField :help="t('settings.providerConnection.kubernetes.insecureSkipTlsVerifyHelp')">
+      <UCheckbox
+        v-model="form.insecureSkipTlsVerify"
+        :label="t('settings.providerConnection.kubernetes.insecureSkipTlsVerify')"
       />
     </UFormField>
 
