@@ -60,6 +60,10 @@ function redactError(err: unknown): Error {
  * Build the remote URL git uses. Only the username (`x-access-token`) is embedded
  * — never the token — so the token never appears in argv. The token is supplied
  * separately via {@link authEnv} and read by the GIT_ASKPASS helper.
+ *
+ * The `x-access-token` username is host-neutral: GitHub keys auth off the token (password)
+ * and ignores the username, and GitLab likewise accepts ANY non-blank username with a PAT as
+ * the password — so the same embedded username authenticates github.com and gitlab.com alike.
  */
 export function authenticatedCloneUrl(cloneUrl: string): string {
   // https://github.com/owner/name.git → https://x-access-token@github.com/...
@@ -786,13 +790,19 @@ async function openGitLabMergeRequest(
   return body.web_url
 }
 
-/** Find the open GitLab MR for `opts.head`, returning its web_url or undefined. */
+/** Find the open GitLab MR for `opts.head`→`opts.base`, returning its web_url or undefined. */
 async function findOpenMergeRequestUrl(
   apiBase: string,
   project: string,
-  opts: { head: string; ghToken: string; signal?: AbortSignal },
+  opts: { head: string; base: string; ghToken: string; signal?: AbortSignal },
 ): Promise<string | undefined> {
-  const query = new URLSearchParams({ source_branch: opts.head, state: 'opened' })
+  // Filter by BOTH branches: a source branch can have open MRs to several targets, so the
+  // source alone could match an MR against a different base than the one we just tried to open.
+  const query = new URLSearchParams({
+    source_branch: opts.head,
+    target_branch: opts.base,
+    state: 'opened',
+  })
   const res = await fetch(`${apiBase}/projects/${project}/merge_requests?${query}`, {
     headers: gitlabHeaders(opts.ghToken),
     ...(opts.signal ? { signal: opts.signal } : {}),

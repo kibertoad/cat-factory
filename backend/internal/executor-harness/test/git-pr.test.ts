@@ -103,7 +103,7 @@ describe('openPullRequest (provider dispatch)', () => {
         status: 409,
         body: { message: ['another open merge request already exists'] },
       },
-      'GET https://gitlab.com/api/v4/projects/group%2Fproj/merge_requests?source_branch=feature&state=opened':
+      'GET https://gitlab.com/api/v4/projects/group%2Fproj/merge_requests?source_branch=feature&target_branch=main&state=opened':
         { body: [{ web_url: 'https://gitlab.com/group/proj/-/merge_requests/9' }] },
     })
     const url = await openPullRequest({
