@@ -135,6 +135,7 @@ export class EnvironmentProvisioningService {
           : {}),
       })
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
       // The provider call threw (network/auth/4xx) — log the verbatim error before
       // it bubbles to the caller, so the attempt shows in the env provider's logs.
       await this.deps.provisioningLog?.record({
@@ -146,9 +147,14 @@ export class EnvironmentProvisioningService {
         blockId: args.blockId ?? null,
         executionId: args.executionId ?? null,
         outcome: 'failure',
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
         detail: null,
       })
+      // Persist a `failed` record carrying the REAL provider error so the deployer step's
+      // details can project it (`step.environment.lastError`), even though the provider
+      // threw before returning anything. Best-effort — symmetric with the returned-`failed`
+      // branch below, which already leaves a record behind.
+      await this.persistFailedEnvironment(workspaceId, args, manifest, message)
       throw error
     }
     if (provisioned.url) {
@@ -156,23 +162,10 @@ export class EnvironmentProvisioningService {
     }
 
     // A block holds at most one live environment: supersede any prior one.
-    if (args.blockId) {
-      const prior = await this.deps.environmentRegistryRepository.getByBlock(
-        workspaceId,
-        args.blockId,
-      )
-      if (prior) {
-        await this.deps.environmentRegistryRepository.softDelete(
-          workspaceId,
-          prior.id,
-          this.deps.clock.now(),
-        )
-      }
-    }
+    await this.supersedePriorEnvironment(workspaceId, args.blockId ?? null)
 
     const now = this.deps.clock.now()
-    const record: EnvironmentRecord = {
-      id: this.deps.idGenerator.next('env'),
+    const record = this.buildEnvironmentRecord({
       workspaceId,
       blockId: args.blockId ?? null,
       executionId: args.executionId ?? null,
@@ -186,9 +179,13 @@ export class EnvironmentProvisioningService {
       ),
       createdAt: now,
       expiresAt: this.resolveExpiry(provisioned, manifest.defaultTtlMs, now),
-      lastError: provisioned.status === 'failed' ? 'Provisioning failed' : null,
-      deletedAt: null,
-    }
+      // A provider that reports `status:'failed'` without throwing still carries its real
+      // reason on `provisioned.error` — surface that verbatim (not a generic literal) so the
+      // deployer step's Environment panel shows the actual root cause; fall back only when the
+      // provider gave none.
+      lastError:
+        provisioned.status === 'failed' ? provisioned.error?.trim() || 'Provisioning failed' : null,
+    })
     await this.deps.environmentRegistryRepository.insert(record)
     // A provider that returns `status:'failed'` (rather than throwing) is still a
     // failed spin-up — log it as such with the captured `lastError`.
@@ -360,6 +357,90 @@ export class EnvironmentProvisioningService {
   private async encryptAccess(access: EnvironmentAccessHandle | null): Promise<string | null> {
     if (!access) return null
     return this.deps.secretCipher.encrypt(JSON.stringify(access))
+  }
+
+  /**
+   * Build an {@link EnvironmentRecord} from its discriminating fields, owning the shared
+   * scaffolding (a fresh id + `deletedAt: null`) ONCE so the success path and the
+   * failed-provision path can't drift when the record shape gains a column — a new field on
+   * `EnvironmentRecord` becomes a compile error at both call sites instead of a silent miss.
+   */
+  private buildEnvironmentRecord(
+    fields: Omit<EnvironmentRecord, 'id' | 'deletedAt'>,
+  ): EnvironmentRecord {
+    return { id: this.deps.idGenerator.next('env'), deletedAt: null, ...fields }
+  }
+
+  /** A block holds at most one live environment: tombstone any prior one. No-op block-less. */
+  private async supersedePriorEnvironment(
+    workspaceId: string,
+    blockId: string | null,
+  ): Promise<void> {
+    if (!blockId) return
+    const prior = await this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
+    if (prior) {
+      await this.deps.environmentRegistryRepository.softDelete(
+        workspaceId,
+        prior.id,
+        this.deps.clock.now(),
+      )
+    }
+  }
+
+  /**
+   * Persist a `failed` environment record (superseding any prior live one) so a broken
+   * provision is STORED and projectable onto the deployer step's details — even when the
+   * provider threw before returning anything. Best-effort: its own persistence failure must
+   * not mask the original provisioning error, so it swallows errors — but it records the
+   * swallow in the provisioning log so a broken registry (DB outage / schema drift) is
+   * OBSERVABLE rather than silently dropping the very root-cause projection it exists to
+   * provide.
+   */
+  private async persistFailedEnvironment(
+    workspaceId: string,
+    args: ProvisionArgs,
+    manifest: EnvironmentManifest,
+    lastError: string,
+  ): Promise<void> {
+    try {
+      await this.supersedePriorEnvironment(workspaceId, args.blockId ?? null)
+      const record = this.buildEnvironmentRecord({
+        workspaceId,
+        blockId: args.blockId ?? null,
+        executionId: args.executionId ?? null,
+        providerId: manifest.providerId,
+        externalId: null,
+        url: null,
+        status: 'failed',
+        accessCipher: null,
+        provisionFieldsCipher: null,
+        createdAt: this.deps.clock.now(),
+        expiresAt: null,
+        lastError,
+      })
+      await this.deps.environmentRegistryRepository.insert(record)
+    } catch (persistError) {
+      // best-effort — never mask the original provisioning error, but leave a breadcrumb so a
+      // broken registry doesn't silently swallow the failed-env record (which would render the
+      // deployer step's lastError empty with no signal). Doubly-guarded: the log is itself
+      // best-effort and must not throw out of the catch.
+      await this.deps.provisioningLog
+        ?.record({
+          workspaceId,
+          subsystem: 'environment',
+          operation: 'provision',
+          targetId: null,
+          providerId: manifest.providerId,
+          blockId: args.blockId ?? null,
+          executionId: args.executionId ?? null,
+          outcome: 'failure',
+          error: `failed to persist the failed-environment record: ${
+            persistError instanceof Error ? persistError.message : String(persistError)
+          }`,
+          detail: null,
+        })
+        .catch(() => undefined)
+    }
   }
 
   private async decryptAccess(cipher: string | null): Promise<EnvironmentAccessHandle | null> {

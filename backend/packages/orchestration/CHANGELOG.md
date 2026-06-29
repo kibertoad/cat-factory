@@ -1,5 +1,122 @@
 # @cat-factory/orchestration
 
+## 0.41.0
+
+### Minor Changes
+
+- 40f687d: Surface container/environment spin-up breakages on the agent step instead of hanging or hiding them.
+
+  - **Local Docker mode fails fast.** `LocalContainerRunnerTransport` now aborts the
+    container start the moment the container has exited (or a CLI call fails) instead of
+    spinning for the full ready timeout, and the thrown error carries the real Docker
+    stderr plus a tail of the container's own logs — so a broken daemon / failed image
+    pull / crashing entrypoint shows the root cause in the step's failure card and the
+    provisioning-logs drawer within one poll rather than ~60s of "spinning up container".
+    Adds a `logs()` method to the `ContainerRuntimeAdapter` seam (Docker + Apple adapters).
+
+  - **Kubernetes runner fails fast on doomed pods.** `KubernetesRunnerTransport` now
+    detects terminal container start-up reasons (`ImagePullBackOff`/`ErrImagePull`/
+    `InvalidImageName`/`CreateContainerConfigError`/`CrashLoopBackOff`/…) and aborts the
+    readiness wait immediately with the pod's real `reason: message` as a hard `dispatch`
+    failure — instead of polling the full 120s and then mis-tagging a deterministic failure
+    (e.g. a bad image) as a recoverable "evicted" that the engine re-drives into the same
+    120s hang. The recoverable timeout/terminated paths are also enriched with the latest
+    pod-status detail so a stuck pod is no longer a bare "not ready within 120000ms".
+
+  - **Custom EnvironmentProvider failures are stored and displayed.** A failed `deployer`
+    provision (the provider threw, or returned `status:'failed'`) is now a real, displayed
+    step failure: the errored environment (with the provider's verbatim `lastError`) is
+    persisted and stamped onto the step, and the run records a new `environment`
+    `AgentFailureKind` — instead of a green step with the error buried in its prose output.
+    A provider that reports `status:'failed'` WITHOUT throwing can now carry its verbatim
+    reason on the new optional `ProvisionedEnvironment.error` field (`@cat-factory/kernel`),
+    which surfaces as the step's `lastError` instead of a generic "Provisioning failed". The
+    failure is terminal + surfaced for one-click retry (NOT auto-retried), deliberately
+    symmetric with the `dispatch` (container-failed-to-start) failure.
+
+  **Breaking shape change:** `agentFailureKindSchema` gains the `environment` member.
+  Pre-1.0, no migration — stale failure rows simply don't use the new kind.
+
+### Patch Changes
+
+- Updated dependencies [40f687d]
+  - @cat-factory/contracts@0.50.0
+  - @cat-factory/kernel@0.51.0
+  - @cat-factory/integrations@0.34.0
+  - @cat-factory/agents@0.21.14
+  - @cat-factory/prompt-fragments@0.9.1
+  - @cat-factory/sandbox@0.8.37
+  - @cat-factory/spend@0.10.29
+  - @cat-factory/workspaces@0.9.20
+
+## 0.40.2
+
+### Patch Changes
+
+- e0f1149: Design-context sources: add Zeplin, generalize the abstraction, drop the Claude Design backend connector.
+
+  - **New source: Zeplin** (`source='zeplin'`, per-workspace Bearer PAT) — a real server-fetchable
+    REST handoff source exposing screens, components and design tokens. On by default; a no-op until a
+    workspace connects it.
+  - **De-Figma-shaped abstraction:** Figma and Zeplin now map into a shared, source-neutral
+    `DesignContext` model rendered by `renderDesignContext` (`integrations/documents/design.logic.ts`).
+    The per-source prompt fragments collapse into a single `design.context` fragment.
+  - **Breaking — Claude Design backend connector removed.** Its only real read path is login-bound
+    (Claude Code's `DesignSync` / `/design-sync`, via the user's claude.ai login), so a headless
+    multi-tenant backend can never authenticate. The provider, the `'claude-design'` source value, the
+    descriptor `credentialScope` field, and the entire per-user `user_document_connections` store
+    (D1 + Drizzle tables, repositories, kernel ports, scope-aware `DocumentConnectionService`) are
+    removed — all document sources are workspace-scoped again. The supported Claude Design workflow is
+    now: `/design-sync` into the repo → commit → agents read it as checkout files. Stale
+    `user_document_connections` rows are dropped (D1 migration `0020`, Drizzle drop migration); per the
+    pre-1.0 policy there is no data migration.
+
+- Updated dependencies [e0f1149]
+  - @cat-factory/contracts@0.49.0
+  - @cat-factory/kernel@0.50.0
+  - @cat-factory/integrations@0.33.0
+  - @cat-factory/prompt-fragments@0.9.0
+  - @cat-factory/agents@0.21.13
+  - @cat-factory/sandbox@0.8.36
+  - @cat-factory/spend@0.10.28
+  - @cat-factory/workspaces@0.9.19
+
+## 0.40.1
+
+### Patch Changes
+
+- fc324d2: Add Kubernetes support for executor containers via a universal "agent runner backend"
+  abstraction.
+
+  The self-hosted runner pool is generalized into a discriminated runner-backend
+  connection (a new `kind` field): `manifest` (the existing BYO HTTP scheduler pool) and
+  `kubernetes` (new), with a `registerRunnerBackend` provider-registry seam so future
+  backends (Nomad, EKS, …) are a single registry entry + a config variant + a UI form — no
+  new table, service, controller, or integration window.
+
+  The Kubernetes backend (`KubernetesRunnerTransport`, target k8s 1.35+) runs one bare Pod
+  per run and reaches the per-pod executor-harness through the kube-apiserver **pod-proxy
+  subresource** (Bearer ServiceAccount token), so the orchestrator needs only HTTPS to the
+  apiserver — no in-cluster networking or per-run Service — and full `RunnerJobView`
+  fidelity is preserved with zero executor-harness changes. It is wired symmetrically into
+  both the Cloudflare and Node facades (and local mode via Node), and surfaced in the
+  existing runner-backend Integrations window via a backend-type selector.
+
+  BREAKING (pre-1.0): the `runner-pool/connection` register/test wire shape now takes a
+  discriminated `config` instead of a bare `manifest`, and the `runner_pool_connections`
+  table gains a `kind` column (existing rows backfill to `manifest`). The
+  `executor-harness` image is unchanged (no image/tag bump).
+
+- Updated dependencies [fc324d2]
+  - @cat-factory/contracts@0.48.0
+  - @cat-factory/kernel@0.49.0
+  - @cat-factory/integrations@0.32.0
+  - @cat-factory/agents@0.21.12
+  - @cat-factory/prompt-fragments@0.8.9
+  - @cat-factory/sandbox@0.8.35
+  - @cat-factory/spend@0.10.27
+  - @cat-factory/workspaces@0.9.18
+
 ## 0.40.0
 
 ### Minor Changes

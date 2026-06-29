@@ -26,7 +26,7 @@ describe('WorkspaceEventsHub', () => {
 
     const received = new Promise<string>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('no event received')), 5000)
-      client.addEventListener('message', (e) => {
+      client.addEventListener('message', (e: MessageEvent) => {
         clearTimeout(timer)
         resolve(typeof e.data === 'string' ? e.data : '')
       })
@@ -63,7 +63,7 @@ describe('WorkspaceEventsHub', () => {
 
     const received = new Promise<string>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('no event received')), 5000)
-      client.addEventListener('message', (e) => {
+      client.addEventListener('message', (e: MessageEvent) => {
         clearTimeout(timer)
         resolve(typeof e.data === 'string' ? e.data : '')
       })

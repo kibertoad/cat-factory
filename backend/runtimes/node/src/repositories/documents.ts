@@ -5,13 +5,11 @@ import type {
   DocumentRepository,
   DocumentSourceKind,
   SecretCipher,
-  UserDocumentConnectionRecord,
-  UserDocumentConnectionRepository,
 } from '@cat-factory/kernel'
 import { urlMatchCandidates } from '@cat-factory/kernel'
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
-import { documentConnections, documents, userDocumentConnections } from '../db/schema.js'
+import { documentConnections, documents } from '../db/schema.js'
 
 // Drizzle/Postgres mirrors of the document-source D1 repositories (migration 0012).
 // A `source` discriminator tags every row, so one pair of tables serves every
@@ -131,112 +129,6 @@ export class DrizzleDocumentConnectionRepository implements DocumentConnectionRe
           eq(documentConnections.workspace_id, workspaceId),
           eq(documentConnections.source, source),
           isNull(documentConnections.deleted_at),
-        ),
-      )
-  }
-}
-
-type UserDocumentConnectionRow = typeof userDocumentConnections.$inferSelect
-
-/**
- * Per-user personal document-source connections over Postgres (migration mirror of D1's
- * `user_document_connections`), the per-user analogue of
- * {@link DrizzleDocumentConnectionRepository}. Used for sources whose
- * `descriptor.credentialScope === 'user'` (Claude Design). The PAT is encrypted at rest
- * with the same AES-256-GCM envelope as the workspace store.
- */
-export class DrizzleUserDocumentConnectionRepository implements UserDocumentConnectionRepository {
-  constructor(
-    private readonly db: DrizzleDb,
-    private readonly cipher: SecretCipher,
-  ) {}
-
-  private async decodeCredentials(stored: string): Promise<Record<string, string>> {
-    if (!stored.startsWith('v1.')) return parseCredentials(stored)
-    try {
-      return parseCredentials(await this.cipher.decrypt(stored))
-    } catch {
-      return {}
-    }
-  }
-
-  private async rowToRecord(row: UserDocumentConnectionRow): Promise<UserDocumentConnectionRecord> {
-    return {
-      userId: row.user_id,
-      source: row.source as DocumentSourceKind,
-      credentials: await this.decodeCredentials(row.credentials),
-      label: row.label,
-      createdAt: row.created_at,
-      deletedAt: row.deleted_at,
-    }
-  }
-
-  async getByUser(
-    userId: string,
-    source: DocumentSourceKind,
-  ): Promise<UserDocumentConnectionRecord | null> {
-    const rows = await this.db
-      .select()
-      .from(userDocumentConnections)
-      .where(
-        and(
-          eq(userDocumentConnections.user_id, userId),
-          eq(userDocumentConnections.source, source),
-          isNull(userDocumentConnections.deleted_at),
-        ),
-      )
-      .limit(1)
-    return rows[0] ? this.rowToRecord(rows[0]) : null
-  }
-
-  async listByUser(userId: string): Promise<UserDocumentConnectionRecord[]> {
-    const rows = await this.db
-      .select()
-      .from(userDocumentConnections)
-      .where(
-        and(
-          eq(userDocumentConnections.user_id, userId),
-          isNull(userDocumentConnections.deleted_at),
-        ),
-      )
-      .orderBy(desc(userDocumentConnections.created_at))
-    return Promise.all(rows.map((row) => this.rowToRecord(row)))
-  }
-
-  async upsert(record: UserDocumentConnectionRecord): Promise<void> {
-    const credentials = await this.cipher.encrypt(JSON.stringify(record.credentials))
-    // A user has a single live connection per source: clear any prior binding (live or
-    // tombstoned) before inserting, in one transaction so a concurrent reader never sees
-    // the connection transiently absent.
-    await this.db.transaction(async (tx) => {
-      await tx
-        .delete(userDocumentConnections)
-        .where(
-          and(
-            eq(userDocumentConnections.user_id, record.userId),
-            eq(userDocumentConnections.source, record.source),
-          ),
-        )
-      await tx.insert(userDocumentConnections).values({
-        user_id: record.userId,
-        source: record.source,
-        credentials,
-        label: record.label,
-        created_at: record.createdAt,
-        deleted_at: null,
-      })
-    })
-  }
-
-  async softDelete(userId: string, source: DocumentSourceKind, at: number): Promise<void> {
-    await this.db
-      .update(userDocumentConnections)
-      .set({ deleted_at: at })
-      .where(
-        and(
-          eq(userDocumentConnections.user_id, userId),
-          eq(userDocumentConnections.source, source),
-          isNull(userDocumentConnections.deleted_at),
         ),
       )
   }

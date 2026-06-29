@@ -272,12 +272,12 @@ describe('validateRegistrations', () => {
       kind: 'auditor',
       systemPrompt: 'audit',
       agent: { surface: 'container-explore', clone: { branch: 'pr' } },
-      // @ts-expect-error — an unknown view id is exactly what the validator must catch.
       presentation: {
         label: 'Auditor',
         icon: 'i',
         color: '#fff',
         description: 'd',
+        // @ts-expect-error — an unknown view id is exactly what the validator must catch.
         resultView: 'no-such-view',
       },
     })

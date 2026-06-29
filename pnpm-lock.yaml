@@ -724,6 +724,9 @@ importers:
       '@cat-factory/conformance':
         specifier: workspace:*
         version: link:../../internal/conformance
+      '@cat-factory/gates':
+        specifier: workspace:*
+        version: link:../../packages/gates
       '@types/node':
         specifier: ^26.0.1
         version: 26.0.1

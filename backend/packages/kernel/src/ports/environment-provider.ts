@@ -99,6 +99,14 @@ export interface ProvisionedEnvironment {
   access: EnvironmentAccessHandle | null
   /** All fields the response mapping captured, for later status/teardown calls. */
   fields: ProvisionFields
+  /**
+   * The verbatim provider error, set when a provider reports `status: 'failed'` WITHOUT
+   * throwing (a deterministic rejection — quota exceeded, invalid manifest, …). Surfaced
+   * verbatim as the deployer step's `step.environment.lastError`, so a non-throwing failure
+   * carries a real root cause instead of a generic "Provisioning failed". Absent on success
+   * (and on a throw, where the thrown error is the root cause instead).
+   */
+  error?: string | null
 }
 
 /**

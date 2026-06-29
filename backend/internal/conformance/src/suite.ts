@@ -849,6 +849,36 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         expect(coder.output).toContain('[frags]db.managed-standard[/frags]')
         expect(coder.selectedFragmentIds).toEqual(['db.managed-standard'])
       })
+
+      it('resolves the built-in design.context fragment into a code-aware run', async () => {
+        // The shared design-context fragment (the one a linked Figma/Zeplin document's
+        // materialised `.cat-context/*.md` pairs with) is a built-in catalog entry. Pinning
+        // it on a service and asserting a `coder` run resolves it proves the fragment is in
+        // the universal pool and reaches a code-aware agent identically on D1 and Postgres —
+        // a rename/removal of the design fragment fails here. (The document body's own
+        // materialisation into the agent context is covered by the generic document-source
+        // path; design sources ride it unchanged.)
+        const app = harness.makeApp({ echoFragments: true })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+          serviceFragmentIds: ['design.context'],
+        })
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code',
+          agentKinds: ['coder'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+
+        const coder = exec.steps.find((s) => s.agentKind === 'coder')!
+        expect(coder.selectedFragmentIds).toEqual(['design.context'])
+        expect(coder.output).toContain('[frags]design.context[/frags]')
+      })
     })
 
     describe('registered custom kind pre/post-ops', () => {
@@ -2560,33 +2590,31 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(afterDelete.body.connections).toEqual([])
       })
 
-      it('connects, lists (secret-free), and disconnects Claude Design (per-user PAT)', async () => {
+      it('connects, lists (secret-free), and disconnects Zeplin (per-workspace PAT)', async () => {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
         const base = `/workspaces/${workspace.id}/document-sources`
 
-        // Claude Design is a PERSONAL source (descriptor `credentialScope: 'user'`): the PAT
-        // is stored in the per-user `user_document_connections` table, NOT the shared
-        // workspace table, yet it surfaces through the SAME connect/list/disconnect surface.
-        // (In dev-open conformance there is no signed-in user, so it is owned by the empty
-        // user id — the single-user/local-mode fallback.) Proves the per-user store + the
-        // scope-aware service are wired symmetrically on this facade, and the token never
-        // leaves the backend.
-        const connected = await call<{ source: string }>('POST', `${base}/claude-design/connect`, {
-          credentials: { apiToken: 'sk-ant-secret-design-token-xyz' },
+        // Zeplin is the second design source, wired on every facade beside Figma (a
+        // per-workspace Bearer PAT; normalizeConnection is pure, so no network). It proves
+        // the design abstraction is not Figma-shaped — a different content model (screens +
+        // a handoff design system) rides the same provider port. The token never leaves the
+        // backend.
+        const connected = await call<{ source: string }>('POST', `${base}/zeplin/connect`, {
+          credentials: { apiToken: 'zpn-secret-zeplin-token-xyz' },
         })
         expect(connected.status).toBe(201)
-        expect(connected.body.source).toBe('claude-design')
-        expect(JSON.stringify(connected.body)).not.toContain('secret-design-token')
+        expect(connected.body.source).toBe('zeplin')
+        expect(JSON.stringify(connected.body)).not.toContain('secret-zeplin-token')
 
         const listed = await call<{ connections: { source: string }[] }>(
           'GET',
           `${base}/connections`,
         )
-        expect(listed.body.connections.map((c) => c.source)).toEqual(['claude-design'])
-        expect(JSON.stringify(listed.body)).not.toContain('secret-design-token')
+        expect(listed.body.connections.map((c) => c.source)).toEqual(['zeplin'])
+        expect(JSON.stringify(listed.body)).not.toContain('secret-zeplin-token')
 
-        const del = await call('DELETE', `${base}/claude-design/connection`)
+        const del = await call('DELETE', `${base}/zeplin/connection`)
         expect(del.status).toBe(204)
         const afterDelete = await call<{ connections: unknown[] }>('GET', `${base}/connections`)
         expect(afterDelete.body.connections).toEqual([])
@@ -2690,6 +2718,69 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(got.body.connection?.config?.kubernetes?.apiServerUrl).toBe(
           'https://cluster.example:6443',
         )
+      })
+
+      it('surfaces a deployer EnvironmentProvider failure as an `environment` run failure on every facade', async () => {
+        // Parity for the deployer spin-up surfacing (PR #446): when a `deployer` step's
+        // EnvironmentProvider fails to provision, the engine must record an `environment`
+        // run failure carrying the provider's verbatim error AND persist a `failed`
+        // EnvironmentRecord that projects back onto the step (`step.environment.lastError`)
+        // — not a green step with the error buried in prose. The failed-record round-trip
+        // crosses each facade's own registry repo (D1 ⇄ Drizzle), so a runtime that maps
+        // the `failed`/`lastError` columns differently — or forgot to wire the failed-record
+        // persistence — diverges here instead of shipping silently.
+        const provider = {
+          provision: async () => {
+            throw new Error('env API unreachable: ECONNREFUSED')
+          },
+          status: async () => ({ externalId: 'e', status: 'ready', url: null }) as never,
+          teardown: async () => ({ status: 'torn_down' }) as never,
+        }
+        const app = harness.makeApp(undefined, {
+          environmentProvider: provider as unknown as EnvironmentProvider,
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // A registered connection gives `provision` its manifest, so the call reaches the
+        // (throwing) provider rather than failing earlier on "no connection".
+        const manifest = {
+          providerId: 'acme-envs',
+          label: 'Acme Ephemeral Envs',
+          baseUrl: 'https://envs.test/api',
+          auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
+          provision: { method: 'POST', pathTemplate: '/environments' },
+          response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
+        }
+        const registered = await app.call('POST', `/workspaces/${wsId}/environments/connection`, {
+          manifest,
+          secrets: { API_TOKEN: 'super-secret-env-token' },
+        })
+        expect(registered.status).toBe(201)
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Deploy only',
+          agentKinds: ['deployer'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        // A real, classified `environment` failure carrying the provider's verbatim error —
+        // not a generic run failure, and not a falsely-green step.
+        expect(exec.status).toBe('failed')
+        expect(exec.failure?.kind).toBe('environment')
+        expect(exec.failure?.detail).toContain('ECONNREFUSED')
+        const deployStep = exec.steps.find((s) => s.agentKind === 'deployer')!
+        expect(deployStep.state).not.toBe('done')
+        // The failed EnvironmentRecord round-tripped through the facade's registry repo and
+        // projects onto the step — the cross-runtime persistence + column-mapping assertion.
+        expect(deployStep.environment?.status).toBe('failed')
+        expect(deployStep.environment?.lastError).toContain('ECONNREFUSED')
       })
 
       it('describes the provider config + missingRequired identically on every facade', async () => {

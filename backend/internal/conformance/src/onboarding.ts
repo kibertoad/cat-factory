@@ -36,7 +36,7 @@ export interface OnboardingInvitesProbe {
     accountId: string,
     actingUserId: string,
     email: string,
-    role?: AccountRole,
+    roles?: AccountRole[],
   ): Promise<{ token: string; invitation: { id: string; email: string } }>
   peek(token: string): Promise<{ accountId: string; email: string } | null>
   accept(token: string, userId: string, userEmail: string | null): Promise<string>
@@ -61,7 +61,7 @@ export interface OnboardingContainer {
       user: { id: string; login: string; name: string | null },
       input: { name: string },
     ): Promise<{ id: string }>
-    members(accountId: string): Promise<{ userId: string; email: string | null }[]>
+    members(accountId: string): Promise<{ userId: string; email?: string | null }[]>
   }
   invitations?: OnboardingInvitesProbe
 }

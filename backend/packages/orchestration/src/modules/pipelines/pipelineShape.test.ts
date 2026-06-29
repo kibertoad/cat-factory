@@ -31,13 +31,16 @@ describe('validatePipelineShape', () => {
 
   it('requires an enabled task-estimator before any enabled gated step', () => {
     expect(() =>
-      assertValidGating(['coder', 'reviewer'], undefined, [null, { enabled: true, minRisk: 0.5 }]),
+      assertValidGating(['coder', 'reviewer'], undefined, [
+        null,
+        { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' },
+      ]),
     ).toThrow()
     expect(() =>
       assertValidGating(['task-estimator', 'coder', 'reviewer'], undefined, [
         null,
         null,
-        { enabled: true, minRisk: 0.5 },
+        { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' },
       ]),
     ).not.toThrow()
     // A disabled gated step imposes no requirement.
@@ -45,7 +48,7 @@ describe('validatePipelineShape', () => {
       assertValidGating(
         ['coder', 'reviewer'],
         [true, false],
-        [null, { enabled: true, minRisk: 0.5 }],
+        [null, { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' }],
       ),
     ).not.toThrow()
   })
@@ -55,7 +58,7 @@ describe('validatePipelineShape', () => {
     expect(() =>
       assertValidGating(['task-estimator', 'coder', 'tester-api'], undefined, [
         null,
-        { enabled: true, minRisk: 0.5 },
+        { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' },
         null,
       ]),
     ).toThrow()
@@ -64,7 +67,7 @@ describe('validatePipelineShape', () => {
       assertValidGating(['task-estimator', 'coder', 'reviewer'], undefined, [
         null,
         null,
-        { enabled: true, minRisk: 0.5 },
+        { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' },
       ]),
     ).not.toThrow()
   })
@@ -74,7 +77,7 @@ describe('validatePipelineShape', () => {
       assertValidGating(['task-estimator', 'coder', 'reviewer'], undefined, [
         null,
         null,
-        { enabled: true },
+        { enabled: true, onMissingEstimate: 'run' },
       ]),
     ).toThrow()
   })

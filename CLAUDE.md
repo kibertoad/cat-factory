@@ -46,19 +46,29 @@ tokens with no data migration — that's acceptable, not a bug to fix.)
   by code changes. Use `pnpm test:run` from `backend/packages/orchestration` (or any other
   non-worker package with a vitest setup, e.g. `integrations`) to verify pure-logic changes;
   the worker integration suite only runs cleanly on Linux/macOS.
-- **`oxfmt .` on Windows rewrites line endings across the whole tree**, so it touches
-  hundreds of files even when CI's `oxfmt --check` (run on a Linux checkout) flags only a
-  handful. This is expected, not a sign something is wrong: **committing the seemingly
-  large drift is fine.** Git's line-ending normalization (`core.autocrlf` / `.gitattributes`)
-  absorbs the CRLF↔LF churn at commit time, so only the genuine formatting changes survive
-  in the recorded diff. Do not revert the mass reformat or try to hand-pick the files CI
-  named — run `pnpm exec oxfmt .`, stage everything, and let git collapse the noise.
-  **Never format (or lint-fix) a hand-picked subset of files**: when CI's `Lint & format`
-  flags formatting, run `pnpm lint:fix` (`oxlint --fix && oxfmt .`) over the ENTIRE project
-  rather than targeting just the named files. Do not be afraid of the excessive visible
-  churn this causes in the working tree — git's line-ending normalization absorbs the
-  irrelevant auto-converted EOL changes at commit time, so only the genuinely relevant
-  formatting fixes survive in the recorded diff.
+- **ALWAYS format/lint-fix the ENTIRE project — NEVER a subset of files. This is an
+  absolute rule, not a CI-only one.** `oxfmt` and `oxlint --fix` MUST be invoked over the
+  whole tree with the bare `.` target and nothing else:
+  - Format: `pnpm exec oxfmt .` (from the repo root) — or `pnpm lint:fix`
+    (`oxlint --fix && oxfmt .`) to do both.
+  - **NEVER** pass file paths or directories to `oxfmt`/`oxlint` (no
+    `oxfmt path/to/file.ts`, no `oxfmt src/`, no globbing the files you happen to have
+    touched). Passing an explicit file list is the wrong invocation, full stop — even for
+    formatting only your own new code, even "just to be safe", even when you think you know
+    exactly which files changed. If you find yourself typing a path after `oxfmt`, STOP: the
+    only correct argument is `.`.
+  - This applies **every time you format for any reason** — tidying your own additions,
+    pre-commit hygiene, or responding to a CI `Lint & format` failure. There is no situation
+    in this repo where formatting a hand-picked subset is correct.
+  - **Why the whole-tree run is safe and the churn is expected:** on Windows `oxfmt .`
+    rewrites line endings across the whole tree, so it touches hundreds of files even when
+    CI's `oxfmt --check` (run on a Linux checkout) flags only a handful. **This is expected,
+    not a sign something is wrong — committing the seemingly large drift is fine.** Git's
+    line-ending normalization (`core.autocrlf` / `.gitattributes`) absorbs the CRLF↔LF churn
+    at commit time, so only the genuine formatting changes survive in the recorded diff. Do
+    not be afraid of the excessive visible churn, do not revert the mass reformat, and do not
+    try to hand-pick the files CI named — run `pnpm exec oxfmt .`, stage everything, and let
+    git collapse the noise.
 
 ## Keep the runtimes symmetric
 

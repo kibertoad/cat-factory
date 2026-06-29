@@ -82,7 +82,7 @@ This repository may contain a prescriptive SPECIFICATION for the service under t
 - \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
 Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
     "userPrompt": "Pipeline: Standard build
-Block: Add widget (feature)
+Block: Add widget (service)
 Description: Implement the widget feature.
 
 Produce your contribution. Be concise and concrete.",
@@ -171,7 +171,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > default (c
     "model": "@cf/test/model",
     "newBranch": "cat-factory/blk_1",
     "pr": {
-      "body": "Automated implementation for block **Add widget** (feature).
+      "body": "Automated implementation for block **Add widget** (service).
 
 Implement the widget feature.
 
@@ -220,7 +220,7 @@ This repository may contain a prescriptive SPECIFICATION for the service under t
 - \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
 Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
     "userPrompt": "Pipeline: Standard build
-Block: Add widget (feature)
+Block: Add widget (service)
 Description: Implement the widget feature.
 
 Produce the implementation for this block, faithful to the design and prior work above: the key modules, functions, data shapes and wiring.",
@@ -287,7 +287,7 @@ This repository may contain a prescriptive SPECIFICATION for the service under t
 - \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
 Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
     "userPrompt": "Pipeline: Standard build
-Block: Add widget (feature)
+Block: Add widget (service)
 Description: Implement the widget feature.
 
 Produce your contribution. Be concise and concrete.",
@@ -383,7 +383,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > on-call 1`
     "sessionToken": "SESSION-TOKEN",
     "systemPrompt": "You are an on-call engineer investigating a possible post-release regression. A recently merged pull request shipped, and the evidence below (alerting Datadog monitors/SLOs and recent error logs) suggests the service regressed afterward. Read the PR diff on the head branch and weigh whether THIS change is the likely cause — beware correlation vs causation; a coincident deploy is not proof. You may read and inspect any file, but you MUST NOT modify, commit or revert anything; a human decides whether to revert. Respond with ONLY a JSON object of shape {"culpritConfidence":0.0,"recommendation":"revert"|"hold"|"monitor","rationale":"…","evidence":["…"]} — no prose, no code fences. Your deliverable is the text of your FINAL reply. Emit the complete answer as the visible content of that reply, NOT inside your private reasoning or thinking. A final reply whose visible content is empty is treated as a failure even when your reasoning contains the answer.",
     "userPrompt": "Pipeline: Standard build
-Block: Add widget (feature)
+Block: Add widget (service)
 Description: Implement the widget feature.
 
 Produce your contribution. Be concise and concrete.
@@ -451,7 +451,7 @@ This repository may contain a prescriptive SPECIFICATION for the service under t
 - \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
 Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
     "userPrompt": "Pipeline: Standard build
-Block: Add widget (feature)
+Block: Add widget (service)
 Description: Implement the widget feature.
 
 Produce the solution design for this block. Be concise and concrete: prefer short bullets over prose, and finish with the ordered implementation steps.",
@@ -595,7 +595,7 @@ This repository may contain a prescriptive SPECIFICATION for the service under t
 - \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
 Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
     "userPrompt": "Pipeline: Standard build
-Block: Add widget (feature)
+Block: Add widget (service)
 Description: Implement the widget feature.
 
 Run mode: local — the service’s infra dependencies have been stood up on localhost; start the service yourself and test it there.

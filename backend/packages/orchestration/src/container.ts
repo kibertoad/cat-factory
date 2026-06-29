@@ -38,11 +38,7 @@ import type {
   ProviderCapabilities,
 } from '@cat-factory/kernel'
 import type { DocumentContentResolver, DocumentSourceProvider } from '@cat-factory/kernel'
-import type {
-  DocumentConnectionRepository,
-  DocumentRepository,
-  UserDocumentConnectionRepository,
-} from '@cat-factory/kernel'
+import type { DocumentConnectionRepository, DocumentRepository } from '@cat-factory/kernel'
 import type { TaskSourceProvider } from '@cat-factory/kernel'
 import type {
   TaskConnectionRepository,
@@ -392,12 +388,6 @@ export interface CoreDependencies {
   documentPlannerModel?: ModelRef
   documentSourceProviders?: DocumentSourceProvider[]
   documentConnectionRepository?: DocumentConnectionRepository
-  /**
-   * Per-user store for personal (`credentialScope: 'user'`) document sources (a per-user
-   * PAT, e.g. Claude Design). Optional: absent → such sources can't connect, but every
-   * workspace-scoped source is unaffected.
-   */
-  userDocumentConnectionRepository?: UserDocumentConnectionRepository
   documentRepository?: DocumentRepository
 
   // ---- Task-source integration (optional; wired only when configured) ------
@@ -1068,7 +1058,6 @@ function createDocumentsModule(
   const registry = new MapDocumentSourceRegistry(documentSourceProviders)
   const connectionService = new DocumentConnectionService({
     documentConnectionRepository,
-    userDocumentConnectionRepository: deps.userDocumentConnectionRepository,
     registry,
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,

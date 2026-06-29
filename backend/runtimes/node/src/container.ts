@@ -6,9 +6,9 @@ import {
   isProxyableProvider,
 } from '@cat-factory/agents'
 import {
-  ClaudeDesignProvider,
   ConfluenceProvider,
   FigmaProvider,
+  ZeplinProvider,
   GitHubDocsProvider,
   GitHubIssuesProvider,
   JiraProvider,
@@ -169,7 +169,6 @@ import { DrizzleEnvConfigRepairJobRepository } from './repositories/envConfigRep
 import {
   DrizzleDocumentConnectionRepository,
   DrizzleDocumentRepository,
-  DrizzleUserDocumentConnectionRepository,
 } from './repositories/documents.js'
 import {
   DrizzleEnvironmentConnectionRepository,
@@ -1980,12 +1979,11 @@ function selectNodeDocumentsDeps(
   const providers: DocumentSourceProvider[] = []
   if (config.documents.sources.includes('confluence')) providers.push(new ConfluenceProvider())
   if (config.documents.sources.includes('notion')) providers.push(new NotionProvider())
-  // Figma authenticates with a per-workspace PAT (no GitHub client needed), like Notion/Confluence.
+  // Figma + Zeplin authenticate with a per-workspace PAT (no GitHub client needed), like
+  // Notion/Confluence.
   if (config.documents.sources.includes('figma')) providers.push(new FigmaProvider())
+  if (config.documents.sources.includes('zeplin')) providers.push(new ZeplinProvider())
   if (config.documents.sources.includes('linear')) providers.push(new LinearDocumentProvider())
-  // Claude Design uses a PERSONAL per-user PAT (descriptor `credentialScope: 'user'`), so it
-  // also needs the per-user connection store wired below.
-  if (config.documents.sources.includes('claude-design')) providers.push(new ClaudeDesignProvider())
   if (config.documents.sources.includes('github') && githubClient) {
     providers.push(new GitHubDocsProvider({ githubClient, installations }))
   }
@@ -1997,15 +1995,6 @@ function selectNodeDocumentsDeps(
       new WebCryptoSecretCipher({
         masterKeyBase64: config.documents.encryptionKey,
         info: 'cat-factory:documents',
-      }),
-    ),
-    // Per-user personal connections (Claude Design PAT), under a distinct HKDF info so a
-    // personal credential is domain-separated from the shared workspace credentials.
-    userDocumentConnectionRepository: new DrizzleUserDocumentConnectionRepository(
-      db,
-      new WebCryptoSecretCipher({
-        masterKeyBase64: config.documents.encryptionKey,
-        info: 'cat-factory:user-documents',
       }),
     ),
     documentRepository: new DrizzleDocumentRepository(db),

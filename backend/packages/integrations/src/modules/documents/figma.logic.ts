@@ -1,4 +1,11 @@
 import type { DocumentSourceDescriptor } from '@cat-factory/kernel'
+import {
+  dimensionMeta,
+  type DesignBlock,
+  type DesignComponent,
+  type DesignContext,
+  type DesignToken,
+} from './design.logic.js'
 import { assertHostPinned } from './http.js'
 
 // Figma-specific pure logic, kept out of the provider shell so it is unit-testable
@@ -120,7 +127,7 @@ export function figmaUrlFor(externalId: string): string {
   return `${base}?node-id=${nodeId.replace(/:/g, '-')}`
 }
 
-// ---- Node tree → Markdown -------------------------------------------------
+// ---- Node tree → DesignContext --------------------------------------------
 
 /** The subset of a Figma node we read for the layout/text/component rendering. */
 export interface FigmaNode {
@@ -142,9 +149,7 @@ const MAX_TREE_DEPTH = 6
 const MAX_TREE_NODES = 400
 
 function dimensionLabel(node: FigmaNode): string {
-  const box = node.absoluteBoundingBox
-  if (!box || box.width == null || box.height == null) return ''
-  return ` (${Math.round(box.width)}×${Math.round(box.height)})`
+  return dimensionMeta(node.absoluteBoundingBox?.width, node.absoluteBoundingBox?.height) ?? ''
 }
 
 /**
@@ -190,47 +195,44 @@ function collectComponents(node: FigmaNode, components: FigmaComponentMap, out: 
 }
 
 /**
- * Convert a fetched Figma node (a frame or a whole file's document) into the
- * lightweight Markdown the planner/agent consume: a `## <name>` heading, a
- * `### Layout` bullet tree, the `### Text content`, and the distinct
- * `### Components used` (matched against the repo's components by the agent).
+ * Map the fetched Figma frames into the source-neutral {@link DesignBlock}s: one block
+ * per frame, with a `Layout` bullet tree and the frame's `Text content`. The
+ * design-system components are collected separately ({@link figmaComponents}) into the
+ * shared global `### Components` section rather than per-frame.
  */
-export function figmaNodesToMarkdown(
-  roots: FigmaNode[],
-  components: FigmaComponentMap = {},
-): string {
-  const sections: string[] = []
-  for (const root of roots) {
-    const lines: string[] = []
-    lines.push(`## ${root.name?.trim() || '(unnamed frame)'}${dimensionLabel(root)}`)
-
+export function figmaBlocks(roots: FigmaNode[]): DesignBlock[] {
+  return roots.map((root) => {
     const layout: string[] = []
     // One counter shared across every top-level child so MAX_TREE_NODES bounds the whole
     // frame, not each subtree — a wide frame can't blow past the cap one branch at a time.
     const counter = { n: 0 }
     for (const child of root.children ?? []) renderLayout(child, 0, counter, layout)
-    if (layout.length) {
-      lines.push('', '### Layout', ...layout)
-    }
 
     const text: string[] = []
     collectText(root, text)
-    if (text.length) {
-      lines.push('', '### Text content', ...text.map((t) => `- ${t.replace(/\s+/g, ' ')}`))
-    }
 
-    const comps = new Set<string>()
-    collectComponents(root, components, comps)
-    if (comps.size) {
-      lines.push('', '### Components used', ...[...comps].sort().map((c) => `- ${c}`))
+    return {
+      title: root.name?.trim() || '(unnamed frame)',
+      meta: dimensionLabel(root),
+      sections: [
+        { heading: 'Layout', lines: layout },
+        { heading: 'Text content', lines: text.map((t) => `- ${t.replace(/\s+/g, ' ')}`) },
+      ],
     }
-
-    sections.push(lines.join('\n').trim())
-  }
-  return sections.join('\n\n').trim()
+  })
 }
 
-// ---- Variables → Markdown -------------------------------------------------
+/** Collect the distinct design-system components instantiated across the frames. */
+export function figmaComponents(
+  roots: FigmaNode[],
+  components: FigmaComponentMap = {},
+): DesignComponent[] {
+  const names = new Set<string>()
+  for (const root of roots) collectComponents(root, components, names)
+  return [...names].map((name) => ({ name }))
+}
+
+// ---- Variables → DesignToken[] --------------------------------------------
 
 interface FigmaVariable {
   name?: string
@@ -269,14 +271,14 @@ function renderVariableValue(value: unknown): string {
 }
 
 /**
- * Convert the Figma local-variables payload into a `### Design tokens` section,
- * one line per `collection › mode › name = value`. Returns '' when there are no
- * variables (so the caller drops the section entirely).
+ * Map the Figma local-variables payload into source-neutral {@link DesignToken}s
+ * (`collection › mode › name = value`). Empty when there are no variables, so the
+ * shared renderer drops the `### Design tokens` section entirely.
  */
-export function figmaVariablesToMarkdown(meta: FigmaVariablesMeta | undefined): string {
+export function figmaTokens(meta: FigmaVariablesMeta | undefined | null): DesignToken[] {
   const variables = meta?.variables ?? {}
   const collections = meta?.variableCollections ?? {}
-  const lines: string[] = []
+  const tokens: DesignToken[] = []
   for (const variable of Object.values(variables)) {
     if (!variable?.name) continue
     const collection = variable.variableCollectionId
@@ -286,11 +288,48 @@ export function figmaVariablesToMarkdown(meta: FigmaVariablesMeta | undefined): 
     const modes = collection?.modes ?? []
     for (const [modeId, value] of Object.entries(variable.valuesByMode ?? {})) {
       const modeName = modes.find((m) => m.modeId === modeId)?.name ?? 'default'
-      lines.push(
-        `- ${collectionName} › ${modeName} › ${variable.name} = ${renderVariableValue(value)}`,
-      )
+      tokens.push({
+        collection: collectionName,
+        mode: modeName,
+        name: variable.name,
+        value: renderVariableValue(value),
+      })
     }
   }
-  if (!lines.length) return ''
-  return ['### Design tokens', ...lines.sort()].join('\n')
+  return tokens
+}
+
+// ---- Assemble the DesignContext -------------------------------------------
+
+export interface FigmaContextInput {
+  /** The composite external id (`<fileKey>` or `<fileKey>:<nodeId>`). */
+  externalId: string
+  /** The Figma file's name (from the API), used for the document title. */
+  fileName: string
+  /** The frame/node id when this is a node link (drives the title shape). */
+  nodeId?: string
+  /** The fetched frame roots. */
+  roots: FigmaNode[]
+  /** The `componentId → { name }` map returned alongside the nodes. */
+  components: FigmaComponentMap
+  /** Local-variables payload, or null when the plan doesn't expose it. */
+  variablesMeta?: FigmaVariablesMeta | null
+  /** Best-effort short-lived rendered-preview URL, or null. */
+  previewUrl?: string | null
+}
+
+/** Assemble the fetched Figma pieces into the shared {@link DesignContext}. */
+export function buildFigmaDesignContext(input: FigmaContextInput): DesignContext {
+  const { fileKey } = splitFigmaExternalId(input.externalId)
+  const title = input.nodeId
+    ? `${input.fileName || fileKey} — ${input.roots[0]?.name?.trim() || input.nodeId}`
+    : input.fileName || fileKey
+  return {
+    title,
+    url: figmaUrlFor(input.externalId),
+    blocks: figmaBlocks(input.roots),
+    components: figmaComponents(input.roots, input.components),
+    tokens: figmaTokens(input.variablesMeta),
+    references: input.previewUrl ? [{ label: 'Rendered preview', url: input.previewUrl }] : [],
+  }
 }

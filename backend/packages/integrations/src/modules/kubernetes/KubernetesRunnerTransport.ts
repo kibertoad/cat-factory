@@ -10,6 +10,7 @@ import type {
 } from '@cat-factory/kernel'
 import { KubernetesApiClient, safeText } from './KubernetesApiClient.js'
 import {
+  analyzePodStatus,
   apiBase,
   buildPodManifest,
   classifyPodReadiness,
@@ -163,20 +164,41 @@ export class KubernetesRunnerTransport implements RunnerTransport {
     // / image-cached) instead of hard-failing the run on a cold pull or a transient
     // pod blip. See EVICTION_ERROR and job.logic `isContainerEvictionError`.
     const recoverable = (reason: string) => new Error(`${reason} (container evicted or crashed)`)
+    // The latest pod-status detail seen (a waiting container's reason:message, a failed
+    // condition, …), folded into the recoverable timeout so even a stuck-but-not-yet-terminal
+    // pod surfaces SOMETHING actionable instead of a bare "not ready within 120000ms".
+    let lastDetail = ''
     for (;;) {
       const res = await this.apiFetch('GET', podUrl(this.config, name), undefined, POLL_TIMEOUT_MS)
       if (res.status === 404) {
         throw recoverable(`Runner pod '${name}' vanished before it became ready`)
       }
       if (res.ok) {
-        const readiness = classifyPodReadiness(await res.json())
+        const pod = await res.json()
+        // One walk of the pod status yields both readings (fatal start-up reason + the
+        // enrichment detail), so the JSON isn't parsed twice per poll.
+        const { terminal: fatal, detail } = analyzePodStatus(pod)
+        // Fail fast + NON-recoverably on a deterministic start-up failure (bad/unpullable
+        // image, bad container config, crash loop): re-driving the same pod would just hang
+        // the whole window again, so surface the real reason as a `dispatch` failure (the
+        // message deliberately omits the "evicted or crashed" marker so the engine does NOT
+        // treat it as recoverable). This is the K8s analogue of the local Docker fail-fast.
+        if (fatal) {
+          throw new Error(`Runner pod '${name}' failed to start: ${fatal}`)
+        }
+        if (detail) lastDetail = detail
+        const readiness = classifyPodReadiness(pod)
         if (readiness === 'ready') return
         if (readiness === 'gone') {
-          throw recoverable(`Runner pod '${name}' terminated before serving`)
+          throw recoverable(
+            `Runner pod '${name}' terminated before serving${lastDetail ? ` (${lastDetail})` : ''}`,
+          )
         }
       }
       if (Date.now() >= deadline) {
-        throw recoverable(`Runner pod '${name}' not ready within ${READY_WAIT_MS}ms`)
+        throw recoverable(
+          `Runner pod '${name}' not ready within ${READY_WAIT_MS}ms${lastDetail ? ` (last status: ${lastDetail})` : ''}`,
+        )
       }
       await sleep(READY_POLL_INTERVAL_MS)
     }

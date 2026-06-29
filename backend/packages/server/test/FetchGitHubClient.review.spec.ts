@@ -143,8 +143,9 @@ describe('FetchGitHubClient PR-review reads', () => {
   })
 
   it('resolveReviewThread posts the GraphQL mutation (no throw on success)', async () => {
-    const fetchMock = vi.fn(async () =>
-      json({ data: { resolveReviewThread: { thread: { id: 'T1' } } } }),
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit): Promise<Response> =>
+        json({ data: { resolveReviewThread: { thread: { id: 'T1' } } } }),
     )
     vi.stubGlobal('fetch', fetchMock)
     await expect(makeClient().resolveReviewThread(1, ref, 'T1')).resolves.toBeUndefined()

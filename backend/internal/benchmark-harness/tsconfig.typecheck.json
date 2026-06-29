@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.json",
+  // Typecheck-only: spans src + test (build uses tsconfig.json, which stays
+  // src-only so dist never carries tests). `rootDir` relaxed to the package root.
+  "compilerOptions": {
+    "rootDir": "."
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

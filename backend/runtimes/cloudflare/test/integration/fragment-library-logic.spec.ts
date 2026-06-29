@@ -90,6 +90,7 @@ describe('deterministic selection', () => {
         { id: 'be', title: 'be', summary: 's', appliesTo: { blockTypes: ['service'] } },
       ],
       {
+        workspaceId: 'ws_test',
         agentKind: 'coder',
         blockType: 'service',
         blockTitle: '',
@@ -104,6 +105,7 @@ describe('deterministic selection', () => {
     const ids = selectDeterministic(
       [{ id: 'rev', title: 'r', summary: 's', appliesTo: { agentKinds: ['reviewer'] } }],
       {
+        workspaceId: 'ws_test',
         agentKind: 'coder',
         blockType: 'service',
         blockTitle: '',
@@ -121,6 +123,7 @@ describe('deterministic selection', () => {
       { id: 'general', title: 'g', summary: 's' },
     ]
     const ids = selectDeterministic(candidates, {
+      workspaceId: 'ws_test',
       agentKind: 'coder',
       blockType: 'service',
       blockTitle: 'Add a db migration',

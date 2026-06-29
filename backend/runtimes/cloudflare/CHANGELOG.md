@@ -1,5 +1,106 @@
 # @cat-factory/worker
 
+## 0.39.1
+
+### Patch Changes
+
+- Updated dependencies [40f687d]
+  - @cat-factory/contracts@0.50.0
+  - @cat-factory/kernel@0.51.0
+  - @cat-factory/integrations@0.34.0
+  - @cat-factory/orchestration@0.41.0
+  - @cat-factory/agents@0.21.14
+  - @cat-factory/consensus@0.7.72
+  - @cat-factory/gates@0.2.24
+  - @cat-factory/gitlab@0.3.5
+  - @cat-factory/prompt-fragments@0.9.1
+  - @cat-factory/server@0.46.2
+  - @cat-factory/spend@0.10.29
+  - @cat-factory/observability-langfuse@0.7.68
+  - @cat-factory/provider-cloudflare@0.7.72
+
+## 0.39.0
+
+### Minor Changes
+
+- e0f1149: Design-context sources: add Zeplin, generalize the abstraction, drop the Claude Design backend connector.
+
+  - **New source: Zeplin** (`source='zeplin'`, per-workspace Bearer PAT) — a real server-fetchable
+    REST handoff source exposing screens, components and design tokens. On by default; a no-op until a
+    workspace connects it.
+  - **De-Figma-shaped abstraction:** Figma and Zeplin now map into a shared, source-neutral
+    `DesignContext` model rendered by `renderDesignContext` (`integrations/documents/design.logic.ts`).
+    The per-source prompt fragments collapse into a single `design.context` fragment.
+  - **Breaking — Claude Design backend connector removed.** Its only real read path is login-bound
+    (Claude Code's `DesignSync` / `/design-sync`, via the user's claude.ai login), so a headless
+    multi-tenant backend can never authenticate. The provider, the `'claude-design'` source value, the
+    descriptor `credentialScope` field, and the entire per-user `user_document_connections` store
+    (D1 + Drizzle tables, repositories, kernel ports, scope-aware `DocumentConnectionService`) are
+    removed — all document sources are workspace-scoped again. The supported Claude Design workflow is
+    now: `/design-sync` into the repo → commit → agents read it as checkout files. Stale
+    `user_document_connections` rows are dropped (D1 migration `0020`, Drizzle drop migration); per the
+    pre-1.0 policy there is no data migration.
+
+### Patch Changes
+
+- Updated dependencies [e0f1149]
+  - @cat-factory/contracts@0.49.0
+  - @cat-factory/kernel@0.50.0
+  - @cat-factory/integrations@0.33.0
+  - @cat-factory/prompt-fragments@0.9.0
+  - @cat-factory/server@0.46.1
+  - @cat-factory/orchestration@0.40.2
+  - @cat-factory/agents@0.21.13
+  - @cat-factory/consensus@0.7.71
+  - @cat-factory/gates@0.2.23
+  - @cat-factory/gitlab@0.3.4
+  - @cat-factory/spend@0.10.28
+  - @cat-factory/observability-langfuse@0.7.67
+  - @cat-factory/provider-cloudflare@0.7.71
+
+## 0.38.0
+
+### Minor Changes
+
+- fc324d2: Add Kubernetes support for executor containers via a universal "agent runner backend"
+  abstraction.
+
+  The self-hosted runner pool is generalized into a discriminated runner-backend
+  connection (a new `kind` field): `manifest` (the existing BYO HTTP scheduler pool) and
+  `kubernetes` (new), with a `registerRunnerBackend` provider-registry seam so future
+  backends (Nomad, EKS, …) are a single registry entry + a config variant + a UI form — no
+  new table, service, controller, or integration window.
+
+  The Kubernetes backend (`KubernetesRunnerTransport`, target k8s 1.35+) runs one bare Pod
+  per run and reaches the per-pod executor-harness through the kube-apiserver **pod-proxy
+  subresource** (Bearer ServiceAccount token), so the orchestrator needs only HTTPS to the
+  apiserver — no in-cluster networking or per-run Service — and full `RunnerJobView`
+  fidelity is preserved with zero executor-harness changes. It is wired symmetrically into
+  both the Cloudflare and Node facades (and local mode via Node), and surfaced in the
+  existing runner-backend Integrations window via a backend-type selector.
+
+  BREAKING (pre-1.0): the `runner-pool/connection` register/test wire shape now takes a
+  discriminated `config` instead of a bare `manifest`, and the `runner_pool_connections`
+  table gains a `kind` column (existing rows backfill to `manifest`). The
+  `executor-harness` image is unchanged (no image/tag bump).
+
+### Patch Changes
+
+- Updated dependencies [fc324d2]
+  - @cat-factory/contracts@0.48.0
+  - @cat-factory/kernel@0.49.0
+  - @cat-factory/integrations@0.32.0
+  - @cat-factory/server@0.46.0
+  - @cat-factory/orchestration@0.40.1
+  - @cat-factory/agents@0.21.12
+  - @cat-factory/consensus@0.7.70
+  - @cat-factory/gates@0.2.22
+  - @cat-factory/gitlab@0.3.3
+  - @cat-factory/prompt-fragments@0.8.9
+  - @cat-factory/spend@0.10.27
+  - @cat-factory/observability-langfuse@0.7.66
+  - @cat-factory/provider-cloudflare@0.7.70
+
 ## 0.37.0
 
 ### Minor Changes

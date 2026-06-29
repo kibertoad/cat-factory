@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { renderDesignContext } from './design.logic.js'
 import {
   assertSafeFigmaUrl,
-  figmaNodesToMarkdown,
+  buildFigmaDesignContext,
+  figmaTokens,
   figmaUrlFor,
-  figmaVariablesToMarkdown,
   normalizeFigmaNodeId,
   parseFigmaRef,
   splitFigmaExternalId,
@@ -91,7 +92,7 @@ describe('assertSafeFigmaUrl (SSRF host pin)', () => {
   })
 })
 
-describe('figmaNodesToMarkdown', () => {
+describe('buildFigmaDesignContext + renderDesignContext', () => {
   const frame: FigmaNode = {
     id: '1:2',
     name: 'Login Card',
@@ -108,27 +109,56 @@ describe('figmaNodesToMarkdown', () => {
     ],
   }
 
-  it('renders frame heading, layout tree, text, and components used', () => {
-    const md = figmaNodesToMarkdown([frame], { C1: { name: 'Button/Primary' } })
+  it('renders frame heading, layout tree, text, and a global components section', () => {
+    const ctx = buildFigmaDesignContext({
+      externalId: 'abcDEF123:1:2',
+      fileName: 'Marketing Site',
+      nodeId: '1:2',
+      roots: [frame],
+      components: { C1: { name: 'Button/Primary' } },
+    })
+    expect(ctx.title).toBe('Marketing Site — Login Card')
+    expect(ctx.url).toBe('https://www.figma.com/design/abcDEF123?node-id=1-2')
+    const md = renderDesignContext(ctx)
     expect(md).toContain('## Login Card (320×200)')
     expect(md).toContain('### Layout')
     expect(md).toContain('- Title _TEXT_')
     expect(md).toContain('### Text content')
     expect(md).toContain('- Sign in')
     expect(md).toContain('- Continue')
-    expect(md).toContain('### Components used')
+    expect(md).toContain('### Components')
     expect(md).toContain('- Button/Primary')
   })
 
   it('omits empty sections', () => {
-    const md = figmaNodesToMarkdown([{ name: 'Empty', type: 'FRAME' }])
-    expect(md).toBe('## Empty')
+    const ctx = buildFigmaDesignContext({
+      externalId: 'Key',
+      fileName: 'File',
+      roots: [{ name: 'Empty', type: 'FRAME' }],
+      components: {},
+    })
+    expect(renderDesignContext(ctx)).toBe('## Empty')
+  })
+
+  it('surfaces a rendered-preview URL as a reference line', () => {
+    const ctx = buildFigmaDesignContext({
+      externalId: 'Key:1:2',
+      fileName: 'File',
+      nodeId: '1:2',
+      roots: [{ name: 'F', type: 'FRAME' }],
+      components: {},
+      previewUrl: 'https://api.figma.com/preview.png',
+    })
+    expect(renderDesignContext(ctx)).toContain('### References')
+    expect(renderDesignContext(ctx)).toContain(
+      '- Rendered preview: https://api.figma.com/preview.png',
+    )
   })
 })
 
-describe('figmaVariablesToMarkdown', () => {
-  it('renders collection › mode › name = value, including colour hex, sorted', () => {
-    const md = figmaVariablesToMarkdown({
+describe('figmaTokens', () => {
+  it('maps collection › mode › name = value, including colour hex', () => {
+    const tokens = figmaTokens({
       variables: {
         v1: {
           name: 'color/primary',
@@ -145,13 +175,21 @@ describe('figmaVariablesToMarkdown', () => {
         c1: { name: 'Core', modes: [{ modeId: 'm1', name: 'Light' }] },
       },
     })
+    const md = renderDesignContext({
+      title: 't',
+      url: 'u',
+      blocks: [],
+      components: [],
+      tokens,
+      references: [],
+    })
     expect(md).toContain('### Design tokens')
     expect(md).toContain('- Core › Light › color/primary = #ff0000')
     expect(md).toContain('- Core › Light › space/sm = 8')
   })
 
-  it('returns empty string when there are no variables (caller drops the section)', () => {
-    expect(figmaVariablesToMarkdown(undefined)).toBe('')
-    expect(figmaVariablesToMarkdown({ variables: {} })).toBe('')
+  it('returns no tokens when there are no variables (renderer drops the section)', () => {
+    expect(figmaTokens(undefined)).toEqual([])
+    expect(figmaTokens({ variables: {} })).toEqual([])
   })
 })

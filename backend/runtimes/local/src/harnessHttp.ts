@@ -114,24 +114,56 @@ export async function harnessHealthy(
   }
 }
 
-/** Poll `/health` until OK or the deadline, throwing on timeout (or if `isDead` fires). */
+/**
+ * An error message that may be composed lazily (only on the failure branch). The container
+ * transport's messages fold in a tail of the container's own logs — an extra CLI call we
+ * must NOT pay on every healthy boot — so it passes a thunk that runs only when the loop
+ * actually throws.
+ */
+type LazyError = string | (() => string | Promise<string>)
+
+const resolveLazyError = async (e: LazyError): Promise<string> =>
+  typeof e === 'function' ? await e() : e
+
+/**
+ * Poll `/health` until OK or the deadline, throwing on timeout (or if `isDead` fires). Both
+ * local runner transports speak the identical protocol, so this loop lives here ONCE rather
+ * than being hand-rolled per transport (see the file header). `isDead` may be async (the
+ * container transport consults the runtime), and the error messages may be thunks composed
+ * lazily on the failure branch only.
+ *
+ * `probeFirst` selects the liveness/probe ORDER each tick:
+ * - `false` (default): check `isDead` BEFORE probing, so an authoritative+cheap death signal
+ *   (the native-process transport's `handle.exited`) fails fastest.
+ * - `true`: probe `/health` FIRST and RETURN if it answers, only consulting `isDead` when it
+ *   doesn't. The container transport needs this — a serving harness whose `docker inspect`
+ *   momentarily reports not-running (inspect lag / a race) must still be accepted, with a real
+ *   death surfacing later at the job poll, rather than aborting dispatch on a stale liveness read.
+ */
 export async function waitForHarnessHealth(opts: {
   fetchImpl: typeof fetch
   endpoint: HarnessEndpoint
   readyTimeoutMs: number
   requestTimeoutMs: number
   intervalMs?: number
-  isDead?: () => boolean
-  deadError?: string
-  timeoutError: string
+  isDead?: () => boolean | Promise<boolean>
+  deadError?: LazyError
+  timeoutError: LazyError
+  probeFirst?: boolean
 }): Promise<void> {
   const deadline = Date.now() + opts.readyTimeoutMs
+  const throwDead = async (): Promise<never> => {
+    throw new Error(
+      await resolveLazyError(opts.deadError ?? 'the harness exited before becoming healthy'),
+    )
+  }
   for (;;) {
-    if (opts.isDead?.()) {
-      throw new Error(opts.deadError ?? 'the harness exited before becoming healthy')
-    }
+    if (!opts.probeFirst && (await opts.isDead?.())) await throwDead()
     if (await harnessHealthy(opts.fetchImpl, opts.endpoint, opts.requestTimeoutMs)) return
-    if (Date.now() >= deadline) throw new Error(opts.timeoutError)
+    // Not healthy yet: only NOW (after the probe) consult liveness in probe-first mode, so a
+    // healthy-but-liveness-lagging backend was already accepted above.
+    if (opts.probeFirst && (await opts.isDead?.())) await throwDead()
+    if (Date.now() >= deadline) throw new Error(await resolveLazyError(opts.timeoutError))
     await delay(opts.intervalMs ?? 300)
   }
 }
