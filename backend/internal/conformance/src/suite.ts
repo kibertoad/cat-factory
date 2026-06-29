@@ -2654,7 +2654,10 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const registered = await call<{ providerId: string; secretKeys: string[] }>(
           'POST',
           `${base}/connection`,
-          { manifest, secrets: { API_TOKEN: 'super-secret-env-token' } },
+          {
+            config: { kind: 'manifest', manifest },
+            secrets: { API_TOKEN: 'super-secret-env-token' },
+          },
         )
         expect(registered.status).toBe(201)
         expect(registered.body.providerId).toBe('acme-envs')
@@ -2675,6 +2678,49 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(del.status).toBe(204)
         const afterDelete = await call<{ connection: unknown }>('GET', `${base}/connection`)
         expect(afterDelete.body.connection).toBeNull()
+      })
+
+      it('round-trips a Kubernetes backend connection (kind + discriminated config)', async () => {
+        // The env-backend registry mirrors the runner pool: a `kind` discriminator selects
+        // the provider, and the K8s config rides the stored manifest's providerConfig. This
+        // must persist + read back identically on D1 and Postgres — a repo that dropped the
+        // `kind` column or mangled the config JSON diverges here. No custom CA, so it also
+        // passes the Worker's `customTlsSupported: false` guard.
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/environments`
+        const config = {
+          kind: 'kubernetes',
+          kubernetes: {
+            label: 'k3s',
+            apiServerUrl: 'https://cluster.example:6443',
+            manifestSource: { type: 'colocated', path: 'k8s' },
+            url: { source: 'ingressTemplate', hostTemplate: '{{branch}}.preview.example.com' },
+          },
+        }
+        const registered = await call<{
+          kind: string
+          providerId: string
+          secretKeys: string[]
+          config?: { kind: string }
+        }>('POST', `${base}/connection`, { config, secrets: { apiToken: 'sa-token' } })
+        expect(registered.status).toBe(201)
+        expect(registered.body.kind).toBe('kubernetes')
+        expect(registered.body.providerId).toBe('kubernetes')
+        expect(registered.body.secretKeys).toEqual(['apiToken'])
+        expect(registered.body.config?.kind).toBe('kubernetes')
+        expect(JSON.stringify(registered.body)).not.toContain('sa-token')
+
+        const got = await call<{
+          connection: {
+            kind: string
+            config?: { kubernetes?: { apiServerUrl: string } }
+          } | null
+        }>('GET', `${base}/connection`)
+        expect(got.body.connection?.kind).toBe('kubernetes')
+        expect(got.body.connection?.config?.kubernetes?.apiServerUrl).toBe(
+          'https://cluster.example:6443',
+        )
       })
 
       it('surfaces a deployer EnvironmentProvider failure as an `environment` run failure on every facade', async () => {
@@ -2710,7 +2756,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
         }
         const registered = await app.call('POST', `/workspaces/${wsId}/environments/connection`, {
-          manifest,
+          config: { kind: 'manifest', manifest },
           secrets: { API_TOKEN: 'super-secret-env-token' },
         })
         expect(registered.status).toBe(201)
@@ -2772,7 +2818,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
         }
         await call('POST', `${base}/connection`, {
-          manifest,
+          config: { kind: 'manifest', manifest },
           secrets: { API_TOKEN: 'super-secret-env-token' },
         })
 
@@ -2802,7 +2848,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
         }
         const res = await call('POST', `/workspaces/${workspace.id}/environments/connection`, {
-          manifest,
+          config: { kind: 'manifest', manifest },
           secrets: { API_TOKEN: 't' },
         })
         // A validation failure (the SSRF/internal-host guard), not a 201.

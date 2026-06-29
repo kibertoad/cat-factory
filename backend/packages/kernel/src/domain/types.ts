@@ -117,6 +117,12 @@ export type {
   EnvironmentAccessMapping,
   EnvironmentResponseMapping,
   EnvironmentManifest,
+  // The universal environment-backend discriminated config + the Kubernetes backend.
+  EnvironmentBackendConfig,
+  EnvironmentBackendKind,
+  KubernetesEnvironmentConfig,
+  KubernetesManifestSource,
+  KubernetesUrlSource,
   EnvironmentAccessHandle,
   EnvironmentHandle,
   EnvironmentConnection,

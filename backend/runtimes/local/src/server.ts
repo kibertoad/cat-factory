@@ -1,7 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { start } from '@cat-factory/node-server'
-import type { EnvironmentProvider } from '@cat-factory/kernel'
 import { logger } from '@cat-factory/server'
 import { applyLocalDefaults } from './config.js'
 import { buildLocalContainer } from './container.js'
@@ -18,17 +17,14 @@ const execFileAsync = promisify(execFile)
 // repo-operating agent jobs (without it the board still serves and only container
 // kinds fail, loudly).
 //
-// `environmentProvider` injects a NATIVE ephemeral-environment adapter (e.g. Kargo)
-// in place of the generic HttpEnvironmentProvider — this is the supported seam for a
-// local deployment to wire its own provider while keeping local mode's preflight
-// (orphan reaping, PAT/auth warnings) and differentiators (local container transport,
-// PAT-backed GitHub client). It threads straight through to `buildNodeContainer`'s
-// `environmentProvider` option. `buildContainer` is intentionally NOT exposed: overriding
-// it would discard local mode's differentiators.
+// A native ephemeral-environment backend (e.g. the built-in `kubernetes` one, or a
+// third-party adapter) is selected per-workspace from the env-backend registry by the
+// stored connection `kind` — registered as an import side effect, no facade seam needed.
+// `buildContainer` is intentionally NOT exposed: overriding it would discard local mode's
+// differentiators (local container transport, PAT-backed GitHub client).
 export async function startLocal(
   options: {
     env?: NodeJS.ProcessEnv
-    environmentProvider?: EnvironmentProvider
     host?: string
   } = {},
 ): Promise<Awaited<ReturnType<typeof start>>> {
@@ -75,8 +71,7 @@ export async function startLocal(
   return start({
     env,
     host: options.host,
-    buildContainer: (o) =>
-      buildLocalContainer({ ...o, environmentProvider: options.environmentProvider }),
+    buildContainer: (o) => buildLocalContainer(o),
   })
 }
 

@@ -2,7 +2,7 @@ import type { EnvironmentConnection } from '@cat-factory/kernel'
 import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { makeApp } from '../helpers'
-import { bearerManifest, TEST_API_TOKEN } from './environment.fixtures'
+import { bearerConfig, TEST_API_TOKEN } from './environment.fixtures'
 
 describe('environment provider registration', () => {
   it('stores the secret bundle encrypted and exposes only safe metadata', async () => {
@@ -13,7 +13,7 @@ describe('environment provider registration', () => {
     const registered = await app.call<EnvironmentConnection>(
       'POST',
       `/workspaces/${ws}/environments/connection`,
-      { manifest: bearerManifest(), secrets: { API_TOKEN: TEST_API_TOKEN } },
+      { config: bearerConfig(), secrets: { API_TOKEN: TEST_API_TOKEN } },
     )
     expect(registered.status).toBe(201)
     expect(registered.body.providerId).toBe('acme-envs')
@@ -42,7 +42,7 @@ describe('environment provider registration', () => {
     const app = makeApp()
     const { workspace } = await app.createWorkspace({ seed: false })
     const res = await app.call(`POST`, `/workspaces/${workspace.id}/environments/connection`, {
-      manifest: bearerManifest({ baseUrl: 'https://localhost/api' }),
+      config: bearerConfig({ baseUrl: 'https://localhost/api' }),
       secrets: { API_TOKEN: TEST_API_TOKEN },
     })
     expect(res.status).toBe(422)
@@ -52,7 +52,7 @@ describe('environment provider registration', () => {
     const app = makeApp()
     const { workspace } = await app.createWorkspace({ seed: false })
     const res = await app.call('POST', `/workspaces/${workspace.id}/environments/connection`, {
-      manifest: bearerManifest(),
+      config: bearerConfig(),
       secrets: {},
     })
     expect(res.status).toBe(422)

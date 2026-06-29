@@ -6,7 +6,7 @@ import type {
   SecretResolver,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
-import { STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
+import { STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
 import { assertApiServerUrlSafe, KUBERNETES_TOKEN_KEY } from '../kubernetes/kubernetes.logic.js'
 import { KubernetesRunnerTransport } from '../kubernetes/KubernetesRunnerTransport.js'
 import { HttpRunnerPoolProvider } from './HttpRunnerPoolProvider.js'
@@ -156,7 +156,8 @@ export const kubernetesRunnerBackend: RunnerBackendProvider = {
     const needsCustomTls =
       !!config.kubernetes.caCertPem || !!config.kubernetes.insecureSkipTlsVerify
     if (needsCustomTls && opts?.customTlsSupported === false) {
-      throw new Error(
+      // Caller-input error → ValidationError (422 with the reason), not a plain Error (500).
+      throw new ValidationError(
         'This runtime cannot verify a custom CA / skip TLS for the Kubernetes apiserver ' +
           '(it requires the Node runtime). Use a publicly-trusted apiserver certificate, or ' +
           'run this workspace on the Node/local deployment.',
