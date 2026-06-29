@@ -581,6 +581,23 @@
         "approved": "Zatwierdzone",
         "changes_requested": "Zażądano zmian",
         "rejected": "Odrzucone"
+      },
+      "container": {
+        "status": {
+          "starting": "Uruchamianie kontenera…",
+          "up": "Kontener działa",
+          "errored": "Błąd kontenera",
+          "destroyed": "Kontener zwolniony"
+        },
+        "phase": {
+          "starting": "Uruchamianie",
+          "clone": "Przygotowywanie obszaru roboczego",
+          "agent": "Agent działa",
+          "push": "Wysyłanie zmian",
+          "done": "Kończenie"
+        },
+        "id": "Kontener",
+        "url": "Adres"
       }
     },
     "stepDetail": {
@@ -2848,7 +2865,8 @@
       "blocking": "({count} blokujące) | ({count} blokujące) | ({count} blokujących)"
     },
     "environment": "Środowisko",
-    "footer": "Scenariusze to obszary, które Tester postanowił sprawdzić (jego scenariusze akceptacyjne ze specyfikacji). Wyniki i zastrzeżenia są pod nimi grupowane według nazwy."
+    "footer": "Scenariusze to obszary, które Tester postanowił sprawdzić (jego scenariusze akceptacyjne ze specyfikacji). Wyniki i zastrzeżenia są pod nimi grupowane według nazwy.",
+    "infrastructure": "Infrastruktura"
   },
   "visualConfirm": {
     "ariaLabel": "Potwierdzenie wizualne",

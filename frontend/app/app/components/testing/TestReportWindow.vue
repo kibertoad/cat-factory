@@ -332,7 +332,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                  the Coder's step detail. Shown even before a report lands, so the infra
                  spin-up is visible WHILE the Tester is still standing it up. -->
             <section
-              v-if="step && (step.container || step.startingContainer || stepEnvironment || executionId)"
+              v-if="
+                step && (step.container || step.startingContainer || stepEnvironment || executionId)
+              "
               data-testid="tester-infrastructure"
               class="space-y-3"
             >

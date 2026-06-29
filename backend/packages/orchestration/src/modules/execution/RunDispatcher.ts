@@ -798,7 +798,7 @@ export class RunDispatcher {
     instance: ExecutionInstance,
     step: PipelineStep,
   ): Promise<void> {
-    step.container = { ...(step.container ?? {}), status: 'errored' }
+    step.container = { ...step.container, status: 'errored' }
     await this.executionRepository.upsert(workspaceId, instance)
     await this.runStateMachine.emitInstance(workspaceId, instance)
   }
