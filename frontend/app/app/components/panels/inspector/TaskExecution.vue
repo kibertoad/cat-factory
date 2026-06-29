@@ -11,7 +11,7 @@ const agentRuns = useAgentRunsStore()
 const ui = useUiStore()
 const models = useModelsStore()
 const reviews = useReviewStage()
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 // The async stage this task's iterative reviewer gate (requirements-review / clarity-review)
 // is mid-cycle in (folding the answers, then re-reviewing), or null. While set, the gate is
@@ -69,6 +69,7 @@ function labelForStep(s: {
   approval?: { status: string } | null
   companion?: { exceeded?: boolean } | null
   startingContainer?: boolean
+  container?: { status: string; phase?: string | null } | null
 }) {
   // A step left mid-flight on a failed run reads "Failed", not the misleading "Working".
   if (stepFailed(s)) return t('inspector.execution.failed')
@@ -79,9 +80,18 @@ function labelForStep(s: {
   if (s.approval?.status === 'pending' && s.companion?.exceeded)
     return t('inspector.execution.needsDecision')
   if (s.approval?.status === 'pending') return t('inspector.execution.needsApproval')
-  // A container-backed step whose container is still cold-booting (only while the
-  // run is live — a failed run's mid-flight step is no longer spinning up).
-  if (s.startingContainer && !runFailed.value) return t('inspector.execution.spinningUp')
+  // A container-backed step: surface its live lifecycle while the run is running. The
+  // container is still cold-booting → "Spinning up"; up with a known phase → the phase
+  // label ("Agent running" / "Preparing workspace"), so a finished cold-boot no longer
+  // collapses into a blank "Working". A failed run's mid-flight step isn't booting.
+  if (!runFailed.value) {
+    if (s.container?.status === 'starting' || s.startingContainer)
+      return t('inspector.execution.spinningUp')
+    if (s.container?.status === 'up' && s.container.phase) {
+      const key = `panels.stepMeta.container.phase.${s.container.phase}`
+      if (te(key)) return t(key)
+    }
+  }
   const key = stepLabel[s.state]
   return key ? t(key) : s.state
 }

@@ -17,6 +17,9 @@ import { useFocusTrap } from '~/composables/useFocusTrap'
 import ArtifactLightbox from '~/components/media/ArtifactLightbox.vue'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
+import StepContainerStatus from '~/components/panels/StepContainerStatus.vue'
+import EnvironmentStatusPanel from '~/components/environments/EnvironmentStatusPanel.vue'
+import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -40,6 +43,17 @@ const step = computed(() => {
 })
 const report = computed<TestReport | null>(() => step.value?.test?.lastReport ?? null)
 const testState = computed(() => step.value?.test ?? null)
+
+// Infrastructure observability — parity with the Coder's generic step detail, so the
+// Tester window surfaces WHERE its job runs (the container lifecycle: spinning up /
+// running phase / id+url / errored), the ephemeral environment it tests against, and the
+// run's infrastructure attempts + logs (container/runner/env spin-up), not just the
+// report. The container/subtask signals already flow onto the step via the generic poll.
+const runFailed = computed(() => instance.value?.status === 'failed')
+const stepEnvironment = computed(() => step.value?.environment ?? null)
+const executionId = computed(() => instance.value?.id ?? null)
+// The infra-attempts log drawer is opened on demand (it fetches the per-run log rows).
+const showProvisioning = ref(false)
 
 const screenshots = computed<TestScreenshot[]>(() => report.value?.screenshots ?? [])
 // Resolve each capture into an object URL for the gallery + lightbox. The shared cache
@@ -258,6 +272,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
         tabindex="-1"
         role="dialog"
         aria-modal="true"
+        data-testid="tester-report-window"
         :aria-label="t('testing.title')"
         class="m-4 flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl focus:outline-none"
       >
@@ -310,11 +325,47 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
         </header>
 
         <div class="flex min-h-0 flex-1">
-          <!-- Main: scenarios → outcomes → concerns tree -->
-          <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
+          <!-- Main: infrastructure observability + scenarios → outcomes → concerns tree -->
+          <div class="min-w-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            <!-- Infrastructure: container lifecycle (where + what it's doing), the
+                 ephemeral environment, and the run's infra attempts + logs — parity with
+                 the Coder's step detail. Shown even before a report lands, so the infra
+                 spin-up is visible WHILE the Tester is still standing it up. -->
+            <section
+              v-if="step && (step.container || step.startingContainer || stepEnvironment || executionId)"
+              data-testid="tester-infrastructure"
+              class="space-y-3"
+            >
+              <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                {{ t('testing.infrastructure') }}
+              </h3>
+              <StepContainerStatus :step="step" :run-failed="runFailed" />
+              <EnvironmentStatusPanel v-if="stepEnvironment" :environment="stepEnvironment" />
+              <div v-if="executionId">
+                <UButton
+                  :icon="showProvisioning ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
+                  variant="ghost"
+                  size="xs"
+                  data-testid="tester-infra-attempts-toggle"
+                  @click="showProvisioning = !showProvisioning"
+                >
+                  {{
+                    showProvisioning
+                      ? t('panels.stepDetail.hideInfraAttempts')
+                      : t('panels.stepDetail.infraAttempts')
+                  }}
+                </UButton>
+                <ProvisioningLogsDrawer
+                  v-if="showProvisioning"
+                  class="mt-2"
+                  :execution-id="executionId"
+                />
+              </div>
+            </section>
+
             <div
               v-if="!report"
-              class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
+              class="flex flex-col items-center justify-center gap-2 py-12 text-center text-slate-400"
             >
               <UIcon name="i-lucide-flask-conical" class="h-8 w-8 opacity-40" />
               <p class="text-sm">{{ t('testing.empty.title') }}</p>

@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { AgentState, PipelineStep, CompanionVerdict, StepApproval } from '~/types/execution'
 import { subtaskIconClass } from '~/utils/pipelineRender'
 import StepModelActivity from '~/components/observability/StepModelActivity.vue'
+import StepContainerStatus from '~/components/panels/StepContainerStatus.vue'
 
 // The step's metadata card body: state/timing/model/run id, the container cold-boot
 // phase, the live subtask breakdown, the LLM observability rollup, the applied
@@ -153,15 +154,9 @@ async function copyRunId() {
       </div>
     </dl>
 
-    <!-- container cold-boot phase: shown until the container is up and
-         the agent starts reporting progress -->
-    <div
-      v-if="step.startingContainer && !runFailed"
-      class="mt-4 flex items-center gap-2 rounded-lg border border-sky-900/50 bg-sky-950/30 px-3 py-2 text-[12px] text-sky-300"
-    >
-      <UIcon name="i-lucide-loader-circle" class="h-4 w-4 shrink-0 animate-spin" />
-      <span>{{ t('panels.stepMeta.spinningUpContainer') }}</span>
-    </div>
+    <!-- container lifecycle (status / live phase / id + url) — shared with the Tester
+         window so both surface what the container is doing and where it lives. -->
+    <StepContainerStatus :step="step" :run-failed="runFailed" class="mt-4" />
 
     <!-- live subtask breakdown -->
     <div v-if="step.subtasks && step.subtasks.total > 0" class="mt-4">

@@ -450,6 +450,16 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
       return {
         state: 'running',
         subtasks: { completed: job.polled, inProgress: 1, total: this.asyncPolls },
+        // The deterministic analogue of the harness's live phase + the transport's
+        // container id/url: the first running poll is still preparing the checkout
+        // (`clone`), later polls are the agent making calls (`agent`). Lets the
+        // conformance suite assert the engine folds these onto `step.container`
+        // identically on both runtimes.
+        phase: job.polled === 1 ? 'clone' : 'agent',
+        container: {
+          id: `fake-container-${handle.runId ?? handle.jobId}`,
+          url: 'http://127.0.0.1:8080',
+        },
         ...(followUps ? { followUps } : {}),
       }
     }

@@ -182,7 +182,10 @@ export class TesterController {
     const handle = await executor.startJob(context)
     step.jobId = handle.jobId
     if (handle.model) step.model = handle.model
-    step.startingContainer = true
+    // The dispatch returned, so the (per-run) container is up; the live phase + id/url
+    // arrive on the first poll. Surfaced via the same `container` projection the Coder
+    // uses, so the Tester window shows the container lifecycle identically.
+    step.container = { status: 'up' }
     step.subtasks = undefined
     if (step.test) step.test.phase = 'testing'
     await this.deps.stateMachine.persistInstance(workspaceId, instance)
@@ -290,7 +293,9 @@ export class TesterController {
     const handle = await executor.startJob(context)
     step.jobId = handle.jobId
     if (handle.model) step.model = handle.model
-    step.startingContainer = true
+    // The fixer's container is up once the dispatch returns; surfaced via the same
+    // `container` projection so the Tester window shows the fixer's container lifecycle.
+    step.container = { status: 'up' }
     step.subtasks = undefined
     step.test = {
       phase: 'fixing',

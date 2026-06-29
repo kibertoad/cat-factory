@@ -3917,10 +3917,11 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(exec.failure?.kind).toBe('dispatch')
         // The verbatim provider/runtime response is preserved as the detail for triage.
         expect(exec.failure?.detail).toContain('HTTP 503')
-        // The step did not falsely complete; the cold-boot flag was cleared.
+        // The step did not falsely complete; the container is surfaced as errored (the
+        // details say the container failed to start, not a generic "run failed").
         const coderStep = exec.steps.find((s) => s.agentKind === 'coder')!
         expect(coderStep.state).not.toBe('done')
-        expect(coderStep.startingContainer ?? false).toBe(false)
+        expect(coderStep.container?.status).toBe('errored')
       })
 
       it("maps a polled job's structured failureCause → AgentFailureKind and surfaces the detail", async () => {
@@ -3952,6 +3953,10 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(exec.failure?.kind).toBe('timeout')
         // The harness's extended diagnostic is surfaced as the failure detail.
         expect(exec.failure?.detail).toContain('Phase timings')
+        // The step's container is surfaced as errored (the run details show the container
+        // faulted), persisted before the failure funnels through `failRun`.
+        const coderStep = exec.steps.find((s) => s.agentKind === 'coder')!
+        expect(coderStep.container?.status).toBe('errored')
       })
 
       it('routes a merger PR to human review when the assessment is unexplained (empty rationale)', async () => {
@@ -4359,7 +4364,9 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         // The `coder` step runs as a polled async job (startJob → awaiting_job → pollJob),
         // so this exercises the durable driver's job-poll loop — Cloudflare Workflows and
         // pg-boss — through the SAME assertion, the path most likely to drift between them.
-        const app = harness.makeApp({ confidence: 1, asyncKinds: ['coder'], asyncPolls: 2 })
+        // asyncPolls: 3 so the job reports two running polls — phase `clone` then `agent`
+        // — exercising the live phase progression surfaced on the step's container.
+        const app = harness.makeApp({ confidence: 1, asyncKinds: ['coder'], asyncPolls: 3 })
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
 
@@ -4378,19 +4385,26 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const coder = exec.steps.find((s) => s.agentKind === 'coder')!
         expect(coder.output).toContain('[coder]')
         expect(coder.model).toBe('fake')
-        // The "spinning up container" phase flag is set at dispatch and must be
-        // cleared once the container is up — a finished step never reads as booting.
-        expect(coder.startingContainer ?? false).toBe(false)
+        // The container reached `up` (the cold-boot lifecycle advanced past `starting`),
+        // and a finished job never reads as still booting.
+        expect(coder.container?.status).toBe('up')
         // The model is known at dispatch (the moment the ref resolves, before the
         // container is up), so it must ALREADY be present on the first "spinning up
-        // container" emit — not only once the job's result lands. Asserting it on the
-        // booting emit pins the early preview so it can't regress on either runtime.
-        const booting = app
+        // container" emit (container `starting`) — not only once the job's result lands.
+        const containerEmits = app
           .executionEmits('task_login')
           .map((e) => e.steps.find((s) => s.agentKind === 'coder'))
-          .find((s) => s?.startingContainer === true)
+        const booting = containerEmits.find((s) => s?.container?.status === 'starting')
         expect(booting, 'expected a "spinning up container" emit for the coder step').toBeTruthy()
         expect(booting!.model).toBe('fake')
+        // Once up, the run surfaces the live phase (the agent making calls) and the
+        // container's id, so the details show WHAT it's doing and WHERE it runs rather
+        // than a blank "working" — identically on both runtimes.
+        const running = containerEmits.find(
+          (s) => s?.container?.status === 'up' && s.container.phase === 'agent',
+        )
+        expect(running, 'expected a running emit with the agent phase').toBeTruthy()
+        expect(running!.container!.id).toContain('fake-container-')
 
         const task = (
           await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
