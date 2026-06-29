@@ -31,6 +31,16 @@ describe('resolveNamespace', () => {
     expect(resolveNamespace(baseConfig, { pullNumber: '7' })).toBe('cf-env-7')
   })
 
+  it('qualifies the default with the repo so same-PR-number repos do not collide', () => {
+    // Two repos in one workspace can both open PR #7; a bare cf-env-7 would collide.
+    expect(resolveNamespace(baseConfig, { repoName: 'web', pullNumber: '7' })).toBe('cf-env-web-7')
+    expect(resolveNamespace(baseConfig, { repoName: 'api', pullNumber: '7' })).toBe('cf-env-api-7')
+  })
+
+  it('falls back to the globally-unique block id when there is no repo context', () => {
+    expect(resolveNamespace(baseConfig, { blockId: 'blk1', pullNumber: '7' })).toBe('cf-env-blk1')
+  })
+
   it('sanitizes an unsafe namespace value to a valid label', () => {
     const ns = resolveNamespace({ ...baseConfig, namespaceTemplate: 'Feature/Login_Branch!' }, {})
     expect(ns).toMatch(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/)

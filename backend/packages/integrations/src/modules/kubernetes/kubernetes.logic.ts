@@ -1,5 +1,5 @@
 import type { KubernetesRunnerConfig, RunnerDispatchOptions } from '@cat-factory/kernel'
-import { isCloudMetadataHost } from '@cat-factory/kernel'
+import { isCloudMetadataHost, ValidationError } from '@cat-factory/kernel'
 import { KUBERNETES_RUNNER_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
 
 // Pure helpers for the native Kubernetes runner backend. No I/O here — URL
@@ -337,16 +337,21 @@ export function describePodStatus(pod: unknown): string {
  * {@link isCloudMetadataHost} classifier.
  */
 export function assertApiServerUrlSafe(rawUrl: string): void {
+  // A bad/unsupported URL is a caller-input error, so throw ValidationError (→ 422 with
+  // the actionable reason) rather than a plain Error (→ a generic 500 that swallows it);
+  // the connect form relies on the message. Shared by the env + runner-pool backends.
   let url: URL
   try {
     url = new URL(rawUrl)
   } catch {
-    throw new Error(`Invalid Kubernetes apiserver URL: ${rawUrl}`)
+    throw new ValidationError(`Invalid Kubernetes apiserver URL: ${rawUrl}`)
   }
   if (url.protocol !== 'https:') {
-    throw new Error('Kubernetes apiserver URL must use https.')
+    throw new ValidationError('Kubernetes apiserver URL must use https.')
   }
   if (isCloudMetadataHost(url.hostname)) {
-    throw new Error('Kubernetes apiserver URL must not target the cloud metadata endpoint.')
+    throw new ValidationError(
+      'Kubernetes apiserver URL must not target the cloud metadata endpoint.',
+    )
   }
 }

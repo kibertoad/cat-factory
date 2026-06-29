@@ -109,7 +109,15 @@ export function renderTemplate(template: string, vars: Record<string, string>): 
 
 /**
  * Resolve the per-PR namespace name: render the configured template (or a default
- * derived from the PR number / block id) then sanitize to an RFC1123 label.
+ * derived from the repo + PR number / block id) then sanitize to an RFC1123 label.
+ *
+ * The default qualifies the PR number with the repo, because a workspace can have many
+ * repos and two of them can open a PR with the SAME number. A bare `cf-env-<pr>` would
+ * then collide on one namespace — and since `ensureNamespace` treats the resulting 409
+ * as idempotent, the second PR's manifests would be applied INTO the first's live
+ * environment (and its teardown would delete the wrong namespace). So prefer
+ * `<repoName>-<pullNumber>`, falling back to the globally-unique block id, and only to a
+ * bare PR number when neither repo nor block context is present (a manual provision).
  */
 export function resolveNamespace(
   config: KubernetesEnvironmentConfig,
@@ -118,7 +126,10 @@ export function resolveNamespace(
   if (config.namespaceTemplate) {
     return k8sName(renderTemplate(config.namespaceTemplate, inputs), '', 63, 'env')
   }
-  const suffix = inputs.pullNumber || inputs.blockId || 'env'
+  const suffix =
+    inputs.repoName && inputs.pullNumber
+      ? `${inputs.repoName}-${inputs.pullNumber}`
+      : inputs.blockId || inputs.pullNumber || 'env'
   return k8sName(suffix, ENV_NAMESPACE_PREFIX, 63, 'env')
 }
 

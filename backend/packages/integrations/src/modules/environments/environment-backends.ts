@@ -4,7 +4,7 @@ import type {
   EnvironmentProvider,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
-import { STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
+import { STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
 import { KUBERNETES_ENV_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
 import { assertApiServerUrlSafe } from '../kubernetes/kubernetes.logic.js'
 import {
@@ -148,7 +148,9 @@ export const kubernetesEnvironmentBackend: EnvironmentBackendProvider = {
     const needsCustomTls =
       !!config.kubernetes.caCertPem || !!config.kubernetes.insecureSkipTlsVerify
     if (needsCustomTls && opts?.customTlsSupported === false) {
-      throw new Error(
+      // Caller-input error (a config this runtime can't honor) → ValidationError (422 with
+      // the reason), not a plain Error (a generic 500 the connect form can't surface).
+      throw new ValidationError(
         'This runtime cannot verify a custom CA / skip TLS for the Kubernetes apiserver ' +
           '(it requires the Node runtime). Use a publicly-trusted apiserver certificate, or ' +
           'run this workspace on the Node/local deployment.',

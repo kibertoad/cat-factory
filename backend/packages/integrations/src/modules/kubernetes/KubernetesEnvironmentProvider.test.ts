@@ -187,6 +187,72 @@ describe('KubernetesEnvironmentProvider.status', () => {
     })
     expect(result.status).toBe('provisioning')
   })
+
+  it('re-derives an ingress-template URL identically across status (non-branch vars survive)', async () => {
+    // provision() must persist the full var set so a hostTemplate referencing {{pullNumber}}
+    // (or any non-branch var) is not silently corrupted to an empty value on the next poll.
+    const cfg: KubernetesEnvironmentConfig = {
+      ...config,
+      namespaceTemplate: 'cf-env-{{pullNumber}}',
+      url: {
+        source: 'ingressTemplate',
+        hostTemplate: 'pr-{{pullNumber}}.preview.example.com',
+        scheme: 'https',
+      },
+    }
+    const m = kubernetesConfigToManifest(cfg)
+    stubFetch((c) =>
+      c.method === 'GET' && c.url.includes('/deployments')
+        ? { body: { items: [{ spec: { replicas: 1 }, status: { availableReplicas: 1 } }] } }
+        : { status: 200 },
+    )
+    const provider = new KubernetesEnvironmentProvider()
+    const provisioned = await provider.provision({
+      manifest: m,
+      inputs: { pullNumber: '42', branch: 'feat' },
+      resolveSecret,
+      runRepo: runRepo({ 'k8s/app.yaml': DEPLOY_YAML }),
+    })
+    expect(provisioned.url).toBe('https://pr-42.preview.example.com')
+    const refreshed = await provider.status({
+      manifest: m,
+      externalId: provisioned.externalId,
+      provisionFields: provisioned.fields,
+      resolveSecret,
+    })
+    expect(refreshed.url).toBe('https://pr-42.preview.example.com')
+  })
+
+  it('reads the only Ingress in the namespace when ingressStatus omits the name', async () => {
+    const cfg: KubernetesEnvironmentConfig = {
+      ...config,
+      url: { source: 'ingressStatus', scheme: 'https' },
+    }
+    const m = kubernetesConfigToManifest(cfg)
+    const calls = stubFetch((c) => {
+      if (c.method === 'GET' && c.url.includes('/deployments')) {
+        return { body: { items: [{ spec: { replicas: 1 }, status: { availableReplicas: 1 } }] } }
+      }
+      if (c.method === 'GET' && c.url.endsWith('/ingresses')) {
+        return {
+          body: {
+            items: [{ status: { loadBalancer: { ingress: [{ hostname: 'lb.example.com' }] } } }],
+          },
+        }
+      }
+      return { status: 200 }
+    })
+    const provider = new KubernetesEnvironmentProvider()
+    const result = await provider.status({
+      manifest: m,
+      externalId: 'cf-env-1',
+      provisionFields: { namespace: 'cf-env-1' },
+      resolveSecret,
+    })
+    expect(result.url).toBe('https://lb.example.com')
+    // It listed the Ingress collection (no name segment) instead of giving up with null.
+    expect(calls.some((c) => c.method === 'GET' && c.url.endsWith('/ingresses'))).toBe(true)
+  })
 })
 
 describe('KubernetesEnvironmentProvider.teardown', () => {

@@ -82,7 +82,11 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
       status: 'provisioning',
       expiresAt: null,
       access: null,
-      fields: { namespace, ...(vars.branch ? { branch: vars.branch } : {}) },
+      // Persist the FULL template var set (not just namespace/branch): `status()`
+      // re-derives an ingress-template URL from these, so dropping e.g. `{{pullNumber}}`
+      // / `{{image}}` here would silently corrupt a previously-correct URL on the next
+      // status poll. The vars are non-secret PR/repo context.
+      fields: { ...vars },
     }
   }
 
@@ -240,27 +244,56 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     namespace: string,
     fields: Record<string, string>,
   ): Promise<string | null> {
+    const url = config.url
     const vars = { ...fields, namespace }
-    if (config.url.source === 'ingressTemplate') return deriveUrl(config.url, vars, null)
-    const kind = config.url.source === 'serviceStatus' ? 'Service' : 'Ingress'
-    const name =
-      config.url.source === 'serviceStatus' ? config.url.serviceName : config.url.ingressName
-    if (!name) return null
+    if (url.source === 'ingressTemplate') return deriveUrl(url, vars, null)
+    const address = await this.readLoadBalancerAddress(client, config, namespace)
+    return address ? deriveUrl(url, vars, address) : null
+  }
+
+  /**
+   * Read the LoadBalancer address backing a status source: the named Service/Ingress, or
+   * — when `ingressStatus` omits the name — the single Ingress applied in the namespace
+   * (the schema/UI documents "absent ⇒ the only Ingress applied"). Null until assigned.
+   */
+  private async readLoadBalancerAddress(
+    client: KubernetesApiClient,
+    config: KubernetesEnvironmentConfig,
+    namespace: string,
+  ): Promise<string | null> {
+    const url = config.url
+    if (url.source === 'serviceStatus') {
+      const res = await client.fetch(
+        'GET',
+        resourceUrl(config, 'v1', 'Service', namespace, url.serviceName),
+        undefined,
+        READ_TIMEOUT_MS,
+      )
+      return res.ok ? extractLoadBalancerAddress(await res.json()) : null
+    }
+    // ingressTemplate is resolved by the caller; only ingressStatus reaches here.
+    if (url.source !== 'ingressStatus') return null
+    // ingressStatus: a named Ingress, else the only Ingress in the namespace.
+    if (url.ingressName) {
+      const res = await client.fetch(
+        'GET',
+        resourceUrl(config, 'networking.k8s.io/v1', 'Ingress', namespace, url.ingressName),
+        undefined,
+        READ_TIMEOUT_MS,
+      )
+      return res.ok ? extractLoadBalancerAddress(await res.json()) : null
+    }
     const res = await client.fetch(
       'GET',
-      resourceUrl(
-        config,
-        kind === 'Service' ? 'v1' : 'networking.k8s.io/v1',
-        kind,
-        namespace,
-        name,
-      ),
+      resourceUrl(config, 'networking.k8s.io/v1', 'Ingress', namespace),
       undefined,
       READ_TIMEOUT_MS,
     )
     if (!res.ok) return null
-    const address = extractLoadBalancerAddress(await res.json())
-    return deriveUrl(config.url, vars, address)
+    const body = (await res.json()) as { items?: unknown[] }
+    const items = Array.isArray(body.items) ? body.items : []
+    if (items.length === 0) return null
+    return extractLoadBalancerAddress(items[0])
   }
 
   /** Read the manifest file(s) from the configured source (co-located or separate repo). */

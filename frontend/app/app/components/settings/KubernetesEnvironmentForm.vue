@@ -116,14 +116,25 @@ watch(
   { immediate: true },
 )
 
+// Mirror kubernetesManifestSourceSchema's `owner/repo` regex so a slashless value is
+// caught here with a field hint instead of a generic 422 from the backend.
+const repoShapeValid = computed(() => /^[^/\s]+\/[^/\s]+$/.test(form.manifestRepo.trim()))
 const manifestSourceValid = computed(() =>
   form.manifestSourceType === 'separate'
-    ? !!form.manifestRepo.trim() && !!form.manifestPath.trim()
+    ? repoShapeValid.value && !!form.manifestPath.trim()
     : !!form.manifestPath.trim(),
 )
+// serviceStatus.port is an optional integer 1..65535 (kubernetesUrlSourceSchema). Validate
+// it here so a decimal isn't silently dropped and an out-of-range value isn't sent then 422'd.
+const servicePortValid = computed(() => {
+  const raw = form.servicePort.trim()
+  if (!raw) return true
+  const port = Number(raw)
+  return Number.isInteger(port) && port >= 1 && port <= 65535
+})
 const urlValid = computed(() => {
   if (form.urlSource === 'ingressTemplate') return !!form.hostTemplate.trim()
-  if (form.urlSource === 'serviceStatus') return !!form.serviceName.trim()
+  if (form.urlSource === 'serviceStatus') return !!form.serviceName.trim() && servicePortValid.value
   return true // ingressStatus has no required field
 })
 
@@ -281,7 +292,14 @@ function optional(label: string): string {
       v-if="form.urlSource === 'serviceStatus'"
       :label="optional(t('settings.providerConnection.kubernetesEnv.port'))"
     >
-      <UInput v-model="form.servicePort" type="number" class="font-mono" placeholder="80" />
+      <UInput
+        v-model="form.servicePort"
+        type="number"
+        :min="1"
+        :max="65535"
+        class="font-mono"
+        placeholder="80"
+      />
     </UFormField>
 
     <UFormField :label="optional(t('settings.providerConnection.kubernetesEnv.scheme'))">
