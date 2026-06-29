@@ -13,14 +13,14 @@ See [`runner-pool-integration.md`](./runner-pool-integration.md) and
 
 ## The pieces
 
-| Component | What it is | Lifecycle | Who hosts it |
-| --- | --- | --- | --- |
-| **node-server** | `@cat-factory/node-server`: the Hono REST API, the WebSocket push transport, and the pg-boss durable-execution workers (the orchestrator). | Long-lived Deployment, horizontally scalable for the API; pg-boss workers single-or-few. | You, in-cluster. |
-| **LLM proxy** | The OpenAI-compatible `/v1` egress route the executor points Pi at. Injects the real vendor key (kept out of the container), meters spend, writes telemetry. Lives in the **same** `@cat-factory/server` app, so it ships in the node-server image. | Same as node-server, or a separate Deployment of the same image scoped to egress. | You, in-cluster. |
-| **Postgres** | Domain DB + the `telemetry` schema (one connection, two schemas). `migrate()` bootstraps it on boot. | StatefulSet, or a managed service (RDS / Cloud SQL / Neon). | You, or your cloud. |
-| **Runner pool scheduler API** | Your thin HTTP wrapper the backend calls to `dispatch`/`poll`/`release` a job. The backend never talks to Kubernetes directly. | Long-lived Deployment (an operator or small web service). | You, in-cluster. |
-| **executor-harness pods** | The published `cat-factory-executor` image: clones the repo, runs the Pi coding agent, pushes a branch / opens a PR. Carries **no** secrets; per-job tokens arrive in the dispatch body. | **Ephemeral** — one K8s Job per pipeline step (`jobId = <executionId>-<agentKind>`). | You, in-cluster (the trust boundary). |
-| **SPA** | `@cat-factory/app` (the Nuxt layer) built into a static bundle. | Static. | A CDN / object store / nginx pod; out of cluster is fine. |
+| Component                     | What it is                                                                                                                                                                                                                                          | Lifecycle                                                                                | Who hosts it                                              |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| **node-server**               | `@cat-factory/node-server`: the Hono REST API, the WebSocket push transport, and the pg-boss durable-execution workers (the orchestrator).                                                                                                          | Long-lived Deployment, horizontally scalable for the API; pg-boss workers single-or-few. | You, in-cluster.                                          |
+| **LLM proxy**                 | The OpenAI-compatible `/v1` egress route the executor points Pi at. Injects the real vendor key (kept out of the container), meters spend, writes telemetry. Lives in the **same** `@cat-factory/server` app, so it ships in the node-server image. | Same as node-server, or a separate Deployment of the same image scoped to egress.        | You, in-cluster.                                          |
+| **Postgres**                  | Domain DB + the `telemetry` schema (one connection, two schemas). `migrate()` bootstraps it on boot.                                                                                                                                                | StatefulSet, or a managed service (RDS / Cloud SQL / Neon).                              | You, or your cloud.                                       |
+| **Runner pool scheduler API** | Your thin HTTP wrapper the backend calls to `dispatch`/`poll`/`release` a job. The backend never talks to Kubernetes directly.                                                                                                                      | Long-lived Deployment (an operator or small web service).                                | You, in-cluster.                                          |
+| **executor-harness pods**     | The published `cat-factory-executor` image: clones the repo, runs the Pi coding agent, pushes a branch / opens a PR. Carries **no** secrets; per-job tokens arrive in the dispatch body.                                                            | **Ephemeral** — one K8s Job per pipeline step (`jobId = <executionId>-<agentKind>`).     | You, in-cluster (the trust boundary).                     |
+| **SPA**                       | `@cat-factory/app` (the Nuxt layer) built into a static bundle.                                                                                                                                                                                     | Static.                                                                                  | A CDN / object store / nginx pod; out of cluster is fine. |
 
 ## Topology
 
@@ -161,5 +161,5 @@ sequenceDiagram
 - **Sizing:** one pool job per pipeline **step**, so a single task run produces several
   short-lived Jobs in sequence. Size the pool for concurrency across workspaces, not one
   job per run.
-</content>
-</invoke>
+  </content>
+  </invoke>

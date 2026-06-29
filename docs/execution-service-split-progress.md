@@ -187,15 +187,15 @@ dependency count dropping _together_.
 
 ## Status (take 2)
 
-| #   | Phase                                                 | Status         |
-| --- | ----------------------------------------------------- | -------------- |
-| 1   | `StepGraph` — pure sync step/cursor mutators          | ✅             |
-| 2   | `RunStateMachine` — async instance/block spine        | ✅             |
-| —   | XState evaluation (spike + decision)                  | ✅ (rejected)  |
-| 3   | Debag the 5 gate controllers onto the spine           | ✅             |
-| 4   | Extract `RunDispatcher` (dispatch + completion spine)  | ✅             |
-| 5   | Gate-action sub-facades + re-point server controllers | ✅             |
-| 6   | Trim constructor + final cleanup                      | 🟡 partial     |
+| #   | Phase                                                 | Status        |
+| --- | ----------------------------------------------------- | ------------- |
+| 1   | `StepGraph` — pure sync step/cursor mutators          | ✅            |
+| 2   | `RunStateMachine` — async instance/block spine        | ✅            |
+| —   | XState evaluation (spike + decision)                  | ✅ (rejected) |
+| 3   | Debag the 5 gate controllers onto the spine           | ✅            |
+| 4   | Extract `RunDispatcher` (dispatch + completion spine) | ✅            |
+| 5   | Gate-action sub-facades + re-point server controllers | ✅            |
+| 6   | Trim constructor + final cleanup                      | 🟡 partial    |
 
 `ExecutionService.ts`: **5,346 → 2,480 lines** (Phase 4 moved ~2,140 lines into the new
 `RunDispatcher.ts`). Every phase landed as its own commit, green on both runtimes (Cloudflare
