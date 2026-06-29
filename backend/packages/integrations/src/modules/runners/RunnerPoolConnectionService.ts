@@ -40,6 +40,12 @@ export interface RunnerPoolConnectionServiceDependencies {
   clock: Clock
   /** URL/host safety policy applied to a manifest backend. Defaults to strict. */
   urlPolicy?: UrlSafetyPolicy
+  /**
+   * Whether this deployment runtime can honor a backend's custom TLS trust material
+   * (a private CA / insecure-skip). The Cloudflare Worker cannot, so it sets `false`
+   * and a Kubernetes config with a CA is rejected at registration. Absent ⇒ supported.
+   */
+  customTlsSupported?: boolean
   /** Injected manifest HTTP provider (its OAuth cache shared / a native pool adapter). */
   runnerPoolProvider?: RunnerPoolProvider
 }
@@ -50,8 +56,6 @@ export interface ResolvedRunnerBackend {
   kind: string
   providerId: string
 }
-/** @deprecated kept for back-compat of the export name; use {@link ResolvedRunnerBackend}. */
-export type ResolvedRunnerPool = ResolvedRunnerBackend
 
 export class RunnerPoolConnectionService {
   constructor(private readonly deps: RunnerPoolConnectionServiceDependencies) {}
@@ -71,6 +75,16 @@ export class RunnerPoolConnectionService {
     return provider
   }
 
+  /** The write-boundary safety options (URL policy + this runtime's TLS capability). */
+  private safetyOptions() {
+    return {
+      ...(this.deps.urlPolicy ? { urlPolicy: this.deps.urlPolicy } : {}),
+      ...(this.deps.customTlsSupported !== undefined
+        ? { customTlsSupported: this.deps.customTlsSupported }
+        : {}),
+    }
+  }
+
   /** Register (or replace) a workspace's runner backend. */
   async register(
     workspaceId: string,
@@ -79,7 +93,7 @@ export class RunnerPoolConnectionService {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     const config = input.config
     const provider = this.provider(config.kind)
-    provider.assertConfigSafe(config, this.deps.urlPolicy)
+    provider.assertConfigSafe(config, this.safetyOptions())
 
     const missing = provider.referencedSecretKeys(config).filter((key) => !(key in input.secrets))
     if (missing.length) {
@@ -137,6 +151,11 @@ export class RunnerPoolConnectionService {
     return {
       providerId: record?.providerId ?? 'http',
       label: record?.label ?? 'Agent runner backend',
+      // `kind` here is the UI FORM-STYLE discriminator (manifest editor vs native flat
+      // form), not the runner-backend kind: only the manifest backend uses this
+      // descriptor-driven form, so it stays 'manifest'. The actual backend kind is
+      // surfaced on the connection (`connection.kind` + the non-secret `config`), which
+      // is what the tab's backend selector + the Kubernetes form read.
       kind: 'manifest',
       configFields,
       supportsTest: true,
@@ -156,7 +175,7 @@ export class RunnerPoolConnectionService {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     if (!input.config) return { ok: true, message: 'Nothing to test.' }
     const provider = this.provider(input.config.kind)
-    provider.assertConfigSafe(input.config, this.deps.urlPolicy)
+    provider.assertConfigSafe(input.config, this.safetyOptions())
     const secrets = input.secrets ?? {}
     return provider.testConnection(
       input.config,
@@ -223,6 +242,10 @@ export class RunnerPoolConnectionService {
     record: RunnerPoolConnectionRecord,
     secretKeys: string[],
   ): RunnerPoolConnection {
+    // The stored config holds NO secrets (those live in the separate encrypted bundle),
+    // so it is safe to expose so the connect form can prefill the non-secret fields on
+    // edit (namespace/image/… for kubernetes) instead of forcing a full re-entry.
+    const config = this.parseConfig(record)
     return {
       kind: record.kind,
       providerId: record.providerId,
@@ -230,6 +253,16 @@ export class RunnerPoolConnectionService {
       baseUrl: record.baseUrl,
       connectedAt: record.createdAt,
       secretKeys,
+      ...(config ? { config } : {}),
+    }
+  }
+
+  /** Parse the stored discriminated config, tolerating a malformed/legacy blob. */
+  private parseConfig(record: RunnerPoolConnectionRecord): RunnerBackendConfig | undefined {
+    try {
+      return JSON.parse(record.configJson) as RunnerBackendConfig
+    } catch {
+      return undefined
     }
   }
 }

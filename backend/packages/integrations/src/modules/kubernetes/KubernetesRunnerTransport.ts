@@ -39,10 +39,14 @@ const EVICTION_ERROR = 'Job not found (container evicted or crashed)'
 
 const DISPATCH_TIMEOUT_MS = 30_000
 const POLL_TIMEOUT_MS = 30_000
-// Bounded readiness wait inside dispatch. If exceeded (slow first image pull), the
-// dispatch throws a retryable error and the durable driver re-drives — by then the
-// pod is created (createPod 409s) and likely ready, so the retry proceeds.
-const READY_WAIT_MS = 30_000
+// Bounded readiness wait inside dispatch. The engine treats `dispatch` as blocking
+// until the runner has accepted the job (a plain dispatch throw hard-fails the run as
+// `failureKind: 'dispatch'`), exactly like the Cloudflare container backend, so we
+// must wait here rather than fail fast. The window is generous enough to cover a cold
+// first image pull in one shot; on a readiness failure we surface a RECOVERABLE
+// eviction (see EVICTION_ERROR) so the durable driver re-drives — by then the pod is
+// created (ensurePod 409s) and its image is cached, so the re-drive proceeds.
+const READY_WAIT_MS = 120_000
 const READY_POLL_INTERVAL_MS = 1_500
 
 export class KubernetesRunnerTransport implements RunnerTransport {
@@ -96,9 +100,16 @@ export class KubernetesRunnerTransport implements RunnerTransport {
       undefined,
       DISPATCH_TIMEOUT_MS,
     )
+    // A 404 means the pod is already gone — idempotent success. Any other failure
+    // (e.g. a 403 from a token lacking `delete`, or a transient 5xx) must NOT be
+    // swallowed: a bare Pod (restartPolicy: Never, no owner ref / Job TTL) is not
+    // garbage-collected, so a silently-dropped delete leaks the pod (and its node
+    // slot) indefinitely. Throw so the caller's best-effort wrapper records it (the
+    // LoggingRunnerTransport logs a `release` failure instead of a false success).
     if (!res.ok && res.status !== 404) {
-      // Best-effort: a failed delete is swept by the operator / pod GC, not fatal.
-      return
+      throw new Error(
+        `Failed to release runner pod '${name}' (HTTP ${res.status}): ${await safeText(res)}`,
+      )
     }
   }
 
@@ -143,20 +154,25 @@ export class KubernetesRunnerTransport implements RunnerTransport {
 
   private async waitForPodReady(name: string): Promise<void> {
     const deadline = Date.now() + READY_WAIT_MS
+    // Every readiness failure carries the eviction marker so the engine recovers it by
+    // re-driving the step (the re-drive re-attaches to the existing pod, by then ready
+    // / image-cached) instead of hard-failing the run on a cold pull or a transient
+    // pod blip. See EVICTION_ERROR and job.logic `isContainerEvictionError`.
+    const recoverable = (reason: string) => new Error(`${reason} (container evicted or crashed)`)
     for (;;) {
       const res = await this.apiFetch('GET', podUrl(this.config, name), undefined, POLL_TIMEOUT_MS)
       if (res.status === 404) {
-        throw new Error(`Runner pod '${name}' vanished before it became ready`)
+        throw recoverable(`Runner pod '${name}' vanished before it became ready`)
       }
       if (res.ok) {
         const readiness = classifyPodReadiness(await res.json())
         if (readiness === 'ready') return
         if (readiness === 'gone') {
-          throw new Error(`Runner pod '${name}' terminated before serving`)
+          throw recoverable(`Runner pod '${name}' terminated before serving`)
         }
       }
       if (Date.now() >= deadline) {
-        throw new Error(`Runner pod '${name}' not ready within ${READY_WAIT_MS}ms`)
+        throw recoverable(`Runner pod '${name}' not ready within ${READY_WAIT_MS}ms`)
       }
       await sleep(READY_POLL_INTERVAL_MS)
     }
@@ -206,10 +222,17 @@ export class KubernetesRunnerTransport implements RunnerTransport {
    * configured. A kube-apiserver usually presents a private CA, which `fetch` can't
    * verify without this. Loaded lazily (Node only) so the Worker bundle never pulls
    * in `undici`; on a runtime without it, a custom-CA/insecure config fails clearly.
+   *
+   * The Agent is cached at MODULE scope keyed by the CA/insecure pair, not per
+   * instance: the wiring builds a fresh transport on every dispatch/poll resolve, so
+   * a per-instance cache would create (and abandon) one Agent — a TLS connection pool
+   * — per poll tick, defeating keep-alive and leaking sockets.
    */
   private async tlsDispatcher(): Promise<unknown> {
     if (!this.config.caCertPem && !this.config.insecureSkipTlsVerify) return undefined
-    if (this.cachedDispatcher !== undefined) return this.cachedDispatcher
+    const key = `${this.config.insecureSkipTlsVerify ? 'insecure' : 'verify'}:${this.config.caCertPem ?? ''}`
+    const existing = tlsDispatcherCache.get(key)
+    if (existing) return existing
     // Variable specifier so bundlers don't statically resolve `undici`.
     const moduleName = 'undici'
     const undici = (await import(moduleName).catch(() => null)) as {
@@ -220,17 +243,19 @@ export class KubernetesRunnerTransport implements RunnerTransport {
         'Kubernetes custom CA / insecure TLS requires the Node runtime (undici is unavailable).',
       )
     }
-    this.cachedDispatcher = new undici.Agent({
+    const agent = new undici.Agent({
       connect: {
         ca: this.config.caCertPem,
         rejectUnauthorized: !this.config.insecureSkipTlsVerify,
       },
     })
-    return this.cachedDispatcher
+    tlsDispatcherCache.set(key, agent)
+    return agent
   }
-
-  private cachedDispatcher: unknown = undefined
 }
+
+/** Module-scoped undici Agent cache, keyed by the CA/insecure pair (see tlsDispatcher). */
+const tlsDispatcherCache = new Map<string, unknown>()
 
 async function safeText(res: Response): Promise<string> {
   try {

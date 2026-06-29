@@ -210,6 +210,12 @@ export const runnerPoolConnectionSchema = v.object({
   connectedAt: v.number(),
   /** Which secret keys are set (names only), so the UI can show completeness. */
   secretKeys: v.array(v.string()),
+  /**
+   * The stored discriminated backend config, sans secrets (those live in the
+   * write-only secret bundle), so the connect form can prefill its non-secret fields
+   * on edit instead of forcing a full re-entry. Omitted only for a legacy/unparsable row.
+   */
+  config: v.optional(runnerBackendConfigSchema),
 })
 export type RunnerPoolConnection = v.InferOutput<typeof runnerPoolConnectionSchema>
 

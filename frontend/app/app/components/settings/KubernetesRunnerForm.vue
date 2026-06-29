@@ -32,14 +32,25 @@ const form = reactive({
 })
 const apiToken = ref('')
 
-// A registered k8s connection exposes only safe metadata, so prefill the label + apiserver
-// URL from it (never the token — secrets are write-only and re-entered on update).
+// A registered k8s connection exposes its non-secret config, so prefill every non-secret
+// field from it (never the token — secrets are write-only and re-entered on update). This
+// lets an edit change one field without re-typing the whole form.
 watch(
   () => props.connection,
   (c) => {
-    if (c?.kind === 'kubernetes') {
-      form.label = c.label
-      form.apiServerUrl = c.baseUrl
+    if (c?.kind !== 'kubernetes') return
+    form.label = c.label
+    form.apiServerUrl = c.baseUrl
+    const k =
+      c.config && (c.config as { kind?: string }).kind === 'kubernetes'
+        ? (c.config as { kubernetes: Record<string, unknown> }).kubernetes
+        : undefined
+    if (k) {
+      form.namespace = typeof k.namespace === 'string' ? k.namespace : ''
+      form.image = typeof k.image === 'string' ? k.image : ''
+      form.imageUi = typeof k.imageUi === 'string' ? k.imageUi : ''
+      form.caCertPem = typeof k.caCertPem === 'string' ? k.caCertPem : ''
+      form.harnessPort = typeof k.harnessPort === 'number' ? String(k.harnessPort) : ''
     }
   },
   { immediate: true },

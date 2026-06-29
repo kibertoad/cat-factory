@@ -47,7 +47,11 @@ export function podUrl(config: KubernetesRunnerConfig, name: string): string {
 export function proxyUrl(config: KubernetesRunnerConfig, name: string, path: string): string {
   const port = config.harnessPort ?? DEFAULT_HARNESS_PORT
   const p = path.startsWith('/') ? path : `/${path}`
-  return `${podsUrl(config)}/${encodeURIComponent(`${name}:${port}`)}/proxy${p}`
+  // The apiserver pod-proxy subresource addresses the target as a literal
+  // `pods/<name>:<port>/proxy` path segment — kubectl/client-go send the colon
+  // UNENCODED. Encode the name (RFC1123, so a no-op in practice) but keep the
+  // `:<port>` literal so the apiserver parses the name:port pair.
+  return `${podsUrl(config)}/${encodeURIComponent(name)}:${port}/proxy${p}`
 }
 
 /** Resolve the image variant a dispatch needs (the heavier UI image when asked + configured). */
@@ -59,7 +63,7 @@ export function resolveImage(
   return config.image
 }
 
-/** Resolve the pod resource block for a dispatch (per-size limit override, else the default). */
+/** Resolve the pod resource block for a dispatch (per-size override, else the default). */
 export function resolveResources(
   config: KubernetesRunnerConfig,
   options?: RunnerDispatchOptions,
@@ -67,8 +71,12 @@ export function resolveResources(
   const sizeOverride = options?.instanceSize
     ? config.resourcesBySize?.[options.instanceSize]
     : undefined
+  // A per-size override is the t-shirt size for this run: it sets BOTH the request and
+  // the limit (requests == limits ⇒ Guaranteed QoS). Applying it to the limit alone
+  // while keeping a larger default request produces requests > limits, which the
+  // apiserver rejects with a 422 — so a smaller size could never start.
+  const requests = sizeOverride ?? config.resources?.requests
   const limits = sizeOverride ?? config.resources?.limits
-  const requests = config.resources?.requests
   const out: { requests?: Record<string, string>; limits?: Record<string, string> } = {}
   if (requests) out.requests = quantities(requests)
   if (limits) out.limits = quantities(limits)
@@ -151,12 +159,61 @@ export function classifyPodReadiness(pod: unknown): PodReadiness {
   return ready?.status === 'True' ? 'ready' : 'pending'
 }
 
+/** Decode a host literal to its IPv4 octets (dotted-decimal, bare integer, or
+ * IPv4-mapped IPv6), or null when it is not an IPv4 literal. Covers the obfuscated
+ * encodings that trivially bypass a naive dotted-decimal equality check. */
+function decodeIpv4(host: string): [number, number, number, number] | null {
+  const dotted = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (dotted) {
+    const parts = dotted.slice(1, 5).map(Number) as [number, number, number, number]
+    return parts.every((n) => n <= 255) ? parts : null
+  }
+  const mapped = host.match(/^::ffff:(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (mapped) {
+    const parts = mapped.slice(1, 5).map(Number) as [number, number, number, number]
+    return parts.every((n) => n <= 255) ? parts : null
+  }
+  // IPv4-mapped IPv6 in hex form (`::ffff:a9fe:a9fe`), the shape `new URL` normalizes
+  // `::ffff:1.2.3.4` to.
+  const hex = host.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/)
+  if (hex) {
+    const hi = parseInt(hex[1] ?? '0', 16)
+    const lo = parseInt(hex[2] ?? '0', 16)
+    return [(hi >> 8) & 0xff, hi & 0xff, (lo >> 8) & 0xff, lo & 0xff]
+  }
+  if (/^\d+$/.test(host)) {
+    const n = Number(host)
+    if (n > 0xffffffff) return null
+    return [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff]
+  }
+  return null
+}
+
+/** Whether a host resolves to a known cloud-metadata / link-local target. */
+function isMetadataHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  if (host === 'metadata.google.internal') return true
+  // AWS IPv6 IMDS.
+  if (host === 'fd00:ec2::254') return true
+  const v4 = decodeIpv4(host)
+  if (v4) {
+    const [a, b, c, d] = v4
+    // The whole 169.254.0.0/16 link-local range (incl. 169.254.169.254 IMDS) — a
+    // kube-apiserver is never link-local, so block the range, not just the one IP.
+    if (a === 169 && b === 254) return true
+    // Alibaba Cloud metadata.
+    if (a === 100 && b === 100 && c === 100 && d === 200) return true
+  }
+  return false
+}
+
 /**
  * Validate the apiserver URL at the write boundary. Unlike the manifest pool's
  * STRICT policy (no private hosts), a kube-apiserver is routinely a private IP or
  * a cluster DNS name, so private hosts are ALLOWED here — the operator is
  * explicitly pointing at their cluster. We still require https and reject the
- * link-local cloud-metadata endpoint (anti-SSRF).
+ * cloud-metadata endpoints (anti-SSRF), including their obfuscated IP encodings
+ * (bare integer, IPv4-mapped IPv6) and the full link-local range.
  */
 export function assertApiServerUrlSafe(rawUrl: string): void {
   let url: URL
@@ -168,8 +225,7 @@ export function assertApiServerUrlSafe(rawUrl: string): void {
   if (url.protocol !== 'https:') {
     throw new Error('Kubernetes apiserver URL must use https.')
   }
-  const host = url.hostname.toLowerCase()
-  if (host === '169.254.169.254' || host === 'metadata.google.internal') {
+  if (isMetadataHost(url.hostname)) {
     throw new Error('Kubernetes apiserver URL must not target the cloud metadata endpoint.')
   }
 }

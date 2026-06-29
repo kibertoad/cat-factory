@@ -27,6 +27,12 @@ export interface ProviderConnection {
   connectedAt: number
   /** Which secret/config keys are stored (names only), so the UI shows completeness. */
   secretKeys: string[]
+  /**
+   * The stored discriminated runner-backend config, sans secrets, so the connect form
+   * can prefill its non-secret fields on edit. Shape mirrors the backend
+   * `RunnerBackendConfig` ({ kind: 'manifest' | 'kubernetes', … }); kept opaque here.
+   */
+  config?: Record<string, unknown>
 }
 
 // The connect form builds the manifest dynamically from a server-provided scaffold

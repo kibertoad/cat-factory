@@ -1592,7 +1592,9 @@ function selectRunnersDeps(env: Env, config: AppConfig, db: D1Database): Partial
     // The generic pool provider backs the connection service's describeProvider +
     // testConnection (the manifest editor's secret-key form + a pre-save probe).
     runnerPoolProvider: new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {}),
-    runnerProviderKind: 'manifest',
+    // The Worker fetch can't verify a private CA / skip TLS (no undici), so reject a
+    // Kubernetes backend that needs custom TLS at registration instead of at dispatch.
+    runnerCustomTlsSupported: false,
     ...(urlPolicy ? { runnerUrlSafetyPolicy: urlPolicy } : {}),
   }
 }

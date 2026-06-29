@@ -38,6 +38,20 @@ export interface RunnerBackendContext {
   runnerPoolProvider?: RunnerPoolProvider
 }
 
+/** Capabilities/policies a backend validates its config against at the write boundary. */
+export interface RunnerBackendSafetyOptions {
+  /** Manifest SSRF policy. Absent ⇒ strict. */
+  urlPolicy?: UrlSafetyPolicy
+  /**
+   * Whether THIS deployment runtime can honor a backend's custom TLS trust material
+   * (a private CA / insecure-skip). The Cloudflare Worker cannot (no undici / no
+   * custom-CA fetch), so it sets this `false` and the kubernetes backend rejects such
+   * a config up front instead of letting it save and then die at first dispatch.
+   * Absent/`true` ⇒ supported (Node/local).
+   */
+  customTlsSupported?: boolean
+}
+
 export interface RunnerBackendProvider {
   readonly kind: RunnerBackendConfig['kind']
   /** Every secret-bundle key the config references (validated present at registration). */
@@ -48,8 +62,8 @@ export interface RunnerBackendProvider {
     label: string
     baseUrl: string
   }
-  /** Validate the config at the write boundary (SSRF / URL safety). Throws if unsafe. */
-  assertConfigSafe(config: RunnerBackendConfig, urlPolicy?: UrlSafetyPolicy): void
+  /** Validate the config at the write boundary (SSRF / URL + runtime safety). Throws if unsafe. */
+  assertConfigSafe(config: RunnerBackendConfig, opts?: RunnerBackendSafetyOptions): void
   /** Build the live transport the execution engine dispatches/polls/releases through. */
   buildTransport(config: RunnerBackendConfig, ctx: RunnerBackendContext): RunnerTransport
   /** Probe the backend without persisting anything. */
@@ -95,9 +109,9 @@ export const manifestRunnerBackend: RunnerBackendProvider = {
       baseUrl: config.manifest.baseUrl,
     }
   },
-  assertConfigSafe: (config, urlPolicy) => {
+  assertConfigSafe: (config, opts) => {
     if (config.kind === 'manifest') {
-      assertManifestUrlsSafe(config.manifest, urlPolicy ?? STRICT_URL_SAFETY_POLICY)
+      assertManifestUrlsSafe(config.manifest, opts?.urlPolicy ?? STRICT_URL_SAFETY_POLICY)
     }
   },
   buildTransport: (config, ctx) => {
@@ -133,8 +147,21 @@ export const kubernetesRunnerBackend: RunnerBackendProvider = {
       baseUrl: config.kubernetes.apiServerUrl,
     }
   },
-  assertConfigSafe: (config) => {
-    if (config.kind === 'kubernetes') assertApiServerUrlSafe(config.kubernetes.apiServerUrl)
+  assertConfigSafe: (config, opts) => {
+    if (config.kind !== 'kubernetes') return
+    assertApiServerUrlSafe(config.kubernetes.apiServerUrl)
+    // Custom TLS trust material is honored only on a runtime with undici (Node/local).
+    // Reject it up front on a runtime that can't (the Cloudflare Worker) so the
+    // connection can't save and then fail at every dispatch.
+    const needsCustomTls =
+      !!config.kubernetes.caCertPem || !!config.kubernetes.insecureSkipTlsVerify
+    if (needsCustomTls && opts?.customTlsSupported === false) {
+      throw new Error(
+        'This runtime cannot verify a custom CA / skip TLS for the Kubernetes apiserver ' +
+          '(it requires the Node runtime). Use a publicly-trusted apiserver certificate, or ' +
+          'run this workspace on the Node/local deployment.',
+      )
+    }
   },
   buildTransport: (config, ctx) => {
     if (config.kind !== 'kubernetes') throw new Error('Expected a kubernetes runner config')

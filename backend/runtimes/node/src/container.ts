@@ -1752,7 +1752,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           runnerPoolProvider:
             options.runnerPoolProvider ??
             new HttpRunnerPoolProvider(runnerUrlPolicy ? { urlPolicy: runnerUrlPolicy } : {}),
-          runnerProviderKind: options.runnerPoolProvider ? 'native' : 'manifest',
+          // Node (and local) has undici, so it can verify a private CA / skip TLS for a
+          // Kubernetes apiserver — accept such a config at registration.
+          runnerCustomTlsSupported: true,
           ...(runnerUrlPolicy ? { runnerUrlSafetyPolicy: runnerUrlPolicy } : {}),
         }
       : {}),

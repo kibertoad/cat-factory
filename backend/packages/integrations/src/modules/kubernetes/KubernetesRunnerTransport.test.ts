@@ -55,9 +55,10 @@ describe('KubernetesRunnerTransport.dispatch', () => {
 
     expect(calls[0]).toMatchObject({ method: 'POST', url: expect.stringMatching(/\/pods$/) })
     expect(calls.some((c) => c.method === 'GET' && c.url.includes('/pods/cf-run-1'))).toBe(true)
+    // The pod-proxy name:port colon is sent LITERAL (kubectl/client-go do the same).
     expect(calls.at(-1)).toMatchObject({
       method: 'POST',
-      url: expect.stringContaining('cf-run-1%3A8080/proxy/jobs'),
+      url: expect.stringContaining('cf-run-1:8080/proxy/jobs'),
     })
   })
 
@@ -107,6 +108,14 @@ describe('KubernetesRunnerTransport.release', () => {
     const transport = new KubernetesRunnerTransport(config, resolveSecret)
     await expect(transport.release(ref)).resolves.toBeUndefined()
     expect(seen.some((s) => s.startsWith('DELETE') && s.includes('/pods/cf-run-1'))).toBe(true)
+  })
+
+  it('throws on a non-404 delete failure so the leak is not swallowed', async () => {
+    // A bare Pod is not GC'd, so a dropped delete leaks it — the failure must surface
+    // (the LoggingRunnerTransport logs it) rather than report a false success.
+    stubFetch((method) => new Response('forbidden', { status: method === 'DELETE' ? 403 : 200 }))
+    const transport = new KubernetesRunnerTransport(config, resolveSecret)
+    await expect(transport.release(ref)).rejects.toThrow(/403/)
   })
 })
 

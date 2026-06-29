@@ -2008,6 +2008,69 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
       })
     })
 
+    describe('runner backend connection (discriminated kind)', () => {
+      type RunnerConnection = {
+        kind: string
+        secretKeys: string[]
+        config?: { kind: string; kubernetes?: { namespace?: string; image?: string } }
+      }
+
+      it('round-trips the discriminated backend kind + config through the store', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/runner-pool/connection`
+
+        // Register a native Kubernetes backend (no real cluster needed — register only
+        // validates + persists). The `kind` column + the discriminated `config` blob must
+        // round-trip identically through the D1 and Drizzle repos.
+        const registered = await call<RunnerConnection>('POST', base, {
+          config: {
+            kind: 'kubernetes',
+            kubernetes: {
+              label: 'Prod',
+              apiServerUrl: 'https://k8s.example:6443',
+              namespace: 'cat-factory',
+              image: 'ghcr.io/acme/executor:1',
+            },
+          },
+          secrets: { apiToken: 'sa-token' },
+        })
+        expect(registered.status).toBe(201)
+        expect(registered.body.kind).toBe('kubernetes')
+        expect(registered.body.secretKeys).toContain('apiToken')
+
+        const got = await call<{ connection: RunnerConnection | null }>('GET', base)
+        expect(got.status).toBe(200)
+        expect(got.body.connection?.kind).toBe('kubernetes')
+        // The non-secret config is exposed (sans token) so the connect form can prefill.
+        expect(got.body.connection?.config?.kind).toBe('kubernetes')
+        expect(got.body.connection?.config?.kubernetes?.namespace).toBe('cat-factory')
+        expect(got.body.connection?.secretKeys).toContain('apiToken')
+
+        // Re-registering a manifest backend replaces it; the discriminator flips back.
+        const manifest = await call<RunnerConnection>('POST', base, {
+          config: {
+            kind: 'manifest',
+            manifest: {
+              providerId: 'acme-pool',
+              label: 'Acme',
+              baseUrl: 'https://pool.test/api',
+              auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
+              dispatch: { method: 'POST', pathTemplate: '/jobs', bodyTemplate: '{}' },
+              poll: { method: 'GET', pathTemplate: '/jobs/{{input.jobId}}' },
+              response: { statusPath: 'state' },
+            },
+          },
+          secrets: { API_TOKEN: 'tok' },
+        })
+        expect(manifest.status).toBe(201)
+        expect(manifest.body.kind).toBe('manifest')
+        const afterManifest = await call<{ connection: RunnerConnection | null }>('GET', base)
+        expect(afterManifest.body.connection?.kind).toBe('manifest')
+        expect(afterManifest.body.connection?.config?.kind).toBe('manifest')
+      })
+    })
+
     describe('local model endpoints (per-user runners)', () => {
       it('stores, lists key-free, resolves with the key, and removes — identically per store', async () => {
         const app = harness.makeApp()

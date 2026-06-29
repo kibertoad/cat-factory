@@ -435,17 +435,21 @@ export interface CoreDependencies {
   // domain, independent of the environment module's `secretCipher`).
   runnerPoolConnectionRepository?: RunnerPoolConnectionRepository
   runnerSecretCipher?: SecretCipher
-  // The pool provider instance + its kind, so the runners connection service can surface
-  // a descriptor + connection test (the generic HTTP pool, or a native one). Absent ⇒ no
-  // descriptor/test (the SPA falls back to the manifest editor with no test button).
+  // The pool provider instance, so the runners connection service can surface a
+  // descriptor + connection test for the manifest backend (the generic HTTP pool, or a
+  // native one). Absent ⇒ no descriptor/test (the SPA falls back to the manifest editor
+  // with no test button). The backend KIND is resolved from the stored config via the
+  // runner-backend registry, not injected here.
   runnerPoolProvider?: RunnerPoolProvider
-  runnerProviderKind?: 'native' | 'manifest'
-  runnerProviderId?: string
-  runnerProviderLabel?: string
   // URL/host safety policy for the RUNNER-POOL integration (the scheduler baseUrl).
   // Absent => strict. Scoped independently of `environmentUrlSafetyPolicy` so an
   // operator widening the env allow-list does not silently widen the pool's SSRF guard.
   runnerUrlSafetyPolicy?: UrlSafetyPolicy
+  // Whether this runtime can honor a runner backend's custom TLS trust material (a
+  // private CA / insecure-skip). The Cloudflare Worker cannot (no undici / custom-CA
+  // fetch) and sets `false`, so a Kubernetes config with a CA is rejected at
+  // registration rather than dying at first dispatch. Absent ⇒ supported (Node/local).
+  runnerCustomTlsSupported?: boolean
 
   // ---- Repo bootstrap (reference architectures + "bootstrap repo" task) ----
   // Reference-architecture CRUD assembles whenever both repositories are present
@@ -1191,6 +1195,9 @@ function createRunnersModule(deps: CoreDependencies): RunnersModule | undefined 
     clock: deps.clock,
     ...(deps.runnerPoolProvider ? { runnerPoolProvider: deps.runnerPoolProvider } : {}),
     ...(deps.runnerUrlSafetyPolicy ? { urlPolicy: deps.runnerUrlSafetyPolicy } : {}),
+    ...(deps.runnerCustomTlsSupported !== undefined
+      ? { customTlsSupported: deps.runnerCustomTlsSupported }
+      : {}),
   })
   return { connectionService }
 }

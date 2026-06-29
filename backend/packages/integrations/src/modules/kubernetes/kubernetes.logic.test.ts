@@ -29,15 +29,13 @@ describe('podName', () => {
 })
 
 describe('proxyUrl', () => {
-  it('targets the apiserver pod-proxy subresource with the harness port', () => {
+  it('targets the apiserver pod-proxy subresource with a LITERAL name:port colon', () => {
     expect(proxyUrl(config, 'cf-run-1', '/jobs/abc')).toBe(
-      'https://k8s.example:6443/api/v1/namespaces/cat-factory/pods/cf-run-1%3A8080/proxy/jobs/abc',
+      'https://k8s.example:6443/api/v1/namespaces/cat-factory/pods/cf-run-1:8080/proxy/jobs/abc',
     )
   })
   it('honours a custom harness port', () => {
-    expect(proxyUrl({ ...config, harnessPort: 9000 }, 'p', '/jobs')).toContain(
-      'p%3A9000/proxy/jobs',
-    )
+    expect(proxyUrl({ ...config, harnessPort: 9000 }, 'p', '/jobs')).toContain('p:9000/proxy/jobs')
   })
 })
 
@@ -73,8 +71,15 @@ describe('assertApiServerUrlSafe', () => {
   it('requires https', () => {
     expect(() => assertApiServerUrlSafe('http://k8s.example:6443')).toThrow(/https/)
   })
-  it('rejects the cloud metadata endpoint', () => {
+  it('rejects the cloud metadata endpoint, including obfuscated encodings', () => {
     expect(() => assertApiServerUrlSafe('https://169.254.169.254')).toThrow(/metadata/)
+    // Anywhere in the link-local range, the Alibaba metadata IP, the AWS IPv6 IMDS, the
+    // bare-integer and IPv4-mapped-IPv6 encodings of 169.254.169.254.
+    expect(() => assertApiServerUrlSafe('https://169.254.10.20')).toThrow(/metadata/)
+    expect(() => assertApiServerUrlSafe('https://100.100.100.200')).toThrow(/metadata/)
+    expect(() => assertApiServerUrlSafe('https://[fd00:ec2::254]')).toThrow(/metadata/)
+    expect(() => assertApiServerUrlSafe('https://2852039166')).toThrow(/metadata/)
+    expect(() => assertApiServerUrlSafe('https://[::ffff:169.254.169.254]')).toThrow(/metadata/)
   })
 })
 
@@ -84,17 +89,30 @@ describe('resolveImage / resolveResources', () => {
     expect(resolveImage(config, { image: 'ui' })).toBe(config.image)
     expect(resolveImage({ ...config, imageUi: 'ui-img' }, { image: 'ui' })).toBe('ui-img')
   })
-  it('prefers a per-size limit override over the default', () => {
+  it('prefers a per-size override over the default for BOTH requests and limits', () => {
     const sized: KubernetesRunnerConfig = {
       ...config,
       resources: { requests: { cpu: '1' }, limits: { cpu: '2' } },
       resourcesBySize: { large: { cpu: '8', memory: '16Gi' } },
     }
-    expect(resolveResources(sized, { instanceSize: 'large' })?.limits).toEqual({
-      cpu: '8',
-      memory: '16Gi',
-    })
+    const resolved = resolveResources(sized, { instanceSize: 'large' })
+    expect(resolved?.limits).toEqual({ cpu: '8', memory: '16Gi' })
+    // The override drives requests too (requests == limits), so requests can't exceed
+    // the sized limit — the apiserver would 422 on requests > limits otherwise.
+    expect(resolved?.requests).toEqual({ cpu: '8', memory: '16Gi' })
     expect(resolveResources(sized)?.limits).toEqual({ cpu: '2' })
+    expect(resolveResources(sized)?.requests).toEqual({ cpu: '1' })
+  })
+
+  it('keeps a smaller size from leaving the default request above the sized limit', () => {
+    const sized: KubernetesRunnerConfig = {
+      ...config,
+      resources: { requests: { memory: '1Gi' }, limits: { memory: '4Gi' } },
+      resourcesBySize: { small: { memory: '256Mi' } },
+    }
+    const resolved = resolveResources(sized, { instanceSize: 'small' })
+    expect(resolved?.requests).toEqual({ memory: '256Mi' })
+    expect(resolved?.limits).toEqual({ memory: '256Mi' })
   })
 })
 

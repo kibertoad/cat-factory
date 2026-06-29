@@ -171,7 +171,6 @@ export {
   RunnerPoolConnectionService,
   type RunnerPoolConnectionServiceDependencies,
   type ResolvedRunnerBackend,
-  type ResolvedRunnerPool,
 } from './modules/runners/RunnerPoolConnectionService.js'
 export * as runnersLogic from './modules/runners/runners.logic.js'
 // The universal "agent runner backend" provider-registry seam: maps a backend kind

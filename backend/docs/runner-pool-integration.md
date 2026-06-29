@@ -52,7 +52,20 @@ A workspace's runner connection is a **discriminated "agent runner backend"**
   `{ "config": { "kind": "kubernetes", "kubernetes": { … } }, "secrets": { "apiToken": "…" } }`.
   Paste the cluster CA bundle (`caCertPem`) so the apiserver's TLS cert verifies
   (private CAs are normal here). Pod sizing maps from the task's instance size via
-  the optional `resources` / `resourcesBySize` config.
+  the optional `resources` / `resourcesBySize` config. NOTE: a custom CA bundle /
+  insecure-skip is honored only on the **Node / local** deployment (it needs
+  `undici`); the Cloudflare Worker can't verify a private CA, so it rejects such a
+  config at registration. Use a publicly-trusted apiserver certificate to run a
+  Kubernetes backend on the Worker.
+
+  Security: the per-run Pod has **no Service and no inbound shared secret** — it is
+  reached only through the RBAC-gated apiserver pod-proxy. RBAC does NOT firewall the
+  pod network, though, and the dispatch body carries short-lived credentials (a
+  per-job GitHub token + the LLM-proxy session token). In a namespace without a
+  default-deny `NetworkPolicy`, any other pod could reach the harness on
+  `<podIP>:8080` directly. Apply a default-deny ingress `NetworkPolicy` in the runner
+  namespace (allow only the apiserver/kubelet) so the harness is reachable solely via
+  the proxy.
 
 Adding a further backend (e.g. EKS-specific provisioning) is a single
 `registerRunnerBackend` entry plus a config variant — no new table, service,
