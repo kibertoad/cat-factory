@@ -1,5 +1,12 @@
 # @cat-factory/server
 
+## 0.48.3
+
+### Patch Changes
+
+- Updated dependencies [b76f303]
+  - @cat-factory/orchestration@0.42.1
+
 ## 0.48.2
 
 ### Patch Changes
