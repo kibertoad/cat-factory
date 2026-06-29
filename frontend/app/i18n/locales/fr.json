@@ -789,6 +789,18 @@
         "cleared": "OAuth Slack effacé",
         "clearFailed": "Impossible d'effacer l'OAuth Slack"
       },
+      "linear": {
+        "title": "Application Linear (OAuth)",
+        "description": "Active le flux OAuth « Se connecter avec Linear ». Sans cela, les espaces de travail peuvent toujours connecter Linear en collant une clé API personnelle.",
+        "clientId": "ID client",
+        "clientSecret": "Secret client",
+        "redirectUrl": "URL de redirection",
+        "validation": "Saisissez l'id client, le secret et l'URL de redirection",
+        "saved": "OAuth Linear enregistré",
+        "saveFailed": "Impossible d'enregistrer OAuth Linear",
+        "cleared": "OAuth Linear effacé",
+        "clearFailed": "Impossible d'effacer OAuth Linear"
+      },
       "web": {
         "title": "Recherche web du conteneur",
         "description": "Le fournisseur de recherche que les agents en conteneur atteignent via le proxy du backend. Définissez une clé Brave (recommandé) ou une URL SearXNG auto-hébergée (avec une clé bearer facultative).",

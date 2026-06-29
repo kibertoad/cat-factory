@@ -337,13 +337,6 @@ export interface Env {
    */
   DOCUMENT_PLANNER?: string
 
-  // ---- Task-source integration (see config.ts; always on) -----------------
-  /** Linear OAuth credentials (the "Connect with Linear" flow); both required to enable it. */
-  LINEAR_OAUTH_CLIENT_ID?: string
-  LINEAR_OAUTH_CLIENT_SECRET?: string
-  /** Explicit Linear redirect_uri; derived as `${origin}/tasks/oauth/callback` when unset. */
-  LINEAR_OAUTH_REDIRECT_URL?: string
-
   // ---- Ephemeral environment integration (see config.ts; opt-in) ----------
   /**
    * Enables the environment provider integration ('true'). Per-workspace provider

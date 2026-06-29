@@ -12,6 +12,7 @@ import type {
 import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
+import type { LinearOAuthSecret } from '@cat-factory/contracts'
 import type { LinearTeam } from './linear.logic.js'
 
 // TaskConnectionService: owns the binding between a cat-factory workspace and an
@@ -34,6 +35,14 @@ export interface TaskConnectionServiceDependencies {
    * provider is even registered — is reported unavailable.
    */
   installations?: GitHubInstallationRepository
+  /**
+   * Resolves the account's Linear OAuth app credentials (the "Connect with Linear"
+   * flow), keyed by the account-scope key, or undefined when the account hasn't
+   * registered one. Backed by the per-account deployment settings (sealed in the DB,
+   * set in the UI) — NOT env — mirroring the Slack OAuth model. Absent ⇒ OAuth
+   * onboarding isn't offered (the manual personal-API-key path still works).
+   */
+  resolveLinearOAuth?: (accountKey: string) => Promise<LinearOAuthSecret | undefined>
 }
 
 /**
@@ -266,6 +275,23 @@ export class TaskConnectionService {
       throw new ConflictError(`Workspace '${workspaceId}' is not connected to linear`)
     if (!hasListTeams(provider)) return []
     return provider.listTeams(connection.credentials)
+  }
+
+  /**
+   * Resolve the account's Linear OAuth app credentials for a workspace (the per-account
+   * deployment setting), or undefined when none is configured. Keyed by the account-scope
+   * key (the workspace's account id, else the workspace id) — mirroring the Slack model — so
+   * an org registers ONE Linear OAuth app shared by its workspaces.
+   */
+  async resolveLinearOAuthConfig(workspaceId: string): Promise<LinearOAuthSecret | undefined> {
+    if (!this.deps.resolveLinearOAuth) return undefined
+    return this.deps.resolveLinearOAuth(await this.resolveAccountKey(workspaceId))
+  }
+
+  /** The per-account scope key for a workspace (account id, else the workspace id). */
+  private async resolveAccountKey(workspaceId: string): Promise<string> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    return (await this.deps.workspaceRepository.accountOf(workspaceId)) ?? workspaceId
   }
 
   /** Build + upsert a connection record (shared by the manual connect + OAuth paths). */

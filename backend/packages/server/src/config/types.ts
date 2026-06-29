@@ -147,14 +147,6 @@ export interface DocumentsConfig {
   encryptionKey?: string
 }
 
-/** Linear OAuth credentials for the "Connect with Linear" task-source connect flow. */
-export interface LinearOAuthConfig {
-  clientId: string
-  clientSecret: string
-  /** Explicit redirect_uri; '' means derive `${origin}/tasks/oauth/callback`. */
-  redirectUrl: string
-}
-
 export interface TasksConfig {
   /**
    * Always on where the runtime serves task sources: there is no enable flag, and an
@@ -163,12 +155,9 @@ export interface TasksConfig {
   enabled: boolean
   /** Service-level master key (base64) backing source-credential encryption at rest. */
   encryptionKey?: string
-  /**
-   * Linear OAuth app credentials, present only when configured
-   * (`LINEAR_OAUTH_CLIENT_ID`/`_SECRET`). Absent ⇒ the OAuth "Connect with Linear"
-   * button isn't offered (the manual personal-API-key paste still works).
-   */
-  linearOAuth?: LinearOAuthConfig
+  // Linear OAuth app credentials are NOT here: like Slack's, they live in per-account
+  // deployment settings (sealed in the DB, set in the UI), resolved dynamically at connect
+  // time via AccountSettingsService — so an admin can set/rotate them without a redeploy.
 }
 
 export interface EnvironmentsConfig {

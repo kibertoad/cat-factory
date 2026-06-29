@@ -185,7 +185,6 @@ export type {
   GitHubConfig,
   GitLabConfig,
   GoogleOAuthConfig,
-  LinearOAuthConfig,
   LangfuseConfig,
   ObservabilityConfig,
   PrivilegedAppConfig,
