@@ -207,15 +207,15 @@ export function gitlabPatCreationUrl(): string {
 
 /**
  * Assemble the source-control PAT-login registry from env — the provider-agnostic seam the
- * `/auth/pat` endpoint resolves through. BOTH providers are always "available" (a developer
- * may paste a PAT for either); a provider is additionally "configured" (one-click login,
- * no paste needed) when its PAT is set in env. Adding a third provider is one more entry
- * here + its resolver, with no change to the endpoint or the UI flow.
+ * `/auth/pat` endpoint resolves through. A provider is "configured" (sign-in available) when
+ * its PAT is set in env; that env token is also the operational credential, so a provider
+ * without one can't sign in (the SPA shows no button for it). The browser never sees a token
+ * — sign-in just selects a provider. Adding a third provider is one more entry here + its
+ * resolver, with no change to the endpoint or the UI flow.
  */
 export function buildVcsIdentityRegistry(env: NodeJS.ProcessEnv): {
   registry: VcsIdentityRegistry
   configured: VcsProvider[]
-  available: VcsProvider[]
 } {
   const githubApiBase = env.GITHUB_API_BASE?.trim() || 'https://api.github.com'
   const gitlabApiBase = env.GITLAB_API_BASE?.trim() || undefined
@@ -229,9 +229,10 @@ export function buildVcsIdentityRegistry(env: NodeJS.ProcessEnv): {
       configuredToken: env.GITLAB_PAT?.trim() || undefined,
     },
   }
-  const available = Object.keys(registry) as VcsProvider[]
-  const configured = available.filter((p) => registry[p]?.configuredToken)
-  return { registry, configured, available }
+  const configured = (Object.keys(registry) as VcsProvider[]).filter(
+    (p) => registry[p]?.configuredToken,
+  )
+  return { registry, configured }
 }
 
 /**

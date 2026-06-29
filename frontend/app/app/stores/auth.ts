@@ -31,6 +31,14 @@ export const useAuthStore = defineStore(
      * setup banner). Null on every other facade.
      */
     const localMode = ref<LocalModeConfig | null>(null)
+    /**
+     * Local mode only: the source-control provider the user last chose to sign in with
+     * (its PAT lives server-side in env — this is just the non-secret choice). Persisted, so
+     * on a later load we silently re-mint a session from that env PAT without showing the
+     * login screen. Set on an explicit sign-in, cleared on logout / 401 (so logout actually
+     * signs out — no auto re-login loop).
+     */
+    const autoLoginProvider = ref<'github' | 'gitlab' | null>(null)
     /** True once the initial auth handshake has settled. */
     const ready = ref(false)
 
@@ -82,6 +90,25 @@ export const useAuthStore = defineStore(
           user.value = null
         }
         if (!user.value) token.value = null
+      }
+
+      // Local mode: if no live session resolved but the user previously signed in with a
+      // configured env PAT, silently re-mint a session from it — so an expired/rotated token
+      // never forces the login screen again. The token itself stays server-side; we only
+      // remembered the provider choice. Guard on the provider STILL being configured (PAT could
+      // have been removed) and clear the choice on failure so we fall back to the login screen
+      // instead of looping.
+      if (
+        localMode.value?.enabled === true &&
+        user.value === null &&
+        autoLoginProvider.value &&
+        localMode.value.patLogin?.configured.includes(autoLoginProvider.value)
+      ) {
+        try {
+          await patLogin({ provider: autoLoginProvider.value })
+        } catch {
+          autoLoginProvider.value = null
+        }
       }
       // An already-signed-in user who followed an invite link redeems it here (a
       // brand-new user redeems it server-side during signup/OAuth instead).
@@ -153,6 +180,8 @@ export const useAuthStore = defineStore(
      */
     async function patLogin(body: { provider: 'github' | 'gitlab'; token?: string }) {
       applySession(await api.patLogin(body))
+      // Remember the choice so a later load re-mints the session from the env PAT silently.
+      autoLoginProvider.value = body.provider
     }
 
     /** Request a password-reset link by email (always resolves; never reveals existence). */
@@ -170,9 +199,18 @@ export const useAuthStore = defineStore(
       api.logout().catch(() => {})
       token.value = null
       user.value = null
+      // Forget the remembered provider so logout sticks (otherwise bootstrap would
+      // immediately re-mint a session from the env PAT).
+      autoLoginProvider.value = null
     }
 
-    /** Called by the API client when a request comes back 401. */
+    /**
+     * Called by the API client when a request comes back 401. Drops the dead session but KEEPS
+     * the remembered provider (unlike logout): a 401 from an expired/rotated token or a
+     * transient blip should let the next load silently re-mint from the env PAT, not force the
+     * login screen. The guarded re-mint in `bootstrap` clears the choice itself if it genuinely
+     * fails (PAT removed/revoked), so there's no re-login loop.
+     */
     function handleUnauthorized() {
       token.value = null
       user.value = null
@@ -184,6 +222,7 @@ export const useAuthStore = defineStore(
       required,
       providers,
       localMode,
+      autoLoginProvider,
       ready,
       isAuthenticated,
       needsLogin,
@@ -199,5 +238,5 @@ export const useAuthStore = defineStore(
       handleUnauthorized,
     }
   },
-  { persist: { pick: ['token'] } },
+  { persist: { pick: ['token', 'autoLoginProvider'] } },
 )

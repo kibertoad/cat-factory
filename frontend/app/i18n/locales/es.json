@@ -716,13 +716,12 @@
       "loading": "Cargando…"
     },
     "localMode": {
-      "continueWith": "Continuar con {provider}",
-      "enterPatTitle": "O inicia sesión con un token de acceso personal",
-      "tokenPlaceholder": "pega un token de {provider}",
+      "continueWithConfigured": "Inicia sesión con el PAT de {provider} configurado",
+      "noPatTitle": "No hay ningún token de control de versiones configurado",
+      "noPatBody": "Define GITHUB_PAT o GITLAB_PAT en tu .env para iniciar sesión con un token de acceso personal y reinicia el servidor.",
       "createToken": "Crear un token de {provider} ↗",
-      "submit": "Iniciar sesión",
       "orDivider": "o",
-      "failed": "Error al iniciar sesión. Comprueba el token e inténtalo de nuevo."
+      "failed": "Error al iniciar sesión. Comprueba que el token configurado sea válido e inténtalo de nuevo."
     },
     "signInRequired": {
       "personalSubscriptions": "Las suscripciones personales se guardan en tu cuenta, pero este despliegue se ejecuta sin inicio de sesión, así que no se pueden almacenar aquí. Usa el grupo del espacio de trabajo o una clave de API de proveedor.",

@@ -716,13 +716,12 @@
       "loading": "Ładowanie…"
     },
     "localMode": {
-      "continueWith": "Kontynuuj z {provider}",
-      "enterPatTitle": "Lub zaloguj się za pomocą osobistego tokenu dostępu",
-      "tokenPlaceholder": "wklej token {provider}",
+      "continueWithConfigured": "Zaloguj się skonfigurowanym tokenem PAT {provider}",
+      "noPatTitle": "Nie skonfigurowano tokenu systemu kontroli wersji",
+      "noPatBody": "Ustaw GITHUB_PAT lub GITLAB_PAT w pliku .env, aby zalogować się za pomocą osobistego tokenu dostępu, a następnie zrestartuj serwer.",
       "createToken": "Utwórz token {provider} ↗",
-      "submit": "Zaloguj się",
       "orDivider": "lub",
-      "failed": "Logowanie nie powiodło się. Sprawdź token i spróbuj ponownie."
+      "failed": "Logowanie nie powiodło się. Sprawdź, czy skonfigurowany token jest prawidłowy, i spróbuj ponownie."
     },
     "signInRequired": {
       "personalSubscriptions": "Subskrypcje osobiste są zapisywane na Twoim koncie, ale to wdrożenie działa bez logowania, więc nie można ich tutaj przechowywać. Użyj puli obszaru roboczego lub klucza API dostawcy.",

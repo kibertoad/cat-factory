@@ -463,7 +463,12 @@ export function authController(): Hono<AppEnv> {
     const pat = token ?? entry.configuredToken
     if (!pat) {
       return c.json(
-        { error: { code: 'validation', message: `Enter your ${provider} token to sign in` } },
+        {
+          error: {
+            code: 'validation',
+            message: `No ${provider} token configured. Set ${provider === 'gitlab' ? 'GITLAB_PAT' : 'GITHUB_PAT'} in your environment to sign in.`,
+          },
+        },
         400,
       )
     }
