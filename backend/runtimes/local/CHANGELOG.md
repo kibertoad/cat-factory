@@ -1,5 +1,19 @@
 # @cat-factory/local-server
 
+## 0.22.1
+
+### Patch Changes
+
+- Updated dependencies [fc324d2]
+  - @cat-factory/contracts@0.48.0
+  - @cat-factory/kernel@0.49.0
+  - @cat-factory/integrations@0.32.0
+  - @cat-factory/server@0.46.0
+  - @cat-factory/node-server@0.40.0
+  - @cat-factory/orchestration@0.40.1
+  - @cat-factory/agents@0.21.12
+  - @cat-factory/gitlab@0.3.3
+
 ## 0.22.0
 
 ### Minor Changes

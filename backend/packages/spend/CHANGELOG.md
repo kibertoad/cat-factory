@@ -1,5 +1,13 @@
 # @cat-factory/spend
 
+## 0.10.27
+
+### Patch Changes
+
+- Updated dependencies [fc324d2]
+  - @cat-factory/contracts@0.48.0
+  - @cat-factory/kernel@0.49.0
+
 ## 0.10.26
 
 ### Patch Changes
