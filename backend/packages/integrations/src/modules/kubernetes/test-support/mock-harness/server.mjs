@@ -18,7 +18,9 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify(body))
   }
 
-  if (req.method === 'GET' && url.pathname === '/healthz') {
+  // `/health` is what the real executor-harness serves and what the pod's readinessProbe
+  // hits; `/healthz` is kept too for any direct caller. Either marks the server up.
+  if (req.method === 'GET' && (url.pathname === '/health' || url.pathname === '/healthz')) {
     res.writeHead(200).end('ok')
     return
   }

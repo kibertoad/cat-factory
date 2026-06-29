@@ -124,6 +124,19 @@ export function buildPodManifest(
     image: resolveImage(config, options),
     ports: [{ containerPort: port }],
     env: [{ name: 'PORT', value: String(port) }],
+    // A readiness probe on the harness's health endpoint so the pod's `Ready` condition —
+    // which `waitForPodReady` blocks on before `dispatch` POSTs the job — reflects the
+    // harness HTTP server actually LISTENING, not merely the container being Running.
+    // Without it a slow-starting container (e.g. a cpu-throttled small instance) is marked
+    // Ready before it binds the port, and the dispatch POST races into a not-yet-listening
+    // server → the pod-proxy returns 502/503. The probe's failure budget covers a cold start.
+    readinessProbe: {
+      httpGet: { path: '/health', port },
+      initialDelaySeconds: 1,
+      periodSeconds: 2,
+      timeoutSeconds: 2,
+      failureThreshold: 30,
+    },
     ...(resources ? { resources } : {}),
   }
   const spec: Record<string, unknown> = {
