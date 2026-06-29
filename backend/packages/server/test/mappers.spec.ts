@@ -23,7 +23,7 @@ function fullBlock(): Block {
   return {
     id: 'blk_1',
     title: 'Task',
-    type: 'task',
+    type: 'service',
     description: 'do the thing',
     position: { x: 12, y: 34 },
     status: 'in_progress',
@@ -61,7 +61,7 @@ describe('block mappers', () => {
       type: 'service',
       description: '',
       position: { x: 0, y: 0 },
-      status: 'todo',
+      status: 'planned',
       progress: 0,
       dependsOn: [],
       executionId: null,
@@ -109,8 +109,11 @@ describe('blockPatchToColumns', () => {
   })
 
   it('nulls a cleared pullRequest / fragmentIds but JSON-encodes a present one', () => {
-    expect(blockPatchToColumns({ pullRequest: null }).pull_request).toBeNull()
-    expect(blockPatchToColumns({ fragmentIds: null }).fragment_ids).toBeNull()
+    // A PATCH body can carry an explicit `null` to clear these optional fields; the
+    // mapper treats any falsy value as "clear" (→ a null column). The `BlockPatch`
+    // type only models `T | undefined`, so cast to exercise the runtime clear path.
+    expect(blockPatchToColumns({ pullRequest: null } as unknown as BlockPatch).pull_request).toBeNull()
+    expect(blockPatchToColumns({ fragmentIds: null } as unknown as BlockPatch).fragment_ids).toBeNull()
     expect(blockPatchToColumns({ fragmentIds: ['a'] }).fragment_ids).toBe('["a"]')
   })
 

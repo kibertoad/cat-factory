@@ -45,7 +45,7 @@ describe('JobRegistry', () => {
   })
 
   it('surfaces the latest subtask progress on the running job view', async () => {
-    const registry = new JobRegistry(limits, async (_job, opts: RunOptions) => {
+    const registry = new JobRegistry<TestJob, TestResult>(limits, async (_job, opts: RunOptions) => {
       opts.onProgress?.({ completed: 1, inProgress: 1, total: 3 })
       opts.onProgress?.({ completed: 2, inProgress: 0, total: 3 })
       await tick(50)
@@ -59,7 +59,7 @@ describe('JobRegistry', () => {
   })
 
   it('buffers tool spans and drains them on each poll (drain-on-read)', async () => {
-    const registry = new JobRegistry(limits, async (_job, opts: RunOptions) => {
+    const registry = new JobRegistry<TestJob, TestResult>(limits, async (_job, opts: RunOptions) => {
       opts.onSpan?.({ tool: 'read', startedAt: 1, endedAt: 2, ok: true })
       opts.onSpan?.({ tool: 'edit_file', startedAt: 2, endedAt: 5, ok: true })
       await tick(50)
@@ -99,7 +99,7 @@ describe('JobRegistry', () => {
 
   it('re-attaches to a running job instead of starting a duplicate', async () => {
     let starts = 0
-    const registry = new JobRegistry(limits, async () => {
+    const registry = new JobRegistry<TestJob, TestResult>(limits, async () => {
       starts++
       await tick(50)
       return { summary: 's' }

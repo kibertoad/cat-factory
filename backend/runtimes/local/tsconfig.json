@@ -1,11 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
     "outDir": "dist",
     // Local runtime: Node globals + the Web Platform APIs Node provides
     // (fetch/Response/AbortSignal/crypto), typed by @types/node.
     "types": ["node"]
   },
-  "include": ["src/**/*.ts"]
+  // Typecheck config: covers tests too. `rootDir` lives in tsconfig.build.json so
+  // the emitted build stays src-only while typecheck spans src + test.
+  "include": ["src/**/*.ts", "test/**/*.ts"]
 }

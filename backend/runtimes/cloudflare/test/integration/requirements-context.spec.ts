@@ -36,6 +36,7 @@ function incorporatedReview(blockId: string): RequirementReview {
     incorporatedRequirements: REWORKED,
     iteration: 2,
     maxIterations: 3,
+    recommendations: [],
     createdAt: 1,
     updatedAt: 2,
     items: [],

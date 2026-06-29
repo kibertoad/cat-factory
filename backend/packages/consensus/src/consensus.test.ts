@@ -25,25 +25,25 @@ const estimate = (over: Partial<TaskEstimate> = {}): TaskEstimate => ({
 describe('decideConsensusMode', () => {
   it('runs consensus when gating is absent or disabled', () => {
     expect(decideConsensusMode(estimate({ risk: 0 }), undefined)).toBe('consensus')
-    expect(decideConsensusMode(estimate({ risk: 0 }), { enabled: false })).toBe('consensus')
+    expect(decideConsensusMode(estimate({ risk: 0 }), { enabled: false, onMissingEstimate: 'consensus' })).toBe('consensus')
   })
 
   it('triggers when ANY supplied axis meets its threshold', () => {
-    const gating = { enabled: true, minRisk: 0.7, minImpact: 0.9 }
+    const gating = { enabled: true, minRisk: 0.7, minImpact: 0.9, onMissingEstimate: 'consensus' as const }
     expect(decideConsensusMode(estimate({ risk: 0.8, impact: 0.1 }), gating)).toBe('consensus')
     expect(decideConsensusMode(estimate({ risk: 0.1, impact: 0.95 }), gating)).toBe('consensus')
     expect(decideConsensusMode(estimate({ risk: 0.1, impact: 0.1 }), gating)).toBe('standard')
   })
 
   it('honors onMissingEstimate when no estimate is present', () => {
-    expect(decideConsensusMode(null, { enabled: true, minRisk: 0.5 })).toBe('consensus')
+    expect(decideConsensusMode(null, { enabled: true, minRisk: 0.5, onMissingEstimate: 'consensus' })).toBe('consensus')
     expect(
       decideConsensusMode(null, { enabled: true, minRisk: 0.5, onMissingEstimate: 'standard' }),
     ).toBe('standard')
   })
 
   it('falls back to standard when gating is enabled but no thresholds are set', () => {
-    expect(decideConsensusMode(estimate(), { enabled: true })).toBe('standard')
+    expect(decideConsensusMode(estimate(), { enabled: true, onMissingEstimate: 'consensus' })).toBe('standard')
   })
 })
 
@@ -132,7 +132,7 @@ describe('ConsensusAgentExecutor', () => {
           enabled: true,
           strategy: 'specialist-panel',
           participants: twoParticipants,
-          gating: { enabled: true, minRisk: 0.8 },
+          gating: { enabled: true, minRisk: 0.8, onMissingEstimate: 'consensus' as const },
         },
         block: {
           id: 'blk',

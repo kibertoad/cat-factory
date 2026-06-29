@@ -9,9 +9,11 @@ import type {
 } from '@cat-factory/kernel'
 import {
   CONFLUENCE_DESCRIPTOR,
+  FIGMA_DESCRIPTOR,
   GITHUB_DOCS_DESCRIPTOR,
   LINEAR_DOCS_DESCRIPTOR,
   NOTION_DESCRIPTOR,
+  ZEPLIN_DESCRIPTOR,
 } from '@cat-factory/integrations'
 
 const DESCRIPTORS: Record<DocumentSourceKind, DocumentSourceDescriptor> = {
@@ -19,6 +21,8 @@ const DESCRIPTORS: Record<DocumentSourceKind, DocumentSourceDescriptor> = {
   notion: NOTION_DESCRIPTOR,
   github: GITHUB_DOCS_DESCRIPTOR,
   linear: LINEAR_DOCS_DESCRIPTOR,
+  figma: FIGMA_DESCRIPTOR,
+  zeplin: ZEPLIN_DESCRIPTOR,
 }
 
 /**

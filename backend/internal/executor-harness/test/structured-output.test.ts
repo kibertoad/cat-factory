@@ -97,7 +97,7 @@ describe('resolveStructuredOutput', () => {
   })
 
   it('makes a structured repair call when the primary is unparseable and recovers', async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn<typeof fetch>(async () =>
       jsonResponse({ choices: [{ message: { content: '{"ok":true,"v":2}' } }] }),
     )
     vi.stubGlobal('fetch', fetchMock)
@@ -180,7 +180,7 @@ describe('resolveStructuredOutput', () => {
   })
 
   it('repairs via the claude-code subscription endpoint when there is no proxy', async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn<typeof fetch>(async () =>
       jsonResponse({ content: [{ type: 'text', text: '{"ok":true,"v":9}' }] }),
     )
     vi.stubGlobal('fetch', fetchMock)

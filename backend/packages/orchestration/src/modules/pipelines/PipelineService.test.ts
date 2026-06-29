@@ -160,7 +160,7 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
       svc().create(WS, {
         name: 'Gated, no estimator',
         agentKinds: ['coder', 'reviewer'],
-        gating: [null, { enabled: true, minRisk: 0.6 }],
+        gating: [null, { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' }],
       }),
     ).rejects.toBeInstanceOf(ValidationError)
   })
@@ -169,9 +169,9 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
     const p = await svc().create(WS, {
       name: 'Gated reviewer',
       agentKinds: ['task-estimator', 'coder', 'reviewer'],
-      gating: [null, null, { enabled: true, minRisk: 0.6 }],
+      gating: [null, null, { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' }],
     })
-    expect(p.gating?.[2]).toEqual({ enabled: true, minRisk: 0.6 })
+    expect(p.gating?.[2]).toEqual({ enabled: true, minRisk: 0.6, onMissingEstimate: 'run' })
     // Only the gated index is persisted; the rest are aligned-null.
     expect(p.gating?.[0]).toBeNull()
   })

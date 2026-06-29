@@ -61,6 +61,11 @@ export interface TestApp {
    * durable BootstrapWorkflow does in production. Returns the number of polls.
    */
   driveBootstrap(workspaceId: string, jobId: string, maxPolls?: number): Promise<number>
+  /**
+   * Drive an env-config-repair job's poll loop to a terminal state, mirroring what the
+   * durable EnvConfigRepairWorkflow does in production. Returns the number of polls.
+   */
+  driveEnvConfigRepair(workspaceId: string, jobId: string, maxPolls?: number): Promise<number>
 }
 
 /**

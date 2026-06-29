@@ -6,7 +6,7 @@ import {
   registeredKindRequiresContainer,
   registeredPostOps,
 } from '@cat-factory/agents'
-import type { RepoFiles } from '@cat-factory/kernel'
+import type { CommitFilesInput, GateStepState, RepoFiles } from '@cat-factory/kernel'
 import {
   clearRegisteredGates,
   clearRegisteredPipelines,
@@ -99,15 +99,16 @@ describe('example custom agents', () => {
       .factory(stubGateContext())
 
     // Wired now ⇒ the gate runs its probe instead of passing through.
+    const stubState: GateStepState = { phase: 'checking', attempts: 0, maxAttempts: 10 }
     expect(gate.wired()).toBe(true)
-    const pass = await gate.probe('ws', 'blk_1')
+    const pass = await gate.probe('ws', 'blk_1', stubState)
     expect(check).toHaveBeenCalledWith('ws', 'blk_1')
     expect(pass.status).toBe('pass')
     expect(pass.headSha).toBe('sha-1')
 
     // A dirty report ⇒ a fail verdict the engine escalates to the license-fixer.
     check.mockResolvedValueOnce({ clean: false, headSha: 'sha-2', summary: 'src/a.ts missing' })
-    const fail = await gate.probe('ws', 'blk_1')
+    const fail = await gate.probe('ws', 'blk_1', stubState)
     expect(fail.status).toBe('fail')
     expect(fail.failureSummary).toContain('missing')
   })
@@ -159,7 +160,7 @@ describe('example custom agents', () => {
   })
 
   it('post-op commits the rendered report onto the run branch via RepoFiles', async () => {
-    const commitFiles = vi.fn(async () => ({ sha: 'sha' }))
+    const commitFiles = vi.fn<(input: CommitFilesInput) => Promise<{ sha: string }>>(async () => ({ sha: 'sha' }))
     // No report on the branch yet (getFile → null), so the idempotency guard lets the commit through.
     const getFile = vi.fn(async () => null)
     const repo = { getFile, commitFiles } as unknown as RepoFiles
@@ -174,7 +175,7 @@ describe('example custom agents', () => {
     })
 
     expect(commitFiles).toHaveBeenCalledTimes(1)
-    const input = commitFiles.mock.calls[0]![0]
+    const input = commitFiles.mock.calls[0]![0]!
     expect(input.branch).toBe('cat-factory/blk_1')
     expect(input.files[0]!.path).toBe('compliance/REPORT.md')
     expect(input.files[0]!.content).toContain('# Security compliance report')
