@@ -1,5 +1,92 @@
 # @cat-factory/orchestration
 
+## 0.41.2
+
+### Patch Changes
+
+- 69558f9: Add a Kubernetes-based ephemeral-environment provider, selected per workspace through an
+  env-backend registry that mirrors the runner-pool backends.
+
+  The ephemeral-environment connection is now discriminated by a `kind` field (`manifest` =
+  the generic BYO HTTP management API, `kubernetes` = native per-PR namespaces), resolved
+  through a `registerEnvironmentBackend` provider-registry seam — so a native backend is a
+  single registry entry + a config variant + a UI form, with no new table/service/controller.
+
+  The Kubernetes backend applies an operator-authored set of k3s/Kubernetes manifests into a
+  per-PR namespace over the kube-apiserver (server-side apply), reusing the Kubernetes runner
+  backend's shared apiserver client (Bearer ServiceAccount token + custom-CA TLS). Manifests
+  are read checkout-free from either the PR repo (co-located) or a separate repo; the URL is
+  derived from an ingress host template or read back from an applied Service/Ingress
+  LoadBalancer (k3s Traefik / ServiceLB). It is wired symmetrically into the Cloudflare and
+  Node facades (the Worker rejects a custom-CA config it can't honor), and local mode can
+  point at a developer-run local k3s (its env URL-safety policy is widened to loopback/LAN).
+  See `backend/docs/local-k3s-environments.md`.
+
+  BREAKING (pre-1.0):
+
+  - The `environments/connection` register/test wire shape now takes a discriminated `config`
+    instead of a bare `manifest`, and the `environment_connections` table gains a `kind`
+    column (existing rows backfill to `manifest`).
+  - The `EnvironmentProvider` provision request gains optional `runRepo` / `resolveRepoFiles`
+    seams (additive).
+  - The deployment-wide environment-provider injection option
+    (`buildNodeContainer({ environmentProvider })` / `startLocal({ environmentProvider })`) is
+    removed — native adapters register via `registerEnvironmentBackend` instead.
+
+- Updated dependencies [69558f9]
+  - @cat-factory/contracts@0.51.0
+  - @cat-factory/kernel@0.53.0
+  - @cat-factory/integrations@0.35.0
+  - @cat-factory/agents@0.21.16
+  - @cat-factory/prompt-fragments@0.9.3
+  - @cat-factory/sandbox@0.8.39
+  - @cat-factory/spend@0.10.31
+  - @cat-factory/workspaces@0.9.22
+
+## 0.41.1
+
+### Patch Changes
+
+- 29d8b5d: Harness error handling & observability: structured failure cause, stuck-run diagnosis, and transient API retry.
+
+  - **Structured failure cause.** The executor-harness now reports a structured `failureCause`
+    (`inactivity-timeout` | `max-duration` | `agent` | `git` | `api` | `no-usable-output` |
+    `no-changes`) and an extended `detail` on a failed job view, alongside the existing one-line
+    `error`. The backend prefers the structured cause to classify a failure (→ `AgentFailureKind`
+    / `BootstrapFailureKind`) and falls back to the existing error-string regex when it's absent
+    (older image, or a manifest pool that doesn't map the cause), so the change is backward
+    compatible. The fallback now matches the bootstrap path's regex on BOTH the agent and
+    bootstrap paths (a watchdog timeout classifies as `timeout`, not a generic `agent`). A `git`
+    operation or an upstream `api` call that fails carries its real cause rather than `agent`.
+    The Node/self-hosted runner pool forwards the structured cause/detail too (new optional
+    `failureCausePath`/`detailPath` on the pool response manifest), so it isn't Cloudflare-only.
+    Container eviction stays facade-detected (the harness never emits the eviction marker). The
+    watchdog phrases are centralized so they can't drift from the regex that still reads them.
+  - **Stuck-run diagnosis.** An inactivity kill now reports which phase was hung and the last tool
+    that ran (e.g. "...likely hung in agent phase; last tool bash 40s ago"), with a per-phase
+    timing breakdown in `detail` and on the failure log. A per-job child logger binds the run's
+    correlation fields (jobId/repo/branch/kind) onto every line.
+  - **Transient API retry.** Opening a PR/MR now retries a transient upstream failure (5xx / 429 /
+    network) with bounded, abort-aware exponential backoff (honoring `Retry-After`), so a momentary
+    blip no longer fails an otherwise-complete run. The 422/409 "already exists" success paths are
+    unaffected.
+  - **Surfaced silent degradation.** Checkpoint-push failures, dropped follow-up lines, malformed
+    Pi JSONL records, and SIGKILL escalation are now logged at warn with counts instead of being
+    swallowed. A final non-newline-terminated Pi event is flushed so its progress/span isn't lost.
+
+  Bumps the `@cat-factory/executor-harness` image to `1.22.0` (and the matching tag in
+  `deploy/backend`).
+
+- Updated dependencies [29d8b5d]
+  - @cat-factory/kernel@0.52.0
+  - @cat-factory/contracts@0.50.1
+  - @cat-factory/integrations@0.34.1
+  - @cat-factory/agents@0.21.15
+  - @cat-factory/sandbox@0.8.38
+  - @cat-factory/spend@0.10.30
+  - @cat-factory/workspaces@0.9.21
+  - @cat-factory/prompt-fragments@0.9.2
+
 ## 0.41.0
 
 ### Minor Changes

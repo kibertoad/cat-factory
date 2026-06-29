@@ -13,10 +13,20 @@ import type { EnvironmentStatus } from '../domain/types.js'
  */
 export interface EnvironmentConnectionRecord {
   workspaceId: string
+  /**
+   * Which backend kind interprets this connection (`manifest` | `kubernetes` | …).
+   * Selects the registered environment-backend provider; absent rows default to
+   * `manifest`. Mirrors `RunnerPoolConnectionRecord.kind`.
+   */
+  kind: string
   providerId: string
   label: string
   baseUrl: string
-  /** The validated manifest, serialized as JSON. */
+  /**
+   * The stored manifest, serialized as JSON. For a native backend (e.g. `kubernetes`)
+   * the per-workspace settings ride the manifest's `providerConfig` bag — the backend
+   * registry builds + reads it. See `backend/docs/native-environment-adapter.md`.
+   */
   manifestJson: string
   /** Ciphertext of the `{ key: value }` secret bundle (SecretCipher envelope). */
   secretsCipher: string

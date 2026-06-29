@@ -97,6 +97,21 @@ export const runnerPoolResponseMappingSchema = v.object({
   followUpsPath: v.optional(v.string()),
   /** Dot-path to a job-level error message (a failed job, or a structured error). */
   errorPath: v.optional(v.string()),
+  /**
+   * Dot-path to the harness's STRUCTURED failure cause on a failed job (the harness
+   * `failureCause`: `inactivity-timeout` | `max-duration` | `agent` | `git` | `api` |
+   * `no-usable-output` | `no-changes`). A pool that proxies the cat-factory executor-harness
+   * verbatim should set this to `failureCause` so the engine classifies the failure WITHOUT
+   * regex-matching the error string — exactly like a Cloudflare container. Absent ⇒ the engine
+   * falls back to the (still-stable) error-string regex.
+   */
+  failureCausePath: v.optional(v.string()),
+  /**
+   * Dot-path to the harness's extended, redacted failure `detail` (phase-timing breakdown,
+   * last-tool breadcrumb) on a failed job, distinct from the one-line error. Surfaced as the
+   * failure detail on the board. A verbatim-proxy pool should set this to `detail`.
+   */
+  detailPath: v.optional(v.string()),
 })
 export type RunnerPoolResponseMapping = v.InferOutput<typeof runnerPoolResponseMappingSchema>
 

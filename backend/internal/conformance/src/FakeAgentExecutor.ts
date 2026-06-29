@@ -33,6 +33,17 @@ export interface FakeAgentOptions {
   dispatchThrowKinds?: AgentKind[]
   /** The verbatim error a {@link dispatchThrowKinds} dispatch throws. Default a generic 503. */
   dispatchThrowMessage?: string
+  /**
+   * Agent kinds whose async poll reports a FAILED job carrying the harness's STRUCTURED
+   * `failureCause` (and `detail`), so the conformance suite can assert the engine maps the
+   * cause → {@link AgentFailureKind} (e.g. `inactivity-timeout` → `timeout`) and surfaces the
+   * harness detail — identically on both runtimes. Only meaningful for {@link asyncKinds}.
+   */
+  pollFailKinds?: AgentKind[]
+  /** The structured `failureCause` a {@link pollFailKinds} poll reports. Default `inactivity-timeout`. */
+  pollFailCause?: string
+  /** The extended `detail` a {@link pollFailKinds} poll reports. Default a phase-timing breadcrumb. */
+  pollFailDetail?: string
   /** Token usage reported per call, so the spend safeguard can be exercised. */
   usage?: { inputTokens: number; outputTokens: number }
   /**
@@ -356,6 +367,9 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
   private readonly asyncPolls: number
   private readonly dispatchThrowKinds: ReadonlySet<AgentKind>
   private readonly dispatchThrowMessage: string
+  private readonly pollFailKinds: ReadonlySet<AgentKind>
+  private readonly pollFailCause: string
+  private readonly pollFailDetail: string
   protected readonly followUpItems: FakeAgentOptions['followUps']
 
   constructor(options: FakeAgentOptions = {}) {
@@ -365,6 +379,11 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     this.dispatchThrowKinds = new Set(options.dispatchThrowKinds ?? [])
     this.dispatchThrowMessage =
       options.dispatchThrowMessage ?? 'Container dispatch failed (HTTP 503): no capacity'
+    this.pollFailKinds = new Set(options.pollFailKinds ?? [])
+    this.pollFailCause = options.pollFailCause ?? 'inactivity-timeout'
+    this.pollFailDetail =
+      options.pollFailDetail ??
+      'Phase timings: clone=2s, agent=600s. last completed tool bash 600s ago.'
     this.followUpItems = options.followUps
   }
 
@@ -406,6 +425,16 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     // An unknown job id (e.g. polled after a result was already recorded) is treated as
     // finished work; the engine clears the handle once a result lands, so it won't re-poll.
     if (!job) return { state: 'done', result: { output: '[async] done', model: 'fake' } }
+    // Report a structured-cause failure (the deterministic analogue of the harness's failed
+    // job view) so the engine's cause → AgentFailureKind mapping is exercised on both runtimes.
+    if (this.pollFailKinds.has(job.context.agentKind)) {
+      return {
+        state: 'failed',
+        error: 'Aborted: no agent activity for 600s (likely hung in agent phase)',
+        failureCause: this.pollFailCause,
+        detail: this.pollFailDetail,
+      }
+    }
     job.polled += 1
     // Stream the configured follow-up items on the FIRST running poll of a `coder` job —
     // the deterministic analogue of the harness tailing the Coder's sentinel file — so the

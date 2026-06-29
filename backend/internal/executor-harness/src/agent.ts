@@ -33,7 +33,7 @@ import {
   resolveStructuredOutput,
 } from './structured-output.js'
 import type { RunOptions } from './runner.js'
-import { log } from './logger.js'
+import { log, type Logger } from './logger.js'
 
 // The single generic agent handler — the manifest-driven replacement for the bespoke
 // per-kind handlers. It runs an LLM over an optional checkout and returns text/JSON
@@ -64,13 +64,13 @@ async function standUpInfra(
   dir: string,
   infra: AgentInfraSpec,
   signal: AbortSignal | undefined,
-  trace: Record<string, unknown>,
+  logger: Logger,
 ): Promise<{ started: boolean; note?: string }> {
   if (infra.environment !== 'local' || infra.noInfraDependencies || !infra.composePath) {
     return { started: false }
   }
   try {
-    log.info('agent(explore): standing up infra', { ...trace, composePath: infra.composePath })
+    logger.info('agent(explore): standing up infra', { composePath: infra.composePath })
     await exec('docker', ['compose', '-f', infra.composePath, 'up', '-d', '--wait'], {
       cwd: dir,
       signal,
@@ -79,7 +79,7 @@ async function standUpInfra(
     return { started: true }
   } catch (err) {
     const note = err instanceof Error ? err.message : String(err)
-    log.warn('agent(explore): infra stand-up failed', { ...trace, error: note })
+    logger.warn('agent(explore): infra stand-up failed', { error: note })
     return { started: false, note }
   }
 }
@@ -126,16 +126,13 @@ export async function handleAgent(job: AgentJob, opts: RunOptions = {}): Promise
  * run is the expected, correct outcome; the only failure is producing no usable output.
  */
 async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentResult> {
-  const trace = {
-    jobId: job.jobId,
-    repo: `${job.repo.owner}/${job.repo.name}`,
-    branch: job.branch,
-  }
+  const logger = opts.log ?? log
   return acquireRepoCheckout(
     { persistent: job.persistentCheckout === true, prefix: 'agent-explore', repo: job.repo },
     async (dir) => {
+      opts.onPhase?.('clone')
       if (job.persistentCheckout) {
-        log.info('agent(explore): preparing reused checkout', trace)
+        logger.info('agent(explore): preparing reused checkout')
         await prepareExistingCheckout({
           dir,
           repo: job.repo,
@@ -146,7 +143,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
           signal: opts.signal,
         })
       } else {
-        log.info('agent(explore): cloning', trace)
+        logger.info('agent(explore): cloning')
         await cloneRepo({
           repo: { ...job.repo, baseBranch: job.branch },
           ghToken: job.ghToken,
@@ -170,7 +167,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
       // harness only manages the lifecycle + this dynamic stand-up note.
       const infra = job.infra
       const standUp = infra
-        ? await standUpInfra(dir, infra, opts.signal, trace)
+        ? await standUpInfra(dir, infra, opts.signal, logger)
         : { started: false }
       const userPrompt = standUp.note
         ? `${job.userPrompt}\n\nNote: standing the infra up reported a problem (${standUp.note}). ` +
@@ -178,7 +175,8 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
         : job.userPrompt
 
       try {
-        log.info('agent(explore): running agent', { ...trace, serviceDirectory })
+        opts.onPhase?.('agent')
+        logger.info('agent(explore): running agent', { serviceDirectory })
         const {
           summary,
           stats,
@@ -214,6 +212,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
             summary,
             stats,
             error: noOutputReason(stats, stderrTail),
+            failureCause: 'no-usable-output',
             ...(usage ? { usage } : {}),
           }
         }
@@ -229,6 +228,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
               summary,
               stats,
               error: `the agent did not return a usable result: ${unusable}.${agentOutputTail(stderrTail, summary)}`,
+              failureCause: 'no-usable-output',
               ...(usage ? { usage } : {}),
             }
           }
@@ -236,7 +236,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
 
         // Prose: the summary IS the deliverable.
         if (job.output?.kind !== 'structured') {
-          log.info('agent(explore): done (prose)', { ...trace, ...stats })
+          logger.info('agent(explore): done (prose)', { ...stats })
           return { summary, stats, ...(usage ? { usage } : {}) }
         }
 
@@ -279,6 +279,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
             summary,
             stats,
             error: noStructuredReason(stats, stderrTail, diagnostics),
+            failureCause: 'no-usable-output',
             ...(usage ? { usage } : {}),
           }
         }
@@ -289,7 +290,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
         if (infra && typeof custom === 'object') {
           ;(custom as Record<string, unknown>).environment = infra.environment
         }
-        log.info('agent(explore): done (structured)', { ...trace, ...stats })
+        logger.info('agent(explore): done (structured)', { ...stats })
         return { summary, custom, stats, ...(usage ? { usage } : {}) }
       } finally {
         if (infra) await tearDownInfra(dir, infra)
@@ -354,6 +355,7 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
       summary,
       stats,
       error: noChangesReason('the agent produced no file changes', stats, stderrTail),
+      failureCause: 'no-changes',
       ...(usage ? { usage } : {}),
     }
   }
@@ -392,9 +394,10 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
 async function runConflictResolution(job: AgentJob, opts: RunOptions): Promise<AgentResult> {
   const { signal } = opts
   const mergeBase = job.mergeBase!
-  const trace = { jobId: job.jobId, repo: `${job.repo.owner}/${job.repo.name}`, branch: job.branch }
+  const logger = opts.log ?? log
   return withWorkspace('conflict', async (dir) => {
-    log.info('agent(conflict): cloning PR branch (full history)', trace)
+    opts.onPhase?.('clone')
+    logger.info('agent(conflict): cloning PR branch (full history)')
     // Full clone so the merge base + `origin/<mergeBase>` are present for the merge.
     await cloneRepo({
       repo: { ...job.repo, baseBranch: job.branch },
@@ -405,7 +408,7 @@ async function runConflictResolution(job: AgentJob, opts: RunOptions): Promise<A
     })
     const prTip = await headCommit(dir, signal)
 
-    log.info('agent(conflict): merging base into PR branch', { ...trace, base: mergeBase })
+    logger.info('agent(conflict): merging base into PR branch', { base: mergeBase })
     const clean = await mergeBranch(dir, mergeBase, signal)
 
     // No conflicts to resolve. If base brought new commits the merge advanced the branch,
@@ -414,8 +417,7 @@ async function runConflictResolution(job: AgentJob, opts: RunOptions): Promise<A
     // base-resolution problem, not the agent's — logged so that loop is diagnosable).
     if (clean) {
       if ((await headCommit(dir, signal)) === prTip) {
-        log.info('agent(conflict): base merged clean and branch already up to date', {
-          ...trace,
+        logger.info('agent(conflict): base merged clean and branch already up to date', {
           base: mergeBase,
         })
         return {
@@ -425,7 +427,8 @@ async function runConflictResolution(job: AgentJob, opts: RunOptions): Promise<A
           stats: { toolCalls: 0, assistantChars: 0 },
         }
       }
-      log.info('agent(conflict): base merged clean — pushing the merge commit', trace)
+      opts.onPhase?.('push')
+      logger.info('agent(conflict): base merged clean — pushing the merge commit')
       await pushBranch(dir, job.branch, job.ghToken, signal)
       return {
         pushed: true,
@@ -440,7 +443,8 @@ async function runConflictResolution(job: AgentJob, opts: RunOptions): Promise<A
     // there were conflicts), so it would drift onto the original feature task. Lead with the
     // conflict; keep the task only as trailing reference.
     const conflicted = await unmergedPaths(dir, signal)
-    log.info('agent(conflict): resolving conflicts with agent', { ...trace, conflicted })
+    opts.onPhase?.('agent')
+    logger.info('agent(conflict): resolving conflicts with agent', { conflicted })
     const diff = await conflictDiff(dir, conflicted, signal)
     const userPrompt = buildConflictPrompt(mergeBase, job.branch, conflicted, diff, job.userPrompt)
 
@@ -466,8 +470,7 @@ async function runConflictResolution(job: AgentJob, opts: RunOptions): Promise<A
     // the PR would still be broken. Fail so the engine can retry / notify.
     const unresolved = await unmergedPaths(dir, signal)
     if (unresolved.length > 0) {
-      log.error('agent(conflict): unresolved conflicts remain — refusing to push', {
-        ...trace,
+      logger.error('agent(conflict): unresolved conflicts remain, refusing to push', {
         unresolved: unresolved.length,
       })
       return {
@@ -476,12 +479,14 @@ async function runConflictResolution(job: AgentJob, opts: RunOptions): Promise<A
         summary,
         stats,
         error: unresolvedReason(unresolved, stats, stderrTail),
+        failureCause: 'agent',
         ...(usage ? { usage } : {}),
       }
     }
     // Complete the merge commit with the agent's resolution staged, then push.
     await commitAll(dir, `Merge ${mergeBase} into ${job.branch}`, signal)
-    log.info('agent(conflict): pushing resolved branch', { ...trace, ...stats })
+    opts.onPhase?.('push')
+    logger.info('agent(conflict): pushing resolved branch', { ...stats })
     await pushBranch(dir, job.branch, job.ghToken, signal)
     return { pushed: true, branch: job.branch, summary, stats, ...(usage ? { usage } : {}) }
   })
@@ -555,11 +560,11 @@ async function runBootstrap(job: AgentJob, opts: RunOptions): Promise<AgentResul
   const { signal } = opts
   const boot = job.bootstrap!
   const fromScratch = boot.fromScratch === true
-  const trace = { jobId: job.jobId, target: `${boot.target.owner}/${boot.target.name}` }
+  const logger = (opts.log ?? log).child({ target: `${boot.target.owner}/${boot.target.name}` })
   return withWorkspace('boot', async (dir) => {
     if (!fromScratch) {
-      log.info('agent(bootstrap): cloning reference architecture', {
-        ...trace,
+      opts.onPhase?.('clone')
+      logger.info('agent(bootstrap): cloning reference architecture', {
         reference: `${job.repo.owner}/${job.repo.name}`,
       })
       await cloneRepo({
@@ -569,10 +574,11 @@ async function runBootstrap(job: AgentJob, opts: RunOptions): Promise<AgentResul
         signal,
       })
     } else {
-      log.info('agent(bootstrap): scaffolding from scratch (no reference)', trace)
+      logger.info('agent(bootstrap): scaffolding from scratch (no reference)')
     }
 
-    log.info('agent(bootstrap): running agent', trace)
+    opts.onPhase?.('agent')
+    logger.info('agent(bootstrap): running agent')
     const { summary, stats, stderrTail, usage } = await runAgentInWorkspace(
       {
         dir,
@@ -596,14 +602,12 @@ async function runBootstrap(job: AgentJob, opts: RunOptions): Promise<AgentResul
     // agent did) instead of pushing nothing.
     if (!(await producedRepoContent(dir, !fromScratch, signal))) {
       const error = bootstrapNoOpReason(!fromScratch, stats, summary, stderrTail)
-      log.error('agent(bootstrap): agent produced no content — refusing to push', {
-        ...trace,
-        ...stats,
-      })
-      return { summary, stats, error, ...(usage ? { usage } : {}) }
+      logger.error('agent(bootstrap): agent produced no content, refusing to push', { ...stats })
+      return { summary, stats, error, failureCause: 'agent', ...(usage ? { usage } : {}) }
     }
 
-    log.info('agent(bootstrap): pushing bootstrapped contents', { ...trace, ...stats })
+    opts.onPhase?.('push')
+    logger.info('agent(bootstrap): pushing bootstrapped contents', { ...stats })
     // Bootstrap always resets history to one commit + force-pushes (the fresh history
     // shares no ancestor with whatever boilerplate the new repo was created with).
     await reinitAndPush({
@@ -614,7 +618,7 @@ async function runBootstrap(job: AgentJob, opts: RunOptions): Promise<AgentResul
         ? 'Bootstrap new repository'
         : `Bootstrap from ${job.repo.owner}/${job.repo.name}`,
     })
-    log.info('agent(bootstrap): complete', { ...trace, defaultBranch: boot.target.defaultBranch })
+    logger.info('agent(bootstrap): complete', { defaultBranch: boot.target.defaultBranch })
     return { defaultBranch: boot.target.defaultBranch, summary, stats, ...(usage ? { usage } : {}) }
   })
 }

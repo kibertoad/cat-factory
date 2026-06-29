@@ -181,3 +181,123 @@ describe('openPullRequest (provider dispatch)', () => {
     expect(calls.at(-1)!.headers.authorization).toBe('Bearer ghp_x')
   })
 })
+
+/** Stub global fetch to return a SEQUENCE of responses (one per successive call). */
+function stubFetchSequence(
+  responses: Array<{ status?: number; body?: unknown; headers?: Record<string, string> }>,
+): { count: () => number } {
+  let i = 0
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      const r = responses[Math.min(i, responses.length - 1)]!
+      i++
+      return new Response(r.body === undefined ? null : JSON.stringify(r.body), {
+        status: r.status ?? 200,
+        headers: { 'content-type': 'application/json', ...r.headers },
+      })
+    }),
+  )
+  return { count: () => i }
+}
+
+const githubPr = {
+  owner: 'o',
+  name: 'r',
+  ghToken: 'ghp_x',
+  head: 'feature',
+  base: 'main',
+  pr: { title: 'T', body: 'B' },
+  cloneUrl: 'https://github.com/o/r.git',
+} as const
+
+describe('openPullRequest (transient retry)', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('retries a 503 and then succeeds', async () => {
+    vi.useFakeTimers()
+    const seq = stubFetchSequence([
+      { status: 503, body: { message: 'upstream blip' } },
+      { status: 201, body: { html_url: 'https://github.com/o/r/pull/11' } },
+    ])
+    const p = openPullRequest({ ...githubPr })
+    await vi.advanceTimersByTimeAsync(10_000)
+    await expect(p).resolves.toBe('https://github.com/o/r/pull/11')
+    expect(seq.count()).toBe(2)
+  })
+
+  it('honors a 429 Retry-After then succeeds', async () => {
+    vi.useFakeTimers()
+    const seq = stubFetchSequence([
+      { status: 429, body: { message: 'rate limited' }, headers: { 'retry-after': '1' } },
+      { status: 201, body: { html_url: 'https://github.com/o/r/pull/12' } },
+    ])
+    const p = openPullRequest({ ...githubPr })
+    // Less than the 1s Retry-After: still pending.
+    await vi.advanceTimersByTimeAsync(500)
+    // Past it: the retry fires and resolves.
+    await vi.advanceTimersByTimeAsync(1_000)
+    await expect(p).resolves.toBe('https://github.com/o/r/pull/12')
+    expect(seq.count()).toBe(2)
+  })
+
+  it('throws (redacted) after exhausting retries on a persistent 5xx, tagged cause `api`', async () => {
+    vi.useFakeTimers()
+    const seq = stubFetchSequence([{ status: 500, body: { message: 'still down' } }])
+    const p = openPullRequest({ ...githubPr })
+    // Capture the rejection so we can assert BOTH the message and the structured cause.
+    const caught = p.catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(10_000)
+    const err = await caught
+    expect(err).toBeInstanceOf(Error)
+    expect((err as Error).message).toMatch(/Failed to open PR \(HTTP 500\)/)
+    // The PR-open failure carries the structured `api` cause for the backend to classify on.
+    expect((err as { failureCause?: string }).failureCause).toBe('api')
+    // 3 attempts total (initial + 2 retries), no more.
+    expect(seq.count()).toBe(3)
+  })
+
+  it('honors an HTTP-date Retry-After then succeeds', async () => {
+    vi.useFakeTimers()
+    // 2s in the future as an HTTP-date — must wait it out, not fall back to the 0.5s backoff.
+    const future = new Date(Date.now() + 2_000).toUTCString()
+    const seq = stubFetchSequence([
+      { status: 503, body: { message: 'slow down' }, headers: { 'retry-after': future } },
+      { status: 201, body: { html_url: 'https://github.com/o/r/pull/14' } },
+    ])
+    const p = openPullRequest({ ...githubPr })
+    // Before the date: the retry has not fired yet.
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(seq.count()).toBe(1)
+    // Past it: the retry fires and resolves.
+    await vi.advanceTimersByTimeAsync(2_000)
+    await expect(p).resolves.toBe('https://github.com/o/r/pull/14')
+    expect(seq.count()).toBe(2)
+  })
+
+  it('does NOT retry a 422 "already exists" — returns the existing PR', async () => {
+    // 422 is not transient: it must fall straight through to the existing-PR lookup, not retry.
+    const seq = stubFetchSequence([
+      { status: 422, body: { message: 'A pull request already exists for o:feature.' } },
+      { status: 200, body: [{ html_url: 'https://github.com/o/r/pull/13' }] },
+    ])
+    const url = await openPullRequest({ ...githubPr })
+    expect(url).toBe('https://github.com/o/r/pull/13')
+    // Exactly two calls: the POST (not retried) + the lookup GET.
+    expect(seq.count()).toBe(2)
+  })
+
+  it('rejects immediately when the watchdog aborts mid-backoff (no further attempts)', async () => {
+    vi.useFakeTimers()
+    const controller = new AbortController()
+    const seq = stubFetchSequence([{ status: 503, body: { message: 'blip' } }])
+    const p = openPullRequest({ ...githubPr, signal: controller.signal })
+    const assertion = expect(p).rejects.toThrow(/aborted by watchdog/)
+    // First attempt (503) has resolved and we're now in the backoff wait; abort it.
+    await vi.advanceTimersByTimeAsync(10)
+    controller.abort(new Error('aborted by watchdog'))
+    await assertion
+    // Only the first attempt ran; the retry never fired.
+    expect(seq.count()).toBe(1)
+  })
+})

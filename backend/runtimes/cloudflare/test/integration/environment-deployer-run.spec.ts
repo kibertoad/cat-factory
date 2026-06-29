@@ -7,12 +7,7 @@ import type {
 } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { makeApp } from '../helpers'
-import {
-  bearerManifest,
-  readyEnvBody,
-  recordingFetch,
-  TEST_API_TOKEN,
-} from './environment.fixtures'
+import { bearerConfig, readyEnvBody, recordingFetch, TEST_API_TOKEN } from './environment.fixtures'
 
 /** Captures the context each agent step receives, so we can assert discovery. */
 class RecordingAgentExecutor implements AgentExecutor {
@@ -36,7 +31,7 @@ describe('deployer agent + environment discovery', () => {
     const ws = workspace.id
 
     await app.call('POST', `/workspaces/${ws}/environments/connection`, {
-      manifest: bearerManifest(),
+      config: bearerConfig(),
       secrets: { API_TOKEN: TEST_API_TOKEN },
     })
 

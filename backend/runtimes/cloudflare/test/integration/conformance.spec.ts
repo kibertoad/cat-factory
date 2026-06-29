@@ -54,9 +54,7 @@ const harness: ConformanceHarness = {
         // Inject a native environment provider + the block-less coords resolver (both
         // fakes in the suite) so the on-demand repo-config validate route is asserted
         // end-to-end against real D1, identically to Node.
-        ...(opts?.environmentProvider
-          ? { environmentProvider: opts.environmentProvider, environmentProviderKind: 'native' }
-          : {}),
+        ...(opts?.environmentProvider ? { environmentProvider: opts.environmentProvider } : {}),
         ...(opts?.resolveRepoFilesForCoords
           ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
           : {}),

@@ -116,6 +116,21 @@ export interface RunnerJobView {
   result?: RunnerJobResult
   error?: string
   /**
+   * Present on a failed view: the harness's STRUCTURED failure cause (e.g.
+   * `inactivity-timeout`, `max-duration`, `no-usable-output`, `agent`), so the engine can
+   * classify the failure without regex-matching {@link error}. Absent on an older harness
+   * image — the consumer falls back to the (still-stable) error-string regex. Container
+   * EVICTION is NOT represented here: that is detected by the runtime facade from a vanished
+   * container (a `(container evicted or crashed)` error), never emitted by the harness.
+   */
+  failureCause?: string
+  /**
+   * Present on a failed view: an extended, redacted diagnostic (phase-timing breakdown,
+   * last-tool breadcrumb) distinct from the one-line {@link error}. The engine surfaces it
+   * as the failure `detail` on the board. Best-effort.
+   */
+  detail?: string
+  /**
    * Tool spans the harness buffered SINCE THE LAST POLL (drain-on-read): the executor
    * forwards them to the optional trace sink as child spans under the run trace. Empty/
    * absent on most polls. Best-effort observability — never affects the job lifecycle.

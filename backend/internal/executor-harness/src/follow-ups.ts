@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import { log } from './logger.js'
+import { log, type Logger } from './logger.js'
 
 // The Coder's forward-looking side channel. As the implementer works it appends one
 // JSON line per item to a sentinel file in its working directory; the harness tails
@@ -49,10 +49,13 @@ function coerceLine(value: unknown): FollowUpLine | null {
  */
 export class FollowUpTailer {
   private consumed = 0
+  /** Running count of complete-but-unparsable lines, so silent drops become visible. */
+  private skipped = 0
 
   constructor(
     private readonly filePath: string,
     private readonly onItems: (items: FollowUpLine[]) => void,
+    private readonly logger: Logger = log,
   ) {}
 
   /** Read any new complete lines and emit the coerced items. Best-effort; never throws. */
@@ -71,19 +74,32 @@ export class FollowUpTailer {
     if (lastNewline === -1) return
     this.consumed += lastNewline + 1
     const items: FollowUpLine[] = []
+    let skippedThisPoll = 0
     for (const raw of fresh.slice(0, lastNewline).split('\n')) {
       const line = raw.trim()
       if (!line) continue
       try {
         const coerced = coerceLine(JSON.parse(line))
         if (coerced) items.push(coerced)
+        else skippedThisPoll++
       } catch {
         // A non-JSON / half-written line — skip it (a later poll re-reads from `consumed`,
         // which only advanced past complete newline-terminated lines).
+        skippedThisPoll++
       }
     }
+    if (skippedThisPoll > 0) {
+      // A complete line that didn't yield an item is dropped for good (consumed past it).
+      // Surface it at warn with a running total rather than swallowing it silently — a
+      // steadily-growing count points at a malformed-emitter bug, not a transient race.
+      this.skipped += skippedThisPoll
+      this.logger.warn('follow-ups: skipped malformed lines', {
+        skipped: skippedThisPoll,
+        skippedTotal: this.skipped,
+      })
+    }
     if (items.length > 0) {
-      log.info('follow-ups: surfaced items', { count: items.length })
+      this.logger.info('follow-ups: surfaced items', { count: items.length })
       this.onItems(items)
     }
   }

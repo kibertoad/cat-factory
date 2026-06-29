@@ -1,8 +1,9 @@
 import { mkdtemp, rm, writeFile, appendFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FollowUpTailer, type FollowUpLine } from '../src/follow-ups.js'
+import { log } from '../src/logger.js'
 
 // The Coder appends JSON lines to a sentinel file; the tailer yields only the NEW complete
 // lines per poll (drain-on-read), holding back a partially-written trailing line. A
@@ -71,5 +72,22 @@ describe('FollowUpTailer', () => {
     )
     await tailer.poll()
     expect(received.map((i) => i.title)).toEqual(['ok'])
+  })
+
+  it('warns with a running skipped-count when complete lines are dropped', async () => {
+    const warn = vi.spyOn(log, 'warn').mockImplementation(() => {})
+    // The tailer logs via the module logger by default (no injected logger here).
+    await writeFile(
+      file,
+      `not json\n${JSON.stringify({ detail: 'no title' })}\n${JSON.stringify({ title: 'ok' })}\n`,
+      'utf8',
+    )
+    await tailer.poll()
+    expect(received.map((i) => i.title)).toEqual(['ok'])
+    expect(warn).toHaveBeenCalledWith(
+      'follow-ups: skipped malformed lines',
+      expect.objectContaining({ skipped: 2, skippedTotal: 2 }),
+    )
+    warn.mockRestore()
   })
 })

@@ -6,6 +6,7 @@ import type { D1Database } from '@cloudflare/workers-types'
 
 interface EnvironmentConnectionRow {
   workspace_id: string
+  kind: string | null
   provider_id: string
   label: string
   base_url: string
@@ -18,6 +19,7 @@ interface EnvironmentConnectionRow {
 function rowToRecord(row: EnvironmentConnectionRow): EnvironmentConnectionRecord {
   return {
     workspaceId: row.workspace_id,
+    kind: row.kind ?? 'manifest',
     providerId: row.provider_id,
     label: row.label,
     baseUrl: row.base_url,
@@ -57,11 +59,12 @@ export class D1EnvironmentConnectionRepository implements EnvironmentConnectionR
     await this.db
       .prepare(
         `INSERT INTO environment_connections
-          (workspace_id, provider_id, label, base_url, manifest_json, secrets_cipher, created_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+          (workspace_id, kind, provider_id, label, base_url, manifest_json, secrets_cipher, created_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
       )
       .bind(
         record.workspaceId,
+        record.kind,
         record.providerId,
         record.label,
         record.baseUrl,

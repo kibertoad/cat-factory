@@ -7,16 +7,39 @@
 type Level = 'debug' | 'info' | 'warn' | 'error'
 type Fields = Record<string, unknown>
 
-function emit(level: Level, msg: string, fields?: Fields): void {
-  const line = JSON.stringify({ level, time: new Date().toISOString(), msg, ...fields })
+function emit(level: Level, msg: string, bound: Fields, fields?: Fields): void {
+  // Bound (per-job context) fields first so a call-site field can override a bound one; the
+  // envelope keys (level/time/msg) go LAST so neither bound nor call-site fields can corrupt
+  // them — a stray field named `level` must never disagree with the stream the line routes to.
+  const line = JSON.stringify({ ...bound, ...fields, level, time: new Date().toISOString(), msg })
   // Errors/warnings to stderr, everything else to stdout — mirrors pino routing.
   if (level === 'error' || level === 'warn') process.stderr.write(`${line}\n`)
   else process.stdout.write(`${line}\n`)
 }
 
-export const log = {
-  debug: (msg: string, fields?: Fields): void => emit('debug', msg, fields),
-  info: (msg: string, fields?: Fields): void => emit('info', msg, fields),
-  warn: (msg: string, fields?: Fields): void => emit('warn', msg, fields),
-  error: (msg: string, fields?: Fields): void => emit('error', msg, fields),
+/** The logging surface: the four levels plus `child` to bind correlation fields once. */
+export interface Logger {
+  debug: (msg: string, fields?: Fields) => void
+  info: (msg: string, fields?: Fields) => void
+  warn: (msg: string, fields?: Fields) => void
+  error: (msg: string, fields?: Fields) => void
+  /**
+   * Return a logger that merges `bound` into every line (e.g. `{ jobId, repo, branch }`),
+   * so a per-job logger carries its correlation context without each call site re-spreading
+   * it. Nestable — the returned logger's own `child` accumulates onto these bound fields.
+   */
+  child: (bound: Fields) => Logger
 }
+
+/** Build a logger whose every emit folds in `bound`. The root logger binds nothing. */
+function makeLogger(bound: Fields): Logger {
+  return {
+    debug: (msg, fields) => emit('debug', msg, bound, fields),
+    info: (msg, fields) => emit('info', msg, bound, fields),
+    warn: (msg, fields) => emit('warn', msg, bound, fields),
+    error: (msg, fields) => emit('error', msg, bound, fields),
+    child: (extra) => makeLogger({ ...bound, ...extra }),
+  }
+}
+
+export const log: Logger = makeLogger({})

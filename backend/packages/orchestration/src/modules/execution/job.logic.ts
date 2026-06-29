@@ -1,3 +1,5 @@
+import type { AgentFailureKind } from '@cat-factory/kernel'
+
 /**
  * Maximum number of times a step's *crash* eviction (OOM / a genuine crash) is
  * recovered automatically by re-dispatching a fresh container for the same step.
@@ -56,4 +58,44 @@ export function isContainerEvictionError(error: string | undefined): boolean {
  */
 export function isTransientEviction(error: string | undefined): boolean {
   return error !== undefined && error.includes(TRANSIENT_EVICTION_MARKER)
+}
+
+/**
+ * Map the harness's STRUCTURED failure cause (the `failureCause` it now reports on a failed
+ * job view) onto the engine's {@link AgentFailureKind}, so a non-eviction agent failure is
+ * classified WITHOUT regex-matching the free-text error. The watchdog timeouts become
+ * `timeout` (matching what the old `/inactivity|no agent activity|max duration/` regex
+ * produced); every other harness cause (a genuine agent error, a no-usable-output / no-changes
+ * result, a git/api failure) is an `agent` failure. Returns undefined for an unknown/absent
+ * cause so the caller falls back to its error-string regex (older harness image). Container
+ * eviction is intentionally NOT a harness cause — it is detected from the error string by
+ * {@link isContainerEvictionError} (the runtime facade emits it), so it never routes here.
+ */
+export function agentFailureKindFromCause(cause: string | undefined): AgentFailureKind | undefined {
+  switch (cause) {
+    case 'inactivity-timeout':
+    case 'max-duration':
+      return 'timeout'
+    case 'agent':
+    case 'git':
+    case 'api':
+    case 'no-usable-output':
+    case 'no-changes':
+      return 'agent'
+    default:
+      return undefined
+  }
+}
+
+/**
+ * The error-string fallback for an agent/execution job failure when the harness reported no
+ * structured `failureCause` (an older image, or a pool transport that doesn't forward it). Mirrors
+ * the bootstrap path's `classifyBootstrapFailure`: the watchdog phrases map to `timeout`, anything
+ * else to `agent` — so the SAME watchdog text classifies identically on both the execution and
+ * bootstrap paths. Container eviction is handled separately (by {@link isContainerEvictionError}),
+ * so it never reaches here. Used as `agentFailureKindFromCause(cause) ?? classifyAgentFailure(error)`.
+ */
+export function classifyAgentFailure(error: string | undefined): AgentFailureKind {
+  if (error && /inactivity|no agent activity|max duration/i.test(error)) return 'timeout'
+  return 'agent'
 }

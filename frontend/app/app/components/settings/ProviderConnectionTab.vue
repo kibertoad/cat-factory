@@ -11,6 +11,7 @@ import type { ProviderConnectionKind } from '~/types/providerConnections'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor.vue'
 import KubernetesRunnerForm from '~/components/settings/KubernetesRunnerForm.vue'
+import KubernetesEnvironmentForm from '~/components/settings/KubernetesEnvironmentForm.vue'
 
 const props = defineProps<{ kind: ProviderConnectionKind }>()
 
@@ -185,21 +186,32 @@ async function saveManifest(payload: {
   }
 }
 
-// --- Runner-backend selector (runner-pool only) -------------------------------------
-// The runner-pool tab can configure either the manifest pool OR a native Kubernetes
-// cluster; environments are manifest-only. Defaults to the saved connection's kind.
-const RUNNER_BACKEND_KINDS = ['manifest', 'kubernetes'] as const
-type RunnerBackendKind = (typeof RUNNER_BACKEND_KINDS)[number]
-// Default a fresh runner-pool to the friendly Kubernetes form (the prominent path); the raw
-// manifest editor is the advanced "custom API-based scheduler" option, collapsed by default.
-// Honour the saved connection's kind below when one exists.
-const backendKind = ref<RunnerBackendKind>('kubernetes')
-const showBackendSelector = computed(() => props.kind === 'runner-pool')
+// --- Backend selector -----------------------------------------------------------------
+// Both infrastructure tabs can configure either the BYO manifest backend OR a native
+// Kubernetes backend (a runner cluster for runner-pool, per-PR namespaces for environment).
+// The two K8s backends have different config shapes, so each kind renders its own form.
+// Defaults to the saved connection's kind.
+const BACKEND_KINDS = ['manifest', 'kubernetes'] as const
+type BackendKind = (typeof BACKEND_KINDS)[number]
+const backendKind = ref<BackendKind>('manifest')
+const showBackendSelector = computed(() => true)
+const backendSelectorLabel = computed(() =>
+  t(
+    props.kind === 'environment'
+      ? 'settings.providerConnection.backend.environmentSelectorLabel'
+      : 'settings.providerConnection.backend.selectorLabel',
+  ),
+)
+function backendKindLabel(k: BackendKind): string {
+  if (k === 'kubernetes') return t('settings.providerConnection.backend.kubernetes')
+  return t(
+    props.kind === 'environment'
+      ? 'settings.providerConnection.backend.environmentManifest'
+      : 'settings.providerConnection.backend.manifest',
+  )
+}
 const backendKindItems = computed(() =>
-  RUNNER_BACKEND_KINDS.map((k) => ({
-    label: t(`settings.providerConnection.backend.${k}`),
-    value: k,
-  })),
+  BACKEND_KINDS.map((k) => ({ label: backendKindLabel(k), value: k })),
 )
 watch(
   () => connection.value,
@@ -320,17 +332,26 @@ function fieldHelp(key: string): string | undefined {
       }}
     </div>
 
-    <!-- Runner-backend selector: the manifest pool or a native Kubernetes cluster. -->
-    <UFormField
-      v-if="showBackendSelector"
-      :label="t('settings.providerConnection.backend.selectorLabel')"
-    >
+    <!-- Backend selector: the BYO manifest backend or a native Kubernetes backend. -->
+    <UFormField v-if="showBackendSelector" :label="backendSelectorLabel">
       <USelect v-model="backendKind" :items="backendKindItems" />
     </UFormField>
 
-    <!-- Native Kubernetes runner backend. -->
+    <!-- Native Kubernetes runner backend (runner-pool). -->
     <KubernetesRunnerForm
-      v-if="showBackendSelector && backendKind === 'kubernetes'"
+      v-if="kind === 'runner-pool' && backendKind === 'kubernetes'"
+      :connection="connection"
+      :supports-test="descriptor.supportsTest"
+      :testing="testing"
+      :busy="busy"
+      :test-result="testResult"
+      @test="testConfig"
+      @save="saveConfig"
+    />
+
+    <!-- Native Kubernetes ephemeral-environment backend (environment). -->
+    <KubernetesEnvironmentForm
+      v-else-if="kind === 'environment' && backendKind === 'kubernetes'"
       :connection="connection"
       :supports-test="descriptor.supportsTest"
       :testing="testing"

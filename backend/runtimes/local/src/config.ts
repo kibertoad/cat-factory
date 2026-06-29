@@ -80,6 +80,16 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     // flip the toggle, so defaulting it on has no behavioural cost. Set ENVIRONMENTS_ENABLED
     // explicitly to override.
     ENVIRONMENTS_ENABLED: env.ENVIRONMENTS_ENABLED?.trim() || 'true',
+    // A local k3s preview environment is reached over http at a loopback/LAN host (a
+    // localhost NodePort, or a Traefik ingress host like `app.127.0.0.1.nip.io` /
+    // `myapp.localhost`). The strict public-https URL guard would reject the URL the
+    // provider returns, so local mode widens the ENVIRONMENT URL policy to permit http +
+    // the common local host suffixes. Hosted facades keep the strict default. Add more
+    // hosts via ENVIRONMENTS_ALLOW_URL_HOSTS; this only widens the ENV integration's guard.
+    ENVIRONMENTS_ALLOW_HTTP_URLS: env.ENVIRONMENTS_ALLOW_HTTP_URLS?.trim() || 'true',
+    ENVIRONMENTS_ALLOW_URL_HOSTS:
+      env.ENVIRONMENTS_ALLOW_URL_HOSTS?.trim() ||
+      'localhost,127.0.0.1,host.docker.internal,.localhost,.local,.nip.io,.sslip.io',
   }
 }
 
