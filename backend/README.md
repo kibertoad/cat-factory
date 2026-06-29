@@ -468,8 +468,11 @@ for real. The suite **self-skips** when the `K8S_IT_*` cluster env is unset, so 
 `pnpm test` run is unaffected. To run it locally:
 
 ```bash
-# 1. Create a throwaway cluster with the apiserver on a fixed host port.
-k3d cluster create cf-it --api-port 127.0.0.1:6443 --wait
+# 1. Create a throwaway cluster with the apiserver on a fixed host port. Disable the bundled
+#    Traefik so its LoadBalancer Service doesn't pin host port 80 (the env suite's workload
+#    needs it).
+k3d cluster create cf-it --api-port 127.0.0.1:6443 \
+  --k3s-arg "--disable=traefik@server:*" --wait
 
 # 2. Build the in-pod mock harness + pre-pull nginx, then import both into the cluster.
 docker build -t cat-factory-mock-harness:it \

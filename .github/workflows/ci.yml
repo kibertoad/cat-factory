@@ -636,9 +636,15 @@ jobs:
           kubectl version --client
 
       # Bind the apiserver to 127.0.0.1:6443 so the kubeconfig server (and k3s cert SANs) match
-      # the host endpoint the Node test process dials.
+      # the host endpoint the Node test process dials. Disable the bundled Traefik: it is a
+      # `type: LoadBalancer` Service that klipper ServiceLB pins to host ports 80/443, which
+      # would collide with the env suite's own port-80 LoadBalancer Service (its svclb pods
+      # could not bind 80, so the Service would never get an address and the URL would never
+      # resolve). With Traefik gone, port 80 is free for the test workload.
       - name: Create k3d cluster
-        run: k3d cluster create cf-it --api-port 127.0.0.1:6443 --wait --timeout 180s
+        run: |
+          k3d cluster create cf-it --api-port 127.0.0.1:6443 \
+            --k3s-arg "--disable=traefik@server:*" --wait --timeout 180s
 
       # Build the tiny mock-harness image (the in-pod HTTP server the runner suite drives) and
       # pre-pull nginx (the env suite's workload), then import BOTH into the cluster so no pod

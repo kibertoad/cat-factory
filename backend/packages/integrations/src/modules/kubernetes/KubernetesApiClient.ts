@@ -31,8 +31,9 @@ export class KubernetesApiClient {
   /**
    * A single apiserver request. `body` is JSON-encoded for non-GET/DELETE unless a
    * `contentType` override is supplied (server-side apply uses
-   * `application/apply-patch+json` with a raw JSON body). Returns the raw Response so
-   * the caller maps status codes (404/409/…) to its own semantics.
+   * `application/apply-patch+yaml` with a raw JSON body — JSON is valid YAML, and that
+   * media type is accepted by every apiserver ≥1.22). Returns the raw Response so the
+   * caller maps status codes (404/409/…) to its own semantics.
    */
   async fetch(
     method: string,

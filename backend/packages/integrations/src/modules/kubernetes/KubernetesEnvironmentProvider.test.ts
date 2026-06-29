@@ -107,7 +107,7 @@ describe('KubernetesEnvironmentProvider.provision', () => {
     expect(apply.url).toBe(
       'https://cluster.test:6443/apis/apps/v1/namespaces/cf-env-42/deployments/web?fieldManager=cat-factory&force=true',
     )
-    expect(apply.contentType).toBe('application/apply-patch+json')
+    expect(apply.contentType).toBe('application/apply-patch+yaml')
     expect(apply.body).toContain('ghcr.io/acme/web:feat')
     expect(apply.body).toContain('"namespace":"cf-env-42"')
   })
