@@ -1284,13 +1284,6 @@
         "removed": "Połączenie usunięte",
         "removeFailed": "Nie udało się usunąć połączenia"
       },
-      "backend": {
-        "selectorLabel": "Backend wykonawczy",
-        "manifest": "Własny pool (manifest)",
-        "kubernetes": "Kubernetes",
-        "environmentSelectorLabel": "Backend środowiska",
-        "environmentManifest": "Własne API HTTP (manifest)"
-      },
       "kubernetesEnv": {
         "label": "Nazwa",
         "labelPlaceholder": "Klaster podglądu",
@@ -1344,10 +1337,6 @@
         "insecureSkipTlsVerify": "Pomiń weryfikację TLS",
         "insecureSkipTlsVerifyHelp": "Zdecydowanie odradzane. Wyłącza weryfikację TLS apiservera; używaj tylko dla lokalnych klastrów k3s/kind/dev.",
         "harnessPort": "Port harnessa"
-      },
-      "advancedManifest": {
-        "summary": "Zaawansowane: niestandardowy harmonogram oparty na API",
-        "intro": "Potrzebne tylko do zintegrowania niestandardowego harmonogramu opartego na API. Typowe backendy (lokalny Docker, Cloudflare Containers i Kubernetes) tego nie wymagają; opisz tutaj API HTTP własnego harmonogramu tylko, jeśli go używasz."
       }
     },
     "serviceFragmentDefaults": {

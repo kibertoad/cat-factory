@@ -1284,13 +1284,6 @@
         "removed": "Connexion supprimée",
         "removeFailed": "Impossible de supprimer la connexion"
       },
-      "backend": {
-        "selectorLabel": "Backend d'exécution",
-        "manifest": "Pool auto-hébergé (manifeste)",
-        "kubernetes": "Kubernetes",
-        "environmentSelectorLabel": "Backend d'environnement",
-        "environmentManifest": "API HTTP personnalisée (manifeste)"
-      },
       "kubernetesEnv": {
         "label": "Nom",
         "labelPlaceholder": "Cluster de prévisualisation",
@@ -1344,10 +1337,6 @@
         "insecureSkipTlsVerify": "Ignorer la vérification TLS",
         "insecureSkipTlsVerifyHelp": "Fortement déconseillé. Désactive la vérification TLS de l'apiserver ; à utiliser uniquement pour des clusters locaux k3s/kind/dev.",
         "harnessPort": "Port du harness"
-      },
-      "advancedManifest": {
-        "summary": "Avancé : planificateur personnalisé basé sur une API",
-        "intro": "Nécessaire uniquement pour intégrer un planificateur personnalisé basé sur une API. Les backends courants (Docker local, Cloudflare Containers et Kubernetes) n'en ont pas besoin ; décrivez ici l'API HTTP de votre propre planificateur uniquement si vous en utilisez un."
       }
     },
     "serviceFragmentDefaults": {

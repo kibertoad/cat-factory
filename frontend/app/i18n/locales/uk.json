@@ -1284,13 +1284,6 @@
         "removed": "Підключення видалено",
         "removeFailed": "Не вдалося видалити підключення"
       },
-      "backend": {
-        "selectorLabel": "Бекенд виконавця",
-        "manifest": "Власний пул (маніфест)",
-        "kubernetes": "Kubernetes",
-        "environmentSelectorLabel": "Бекенд середовища",
-        "environmentManifest": "Власний HTTP API (маніфест)"
-      },
       "kubernetesEnv": {
         "label": "Назва",
         "labelPlaceholder": "Кластер попереднього перегляду",
@@ -1344,10 +1337,6 @@
         "insecureSkipTlsVerify": "Пропустити перевірку TLS",
         "insecureSkipTlsVerifyHelp": "Наполегливо не рекомендується. Вимикає перевірку TLS apiserver; використовуйте лише для локальних кластерів k3s/kind/dev.",
         "harnessPort": "Порт harness"
-      },
-      "advancedManifest": {
-        "summary": "Розширено: власний планувальник на основі API",
-        "intro": "Потрібно лише для інтеграції власного планувальника на основі API. Звичайні бекенди (локальний Docker, Cloudflare Containers і Kubernetes) цього не потребують; опишіть тут HTTP API власного планувальника, лише якщо ви його використовуєте."
       }
     },
     "serviceFragmentDefaults": {
