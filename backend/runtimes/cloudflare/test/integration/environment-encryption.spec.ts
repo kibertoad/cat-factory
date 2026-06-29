@@ -4,12 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { makeApp } from '../helpers'
 import { buildContainer } from '../../src/infrastructure/container'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
-import {
-  bearerConfig,
-  readyEnvBody,
-  recordingFetch,
-  TEST_API_TOKEN,
-} from './environment.fixtures'
+import { bearerConfig, readyEnvBody, recordingFetch, TEST_API_TOKEN } from './environment.fixtures'
 
 afterEach(() => vi.unstubAllGlobals())
 

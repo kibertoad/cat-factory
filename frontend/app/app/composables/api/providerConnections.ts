@@ -121,9 +121,7 @@ export function providerConnectionsApi({ send, ws }: ApiContext) {
  * manifest editor) is wrapped into the `manifest` backend kind. Both subsystems now take a
  * discriminated `config`, so the same shape serves each.
  */
-function backendConfig(
-  body: RegisterProviderInput | TestProviderInput,
-): Record<string, unknown> {
+function backendConfig(body: RegisterProviderInput | TestProviderInput): Record<string, unknown> {
   if (body.config) return body.config
   return { kind: 'manifest', manifest: body.manifest ?? {} }
 }

@@ -43,7 +43,7 @@ All backend source builds (22/22) and the changed backend packages typecheck cle
   `registerEnvironmentProviderSchema` + `testEnvironmentConnectionSchema` now take `{config}`;
   `environmentConnectionSchema` gains `kind` + `config?`. Kernel re-exports the new types.
 - Reuse: extracted `KubernetesApiClient` (`backend/packages/integrations/src/modules/kubernetes/
-  KubernetesApiClient.ts`) — bearer token + undici TLS dispatcher + safeText — and refactored
+KubernetesApiClient.ts`) — bearer token + undici TLS dispatcher + safeText — and refactored
   `KubernetesRunnerTransport` to delegate to it (behaviour-identical). Generalized
   `kubernetes.logic.ts`: `k8sName(value,prefix,...)` (podName now uses it), exported
   `labelValue`, added `classifyDeploymentReadiness`, widened `apiBase` param.
@@ -56,8 +56,8 @@ All backend source builds (22/22) and the changed backend packages typecheck cle
 - Services: `EnvironmentConnectionService` rewritten to resolve the backend by `kind` (register
   validates via the backend, stores the manifest + kind, describeProvider/testConnection/
   validateRepo/bootstrap go through it, honors the internal override). `EnvironmentProvisioning
-  Service` + `EnvironmentTeardownService` resolve the provider via `connectionService.resolve
-  Provider` and pass `runRepo` / `resolveRepoFiles`. `referencedSecretKeys` +
+Service` + `EnvironmentTeardownService` resolve the provider via `connectionService.resolve
+Provider` and pass `runRepo` / `resolveRepoFiles`. `referencedSecretKeys` +
   `assertManifestUrlsSafe` moved to `environments.logic.ts` (broke an import cycle).
 - Composition: orchestration `container.ts` drops the singleton provider deps, gates the env
   module on repos+cipher, passes `environmentCustomTlsSupported` + `resolveRepoFilesForCoords`.
@@ -87,7 +87,7 @@ All backend source builds (22/22) and the changed backend packages typecheck cle
 
 1. Frontend Kubernetes env connect FORM (task 9, partial). `ProviderConnectionTab.vue` shows
    the backend-type selector + K8s form only for `runner-pool` (`showBackendSelector =
-   props.kind === 'runner-pool'`); environment is manifest-only in the UI. To finish: enable
+props.kind === 'runner-pool'`); environment is manifest-only in the UI. To finish: enable
    the selector for `environment`, add a K8s env form section (apiServerUrl, token,
    manifestSource colocated|separate, url ingressTemplate|status), and i18n keys in
    `i18n/locales/en.json`. The backend fully supports it today; operators can register a

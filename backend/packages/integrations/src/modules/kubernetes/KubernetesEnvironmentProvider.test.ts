@@ -8,7 +8,11 @@ const config: KubernetesEnvironmentConfig = {
   apiServerUrl: 'https://cluster.test:6443',
   namespaceTemplate: 'cf-env-{{pullNumber}}',
   manifestSource: { type: 'colocated', path: 'k8s/app.yaml' },
-  url: { source: 'ingressTemplate', hostTemplate: '{{branch}}.preview.example.com', scheme: 'https' },
+  url: {
+    source: 'ingressTemplate',
+    hostTemplate: '{{branch}}.preview.example.com',
+    scheme: 'https',
+  },
 }
 const manifest = kubernetesConfigToManifest(config)
 const resolveSecret = (key: string) => (key === 'apiToken' ? 'tok' : undefined)
@@ -171,7 +175,9 @@ describe('KubernetesEnvironmentProvider.status', () => {
   })
 
   it('stays provisioning while a Deployment is still rolling out', async () => {
-    stubFetch(() => ({ body: { items: [{ spec: { replicas: 2 }, status: { availableReplicas: 1 } }] } }))
+    stubFetch(() => ({
+      body: { items: [{ spec: { replicas: 2 }, status: { availableReplicas: 1 } }] },
+    }))
     const provider = new KubernetesEnvironmentProvider()
     const result = await provider.status({
       manifest,

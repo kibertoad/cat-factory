@@ -5,12 +5,7 @@ import { makeApp } from '../helpers'
 import { SystemClock } from '../../src/infrastructure/runtime'
 import { sweepExpiredEnvironments } from '../../src/infrastructure/environments/sweep'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
-import {
-  bearerConfig,
-  readyEnvBody,
-  recordingFetch,
-  TEST_API_TOKEN,
-} from './environment.fixtures'
+import { bearerConfig, readyEnvBody, recordingFetch, TEST_API_TOKEN } from './environment.fixtures'
 
 afterEach(() => vi.unstubAllGlobals())
 

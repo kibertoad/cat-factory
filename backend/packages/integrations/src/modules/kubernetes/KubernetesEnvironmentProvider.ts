@@ -56,9 +56,7 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     const client = new KubernetesApiClient(config, req.resolveSecret)
     const inputs = req.inputs
     const namespace = resolveNamespace(config, inputs)
-    const image = config.imageTemplate
-      ? renderImage(config.imageTemplate, inputs)
-      : undefined
+    const image = config.imageTemplate ? renderImage(config.imageTemplate, inputs) : undefined
     const vars = templateVars(inputs, namespace, image)
 
     await this.ensureNamespace(client, config, namespace)
@@ -92,7 +90,14 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     const config = parseKubernetesEnvConfig(req.manifest)
     const namespace = req.provisionFields.namespace ?? req.externalId
     if (!namespace) {
-      return { externalId: null, url: null, status: 'failed', expiresAt: null, access: null, fields: {} }
+      return {
+        externalId: null,
+        url: null,
+        status: 'failed',
+        expiresAt: null,
+        access: null,
+        fields: {},
+      }
     }
     const client = new KubernetesApiClient(config, req.resolveSecret)
     const status = await this.deploymentStatus(client, config, namespace)
@@ -175,7 +180,9 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     }
     const res = await client.fetch('POST', namespaceUrl(config), body, APPLY_TIMEOUT_MS)
     if (res.ok || res.status === 409) return // 409 AlreadyExists ⇒ idempotent
-    throw new Error(`Failed to create namespace '${namespace}' (HTTP ${res.status}): ${await safeText(res)}`)
+    throw new Error(
+      `Failed to create namespace '${namespace}' (HTTP ${res.status}): ${await safeText(res)}`,
+    )
   }
 
   private async apply(
@@ -241,7 +248,13 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     if (!name) return null
     const res = await client.fetch(
       'GET',
-      resourceUrl(config, kind === 'Service' ? 'v1' : 'networking.k8s.io/v1', kind, namespace, name),
+      resourceUrl(
+        config,
+        kind === 'Service' ? 'v1' : 'networking.k8s.io/v1',
+        kind,
+        namespace,
+        name,
+      ),
       undefined,
       READ_TIMEOUT_MS,
     )

@@ -159,7 +159,10 @@ export const kubernetesEnvironmentBackend: EnvironmentBackendProvider = {
     if (config.kind !== 'kubernetes') throw new Error('Expected a kubernetes environment config')
     return kubernetesConfigToManifest(config.kubernetes)
   },
-  fromManifest: (manifest) => ({ kind: 'kubernetes', kubernetes: parseKubernetesEnvConfig(manifest) }),
+  fromManifest: (manifest) => ({
+    kind: 'kubernetes',
+    kubernetes: parseKubernetesEnvConfig(manifest),
+  }),
   buildProvider: (ctx) => new KubernetesEnvironmentProvider({ urlPolicy: ctx.urlPolicy }),
 }
 

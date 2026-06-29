@@ -787,7 +787,8 @@ function selectNodeEnvConfigRepairer(deps: {
   const repairUrlPolicy = resolveUrlSafetyPolicy(deps.config.environments)
   const environmentProvider = !deps.resolveTransport
     ? undefined
-    : (deps.override ?? findRepairCapableProvider(repairUrlPolicy ? { urlPolicy: repairUrlPolicy } : {}))
+    : (deps.override ??
+      findRepairCapableProvider(repairUrlPolicy ? { urlPolicy: repairUrlPolicy } : {}))
   if (
     !deps.resolveTransport ||
     !publicUrl ||

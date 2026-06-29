@@ -29,6 +29,7 @@ point at a developer-run local k3s (its env URL-safety policy is widened to loop
 See `backend/docs/local-k3s-environments.md`.
 
 BREAKING (pre-1.0):
+
 - The `environments/connection` register/test wire shape now takes a discriminated `config`
   instead of a bare `manifest`, and the `environment_connections` table gains a `kind`
   column (existing rows backfill to `manifest`).

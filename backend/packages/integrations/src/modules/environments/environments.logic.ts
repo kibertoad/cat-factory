@@ -87,7 +87,10 @@ export function assertSafeEnvironmentUrl(
 }
 
 /** Validate every URL a manifest will fetch (defence against SSRF). */
-export function assertManifestUrlsSafe(manifest: EnvironmentManifest, policy: UrlSafetyPolicy): void {
+export function assertManifestUrlsSafe(
+  manifest: EnvironmentManifest,
+  policy: UrlSafetyPolicy,
+): void {
   assertSafeEnvironmentUrl(manifest.baseUrl, 'base URL', policy)
   if (manifest.auth.type === 'oauth2_client_credentials') {
     assertSafeEnvironmentUrl(manifest.auth.tokenUrl, 'OAuth token URL', policy)

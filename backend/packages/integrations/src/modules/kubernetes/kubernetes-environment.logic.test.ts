@@ -32,10 +32,7 @@ describe('resolveNamespace', () => {
   })
 
   it('sanitizes an unsafe namespace value to a valid label', () => {
-    const ns = resolveNamespace(
-      { ...baseConfig, namespaceTemplate: 'Feature/Login_Branch!' },
-      {},
-    )
+    const ns = resolveNamespace({ ...baseConfig, namespaceTemplate: 'Feature/Login_Branch!' }, {})
     expect(ns).toMatch(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/)
     expect(ns).toBe('feature-login-branch')
   })
@@ -127,7 +124,9 @@ describe('deriveUrl', () => {
 describe('extractLoadBalancerAddress', () => {
   it('prefers hostname over ip', () => {
     expect(
-      extractLoadBalancerAddress({ status: { loadBalancer: { ingress: [{ hostname: 'h', ip: '1.2.3.4' }] } } }),
+      extractLoadBalancerAddress({
+        status: { loadBalancer: { ingress: [{ hostname: 'h', ip: '1.2.3.4' }] } },
+      }),
     ).toBe('h')
   })
   it('returns null when no ingress address is assigned', () => {
@@ -146,14 +145,14 @@ describe('isManifestFile', () => {
 
 describe('classifyDeploymentReadiness', () => {
   it('is ready when availableReplicas meets the desired count', () => {
-    expect(classifyDeploymentReadiness({ spec: { replicas: 2 }, status: { availableReplicas: 2 } })).toBe(
-      'ready',
-    )
+    expect(
+      classifyDeploymentReadiness({ spec: { replicas: 2 }, status: { availableReplicas: 2 } }),
+    ).toBe('ready')
   })
   it('is pending while rolling out', () => {
-    expect(classifyDeploymentReadiness({ spec: { replicas: 2 }, status: { availableReplicas: 1 } })).toBe(
-      'pending',
-    )
+    expect(
+      classifyDeploymentReadiness({ spec: { replicas: 2 }, status: { availableReplicas: 1 } }),
+    ).toBe('pending')
   })
   it('is gone on a terminal ProgressDeadlineExceeded', () => {
     expect(
@@ -161,7 +160,9 @@ describe('classifyDeploymentReadiness', () => {
         spec: { replicas: 1 },
         status: {
           availableReplicas: 0,
-          conditions: [{ type: 'Progressing', status: 'False', reason: 'ProgressDeadlineExceeded' }],
+          conditions: [
+            { type: 'Progressing', status: 'False', reason: 'ProgressDeadlineExceeded' },
+          ],
         },
       }),
     ).toBe('gone')

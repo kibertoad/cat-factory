@@ -2654,7 +2654,10 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const registered = await call<{ providerId: string; secretKeys: string[] }>(
           'POST',
           `${base}/connection`,
-          { config: { kind: 'manifest', manifest }, secrets: { API_TOKEN: 'super-secret-env-token' } },
+          {
+            config: { kind: 'manifest', manifest },
+            secrets: { API_TOKEN: 'super-secret-env-token' },
+          },
         )
         expect(registered.status).toBe(201)
         expect(registered.body.providerId).toBe('acme-envs')

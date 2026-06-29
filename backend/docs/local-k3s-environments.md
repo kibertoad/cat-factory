@@ -48,10 +48,11 @@ backend with no extra code:
      k3s Traefik; or a `serviceStatus` LoadBalancer with k3s ServiceLB).
 
 Local mode widens the environment URL-safety policy by default (`ENVIRONMENTS_ALLOW_HTTP_URLS`
-+ a loopback/LAN `ENVIRONMENTS_ALLOW_URL_HOSTS` allow-list: `localhost`, `127.0.0.1`,
-`host.docker.internal`, `.localhost`, `.local`, `.nip.io`, `.sslip.io`) so the `http://localhost`
-/ ingress-host URL the provider returns is accepted. Add more hosts via
-`ENVIRONMENTS_ALLOW_URL_HOSTS`. Hosted facades keep the strict public-https default.
+
+- a loopback/LAN `ENVIRONMENTS_ALLOW_URL_HOSTS` allow-list: `localhost`, `127.0.0.1`,
+  `host.docker.internal`, `.localhost`, `.local`, `.nip.io`, `.sslip.io`) so the `http://localhost`
+  / ingress-host URL the provider returns is accepted. Add more hosts via
+  `ENVIRONMENTS_ALLOW_URL_HOSTS`. Hosted facades keep the strict public-https default.
 
 ## Future: managed local k3s lifecycle
 
@@ -66,7 +67,7 @@ cluster lifecycle itself — a cluster adapter analogous to the per-run `Contain
   cluster CA, and seed the workspace's `kubernetes` connection automatically (a `linkCluster`
   helper, analogous to local mode's `linkRepo`).
 - **Image loading**: a local image the PR built must be importable into the cluster (`k3d image
-  import`) rather than pulled from a registry — wire the provision flow to load `{{image}}` when
+import`) rather than pulled from a registry — wire the provision flow to load `{{image}}` when
   it's a local tag.
 - **URL exposure**: decide the default ingress story (k3d maps a host port to Traefik; the
   ingress-template host should resolve to that port). Document the `nip.io`/`localhost` host

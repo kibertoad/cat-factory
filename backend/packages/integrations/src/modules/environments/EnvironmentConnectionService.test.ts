@@ -94,7 +94,10 @@ describe('EnvironmentConnectionService — providerConfig round-trip', () => {
     const repo = fakeConnections()
     const service = makeService(repo)
 
-    await service.register('ws1', { config: { kind: 'manifest', manifest: baseManifest }, secrets: {} })
+    await service.register('ws1', {
+      config: { kind: 'manifest', manifest: baseManifest },
+      secrets: {},
+    })
 
     const { manifest: resolved } = await service.requireConnection('ws1')
     expect(resolved.providerConfig).toBeUndefined()
@@ -149,7 +152,10 @@ describe('EnvironmentConnectionService — describeProvider.missingRequired', ()
     const repo = fakeConnections()
     const service = nativeService(repo)
     await service.register('ws1', {
-      config: { kind: 'manifest', manifest: { ...baseManifest, providerConfig: { project: 'acme-web' } } },
+      config: {
+        kind: 'manifest',
+        manifest: { ...baseManifest, providerConfig: { project: 'acme-web' } },
+      },
       secrets: { apiToken: 'tok' },
     })
 
@@ -161,7 +167,10 @@ describe('EnvironmentConnectionService — describeProvider.missingRequired', ()
     const repo = fakeConnections()
     const service = nativeService(repo)
     await service.register('ws1', {
-      config: { kind: 'manifest', manifest: { ...baseManifest, providerConfig: { project: 'acme-web' } } },
+      config: {
+        kind: 'manifest',
+        manifest: { ...baseManifest, providerConfig: { project: 'acme-web' } },
+      },
       secrets: {},
     })
 
@@ -186,7 +195,10 @@ describe('EnvironmentConnectionService — describeProvider.missingRequired', ()
 
     expect((await service.describeProvider('ws1')).missingRequired).toEqual(['baseUrl'])
 
-    await service.register('ws1', { config: { kind: 'manifest', manifest: baseManifest }, secrets: {} })
+    await service.register('ws1', {
+      config: { kind: 'manifest', manifest: baseManifest },
+      secrets: {},
+    })
     expect((await service.describeProvider('ws1')).missingRequired).toEqual([])
   })
 
@@ -196,7 +208,13 @@ describe('EnvironmentConnectionService — describeProvider.missingRequired', ()
     const repo = fakeConnections()
     const service = nativeService(repo)
     await service.register('ws1', {
-      config: { kind: 'manifest', manifest: { ...baseManifest, providerConfig: { project: 'acme-web', nested: { a: [1, 2] } } } },
+      config: {
+        kind: 'manifest',
+        manifest: {
+          ...baseManifest,
+          providerConfig: { project: 'acme-web', nested: { a: [1, 2] } },
+        },
+      },
       secrets: { apiToken: 'super-secret-token' },
     })
 
@@ -331,7 +349,10 @@ describe('EnvironmentConnectionService — validateRepo', () => {
       resolveRepoFilesForWorkspace: async () => repoCtx(repo),
     })
     await service.register('ws1', {
-      config: { kind: 'manifest', manifest: { ...baseManifest, providerConfig: { project: 'acme' } } },
+      config: {
+        kind: 'manifest',
+        manifest: { ...baseManifest, providerConfig: { project: 'acme' } },
+      },
       secrets: {},
     })
 
@@ -360,7 +381,10 @@ describe('EnvironmentConnectionService — validateRepo', () => {
       } as unknown as EnvironmentProvider,
       resolveRepoFilesForWorkspace: async () => repoCtx(repo),
     })
-    await service.register('ws1', { config: { kind: 'manifest', manifest: baseManifest }, secrets: {} })
+    await service.register('ws1', {
+      config: { kind: 'manifest', manifest: baseManifest },
+      secrets: {},
+    })
 
     const result = await service.validateRepo('ws1', { owner: 'o', repo: 'r' })
     expect(result.ok).toBe(false)
@@ -423,7 +447,10 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
   it('mechanically commits the generated config and re-validates ok', async () => {
     const repo = fakeRepoFiles()
     const service = serviceWith(bootstrapProvider(), repo)
-    await service.register('ws1', { config: { kind: 'manifest', manifest: baseManifest }, secrets: {} })
+    await service.register('ws1', {
+      config: { kind: 'manifest', manifest: baseManifest },
+      secrets: {},
+    })
 
     const result = await service.bootstrapRepo('ws1', {
       owner: 'o',
@@ -440,7 +467,10 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
   it('is idempotent: skips committing when the file already matches', async () => {
     const repo = fakeRepoFiles({ '.kargo.yml': VALID })
     const service = serviceWith(bootstrapProvider(), repo)
-    await service.register('ws1', { config: { kind: 'manifest', manifest: baseManifest }, secrets: {} })
+    await service.register('ws1', {
+      config: { kind: 'manifest', manifest: baseManifest },
+      secrets: {},
+    })
 
     const result = await service.bootstrapRepo('ws1', { owner: 'o', repo: 'r', inputs: {} })
     expect(result.ok).toBe(true)
@@ -451,7 +481,10 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
   it('opens a PR onto the target branch when openPr is set', async () => {
     const repo = fakeRepoFiles()
     const service = serviceWith(bootstrapProvider(), repo)
-    await service.register('ws1', { config: { kind: 'manifest', manifest: baseManifest }, secrets: {} })
+    await service.register('ws1', {
+      config: { kind: 'manifest', manifest: baseManifest },
+      secrets: {},
+    })
 
     const result = await service.bootstrapRepo('ws1', {
       owner: 'o',
@@ -467,7 +500,10 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
   it('openPr re-run is idempotent: no duplicate commit or PR when content is unchanged', async () => {
     const repo = fakeRepoFiles()
     const service = serviceWith(bootstrapProvider(), repo)
-    await service.register('ws1', { config: { kind: 'manifest', manifest: baseManifest }, secrets: {} })
+    await service.register('ws1', {
+      config: { kind: 'manifest', manifest: baseManifest },
+      secrets: {},
+    })
 
     const first = await service.bootstrapRepo('ws1', {
       owner: 'o',
@@ -514,7 +550,10 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
         },
       },
     )
-    await service.register('ws1', { config: { kind: 'manifest', manifest: baseManifest }, secrets: {} })
+    await service.register('ws1', {
+      config: { kind: 'manifest', manifest: baseManifest },
+      secrets: {},
+    })
 
     const result = await service.bootstrapRepo('ws1', {
       owner: 'o',
@@ -535,7 +574,10 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
       bootstrapProvider({ describeRepairAgent: () => ({ prompt: 'fix' }) }),
       repo,
     )
-    await service.register('ws1', { config: { kind: 'manifest', manifest: baseManifest }, secrets: {} })
+    await service.register('ws1', {
+      config: { kind: 'manifest', manifest: baseManifest },
+      secrets: {},
+    })
 
     // Still invalid → ok:false.
     const before = await service.revalidate({
@@ -573,7 +615,10 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
         },
       },
     )
-    await service.register('ws1', { config: { kind: 'manifest', manifest: baseManifest }, secrets: {} })
+    await service.register('ws1', {
+      config: { kind: 'manifest', manifest: baseManifest },
+      secrets: {},
+    })
 
     const result = await service.bootstrapRepo('ws1', { owner: 'o', repo: 'r', inputs: {} })
     expect(dispatched).toBe(false)

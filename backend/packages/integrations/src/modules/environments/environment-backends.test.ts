@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { EnvironmentBackendConfig, EnvironmentManifest } from '@cat-factory/kernel'
-import {
-  environmentBackend,
-  registeredEnvironmentBackendKinds,
-} from './environment-backends.js'
+import { environmentBackend, registeredEnvironmentBackendKinds } from './environment-backends.js'
 import { HttpEnvironmentProvider } from './HttpEnvironmentProvider.js'
 import { KubernetesEnvironmentProvider } from '../kubernetes/KubernetesEnvironmentProvider.js'
 

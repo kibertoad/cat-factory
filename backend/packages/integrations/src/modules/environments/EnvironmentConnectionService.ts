@@ -23,14 +23,8 @@ import type {
 import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
-import {
-  environmentBackend,
-  type EnvironmentBackendProvider,
-} from './environment-backends.js'
-import {
-  missingRequiredConfigKeys,
-  stringifyProviderConfig,
-} from './environments.logic.js'
+import { environmentBackend, type EnvironmentBackendProvider } from './environment-backends.js'
+import { missingRequiredConfigKeys, stringifyProviderConfig } from './environments.logic.js'
 import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningLogService.js'
 
 /**
@@ -475,7 +469,8 @@ export class EnvironmentConnectionService {
     workspaceId: string,
   ): Promise<{ provider: EnvironmentProvider; manifest: EnvironmentManifest }> {
     const { record, manifest } = await this.requireConnection(workspaceId)
-    const provider = this.deps.environmentProvider ?? this.buildProvider(this.requireBackend(record.kind))
+    const provider =
+      this.deps.environmentProvider ?? this.buildProvider(this.requireBackend(record.kind))
     return { provider, manifest }
   }
 

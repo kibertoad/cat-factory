@@ -7,12 +7,7 @@ import type {
 } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { makeApp } from '../helpers'
-import {
-  bearerConfig,
-  readyEnvBody,
-  recordingFetch,
-  TEST_API_TOKEN,
-} from './environment.fixtures'
+import { bearerConfig, readyEnvBody, recordingFetch, TEST_API_TOKEN } from './environment.fixtures'
 
 /** Captures the context each agent step receives, so we can assert discovery. */
 class RecordingAgentExecutor implements AgentExecutor {

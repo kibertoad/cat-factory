@@ -65,14 +65,18 @@ export function isSupportedKind(kind: string): boolean {
  * The config was Valibot-validated at the connect controller boundary, so this trusts
  * the stored shape (a cast) rather than re-parsing (which would pull valibot in here).
  */
-export function parseKubernetesEnvConfig(manifest: EnvironmentManifest): KubernetesEnvironmentConfig {
+export function parseKubernetesEnvConfig(
+  manifest: EnvironmentManifest,
+): KubernetesEnvironmentConfig {
   const raw = manifest.providerConfig
   if (!raw) throw new Error('Kubernetes environment manifest is missing its providerConfig')
   return raw as unknown as KubernetesEnvironmentConfig
 }
 
 /** Build the stored manifest that carries a Kubernetes env config in its providerConfig. */
-export function kubernetesConfigToManifest(config: KubernetesEnvironmentConfig): EnvironmentManifest {
+export function kubernetesConfigToManifest(
+  config: KubernetesEnvironmentConfig,
+): EnvironmentManifest {
   return {
     providerId: 'kubernetes',
     label: config.label,
@@ -145,7 +149,9 @@ export function resourceUrl(
   const slash = apiVersion.indexOf('/')
   const group = slash === -1 ? '' : apiVersion.slice(0, slash)
   const version = slash === -1 ? apiVersion : apiVersion.slice(slash + 1)
-  const root = group ? `${apiBase(config)}/apis/${group}/${version}` : `${apiBase(config)}/api/${version}`
+  const root = group
+    ? `${apiBase(config)}/apis/${group}/${version}`
+    : `${apiBase(config)}/api/${version}`
   const nsSeg = meta.namespaced ? `/namespaces/${encodeURIComponent(namespace)}` : ''
   const nameSeg = name ? `/${encodeURIComponent(name)}` : ''
   return `${root}${nsSeg}/${meta.plural}${nameSeg}`
@@ -184,9 +190,9 @@ export function parseManifests(
       ...json.metadata,
       namespace,
       labels: {
-        ...(json.metadata.labels ?? {}),
+        ...json.metadata.labels,
         ...(blockId ? { [ENV_BLOCK_LABEL]: labelValue(blockId) } : {}),
-        ...(extraLabels ?? {}),
+        ...extraLabels,
       },
     }
     out.push(json)
