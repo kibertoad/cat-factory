@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { EnvironmentBackendConfig, EnvironmentManifest } from '@cat-factory/kernel'
-import { environmentBackend, registeredEnvironmentBackendKinds } from './environment-backends.js'
+import {
+  environmentBackend,
+  environmentBackendKinds,
+  registerEnvironmentBackend,
+  registeredEnvironmentBackendKinds,
+  type EnvironmentBackendProvider,
+} from './environment-backends.js'
 import { HttpEnvironmentProvider } from './HttpEnvironmentProvider.js'
 import { KubernetesEnvironmentProvider } from '../kubernetes/KubernetesEnvironmentProvider.js'
 
@@ -77,5 +83,36 @@ describe('environment-backends registry', () => {
     )
     // Allowed on a runtime that supports custom TLS.
     expect(() => backend.assertConfigSafe(withCa, { customTlsSupported: true })).not.toThrow()
+  })
+
+  // NB: registers an extra kind, so it runs AFTER the exact-set assertion above.
+  it('accepts a programmatically-registered CUSTOM kind + advertises it with its label', () => {
+    const custom: EnvironmentBackendProvider = {
+      kind: 'acme-cloud',
+      displayLabel: 'Acme Cloud',
+      referencedSecretKeys: () => ['ACME_TOKEN'],
+      connectionMeta: (config) => ({
+        providerId: 'acme-cloud',
+        label: 'manifest' in config ? config.manifest.label : 'Acme Cloud',
+        baseUrl: 'manifest' in config ? config.manifest.baseUrl : '',
+      }),
+      assertConfigSafe: () => {},
+      toManifest: (config) => {
+        if (!('manifest' in config)) throw new Error('expected manifest')
+        return config.manifest
+      },
+      fromManifest: (m) => ({ kind: 'acme-cloud', manifest: m }),
+      buildProvider: (ctx) =>
+        new HttpEnvironmentProvider(ctx.urlPolicy ? { urlPolicy: ctx.urlPolicy } : {}),
+    }
+    registerEnvironmentBackend(custom)
+    expect(registeredEnvironmentBackendKinds()).toContain('acme-cloud')
+    expect(environmentBackendKinds()).toContainEqual({ kind: 'acme-cloud', label: 'Acme Cloud' })
+    // The built-ins still carry their labels (displayLabel ?? kind).
+    expect(environmentBackendKinds()).toContainEqual({ kind: 'manifest', label: 'HTTP manifest' })
+    // A custom config (manifest-shaped) round-trips through the registered backend.
+    const config: EnvironmentBackendConfig = { kind: 'acme-cloud', manifest }
+    expect(custom.referencedSecretKeys(config)).toEqual(['ACME_TOKEN'])
+    expect(environmentBackend('acme-cloud')?.connectionMeta(config).providerId).toBe('acme-cloud')
   })
 })

@@ -4,6 +4,7 @@ import {
   environmentRequestTemplateSchema,
   environmentSecretRefSchema,
 } from './environments.js'
+import { customBackendKindSchema } from './primitives.js'
 
 // ---------------------------------------------------------------------------
 // Self-hosted runner-pool wire contracts ("bring your own infra").
@@ -200,17 +201,31 @@ export const runnerPoolManifestSchema = v.object({
 })
 export type RunnerPoolManifest = v.InferOutput<typeof runnerPoolManifestSchema>
 
+/** Built-in runner backend kinds the contract knows by name. */
+export const RESERVED_RUNNER_BACKEND_KINDS = ['manifest', 'kubernetes'] as const
+
+/**
+ * The `kind` slug of a CUSTOM (third-party, programmatically-registered) runner backend:
+ * any lower-kebab slug that isn't a reserved built-in. A custom runner backend rides the
+ * generic `runnerPoolManifestSchema` body — its scheduler endpoints/secret refs live there
+ * exactly like the manifest built-in — and the registered `RunnerBackendProvider` (resolved
+ * by `kind`) builds the real transport. The reserved-kind guard stops a wrong-shaped
+ * built-in payload from silently matching this generic member instead of failing.
+ */
+export const customRunnerBackendKindSchema = customBackendKindSchema(RESERVED_RUNNER_BACKEND_KINDS)
+
 /**
  * An "agent runner backend" config, discriminated by `kind`. This is the universal
- * abstraction over WHERE repo-operating coding jobs run: today `manifest` (the BYO
- * HTTP scheduler pool) and `kubernetes` (native per-run pods); future kinds
- * (`nomad`, `eks`, …) add a member here + a provider in `@cat-factory/integrations`
- * — no new table/service/controller/UI window. The provider-registry seam keys on
- * `kind`.
+ * abstraction over WHERE repo-operating coding jobs run: the built-ins `manifest` (the BYO
+ * HTTP scheduler pool) and `kubernetes` (native per-run pods), plus any CUSTOM kind a
+ * deployment registers programmatically via `registerRunnerBackend` (it rides the generic
+ * manifest member — NO new variant needed). Mirrors `environmentBackendConfigSchema`; the
+ * provider-registry seam keys on `kind`.
  */
 export const runnerBackendConfigSchema = v.variant('kind', [
   v.object({ kind: v.literal('manifest'), manifest: runnerPoolManifestSchema }),
   v.object({ kind: v.literal('kubernetes'), kubernetes: kubernetesRunnerConfigSchema }),
+  v.object({ kind: customRunnerBackendKindSchema, manifest: runnerPoolManifestSchema }),
 ])
 export type RunnerBackendConfig = v.InferOutput<typeof runnerBackendConfigSchema>
 export type RunnerBackendKind = RunnerBackendConfig['kind']

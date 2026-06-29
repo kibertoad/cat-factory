@@ -13,12 +13,14 @@ import { HttpEnvironmentProvider } from './HttpEnvironmentProvider.js'
 
 // The ephemeral-environment backend provider-registry seam. A backend kind
 // (`manifest` = generic BYO HTTP management API, `kubernetes` = native per-PR
-// namespaces, future `nomad`/…) registers an EnvironmentBackendProvider that maps its
-// discriminated config → an EnvironmentProvider. The connection service resolves a
-// workspace's stored `kind` to the registered backend — so adding a backend is ONE
-// registry entry + a config variant + a UI form, with no new table/service/controller.
-// Mirrors `runner-backends.ts` and the registerGate / model-provider seams: built-ins
-// self-register on import; a third-party kind registers by importing for side effect.
+// namespaces, plus any CUSTOM kind) registers an EnvironmentBackendProvider that maps its
+// config → an EnvironmentProvider. The connection service resolves a workspace's stored
+// `kind` to the registered backend. A CUSTOM third-party kind needs only a registry entry
+// (an import side effect) — it rides the contract's generic manifest member, so NO new
+// config variant and no new table/service/controller; its connect form is derived from the
+// provider's `describeConfig`/`describeManifestTemplate` (or falls back to the raw manifest
+// editor). Mirrors `runner-backends.ts` and the registerGate / model-provider / agent-kind
+// seams: built-ins self-register on import; a third-party kind registers for side effect.
 //
 // The stored connection always persists an EnvironmentManifest (the K8s config rides
 // its `providerConfig`), so a backend supplies `toManifest`/`fromManifest` to translate
@@ -43,7 +45,15 @@ export interface EnvironmentBackendSafetyOptions {
 }
 
 export interface EnvironmentBackendProvider {
-  readonly kind: EnvironmentBackendConfig['kind']
+  // `string`, not the contract's discriminated `kind`, so a CUSTOM third-party kind can
+  // register (the built-ins still use their literals). Pinned explicitly so a future
+  // contract re-narrowing can't silently re-lock the registry to the built-in set.
+  readonly kind: string
+  /**
+   * Human label for the connect-form backend selector + the snapshot (an unconnected kind
+   * has no stored config to derive a label from). Defaults to `kind` when omitted.
+   */
+  readonly displayLabel?: string
   /** Every secret-bundle key the config references (validated present at registration). */
   referencedSecretKeys(config: EnvironmentBackendConfig): string[]
   /** Non-secret metadata persisted on the connection row + shown in the UI. */
@@ -80,6 +90,14 @@ export function registeredEnvironmentBackendKinds(): string[] {
 }
 
 /**
+ * Registered backend kinds + display labels, for the workspace snapshot → the SPA's
+ * provider-connect backend-kind selector. Always includes the built-ins.
+ */
+export function environmentBackendKinds(): { kind: string; label: string }[] {
+  return [...REGISTRY.values()].map((p) => ({ kind: p.kind, label: p.displayLabel ?? p.kind }))
+}
+
+/**
  * The first registered backend whose provider supports agent-based config repair
  * (`describeRepairAgent`) — used by a facade to wire the env-config-repair agent. Built-ins
  * don't support repair, so this is undefined on a stock deployment; a third-party backend
@@ -100,6 +118,7 @@ export function findRepairCapableProvider(
 
 export const manifestEnvironmentBackend: EnvironmentBackendProvider = {
   kind: 'manifest',
+  displayLabel: 'HTTP manifest',
   referencedSecretKeys: (config) =>
     config.kind === 'manifest' ? referencedSecretKeys(config.manifest) : [],
   connectionMeta: (config) => {

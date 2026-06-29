@@ -48,6 +48,9 @@ export const unregisterRunnerPoolContract = defineApiContract({
 export const describeRunnerPoolProviderContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/runner-pool/provider',
+  // Optional `kind` describes a REGISTERED backend that isn't connected yet. Omitted ⇒ the
+  // stored kind, else the default `manifest` backend.
+  requestQuerySchema: v.object({ kind: v.optional(v.string()) }),
   responsesByStatusCode: { 200: providerDescriptorSchema, ...errorResponses },
 })
 

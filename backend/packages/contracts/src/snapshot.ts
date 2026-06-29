@@ -24,6 +24,13 @@ import { customAgentKindSchema } from './agent-presentation.js'
 // ./bootstrap, and ./bootstrap imports from ./entities — defining it in either
 // would be a circular import.
 
+/** A selectable infra backend kind advertised to the SPA's connect form. */
+export const backendKindOptionSchema = v.object({
+  kind: v.string(),
+  label: v.string(),
+})
+export type BackendKindOption = v.InferOutput<typeof backendKindOptionSchema>
+
 export const workspaceSnapshotSchema = v.object({
   workspace: workspaceSchema,
   blocks: v.array(blockSchema),
@@ -128,6 +135,18 @@ export const workspaceSnapshotSchema = v.object({
    * by the facade, so optional on the wire and omitted when no custom kind is registered.
    */
   customAgentKinds: v.optional(v.array(customAgentKindSchema)),
+  /**
+   * The registered ephemeral-environment / runner-pool backend kinds (built-in + any a
+   * deployment registered via `registerEnvironmentBackend` / `registerRunnerBackend`), each
+   * `{ kind, label }`. The SPA drives the provider-connect backend-kind selector from these
+   * instead of a hardcoded `manifest`/`kubernetes` list, so a programmatically-registered
+   * custom backend becomes a first-class connect option. Static (process-global registry),
+   * workspace-independent; attached by the facade `WorkspaceController` (the registry lives in
+   * `@cat-factory/integrations`, which the `workspaces` package doesn't depend on). Optional on
+   * the wire; the SPA falls back to the built-ins when absent.
+   */
+  environmentBackendKinds: v.optional(v.array(backendKindOptionSchema)),
+  runnerBackendKinds: v.optional(v.array(backendKindOptionSchema)),
   /**
    * Current built-in pipeline catalog versions (`seedPipelines()`), keyed by pipeline id. The
    * SPA compares each persisted built-in's `version` against this to detect a stale copy and

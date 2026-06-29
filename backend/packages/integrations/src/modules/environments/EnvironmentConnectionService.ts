@@ -163,27 +163,36 @@ export class EnvironmentConnectionService {
 
   /**
    * Describe the provider's config fields for the UI (what to render and whether a
-   * connection test is available). Resolves the backend for the workspace's stored
-   * connection (or the default `manifest` backend when none is registered).
+   * connection test is available). With no `kind`, describes the workspace's stored
+   * connection (or the default `manifest` backend when none is registered). With an
+   * explicit `kind`, describes that REGISTERED backend even when it isn't connected yet —
+   * so the SPA can render a custom kind's connect form before the first connect. The
+   * stored manifest/secrets are folded in only when the requested kind matches the stored
+   * one (a different kind starts blank).
    */
-  async describeProvider(workspaceId: string): Promise<ProviderDescriptor> {
+  async describeProvider(workspaceId: string, kind?: string): Promise<ProviderDescriptor> {
     const record = await this.deps.environmentConnectionRepository.getByWorkspace(workspaceId)
-    const kind = record?.kind ?? 'manifest'
-    const backend = this.requireBackend(kind)
+    const resolvedKind = kind ?? record?.kind ?? 'manifest'
+    const backend = this.requireBackend(resolvedKind)
     const provider = this.deps.environmentProvider ?? this.buildProvider(backend)
     const overridden = !!this.deps.environmentProvider
-    const manifest = record ? (JSON.parse(record.manifestJson) as EnvironmentManifest) : undefined
+    // Fold in the stored manifest/secrets only when describing the kind that is actually
+    // connected; describing a different (e.g. not-yet-connected custom) kind starts blank.
+    const useStored = !!record && resolvedKind === record.kind
+    const manifest = useStored
+      ? (JSON.parse(record!.manifestJson) as EnvironmentManifest)
+      : undefined
     const configFields = provider.describeConfig?.(manifest) ?? []
     const storedKeys: string[] = []
-    if (record) {
-      storedKeys.push(...Object.keys(await this.decryptSecrets(record)))
+    if (useStored) {
+      storedKeys.push(...Object.keys(await this.decryptSecrets(record!)))
       if (manifest?.providerConfig) storedKeys.push(...Object.keys(manifest.providerConfig))
       if (manifest?.baseUrl) storedKeys.push('baseUrl')
     }
     return {
-      providerId: record?.providerId ?? kind,
-      label: record?.label ?? kind,
-      kind: overridden || kind !== 'manifest' ? 'native' : 'manifest',
+      providerId: useStored ? record!.providerId : resolvedKind,
+      label: useStored ? record!.label : (backend.displayLabel ?? resolvedKind),
+      kind: overridden || resolvedKind !== 'manifest' ? 'native' : 'manifest',
       configFields,
       supportsTest: typeof provider.testConnection === 'function',
       supportsRepoValidation: typeof provider.validateRepo === 'function',

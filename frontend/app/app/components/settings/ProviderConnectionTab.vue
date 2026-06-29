@@ -15,8 +15,9 @@ import KubernetesEnvironmentForm from '~/components/settings/KubernetesEnvironme
 
 const props = defineProps<{
   kind: ProviderConnectionKind
-  /** Which connect form to show — chosen by the parent picker's radio, not a local dropdown. */
-  backendKind: 'manifest' | 'kubernetes'
+  /** The selected backend-kind slug — chosen by the parent picker's radio, not a local
+   *  dropdown. Built-in (`manifest`/`kubernetes`) or a deployment-registered custom kind. */
+  backendKind: string
   /** A low-config preset to prefill the Kubernetes form (today: local k3s). */
   preset?: 'k3s'
   /** The deployment's executor image, used to prefill the k3s preset's image field. */
@@ -41,7 +42,7 @@ const title = computed(() => t(`settings.providerConnection.kind.${props.kind}.t
 
 watch(
   () => props.kind,
-  (k) => void store.loadKind(k).then(resetDraft),
+  (k) => void store.loadKind(k, props.backendKind).then(resetDraft),
   { immediate: true },
 )
 
@@ -98,6 +99,7 @@ const canSave = computed(() => {
 function buildManifestPayload(): {
   manifest: Record<string, unknown>
   secrets: Record<string, string>
+  backendKind: string
 } | null {
   const template = descriptor.value?.manifestTemplate
   if (!template) return null
@@ -116,7 +118,9 @@ function buildManifestPayload(): {
     else providerConfig[f.key] = val
   }
   if (Object.keys(providerConfig).length) manifest.providerConfig = providerConfig
-  return { manifest, secrets }
+  // Carry the selected kind so a CUSTOM backend's flat-form save is tagged with its slug
+  // (not silently wrapped into the built-in `manifest` backend).
+  return { manifest, secrets, backendKind: props.backendKind }
 }
 
 function notifyError(title: string, e: unknown) {
@@ -167,6 +171,8 @@ async function saveNative() {
 }
 
 // --- Manifest-editor actions (emitted from ProviderManifestEditor) ------------------
+// Tag the raw-manifest save/test with the selected backend kind too, so a CUSTOM kind that
+// ships no flat-form template (and thus uses the raw editor) isn't mis-tagged as `manifest`.
 async function testManifest(payload: {
   manifest: Record<string, unknown>
   secrets: Record<string, string>
@@ -174,7 +180,7 @@ async function testManifest(payload: {
   testing.value = true
   testResult.value = null
   try {
-    testResult.value = await store.test(props.kind, payload)
+    testResult.value = await store.test(props.kind, { ...payload, backendKind: props.backendKind })
   } catch (e) {
     testResult.value = { ok: false, message: e instanceof Error ? e.message : String(e) }
   } finally {
@@ -188,7 +194,7 @@ async function saveManifest(payload: {
 }) {
   busy.value = true
   try {
-    await store.register(props.kind, payload)
+    await store.register(props.kind, { ...payload, backendKind: props.backendKind })
     emit('connected')
     toastSaved()
   } catch (e) {
@@ -199,9 +205,19 @@ async function saveManifest(payload: {
 }
 
 // --- Backend connect forms ------------------------------------------------------------
-// Which form to render (the native Kubernetes form or the BYO manifest editor) is decided
-// by the parent picker's radio and passed in as `backendKind` — there is no longer a local
-// dropdown here.
+// Which backend kind to configure (the built-in `manifest`/`kubernetes` backends or any
+// CUSTOM kind a deployment registered) is decided by the parent picker's unified radio and
+// passed in as `backendKind` — there is no longer a local dropdown here. The two K8s
+// backends have bespoke forms; every other kind (manifest + custom) uses the descriptor-
+// driven flat form / raw manifest editor. Switching the kind re-probes ONLY that kind's
+// descriptor (so a not-yet-connected custom kind's connect form renders) WITHOUT re-fetching
+// the stored connection — using `loadDescriptor` (not `loadKind`) avoids bouncing the
+// picker's selection back to the stored kind via a connection re-read.
+watch(
+  () => props.backendKind,
+  (k) => void store.loadDescriptor(props.kind, k).then(resetDraft),
+)
+
 async function testConfig(payload: {
   config: Record<string, unknown>
   secrets: Record<string, string>
