@@ -1,14 +1,21 @@
 import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
+  bootstrapEnvironmentRepoSchema,
   environmentConnectionSchema,
   environmentHandleSchema,
   provisionEnvironmentSchema,
   registerEnvironmentProviderSchema,
   testEnvironmentConnectionSchema,
   updateEnvironmentSecretsSchema,
+  validateEnvironmentRepoSchema,
 } from '../environments.js'
-import { connectionTestResultSchema, providerDescriptorSchema } from '../provider-config.js'
+import {
+  bootstrapRepoResultSchema,
+  connectionTestResultSchema,
+  providerDescriptorSchema,
+  repoValidationResultSchema,
+} from '../provider-config.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -64,6 +71,24 @@ export const testEnvironmentConnectionContract = defineApiContract({
   pathResolver: () => '/environments/connection/test',
   requestBodySchema: testEnvironmentConnectionSchema,
   responsesByStatusCode: { 200: connectionTestResultSchema, ...errorResponses },
+})
+
+// Validate that a target repo satisfies the provider's config expectations (e.g. a
+// Kargo `.kargo.yml` is present + well-formed). Nothing persisted.
+export const validateEnvironmentRepoContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/environments/connection/validate-repo',
+  requestBodySchema: validateEnvironmentRepoSchema,
+  responsesByStatusCode: { 200: repoValidationResultSchema, ...errorResponses },
+})
+
+// Mechanically bootstrap (and optionally agent-repair) the provider's config file in
+// a target repo from UI-collected variables.
+export const bootstrapEnvironmentRepoContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/environments/connection/bootstrap-repo',
+  requestBodySchema: bootstrapEnvironmentRepoSchema,
+  responsesByStatusCode: { 200: bootstrapRepoResultSchema, ...errorResponses },
 })
 
 export const listEnvironmentsContract = defineApiContract({

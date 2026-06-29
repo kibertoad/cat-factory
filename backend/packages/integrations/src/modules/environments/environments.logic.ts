@@ -169,6 +169,25 @@ export function assertSafeEnvironmentUrl(
 }
 
 /**
+ * Stringify a manifest's opaque `providerConfig` bag (`Record<string, unknown>`) into
+ * the `Record<string, string>` a native adapter receives. The bag can carry nested
+ * values (objects/arrays — see `providerDescriptorSchema.manifestTemplate`), so a plain
+ * `String(v)` would mangle them into `[object Object]` / comma-joined garbage; serialize
+ * non-primitive values as JSON instead so the provider sees a faithful representation.
+ */
+export function stringifyProviderConfig(
+  config: Record<string, unknown> | undefined,
+): Record<string, string> | undefined {
+  if (!config) return undefined
+  return Object.fromEntries(
+    Object.entries(config).map(([k, v]) => [
+      k,
+      v !== null && typeof v === 'object' ? JSON.stringify(v) : String(v),
+    ]),
+  )
+}
+
+/**
  * Render a manifest's referenced secret keys as password config fields, so the
  * manifest editor can show which secrets a connection still needs. Shared by the
  * generic environment + runner-pool providers' `describeConfig`.

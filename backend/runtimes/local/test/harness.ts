@@ -124,6 +124,8 @@ export function makeConformanceApp(
     cloudflareModelsEnabled?: boolean
     resolveRunRepoContext?: CoreDependencies['resolveRunRepoContext']
     gateProviders?: GateProviderOverrides
+    environmentProvider?: CoreDependencies['environmentProvider']
+    resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
     /**
      * Keep the REAL local-mode Tester default (`local` / host DinD) instead of pinning the
      * neutral `ephemeral` used for the shared assertions. Local-only tests that assert the
@@ -150,6 +152,17 @@ export function makeConformanceApp(
     // Inject the engine's run-repo resolver (a fake in the suite) so the registered
     // custom kind's pre/post-op hooks run + commit identically to a real GitHub-wired facade.
     ...(opts?.resolveRunRepoContext ? { resolveRunRepoContext: opts.resolveRunRepoContext } : {}),
+    // Inject a native environment provider + the block-less coords resolver (both fakes
+    // in the suite) so the on-demand repo-config validate route is asserted end-to-end
+    // against real Postgres, identically to the Worker/Node. Overrides are spread last in
+    // buildNodeContainer (reused by buildLocalContainer), so they win over the default
+    // HttpEnvironmentProvider.
+    ...(opts?.environmentProvider
+      ? { environmentProvider: opts.environmentProvider, environmentProviderKind: 'native' }
+      : {}),
+    ...(opts?.resolveRepoFilesForCoords
+      ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
+      : {}),
     // Pin the facade-NEUTRAL Tester default (`ephemeral`) for the SHARED conformance
     // assertions: local mode's real default is `local` (host DinD), a facade-specific
     // behavior covered by its own tests — but the shared fixtures don't configure a

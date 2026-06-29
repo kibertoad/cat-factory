@@ -245,6 +245,40 @@ export const testEnvironmentConnectionSchema = v.object({
 })
 export type TestEnvironmentConnectionInput = v.InferOutput<typeof testEnvironmentConnectionSchema>
 
+/**
+ * Validate a target repo against the provider's expectations on demand (no block
+ * context). The operator supplies the repo coordinates + ref; nothing is persisted.
+ */
+export const validateEnvironmentRepoSchema = v.object({
+  owner: v.pipe(v.string(), v.minLength(1)),
+  repo: v.pipe(v.string(), v.minLength(1)),
+  /** Branch/tag/sha to read at; absent ⇒ the repo's default branch. */
+  gitRef: v.optional(v.pipe(v.string(), v.minLength(1))),
+  /** Optional VCS provider hint; absent ⇒ the workspace's connected provider. */
+  provider: v.optional(v.picklist(['github', 'gitlab'])),
+})
+export type ValidateEnvironmentRepoInput = v.InferOutput<typeof validateEnvironmentRepoSchema>
+
+/**
+ * Mechanically bootstrap the provider's config file into a target repo from the
+ * variables the bootstrap form collected, optionally opening a PR and/or allowing the
+ * agent-repair fallback when mechanical generation can't produce a valid config.
+ */
+export const bootstrapEnvironmentRepoSchema = v.object({
+  owner: v.pipe(v.string(), v.minLength(1)),
+  repo: v.pipe(v.string(), v.minLength(1)),
+  /** Branch to write to; absent ⇒ the repo's default branch (the ref the provider reads). */
+  gitRef: v.optional(v.pipe(v.string(), v.minLength(1))),
+  provider: v.optional(v.picklist(['github', 'gitlab'])),
+  /** Variables collected by the bootstrap form (keyed by `describeBootstrapInputs`). */
+  inputs: v.record(v.string(), v.string()),
+  /** Open a PR instead of committing straight to the branch. */
+  openPr: v.optional(v.boolean()),
+  /** Allow dispatching the repair agent when mechanical bootstrap can't do it. */
+  allowAgentFallback: v.optional(v.boolean()),
+})
+export type BootstrapEnvironmentRepoInput = v.InferOutput<typeof bootstrapEnvironmentRepoSchema>
+
 /** Manually provision an environment (outside a pipeline run). */
 export const provisionEnvironmentSchema = v.object({
   blockId: v.optional(v.pipe(v.string(), v.minLength(1))),

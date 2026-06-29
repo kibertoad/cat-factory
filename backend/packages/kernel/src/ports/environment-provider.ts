@@ -89,6 +89,126 @@ export interface EnvironmentConnectionTestRequest {
   resolveSecret: SecretResolver
 }
 
+// ---------------------------------------------------------------------------
+// Repo lifecycle: validate / bootstrap / agent-repair the provider's config in
+// the TARGET repo (e.g. a Kargo `.kargo.yml`). Some providers (Kargo) require a
+// config file to exist in the deployed repo before they can provision. These
+// OPTIONAL capabilities let a native adapter (a) mechanically verify that file is
+// present + well-formed, (b) mechanically generate it from UI-collected variables,
+// and (c) supply an agent prompt to fix a malformed/partial one when mechanical
+// generation can't. The provider supplies the EXPECTATIONS / generation / prompt;
+// the engine supplies the VCS-neutral read+write and the agent runtime — so the
+// provider never sees a VCS host or a token (GitHub today, GitLab later).
+// ---------------------------------------------------------------------------
+
+/**
+ * A VCS-neutral, already-bound file reader handed to a provider so it can inspect a
+ * target repo WITHOUT knowing the VCS host. The engine builds it from the workspace's
+ * resolved RepoFiles (GitHub today, GitLab later); the provider only names paths.
+ * Returns null when the path is absent on the ref.
+ */
+export type RepoFileReader = (
+  path: string,
+  gitRef?: string,
+) => Promise<{ content: string; sha: string } | null>
+
+/** Severity of a single repo-validation finding. */
+export type RepoValidationSeverity = 'error' | 'warning'
+
+/** One finding from a repo validation (a missing/invalid file, a bad field, etc.). */
+export interface RepoValidationIssue {
+  severity: RepoValidationSeverity
+  /** Human-readable explanation, safe to surface to an operator. */
+  message: string
+  /** The repo-relative path the issue concerns, when applicable (e.g. `.kargo.yml`). */
+  path?: string
+}
+
+/**
+ * Ask a provider to mechanically verify a target repo contains the files it needs
+ * BEFORE provisioning. The engine supplies the neutral reader (already bound to the
+ * workspace's repo + connection); the provider supplies the expectations.
+ */
+export interface RepoValidationRequest {
+  /** VCS-neutral read of a file on `defaultGitRef` (or an explicit ref). */
+  readRepoFile: RepoFileReader
+  /** The ref to read at when a call omits one (PR head branch / default branch). */
+  defaultGitRef?: string
+  /** Display-only repo coordinates, for messages. NOT used to build a client. */
+  repoOwner?: string
+  repoName?: string
+  /** Per-workspace native config (the manifest's `providerConfig` bag), when known. */
+  config?: Record<string, string>
+  resolveSecret: SecretResolver
+}
+
+/** The outcome of a repo validation: ok plus structured issues. */
+export interface RepoValidationResult {
+  ok: boolean
+  issues: RepoValidationIssue[]
+}
+
+/** One file the bootstrap op will write into the repo (create or update). */
+export interface BootstrapConfigFile {
+  path: string
+  content: string
+}
+
+/**
+ * Ask a provider to mechanically GENERATE its config file(s) for a target repo from
+ * variables collected via the UI bootstrapping form. The provider returns the file
+ * bytes; the ENGINE commits them through the VCS-neutral writer (so the provider stays
+ * side-effect-free). The provider may also read existing files (to detect/merge an
+ * existing config) via `readRepoFile`.
+ */
+export interface BootstrapConfigRequest {
+  /** Variables collected from the UI form (keyed by `describeBootstrapInputs` keys). */
+  inputs: Record<string, string>
+  /** VCS-neutral read, to detect/merge an existing config. */
+  readRepoFile: RepoFileReader
+  defaultGitRef?: string
+  repoOwner?: string
+  repoName?: string
+  config?: Record<string, string>
+  resolveSecret: SecretResolver
+}
+
+/** The provider's mechanical-bootstrap output: files to write, or "needs an agent". */
+export interface BootstrapConfigResult {
+  /** Files the engine should create/update. Empty ⇒ nothing to write. */
+  files: BootstrapConfigFile[]
+  /** Suggested commit message / PR title for the write. */
+  commitMessage?: string
+  /**
+   * The provider could NOT safely produce the config mechanically (e.g. an existing
+   * config is present but malformed and merging is ambiguous). The engine falls back
+   * to the repair agent (`describeRepairAgent`) when allowed.
+   */
+  needsAgent?: boolean
+  /** Diagnostics explaining a `needsAgent` outcome (or non-fatal warnings). */
+  issues?: RepoValidationIssue[]
+}
+
+/**
+ * Context for building the repair-agent prompt: the validation issues that triggered
+ * the repair, plus the bootstrap variables/coords (so the prompt can be specific).
+ */
+export interface RepairAgentRequest {
+  issues: RepoValidationIssue[]
+  inputs?: Record<string, string>
+  repoOwner?: string
+  repoName?: string
+  config?: Record<string, string>
+}
+
+/** The prompt a coding agent is dispatched with to fix a malformed provider config. */
+export interface RepairAgentSpec {
+  /** The user prompt handed to the coding agent. */
+  prompt: string
+  /** Optional extra system guidance appended to the base coding role. */
+  systemPromptAddendum?: string
+}
+
 export interface EnvironmentProvider {
   provision(req: ProvisionEnvironmentRequest): Promise<ProvisionedEnvironment>
   status(req: EnvironmentStatusRequest): Promise<ProvisionedEnvironment>
@@ -115,4 +235,31 @@ export interface EnvironmentProvider {
   describeManifestTemplate?(): EnvironmentManifest
   /** Probe the connection without persisting. Optional — absent ⇒ "nothing to test". */
   testConnection?(req: EnvironmentConnectionTestRequest): Promise<ConnectionTestResult>
+  /**
+   * Mechanically verify a target repo satisfies this provider's expectations
+   * (required files present + well-formed) BEFORE provisioning. The engine hands a
+   * VCS-neutral `readRepoFile`; the provider declares what it needs. Optional —
+   * absent ⇒ "no repo validation" (the engine skips the pre-flight gate).
+   */
+  validateRepo?(req: RepoValidationRequest): Promise<RepoValidationResult>
+  /**
+   * Declare the variables the UI bootstrapping form should collect to generate this
+   * provider's config file. Reuses {@link ProviderConfigField} so the SPA renders the
+   * form generically (like `describeConfig`). Optional — absent ⇒ no bootstrap form.
+   */
+  describeBootstrapInputs?(): ProviderConfigField[]
+  /**
+   * Mechanically generate this provider's config file(s) for a target repo from the
+   * collected `inputs`. Returns the file bytes (the engine commits them) or
+   * `needsAgent: true` when it can't be done safely. Optional — absent ⇒ no mechanical
+   * bootstrap (the engine may still offer the agent-repair path).
+   */
+  bootstrapProviderConfiguration?(req: BootstrapConfigRequest): Promise<BootstrapConfigResult>
+  /**
+   * Supply the prompt for a coding agent to FIX a malformed/partial provider config
+   * when mechanical bootstrap can't (e.g. a config exists in the wrong form). The
+   * engine dispatches a container coding agent with this prompt against the repo.
+   * Optional — absent ⇒ no agent fallback.
+   */
+  describeRepairAgent?(req: RepairAgentRequest): RepairAgentSpec
 }

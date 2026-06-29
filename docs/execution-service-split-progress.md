@@ -25,12 +25,12 @@ conformance suite (both Cloudflare D1 and Node Postgres).
 
 | #   | Phase                                                   | Status |
 | --- | ------------------------------------------------------- | ------ |
-| 0   | StepHandler registry scaffolding (fallthrough, no-op)   | ✅     |
-| 1   | Deterministic one-shot step handlers (deployer/tracker) | ✅     |
-| 2   | Post-completion resolvers (blueprint/spec/estimate)     | ✅     |
-| 3   | Verdict interceptors (tester/companion short-circuits)  | ✅     |
-| 4   | Decision/polling/companion gate step handlers           | ✅     |
-| 5   | Container-agent default handler + cleanup               | ✅     |
+| 0   | StepHandler registry scaffolding (fallthrough, no-op)   | done   |
+| 1   | Deterministic one-shot step handlers (deployer/tracker) | done   |
+| 2   | Post-completion resolvers (blueprint/spec/estimate)     | done   |
+| 3   | Verdict interceptors (tester/companion short-circuits)  | done   |
+| 4   | Decision/polling/companion gate step handlers           | done   |
+| 5   | Container-agent default handler + cleanup               | done   |
 
 ## Phase 0 — scaffolding
 

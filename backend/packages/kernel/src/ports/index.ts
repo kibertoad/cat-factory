@@ -245,6 +245,16 @@ export type {
   ProvisionedEnvironment,
   ProvisionFields,
   SecretResolver,
+  RepoFileReader,
+  RepoValidationSeverity,
+  RepoValidationIssue,
+  RepoValidationRequest,
+  RepoValidationResult,
+  BootstrapConfigFile,
+  BootstrapConfigRequest,
+  BootstrapConfigResult,
+  RepairAgentRequest,
+  RepairAgentSpec,
 } from './environment-provider.js'
 export { type UrlSafetyPolicy, STRICT_URL_SAFETY_POLICY } from './url-safety-policy.js'
 export type {

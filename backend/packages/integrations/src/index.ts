@@ -140,6 +140,7 @@ export { JiraProvider, JiraApiError } from './modules/tasks/JiraProvider.js'
 export {
   EnvironmentConnectionService,
   type EnvironmentConnectionServiceDependencies,
+  type ConfigRepairDispatch,
   type ResolvedConnection,
   referencedSecretKeys,
 } from './modules/environments/EnvironmentConnectionService.js'
