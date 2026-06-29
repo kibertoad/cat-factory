@@ -284,3 +284,38 @@ export function createLocalGitLabClient(env: NodeJS.ProcessEnv): GitHubClient | 
   })
   return asGitHubClient({ vcs, provider: 'gitlab' })
 }
+
+/**
+ * The host a GitLab local deployment clones/pushes against, derived from `GITLAB_API_BASE`'s
+ * host (a self-managed instance) or the public `gitlab.com`. Single source of truth for BOTH
+ * the clone URL the server builds (`resolveRepoOrigin`) and the harness host allow-list, so
+ * they can never disagree. Returns undefined when no `GITLAB_PAT` is configured (GitHub mode).
+ */
+export function gitlabVcsHost(env: NodeJS.ProcessEnv): string | undefined {
+  if (!env.GITLAB_PAT?.trim()) return undefined
+  const apiBase = env.GITLAB_API_BASE?.trim()
+  if (!apiBase) return 'gitlab.com'
+  try {
+    return new URL(apiBase).host
+  } catch {
+    return 'gitlab.com'
+  }
+}
+
+/**
+ * The comma-separated host allow-list the harness container is given (`GITHUB_ALLOWED_HOSTS`).
+ * The harness rejects any clone/push host not on this list (default github.com), so a GitLab
+ * deployment must add its host or every clone is refused. Combines any operator-set
+ * `GITHUB_ALLOWED_HOSTS` with the resolved GitLab host. Returns undefined when neither applies
+ * (GitHub mode with no extra hosts ⇒ the harness keeps its github.com default).
+ */
+export function harnessAllowedHosts(env: NodeJS.ProcessEnv): string | undefined {
+  const hosts = new Set<string>()
+  for (const h of (env.GITHUB_ALLOWED_HOSTS ?? '').split(',')) {
+    const t = h.trim()
+    if (t) hosts.add(t)
+  }
+  const gitlab = gitlabVcsHost(env)
+  if (gitlab) hosts.add(gitlab)
+  return hosts.size > 0 ? [...hosts].join(',') : undefined
+}

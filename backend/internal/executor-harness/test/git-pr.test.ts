@@ -137,4 +137,47 @@ describe('openPullRequest (provider dispatch)', () => {
     expect(url).toBe('https://github.com/o/r/pull/5')
     expect(calls.at(-1)!.headers.authorization).toBe('Bearer ghp_x')
   })
+
+  it('opens an MR when provider is set explicitly, even for a self-managed host inference misses', async () => {
+    // `git.acme.com` is NOT recognised by inferVcsProvider (it would default to GitHub), so the
+    // explicit provider is the only thing that routes this to GitLab — the self-managed case.
+    const calls = stubFetch({
+      'POST https://git.acme.com/api/v4/projects/team%2Fproj/merge_requests': {
+        body: { web_url: 'https://git.acme.com/team/proj/-/merge_requests/7' },
+      },
+    })
+    const url = await openPullRequest({
+      owner: 'team',
+      name: 'proj',
+      ghToken: 'glpat-x',
+      head: 'feature',
+      base: 'main',
+      pr: { title: 'T', body: 'B' },
+      cloneUrl: 'https://git.acme.com/team/proj.git',
+      provider: 'gitlab',
+    })
+    expect(url).toBe('https://git.acme.com/team/proj/-/merge_requests/7')
+    expect(calls.at(-1)!.headers['private-token']).toBe('glpat-x')
+  })
+
+  it('opens a GitHub PR when provider is set to github even for a gitlab-named host', async () => {
+    // The explicit provider overrides host inference in BOTH directions.
+    const calls = stubFetch({
+      'POST https://api.github.com/repos/o/r/pulls': {
+        body: { html_url: 'https://github.com/o/r/pull/8' },
+      },
+    })
+    const url = await openPullRequest({
+      owner: 'o',
+      name: 'r',
+      ghToken: 'ghp_x',
+      head: 'feature',
+      base: 'main',
+      pr: { title: 'T', body: 'B' },
+      cloneUrl: 'https://gitlab.com/o/r.git',
+      provider: 'github',
+    })
+    expect(url).toBe('https://github.com/o/r/pull/8')
+    expect(calls.at(-1)!.headers.authorization).toBe('Bearer ghp_x')
+  })
 })

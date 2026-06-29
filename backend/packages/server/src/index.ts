@@ -53,6 +53,8 @@ export {
   type ContainerAgentExecutorDependencies,
   type RepoTarget,
   type ResolveRepoTarget,
+  type RepoOrigin,
+  type ResolveRepoOrigin,
   type MintInstallationToken,
   type EnsureWorkBranch,
 } from './agents/ContainerAgentExecutor.js'

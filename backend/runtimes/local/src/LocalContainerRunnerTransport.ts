@@ -26,6 +26,7 @@ import {
   createRuntimeAdapter,
   DockerRuntimeAdapter,
 } from './runtimes/index.js'
+import { harnessAllowedHosts } from './github.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -647,6 +648,12 @@ export function createLocalContainerTransportFromEnv(
   }
   const pool = settings?.pool
   const extraEnv = checkoutExtraEnv(settings)
+  // The harness validates every clone/push host against an allow-list defaulting to
+  // github.com. A GitLab local deployment clones a GitLab host, so forward it (plus any
+  // operator-set hosts) into the container — otherwise the harness rejects the GitLab clone
+  // URL before it can clone. No-op for a GitHub deployment with no extra hosts.
+  const allowedHosts = harnessAllowedHosts(env)
+  if (allowedHosts) extraEnv.GITHUB_ALLOWED_HOSTS = allowedHosts
   return new LocalContainerRunnerTransport({
     image,
     adapter: createRuntimeAdapter(env),

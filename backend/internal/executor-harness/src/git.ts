@@ -628,11 +628,19 @@ export interface OpenPullRequestOptions {
   pr: PrSpec
   apiBase?: string
   /**
-   * The repo's clone URL. Used to detect the provider (GitHub vs GitLab) and, for GitLab,
-   * to derive the REST base + project path from its host — so the harness opens a GitLab
-   * **merge request** rather than POSTing to GitHub's pulls API. Absent ⇒ GitHub.
+   * The repo's clone URL. Used (when {@link provider} is absent) to detect the provider and,
+   * for GitLab, to derive the REST base + project path from its host — so the harness opens a
+   * GitLab **merge request** rather than POSTing to GitHub's pulls API. Absent ⇒ GitHub.
    */
   cloneUrl?: string
+  /**
+   * The VCS provider, when the dispatcher knows it (the server derives it from the configured
+   * source-control backend and sets `repo.provider`). AUTHORITATIVE — it overrides host
+   * inference — so a self-managed GitLab on an arbitrarily-named host (e.g. `git.acme.com`,
+   * which {@link inferVcsProvider} can't recognise) still opens a merge request instead of
+   * being misrouted to GitHub's API. Absent ⇒ inferred from {@link cloneUrl}'s host.
+   */
+  provider?: 'github' | 'gitlab'
   signal?: AbortSignal
 }
 
@@ -674,11 +682,17 @@ export function gitlabProjectPath(cloneUrl: string): string {
 
 /**
  * Open a PR (GitHub) or merge request (GitLab) for the pushed branch; returns its web URL.
- * Dispatches on the clone URL's host so a GitLab job opens a real MR instead of failing
- * against GitHub's API. The GitHub path is unchanged.
+ * The provider is chosen from the EXPLICIT `opts.provider` when the dispatcher set it,
+ * falling back to host inference from the clone URL only when it didn't — so a self-managed
+ * GitLab whose host isn't named `gitlab.*` still opens an MR instead of being misrouted to
+ * GitHub's API. The GitHub path is unchanged.
  */
 export async function openPullRequest(opts: OpenPullRequestOptions): Promise<string> {
-  if (opts.cloneUrl && inferVcsProvider(opts.cloneUrl) === 'gitlab') {
+  const provider = opts.provider ?? (opts.cloneUrl ? inferVcsProvider(opts.cloneUrl) : 'github')
+  if (provider === 'gitlab') {
+    if (!opts.cloneUrl) {
+      throw new Error('Cannot open a GitLab merge request without the repo clone URL')
+    }
     return openGitLabMergeRequest({ ...opts, cloneUrl: opts.cloneUrl })
   }
   const apiBase = opts.apiBase ?? 'https://api.github.com'

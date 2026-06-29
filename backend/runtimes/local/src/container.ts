@@ -28,8 +28,10 @@ import {
   fetchPatAccount,
   githubPatCreationUrl,
   gitlabPatCreationUrl,
+  gitlabVcsHost,
 } from './github.js'
 import type { GitHubClient } from '@cat-factory/kernel'
+import type { ResolveRepoOrigin } from '@cat-factory/server'
 import { AutoProvisioningInstallationRepository, type PatAccount } from './installations.js'
 import {
   type LocalContainerRunnerTransport,
@@ -83,6 +85,17 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     : gitlabPat
       ? createLocalGitLabClient(env)
       : undefined
+  // When GitLab is the active backend (no GitHub PAT), the agent containers must clone the
+  // GitLab host and open merge requests — not github.com. The repo projection carries no host,
+  // so build the clone URL + provider from the configured GitLab host here. Same host the
+  // harness allow-list is widened to (`harnessAllowedHosts`), so they can't disagree.
+  const gitlabHost = pat ? undefined : gitlabPat ? gitlabVcsHost(env) : undefined
+  const resolveRepoOrigin: ResolveRepoOrigin | undefined = gitlabHost
+    ? (repo) => ({
+        cloneUrl: `https://${gitlabHost}/${repo.owner}/${repo.name}.git`,
+        provider: 'gitlab',
+      })
+    : undefined
   const base = options.config ?? loadNodeConfig(env)
   // Tag the config as local mode and, when no PAT is set, carry the (scopes-preselected)
   // creation URL so the SPA can surface it as a dismissible banner — the server-side warn
@@ -353,6 +366,9 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     // endpoints. GitHub uses the PAT client (repos via /user/repos); GitLab uses the
     // FetchGitLabClient adapted to the same GitHubClient port.
     ...(vcsClient ? { githubClient: vcsClient } : {}),
+    // For a GitLab backend, make agent containers clone the GitLab host + open MRs (without
+    // this the clone URL is always github.com, so a GitLab repo can't be cloned).
+    ...(resolveRepoOrigin ? { resolveRepoOrigin } : {}),
     // Auto-provision the synthetic per-workspace installation so the integration reports
     // connected with no manual connect step.
     ...(githubInstallationRepository ? { githubInstallationRepository } : {}),
