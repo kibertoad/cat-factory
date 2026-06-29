@@ -4,14 +4,10 @@ import type {
   EnvironmentProvider,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
-import { STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
-import { KUBERNETES_ENV_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
-import { assertApiServerUrlSafe } from '../kubernetes/kubernetes.logic.js'
-import {
-  kubernetesConfigToManifest,
-  parseKubernetesEnvConfig,
-} from '../kubernetes/kubernetes-environment.logic.js'
-import { KubernetesEnvironmentProvider } from '../kubernetes/KubernetesEnvironmentProvider.js'
+import { STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
+// The native Kubernetes environment backend lives in the kubernetes module (all K8s code
+// colocated). Imported here purely to self-register, mirroring the manifest built-in.
+import { kubernetesEnvironmentBackend } from '../kubernetes/kubernetes-environment-backend.js'
 import { assertManifestUrlsSafe, referencedSecretKeys } from './environments.logic.js'
 import { HttpEnvironmentProvider } from './HttpEnvironmentProvider.js'
 
@@ -129,44 +125,9 @@ export const manifestEnvironmentBackend: EnvironmentBackendProvider = {
 }
 
 // --- Built-in: kubernetes (native per-PR namespaces over the apiserver) --------
-
-export const kubernetesEnvironmentBackend: EnvironmentBackendProvider = {
-  kind: 'kubernetes',
-  referencedSecretKeys: (config) =>
-    config.kind === 'kubernetes' ? [KUBERNETES_ENV_TOKEN_SECRET_KEY] : [],
-  connectionMeta: (config) => {
-    if (config.kind !== 'kubernetes') throw new Error('Expected a kubernetes environment config')
-    return {
-      providerId: 'kubernetes',
-      label: config.kubernetes.label,
-      baseUrl: config.kubernetes.apiServerUrl,
-    }
-  },
-  assertConfigSafe: (config, opts) => {
-    if (config.kind !== 'kubernetes') return
-    assertApiServerUrlSafe(config.kubernetes.apiServerUrl)
-    const needsCustomTls =
-      !!config.kubernetes.caCertPem || !!config.kubernetes.insecureSkipTlsVerify
-    if (needsCustomTls && opts?.customTlsSupported === false) {
-      // Caller-input error (a config this runtime can't honor) → ValidationError (422 with
-      // the reason), not a plain Error (a generic 500 the connect form can't surface).
-      throw new ValidationError(
-        'This runtime cannot verify a custom CA / skip TLS for the Kubernetes apiserver ' +
-          '(it requires the Node runtime). Use a publicly-trusted apiserver certificate, or ' +
-          'run this workspace on the Node/local deployment.',
-      )
-    }
-  },
-  toManifest: (config) => {
-    if (config.kind !== 'kubernetes') throw new Error('Expected a kubernetes environment config')
-    return kubernetesConfigToManifest(config.kubernetes)
-  },
-  fromManifest: (manifest) => ({
-    kind: 'kubernetes',
-    kubernetes: parseKubernetesEnvConfig(manifest),
-  }),
-  buildProvider: (ctx) => new KubernetesEnvironmentProvider({ urlPolicy: ctx.urlPolicy }),
-}
+// Defined in the kubernetes module (see the import above) so all K8s code is colocated;
+// re-exported here so the package's public surface (index.ts) is unchanged.
+export { kubernetesEnvironmentBackend }
 
 registerEnvironmentBackend(manifestEnvironmentBackend)
 registerEnvironmentBackend(kubernetesEnvironmentBackend)

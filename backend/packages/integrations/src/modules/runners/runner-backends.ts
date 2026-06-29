@@ -6,9 +6,10 @@ import type {
   SecretResolver,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
-import { STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
-import { assertApiServerUrlSafe, KUBERNETES_TOKEN_KEY } from '../kubernetes/kubernetes.logic.js'
-import { KubernetesRunnerTransport } from '../kubernetes/KubernetesRunnerTransport.js'
+import { STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
+// The native Kubernetes runner backend lives in the kubernetes module (all K8s code
+// colocated). It is imported here purely to self-register, mirroring the manifest built-in.
+import { kubernetesRunnerBackend } from '../kubernetes/kubernetes-runner-backend.js'
 import { HttpRunnerPoolProvider } from './HttpRunnerPoolProvider.js'
 import { RunnerPoolTransport } from './RunnerPoolTransport.js'
 import {
@@ -135,46 +136,9 @@ export const manifestRunnerBackend: RunnerBackendProvider = {
 }
 
 // --- Built-in: kubernetes (native per-run pods over the apiserver pod-proxy) ---
-
-export const kubernetesRunnerBackend: RunnerBackendProvider = {
-  kind: 'kubernetes',
-  referencedSecretKeys: (config) => (config.kind === 'kubernetes' ? [KUBERNETES_TOKEN_KEY] : []),
-  connectionMeta: (config) => {
-    if (config.kind !== 'kubernetes') throw new Error('Expected a kubernetes runner config')
-    return {
-      providerId: 'kubernetes',
-      label: config.kubernetes.label,
-      baseUrl: config.kubernetes.apiServerUrl,
-    }
-  },
-  assertConfigSafe: (config, opts) => {
-    if (config.kind !== 'kubernetes') return
-    assertApiServerUrlSafe(config.kubernetes.apiServerUrl)
-    // Custom TLS trust material is honored only on a runtime with undici (Node/local).
-    // Reject it up front on a runtime that can't (the Cloudflare Worker) so the
-    // connection can't save and then fail at every dispatch.
-    const needsCustomTls =
-      !!config.kubernetes.caCertPem || !!config.kubernetes.insecureSkipTlsVerify
-    if (needsCustomTls && opts?.customTlsSupported === false) {
-      // Caller-input error → ValidationError (422 with the reason), not a plain Error (500).
-      throw new ValidationError(
-        'This runtime cannot verify a custom CA / skip TLS for the Kubernetes apiserver ' +
-          '(it requires the Node runtime). Use a publicly-trusted apiserver certificate, or ' +
-          'run this workspace on the Node/local deployment.',
-      )
-    }
-  },
-  buildTransport: (config, ctx) => {
-    if (config.kind !== 'kubernetes') throw new Error('Expected a kubernetes runner config')
-    return new KubernetesRunnerTransport(config.kubernetes, ctx.resolveSecret)
-  },
-  testConnection: (config, ctx) => {
-    if (config.kind !== 'kubernetes') {
-      return Promise.resolve({ ok: false, message: 'Expected a kubernetes runner config' })
-    }
-    return new KubernetesRunnerTransport(config.kubernetes, ctx.resolveSecret).testConnection()
-  },
-}
+// Defined in the kubernetes module (see the import above) so all K8s code is colocated;
+// re-exported here so the package's public surface (index.ts) is unchanged.
+export { kubernetesRunnerBackend }
 
 registerRunnerBackend(manifestRunnerBackend)
 registerRunnerBackend(kubernetesRunnerBackend)
