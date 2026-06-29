@@ -21,14 +21,13 @@ export default defineConfig(async () => {
         // for it on startup. Tests inject a FakeAgentExecutor and never touch
         // env.AI, so opt out of remote bindings to keep the suite fully local.
         remoteBindings: false,
-        // Workflows are declared in wrangler.toml; the pool requires shared
-        // (non-isolated) storage to run them. Tests stay independent by
-        // scoping every aggregate under a freshly-created workspace id.
-        isolatedStorage: false,
-        // Run all test files in one worker, sequentially. With shared storage
-        // they target the same D1, so applying migrations per file in parallel
-        // races on CREATE TABLE; serialising removes that race.
-        singleWorker: true,
+        // NOTE: the v3 `isolatedStorage`/`singleWorker` pool options no longer
+        // exist on the v4 `cloudflareTest` plugin schema (it strips unknown
+        // keys), so they are omitted here. v4 already runs the suite against
+        // shared, non-isolated storage in a single worker; tests stay
+        // independent by scoping every aggregate under a freshly-created
+        // workspace id, and migrations are applied once per file in
+        // test/apply-migrations.ts.
         wrangler: { configPath: './wrangler.toml' },
         miniflare: {
           // Surface the parsed migrations to the setup file. Tests drive the

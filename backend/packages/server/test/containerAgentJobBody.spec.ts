@@ -31,7 +31,7 @@ const routing: AgentRouting = {
 interface Captured {
   ref: RunnerJobRef
   spec: Record<string, unknown>
-  kind: RunnerDispatchKind
+  kind: RunnerDispatchKind | undefined
 }
 
 function makeExecutor(): { executor: ContainerAgentExecutor; captured: Captured[] } {
@@ -87,11 +87,12 @@ function context(
     block: {
       id: 'blk_1',
       title: 'Add widget',
-      type: 'feature',
+      type: 'service',
       description: 'Implement the widget feature.',
       ...overrides,
     },
     ...(service ? { service } : {}),
+    resolvedDecision: null,
     priorOutputs: [],
     decisions: [],
   }
@@ -159,11 +160,11 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
         { noInfraDependencies: true },
       ),
     )
-    const userPrompt = captured[0].spec.userPrompt as string
+    const userPrompt = captured[0]!.spec.userPrompt as string
     expect(userPrompt).toContain('Run mode: local, no infra dependencies')
     expect(userPrompt).not.toContain('have been stood up on localhost')
     // The infra spec still flags it so the harness spins nothing up.
-    expect(captured[0].spec.infra).toMatchObject({
+    expect(captured[0]!.spec.infra).toMatchObject({
       environment: 'local',
       noInfraDependencies: true,
     })
@@ -188,12 +189,12 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
     // conflict-resolver carries a built-in tuning entry (more error headroom). The body
     // must carry it so the harness loosens the guard for that kind.
     await executor.startJob(context('conflict-resolver', { pullRequest: PR }))
-    expect(captured[0].spec.guardLimits).toEqual({ maxConsecutiveErrors: 20 })
+    expect(captured[0]!.spec.guardLimits).toEqual({ maxConsecutiveErrors: 20 })
   })
 
   it('omits guardLimits for an un-tuned kind (the harness keeps its defaults)', async () => {
     await executor.startJob(context('coder'))
-    expect(captured[0].spec.guardLimits).toBeUndefined()
+    expect(captured[0]!.spec.guardLimits).toBeUndefined()
   })
 })
 

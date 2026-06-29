@@ -3,7 +3,12 @@ import type { Server } from 'node:http'
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { DEFAULT_SPEND_PRICING, SpendService } from '@cat-factory/spend'
-import { ContainerSessionService, type LlmUpstream, llmProxyController } from '@cat-factory/server'
+import {
+  type AppEnv,
+  ContainerSessionService,
+  type LlmUpstream,
+  llmProxyController,
+} from '@cat-factory/server'
 import { freePort, listen, streamingLlmStub } from './support'
 
 /** A minimal OpenAI-compatible upstream gateway pointing at the in-test stub. */
@@ -51,6 +56,7 @@ async function startRealProxy() {
       },
       totalsSince: async () => ({ inputTokens: 0, outputTokens: 0, costEstimate: 0 }),
       totalsSinceForWorkspace: async () => ({ inputTokens: 0, outputTokens: 0, costEstimate: 0 }),
+      deleteOlderThan: async () => 0,
     },
     idGenerator: { next: (p: string) => `${p}-${ledger.length}` },
     clock: { now: () => Date.now() },
@@ -78,7 +84,7 @@ async function startRealProxy() {
     },
   }
 
-  const app = new Hono()
+  const app = new Hono<AppEnv>()
   app.use('*', async (c, next) => {
     c.set('container', container as never)
     await next()
@@ -185,6 +191,7 @@ describe('real proxy (in-process LlmProxyController)', () => {
           outputTokens: 0,
           costEstimate: 999,
         }),
+        deleteOlderThan: async () => 0,
       },
       idGenerator: { next: (p: string) => p },
       clock: { now: () => Date.now() },
@@ -196,7 +203,7 @@ describe('real proxy (in-process LlmProxyController)', () => {
       spendService,
       gateways: { llmUpstream: stubLlmUpstream(`http://127.0.0.1:${upstreamPort}/v1`) },
     }
-    const app = new Hono()
+    const app = new Hono<AppEnv>()
     app.use('*', async (c, next) => {
       c.set('container', container as never)
       await next()

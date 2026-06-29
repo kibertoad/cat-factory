@@ -1,8 +1,10 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "composite": true
+    "composite": true,
+    "rootDir": "src"
   },
+  "include": ["src/**/*.ts"],
   "exclude": ["**/*.test.ts", "**/*.spec.ts"],
   "references": [
     { "path": "../../packages/kernel/tsconfig.build.json" },

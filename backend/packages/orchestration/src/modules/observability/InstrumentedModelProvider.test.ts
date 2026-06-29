@@ -21,8 +21,8 @@ class CaptureSink implements LlmTraceSink {
 function mockProvider(text: string): ModelProvider {
   const model: LanguageModel = new MockLanguageModelV3({
     doGenerate: async () => ({
-      content: [{ type: 'text', text }],
-      finishReason: 'stop',
+      content: [{ type: 'text' as const, text }],
+      finishReason: { unified: 'stop', raw: 'stop' },
       usage: {
         inputTokens: { total: 100, noCache: 100, cacheRead: 0, cacheWrite: 0 },
         outputTokens: { total: 40, text: 40, reasoning: 0 },

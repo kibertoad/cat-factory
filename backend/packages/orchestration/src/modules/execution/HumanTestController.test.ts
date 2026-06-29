@@ -155,10 +155,10 @@ describe('HumanTestController', () => {
     const result = await c.evaluate('ws', instance([s]), s, BLOCK, true)
 
     expect(
-      (deps.agentExecutor as { startJob: ReturnType<typeof vi.fn> }).startJob,
+      (deps.agentExecutor as unknown as { startJob: ReturnType<typeof vi.fn> }).startJob,
     ).toHaveBeenCalled()
-    const ctx = (deps.agentExecutor as { startJob: ReturnType<typeof vi.fn> }).startJob.mock
-      .calls[0]![0]
+    const ctx = (deps.agentExecutor as unknown as { startJob: ReturnType<typeof vi.fn> }).startJob
+      .mock.calls[0]![0]
     expect(ctx.agentKind).toBe('fixer')
     expect(result).toEqual({ kind: 'awaiting_job', jobId: 'job_1', stepIndex: 0 })
     expect(s.humanTest?.phase).toBe('fixing')
@@ -342,8 +342,8 @@ describe('HumanTestController', () => {
       },
     })
     const r1 = await c1.evaluate('ws', instance([s1]), s1, BLOCK, true)
-    const ctx = (conflictDeps.agentExecutor as { startJob: ReturnType<typeof vi.fn> }).startJob.mock
-      .calls[0]![0]
+    const ctx = (conflictDeps.agentExecutor as unknown as { startJob: ReturnType<typeof vi.fn> })
+      .startJob.mock.calls[0]![0]
     expect(ctx.agentKind).toBe('conflict-resolver')
     expect(r1).toEqual({ kind: 'awaiting_job', jobId: 'job_1', stepIndex: 0 })
     expect(s1.humanTest?.phase).toBe('resolving_conflicts')
@@ -367,7 +367,7 @@ describe('HumanTestController', () => {
     })
     const r2 = await c2.evaluate('ws', instance([s2]), s2, BLOCK, true)
     expect(
-      (cleanDeps.agentExecutor as { startJob: ReturnType<typeof vi.fn> }).startJob,
+      (cleanDeps.agentExecutor as unknown as { startJob: ReturnType<typeof vi.fn> }).startJob,
     ).not.toHaveBeenCalled()
     expect(r2).toEqual({ kind: 'awaiting_gate', stepIndex: 0 })
   })

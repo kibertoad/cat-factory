@@ -1,7 +1,8 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { LanguageModel, ModelProvider } from '@cat-factory/kernel'
+import type { LanguageModel } from 'ai'
+import type { ModelProvider } from '@cat-factory/kernel'
 import { MockLanguageModelV3 } from 'ai/test'
 import { afterEach, describe, expect, it } from 'vitest'
 import { writeRunArtifacts } from '../src/artifacts'
@@ -16,23 +17,20 @@ import { type CandidateResult, type CellKey, cellId, type GradesFile } from '../
 // A model provider that returns a fixed completion — lets the runners be driven
 // fully offline.
 function fakeProvider(text: string): ModelProvider {
-  return {
-    resolve(): LanguageModel {
-      return new MockLanguageModelV3({
-        doGenerate: async () => ({
-          content: [{ type: 'text', text }],
-          finishReason: 'stop',
-          // V3 doGenerate usage is nested; generateText flattens it to
-          // `usage.inputTokens` (= 11) / `usage.outputTokens` (= 22).
-          usage: {
-            inputTokens: { total: 11, noCache: 11, cacheRead: 0, cacheWrite: 0 },
-            outputTokens: { total: 22, text: 22, reasoning: 0 },
-          },
-          warnings: [],
-        }),
-      }) as unknown as LanguageModel
-    },
-  }
+  const model: LanguageModel = new MockLanguageModelV3({
+    doGenerate: async () => ({
+      content: [{ type: 'text', text }],
+      finishReason: { unified: 'stop' as const, raw: undefined },
+      // V3 doGenerate usage is nested; generateText flattens it to
+      // `usage.inputTokens` (= 11) / `usage.outputTokens` (= 22).
+      usage: {
+        inputTokens: { total: 11, noCache: 11, cacheRead: 0, cacheWrite: 0 },
+        outputTokens: { total: 22, text: 22, reasoning: 0 },
+      },
+      warnings: [],
+    }),
+  })
+  return { resolve: () => model }
 }
 
 const tmpDirs: string[] = []

@@ -8,6 +8,7 @@ import { readFile } from 'node:fs/promises'
 import {
   DEFAULT_PROGRESS_GUARD_LIMITS,
   ProgressGuard,
+  type ProgressGuardLimits,
   mergeGuardLimits,
   parsePiOutput,
   parseTodoProgress,

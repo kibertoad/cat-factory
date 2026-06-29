@@ -20,6 +20,7 @@ function seedReview(workspaceId: string, blockId: string): RequirementReview {
     incorporatedRequirements: null,
     iteration: 1,
     maxIterations: 3,
+    recommendations: [],
     createdAt: 1,
     updatedAt: 1,
     items: [

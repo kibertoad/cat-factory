@@ -16,11 +16,11 @@ function recordingProvider(): { provider: ModelProvider; captured: () => Record<
   const provider: ModelProvider = {
     resolve(_ref: ModelRef): ReturnType<ModelProvider['resolve']> {
       return new MockLanguageModelV3({
-        doGenerate: async (options: Record<string, unknown>) => {
-          seen = options
+        doGenerate: async (options) => {
+          seen = options as unknown as Record<string, unknown>
           return {
-            content: [{ type: 'text', text: 'ok' }],
-            finishReason: 'stop',
+            content: [{ type: 'text' as const, text: 'ok' }],
+            finishReason: { unified: 'stop', raw: 'stop' },
             usage: {
               inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
               outputTokens: { total: 1, text: 1, reasoning: 0 },
@@ -51,7 +51,10 @@ function contextFor(agentKind: string): AgentRunContext {
     pipelineName: 'design',
     stepIndex: 0,
     isFinalStep: true,
-    block: { title: 'A task', type: 'task', description: 'Do the thing' },
+    block: { title: 'A task', type: 'service', description: 'Do the thing' },
+    priorOutputs: [],
+    decisions: [],
+    resolvedDecision: null,
   }
 }
 

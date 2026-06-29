@@ -41,10 +41,11 @@ function context(
     block: {
       id: 'blk_1',
       title: 't',
-      type: 'feature',
+      type: 'service',
       description: 'd',
       modelId: overrides.modelId,
     },
+    resolvedDecision: null,
     priorOutputs: [],
     decisions: [],
   }
