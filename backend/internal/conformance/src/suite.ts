@@ -2756,7 +2756,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
         }
         const registered = await app.call('POST', `/workspaces/${wsId}/environments/connection`, {
-          manifest,
+          config: { kind: 'manifest', manifest },
           secrets: { API_TOKEN: 'super-secret-env-token' },
         })
         expect(registered.status).toBe(201)
