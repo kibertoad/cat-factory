@@ -1298,7 +1298,8 @@
         "jiraProjectKey": "Ключ проєкту Jira",
         "jiraProjectKeyHelp": "Нові тикети реєструються в цьому проєкті.",
         "linearTeamId": "Ідентифікатор команди Linear",
-        "linearTeamIdHelp": "Нові тикети створюються в цій команді (Linear вимагає команду для створення тикета)."
+        "linearTeamIdHelp": "Нові тикети створюються в цій команді (Linear вимагає команду для створення тикета).",
+        "linearTeamPlaceholder": "Виберіть команду"
       },
       "vendor": {
         "github": "GitHub Issues",
@@ -2110,7 +2111,9 @@
       "offerHint": "Коли вимкнено, {label} приховано з імпорту та прив'язування.",
       "disconnect": "Відключити",
       "updateConnection": "Оновити підключення",
-      "connect": "Підключити"
+      "connect": "Підключити",
+      "oauthButton": "Підключити через {label}",
+      "oauthOr": "або підключіться за допомогою ключа API"
     }
   },
   "pipeline": {

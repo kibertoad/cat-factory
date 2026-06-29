@@ -1298,7 +1298,8 @@
         "jiraProjectKey": "Klucz projektu Jira",
         "jiraProjectKeyHelp": "Nowe zgłoszenia są rejestrowane w tym projekcie.",
         "linearTeamId": "Identyfikator zespołu Linear",
-        "linearTeamIdHelp": "Nowe zgłoszenia są tworzone w tym zespole (Linear wymaga zespołu do utworzenia zgłoszenia)."
+        "linearTeamIdHelp": "Nowe zgłoszenia są tworzone w tym zespole (Linear wymaga zespołu do utworzenia zgłoszenia).",
+        "linearTeamPlaceholder": "Wybierz zespół"
       },
       "vendor": {
         "github": "GitHub Issues",
@@ -2110,7 +2111,9 @@
       "offerHint": "Po wyłączeniu {label} jest ukryte przed importem i powiązywaniem.",
       "disconnect": "Rozłącz",
       "updateConnection": "Zaktualizuj połączenie",
-      "connect": "Połącz"
+      "connect": "Połącz",
+      "oauthButton": "Połącz z {label}",
+      "oauthOr": "lub połącz za pomocą klucza API"
     }
   },
   "pipeline": {

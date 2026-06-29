@@ -24,6 +24,9 @@ const connection = computed(() => (source.value ? tasks.connectionFor(source.val
 const connected = computed(() => connection.value !== undefined)
 // A credentialless source (GitHub Issues) reuses the installed GitHub App: no form.
 const credentialless = computed(() => (descriptor.value?.credentialFields.length ?? 0) === 0)
+// An OAuth source (Linear) offers a "Connect with X" button alongside the manual fields.
+const oauth = computed(() => descriptor.value?.oauth ?? false)
+const oauthStarting = ref(false)
 // Usable right now: a credentialed source is connected; GitHub Issues' App is installed.
 const available = computed(() => descriptor.value?.available ?? false)
 
@@ -74,6 +77,23 @@ async function submit() {
     })
   } finally {
     saving.value = false
+  }
+}
+
+async function startOAuth() {
+  if (!source.value) return
+  oauthStarting.value = true
+  try {
+    // Only Linear wires an OAuth flow today; the browser navigates away on success.
+    if (source.value === 'linear') await tasks.startLinearOAuth()
+  } catch (e) {
+    toast.add({
+      title: t('tasks.connect.connectFailed'),
+      description: e instanceof Error ? e.message : String(e),
+      icon: 'i-lucide-triangle-alert',
+      color: 'error',
+    })
+    oauthStarting.value = false
   }
 }
 
@@ -129,8 +149,23 @@ async function toggleEnabled(enabled: boolean) {
           </p>
         </template>
 
-        <!-- Credentialed source (Jira): the connect form, shown until connected. -->
+        <!-- Credentialed source (Jira/Linear): the connect form, shown until connected. -->
         <div v-else-if="!connected" class="space-y-3">
+          <!-- OAuth source (Linear): the redirect button, with the manual key form below. -->
+          <template v-if="oauth">
+            <UButton
+              block
+              color="primary"
+              icon="i-lucide-plug"
+              :loading="oauthStarting"
+              @click="startOAuth"
+            >
+              {{ t('tasks.connect.oauthButton', { label: descriptor.label }) }}
+            </UButton>
+            <p class="text-center text-[11px] text-slate-500">
+              {{ t('tasks.connect.oauthOr') }}
+            </p>
+          </template>
           <UFormField
             v-for="field in descriptor.credentialFields"
             :key="field.key"

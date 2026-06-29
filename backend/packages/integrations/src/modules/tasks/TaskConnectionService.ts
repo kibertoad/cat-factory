@@ -12,6 +12,7 @@ import type {
 import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
+import type { LinearTeam } from './linear.logic.js'
 
 // TaskConnectionService: owns the binding between a cat-factory workspace and an
 // external task source. Connecting delegates credential validation to the
@@ -54,6 +55,18 @@ function isCredentialless(provider: TaskSourceProvider): boolean {
  */
 function ridesGitHubApp(provider: TaskSourceProvider): boolean {
   return provider.kind === 'github' && isCredentialless(provider)
+}
+
+/** A provider that can list Linear teams (only {@link LinearTaskProvider} today). */
+interface LinearTeamLister {
+  listTeams(credentials: TaskCredentials): Promise<LinearTeam[]>
+}
+
+/** Duck-type the optional `listTeams` capability (bundling-safe, unlike `instanceof`). */
+function hasListTeams(
+  provider: TaskSourceProvider,
+): provider is TaskSourceProvider & LinearTeamLister {
+  return typeof (provider as Partial<LinearTeamLister>).listTeams === 'function'
 }
 
 function toConnection(record: TaskConnectionRecord): TaskConnection {
@@ -220,12 +233,54 @@ export class TaskConnectionService {
       )
     }
     const normalized = provider.normalizeConnection(credentials)
+    return this.store(workspaceId, source, normalized.credentials, normalized.label)
+  }
+
+  /**
+   * Complete the Linear OAuth flow: persist the exchanged access token as the
+   * workspace's Linear connection (a `{ token }` credential bag, used as a `Bearer`
+   * token by the shared client). The token exchange itself happens in the server's
+   * OAuth callback (which holds the OAuth client + secret); this only stores the
+   * result, so the integrations package stays free of OAuth config.
+   */
+  async connectLinearViaOAuth(workspaceId: string, token: string): Promise<TaskConnection> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    this.requireProvider('linear')
+    return this.store(workspaceId, 'linear', { token }, 'Linear workspace')
+  }
+
+  /**
+   * List the workspace's Linear teams, for the ticket-filing team picker. Linear-
+   * specific, so it duck-types the provider's `listTeams` rather than widening the
+   * generic port (and `instanceof` is unreliable once the class is bundled across
+   * module boundaries). Throws when Linear isn't connected; returns [] if the wired
+   * provider can't list teams.
+   */
+  async listLinearTeams(workspaceId: string): Promise<LinearTeam[]> {
+    const provider = this.requireProvider('linear')
+    const connection = await this.deps.taskConnectionRepository.getByWorkspace(
+      workspaceId,
+      'linear',
+    )
+    if (!connection)
+      throw new ConflictError(`Workspace '${workspaceId}' is not connected to linear`)
+    if (!hasListTeams(provider)) return []
+    return provider.listTeams(connection.credentials)
+  }
+
+  /** Build + upsert a connection record (shared by the manual connect + OAuth paths). */
+  private async store(
+    workspaceId: string,
+    source: TaskSourceKind,
+    credentials: TaskCredentials,
+    label: string,
+  ): Promise<TaskConnection> {
     const existing = await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
     const record: TaskConnectionRecord = {
       workspaceId,
       source,
-      credentials: normalized.credentials,
-      label: normalized.label,
+      credentials,
+      label,
       createdAt: existing?.createdAt ?? this.deps.clock.now(),
       deletedAt: null,
     }

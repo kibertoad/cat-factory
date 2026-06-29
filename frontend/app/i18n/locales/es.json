@@ -1298,7 +1298,8 @@
         "jiraProjectKey": "Clave de proyecto de Jira",
         "jiraProjectKeyHelp": "Los nuevos tickets se registran en este proyecto.",
         "linearTeamId": "Id de equipo de Linear",
-        "linearTeamIdHelp": "Las nuevas incidencias se crean en este equipo (Linear requiere un equipo para crear una incidencia)."
+        "linearTeamIdHelp": "Las nuevas incidencias se crean en este equipo (Linear requiere un equipo para crear una incidencia).",
+        "linearTeamPlaceholder": "Selecciona un equipo"
       },
       "vendor": {
         "github": "GitHub Issues",
@@ -2110,7 +2111,9 @@
       "offerHint": "Cuando está desactivada, {label} se oculta de la importación y la vinculación.",
       "disconnect": "Desconectar",
       "updateConnection": "Actualizar conexión",
-      "connect": "Conectar"
+      "connect": "Conectar",
+      "oauthButton": "Conectar con {label}",
+      "oauthOr": "o conecta con una clave API"
     }
   },
   "pipeline": {

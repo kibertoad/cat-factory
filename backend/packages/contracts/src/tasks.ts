@@ -46,8 +46,24 @@ export const taskSourceDescriptorSchema = v.object({
    * backward-compatibility; absent is treated as `false`.
    */
   searchable: v.optional(v.boolean()),
+  /**
+   * Whether this source connects via an OAuth redirect (the UI shows a "Connect
+   * with X" button that GETs the install URL) in addition to / instead of the
+   * `credentialFields` form. Optional; absent is treated as `false`. The OAuth
+   * button is only actionable when the deployment configured the provider's OAuth
+   * app — `available`/the install-url endpoint reflect that.
+   */
+  oauth: v.optional(v.boolean()),
 })
 export type TaskSourceDescriptor = v.InferOutput<typeof taskSourceDescriptorSchema>
+
+/** A Linear team, offered in the ticket-filing team picker. */
+export const linearTeamSchema = v.object({
+  id: v.string(),
+  name: v.string(),
+  key: v.string(),
+})
+export type LinearTeam = v.InferOutput<typeof linearTeamSchema>
 
 /**
  * A source's descriptor plus the workspace's live state for it: whether it is

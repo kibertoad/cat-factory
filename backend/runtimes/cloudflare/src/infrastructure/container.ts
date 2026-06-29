@@ -1003,8 +1003,8 @@ function selectRecurringDeps(
     writebackDeps.resolveJiraConnection = resolveJiraConnection
     const resolveLinearConnection = async (workspaceId: string) => {
       const connection = await taskConnectionRepository.getByWorkspace(workspaceId, 'linear')
-      const apiKey = connection?.credentials?.apiKey
-      return apiKey ? { apiKey } : null
+      const { apiKey, token } = connection?.credentials ?? {}
+      return apiKey || token ? { apiKey, token } : null
     }
     trackerDeps.resolveLinearConnection = resolveLinearConnection
     writebackDeps.resolveLinearConnection = resolveLinearConnection

@@ -90,6 +90,17 @@ export const useTasksStore = defineStore('tasks', () => {
     available.value = true
   }
 
+  /**
+   * Start the "Connect with Linear" OAuth flow by navigating the browser to the
+   * authorize URL the backend mints (carrying a signed `state`). Linear redirects
+   * back to the public callback, which stores the token; the settings panel's
+   * `probe()` on return then reflects the new connection.
+   */
+  async function startLinearOAuth() {
+    const { url } = await api.getLinearInstallUrl(workspace.requireId())
+    window.location.href = url
+  }
+
   /** Disconnect the workspace from a source. */
   async function disconnect(source: TaskSourceKind) {
     await api.disconnectTaskSource(workspace.requireId(), source)
@@ -203,6 +214,7 @@ export const useTasksStore = defineStore('tasks', () => {
     probe,
     checkSetup,
     connect,
+    startLinearOAuth,
     disconnect,
     setEnabled,
     loadTasks,

@@ -2372,6 +2372,31 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(linear?.available).toBe(true)
         expect(linear?.enabled).toBe(true)
       })
+
+      it('wires the Linear OAuth + team-picker routes on every facade', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace({ seed: false })
+        const ws = workspace.id
+
+        // The descriptor advertises the OAuth connect option (the SPA shows the
+        // "Connect with Linear" button), in addition to the manual API-key field.
+        const listed = await call<{ sources: TaskSourceState[] }>(
+          'GET',
+          `/workspaces/${ws}/task-sources`,
+        )
+        const linear = listed.body.sources.find((s) => s.source === 'linear')
+        expect(linear?.oauth).toBe(true)
+
+        // The install-url route is wired but reports 503 until the deployment configures
+        // a Linear OAuth app (the conformance harness leaves it unconfigured).
+        const installUrl = await call('GET', `/workspaces/${ws}/task-sources/linear/install-url`)
+        expect(installUrl.status).toBe(503)
+
+        // The team-picker route is wired; with no Linear connection it refuses (409)
+        // rather than 404 — proving the route exists symmetrically on both runtimes.
+        const teams = await call('GET', `/workspaces/${ws}/task-sources/linear/teams`)
+        expect(teams.status).toBe(409)
+      })
     })
 
     describe('document sources', () => {

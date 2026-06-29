@@ -68,6 +68,39 @@ const canSave = computed(() => {
   return true
 })
 
+// Linear team picker: load the connected workspace's teams so filing offers a
+// dropdown instead of a raw team-id paste. Falls back to the text input if the
+// teams can't be loaded (a broken connection shouldn't block configuration).
+const teamsLoading = ref(false)
+const teamsError = ref(false)
+const teamOptions = computed(() =>
+  tracker.linearTeams.map((tm) => ({
+    label: tm.key ? `${tm.name} (${tm.key})` : tm.name,
+    value: tm.id,
+  })),
+)
+async function loadLinearTeams() {
+  if (!linearConnected.value) return
+  teamsLoading.value = true
+  teamsError.value = false
+  try {
+    await tracker.loadLinearTeams()
+  } catch {
+    teamsError.value = true
+  } finally {
+    teamsLoading.value = false
+  }
+}
+watch(
+  () => [trackerKind.value, linearConnected.value] as const,
+  ([kind, connected]) => {
+    if (kind === 'linear' && connected && tracker.linearTeams.length === 0 && !teamsError.value) {
+      void loadLinearTeams()
+    }
+  },
+  { immediate: true },
+)
+
 async function save() {
   if (!canSave.value) return
   saving.value = true
@@ -284,7 +317,18 @@ const STATUS_UI: Record<
         :label="t('settings.issueTracker.filing.linearTeamId')"
         class="w-64"
       >
-        <UInput v-model="linearTeamId" placeholder="team_…" size="sm" class="w-full" />
+        <!-- Picker when the connection's teams loaded; raw-id fallback otherwise. -->
+        <USelect
+          v-if="linearConnected && !teamsError && teamOptions.length > 0"
+          v-model="linearTeamId"
+          :items="teamOptions"
+          value-key="value"
+          :loading="teamsLoading"
+          :placeholder="t('settings.issueTracker.filing.linearTeamPlaceholder')"
+          size="sm"
+          class="w-full"
+        />
+        <UInput v-else v-model="linearTeamId" placeholder="team_…" size="sm" class="w-full" />
         <template #help>
           <span class="text-[11px] text-slate-500">
             {{ t('settings.issueTracker.filing.linearTeamIdHelp') }}

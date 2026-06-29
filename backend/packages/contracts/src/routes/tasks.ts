@@ -5,6 +5,7 @@ import {
   connectTaskSourceSchema,
   createTaskFromIssueSchema,
   importTaskSchema,
+  linearTeamSchema,
   linkTaskSchema,
   searchTasksSchema,
   setTaskSourceEnabledSchema,
@@ -45,6 +46,12 @@ const createTaskFromIssueResultSchema = v.object({
 const spawnEpicResultSchema = v.object({
   epic: blockSchema,
   tasks: v.array(blockSchema),
+})
+const linearTeamsViewSchema = v.object({
+  teams: v.array(linearTeamSchema),
+})
+const linearInstallUrlViewSchema = v.object({
+  url: v.string(),
 })
 
 export const listTaskSourcesContract = defineApiContract({
@@ -88,6 +95,20 @@ export const diagnoseTaskSourceContract = defineApiContract({
   pathResolver: ({ source }) => `/task-sources/${source}/diagnostics`,
   requestBodySchema: ContractNoBody,
   responsesByStatusCode: { 200: taskSourceDiagnosticSchema, ...errorResponses },
+})
+
+// Linear-specific: list the connection's teams (for the ticket-filing team picker)
+// and start the OAuth "Connect with Linear" flow (returns the authorize URL).
+export const listLinearTeamsContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/task-sources/linear/teams',
+  responsesByStatusCode: { 200: linearTeamsViewSchema, ...errorResponses },
+})
+
+export const getLinearInstallUrlContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/task-sources/linear/install-url',
+  responsesByStatusCode: { 200: linearInstallUrlViewSchema, ...errorResponses },
 })
 
 export const listTasksContract = defineApiContract({

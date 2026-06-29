@@ -140,9 +140,22 @@ function loadTasksConfig(env: NodeJS.ProcessEnv): TasksConfig {
         'least 32 bytes.',
     )
   }
+  // Linear OAuth app credentials (the "Connect with Linear" task-source flow). Present
+  // only when id+secret are both set; absent ⇒ only the manual API-key paste is offered.
+  const linearClientId = env.LINEAR_OAUTH_CLIENT_ID?.trim()
+  const linearClientSecret = env.LINEAR_OAUTH_CLIENT_SECRET?.trim()
+  const linearOAuth =
+    linearClientId && linearClientSecret
+      ? {
+          clientId: linearClientId,
+          clientSecret: linearClientSecret,
+          redirectUrl: env.LINEAR_OAUTH_REDIRECT_URL?.trim() ?? '',
+        }
+      : undefined
   return {
     enabled: true,
     encryptionKey,
+    linearOAuth,
   }
 }
 

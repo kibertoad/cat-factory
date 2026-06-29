@@ -1,3 +1,5 @@
+import { ValidationError } from '@cat-factory/kernel'
+
 // Shared Linear GraphQL transport. Linear exposes a single GraphQL endpoint, so
 // every Linear consumer (the document source, the task source, ticket filing and
 // PR writeback) talks to the SAME host with the SAME auth scheme — this module is
@@ -30,6 +32,22 @@ export type LinearAuth = { apiKey: string } | { token: string }
 /** Build the `authorization` header for a Linear request (API key raw, OAuth `Bearer`). */
 export function linearAuthHeader(auth: LinearAuth): string {
   return 'token' in auth ? `Bearer ${auth.token}` : auth.apiKey
+}
+
+/**
+ * Resolve a stored Linear credential bag into the {@link LinearAuth} the client
+ * needs. A connection may hold an OAuth access `token` (the OAuth connect flow) or
+ * a personal `apiKey` (the manual connect form); the token wins when both are
+ * present. Throws when neither is set — every Linear caller resolves auth through
+ * this one helper so the API-key/OAuth choice never diverges between call sites.
+ */
+export function linearAuthFromCredentials(credentials: {
+  token?: string
+  apiKey?: string
+}): LinearAuth {
+  if (credentials.token) return { token: credentials.token }
+  if (credentials.apiKey) return { apiKey: credentials.apiKey }
+  throw new ValidationError('Linear connection has neither an OAuth token nor an API key')
 }
 
 /** Carries the HTTP status so callers can surface a meaningful error. */

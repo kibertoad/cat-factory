@@ -3,8 +3,10 @@ import {
   createTaskFromIssueContract,
   diagnoseTaskSourceContract,
   disconnectTaskSourceContract,
+  getLinearInstallUrlContract,
   importTaskContract,
   linkTaskContract,
+  listLinearTeamsContract,
   listTaskConnectionsContract,
   listTaskSourcesContract,
   listTasksContract,
@@ -20,6 +22,9 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { ValidationError, type TaskSearchRepoScope } from '@cat-factory/kernel'
 import type { TasksModule } from '@cat-factory/orchestration'
+import type { AppConfig } from '../../config/types.js'
+import { LinearOAuth } from '../../auth/LinearOAuth.js'
+import { StateSigner } from '../../github/state.js'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 
@@ -33,6 +38,17 @@ const unavailable = <E extends AppEnv>(c: Context<E>) =>
     { error: { code: 'unavailable', message: 'Task-source integration is not configured' } },
     503,
   )
+
+/**
+ * The Linear OAuth redirect_uri: the configured value, else derived from the request
+ * origin (mirrors the Google login flow). MUST be identical at authorize + token
+ * exchange + the registered Linear app, so both call sites resolve it through here.
+ */
+function linearCallbackUrl<E extends AppEnv>(c: Context<E>, cfg: AppConfig): string {
+  const explicit = cfg.tasks.linearOAuth?.redirectUrl
+  if (explicit) return explicit
+  return `${new URL(c.req.url).origin}/tasks/oauth/callback`
+}
 
 /** Read + validate the `:source` path param as a known source kind. */
 function sourceParam<E extends AppEnv>(c: Context<E>): TaskSourceKind {
@@ -155,6 +171,45 @@ export function taskSourceController(): Hono<AppEnv> {
     return c.json(diagnostic, 200)
   })
 
+  // ---- Linear-specific ----------------------------------------------------
+
+  // List the connection's Linear teams, so the ticket-filing settings can offer a
+  // team picker instead of a raw team-id paste. 409 when Linear isn't connected.
+  buildHonoRoute(app, listLinearTeamsContract, async (c) => {
+    const tasks = requireTasks(c)
+    if (!tasks) return unavailable(c)
+    const teams = await tasks.connectionService.listLinearTeams(param(c, 'workspaceId'))
+    return c.json({ teams }, 200)
+  })
+
+  // The "Connect with Linear" authorize URL, carrying an HMAC-signed `state` that binds
+  // the install to this workspace + user with a short expiry. 503 when Linear OAuth
+  // isn't configured (the manual API-key paste is then the way to connect).
+  buildHonoRoute(app, getLinearInstallUrlContract, async (c) => {
+    const tasks = requireTasks(c)
+    if (!tasks) return unavailable(c)
+    const cfg = c.get('container').config
+    const oauth = cfg.tasks.linearOAuth
+    if (!oauth) {
+      return c.json(
+        { error: { code: 'unavailable', message: 'Linear OAuth is not configured' } },
+        503,
+      )
+    }
+    const workspaceId = param(c, 'workspaceId')
+    const signer = new StateSigner(cfg.auth.sessionSecret)
+    const state = await signer.sign({
+      workspaceId,
+      userId: c.get('user')?.id ?? null,
+      exp: Date.now() + 10 * 60 * 1000,
+    })
+    const url = new LinearOAuth({
+      clientId: oauth.clientId,
+      clientSecret: oauth.clientSecret,
+    }).authorizeUrl({ redirectUri: linearCallbackUrl(c, cfg), state })
+    return c.json({ url }, 200)
+  })
+
   // ---- issues -------------------------------------------------------------
 
   buildHonoRoute(app, listTasksContract, async (c) => {
@@ -234,6 +289,45 @@ export function taskSourceController(): Hono<AppEnv> {
       position,
     )
     return c.json(result, 201)
+  })
+
+  return app
+}
+
+/**
+ * Public Linear OAuth callback (Linear redirects the browser here with `?code&state`,
+ * so it can't be workspace-scoped or session-gated; the `state` is HMAC-verified).
+ * Mounted at `/tasks`. Mirrors the Slack `/slack/oauth/callback` flow: the token
+ * exchange happens here (the server holds the OAuth secret) and the resulting access
+ * token is handed to the connection service to store as a `{ token }` connection.
+ */
+export function linearOAuthController(): Hono<AppEnv> {
+  const app = new Hono<AppEnv>()
+
+  app.get('/oauth/callback', async (c) => {
+    const container = c.get('container')
+    const tasks = container.tasks
+    if (!tasks) return unavailable(c)
+    const oauth = container.config.tasks.linearOAuth
+    if (!oauth) return unavailable(c)
+
+    const code = c.req.query('code')
+    if (!code) {
+      return c.json({ error: { code: 'validation', message: 'Missing code' } }, 400)
+    }
+    const signer = new StateSigner(container.config.auth.sessionSecret)
+    const state = await signer.verify(c.req.query('state') ?? null)
+    if (!state) {
+      return c.json({ error: { code: 'unauthorized', message: 'Invalid or expired state' } }, 401)
+    }
+
+    const token = await new LinearOAuth({
+      clientId: oauth.clientId,
+      clientSecret: oauth.clientSecret,
+    }).exchangeCode(code, linearCallbackUrl(c, container.config))
+    await tasks.connectionService.connectLinearViaOAuth(state.workspaceId, token)
+    // Land back on the app (reuse the GitHub setup redirect target as the app URL).
+    return c.redirect(container.config.github.setupRedirectUrl || '/')
   })
 
   return app
