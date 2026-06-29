@@ -1,5 +1,30 @@
 # @cat-factory/node-server
 
+## 0.43.0
+
+### Minor Changes
+
+- 0577404: feat: move infrastructure configuration into its own top-level navbar menu. Agent-container execution + Tester environments + (local mode) the warm-container pool / checkout reuse now live in a dedicated tabbed "Infrastructure" window reached from the navbar, instead of being buried in the Integrations hub and a separate "Local mode" entry. The old bare "delegate to runner pool" toggle is replaced by a clear execution-backend selector that reflects the backends available for THIS deployment (local Docker host / Cloudflare Containers / self-hosted runner pool) and which is active — driven by a new symmetric `infrastructure` capability descriptor on `GET /auth/config` (set by every facade; asserted by the cross-runtime conformance suite). The raw-JSON runner manifest editor is kept but collapsed behind an "Advanced: custom API-based scheduler" disclosure, since the common backends don't need it.
+
+### Patch Changes
+
+- Updated dependencies [0577404]
+  - @cat-factory/contracts@0.52.0
+  - @cat-factory/server@0.48.0
+  - @cat-factory/agents@0.21.17
+  - @cat-factory/consensus@0.7.75
+  - @cat-factory/gates@0.2.27
+  - @cat-factory/gitlab@0.3.8
+  - @cat-factory/integrations@0.35.1
+  - @cat-factory/kernel@0.53.1
+  - @cat-factory/orchestration@0.41.3
+  - @cat-factory/prompt-fragments@0.9.4
+  - @cat-factory/spend@0.10.32
+  - @cat-factory/provider-bedrock@0.7.75
+  - @cat-factory/provider-cloudflare@0.7.75
+  - @cat-factory/observability-langfuse@0.7.71
+  - @cat-factory/provider-s3@0.2.21
+
 ## 0.42.0
 
 ### Minor Changes
