@@ -67,6 +67,18 @@ export function buildRevisionContext(step: PipelineStep): {
 }
 
 /**
+ * The step's per-round dispatch epoch (see {@link AgentRunContext.dispatchEpoch}). A
+ * looping step carries its round count on its own gate state: the Tester→Fixer loop on
+ * `step.test.attempts` (incremented per fixer round) and a polling gate's helper loop on
+ * `step.gate.attempts` (incremented per helper dispatch). Either uniquely tags each
+ * re-dispatch, so the harness job id changes round to round and a re-test never re-attaches
+ * to a prior round's completed job. A step with neither (dispatched once) is epoch 0.
+ */
+function dispatchEpochFor(step: PipelineStep): number {
+  return step.test?.attempts ?? step.gate?.attempts ?? 0
+}
+
+/**
  * Resolves already-selected fragment ids to their bodies against the merged
  * tenant catalog, live-resolving any document-backed entries. Implemented by the
  * fragment-library service; wired only when the library is configured. Absent →
@@ -219,6 +231,13 @@ export class AgentContextBuilder {
       // (individual-usage) subscription for the step. Null on system/dev runs.
       ...(instance.initiatedBy != null ? { initiatedByUserId: instance.initiatedBy } : {}),
       stepIndex: instance.currentStep,
+      // Per-step dispatch epoch (see AgentRunContext.dispatchEpoch): the count of fixer/helper
+      // rounds this step has been through, so a re-dispatched job (the Tester re-test after a
+      // fixer round, a gate's helper retry) gets a FRESH harness job id and runs anew rather
+      // than re-attaching to its prior round's completed job on a container-reusing transport.
+      // Both counters increment once per round, so they uniquely tag each re-dispatch; a step
+      // dispatched once has neither and stays at epoch 0 (unsuffixed id, unchanged behaviour).
+      ...(dispatchEpochFor(step) > 0 ? { dispatchEpoch: dispatchEpochFor(step) } : {}),
       isFinalStep,
       // The future-looking Follow-up companion is enabled for this (coder) step: the
       // container executor appends the follow-up guidance + sets the harness to stream items.

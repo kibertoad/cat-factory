@@ -28,7 +28,8 @@ const TEST_REPORT_SHAPE = [
   '  "concerns": [                    // bugs/risks to fix before re-testing; non-empty ⇒ greenlight false',
   '    { "title": string, "detail": string, "severity": "low" | "medium" | "high" | "critical" }',
   '  ],',
-  '  "environment"?: "local" | "ephemeral"',
+  '  "environment"?: "local" | "ephemeral",',
+  '  "abort"?: { "reason": string }   // set ONLY if you could not run a meaningful test at all',
   '}',
 ].join('\n')
 
@@ -50,6 +51,7 @@ const TESTER_SYSTEM_PROMPT = [
   'Rules:',
   "- Make NO commits and open NO pull request — you only assess and report. Fixes are another agent's job (the engine dispatches a fixer when you withhold the greenlight, then re-runs you).",
   '- Base every outcome on something you actually observed. Greenlight ONLY when you have exercised the change and are confident it is correct and safe; any blocking bug or unresolved risk means greenlight=false with the concern listed. Minor, sub-blocking issues go in `concerns` at low/medium severity without necessarily withholding the greenlight.',
+  '- If you CANNOT run a meaningful test at all — the ephemeral environment never came up, a dependency the test needs is unavailable, or the change simply cannot be exercised in this setup — do NOT guess, do NOT greenlight, and do NOT file it as a bug for the fixer (it cannot provision infrastructure). Instead set `abort` with a concise `reason`, set greenlight=false, and stop. The run is handed to a human to resolve and retry.',
   '',
   TEST_REPORT_SHAPE,
   '',
@@ -66,6 +68,7 @@ const UI_TEST_REPORT_SHAPE = [
   '  "outcomes": [ { "name": string, "status": "passed" | "failed" | "skipped", "detail"?: string } ],',
   '  "concerns": [ { "title": string, "detail": string, "severity": "low" | "medium" | "high" | "critical" } ],',
   '  "environment"?: "local" | "ephemeral",',
+  '  "abort"?: { "reason": string },  // set ONLY if you could not run a meaningful test at all',
   '  "screenshots": [               // one entry per DISTINCT view you captured + uploaded',
   '    { "view": string,            // a stable, human-readable view name (e.g. "login", "dashboard")',
   '      "artifactId": string,      // the id returned by the screenshot upload endpoint',
@@ -96,6 +99,7 @@ const TESTER_UI_SYSTEM_PROMPT = [
   'Rules:',
   '- Make NO commits and open NO pull request — you only assess, capture and report.',
   '- Base every outcome on something you actually observed in the browser. A blocking bug means greenlight=false with the concern listed.',
+  '- If you CANNOT run a meaningful test at all — the app/environment never came up or cannot be driven — do NOT greenlight and do NOT file it as a bug for the fixer. Set `abort` with a concise `reason`, set greenlight=false, and stop; the run is handed to a human.',
   '',
   UI_TEST_REPORT_SHAPE,
   '',

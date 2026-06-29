@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 import { subscriptionVendorSchema } from './vendor-credentials.js'
 import { agentConfigValuesSchema } from './agent-config.js'
-import { testReportSchema, testEnvironmentSchema } from './testing.js'
+import { testConcernSchema, testReportSchema, testEnvironmentSchema } from './testing.js'
 import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from './consensus.js'
 import { followUpsStepStateSchema } from './followUp.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
@@ -833,6 +833,30 @@ export type GateStepState = v.InferOutput<typeof gateStepStateSchema>
  *   - `phase: 'fixing'`  — a Fixer job is in flight; on completion the step returns to
  *                          `testing` and a fresh Tester job is dispatched.
  */
+/**
+ * One round of the Tester→Fixer loop, recorded when a `fixer` job finishes so the test
+ * window can show what each fixer attempt set out to fix and how it ended — the analogue of
+ * a polling gate's {@link gateAttemptSchema}, since a fixer run is otherwise an opaque
+ * sub-job with no surface of its own (only a bare `attempts` count).
+ */
+export const testerAttemptSchema = v.object({
+  /** 1-based fixer round (matches `attempts` after the fixer for this round was dispatched). */
+  attempt: v.number(),
+  /** Epoch ms when the fixer job finished. */
+  at: v.number(),
+  /** Whether the fixer container finished (`completed`) or errored/was evicted (`failed`). */
+  outcome: v.picklist(['completed', 'failed']),
+  /** The fixer's own summary (or the failure reason), naming what it changed / what failed. */
+  summary: v.optional(v.nullable(v.string())),
+  /**
+   * The concerns the fixer was handed for this round (from the Tester report that withheld
+   * its greenlight), so the window can show WHAT each round tried to address — not only that
+   * a round happened.
+   */
+  concerns: v.optional(v.nullable(v.array(testConcernSchema))),
+})
+export type TesterAttempt = v.InferOutput<typeof testerAttemptSchema>
+
 export const testerStepStateSchema = v.object({
   phase: v.picklist(['testing', 'fixing']),
   /** How many `fixer` attempts have been dispatched so far. */
@@ -841,6 +865,12 @@ export const testerStepStateSchema = v.object({
   maxAttempts: v.number(),
   /** The most recent Tester report (what was tested, outcomes, concerns, greenlight). */
   lastReport: v.optional(v.nullable(testReportSchema)),
+  /**
+   * Append-only history of the `fixer` rounds this Tester step looped through, each recorded
+   * when its job finished. Lets the test window surface an inspectable timeline of the fixer
+   * attempts (what each addressed, how it ended) instead of only a bare `attempts` count.
+   */
+  attemptLog: v.optional(v.nullable(v.array(testerAttemptSchema))),
 })
 export type TesterStepState = v.InferOutput<typeof testerStepStateSchema>
 

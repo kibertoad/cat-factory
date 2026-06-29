@@ -101,6 +101,16 @@ export const testReportSchema = v.object({
    * the visual-confirmation gate's actual-vs-reference review.
    */
   screenshots: v.optional(v.array(testScreenshotSchema)),
+  /**
+   * Set when the Tester could NOT run a meaningful test at all and the run must STOP for a
+   * human rather than loop the fixer — e.g. the ephemeral environment it was configured to
+   * use never came up, a required dependency was unavailable, or the change simply can't be
+   * exercised in this setup. The engine then blocks the task (retryable) and raises a
+   * notification WITHOUT dispatching the `fixer` (which can't fix missing infrastructure).
+   * This is distinct from a withheld greenlight (bugs were found → loop the fixer); when
+   * `abort` is set, `greenlight` MUST be false. The `reason` is shown to the human verbatim.
+   */
+  abort: v.optional(v.nullable(v.object({ reason: v.string() }))),
 })
 export type TestReport = v.InferOutput<typeof testReportSchema>
 

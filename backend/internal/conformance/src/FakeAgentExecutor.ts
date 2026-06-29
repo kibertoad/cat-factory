@@ -137,6 +137,19 @@ export interface FakeAgentOptions {
    * loop / advance) without a real container. Emitted once per fresh job. Omitted ⇒ none.
    */
   followUps?: { kind: 'follow_up' | 'question'; title: string; detail?: string }[]
+  /**
+   * Model a CONTAINER-REUSING runner (a warm local pool / self-hosted runner pool) instead
+   * of the default per-run-container transport. A pooled member's harness `JobRegistry`
+   * survives across rounds (reclaiming it does NOT destroy it), so:
+   *  - jobs are keyed by the SAME identity the real {@link ContainerAgentExecutor} uses —
+   *    `run + agentKind + dispatchEpoch` — rather than the step index, and
+   *  - a re-dispatch RE-ATTACHES to an existing entry and replays its STORED result (the
+   *    harness never re-runs a job it already has), and `stopJob` does NOT clear it.
+   * This reproduces the Tester→Fixer bug where a re-test silently replayed the first
+   * round's report: it loops/“passes regardless” WITHOUT the per-round `dispatchEpoch`
+   * fix, and re-runs correctly WITH it. Default false (per-run container, fresh each round).
+   */
+  pooledContainer?: boolean
 }
 
 /**
@@ -362,8 +375,12 @@ function greenReport(): TestReport {
  * for every test would change the CI-fixer / conflict-resolver / stopJob gates.
  */
 export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAgentExecutor {
-  private readonly jobs = new Map<string, { polled: number; context: AgentRunContext }>()
+  private readonly jobs = new Map<
+    string,
+    { polled: number; context: AgentRunContext; result?: AgentRunResult }
+  >()
   private readonly asyncKinds: ReadonlySet<AgentKind>
+  private readonly pooledContainer: boolean
   private readonly asyncPolls: number
   private readonly dispatchThrowKinds: ReadonlySet<AgentKind>
   private readonly dispatchThrowMessage: string
@@ -375,6 +392,7 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
   constructor(options: FakeAgentOptions = {}) {
     super(options)
     this.asyncKinds = new Set(options.asyncKinds ?? [])
+    this.pooledContainer = options.pooledContainer ?? false
     this.asyncPolls = Math.max(1, options.asyncPolls ?? 2)
     this.dispatchThrowKinds = new Set(options.dispatchThrowKinds ?? [])
     this.dispatchThrowMessage =
@@ -392,8 +410,16 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
   }
 
   // Deterministic, idempotent job id per (execution, step): a replayed dispatch
-  // re-attaches to the same job rather than starting a duplicate.
+  // re-attaches to the same job rather than starting a duplicate. In `pooledContainer`
+  // mode it mirrors the real ContainerAgentExecutor's `stepJobId(run, kind, epoch)` so a
+  // re-dispatched step (the Tester re-test, a fixer round) only gets a fresh job when the
+  // engine bumps the dispatch epoch — otherwise it re-attaches to the prior round's result.
   private jobIdFor(context: AgentRunContext): string {
+    if (this.pooledContainer) {
+      const base = `fakejob:${context.executionId ?? 'noexec'}:${context.agentKind}`
+      const epoch = context.dispatchEpoch ?? 0
+      return epoch > 0 ? `${base}:${epoch}` : base
+    }
     return `fakejob:${context.executionId ?? 'noexec'}:${context.stepIndex}`
   }
 
@@ -416,6 +442,10 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
    * re-attaching to a finished result.
    */
   async stopJob(handle: AgentJobHandle): Promise<void> {
+    // A pooled member is RETURNED to the pool, not destroyed, so its harness JobRegistry
+    // survives — modelled by NOT clearing the run's jobs. (This is the whole point of the
+    // mode: the re-dispatch must rely on a fresh dispatch epoch, not on container teardown.)
+    if (this.pooledContainer) return
     const prefix = `fakejob:${handle.jobId}:`
     for (const id of this.jobs.keys()) if (id.startsWith(prefix)) this.jobs.delete(id)
   }
@@ -462,6 +492,15 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
         },
         ...(followUps ? { followUps } : {}),
       }
+    }
+    // A pooled harness CACHES a finished job's result and replays it on every later poll /
+    // re-attach — it never re-runs a job id it already completed. (The default per-run fake
+    // recomputes via `run()`, which is how its existing tests advance a sequenced result on
+    // re-dispatch; keep that path untouched.) Caching is what makes a re-dispatch with a
+    // STALE job id replay the prior round — exactly the production bug the epoch fix prevents.
+    if (this.pooledContainer) {
+      if (!job.result) job.result = await this.run(job.context)
+      return { state: 'done', result: job.result, ...(followUps ? { followUps } : {}) }
     }
     return {
       state: 'done',

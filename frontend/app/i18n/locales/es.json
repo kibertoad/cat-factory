@@ -2822,6 +2822,13 @@
     "fixerAttempts": "Intentos del corrector",
     "fixCount": "{attempts}/{max} corrección",
     "fixingSuffix": "· corrigiendo…",
+    "fixerTimeline": {
+      "heading": "Intentos del corrector",
+      "attempt": "Intento {n}",
+      "completed": "Completado",
+      "failed": "Falló",
+      "addressed": "Abordando"
+    },
     "empty": {
       "title": "Aún no hay informe de pruebas.",
       "hint": "El informe aparece cuando el Tester termina una pasada. Mientras se ejecuta, el paso muestra el progreso en vivo en el tablero."

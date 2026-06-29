@@ -45,6 +45,19 @@ export interface AgentRunContext {
   initiatedByUserId?: string
   /** Index of this step within the pipeline. */
   stepIndex: number
+  /**
+   * Monotonic per-step dispatch counter, folded into the harness job id so a step that is
+   * RE-dispatched within one run (the Tester→Fixer loop's re-test, a fixer round, a polling
+   * gate's helper attempt) never collides with — and so never RE-ATTACHES to — a prior
+   * round's completed harness job. The harness keys its `JobRegistry` by the backend-supplied
+   * job id and re-attaches to an existing entry rather than re-running (replay idempotency),
+   * and a container-reusing transport (a warm local pool / a self-hosted runner pool) keeps
+   * that registry alive across rounds because reclaiming a pooled member does NOT destroy it.
+   * Without a per-round epoch the re-test would replay the first round's stale report. Derived
+   * from the step's own round counter; absent/0 for a step dispatched once (the id is then
+   * unsuffixed, so single-dispatch steps are unaffected).
+   */
+  dispatchEpoch?: number
   /** Whether this is the pipeline's last step (drives task finalisation). */
   isFinalStep: boolean
   /**

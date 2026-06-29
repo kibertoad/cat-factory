@@ -23,7 +23,7 @@ import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDr
 
 const board = useBoardStore()
 const execution = useExecutionStore()
-const { t } = useI18n()
+const { t, d } = useI18n()
 
 // Per-window blob cache for the captured screenshots; revoked on unmount.
 const blobs = useArtifactBlobs()
@@ -43,6 +43,9 @@ const step = computed(() => {
 })
 const report = computed<TestReport | null>(() => step.value?.test?.lastReport ?? null)
 const testState = computed(() => step.value?.test ?? null)
+// The inspectable Fixer history: one entry per fixer round (what it was handed + how it
+// ended), newest first, so the otherwise-opaque fixer sub-jobs have a surface here.
+const fixerAttempts = computed(() => [...(testState.value?.attemptLog ?? [])].reverse())
 
 // Infrastructure observability — parity with the Coder's generic step detail, so the
 // Tester window surfaces WHERE its job runs (the container lifecycle: spinning up /
@@ -363,6 +366,74 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                   :execution-id="executionId"
                 />
               </div>
+            </section>
+
+            <!-- Fixer timeline: one inspectable entry per fixer round (what it was handed and
+                 how it ended), so the otherwise-opaque fixer sub-jobs have a surface — the
+                 analogue of the polling gate's attempt history. -->
+            <section
+              v-if="fixerAttempts.length"
+              data-testid="tester-fixer-attempts"
+              class="space-y-2"
+            >
+              <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                {{ t('testing.fixerTimeline.heading') }}
+              </h3>
+              <ol class="space-y-2">
+                <li
+                  v-for="a in fixerAttempts"
+                  :key="a.attempt"
+                  data-testid="tester-fixer-attempt"
+                  class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2"
+                >
+                  <div class="flex items-center gap-2">
+                    <UIcon
+                      :name="a.outcome === 'completed' ? 'i-lucide-wrench' : 'i-lucide-circle-x'"
+                      class="h-3.5 w-3.5 shrink-0"
+                      :class="a.outcome === 'completed' ? 'text-amber-300' : 'text-rose-400'"
+                    />
+                    <span class="text-[13px] font-medium text-slate-200">
+                      {{ t('testing.fixerTimeline.attempt', { n: a.attempt }) }}
+                    </span>
+                    <UBadge
+                      :color="a.outcome === 'completed' ? 'neutral' : 'error'"
+                      variant="subtle"
+                      size="sm"
+                    >
+                      {{
+                        a.outcome === 'completed'
+                          ? t('testing.fixerTimeline.completed')
+                          : t('testing.fixerTimeline.failed')
+                      }}
+                    </UBadge>
+                    <span class="ml-auto text-[11px] text-slate-500">{{
+                      d(new Date(a.at), 'short')
+                    }}</span>
+                  </div>
+                  <p v-if="a.summary" class="mt-1 text-[12px] leading-snug text-slate-400">
+                    {{ a.summary }}
+                  </p>
+                  <div v-if="a.concerns && a.concerns.length" class="mt-1.5">
+                    <p class="text-[11px] text-slate-500">
+                      {{ t('testing.fixerTimeline.addressed') }}
+                    </p>
+                    <ul class="mt-1 space-y-0.5">
+                      <li
+                        v-for="(c, ci) in a.concerns"
+                        :key="`fa${a.attempt}-c${ci}`"
+                        class="flex items-center gap-1.5 text-[12px] text-slate-300"
+                      >
+                        <span
+                          class="rounded px-1 text-[10px] uppercase"
+                          :class="SEVERITY_META[c.severity].chip"
+                          >{{ SEVERITY_LABELS[c.severity] }}</span
+                        >
+                        <span class="truncate">{{ c.title }}</span>
+                      </li>
+                    </ul>
+                  </div>
+                </li>
+              </ol>
             </section>
 
             <div

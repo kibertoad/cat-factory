@@ -2909,6 +2909,13 @@
     "fixerAttempts": "Fixer attempts",
     "fixCount": "{attempts}/{max} fix",
     "fixingSuffix": "· fixing…",
+    "fixerTimeline": {
+      "heading": "Fixer attempts",
+      "attempt": "Attempt {n}",
+      "completed": "Completed",
+      "failed": "Failed",
+      "addressed": "Addressing"
+    },
     "empty": {
       "title": "No test report yet.",
       "hint": "The report appears once the Tester finishes a pass. While it runs, the step shows live progress on the board."
