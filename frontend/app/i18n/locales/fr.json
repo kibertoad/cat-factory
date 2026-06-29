@@ -34,7 +34,8 @@
     "configuration": "Configuration",
     "workspaceSettings": "Paramètres de l’espace de travail",
     "modelConfiguration": "Configuration du modèle",
-    "accountSettings": "Paramètres du compte"
+    "accountSettings": "Paramètres du compte",
+    "infrastructure": "Infrastructure"
   },
   "board": {
     "toolbar": {
@@ -1111,7 +1112,6 @@
         "documents": "Documents",
         "taskTrackers": "Outils de suivi des tâches",
         "observability": "Observabilité",
-        "infrastructure": "Infrastructure",
         "personal": "Personnel (vous uniquement)"
       },
       "items": {
@@ -1148,16 +1148,6 @@
         "observability": {
           "label": "Santé après publication",
           "description": "Surveillez les moniteurs et les SLO après la publication d'une version (Datadog)."
-        },
-        "infrastructure": {
-          "label": "Infrastructure",
-          "description": "Pool d'exécuteurs auto-hébergé pour les agents de conteneur et environnements de test éphémères.",
-          "agents": "Agents : {state}",
-          "envs": "Environnements : {state}"
-        },
-        "localMode": {
-          "label": "Mode local",
-          "description": "Pool de conteneurs à chaud et réutilisation du checkout par dépôt pour l'exécuteur local."
         },
         "githubPat": {
           "label": "Mon jeton GitHub",
@@ -1225,8 +1215,8 @@
       "windowTitle": "Infrastructure",
       "noneAvailable": "Aucun fournisseur d'infrastructure n'est activé sur ce déploiement.",
       "tabs": {
-        "containerAgents": "Agents de conteneur",
-        "testEnvironments": "Environnements de test"
+        "testEnvironments": "Environnements de test",
+        "agentContainers": "Agents de conteneur"
       },
       "kind": {
         "environment": {
@@ -1249,17 +1239,6 @@
         "noSecrets": "Ce manifeste ne référence aucun secret.",
         "reenterSecrets": "Saisissez à nouveau chaque secret pour enregistrer : les secrets stockés sont en écriture seule et ne sont pas affichés.",
         "starterHint": "Ceci est un exemple de départ. Modifiez-le pour qu'il corresponde à l'API de votre fournisseur."
-      },
-      "delegation": {
-        "title": "Délégation locale",
-        "intro": "Par défaut, cette machine exécute tout en local : les agents de conteneur sur le Docker de l'hôte, l'infrastructure du Tester via docker-compose dans le conteneur. Activez les options ci-dessous pour déléguer l'une ou l'autre de ces tâches à un service externe. S'applique uniquement en mode local.",
-        "agentsToggle": "Exécuter les agents de conteneur sur le pool d'exécuteurs",
-        "agentsHint": "Envoyez chaque agent de conteneur (codeur, tester, fusionneur, bootstrap, …) au pool d'exécuteurs auto-hébergé de cet espace de travail plutôt qu'au Docker de l'hôte.",
-        "registerPoolPrompt": "{link} d'abord pour activer cette option.",
-        "registerPoolLink": "Enregistrez un pool d'exécuteurs",
-        "envToggle": "Provisionner les environnements du Tester via le fournisseur",
-        "envHint": "Montez l'environnement d'aperçu du Tester via le fournisseur d'environnements configuré ci-dessous plutôt que via docker-compose dans le conteneur. Connectez d'abord un fournisseur pour activer cette option.",
-        "updateFailed": "Impossible de mettre à jour la délégation"
       },
       "viewLogs": "Voir les journaux",
       "hideLogs": "Masquer les journaux",
@@ -1304,6 +1283,10 @@
         "caCertPem": "Certificat CA du cluster (PEM)",
         "caCertPemHelp": "Collez le bundle CA du cluster pour que le certificat TLS de l'apiserver soit vérifié. À omettre uniquement pour une CA publiquement approuvée.",
         "harnessPort": "Port du harness"
+      },
+      "advancedManifest": {
+        "summary": "Avancé : planificateur personnalisé basé sur une API",
+        "intro": "Nécessaire uniquement pour intégrer un planificateur personnalisé basé sur une API. Les backends courants (Docker local, Cloudflare Containers et Kubernetes) n'en ont pas besoin ; décrivez ici l'API HTTP de votre propre planificateur uniquement si vous en utilisez un."
       }
     },
     "serviceFragmentDefaults": {
@@ -1653,6 +1636,22 @@
         "saveFailed": "Impossible d'enregistrer le runner",
         "removed": "Runner supprimé",
         "removeFailed": "Impossible de supprimer le runner"
+      }
+    },
+    "infrastructure": {
+      "active": "Actif : {backend}",
+      "registerHint": "Enregistrez un pool d'exécuteurs ci-dessous pour l'activer.",
+      "updateFailed": "Impossible de mettre à jour le backend d'exécution",
+      "executionBackend": {
+        "label": "Où s'exécutent les agents",
+        "local-docker": "Docker local (hôte)",
+        "cloudflare-containers": "Cloudflare Containers (intégré)",
+        "runner-pool": "Pool d'exécuteurs auto-hébergé"
+      },
+      "testEnvBackend": {
+        "label": "Où s'exécutent les environnements de test",
+        "local-compose": "docker-compose dans le conteneur",
+        "environment-provider": "Fournisseur d'environnements"
       }
     }
   },

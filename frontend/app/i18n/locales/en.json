@@ -33,6 +33,7 @@
     "addFromRepo": "Add from existing repo",
     "bootstrapRepo": "Bootstrap repo",
     "integrations": "Integrations",
+    "infrastructure": "Infrastructure",
     "sandbox": "Sandbox",
     "@sandbox": {
       "description": "Named feature area (a screen for trying prompt versions / models against graded fixtures). Fine to localize descriptively per locale - unlike nav.kaizen, this one is NOT kept verbatim."
@@ -1150,7 +1151,6 @@
         "documents": "Documents",
         "taskTrackers": "Task trackers",
         "observability": "Observability",
-        "infrastructure": "Infrastructure",
         "personal": "Personal (only you)"
       },
       "items": {
@@ -1187,16 +1187,6 @@
         "observability": {
           "label": "Post-release health",
           "description": "Watch monitors and SLOs after a release ships (Datadog)."
-        },
-        "infrastructure": {
-          "label": "Infrastructure",
-          "description": "Self-hosted runner pool for container agents and ephemeral test environments.",
-          "agents": "Agents: {state}",
-          "envs": "Envs: {state}"
-        },
-        "localMode": {
-          "label": "Local mode",
-          "description": "Warm container pool plus per-repo checkout reuse for the local runner."
         },
         "githubPat": {
           "label": "My GitHub token",
@@ -1259,12 +1249,28 @@
         "fragments": "Context fragments"
       }
     },
+    "infrastructure": {
+      "active": "Active: {backend}",
+      "registerHint": "Register a runner pool below to enable this.",
+      "updateFailed": "Could not update the execution backend",
+      "executionBackend": {
+        "label": "Where agents run",
+        "local-docker": "Local Docker (host)",
+        "cloudflare-containers": "Cloudflare Containers (built-in)",
+        "runner-pool": "Self-hosted runner pool"
+      },
+      "testEnvBackend": {
+        "label": "Where test environments run",
+        "local-compose": "In-container docker-compose",
+        "environment-provider": "Environment provider"
+      }
+    },
     "providerConnection": {
       "fallbackTitle": "Provider",
       "windowTitle": "Infrastructure",
       "noneAvailable": "No infrastructure providers are enabled on this deployment.",
       "tabs": {
-        "containerAgents": "Container agents",
+        "agentContainers": "Agent containers",
         "testEnvironments": "Test environments"
       },
       "kind": {
@@ -1309,16 +1315,9 @@
         "reenterSecrets": "Re-enter every secret to save. Stored secrets are write-only and aren't shown.",
         "starterHint": "This is a starter example. Edit it to match your provider's API."
       },
-      "delegation": {
-        "title": "Local delegation",
-        "intro": "By default this machine runs everything locally — container agents on host Docker, the Tester's infrastructure via in-container docker-compose. Opt in below to delegate either concern to an external service instead. Applies only in local mode.",
-        "agentsToggle": "Run container agents on the runner pool",
-        "agentsHint": "Dispatch every container agent (coder, tester, merger, bootstrap, …) to this workspace's self-hosted runner pool instead of host Docker.",
-        "registerPoolPrompt": "{link} first to enable this.",
-        "registerPoolLink": "Register a runner pool",
-        "envToggle": "Provision Tester environments via the provider",
-        "envHint": "Stand the Tester's preview environment up through the environment provider configured below instead of in-container docker-compose. Connect a provider first to enable this.",
-        "updateFailed": "Could not update delegation"
+      "advancedManifest": {
+        "summary": "Advanced: custom API-based scheduler",
+        "intro": "Only needed to integrate a custom API-based scheduler. The common backends (local Docker, Cloudflare Containers and Kubernetes) don't need this; describe your own scheduler's HTTP API here only if you run one."
       },
       "viewLogs": "View logs",
       "hideLogs": "Hide logs",

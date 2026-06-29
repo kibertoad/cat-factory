@@ -190,7 +190,10 @@ async function saveManifest(payload: {
 // cluster; environments are manifest-only. Defaults to the saved connection's kind.
 const RUNNER_BACKEND_KINDS = ['manifest', 'kubernetes'] as const
 type RunnerBackendKind = (typeof RUNNER_BACKEND_KINDS)[number]
-const backendKind = ref<RunnerBackendKind>('manifest')
+// Default a fresh runner-pool to the friendly Kubernetes form (the prominent path); the raw
+// manifest editor is the advanced "custom API-based scheduler" option, collapsed by default.
+// Honour the saved connection's kind below when one exists.
+const backendKind = ref<RunnerBackendKind>('kubernetes')
 const showBackendSelector = computed(() => props.kind === 'runner-pool')
 const backendKindItems = computed(() =>
   RUNNER_BACKEND_KINDS.map((k) => ({
@@ -416,18 +419,31 @@ function fieldHelp(key: string): string | undefined {
       </div>
     </div>
 
-    <!-- MANIFEST-driven provider: the full in-app manifest editor. -->
-    <ProviderManifestEditor
+    <!-- MANIFEST-driven provider: the raw JSON manifest editor. Collapsed by default — it's
+         the advanced path, needed ONLY to integrate a custom API-based scheduler. The common
+         backends (local Docker, Cloudflare Containers, Kubernetes) don't need it. -->
+    <details
       v-else
-      :kind="kind"
-      :saved-manifest="descriptor.savedManifest"
-      :connected="!!connection"
-      :supports-test="descriptor.supportsTest"
-      :testing="testing"
-      :busy="busy"
-      :test-result="testResult"
-      @test="testManifest"
-      @save="saveManifest"
-    />
+      class="rounded-lg border border-slate-700 bg-slate-900/40 p-3"
+      :open="!!connection"
+    >
+      <summary class="cursor-pointer text-sm font-medium text-slate-200">
+        {{ t('settings.providerConnection.advancedManifest.summary') }}
+      </summary>
+      <p class="mt-2 mb-3 text-[11px] text-slate-400">
+        {{ t('settings.providerConnection.advancedManifest.intro') }}
+      </p>
+      <ProviderManifestEditor
+        :kind="kind"
+        :saved-manifest="descriptor.savedManifest"
+        :connected="!!connection"
+        :supports-test="descriptor.supportsTest"
+        :testing="testing"
+        :busy="busy"
+        :test-result="testResult"
+        @test="testManifest"
+        @save="saveManifest"
+      />
+    </details>
   </div>
 </template>

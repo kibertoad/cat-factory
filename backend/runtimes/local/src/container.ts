@@ -14,7 +14,7 @@ import {
 import type { NodeContainerOptions } from '@cat-factory/node-server'
 import { ConflictError } from '@cat-factory/kernel'
 import { WorkspaceSettingsService } from '@cat-factory/orchestration'
-import { logger } from '@cat-factory/server'
+import { buildInfrastructureCapabilities, logger } from '@cat-factory/server'
 import type { AppConfig, ResolveRunnerTransport, ServerContainer } from '@cat-factory/server'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { LocalSettingsService } from '@cat-factory/integrations'
@@ -341,6 +341,22 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   const localTestInfraSupported = nativeAgents
     ? false
     : createRuntimeAdapter(env).capabilities.localDind
+
+  // Surface the local deployment's execution backends so the SPA renders a clear selector.
+  // Agents run on host Docker (`local-docker`) by default, flipping to the self-hosted pool
+  // per-workspace via `delegateAgentsToRunnerPool` (the SPA derives the effective active).
+  // The Tester's in-container docker-compose infra (`local-compose`) is offered ONLY when the
+  // runtime can nest containers — Apple `container` can't, so it's omitted there (the one
+  // legitimate per-runtime asymmetry, gated by `localTestInfraSupported`/`localDind`).
+  config.infrastructure = buildInfrastructureCapabilities({
+    execution: { available: ['local-docker', 'runner-pool'], active: 'local-docker' },
+    testEnv: {
+      available: localTestInfraSupported
+        ? ['local-compose', 'environment-provider']
+        : ['environment-provider'],
+      active: localTestInfraSupported ? 'local-compose' : 'environment-provider',
+    },
+  })
 
   const container = buildNodeContainer({
     ...options,

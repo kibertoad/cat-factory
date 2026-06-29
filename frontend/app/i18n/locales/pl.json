@@ -34,7 +34,8 @@
     "configuration": "Konfiguracja",
     "workspaceSettings": "Ustawienia obszaru roboczego",
     "modelConfiguration": "Konfiguracja modelu",
-    "accountSettings": "Ustawienia konta"
+    "accountSettings": "Ustawienia konta",
+    "infrastructure": "Infrastruktura"
   },
   "board": {
     "toolbar": {
@@ -1111,7 +1112,6 @@
         "documents": "Dokumenty",
         "taskTrackers": "Narzędzia do śledzenia zadań",
         "observability": "Obserwowalność",
-        "infrastructure": "Infrastruktura",
         "personal": "Osobiste (tylko Ty)"
       },
       "items": {
@@ -1148,16 +1148,6 @@
         "observability": {
           "label": "Kondycja po wydaniu",
           "description": "Obserwuj monitory i SLO po wdrożeniu wydania (Datadog)."
-        },
-        "infrastructure": {
-          "label": "Infrastruktura",
-          "description": "Samodzielnie hostowana pula wykonawców dla agentów kontenerowych oraz efemeryczne środowiska testowe.",
-          "agents": "Agenci: {state}",
-          "envs": "Środowiska: {state}"
-        },
-        "localMode": {
-          "label": "Tryb lokalny",
-          "description": "Pula ciepłych kontenerów oraz ponowne użycie checkoutu na repozytorium dla lokalnego silnika."
         },
         "githubPat": {
           "label": "Mój token GitHub",
@@ -1225,8 +1215,8 @@
       "windowTitle": "Infrastruktura",
       "noneAvailable": "W tym wdrożeniu nie włączono żadnych dostawców infrastruktury.",
       "tabs": {
-        "containerAgents": "Agenci kontenerowi",
-        "testEnvironments": "Środowiska testowe"
+        "testEnvironments": "Środowiska testowe",
+        "agentContainers": "Agenci kontenerowi"
       },
       "kind": {
         "environment": {
@@ -1249,17 +1239,6 @@
         "noSecrets": "Ten manifest nie odwołuje się do żadnych sekretów.",
         "reenterSecrets": "Wprowadź ponownie każdy sekret, aby zapisać — przechowywane sekrety są tylko do zapisu i nie są wyświetlane.",
         "starterHint": "To jest przykład startowy. Zmodyfikuj go, aby pasował do API Twojego dostawcy."
-      },
-      "delegation": {
-        "title": "Delegowanie lokalne",
-        "intro": "Domyślnie ta maszyna uruchamia wszystko lokalnie — agentów kontenerowych na Dockerze hosta, a infrastrukturę Testera przez docker-compose wewnątrz kontenera. Włącz poniższe opcje, aby przekazać dowolne z tych zadań do usługi zewnętrznej. Dotyczy wyłącznie trybu lokalnego.",
-        "agentsToggle": "Uruchamiaj agentów kontenerowych w puli wykonawców",
-        "agentsHint": "Wysyłaj każdego agenta kontenerowego (koder, tester, scalający, bootstrap, …) do samodzielnie hostowanej puli wykonawców tego obszaru roboczego zamiast na Dockera hosta.",
-        "registerPoolPrompt": "Najpierw {link}, aby to włączyć.",
-        "registerPoolLink": "Zarejestruj pulę wykonawców",
-        "envToggle": "Udostępniaj środowiska Testera przez dostawcę",
-        "envHint": "Uruchom środowisko podglądowe Testera przez dostawcę środowisk skonfigurowanego poniżej zamiast przez docker-compose wewnątrz kontenera. Najpierw połącz dostawcę, aby to włączyć.",
-        "updateFailed": "Nie udało się zaktualizować delegowania"
       },
       "viewLogs": "Pokaż dzienniki",
       "hideLogs": "Ukryj dzienniki",
@@ -1304,6 +1283,10 @@
         "caCertPem": "Certyfikat CA klastra (PEM)",
         "caCertPemHelp": "Wklej pakiet CA klastra, aby certyfikat TLS apiservera został zweryfikowany. Pomiń tylko dla publicznie zaufanego CA.",
         "harnessPort": "Port harnessa"
+      },
+      "advancedManifest": {
+        "summary": "Zaawansowane: niestandardowy harmonogram oparty na API",
+        "intro": "Potrzebne tylko do zintegrowania niestandardowego harmonogramu opartego na API. Typowe backendy (lokalny Docker, Cloudflare Containers i Kubernetes) tego nie wymagają; opisz tutaj API HTTP własnego harmonogramu tylko, jeśli go używasz."
       }
     },
     "serviceFragmentDefaults": {
@@ -1653,6 +1636,22 @@
         "saveFailed": "Nie udało się zapisać runnera",
         "removed": "Runner usunięty",
         "removeFailed": "Nie udało się usunąć runnera"
+      }
+    },
+    "infrastructure": {
+      "active": "Aktywne: {backend}",
+      "registerHint": "Zarejestruj pulę runnerów poniżej, aby to włączyć.",
+      "updateFailed": "Nie udało się zaktualizować backendu wykonawczego",
+      "executionBackend": {
+        "label": "Gdzie działają agenci",
+        "local-docker": "Lokalny Docker (host)",
+        "cloudflare-containers": "Cloudflare Containers (wbudowane)",
+        "runner-pool": "Samodzielnie hostowana pula runnerów"
+      },
+      "testEnvBackend": {
+        "label": "Gdzie działają środowiska testowe",
+        "local-compose": "docker-compose w kontenerze",
+        "environment-provider": "Dostawca środowisk"
       }
     }
   },

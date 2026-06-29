@@ -34,7 +34,8 @@
     "configuration": "Configuración",
     "workspaceSettings": "Ajustes del espacio de trabajo",
     "modelConfiguration": "Configuración del modelo",
-    "accountSettings": "Ajustes de la cuenta"
+    "accountSettings": "Ajustes de la cuenta",
+    "infrastructure": "Infraestructura"
   },
   "board": {
     "toolbar": {
@@ -1111,7 +1112,6 @@
         "documents": "Documentos",
         "taskTrackers": "Rastreadores de tareas",
         "observability": "Observabilidad",
-        "infrastructure": "Infraestructura",
         "personal": "Personal (solo tú)"
       },
       "items": {
@@ -1148,16 +1148,6 @@
         "observability": {
           "label": "Salud posterior al lanzamiento",
           "description": "Vigila los monitores y SLO después de publicar una versión (Datadog)."
-        },
-        "infrastructure": {
-          "label": "Infraestructura",
-          "description": "Grupo de ejecutores autoalojado para los agentes de contenedor y entornos de prueba efímeros.",
-          "agents": "Agentes: {state}",
-          "envs": "Entornos: {state}"
-        },
-        "localMode": {
-          "label": "Modo local",
-          "description": "Grupo de contenedores en caliente y reutilización de checkout por repositorio para el ejecutor local."
         },
         "githubPat": {
           "label": "Mi token de GitHub",
@@ -1225,8 +1215,8 @@
       "windowTitle": "Infraestructura",
       "noneAvailable": "No hay proveedores de infraestructura habilitados en este despliegue.",
       "tabs": {
-        "containerAgents": "Agentes de contenedor",
-        "testEnvironments": "Entornos de prueba"
+        "testEnvironments": "Entornos de prueba",
+        "agentContainers": "Agentes de contenedor"
       },
       "kind": {
         "environment": {
@@ -1249,17 +1239,6 @@
         "noSecrets": "Este manifiesto no hace referencia a ningún secreto.",
         "reenterSecrets": "Vuelve a introducir cada secreto para guardar: los secretos almacenados son de solo escritura y no se muestran.",
         "starterHint": "Este es un ejemplo inicial. Edítalo para que coincida con la API de tu proveedor."
-      },
-      "delegation": {
-        "title": "Delegación local",
-        "intro": "De forma predeterminada, esta máquina ejecuta todo localmente: los agentes de contenedor en Docker del host y la infraestructura del Tester mediante docker-compose dentro del contenedor. Activa las opciones de abajo para delegar cualquiera de estas tareas en un servicio externo. Solo se aplica en modo local.",
-        "agentsToggle": "Ejecutar los agentes de contenedor en el grupo de ejecutores",
-        "agentsHint": "Envía cada agente de contenedor (codificador, tester, fusionador, bootstrap, …) al grupo de ejecutores autoalojado de este espacio de trabajo en lugar de a Docker del host.",
-        "registerPoolPrompt": "{link} primero para habilitar esto.",
-        "registerPoolLink": "Registra un grupo de ejecutores",
-        "envToggle": "Aprovisionar los entornos del Tester mediante el proveedor",
-        "envHint": "Levanta el entorno de vista previa del Tester a través del proveedor de entornos configurado abajo en lugar de docker-compose dentro del contenedor. Conecta un proveedor primero para habilitar esto.",
-        "updateFailed": "No se pudo actualizar la delegación"
       },
       "viewLogs": "Ver registros",
       "hideLogs": "Ocultar registros",
@@ -1304,6 +1283,10 @@
         "caCertPem": "Certificado CA del clúster (PEM)",
         "caCertPemHelp": "Pega el bundle CA del clúster para que el certificado TLS del apiserver se verifique. Omítelo solo para una CA de confianza pública.",
         "harnessPort": "Puerto del harness"
+      },
+      "advancedManifest": {
+        "summary": "Avanzado: planificador personalizado basado en API",
+        "intro": "Solo es necesario para integrar un planificador personalizado basado en API. Los backends habituales (Docker local, Cloudflare Containers y Kubernetes) no lo necesitan; describe aquí la API HTTP de tu propio planificador solo si usas uno."
       }
     },
     "serviceFragmentDefaults": {
@@ -1653,6 +1636,22 @@
         "saveFailed": "No se pudo guardar el runner",
         "removed": "Runner eliminado",
         "removeFailed": "No se pudo eliminar el runner"
+      }
+    },
+    "infrastructure": {
+      "active": "Activo: {backend}",
+      "registerHint": "Registra un pool de ejecutores abajo para habilitarlo.",
+      "updateFailed": "No se pudo actualizar el backend de ejecución",
+      "executionBackend": {
+        "label": "Dónde se ejecutan los agentes",
+        "local-docker": "Docker local (host)",
+        "cloudflare-containers": "Cloudflare Containers (integrado)",
+        "runner-pool": "Pool de ejecutores autoalojado"
+      },
+      "testEnvBackend": {
+        "label": "Dónde se ejecutan los entornos de prueba",
+        "local-compose": "docker-compose en contenedor",
+        "environment-provider": "Proveedor de entornos"
       }
     }
   },

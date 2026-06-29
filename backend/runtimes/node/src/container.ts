@@ -101,6 +101,7 @@ import {
   WebCryptoPersonalSecretCipher,
   WebCryptoSecretCipher,
   WebCryptoWebhookVerifier,
+  buildInfrastructureCapabilities,
   buildResolveRepoTarget,
   makeResolveRunRepoContext,
   makeResolveRepoFilesForCoords,
@@ -1031,6 +1032,14 @@ function buildNodeGitHubIssueFiler(
 export function buildNodeContainer(options: NodeContainerOptions): ServerContainer {
   const env = options.env ?? process.env
   const config = options.config ?? loadNodeConfig(env)
+  // The Node service has no built-in per-run container runtime: repo-operating agents run on
+  // a self-hosted runner pool, and Tester environments via the environment provider. Surface
+  // that so the SPA's infrastructure selector reads accurately. Local mode pre-sets its own
+  // descriptor (host Docker + pool) before calling in, so only fill it when absent.
+  config.infrastructure ??= buildInfrastructureCapabilities({
+    execution: { available: ['runner-pool'], active: 'runner-pool' },
+    testEnv: { available: ['environment-provider'], active: 'environment-provider' },
+  })
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
   const repos = options.repos ?? createDrizzleRepositories(options.db, clock)
