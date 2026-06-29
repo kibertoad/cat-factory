@@ -6,11 +6,12 @@ import type {
 } from '@cat-factory/kernel'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { KubernetesEnvironmentProvider } from './KubernetesEnvironmentProvider.js'
-import { kubernetesConfigToManifest } from './kubernetes-environment.logic.js'
+import { kubernetesConfigToManifest, resourceUrl } from './kubernetes-environment.logic.js'
 import {
   clusterSkipReason,
   deleteNamespaceQuietly,
   envConfig,
+  rawClient,
   readClusterEnv,
   tokenResolver,
   uniqueSuffix,
@@ -144,6 +145,79 @@ describe.skipIf(skip !== null)(
       )
       expect(ready.status).toBe('ready')
       expect(ready.url).toMatch(/^http:\/\/.+:80$/)
+    })
+
+    it('resolves the URL from a named Ingress status (ingressStatus source)', async () => {
+      // The minimal test cluster runs no Ingress controller (Traefik is disabled so the
+      // serviceStatus test can own host port 80), so nothing programs an Ingress' address.
+      // We therefore apply a real Ingress through the provider, then set its
+      // `.status.loadBalancer` via the apiserver status subresource — exactly the shape a
+      // controller would write — and assert the provider GETs that real Ingress and parses
+      // the address into the URL. (What's under test is the provider's read+parse of the
+      // live apiserver Ingress status, not the controller.)
+      const ingressYaml = `
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  selector:
+    app: web
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+spec:
+  rules:
+    - host: web.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 80
+`
+      const config = envConfig(cluster, {
+        manifestSource: { type: 'colocated', path: 'k8s/ingress.yaml' },
+        url: { source: 'ingressStatus', ingressName: 'web', scheme: 'http' },
+      })
+      const ingressManifest = kubernetesConfigToManifest(config)
+      const provisioned = await provider.provision({
+        manifest: ingressManifest,
+        inputs: { pullNumber: '3', branch: 'ing', blockId: `it-${uniqueSuffix()}` },
+        resolveSecret,
+        runRepo: runRepo({ 'k8s/ingress.yaml': ingressYaml }),
+      })
+      const namespace = provisioned.externalId!
+      namespaces.push(namespace)
+
+      // Stand in for the ingress controller: write the LoadBalancer address onto the real
+      // Ingress' status subresource (a TEST-NET-3 address, RFC 5737).
+      const statusUrl = `${resourceUrl(config, 'networking.k8s.io/v1', 'Ingress', namespace, 'web')}/status`
+      const patch = await rawClient(cluster).fetch(
+        'PATCH',
+        statusUrl,
+        { status: { loadBalancer: { ingress: [{ ip: '203.0.113.10' }] } } },
+        30_000,
+        'application/merge-patch+json',
+      )
+      expect(patch.ok).toBe(true)
+
+      const ready = await provider.status({
+        manifest: ingressManifest,
+        externalId: namespace,
+        provisionFields: provisioned.fields,
+        resolveSecret,
+      })
+      expect(ready.status).toBe('ready')
+      expect(ready.url).toBe('http://203.0.113.10')
     })
 
     it('tears the namespace down and tolerates a repeat teardown', async () => {

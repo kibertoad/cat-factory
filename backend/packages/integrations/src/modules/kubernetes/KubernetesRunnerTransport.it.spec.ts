@@ -65,6 +65,22 @@ describe.skipIf(skip !== null)(
       await expect(transport.dispatch(ref, { mode: 'coding' }, 'agent')).resolves.toBeUndefined()
     })
 
+    it('schedules + serves a pod built with an instanceSize resource override', async () => {
+      // A per-size override sets requests == limits (Guaranteed QoS). The unit test only
+      // asserts the manifest's `resources` block is shaped right; this proves the
+      // resource-bounded pod the apiserver actually admits still schedules on a real node
+      // AND serves the harness through the pod-proxy. (Memory is generous enough not to OOM
+      // the tiny Node mock; cpu is a request the single runner node trivially satisfies.)
+      const sized = new KubernetesRunnerTransport(
+        runnerConfig(cluster, { resourcesBySize: { small: { cpu: '100m', memory: '256Mi' } } }),
+        tokenResolver(cluster),
+      )
+      const ref = freshRef()
+      await sized.dispatch(ref, { mode: 'coding' }, 'agent', { instanceSize: 'small' })
+      const view = await sized.poll(ref)
+      expect(view.state).toBe('done')
+    })
+
     it('releases the run pod, and a subsequent poll maps the proxy 404 to an eviction', async () => {
       const ref = freshRef()
       await transport.dispatch(ref, { mode: 'coding' }, 'agent')
