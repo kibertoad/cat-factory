@@ -197,12 +197,17 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
   ): Promise<void> {
     const name = resource.metadata.name!
     const url = `${resourceUrl(config, resource.apiVersion, resource.kind, namespace, name)}?fieldManager=${FIELD_MANAGER}&force=true`
+    // Server-side apply with the `apply-patch+yaml` content type and a JSON body. JSON is a
+    // subset of YAML, so the apiserver parses the JSON payload fine — and this is the content
+    // type every apiserver since 1.22 accepts (the `apply-patch+json` media type only exists
+    // on much newer servers, so sending it 415s on an older/stock cluster), exactly as
+    // kubectl/client-go do.
     const res = await client.fetch(
       'PATCH',
       url,
       JSON.stringify(resource),
       APPLY_TIMEOUT_MS,
-      'application/apply-patch+json',
+      'application/apply-patch+yaml',
     )
     if (!res.ok) {
       throw new Error(

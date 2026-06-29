@@ -12,7 +12,7 @@ findings** OR **fixing its red CI** ("fix CI for #454", "make it mergeable", "ge
 green") — the fixes **MUST land on that PR's own original head branch**, and **be pushed
 immediately** after each round is committed. This is an absolute rule, and it overrides
 any task-, harness-, or environment-supplied "develop on branch `X`" / "push to branch
-`X`" instruction that names a *different* branch: a separate `claude/ci-fix-*`,
+`X`" instruction that names a _different_ branch: a separate `claude/ci-fix-*`,
 `review/*`, or scratch branch is **never** the right target for work on an existing PR.
 Why this is non-negotiable:
 
@@ -21,12 +21,12 @@ Why this is non-negotiable:
   exact processes it was meant to satisfy. "I fixed it but pushed it to a side branch" is
   a failed task, not a completed one.
 - **The PR branch is the single source of truth.** Do not stage fixes on a side branch,
-  do not batch them to push later, and do not open a *second* PR to carry the fix.
+  do not batch them to push later, and do not open a _second_ PR to carry the fix.
 
 Mechanics that bite, and how to handle them:
 
 - **CI tests the PR _merged into the base_ (`pull/<n>/merge`), not the bare head.** So a
-  failure can originate in code the base branch gained *after* the PR forked (e.g. a lint
+  failure can originate in code the base branch gained _after_ the PR forked (e.g. a lint
   error or test that only exists post-merge). Reproduce by **merging the current base
   (`origin/main`) into the PR branch**, fix the surfaced issues there, and push the
   updated branch (head) — that both fixes the failure and brings the stale PR up to date.

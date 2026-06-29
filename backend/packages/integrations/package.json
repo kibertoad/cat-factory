@@ -28,7 +28,8 @@
     "prepublishOnly": "pnpm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "test:integration": "vitest run -c vitest.integration.config.ts"
   },
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
