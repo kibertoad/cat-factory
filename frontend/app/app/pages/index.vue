@@ -79,9 +79,6 @@ const ModelConfigurationPanel = defineAsyncComponent(
 const LocalModelEndpointsPanel = defineAsyncComponent(
   () => import('~/components/settings/LocalModelEndpointsPanel.vue'),
 )
-const LocalModeSettingsPanel = defineAsyncComponent(
-  () => import('~/components/settings/LocalModeSettingsPanel.vue'),
-)
 const SandboxPanel = defineAsyncComponent(() => import('~/components/sandbox/SandboxPanel.vue'))
 const UserSecretsSection = defineAsyncComponent(
   () => import('~/components/settings/UserSecretsSection.vue'),
@@ -287,7 +284,6 @@ watch(
       <InfrastructureWindow v-if="ui.infrastructureOpen" />
       <ModelConfigurationPanel v-if="ui.modelConfigOpen" />
       <LocalModelEndpointsPanel v-if="ui.localModelsOpen" />
-      <LocalModeSettingsPanel v-if="ui.localModeSettingsOpen" />
       <SandboxPanel v-if="ui.sandboxOpen" />
       <UserSecretsSection v-if="ui.userSecretsOpen" />
       <OpenRouterCatalogPanel v-if="ui.openRouterOpen" />

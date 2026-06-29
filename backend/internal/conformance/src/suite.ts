@@ -69,6 +69,26 @@ import type { ConformanceHarness } from './harness.js'
 // imports and hold no cross-group state (every register/clear is scoped to its own describe).
 export function defineCoreConformance(harness: ConformanceHarness): void {
   describe(`[${harness.name}] conformance`, () => {
+    describe('infrastructure capabilities', () => {
+      it('exposes execution + test-env backends on /auth/config with active ∈ available', async () => {
+        const { call } = harness.makeApp()
+        const res = await call<{
+          infrastructure?: {
+            execution: { available: string[]; active: string }
+            testEnv: { available: string[]; active: string }
+          }
+        }>('GET', '/auth/config')
+        expect(res.status).toBe(200)
+        // Every facade must populate the descriptor (it drives the SPA's infra selector).
+        const infra = res.body.infrastructure
+        expect(infra).toBeTruthy()
+        expect(infra!.execution.available.length).toBeGreaterThan(0)
+        expect(infra!.execution.available).toContain(infra!.execution.active)
+        expect(infra!.testEnv.available.length).toBeGreaterThan(0)
+        expect(infra!.testEnv.available).toContain(infra!.testEnv.active)
+      })
+    })
+
     describe('workspaces', () => {
       it('creates a seeded board and returns a full snapshot', async () => {
         const { call } = harness.makeApp()

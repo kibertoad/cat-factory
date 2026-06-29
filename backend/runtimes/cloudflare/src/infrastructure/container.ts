@@ -84,6 +84,7 @@ import {
   WebCryptoPasswordHasher,
   WebCryptoPersonalSecretCipher,
   logger,
+  buildInfrastructureCapabilities,
   createScopedModelProviderResolver,
   resolveUrlSafetyPolicy,
   resolveWorkspaceCapabilities,
@@ -1751,6 +1752,19 @@ export function buildContainer(
   opts: { cloudflareModelsEnabled?: boolean; gateProviders?: GateProviderOverrides } = {},
 ): Container {
   const config = loadConfig(env)
+  // The Worker runs repo-operating agents on per-run Cloudflare Containers (always available),
+  // and can additionally delegate to a self-hosted runner pool when one is configured. Tester
+  // environments run via the environment provider. Surface this so the SPA's infrastructure
+  // selector reads accurately for a Worker deployment.
+  config.infrastructure = buildInfrastructureCapabilities({
+    execution: {
+      available: config.runners.enabled
+        ? ['cloudflare-containers', 'runner-pool']
+        : ['cloudflare-containers'],
+      active: 'cloudflare-containers',
+    },
+    testEnv: { available: ['environment-provider'], active: 'environment-provider' },
+  })
   const db = env.DB
   // Telemetry (llm_call_metrics + agent_context_snapshots) lives in its own D1 database
   // — append-heavy/high-volume/short-retention, unlike the transactional domain. The

@@ -69,6 +69,44 @@ export const localModeConfigSchema = v.object({
 })
 export type LocalModeConfig = v.InferOutput<typeof localModeConfigSchema>
 
+/**
+ * The execution backends a deployment can run repo-operating agent containers on. The
+ * available set differs per facade — local mode runs them on host Docker (and can
+ * delegate to a pool), the Worker runs Cloudflare Containers, Node runs a self-hosted
+ * pool. Leaf values are spelled verbatim so the SPA can key static i18n labels off them.
+ */
+export const executionBackendKindSchema = v.picklist([
+  'local-docker',
+  'cloudflare-containers',
+  'runner-pool',
+])
+export type ExecutionBackendKind = v.InferOutput<typeof executionBackendKindSchema>
+
+/** Where the Tester's ephemeral environments are provisioned (local compose vs a provider). */
+export const testEnvBackendKindSchema = v.picklist(['local-compose', 'environment-provider'])
+export type TestEnvBackendKind = v.InferOutput<typeof testEnvBackendKindSchema>
+
+/**
+ * The deployment's infrastructure backends, surfaced so the SPA can present a clear
+ * selector of what's available + what's active, instead of a bare delegation toggle.
+ *
+ * NOTE: `/auth/config` is workspace-agnostic, so `active` here is the DEPLOYMENT DEFAULT.
+ * In local mode the user's per-workspace choice lives in the workspace-settings delegation
+ * booleans, so the SPA computes the EFFECTIVE active from `available` + those booleans —
+ * this descriptor only supplies the option set + the deployment-level default.
+ */
+export const infrastructureCapabilitiesSchema = v.object({
+  execution: v.object({
+    available: v.array(executionBackendKindSchema),
+    active: executionBackendKindSchema,
+  }),
+  testEnv: v.object({
+    available: v.array(testEnvBackendKindSchema),
+    active: testEnvBackendKindSchema,
+  }),
+})
+export type InfrastructureCapabilities = v.InferOutput<typeof infrastructureCapabilitiesSchema>
+
 const authConfigViewSchema = v.object({
   enabled: v.boolean(),
   providers: v.object({
@@ -77,6 +115,7 @@ const authConfigViewSchema = v.object({
     google: v.boolean(),
   }),
   localMode: v.optional(localModeConfigSchema),
+  infrastructure: v.optional(infrastructureCapabilitiesSchema),
 })
 
 const meViewSchema = v.object({

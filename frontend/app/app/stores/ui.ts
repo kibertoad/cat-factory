@@ -125,11 +125,12 @@ export const useUiStore = defineStore('ui', () => {
   // today, pluggable). NB: distinct from `observabilityInstanceId` below, which is the
   // LLM per-call observability panel.
   const observabilityConnectionOpen = ref(false)
-  // The single tabbed Infrastructure window (ephemeral-environment provider + self-hosted
-  // runner pool — the same custom pool typically backs both jobs, so they're configured
-  // together). `infrastructureOpen` is the modal flag; `infrastructureTab` selects which
-  // provider's tab is shown. `openProviderConnection(kind)` stays the entry API but now
-  // selects the matching tab instead of mounting a per-kind standalone panel.
+  // The single tabbed Infrastructure window — a TOP-LEVEL navbar destination (no longer
+  // reached via the Integrations hub). Two topical tabs: "Agent containers" (the execution
+  // backend + self-hosted runner pool, plus the local-mode warm pool/checkout) and "Test
+  // environments" (the ephemeral-environment provider). `infrastructureOpen` is the modal
+  // flag; `infrastructureTab` selects the tab. `openInfrastructure()` is the navbar entry;
+  // `openProviderConnection(kind)` remains for deep-links (a banner's "Configure…" button).
   const infrastructureOpen = ref(false)
   const infrastructureTab = ref<'environment' | 'runner-pool'>('runner-pool')
   const modelConfigOpen = ref(false)
@@ -140,9 +141,6 @@ export const useUiStore = defineStore('ui', () => {
   const vendorCredentialsTab = ref('pool')
   // Per-user settings panel: the signed-in user's own-machine local model runners.
   const localModelsOpen = ref(false)
-  // Local-mode-only settings panel: the warm-container pool sizing + per-repo checkout reuse
-  // (a per-deployment singleton that replaced the LOCAL_POOL_* / HARNESS_* env vars).
-  const localModeSettingsOpen = ref(false)
   // The Sandbox (parallel prompt/model testing) surface — an opt-in, on-demand window.
   const sandboxOpen = ref(false)
   const userSecretsOpen = ref(false)
@@ -479,6 +477,13 @@ export const useUiStore = defineStore('ui', () => {
   function closeObservabilityConnection() {
     observabilityConnectionOpen.value = false
   }
+  // Top-level navbar entry into the Infrastructure window. No hub-return marker (it isn't
+  // reached from the Integrations hub), so the window shows no "Back to Integrations" control.
+  function openInfrastructure(tab: 'environment' | 'runner-pool' = 'runner-pool') {
+    resetHubReturn()
+    infrastructureTab.value = tab
+    infrastructureOpen.value = true
+  }
   function openProviderConnection(kind: 'environment' | 'runner-pool') {
     resetHubReturn()
     infrastructureTab.value = kind
@@ -510,13 +515,6 @@ export const useUiStore = defineStore('ui', () => {
   }
   function closeLocalModels() {
     localModelsOpen.value = false
-  }
-  function openLocalModeSettings() {
-    resetHubReturn()
-    localModeSettingsOpen.value = true
-  }
-  function closeLocalModeSettings() {
-    localModeSettingsOpen.value = false
   }
   function openSandbox() {
     sandboxOpen.value = true
@@ -669,11 +667,11 @@ export const useUiStore = defineStore('ui', () => {
     observabilityConnectionOpen,
     infrastructureOpen,
     infrastructureTab,
+    openInfrastructure,
     modelConfigOpen,
     vendorCredentialsOpen,
     vendorCredentialsTab,
     localModelsOpen,
-    localModeSettingsOpen,
     sandboxOpen,
     userSecretsOpen,
     openRouterOpen,
@@ -754,8 +752,6 @@ export const useUiStore = defineStore('ui', () => {
     closeVendorCredentials,
     openLocalModels,
     closeLocalModels,
-    openLocalModeSettings,
-    closeLocalModeSettings,
     openSandbox,
     closeSandbox,
     openUserSecrets,
