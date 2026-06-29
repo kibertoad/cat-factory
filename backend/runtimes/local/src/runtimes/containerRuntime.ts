@@ -15,6 +15,20 @@ export const HARNESS_PORT = 8080
 /** Injectable CLI runner (docker/podman/container) — overridable in tests. */
 export type ContainerExec = (args: string[]) => Promise<{ stdout: string; stderr: string }>
 
+/**
+ * Shape a container's captured `logs` output into a short tail for a fail-fast spin-up
+ * error: trim + drop empty stdout/stderr, join with newlines, and (when the CLI can't
+ * `--tail` itself, e.g. Apple `container`) keep only the last `tailLines`. Shared by the
+ * adapters' `logs()` impls so they can't drift in how they shape the tail.
+ */
+export function formatContainerLogs(stdout: string, stderr: string, tailLines?: number): string {
+  const out = [stdout, stderr]
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join('\n')
+  return tailLines ? out.split('\n').slice(-tailLines).join('\n') : out
+}
+
 /** Where the orchestrator connects to reach a run's harness. */
 export interface ContainerEndpoint {
   host: string
@@ -89,6 +103,13 @@ export interface ContainerRuntimeAdapter {
   endpoint(exec: ContainerExec, containerId: string): Promise<ContainerEndpoint | undefined>
   /** Whether the container is currently running. */
   isRunning(exec: ContainerExec, containerId: string): Promise<boolean>
+  /**
+   * A short tail of the container's logs (stdout+stderr), best-effort — resolves to `''`
+   * on any error or when the runtime can't read them. Used to explain WHY a container
+   * exited during boot (image entrypoint crash, missing env, OOM) so a fail-fast spin-up
+   * error carries the root cause instead of a bare timeout.
+   */
+  logs(exec: ContainerExec, containerId: string): Promise<string>
   /** Force-remove a single container (idempotent). */
   remove(exec: ContainerExec, containerId: string): Promise<void>
   /** Force-remove every container for a run (idempotent). */

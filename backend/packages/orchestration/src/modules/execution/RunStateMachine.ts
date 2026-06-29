@@ -49,6 +49,8 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
   cancelled: 'You stopped this run; its container was killed. Retry to start it again.',
   dispatch:
     'The agent’s container could not be started — the run never began executing. The provider/runtime’s verbatim response is shown below. Most often this is transient (a capacity blip or a new-version rollout); retrying spins a fresh container. If it persists it points at a misconfigured container binding/image or runner pool. Retry to try again.',
+  environment:
+    'The deployer step could not provision its ephemeral environment — the environment provider failed, so the run never reached the steps that need it. The provider’s verbatim error is shown below. Most often this is a transient provider/network blip (retrying re-runs the provisioning) or a misconfigured provider connection / repo config. Fix the cause if it persists, then retry.',
   unknown: 'The run failed for an unclassified reason. Review the run, then retry.',
 }
 

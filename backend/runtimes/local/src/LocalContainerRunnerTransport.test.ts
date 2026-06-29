@@ -379,6 +379,88 @@ describe('LocalContainerRunnerTransport', () => {
     expect(calls.some((c) => c[0] === 'rm')).toBe(false)
   })
 
+  it('fails fast (no ready-timeout wait) with the container logs when it exits before exposing its endpoint', async () => {
+    // Docker broke mid-boot: the container exited immediately, so `port` never maps and
+    // `inspect` reports not-running. The transport must surface the container's own logs at
+    // once rather than spinning for the full (here deliberately huge) ready timeout.
+    const exec: ContainerExec = (args) => {
+      const sub = args[0]
+      if (sub === 'run') return Promise.resolve({ stdout: 'dead-container\n', stderr: '' })
+      if (sub === 'ps') return Promise.resolve({ stdout: '', stderr: '' })
+      if (sub === 'port') return Promise.resolve({ stdout: '\n', stderr: '' })
+      if (sub === 'inspect') return Promise.resolve({ stdout: 'false\n', stderr: '' })
+      if (sub === 'logs') return Promise.resolve({ stdout: 'boom: missing env VAR\n', stderr: '' })
+      return Promise.resolve({ stdout: '', stderr: '' })
+    }
+    const transport = new LocalContainerRunnerTransport({
+      image: 'harness:test',
+      exec,
+      // Huge so the assertion proves fail-fast, not just a short timeout elapsing.
+      readyTimeoutMs: 60_000,
+      fetchImpl: (() => {
+        throw new Error('should not fetch before the endpoint is ready')
+      }) as unknown as typeof fetch,
+    })
+    await expect(transport.dispatch({ runId: 'dead', jobId: 'dead' }, {}, 'agent')).rejects.toThrow(
+      /exited before exposing its endpoint[\s\S]*boom: missing env VAR/,
+    )
+    // Classified as a `dispatch` (container-failed-to-start) failure, NOT an eviction.
+    await expect(
+      transport.dispatch({ runId: 'dead2', jobId: 'dead2' }, {}, 'agent'),
+    ).rejects.not.toThrow(/evicted or crashed/)
+  })
+
+  it('fails fast with the container logs when it dies before the harness becomes healthy', async () => {
+    // The endpoint maps (so waitForEndpoint passes) but the container then dies, so the
+    // harness `/health` will never answer — surface the logs instead of waiting it out.
+    const exec: ContainerExec = (args) => {
+      const sub = args[0]
+      if (sub === 'run') return Promise.resolve({ stdout: 'crash-container\n', stderr: '' })
+      if (sub === 'ps') return Promise.resolve({ stdout: '', stderr: '' })
+      if (sub === 'port') return Promise.resolve({ stdout: '127.0.0.1:49190\n', stderr: '' })
+      if (sub === 'inspect') return Promise.resolve({ stdout: 'false\n', stderr: '' })
+      if (sub === 'logs') return Promise.resolve({ stdout: 'panic: harness crashed\n', stderr: '' })
+      return Promise.resolve({ stdout: '', stderr: '' })
+    }
+    const transport = new LocalContainerRunnerTransport({
+      image: 'harness:test',
+      exec,
+      readyTimeoutMs: 60_000,
+      // The harness never comes up: /health stays non-OK, so the loop consults the runtime,
+      // finds the container dead, and fails fast (rather than waiting out the ready timeout).
+      fetchImpl: (async () => new Response('down', { status: 503 })) as unknown as typeof fetch,
+    })
+    await expect(
+      transport.dispatch({ runId: 'crash', jobId: 'crash' }, {}, 'agent'),
+    ).rejects.toThrow(/exited before the harness became healthy[\s\S]*panic: harness crashed/)
+  })
+
+  it('surfaces the last endpoint error + logs when the running container never exposes its endpoint', async () => {
+    // The container stays up but `port` keeps failing (a daemon hiccup), so the endpoint
+    // wait legitimately times out — the error must still carry the root cause, not a bare
+    // "timed out" with nothing to act on.
+    const exec: ContainerExec = (args) => {
+      const sub = args[0]
+      if (sub === 'run') return Promise.resolve({ stdout: 'slow-container\n', stderr: '' })
+      if (sub === 'ps') return Promise.resolve({ stdout: '', stderr: '' })
+      if (sub === 'port') return Promise.reject(new Error('docker port: connection reset'))
+      if (sub === 'inspect') return Promise.resolve({ stdout: 'true\n', stderr: '' })
+      if (sub === 'logs') return Promise.resolve({ stdout: 'still booting\n', stderr: '' })
+      return Promise.resolve({ stdout: '', stderr: '' })
+    }
+    const transport = new LocalContainerRunnerTransport({
+      image: 'harness:test',
+      exec,
+      readyTimeoutMs: 40,
+      fetchImpl: (() => {
+        throw new Error('should not fetch')
+      }) as unknown as typeof fetch,
+    })
+    await expect(transport.dispatch({ runId: 'slow', jobId: 'slow' }, {}, 'agent')).rejects.toThrow(
+      /did not expose its endpoint before the start timeout[\s\S]*connection reset/,
+    )
+  })
+
   it('forwards the checkout-reuse settings into the container as -e env', async () => {
     // The DB-stored checkout config (workspace root + clean-keep list) is consumed INSIDE
     // the harness container, so the transport passes it as `-e HARNESS_*` on `docker run`.

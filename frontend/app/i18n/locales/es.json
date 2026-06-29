@@ -146,6 +146,7 @@
     },
     "failure": {
       "containerFailedToStart": "El contenedor no pudo iniciarse",
+      "environmentFailed": "No se pudo aprovisionar el entorno",
       "bootstrapFailed": "El arranque falló",
       "runFailed": "La ejecución falló",
       "retryBootstrap": "Reintentar arranque",
