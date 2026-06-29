@@ -6,6 +6,7 @@ import type {
   BrainstormSession,
   ConsensusSession,
   ClarityReview,
+  EnvConfigRepairJob,
   ExecutionInstance,
   KaizenGrading,
   LlmCallActivity,
@@ -139,6 +140,10 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
     block?: Block | null,
   ): Promise<void> {
     this.publish(workspaceId, { type: 'bootstrap', job, block: block ?? null, at: Date.now() })
+  }
+
+  async envConfigRepairChanged(workspaceId: string, job: EnvConfigRepairJob): Promise<void> {
+    this.publish(workspaceId, { type: 'env-config-repair', job, at: Date.now() })
   }
 
   async notificationChanged(workspaceId: string, notification: Notification): Promise<void> {

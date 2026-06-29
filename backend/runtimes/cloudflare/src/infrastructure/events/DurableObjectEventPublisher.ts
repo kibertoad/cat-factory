@@ -4,6 +4,7 @@ import type {
   BootstrapJob,
   ConsensusSession,
   ClarityReview,
+  EnvConfigRepairJob,
   ExecutionInstance,
   KaizenGrading,
   LlmCallActivity,
@@ -62,6 +63,10 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
       block: block ?? null,
       at: Date.now(),
     })
+  }
+
+  async envConfigRepairChanged(workspaceId: string, job: EnvConfigRepairJob): Promise<void> {
+    await this.publish(workspaceId, { type: 'env-config-repair', job, at: Date.now() })
   }
 
   async notificationChanged(workspaceId: string, notification: Notification): Promise<void> {

@@ -85,6 +85,7 @@ export const useWorkspaceStore = defineStore(
       usePipelinesStore().hydrate(snapshot.pipelines, snapshot.pipelineCatalogVersions)
       useExecutionStore().hydrate(snapshot.executions)
       useAgentRunsStore().hydrate(snapshot.bootstrapJobs ?? [])
+      useAgentRunsStore().hydrateEnvConfigRepair(snapshot.envConfigRepairJobs ?? [])
       useNotificationsStore().hydrate(snapshot.notifications ?? [])
       useMergePresetsStore().hydrate(snapshot.mergePresets ?? [])
       useWorkspaceSettingsStore().hydrate(snapshot.settings)

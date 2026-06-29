@@ -108,6 +108,15 @@ binding = "BOOTSTRAP_WORKFLOW"
 name = "cat-factory-bootstrap"
 class_name = "BootstrapWorkflow"
 
+# Durable driver for the environment-provider config-repair agent
+# (EnvConfigRepairWorkflow). Each run becomes one instance whose id is the repair
+# job id; it polls the per-run container, streaming subtask progress, and on success
+# re-validates the repo. Only used when the agent prerequisites are configured.
+[[workflows]]
+binding = "ENV_CONFIG_REPAIR_WORKFLOW"
+name = "cat-factory-env-config-repair"
+class_name = "EnvConfigRepairWorkflow"
+
 # Per-run code-implementation containers (the @cat-factory/executor-harness
 # Pi coding-agent image). Each run addresses its own instance. Container-based
 # implementation is always on — this binding (or a registered runner pool) is a

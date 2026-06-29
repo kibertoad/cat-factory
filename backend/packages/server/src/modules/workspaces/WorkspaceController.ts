@@ -134,6 +134,12 @@ export function workspaceController(): Hono<AppEnv> {
     const bootstrapJobs = container.bootstrap
       ? await container.bootstrap.service.listJobs(workspaceId)
       : undefined
+    // Env-config-repair runs (the durable agent fallback for provider config), so the
+    // infrastructure-providers window renders a repair's live progress / outcome on load.
+    // No-op when the repair module isn't configured.
+    const envConfigRepairJobs = container.envConfigRepair
+      ? await container.envConfigRepair.service.listJobs(workspaceId)
+      : undefined
     // Open notifications + merge-preset library, so the board renders the inbox,
     // per-block badges and the task preset picker on load. No-ops when unconfigured.
     const notifications = container.notifications
@@ -186,6 +192,7 @@ export function workspaceController(): Hono<AppEnv> {
         ...snapshot,
         spend,
         ...(bootstrapJobs ? { bootstrapJobs } : {}),
+        ...(envConfigRepairJobs ? { envConfigRepairJobs } : {}),
         ...(notifications ? { notifications } : {}),
         ...(mergePresets ? { mergePresets } : {}),
         ...(modelPresets ? { modelPresets } : {}),

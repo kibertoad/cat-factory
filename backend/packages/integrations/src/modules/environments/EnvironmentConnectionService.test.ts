@@ -496,9 +496,9 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
     expect(repo.prs).toBe(1)
   })
 
-  it('falls back to the repair agent when generation needs one and the caller allows it', async () => {
+  it('starts an async repair run (returns repairJobId, ok pending) when generation needs an agent and the caller allows it', async () => {
     const repo = fakeRepoFiles({ '.kargo.yml': 'broken: [' })
-    let dispatched = false
+    let dispatchedRef: { owner: string; repo: string; gitRef: string } | null = null
     const service = serviceWith(
       bootstrapProvider({
         bootstrapProviderConfiguration: async () => ({
@@ -510,11 +510,11 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
       }),
       repo,
       {
-        // The dispatcher pushes the agent's fix back onto the branch (here: write a valid
-        // config into the fake repo); the SERVICE re-validates afterward.
-        dispatchConfigRepair: async () => {
-          dispatched = true
-          repo.store.set('.kargo.yml', VALID)
+        // The dispatcher now only STARTS the durable repair run and returns its jobId — it
+        // does NOT await the agent and the service does NOT re-validate inline.
+        dispatchConfigRepair: async (input) => {
+          dispatchedRef = { owner: input.owner, repo: input.repo, gitRef: input.gitRef }
+          return { jobId: 'envfix_1' }
         },
       },
     )
@@ -526,39 +526,39 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
       inputs: {},
       allowAgentFallback: true,
     })
-    expect(dispatched).toBe(true)
+    expect(dispatchedRef).toEqual({ owner: 'o', repo: 'r', gitRef: 'main' })
     expect(result.usedAgent).toBe(true)
-    // ok comes from the service's POST-repair re-validation (not the dispatcher's return).
-    expect(result.ok).toBe(true)
+    expect(result.repairJobId).toBe('envfix_1')
+    // ok is PENDING (false) — the repair run re-validates later via revalidate().
+    expect(result.ok).toBe(false)
   })
 
-  it('reports failure when the repair agent did not produce a valid config', async () => {
+  it('revalidate re-runs the provider validation at a ref (the repair run completion callback)', async () => {
     const repo = fakeRepoFiles({ '.kargo.yml': 'broken: [' })
     const service = serviceWith(
-      bootstrapProvider({
-        bootstrapProviderConfiguration: async () => ({
-          files: [],
-          needsAgent: true,
-          issues: [{ severity: 'error', message: 'cannot merge existing config' }],
-        }),
-        describeRepairAgent: () => ({ prompt: 'fix the kargo config' }),
-      }),
+      bootstrapProvider({ describeRepairAgent: () => ({ prompt: 'fix' }) }),
       repo,
-      {
-        // The agent ran but left the config still invalid (no write), so re-validation fails.
-        dispatchConfigRepair: async () => {},
-      },
     )
     await service.register('ws1', { manifest: baseManifest, secrets: {} })
 
-    const result = await service.bootstrapRepo('ws1', {
+    // Still invalid → ok:false.
+    const before = await service.revalidate({
+      workspaceId: 'ws1',
       owner: 'o',
       repo: 'r',
-      inputs: {},
-      allowAgentFallback: true,
+      gitRef: 'main',
     })
-    expect(result.usedAgent).toBe(true)
-    expect(result.ok).toBe(false)
+    expect(before.ok).toBe(false)
+
+    // The agent's fix landed → ok:true on re-validation.
+    repo.store.set('.kargo.yml', VALID)
+    const after = await service.revalidate({
+      workspaceId: 'ws1',
+      owner: 'o',
+      repo: 'r',
+      gitRef: 'main',
+    })
+    expect(after.ok).toBe(true)
   })
 
   it('does not dispatch the agent when needsAgent but the caller did not opt in', async () => {
@@ -573,6 +573,7 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
       {
         dispatchConfigRepair: async () => {
           dispatched = true
+          return { jobId: 'envfix_x' }
         },
       },
     )
@@ -581,5 +582,6 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
     const result = await service.bootstrapRepo('ws1', { owner: 'o', repo: 'r', inputs: {} })
     expect(dispatched).toBe(false)
     expect(result.usedAgent).toBeUndefined()
+    expect(result.repairJobId).toBeUndefined()
   })
 })

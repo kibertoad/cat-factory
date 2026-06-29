@@ -87,6 +87,13 @@ export interface ConformanceApp {
    */
   driveBootstrap(workspaceId: string, jobId: string, maxPolls?: number): Promise<number>
   /**
+   * Poll an env-config-repair run to a terminal state (the Node/CF facades durably drive
+   * this via pg-boss / an EnvConfigRepairWorkflow; the suite drives it directly against a
+   * deterministic {@link FakeEnvConfigRepairer}, whose `done` poll triggers the service's
+   * injected re-validation). Returns the number of polls taken.
+   */
+  driveEnvConfigRepair(workspaceId: string, jobId: string, maxPolls?: number): Promise<number>
+  /**
    * Every {@link ExecutionInstance} the engine emitted (via `executionChanged`), in
    * order and deep-cloned at emit time — so the suite can assert intermediate
    * transitions `drive`'s final state can't show. Optionally filtered to one block.

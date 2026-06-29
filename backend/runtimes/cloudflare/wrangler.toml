@@ -80,6 +80,12 @@ binding = "BOOTSTRAP_WORKFLOW"
 name = "cat-factory-bootstrap"
 class_name = "BootstrapWorkflow"
 
+# Durable driver for the environment-provider config-repair agent.
+[[workflows]]
+binding = "ENV_CONFIG_REPAIR_WORKFLOW"
+name = "cat-factory-env-config-repair"
+class_name = "EnvConfigRepairWorkflow"
+
 # Per-run implementation container. The acceptance suite builds this image from
 # the internal harness package's Dockerfile, so dev/test reference it by local
 # path; the production deployment instead references the published GHCR image

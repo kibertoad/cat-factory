@@ -3,6 +3,7 @@ import {
   type ConformanceApp,
   FakeAgentExecutor,
   type FakeAgentOptions,
+  FakeEnvConfigRepairer,
   FakeRepoBootstrapper,
   FakeTaskSourceProvider,
   RecordingEventPublisher,
@@ -22,7 +23,7 @@ import {
 } from '@cat-factory/node-server'
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { Clock, ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
-import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
+import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type { LocalRunner, UpsertLocalModelEndpointInput } from '@cat-factory/contracts'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { buildLocalContainer } from '../src/container.js'
@@ -146,6 +147,11 @@ export function makeConformanceApp(
     // Deterministic bootstrapper so the suite drives the bootstrap lifecycle through the
     // local composition root without GitHub/Docker (driven via driveBootstrap).
     repoBootstrapper: new FakeRepoBootstrapper(),
+    // Deterministic env-config-repairer + no-op runner so the suite drives the repair
+    // lifecycle through the local composition root (driven via driveEnvConfigRepair); the
+    // module only builds when an env provider is also wired.
+    envConfigRepairer: new FakeEnvConfigRepairer(),
+    envConfigRepairRunner: new NoopEnvConfigRepairRunner(),
     executionEventPublisher: recorder,
     // Swap the config-wired real Jira provider for a deterministic fake (the Drizzle
     // task repos stay), so the shared suite asserts create-task-from-issue against
@@ -249,6 +255,22 @@ export function makeConformanceApp(
     return maxPolls
   }
 
+  // Poll an env-config-repair run to terminal directly (production drives this via pg-boss).
+  async function driveEnvConfigRepair(
+    workspaceId: string,
+    jobId: string,
+    maxPolls = 50,
+  ): Promise<number> {
+    if (!container.envConfigRepair) {
+      throw new Error('env-config-repair module is not configured in this app')
+    }
+    for (let p = 0; p < maxPolls; p++) {
+      const result = await container.envConfigRepair.service.pollJob(workspaceId, jobId)
+      if (result.state !== 'running') return p + 1
+    }
+    return maxPolls
+  }
+
   // Seed a block's incorporated requirements review directly into the (shared
   // Postgres) store so the engine's reworked-requirements substitution can be driven
   // without running the reviewer LLM — the same Drizzle persistence the Node harness
@@ -280,6 +302,7 @@ export function makeConformanceApp(
     createOrgWorkspace,
     drive,
     driveBootstrap,
+    driveEnvConfigRepair,
     executionEmits,
     boardEmits,
     seedIncorporatedReview,

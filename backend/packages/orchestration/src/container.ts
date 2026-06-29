@@ -58,6 +58,11 @@ import type { RunnerPoolConnectionRepository } from '@cat-factory/kernel'
 import type { BootstrapJobRepository, ReferenceArchitectureRepository } from '@cat-factory/kernel'
 import type { RepoBootstrapper } from '@cat-factory/kernel'
 import type { BootstrapRunner } from '@cat-factory/kernel'
+import type {
+  EnvConfigRepairJobRepository,
+  EnvConfigRepairer,
+  EnvConfigRepairRunner,
+} from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import type { KaizenGradingRepository, KaizenVerifiedComboRepository } from '@cat-factory/kernel'
 import type { ClarityReviewRepository } from '@cat-factory/kernel'
@@ -147,6 +152,7 @@ import {
   SlackMemberMappingService,
 } from '@cat-factory/integrations'
 import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
+import { EnvConfigRepairService } from './modules/envConfigRepair/EnvConfigRepairService.js'
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService.js'
 import { KaizenService } from './modules/kaizen/KaizenService.js'
@@ -159,7 +165,7 @@ import { SandboxRunService } from './modules/sandbox/SandboxRunService.js'
 import { WorkspaceSettingsService } from './modules/settings/WorkspaceSettingsService.js'
 import { ReleaseHealthService } from './modules/releaseHealth/ReleaseHealthService.js'
 import { IncidentEnrichmentService } from './modules/incidentEnrichment/IncidentEnrichmentService.js'
-import type { AccountSettingsService, ConfigRepairDispatch } from '@cat-factory/integrations'
+import type { AccountSettingsService } from '@cat-factory/integrations'
 import {
   ModelPresetService,
   resolvePresetModelForKind,
@@ -246,12 +252,23 @@ export interface CoreDependencies {
     coords: { owner: string; repo: string; provider?: 'github' | 'gitlab' },
   ) => Promise<RunRepoContext | null>
   /**
-   * Optional: dispatch a coding agent to repair a malformed/partial environment-provider
-   * config — it pushes the fix back onto the target branch and resolves once the agent
-   * finishes (the environments module re-validates afterward). Wired by a facade that has
-   * the agent runtime. Absent → the bootstrap op has no agent fallback.
+   * Optional: the kind-scoped `agent_runs` rows for env-config-repair runs. Wired by a
+   * facade alongside {@link envConfigRepairer}; absent → no durable repair runs.
    */
-  dispatchEnvConfigRepair?: (input: ConfigRepairDispatch) => Promise<void>
+  envConfigRepairJobRepository?: EnvConfigRepairJobRepository
+  /**
+   * Optional: the side-effecting dispatch/poll/release of the repair container (the
+   * server's `ContainerEnvConfigRepairer`). When wired (with the job repository), the
+   * environments module builds an {@link EnvConfigRepairService} and routes the connection
+   * service's `dispatchConfigRepair` seam through it (start the durable run, return its id).
+   * Absent → the bootstrap op has no agent fallback.
+   */
+  envConfigRepairer?: EnvConfigRepairer
+  /**
+   * Optional: durably drives an env-config-repair run's poll loop (the worker's
+   * `EnvConfigRepairWorkflow` / Node pg-boss). Absent → tests poll `pollJob` directly.
+   */
+  envConfigRepairRunner?: EnvConfigRepairRunner
   /**
    * Optional: runs the engine's gate-probe / merge GitHub reads under the run
    * initiator's ambient context so a per-user PAT is preferred (see
@@ -718,6 +735,8 @@ export interface EnvironmentsModule {
   connectionService: EnvironmentConnectionService
   provisioningService: EnvironmentProvisioningService
   teardownService: EnvironmentTeardownService
+  /** The durable env-config-repair service, present only when its deps are wired. */
+  envConfigRepair?: EnvConfigRepairModule
 }
 
 /** The self-hosted runner-pool integration's services, present only when configured. */
@@ -733,6 +752,11 @@ export interface ProvisioningLogsModule {
 /** The repo-bootstrap feature's service, present only when its repositories exist. */
 export interface BootstrapModule {
   service: BootstrapService
+}
+
+/** The env-config-repair feature's durable service, present only when its deps are wired. */
+export interface EnvConfigRepairModule {
+  service: EnvConfigRepairService
 }
 
 /** The requirements-review feature's service, present only when its repository is wired. */
@@ -871,6 +895,8 @@ export interface Core {
   provisioningLogs?: ProvisioningLogsModule
   /** Present only when the repo-bootstrap repositories are wired (see CoreDependencies). */
   bootstrap?: BootstrapModule
+  /** Present only when the env-config-repair deps are wired (see CoreDependencies). */
+  envConfigRepair?: EnvConfigRepairModule
   /** Present only when the requirements-review repository is wired (see CoreDependencies). */
   requirements?: RequirementsModule
   /** Present only when the Kaizen repositories are wired (see CoreDependencies). */
@@ -1130,6 +1156,7 @@ function createTasksModule(
 function createEnvironmentsModule(
   deps: CoreDependencies,
   provisioningLog: ProvisioningLogRecorder | undefined,
+  eventPublisher: ExecutionEventPublisher | undefined,
 ): EnvironmentsModule | undefined {
   const {
     environmentProvider,
@@ -1146,6 +1173,15 @@ function createEnvironmentsModule(
     return undefined
   }
 
+  // Durable async config repair is wired when both the dispatcher (the side-effecting
+  // container plumbing) and the kind-scoped job repository are present. The repair service
+  // and the connection service are mutually dependent: the connection service's
+  // `dispatchConfigRepair` seam STARTS a repair run (→ repairService), and the repair run's
+  // success path RE-VALIDATES via the connection service. We break the cycle by capturing
+  // `repairService` in a closure that is only invoked at request time (after assignment).
+  const canRepair = !!(deps.envConfigRepairer && deps.envConfigRepairJobRepository)
+  let repairService: EnvConfigRepairService | undefined
+
   const connectionService = new EnvironmentConnectionService({
     environmentConnectionRepository,
     workspaceRepository: deps.workspaceRepository,
@@ -1159,9 +1195,35 @@ function createEnvironmentsModule(
     ...(deps.resolveRepoFilesForCoords
       ? { resolveRepoFilesForWorkspace: deps.resolveRepoFilesForCoords }
       : {}),
-    ...(deps.dispatchEnvConfigRepair ? { dispatchConfigRepair: deps.dispatchEnvConfigRepair } : {}),
+    ...(canRepair
+      ? {
+          dispatchConfigRepair: (input) =>
+            repairService!
+              .start(input.workspaceId, {
+                owner: input.owner,
+                repo: input.repo,
+                gitRef: input.gitRef,
+                issues: input.issues,
+                ...(input.inputs ? { inputs: input.inputs } : {}),
+              })
+              .then((job) => ({ jobId: job.id })),
+        }
+      : {}),
     ...(provisioningLog ? { provisioningLog } : {}),
   })
+
+  if (canRepair) {
+    repairService = new EnvConfigRepairService({
+      envConfigRepairJobRepository: deps.envConfigRepairJobRepository!,
+      workspaceRepository: deps.workspaceRepository,
+      idGenerator: deps.idGenerator,
+      clock: deps.clock,
+      repairer: deps.envConfigRepairer!,
+      ...(deps.envConfigRepairRunner ? { runner: deps.envConfigRepairRunner } : {}),
+      ...(eventPublisher ? { eventPublisher } : {}),
+      revalidate: (input) => connectionService.revalidate(input),
+    })
+  }
   const provisioningService = new EnvironmentProvisioningService({
     connectionService,
     environmentProvider,
@@ -1181,7 +1243,12 @@ function createEnvironmentsModule(
     clock: deps.clock,
     ...(provisioningLog ? { provisioningLog } : {}),
   })
-  return { connectionService, provisioningService, teardownService }
+  return {
+    connectionService,
+    provisioningService,
+    teardownService,
+    ...(repairService ? { envConfigRepair: { service: repairService } } : {}),
+  }
 }
 
 /**
@@ -1848,7 +1915,11 @@ export function createCore(dependencies: CoreDependencies): Core {
         service: new ProvisioningLogService({ repository: dependencies.provisioningLogRepository }),
       }
     : undefined
-  const environments = createEnvironmentsModule(dependencies, provisioningLogRecorder)
+  const environments = createEnvironmentsModule(
+    dependencies,
+    provisioningLogRecorder,
+    executionEventPublisher,
+  )
   // Built before the fragment library so a document-backed fragment can re-resolve
   // its linked Confluence/Notion/GitHub page through the document module's reader.
   const documents = createDocumentsModule(dependencies, boardService)
@@ -1965,6 +2036,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(documents ? { documents } : {}),
     ...(tasks ? { tasks } : {}),
     ...(environments ? { environments } : {}),
+    ...(environments?.envConfigRepair ? { envConfigRepair: environments.envConfigRepair } : {}),
     ...(runners ? { runners } : {}),
     ...(provisioningLogs ? { provisioningLogs } : {}),
     ...(bootstrap ? { bootstrap } : {}),

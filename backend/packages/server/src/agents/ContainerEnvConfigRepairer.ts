@@ -1,10 +1,13 @@
 import type {
+  AgentFailureKind,
+  EnvConfigRepairer,
+  EnvConfigRepairHandle,
+  EnvConfigRepairRequest,
+  EnvConfigRepairUpdate,
   EnvironmentProvider,
   GitHubInstallationRepository,
-  IdGenerator,
   ModelRef,
 } from '@cat-factory/kernel'
-import type { ConfigRepairDispatch } from '@cat-factory/integrations'
 import { isProxyableProvider } from '@cat-factory/agents'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
@@ -22,12 +25,13 @@ import { logger } from '../observability/logger.js'
 // block, so the harness takes its ordinary clone→edit→push path. The two flows share
 // only the runner dispatch/poll plumbing (RunnerJobClient), nothing else.
 //
-// It is the runtime implementation behind `CoreDependencies.dispatchEnvConfigRepair` /
-// `EnvironmentConnectionService`'s `dispatchConfigRepair` seam: the connection service
-// invokes it as the agent fallback when mechanical config bootstrap can't produce a valid
-// config, then RE-VALIDATES the repo itself (where the decrypted secrets + manifest config
-// live). So this dispatcher is pure container plumbing — it pushes the fix and returns; it
-// does not validate.
+// It implements the kernel {@link EnvConfigRepairer} port — the side-effecting half of a
+// config-repair run, mirroring {@link ContainerRepoBootstrapper}'s SHAPE: `startRepair`
+// pre-flights + dispatches (returns once accepted), `pollRepair` reports progress / the
+// terminal outcome, `stopRepair` reclaims the container. The run is driven DURABLY by an
+// EnvConfigRepairRunner (the worker's EnvConfigRepairWorkflow / Node pg-boss) and the
+// engine (EnvConfigRepairService) RE-VALIDATES the repo after the agent pushes — so this
+// dispatcher only pushes the fix; it never validates and never blocks the request.
 // ---------------------------------------------------------------------------
 
 /** The base coding role for a config-repair run; the provider's prompt supplies the specifics. */
@@ -50,8 +54,6 @@ export interface ContainerEnvConfigRepairerDependencies {
   mintInstallationToken: (installationId: number) => Promise<string>
   /** Mints the signed, model-locked LLM-proxy session token the container uses. */
   sessionService: ContainerSessionService
-  /** Generates the single job/run id for the one-shot repair dispatch. */
-  idGenerator: IdGenerator
   /** The provider whose `describeRepairAgent` supplies the repair prompt. */
   environmentProvider: EnvironmentProvider
   /** Model the repair agent runs with (must be proxyable, like the other Pi agents). */
@@ -62,20 +64,16 @@ export interface ContainerEnvConfigRepairerDependencies {
   githubApiBase?: string
   /** Web base for building the target repo's clone URL (defaults to github.com). */
   webBaseUrl?: string
-  /** Poll interval between job-status reads (ms). Defaults to 5s; tests pass 0. */
-  pollIntervalMs?: number
-  /** Max poll attempts before giving up (bounds the in-request await). Defaults to 240. */
-  maxPolls?: number
 }
 
 /**
- * Dispatches a one-shot coding agent that repairs a provider's config file in an existing
- * repo, awaiting it to completion. A thin layer over the shared {@link RunnerJobClient}
+ * Dispatches and polls a one-shot coding agent that repairs a provider's config file
+ * in an existing repo. A thin layer over the shared {@link RunnerJobClient}
  * dispatch/poll/release plumbing, mirroring {@link ContainerRepoBootstrapper}'s SHAPE — but
  * a distinct flow: ordinary coding (NO `bootstrap`/`mergeBase` block), so the harness clones
  * `gitRef`, lets the agent edit the config, and pushes back onto `gitRef` with no PR.
  */
-export class ContainerEnvConfigRepairer {
+export class ContainerEnvConfigRepairer implements EnvConfigRepairer {
   /** Shared backend-polymorphic dispatch/poll/release plumbing (see RunnerJobClient). */
   private readonly jobs: RunnerJobClient
 
@@ -84,15 +82,13 @@ export class ContainerEnvConfigRepairer {
   }
 
   /**
-   * Dispatch the repair coding agent against `input.gitRef` and AWAIT its completion (the
-   * fix is pushed back onto that branch). The caller (`EnvironmentConnectionService`)
-   * re-validates afterward. Throws on a missing GitHub connection, a non-proxyable model,
-   * an absent `describeRepairAgent`, a failed job, or a timeout — so the bootstrap op
-   * surfaces a clear failure instead of reporting a phantom success.
+   * Pre-flight + dispatch the repair coding agent against `request.gitRef`, returning once
+   * the container accepts the job (the fix is pushed back onto that branch by the run).
+   * Throws on a missing GitHub connection, a non-proxyable model, or an absent
+   * `describeRepairAgent` — so the run fails fast instead of reporting a phantom success.
    */
-  async repair(input: ConfigRepairDispatch): Promise<void> {
-    const { workspaceId, owner, repo, gitRef } = input
-    const jobId = this.deps.idGenerator.next('exec')
+  async startRepair(request: EnvConfigRepairRequest): Promise<EnvConfigRepairHandle> {
+    const { workspaceId, jobId, owner, repo, gitRef } = request
     const log = logger.child({ jobId, workspaceId, repo: `${owner}/${repo}`, branch: gitRef })
 
     const installation = await this.deps.installationRepository.getByWorkspace(workspaceId)
@@ -107,8 +103,8 @@ export class ContainerEnvConfigRepairer {
       )
     }
     const spec = this.deps.environmentProvider.describeRepairAgent?.({
-      issues: input.issues,
-      ...(input.inputs ? { inputs: input.inputs } : {}),
+      issues: request.issues,
+      ...(request.inputs ? { inputs: request.inputs } : {}),
       repoOwner: owner,
       repoName: repo,
     })
@@ -153,35 +149,57 @@ export class ContainerEnvConfigRepairer {
     const ref = { runId: jobId, jobId }
     log.info('env-config-repair: dispatching container')
     await this.jobs.dispatch(workspaceId, ref, body, 'agent')
+    log.info('env-config-repair: container accepted job')
+    return { workspaceId, jobId }
+  }
 
-    const pollIntervalMs = this.deps.pollIntervalMs ?? 5_000
-    const maxPolls = this.deps.maxPolls ?? 240
-    try {
-      for (let attempt = 0; attempt < maxPolls; attempt++) {
-        const view = await this.jobs.poll(workspaceId, ref)
-        if (view.state === 'running') {
-          if (pollIntervalMs > 0) await sleep(pollIntervalMs)
-          continue
-        }
-        if (view.state === 'failed') {
-          throw new Error(view.error ?? 'Environment config repair job failed')
-        }
-        // Completed: a structured error (e.g. push rejected) is still a failure.
-        if (view.result?.error) {
-          throw new Error(`Environment config repair failed: ${view.result.error}`)
-        }
-        log.info('env-config-repair: container finished')
-        return
-      }
-      throw new Error('Environment config repair timed out waiting for the agent to finish.')
-    } finally {
-      // Best-effort reclaim of the per-run container (idempotent; a no-op if already gone).
-      await this.jobs.release(workspaceId, ref).catch(() => {})
+  /** Poll a dispatched repair job, mapping the runner view into a progress/terminal update. */
+  async pollRepair(handle: EnvConfigRepairHandle): Promise<EnvConfigRepairUpdate> {
+    const ref = { runId: handle.jobId, jobId: handle.jobId }
+    const view = await this.jobs.poll(handle.workspaceId, ref)
+
+    if (view.state === 'running') {
+      return view.progress ? { state: 'running', subtasks: view.progress } : { state: 'running' }
     }
+    if (view.state === 'failed') {
+      const error = view.error ?? 'Environment config repair job failed'
+      return {
+        state: 'failed',
+        failureKind: classifyRepairFailure(error),
+        error,
+        detail: view.error,
+      }
+    }
+    // Completed: a structured `error` (e.g. push rejected) is still a failure.
+    const result = view.result ?? {}
+    if (result.error) {
+      return {
+        state: 'failed',
+        failureKind: 'agent',
+        error: `Environment config repair failed: ${result.error}`,
+        detail: result.error,
+      }
+    }
+    return { state: 'done' }
+  }
+
+  /**
+   * Best-effort: reclaim the per-run container for a job. Releases through the same
+   * transport the run dispatched to; idempotent (a release on a gone instance is a no-op,
+   * and any error is swallowed by the caller).
+   */
+  async stopRepair(handle: EnvConfigRepairHandle): Promise<void> {
+    await this.jobs.release(handle.workspaceId, { runId: handle.jobId, jobId: handle.jobId })
   }
 }
 
-/** Resolve after `ms` milliseconds (the in-process poll back-off). */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+/**
+ * Classify a failed repair job's error message into an {@link AgentFailureKind}: the
+ * transport maps an evicted/crashed container (a 404 poll) to a failed view, and the
+ * harness redacts + labels its watchdog kills. Everything else is an agent fault.
+ */
+function classifyRepairFailure(error: string): AgentFailureKind {
+  if (/evicted or crashed/i.test(error)) return 'evicted'
+  if (/inactivity|no agent activity|max duration/i.test(error)) return 'timeout'
+  return 'agent'
 }

@@ -1,5 +1,6 @@
 import type { Block, ExecutionInstance } from './entities.js'
 import type { BootstrapJob } from './bootstrap.js'
+import type { EnvConfigRepairJob } from './env-config-repair.js'
 import type { Notification } from './notifications.js'
 import type { LlmCallActivity } from './observability.js'
 import type { RequirementReview } from './requirements.js'
@@ -32,6 +33,13 @@ export type WorkspaceEvent =
    * vanished between the transition and the publish.
    */
   | { type: 'bootstrap'; job: BootstrapJob; block: Block | null; at: number }
+  /**
+   * An environment-provider config-repair run advanced. Carries the updated job
+   * (live `subtasks`, terminal `ok`/`issues`/`failure`) so the infrastructure-providers
+   * window patches the "repairing…" indicator and its final outcome without a refetch.
+   * There is no board block — this run is surfaced only on the infra window.
+   */
+  | { type: 'env-config-repair'; job: EnvConfigRepairJob; at: number }
   /**
    * A human-actionable notification was raised or resolved (a PR needs review, a
    * pipeline finished and wants confirmation, CI fixing gave up). The client

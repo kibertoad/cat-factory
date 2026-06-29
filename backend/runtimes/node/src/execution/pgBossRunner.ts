@@ -2,6 +2,7 @@ import type { WorkRunner } from '@cat-factory/kernel'
 import type { Logger, ServerContainer } from '@cat-factory/server'
 import type { Job, PgBoss, SendOptions } from 'pg-boss'
 import { reenqueueStaleBootstrap } from './bootstrapRunner.js'
+import { reenqueueStaleEnvConfigRepair } from './envConfigRepairRunner.js'
 import { type DriveConfig, driveExecution } from './drive.js'
 
 // Durable execution on pg-boss: the analogue of the Worker's Cloudflare Workflows
@@ -189,12 +190,21 @@ export function startStaleRunSweeper(
     try {
       const stale = await container.agentRunRepository.listStale(Date.now() - cfg.leaseMs)
       for (const ref of stale) {
-        // Both durable kinds are re-driven: an orphaned execution back onto the advance
-        // queue, an orphaned bootstrap onto the bootstrap drive queue (parity with the
-        // Worker's sweepStuckRuns, which covers execution + bootstrap).
+        // Every durable kind is re-driven: an orphaned execution back onto the advance
+        // queue, an orphaned bootstrap onto the bootstrap drive queue, an orphaned
+        // env-config-repair onto its drive queue (parity with the Worker's sweepStuckRuns,
+        // which covers execution + bootstrap + env-config-repair).
         if (ref.kind === 'bootstrap') {
           log.warn({ workspaceId: ref.workspaceId, jobId: ref.id }, 're-driving stale bootstrap')
           await reenqueueStaleBootstrap(boss, ref.workspaceId, ref.id, queueOptions)
+          continue
+        }
+        if (ref.kind === 'env-config-repair') {
+          log.warn(
+            { workspaceId: ref.workspaceId, jobId: ref.id },
+            're-driving stale env-config-repair',
+          )
+          await reenqueueStaleEnvConfigRepair(boss, ref.workspaceId, ref.id, queueOptions)
           continue
         }
         if (ref.kind !== 'execution') continue

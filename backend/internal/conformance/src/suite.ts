@@ -2742,6 +2742,101 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(good.status).toBe(200)
         expect(good.body).toEqual({ ok: true, issues: [] })
       })
+
+      it('drives an env-config-repair run to success and records the post-repair validation', async () => {
+        // The durable, asynchronous config-repair fallback (PR #424 follow-up): when
+        // mechanical bootstrap can't synthesise a valid provider config and the caller opts
+        // in, the service dispatches a coding agent as its OWN `env-config-repair` agent_runs
+        // run and returns immediately (ok pending) — then re-validates on completion. This
+        // must behave identically on D1 and Postgres: a facade that wired the durable repair
+        // into only one runtime (or maps the kind-scoped row differently) fails here.
+        //
+        // A MUTABLE in-memory repo lets us simulate the agent's push: the config file is
+        // flipped from invalid to valid between dispatch and drive, so the service's injected
+        // re-validation (→ provider.validateRepo) records ok:true. The repairer itself is the
+        // deterministic FakeEnvConfigRepairer the harness injects (no GitHub / container).
+        const store = new Map<string, string>([['.kargo.yml', 'name: x\n']]) // invalid: no `jobs`
+        const repo = {
+          getFile: async (path: string) => {
+            const content = store.get(path)
+            return content != null ? { content, sha: `sha:${path}` } : null
+          },
+          listDirectory: async () => [],
+          headSha: async () => 'base-sha',
+          createBranch: async () => {},
+          commitFiles: async () => ({ sha: 'c' }),
+          openPullRequest: async () => ({ number: 1 }) as never,
+        }
+        const provider = {
+          provision: async () => ({ externalId: 'e', status: 'ready', url: null }) as never,
+          status: async () => ({ externalId: 'e', status: 'ready', url: null }) as never,
+          teardown: async () => ({ status: 'torn_down' }) as never,
+          validateRepo: async (req: {
+            readRepoFile: (p: string) => Promise<{ content: string } | null>
+          }) => {
+            const file = await req.readRepoFile('.kargo.yml')
+            const ok = !!file && file.content.includes('jobs')
+            return ok
+              ? { ok: true, issues: [] }
+              : {
+                  ok: false,
+                  issues: [
+                    { severity: 'error' as const, message: 'missing jobs', path: '.kargo.yml' },
+                  ],
+                }
+          },
+          // Mechanical bootstrap can't synthesise a config → ask for the agent fallback.
+          bootstrapProviderConfiguration: async () => ({
+            files: [],
+            needsAgent: true,
+            issues: [{ severity: 'error' as const, message: 'cannot synthesize config' }],
+          }),
+          // Declares agent-repair support (the fallback's gate; the fake repairer performs it).
+          describeRepairAgent: () => ({ prompt: 'Fix .kargo.yml: add a jobs list.' }),
+        }
+
+        const app = harness.makeApp(undefined, {
+          environmentProvider: provider as unknown as EnvironmentProvider,
+          resolveRepoFilesForCoords: async () =>
+            ({ repo, baseBranch: 'main' }) as unknown as RunRepoContext,
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // Mechanical bootstrap bails (needsAgent) → the durable repair run is dispatched and
+        // the call returns immediately with the run id and ok pending (false).
+        const started = await app.call<{ ok: boolean; usedAgent?: boolean; repairJobId?: string }>(
+          'POST',
+          `/workspaces/${wsId}/environments/connection/bootstrap-repo`,
+          { owner: 'acme', repo: 'widgets', inputs: {}, allowAgentFallback: true },
+        )
+        expect(started.status).toBe(200)
+        expect(started.body.usedAgent).toBe(true)
+        expect(started.body.ok).toBe(false)
+        const jobId = started.body.repairJobId
+        expect(jobId).toBeTruthy()
+
+        // Persisted as a running env-config-repair agent_runs row, surfaced on the snapshot
+        // (no board block — it's an infra-window run).
+        const before = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const running = before.body.envConfigRepairJobs?.find((j) => j.id === jobId)
+        expect(running?.status).toBe('running')
+
+        // Simulate the agent pushing its fix, then drive the durable poll loop (production: a
+        // pg-boss queue / an EnvConfigRepairWorkflow). The fake reports `done` on the first
+        // poll, which triggers the service's re-validation against the now-valid repo.
+        store.set('.kargo.yml', 'name: x\njobs: [build]\n')
+        const polls = await app.driveEnvConfigRepair(wsId, jobId!)
+        expect(polls).toBeGreaterThanOrEqual(1)
+
+        // Finalised as succeeded with the post-repair validation recorded ok:true — on both
+        // D1 and Postgres.
+        const after = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const done = after.body.envConfigRepairJobs?.find((j) => j.id === jobId)
+        expect(done?.status).toBe('succeeded')
+        expect(done?.ok).toBe(true)
+        expect(done?.issues).toEqual([])
+      })
     })
 
     describe('board', () => {

@@ -7,6 +7,7 @@ import {
   workspaceSchema,
 } from './entities.js'
 import { bootstrapJobSchema } from './bootstrap.js'
+import { envConfigRepairJobSchema } from './env-config-repair.js'
 import { notificationSchema } from './notifications.js'
 import { mergeThresholdPresetSchema } from './merge.js'
 import { agentConfigCatalogSchema } from './agent-config.js'
@@ -35,6 +36,13 @@ export const workspaceSnapshotSchema = v.object({
    * could fail independently. Attached by the worker, so optional on the wire.
    */
   bootstrapJobs: v.optional(v.array(bootstrapJobSchema)),
+  /**
+   * Environment-provider config-repair runs for this workspace (the unified
+   * `agent_runs` table's `env-config-repair` rows). Carried so the infrastructure
+   * window can render a repair's live progress / outcome on load. Attached by the
+   * facade, so optional on the wire.
+   */
+  envConfigRepairJobs: v.optional(v.array(envConfigRepairJobSchema)),
   /**
    * The current spend-safeguard status. Attached by the worker (it depends on
    * deployment-wide pricing/budget config), so it is optional on the wire.

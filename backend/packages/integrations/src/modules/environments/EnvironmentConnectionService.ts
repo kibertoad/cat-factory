@@ -86,13 +86,15 @@ export interface EnvironmentConnectionServiceDependencies {
     coords: { owner: string; repo: string; provider?: 'github' | 'gitlab' },
   ) => Promise<RunRepoContext | null>
   /**
-   * Dispatch a coding agent to repair a malformed/partial provider config — it pushes the
-   * fix back onto the target branch and resolves once the agent finishes (throwing on a
-   * hard failure). The SERVICE re-validates afterward (it owns the decrypted secrets +
-   * manifest config), so this just performs the push. Wired by a runtime over the shared
-   * runner transport + the provider's `describeRepairAgent`. Absent ⇒ no agent fallback.
+   * START a durable, asynchronous config-repair run — it dispatches a coding agent that
+   * fixes a malformed/partial provider config and pushes the fix back onto the target
+   * branch, then RETURNS IMMEDIATELY with the run's `jobId` (it does NOT await the agent
+   * or re-validate). The run is driven by the durable runner (CF Workflows / Node pg-boss);
+   * on completion it calls back into this service's {@link revalidate} to record the
+   * post-repair outcome. Wired by a runtime over the orchestration `EnvConfigRepairService`.
+   * Absent ⇒ no agent fallback.
    */
-  dispatchConfigRepair?: (input: ConfigRepairDispatch) => Promise<void>
+  dispatchConfigRepair?: (input: ConfigRepairDispatch) => Promise<{ jobId: string }>
   /** Best-effort provisioning-event log; absent ⇒ no logging. */
   provisioningLog?: ProvisioningLogRecorder
 }
@@ -392,6 +394,7 @@ export class EnvironmentConnectionService {
     )
 
     let usedAgent = false
+    let repairJobId: string | undefined
     if (
       !validation.ok &&
       input.allowAgentFallback &&
@@ -422,10 +425,13 @@ export class EnvironmentConnectionService {
         }
         writeBranch = BOOTSTRAP_CONFIG_BRANCH
       }
-      // The agent pushes its fix back onto `writeBranch`; we then re-validate here, where
-      // the decrypted secrets + manifest config live (the dispatcher is pure container
-      // plumbing). A dispatch failure throws and surfaces to the caller.
-      await this.deps.dispatchConfigRepair({
+      // START the durable repair run and return immediately — the agent pushes its fix back
+      // onto `writeBranch` asynchronously, and the run re-validates (via {@link revalidate})
+      // on completion to settle `ok`/`issues`. So this call does NOT block on the agent and
+      // does NOT re-validate inline; `ok` is reported as `false` (pending) until the repair
+      // run finishes, which the caller tracks via `repairJobId` (snapshot + repair events).
+      // A dispatch/pre-flight failure is recorded on the repair-job row by the run itself.
+      const started = await this.deps.dispatchConfigRepair({
         workspaceId,
         owner: input.owner,
         repo: input.repo,
@@ -433,14 +439,7 @@ export class EnvironmentConnectionService {
         issues: validation.issues,
         inputs: input.inputs,
       })
-      validation = await this.runProviderValidate(
-        bound,
-        writeBranch,
-        input.owner,
-        input.repo,
-        config,
-        resolveSecret,
-      )
+      repairJobId = started.jobId
     }
 
     await this.deps.provisioningLog?.record({
@@ -451,22 +450,63 @@ export class EnvironmentConnectionService {
       providerId: manifest?.providerId ?? null,
       blockId: null,
       executionId: null,
+      // The mechanical bootstrap's own outcome: a dispatched async repair means it did NOT
+      // produce a valid config (a repair run is now pending; `repairJobId` in `detail`).
       outcome: validation.ok ? 'success' : 'failure',
-      error: validation.ok ? null : 'Provider config bootstrap did not produce a valid config',
-      detail: JSON.stringify({ committed, usedAgent, branch: writeBranch }),
+      error: validation.ok
+        ? null
+        : usedAgent
+          ? 'Provider config needs agent repair; a repair run was dispatched'
+          : 'Provider config bootstrap did not produce a valid config',
+      detail: JSON.stringify({ committed, usedAgent, branch: writeBranch, repairJobId }),
     })
 
     // Surface the provider's own bootstrap diagnostics (e.g. why it bailed with
-    // `needsAgent`) on the mechanical path; once the agent ran, `validation` is the
-    // fresh post-repair result so the stale generation issues no longer apply.
-    const generatedIssues = usedAgent ? [] : (generated.issues ?? [])
+    // `needsAgent`) on the mechanical path. Once an async repair was dispatched, `ok` is
+    // pending (false) and the residual issues are the ones the repair will address.
+    const generatedIssues = generated.issues ?? []
     return {
-      ok: validation.ok,
+      ok: usedAgent ? false : validation.ok,
       committed,
       branch: writeBranch,
-      ...(usedAgent ? { usedAgent } : {}),
+      ...(usedAgent ? { usedAgent: true, ...(repairJobId ? { repairJobId } : {}) } : {}),
       issues: [...generatedIssues, ...validation.issues],
     }
+  }
+
+  /**
+   * Re-validate a repo's provider config after the async repair agent pushed its fix —
+   * re-deriving the bound RepoFiles, parsed manifest, decrypted secrets, and config the
+   * same way {@link bootstrapRepo} does, then running the provider's `validateRepo`. This
+   * is the callback {@link EnvConfigRepairService.pollJob} invokes on a successful repair
+   * run to settle its terminal `ok`/`issues`. Lives here because the decrypted secrets +
+   * manifest config live here (orchestration must not reach into the integration internals).
+   */
+  async revalidate(input: {
+    workspaceId: string
+    owner: string
+    repo: string
+    gitRef: string
+  }): Promise<RepoValidationResult> {
+    const { workspaceId, owner, repo, gitRef } = input
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const bound = await this.resolveRepo(workspaceId, owner, repo)
+    if (!bound) {
+      return {
+        ok: false,
+        issues: [
+          {
+            severity: 'error',
+            message:
+              'No VCS connection is configured for this workspace; cannot re-validate the repo.',
+          },
+        ],
+      }
+    }
+    const manifest = await this.optionalManifest(workspaceId)
+    const resolveSecret = await this.resolveSecrets(workspaceId)
+    const config = stringifyProviderConfig(manifest?.providerConfig)
+    return this.runProviderValidate(bound, gitRef, owner, repo, config, resolveSecret)
   }
 
   /** Resolve a VCS-neutral bound RepoFiles for the workspace+coords, or null. */

@@ -2356,10 +2356,7 @@ export class RunDispatcher {
    * durable path), in which case the error propagates so the driver's per-step
    * retry can take over.
    */
-  async runAgent(
-    context: AgentRunContext,
-    options: AdvanceOptions = {},
-  ): Promise<AgentRunResult> {
+  async runAgent(context: AgentRunContext, options: AdvanceOptions = {}): Promise<AgentRunResult> {
     try {
       return await this.agentExecutor.run(context)
     } catch (error) {
