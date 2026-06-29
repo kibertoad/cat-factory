@@ -130,3 +130,38 @@ export type TestReport = v.InferOutput<typeof testReportSchema>
 export function parseTestReport(value: unknown): TestReport {
   return v.parse(testReportSchema, value)
 }
+
+/**
+ * The record of standing the service's docker-compose dependencies up before a `local`
+ * tester run. The stand-up happens INSIDE the executor container (`docker compose up
+ * --wait`), so its output never reaches the orchestrator-side provisioning-log store
+ * (which records only the backend's container/env spin-up). The harness captures it
+ * (redacted + tail-bounded) and the engine persists it on the Tester step, so the test
+ * window can show WHY the dependencies failed to come up — the single highest-signal
+ * artifact for a local-infra Tester failure, previously trapped in the harness's own logs.
+ */
+export const testerInfraSetupSchema = v.object({
+  /** Whether `docker compose up --wait` succeeded (the dependencies are up). */
+  started: v.boolean(),
+  /** The repo-relative compose file that was stood up, when known. */
+  composePath: v.optional(v.nullable(v.string())),
+  /** Epoch ms the stand-up attempt finished. */
+  at: v.number(),
+  /** Wall-clock of the stand-up attempt, ms. */
+  durationMs: v.optional(v.nullable(v.number())),
+  /** Captured (redacted, tail-bounded) stdout+stderr of the stand-up command. */
+  logs: v.optional(v.nullable(v.string())),
+  /** The verbatim (redacted) failure message when stand-up failed, else null. */
+  error: v.optional(v.nullable(v.string())),
+})
+export type TesterInfraSetup = v.InferOutput<typeof testerInfraSetupSchema>
+
+/**
+ * Parse a tester infra-setup record the harness reported, or null when absent/malformed.
+ * The data is harness-produced (deterministic, not LLM), but it crosses the container→
+ * backend HTTP boundary, so the engine validates it defensively before persisting.
+ */
+export function parseTesterInfraSetup(value: unknown): TesterInfraSetup | null {
+  const result = v.safeParse(testerInfraSetupSchema, value)
+  return result.success ? result.output : null
+}

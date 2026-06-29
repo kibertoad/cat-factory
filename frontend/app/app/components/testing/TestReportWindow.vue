@@ -23,7 +23,7 @@ import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDr
 
 const board = useBoardStore()
 const execution = useExecutionStore()
-const { t, d } = useI18n()
+const { t, d, n } = useI18n()
 
 // Per-window blob cache for the captured screenshots; revoked on unmount.
 const blobs = useArtifactBlobs()
@@ -57,6 +57,14 @@ const stepEnvironment = computed(() => step.value?.environment ?? null)
 const executionId = computed(() => instance.value?.id ?? null)
 // The infra-attempts log drawer is opened on demand (it fetches the per-run log rows).
 const showProvisioning = ref(false)
+
+// The in-container docker-compose dependency stand-up record (local-infra tester): whether
+// the dependencies came up + the captured `docker compose up` logs. Unlike the provisioning
+// drawer above (the orchestrator-side container/env spin-up), this is the stand-up that runs
+// INSIDE the container — the highest-signal artifact when local infra fails to come up.
+const infraSetup = computed(() => testState.value?.infraSetup ?? null)
+// The captured stand-up logs are shown on demand (they can be long).
+const showInfraSetupLogs = ref(false)
 
 const screenshots = computed<TestScreenshot[]>(() => report.value?.screenshots ?? [])
 // Resolve each capture into an object URL for the gallery + lightbox. The shared cache
@@ -338,7 +346,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                  environment. A no-infra tester (no container, no env) has no infra attempts
                  either, so we don't render an empty header + a log toggle over nothing. -->
             <section
-              v-if="step && (step.container || stepEnvironment)"
+              v-if="step && (step.container || stepEnvironment || infraSetup)"
               data-testid="tester-infrastructure"
               class="space-y-3"
             >
@@ -347,6 +355,75 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
               </h3>
               <StepContainerStatus :step="step" :run-failed="runFailed" />
               <EnvironmentStatusPanel v-if="stepEnvironment" :environment="stepEnvironment" />
+
+              <!-- In-container docker-compose dependency stand-up (local-infra tester): the
+                   outcome + the captured `docker compose up` logs. This is the stand-up that
+                   runs INSIDE the container, so its output isn't in the provisioning drawer
+                   below — it's the highest-signal artifact when local infra fails to start. -->
+              <div
+                v-if="infraSetup"
+                data-testid="tester-infra-setup"
+                class="rounded-lg border px-3 py-2"
+                :class="
+                  infraSetup.started
+                    ? 'border-slate-800 bg-slate-900/60'
+                    : 'border-rose-500/40 bg-rose-500/10'
+                "
+              >
+                <div class="flex items-center gap-2">
+                  <UIcon
+                    :name="infraSetup.started ? 'i-lucide-container' : 'i-lucide-circle-x'"
+                    class="h-3.5 w-3.5 shrink-0"
+                    :class="infraSetup.started ? 'text-emerald-400' : 'text-rose-400'"
+                  />
+                  <span class="text-[13px] font-medium text-slate-200">
+                    {{ infraSetup.started ? t('testing.standup.up') : t('testing.standup.failed') }}
+                  </span>
+                  <span
+                    v-if="infraSetup.durationMs != null"
+                    class="ml-auto text-[11px] text-slate-500"
+                  >
+                    {{
+                      t('testing.standup.took', {
+                        seconds: n(infraSetup.durationMs / 1000, 'decimal'),
+                      })
+                    }}
+                  </span>
+                </div>
+                <p v-if="infraSetup.composePath" class="mt-1 font-mono text-[11px] text-slate-500">
+                  {{ infraSetup.composePath }}
+                </p>
+                <p
+                  v-if="infraSetup.error"
+                  class="mt-1 text-[12px] leading-snug text-rose-300"
+                  data-testid="tester-infra-setup-error"
+                >
+                  {{ infraSetup.error }}
+                </p>
+                <template v-if="infraSetup.logs">
+                  <UButton
+                    :icon="showInfraSetupLogs ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
+                    variant="ghost"
+                    size="xs"
+                    class="mt-1.5"
+                    data-testid="tester-infra-setup-logs-toggle"
+                    @click="showInfraSetupLogs = !showInfraSetupLogs"
+                  >
+                    {{
+                      showInfraSetupLogs
+                        ? t('testing.standup.hideLogs')
+                        : t('testing.standup.showLogs')
+                    }}
+                  </UButton>
+                  <pre
+                    v-if="showInfraSetupLogs"
+                    data-testid="tester-infra-setup-logs"
+                    class="mt-2 max-h-64 overflow-auto rounded bg-slate-950/70 p-2 font-mono text-[11px] leading-relaxed text-slate-300"
+                    >{{ infraSetup.logs }}</pre
+                  >
+                </template>
+              </div>
+
               <div v-if="executionId">
                 <UButton
                   :icon="showProvisioning ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"

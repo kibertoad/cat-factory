@@ -399,12 +399,42 @@ export interface GuardLimitsSpec {
   maxConsecutiveWebCalls?: number
 }
 
+/**
+ * The record of standing the service's docker-compose dependencies up before a tester
+ * run (explore mode, `infra.environment === 'local'`). The compose stand-up happens
+ * INSIDE the container, so its output never reaches the orchestrator's provisioning-log
+ * store (which records only the backend-side container/env spin-up); this carries the
+ * captured (redacted + bounded) command output back structurally so the test window can
+ * show WHY the dependencies failed to come up — previously this was trapped in the
+ * harness's own logs. Absent for ephemeral / no-infra / no-compose-path runs.
+ */
+export interface InfraSetupRecord {
+  /** Whether `docker compose up --wait` succeeded (the dependencies are up). */
+  started: boolean
+  /** The repo-relative compose file that was stood up. */
+  composePath?: string
+  /** Epoch ms the stand-up attempt finished. */
+  at: number
+  /** Wall-clock of the stand-up attempt, ms. */
+  durationMs?: number
+  /** Captured (redacted, tail-bounded) stdout+stderr of the stand-up command. */
+  logs?: string
+  /** The verbatim (redacted) failure message when stand-up failed, else absent. */
+  error?: string
+}
+
 /** The generic agent response. `custom` carries a structured explore result. */
 export interface AgentResult {
   summary?: string
   stats?: PiRunStats
   /** Structured explore output (the parsed JSON object) when `output.kind==='structured'`. */
   custom?: unknown
+  /**
+   * The tester's docker-compose stand-up record (explore mode, local infra). Carried back
+   * so the backend can surface the in-container dependency stand-up logs on the Tester step
+   * — the failure-class artifact the orchestrator-side provisioning logs can't capture.
+   */
+  infraSetup?: InfraSetupRecord
   /** Coding mode: whether a change was pushed. */
   pushed?: boolean
   prUrl?: string

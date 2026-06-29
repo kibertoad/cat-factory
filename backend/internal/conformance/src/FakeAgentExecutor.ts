@@ -124,6 +124,21 @@ export interface FakeAgentOptions {
    */
   testReports?: TestReport[]
   /**
+   * The in-container docker-compose dependency stand-up record a `tester` step reports
+   * alongside its report (the deterministic analogue of the harness capturing `docker
+   * compose up` logs). Lets the conformance suite assert it round-trips onto
+   * `step.test.infraSetup` identically on both stores. Omitted ⇒ the tester reports none
+   * (ephemeral / no-infra).
+   */
+  testerInfraSetup?: {
+    started: boolean
+    composePath?: string
+    at: number
+    durationMs?: number
+    logs?: string
+    error?: string
+  }
+  /**
    * The structured JSON a registered CUSTOM kind (one with a `container-explore`
    * structured agent step) returns as `result.custom`, so the engine's generic post-op
    * (coerce → render → commit via the checkout-free RepoFiles port) can be exercised
@@ -275,6 +290,9 @@ export class FakeAgentExecutor implements AgentExecutor {
         output: `[tester] ${report.greenlight ? 'greenlit' : 'found issues for'} "${context.block.title}"`,
         model: 'fake',
         testReport: report,
+        // The in-container compose stand-up record rides back exactly as the harness sends it,
+        // so the engine's persist → reload round-trip onto `step.test.infraSetup` is asserted.
+        ...(this.options.testerInfraSetup ? { infraSetup: this.options.testerInfraSetup } : {}),
       }
     }
 
