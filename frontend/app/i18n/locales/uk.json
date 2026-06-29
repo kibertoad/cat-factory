@@ -789,6 +789,18 @@
         "cleared": "OAuth Slack очищено",
         "clearFailed": "Не вдалося очистити OAuth Slack"
       },
+      "linear": {
+        "title": "Застосунок Linear (OAuth)",
+        "description": "Вмикає потік OAuth «Підключити через Linear». Без нього робочі простори все одно можуть підключити Linear, вставивши особистий ключ API.",
+        "clientId": "ID клієнта",
+        "clientSecret": "Секрет клієнта",
+        "redirectUrl": "URL перенаправлення",
+        "validation": "Введіть ID клієнта, секрет і URL перенаправлення",
+        "saved": "OAuth Linear збережено",
+        "saveFailed": "Не вдалося зберегти OAuth Linear",
+        "cleared": "OAuth Linear очищено",
+        "clearFailed": "Не вдалося очистити OAuth Linear"
+      },
       "web": {
         "title": "Вебпошук контейнера",
         "description": "Постачальник пошуку, до якого агенти в контейнері звертаються через проксі бекенду. Задайте ключ Brave (рекомендовано) або власний URL SearXNG (з необов'язковим ключем bearer).",
@@ -1298,7 +1310,8 @@
         "jiraProjectKey": "Ключ проєкту Jira",
         "jiraProjectKeyHelp": "Нові тикети реєструються в цьому проєкті.",
         "linearTeamId": "Ідентифікатор команди Linear",
-        "linearTeamIdHelp": "Нові тикети створюються в цій команді (Linear вимагає команду для створення тикета)."
+        "linearTeamIdHelp": "Нові тикети створюються в цій команді (Linear вимагає команду для створення тикета).",
+        "linearTeamSearchPlaceholder": "Пошук команд…"
       },
       "vendor": {
         "github": "GitHub Issues",
@@ -2111,7 +2124,9 @@
       "offerHint": "Коли вимкнено, {label} приховано з імпорту та прив'язування.",
       "disconnect": "Відключити",
       "updateConnection": "Оновити підключення",
-      "connect": "Підключити"
+      "connect": "Підключити",
+      "oauthButton": "Підключити через {label}",
+      "oauthOr": "або підключіться за допомогою ключа API"
     }
   },
   "pipeline": {

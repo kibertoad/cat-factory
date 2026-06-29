@@ -7,6 +7,7 @@ import type {
   AccountSettingsView,
   ContentStorageCapability,
   ContentStorageConfig,
+  LinearOAuthSecret,
   S3CredentialsSecret,
   SlackOAuthSecret,
   UpdateAccountSettingsInput,
@@ -35,6 +36,7 @@ const CACHE_TTL_MS = 30_000
 export interface ResolvedAccountSettings {
   config: AccountSettingsConfig
   slackOAuth?: SlackOAuthSecret
+  linearOAuth?: LinearOAuthSecret
   webSearch?: WebSearchSecret
   /** Non-secret content-storage config (backend selection + connection settings). */
   contentStorage?: ContentStorageConfig
@@ -87,6 +89,7 @@ export class AccountSettingsService {
     const value: ResolvedAccountSettings = {
       config,
       ...(secrets.slackOAuth ? { slackOAuth: secrets.slackOAuth } : {}),
+      ...(secrets.linearOAuth ? { linearOAuth: secrets.linearOAuth } : {}),
       ...(secrets.webSearch ? { webSearch: secrets.webSearch } : {}),
       ...(config.contentStorage ? { contentStorage: config.contentStorage } : {}),
       ...(secrets.s3 ? { s3Credentials: secrets.s3 } : {}),
@@ -137,14 +140,16 @@ export class AccountSettingsService {
     const current = existing?.secretsCipher ? await this.decryptSecrets(existing.secretsCipher) : {}
     const merged: AccountSettingsSecrets = { ...current }
     if (input.secrets) {
-      for (const key of ['slackOAuth', 'webSearch', 's3'] as const) {
+      for (const key of ['slackOAuth', 'linearOAuth', 'webSearch', 's3'] as const) {
         if (!(key in input.secrets)) continue
         const value = input.secrets[key]
         if (value == null) delete merged[key]
         else merged[key] = value as never
       }
     }
-    const hasSecrets = Boolean(merged.slackOAuth || merged.webSearch || merged.s3)
+    const hasSecrets = Boolean(
+      merged.slackOAuth || merged.linearOAuth || merged.webSearch || merged.s3,
+    )
     const summary = accountSettingsSummary(merged, config)
     await this.repo.upsert({
       accountId,
@@ -204,6 +209,7 @@ function parseSummary(raw: string): AccountSettingsSummary {
           : null
       return {
         slackOAuthConfigured: Boolean(o.slackOAuthConfigured),
+        linearOAuthConfigured: Boolean(o.linearOAuthConfigured),
         webSearch: o.webSearch === 'brave' || o.webSearch === 'searxng' ? o.webSearch : null,
         contentStorage: {
           backend,

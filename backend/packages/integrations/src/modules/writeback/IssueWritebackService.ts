@@ -22,7 +22,7 @@ import type {
   JiraConnection,
   LinearConnection,
 } from '../tracker/TicketTrackerService.js'
-import { postLinearGraphql } from '../shared/linear.client.js'
+import { linearAuthFromCredentials, postLinearGraphql } from '../shared/linear.client.js'
 import { toBase64 } from '../tracker/base64.js'
 
 // IssueWritebackService: the runtime-neutral `IssueWritebackProvider`. As a task's
@@ -193,8 +193,13 @@ export class IssueWritebackService implements IssueWritebackProvider {
     const { resolveLinearConnection, fetchImpl } = this.deps
     if (!resolveLinearConnection || !fetchImpl) return null
     const connection = await resolveLinearConnection(workspaceId)
-    if (!connection?.apiKey) return null
-    return postLinearGraphql<unknown>(fetchImpl, { apiKey: connection.apiKey }, document, variables)
+    if (!connection?.token && !connection?.apiKey) return null
+    return postLinearGraphql<unknown>(
+      fetchImpl,
+      linearAuthFromCredentials(connection),
+      document,
+      variables,
+    )
   }
 
   private async resolveJira(workspaceId: string, key: string): Promise<void> {

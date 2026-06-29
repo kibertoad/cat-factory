@@ -155,6 +155,9 @@ export interface TasksConfig {
   enabled: boolean
   /** Service-level master key (base64) backing source-credential encryption at rest. */
   encryptionKey?: string
+  // Linear OAuth app credentials are NOT here: like Slack's, they live in per-account
+  // deployment settings (sealed in the DB, set in the UI), resolved dynamically at connect
+  // time via AccountSettingsService — so an admin can set/rotate them without a redeploy.
 }
 
 export interface EnvironmentsConfig {

@@ -789,6 +789,18 @@
         "cleared": "OAuth Slack effacé",
         "clearFailed": "Impossible d'effacer l'OAuth Slack"
       },
+      "linear": {
+        "title": "Application Linear (OAuth)",
+        "description": "Active le flux OAuth « Se connecter avec Linear ». Sans cela, les espaces de travail peuvent toujours connecter Linear en collant une clé API personnelle.",
+        "clientId": "ID client",
+        "clientSecret": "Secret client",
+        "redirectUrl": "URL de redirection",
+        "validation": "Saisissez l'id client, le secret et l'URL de redirection",
+        "saved": "OAuth Linear enregistré",
+        "saveFailed": "Impossible d'enregistrer OAuth Linear",
+        "cleared": "OAuth Linear effacé",
+        "clearFailed": "Impossible d'effacer OAuth Linear"
+      },
       "web": {
         "title": "Recherche web du conteneur",
         "description": "Le fournisseur de recherche que les agents en conteneur atteignent via le proxy du backend. Définissez une clé Brave (recommandé) ou une URL SearXNG auto-hébergée (avec une clé bearer facultative).",
@@ -1298,7 +1310,8 @@
         "jiraProjectKey": "Clé de projet Jira",
         "jiraProjectKeyHelp": "Les nouveaux tickets sont créés dans ce projet.",
         "linearTeamId": "Id d'équipe Linear",
-        "linearTeamIdHelp": "Les nouveaux tickets sont créés dans cette équipe (Linear exige une équipe pour créer un ticket)."
+        "linearTeamIdHelp": "Les nouveaux tickets sont créés dans cette équipe (Linear exige une équipe pour créer un ticket).",
+        "linearTeamSearchPlaceholder": "Rechercher des équipes…"
       },
       "vendor": {
         "github": "GitHub Issues",
@@ -2111,7 +2124,9 @@
       "offerHint": "Lorsqu'elle est désactivée, {label} est masquée de l'importation et de la liaison.",
       "disconnect": "Déconnecter",
       "updateConnection": "Mettre à jour la connexion",
-      "connect": "Connecter"
+      "connect": "Connecter",
+      "oauthButton": "Se connecter avec {label}",
+      "oauthOr": "ou connectez-vous avec une clé API"
     }
   },
   "pipeline": {

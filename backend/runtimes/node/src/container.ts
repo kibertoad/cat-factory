@@ -1381,8 +1381,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
               workspaceId,
               'linear',
             )
-            const apiKey = connection?.credentials?.apiKey
-            return apiKey ? { apiKey } : null
+            const { apiKey, token } = connection?.credentials ?? {}
+            return apiKey || token ? { apiKey, token } : null
           },
         }
       : {}),
@@ -1735,8 +1735,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
                 workspaceId,
                 'linear',
               )
-              const apiKey = connection?.credentials?.apiKey
-              return apiKey ? { apiKey } : null
+              const { apiKey, token } = connection?.credentials ?? {}
+              return apiKey || token ? { apiKey, token } : null
             },
           }
         : {}),

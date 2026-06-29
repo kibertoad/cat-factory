@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { LinearApiError, linearAuthHeader, unwrapLinearData } from './linear.client.js'
+import {
+  LinearApiError,
+  linearAuthFromCredentials,
+  linearAuthHeader,
+  unwrapLinearData,
+} from './linear.client.js'
 
 describe('linearAuthHeader', () => {
   it('sends a personal API key as the raw header value', () => {
@@ -8,6 +13,22 @@ describe('linearAuthHeader', () => {
 
   it('sends an OAuth token as a Bearer (the future-ready variant)', () => {
     expect(linearAuthHeader({ token: 'oauth_x' })).toBe('Bearer oauth_x')
+  })
+})
+
+describe('linearAuthFromCredentials', () => {
+  it('prefers an OAuth token over an API key', () => {
+    expect(linearAuthFromCredentials({ token: 't', apiKey: 'k' })).toEqual({ token: 't' })
+    expect(linearAuthHeader(linearAuthFromCredentials({ token: 't' }))).toBe('Bearer t')
+  })
+
+  it('falls back to the API key (raw header)', () => {
+    expect(linearAuthFromCredentials({ apiKey: 'k' })).toEqual({ apiKey: 'k' })
+    expect(linearAuthHeader(linearAuthFromCredentials({ apiKey: 'k' }))).toBe('k')
+  })
+
+  it('throws when neither credential is present', () => {
+    expect(() => linearAuthFromCredentials({})).toThrow()
   })
 })
 

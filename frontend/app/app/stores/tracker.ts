@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import type { LinearTeam } from '~/types/domain'
 import type { PutTrackerSettingsInput, TrackerSettings } from '~/types/tracker'
 import { useWorkspaceStore } from '~/stores/workspace'
 
@@ -20,6 +21,9 @@ export const useTrackerStore = defineStore('tracker', () => {
     updatedAt: 0,
   })
 
+  /** The connected Linear workspace's teams, for the filing team picker (lazily loaded). */
+  const linearTeams = ref<LinearTeam[]>([])
+
   function hydrate(value: TrackerSettings | undefined) {
     settings.value = value ?? {
       tracker: null,
@@ -37,5 +41,12 @@ export const useTrackerStore = defineStore('tracker', () => {
     return settings.value
   }
 
-  return { settings, hydrate, save }
+  /** Load the connected Linear workspace's teams for the filing team picker. */
+  async function loadLinearTeams() {
+    const ws = useWorkspaceStore()
+    const { teams } = await api.listLinearTeams(ws.requireId())
+    linearTeams.value = teams
+  }
+
+  return { settings, linearTeams, hydrate, save, loadLinearTeams }
 })

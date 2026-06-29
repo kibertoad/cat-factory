@@ -3,8 +3,10 @@ import {
   createTaskFromIssueContract,
   diagnoseTaskSourceContract,
   disconnectTaskSourceContract,
+  getLinearInstallUrlContract,
   importTaskContract,
   linkTaskContract,
+  listLinearTeamsContract,
   listTaskConnectionsContract,
   listTaskSourcesContract,
   listTasksContract,
@@ -20,6 +22,8 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { ValidationError, type TaskSearchRepoScope } from '@cat-factory/kernel'
 import type { TasksModule } from '@cat-factory/orchestration'
+import { LinearOAuth } from '../../auth/LinearOAuth.js'
+import { StateSigner } from '../../github/state.js'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 
@@ -155,6 +159,46 @@ export function taskSourceController(): Hono<AppEnv> {
     return c.json(diagnostic, 200)
   })
 
+  // ---- Linear-specific ----------------------------------------------------
+
+  // List the connection's Linear teams, so the ticket-filing settings can offer a
+  // team picker instead of a raw team-id paste. 409 when Linear isn't connected.
+  buildHonoRoute(app, listLinearTeamsContract, async (c) => {
+    const tasks = requireTasks(c)
+    if (!tasks) return unavailable(c)
+    const teams = await tasks.connectionService.listLinearTeams(param(c, 'workspaceId'))
+    return c.json({ teams }, 200)
+  })
+
+  // The "Connect with Linear" authorize URL, carrying an HMAC-signed `state` that binds
+  // the install to this workspace + user with a short expiry. 503 when Linear OAuth
+  // isn't configured (the manual API-key paste is then the way to connect).
+  buildHonoRoute(app, getLinearInstallUrlContract, async (c) => {
+    const tasks = requireTasks(c)
+    if (!tasks) return unavailable(c)
+    const workspaceId = param(c, 'workspaceId')
+    // OAuth app creds live in per-account deployment settings (sealed in the DB), resolved
+    // dynamically — not env. Absent ⇒ OAuth isn't offered (manual API-key paste still works).
+    const oauth = await tasks.connectionService.resolveLinearOAuthConfig(workspaceId)
+    if (!oauth) {
+      return c.json(
+        { error: { code: 'unavailable', message: 'Linear OAuth is not configured' } },
+        503,
+      )
+    }
+    const signer = new StateSigner(c.get('container').config.auth.sessionSecret)
+    const state = await signer.sign({
+      workspaceId,
+      userId: c.get('user')?.id ?? null,
+      exp: Date.now() + 10 * 60 * 1000,
+    })
+    const url = new LinearOAuth({
+      clientId: oauth.clientId,
+      clientSecret: oauth.clientSecret,
+    }).authorizeUrl({ redirectUri: oauth.redirectUrl, state })
+    return c.json({ url }, 200)
+  })
+
   // ---- issues -------------------------------------------------------------
 
   buildHonoRoute(app, listTasksContract, async (c) => {
@@ -234,6 +278,47 @@ export function taskSourceController(): Hono<AppEnv> {
       position,
     )
     return c.json(result, 201)
+  })
+
+  return app
+}
+
+/**
+ * Public Linear OAuth callback (Linear redirects the browser here with `?code&state`,
+ * so it can't be workspace-scoped or session-gated; the `state` is HMAC-verified).
+ * Mounted at `/tasks`. Mirrors the Slack `/slack/oauth/callback` flow: the token
+ * exchange happens here (the server holds the OAuth secret) and the resulting access
+ * token is handed to the connection service to store as a `{ token }` connection.
+ */
+export function linearOAuthController(): Hono<AppEnv> {
+  const app = new Hono<AppEnv>()
+
+  app.get('/oauth/callback', async (c) => {
+    const container = c.get('container')
+    const tasks = container.tasks
+    if (!tasks) return unavailable(c)
+
+    const code = c.req.query('code')
+    if (!code) {
+      return c.json({ error: { code: 'validation', message: 'Missing code' } }, 400)
+    }
+    const signer = new StateSigner(container.config.auth.sessionSecret)
+    const state = await signer.verify(c.req.query('state') ?? null)
+    if (!state) {
+      return c.json({ error: { code: 'unauthorized', message: 'Invalid or expired state' } }, 401)
+    }
+
+    // Resolve the account's OAuth creds (per-account deployment settings, not env). The
+    // redirect_uri must match the install-url + the registered app, so reuse the stored one.
+    const oauth = await tasks.connectionService.resolveLinearOAuthConfig(state.workspaceId)
+    if (!oauth) return unavailable(c)
+    const token = await new LinearOAuth({
+      clientId: oauth.clientId,
+      clientSecret: oauth.clientSecret,
+    }).exchangeCode(code, oauth.redirectUrl)
+    await tasks.connectionService.connectLinearViaOAuth(state.workspaceId, token)
+    // Land back on the app (reuse the GitHub setup redirect target as the app URL).
+    return c.redirect(container.config.github.setupRedirectUrl || '/')
   })
 
   return app

@@ -828,6 +828,18 @@
         "cleared": "Slack OAuth cleared",
         "clearFailed": "Could not clear Slack OAuth"
       },
+      "linear": {
+        "title": "Linear app (OAuth)",
+        "description": "Enables the \"Connect with Linear\" OAuth flow. Without it, workspaces can still connect Linear by pasting a personal API key.",
+        "clientId": "Client ID",
+        "clientSecret": "Client secret",
+        "redirectUrl": "Redirect URL",
+        "validation": "Enter the client id, secret and redirect URL",
+        "saved": "Linear OAuth saved",
+        "saveFailed": "Could not save Linear OAuth",
+        "cleared": "Linear OAuth cleared",
+        "clearFailed": "Could not clear Linear OAuth"
+      },
       "web": {
         "title": "Container web search",
         "description": "The search upstream container agents reach through the backend proxy. Set a Brave key (recommended), or a self-hosted SearXNG URL (with an optional bearer key).",
@@ -1340,7 +1352,8 @@
         "jiraProjectKey": "Jira project key",
         "jiraProjectKeyHelp": "New tickets are filed under this project.",
         "linearTeamId": "Linear team id",
-        "linearTeamIdHelp": "New issues are created under this team (Linear requires a team to create an issue)."
+        "linearTeamIdHelp": "New issues are created under this team (Linear requires a team to create an issue).",
+        "linearTeamSearchPlaceholder": "Search teams…"
       },
       "vendor": {
         "github": "GitHub Issues",
@@ -2168,7 +2181,9 @@
       "offerHint": "When off, {label} is hidden from import and linking.",
       "disconnect": "Disconnect",
       "updateConnection": "Update connection",
-      "connect": "Connect"
+      "connect": "Connect",
+      "oauthButton": "Connect with {label}",
+      "oauthOr": "or connect with an API key"
     }
   },
   "pipeline": {

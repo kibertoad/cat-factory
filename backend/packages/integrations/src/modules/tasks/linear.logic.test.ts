@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  linearIssueSearchHit,
+  mapLinearChildIds,
+  mapLinearComments,
   mapLinearIssue,
   mapLinearRelations,
   mapLinearSearchResults,
+  mapLinearTeams,
   parseLinearRef,
 } from './linear.logic.js'
 
@@ -119,6 +123,55 @@ describe('mapLinearSearchResults', () => {
         status: 'Todo',
         excerpt: '',
       },
+    ])
+  })
+})
+
+describe('mapLinearChildIds / mapLinearComments (pagination page mappers)', () => {
+  it('maps a children page to identifiers, dropping blanks', () => {
+    expect(
+      mapLinearChildIds({ nodes: [{ identifier: 'ENG-2' }, {}, { identifier: 'ENG-3' }] }),
+    ).toEqual(['ENG-2', 'ENG-3'])
+    expect(mapLinearChildIds(null)).toEqual([])
+  })
+
+  it('maps a comments page to normalized comments', () => {
+    expect(
+      mapLinearComments({
+        nodes: [{ user: { name: 'Ada' }, createdAt: '2026-01-02', body: 'hi\n\n\n\nthere' }],
+      }),
+    ).toEqual([{ author: 'Ada', createdAt: '2026-01-02', body: 'hi\n\nthere' }])
+    expect(mapLinearComments(undefined)).toEqual([])
+  })
+})
+
+describe('linearIssueSearchHit', () => {
+  it('projects a fetched issue onto a lean search hit', () => {
+    const content = mapLinearIssue({
+      issue: { identifier: 'ENG-9', title: 'Nine', url: 'u9', state: { name: 'Todo' } },
+    })
+    expect(linearIssueSearchHit(content)).toEqual({
+      source: 'linear',
+      externalId: 'ENG-9',
+      title: 'Nine',
+      url: 'u9',
+      status: 'Todo',
+      excerpt: '',
+    })
+  })
+})
+
+describe('mapLinearTeams', () => {
+  it('maps teams and drops id-less nodes, defaulting name/key', () => {
+    expect(
+      mapLinearTeams({
+        teams: {
+          nodes: [{ id: 't1', name: 'Engineering', key: 'ENG' }, { id: 't2' }, { name: 'no id' }],
+        },
+      }),
+    ).toEqual([
+      { id: 't1', name: 'Engineering', key: 'ENG' },
+      { id: 't2', name: 't2', key: '' },
     ])
   })
 })
