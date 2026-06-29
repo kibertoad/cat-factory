@@ -276,9 +276,12 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       const error = view.error ?? 'Bootstrap job failed'
       return {
         state: 'failed',
-        failureKind: classifyBootstrapFailure(error),
+        // Prefer the harness's structured cause; fall back to the error-string regex (which
+        // also catches the facade-emitted eviction, for which the harness sets no cause).
+        failureKind:
+          bootstrapFailureKindFromCause(view.failureCause) ?? classifyBootstrapFailure(error),
         error,
-        detail: view.error,
+        detail: view.detail ?? view.error,
       }
     }
     // Completed: a structured `error` (e.g. push rejected) is still a failure.
@@ -286,9 +289,9 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     if (result.error) {
       return {
         state: 'failed',
-        failureKind: 'agent',
+        failureKind: bootstrapFailureKindFromCause(view.failureCause) ?? 'agent',
         error: `Bootstrap failed: ${result.error}`,
-        detail: result.error,
+        detail: view.detail ?? result.error,
       }
     }
     const outcome = await this.buildOutcome(handle, result.defaultBranch)
@@ -392,4 +395,29 @@ function classifyBootstrapFailure(error: string): BootstrapFailureKind {
   if (/evicted or crashed/i.test(error)) return 'evicted'
   if (/inactivity|no agent activity|max duration/i.test(error)) return 'timeout'
   return 'agent'
+}
+
+/**
+ * Map the harness's STRUCTURED failure cause onto a {@link BootstrapFailureKind}, preferred
+ * over {@link classifyBootstrapFailure}'s error-string regex when present. Returns undefined
+ * for an absent/unknown cause so the caller falls back to the regex (older harness image) —
+ * crucially including container eviction, which has NO harness cause (the transport emits the
+ * "evicted or crashed" string), so it correctly falls through to the regex's `evicted`.
+ */
+function bootstrapFailureKindFromCause(
+  cause: string | undefined,
+): BootstrapFailureKind | undefined {
+  switch (cause) {
+    case 'inactivity-timeout':
+    case 'max-duration':
+      return 'timeout'
+    case 'agent':
+    case 'git':
+    case 'api':
+    case 'no-usable-output':
+    case 'no-changes':
+      return 'agent'
+    default:
+      return undefined
+  }
 }

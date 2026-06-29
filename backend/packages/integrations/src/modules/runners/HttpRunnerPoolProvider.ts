@@ -316,6 +316,14 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     const followUps = this.mapFollowUps(manifest, json)
     if (followUps && followUps.length > 0) view.followUps = followUps
 
+    // The harness's structured failure cause + extended diagnostic, when the manifest maps
+    // them — so a pool that proxies the executor-harness verbatim classifies a failure exactly
+    // like a Cloudflare container, instead of degrading to the engine's error-string regex.
+    const failureCause = environmentsLogic.extractString(json, r.failureCausePath)
+    const detail = environmentsLogic.extractString(json, r.detailPath)
+    if (failureCause) view.failureCause = failureCause
+    if (detail) view.detail = detail
+
     if (state === 'failed') {
       view.error = error ?? 'Runner pool reported the job failed'
       return view

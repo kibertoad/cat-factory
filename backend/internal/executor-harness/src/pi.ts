@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { killChildProcess } from './process.js'
 import { redactSecrets } from './redact.js'
+import { log } from './logger.js'
 
 // Drives the Pi coding-agent CLI. Pi is pointed at the Worker's OpenAI-compatible
 // proxy via a custom provider in ~/.pi/agent/models.json, authenticated with the
@@ -854,6 +855,10 @@ export function runPi(opts: {
     // Pi's json mode is strict LF-framed JSONL; buffer partial lines across
     // chunks so we only ever parse complete records for progress + the guard.
     let lineBuffer = ''
+    // Counters for silent losses, warned ONCE at close (not per-line, to avoid log
+    // spam): `{`-leading lines that failed to JSON.parse, and observer-callback throws.
+    let malformedLines = 0
+    let observerErrors = 0
     const guard = new ProgressGuard(
       opts.guardLimits ?? progressGuardLimitsFromEnv(),
       opts.expectsEdits ?? true,
@@ -870,12 +875,19 @@ export function runPi(opts: {
     // Parse each complete JSONL record once, feeding both the todo-progress
     // emitter and the no-progress guard. A tripped guard kills Pi with a
     // diagnostic the run then fails on.
-    const processLine = (line: string): void => {
+    // `runGuard` is false only for the at-close flush of a final unterminated line: the
+    // process has already exited, so feeding that record to the no-progress guard could trip
+    // it and turn a clean (code 0) exit into a spurious "no progress" rejection. The flush
+    // still recovers the record's progress/span signal; only the kill decision is skipped.
+    const processLine = (line: string, runGuard = true): void => {
       if (!line.startsWith('{')) return
       let event: Record<string, unknown>
       try {
         event = JSON.parse(line) as Record<string, unknown>
       } catch {
+        // A `{`-leading line that doesn't parse is a corrupted/truncated record we drop
+        // (progress/spans for it are lost). Count it; warned once at close.
+        malformedLines++
         return
       }
       if (opts.onEvent) {
@@ -883,6 +895,7 @@ export function runPi(opts: {
           opts.onEvent(event)
         } catch {
           // A faulty observer must never break the run.
+          observerErrors++
         }
       }
       if (opts.onProgress) {
@@ -902,11 +915,12 @@ export function runPi(opts: {
             })
           } catch {
             // A faulty observer must never break the run.
+            observerErrors++
           }
           toolBoundary = endedAt
         }
       }
-      if (!guardReason && !aborted) {
+      if (runGuard && !guardReason && !aborted) {
         const reason = guard.observe(event)
         if (reason) {
           guardReason = reason
@@ -951,6 +965,21 @@ export function runPi(opts: {
     })
     child.on('close', (code) => {
       opts.signal?.removeEventListener('abort', onAbort)
+      // Flush a final record that arrived without a trailing newline: Pi usually LF-frames
+      // every line, but a clean exit can leave the last event (often `agent_end`) unterminated
+      // in the buffer, so without this its progress/span/guard signal would be silently lost.
+      if (lineBuffer.trim()) {
+        processLine(lineBuffer.trim(), false)
+        lineBuffer = ''
+      }
+      // Surface any silent stream losses ONCE (counts, not per-line), so a corrupted JSONL
+      // stream or a throwing observer is diagnosable rather than invisible.
+      if (malformedLines > 0 || observerErrors > 0) {
+        log.warn('pi: skipped malformed JSONL lines / observer errors', {
+          malformedLines,
+          observerErrors,
+        })
+      }
       if (guardReason) {
         const tail = redactSecrets(stderr.trim()).slice(-700)
         reject(new Error(tail ? `${guardReason} Agent stderr: ${tail}` : guardReason))

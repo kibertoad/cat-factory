@@ -732,12 +732,21 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         ? { state: 'running', subtasks: view.progress, ...followUps }
         : { state: 'running', ...followUps }
     }
-    if (view.state === 'failed') {
-      return { state: 'failed', error: view.error ?? 'Implementation job failed' }
+    // The harness's structured failure cause + extended diagnostic, forwarded so the engine
+    // classifies the failure without regex-matching `error`. Absent on an older image.
+    const failureMeta = {
+      ...(view.failureCause ? { failureCause: view.failureCause } : {}),
+      ...(view.detail ? { detail: view.detail } : {}),
     }
-    // Completed: a structured `error` (e.g. "no file changes") is still a failure.
+    if (view.state === 'failed') {
+      return { state: 'failed', error: view.error ?? 'Implementation job failed', ...failureMeta }
+    }
+    // Completed: a structured `error` (e.g. "no file changes") is still a failure. The harness
+    // carries the cause on the view even for these clean-exit failures, so forward it too.
     const result = view.result ?? {}
-    if (result.error) return { state: 'failed', error: `Implementation failed: ${result.error}` }
+    if (result.error) {
+      return { state: 'failed', error: `Implementation failed: ${result.error}`, ...failureMeta }
+    }
     // Attribute a subscription harness's reported usage to its leased pool token
     // (usage-aware rotation) and the telemetry sink. Best-effort: a missing usage
     // signal or unconfigured recorder is a no-op; recorded at most once per job id

@@ -195,6 +195,41 @@ describe('HttpRunnerPoolProvider', () => {
     expect(view.result?.prUrl).toBe('https://github.com/o/r/pull/9')
   })
 
+  it('forwards the harness failureCause + detail on a failed view when the manifest maps them', async () => {
+    // Runtime symmetry: a pool that proxies the executor-harness verbatim must surface the
+    // STRUCTURED cause/detail just like a Cloudflare container, so the engine classifies the
+    // failure without regex. Absent the manifest paths (below) it stays a bare error.
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'errored',
+      error: 'Aborted: no agent activity for 600s (likely hung in agent phase)',
+      failureCause: 'inactivity-timeout',
+      detail: 'Phase timings: clone=2s, agent=600s.',
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withCause: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, failureCausePath: 'failureCause', detailPath: 'detail' },
+    }
+    const view = await provider.poll({
+      manifest: withCause,
+      jobId: 'job-7',
+      resolveSecret: () => 't',
+    })
+    expect(view.state).toBe('failed')
+    expect(view.failureCause).toBe('inactivity-timeout')
+    expect(view.detail).toBe('Phase timings: clone=2s, agent=600s.')
+  })
+
+  it('leaves failureCause/detail unset when the manifest does not map them (older pool)', async () => {
+    capture('/api/jobs/job-7', 'GET', { state: 'errored', error: 'boom' })
+    const provider = new HttpRunnerPoolProvider()
+    const view = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
+    expect(view.state).toBe('failed')
+    expect(view.error).toBe('boom')
+    expect(view.failureCause).toBeUndefined()
+    expect(view.detail).toBeUndefined()
+  })
+
   it('forwards the slimmed result scalars via resultPath and drops legacy structured fields', async () => {
     // The bespoke per-kind result channels (`report`/`service`/`assessment`/`resolved`/…)
     // were removed when every built-in agent migrated onto the single `agent` kind — its

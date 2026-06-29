@@ -90,6 +90,8 @@ import {
   shouldLoopCoder,
 } from './followUp.logic.js'
 import {
+  agentFailureKindFromCause,
+  classifyAgentFailure,
   isContainerEvictionError,
   isTransientEviction,
   MAX_EVICTION_RECOVERIES,
@@ -718,7 +720,18 @@ export class RunDispatcher {
             : `${update.error ?? 'Container evicted'} (still evicting after ${recoveries} automatic container restart${recoveries === 1 ? '' : 's'} — treating as deterministic)`,
         }
       }
-      return { kind: 'job_failed', error: update.error }
+      // Not an eviction: a genuine agent/job failure. Prefer the harness's STRUCTURED cause
+      // to classify it (→ AgentFailureKind), falling back to the error-string regex when an
+      // older image (or a pool transport that doesn't forward the cause) reported none — the
+      // same regex the bootstrap path uses, so a watchdog timeout still classifies as `timeout`
+      // rather than a generic `agent`. The extended diagnostic surfaces as the failure detail.
+      return {
+        kind: 'job_failed',
+        error: update.error,
+        failureKind:
+          agentFailureKindFromCause(update.failureCause) ?? classifyAgentFailure(update.error),
+        detail: update.detail ?? update.error,
+      }
     }
 
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
