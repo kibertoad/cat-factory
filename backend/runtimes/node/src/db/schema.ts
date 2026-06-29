@@ -1214,23 +1214,6 @@ export const documentConnections = pgTable(
   (t) => [primaryKey({ columns: [t.workspace_id, t.source] })],
 )
 
-// Per-user personal document-source connections (descriptor `credentialScope: 'user'`),
-// e.g. a Claude Design PAT. The per-user analogue of document_connections, keyed by the
-// owning user so a personal credential is stored once per user and never shared. Mirrors
-// the D1 `user_document_connections` table (migration 0019).
-export const userDocumentConnections = pgTable(
-  'user_document_connections',
-  {
-    user_id: text('user_id').notNull(),
-    source: text('source').notNull(),
-    credentials: text('credentials').notNull(),
-    label: text('label').notNull().default(''),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [primaryKey({ columns: [t.user_id, t.source] })],
-)
-
 // One row per imported page: `body` holds the normalized Markdown the planner +
 // agent-context injection consume, `linked_block_id` attaches it to a board block.
 export const documents = pgTable(

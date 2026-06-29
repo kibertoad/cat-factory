@@ -5,6 +5,7 @@ import {
   type DocumentSourceProvider,
   type NormalizedConnection,
 } from '@cat-factory/kernel'
+import { renderDesignContext } from './design.logic.js'
 import { FIGMA_API_HOST, FIGMA_DESCRIPTOR } from './figma.logic.js'
 import * as figmaLogic from './figma.logic.js'
 import { DocumentHttpError, createHostPinnedFetch, readCappedText } from './http.js'
@@ -93,24 +94,27 @@ export class FigmaProvider implements DocumentSourceProvider {
     }
 
     const { roots, components, fileName } = await this.fetchNodes(credentials, fileKey, nodeId)
-    const sections: string[] = [figmaLogic.figmaNodesToMarkdown(roots, components)]
+    // Design tokens are Enterprise-gated; on 403/404 drop them, don't fail. A rendered
+    // preview rides along as a reference (no download) — best-effort, the short-lived URL
+    // may expire and a non-multimodal agent ignores it.
+    const variablesMeta = await this.fetchVariables(credentials, fileKey)
+    const previewUrl = await this.fetchPreviewUrl(credentials, fileKey, nodeId)
 
-    // Design tokens are Enterprise-gated; on 403/404 drop the section, don't fail.
-    const tokens = await this.fetchVariables(credentials, fileKey)
-    if (tokens) sections.push(tokens)
-
-    // A rendered preview rides along as a reference line (no download). Best-effort:
-    // a non-multimodal agent ignores it and the short-lived URL may expire.
-    const preview = await this.fetchPreviewUrl(credentials, fileKey, nodeId)
-    if (preview) sections.push(`### Rendered preview\nRendered preview: ${preview}`)
-
-    const title = nodeId ? `${fileName} — ${roots[0]?.name?.trim() || nodeId}` : fileName || fileKey
+    const context = figmaLogic.buildFigmaDesignContext({
+      externalId,
+      fileName,
+      nodeId,
+      roots,
+      components,
+      variablesMeta,
+      previewUrl,
+    })
 
     return {
       externalId,
-      title,
-      url: figmaLogic.figmaUrlFor(externalId),
-      body: sections.filter(Boolean).join('\n\n').trim(),
+      title: context.title,
+      url: context.url,
+      body: renderDesignContext(context),
     }
   }
 
@@ -157,24 +161,22 @@ export class FigmaProvider implements DocumentSourceProvider {
   }
 
   /**
-   * Fetch local variables (design tokens); null on the Enterprise-gating 403/404. Fully
-   * best-effort: any transport failure (incl. a blocked-redirect `DocumentHttpError`)
-   * drops the section rather than failing the whole import.
+   * Fetch the local-variables `meta` (design tokens); null on the Enterprise-gating
+   * 403/404. Fully best-effort: any transport failure (incl. a blocked-redirect
+   * `DocumentHttpError`) drops the tokens rather than failing the whole import.
    */
   private async fetchVariables(
     credentials: DocumentCredentials,
     fileKey: string,
-  ): Promise<string | null> {
+  ): Promise<figmaLogic.FigmaVariablesMeta | null> {
     try {
       const res = await safeFetch(
         `${API_BASE}/files/${encodeURIComponent(fileKey)}/variables/local`,
         { method: 'GET', headers: this.headers(credentials) },
       )
-      if (res.status === 403 || res.status === 404) return null
       if (!res.ok) return null
       const json = this.parse<VariablesResponse>(await readCappedText(res, MAX_RESPONSE_BYTES))
-      const markdown = figmaLogic.figmaVariablesToMarkdown(json?.meta)
-      return markdown || null
+      return json?.meta ?? null
     } catch {
       return null
     }

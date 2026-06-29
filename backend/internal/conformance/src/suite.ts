@@ -849,6 +849,36 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         expect(coder.output).toContain('[frags]db.managed-standard[/frags]')
         expect(coder.selectedFragmentIds).toEqual(['db.managed-standard'])
       })
+
+      it('resolves the built-in design.context fragment into a code-aware run', async () => {
+        // The shared design-context fragment (the one a linked Figma/Zeplin document's
+        // materialised `.cat-context/*.md` pairs with) is a built-in catalog entry. Pinning
+        // it on a service and asserting a `coder` run resolves it proves the fragment is in
+        // the universal pool and reaches a code-aware agent identically on D1 and Postgres —
+        // a rename/removal of the design fragment fails here. (The document body's own
+        // materialisation into the agent context is covered by the generic document-source
+        // path; design sources ride it unchanged.)
+        const app = harness.makeApp({ echoFragments: true })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+          serviceFragmentIds: ['design.context'],
+        })
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code',
+          agentKinds: ['coder'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+
+        const coder = exec.steps.find((s) => s.agentKind === 'coder')!
+        expect(coder.selectedFragmentIds).toEqual(['design.context'])
+        expect(coder.output).toContain('[frags]design.context[/frags]')
+      })
     })
 
     describe('registered custom kind pre/post-ops', () => {
@@ -2472,33 +2502,31 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(afterDelete.body.connections).toEqual([])
       })
 
-      it('connects, lists (secret-free), and disconnects Claude Design (per-user PAT)', async () => {
+      it('connects, lists (secret-free), and disconnects Zeplin (per-workspace PAT)', async () => {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
         const base = `/workspaces/${workspace.id}/document-sources`
 
-        // Claude Design is a PERSONAL source (descriptor `credentialScope: 'user'`): the PAT
-        // is stored in the per-user `user_document_connections` table, NOT the shared
-        // workspace table, yet it surfaces through the SAME connect/list/disconnect surface.
-        // (In dev-open conformance there is no signed-in user, so it is owned by the empty
-        // user id — the single-user/local-mode fallback.) Proves the per-user store + the
-        // scope-aware service are wired symmetrically on this facade, and the token never
-        // leaves the backend.
-        const connected = await call<{ source: string }>('POST', `${base}/claude-design/connect`, {
-          credentials: { apiToken: 'sk-ant-secret-design-token-xyz' },
+        // Zeplin is the second design source, wired on every facade beside Figma (a
+        // per-workspace Bearer PAT; normalizeConnection is pure, so no network). It proves
+        // the design abstraction is not Figma-shaped — a different content model (screens +
+        // a handoff design system) rides the same provider port. The token never leaves the
+        // backend.
+        const connected = await call<{ source: string }>('POST', `${base}/zeplin/connect`, {
+          credentials: { apiToken: 'zpn-secret-zeplin-token-xyz' },
         })
         expect(connected.status).toBe(201)
-        expect(connected.body.source).toBe('claude-design')
-        expect(JSON.stringify(connected.body)).not.toContain('secret-design-token')
+        expect(connected.body.source).toBe('zeplin')
+        expect(JSON.stringify(connected.body)).not.toContain('secret-zeplin-token')
 
         const listed = await call<{ connections: { source: string }[] }>(
           'GET',
           `${base}/connections`,
         )
-        expect(listed.body.connections.map((c) => c.source)).toEqual(['claude-design'])
-        expect(JSON.stringify(listed.body)).not.toContain('secret-design-token')
+        expect(listed.body.connections.map((c) => c.source)).toEqual(['zeplin'])
+        expect(JSON.stringify(listed.body)).not.toContain('secret-zeplin-token')
 
-        const del = await call('DELETE', `${base}/claude-design/connection`)
+        const del = await call('DELETE', `${base}/zeplin/connection`)
         expect(del.status).toBe(204)
         const afterDelete = await call<{ connections: unknown[] }>('GET', `${base}/connections`)
         expect(afterDelete.body.connections).toEqual([])

@@ -2012,7 +2012,6 @@
       "title": "Conectar fuente",
       "sourceFallback": "Fuente",
       "intro": "Conecta {source} para importar requisitos, RFC y PRD, y luego generar la estructura del tablero o adjuntarlos a las tareas como contexto para los agentes.",
-      "personalNote": "Conexión personal: esta credencial te autentica a ti y se almacena solo para tu cuenta, nunca se comparte con el resto del espacio de trabajo.",
       "disconnect": "Desconectar",
       "connect": "Conectar",
       "update": "Actualizar conexión",

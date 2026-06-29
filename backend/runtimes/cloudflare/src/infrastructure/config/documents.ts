@@ -11,22 +11,13 @@ const ALL_SOURCES: readonly DocumentSourceKind[] = [
   'notion',
   'github',
   'figma',
+  'zeplin',
   'linear',
-  'claude-design',
 ]
 
-// Sources enabled when `DOCUMENT_SOURCES` is unset. Claude Design is intentionally NOT
-// on by default: its credentialed project-read API is provisional (the read is still
-// claude.ai-login-bound, no per-user service token yet), so connecting it today can't
-// fetch. Opt it in explicitly via `DOCUMENT_SOURCES=…,claude-design` once the API is
-// real, rather than exposing a non-functional connector to every tenant.
-const DEFAULT_SOURCES: readonly DocumentSourceKind[] = [
-  'confluence',
-  'notion',
-  'github',
-  'figma',
-  'linear',
-]
+// Sources enabled when `DOCUMENT_SOURCES` is unset. Every known source is on by default;
+// each is a no-op until a tenant connects it interactively in the UI.
+const DEFAULT_SOURCES: readonly DocumentSourceKind[] = [...ALL_SOURCES]
 
 /** Parse the comma-separated `DOCUMENT_SOURCES` allow-list, defaulting to the on-by-default set. */
 function parseSources(raw: string | undefined): DocumentSourceKind[] {

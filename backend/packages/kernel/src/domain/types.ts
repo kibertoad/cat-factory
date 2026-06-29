@@ -86,7 +86,6 @@ export type {
   // Document-source integration projections + planning shapes.
   DocumentSourceKind,
   DocumentSourceDescriptor,
-  DocumentCredentialScope,
   CredentialField,
   DocumentConnection,
   SourceDocument,
