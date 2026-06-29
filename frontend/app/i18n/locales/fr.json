@@ -584,6 +584,23 @@
         "approved": "Approuvé",
         "changes_requested": "Modifications demandées",
         "rejected": "Rejeté"
+      },
+      "container": {
+        "status": {
+          "starting": "Démarrage du conteneur…",
+          "up": "Conteneur en cours d’exécution",
+          "errored": "Erreur du conteneur",
+          "destroyed": "Conteneur libéré"
+        },
+        "phase": {
+          "starting": "Démarrage",
+          "clone": "Préparation de l’espace de travail",
+          "agent": "Agent en cours d’exécution",
+          "push": "Envoi des modifications",
+          "done": "Finalisation"
+        },
+        "id": "Conteneur",
+        "url": "Adresse"
       }
     },
     "stepDetail": {
@@ -2845,6 +2862,12 @@
     "fixerAttempts": "Tentatives du correcteur",
     "fixCount": "{attempts}/{max} correction",
     "fixingSuffix": "· correction…",
+    "fixerTimeline": {
+      "attempt": "Tentative {n}",
+      "completed": "Terminé",
+      "failed": "Échec",
+      "addressed": "Corrige"
+    },
     "empty": {
       "title": "Aucun rapport de tests pour l'instant.",
       "hint": "Le rapport apparaît une fois que le Testeur a terminé une passe. Pendant son exécution, l'étape affiche la progression en direct sur le tableau."
@@ -2888,7 +2911,8 @@
       "blocking": "({count} bloquante) | ({count} bloquantes)"
     },
     "environment": "Environnement",
-    "footer": "Les scénarios sont les domaines que le Testeur a choisi d'éprouver (ses scénarios d'acceptation de la spécification). Les résultats et les réserves y sont regroupés par nom."
+    "footer": "Les scénarios sont les domaines que le Testeur a choisi d'éprouver (ses scénarios d'acceptation de la spécification). Les résultats et les réserves y sont regroupés par nom.",
+    "infrastructure": "Infrastructure"
   },
   "visualConfirm": {
     "ariaLabel": "Confirmation visuelle",

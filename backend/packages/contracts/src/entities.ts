@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 import { subscriptionVendorSchema } from './vendor-credentials.js'
 import { agentConfigValuesSchema } from './agent-config.js'
-import { testReportSchema, testEnvironmentSchema } from './testing.js'
+import { testConcernSchema, testReportSchema, testEnvironmentSchema } from './testing.js'
 import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from './consensus.js'
 import { followUpsStepStateSchema } from './followUp.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
@@ -833,6 +833,30 @@ export type GateStepState = v.InferOutput<typeof gateStepStateSchema>
  *   - `phase: 'fixing'`  — a Fixer job is in flight; on completion the step returns to
  *                          `testing` and a fresh Tester job is dispatched.
  */
+/**
+ * One round of the Tester→Fixer loop, recorded when a `fixer` job finishes so the test
+ * window can show what each fixer attempt set out to fix and how it ended — the analogue of
+ * a polling gate's {@link gateAttemptSchema}, since a fixer run is otherwise an opaque
+ * sub-job with no surface of its own (only a bare `attempts` count).
+ */
+export const testerAttemptSchema = v.object({
+  /** 1-based fixer round (matches `attempts` after the fixer for this round was dispatched). */
+  attempt: v.number(),
+  /** Epoch ms when the fixer job finished. */
+  at: v.number(),
+  /** Whether the fixer container finished (`completed`) or errored/was evicted (`failed`). */
+  outcome: v.picklist(['completed', 'failed']),
+  /** The fixer's own summary (or the failure reason), naming what it changed / what failed. */
+  summary: v.optional(v.nullable(v.string())),
+  /**
+   * The concerns the fixer was handed for this round (from the Tester report that withheld
+   * its greenlight), so the window can show WHAT each round tried to address — not only that
+   * a round happened.
+   */
+  concerns: v.optional(v.nullable(v.array(testConcernSchema))),
+})
+export type TesterAttempt = v.InferOutput<typeof testerAttemptSchema>
+
 export const testerStepStateSchema = v.object({
   phase: v.picklist(['testing', 'fixing']),
   /** How many `fixer` attempts have been dispatched so far. */
@@ -841,6 +865,12 @@ export const testerStepStateSchema = v.object({
   maxAttempts: v.number(),
   /** The most recent Tester report (what was tested, outcomes, concerns, greenlight). */
   lastReport: v.optional(v.nullable(testReportSchema)),
+  /**
+   * Append-only history of the `fixer` rounds this Tester step looped through, each recorded
+   * when its job finished. Lets the test window surface an inspectable timeline of the fixer
+   * attempts (what each addressed, how it ended) instead of only a bare `attempts` count.
+   */
+  attemptLog: v.optional(v.nullable(v.array(testerAttemptSchema))),
 })
 export type TesterStepState = v.InferOutput<typeof testerStepStateSchema>
 
@@ -872,6 +902,41 @@ export const runEnvironmentSchema = v.object({
   lastError: v.optional(v.nullable(v.string())),
 })
 export type RunEnvironment = v.InferOutput<typeof runEnvironmentSchema>
+
+/**
+ * The lifecycle status of the per-run container backing a container agent step:
+ * `starting` (dispatching / cold-booting), `up` (running the agent's job),
+ * `errored` (the container failed to start, was evicted, or its job faulted), and
+ * `destroyed` (the run's container has been reclaimed). The SPA additionally derives
+ * `destroyed` for a finished run's container steps (the container is reclaimed as a
+ * unit when the run terminates), so the backend only ever persists the first three.
+ */
+export const runContainerStatusSchema = v.picklist(['starting', 'up', 'errored', 'destroyed'])
+export type RunContainerStatus = v.InferOutput<typeof runContainerStatusSchema>
+
+/**
+ * The compact, non-secret projection of the per-run container a container agent step
+ * runs in, so a run's details can show WHAT the container is doing and WHERE it lives
+ * instead of a step's "spinning up container…" badge vanishing into a blank "working"
+ * state once the container is up. Populated by the engine across the dispatch + poll
+ * lifecycle of an async (container) step; only ever set on container-backed steps.
+ */
+export const runContainerSchema = v.object({
+  /** The container lifecycle status; see {@link runContainerStatusSchema}. */
+  status: runContainerStatusSchema,
+  /**
+   * The coarse phase the agent's job is in while the container is `up` (`clone` →
+   * `agent` → `push`, seeded `starting`), forwarded from the harness. Lets the details
+   * distinguish "still preparing the checkout" from "the agent is making calls". Absent
+   * until the first poll, or when the runner doesn't report a phase.
+   */
+  phase: v.optional(v.nullable(v.string())),
+  /** Provider container/runner id (Cloudflare DO id, docker container id), when known. */
+  id: v.optional(v.nullable(v.string())),
+  /** A reachable address for the running container (the local docker host URL), when one exists. */
+  url: v.optional(v.nullable(v.string())),
+})
+export type RunContainer = v.InferOutput<typeof runContainerSchema>
 
 export const humanTestEnvironmentSchema = v.object({
   /** The `environments` row id, so the window can fetch access creds / re-poll status. */
@@ -1102,15 +1167,16 @@ export const pipelineStepSchema = v.object({
   /** Live subtask counts while an async (container) step runs; see {@link stepSubtasksSchema}. */
   subtasks: v.optional(stepSubtasksSchema),
   /**
-   * True while a container-backed step is being dispatched and its per-run
-   * container is cold-booting — i.e. before the container is up and the agent has
-   * begun executing. Set the moment the job is dispatched (the dispatch blocks
-   * until the container accepts the job, so it covers the whole boot window) and
-   * cleared on the first successful poll, when the container is provably up. Lets
-   * the board show an explicit "Spinning up container…" phase instead of a blank
-   * "working" state. Only ever set on async (container) steps.
+   * The per-run container this async (container) step runs in — its lifecycle status
+   * (starting / up / errored), the agent's current phase (clone / agent / push), and
+   * the container's id + reachable URL once up. Lets a run's details surface what the
+   * container is doing and where it lives, so the board shows an explicit "Spinning up
+   * container…" → live-phase progression instead of a blank "working" state. Set the
+   * moment the job is dispatched (the dispatch blocks until the container accepts the
+   * job) and refined on each poll. Only ever set on async (container) steps; absent on
+   * non-container steps and steps not yet dispatched. See {@link runContainerSchema}.
    */
-  startingContainer: v.optional(v.boolean()),
+  container: v.optional(v.nullable(runContainerSchema)),
   decision: v.nullable(decisionSchema),
   /**
    * Whether a human approval gate fires after this step completes. Copied from

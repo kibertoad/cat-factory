@@ -348,11 +348,11 @@ export class RunDispatcher {
         // dispatch to return. startJob confirms the same value below.
         const previewModel = await this.previewStepModel(context)
         if (previewModel) step.model = previewModel
-        // Surface an explicit "spinning up container" phase for the cold-boot
-        // window: dispatch blocks until the per-run container is up and has
-        // accepted the job, so emitting before it lets the board show the boot
-        // instead of a blank "working" state.
-        step.startingContainer = true
+        // Surface the explicit container lifecycle for the cold-boot window: dispatch
+        // blocks until the per-run container is up and has accepted the job, so emitting
+        // `starting` now lets the details show the boot (and then the live phase + the
+        // container id/url) instead of a blank "working" state.
+        step.container = { status: 'starting' }
         // Surface the block's ephemeral environment (if any) alongside the cold-boot
         // phase, so a run's details show the env spinning up next to the container.
         await this.attachEnvironmentProjection(workspaceId, instance.blockId, step)
@@ -368,7 +368,7 @@ export class RunDispatcher {
           // response and classify it as a `dispatch` failure ("container failed to
           // start") so the run details say the container never started — not a generic
           // "run failed". A dispatch-time eviction still routes to the evicted framing.
-          step.startingContainer = false
+          step.container = { status: 'errored' }
           await this.executionRepository.upsert(workspaceId, instance)
           await this.runStateMachine.emitInstance(workspaceId, instance)
           const message = getErrorMessage(error)
@@ -383,8 +383,9 @@ export class RunDispatcher {
         step.jobId = handle.jobId
         // Record the model at dispatch — the poll site can't resolve it later.
         if (handle.model) step.model = handle.model
-        // The dispatch returned, so the container is up and execution has begun.
-        step.startingContainer = false
+        // The dispatch returned, so the container is up and the job is accepted; the
+        // live phase + the container id/url arrive on the first poll.
+        step.container = { status: 'up' }
         await this.executionRepository.upsert(workspaceId, instance)
         await this.runStateMachine.emitInstance(workspaceId, instance)
       }
@@ -521,10 +522,9 @@ export class RunDispatcher {
       // emit when something actually changed so an idle poll doesn't churn storage
       // or the event stream.
       let changed = false
-      if (step.startingContainer) {
-        step.startingContainer = false
-        changed = true
-      }
+      // A successful poll proves the container is up: reflect that, the live phase
+      // (clone / agent / push) and the container's id/url the transport surfaced.
+      if (this.applyContainerRunning(step, update)) changed = true
       if (update.subtasks && !sameSubtasks(step.subtasks, update.subtasks)) {
         step.subtasks = update.subtasks
         step.progress =
@@ -649,6 +649,16 @@ export class RunDispatcher {
     // `testing`, and re-dispatch the Tester against the (now-fixed) branch — its
     // fresh report then drives greenlight-or-loop again. Mirrors the CI gate.
     if (isTesterKind(step.agentKind) && step.test?.phase === 'fixing') {
+      // Record this fixer round (what it was handed + how it ended) so the test window can
+      // show an inspectable timeline of the otherwise-opaque fixer sub-jobs. Persisted as
+      // part of the re-dispatch below.
+      this.testerController.recordFixerOutcome(
+        step,
+        update.state === 'done'
+          ? { state: 'done', output: update.result.output ?? null }
+          : { state: 'failed', error: update.error ?? null },
+        this.clock.now(),
+      )
       step.jobId = undefined
       step.subtasks = undefined
       step.test.phase = 'testing'
@@ -709,10 +719,18 @@ export class RunDispatcher {
           step.jobId = undefined
           step.subtasks = undefined
           step.progress = 0
+          // The container vanished and a fresh one is about to boot for the re-dispatch,
+          // so the details show it spinning up again rather than a stale "up".
+          step.container = { status: 'starting' }
           await this.executionRepository.upsert(workspaceId, instance)
           await this.runStateMachine.emitInstance(workspaceId, instance)
           return { kind: 'continue' }
         }
+        // Eviction budget spent — the container is gone for good. Mark it errored and
+        // persist so the failed details show the errored container (failRun re-reads the
+        // run from storage, so an in-memory-only mutation would be lost; it emits the
+        // terminal frame, so markContainerErrored deliberately doesn't).
+        await this.markContainerErrored(workspaceId, instance, step)
         return {
           kind: 'job_evicted',
           error: transient
@@ -725,6 +743,10 @@ export class RunDispatcher {
       // older image (or a pool transport that doesn't forward the cause) reported none — the
       // same regex the bootstrap path uses, so a watchdog timeout still classifies as `timeout`
       // rather than a generic `agent`. The extended diagnostic surfaces as the failure detail.
+      // Mark the container errored and persist so the failed details show it (failRun
+      // re-reads from storage, so an in-memory-only mutation would be lost; failRun emits
+      // the terminal frame, so markContainerErrored deliberately doesn't).
+      await this.markContainerErrored(workspaceId, instance, step)
       return {
         kind: 'job_failed',
         error: update.error,
@@ -744,6 +766,53 @@ export class RunDispatcher {
     // Clear the handle before recording so a replay re-attaches to nothing.
     step.jobId = undefined
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, update.result)
+  }
+
+  /**
+   * Fold a running poll's container signals into `step.container`: a successful poll
+   * proves the container is `up`, and the harness's live phase (clone / agent / push)
+   * plus the transport's container id/url enrich it. Returns whether anything changed,
+   * so the caller only persists + emits on a real transition (an idle poll is a no-op).
+   * Prior id/url/phase are preserved when a poll omits them (drain-on-read semantics).
+   */
+  private applyContainerRunning(
+    step: PipelineStep,
+    update: { phase?: string; container?: { id?: string; url?: string } },
+  ): boolean {
+    const prev = step.container ?? undefined
+    const next = {
+      status: 'up' as const,
+      phase: update.phase ?? prev?.phase ?? null,
+      id: update.container?.id ?? prev?.id ?? null,
+      url: update.container?.url ?? prev?.url ?? null,
+    }
+    if (
+      prev?.status === next.status &&
+      (prev?.phase ?? null) === next.phase &&
+      (prev?.id ?? null) === next.id &&
+      (prev?.url ?? null) === next.url
+    ) {
+      return false
+    }
+    step.container = next
+    return true
+  }
+
+  /**
+   * Mark a container step's container `errored` (preserving the id/url/phase it reached) and
+   * PERSIST it, so a failed run's details show the errored container. Called on the genuine
+   * job-failure / exhausted-eviction paths before the result funnels to `failRun`, which
+   * re-reads the run from storage (so an in-memory-only mutation here would be lost) and emits
+   * the terminal frame itself — so we deliberately persist WITHOUT emitting here, to avoid a
+   * redundant transient "errored but still running" broadcast right before the "failed" one.
+   */
+  private async markContainerErrored(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+  ): Promise<void> {
+    step.container = { ...step.container, status: 'errored' }
+    await this.executionRepository.upsert(workspaceId, instance)
   }
 
   /**

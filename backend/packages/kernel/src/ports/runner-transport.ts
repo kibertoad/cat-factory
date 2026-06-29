@@ -108,9 +108,39 @@ export interface RunnerDispatchOptions {
   image?: 'default' | 'ui'
 }
 
+/**
+ * Where a run's container is reachable + how to identify it, surfaced by the transport
+ * (NOT the harness — the harness doesn't know its own external address). Both fields are
+ * best-effort and transport-specific: the Cloudflare per-run Container reports an `id` (the
+ * Durable Object id) but no public `url`; the local Docker transport reports both the
+ * container id and the published host URL; a self-hosted pool reports neither (the runner
+ * lives inside the workspace's own trust domain). The engine surfaces these in a run's
+ * details once the container is up.
+ */
+export interface RunnerJobContainer {
+  /** Provider container/runner identifier (Cloudflare DO id, docker container id). */
+  id?: string
+  /** A reachable address for the running container (the local docker host URL), when one exists. */
+  url?: string
+}
+
 /** A job's current state, as the harness/pool reports it. */
 export interface RunnerJobView {
   state: 'running' | 'done' | 'failed'
+  /**
+   * The coarse lifecycle phase the job is CURRENTLY in (`starting` → `clone` → `agent`
+   * → `push`), forwarded verbatim from the harness so the engine can show WHAT the
+   * container is doing — still preparing the checkout, or has the agent begun making
+   * calls — instead of a blank "working" state. Absent on an older harness image (or a
+   * pool/transport that doesn't forward it). Free-form; unknown phases show verbatim.
+   */
+  phase?: string
+  /**
+   * The container's identity/address once it is up, attached by the TRANSPORT (the
+   * harness can't know its own external address). Best-effort + transport-specific; see
+   * {@link RunnerJobContainer}. Absent when the transport has nothing to surface.
+   */
+  container?: RunnerJobContainer
   /** Present while running once the agent has touched its todo list. */
   progress?: RunnerJobProgress
   result?: RunnerJobResult

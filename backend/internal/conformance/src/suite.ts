@@ -1204,6 +1204,10 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         const app = harness.makeApp(
           {
             asyncKinds: ['coder', 'ci-fixer'],
+            // Model a container-reusing runner: the gate's `ci-fixer` helper shares the
+            // re-dispatch shape the per-round dispatch epoch fixes, so exercise it under a
+            // pooled harness whose JobRegistry survives between rounds.
+            pooledContainer: true,
             pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
           },
           // red first, green after the fixer ran
@@ -3295,6 +3299,11 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
       it('loops the fixer until the tester greenlights, then completes', async () => {
         // Drive the Tester→Fixer loop on BOTH runtimes: the first report withholds its
         // greenlight (the engine dispatches the fixer and re-tests), the second greenlights.
+        // `pooledContainer` models a container-reusing runner whose harness JobRegistry
+        // survives between rounds: the re-test MUST get a fresh per-round dispatch epoch, or
+        // it re-attaches to the first round's stale "found a bug" report and never re-runs
+        // (the bug where the Tester appeared to pass regardless). With the epoch it runs anew
+        // and reads the SECOND report, so the run only converges when the loop truly re-tests.
         const notGreen = {
           greenlight: false,
           summary: 'found a bug',
@@ -3312,6 +3321,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const app = harness.makeApp({
           asyncKinds: ['coder', 'tester-api', 'fixer'],
           asyncPolls: 1,
+          pooledContainer: true,
           testReports: [notGreen, green],
           pullRequest: { url: 'https://gh/pr/1', number: 1, branch: 'cat-factory/task_login' },
         })
@@ -3500,6 +3510,102 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
         expect(testerStep.state).toBe('done')
         // The first-round nit looped the fixer exactly once; the second-round nit was advisory.
+        expect(testerStep.test?.attempts).toBe(1)
+        expect(testerStep.test?.lastReport?.greenlight).toBe(true)
+        // The fixer round was recorded as an inspectable attempt (so the test window can
+        // surface what each otherwise-opaque fixer sub-job did), with the concerns it was handed.
+        expect(testerStep.test?.attemptLog).toHaveLength(1)
+        expect(testerStep.test?.attemptLog?.[0]?.outcome).toBe('completed')
+        // The fixer was handed the first round's report — the same nit (`naming`).
+        expect(testerStep.test?.attemptLog?.[0]?.concerns?.[0]?.title).toBe('naming')
+      })
+
+      it('aborts the run (no fixer) when the tester reports it cannot test', async () => {
+        // The Tester reports `abort` (its ephemeral environment never came up, say): the engine
+        // must STOP the run for a human — fail it, leave the step un-`done` — and NOT loop the
+        // fixer (which can't provision infrastructure). No fixer ⇒ attempts stays 0.
+        const aborted = {
+          greenlight: false,
+          summary: 'could not stand up the environment',
+          tested: [],
+          outcomes: [],
+          concerns: [],
+          abort: { reason: 'the ephemeral environment failed to provision' },
+        }
+        const app = harness.makeApp({
+          asyncKinds: ['coder', 'tester-api', 'fixer'],
+          asyncPolls: 1,
+          testReports: [aborted],
+          pullRequest: { url: 'https://gh/pr/9', number: 9, branch: 'cat-factory/task_login' },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code + test abort',
+          agentKinds: ['coder', 'tester-api'],
+        })
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          agentConfig: { 'tester.environment': 'ephemeral' },
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('failed')
+        const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
+        expect(testerStep.state).not.toBe('done')
+        // The fixer was NOT dispatched — an abort is handed straight to a human.
+        expect(testerStep.test?.attempts ?? 0).toBe(0)
+        expect(testerStep.test?.attemptLog ?? []).toHaveLength(0)
+      })
+
+      it('loops the fixer when a report greenlights but a check FAILED (a failed outcome is a blocker)', async () => {
+        // Defensive verdict: a `failed` outcome is itself a blocker, so the engine must NOT
+        // accept a report that greenlights with a red check — it loops the fixer regardless of
+        // the greenlight flag. The first report greenlights yet has a failed outcome (so it must
+        // be rejected and dispatch the fixer); the second is cleanly green (so the run converges).
+        // Without the failed-outcome guard the first report is accepted at attempts=0 and the run
+        // completes without ever fixing the red check.
+        const greenButFailed = {
+          greenlight: true,
+          summary: 'shipping it',
+          tested: ['login'],
+          outcomes: [{ name: 'login', status: 'failed' as const, detail: 'returns 500' }],
+          concerns: [],
+        }
+        const green = {
+          greenlight: true,
+          summary: 'all good',
+          tested: ['login'],
+          outcomes: [{ name: 'login', status: 'passed' as const }],
+          concerns: [],
+        }
+        const app = harness.makeApp({
+          asyncKinds: ['coder', 'tester-api', 'fixer'],
+          asyncPolls: 1,
+          testReports: [greenButFailed, green],
+          pullRequest: { url: 'https://gh/pr/7', number: 7, branch: 'cat-factory/task_login' },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code + test failed-outcome',
+          agentKinds: ['coder', 'tester-api'],
+        })
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          agentConfig: { 'tester.environment': 'ephemeral' },
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
+        expect(testerStep.state).toBe('done')
+        // The greenlit-but-failed report was rejected and looped the fixer exactly once before
+        // the clean re-test greenlit — NOT accepted on the first round.
         expect(testerStep.test?.attempts).toBe(1)
         expect(testerStep.test?.lastReport?.greenlight).toBe(true)
       })
@@ -3983,10 +4089,11 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(exec.failure?.kind).toBe('dispatch')
         // The verbatim provider/runtime response is preserved as the detail for triage.
         expect(exec.failure?.detail).toContain('HTTP 503')
-        // The step did not falsely complete; the cold-boot flag was cleared.
+        // The step did not falsely complete; the container is surfaced as errored (the
+        // details say the container failed to start, not a generic "run failed").
         const coderStep = exec.steps.find((s) => s.agentKind === 'coder')!
         expect(coderStep.state).not.toBe('done')
-        expect(coderStep.startingContainer ?? false).toBe(false)
+        expect(coderStep.container?.status).toBe('errored')
       })
 
       it("maps a polled job's structured failureCause → AgentFailureKind and surfaces the detail", async () => {
@@ -4018,6 +4125,10 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(exec.failure?.kind).toBe('timeout')
         // The harness's extended diagnostic is surfaced as the failure detail.
         expect(exec.failure?.detail).toContain('Phase timings')
+        // The step's container is surfaced as errored (the run details show the container
+        // faulted), persisted before the failure funnels through `failRun`.
+        const coderStep = exec.steps.find((s) => s.agentKind === 'coder')!
+        expect(coderStep.container?.status).toBe('errored')
       })
 
       it('routes a merger PR to human review when the assessment is unexplained (empty rationale)', async () => {
@@ -4425,7 +4536,9 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         // The `coder` step runs as a polled async job (startJob → awaiting_job → pollJob),
         // so this exercises the durable driver's job-poll loop — Cloudflare Workflows and
         // pg-boss — through the SAME assertion, the path most likely to drift between them.
-        const app = harness.makeApp({ confidence: 1, asyncKinds: ['coder'], asyncPolls: 2 })
+        // asyncPolls: 3 so the job reports two running polls — phase `clone` then `agent`
+        // — exercising the live phase progression surfaced on the step's container.
+        const app = harness.makeApp({ confidence: 1, asyncKinds: ['coder'], asyncPolls: 3 })
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
 
@@ -4444,19 +4557,26 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const coder = exec.steps.find((s) => s.agentKind === 'coder')!
         expect(coder.output).toContain('[coder]')
         expect(coder.model).toBe('fake')
-        // The "spinning up container" phase flag is set at dispatch and must be
-        // cleared once the container is up — a finished step never reads as booting.
-        expect(coder.startingContainer ?? false).toBe(false)
+        // The container reached `up` (the cold-boot lifecycle advanced past `starting`),
+        // and a finished job never reads as still booting.
+        expect(coder.container?.status).toBe('up')
         // The model is known at dispatch (the moment the ref resolves, before the
         // container is up), so it must ALREADY be present on the first "spinning up
-        // container" emit — not only once the job's result lands. Asserting it on the
-        // booting emit pins the early preview so it can't regress on either runtime.
-        const booting = app
+        // container" emit (container `starting`) — not only once the job's result lands.
+        const containerEmits = app
           .executionEmits('task_login')
           .map((e) => e.steps.find((s) => s.agentKind === 'coder'))
-          .find((s) => s?.startingContainer === true)
+        const booting = containerEmits.find((s) => s?.container?.status === 'starting')
         expect(booting, 'expected a "spinning up container" emit for the coder step').toBeTruthy()
         expect(booting!.model).toBe('fake')
+        // Once up, the run surfaces the live phase (the agent making calls) and the
+        // container's id, so the details show WHAT it's doing and WHERE it runs rather
+        // than a blank "working" — identically on both runtimes.
+        const running = containerEmits.find(
+          (s) => s?.container?.status === 'up' && s.container.phase === 'agent',
+        )
+        expect(running, 'expected a running emit with the agent phase').toBeTruthy()
+        expect(running!.container!.id).toContain('fake-container-')
 
         const task = (
           await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)

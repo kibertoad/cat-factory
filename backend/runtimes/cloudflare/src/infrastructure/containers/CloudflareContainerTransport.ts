@@ -101,7 +101,12 @@ export class CloudflareContainerTransport implements RunnerTransport {
   }
 
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
-    const stub = this.namespace.get(this.namespace.idFromName(ref.runId))
+    // The per-run container is the Durable Object addressed by the run id; its DO id is
+    // the closest thing to a stable "container id" to surface in the run's details (a
+    // Cloudflare Container has no public URL). Derived here so the executor can show WHICH
+    // container the run is on. Cheap (no extra round-trip): `idFromName` is local.
+    const doId = this.namespace.idFromName(ref.runId)
+    const stub = this.namespace.get(doId)
     let res: Response
     try {
       res = await stub.fetch(`http://container/jobs/${encodeURIComponent(ref.jobId)}`, {
@@ -130,7 +135,11 @@ export class CloudflareContainerTransport implements RunnerTransport {
     if (!res.ok) {
       throw new Error(`Container job poll failed (HTTP ${res.status}): ${await safeText(res)}`)
     }
-    return (await res.json()) as RunnerJobView
+    // The harness view carries the live `phase`; fold in the container's id (the DO id)
+    // so the run's details can name which container it's running on. No public URL exists
+    // for a Cloudflare per-run Container, so `url` is left unset.
+    const view = (await res.json()) as RunnerJobView
+    return { ...view, container: { ...view.container, id: doId.toString() } }
   }
 
   /**

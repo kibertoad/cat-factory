@@ -15,6 +15,7 @@ import {
   type HarnessEndpoint,
   delay,
   harnessHealthy,
+  harnessUrl,
   pollHarnessJob,
   postHarnessJob,
   waitForHarnessHealth,
@@ -338,7 +339,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     // Address the per-RUN container, but read the per-step job by its own id. A connection
     // error confirms-or-denies an eviction via the runtime; a confirmed-dead container
     // clears the cache so the next dispatch starts fresh.
-    return pollHarnessJob({
+    const view = await pollHarnessJob({
       fetchImpl: this.fetchImpl,
       endpoint: resolved,
       jobId: ref.jobId,
@@ -351,6 +352,13 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         return true
       },
     })
+    // Surface the container's id + the (credential-free) host URL the harness is published
+    // on, so the run's details can show WHICH local container the run is on and where to
+    // reach it. The harness view already carries the live `phase`.
+    return {
+      ...view,
+      container: { ...view.container, id: resolved.containerId, url: harnessUrl(resolved, '') },
+    }
   }
 
   /**
@@ -421,7 +429,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     // eviction so the stale-run sweeper re-drives (a retry leases a healthy member and the
     // harness's persistent checkout resumes the work branch). A 404 with the member still
     // healthy keeps it leased for a re-dispatch (handled inside pollHarnessJob).
-    return pollHarnessJob({
+    const view = await pollHarnessJob({
       fetchImpl: this.fetchImpl,
       endpoint: member,
       jobId: ref.jobId,
@@ -434,6 +442,12 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         return true
       },
     })
+    // Same container id + host URL enrichment as the per-run path (the leased pool member
+    // is just a differently-sourced container); the harness view carries the live `phase`.
+    return {
+      ...view,
+      container: { ...view.container, id: member.containerId, url: harnessUrl(member, '') },
+    }
   }
 
   private async releasePooled(ref: RunnerJobRef): Promise<void> {

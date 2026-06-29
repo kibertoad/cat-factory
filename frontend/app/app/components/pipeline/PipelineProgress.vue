@@ -9,6 +9,7 @@ import {
   isCompanionKind,
   isFailedStep,
   FAILED_STEP_META,
+  containerPhaseLabel,
 } from '~/utils/pipelineRender'
 import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
 
@@ -22,7 +23,15 @@ const models = useModelsStore()
 const ui = useUiStore()
 const execution = useExecutionStore()
 const reviews = useReviewStage()
-const { t } = useI18n()
+const { t, te } = useI18n()
+
+// The friendly container phase label for a step whose container is up — null otherwise.
+// Lets the board fill the gap between the cold-boot badge clearing and the first subtask
+// count (the old "blank working"). Shared with the step-detail card + inspector label.
+function stepPhaseLabel(s: { container?: { status: string; phase?: string | null } | null }) {
+  if (s.container?.status !== 'up') return null
+  return containerPhaseLabel(s.container.phase, { t, te })
+}
 
 // While an iterative reviewer gate (requirements-review / clarity-review) folds the
 // answers / re-reviews in the background it needs NO human, so its parked approval is
@@ -126,9 +135,9 @@ const total = computed(() => steps.value.length)
 // human can see at a glance whether the fixer ran or was skipped.
 const companionByStep = computed(() => steps.value.map((s) => gateCompanionFor(s, runFailed.value)))
 
-// A failed run is no longer executing: a step left mid-flight (state still
-// `working`, `startingContainer` still set) must stop looking live — no spinner,
-// no pulse, no "spinning up container" phase.
+// A failed run is no longer executing: a step left mid-flight (state still `working`,
+// its container caught mid cold-boot) must stop looking live — no spinner, no pulse,
+// no "spinning up container" phase.
 const runFailed = computed(() => props.instance.status === 'failed')
 /** A step that is genuinely, currently working (not a stale mid-flight step). */
 function liveWorking(state: AgentState) {
@@ -356,14 +365,23 @@ const ITEM_ICON: Record<string, string> = {
             class="mt-3"
           />
 
-          <!-- container cold-boot phase: shown until the container is up and the
-               agent starts reporting progress -->
+          <!-- container cold-boot phase: shown while the container is spinning up. -->
           <div
-            v-if="s.startingContainer && !runFailed"
+            v-if="s.container?.status === 'starting' && !runFailed"
             class="mt-2 flex items-center gap-1.5 text-[11px] text-sky-300"
           >
             <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 shrink-0 animate-spin" />
             <span>{{ t('pipeline.progress.spinningUpContainer') }}</span>
+          </div>
+
+          <!-- container is up: show WHAT it's doing (preparing the checkout vs the agent
+               making calls) so the step isn't a blank "working" before subtasks appear. -->
+          <div
+            v-else-if="stepPhaseLabel(s) && !runFailed"
+            class="mt-2 flex items-center gap-1.5 text-[11px] text-emerald-300"
+          >
+            <UIcon name="i-lucide-box" class="h-3.5 w-3.5 shrink-0" />
+            <span>{{ stepPhaseLabel(s) }}</span>
           </div>
 
           <!-- live subtask counts from the agent's todo list -->

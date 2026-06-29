@@ -67,6 +67,15 @@ export interface JobView<TResult extends JobResultBase = JobResultBase> {
   /** Epoch ms of the last sign of progress (job start, or Pi output). */
   heartbeatAt: number
   /**
+   * The coarse lifecycle phase the job is CURRENTLY in (`starting` → `clone` → `agent`
+   * → `push` → `done`/`failed`), so the backend can surface WHAT the container is doing
+   * rather than a blank "working" state — is it still cloning/preparing the checkout, or
+   * has the agent begun making calls? The same per-phase marker that drives the stuck-run
+   * breadcrumb on a failure, exposed live here while the job runs. Free-form; unknown
+   * phases just show verbatim. Always present (seeded `starting` at job start).
+   */
+  phase?: string
+  /**
    * Latest subtask progress from Pi's `todo` tool while the job runs — the
    * Worker poll surfaces it to the board (e.g. "3/8 done"). Absent until Pi
    * first touches its todo list (or if the model never uses it).
@@ -185,6 +194,10 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
       id,
       state: 'running',
       startedAt: now,
+      // Seed the live phase so a poll BEFORE the handler enters its first phase still
+      // shows "starting" (the container is up; the agent hasn't begun cloning yet)
+      // rather than an absent/blank phase.
+      phase: 'starting',
       heartbeatAt: now,
       promise: Promise.resolve(),
       spanBuffer: [],
@@ -232,6 +245,10 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
       phaseTimingsMs[phase] = (phaseTimingsMs[phase] ?? 0) + (now - phaseEnteredAt)
       phase = next
       phaseEnteredAt = now
+      // Surface the live phase on the view so a poll shows WHAT the container is doing
+      // (cloning / running the agent / pushing) — the same marker drives the failure
+      // breadcrumb. A terminal `done`/`failed` is set by the caller below.
+      entry.phase = next
     }
     let lastTool: { name: string; at: number } | undefined
 

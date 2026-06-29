@@ -601,6 +601,23 @@
       "run": "Run",
       "clickToCopy": "{id} (click to copy)",
       "spinningUpContainer": "Spinning up container…",
+      "container": {
+        "status": {
+          "starting": "Spinning up container…",
+          "up": "Container running",
+          "errored": "Container errored",
+          "destroyed": "Container reclaimed"
+        },
+        "phase": {
+          "starting": "Starting up",
+          "clone": "Preparing workspace",
+          "agent": "Agent running",
+          "push": "Pushing changes",
+          "done": "Finishing up"
+        },
+        "id": "Container",
+        "url": "Address"
+      },
       "subtasks": "Subtasks · {completed}/{total}",
       "standardsApplied": "Standards applied",
       "decision": "Decision",
@@ -2932,6 +2949,12 @@
     "fixerAttempts": "Fixer attempts",
     "fixCount": "{attempts}/{max} fix",
     "fixingSuffix": "· fixing…",
+    "fixerTimeline": {
+      "attempt": "Attempt {n}",
+      "completed": "Completed",
+      "failed": "Failed",
+      "addressed": "Addressing"
+    },
     "empty": {
       "title": "No test report yet.",
       "hint": "The report appears once the Tester finishes a pass. While it runs, the step shows live progress on the board."
@@ -2975,6 +2998,7 @@
       "blocking": "({count} blocking) | ({count} blocking)"
     },
     "environment": "Environment",
+    "infrastructure": "Infrastructure",
     "footer": "Scenarios are the areas the Tester chose to exercise (its spec acceptance scenarios). Outcomes and concerns are grouped under them by name.",
     "@screenshotAlt": {
       "description": "Alt text for a captured screenshot thumbnail; {view} is the screen/view name. The literal word 'screenshot' should be localized."

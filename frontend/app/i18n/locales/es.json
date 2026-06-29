@@ -584,6 +584,23 @@
         "approved": "Aprobado",
         "changes_requested": "Cambios solicitados",
         "rejected": "Rechazado"
+      },
+      "container": {
+        "status": {
+          "starting": "Iniciando contenedor…",
+          "up": "Contenedor en ejecución",
+          "errored": "Error del contenedor",
+          "destroyed": "Contenedor liberado"
+        },
+        "phase": {
+          "starting": "Iniciando",
+          "clone": "Preparando el espacio de trabajo",
+          "agent": "Agente en ejecución",
+          "push": "Enviando cambios",
+          "done": "Finalizando"
+        },
+        "id": "Contenedor",
+        "url": "Dirección"
       }
     },
     "stepDetail": {
@@ -2845,6 +2862,12 @@
     "fixerAttempts": "Intentos del corrector",
     "fixCount": "{attempts}/{max} corrección",
     "fixingSuffix": "· corrigiendo…",
+    "fixerTimeline": {
+      "attempt": "Intento {n}",
+      "completed": "Completado",
+      "failed": "Falló",
+      "addressed": "Abordando"
+    },
     "empty": {
       "title": "Aún no hay informe de pruebas.",
       "hint": "El informe aparece cuando el Tester termina una pasada. Mientras se ejecuta, el paso muestra el progreso en vivo en el tablero."
@@ -2888,7 +2911,8 @@
       "blocking": "({count} bloqueante) | ({count} bloqueantes)"
     },
     "environment": "Entorno",
-    "footer": "Los escenarios son las áreas que el Tester decidió ejercitar (sus escenarios de aceptación de la especificación). Los resultados y las incidencias se agrupan bajo ellos por nombre."
+    "footer": "Los escenarios son las áreas que el Tester decidió ejercitar (sus escenarios de aceptación de la especificación). Los resultados y las incidencias se agrupan bajo ellos por nombre.",
+    "infrastructure": "Infraestructura"
   },
   "visualConfirm": {
     "ariaLabel": "Confirmación visual",
