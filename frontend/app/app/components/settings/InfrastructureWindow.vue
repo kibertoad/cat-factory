@@ -29,9 +29,12 @@ const open = computed({
 
 const isLocal = computed(() => auth.localMode?.enabled === true)
 
-// Each concern gates on its own availability probe; an unavailable tab isn't offered.
-const agentsAvailable = computed(() => store.isAvailable('runner-pool'))
-const envsAvailable = computed(() => store.isAvailable('environment'))
+// The tabs are driven by the deployment's infrastructure capability (every facade reports
+// execution + test-env backends), NOT the optional provider-connection probes — the execution-
+// backend selector must show even when no runner-pool / environment connection is registered.
+// The connect form inside each tab still gates on its own probe (see the template).
+const agentsAvailable = computed(() => (auth.infrastructure?.execution.available.length ?? 0) > 0)
+const envsAvailable = computed(() => (auth.infrastructure?.testEnv.available.length ?? 0) > 0)
 
 const tabs = computed(() => {
   const out: { value: ProviderConnectionKind; label: string; icon: string; slot: string }[] = []
@@ -102,7 +105,8 @@ watch([tabs, () => store.loaded], () => {
             <div class="space-y-4">
               <!-- Where agent containers run (writable in local mode; read-only elsewhere). -->
               <ExecutionBackendSelector axis="execution" />
-              <ProviderConnectionTab kind="runner-pool" />
+              <!-- The runner-pool connect form only when that integration is enabled. -->
+              <ProviderConnectionTab v-if="store.isAvailable('runner-pool')" kind="runner-pool" />
               <!-- Local mode: the warm-pool + checkout reuse ARE the host agent-container
                    runtime, so they live here rather than in a separate menu. -->
               <section v-if="isLocal" class="border-t border-slate-800 pt-4">
@@ -117,7 +121,8 @@ watch([tabs, () => store.loaded], () => {
             <div class="space-y-4">
               <!-- Where Tester environments run (writable in local mode; read-only elsewhere). -->
               <ExecutionBackendSelector axis="testEnv" />
-              <ProviderConnectionTab kind="environment" />
+              <!-- The environment-provider connect form only when that integration is enabled. -->
+              <ProviderConnectionTab v-if="store.isAvailable('environment')" kind="environment" />
             </div>
           </template>
         </UTabs>
