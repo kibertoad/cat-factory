@@ -18,7 +18,7 @@ ones.
 | 5   | Manifest-driven agent-kind registry             | Backend engine      | High      | Medium    |
 | 6   | Module registry for the orchestration container | Backend DI          | High      | High      |
 | 7   | Shared container builder (Node ⇄ Cloudflare)    | Cross-runtime       | High      | High      |
-| 8   | Split `ExecutionService`                        | Backend engine      | Very high | Very high |
+| 8   | Split `ExecutionService` ✅ (done)              | Backend engine      | Very high | Very high |
 
 ---
 
@@ -213,3 +213,8 @@ tree. `ExecutionService` shrinks to lifecycle + the dispatch loop.
 isolation, and removes the implicit-ordering hazard. The most intrusive item — it touches
 the engine core that every run flows through — so it is best done incrementally, one step
 kind at a time, behind the cross-runtime conformance suite.
+
+**Status: done.** `ExecutionService.ts` is down to ~2,470 lines, with the spine extracted into
+`RunDispatcher` / `RunStateMachine` / `StepGraph` / the gate controllers + sub-facades, and the
+constructor trimmed of its vestigial fields. The run/step lifecycle reference (and the recorded
+decision not to adopt XState) lives in [`execution-state-machine.md`](./execution-state-machine.md).
