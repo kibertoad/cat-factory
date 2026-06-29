@@ -1,0 +1,52 @@
+{
+  "name": "@cat-factory/cli",
+  "version": "0.1.0",
+  "description": "Bootstrap CLI for the Agent Architecture Board: scaffold a local-mode deployment (Node/local backend + frontend SPA) on your own machine — generates the crypto secrets, populates and gitignores the .env files, and mints a GitHub/GitLab personal access token by opening the browser at the right pre-scoped URL.",
+  "keywords": [
+    "bootstrap",
+    "cat-factory",
+    "cli",
+    "scaffold",
+    "self-host"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/cat-factory.git",
+    "directory": "backend/packages/cli"
+  },
+  "bin": {
+    "cat-factory": "./dist/bin.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "start": "node dist/bin.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "typescript": "7.0.1-rc",
+    "vitest": "^4.1.9"
+  }
+}

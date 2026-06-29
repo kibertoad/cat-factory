@@ -150,6 +150,15 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   `app/composables`, components in `app/components`, wire types in `app/types`).
   Published to npm; consumed by a deployment via `extends: ['@cat-factory/app']`.
 - `backend/packages/contracts` — Valibot wire contracts shared by SPA + backends.
+- `backend/packages/cli` — `@cat-factory/cli`, the **bootstrap CLI** (`cat-factory init`,
+  bin `cat-factory`). A scaffolder (no backend stack pulled in — its only runtime dep is
+  `@clack/prompts` for the interactive UI) that generates a local-mode deployment (a `local/`
+  backend + `frontend/` SPA, mirroring `deploy/local` + `deploy/frontend` but on the **published**
+  libraries): generates the crypto secrets in the server's required formats, mints a GitHub/GitLab
+  PAT by opening the browser at the right pre-scoped URL (the same scopes as `runtimes/local`'s
+  `githubPatCreationUrl`), and writes the populated + gitignored `.env` files. Pure functions
+  (`buildPlan`/`generateSecrets`/`buildLocalEnv`/`mergeGitignore`/the VCS URL helpers) under an
+  injectable IO+FS seam (clack is confined to the real IO impl), so the whole flow is tested.
 - `backend/packages/prompt-fragments` — versioned best-practice prompt fragments.
 - The framework-agnostic domain is split across several published packages (there
   is **no** `backend/packages/core` any more):
