@@ -76,6 +76,7 @@ import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   type AppConfig,
   type MintInstallationToken,
+  type ResolveRepoOrigin,
   type ResolveRepoTarget,
   type ResolveRunnerTransport,
   type ServerContainer,
@@ -443,6 +444,14 @@ export interface NodeContainerOptions {
    */
   githubClient?: GitHubClient
   /**
+   * Override the git origin (clone URL + provider) for a run's repo. The default builds a
+   * `github.com` URL; the local GitLab facade injects a builder emitting the configured
+   * GitLab host + `gitlab`, so agent containers clone the right host and open merge requests
+   * (without it the clone URL is always github.com, so a GitLab repo can't be cloned).
+   * Undefined → the default GitHub origin.
+   */
+  resolveRepoOrigin?: ResolveRepoOrigin
+  /**
    * Override the GitHub installation repository. When provided it REPLACES the default
    * Drizzle one, so a sibling facade can wrap it — e.g. local mode decorates it to
    * auto-provision a synthetic per-workspace installation for its PAT, since there is no
@@ -609,6 +618,7 @@ function buildNodeContainerExecutor(
   resolveUserGitHubToken?: ResolveUserGitHubToken,
   agentContextObservability?: AgentContextObservabilityService,
   resolveWebSearchEnabled?: (workspaceId: string) => Promise<boolean>,
+  resolveRepoOrigin?: ResolveRepoOrigin,
 ): AgentExecutor | null {
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
   // is this service's externally reachable base (the runner pool / local container
@@ -705,6 +715,10 @@ function buildNodeContainerExecutor(
     // call site), so the tool is never advertised to a run where it would just fail.
     ...(resolveWebSearchEnabled ? { resolveWebSearchEnabled } : {}),
     githubApiBase: config.github.apiBase,
+    // Resolve the clone URL + provider per repo. The local GitLab facade injects a GitLab
+    // origin so containers clone gitlab.com (or a self-managed host) and open MRs; absent ⇒
+    // the default github.com origin.
+    ...(resolveRepoOrigin ? { resolveRepoOrigin } : {}),
     // Forward container tool spans to Langfuse (when configured) as child spans under
     // the run trace — the same sink the LLM proxy fans generations out to.
     llmTraceSink: buildLangfuseSink(config),
@@ -1265,6 +1279,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     resolveUserGitHubToken,
     agentContextObservability,
     resolveWebSearchEnabled,
+    options.resolveRepoOrigin,
   )
 
   // Always a composite: inline kinds run as one-shot LLM calls; repo-operating kinds
@@ -1366,8 +1381,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
               workspaceId,
               'linear',
             )
-            const apiKey = connection?.credentials?.apiKey
-            return apiKey ? { apiKey } : null
+            const { apiKey, token } = connection?.credentials ?? {}
+            return apiKey || token ? { apiKey, token } : null
           },
         }
       : {}),
@@ -1720,8 +1735,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
                 workspaceId,
                 'linear',
               )
-              const apiKey = connection?.credentials?.apiKey
-              return apiKey ? { apiKey } : null
+              const { apiKey, token } = connection?.credentials ?? {}
+              return apiKey || token ? { apiKey, token } : null
             },
           }
         : {}),

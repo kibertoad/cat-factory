@@ -258,12 +258,34 @@ function refForHandle(handle: AgentJobHandle): RunnerJobRef {
   return { runId: handle.runId ?? handle.jobId, jobId: handle.jobId }
 }
 
-function buildRepoSpec(repo: RepoTarget) {
+/** The git origin a run's repo is reached at: the clone URL plus the VCS provider. */
+export interface RepoOrigin {
+  cloneUrl: string
+  provider: 'github' | 'gitlab'
+}
+
+/**
+ * Resolve the clone URL + VCS provider for a run's repo. The repo projection carries NO host
+ * (it stores only `owner`/`name`), so the origin is a deployment-level fact supplied here.
+ * Defaults to GitHub (`https://github.com/<owner>/<name>.git`); a GitLab deployment (local
+ * mode) injects a builder that emits the configured GitLab host + `gitlab`, so the harness
+ * clones the right host AND opens a merge request instead of a pull request. Without this the
+ * clone URL would always point at github.com, so a GitLab repo could never be cloned.
+ */
+export type ResolveRepoOrigin = (repo: RepoTarget) => RepoOrigin
+
+const githubRepoOrigin: ResolveRepoOrigin = (repo) => ({
+  cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
+  provider: 'github',
+})
+
+function buildRepoSpec(repo: RepoTarget, origin: RepoOrigin) {
   return {
     owner: repo.owner,
     name: repo.name,
     baseBranch: repo.baseBranch,
-    cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
+    cloneUrl: origin.cloneUrl,
+    provider: origin.provider,
     ...(repo.serviceDirectory ? { serviceDirectory: repo.serviceDirectory } : {}),
   }
 }
@@ -410,6 +432,12 @@ export interface ContainerAgentExecutorDependencies {
   proxyBaseUrl: string
   /** GitHub REST base for opening the PR (GitHub Enterprise / api.github.com). */
   githubApiBase?: string
+  /**
+   * Resolve a repo's clone URL + VCS provider. Defaults to GitHub; the local GitLab facade
+   * injects a GitLab origin so containers clone the right host (gitlab.com or a self-managed
+   * instance) and open merge requests. See {@link ResolveRepoOrigin}.
+   */
+  resolveRepoOrigin?: ResolveRepoOrigin
   /**
    * Resolve whether THIS run's account actually has a usable container web-search
    * upstream, so a coding/ci-fixer job is told to point Pi's `web_search` tool at
@@ -933,7 +961,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       model: ref.model,
       ...auth,
       ghToken,
-      repo: buildRepoSpec(repo),
+      repo: buildRepoSpec(repo, (this.deps.resolveRepoOrigin ?? githubRepoOrigin)(repo)),
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       ...(contextFiles.length ? { contextFiles } : {}),
       ...(artifactUpload ? { artifactUpload } : {}),

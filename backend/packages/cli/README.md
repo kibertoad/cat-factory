@@ -13,7 +13,11 @@ It does the fiddly setup for you:
   `AUTH_SESSION_SECRET` (32 random bytes, hex) and `ENCRYPTION_KEY` (32 random bytes, base64).
 - **Mints a source-control token.** Pick GitHub or GitLab; the CLI opens your browser at the
   provider's "create a personal access token" page with the right **scopes pre-selected**
-  (GitHub classic `repo,workflow`; GitLab `api`), then reads the token you paste back.
+  (GitHub classic `repo,workflow`; GitLab `api`), then reads the token you paste back. Both
+  providers are first-class in local mode: the token authenticates the agent containers' git
+  clone/push, and the CI gate / mergeability / real merge / repo-link flows all run against the
+  provider's real API (GitLab via `@cat-factory/gitlab`, GitHub via the PAT client). For a
+  self-managed GitLab instance, set `GITLAB_API_BASE` in `local/.env`.
 - **Populates and gitignores the `.env` files.** It writes `local/.env` (DB URL, the generated
   secrets, your PAT, the harness image) and `frontend/.env` (`NUXT_PUBLIC_API_BASE`), and writes
   (or merges into) a `.gitignore` so those secret files are never committed.

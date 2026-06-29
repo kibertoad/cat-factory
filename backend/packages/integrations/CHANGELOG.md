@@ -1,5 +1,58 @@
 # @cat-factory/integrations
 
+## 0.30.0
+
+### Minor Changes
+
+- 704c99e: Fill the gaps in Linear support:
+
+  - **Connection pagination**: the Linear task source now walks the `children` and
+    `comments` GraphQL connection cursors, so an epic with more than one page of
+    sub-issues imports its full child set (no longer silently capped at ~50) — matching
+    the Jira provider's epic-children pagination.
+  - **Team picker for ticket filing**: a new `GET /workspaces/:ws/task-sources/linear/teams`
+    endpoint lists the connected workspace's Linear teams, and the issue-tracker settings
+    UI offers a searchable (typeahead) team picker instead of requiring a hand-pasted team
+    UUID.
+  - **OAuth connect flow**: Linear can now be connected via OAuth ("Connect with Linear")
+    in addition to a personal API key. The OAuth app credentials (client id / secret /
+    redirect URL) are configured **per account in the UI** (account Deployment settings,
+    sealed in the DB and resolved dynamically — mirroring the Slack OAuth model), NOT via
+    env vars, so an admin can set/rotate them without a redeploy. Absent ⇒ only the manual
+    API-key path is offered. The exchanged access token is stored as the connection and
+    used as a `Bearer` token across import, search, ticket filing and PR writeback.
+  - **Search exact-ref match**: pasting a Linear issue identifier or URL into search now
+    resolves and surfaces that exact issue first (de-duped against the term hits), like the
+    GitHub Issues source.
+
+### Patch Changes
+
+- Updated dependencies [704c99e]
+  - @cat-factory/contracts@0.46.0
+  - @cat-factory/kernel@0.47.2
+
+## 0.29.0
+
+### Minor Changes
+
+- 3d0b85c: feat(environments): wire the live environment-provider config-repair agent (PR #416 increment 2)
+
+  When mechanical config bootstrap can't produce a valid provider config (`needsAgent`, or the
+  post-commit re-validation still fails) and the caller passed `allowAgentFallback`, the engine now
+  dispatches a coding agent that clones the target repo at the write branch, fixes the provider's
+  config file in place, and pushes the fix back onto the same branch — then `EnvironmentConnectionService`
+  re-validates.
+
+  - New `ContainerEnvConfigRepairer` (`@cat-factory/server`) dispatches a plain `coding` job via the
+    shared `RunnerJobClient`/`RunnerTransport` (no `bootstrap` block, no PR) and awaits it. It is
+    distinct from the repo-bootstrap flow — it never reinitialises history or force-pushes.
+  - The `dispatchConfigRepair` / `CoreDependencies.dispatchEnvConfigRepair` seam now returns `void`
+    (it only pushes the fix); re-validation moved into `EnvironmentConnectionService`, where the
+    decrypted secrets + manifest config live.
+  - Wired symmetrically across the Cloudflare and Node facades (local inherits via `buildNodeContainer`),
+    gated on the container prerequisites plus an injected provider that supports `describeRepairAgent`,
+    so a stock deployment running the generic manifest provider is unchanged.
+
 ## 0.28.1
 
 ### Patch Changes

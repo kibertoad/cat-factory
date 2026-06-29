@@ -789,6 +789,18 @@
         "cleared": "OAuth Slack очищено",
         "clearFailed": "Не вдалося очистити OAuth Slack"
       },
+      "linear": {
+        "title": "Застосунок Linear (OAuth)",
+        "description": "Вмикає потік OAuth «Підключити через Linear». Без нього робочі простори все одно можуть підключити Linear, вставивши особистий ключ API.",
+        "clientId": "ID клієнта",
+        "clientSecret": "Секрет клієнта",
+        "redirectUrl": "URL перенаправлення",
+        "validation": "Введіть ID клієнта, секрет і URL перенаправлення",
+        "saved": "OAuth Linear збережено",
+        "saveFailed": "Не вдалося зберегти OAuth Linear",
+        "cleared": "OAuth Linear очищено",
+        "clearFailed": "Не вдалося очистити OAuth Linear"
+      },
       "web": {
         "title": "Вебпошук контейнера",
         "description": "Постачальник пошуку, до якого агенти в контейнері звертаються через проксі бекенду. Задайте ключ Brave (рекомендовано) або власний URL SearXNG (з необов'язковим ключем bearer).",
@@ -1298,7 +1310,8 @@
         "jiraProjectKey": "Ключ проєкту Jira",
         "jiraProjectKeyHelp": "Нові тикети реєструються в цьому проєкті.",
         "linearTeamId": "Ідентифікатор команди Linear",
-        "linearTeamIdHelp": "Нові тикети створюються в цій команді (Linear вимагає команду для створення тикета)."
+        "linearTeamIdHelp": "Нові тикети створюються в цій команді (Linear вимагає команду для створення тикета).",
+        "linearTeamSearchPlaceholder": "Пошук команд…"
       },
       "vendor": {
         "github": "GitHub Issues",
@@ -1885,9 +1898,10 @@
       "repository": "Репозиторій",
       "repositoryHint": "Репозиторії, до яких застосунок GitHub має доступ. Не бачите свого? Надайте застосунку доступ нижче, а потім оновіть.",
       "noReposAvailable": "Поки що немає доступних репозиторіїв. Надайте застосунку доступ до одного нижче, а потім оновіть.",
-      "filterPlaceholder": "Фільтрувати за власником/назвою…",
-      "clearFilter": "Очистити фільтр",
-      "chooseRepository": "Виберіть репозиторій",
+      "searchPlaceholder": "Шукайте репозиторії за власником або назвою…",
+      "searchMinChars": "Введіть щонайменше {min} символ для пошуку. | Введіть щонайменше {min} символи для пошуку. | Введіть щонайменше {min} символів для пошуку.",
+      "noMatches": "Не знайдено репозиторіїв для {query}.",
+      "clearSelection": "Очистити вибір",
       "showingCount": "Показано {shown} із {total} репозиторіїв.",
       "repoLabel": {
         "private": " (приватний)",
@@ -2110,7 +2124,9 @@
       "offerHint": "Коли вимкнено, {label} приховано з імпорту та прив'язування.",
       "disconnect": "Відключити",
       "updateConnection": "Оновити підключення",
-      "connect": "Підключити"
+      "connect": "Підключити",
+      "oauthButton": "Підключити через {label}",
+      "oauthOr": "або підключіться за допомогою ключа API"
     }
   },
   "pipeline": {

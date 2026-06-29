@@ -3,9 +3,11 @@ import {
   createTaskFromIssueContract,
   diagnoseTaskSourceContract,
   disconnectTaskSourceContract,
+  getLinearInstallUrlContract,
   getTrackerSettingsContract,
   importTaskContract,
   linkTaskContract,
+  listLinearTeamsContract,
   listTaskConnectionsContract,
   listTaskSourcesContract,
   listTasksContract,
@@ -94,6 +96,15 @@ export function tasksApi({ send, ws }: ApiContext) {
       source: TaskSourceKind,
       body: { ref: string; containerId: string; position?: { x: number; y: number } },
     ) => send(spawnEpicContract, { pathPrefix: ws(workspaceId), pathParams: { source }, body }),
+
+    // ---- Linear-specific --------------------------------------------------
+    // The connection's Linear teams, for the ticket-filing team picker.
+    listLinearTeams: (workspaceId: string) =>
+      send(listLinearTeamsContract, { pathPrefix: ws(workspaceId) }),
+
+    // The "Connect with Linear" OAuth authorize URL (the browser is redirected to it).
+    getLinearInstallUrl: (workspaceId: string) =>
+      send(getLinearInstallUrlContract, { pathPrefix: ws(workspaceId) }),
 
     // ---- issue-tracker selection (workspace-level) ------------------------
     getTrackerSettings: (workspaceId: string) =>

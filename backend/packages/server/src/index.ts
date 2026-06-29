@@ -35,6 +35,7 @@ export {
   type GoogleOAuthDependencies,
   type GoogleIdentity,
 } from './auth/GoogleOAuth.js'
+export { LinearOAuth, type LinearOAuthDependencies } from './auth/LinearOAuth.js'
 export { WebCryptoPasswordHasher } from './crypto/WebCryptoPasswordHasher.js'
 export { authController, pickPostLoginRedirect } from './modules/auth/AuthController.js'
 export { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
@@ -53,6 +54,8 @@ export {
   type ContainerAgentExecutorDependencies,
   type RepoTarget,
   type ResolveRepoTarget,
+  type RepoOrigin,
+  type ResolveRepoOrigin,
   type MintInstallationToken,
   type EnsureWorkBranch,
 } from './agents/ContainerAgentExecutor.js'

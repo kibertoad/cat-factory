@@ -27,6 +27,7 @@ export {
   GITLAB_PUBLIC_API_BASE,
 } from './tokenSource.js'
 export * as gitlabProjection from './projection.js'
+export { asGitHubClient, type VcsBackedGitHubClientOptions } from './vcsBackedGitHubClient.js'
 
 export interface RegisterGitLabOptions {
   tokenSource: GitLabTokenSource

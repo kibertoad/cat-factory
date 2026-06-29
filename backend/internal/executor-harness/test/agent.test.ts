@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parseAgentJob } from '../src/job.js'
 
 // The generic, manifest-driven agent kind's body validator. The handler itself
@@ -23,6 +23,32 @@ const base = {
 }
 
 describe('parseAgentJob', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('parses the optional repo.provider discriminator', () => {
+    // The GitLab host must be allow-listed or the clone-URL host check rejects it first.
+    vi.stubEnv('GITHUB_ALLOWED_HOSTS', 'gitlab.com')
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      repo: { ...base.repo, provider: 'gitlab', cloneUrl: 'https://gitlab.com/acme/widgets.git' },
+    })
+    expect(job.repo.provider).toBe('gitlab')
+  })
+
+  it('leaves repo.provider undefined when absent (host inference applies downstream)', () => {
+    const job = parseAgentJob({ ...base, mode: 'coding' })
+    expect(job.repo.provider).toBeUndefined()
+  })
+
+  it('rejects an unknown repo.provider', () => {
+    expect(() =>
+      parseAgentJob({ ...base, mode: 'coding', repo: { ...base.repo, provider: 'bitbucket' } }),
+    ).toThrow(/repo\.provider/)
+  })
+
   it('accepts a structured explore job', () => {
     const job = parseAgentJob({
       ...base,

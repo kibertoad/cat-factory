@@ -1,5 +1,14 @@
-import { describe, expect, it, vi } from 'vitest'
-import { createLocalGitHubClient, githubPatCreationUrl, StaticTokenAppRegistry } from './github.js'
+import { describe, expect, it } from 'vitest'
+import {
+  githubPatCreationUrl,
+  gitlabVcsHost,
+  harnessAllowedHosts,
+  StaticTokenAppRegistry,
+} from './github.js'
+
+// NOTE: the PAT-authenticated client behaviour (Bearer auth, merge, mergeability, CI reads)
+// is asserted for BOTH GitHub and GitLab in the cross-provider `vcs-conformance.test.ts`.
+// This file keeps only the GitHub-specific units (the static app registry + the PAT URL).
 
 describe('StaticTokenAppRegistry', () => {
   it('returns the PAT for installation tokens and rejects app-JWT use', async () => {
@@ -20,29 +29,49 @@ describe('githubPatCreationUrl', () => {
   })
 })
 
-describe('createLocalGitHubClient', () => {
-  it('returns undefined without a PAT', () => {
-    expect(createLocalGitHubClient({})).toBeUndefined()
+describe('gitlabVcsHost', () => {
+  it('returns undefined in GitHub mode (no GITLAB_PAT)', () => {
+    expect(gitlabVcsHost({})).toBeUndefined()
+    expect(gitlabVcsHost({ GITHUB_PAT: 'ghp_x' })).toBeUndefined()
   })
 
-  it('builds a PAT-authenticated client that hits the GitHub API with a Bearer token', async () => {
-    const fetchMock = vi.fn(
-      async (_input: string | URL | Request, _init?: RequestInit) =>
-        new Response(JSON.stringify({ id: 1, sha: 'abc' }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
+  it('defaults to gitlab.com when only GITLAB_PAT is set', () => {
+    expect(gitlabVcsHost({ GITLAB_PAT: 'glpat_x' })).toBe('gitlab.com')
+  })
+
+  it('derives the host from GITLAB_API_BASE for a self-managed instance', () => {
+    expect(
+      gitlabVcsHost({ GITLAB_PAT: 'glpat_x', GITLAB_API_BASE: 'https://git.acme.com/api/v4' }),
+    ).toBe('git.acme.com')
+  })
+
+  it('falls back to gitlab.com on an unparseable GITLAB_API_BASE', () => {
+    expect(gitlabVcsHost({ GITLAB_PAT: 'glpat_x', GITLAB_API_BASE: 'not a url' })).toBe(
+      'gitlab.com',
     )
-    vi.stubGlobal('fetch', fetchMock)
-    try {
-      const client = createLocalGitHubClient({ GITHUB_PAT: 'pat_xyz' })!
-      expect(client).toBeDefined()
-      // Any installation-authenticated call should carry the PAT as a bearer token.
-      await client.mergePullRequest(123, { owner: 'o', repo: 'r' }, 7)
-      const [, init] = fetchMock.mock.calls.at(-1)!
-      expect((init as RequestInit).headers).toMatchObject({ authorization: 'Bearer pat_xyz' })
-    } finally {
-      vi.unstubAllGlobals()
-    }
+  })
+})
+
+describe('harnessAllowedHosts', () => {
+  it('is undefined in GitHub mode with no extra hosts (harness keeps its github.com default)', () => {
+    expect(harnessAllowedHosts({})).toBeUndefined()
+  })
+
+  it('adds the GitLab host so the harness will not reject a GitLab clone URL', () => {
+    expect(harnessAllowedHosts({ GITLAB_PAT: 'glpat_x' })).toBe('gitlab.com')
+    expect(
+      harnessAllowedHosts({
+        GITLAB_PAT: 'glpat_x',
+        GITLAB_API_BASE: 'https://git.acme.com/api/v4',
+      }),
+    ).toBe('git.acme.com')
+  })
+
+  it('merges operator-set GITHUB_ALLOWED_HOSTS with the GitLab host (deduped)', () => {
+    const out = harnessAllowedHosts({
+      GITLAB_PAT: 'glpat_x',
+      GITHUB_ALLOWED_HOSTS: 'gitlab.com, ghe.internal',
+    })
+    expect(out?.split(',').sort()).toEqual(['ghe.internal', 'gitlab.com'])
   })
 })

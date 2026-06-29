@@ -19,4 +19,5 @@ export type {
   SourceTask,
   TaskSearchResult,
   CredentialField,
+  LinearTeam,
 } from '@cat-factory/contracts'

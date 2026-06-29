@@ -77,6 +77,7 @@ export {
   LinearApiError,
   LINEAR_GRAPHQL_URL,
   linearAuthHeader,
+  linearAuthFromCredentials,
   unwrapLinearData,
   type LinearAuth,
   type LinearFetchLike,

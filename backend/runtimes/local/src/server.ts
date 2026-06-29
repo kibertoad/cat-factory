@@ -51,15 +51,16 @@ export async function startLocal(
   // transport, which `buildLocalContainer` builds (with the DB-stored pool config) and warms
   // eagerly at boot when an image is configured — so it is not repeated here.
 
-  // GitHub is reached via a PAT in local mode (there is no GitHub-App connect flow). Without
-  // one the board still serves, but every repo-operating agent step — clone, push, open PR,
-  // the CI gate, the real merge — fails. Surface it at boot with a click-through URL that
-  // pre-selects the scopes, so it is a one-step fix rather than a runtime surprise.
-  if (!localized.GITHUB_PAT?.trim()) {
+  // Source control is reached via a PAT in local mode (there is no GitHub-App connect flow):
+  // a GITHUB_PAT or a GITLAB_PAT. Without EITHER the board still serves, but every repo-
+  // operating agent step — clone, push, open PR/MR, the CI gate, the real merge — fails.
+  // Surface it at boot with a click-through URL that pre-selects the scopes, so it is a
+  // one-step fix rather than a runtime surprise.
+  if (!localized.GITHUB_PAT?.trim() && !localized.GITLAB_PAT?.trim()) {
     logger.warn(
-      `local mode: GITHUB_PAT is not set — agent steps that clone, push, open PRs, gate on ` +
-        `CI or merge will fail. Create a token (scopes pre-selected) at ${githubPatCreationUrl()} ` +
-        `then set GITHUB_PAT and restart.`,
+      `local mode: neither GITHUB_PAT nor GITLAB_PAT is set — agent steps that clone, push, ` +
+        `open PRs/MRs, gate on CI or merge will fail. Create a GitHub token (scopes pre-selected) ` +
+        `at ${githubPatCreationUrl()} then set GITHUB_PAT (or set GITLAB_PAT for GitLab) and restart.`,
     )
   }
 

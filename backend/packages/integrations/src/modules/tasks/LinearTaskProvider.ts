@@ -7,14 +7,29 @@ import {
   type TaskSourceProvider,
   type NormalizedTaskConnection,
 } from '@cat-factory/kernel'
-import { LinearApiError, LinearGraphqlClient } from '../shared/linear.client.js'
 import {
+  LinearApiError,
+  LinearGraphqlClient,
+  linearAuthFromCredentials,
+} from '../shared/linear.client.js'
+import {
+  LINEAR_ISSUE_CHILDREN_QUERY,
+  LINEAR_ISSUE_COMMENTS_QUERY,
   LINEAR_ISSUE_QUERY,
+  LINEAR_PAGE_CAP,
   LINEAR_SEARCH_ISSUES_QUERY,
   LINEAR_TASK_DESCRIPTOR,
+  LINEAR_TEAMS_QUERY,
   LINEAR_VIEWER_QUERY,
+  type LinearChildrenPage,
+  type LinearCommentsPage,
+  type LinearTeam,
+  linearIssueSearchHit,
+  mapLinearChildIds,
+  mapLinearComments,
   mapLinearIssue,
   mapLinearSearchResults,
+  mapLinearTeams,
   parseLinearRef,
 } from './linear.logic.js'
 
@@ -34,11 +49,18 @@ export class LinearTaskProvider implements TaskSourceProvider {
   readonly descriptor = LINEAR_TASK_DESCRIPTOR
 
   normalizeConnection(input: TaskCredentials): NormalizedTaskConnection {
+    // The OAuth connect flow writes a `{ token }` record directly (it never calls
+    // this), so the manual connect form only ever supplies an API key — but accept
+    // either so a token bag isn't rejected if it ever reaches here.
+    const token = input.token?.trim()
     const apiKey = input.apiKey?.trim()
-    if (!apiKey) {
+    if (!token && !apiKey) {
       throw new ValidationError('Linear requires a personal API key')
     }
-    return { credentials: { apiKey }, label: 'Linear workspace' }
+    return {
+      credentials: token ? { token } : { apiKey: apiKey! },
+      label: 'Linear workspace',
+    }
   }
 
   parseRef(input: string): string | null {
@@ -46,20 +68,127 @@ export class LinearTaskProvider implements TaskSourceProvider {
   }
 
   async fetchTask(credentials: TaskCredentials, externalId: string): Promise<TaskContent> {
-    const client = new LinearGraphqlClient({ apiKey: credentials.apiKey! })
+    const client = new LinearGraphqlClient(linearAuthFromCredentials(credentials))
     const data = await client.query<Parameters<typeof mapLinearIssue>[0]>(LINEAR_ISSUE_QUERY, {
       id: externalId,
     })
-    return mapLinearIssue(data)
+    const content = mapLinearIssue(data)
+    return this.paginate(client, externalId, content, data)
   }
 
   async search(credentials: TaskCredentials, query: string): Promise<TaskSearchResult[]> {
-    const client = new LinearGraphqlClient({ apiKey: credentials.apiKey! })
+    const client = new LinearGraphqlClient(linearAuthFromCredentials(credentials))
+    const out: TaskSearchResult[] = []
+    const seen = new Set<string>()
+
+    // Exact match first: a pasted issue identifier / URL resolves to one issue, which
+    // the picker offers as the top option ("point at it, don't search"). Best-effort —
+    // a miss (no such issue) falls through to the free-text search below.
+    const exactId = parseLinearRef(query)
+    if (exactId) {
+      const hit = await this.fetchExact(client, exactId).catch(() => null)
+      if (hit) {
+        seen.add(hit.externalId)
+        out.push(hit)
+      }
+    }
+
     const data = await client.query<Parameters<typeof mapLinearSearchResults>[0]>(
       LINEAR_SEARCH_ISSUES_QUERY,
       { term: query },
     )
-    return mapLinearSearchResults(data)
+    for (const hit of mapLinearSearchResults(data)) {
+      if (seen.has(hit.externalId)) continue
+      seen.add(hit.externalId)
+      out.push(hit)
+    }
+    return out
+  }
+
+  /** Fetch one issue by identifier and project it as a lean search hit (for the exact-match path). */
+  private async fetchExact(
+    client: LinearGraphqlClient,
+    externalId: string,
+  ): Promise<TaskSearchResult | null> {
+    const data = await client.query<Parameters<typeof mapLinearIssue>[0]>(LINEAR_ISSUE_QUERY, {
+      id: externalId,
+    })
+    return data.issue?.identifier ? linearIssueSearchHit(mapLinearIssue(data)) : null
+  }
+
+  /**
+   * Linear's GraphQL connections (children, comments) return only the first page by
+   * default, so an epic with many sub-issues or a long comment thread is silently
+   * truncated. When the initial issue query reports more pages, walk the cursors to
+   * gather the rest (bounded by {@link LINEAR_PAGE_CAP} per connection). Best-effort —
+   * a failed page returns what was gathered so far, mirroring {@link JiraProvider}'s
+   * epic-children walk.
+   */
+  private async paginate(
+    client: LinearGraphqlClient,
+    externalId: string,
+    content: TaskContent,
+    first: Parameters<typeof mapLinearIssue>[0],
+  ): Promise<TaskContent> {
+    const childExternalIds = [...(content.childExternalIds ?? [])]
+    const comments = [...content.comments]
+
+    let childPage = first.issue?.children?.pageInfo ?? null
+    for (
+      let page = 0;
+      childPage?.hasNextPage && childPage.endCursor && page < LINEAR_PAGE_CAP;
+      page++
+    ) {
+      const data = await client
+        .query<{ issue?: { children?: LinearChildrenPage } | null }>(LINEAR_ISSUE_CHILDREN_QUERY, {
+          id: externalId,
+          after: childPage.endCursor,
+        })
+        .catch(() => null)
+      if (!data) break
+      const conn = data.issue?.children
+      for (const id of mapLinearChildIds(conn)) childExternalIds.push(id)
+      childPage = conn?.pageInfo ?? null
+    }
+
+    let commentPage = first.issue?.comments?.pageInfo ?? null
+    for (
+      let page = 0;
+      commentPage?.hasNextPage && commentPage.endCursor && page < LINEAR_PAGE_CAP;
+      page++
+    ) {
+      const data = await client
+        .query<{ issue?: { comments?: LinearCommentsPage } | null }>(LINEAR_ISSUE_COMMENTS_QUERY, {
+          id: externalId,
+          after: commentPage.endCursor,
+        })
+        .catch(() => null)
+      if (!data) break
+      const conn = data.issue?.comments
+      for (const c of mapLinearComments(conn)) comments.push(c)
+      commentPage = conn?.pageInfo ?? null
+    }
+
+    return {
+      ...content,
+      comments,
+      childExternalIds,
+      isEpic: childExternalIds.length > 0,
+      type: childExternalIds.length > 0 ? 'Epic' : content.type,
+    }
+  }
+
+  /**
+   * List the connection's Linear teams (id + name + key), so the ticket-filing UI can
+   * offer a team picker instead of asking the user to paste a raw team UUID. Linear-
+   * specific (no other task source has teams), so it is NOT on the generic
+   * {@link TaskSourceProvider} port — {@link TaskConnectionService} narrows to this
+   * class to reach it.
+   */
+  async listTeams(credentials: TaskCredentials): Promise<LinearTeam[]> {
+    const client = new LinearGraphqlClient(linearAuthFromCredentials(credentials))
+    const data = await client.query<Parameters<typeof mapLinearTeams>[0]>(LINEAR_TEAMS_QUERY)
+    return mapLinearTeams(data)
   }
 
   /**
@@ -71,8 +200,8 @@ export class LinearTaskProvider implements TaskSourceProvider {
     workspaceId: string
     credentials: TaskCredentials | null
   }): Promise<TaskSourceDiagnostic> {
-    const apiKey = input.credentials?.apiKey
-    if (!apiKey) {
+    const credentials = input.credentials
+    if (!credentials?.apiKey && !credentials?.token) {
       return {
         source: 'linear',
         ok: false,
@@ -81,7 +210,7 @@ export class LinearTaskProvider implements TaskSourceProvider {
       }
     }
     try {
-      const client = new LinearGraphqlClient({ apiKey })
+      const client = new LinearGraphqlClient(linearAuthFromCredentials(credentials))
       const data = await client.query<{ viewer?: { name?: string } }>(LINEAR_VIEWER_QUERY)
       return {
         source: 'linear',

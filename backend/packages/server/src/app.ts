@@ -54,7 +54,10 @@ import {
 } from './modules/providers/ApiKeyController.js'
 import { serviceMountController } from './modules/services/ServiceMountController.js'
 import { serviceSpecController } from './modules/serviceSpec/ServiceSpecController.js'
-import { taskSourceController } from './modules/tasks/TaskSourceController.js'
+import {
+  linearOAuthController,
+  taskSourceController,
+} from './modules/tasks/TaskSourceController.js'
 import { workspaceController } from './modules/workspaces/WorkspaceController.js'
 
 /**
@@ -143,4 +146,6 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/vcs', vcsWebhookController())
   // Slack-facing OAuth callback (browser redirect); not workspace-scoped.
   app.route('/slack', slackOAuthController())
+  // Linear-facing OAuth callback (browser redirect); not workspace-scoped.
+  app.route('/tasks', linearOAuthController())
 }

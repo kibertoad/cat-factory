@@ -789,6 +789,18 @@
         "cleared": "Wyczyszczono OAuth Slacka",
         "clearFailed": "Nie udało się wyczyścić OAuth Slacka"
       },
+      "linear": {
+        "title": "Aplikacja Linear (OAuth)",
+        "description": "Włącza przepływ OAuth „Połącz z Linear”. Bez niego przestrzenie robocze nadal mogą połączyć Linear, wklejając osobisty klucz API.",
+        "clientId": "Identyfikator klienta",
+        "clientSecret": "Sekret klienta",
+        "redirectUrl": "Adres URL przekierowania",
+        "validation": "Podaj identyfikator klienta, sekret i adres URL przekierowania",
+        "saved": "Zapisano OAuth Linear",
+        "saveFailed": "Nie udało się zapisać OAuth Linear",
+        "cleared": "Wyczyszczono OAuth Linear",
+        "clearFailed": "Nie udało się wyczyścić OAuth Linear"
+      },
       "web": {
         "title": "Wyszukiwanie w sieci w kontenerze",
         "description": "Dostawca wyszukiwania, do którego agenci w kontenerze sięgają przez proxy backendu. Ustaw klucz Brave (zalecane) lub własny adres URL SearXNG (z opcjonalnym kluczem bearer).",
@@ -1298,7 +1310,8 @@
         "jiraProjectKey": "Klucz projektu Jira",
         "jiraProjectKeyHelp": "Nowe zgłoszenia są rejestrowane w tym projekcie.",
         "linearTeamId": "Identyfikator zespołu Linear",
-        "linearTeamIdHelp": "Nowe zgłoszenia są tworzone w tym zespole (Linear wymaga zespołu do utworzenia zgłoszenia)."
+        "linearTeamIdHelp": "Nowe zgłoszenia są tworzone w tym zespole (Linear wymaga zespołu do utworzenia zgłoszenia).",
+        "linearTeamSearchPlaceholder": "Szukaj zespołów…"
       },
       "vendor": {
         "github": "GitHub Issues",
@@ -1885,9 +1898,10 @@
       "repository": "Repozytorium",
       "repositoryHint": "Repozytoria, do których aplikacja GitHub ma dostęp. Nie widzisz swojego? Przyznaj aplikacji dostęp poniżej, a następnie odśwież.",
       "noReposAvailable": "Brak dostępnych repozytoriów. Przyznaj aplikacji dostęp do jednego poniżej, a następnie odśwież.",
-      "filterPlaceholder": "Filtruj według właściciela/nazwy…",
-      "clearFilter": "Wyczyść filtr",
-      "chooseRepository": "Wybierz repozytorium",
+      "searchPlaceholder": "Szukaj repozytoriów według właściciela lub nazwy…",
+      "searchMinChars": "Wpisz co najmniej {min} znak, aby wyszukać. | Wpisz co najmniej {min} znaki, aby wyszukać. | Wpisz co najmniej {min} znaków, aby wyszukać.",
+      "noMatches": "Nie znaleziono repozytoriów dla {query}.",
+      "clearSelection": "Wyczyść wybór",
       "showingCount": "Wyświetlanie {shown} z {total} repozytoriów.",
       "repoLabel": {
         "private": " (prywatne)",
@@ -2110,7 +2124,9 @@
       "offerHint": "Po wyłączeniu {label} jest ukryte przed importem i powiązywaniem.",
       "disconnect": "Rozłącz",
       "updateConnection": "Zaktualizuj połączenie",
-      "connect": "Połącz"
+      "connect": "Połącz",
+      "oauthButton": "Połącz z {label}",
+      "oauthOr": "lub połącz za pomocą klucza API"
     }
   },
   "pipeline": {

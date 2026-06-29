@@ -1,5 +1,99 @@
 # @cat-factory/local-server
 
+## 0.21.1
+
+### Patch Changes
+
+- Updated dependencies [704c99e]
+  - @cat-factory/integrations@0.30.0
+  - @cat-factory/contracts@0.46.0
+  - @cat-factory/server@0.44.0
+  - @cat-factory/node-server@0.38.0
+  - @cat-factory/orchestration@0.39.2
+  - @cat-factory/agents@0.21.10
+  - @cat-factory/gitlab@0.3.1
+  - @cat-factory/kernel@0.47.2
+
+## 0.21.0
+
+### Minor Changes
+
+- 2961b05: Meaningfully widen GitLab support in local mode — a `GITLAB_PAT` deployment now drives the
+  real agent workflow, not just sign-in:
+
+  - **`@cat-factory/gitlab`** adds `asGitHubClient(...)`, a `VcsClient`→`GitHubClient` adapter so
+    any provider-neutral VCS client (e.g. `FetchGitLabClient`) satisfies the legacy `GitHubClient`
+    port the engine's CI gate, merger and repo-read paths still consume.
+  - **`@cat-factory/server`** resolves a run's repo origin (clone URL + provider) through an
+    injectable `resolveRepoOrigin` seam and stamps the provider onto the dispatched job, instead
+    of hardcoding a `github.com` clone URL. The default stays GitHub, so the Worker/Node facades
+    are unchanged; a GitLab deployment supplies a GitLab origin so containers clone the right host
+    and open merge requests. Without this the clone URL was always github.com, so a GitLab repo
+    could never be cloned by an agent container.
+  - **`@cat-factory/node-server`** threads `resolveRepoOrigin` through `NodeContainerOptions` to
+    the container executor (default GitHub), so a sibling facade can supply a GitLab origin.
+  - **`@cat-factory/local-server`** wires a GitLab PAT symmetrically to the GitHub PAT: the agent
+    containers' git clone/push token falls back to `GITLAB_PAT`; the CI gate, mergeability, real
+    merge and repo-link flows read through a PAT-backed `FetchGitLabClient` (adapted to
+    `GitHubClient`); the agent containers clone the configured GitLab host + open merge requests
+    (via `resolveRepoOrigin`); and the GitLab host is added to the harness clone/push allow-list
+    (`GITHUB_ALLOWED_HOSTS`) so the container doesn't reject the GitLab clone URL. A GitLab-only
+    local deployment is now a first-class source-control backend. Set `GITLAB_API_BASE` for a
+    self-managed instance. The boot warning and the cross-provider `vcs-conformance` test cover
+    both providers.
+  - **`@cat-factory/executor-harness`** opens a GitLab **merge request** (not a GitHub PR) when the
+    job's `repo.provider` is `gitlab` (set authoritatively by the server, so a self-managed GitLab
+    on an arbitrarily-named host is routed correctly), falling back to host inference from the
+    clone URL. The REST base + project path are derived from the host, and an already-open MR is
+    reused on a resumed run. The GitHub path is unchanged. (The runner image must be republished
+    for this to take effect in a deployed worker.)
+
+### Patch Changes
+
+- Updated dependencies [2961b05]
+  - @cat-factory/node-server@0.37.0
+  - @cat-factory/server@0.43.0
+  - @cat-factory/gitlab@0.3.0
+
+## 0.20.1
+
+### Patch Changes
+
+- Updated dependencies [5ad45de]
+  - @cat-factory/orchestration@0.39.1
+  - @cat-factory/server@0.42.1
+  - @cat-factory/node-server@0.36.1
+
+## 0.20.0
+
+### Minor Changes
+
+- 3d0b85c: feat(environments): wire the live environment-provider config-repair agent (PR #416 increment 2)
+
+  When mechanical config bootstrap can't produce a valid provider config (`needsAgent`, or the
+  post-commit re-validation still fails) and the caller passed `allowAgentFallback`, the engine now
+  dispatches a coding agent that clones the target repo at the write branch, fixes the provider's
+  config file in place, and pushes the fix back onto the same branch — then `EnvironmentConnectionService`
+  re-validates.
+
+  - New `ContainerEnvConfigRepairer` (`@cat-factory/server`) dispatches a plain `coding` job via the
+    shared `RunnerJobClient`/`RunnerTransport` (no `bootstrap` block, no PR) and awaits it. It is
+    distinct from the repo-bootstrap flow — it never reinitialises history or force-pushes.
+  - The `dispatchConfigRepair` / `CoreDependencies.dispatchEnvConfigRepair` seam now returns `void`
+    (it only pushes the fix); re-validation moved into `EnvironmentConnectionService`, where the
+    decrypted secrets + manifest config live.
+  - Wired symmetrically across the Cloudflare and Node facades (local inherits via `buildNodeContainer`),
+    gated on the container prerequisites plus an injected provider that supports `describeRepairAgent`,
+    so a stock deployment running the generic manifest provider is unchanged.
+
+### Patch Changes
+
+- Updated dependencies [3d0b85c]
+  - @cat-factory/server@0.42.0
+  - @cat-factory/integrations@0.29.0
+  - @cat-factory/orchestration@0.39.0
+  - @cat-factory/node-server@0.36.0
+
 ## 0.19.5
 
 ### Patch Changes

@@ -147,7 +147,9 @@ export const OPTION_DEFAULTS = {
   appTitle: 'Agent Architecture Board',
   provider: 'github' as VcsProvider,
   databaseUrl: 'postgres://cat:cat@localhost:5432/catfactory',
-  apiBase: 'http://localhost:8787',
+  // The SPA's API base has no standalone default: it is derived from `port`
+  // (`http://localhost:<port>`) in bootstrap.ts so a custom --port can't leave the frontend
+  // pointed at the wrong backend.
   port: 8787,
   harnessImage: DEFAULT_HARNESS_IMAGE,
   containerRuntime: 'docker' as ContainerRuntime,
