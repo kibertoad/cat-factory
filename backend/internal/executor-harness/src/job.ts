@@ -1,5 +1,6 @@
 import type { PiRunStats } from './pi.js'
 import type { HarnessKind } from './pi-workspace.js'
+import type { FailureCause } from './failure.js'
 
 // The job the Worker's ContainerAgentExecutor POSTs to /run. Kept as plain
 // types with a hand-rolled validator so the image needs no schema dependency.
@@ -411,6 +412,12 @@ export interface AgentResult {
   /** Coding mode (bootstrap): the default branch the bootstrapped contents were pushed to. */
   defaultBranch?: string
   error?: string
+  /**
+   * The structured failure cause set alongside `error` on a clean-exit failure (no usable
+   * output, no changes to push, unresolved conflicts, …). The job registry copies it onto
+   * the job view so the backend classifies the failure without regex. See {@link FailureCause}.
+   */
+  failureCause?: FailureCause
   usage?: { inputTokens: number; outputTokens: number }
 }
 

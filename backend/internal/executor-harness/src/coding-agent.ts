@@ -127,12 +127,9 @@ export async function runCodingAgent(
   opts: RunOptions = {},
 ): Promise<CodingAgentOutcome> {
   const { signal } = opts
-  const trace = {
-    jobId: spec.jobId,
-    kind: spec.kind,
-    repo: `${spec.repo.owner}/${spec.repo.name}`,
-    branch: spec.pushBranch,
-  }
+  // The registry already binds jobId/repo/branch; add the coding kind + the push branch
+  // (which differs from the cloned branch the registry bound).
+  const logger = (opts.log ?? log).child({ kind: spec.kind, branch: spec.pushBranch })
   return acquireRepoCheckout(
     { persistent: spec.persistentCheckout === true, prefix: spec.kind, repo: spec.repo },
     async (dir) => {
@@ -157,17 +154,14 @@ export async function runCodingAgent(
       const resumed =
         spec.newBranch != null &&
         (await remoteBranchExists(spec.repo.cloneUrl, spec.newBranch, spec.ghToken, signal))
+      opts.onPhase?.('clone')
       if (spec.persistentCheckout) {
         // Reused checkout: clean-sweep + fetch + switch branch in place. A resumed branch
         // (or a run without `newBranch`, working directly on `cloneBranch`) already exists
         // on the remote, so check it out directly; otherwise (re)create `newBranch` off the
         // base tip — the same resume-vs-fresh decision the clone paths below make.
         const targetBranch = spec.newBranch ?? spec.cloneBranch
-        log.info('coding-agent: preparing reused checkout', {
-          ...trace,
-          branch: targetBranch,
-          resumed,
-        })
+        logger.info('coding-agent: preparing reused checkout', { branch: targetBranch, resumed })
         await prepareExistingCheckout({
           dir,
           repo: spec.repo,
@@ -178,7 +172,7 @@ export async function runCodingAgent(
           signal,
         })
       } else if (resumed) {
-        log.info('coding-agent: resuming existing branch', { ...trace, branch: spec.newBranch })
+        logger.info('coding-agent: resuming existing branch', { branch: spec.newBranch })
         await cloneExistingBranch({
           cloneUrl: spec.repo.cloneUrl,
           branch: spec.newBranch!,
@@ -187,7 +181,7 @@ export async function runCodingAgent(
           signal,
         })
       } else {
-        log.info('coding-agent: cloning', { ...trace, cloneBranch: spec.cloneBranch })
+        logger.info('coding-agent: cloning', { cloneBranch: spec.cloneBranch })
         await cloneRepo({
           repo: { ...spec.repo, baseBranch: spec.cloneBranch },
           ghToken: spec.ghToken,
@@ -215,8 +209,7 @@ export async function runCodingAgent(
           signal,
         ).catch(() => false)
         if (!refreshed) {
-          log.info('coding-agent: resume base refresh skipped (conflict or error)', {
-            ...trace,
+          logger.info('coding-agent: resume base refresh skipped (conflict or error)', {
             base: spec.cloneBranch,
           })
         }
@@ -256,11 +249,17 @@ export async function runCodingAgent(
       // mid-run doesn't lose it (a retry then resumes from the pushed commits). The
       // agent commits its own work; this only PUSHES already-committed commits, so it
       // never races the agent's staging. Best-effort: a failed checkpoint is skipped.
+      // Surface checkpoint-push failures at warn with a running count: a checkpoint losing
+      // a race is harmless once, but a steadily-climbing count means mid-run work is NOT
+      // being durably checkpointed, so an eviction would lose it — previously invisible at
+      // info level. Still best-effort: a failed checkpoint never fails the run.
+      let checkpointFailures = 0
       const checkpoint = setInterval(() => {
         pushWorkOnce().catch((err) => {
-          log.info('coding-agent: checkpoint push skipped', {
-            ...trace,
+          checkpointFailures++
+          logger.warn('coding-agent: checkpoint push failed', {
             reason: err instanceof Error ? err.message : String(err),
+            checkpointFailures,
           })
         })
       }, checkpointIntervalMs())
@@ -281,7 +280,7 @@ export async function runCodingAgent(
       // lives in the agent's working directory (its cwd), where the prompt tells it to write.
       const followUpTailer =
         spec.streamFollowUps && opts.onFollowUp
-          ? new FollowUpTailer(join(workDir, FOLLOW_UPS_FILENAME), opts.onFollowUp)
+          ? new FollowUpTailer(join(workDir, FOLLOW_UPS_FILENAME), opts.onFollowUp, logger)
           : undefined
       let followUpTick: ReturnType<typeof setInterval> | undefined
       if (followUpTailer) {
@@ -294,7 +293,8 @@ export async function runCodingAgent(
 
       let outcome: CodingAgentOutcome
       try {
-        log.info('coding-agent: running agent', { ...trace, serviceDirectory })
+        opts.onPhase?.('agent')
+        logger.info('coding-agent: running agent', { serviceDirectory })
         const { summary, stats, stderrTail, usage } = await runAgentInWorkspace(
           {
             dir: workDir,
@@ -337,8 +337,7 @@ export async function runCodingAgent(
         // makes that loss observable when a PR turns out to be missing a file.
         const leftover = await listUntrackedFiles(dir, signal)
         if (leftover.length > 0) {
-          log.warn('coding-agent: uncommitted new files left behind (not pushed)', {
-            ...trace,
+          logger.warn('coding-agent: uncommitted new files left behind (not pushed)', {
             count: leftover.length,
             files: leftover.slice(0, 20),
           })
@@ -346,7 +345,7 @@ export async function runCodingAgent(
 
         const hasWork = resumed || (await branchHasCommitsSince(dir, baseSha, signal))
         if (!hasWork) {
-          log.info('coding-agent: no changes produced', { ...trace, ...stats })
+          logger.info('coding-agent: no changes produced', { ...stats })
           outcome = {
             pushed: false,
             resumed,
@@ -356,7 +355,8 @@ export async function runCodingAgent(
             ...(usage ? { usage } : {}),
           }
         } else {
-          log.info('coding-agent: pushing', { ...trace, resumed, ...stats })
+          opts.onPhase?.('push')
+          logger.info('coding-agent: pushing', { resumed, ...stats })
           await pushWorkOnce()
           outcome = {
             pushed: true,

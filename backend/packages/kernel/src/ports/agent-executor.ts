@@ -398,8 +398,15 @@ export type AgentJobUpdate =
    * engine never loses the last items — notably a question that must hold the gate.
    */
   | { state: 'done'; result: AgentRunResult; followUps?: StreamedFollowUp[] }
-  /** Finished with a failure (agent error, inactivity/max-duration watchdog, …). */
-  | { state: 'failed'; error: string }
+  /**
+   * Finished with a failure (agent error, inactivity/max-duration watchdog, …). When the
+   * harness reported a STRUCTURED `failureCause`, it is forwarded here so the driver can
+   * classify the failure (→ `AgentFailureKind`) without regex-matching `error`; absent on an
+   * older harness image (the driver falls back to the error-string regex). `detail` carries an
+   * extended, redacted diagnostic (phase timings, last-tool breadcrumb) distinct from the
+   * one-line `error`, surfaced as the failure detail on the board.
+   */
+  | { state: 'failed'; error: string; failureCause?: string; detail?: string }
 
 /**
  * An executor whose work can outlive a single request. Instead of `run()`
