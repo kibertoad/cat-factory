@@ -3,6 +3,7 @@ import {
   LlmFragmentSelector,
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
+  isProxyableProvider,
 } from '@cat-factory/agents'
 import {
   ClaudeDesignProvider,
@@ -787,6 +788,21 @@ function selectNodeEnvConfigRepairer(deps: {
   ) {
     return undefined
   }
+  // A config fix is coding work, so it follows the `coder` kind's routing. The repair runs on
+  // the Pi harness over the LLM proxy, so the routed model MUST be proxyable. Surface a
+  // misconfiguration HERE (at wiring) rather than letting every repair dispatch throw deep in a
+  // request: if `coder` is routed to a non-proxyable model (e.g. an individual subscription
+  // vendor), leave the fallback unwired — bootstrap then returns the validation issues, exactly
+  // as it does when no provider supports repair.
+  const model = resolveAgentConfig(deps.config.agents.routing, 'coder').ref
+  if (!isProxyableProvider(model.provider)) {
+    logger.warn(
+      { provider: model.provider },
+      'env-config repair: the coder routing model is not proxyable by the LLM proxy; ' +
+        'the agent config-repair fallback is disabled.',
+    )
+    return undefined
+  }
   return new ContainerEnvConfigRepairer({
     resolveTransport: deps.resolveTransport,
     installationRepository: deps.installationRepository,
@@ -794,8 +810,7 @@ function selectNodeEnvConfigRepairer(deps: {
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
     idGenerator: deps.idGenerator,
     environmentProvider: deps.environmentProvider,
-    // A config fix is coding work, so it follows the `coder` kind's routing.
-    model: resolveAgentConfig(deps.config.agents.routing, 'coder').ref,
+    model,
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
     githubApiBase: deps.config.github.apiBase,
   })
