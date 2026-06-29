@@ -24,11 +24,15 @@ const auth = useAuthStore()
 const providerConnections = useProviderConnectionsStore()
 const ui = useUiStore()
 
-// The Infrastructure menu (agent-container execution + test environments) is relevant when
-// either provider integration is available OR we're running the local-mode facade (which
-// always has host-Docker execution + the warm-pool/checkout settings to configure).
+// The Infrastructure menu (agent-container execution + test environments) shows whenever the
+// deployment reports its infrastructure capability — every facade populates `auth.infrastructure`
+// (it drives the execution-backend selector), so there is always an execution + test-env backend
+// to view, even on a Worker/Node deployment with no runner-pool/environment connection registered.
+// The old provider-availability/local-mode signals stay as a defensive fallback for a backend that
+// (somehow) omits the descriptor.
 const showInfrastructure = computed(
   () =>
+    auth.infrastructure != null ||
     auth.localMode?.enabled === true ||
     providerConnections.isAvailable('runner-pool') ||
     providerConnections.isAvailable('environment'),
