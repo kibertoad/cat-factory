@@ -875,7 +875,11 @@ export function runPi(opts: {
     // Parse each complete JSONL record once, feeding both the todo-progress
     // emitter and the no-progress guard. A tripped guard kills Pi with a
     // diagnostic the run then fails on.
-    const processLine = (line: string): void => {
+    // `runGuard` is false only for the at-close flush of a final unterminated line: the
+    // process has already exited, so feeding that record to the no-progress guard could trip
+    // it and turn a clean (code 0) exit into a spurious "no progress" rejection. The flush
+    // still recovers the record's progress/span signal; only the kill decision is skipped.
+    const processLine = (line: string, runGuard = true): void => {
       if (!line.startsWith('{')) return
       let event: Record<string, unknown>
       try {
@@ -916,7 +920,7 @@ export function runPi(opts: {
           toolBoundary = endedAt
         }
       }
-      if (!guardReason && !aborted) {
+      if (runGuard && !guardReason && !aborted) {
         const reason = guard.observe(event)
         if (reason) {
           guardReason = reason
@@ -965,7 +969,7 @@ export function runPi(opts: {
       // every line, but a clean exit can leave the last event (often `agent_end`) unterminated
       // in the buffer, so without this its progress/span/guard signal would be silently lost.
       if (lineBuffer.trim()) {
-        processLine(lineBuffer.trim())
+        processLine(lineBuffer.trim(), false)
         lineBuffer = ''
       }
       // Surface any silent stream losses ONCE (counts, not per-line), so a corrupted JSONL

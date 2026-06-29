@@ -4,6 +4,7 @@ import type { TodoProgress, ToolSpan } from './pi.js'
 import { log, type Logger } from './logger.js'
 import {
   type FailureCause,
+  failureCauseOf,
   inactivityAbortMessage,
   maxDurationAbortMessage,
 } from './failure.js'
@@ -317,7 +318,8 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
    * Build the redacted one-line `error`, the structured {@link FailureCause}, and the extended
    * `detail` for a failed job. Watchdog kills keep their regex-stable phrase (so the backend's
    * `classifyBootstrapFailure` fallback still works) and gain a breadcrumb of where they hung;
-   * a thrown error keeps its own message (cause `agent`). All strings are credential-scrubbed.
+   * a thrown error keeps its own message and its structured cause when tagged (a git op → `git`,
+   * an upstream API call → `api`), else `agent`. All strings are credential-scrubbed.
    */
   private describeFailure(
     killReason: 'inactivity' | 'max-duration' | undefined,
@@ -326,9 +328,12 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
     lastTool: { name: string; at: number } | undefined,
     phaseTimingsMs: Record<string, number>,
   ): { message: string; cause: FailureCause; detail: string } {
+    // `lastTool` is the last tool that COMPLETED (a span is emitted on tool end), so when the
+    // hang is inside a still-running tool the breadcrumb points at the prior one — worded
+    // "last completed tool" so the reader knows the stuck call may be the next, unfinished one.
     const breadcrumb = lastTool
-      ? `last tool ${lastTool.name} ${Math.round((Date.now() - lastTool.at) / 1000)}s ago`
-      : 'no tool had run yet'
+      ? `last completed tool ${lastTool.name} ${Math.round((Date.now() - lastTool.at) / 1000)}s ago`
+      : 'no tool had completed yet'
     const phaseBreakdown = Object.entries(phaseTimingsMs)
       .map(([p, ms]) => `${p}=${Math.round(ms / 1000)}s`)
       .join(', ')
@@ -349,9 +354,11 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
       }
     }
     const raw = error instanceof Error ? error.message : String(error)
+    // A thrown error tagged with a structured cause (a git op / an upstream API call) keeps
+    // it; an untagged throw is a generic agent failure.
     return {
       message: redactSecrets(raw),
-      cause: 'agent',
+      cause: failureCauseOf(error) ?? 'agent',
       detail: redactSecrets(
         `${phaseBreakdown ? `Phase timings: ${phaseBreakdown}. ` : ''}Failed in ${phase} phase; ${breadcrumb}.`,
       ),

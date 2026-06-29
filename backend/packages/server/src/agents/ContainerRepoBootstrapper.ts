@@ -278,7 +278,8 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
         state: 'failed',
         // Prefer the harness's structured cause; fall back to the error-string regex (which
         // also catches the facade-emitted eviction, for which the harness sets no cause).
-        failureKind: bootstrapFailureKindFromCause(view.failureCause) ?? classifyBootstrapFailure(error),
+        failureKind:
+          bootstrapFailureKindFromCause(view.failureCause) ?? classifyBootstrapFailure(error),
         error,
         detail: view.detail ?? view.error,
       }
@@ -403,7 +404,9 @@ function classifyBootstrapFailure(error: string): BootstrapFailureKind {
  * crucially including container eviction, which has NO harness cause (the transport emits the
  * "evicted or crashed" string), so it correctly falls through to the regex's `evicted`.
  */
-function bootstrapFailureKindFromCause(cause: string | undefined): BootstrapFailureKind | undefined {
+function bootstrapFailureKindFromCause(
+  cause: string | undefined,
+): BootstrapFailureKind | undefined {
   switch (cause) {
     case 'inactivity-timeout':
     case 'max-duration':

@@ -86,3 +86,16 @@ export function agentFailureKindFromCause(cause: string | undefined): AgentFailu
       return undefined
   }
 }
+
+/**
+ * The error-string fallback for an agent/execution job failure when the harness reported no
+ * structured `failureCause` (an older image, or a pool transport that doesn't forward it). Mirrors
+ * the bootstrap path's `classifyBootstrapFailure`: the watchdog phrases map to `timeout`, anything
+ * else to `agent` — so the SAME watchdog text classifies identically on both the execution and
+ * bootstrap paths. Container eviction is handled separately (by {@link isContainerEvictionError}),
+ * so it never reaches here. Used as `agentFailureKindFromCause(cause) ?? classifyAgentFailure(error)`.
+ */
+export function classifyAgentFailure(error: string | undefined): AgentFailureKind {
+  if (error && /inactivity|no agent activity|max duration/i.test(error)) return 'timeout'
+  return 'agent'
+}

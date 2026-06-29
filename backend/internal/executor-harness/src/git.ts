@@ -6,6 +6,7 @@ import { promisify } from 'node:util'
 import type { BootstrapTargetSpec, PrSpec, RepoSpec } from './job.js'
 import { redactSecrets } from './redact.js'
 import { loadRunnerLimits } from './runner.js'
+import { HarnessFailure } from './failure.js'
 
 // Re-exported so existing importers that pull `redactSecrets` from this module keep
 // working; the single source of truth now lives in ./redact.js.
@@ -125,7 +126,13 @@ async function git(
     })
     return stdout
   } catch (err) {
-    throw redactError(err)
+    // Tag the failure as `git` so the registry's catch records the real cause instead of
+    // the generic `agent`. A watchdog abort still wins: `describeFailure` keys off
+    // `killReason` first, so an abort during a git op keeps the timeout message/cause.
+    const redacted = redactError(err)
+    const failure = new HarnessFailure('git', redacted.message)
+    if (redacted.stack) failure.stack = redacted.stack
+    throw failure
   }
 }
 
@@ -694,13 +701,23 @@ function isAbortError(err: unknown): boolean {
   return err instanceof Error && err.name === 'AbortError'
 }
 
-/** Parse a `Retry-After` header (integer seconds) into ms, bounded so it can't stall the job. */
+/**
+ * Parse a `Retry-After` header into ms, bounded so it can't stall the job. Accepts BOTH
+ * forms the spec allows: integer delay-seconds (`120`) and an HTTP-date (`Wed, 21 Oct 2026
+ * 07:28:00 GMT`); the latter is turned into a delay from now. A past/zero/unparseable value
+ * yields undefined so the caller falls back to exponential backoff.
+ */
 function retryAfterMs(res: Response): number | undefined {
   const raw = res.headers.get('retry-after')
   if (!raw) return undefined
   const secs = Number(raw)
-  if (!Number.isFinite(secs) || secs <= 0) return undefined
-  return Math.min(secs * 1000, MAX_RETRY_AFTER_MS)
+  if (Number.isFinite(secs)) {
+    return secs > 0 ? Math.min(secs * 1000, MAX_RETRY_AFTER_MS) : undefined
+  }
+  const at = Date.parse(raw)
+  if (Number.isNaN(at)) return undefined
+  const ms = at - Date.now()
+  return ms > 0 ? Math.min(ms, MAX_RETRY_AFTER_MS) : undefined
 }
 
 /** Sleep `ms`, rejecting immediately (with the abort reason) if `signal` aborts meanwhile. */
@@ -763,9 +780,10 @@ async function withApiRetry(
     if (attempt >= maxAttempts) break
     await abortableDelay(backoffMs(attempt), opts.signal)
   }
-  throw lastError instanceof Error
-    ? lastError
-    : new Error('API request failed after retries')
+  // Exhausted on a network-level rejection (no HTTP response): an upstream API failure.
+  const message =
+    lastError instanceof Error ? lastError.message : 'API request failed after retries'
+  throw new HarnessFailure('api', redactSecrets(message))
 }
 
 /** Exponential backoff (base 500ms, capped 4s) with up to 25% positive jitter. */
@@ -822,12 +840,13 @@ export async function openPullRequest(opts: OpenPullRequestOptions): Promise<str
       const existing = await findOpenPullRequestUrl(opts)
       if (existing) return existing
     }
-    throw new Error(
+    throw new HarnessFailure(
+      'api',
       redactSecrets(`Failed to open PR (HTTP ${res.status}): ${detail.slice(0, 300)}`),
     )
   }
   const body = (await res.json()) as { html_url?: string }
-  if (!body.html_url) throw new Error('GitHub did not return a PR url')
+  if (!body.html_url) throw new HarnessFailure('api', 'GitHub did not return a PR url')
   return body.html_url
 }
 
@@ -879,12 +898,13 @@ async function openGitLabMergeRequest(
       const existing = await findOpenMergeRequestUrl(apiBase, project, opts)
       if (existing) return existing
     }
-    throw new Error(
+    throw new HarnessFailure(
+      'api',
       redactSecrets(`Failed to open merge request (HTTP ${res.status}): ${detail.slice(0, 300)}`),
     )
   }
   const body = (await res.json()) as { web_url?: string }
-  if (!body.web_url) throw new Error('GitLab did not return a merge request url')
+  if (!body.web_url) throw new HarnessFailure('api', 'GitLab did not return a merge request url')
   return body.web_url
 }
 

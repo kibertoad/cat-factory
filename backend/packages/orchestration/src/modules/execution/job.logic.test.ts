@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   agentFailureKindFromCause,
+  classifyAgentFailure,
   isContainerEvictionError,
   isTransientEviction,
   MAX_EVICTION_RECOVERIES,
@@ -73,5 +74,20 @@ describe('agentFailureKindFromCause', () => {
     expect(agentFailureKindFromCause('something-new')).toBeUndefined()
     // Eviction is never a harness cause — it routes through isContainerEvictionError, not here.
     expect(agentFailureKindFromCause('evicted')).toBeUndefined()
+  })
+})
+
+describe('classifyAgentFailure (error-string fallback)', () => {
+  it('maps the watchdog phrases to `timeout`, matching the bootstrap path', () => {
+    expect(classifyAgentFailure('Aborted: no agent activity for 600s (likely hung)')).toBe(
+      'timeout',
+    )
+    expect(classifyAgentFailure('Aborted: exceeded max duration of 3600s')).toBe('timeout')
+    expect(classifyAgentFailure('inactivity watchdog fired')).toBe('timeout')
+  })
+
+  it('maps anything else (and an absent error) to `agent`', () => {
+    expect(classifyAgentFailure('the agent produced no usable result')).toBe('agent')
+    expect(classifyAgentFailure(undefined)).toBe('agent')
   })
 })

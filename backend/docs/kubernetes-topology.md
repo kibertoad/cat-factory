@@ -26,13 +26,13 @@ managed services is yours to choose.
 
 ## The pieces
 
-| Component                 | What it is                                                                                                                                                                                                                                          | Lifecycle                                                                                                          | Who hosts it                                              |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| **node-server**           | `@cat-factory/node-server`: the Hono REST API, the WebSocket push transport, and the pg-boss durable-execution workers (the orchestrator). With the `kubernetes` backend it also drives the apiserver to create/poll/delete the run pods.            | Long-lived Deployment, horizontally scalable for the API; pg-boss workers single-or-few.                          | You, in-cluster.                                          |
-| **LLM proxy**             | The OpenAI-compatible `/v1` egress route the executor points Pi at. Injects the real vendor key (kept out of the container), meters spend, writes telemetry. Lives in the **same** `@cat-factory/server` app, so it ships in the node-server image.  | Same as node-server, or a separate Deployment of the same image scoped to egress.                                 | You, in-cluster.                                          |
-| **Postgres**              | Domain DB + the `telemetry` schema (one connection, two schemas). `migrate()` bootstraps it on boot.                                                                                                                                                | StatefulSet, or a managed service (RDS / Cloud SQL / Neon).                                                       | You, or your cloud.                                       |
+| Component                 | What it is                                                                                                                                                                                                                                          | Lifecycle                                                                                                           | Who hosts it                                              |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| **node-server**           | `@cat-factory/node-server`: the Hono REST API, the WebSocket push transport, and the pg-boss durable-execution workers (the orchestrator). With the `kubernetes` backend it also drives the apiserver to create/poll/delete the run pods.           | Long-lived Deployment, horizontally scalable for the API; pg-boss workers single-or-few.                            | You, in-cluster.                                          |
+| **LLM proxy**             | The OpenAI-compatible `/v1` egress route the executor points Pi at. Injects the real vendor key (kept out of the container), meters spend, writes telemetry. Lives in the **same** `@cat-factory/server` app, so it ships in the node-server image. | Same as node-server, or a separate Deployment of the same image scoped to egress.                                   | You, in-cluster.                                          |
+| **Postgres**              | Domain DB + the `telemetry` schema (one connection, two schemas). `migrate()` bootstraps it on boot.                                                                                                                                                | StatefulSet, or a managed service (RDS / Cloud SQL / Neon).                                                         | You, or your cloud.                                       |
 | **executor-harness pods** | The published `cat-factory-executor` image: clones the repo, runs the Pi coding agent, pushes a branch / opens a PR. Carries **no** secrets; per-job tokens arrive in the dispatch body.                                                            | **Ephemeral** — one bare Pod per RUN (named `cf-run-<runId>`); the run's steps re-attach to it, deleted on release. | You, in-cluster (the trust boundary).                     |
-| **SPA**                   | `@cat-factory/app` (the Nuxt layer) built into a static bundle.                                                                                                                                                                                     | Static.                                                                                                            | A CDN / object store / nginx pod; out of cluster is fine. |
+| **SPA**                   | `@cat-factory/app` (the Nuxt layer) built into a static bundle.                                                                                                                                                                                     | Static.                                                                                                             | A CDN / object store / nginx pod; out of cluster is fine. |
 
 ## Topology
 
@@ -109,7 +109,7 @@ flowchart TB
 
 - **How the node-server drives Kubernetes.** On the first step of a run it creates one bare
   Pod named `cf-run-<runId>`; every later step re-attaches (a `POST pods` that returns `409
-  AlreadyExists` is treated as an idempotent re-attach), so a run is one pod handling its steps
+AlreadyExists` is treated as an idempotent re-attach), so a run is one pod handling its steps
   in sequence, not a pod per step. Dispatch and poll reach the harness through the apiserver
   **pod-proxy subresource** (`…/pods/<name>:<port>/proxy/…`, harness port `8080` by default);
   `release` deletes the pod. It is a bare Pod, not a Job, because the harness is a long-lived
@@ -164,7 +164,7 @@ once the run no longer needs it.
   insecure-skip needs the Node runtime (undici), so it is rejected at registration on the
   Cloudflare Worker — use a publicly-trusted apiserver certificate to run this backend there.
 - **RBAC, not a harness secret, gates access.** The ServiceAccount token needs `create/get/
-  delete` on `pods` and `create/get` on `pods/proxy` in the runners namespace. Because the run
+delete` on `pods` and `create/get` on `pods/proxy` in the runners namespace. Because the run
   pod has no Service, the RBAC-gated pod-proxy is the only way in.
 - **Executor egress** needs: the in-cluster proxy at `${PUBLIC_URL}/v1` for all Pi model
   calls, and GitHub (`github.com` or your Enterprise host). Subscription harnesses
@@ -202,7 +202,7 @@ flowchart LR
   node-server and the cluster. cat-factory speaks only `dispatch`/`poll`/`release` to it,
   described by the JSON manifest you register per workspace; your service maps that to
   `dispatch -> create Job`, `poll -> read Job + harness GET /jobs/{id}`, `release -> delete
-  Job`. Route by `jobId` stickily so a re-dispatch (durable replay) re-attaches instead of
+Job`. Route by `jobId` stickily so a re-dispatch (durable replay) re-attaches instead of
   duplicating.
 - **One K8s Job per pipeline step** (`jobId = <executionId>-<agentKind>`) is the natural shape
   here, rather than the native backend's one bare Pod per run.

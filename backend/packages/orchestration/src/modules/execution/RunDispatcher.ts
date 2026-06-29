@@ -91,6 +91,7 @@ import {
 } from './followUp.logic.js'
 import {
   agentFailureKindFromCause,
+  classifyAgentFailure,
   isContainerEvictionError,
   isTransientEviction,
   MAX_EVICTION_RECOVERIES,
@@ -721,11 +722,14 @@ export class RunDispatcher {
       }
       // Not an eviction: a genuine agent/job failure. Prefer the harness's STRUCTURED cause
       // to classify it (→ AgentFailureKind), falling back to the error-string regex when an
-      // older image reported no cause; surface the extended diagnostic as the failure detail.
+      // older image (or a pool transport that doesn't forward the cause) reported none — the
+      // same regex the bootstrap path uses, so a watchdog timeout still classifies as `timeout`
+      // rather than a generic `agent`. The extended diagnostic surfaces as the failure detail.
       return {
         kind: 'job_failed',
         error: update.error,
-        failureKind: agentFailureKindFromCause(update.failureCause) ?? 'agent',
+        failureKind:
+          agentFailureKindFromCause(update.failureCause) ?? classifyAgentFailure(update.error),
         detail: update.detail ?? update.error,
       }
     }

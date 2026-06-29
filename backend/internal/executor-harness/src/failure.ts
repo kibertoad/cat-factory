@@ -35,6 +35,26 @@ export type FailureCause =
   | 'no-changes'
 
 /**
+ * A thrown failure that carries a structured {@link FailureCause}, so a `git` / `api`
+ * operation that fails deep in a helper surfaces its real cause instead of being flattened
+ * to the generic `agent` in the registry's catch. The watchdog kills set their cause from
+ * `killReason` and never throw this; anything else thrown without a cause stays `agent`.
+ */
+export class HarnessFailure extends Error {
+  readonly failureCause: FailureCause
+  constructor(failureCause: FailureCause, message: string) {
+    super(message)
+    this.name = 'HarnessFailure'
+    this.failureCause = failureCause
+  }
+}
+
+/** The structured cause a thrown error carries, or undefined for a plain/agent error. */
+export function failureCauseOf(err: unknown): FailureCause | undefined {
+  return err instanceof HarnessFailure ? err.failureCause : undefined
+}
+
+/**
  * The inactivity-watchdog abort message PREFIX. The `no agent activity` phrase is
  * regex-matched by the backend's `classifyBootstrapFailure` (→ `timeout`); do not reword it.
  * The caller appends a `(likely hung ...)` diagnostic clause (phase + last tool) after this,

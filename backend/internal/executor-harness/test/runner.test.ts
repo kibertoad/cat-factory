@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { JobRegistry, loadRunnerLimits, type RunOptions } from '../src/runner.js'
+import { HarnessFailure } from '../src/failure.js'
 
 // The registry is generic over the job/result shape; the lifecycle/watchdog tests only
 // need a job carrying its id and a result carrying the optional fields they assert on.
@@ -106,6 +107,18 @@ describe('JobRegistry', () => {
     expect(view?.failureCause).toBe('agent')
   })
 
+  it("preserves a thrown HarnessFailure's structured cause (git/api), not a generic `agent`", async () => {
+    const registry = new JobRegistry(limits, async () => {
+      throw new HarnessFailure('git', 'fatal: could not read from remote repository')
+    })
+    registry.start('exec-1', job())
+    await tick()
+    const view = registry.get('exec-1')
+    expect(view?.state).toBe('failed')
+    expect(view?.error).toMatch(/could not read from remote/)
+    expect(view?.failureCause).toBe('git')
+  })
+
   it('copies a clean-exit result.failureCause onto the failed-but-done view', async () => {
     // A handler can finish cleanly (state 'done') yet report a failure via result.error +
     // result.failureCause (e.g. no-usable-output). The registry surfaces that cause.
@@ -155,14 +168,14 @@ describe('JobRegistry', () => {
     expect(view?.error).toMatch(/no agent activity/)
     // ...and the breadcrumb names the hung phase + last tool.
     expect(view?.error).toMatch(/hung in agent phase/)
-    expect(view?.error).toMatch(/last tool bash .*ago/)
+    expect(view?.error).toMatch(/last completed tool bash .*ago/)
     expect(view?.failureCause).toBe('inactivity-timeout')
     // The extended diagnostic is distinct from the one-line error.
     expect(view?.detail).toMatch(/Phase timings/)
     expect(view?.detail).not.toBe(view?.error)
   })
 
-  it('reports "no tool had run yet" when a hang happens before any tool', async () => {
+  it('reports "no tool had completed yet" when a hang happens before any tool', async () => {
     const tiny = { maxDurationMs: 60_000, inactivityMs: 20 }
     const registry = new JobRegistry(tiny, (_job, opts: RunOptions) => {
       return new Promise<TestResult>((_resolve, reject) => {
@@ -171,7 +184,7 @@ describe('JobRegistry', () => {
     })
     registry.start('exec-1', job())
     await tick(60)
-    expect(registry.get('exec-1')?.error).toMatch(/no tool had run yet/)
+    expect(registry.get('exec-1')?.error).toMatch(/no tool had completed yet/)
   })
 
   it('enforces the max-duration cap even when the job keeps producing output', async () => {

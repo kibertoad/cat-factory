@@ -241,15 +241,38 @@ describe('openPullRequest (transient retry)', () => {
     expect(seq.count()).toBe(2)
   })
 
-  it('throws (redacted) after exhausting retries on a persistent 5xx', async () => {
+  it('throws (redacted) after exhausting retries on a persistent 5xx, tagged cause `api`', async () => {
     vi.useFakeTimers()
     const seq = stubFetchSequence([{ status: 500, body: { message: 'still down' } }])
     const p = openPullRequest({ ...githubPr })
-    const assertion = expect(p).rejects.toThrow(/Failed to open PR \(HTTP 500\)/)
+    // Capture the rejection so we can assert BOTH the message and the structured cause.
+    const caught = p.catch((e: unknown) => e)
     await vi.advanceTimersByTimeAsync(10_000)
-    await assertion
+    const err = await caught
+    expect(err).toBeInstanceOf(Error)
+    expect((err as Error).message).toMatch(/Failed to open PR \(HTTP 500\)/)
+    // The PR-open failure carries the structured `api` cause for the backend to classify on.
+    expect((err as { failureCause?: string }).failureCause).toBe('api')
     // 3 attempts total (initial + 2 retries), no more.
     expect(seq.count()).toBe(3)
+  })
+
+  it('honors an HTTP-date Retry-After then succeeds', async () => {
+    vi.useFakeTimers()
+    // 2s in the future as an HTTP-date — must wait it out, not fall back to the 0.5s backoff.
+    const future = new Date(Date.now() + 2_000).toUTCString()
+    const seq = stubFetchSequence([
+      { status: 503, body: { message: 'slow down' }, headers: { 'retry-after': future } },
+      { status: 201, body: { html_url: 'https://github.com/o/r/pull/14' } },
+    ])
+    const p = openPullRequest({ ...githubPr })
+    // Before the date: the retry has not fired yet.
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(seq.count()).toBe(1)
+    // Past it: the retry fires and resolves.
+    await vi.advanceTimersByTimeAsync(2_000)
+    await expect(p).resolves.toBe('https://github.com/o/r/pull/14')
+    expect(seq.count()).toBe(2)
   })
 
   it('does NOT retry a 422 "already exists" — returns the existing PR', async () => {

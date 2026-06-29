@@ -8,8 +8,10 @@ type Level = 'debug' | 'info' | 'warn' | 'error'
 type Fields = Record<string, unknown>
 
 function emit(level: Level, msg: string, bound: Fields, fields?: Fields): void {
-  // Bound (per-job context) fields first so a call site can still override a key.
-  const line = JSON.stringify({ level, time: new Date().toISOString(), msg, ...bound, ...fields })
+  // Bound (per-job context) fields first so a call-site field can override a bound one; the
+  // envelope keys (level/time/msg) go LAST so neither bound nor call-site fields can corrupt
+  // them — a stray field named `level` must never disagree with the stream the line routes to.
+  const line = JSON.stringify({ ...bound, ...fields, level, time: new Date().toISOString(), msg })
   // Errors/warnings to stderr, everything else to stdout — mirrors pino routing.
   if (level === 'error' || level === 'warn') process.stderr.write(`${line}\n`)
   else process.stdout.write(`${line}\n`)
