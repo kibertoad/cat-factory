@@ -100,4 +100,30 @@ describe('buildPlan', () => {
     expect(example).toContain('\nGITLAB_PAT=')
     expect(example).toContain('# GITHUB_PAT=')
   })
+
+  it('reflects the chosen port/db in the .env.example files (not a hardcoded 8787)', () => {
+    const { byPath } = plan({
+      port: 9001,
+      databaseUrl: 'postgres://bob:pw@localhost:6000/mydb',
+      apiBase: 'http://localhost:9001',
+    })
+    const localExample = byPath.get('local/.env.example')?.content ?? ''
+    expect(localExample).toContain('PORT=9001')
+    expect(localExample).toContain('DATABASE_URL=postgres://bob:pw@localhost:6000/mydb')
+    const frontendExample = byPath.get('frontend/.env.example')?.content ?? ''
+    expect(frontendExample).toContain('NUXT_PUBLIC_API_BASE=http://localhost:9001')
+  })
+
+  it('warns in the README when db:up needs a non-docker runtime', () => {
+    expect(plan({ containerRuntime: 'apple' }).byPath.get('README.md')?.content ?? '').toContain(
+      'Apple `container` note',
+    )
+    expect(plan({ containerRuntime: 'podman' }).byPath.get('README.md')?.content ?? '').toContain(
+      'Podman note',
+    )
+    // No note for a docker-family runtime that ships `docker compose`.
+    expect(
+      plan({ containerRuntime: 'orbstack' }).byPath.get('README.md')?.content ?? '',
+    ).not.toMatch(/db:up.*runs `docker compose`/)
+  })
 })

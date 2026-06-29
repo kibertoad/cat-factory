@@ -11,7 +11,13 @@ import type {
 } from '@cat-factory/kernel'
 import type { VcsIdentityRegistry, VcsProvider } from '@cat-factory/kernel'
 import { type AppTokenSource, FetchGitHubClient, GitHubIdentityResolver } from '@cat-factory/server'
-import { GitLabIdentityResolver } from '@cat-factory/gitlab'
+import {
+  asGitHubClient,
+  FetchGitLabClient,
+  GITLAB_PUBLIC_API_BASE,
+  GitLabIdentityResolver,
+  StaticGitLabTokenSource,
+} from '@cat-factory/gitlab'
 import type { PatAccount } from './installations.js'
 
 // PAT-backed GitHub access for local mode. The shared FetchGitHubClient normally mints
@@ -256,4 +262,25 @@ export function createLocalGitHubClient(env: NodeJS.ProcessEnv): GitHubClient | 
     apiBase,
     localClock,
   )
+}
+
+/**
+ * Build a {@link GitHubClient} for a GitLab-only local deployment: a PAT-backed
+ * {@link FetchGitLabClient} (the provider-neutral `VcsClient`) adapted to the legacy
+ * `GitHubClient` port the CI / merge / mergeability gates + repo-link flows still consume.
+ * So a developer who set only `GITLAB_PAT` gets the same gating/merge/repo-read surface a
+ * GitHub PAT gives — the engine talks to GitLab through the adapter without being migrated to
+ * the neutral port. Returns undefined when no `GITLAB_PAT` is configured (the gates then pass
+ * through). For a self-managed instance set `GITLAB_API_BASE` (e.g.
+ * `https://gitlab.example.com/api/v4`).
+ */
+export function createLocalGitLabClient(env: NodeJS.ProcessEnv): GitHubClient | undefined {
+  const pat = env.GITLAB_PAT?.trim()
+  if (!pat) return undefined
+  const apiBase = env.GITLAB_API_BASE?.trim() || GITLAB_PUBLIC_API_BASE
+  const vcs = new FetchGitLabClient({
+    tokenSource: new StaticGitLabTokenSource(pat, apiBase),
+    clock: localClock,
+  })
+  return asGitHubClient({ vcs, provider: 'gitlab' })
 }

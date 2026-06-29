@@ -108,26 +108,42 @@ volumes:
 `
 }
 
-export const localEnvExample = (
-  provider: 'github' | 'gitlab' = 'github',
-  containerRuntime: ContainerRuntime = 'docker',
-): string => {
+/** Non-secret inputs shown in `local/.env.example`, kept in sync with the populated `.env`. */
+export interface LocalEnvExampleInput {
+  provider?: 'github' | 'gitlab'
+  containerRuntime?: ContainerRuntime
+  databaseUrl?: string
+  port?: number
+  harnessImage?: string
+}
+
+export const localEnvExample = (input: LocalEnvExampleInput = {}): string => {
+  const {
+    provider = 'github',
+    containerRuntime = 'docker',
+    databaseUrl = 'postgres://cat:cat@localhost:5432/catfactory',
+    port = 8787,
+    harnessImage = DEFAULT_HARNESS_IMAGE,
+  } = input
   // Show the chosen provider's PAT var active and the other commented, so the example matches
   // the populated `.env` the CLI writes for that provider.
   const tokenLines =
     provider === 'gitlab' ? ['# GITHUB_PAT=', 'GITLAB_PAT='] : ['GITHUB_PAT=', '# GITLAB_PAT=']
   return `# Example env for the local-mode backend. Copy to \`.env\` (gitignored) and fill in.
-# \`cat-factory init\` generates a populated \`.env\` for you; this is the documented template.
-DATABASE_URL=postgres://cat:cat@localhost:5432/catfactory
-PORT=8787
+# \`cat-factory init\` generates a populated \`.env\` for you; this is the documented template
+# (the non-secret values below mirror the ones you chose at scaffold time).
+DATABASE_URL=${databaseUrl}
+PORT=${port}
 CORS_ALLOWED_ORIGINS=http://localhost:3000
 # Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 AUTH_SESSION_SECRET=
 # Generate with: openssl rand -base64 32
 ENCRYPTION_KEY=
-# A GitHub (classic, scopes: repo,workflow) or GitLab (scope: api) personal access token.
+# A GitHub (classic, scopes: repo,workflow) or GitLab (scope: api,read_user) personal access token.
 ${tokenLines.join('\n')}
-LOCAL_HARNESS_IMAGE=${DEFAULT_HARNESS_IMAGE}
+# For a self-managed GitLab instance, also set GITLAB_API_BASE (e.g. https://gitlab.example.com/api/v4).
+# GITLAB_API_BASE=
+LOCAL_HARNESS_IMAGE=${harnessImage}
 # Container runtime that spawns agent jobs: ${CONTAINER_RUNTIMES.join(' | ')}.
 LOCAL_CONTAINER_RUNTIME=${containerRuntime}
 # At least one model provider (Cloudflare Workers AI over REST shown; or a direct vendor key):
@@ -194,9 +210,10 @@ pages_build_output_dir = ".output/public"
 compatibility_date = "2025-06-01"
 `
 
-export const frontendEnvExample = `# Example env for the frontend SPA. Copy to \`.env\` (gitignored).
-# Base URL of the backend API, baked in at build time.
-NUXT_PUBLIC_API_BASE=http://localhost:8787
+export const frontendEnvExample = (apiBase = 'http://localhost:8787'): string =>
+  `# Example env for the frontend SPA. Copy to \`.env\` (gitignored).
+# Base URL of the backend API, baked in at build time (mirrors your chosen --api-base/--port).
+NUXT_PUBLIC_API_BASE=${apiBase}
 `
 
 export const tsconfigJson = `{

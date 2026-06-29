@@ -619,8 +619,7 @@ export async function reinitAndPush(opts: {
   })
 }
 
-/** Open a PR via the GitHub REST API; returns its html_url. */
-export async function openPullRequest(opts: {
+export interface OpenPullRequestOptions {
   owner: string
   name: string
   ghToken: string
@@ -628,8 +627,60 @@ export async function openPullRequest(opts: {
   base: string
   pr: PrSpec
   apiBase?: string
+  /**
+   * The repo's clone URL. Used to detect the provider (GitHub vs GitLab) and, for GitLab,
+   * to derive the REST base + project path from its host — so the harness opens a GitLab
+   * **merge request** rather than POSTing to GitHub's pulls API. Absent ⇒ GitHub.
+   */
+  cloneUrl?: string
   signal?: AbortSignal
-}): Promise<string> {
+}
+
+/**
+ * The VCS host a clone URL points at. The harness is otherwise provider-agnostic (its git
+ * auth is a host-neutral GIT_ASKPASS credential), but the "open the PR/MR" REST call is not:
+ * GitHub and GitLab have different endpoints, so infer which to call from the host. GitHub is
+ * the default; a host of `gitlab.com` or one in the `gitlab.*` / `*.gitlab.*` family (covering
+ * self-managed instances named that way) is treated as GitLab.
+ */
+export function inferVcsProvider(cloneUrl: string): 'github' | 'gitlab' {
+  let host = ''
+  try {
+    host = new URL(cloneUrl).host.toLowerCase()
+  } catch {
+    return 'github'
+  }
+  if (host === 'gitlab.com' || host.startsWith('gitlab.') || host.includes('.gitlab.')) {
+    return 'gitlab'
+  }
+  return 'github'
+}
+
+/** The GitLab REST v4 base for a clone URL's host, e.g. `https://gitlab.com/api/v4`. */
+export function gitlabApiBaseFromCloneUrl(cloneUrl: string): string {
+  const u = new URL(cloneUrl)
+  return `${u.protocol}//${u.host}/api/v4`
+}
+
+/**
+ * The URL-encoded GitLab project path from a clone URL — the full namespace path (so subgroups
+ * survive), with the trailing `.git` stripped, e.g.
+ * `https://gitlab.com/group/sub/proj.git` → `group%2Fsub%2Fproj`.
+ */
+export function gitlabProjectPath(cloneUrl: string): string {
+  const path = new URL(cloneUrl).pathname.replace(/^\/+/, '').replace(/\.git$/, '')
+  return encodeURIComponent(path)
+}
+
+/**
+ * Open a PR (GitHub) or merge request (GitLab) for the pushed branch; returns its web URL.
+ * Dispatches on the clone URL's host so a GitLab job opens a real MR instead of failing
+ * against GitHub's API. The GitHub path is unchanged.
+ */
+export async function openPullRequest(opts: OpenPullRequestOptions): Promise<string> {
+  if (opts.cloneUrl && inferVcsProvider(opts.cloneUrl) === 'gitlab') {
+    return openGitLabMergeRequest({ ...opts, cloneUrl: opts.cloneUrl })
+  }
   const apiBase = opts.apiBase ?? 'https://api.github.com'
   const path = `${encodeURIComponent(opts.owner)}/${encodeURIComponent(opts.name)}`
   const res = await fetch(`${apiBase}/repos/${path}/pulls`, {
@@ -666,6 +717,75 @@ export async function openPullRequest(opts: {
   const body = (await res.json()) as { html_url?: string }
   if (!body.html_url) throw new Error('GitHub did not return a PR url')
   return body.html_url
+}
+
+/** GitLab API headers for the PAT (the `PRIVATE-TOKEN` auth GitLab uses). */
+function gitlabHeaders(token: string): Record<string, string> {
+  return {
+    'private-token': token,
+    accept: 'application/json',
+    'user-agent': 'cat-factory-executor',
+    'content-type': 'application/json',
+  }
+}
+
+/**
+ * Open a GitLab merge request (the analogue of {@link openPullRequest} for GitLab). The REST
+ * base + project path are derived from the clone URL's host, so it works for gitlab.com and a
+ * self-managed instance alike. `head`→`source_branch`, `base`→`target_branch`. On a duplicate
+ * (a resumed run whose branch already has an open MR — GitLab answers 409) the existing MR's
+ * web URL is returned instead of failing the run, mirroring the GitHub 422 handling.
+ */
+async function openGitLabMergeRequest(
+  opts: OpenPullRequestOptions & { cloneUrl: string },
+): Promise<string> {
+  const apiBase = gitlabApiBaseFromCloneUrl(opts.cloneUrl)
+  const project = gitlabProjectPath(opts.cloneUrl)
+  const res = await fetch(`${apiBase}/projects/${project}/merge_requests`, {
+    method: 'POST',
+    headers: gitlabHeaders(opts.ghToken),
+    body: JSON.stringify({
+      source_branch: opts.head,
+      target_branch: opts.base,
+      title: opts.pr.title,
+      description: opts.pr.body,
+    }),
+    ...(opts.signal ? { signal: opts.signal } : {}),
+  })
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    // GitLab returns 409 (sometimes 400) when an open MR already exists for this source
+    // branch; that is success for a resumed run — return the existing MR's url.
+    if (
+      (res.status === 409 || res.status === 400) &&
+      /already exists|open merge request/i.test(detail)
+    ) {
+      const existing = await findOpenMergeRequestUrl(apiBase, project, opts)
+      if (existing) return existing
+    }
+    throw new Error(
+      redactSecrets(`Failed to open merge request (HTTP ${res.status}): ${detail.slice(0, 300)}`),
+    )
+  }
+  const body = (await res.json()) as { web_url?: string }
+  if (!body.web_url) throw new Error('GitLab did not return a merge request url')
+  return body.web_url
+}
+
+/** Find the open GitLab MR for `opts.head`, returning its web_url or undefined. */
+async function findOpenMergeRequestUrl(
+  apiBase: string,
+  project: string,
+  opts: { head: string; ghToken: string; signal?: AbortSignal },
+): Promise<string | undefined> {
+  const query = new URLSearchParams({ source_branch: opts.head, state: 'opened' })
+  const res = await fetch(`${apiBase}/projects/${project}/merge_requests?${query}`, {
+    headers: gitlabHeaders(opts.ghToken),
+    ...(opts.signal ? { signal: opts.signal } : {}),
+  })
+  if (!res.ok) return undefined
+  const list = (await res.json().catch(() => [])) as Array<{ web_url?: string }>
+  return Array.isArray(list) && list[0]?.web_url ? list[0].web_url : undefined
 }
 
 /** Find the open PR for `opts.head` on `opts.base`, returning its html_url or undefined. */

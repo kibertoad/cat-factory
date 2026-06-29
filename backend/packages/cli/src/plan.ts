@@ -70,7 +70,13 @@ export function buildPlan(input: BootstrapInput): PlannedFile[] {
     { path: 'local/tsconfig.json', content: tsconfigJson },
     {
       path: 'local/.env.example',
-      content: localEnvExample(input.provider, input.containerRuntime),
+      content: localEnvExample({
+        provider: input.provider,
+        containerRuntime: input.containerRuntime,
+        databaseUrl: input.databaseUrl,
+        port: input.port,
+        harnessImage: input.harnessImage,
+      }),
     },
     { path: 'local/.env', content: localEnv, secret: true },
 
@@ -78,9 +84,32 @@ export function buildPlan(input: BootstrapInput): PlannedFile[] {
     { path: 'frontend/package.json', content: frontendPackageJson(input.projectName) },
     { path: 'frontend/nuxt.config.ts', content: frontendNuxtConfig(input.appTitle) },
     { path: 'frontend/wrangler.toml', content: frontendWranglerToml(input.projectName) },
-    { path: 'frontend/.env.example', content: frontendEnvExample },
+    { path: 'frontend/.env.example', content: frontendEnvExample(input.apiBase) },
     { path: 'frontend/.env', content: frontendEnv, secret: true },
   ]
+}
+
+/**
+ * The bundled `npm run db:up` shells `docker compose` (matching `deploy/local`). Docker, OrbStack
+ * and Colima all provide a `docker` CLI so it works as-is; Podman and Apple `container` don't, so
+ * warn and point at the alternative for the chosen runtime.
+ */
+function dbUpRuntimeNote(runtime: ContainerRuntime): string {
+  if (runtime === 'podman') {
+    return `
+> **Podman note:** \`npm run db:up\` runs \`docker compose\`. If you don't have the Docker CLI,
+> bring Postgres up with \`podman compose up -d postgres\` (or \`podman-compose\`) instead, or
+> point a \`docker\`-compatible shim at the Podman socket.
+`
+  }
+  if (runtime === 'apple') {
+    return `
+> **Apple \`container\` note:** there is no \`docker compose\`, so \`npm run db:up\` won't work.
+> Run Postgres another way (e.g. Docker Desktop/OrbStack just for the DB, or a native Postgres)
+> and point \`DATABASE_URL\` at it. Only the agent job containers use Apple \`container\`.
+`
+  }
+  return ''
 }
 
 function projectReadme(input: BootstrapInput): string {
@@ -123,7 +152,7 @@ cd local
 npm run db:up      # start local Postgres (docker compose)
 npm start          # migrate + serve the API on :${input.port}
 \`\`\`
-
+${dbUpRuntimeNote(input.containerRuntime)}
 At least one **model provider** must be configured or no model is selectable. The simplest is
 Cloudflare Workers AI over REST — set \`CLOUDFLARE_ACCOUNT_ID\` + \`CLOUDFLARE_API_TOKEN\` in
 \`local/.env\` (or a direct vendor key like \`ANTHROPIC_API_KEY\`), then restart.

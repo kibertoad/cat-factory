@@ -368,6 +368,9 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
       base: job.repo.baseBranch,
       pr: job.pr,
       apiBase: job.githubApiBase,
+      // The clone URL's host selects GitHub-PR vs GitLab-MR (and, for GitLab, the REST base
+      // + project path); the harness's git auth is already host-neutral.
+      cloneUrl: job.repo.cloneUrl,
       signal: opts.signal,
     })
     return { pushed: true, prUrl, branch: pushBranch, summary, stats, ...(usage ? { usage } : {}) }
