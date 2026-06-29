@@ -1885,9 +1885,10 @@
       "repository": "Dépôt",
       "repositoryHint": "Dépôts auxquels la GitHub App peut accéder. Vous ne voyez pas le vôtre ? Accordez l'accès à l'App ci-dessous, puis actualisez.",
       "noReposAvailable": "Aucun dépôt disponible pour le moment. Accordez l'accès de l'App à l'un d'eux ci-dessous, puis actualisez.",
-      "filterPlaceholder": "Filtrer par propriétaire/nom…",
-      "clearFilter": "Effacer le filtre",
-      "chooseRepository": "Choisir un dépôt",
+      "searchPlaceholder": "Rechercher des dépôts par propriétaire ou nom…",
+      "searchMinChars": "Saisissez au moins {min} caractère pour rechercher. | Saisissez au moins {min} caractères pour rechercher.",
+      "noMatches": "Aucun dépôt trouvé pour {query}.",
+      "clearSelection": "Effacer la sélection",
       "showingCount": "Affichage de {shown} dépôts sur {total}.",
       "repoLabel": {
         "private": " (privé)",
