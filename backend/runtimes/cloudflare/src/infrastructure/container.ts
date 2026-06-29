@@ -109,7 +109,6 @@ import { CloudflareContainerTransport } from './containers/CloudflareContainerTr
 import { ContainerInstanceRegistry } from './containers/ContainerInstanceRegistry'
 import { D1LiveContainerRepository } from './repositories/D1LiveContainerRepository'
 import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
-import { RunnerPoolTransport } from './runners/RunnerPoolTransport'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
 import { D1ProviderSubscriptionTokenRepository } from './repositories/D1ProviderSubscriptionTokenRepository'
 import { D1ProviderApiKeyRepository } from './repositories/D1ProviderApiKeyRepository'
@@ -434,11 +433,13 @@ function buildResolveTransport(
       )
     : null
 
-  // The self-hosted pool path: one stateless manifest interpreter (its OAuth cache
-  // shared) plus a connection service to resolve each workspace's manifest+secrets.
+  // The self-hosted backend path: a connection service that resolves each workspace's
+  // runner-backend config (manifest pool OR native Kubernetes) to a live transport via
+  // the runner-backend provider registry. The shared manifest HTTP provider (its OAuth
+  // cache reused) is threaded in for the `manifest` kind.
   let runnerService: RunnerPoolConnectionService | undefined
-  let poolProvider: RunnerPoolProvider | undefined
   if (config.runners.enabled) {
+    const urlPolicy = resolveUrlSafetyPolicy(config.runners)
     runnerService = new RunnerPoolConnectionService({
       runnerPoolConnectionRepository: new D1RunnerPoolConnectionRepository({ db }),
       workspaceRepository: new D1WorkspaceRepository({ db }),
@@ -447,10 +448,10 @@ function buildResolveTransport(
         info: 'cat-factory:runners',
       }),
       clock,
+      ...(urlPolicy ? { urlPolicy } : {}),
+      runnerPoolProvider:
+        injectedPoolProvider ?? new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {}),
     })
-    const urlPolicy = resolveUrlSafetyPolicy(config.runners)
-    poolProvider =
-      injectedPoolProvider ?? new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {})
   }
 
   if (!cloudflare && !runnerService) return null
@@ -478,21 +479,16 @@ function buildResolveTransport(
       : inner
 
   return async (workspaceId) => {
-    if (runnerService && poolProvider && workspaceId) {
+    if (runnerService && workspaceId) {
       const resolved = await runnerService.resolve(workspaceId)
       if (resolved) {
-        return log(
-          new RunnerPoolTransport(poolProvider, resolved.manifest, resolved.resolveSecret),
-          'runner-pool',
-          workspaceId,
-          resolved.manifest.providerId,
-        )
+        return log(resolved.transport, 'runner-pool', workspaceId, resolved.providerId)
       }
     }
     if (cloudflare) return log(cloudflare, 'container', workspaceId)
     throw new Error(
       `No runner backend available for workspace '${workspaceId ?? '(unknown)'}': ` +
-        `register a runner pool or enable Cloudflare Containers`,
+        `register a runner backend (a pool or Kubernetes) or enable Cloudflare Containers`,
     )
   }
 }
@@ -1598,7 +1594,9 @@ function selectRunnersDeps(env: Env, config: AppConfig, db: D1Database): Partial
     // The generic pool provider backs the connection service's describeProvider +
     // testConnection (the manifest editor's secret-key form + a pre-save probe).
     runnerPoolProvider: new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {}),
-    runnerProviderKind: 'manifest',
+    // The Worker fetch can't verify a private CA / skip TLS (no undici), so reject a
+    // Kubernetes backend that needs custom TLS at registration instead of at dispatch.
+    runnerCustomTlsSupported: false,
     ...(urlPolicy ? { runnerUrlSafetyPolicy: urlPolicy } : {}),
   }
 }

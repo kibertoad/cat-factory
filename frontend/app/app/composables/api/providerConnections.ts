@@ -58,9 +58,10 @@ export function providerConnectionsApi({ send, ws }: ApiContext) {
       send(CONTRACTS[kind].get, { pathPrefix: ws(workspaceId) }),
 
     // The connect form builds the manifest dynamically from a server-provided scaffold, so
-    // the FE input keeps `manifest` opaque (`Record<string, unknown>`); narrow on the kind
-    // and cast to the matching per-kind contract input at this single boundary (the backend
-    // re-validates the manifest against the precise contract on receipt).
+    // the FE input keeps `manifest`/`config` opaque (`Record<string, unknown>`); narrow on
+    // the kind and cast to the matching per-kind contract input at this single boundary (the
+    // backend re-validates against the precise contract on receipt). The runner-pool provider
+    // takes a discriminated `config`; a bare `manifest` is wrapped into the manifest backend.
     registerProviderConnection: (
       workspaceId: string,
       kind: ProviderConnectionKind,
@@ -73,7 +74,10 @@ export function providerConnectionsApi({ send, ws }: ApiContext) {
           })
         : send(CONTRACTS['runner-pool'].register, {
             pathPrefix: ws(workspaceId),
-            body: body as RegisterRunnerPoolInput,
+            body: {
+              config: runnerBackendConfig(body),
+              secrets: body.secrets,
+            } as RegisterRunnerPoolInput,
           }),
 
     updateProviderSecrets: (
@@ -94,10 +98,25 @@ export function providerConnectionsApi({ send, ws }: ApiContext) {
           })
         : send(CONTRACTS['runner-pool'].test, {
             pathPrefix: ws(workspaceId),
-            body: body as TestRunnerPoolConnectionInput,
+            body: {
+              ...(body.manifest || body.config ? { config: runnerBackendConfig(body) } : {}),
+              ...(body.secrets ? { secrets: body.secrets } : {}),
+            } as TestRunnerPoolConnectionInput,
           }),
 
     deleteProviderConnection: (workspaceId: string, kind: ProviderConnectionKind) =>
       send(CONTRACTS[kind].unregister, { pathPrefix: ws(workspaceId) }),
   }
+}
+
+/**
+ * Resolve the discriminated runner-backend config from a connect-form payload: an
+ * explicit `config` (the Kubernetes form) wins; otherwise a bare `manifest` (the manifest
+ * editor) is wrapped into the manifest backend kind.
+ */
+function runnerBackendConfig(
+  body: RegisterProviderInput | TestProviderInput,
+): Record<string, unknown> {
+  if (body.config) return body.config
+  return { kind: 'manifest', manifest: body.manifest ?? {} }
 }

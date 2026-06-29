@@ -14,6 +14,63 @@ interpreter (`HttpRunnerPoolProvider`) drives it. There are no per-org presets a
 no adapter we ship and review. See [ADR 0004](./adr/0004-self-hosted-runner-pool.md)
 for the design rationale; this is the operator + integrator playbook.
 
+## Two backend kinds (the runner-backend abstraction)
+
+A workspace's runner connection is a **discriminated "agent runner backend"**
+(`kind`), registered through the same endpoints and the same Integrations window:
+
+- **`manifest`** — the self-hosted pool described in the rest of this document. You
+  bring your own scheduler API; we drive it through the manifest. Use this when you
+  already run a scheduler (Nomad, an internal queue, an Argo Workflows front end, …)
+  or want full control of placement.
+- **`kubernetes`** — a **native** backend (no manifest, no scheduler API to build).
+  You give cat-factory your **kube-apiserver URL, namespace, a ServiceAccount token,
+  and the executor image**; it creates **one bare Pod per run** and talks to the
+  per-pod harness through the apiserver **pod-proxy subresource**
+  (`…/pods/<name>:8080/proxy/…`). Only HTTPS to the apiserver is required — no
+  in-cluster networking, no per-run Service/Ingress, and full job-progress/result
+  fidelity (the harness is unchanged). Target **Kubernetes 1.35+**.
+
+  The ServiceAccount token needs RBAC for `create`/`get`/`delete` on `pods` and
+  `create`/`get` on `pods/proxy` in the namespace, e.g.:
+
+  ```yaml
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: Role
+  metadata: { name: cat-factory-runner, namespace: cat-factory }
+  rules:
+    - apiGroups: ['']
+      resources: ['pods']
+      verbs: ['create', 'get', 'delete']
+    - apiGroups: ['']
+      resources: ['pods/proxy']
+      verbs: ['create', 'get']
+  ```
+
+  Register it via the runner-backend window (pick **Kubernetes**) or
+  `POST /workspaces/:ws/runner-pool/connection` with
+  `{ "config": { "kind": "kubernetes", "kubernetes": { … } }, "secrets": { "apiToken": "…" } }`.
+  Paste the cluster CA bundle (`caCertPem`) so the apiserver's TLS cert verifies
+  (private CAs are normal here). Pod sizing maps from the task's instance size via
+  the optional `resources` / `resourcesBySize` config. NOTE: a custom CA bundle /
+  insecure-skip is honored only on the **Node / local** deployment (it needs
+  `undici`); the Cloudflare Worker can't verify a private CA, so it rejects such a
+  config at registration. Use a publicly-trusted apiserver certificate to run a
+  Kubernetes backend on the Worker.
+
+  Security: the per-run Pod has **no Service and no inbound shared secret** — it is
+  reached only through the RBAC-gated apiserver pod-proxy. RBAC does NOT firewall the
+  pod network, though, and the dispatch body carries short-lived credentials (a
+  per-job GitHub token + the LLM-proxy session token). In a namespace without a
+  default-deny `NetworkPolicy`, any other pod could reach the harness on
+  `<podIP>:8080` directly. Apply a default-deny ingress `NetworkPolicy` in the runner
+  namespace (allow only the apiserver/kubelet) so the harness is reachable solely via
+  the proxy.
+
+Adding a further backend (e.g. EKS-specific provisioning) is a single
+`registerRunnerBackend` entry plus a config variant — no new table, service,
+controller, or window. The rest of this document covers the **`manifest`** kind.
+
 The work splits cleanly across two teams:
 
 - **Platform / Infra team** — stands up runners and a small scheduler API in front

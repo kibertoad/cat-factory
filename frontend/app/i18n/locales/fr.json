@@ -1283,6 +1283,26 @@
         "saveFailed": "Impossible d'enregistrer la connexion",
         "removed": "Connexion supprimée",
         "removeFailed": "Impossible de supprimer la connexion"
+      },
+      "backend": {
+        "selectorLabel": "Backend d'exécution",
+        "manifest": "Pool auto-hébergé (manifeste)",
+        "kubernetes": "Kubernetes"
+      },
+      "kubernetes": {
+        "label": "Nom",
+        "labelPlaceholder": "Cluster de production",
+        "apiServerUrl": "URL du serveur d'API",
+        "apiServerUrlHelp": "La racine du kube-apiserver, p. ex. https://10.0.0.1:6443. L'orchestrateur atteint le pod de chaque exécution via l'apiserver, donc seul ce point d'accès doit être accessible.",
+        "namespace": "Namespace",
+        "image": "Image de l'exécuteur",
+        "imageHelp": "L'image executor-harness exécutée par chaque pod d'exécution.",
+        "imageUi": "Image testeur d'UI",
+        "apiToken": "Jeton de ServiceAccount",
+        "apiTokenHelp": "Un jeton bearer avec les droits RBAC pour créer, lire et supprimer les pods et pods/proxy dans le namespace. Stocké chiffré ; jamais réaffiché.",
+        "caCertPem": "Certificat CA du cluster (PEM)",
+        "caCertPemHelp": "Collez le bundle CA du cluster pour que le certificat TLS de l'apiserver soit vérifié. À omettre uniquement pour une CA publiquement approuvée.",
+        "harnessPort": "Port du harness"
       }
     },
     "serviceFragmentDefaults": {

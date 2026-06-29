@@ -45,10 +45,11 @@ describe('container-execution persistence (Postgres)', () => {
       const workspaceId = ws()
       await repo.upsert({
         workspaceId,
+        kind: 'manifest',
         providerId: 'acme-pool',
         label: 'Acme',
         baseUrl: 'https://pool.test/api',
-        manifestJson: '{"providerId":"acme-pool"}',
+        configJson: '{"kind":"manifest","manifest":{"providerId":"acme-pool"}}',
         secretsCipher: 'v1.cipher',
         createdAt: 1000,
         deletedAt: null,
@@ -66,9 +67,10 @@ describe('container-execution persistence (Postgres)', () => {
       const workspaceId = ws()
       const base = {
         workspaceId,
+        kind: 'manifest',
         label: 'L',
         baseUrl: 'https://p',
-        manifestJson: '{}',
+        configJson: '{"kind":"manifest","manifest":{}}',
         secretsCipher: 'c',
         createdAt: 1,
         deletedAt: null,

@@ -10,6 +10,7 @@ import { computed, ref, toRaw, watch } from 'vue'
 import type { ProviderConnectionKind } from '~/types/providerConnections'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor.vue'
+import KubernetesRunnerForm from '~/components/settings/KubernetesRunnerForm.vue'
 
 const props = defineProps<{ kind: ProviderConnectionKind }>()
 
@@ -184,6 +185,57 @@ async function saveManifest(payload: {
   }
 }
 
+// --- Runner-backend selector (runner-pool only) -------------------------------------
+// The runner-pool tab can configure either the manifest pool OR a native Kubernetes
+// cluster; environments are manifest-only. Defaults to the saved connection's kind.
+const RUNNER_BACKEND_KINDS = ['manifest', 'kubernetes'] as const
+type RunnerBackendKind = (typeof RUNNER_BACKEND_KINDS)[number]
+const backendKind = ref<RunnerBackendKind>('manifest')
+const showBackendSelector = computed(() => props.kind === 'runner-pool')
+const backendKindItems = computed(() =>
+  RUNNER_BACKEND_KINDS.map((k) => ({
+    label: t(`settings.providerConnection.backend.${k}`),
+    value: k,
+  })),
+)
+watch(
+  () => connection.value,
+  (c) => {
+    if (c?.kind === 'kubernetes' || c?.kind === 'manifest') backendKind.value = c.kind
+  },
+  { immediate: true },
+)
+
+async function testConfig(payload: {
+  config: Record<string, unknown>
+  secrets: Record<string, string>
+}) {
+  testing.value = true
+  testResult.value = null
+  try {
+    testResult.value = await store.test(props.kind, payload)
+  } catch (e) {
+    testResult.value = { ok: false, message: e instanceof Error ? e.message : String(e) }
+  } finally {
+    testing.value = false
+  }
+}
+
+async function saveConfig(payload: {
+  config: Record<string, unknown>
+  secrets: Record<string, string>
+}) {
+  busy.value = true
+  try {
+    await store.register(props.kind, payload)
+    toastSaved()
+  } catch (e) {
+    notifyError(t('settings.providerConnection.toast.saveFailed'), e)
+  } finally {
+    busy.value = false
+  }
+}
+
 async function remove() {
   busy.value = true
   try {
@@ -265,8 +317,31 @@ function fieldHelp(key: string): string | undefined {
       }}
     </div>
 
+    <!-- Runner-backend selector: the manifest pool or a native Kubernetes cluster. -->
+    <UFormField
+      v-if="showBackendSelector"
+      :label="t('settings.providerConnection.backend.selectorLabel')"
+    >
+      <USelect v-model="backendKind" :items="backendKindItems" />
+    </UFormField>
+
+    <!-- Native Kubernetes runner backend. -->
+    <KubernetesRunnerForm
+      v-if="showBackendSelector && backendKind === 'kubernetes'"
+      :connection="connection"
+      :supports-test="descriptor.supportsTest"
+      :testing="testing"
+      :busy="busy"
+      :test-result="testResult"
+      @test="testConfig"
+      @save="saveConfig"
+    />
+
     <!-- NATIVE provider: the friendly, descriptor-driven flat field form. -->
-    <div v-if="isNative" class="rounded-lg border border-dashed border-slate-700 p-3 space-y-3">
+    <div
+      v-else-if="isNative"
+      class="rounded-lg border border-dashed border-slate-700 p-3 space-y-3"
+    >
       <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
         {{
           connection

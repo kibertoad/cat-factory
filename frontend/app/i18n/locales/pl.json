@@ -1283,6 +1283,26 @@
         "saveFailed": "Nie udało się zapisać połączenia",
         "removed": "Połączenie usunięte",
         "removeFailed": "Nie udało się usunąć połączenia"
+      },
+      "backend": {
+        "selectorLabel": "Backend wykonawczy",
+        "manifest": "Własny pool (manifest)",
+        "kubernetes": "Kubernetes"
+      },
+      "kubernetes": {
+        "label": "Nazwa",
+        "labelPlaceholder": "Klaster produkcyjny",
+        "apiServerUrl": "URL serwera API",
+        "apiServerUrlHelp": "Główny adres kube-apiserver, np. https://10.0.0.1:6443. Orkiestrator łączy się z podem każdego uruchomienia przez apiserver, więc tylko ten endpoint musi być osiągalny.",
+        "namespace": "Namespace",
+        "image": "Obraz wykonawcy",
+        "imageHelp": "Obraz executor-harness uruchamiany przez każdy pod uruchomienia.",
+        "imageUi": "Obraz testera UI",
+        "apiToken": "Token ServiceAccount",
+        "apiTokenHelp": "Token bearer z uprawnieniami RBAC do tworzenia, odczytu i usuwania podów oraz pods/proxy w namespace. Przechowywany w postaci zaszyfrowanej; nie jest ponownie pokazywany.",
+        "caCertPem": "Certyfikat CA klastra (PEM)",
+        "caCertPemHelp": "Wklej pakiet CA klastra, aby certyfikat TLS apiservera został zweryfikowany. Pomiń tylko dla publicznie zaufanego CA.",
+        "harnessPort": "Port harnessa"
       }
     },
     "serviceFragmentDefaults": {

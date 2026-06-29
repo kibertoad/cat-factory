@@ -5,17 +5,31 @@
 // (see the SecretCipher port) — this record never holds plaintext secrets.
 
 /**
- * A workspace's binding to a self-hosted runner pool: the validated manifest and
- * the encrypted per-tenant secret bundle (the scheduler-API credentials). The
- * bundle is decrypted only in-memory, at call time, by the dispatch/poll path.
+ * A workspace's binding to an "agent runner backend" — the place repo-operating
+ * coding jobs run. This generalises the original self-hosted runner pool into a
+ * discriminated backend: `kind` selects WHICH backend (`manifest` = the BYO
+ * scheduler HTTP pool, `kubernetes` = a native kube-apiserver pod runner, future
+ * `nomad`/`eks`/…), and `configJson` carries that kind's serialized config (the
+ * discriminated `RunnerBackendConfig`). The provider-registry seam in
+ * `@cat-factory/integrations` maps `kind` → a `RunnerTransport`. The encrypted
+ * per-tenant secret bundle (the backend's credentials — a scheduler API key, a
+ * Kubernetes ServiceAccount token, …) is decrypted only in-memory, at call time,
+ * by the dispatch/poll path.
  */
 export interface RunnerPoolConnectionRecord {
   workspaceId: string
+  /** Which runner backend this row configures (`manifest` | `kubernetes` | …). */
+  kind: string
   providerId: string
   label: string
+  /** The backend's primary URL (a manifest's `baseUrl`, a cluster's apiserver URL). */
   baseUrl: string
-  /** The validated manifest, serialized as JSON. */
-  manifestJson: string
+  /**
+   * The serialized per-kind config: the discriminated `RunnerBackendConfig` JSON.
+   * (Physical column keeps its historical `manifest_json` name — it now holds the
+   * whole discriminated config, not just a manifest.)
+   */
+  configJson: string
   /** Ciphertext of the `{ key: value }` secret bundle (SecretCipher envelope). */
   secretsCipher: string
   createdAt: number
