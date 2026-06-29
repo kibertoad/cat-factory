@@ -9,6 +9,7 @@
 // agent step and the spec-writer consume.
 import { parseOutputOutline } from '~/utils/agentOutput'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
+import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
 import type {
   RequirementRecommendation,
   RequirementReview,
