@@ -106,6 +106,18 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
     }
   }
 
+  async logs(exec: ContainerExec, containerId: string): Promise<string> {
+    try {
+      const { stdout, stderr } = await exec(['logs', '--tail', '50', containerId])
+      return [stdout, stderr]
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join('\n')
+    } catch {
+      return ''
+    }
+  }
+
   async remove(exec: ContainerExec, containerId: string): Promise<void> {
     await exec(['rm', '-f', containerId]).catch(() => undefined)
   }

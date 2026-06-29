@@ -146,6 +146,7 @@
     },
     "failure": {
       "containerFailedToStart": "Nie udało się uruchomić kontenera",
+      "environmentFailed": "Nie udało się przygotować środowiska",
       "bootstrapFailed": "Inicjalizacja nie powiodła się",
       "runFailed": "Uruchomienie nie powiodło się",
       "retryBootstrap": "Ponów inicjalizację",

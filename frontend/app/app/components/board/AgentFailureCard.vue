@@ -21,6 +21,9 @@ const title = computed(() => {
   // explicitly rather than the generic "Run failed", and show the verbatim provider
   // error in the collapsible detail below.
   if (failure.value?.kind === 'dispatch') return t('board.failure.containerFailedToStart')
+  // An `environment` failure means the deployer's EnvironmentProvider could not provision —
+  // name it, with the provider's verbatim error in the collapsible detail below.
+  if (failure.value?.kind === 'environment') return t('board.failure.environmentFailed')
   return props.run.kind === 'bootstrap'
     ? t('board.failure.bootstrapFailed')
     : t('board.failure.runFailed')

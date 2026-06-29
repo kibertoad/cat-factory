@@ -4,6 +4,8 @@ import {
   assertApiServerUrlSafe,
   buildPodManifest,
   classifyPodReadiness,
+  classifyPodStartupFailure,
+  describePodStatus,
   podName,
   proxyUrl,
   resolveImage,
@@ -60,6 +62,65 @@ describe('classifyPodReadiness', () => {
   })
   it('is pending while still Pending', () => {
     expect(classifyPodReadiness({ status: { phase: 'Pending' } })).toBe('pending')
+  })
+})
+
+describe('classifyPodStartupFailure', () => {
+  const waiting = (reason: string, message?: string) => ({
+    status: {
+      phase: 'Pending',
+      containerStatuses: [{ name: 'executor', state: { waiting: { reason, message } } }],
+    },
+  })
+
+  it('flags terminal, unrecoverable container-waiting reasons with their message', () => {
+    expect(
+      classifyPodStartupFailure(waiting('ImagePullBackOff', 'Back-off pulling image "x"')),
+    ).toBe('ImagePullBackOff: Back-off pulling image "x"')
+    expect(classifyPodStartupFailure(waiting('CrashLoopBackOff'))).toBe('CrashLoopBackOff')
+    expect(classifyPodStartupFailure(waiting('InvalidImageName', 'bad ref'))).toBe(
+      'InvalidImageName: bad ref',
+    )
+    expect(classifyPodStartupFailure(waiting('CreateContainerConfigError', 'secret missing'))).toBe(
+      'CreateContainerConfigError: secret missing',
+    )
+  })
+
+  it('returns null for the normal transient waiting reasons (still coming up)', () => {
+    expect(classifyPodStartupFailure(waiting('ContainerCreating'))).toBeNull()
+    expect(classifyPodStartupFailure(waiting('PodInitializing'))).toBeNull()
+    expect(classifyPodStartupFailure({ status: { phase: 'Pending' } })).toBeNull()
+    expect(classifyPodStartupFailure(null)).toBeNull()
+  })
+})
+
+describe('describePodStatus', () => {
+  it('surfaces a waiting container reason:message', () => {
+    expect(
+      describePodStatus({
+        status: {
+          containerStatuses: [
+            { state: { waiting: { reason: 'ContainerCreating', message: 'pulling' } } },
+          ],
+        },
+      }),
+    ).toBe('ContainerCreating: pulling')
+  })
+  it('falls back to a failed pod condition message', () => {
+    expect(
+      describePodStatus({
+        status: {
+          phase: 'Pending',
+          conditions: [
+            { type: 'PodScheduled', status: 'False', reason: 'Unschedulable', message: 'no nodes' },
+          ],
+        },
+      }),
+    ).toBe('Unschedulable: no nodes')
+  })
+  it('returns empty string when nothing useful is present', () => {
+    expect(describePodStatus({ status: { phase: 'Running' } })).toBe('')
+    expect(describePodStatus(null)).toBe('')
   })
 })
 

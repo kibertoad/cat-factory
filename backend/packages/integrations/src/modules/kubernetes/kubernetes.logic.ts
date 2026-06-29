@@ -166,6 +166,98 @@ export function classifyPodReadiness(pod: unknown): PodReadiness {
 }
 
 /**
+ * Container `state.waiting.reason`s that will NOT self-heal within the readiness window:
+ * a bad/unpullable image, a malformed container config, or a container that keeps
+ * crashing on boot. These are deterministic — re-driving the same pod just hangs the
+ * full window again — so the transport must FAIL FAST and NON-recoverably on them (a
+ * `dispatch` failure with the root cause), not poll until the generic timeout and then
+ * mis-tag it as a recoverable eviction. (`ContainerCreating` / `PodInitializing` are the
+ * normal transient waiting reasons and are deliberately NOT here.)
+ */
+const TERMINAL_WAITING_REASONS = new Set([
+  'ImagePullBackOff',
+  'ErrImagePull',
+  'ErrImageNeverPull',
+  'InvalidImageName',
+  'CreateContainerConfigError',
+  'CreateContainerError',
+  'CrashLoopBackOff',
+  'RunContainerError',
+])
+
+function statusOf(pod: unknown): Record<string, unknown> | undefined {
+  return (pod as { status?: Record<string, unknown> } | null)?.status
+}
+
+function containerStatuses(
+  status: Record<string, unknown> | undefined,
+): Array<Record<string, unknown>> {
+  return Array.isArray(status?.containerStatuses)
+    ? (status.containerStatuses as Array<Record<string, unknown>>)
+    : []
+}
+
+function waitingOf(cs: Record<string, unknown>): { reason?: string; message?: string } | undefined {
+  const state = cs.state as { waiting?: Record<string, unknown> } | undefined
+  const waiting = state?.waiting
+  if (!waiting) return undefined
+  return {
+    reason: typeof waiting.reason === 'string' ? waiting.reason : undefined,
+    message: typeof waiting.message === 'string' ? waiting.message : undefined,
+  }
+}
+
+/**
+ * A terminal, unrecoverable container start-up failure (a bad image / config / crash
+ * loop), formatted as `"<reason>: <message>"`, or null when the pod is just still coming
+ * up. Drives the transport's fail-fast path so a doomed pod surfaces its real reason
+ * (e.g. `ImagePullBackOff: Back-off pulling image "…"`) at once instead of after the
+ * 120s readiness timeout.
+ */
+export function classifyPodStartupFailure(pod: unknown): string | null {
+  for (const cs of containerStatuses(statusOf(pod))) {
+    const waiting = waitingOf(cs)
+    if (waiting?.reason && TERMINAL_WAITING_REASONS.has(waiting.reason)) {
+      return waiting.message ? `${waiting.reason}: ${waiting.message}` : waiting.reason
+    }
+  }
+  return null
+}
+
+/**
+ * Best-effort short, human-readable detail of WHY a pod isn't ready — a waiting
+ * container's `reason: message`, else the pod's failed/unready condition message — for
+ * enriching an otherwise root-cause-less "terminated"/"not ready in time" error. Returns
+ * '' when nothing useful is present.
+ */
+export function describePodStatus(pod: unknown): string {
+  const status = statusOf(pod)
+  for (const cs of containerStatuses(status)) {
+    const waiting = waitingOf(cs)
+    if (waiting?.reason)
+      return waiting.message ? `${waiting.reason}: ${waiting.message}` : waiting.reason
+    const terminated = (cs.state as { terminated?: Record<string, unknown> } | undefined)
+      ?.terminated
+    if (terminated && typeof terminated.reason === 'string') {
+      const msg = typeof terminated.message === 'string' ? terminated.message : undefined
+      return msg ? `${terminated.reason}: ${msg}` : terminated.reason
+    }
+  }
+  const conditions = Array.isArray(status?.conditions)
+    ? (status.conditions as Array<Record<string, unknown>>)
+    : []
+  const failing = conditions.find(
+    (c) => c.status === 'False' && typeof c.message === 'string' && c.message,
+  )
+  if (failing && typeof failing.message === 'string') {
+    return typeof failing.reason === 'string'
+      ? `${failing.reason}: ${failing.message}`
+      : failing.message
+  }
+  return ''
+}
+
+/**
  * Validate the apiserver URL at the write boundary. Unlike the manifest pool's
  * STRICT policy (no private hosts), a kube-apiserver is routinely a private IP or
  * a cluster DNS name, so private hosts are ALLOWED here — the operator is

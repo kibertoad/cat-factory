@@ -164,6 +164,7 @@
     },
     "failure": {
       "containerFailedToStart": "Container failed to start",
+      "environmentFailed": "Environment provisioning failed",
       "bootstrapFailed": "Bootstrap failed",
       "runFailed": "Run failed",
       "retryBootstrap": "Retry bootstrap",

@@ -62,6 +62,44 @@ describe('KubernetesRunnerTransport.dispatch', () => {
     })
   })
 
+  it('fails fast with the root cause (NOT a recoverable eviction) on an unpullable image', async () => {
+    // The pod is created but the image can't be pulled, so it sits in ImagePullBackOff.
+    // The transport must surface that reason at once and classify it as a hard `dispatch`
+    // failure (no "evicted or crashed" marker) rather than poll for 120s and then re-drive
+    // the same doomed pod forever.
+    stubFetch((method, url) => {
+      if (method === 'POST' && url.endsWith('/pods')) return new Response('{}', { status: 201 })
+      if (method === 'GET' && url.includes('/pods/cf-run-1') && !url.includes('/proxy')) {
+        return new Response(
+          JSON.stringify({
+            status: {
+              phase: 'Pending',
+              containerStatuses: [
+                {
+                  name: 'executor',
+                  state: {
+                    waiting: {
+                      reason: 'ImagePullBackOff',
+                      message: 'Back-off pulling image "ghcr.io/acme/executor:1.0.0"',
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        )
+      }
+      return undefined
+    })
+    const transport = new KubernetesRunnerTransport(config, resolveSecret)
+    const err = await transport.dispatch(ref, {}, 'agent').catch((e) => e as Error)
+    expect(err).toBeInstanceOf(Error)
+    expect(err.message).toMatch(/failed to start: ImagePullBackOff: Back-off pulling image/)
+    // NOT tagged recoverable — a bad image never self-heals, so it must hard-fail.
+    expect(err.message).not.toMatch(/evicted or crashed/)
+  })
+
   it('treats a 409 AlreadyExists pod as an idempotent re-attach', async () => {
     stubFetch((method, url) => {
       if (method === 'POST' && url.endsWith('/pods')) return new Response('exists', { status: 409 })

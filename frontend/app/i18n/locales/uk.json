@@ -146,6 +146,7 @@
     },
     "failure": {
       "containerFailedToStart": "Не вдалося запустити контейнер",
+      "environmentFailed": "Не вдалося підготувати середовище",
       "bootstrapFailed": "Не вдалося ініціалізувати",
       "runFailed": "Запуск не вдався",
       "retryBootstrap": "Повторити ініціалізацію",

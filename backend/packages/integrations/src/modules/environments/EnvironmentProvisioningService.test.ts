@@ -268,6 +268,47 @@ describe('EnvironmentProvisioningService — repo-config pre-flight gate', () =>
   })
 })
 
+describe('EnvironmentProvisioningService — failed provisioning is stored', () => {
+  it('persists a `failed` record carrying the provider error when the provider throws', async () => {
+    const provider: EnvironmentProvider = {
+      async provision() {
+        throw new Error('Cannot reach env API: ECONNREFUSED')
+      },
+      async status() {
+        return READY
+      },
+      async teardown() {
+        return { status: 'torn_down' }
+      },
+    }
+    const registry = fakeRegistry()
+    const service = makeService(provider, registry)
+
+    // The original provider error still propagates to the caller...
+    await expect(service.provision({ workspaceId: 'ws1', blockId: 'blk1' })).rejects.toThrow(
+      /ECONNREFUSED/,
+    )
+    // ...AND a failed environment record is left behind so the deployer step can show it.
+    expect(registry.records).toHaveLength(1)
+    const rec = registry.records[0]!
+    expect(rec.status).toBe('failed')
+    expect(rec.blockId).toBe('blk1')
+    expect(rec.lastError).toMatch(/ECONNREFUSED/)
+  })
+
+  it('persists a `failed` record when the provider RETURNS status:failed (no throw)', async () => {
+    const failed: ProvisionedEnvironment = { ...READY, status: 'failed', url: null }
+    const registry = fakeRegistry()
+    const service = makeService(recordingProvider(failed), registry)
+
+    const handle = await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    expect(handle.status).toBe('failed')
+    expect(registry.records).toHaveLength(1)
+    expect(registry.records[0]!.status).toBe('failed')
+    expect(registry.records[0]!.lastError).toBeTruthy()
+  })
+})
+
 describe('EnvironmentProvisioningService — returned URL policy', () => {
   const internalEnv: ProvisionedEnvironment = { ...READY, url: 'https://prenv.kargo.internal' }
 

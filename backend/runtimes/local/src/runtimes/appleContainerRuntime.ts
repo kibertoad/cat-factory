@@ -187,6 +187,20 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
     }
   }
 
+  async logs(exec: ContainerExec, containerId: string): Promise<string> {
+    try {
+      const { stdout, stderr } = await exec(['logs', containerId])
+      const out = [stdout, stderr]
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join('\n')
+      // Keep only a short tail — Apple `container logs` has no `--tail` flag, so trim here.
+      return out.split('\n').slice(-50).join('\n')
+    } catch {
+      return ''
+    }
+  }
+
   async remove(exec: ContainerExec, containerId: string): Promise<void> {
     await exec(['delete', '--force', containerId]).catch(() => undefined)
   }

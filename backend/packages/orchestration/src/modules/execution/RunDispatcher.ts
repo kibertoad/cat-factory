@@ -1148,37 +1148,73 @@ export class RunDispatcher {
   }
 
   /**
-   * Deterministically provision an ephemeral environment for a deployer step.
-   * Produces a human-readable summary as the step output and reports no token
-   * usage (it incurs no LLM cost). Errors are swallowed into the output unless
-   * the durable driver wants them surfaced for its per-step retry.
+   * Deterministically provision an ephemeral environment for a `deployer` step and turn the
+   * outcome into the step's advance result (no LLM, no token usage). On success the env
+   * summary is recorded as the step output. On a provisioning failure — the provider threw
+   * OR returned `status:'failed'` — the breakage is surfaced as a real, DISPLAYED step
+   * failure rather than a green step with the error buried in its prose output: `step.environment`
+   * is stamped with the errored env (its `lastError` renders in the step's Environment panel)
+   * and a structured `environment` failure is returned (the board's failure card). A deployer
+   * that can't provision IS failed — the downstream tester/coder steps need that environment.
    */
-  private async runDeployer(
+  private async runDeployerStep(
     workspaceId: string,
     instance: ExecutionInstance,
+    step: PipelineStep,
     block: Block,
-    options: AdvanceOptions = {},
-  ): Promise<AgentRunResult> {
+    isFinalStep: boolean,
+  ): Promise<AdvanceResult> {
+    let handle
     try {
-      const handle = await this.environmentProvisioning!.provision({
+      handle = await this.environmentProvisioning!.provision({
         workspaceId,
         blockId: block.id,
         executionId: instance.id,
         inputs: this.deployInputs(block),
         context: this.deployContext(block),
       })
-      const lines = [
-        `Provisioned ephemeral environment via '${handle.providerId}'.`,
-        `Status: ${handle.status}`,
-        `URL: ${handle.url ?? '(pending)'}`,
-      ]
-      if (handle.expiresAt) lines.push(`Expires: ${new Date(handle.expiresAt).toISOString()}`)
-      return { output: lines.join('\n'), model: `environment:${handle.providerId}` }
     } catch (error) {
-      if (options.rethrowAgentErrors) throw error
-      return {
-        output: `Deployer error: ${getErrorMessage(error)}`,
-      }
+      return this.failDeployerStep(workspaceId, instance, step, getErrorMessage(error))
+    }
+    if (handle.status === 'failed') {
+      return this.failDeployerStep(
+        workspaceId,
+        instance,
+        step,
+        handle.lastError ?? 'Provisioning failed.',
+      )
+    }
+    const lines = [
+      `Provisioned ephemeral environment via '${handle.providerId}'.`,
+      `Status: ${handle.status}`,
+      `URL: ${handle.url ?? '(pending)'}`,
+    ]
+    if (handle.expiresAt) lines.push(`Expires: ${new Date(handle.expiresAt).toISOString()}`)
+    return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
+      output: lines.join('\n'),
+      model: `environment:${handle.providerId}`,
+    })
+  }
+
+  /**
+   * Stamp the errored environment onto the deployer step (so its details show the verbatim
+   * `lastError`), persist + emit, then return a structured `environment` failure carrying the
+   * provider's message as the detail. Mirrors {@link handleAgentStep}'s dispatch-failure path.
+   */
+  private async failDeployerStep(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    message: string,
+  ): Promise<AdvanceResult> {
+    await this.attachEnvironmentProjection(workspaceId, instance.blockId, step)
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.runStateMachine.emitInstance(workspaceId, instance)
+    return {
+      kind: 'job_failed',
+      error: 'Environment provisioning failed.',
+      failureKind: 'environment',
+      detail: message,
     }
   }
 
@@ -1471,10 +1507,8 @@ export class RunDispatcher {
         kind: DEPLOYER_AGENT_KIND,
         order: 100,
         canHandle: ({ step }) => !!this.environmentProvisioning && isDeployStep(step.agentKind),
-        handle: async ({ workspaceId, instance, step, block, isFinalStep, options }) => {
-          const result = await this.runDeployer(workspaceId, instance, block, options)
-          return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
-        },
+        handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
+          this.runDeployerStep(workspaceId, instance, step, block, isFinalStep),
       },
       // A `tracker` step files a GitHub issue / Jira ticket from the preceding `analysis`
       // output (the tech-debt pipeline) — no LLM of its own. It is a pass-through when no

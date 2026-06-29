@@ -17,7 +17,6 @@ import {
   harnessHealthy,
   pollHarnessJob,
   postHarnessJob,
-  waitForHarnessHealth,
 } from './harnessHttp.js'
 import {
   type ContainerEndpoint,
@@ -29,6 +28,26 @@ import {
 import { harnessAllowedHosts } from './github.js'
 
 const execFileAsync = promisify(execFile)
+
+/**
+ * The default {@link ContainerExec}: run the runtime binary via `execFile` and, on a
+ * non-zero exit, rethrow an error whose message carries the binary, the sub-command, and
+ * the captured `stderr`. `execFile`'s own rejection message is a terse "Command failed:
+ * <cmd>" that drops the daemon's actual complaint ("Cannot connect to the Docker daemon",
+ * "manifest unknown", "permission denied"), so without this the dispatch-failure detail
+ * shown on the step would have no root cause.
+ */
+function defaultExec(binary: string): ContainerExec {
+  return async (args) => {
+    try {
+      return await execFileAsync(binary, args, { maxBuffer: 16 * 1024 * 1024 })
+    } catch (err) {
+      const e = err as { stderr?: string; stdout?: string; message?: string }
+      const reason = (e.stderr ?? '').trim() || (e.message ?? '').trim() || 'unknown error'
+      throw new Error(`\`${binary} ${args[0] ?? ''}\` failed: ${reason}`)
+    }
+  }
+}
 
 // The local-mode runner backend: each RUN gets its OWN local container — the SAME
 // executor-harness image the Cloudflare Worker runs per-run Containers from — which
@@ -173,9 +192,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     this.sharedSecret = options.sharedSecret ?? randomBytes(24).toString('hex')
     this.network = options.network
     this.extraEnv = options.env ?? {}
-    this.exec =
-      options.exec ??
-      ((args) => execFileAsync(this.adapter.binary, args, { maxBuffer: 16 * 1024 * 1024 }))
+    this.exec = options.exec ?? defaultExec(this.adapter.binary)
     this.fetchImpl = options.fetchImpl ?? fetch
     this.readyTimeoutMs = options.readyTimeoutMs ?? 60_000
     this.requestTimeoutMs = options.requestTimeoutMs ?? 30_000
@@ -301,7 +318,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
       const endpoint = await this.waitForEndpoint(containerId)
       resolved = { containerId, ...endpoint }
       this.cache.set(runId, resolved)
-      await this.waitForHealth(endpoint)
+      await this.waitForHealth(endpoint, containerId)
     }
 
     // POST the job to the single harness endpoint, with the kind in the body. Idempotent:
@@ -483,7 +500,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
       pool: true,
     })
     const endpoint = await this.waitForEndpoint(containerId)
-    await this.waitForHealth(endpoint)
+    await this.waitForHealth(endpoint, containerId)
     const member: PoolMember = { id, containerId, transient, ...endpoint }
     this.members.push(member)
     return member
@@ -582,24 +599,75 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
 
   private async waitForEndpoint(containerId: string): Promise<ContainerEndpoint> {
     const deadline = Date.now() + this.readyTimeoutMs
+    let lastError: unknown
     for (;;) {
-      const endpoint = await this.adapter.endpoint(this.exec, containerId).catch(() => undefined)
+      const endpoint = await this.adapter.endpoint(this.exec, containerId).catch((err) => {
+        lastError = err
+        return undefined
+      })
       if (endpoint) return endpoint
+      // Fail fast: a container that has already exited will never expose an endpoint, so
+      // surface its boot logs now instead of stalling for the whole ready timeout.
+      if (!(await this.adapter.isRunning(this.exec, containerId))) {
+        throw new Error(
+          await this.startupFailure(containerId, 'exited before exposing its endpoint', lastError),
+        )
+      }
       if (Date.now() >= deadline) {
-        throw new Error(`Timed out waiting for container ${containerId} to expose its endpoint`)
+        throw new Error(
+          await this.startupFailure(
+            containerId,
+            'did not expose its endpoint before the start timeout',
+            lastError,
+          ),
+        )
       }
       await delay(250)
     }
   }
 
-  private waitForHealth(endpoint: ContainerEndpoint): Promise<void> {
-    return waitForHarnessHealth({
-      fetchImpl: this.fetchImpl,
-      endpoint,
-      readyTimeoutMs: this.readyTimeoutMs,
-      requestTimeoutMs: this.requestTimeoutMs,
-      timeoutError: `Timed out waiting for the harness at ${endpoint.host}:${endpoint.port} to become healthy`,
-    })
+  private async waitForHealth(endpoint: ContainerEndpoint, containerId: string): Promise<void> {
+    const deadline = Date.now() + this.readyTimeoutMs
+    for (;;) {
+      if (await harnessHealthy(this.fetchImpl, endpoint, this.requestTimeoutMs)) return
+      // Not healthy YET. Fail fast only if the container has actually died — otherwise it is
+      // still booting, so keep waiting until the deadline. (The old behaviour spun the whole
+      // ready timeout against a dead container, then threw a generic, root-cause-less error.)
+      if (!(await this.adapter.isRunning(this.exec, containerId))) {
+        throw new Error(
+          await this.startupFailure(containerId, 'exited before the harness became healthy'),
+        )
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(
+          await this.startupFailure(
+            containerId,
+            `harness at ${endpoint.host}:${endpoint.port} did not become healthy before the start timeout`,
+          ),
+        )
+      }
+      await delay(300)
+    }
+  }
+
+  /**
+   * Compose a fail-fast container-start error: the run's container id, what went wrong, the
+   * last CLI/endpoint error seen, and a tail of the container's own logs (the boot crash).
+   * Deliberately avoids the phrase `evicted or crashed` so the engine classifies it as a
+   * `dispatch` failure ("the container failed to start"), not an eviction recovery.
+   */
+  private async startupFailure(
+    containerId: string,
+    what: string,
+    lastError?: unknown,
+  ): Promise<string> {
+    const parts = [`Container ${containerId} ${what}.`]
+    const reason =
+      lastError instanceof Error ? lastError.message : lastError ? String(lastError) : ''
+    if (reason.trim()) parts.push(`Last error: ${reason.trim()}`)
+    const logs = (await this.adapter.logs(this.exec, containerId)).trim()
+    if (logs) parts.push(`Container logs:\n${logs}`)
+    return parts.join('\n')
   }
 }
 
