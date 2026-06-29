@@ -2112,5 +2112,217 @@
       "updateConnection": "Actualizar conexión",
       "connect": "Conectar"
     }
+  },
+  "pipeline": {
+    "iterationCap": {
+      "extraRound": "Una ronda más",
+      "proceed": "Continuar de todos modos",
+      "stopReset": "Detener y reiniciar la tarea"
+    },
+    "builder": {
+      "title": "Constructor de pipelines",
+      "agentPalette": "Paleta de agentes",
+      "addAgent": "Añadir agente",
+      "pipeline": "Pipeline",
+      "configureModels": "Configurar modelos",
+      "configureModelsTooltip": "Gestionar los preajustes de modelos (qué modelo ejecuta cada agente)",
+      "namePlaceholder": "Nombre del pipeline",
+      "labelPlaceholder": "+ etiqueta",
+      "gatingNeedsEstimator": "Un paso con compuerta necesita un Task Estimator antes. Añade uno o el pipeline no se guardará.",
+      "emptyDraft": "Haz clic en los agentes de la izquierda para montar un pipeline lineal.",
+      "companionAdd": "Añadir el {companion} (revisa este paso y lo repite si queda por debajo del umbral)",
+      "companionRemove": "Quitar el {companion} de este paso",
+      "disableTooltip": "Desactivar este paso (se mantiene en el pipeline pero se omite al ejecutar)",
+      "enableTooltip": "Paso desactivado (omitido al ejecutar). Haz clic para activarlo.",
+      "approvalAddTooltip": "Requerir aprobación humana después de este paso",
+      "approvalRemoveTooltip": "Aprobación requerida después de este paso. Haz clic para quitar la compuerta.",
+      "consensusEnableTooltip": "Activar el consenso (panel/debate/votación multimodelo) para este paso",
+      "consensusRevertTooltip": "Consenso activado. Haz clic para volver a un solo agente.",
+      "followUpEnableTooltip": "Compañero de seguimiento desactivado. Haz clic para activarlo (Coder detecta cabos sueltos / preguntas).",
+      "followUpDisableTooltip": "Compañero de seguimiento activado. Coder detecta cabos sueltos / subtareas / preguntas; haz clic para desactivarlo.",
+      "moveUp": "Subir el paso",
+      "moveDown": "Bajar el paso",
+      "removeStep": "Quitar este paso del pipeline",
+      "gateOnEstimate": "Compuerta según la estimación",
+      "companionGateTooltip": "Ejecutar este compañero solo cuando la estimación de la tarea supere un umbral (requiere un Task Estimator antes)",
+      "consensusGateTooltip": "Ejecutar el consenso solo cuando la estimación de la tarea supere un umbral (de lo contrario se ejecuta el agente estándar)",
+      "runWhenAny": "ejecutar cuando (cualquiera):",
+      "complexityThreshold": "complejidad ≥",
+      "riskThreshold": "riesgo ≥",
+      "impactThreshold": "impacto ≥",
+      "strategy": "Estrategia",
+      "rounds": "Rondas",
+      "strategyOption": {
+        "specialist-panel": "Panel de especialistas",
+        "debate": "Debate",
+        "ranked-voting": "Votación por ranking"
+      },
+      "rolePlaceholder": "Rol",
+      "modelIdPlaceholder": "Id del modelo (opcional)",
+      "removeParticipant": "Quitar participante (mín. 2)",
+      "addParticipant": "Añadir participante",
+      "savedPipelines": "Pipelines guardados",
+      "hideArchived": "Ocultar archivados",
+      "archivedCount": "Archivados ({count})",
+      "allLabels": "Todas",
+      "defaultBadge": "predeterminado",
+      "stepCount": "{count} paso | {count} pasos",
+      "unarchive": "Desarchivar",
+      "archive": "Archivar (ocultar de la vista predeterminada)",
+      "cloneDefault": "Clonar este predeterminado en una copia editable",
+      "clone": "Clonar",
+      "edit": "Editar este pipeline",
+      "delete": "Eliminar este pipeline",
+      "disabledStepTooltip": "Desactivado, omitido al ejecutar",
+      "cancelEdit": "Cancelar edición",
+      "clear": "Limpiar",
+      "update": "Actualizar pipeline",
+      "save": "Guardar pipeline",
+      "addAgentModal": {
+        "title": "Añadir agente",
+        "name": "Nombre",
+        "namePlaceholder": "p. ej. Auditor de seguridad",
+        "description": "Descripción",
+        "descriptionPlaceholder": "¿Qué hace este agente?",
+        "linkDoc": "Vincular documento de contexto",
+        "create": "Crear agente"
+      },
+      "toast": {
+        "added": "Agente \"{name}\" añadido",
+        "placeholderTitle": "Marcador de posición",
+        "updated": "\"{name}\" actualizado",
+        "saved": "\"{name}\" guardado",
+        "addOneFirst": "Añade al menos un agente primero",
+        "saveFailed": "No se pudo guardar el pipeline",
+        "cloned": "Clonado \"{name}\" — ahora editando \"{copy}\"",
+        "cloneFailed": "No se pudo clonar el pipeline",
+        "updateFailed": "No se pudo actualizar el pipeline"
+      }
+    },
+    "progress": {
+      "status": {
+        "running": "En ejecución",
+        "blocked": "Te necesita",
+        "paused": "En pausa (presupuesto)",
+        "done": "Completado",
+        "failed": "Falló"
+      },
+      "state": {
+        "pending": "Pendiente",
+        "working": "Trabajando",
+        "waiting_decision": "Requiere decisión",
+        "done": "Completado"
+      },
+      "stage": {
+        "incorporating": "Incorporando…",
+        "reviewing": "Revisando de nuevo…",
+        "recommending": "Recomendando…"
+      },
+      "followUp": {
+        "watching": "Observando…",
+        "toDecide": "{count} por decidir",
+        "allDecided": "Todo decidido"
+      },
+      "agentsComplete": "{completed} / {total} agentes completados",
+      "currently": "ahora {agent}",
+      "percent": "{value} %",
+      "companion": "Acompañante",
+      "companionTooltip": "Acompañante de un paso productor",
+      "companionSuffix": "(acompañante)",
+      "stepOf": "Paso {current} de {total}",
+      "viewDetailsOutput": "Ver detalles y leer la salida",
+      "viewDetails": "Ver detalles del paso",
+      "restartTooltip": "Reiniciar el pipeline desde este paso",
+      "restartFromHere": "Reiniciar desde aquí",
+      "spinningUpContainer": "Iniciando contenedor…",
+      "subtasks": "{completed}/{total} subtareas",
+      "subtasksInProgress": "· {count} en progreso",
+      "clickToRead": "Haz clic para leer la salida de este agente",
+      "reviewApprove": "Revisar y aprobar la propuesta de {agent}",
+      "resolve": "Resolver: {question}"
+    },
+    "health": {
+      "title": "Estado de los pipelines",
+      "allValid": "Todos los pipelines son válidos y están actualizados.",
+      "invalidHeading": "Pipelines no válidos",
+      "invalidDescription": "Estos hacen referencia a un agente inexistente o están mal configurados, por lo que fallarían (o se ejecutarían mal) al iniciar. Elimina un pipeline personalizado o vuelve a generar uno integrado para restaurar su definición del catálogo.",
+      "builtinBadge": "integrado",
+      "reseed": "Regenerar",
+      "delete": "Eliminar",
+      "updatesHeading": "Actualizaciones disponibles",
+      "updatesDescription": "Se ha publicado una versión más reciente de estos pipelines integrados. Regenéralos para adoptarla (se conservan tus etiquetas y el estado de archivo).",
+      "reseedAll": "Regenerar todos ({count})",
+      "dismiss": "Descartar",
+      "done": "Hecho",
+      "toast": {
+        "reseedFailed": "No se pudo regenerar el pipeline",
+        "deleteFailed": "No se pudo eliminar el pipeline"
+      }
+    }
+  },
+  "palette": {
+    "hint": "Haz clic en un agente para añadirlo al pipeline.",
+    "customAgents": "Agentes personalizados"
+  },
+  "gates": {
+    "subtitle": {
+      "humanReview": "Espera una revisión de código humana en el PR, repitiendo el corrector ante los comentarios",
+      "ci": "Bloquea el PR hasta que la CI esté verde, repitiendo el corrector de CI ante los fallos",
+      "conflicts": "Bloquea el PR hasta una fusión limpia, repitiendo el resolutor ante los conflictos"
+    },
+    "status": {
+      "passed": "Aprobado",
+      "gaveUp": "Se rindió",
+      "fixing": "Corrigiendo",
+      "failing": "Fallando",
+      "pending": "Pendiente",
+      "checking": "Comprobando"
+    },
+    "conflict": {
+      "mergeable": "Fusionable",
+      "computing": "Calculando la fusionabilidad…",
+      "conflicts": "Conflictos con la base",
+      "unknown": "Desconocido"
+    },
+    "noActivity": "Aún no hay actividad en la compuerta.",
+    "noActivityHint": "La comprobación previa se ejecuta una vez abierto el PR. Mientras sondea, el paso muestra su estado en vivo en el tablero.",
+    "passedCi": "La CI está verde.",
+    "passedConflicts": "El PR se fusiona limpiamente con su base.",
+    "humanReview": {
+      "approvals": "{approved} / {required} aprobación | {approved} / {required} aprobaciones",
+      "suffixFixing": "· el corrector está atendiendo los comentarios…",
+      "suffixFailing": "· comentarios de revisión por atender",
+      "suffixAwaiting": "· a la espera de revisión",
+      "reviewPr": "Revisar la pull request en GitHub",
+      "requestFixHeading": "Solicitar una corrección",
+      "requestFixDescription": "Describe un cambio para que el corrector lo haga ahora en la rama del PR (además de los comentarios de revisión, que atiende automáticamente).",
+      "requestFixPlaceholder": "p. ej. renombra el helper y añade una prueba unitaria para el caso de entrada vacía",
+      "requestFix": "Solicitar corrección"
+    },
+    "ci": {
+      "failingChecks": "Comprobaciones fallidas",
+      "openOnGithub": "Abrir {name} en GitHub",
+      "conclusionFallback": "fallo",
+      "failureFallback": "La CI no ha informado de ningún fallo en este commit."
+    },
+    "conflicts": {
+      "mergeability": "Fusionabilidad",
+      "viewPr": "Ver la pull request en GitHub"
+    },
+    "attemptsHeading": "Intentos de {helper}",
+    "attempt": "Intento {number}",
+    "outcome": {
+      "completed": "completado",
+      "failed": "fallido"
+    },
+    "sidebar": {
+      "state": "Estado",
+      "fixRounds": "{count} ronda de corrección | {count} rondas de corrección",
+      "attempts": "{attempts}/{max} intento | {attempts}/{max} intentos",
+      "suffixRunning": "· ejecutándose…",
+      "suffixNotNeeded": "· aún no necesario",
+      "gatedCommit": "Commit con compuerta",
+      "footer": "Una compuerta ejecuta una comprobación previa programática y solo pone en marcha el {helper} cuando falla; una comprobación en verde avanza sin poner nada en marcha."
+    }
   }
 }

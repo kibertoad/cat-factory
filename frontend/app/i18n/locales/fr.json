@@ -2112,5 +2112,217 @@
       "updateConnection": "Mettre à jour la connexion",
       "connect": "Connecter"
     }
+  },
+  "pipeline": {
+    "iterationCap": {
+      "extraRound": "Un tour de plus",
+      "proceed": "Continuer quand même",
+      "stopReset": "Arrêter et réinitialiser la tâche"
+    },
+    "builder": {
+      "title": "Constructeur de pipelines",
+      "agentPalette": "Palette d'agents",
+      "addAgent": "Ajouter un agent",
+      "pipeline": "Pipeline",
+      "configureModels": "Configurer les modèles",
+      "configureModelsTooltip": "Gérer les préréglages de modèles (quel modèle exécute chaque agent)",
+      "namePlaceholder": "Nom du pipeline",
+      "labelPlaceholder": "+ étiquette",
+      "gatingNeedsEstimator": "Une étape sous condition nécessite un Task Estimator avant elle. Ajoutez-en un, sinon le pipeline ne sera pas enregistré.",
+      "emptyDraft": "Cliquez sur les agents à gauche pour assembler un pipeline linéaire.",
+      "companionAdd": "Ajouter le {companion} (révise cette étape, la relance si sous le seuil)",
+      "companionRemove": "Retirer le {companion} de cette étape",
+      "disableTooltip": "Désactiver cette étape (conservée dans le pipeline mais ignorée à l'exécution)",
+      "enableTooltip": "Étape désactivée (ignorée à l'exécution). Cliquez pour l'activer.",
+      "approvalAddTooltip": "Exiger une approbation humaine après cette étape",
+      "approvalRemoveTooltip": "Approbation requise après cette étape. Cliquez pour retirer la condition.",
+      "consensusEnableTooltip": "Activer le consensus (panel/débat/vote multimodèle) pour cette étape",
+      "consensusRevertTooltip": "Consensus activé. Cliquez pour revenir à un seul agent.",
+      "followUpEnableTooltip": "Compagnon de suivi désactivé. Cliquez pour l'activer (Coder repère les points en suspens / questions).",
+      "followUpDisableTooltip": "Compagnon de suivi activé. Coder repère les points en suspens / sous-tâches / questions ; cliquez pour le désactiver.",
+      "moveUp": "Monter l'étape",
+      "moveDown": "Descendre l'étape",
+      "removeStep": "Retirer cette étape du pipeline",
+      "gateOnEstimate": "Conditionner à l'estimation",
+      "companionGateTooltip": "N'exécuter ce compagnon que lorsque l'estimation de la tâche dépasse un seuil (nécessite un Task Estimator en amont)",
+      "consensusGateTooltip": "N'exécuter le consensus que lorsque l'estimation de la tâche dépasse un seuil (sinon l'agent standard s'exécute)",
+      "runWhenAny": "exécuter quand (l'un de) :",
+      "complexityThreshold": "complexité ≥",
+      "riskThreshold": "risque ≥",
+      "impactThreshold": "impact ≥",
+      "strategy": "Stratégie",
+      "rounds": "Tours",
+      "strategyOption": {
+        "specialist-panel": "Panel de spécialistes",
+        "debate": "Débat",
+        "ranked-voting": "Vote par classement"
+      },
+      "rolePlaceholder": "Rôle",
+      "modelIdPlaceholder": "Id du modèle (facultatif)",
+      "removeParticipant": "Retirer le participant (min. 2)",
+      "addParticipant": "Ajouter un participant",
+      "savedPipelines": "Pipelines enregistrés",
+      "hideArchived": "Masquer les archivés",
+      "archivedCount": "Archivés ({count})",
+      "allLabels": "Toutes",
+      "defaultBadge": "par défaut",
+      "stepCount": "{count} étape | {count} étapes",
+      "unarchive": "Désarchiver",
+      "archive": "Archiver (masquer de la vue par défaut)",
+      "cloneDefault": "Cloner ce modèle par défaut en une copie modifiable",
+      "clone": "Cloner",
+      "edit": "Modifier ce pipeline",
+      "delete": "Supprimer ce pipeline",
+      "disabledStepTooltip": "Désactivée, ignorée à l'exécution",
+      "cancelEdit": "Annuler la modification",
+      "clear": "Effacer",
+      "update": "Mettre à jour le pipeline",
+      "save": "Enregistrer le pipeline",
+      "addAgentModal": {
+        "title": "Ajouter un agent",
+        "name": "Nom",
+        "namePlaceholder": "ex. Auditeur de sécurité",
+        "description": "Description",
+        "descriptionPlaceholder": "Que fait cet agent ?",
+        "linkDoc": "Lier un document de contexte",
+        "create": "Créer l'agent"
+      },
+      "toast": {
+        "added": "Agent \"{name}\" ajouté",
+        "placeholderTitle": "Espace réservé",
+        "updated": "\"{name}\" mis à jour",
+        "saved": "\"{name}\" enregistré",
+        "addOneFirst": "Ajoutez d'abord au moins un agent",
+        "saveFailed": "Impossible d'enregistrer le pipeline",
+        "cloned": "\"{name}\" cloné — édition de \"{copy}\" en cours",
+        "cloneFailed": "Impossible de cloner le pipeline",
+        "updateFailed": "Impossible de mettre à jour le pipeline"
+      }
+    },
+    "progress": {
+      "status": {
+        "running": "En cours",
+        "blocked": "Action requise",
+        "paused": "En pause (budget)",
+        "done": "Terminé",
+        "failed": "Échec"
+      },
+      "state": {
+        "pending": "En attente",
+        "working": "En cours",
+        "waiting_decision": "Décision requise",
+        "done": "Terminé"
+      },
+      "stage": {
+        "incorporating": "Intégration en cours…",
+        "reviewing": "Nouvelle revue en cours…",
+        "recommending": "Recommandation en cours…"
+      },
+      "followUp": {
+        "watching": "Surveillance…",
+        "toDecide": "{count} à décider",
+        "allDecided": "Tout est décidé"
+      },
+      "agentsComplete": "{completed} / {total} agents terminés",
+      "currently": "actuellement {agent}",
+      "percent": "{value} %",
+      "companion": "Compagnon",
+      "companionTooltip": "Compagnon d'une étape productrice",
+      "companionSuffix": "(compagnon)",
+      "stepOf": "Étape {current} sur {total}",
+      "viewDetailsOutput": "Voir les détails et lire la sortie",
+      "viewDetails": "Voir les détails de l'étape",
+      "restartTooltip": "Redémarrer le pipeline à partir de cette étape",
+      "restartFromHere": "Redémarrer ici",
+      "spinningUpContainer": "Démarrage du conteneur…",
+      "subtasks": "{completed}/{total} sous-tâches",
+      "subtasksInProgress": "· {count} en cours",
+      "clickToRead": "Cliquez pour lire la sortie de cet agent",
+      "reviewApprove": "Revoir et approuver la proposition de {agent}",
+      "resolve": "Résoudre : {question}"
+    },
+    "health": {
+      "title": "État des pipelines",
+      "allValid": "Tous les pipelines sont valides et à jour.",
+      "invalidHeading": "Pipelines non valides",
+      "invalidDescription": "Ceux-ci référencent un agent manquant ou sont mal configurés et échoueraient (ou s'exécuteraient mal) au démarrage. Supprimez un pipeline personnalisé, ou régénérez un pipeline intégré pour restaurer sa définition du catalogue.",
+      "builtinBadge": "intégré",
+      "reseed": "Régénérer",
+      "delete": "Supprimer",
+      "updatesHeading": "Mises à jour disponibles",
+      "updatesDescription": "Une version plus récente de ces pipelines intégrés est disponible. Régénérez-les pour l'adopter (vos étiquettes et l'état d'archivage sont conservés).",
+      "reseedAll": "Tout régénérer ({count})",
+      "dismiss": "Ignorer",
+      "done": "Terminé",
+      "toast": {
+        "reseedFailed": "Impossible de régénérer le pipeline",
+        "deleteFailed": "Impossible de supprimer le pipeline"
+      }
+    }
+  },
+  "palette": {
+    "hint": "Cliquez sur un agent pour l'ajouter au pipeline.",
+    "customAgents": "Agents personnalisés"
+  },
+  "gates": {
+    "subtitle": {
+      "humanReview": "Attend une revue de code humaine sur la PR, en relançant le correcteur à chaque commentaire",
+      "ci": "Bloque la PR jusqu'à une CI verte, en relançant le correcteur de CI en cas d'échec",
+      "conflicts": "Bloque la PR jusqu'à une fusion propre, en relançant le résolveur en cas de conflits"
+    },
+    "status": {
+      "passed": "Réussi",
+      "gaveUp": "Abandonné",
+      "fixing": "Correction",
+      "failing": "En échec",
+      "pending": "En attente",
+      "checking": "Vérification"
+    },
+    "conflict": {
+      "mergeable": "Fusionnable",
+      "computing": "Calcul de la fusionnabilité…",
+      "conflicts": "Conflits avec la base",
+      "unknown": "Inconnu"
+    },
+    "noActivity": "Aucune activité de la condition pour l'instant.",
+    "noActivityHint": "La vérification préalable s'exécute une fois la PR ouverte. Pendant le sondage, l'étape affiche son état en direct sur le tableau.",
+    "passedCi": "La CI est verte.",
+    "passedConflicts": "La PR fusionne proprement avec sa base.",
+    "humanReview": {
+      "approvals": "{approved} / {required} approbation | {approved} / {required} approbations",
+      "suffixFixing": "· le correcteur traite les commentaires…",
+      "suffixFailing": "· commentaires de revue à traiter",
+      "suffixAwaiting": "· en attente de revue",
+      "reviewPr": "Revoir la pull request sur GitHub",
+      "requestFixHeading": "Demander une correction",
+      "requestFixDescription": "Décrivez une modification que le correcteur doit effectuer maintenant sur la branche de la PR (en plus des commentaires de revue, qu'il traite automatiquement).",
+      "requestFixPlaceholder": "ex. renommez le helper et ajoutez un test unitaire pour le cas d'entrée vide",
+      "requestFix": "Demander la correction"
+    },
+    "ci": {
+      "failingChecks": "Vérifications en échec",
+      "openOnGithub": "Ouvrir {name} sur GitHub",
+      "conclusionFallback": "échec",
+      "failureFallback": "La CI n'a signalé aucun échec sur ce commit."
+    },
+    "conflicts": {
+      "mergeability": "Fusionnabilité",
+      "viewPr": "Voir la pull request sur GitHub"
+    },
+    "attemptsHeading": "Tentatives du {helper}",
+    "attempt": "Tentative {number}",
+    "outcome": {
+      "completed": "terminée",
+      "failed": "échouée"
+    },
+    "sidebar": {
+      "state": "État",
+      "fixRounds": "{count} tour de correction | {count} tours de correction",
+      "attempts": "{attempts}/{max} tentative | {attempts}/{max} tentatives",
+      "suffixRunning": "· en cours…",
+      "suffixNotNeeded": "· pas encore nécessaire",
+      "gatedCommit": "Commit sous condition",
+      "footer": "Une condition exécute une vérification préalable programmatique et ne lance le {helper} qu'en cas d'échec ; une vérification verte avance sans rien lancer."
+    }
   }
 }

@@ -4,6 +4,7 @@
 //   • invalid pipelines (unknown agent kind / bad shape) — DELETE a custom one, RESEED a built-in;
 //   • outdated built-ins (a newer catalog definition is available) — RESEED to adopt it.
 // Detection is client-side (see usePipelineHealth); the actions hit the pipelines store.
+const { t } = useI18n()
 const ui = useUiStore()
 const pipelines = usePipelinesStore()
 const { invalid, outdated, hasIssues } = usePipelineHealth()
@@ -39,9 +40,10 @@ async function run(id: string, action: () => Promise<unknown>, failTitle: string
   }
 }
 
-const reseed = (id: string) => run(id, () => pipelines.reseed(id), 'Could not reseed pipeline')
+const reseed = (id: string) =>
+  run(id, () => pipelines.reseed(id), t('pipeline.health.toast.reseedFailed'))
 const remove = (id: string) =>
-  run(id, () => pipelines.removePipeline(id), 'Could not delete pipeline')
+  run(id, () => pipelines.removePipeline(id), t('pipeline.health.toast.deleteFailed'))
 
 /** Reseed every reseedable pipeline (outdated built-ins + invalid built-ins) in one go. */
 async function reseedAll() {
@@ -61,11 +63,11 @@ const reseedableCount = computed(
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Pipeline health" :ui="{ content: 'max-w-2xl' }">
+  <UModal v-model:open="open" :title="t('pipeline.health.title')" :ui="{ content: 'max-w-2xl' }">
     <template #body>
       <div v-if="!hasIssues" class="py-6 text-center text-sm text-slate-400">
         <UIcon name="i-lucide-check-circle-2" class="mx-auto mb-2 h-8 w-8 text-emerald-400" />
-        All pipelines are valid and up to date.
+        {{ t('pipeline.health.allValid') }}
       </div>
 
       <div v-else class="space-y-5">
@@ -73,11 +75,12 @@ const reseedableCount = computed(
         <section v-if="invalid.length" class="space-y-2">
           <div class="flex items-center gap-2">
             <UIcon name="i-lucide-triangle-alert" class="h-4 w-4 text-rose-400" />
-            <h3 class="text-sm font-semibold text-slate-200">Invalid pipelines</h3>
+            <h3 class="text-sm font-semibold text-slate-200">
+              {{ t('pipeline.health.invalidHeading') }}
+            </h3>
           </div>
           <p class="text-[11px] text-slate-500">
-            These reference a missing agent or are misconfigured, so they would fail (or misrun) at
-            start. Delete a custom pipeline, or reseed a built-in to restore its catalog definition.
+            {{ t('pipeline.health.invalidDescription') }}
           </p>
           <ul class="space-y-2">
             <li
@@ -92,7 +95,7 @@ const reseedableCount = computed(
                       {{ h.pipeline.name }}
                     </span>
                     <UBadge v-if="h.pipeline.builtin" color="neutral" variant="subtle" size="xs">
-                      built-in
+                      {{ t('pipeline.health.builtinBadge') }}
                     </UBadge>
                   </div>
                   <ul class="mt-1 space-y-0.5">
@@ -116,7 +119,7 @@ const reseedableCount = computed(
                   :disabled="anyBusy"
                   @click="reseed(h.pipeline.id)"
                 >
-                  Reseed
+                  {{ t('pipeline.health.reseed') }}
                 </UButton>
                 <UButton
                   v-else
@@ -128,7 +131,7 @@ const reseedableCount = computed(
                   :disabled="anyBusy"
                   @click="remove(h.pipeline.id)"
                 >
-                  Delete
+                  {{ t('pipeline.health.delete') }}
                 </UButton>
               </div>
             </li>
@@ -139,11 +142,12 @@ const reseedableCount = computed(
         <section v-if="outdated.length" class="space-y-2">
           <div class="flex items-center gap-2">
             <UIcon name="i-lucide-arrow-up-circle" class="h-4 w-4 text-amber-400" />
-            <h3 class="text-sm font-semibold text-slate-200">Updates available</h3>
+            <h3 class="text-sm font-semibold text-slate-200">
+              {{ t('pipeline.health.updatesHeading') }}
+            </h3>
           </div>
           <p class="text-[11px] text-slate-500">
-            A newer version of these built-in pipelines has shipped. Reseed to adopt it (your labels
-            and archive state are kept).
+            {{ t('pipeline.health.updatesDescription') }}
           </p>
           <ul class="space-y-2">
             <li
@@ -166,7 +170,7 @@ const reseedableCount = computed(
                 :disabled="anyBusy"
                 @click="reseed(h.pipeline.id)"
               >
-                Reseed
+                {{ t('pipeline.health.reseed') }}
               </UButton>
             </li>
           </ul>
@@ -184,7 +188,7 @@ const reseedableCount = computed(
           :loading="anyBusy"
           @click="reseedAll"
         >
-          Reseed all ({{ reseedableCount }})
+          {{ t('pipeline.health.reseedAll', { count: reseedableCount }) }}
         </UButton>
         <span v-else />
         <UButton
@@ -193,7 +197,7 @@ const reseedableCount = computed(
           :disabled="anyBusy"
           @click="ui.closePipelineHealth()"
         >
-          {{ hasIssues ? 'Dismiss' : 'Done' }}
+          {{ hasIssues ? t('pipeline.health.dismiss') : t('pipeline.health.done') }}
         </UButton>
       </div>
     </template>

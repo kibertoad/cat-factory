@@ -22,6 +22,7 @@ const models = useModelsStore()
 const ui = useUiStore()
 const execution = useExecutionStore()
 const reviews = useReviewStage()
+const { t } = useI18n()
 
 // While an iterative reviewer gate (requirements-review / clarity-review) folds the
 // answers / re-reviews in the background it needs NO human, so its parked approval is
@@ -30,11 +31,11 @@ function reviewStageLabel(agentKind: string | undefined): string | null {
   if (!reviews.isBackground(agentKind, props.instance.blockId)) return null
   const stage = reviews.stageForBlock(props.instance.blockId)
   return stage === 'incorporating'
-    ? 'Incorporating…'
+    ? t('pipeline.progress.stage.incorporating')
     : stage === 'reviewing'
-      ? 'Re-reviewing…'
+      ? t('pipeline.progress.stage.reviewing')
       : stage === 'recommending'
-        ? 'Recommending…'
+        ? t('pipeline.progress.stage.recommending')
         : null
 }
 
@@ -51,9 +52,11 @@ function followUpPending(step: PipelineStep): number {
 }
 function followUpLabel(step: PipelineStep): string {
   const items = step.followUps?.items ?? []
-  if (items.length === 0) return 'Watching…'
+  if (items.length === 0) return t('pipeline.progress.followUp.watching')
   const pending = followUpPending(step)
-  return pending > 0 ? `${pending} to decide` : 'All decided'
+  return pending > 0
+    ? t('pipeline.progress.followUp.toDecide', { count: pending })
+    : t('pipeline.progress.followUp.allDecided')
 }
 
 // --- restart from a step -----------------------------------------------------
@@ -79,21 +82,41 @@ async function restartFromHere(i: number) {
 }
 
 /** Visual language for an individual agent's runtime state. */
-const STATE_META: Record<AgentState, { label: string; color: string; icon: string }> = {
-  pending: { label: 'Pending', color: '#64748b', icon: 'i-lucide-circle-dashed' },
-  working: { label: 'Working', color: '#6366f1', icon: 'i-lucide-loader' },
-  waiting_decision: { label: 'Needs decision', color: '#f59e0b', icon: 'i-lucide-circle-help' },
-  done: { label: 'Done', color: '#22c55e', icon: 'i-lucide-circle-check' },
-}
+const STATE_META = computed<Record<AgentState, { label: string; color: string; icon: string }>>(
+  () => ({
+    pending: {
+      label: t('pipeline.progress.state.pending'),
+      color: '#64748b',
+      icon: 'i-lucide-circle-dashed',
+    },
+    working: {
+      label: t('pipeline.progress.state.working'),
+      color: '#6366f1',
+      icon: 'i-lucide-loader',
+    },
+    waiting_decision: {
+      label: t('pipeline.progress.state.waiting_decision'),
+      color: '#f59e0b',
+      icon: 'i-lucide-circle-help',
+    },
+    done: {
+      label: t('pipeline.progress.state.done'),
+      color: '#22c55e',
+      icon: 'i-lucide-circle-check',
+    },
+  }),
+)
 
 /** Visual language for the pipeline instance as a whole. */
-const STATUS_META: Record<ExecutionInstance['status'], { label: string; chip: string }> = {
-  running: { label: 'Running', chip: 'primary' },
-  blocked: { label: 'Needs you', chip: 'warning' },
-  paused: { label: 'Paused (budget)', chip: 'neutral' },
-  done: { label: 'Completed', chip: 'success' },
-  failed: { label: 'Failed', chip: 'error' },
-}
+const STATUS_META = computed<Record<ExecutionInstance['status'], { label: string; chip: string }>>(
+  () => ({
+    running: { label: t('pipeline.progress.status.running'), chip: 'primary' },
+    blocked: { label: t('pipeline.progress.status.blocked'), chip: 'warning' },
+    paused: { label: t('pipeline.progress.status.paused'), chip: 'neutral' },
+    done: { label: t('pipeline.progress.status.done'), chip: 'success' },
+    failed: { label: t('pipeline.progress.status.failed'), chip: 'error' },
+  }),
+)
 
 const steps = computed(() => props.instance.steps)
 const total = computed(() => steps.value.length)
@@ -116,7 +139,7 @@ function liveWorking(state: AgentState) {
  * failed reads as "Failed" with a red cross, not a frozen "Working" loader.
  */
 function stepVisual(state: AgentState) {
-  return isFailedStep(state, runFailed.value) ? FAILED_STEP_META : STATE_META[state]
+  return isFailedStep(state, runFailed.value) ? FAILED_STEP_META : STATE_META.value[state]
 }
 
 /** A step counts as fully complete only once its state is `done`. */
@@ -135,7 +158,7 @@ const overallProgress = computed(() => {
 })
 const overallPct = computed(() => Math.round(overallProgress.value * 100))
 
-const statusMeta = computed(() => STATUS_META[props.instance.status])
+const statusMeta = computed(() => STATUS_META.value[props.instance.status])
 
 /** The agent the pipeline is currently centred on (for the summary line). */
 const currentAgent = computed(() => {
@@ -171,13 +194,19 @@ const ITEM_ICON: Record<string, string> = {
       <div class="flex flex-wrap items-center gap-3">
         <UBadge :color="statusMeta.chip as any" variant="subtle">{{ statusMeta.label }}</UBadge>
         <span class="text-sm text-slate-300">
-          <span class="font-semibold text-white">{{ completedCount }}</span>
-          / {{ total }} agents complete
+          <i18n-t keypath="pipeline.progress.agentsComplete" tag="span" scope="global">
+            <template #completed>
+              <span class="font-semibold text-white">{{ completedCount }}</span>
+            </template>
+            <template #total>{{ total }}</template>
+          </i18n-t>
         </span>
         <span v-if="currentAgent && instance.status === 'running'" class="text-xs text-slate-500">
-          · currently {{ currentAgent }}
+          · {{ t('pipeline.progress.currently', { agent: currentAgent }) }}
         </span>
-        <span class="ml-auto font-mono text-sm tabular-nums text-slate-200">{{ overallPct }}%</span>
+        <span class="ml-auto font-mono text-sm tabular-nums text-slate-200">{{
+          t('pipeline.progress.percent', { value: overallPct })
+        }}</span>
       </div>
       <UProgress :model-value="overallPct" class="mt-3" />
 
@@ -233,7 +262,11 @@ const ITEM_ICON: Record<string, string> = {
         >
           <div
             class="group flex cursor-pointer items-center gap-2"
-            :title="s.output ? 'View details & read output' : 'View step details'"
+            :title="
+              s.output
+                ? t('pipeline.progress.viewDetailsOutput')
+                : t('pipeline.progress.viewDetails')
+            "
             @click="openStep(i)"
           >
             <div
@@ -254,13 +287,13 @@ const ITEM_ICON: Record<string, string> = {
                 <span
                   v-if="isCompanionKind(s.agentKind)"
                   class="shrink-0 rounded bg-slate-700/60 px-1 text-[9px] font-medium uppercase tracking-wide text-slate-300"
-                  title="Companion of a producer step"
+                  :title="t('pipeline.progress.companionTooltip')"
                 >
-                  Companion
+                  {{ t('pipeline.progress.companion') }}
                 </span>
               </div>
               <div class="text-[10px] uppercase tracking-wide text-slate-500">
-                Step {{ i + 1 }} of {{ total }}
+                {{ t('pipeline.progress.stepOf', { current: i + 1, total }) }}
               </div>
             </div>
             <span
@@ -281,7 +314,7 @@ const ITEM_ICON: Record<string, string> = {
                 variant="ghost"
                 size="xs"
                 class="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-                title="Restart pipeline from this step"
+                :title="t('pipeline.progress.restartTooltip')"
                 @click.stop="restartArmed = i"
               />
               <template v-else>
@@ -294,7 +327,7 @@ const ITEM_ICON: Record<string, string> = {
                   class="shrink-0"
                   @click.stop="restartFromHere(i)"
                 >
-                  Restart from here
+                  {{ t('pipeline.progress.restartFromHere') }}
                 </UButton>
                 <UButton
                   color="neutral"
@@ -304,7 +337,7 @@ const ITEM_ICON: Record<string, string> = {
                   :disabled="restarting === i"
                   @click.stop="restartArmed = null"
                 >
-                  Cancel
+                  {{ t('common.cancel') }}
                 </UButton>
               </template>
             </template>
@@ -330,16 +363,21 @@ const ITEM_ICON: Record<string, string> = {
             class="mt-2 flex items-center gap-1.5 text-[11px] text-sky-300"
           >
             <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 shrink-0 animate-spin" />
-            <span>Spinning up container…</span>
+            <span>{{ t('pipeline.progress.spinningUpContainer') }}</span>
           </div>
 
           <!-- live subtask counts from the agent's todo list -->
           <div v-if="s.subtasks && s.subtasks.total > 0" class="mt-2">
             <div class="flex items-center justify-between text-[10px] text-slate-400">
               <span>
-                {{ s.subtasks.completed }}/{{ s.subtasks.total }} subtasks
+                {{
+                  t('pipeline.progress.subtasks', {
+                    completed: s.subtasks.completed,
+                    total: s.subtasks.total,
+                  })
+                }}
                 <span v-if="s.subtasks.inProgress > 0" class="text-indigo-300">
-                  · {{ s.subtasks.inProgress }} in progress
+                  {{ t('pipeline.progress.subtasksInProgress', { count: s.subtasks.inProgress }) }}
                 </span>
               </span>
             </div>
@@ -399,7 +437,7 @@ const ITEM_ICON: Record<string, string> = {
                all step metadata) lives in the step-detail overlay opened by click. -->
           <p v-if="s.output" class="mt-2 flex items-center gap-1 text-[11px] text-slate-500">
             <UIcon name="i-lucide-book-open-text" class="h-3 w-3 shrink-0" />
-            Click to read this agent’s output
+            {{ t('pipeline.progress.clickToRead') }}
           </p>
 
           <!-- Conditionally-run companion (today the Tester's fixer): a distinct
@@ -423,7 +461,7 @@ const ITEM_ICON: Record<string, string> = {
             </span>
             <span class="min-w-0 flex-1 truncate text-[12px] text-slate-300">
               {{ agentKindMeta(companionByStep[i]!.kind).label }}
-              <span class="text-slate-500">(companion)</span>
+              <span class="text-slate-500">{{ t('pipeline.progress.companionSuffix') }}</span>
             </span>
             <span
               class="shrink-0 text-[11px] font-medium"
@@ -454,7 +492,7 @@ const ITEM_ICON: Record<string, string> = {
             </span>
             <span class="min-w-0 flex-1 truncate text-[12px] text-slate-300">
               {{ FOLLOW_UP_COMPANION_META.label }}
-              <span class="text-slate-500">(companion)</span>
+              <span class="text-slate-500">{{ t('pipeline.progress.companionSuffix') }}</span>
             </span>
             <span
               class="shrink-0 text-[11px] font-medium"
@@ -483,7 +521,9 @@ const ITEM_ICON: Record<string, string> = {
               icon="i-lucide-shield-check"
               @click="emit('openApproval', s.approval.id)"
             >
-              Review &amp; approve {{ agentKindMeta(s.agentKind).label }}'s proposal
+              {{
+                t('pipeline.progress.reviewApprove', { agent: agentKindMeta(s.agentKind).label })
+              }}
             </UButton>
           </div>
 
@@ -496,7 +536,7 @@ const ITEM_ICON: Record<string, string> = {
               icon="i-lucide-circle-help"
               @click="emit('openDecision', s.decision.id)"
             >
-              Resolve: {{ s.decision.question }}
+              {{ t('pipeline.progress.resolve', { question: s.decision.question }) }}
             </UButton>
           </div>
           <p

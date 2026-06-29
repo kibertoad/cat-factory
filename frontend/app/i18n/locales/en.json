@@ -2166,5 +2166,217 @@
       "updateConnection": "Update connection",
       "connect": "Connect"
     }
+  },
+  "pipeline": {
+    "iterationCap": {
+      "extraRound": "One more round",
+      "proceed": "Proceed anyway",
+      "stopReset": "Stop & reset task"
+    },
+    "builder": {
+      "title": "Pipeline builder",
+      "agentPalette": "Agent palette",
+      "addAgent": "Add agent",
+      "pipeline": "Pipeline",
+      "configureModels": "Configure models",
+      "configureModelsTooltip": "Manage model presets (which model each agent runs on)",
+      "namePlaceholder": "Pipeline name",
+      "labelPlaceholder": "+ label",
+      "gatingNeedsEstimator": "A gated step needs a Task Estimator before it. Add one or the pipeline won't save.",
+      "emptyDraft": "Click agents on the left to assemble a linear pipeline.",
+      "companionAdd": "Add the {companion} (reviews this step, loops it back below threshold)",
+      "companionRemove": "Remove the {companion} for this step",
+      "disableTooltip": "Disable this step (kept in the pipeline but skipped at run)",
+      "enableTooltip": "Step disabled (skipped at run). Click to enable.",
+      "approvalAddTooltip": "Require human approval after this step",
+      "approvalRemoveTooltip": "Approval required after this step. Click to remove the gate.",
+      "consensusEnableTooltip": "Enable consensus (multi-model panel/debate/voting) for this step",
+      "consensusRevertTooltip": "Consensus enabled. Click to revert to a single agent.",
+      "followUpEnableTooltip": "Follow-up companion disabled. Click to enable (Coder surfaces loose ends / questions).",
+      "followUpDisableTooltip": "Follow-up companion enabled. Coder surfaces loose ends / side-tasks / questions; click to disable.",
+      "moveUp": "Move step up",
+      "moveDown": "Move step down",
+      "removeStep": "Remove this step from the pipeline",
+      "gateOnEstimate": "Gate on estimate",
+      "companionGateTooltip": "Only run this companion when the task estimate clears a threshold (needs a Task Estimator earlier)",
+      "consensusGateTooltip": "Only run consensus when the task estimate clears a threshold (else the standard agent runs)",
+      "runWhenAny": "run when (any):",
+      "complexityThreshold": "complexity ≥",
+      "riskThreshold": "risk ≥",
+      "impactThreshold": "impact ≥",
+      "strategy": "Strategy",
+      "rounds": "Rounds",
+      "strategyOption": {
+        "specialist-panel": "Specialist panel",
+        "debate": "Debate",
+        "ranked-voting": "Ranked voting"
+      },
+      "rolePlaceholder": "Role",
+      "modelIdPlaceholder": "Model id (optional)",
+      "removeParticipant": "Remove participant (min 2)",
+      "addParticipant": "Add participant",
+      "savedPipelines": "Saved pipelines",
+      "hideArchived": "Hide archived",
+      "archivedCount": "Archived ({count})",
+      "allLabels": "All",
+      "defaultBadge": "default",
+      "stepCount": "{count} step | {count} steps",
+      "unarchive": "Unarchive",
+      "archive": "Archive (hide from the default view)",
+      "cloneDefault": "Clone this default into an editable copy",
+      "clone": "Clone",
+      "edit": "Edit this pipeline",
+      "delete": "Delete this pipeline",
+      "disabledStepTooltip": "Disabled, skipped at run",
+      "cancelEdit": "Cancel edit",
+      "clear": "Clear",
+      "update": "Update pipeline",
+      "save": "Save pipeline",
+      "addAgentModal": {
+        "title": "Add agent",
+        "name": "Name",
+        "namePlaceholder": "e.g. Security Auditor",
+        "description": "Description",
+        "descriptionPlaceholder": "What does this agent do?",
+        "linkDoc": "Link context document",
+        "create": "Create agent"
+      },
+      "toast": {
+        "added": "Added agent \"{name}\"",
+        "placeholderTitle": "Placeholder",
+        "updated": "Updated \"{name}\"",
+        "saved": "Saved \"{name}\"",
+        "addOneFirst": "Add at least one agent first",
+        "saveFailed": "Could not save pipeline",
+        "cloned": "Cloned \"{name}\" — now editing \"{copy}\"",
+        "cloneFailed": "Could not clone pipeline",
+        "updateFailed": "Could not update pipeline"
+      }
+    },
+    "progress": {
+      "status": {
+        "running": "Running",
+        "blocked": "Needs you",
+        "paused": "Paused (budget)",
+        "done": "Completed",
+        "failed": "Failed"
+      },
+      "state": {
+        "pending": "Pending",
+        "working": "Working",
+        "waiting_decision": "Needs decision",
+        "done": "Done"
+      },
+      "stage": {
+        "incorporating": "Incorporating…",
+        "reviewing": "Re-reviewing…",
+        "recommending": "Recommending…"
+      },
+      "followUp": {
+        "watching": "Watching…",
+        "toDecide": "{count} to decide",
+        "allDecided": "All decided"
+      },
+      "agentsComplete": "{completed} / {total} agents complete",
+      "currently": "currently {agent}",
+      "percent": "{value}%",
+      "companion": "Companion",
+      "companionTooltip": "Companion of a producer step",
+      "companionSuffix": "(companion)",
+      "stepOf": "Step {current} of {total}",
+      "viewDetailsOutput": "View details and read output",
+      "viewDetails": "View step details",
+      "restartTooltip": "Restart pipeline from this step",
+      "restartFromHere": "Restart from here",
+      "spinningUpContainer": "Spinning up container…",
+      "subtasks": "{completed}/{total} subtasks",
+      "subtasksInProgress": "· {count} in progress",
+      "clickToRead": "Click to read this agent's output",
+      "reviewApprove": "Review & approve {agent}'s proposal",
+      "resolve": "Resolve: {question}"
+    },
+    "health": {
+      "title": "Pipeline health",
+      "allValid": "All pipelines are valid and up to date.",
+      "invalidHeading": "Invalid pipelines",
+      "invalidDescription": "These reference a missing agent or are misconfigured, so they would fail (or misrun) at start. Delete a custom pipeline, or reseed a built-in to restore its catalog definition.",
+      "builtinBadge": "built-in",
+      "reseed": "Reseed",
+      "delete": "Delete",
+      "updatesHeading": "Updates available",
+      "updatesDescription": "A newer version of these built-in pipelines has shipped. Reseed to adopt it (your labels and archive state are kept).",
+      "reseedAll": "Reseed all ({count})",
+      "dismiss": "Dismiss",
+      "done": "Done",
+      "toast": {
+        "reseedFailed": "Could not reseed pipeline",
+        "deleteFailed": "Could not delete pipeline"
+      }
+    }
+  },
+  "palette": {
+    "hint": "Click an agent to append it to the pipeline.",
+    "customAgents": "Custom agents"
+  },
+  "gates": {
+    "subtitle": {
+      "humanReview": "Waits for a human code review on the PR, looping the fixer on comments",
+      "ci": "Gates the PR on green CI, looping the CI fixer on failure",
+      "conflicts": "Gates the PR on a clean merge, looping the resolver on conflicts"
+    },
+    "status": {
+      "passed": "Passed",
+      "gaveUp": "Gave up",
+      "fixing": "Fixing",
+      "failing": "Failing",
+      "pending": "Pending",
+      "checking": "Checking"
+    },
+    "conflict": {
+      "mergeable": "Mergeable",
+      "computing": "Computing mergeability…",
+      "conflicts": "Conflicts with base",
+      "unknown": "Unknown"
+    },
+    "noActivity": "No gate activity yet.",
+    "noActivityHint": "The precheck runs once the PR is open. While it polls, the step shows live state on the board.",
+    "passedCi": "CI is green.",
+    "passedConflicts": "The PR merges cleanly with its base.",
+    "humanReview": {
+      "approvals": "{approved} / {required} approval | {approved} / {required} approvals",
+      "suffixFixing": "· fixer addressing comments…",
+      "suffixFailing": "· review comments to address",
+      "suffixAwaiting": "· awaiting review",
+      "reviewPr": "Review pull request on GitHub",
+      "requestFixHeading": "Request a fix",
+      "requestFixDescription": "Describe a change for the fixer to make on the PR branch now (in addition to any review comments, which it addresses automatically).",
+      "requestFixPlaceholder": "e.g. rename the helper and add a unit test for the empty-input case",
+      "requestFix": "Request fix"
+    },
+    "ci": {
+      "failingChecks": "Failing checks",
+      "openOnGithub": "Open {name} on GitHub",
+      "conclusionFallback": "failure",
+      "failureFallback": "CI has not reported a failure on this commit."
+    },
+    "conflicts": {
+      "mergeability": "Mergeability",
+      "viewPr": "View pull request on GitHub"
+    },
+    "attemptsHeading": "{helper} attempts",
+    "attempt": "Attempt {number}",
+    "outcome": {
+      "completed": "completed",
+      "failed": "failed"
+    },
+    "sidebar": {
+      "state": "State",
+      "fixRounds": "{count} fix round | {count} fix rounds",
+      "attempts": "{attempts}/{max} attempt | {attempts}/{max} attempts",
+      "suffixRunning": "· running…",
+      "suffixNotNeeded": "· not needed yet",
+      "gatedCommit": "Gated commit",
+      "footer": "A gate runs a programmatic precheck and only spins up the {helper} when it fails; a green check advances with nothing spun up."
+    }
   }
 }

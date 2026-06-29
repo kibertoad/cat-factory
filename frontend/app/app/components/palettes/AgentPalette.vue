@@ -4,6 +4,7 @@ import { useLocalStorage } from '@vueuse/core'
 import type { AgentKind } from '~/types/domain'
 import { AGENT_CATEGORIES, OBSERVABILITY_GATE_ARCHETYPE } from '~/utils/catalog'
 
+const { t } = useI18n()
 const agents = useAgentsStore()
 const releaseHealth = useReleaseHealthStore()
 defineEmits<{ (e: 'add', kind: AgentKind): void }>()
@@ -25,7 +26,8 @@ const groups = computed(() => {
     agents: palette.value.filter((a) => a.category === cat.id),
   }))
   const custom = palette.value.filter((a) => !a.category)
-  if (custom.length) ordered.push({ id: 'custom', label: 'Custom agents', agents: custom })
+  if (custom.length)
+    ordered.push({ id: 'custom', label: t('palette.customAgents'), agents: custom })
   return ordered.filter((g) => g.agents.length)
 })
 
@@ -43,7 +45,7 @@ function toggle(id: string) {
 
 <template>
   <div class="space-y-2">
-    <p class="px-1 text-[11px] text-slate-500">Click an agent to append it to the pipeline.</p>
+    <p class="px-1 text-[11px] text-slate-500">{{ t('palette.hint') }}</p>
     <div class="space-y-2">
       <section v-for="g in groups" :key="g.id">
         <button

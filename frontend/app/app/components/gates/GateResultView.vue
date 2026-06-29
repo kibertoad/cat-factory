@@ -7,12 +7,13 @@
 // gates; it branches on the step's `agentKind` for the copy and the failure detail.
 import { computed, ref } from 'vue'
 import { agentKindMeta } from '~/utils/catalog'
-import type { GateStepState } from '~/types/execution'
+import type { GateAttempt, GateStepState } from '~/types/execution'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
+const { t, d } = useI18n()
 
 // Synchronous window: it reads its state straight off the execution step, so there's
 // nothing to fetch on open (no `onOpen` loader).
@@ -39,10 +40,10 @@ const helperMeta = computed(() => agentKindMeta(helperKind.value))
 
 const subtitle = computed(() =>
   isHumanReview.value
-    ? 'Waits for a human code review on the PR, looping the fixer on comments'
+    ? t('gates.subtitle.humanReview')
     : isCi.value
-      ? 'Gates the PR on green CI, looping the CI fixer on failure'
-      : 'Gates the PR on a clean merge, looping the resolver on conflicts',
+      ? t('gates.subtitle.ci')
+      : t('gates.subtitle.conflicts'),
 )
 
 // Human-review: approval progress + the freeform "request a fix" control.
@@ -67,8 +68,15 @@ const shortSha = computed(() => (gate.value?.headSha ? gate.value.headSha.slice(
 // The helper-agent attempts this gate dispatched, newest first for the timeline.
 const attempts = computed(() => [...(gate.value?.attemptLog ?? [])].reverse())
 
+// Exhaustive map of the attempt outcome enum → label (literal keys keep the typed-key
+// drift guard live, vs a runtime-built `gates.outcome.${outcome}`).
+const OUTCOME_LABELS = computed<Record<GateAttempt['outcome'], string>>(() => ({
+  completed: t('gates.outcome.completed'),
+  failed: t('gates.outcome.failed'),
+}))
+
 function formatClock(ms?: number | null): string | null {
-  return ms ? new Date(ms).toLocaleString() : null
+  return ms ? d(new Date(ms), 'long') : null
 }
 
 /**
@@ -94,45 +102,62 @@ const status = computed<GateDisplayStatus>(() => {
   return 'checking'
 })
 
-const STATUS_META: Record<
-  GateDisplayStatus,
-  { label: string; badge: 'success' | 'warning' | 'error' | 'neutral'; icon: string; text: string }
-> = {
+const STATUS_META = computed<
+  Record<
+    GateDisplayStatus,
+    {
+      label: string
+      badge: 'success' | 'warning' | 'error' | 'neutral'
+      icon: string
+      text: string
+    }
+  >
+>(() => ({
   passed: {
-    label: 'Passed',
+    label: t('gates.status.passed'),
     badge: 'success',
     icon: 'i-lucide-circle-check',
     text: 'text-emerald-300',
   },
-  'gave-up': { label: 'Gave up', badge: 'error', icon: 'i-lucide-circle-x', text: 'text-rose-300' },
-  fixing: { label: 'Fixing', badge: 'warning', icon: 'i-lucide-loader', text: 'text-amber-300' },
+  'gave-up': {
+    label: t('gates.status.gaveUp'),
+    badge: 'error',
+    icon: 'i-lucide-circle-x',
+    text: 'text-rose-300',
+  },
+  fixing: {
+    label: t('gates.status.fixing'),
+    badge: 'warning',
+    icon: 'i-lucide-loader',
+    text: 'text-amber-300',
+  },
   failing: {
-    label: 'Failing',
+    label: t('gates.status.failing'),
     badge: 'error',
     icon: 'i-lucide-circle-x',
     text: 'text-rose-300',
   },
   pending: {
-    label: 'Pending',
+    label: t('gates.status.pending'),
     badge: 'neutral',
     icon: 'i-lucide-clock',
     text: 'text-slate-300',
   },
   checking: {
-    label: 'Checking',
+    label: t('gates.status.checking'),
     badge: 'neutral',
     icon: 'i-lucide-loader',
     text: 'text-slate-300',
   },
-}
+}))
 
 // The conflicts gate has no structured detail (GitHub reports mergeability as a single
 // verdict, no file list), so the window shows the verdict + a note rather than a list.
 const conflictVerdict = computed(() => {
-  if (status.value === 'passed') return 'Mergeable'
-  if (gate.value?.lastVerdict === 'pending') return 'Computing mergeability…'
-  if (gate.value?.lastVerdict === 'fail') return 'Conflicts with base'
-  return 'Unknown'
+  if (status.value === 'passed') return t('gates.conflict.mergeable')
+  if (gate.value?.lastVerdict === 'pending') return t('gates.conflict.computing')
+  if (gate.value?.lastVerdict === 'fail') return t('gates.conflict.conflicts')
+  return t('gates.conflict.unknown')
 })
 </script>
 
@@ -183,10 +208,9 @@ const conflictVerdict = computed(() => {
               class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
             >
               <UIcon :name="meta.icon" class="h-8 w-8 opacity-40" />
-              <p class="text-sm">No gate activity yet.</p>
+              <p class="text-sm">{{ t('gates.noActivity') }}</p>
               <p class="max-w-sm text-[11px] text-slate-500">
-                The precheck runs once the PR is open. While it polls, the step shows live state on
-                the board.
+                {{ t('gates.noActivityHint') }}
               </p>
             </div>
 
@@ -201,9 +225,7 @@ const conflictVerdict = computed(() => {
                   class="mt-0.5 h-4 w-4 shrink-0 text-emerald-400"
                 />
                 <p class="text-[13px] leading-relaxed text-emerald-200">
-                  {{
-                    step?.output || (isCi ? 'CI is green.' : 'The PR merges cleanly with its base.')
-                  }}
+                  {{ step?.output || (isCi ? t('gates.passedCi') : t('gates.passedConflicts')) }}
                 </p>
               </div>
 
@@ -214,14 +236,20 @@ const conflictVerdict = computed(() => {
                 >
                   <UIcon name="i-lucide-users" class="h-4 w-4 shrink-0 text-violet-300" />
                   <span class="text-[13px] text-slate-200">
-                    {{ gate.lastApprovals ?? 0 }} / {{ requiredApprovals }} approval{{
-                      requiredApprovals === 1 ? '' : 's'
+                    {{
+                      t(
+                        'gates.humanReview.approvals',
+                        { approved: gate.lastApprovals ?? 0, required: requiredApprovals },
+                        requiredApprovals,
+                      )
                     }}
-                    <template v-if="status === 'fixing'"> · fixer addressing comments…</template>
-                    <template v-else-if="status === 'failing'">
-                      · review comments to address</template
+                    <template v-if="status === 'fixing'">
+                      {{ t('gates.humanReview.suffixFixing') }}</template
                     >
-                    <template v-else> · awaiting review</template>
+                    <template v-else-if="status === 'failing'">
+                      {{ t('gates.humanReview.suffixFailing') }}</template
+                    >
+                    <template v-else> {{ t('gates.humanReview.suffixAwaiting') }}</template>
                   </span>
                 </div>
                 <p
@@ -237,7 +265,7 @@ const conflictVerdict = computed(() => {
                   rel="noopener"
                   class="mt-2 inline-flex items-center gap-1 text-[12px] text-sky-300 hover:text-sky-200 hover:underline"
                 >
-                  Review pull request on GitHub
+                  {{ t('gates.humanReview.reviewPr') }}
                   <UIcon name="i-lucide-external-link" class="h-3 w-3" />
                 </a>
 
@@ -246,17 +274,16 @@ const conflictVerdict = computed(() => {
                   <h3
                     class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
                   >
-                    Request a fix
+                    {{ t('gates.humanReview.requestFixHeading') }}
                   </h3>
                   <p class="mb-2 text-[11px] leading-relaxed text-slate-500">
-                    Describe a change for the fixer to make on the PR branch now (in addition to any
-                    review comments, which it addresses automatically).
+                    {{ t('gates.humanReview.requestFixDescription') }}
                   </p>
                   <textarea
                     v-model="fixInstructions"
                     rows="3"
                     :disabled="fixBusy"
-                    placeholder="e.g. rename the helper and add a unit test for the empty-input case"
+                    :placeholder="t('gates.humanReview.requestFixPlaceholder')"
                     class="w-full resize-y rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-[13px] text-slate-200 placeholder:text-slate-600 focus:border-violet-500/60 focus:outline-none"
                   />
                   <div class="mt-2 flex justify-end">
@@ -268,7 +295,7 @@ const conflictVerdict = computed(() => {
                       :disabled="fixBusy || fixInstructions.trim().length === 0"
                       @click="submitFix"
                     >
-                      Request fix
+                      {{ t('gates.humanReview.requestFix') }}
                     </UButton>
                   </div>
                 </section>
@@ -277,7 +304,7 @@ const conflictVerdict = computed(() => {
               <!-- CI: failing checks -->
               <template v-else-if="isCi">
                 <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Failing checks
+                  {{ t('gates.ci.failingChecks') }}
                 </h3>
                 <ul v-if="failingChecks.length" class="space-y-1">
                   <li
@@ -292,7 +319,7 @@ const conflictVerdict = computed(() => {
                       target="_blank"
                       rel="noopener"
                       class="group min-w-0 flex-1 truncate text-[13px] text-sky-300 hover:text-sky-200 hover:underline"
-                      :title="`Open ${c.name} on GitHub`"
+                      :title="t('gates.ci.openOnGithub', { name: c.name })"
                     >
                       {{ c.name }}
                       <UIcon
@@ -304,19 +331,19 @@ const conflictVerdict = computed(() => {
                       c.name
                     }}</span>
                     <span class="shrink-0 text-[11px] uppercase text-rose-300">
-                      {{ c.conclusion ?? 'failure' }}
+                      {{ c.conclusion ?? t('gates.ci.conclusionFallback') }}
                     </span>
                   </li>
                 </ul>
                 <p v-else class="text-[13px] leading-relaxed text-slate-300">
-                  {{ gate.lastFailureSummary || 'CI has not reported a failure on this commit.' }}
+                  {{ gate.lastFailureSummary || t('gates.ci.failureFallback') }}
                 </p>
               </template>
 
               <!-- Conflicts: verdict + the resolver's account of what it left -->
               <template v-else>
                 <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Mergeability
+                  {{ t('gates.conflicts.mergeability') }}
                 </h3>
                 <div
                   class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
@@ -344,7 +371,7 @@ const conflictVerdict = computed(() => {
                   rel="noopener"
                   class="mt-2 inline-flex items-center gap-1 text-[12px] text-sky-300 hover:text-sky-200 hover:underline"
                 >
-                  View pull request on GitHub
+                  {{ t('gates.conflicts.viewPr') }}
                   <UIcon name="i-lucide-external-link" class="h-3 w-3" />
                 </a>
               </template>
@@ -352,7 +379,7 @@ const conflictVerdict = computed(() => {
               <!-- Attempt history (both gates): what each helper run did and how it ended. -->
               <section v-if="attempts.length" class="mt-5">
                 <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  {{ helperMeta.label }} attempts
+                  {{ t('gates.attemptsHeading', { helper: helperMeta.label }) }}
                 </h3>
                 <ol class="space-y-2">
                   <li
@@ -361,14 +388,14 @@ const conflictVerdict = computed(() => {
                     class="rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
                   >
                     <div class="flex items-center gap-2">
-                      <span class="text-[12px] font-semibold text-slate-200"
-                        >Attempt {{ a.attempt }}</span
-                      >
+                      <span class="text-[12px] font-semibold text-slate-200">{{
+                        t('gates.attempt', { number: a.attempt })
+                      }}</span>
                       <UBadge
                         :color="a.outcome === 'failed' ? 'error' : 'neutral'"
                         variant="subtle"
                         size="sm"
-                        >{{ a.outcome }}</UBadge
+                        >{{ OUTCOME_LABELS[a.outcome] }}</UBadge
                       >
                       <span v-if="formatClock(a.at)" class="ml-auto text-[11px] text-slate-500">{{
                         formatClock(a.at)
@@ -392,7 +419,7 @@ const conflictVerdict = computed(() => {
           >
             <div v-if="gate">
               <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                State
+                {{ t('gates.sidebar.state') }}
               </h4>
               <div class="flex items-center gap-2 text-[13px]">
                 <UIcon
@@ -412,21 +439,29 @@ const conflictVerdict = computed(() => {
                 <!-- The human-review gate's budget is effectively unbounded (it waits for a human
                      indefinitely), so render a plain round count rather than "0/9007199254740991". -->
                 <template v-if="isHumanReview">
-                  {{ gate.attempts }} fix round{{ gate.attempts === 1 ? '' : 's' }}
+                  {{ t('gates.sidebar.fixRounds', { count: gate.attempts }, gate.attempts) }}
                 </template>
                 <template v-else>
-                  {{ gate.attempts }}/{{ gate.maxAttempts }} attempt{{
-                    gate.maxAttempts === 1 ? '' : 's'
+                  {{
+                    t(
+                      'gates.sidebar.attempts',
+                      { attempts: gate.attempts, max: gate.maxAttempts },
+                      gate.maxAttempts,
+                    )
                   }}
                 </template>
-                <template v-if="gate.phase === 'working'"> · running…</template>
-                <template v-else-if="gate.attempts === 0"> · not needed yet</template>
+                <template v-if="gate.phase === 'working'">
+                  {{ t('gates.sidebar.suffixRunning') }}</template
+                >
+                <template v-else-if="gate.attempts === 0">
+                  {{ t('gates.sidebar.suffixNotNeeded') }}</template
+                >
               </p>
             </div>
 
             <div v-if="shortSha">
               <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Gated commit
+                {{ t('gates.sidebar.gatedCommit') }}
               </h4>
               <p class="font-mono text-[12px] text-slate-300">{{ shortSha }}</p>
             </div>
@@ -444,8 +479,7 @@ const conflictVerdict = computed(() => {
             />
 
             <p class="mt-auto text-[10px] leading-relaxed text-slate-600">
-              A gate runs a programmatic precheck and only spins up the
-              {{ helperMeta.label }} when it fails — a green check advances with nothing spun up.
+              {{ t('gates.sidebar.footer', { helper: helperMeta.label }) }}
             </p>
           </aside>
         </div>

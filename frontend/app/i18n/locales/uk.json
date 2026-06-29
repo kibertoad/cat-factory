@@ -2112,5 +2112,217 @@
       "updateConnection": "Оновити підключення",
       "connect": "Підключити"
     }
+  },
+  "pipeline": {
+    "iterationCap": {
+      "extraRound": "Ще один раунд",
+      "proceed": "Продовжити попри це",
+      "stopReset": "Зупинити та скинути завдання"
+    },
+    "builder": {
+      "title": "Конструктор пайплайнів",
+      "agentPalette": "Палітра агентів",
+      "addAgent": "Додати агента",
+      "pipeline": "Пайплайн",
+      "configureModels": "Налаштувати моделі",
+      "configureModelsTooltip": "Керування пресетами моделей (яку модель запускає кожен агент)",
+      "namePlaceholder": "Назва пайплайну",
+      "labelPlaceholder": "+ мітка",
+      "gatingNeedsEstimator": "Крок із бар'єром потребує Task Estimator перед собою. Додайте його, інакше пайплайн не збережеться.",
+      "emptyDraft": "Натисніть агентів ліворуч, щоб зібрати лінійний пайплайн.",
+      "companionAdd": "Додати {companion} (рецензує цей крок, повторює його нижче порогу)",
+      "companionRemove": "Прибрати {companion} із цього кроку",
+      "disableTooltip": "Вимкнути цей крок (залишається в пайплайні, але пропускається під час запуску)",
+      "enableTooltip": "Крок вимкнено (пропускається під час запуску). Натисніть, щоб увімкнути.",
+      "approvalAddTooltip": "Вимагати схвалення людиною після цього кроку",
+      "approvalRemoveTooltip": "Після цього кроку потрібне схвалення. Натисніть, щоб прибрати бар'єр.",
+      "consensusEnableTooltip": "Увімкнути консенсус (панель/дебати/голосування кількох моделей) для цього кроку",
+      "consensusRevertTooltip": "Консенсус увімкнено. Натисніть, щоб повернутися до одного агента.",
+      "followUpEnableTooltip": "Супровідний агент вимкнений. Натисніть, щоб увімкнути (Coder виявляє незавершені моменти / питання).",
+      "followUpDisableTooltip": "Супровідний агент увімкнений. Coder виявляє незавершені моменти / підзавдання / питання; натисніть, щоб вимкнути.",
+      "moveUp": "Перемістити крок вгору",
+      "moveDown": "Перемістити крок вниз",
+      "removeStep": "Прибрати цей крок із пайплайну",
+      "gateOnEstimate": "Бар'єр за оцінкою",
+      "companionGateTooltip": "Запускати цього супутника лише коли оцінка завдання перевищує поріг (потребує Task Estimator раніше)",
+      "consensusGateTooltip": "Запускати консенсус лише коли оцінка завдання перевищує поріг (інакше запускається стандартний агент)",
+      "runWhenAny": "запускати, коли (будь-що):",
+      "complexityThreshold": "складність ≥",
+      "riskThreshold": "ризик ≥",
+      "impactThreshold": "вплив ≥",
+      "strategy": "Стратегія",
+      "rounds": "Раунди",
+      "strategyOption": {
+        "specialist-panel": "Панель фахівців",
+        "debate": "Дебати",
+        "ranked-voting": "Рейтингове голосування"
+      },
+      "rolePlaceholder": "Роль",
+      "modelIdPlaceholder": "Id моделі (необов'язково)",
+      "removeParticipant": "Прибрати учасника (мін. 2)",
+      "addParticipant": "Додати учасника",
+      "savedPipelines": "Збережені пайплайни",
+      "hideArchived": "Сховати архівовані",
+      "archivedCount": "Архівовані ({count})",
+      "allLabels": "Усі",
+      "defaultBadge": "за замовчуванням",
+      "stepCount": "{count} крок | {count} кроки | {count} кроків",
+      "unarchive": "Розархівувати",
+      "archive": "Архівувати (сховати з типового вигляду)",
+      "cloneDefault": "Клонувати цей типовий у редаговану копію",
+      "clone": "Клонувати",
+      "edit": "Редагувати цей пайплайн",
+      "delete": "Видалити цей пайплайн",
+      "disabledStepTooltip": "Вимкнено, пропускається під час запуску",
+      "cancelEdit": "Скасувати редагування",
+      "clear": "Очистити",
+      "update": "Оновити пайплайн",
+      "save": "Зберегти пайплайн",
+      "addAgentModal": {
+        "title": "Додати агента",
+        "name": "Назва",
+        "namePlaceholder": "напр. Аудитор безпеки",
+        "description": "Опис",
+        "descriptionPlaceholder": "Що робить цей агент?",
+        "linkDoc": "Прив'язати контекстний документ",
+        "create": "Створити агента"
+      },
+      "toast": {
+        "added": "Додано агента \"{name}\"",
+        "placeholderTitle": "Заповнювач",
+        "updated": "Оновлено \"{name}\"",
+        "saved": "Збережено \"{name}\"",
+        "addOneFirst": "Спершу додайте хоча б одного агента",
+        "saveFailed": "Не вдалося зберегти пайплайн",
+        "cloned": "Клоновано \"{name}\" — триває редагування \"{copy}\"",
+        "cloneFailed": "Не вдалося клонувати пайплайн",
+        "updateFailed": "Не вдалося оновити пайплайн"
+      }
+    },
+    "progress": {
+      "status": {
+        "running": "Виконується",
+        "blocked": "Потрібні ви",
+        "paused": "Призупинено (бюджет)",
+        "done": "Завершено",
+        "failed": "Помилка"
+      },
+      "state": {
+        "pending": "Очікує",
+        "working": "Працює",
+        "waiting_decision": "Потрібне рішення",
+        "done": "Готово"
+      },
+      "stage": {
+        "incorporating": "Внесення…",
+        "reviewing": "Повторний огляд…",
+        "recommending": "Рекомендування…"
+      },
+      "followUp": {
+        "watching": "Спостереження…",
+        "toDecide": "{count} на рішення",
+        "allDecided": "Усе вирішено"
+      },
+      "agentsComplete": "{completed} / {total} агентів завершено",
+      "currently": "зараз {agent}",
+      "percent": "{value}%",
+      "companion": "Супутник",
+      "companionTooltip": "Супутник кроку-виробника",
+      "companionSuffix": "(супутник)",
+      "stepOf": "Крок {current} з {total}",
+      "viewDetailsOutput": "Переглянути деталі та прочитати вивід",
+      "viewDetails": "Переглянути деталі кроку",
+      "restartTooltip": "Перезапустити пайплайн із цього кроку",
+      "restartFromHere": "Перезапустити звідси",
+      "spinningUpContainer": "Запуск контейнера…",
+      "subtasks": "{completed}/{total} підзавдань",
+      "subtasksInProgress": "· {count} у процесі",
+      "clickToRead": "Натисніть, щоб прочитати вивід цього агента",
+      "reviewApprove": "Переглянути та схвалити пропозицію агента {agent}",
+      "resolve": "Вирішити: {question}"
+    },
+    "health": {
+      "title": "Стан пайплайнів",
+      "allValid": "Усі пайплайни дійсні та актуальні.",
+      "invalidHeading": "Недійсні пайплайни",
+      "invalidDescription": "Вони посилаються на відсутнього агента або неправильно налаштовані, тож зазнали б помилки (або виконалися б неправильно) під час старту. Видаліть власний пайплайн або перегенеруйте вбудований, щоб відновити його визначення з каталогу.",
+      "builtinBadge": "вбудований",
+      "reseed": "Перегенерувати",
+      "delete": "Видалити",
+      "updatesHeading": "Доступні оновлення",
+      "updatesDescription": "Вийшла новіша версія цих вбудованих пайплайнів. Перегенеруйте їх, щоб прийняти її (ваші мітки та стан архіву збережуться).",
+      "reseedAll": "Перегенерувати всі ({count})",
+      "dismiss": "Відхилити",
+      "done": "Готово",
+      "toast": {
+        "reseedFailed": "Не вдалося перегенерувати пайплайн",
+        "deleteFailed": "Не вдалося видалити пайплайн"
+      }
+    }
+  },
+  "palette": {
+    "hint": "Натисніть агента, щоб додати його до пайплайну.",
+    "customAgents": "Власні агенти"
+  },
+  "gates": {
+    "subtitle": {
+      "humanReview": "Чекає на огляд коду людиною в PR, повторюючи виправлювача після коментарів",
+      "ci": "Блокує PR до зеленого CI, повторюючи виправлювача CI у разі помилки",
+      "conflicts": "Блокує PR до чистого злиття, повторюючи розв'язувача у разі конфліктів"
+    },
+    "status": {
+      "passed": "Пройдено",
+      "gaveUp": "Здався",
+      "fixing": "Виправлення",
+      "failing": "Помилка",
+      "pending": "Очікує",
+      "checking": "Перевірка"
+    },
+    "conflict": {
+      "mergeable": "Можна злити",
+      "computing": "Обчислення можливості злиття…",
+      "conflicts": "Конфлікти з базою",
+      "unknown": "Невідомо"
+    },
+    "noActivity": "Поки що немає активності бар'єра.",
+    "noActivityHint": "Попередня перевірка запускається після відкриття PR. Під час опитування крок показує стан наживо на дошці.",
+    "passedCi": "CI зелений.",
+    "passedConflicts": "PR чисто зливається зі своєю базою.",
+    "humanReview": {
+      "approvals": "{approved} / {required} схвалення | {approved} / {required} схвалення | {approved} / {required} схвалень",
+      "suffixFixing": "· виправлювач опрацьовує коментарі…",
+      "suffixFailing": "· коментарі огляду до опрацювання",
+      "suffixAwaiting": "· очікування огляду",
+      "reviewPr": "Переглянути pull request на GitHub",
+      "requestFixHeading": "Запросити виправлення",
+      "requestFixDescription": "Опишіть зміну, яку виправлювач має внести зараз у гілку PR (на додачу до коментарів огляду, які він опрацьовує автоматично).",
+      "requestFixPlaceholder": "напр. перейменуйте helper і додайте модульний тест для випадку порожнього вводу",
+      "requestFix": "Запросити виправлення"
+    },
+    "ci": {
+      "failingChecks": "Перевірки з помилками",
+      "openOnGithub": "Відкрити {name} на GitHub",
+      "conclusionFallback": "помилка",
+      "failureFallback": "CI не повідомляв про помилку на цьому коміті."
+    },
+    "conflicts": {
+      "mergeability": "Можливість злиття",
+      "viewPr": "Переглянути pull request на GitHub"
+    },
+    "attemptsHeading": "Спроби: {helper}",
+    "attempt": "Спроба {number}",
+    "outcome": {
+      "completed": "завершено",
+      "failed": "помилка"
+    },
+    "sidebar": {
+      "state": "Стан",
+      "fixRounds": "{count} раунд виправлень | {count} раунди виправлень | {count} раундів виправлень",
+      "attempts": "{attempts}/{max} спроба | {attempts}/{max} спроби | {attempts}/{max} спроб",
+      "suffixRunning": "· виконується…",
+      "suffixNotNeeded": "· поки не потрібно",
+      "gatedCommit": "Коміт із бар'єром",
+      "footer": "Бар'єр виконує програмну попередню перевірку й запускає {helper} лише в разі невдачі; зелена перевірка проходить далі, нічого не запускаючи."
+    }
   }
 }

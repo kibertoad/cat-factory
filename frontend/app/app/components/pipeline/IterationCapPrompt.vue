@@ -7,7 +7,7 @@ import type { IterationCapChoice } from '~/types/execution'
 // or stop and reset the task. Used by both the requirements-review window and the
 // companion step detail (Spec Reviewer / Reviewer / Architect Companion), so the two
 // gates present an identical choice rather than each rolling its own.
-withDefaults(
+const props = withDefaults(
   defineProps<{
     heading: string
     detail: string
@@ -16,13 +16,16 @@ withDefaults(
     proceedLabel?: string
     stopLabel?: string
   }>(),
-  {
-    loading: false,
-    extraRoundLabel: 'One more round',
-    proceedLabel: 'Proceed anyway',
-    stopLabel: 'Stop & reset task',
-  },
+  { loading: false },
 )
+
+const { t } = useI18n()
+
+// The three button labels default to the shared i18n copy, but a caller may override
+// any of them with surface-specific wording.
+const extraRound = computed(() => props.extraRoundLabel ?? t('pipeline.iterationCap.extraRound'))
+const proceed = computed(() => props.proceedLabel ?? t('pipeline.iterationCap.proceed'))
+const stop = computed(() => props.stopLabel ?? t('pipeline.iterationCap.stopReset'))
 
 const emit = defineEmits<{ resolve: [choice: IterationCapChoice] }>()
 </script>
@@ -43,7 +46,7 @@ const emit = defineEmits<{ resolve: [choice: IterationCapChoice] }>()
         :loading="loading"
         @click="emit('resolve', 'extra-round')"
       >
-        {{ extraRoundLabel }}
+        {{ extraRound }}
       </UButton>
       <UButton
         color="warning"
@@ -53,7 +56,7 @@ const emit = defineEmits<{ resolve: [choice: IterationCapChoice] }>()
         :loading="loading"
         @click="emit('resolve', 'proceed')"
       >
-        {{ proceedLabel }}
+        {{ proceed }}
       </UButton>
       <UButton
         color="error"
@@ -63,7 +66,7 @@ const emit = defineEmits<{ resolve: [choice: IterationCapChoice] }>()
         :loading="loading"
         @click="emit('resolve', 'stop-reset')"
       >
-        {{ stopLabel }}
+        {{ stop }}
       </UButton>
     </div>
   </div>

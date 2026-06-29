@@ -31,14 +31,14 @@ it only records **what is done and what is left**.
 |     3 | **Layout + auth**                                               | `layout/**` (14) + `auth/**` (4)                                                                                                       | `layout.*`, `nav.*`, `auth.*`                                            | ✅ merged (#398)         |
 |     4 | **Settings**                                                    | `settings/**` (12)                                                                                                                     | `settings.*`                                                             | ✅ merged (#401)         |
 |     5 | **Providers + AI onboarding**                                   | `providers/**` (5)                                                                                                                     | `providers.*`                                                            | ✅ merged (#403)         |
-|     6 | **Integrations: GitHub / Slack / documents / tasks**            | `github/**` (5), `slack/**` (1), `documents/**` (5), `tasks/**` (4)                                                                    | `github.*`, `slack.*`, `documents.*`, `tasks.*`                          | ✅ done (this PR)        |
-|     7 | Pipeline + palette + gates                                      | `pipeline/**`, `palettes/**`, `gates/**`                                                                                               | `pipeline.*`, `palette.*`, `gates.*`                                     | ⬜ planned               |
+|     6 | **Integrations: GitHub / Slack / documents / tasks**            | `github/**` (5), `slack/**` (1), `documents/**` (5), `tasks/**` (4)                                                                    | `github.*`, `slack.*`, `documents.*`, `tasks.*`                          | ✅ merged (#411)         |
+|     7 | **Pipeline + palette + gates**                                  | `pipeline/**` (5), `palettes/**` (1), `gates/**` (1)                                                                                   | `pipeline.*`, `palette.*`, `gates.*`                                     | ✅ done (this PR)        |
 |     8 | Agent windows                                                   | `requirements/`, `clarity/`, `consensus/`, `brainstorm/`, `spec/`, `followUp/`, `humanTest/`, `testing/`, `visualConfirm/`, `focus/`   | per-feature                                                              | ⬜ planned               |
 |     9 | Remaining surfaces                                              | `bootstrap/`, `environments/`, `fragments/`, `kaizen/`, `sandbox/`, `recurring/`, `media/`, `provisioning/`                            | per-feature                                                              | ⬜ planned               |
 |     X | Cross-cutting                                                   | `app/utils/catalog.ts` (status/agent-kind/block-type labels), `app/pages/*.vue`                                                        | `catalog.*` etc.                                                         | ⬜ planned               |
 
-Rough scale: **~121 SPA components**; ~89 already resolve copy through i18n after
-phases 0–6. The remaining work is the bulk of phases 7–X below.
+Rough scale: **~121 SPA components**; ~96 already resolve copy through i18n after
+phases 0–7. The remaining work is the bulk of phases 8–X below.
 
 ### Done
 
@@ -98,20 +98,32 @@ phases 0–6. The remaining work is the bulk of phases 7–X below.
   notification types) resolve via literal `t(...)` keys to keep the typed-key drift guard
   live, and structural emphasis uses `<i18n-t>` slots instead of HTML in message bodies.
 
+- **Phase 7 (pipeline + palette + gates, this PR):** the pipeline builder slideover (agent
+  palette, draft chain with the per-step companion/approval/consensus/follow-up toggles and
+  their tooltips, estimate-gating thresholds, the consensus strategy picker + participants,
+  the saved-pipeline library with archive/clone/edit and label filters, the add-agent
+  modal, and every toast), the pipeline-progress timeline (instance/step status labels,
+  background review stages, subtask + follow-up readouts, restart controls, the approval /
+  decision prompts), the pipeline-health advisory (invalid / outdated sections, reseed /
+  delete actions), the agent palette (hint + custom bucket), the shared iteration-cap prompt
+  (the three default choice labels), and the gate result window (CI / conflicts / human-review
+  variants — subtitles, the rolled-up display status, failing-check list, approval progress,
+  the request-a-fix box, attempt timeline, and the sidebar state/budget/footer). New keys
+  under `pipeline.*`, `palette.*` and `gates.*` in all five bundled locales (166 leaf keys,
+  full parity); count readouts use plural forms (3-form for pl/uk) with the count selector,
+  the local status/state/strategy/outcome enum lookups resolve via exhaustive `Record` maps
+  of literal `t(...)` keys to keep the typed-key drift guard live, the "agents complete"
+  count uses an `<i18n-t>` slot for its bold figure, and timestamps go through `d(...)`.
+  `pipeline/AgentKindIcon.vue` resolves all its copy from the shared catalog (deferred to
+  phase X), so it carries no own strings and needs no migration. The composable-produced
+  `usePipelineHealth` problem messages stay English for now (they mirror backend validation
+  and are out of the component scope; their unit test asserts on `type`, not text).
+
 The four board/panels components with **no** user-facing text — `AgentChip`,
 `TaskDependencyEdges`, `DependencyConnectOverlay`, `StepResultViewHost` — need no
 migration and are intentionally skipped.
 
 ### Remaining (by area)
-
-**Pipeline / palette / gates** (phase 7)
-
-```
-pipeline/AgentKindIcon.vue, pipeline/IterationCapPrompt.vue, pipeline/PipelineBuilder.vue,
-pipeline/PipelineHealthModal.vue, pipeline/PipelineProgress.vue
-palettes/AgentPalette.vue
-gates/GateResultView.vue
-```
 
 **Agent windows** (phase 8)
 
