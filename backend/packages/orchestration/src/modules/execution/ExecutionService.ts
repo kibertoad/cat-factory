@@ -390,7 +390,6 @@ export interface BlueprintReconciler {
  * deterministic fake and no timing/delays.
  */
 export class ExecutionService {
-  private readonly runInitiatorScope: RunInitiatorScope
   private readonly workspaceRepository: WorkspaceRepository
   private readonly blockRepository: BlockRepository
   private readonly pipelineRepository: PipelineRepository
@@ -437,10 +436,11 @@ export class ExecutionService {
   private readonly clarityReviewActions: ClarityReviewActions
   /** Brainstorm window actions (exposed via {@link brainstorm}). */
   private readonly brainstormActions: BrainstormActions
-  // `blueprintReconciler` / `notificationService` / `ticketTrackerProvider` are NOT stored on
-  // the engine: their only consumers (the ingest/follow-up/tracker/notification paths) moved to
-  // {@link RunDispatcher} (and the controllers / RunStateMachine), so the constructor forwards
-  // the destructured params straight to those collaborators.
+  // `blueprintReconciler` / `notificationService` / `ticketTrackerProvider` /
+  // `resolveRunRepoContext` / `runInitiatorScope` are NOT stored on the engine: their only
+  // consumers (the ingest/follow-up/tracker/notification paths + the pre/post-op repo binding +
+  // the initiator scope) moved to {@link RunDispatcher} (and the controllers / RunStateMachine),
+  // so the constructor forwards the destructured params straight to those collaborators.
   private readonly workspaceSettingsService?: WorkspaceSettingsService
   private readonly prMerger?: PullRequestMerger
   private readonly mergePresetRepository?: MergePresetRepository
@@ -457,12 +457,6 @@ export class ExecutionService {
   ) => Promise<string | undefined>
   /** Whether the runtime can run the Tester's local DinD infra (false = limited mode). */
   private readonly localTestInfraSupported: boolean
-  /**
-   * Optional: resolve a block's run repo bound to a checkout-free {@link RepoFiles} so a
-   * registered custom kind's pre/post-op hooks read/commit a targeted subset of the repo
-   * without a checkout. Absent (tests / GitHub not connected) → pre/post-ops are skipped.
-   */
-  private readonly resolveRunRepoContext?: ResolveRunRepoContext
   /** Local-mode floor for the Tester environment (default `ephemeral`). See deps doc. */
   private readonly resolveTesterFallbackDefault?: (
     workspaceId: string,
@@ -526,7 +520,9 @@ export class ExecutionService {
     assertAgentBackendConfigured,
     runInitiatorScope,
   }: ExecutionServiceDependencies) {
-    this.runInitiatorScope = runInitiatorScope ?? ((_initiatedBy, fn) => fn())
+    // Forward-only: the run-initiator scope is consumed solely by RunDispatcher (below), so it
+    // is hoisted to a local with its default applied rather than stored as a `this.` field.
+    const runInitiatorScopeFn = runInitiatorScope ?? ((_initiatedBy, fn) => fn())
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
     this.pipelineRepository = pipelineRepository
@@ -692,7 +688,7 @@ export class ExecutionService {
       clarityKind: this.clarityKind,
       requirementsBrainstormKind: this.requirementsBrainstormKind,
       architectureBrainstormKind: this.architectureBrainstormKind,
-      runInitiatorScope: this.runInitiatorScope,
+      runInitiatorScope: runInitiatorScopeFn,
       environmentProvisioning,
       ticketTrackerProvider,
       issueWriteback,
@@ -722,7 +718,6 @@ export class ExecutionService {
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
     this.resolveProviderCapabilities = resolveProviderCapabilities
     this.localTestInfraSupported = localTestInfraSupported ?? true
-    this.resolveRunRepoContext = resolveRunRepoContext
     this.resolveTesterFallbackDefault = resolveTesterFallbackDefault
     this.resolveRequireEnvironmentProvider = resolveRequireEnvironmentProvider
     this.assertAgentBackendConfigured = assertAgentBackendConfigured
