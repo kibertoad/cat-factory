@@ -2823,7 +2823,6 @@
     "fixCount": "{attempts}/{max} виправлення",
     "fixingSuffix": "· виправлення…",
     "fixerTimeline": {
-      "heading": "Спроби виправлення",
       "attempt": "Спроба {n}",
       "completed": "Завершено",
       "failed": "Помилка",

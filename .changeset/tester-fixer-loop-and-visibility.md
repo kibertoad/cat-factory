@@ -6,6 +6,7 @@
 '@cat-factory/server': patch
 '@cat-factory/app': minor
 '@cat-factory/worker': patch
+'@cat-factory/node-server': patch
 '@cat-factory/local-server': patch
 ---
 

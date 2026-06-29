@@ -26,6 +26,16 @@ function hasFailedOutcome(report: TestReport): boolean {
 }
 
 /**
+ * Ensure a free-text fragment ends with sentence-terminating punctuation so it can be
+ * concatenated into a notification body without running into the following sentence.
+ */
+function endWithStop(text: string): string {
+  const trimmed = text.trim()
+  if (!trimmed) return trimmed
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`
+}
+
+/**
  * The engine's release verdict for a Tester report: greenlit only when the Tester
  * said so AND it raised no blocking (high/critical) concern AND no check failed.
  * Defensive against a harness that greenlights with open blockers or red checks — a
@@ -308,8 +318,10 @@ export class TesterController {
       blockId: block.id,
       executionId: instance.id,
       title: `Testing could not run for "${block.title}"`,
+      // Punctuate the reason so it doesn't run into the next sentence (the reason comes from
+      // the Tester / env error and may not end with terminal punctuation).
       body:
-        `The Tester stopped the run without attempting a fix: ${reason} ` +
+        `The Tester stopped the run without attempting a fix: ${endWithStop(reason)} ` +
         `Resolve the cause, then retry the run.`,
       payload: {
         ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
@@ -333,7 +345,7 @@ export class TesterController {
       executionId: instance.id,
       title: `Tests are still failing for "${block.title}"`,
       body:
-        `The Fixer agent tried ${attempts} time(s) but the Tester still won't greenlight. ${summary} ` +
+        `The Fixer agent tried ${attempts} time(s) but the Tester still won't greenlight. ${endWithStop(summary)} ` +
         `Take a look and retry the run once fixed.`,
       payload: {
         ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),

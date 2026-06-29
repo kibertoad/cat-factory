@@ -1184,6 +1184,10 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         const app = harness.makeApp(
           {
             asyncKinds: ['coder', 'ci-fixer'],
+            // Model a container-reusing runner: the gate's `ci-fixer` helper shares the
+            // re-dispatch shape the per-round dispatch epoch fixes, so exercise it under a
+            // pooled harness whose JobRegistry survives between rounds.
+            pooledContainer: true,
             pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
           },
           // red first, green after the fixer ran
@@ -3487,6 +3491,56 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         // The fixer was NOT dispatched — an abort is handed straight to a human.
         expect(testerStep.test?.attempts ?? 0).toBe(0)
         expect(testerStep.test?.attemptLog ?? []).toHaveLength(0)
+      })
+
+      it('loops the fixer when a report greenlights but a check FAILED (a failed outcome is a blocker)', async () => {
+        // Defensive verdict: a `failed` outcome is itself a blocker, so the engine must NOT
+        // accept a report that greenlights with a red check — it loops the fixer regardless of
+        // the greenlight flag. The first report greenlights yet has a failed outcome (so it must
+        // be rejected and dispatch the fixer); the second is cleanly green (so the run converges).
+        // Without the failed-outcome guard the first report is accepted at attempts=0 and the run
+        // completes without ever fixing the red check.
+        const greenButFailed = {
+          greenlight: true,
+          summary: 'shipping it',
+          tested: ['login'],
+          outcomes: [{ name: 'login', status: 'failed' as const, detail: 'returns 500' }],
+          concerns: [],
+        }
+        const green = {
+          greenlight: true,
+          summary: 'all good',
+          tested: ['login'],
+          outcomes: [{ name: 'login', status: 'passed' as const }],
+          concerns: [],
+        }
+        const app = harness.makeApp({
+          asyncKinds: ['coder', 'tester-api', 'fixer'],
+          asyncPolls: 1,
+          testReports: [greenButFailed, green],
+          pullRequest: { url: 'https://gh/pr/7', number: 7, branch: 'cat-factory/task_login' },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code + test failed-outcome',
+          agentKinds: ['coder', 'tester-api'],
+        })
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          agentConfig: { 'tester.environment': 'ephemeral' },
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
+        expect(testerStep.state).toBe('done')
+        // The greenlit-but-failed report was rejected and looped the fixer exactly once before
+        // the clean re-test greenlit — NOT accepted on the first round.
+        expect(testerStep.test?.attempts).toBe(1)
+        expect(testerStep.test?.lastReport?.greenlight).toBe(true)
       })
 
       it('fails the run (tester step left un-done) when the greenlight is withheld terminally', async () => {

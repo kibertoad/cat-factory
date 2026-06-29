@@ -78,7 +78,7 @@ export type TestScreenshot = v.InferOutput<typeof testScreenshotSchema>
  * requirements plus best-judgement regression of related ones); `outcomes` are the
  * per-area results; `concerns` are the bugs/risks to fix before re-testing.
  */
-export const testReportSchema = v.object({
+const testReportObjectSchema = v.object({
   /** The gate verdict: release-ready (true) or needs fixing (false). */
   greenlight: v.boolean(),
   /** Plain-prose overall summary of the testing session. */
@@ -112,6 +112,18 @@ export const testReportSchema = v.object({
    */
   abort: v.optional(v.nullable(v.object({ reason: v.string() }))),
 })
+
+/**
+ * Enforce the `abort ⇒ greenlight === false` invariant at the schema boundary so it can't
+ * depend on every caller getting the ordering right: a report that signals `abort` is never
+ * release-ready, so normalise `greenlight` to false whenever an `abort` reason is present.
+ * (The container executor's `coerceTestReport` already forces this on the dispatch path; the
+ * transform makes it hold for every parse — e.g. re-validating persisted step state too.)
+ */
+export const testReportSchema = v.pipe(
+  testReportObjectSchema,
+  v.transform((report) => (report.abort?.reason ? { ...report, greenlight: false } : report)),
+)
 export type TestReport = v.InferOutput<typeof testReportSchema>
 
 /** Parse-or-throw a test report payload an agent returned (the engine validates it). */

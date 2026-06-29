@@ -1762,12 +1762,19 @@ function coerceTestReport(raw: unknown, summary: string | undefined): unknown {
   // An abort signal: the Tester reported it can't run a meaningful test at all (its env never
   // came up, a dependency is missing). Carry the reason through and force the greenlight off —
   // an abort is never release-ready, and the engine routes it to a human instead of the fixer.
+  // The presence of the `abort` object IS the signal: never let a blank/oversized `reason`
+  // downgrade that intent back into a (pointless) fixer loop, so fall back to a generic reason
+  // and cap it like `summary` (the reason is shown to the human + stored on the step verbatim).
   const abortRaw = (typeof o.abort === 'object' && o.abort !== null ? o.abort : null) as Record<
     string,
     unknown
   > | null
-  const abortReason =
-    abortRaw && typeof abortRaw.reason === 'string' && abortRaw.reason ? abortRaw.reason : undefined
+  const abortReason = abortRaw
+    ? (typeof abortRaw.reason === 'string' && abortRaw.reason.trim()
+        ? abortRaw.reason.trim()
+        : 'the Tester could not run a meaningful test'
+      ).slice(0, 2000)
+    : undefined
   return {
     greenlight: o.greenlight === true && !blocking && !abortReason,
     summary:

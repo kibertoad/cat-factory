@@ -2823,7 +2823,6 @@
     "fixCount": "{attempts}/{max} correction",
     "fixingSuffix": "· correction…",
     "fixerTimeline": {
-      "heading": "Tentatives du correcteur",
       "attempt": "Tentative {n}",
       "completed": "Terminé",
       "failed": "Échec",

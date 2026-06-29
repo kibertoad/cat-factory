@@ -2823,7 +2823,6 @@
     "fixCount": "{attempts}/{max} naprawa",
     "fixingSuffix": "· naprawianie…",
     "fixerTimeline": {
-      "heading": "Próby naprawy",
       "attempt": "Próba {n}",
       "completed": "Ukończono",
       "failed": "Niepowodzenie",

@@ -74,7 +74,7 @@ export function buildRevisionContext(step: PipelineStep): {
  * re-dispatch, so the harness job id changes round to round and a re-test never re-attaches
  * to a prior round's completed job. A step with neither (dispatched once) is epoch 0.
  */
-function dispatchEpochFor(step: PipelineStep): number {
+export function dispatchEpochFor(step: PipelineStep): number {
   return step.test?.attempts ?? step.gate?.attempts ?? 0
 }
 
