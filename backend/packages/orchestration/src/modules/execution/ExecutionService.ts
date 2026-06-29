@@ -15,11 +15,7 @@ import type {
   IssueWritebackProvider,
 } from '@cat-factory/kernel'
 import { DEFAULT_COMPANION_MAX_ATTEMPTS, isLocalRunner } from '@cat-factory/contracts'
-import {
-  companionFor,
-  companionTargets,
-  isCompanionKind,
-} from '@cat-factory/agents'
+import { companionFor, companionTargets, isCompanionKind } from '@cat-factory/agents'
 import type { RunInitiatorScope } from '@cat-factory/kernel'
 import { validatePipelineShape } from '../pipelines/pipelineShape.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
