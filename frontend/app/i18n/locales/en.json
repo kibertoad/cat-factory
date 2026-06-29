@@ -1937,8 +1937,12 @@
       "repositoryHint": "Repositories the GitHub App can access. Don't see yours? Grant the App access below, then refresh.",
       "noReposAvailable": "No repositories available yet. Grant the App access to one below, then refresh.",
       "searchPlaceholder": "Search repositories by owner or name…",
-      "searchMinChars": "Type at least {min} characters to search.",
+      "searchMinChars": "Type at least {min} character to search. | Type at least {min} characters to search.",
+      "@searchMinChars": {
+        "description": "Shown when a large repo list needs a typed query before searching. Resolved via t(key, { min }, min) so {min} also drives the plural choice; min is always 2 or more. Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - and rely on the custom pluralRules wired in i18n.config.ts)."
+      },
       "noMatches": "No repositories found for {query}.",
+      "clearSelection": "Clear selection",
       "showingCount": "Showing {shown} of {total} repositories.",
       "repoLabel": {
         "private": " (private)",

@@ -1886,8 +1886,9 @@
       "repositoryHint": "Repositorios a los que la GitHub App puede acceder. ¿No ves el tuyo? Concede acceso a la App abajo y luego actualiza.",
       "noReposAvailable": "Aún no hay repositorios disponibles. Concede acceso a la App a uno abajo y luego actualiza.",
       "searchPlaceholder": "Busca repositorios por propietario o nombre…",
-      "searchMinChars": "Escribe al menos {min} caracteres para buscar.",
+      "searchMinChars": "Escribe al menos {min} carácter para buscar. | Escribe al menos {min} caracteres para buscar.",
       "noMatches": "No se encontraron repositorios para {query}.",
+      "clearSelection": "Borrar selección",
       "showingCount": "Mostrando {shown} de {total} repositorios.",
       "repoLabel": {
         "private": " (privado)",
