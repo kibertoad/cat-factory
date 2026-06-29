@@ -412,9 +412,9 @@ function buildResolveTransport(
   db: D1Database,
   clock: Clock,
   provisioningLog?: ProvisioningLogRecorder,
-  // An injected native pool adapter (e.g. a Kargo runner adapter implementing
-  // `RunnerPoolProvider`) drives the actual dispatch when supplied — symmetric with the
-  // `environmentProvider` override. Absent → the generic manifest-driven HTTP provider.
+  // The shared HTTP provider the built-in `manifest` backend reuses when supplied (its OAuth
+  // cache reused). NOT the custom-kind seam — a bespoke runner backend is a registered `kind`
+  // (`registerRunnerBackend`). Absent → the generic manifest-driven HTTP provider.
   injectedPoolProvider?: RunnerPoolProvider,
 ): ResolveRunnerTransport | null {
   // The Cloudflare backend folds in instance-level reaping: the registry records
@@ -1822,10 +1822,11 @@ export function buildContainer(
   // implementation executor and the repo bootstrapper), so both dispatch through the
   // same Cloudflare/self-hosted seam — and the bootstrapper rides the reaping-aware
   // Cloudflare transport for free. Null when no backend is configured.
-  // A native runner-pool adapter (e.g. Kargo) is injected via `overrides.runnerPoolProvider`
-  // — the same `overrides` seam the native environment adapter uses. The `...overrides` spread
-  // (last, below) already routes it to the connection-management UI; thread it here so it ALSO
-  // drives the actual dispatch transport, fully symmetric with `environmentProvider`.
+  // `overrides.runnerPoolProvider` swaps the shared HTTP provider the built-in `manifest` pool
+  // reuses (its OAuth cache); the `...overrides` spread (last, below) already routes it to the
+  // connection-management UI, so thread it here too so it ALSO drives the manifest backend's
+  // dispatch transport. (A bespoke runner backend is a registered `kind` via
+  // `registerRunnerBackend`, NOT this provider override.)
   const resolveTransport = buildResolveTransport(
     env,
     config,

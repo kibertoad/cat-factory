@@ -51,8 +51,20 @@ const CONTRACTS = {
 /** Environment-provider + runner-pool connection endpoints (self-describe + register/test). */
 export function providerConnectionsApi({ send, ws }: ApiContext) {
   return {
-    describeProvider: (workspaceId: string, kind: ProviderConnectionKind) =>
-      send(CONTRACTS[kind].describe, { pathPrefix: ws(workspaceId) }),
+    // `backendKind` (optional) describes a REGISTERED backend that isn't connected yet, so a
+    // custom kind's connect form renders before the first connect. Omitted ⇒ the stored kind.
+    // Branch on the kind so `send` sees a single concrete contract (a union contract can't
+    // type-check the optional `queryParams`).
+    describeProvider: (workspaceId: string, kind: ProviderConnectionKind, backendKind?: string) =>
+      kind === 'environment'
+        ? send(CONTRACTS.environment.describe, {
+            pathPrefix: ws(workspaceId),
+            queryParams: { kind: backendKind },
+          })
+        : send(CONTRACTS['runner-pool'].describe, {
+            pathPrefix: ws(workspaceId),
+            queryParams: { kind: backendKind },
+          }),
 
     getProviderConnection: (workspaceId: string, kind: ProviderConnectionKind) =>
       send(CONTRACTS[kind].get, { pathPrefix: ws(workspaceId) }),
@@ -118,10 +130,11 @@ export function providerConnectionsApi({ send, ws }: ApiContext) {
 /**
  * Resolve the discriminated backend config (runner-pool OR environment) from a connect-form
  * payload: an explicit `config` (the Kubernetes form) wins; otherwise a bare `manifest` (the
- * manifest editor) is wrapped into the `manifest` backend kind. Both subsystems now take a
- * discriminated `config`, so the same shape serves each.
+ * flat form / manifest editor) is wrapped into the selected backend kind — `body.backendKind`
+ * (a built-in `manifest` or a registered CUSTOM slug), defaulting to `manifest`. A custom kind
+ * MUST carry its slug here, else its flat-form save would be mis-tagged as the manifest backend.
  */
 function backendConfig(body: RegisterProviderInput | TestProviderInput): Record<string, unknown> {
   if (body.config) return body.config
-  return { kind: 'manifest', manifest: body.manifest ?? {} }
+  return { kind: body.backendKind ?? 'manifest', manifest: body.manifest ?? {} }
 }

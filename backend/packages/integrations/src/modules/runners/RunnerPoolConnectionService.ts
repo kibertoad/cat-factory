@@ -135,22 +135,34 @@ export class RunnerPoolConnectionService {
     return this.toConnection(updated, Object.keys(secrets))
   }
 
-  /** Describe the backend's config fields + test availability for the UI. */
-  async describeProvider(workspaceId: string): Promise<ProviderDescriptor> {
+  /**
+   * Describe the backend's config fields + test availability for the UI. With no `kind`,
+   * describes the workspace's stored connection. With an explicit `kind`, validates it is a
+   * REGISTERED backend (throws on unknown) and describes it even when not connected yet — so
+   * the SPA can render the connect form before the first connect. The stored config/secrets
+   * are folded in only when the requested kind matches the stored one.
+   *
+   * A custom runner kind rides the generic manifest body and has no per-kind config form
+   * hooks (the `RunnerBackendProvider` interface has none), so — like the built-in manifest
+   * backend — it uses the shared flat manifest form, falling back to the raw manifest editor.
+   */
+  async describeProvider(workspaceId: string, kind?: string): Promise<ProviderDescriptor> {
     const record = await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)
-    const config = record ? (JSON.parse(record.configJson) as RunnerBackendConfig) : undefined
+    if (kind !== undefined) this.provider(kind) // validate the requested kind is registered
+    const useStored = !!record && (kind === undefined || kind === record.kind)
+    const config = useStored ? (JSON.parse(record!.configJson) as RunnerBackendConfig) : undefined
     // The manifest backend renders a flat field form (its secret-ref keys + baseUrl);
     // the native (kubernetes) backend uses an explicit UI form, so it has no flat fields.
     const manifest = config?.kind === 'manifest' ? config.manifest : undefined
     const configFields = manifest
       ? (this.deps.runnerPoolProvider?.describeConfig?.(manifest) ?? [])
       : []
-    const storedKeys = record ? Object.keys(await this.decryptSecrets(record)) : []
+    const storedKeys = useStored ? Object.keys(await this.decryptSecrets(record!)) : []
     if (manifest?.baseUrl) storedKeys.push('baseUrl')
     const provider = this.deps.runnerPoolProvider
     return {
-      providerId: record?.providerId ?? 'http',
-      label: record?.label ?? 'Agent runner backend',
+      providerId: useStored ? record!.providerId : 'http',
+      label: useStored ? record!.label : 'Agent runner backend',
       // `kind` here is the UI FORM-STYLE discriminator (manifest editor vs native flat
       // form), not the runner-backend kind: only the manifest backend uses this
       // descriptor-driven form, so it stays 'manifest'. The actual backend kind is

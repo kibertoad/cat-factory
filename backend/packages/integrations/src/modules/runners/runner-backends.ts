@@ -18,14 +18,18 @@ import {
 } from './runners.logic.js'
 
 // The universal "agent runner backend" provider-registry seam. A backend kind
-// (`manifest` = BYO HTTP scheduler pool, `kubernetes` = native per-run pods, future
-// `nomad`/`eks`/…) registers a RunnerBackendProvider that maps its discriminated
-// config → a RunnerTransport. The connection service resolves a workspace's stored
-// `kind` to the registered provider and builds the transport — so adding a backend
-// is ONE registry entry + a config variant + a UI form, with no new table, service,
-// controller, or integration window. Mirrors the registerGate / model-provider
-// seams: built-ins self-register on import; a third-party kind registers by
-// importing for side effect.
+// (`manifest` = BYO HTTP scheduler pool, `kubernetes` = native per-run pods, plus any
+// CUSTOM kind) registers a RunnerBackendProvider that maps its config → a RunnerTransport.
+// The connection service resolves a workspace's stored `kind` to the registered provider and
+// builds the transport. A CUSTOM third-party kind needs only a registry entry (an import
+// side effect) — it rides the contract's generic manifest member, so NO new config variant
+// and no new table/service/controller/UI window. Mirrors `environment-backends.ts` and the
+// registerGate / model-provider / agent-kind seams: built-ins self-register on import; a
+// third-party kind registers for side effect.
+//
+// NB: the `ctx.runnerPoolProvider` below is a DIFFERENT seam — a deployment-wide HTTP-pool
+// provider the `manifest` backend reuses (its OAuth cache), NOT the custom-kind mechanism. A
+// bespoke backend is a registered kind, not an injected `runnerPoolProvider`.
 
 /** Per-call dependencies a provider may need to build/test its transport. */
 export interface RunnerBackendContext {
@@ -54,7 +58,14 @@ export interface RunnerBackendSafetyOptions {
 }
 
 export interface RunnerBackendProvider {
-  readonly kind: RunnerBackendConfig['kind']
+  // `string`, not the contract's discriminated `kind`, so a CUSTOM third-party kind can
+  // register. Pinned explicitly so a future contract re-narrowing can't re-lock the registry.
+  readonly kind: string
+  /**
+   * Human label for the connect-form backend selector + the snapshot (an unconnected kind
+   * has no stored config to derive a label from). Defaults to `kind` when omitted.
+   */
+  readonly displayLabel?: string
   /** Every secret-bundle key the config references (validated present at registration). */
   referencedSecretKeys(config: RunnerBackendConfig): string[]
   /** Non-secret metadata persisted on the connection row + shown in the UI. */
@@ -91,6 +102,14 @@ export function registeredRunnerBackendKinds(): string[] {
   return [...REGISTRY.keys()]
 }
 
+/**
+ * Registered backend kinds + display labels, for the workspace snapshot → the SPA's
+ * provider-connect backend-kind selector. Always includes the built-ins.
+ */
+export function runnerBackendKinds(): { kind: string; label: string }[] {
+  return [...REGISTRY.values()].map((p) => ({ kind: p.kind, label: p.displayLabel ?? p.kind }))
+}
+
 // --- Built-in: manifest (the original BYO HTTP scheduler pool) ----------------
 
 let sharedHttpProvider: HttpRunnerPoolProvider | undefined
@@ -100,6 +119,7 @@ function defaultHttpProvider(urlPolicy?: UrlSafetyPolicy): HttpRunnerPoolProvide
 
 export const manifestRunnerBackend: RunnerBackendProvider = {
   kind: 'manifest',
+  displayLabel: 'HTTP manifest pool',
   referencedSecretKeys: (config) =>
     config.kind === 'manifest' ? manifestSecretKeys(config.manifest) : [],
   connectionMeta: (config) => {

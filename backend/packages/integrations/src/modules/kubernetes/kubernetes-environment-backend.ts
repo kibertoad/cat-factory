@@ -18,10 +18,15 @@ import type { EnvironmentBackendProvider } from '../environments/environment-bac
 
 export const kubernetesEnvironmentBackend: EnvironmentBackendProvider = {
   kind: 'kubernetes',
+  displayLabel: 'Kubernetes',
+  // Structural (`'kubernetes' in config`) narrowing, not `config.kind === 'kubernetes'`:
+  // the open contract union now carries a generic `{ kind: string, manifest }` custom member
+  // whose `kind` can equal `'kubernetes'`, so a kind-equality check no longer narrows away
+  // that member. The registry routes by slug, so this backend only ever sees its own config.
   referencedSecretKeys: (config) =>
-    config.kind === 'kubernetes' ? [KUBERNETES_ENV_TOKEN_SECRET_KEY] : [],
+    'kubernetes' in config ? [KUBERNETES_ENV_TOKEN_SECRET_KEY] : [],
   connectionMeta: (config) => {
-    if (config.kind !== 'kubernetes') throw new Error('Expected a kubernetes environment config')
+    if (!('kubernetes' in config)) throw new Error('Expected a kubernetes environment config')
     return {
       providerId: 'kubernetes',
       label: config.kubernetes.label,
@@ -29,7 +34,7 @@ export const kubernetesEnvironmentBackend: EnvironmentBackendProvider = {
     }
   },
   assertConfigSafe: (config, opts) => {
-    if (config.kind !== 'kubernetes') return
+    if (!('kubernetes' in config)) return
     assertApiServerUrlSafe(config.kubernetes.apiServerUrl)
     const needsCustomTls =
       !!config.kubernetes.caCertPem || !!config.kubernetes.insecureSkipTlsVerify
@@ -44,7 +49,7 @@ export const kubernetesEnvironmentBackend: EnvironmentBackendProvider = {
     }
   },
   toManifest: (config) => {
-    if (config.kind !== 'kubernetes') throw new Error('Expected a kubernetes environment config')
+    if (!('kubernetes' in config)) throw new Error('Expected a kubernetes environment config')
     return kubernetesConfigToManifest(config.kubernetes)
   },
   fromManifest: (manifest) => ({

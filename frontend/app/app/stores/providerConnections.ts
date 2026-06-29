@@ -11,6 +11,27 @@ import { useWorkspaceStore } from '~/stores/workspace'
 
 const KINDS: ProviderConnectionKind[] = ['environment', 'runner-pool']
 
+/** A selectable backend kind for the connect form's backend selector. */
+interface BackendKindOption {
+  kind: string
+  label: string
+}
+
+// Built-in fallback so the connect form's backend selector works before the snapshot
+// loads (or on an older backend that doesn't advertise the kinds). The live lists come
+// from the workspace snapshot (`environmentBackendKinds` / `runnerBackendKinds`) and may
+// additionally carry a deployment's programmatically-registered CUSTOM kinds.
+const BUILTIN_BACKEND_KINDS: Record<ProviderConnectionKind, BackendKindOption[]> = {
+  environment: [
+    { kind: 'manifest', label: 'HTTP manifest' },
+    { kind: 'kubernetes', label: 'Kubernetes' },
+  ],
+  'runner-pool': [
+    { kind: 'manifest', label: 'HTTP manifest pool' },
+    { kind: 'kubernetes', label: 'Kubernetes' },
+  ],
+}
+
 interface ProviderState {
   /** null until first probed; false ⇒ integration disabled on the backend (hide it). */
   available: boolean | null
@@ -38,13 +59,35 @@ export const useProviderConnectionsStore = defineStore('providerConnections', ()
   })
   const loaded = ref(false)
   let inFlight: Promise<void> | null = null
+  // The selectable backend kinds per subsystem, fed from the workspace snapshot.
+  const backendKinds = reactive<Record<ProviderConnectionKind, BackendKindOption[]>>({
+    environment: BUILTIN_BACKEND_KINDS.environment,
+    'runner-pool': BUILTIN_BACKEND_KINDS['runner-pool'],
+  })
 
-  async function loadKind(kind: ProviderConnectionKind) {
+  /** Seed the backend-kind selector lists from the workspace snapshot (built-in + custom). */
+  function registerBackendKinds(
+    payload: Partial<Record<ProviderConnectionKind, BackendKindOption[]>>,
+  ) {
+    for (const kind of KINDS) {
+      const list = payload[kind]
+      if (list && list.length > 0) backendKinds[kind] = list
+    }
+  }
+
+  /** The selectable backend kinds for a subsystem (built-in fallback until the snapshot loads). */
+  function backendKindsFor(kind: ProviderConnectionKind): BackendKindOption[] {
+    return backendKinds[kind]
+  }
+
+  // `backendKind` (optional) re-probes the descriptor for a specific (e.g. not-yet-connected
+  // custom) backend kind, so its connect form renders before the first connect.
+  async function loadKind(kind: ProviderConnectionKind, backendKind?: string) {
     const ws = useWorkspaceStore()
     const s = state[kind]
     try {
       const [descriptor, { connection }] = await Promise.all([
-        api.describeProvider(ws.requireId(), kind),
+        api.describeProvider(ws.requireId(), kind, backendKind),
         api.getProviderConnection(ws.requireId(), kind),
       ])
       s.descriptor = descriptor
@@ -60,7 +103,7 @@ export const useProviderConnectionsStore = defineStore('providerConnections', ()
 
   /** Refresh both providers (used by the banner + after a save/remove). */
   async function load() {
-    await Promise.all(KINDS.map(loadKind))
+    await Promise.all(KINDS.map((k) => loadKind(k)))
     loaded.value = true
   }
 
@@ -128,6 +171,8 @@ export const useProviderConnectionsStore = defineStore('providerConnections', ()
     connectionFor,
     isAvailable,
     needingConfig,
+    backendKindsFor,
+    registerBackendKinds,
     register,
     updateSecrets,
     test,

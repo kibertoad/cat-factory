@@ -152,15 +152,15 @@ export const environmentManifestSchema = v.object({
   /** Fallback TTL (ms) when the response carries no explicit expiry. */
   defaultTtlMs: v.optional(v.pipe(v.number(), v.minValue(60000))),
   /**
-   * Opaque, provider-specific configuration for a *native* injected adapter (e.g. a
-   * Kargo project, link-selection key, status map). The generic HttpEnvironmentProvider
-   * ignores it entirely; a native adapter (injected via `buildNodeContainer({
-   * environmentProvider })` / `startLocal({ environmentProvider })`) reads + validates it
-   * off the per-call `manifest`. This is the per-WORKSPACE config carrier for native
-   * adapters — the deployment-wide provider singleton has no other way to receive
-   * per-workspace settings. NOT covered by the manifest URL/SSRF checks (which only guard
-   * `baseUrl`/`tokenUrl`); an adapter that puts a URL here must guard it itself (reuse the
-   * exported `UrlSafetyPolicy`). See `backend/docs/native-environment-adapter.md`.
+   * Opaque, provider-specific configuration for a CUSTOM backend (e.g. a Kargo project,
+   * link-selection key, status map). The generic HttpEnvironmentProvider ignores it
+   * entirely; a custom backend — registered programmatically via `registerEnvironmentBackend`
+   * (see `backend/docs/native-environment-adapter.md`) — reads + validates it off the per-call
+   * `manifest`. This is the per-WORKSPACE config carrier: a custom backend rides the generic
+   * manifest member of `environmentBackendConfigSchema`, so its bespoke settings live here and
+   * its credentials in the secret bundle. NOT covered by the manifest URL/SSRF checks (which
+   * only guard `baseUrl`/`tokenUrl`); a backend that puts a URL here must guard it itself
+   * (reuse the exported `UrlSafetyPolicy`).
    */
   providerConfig: v.optional(v.record(v.string(), v.unknown())),
 })
@@ -261,17 +261,43 @@ export const kubernetesEnvironmentConfigSchema = v.object({
 })
 export type KubernetesEnvironmentConfig = v.InferOutput<typeof kubernetesEnvironmentConfigSchema>
 
+/** Built-in environment backend kinds the contract knows by name. */
+export const RESERVED_ENVIRONMENT_BACKEND_KINDS = ['manifest', 'kubernetes'] as const
+
+/**
+ * The `kind` slug of a CUSTOM (third-party, programmatically-registered) environment
+ * backend: any lower-kebab slug that isn't a reserved built-in. A custom backend stores
+ * everything in the generic manifest — bespoke settings ride `providerConfig`, credentials
+ * the secret bundle — so its connect config is a manifest under this slug, and the
+ * registered `EnvironmentBackendProvider` (resolved by `kind`) owns the semantic
+ * validation. The reserved-kind guard is load-bearing: it stops a wrong-shaped built-in
+ * payload (e.g. `{ kind: 'kubernetes', manifest }`) from silently matching this generic
+ * member instead of failing.
+ */
+export const customEnvironmentBackendKindSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(64),
+  v.regex(/^[a-z0-9][a-z0-9-]*$/, 'must be a lower-kebab slug'),
+  v.check(
+    (k) => !(RESERVED_ENVIRONMENT_BACKEND_KINDS as readonly string[]).includes(k),
+    'reserved backend kind',
+  ),
+)
+
 /**
  * An ephemeral-environment backend config, discriminated by `kind`. The universal
- * abstraction over HOW a workspace's preview environments are provisioned: today
+ * abstraction over HOW a workspace's preview environments are provisioned: the built-ins
  * `manifest` (the generic BYO HTTP management API) and `kubernetes` (native per-PR
- * namespaces). Future kinds add a member here + a provider in
- * `@cat-factory/integrations` — no new table/service/controller. Mirrors
- * `runnerBackendConfigSchema`; the provider-registry seam keys on `kind`.
+ * namespaces), plus any CUSTOM kind a deployment registers programmatically via
+ * `registerEnvironmentBackend` (it rides the generic manifest member — NO new variant
+ * needed). Mirrors `runnerBackendConfigSchema`; the provider-registry seam keys on `kind`.
  */
 export const environmentBackendConfigSchema = v.variant('kind', [
   v.object({ kind: v.literal('manifest'), manifest: environmentManifestSchema }),
   v.object({ kind: v.literal('kubernetes'), kubernetes: kubernetesEnvironmentConfigSchema }),
+  v.object({ kind: customEnvironmentBackendKindSchema, manifest: environmentManifestSchema }),
 ])
 export type EnvironmentBackendConfig = v.InferOutput<typeof environmentBackendConfigSchema>
 export type EnvironmentBackendKind = EnvironmentBackendConfig['kind']

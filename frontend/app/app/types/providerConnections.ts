@@ -50,8 +50,14 @@ export interface ProviderConnection {
  */
 export interface RegisterProviderInput {
   manifest?: Record<string, unknown>
-  /** The discriminated runner-backend config (manifest pool or kubernetes). */
+  /** The discriminated runner-backend config (manifest pool, kubernetes, or a custom kind). */
   config?: Record<string, unknown>
+  /**
+   * The selected backend kind, used to wrap a bare `manifest` into the discriminated config
+   * (`{ kind, manifest }`). Defaults to `manifest`. A CUSTOM registered kind passes its slug
+   * here so the flat-form save isn't mis-tagged as the built-in manifest backend.
+   */
+  backendKind?: string
   secrets: Record<string, string>
 }
 
@@ -59,5 +65,6 @@ export interface RegisterProviderInput {
 export interface TestProviderInput {
   manifest?: Record<string, unknown>
   config?: Record<string, unknown>
+  backendKind?: string
   secrets?: Record<string, string>
 }

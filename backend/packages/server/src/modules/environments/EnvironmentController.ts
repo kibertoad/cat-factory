@@ -85,7 +85,10 @@ export function environmentController(): Hono<AppEnv> {
   buildHonoRoute(app, describeEnvironmentProviderContract, async (c) => {
     const env = requireEnvironments(c)
     if (!env) return unavailable(c)
-    return c.json(await env.connectionService.describeProvider(param(c, 'workspaceId')), 200)
+    return c.json(
+      await env.connectionService.describeProvider(param(c, 'workspaceId'), c.req.query('kind')),
+      200,
+    )
   })
 
   // Probe a candidate connection before saving (nothing persisted).
