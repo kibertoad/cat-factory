@@ -655,6 +655,9 @@ export class FetchGitHubClient implements GitHubClient {
     installationId: number,
     ref: GitHubRepoRef,
     branch: string,
+    // GitHub's required count is branch-protection-scoped; the PR number a provider with a
+    // PR-scoped rule (GitLab) needs is accepted by the port but unused here.
+    _number?: number,
   ): Promise<number> {
     try {
       const { json } = await this.request(

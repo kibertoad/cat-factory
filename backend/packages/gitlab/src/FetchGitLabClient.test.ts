@@ -6,12 +6,19 @@ import { StaticGitLabTokenSource } from './tokenSource.js'
 import { registerGitLab } from './index.js'
 import { GitLabWebhookMapper, GitLabWebhookVerifier } from './webhook.js'
 
-// A scripted fetch: matches each request by `METHOD path` (path = URL minus the api base)
-// and returns the queued response. Asserts the PRIVATE-TOKEN header is always sent.
-function fakeFetch(
-  routes: Record<string, { status?: number; body?: unknown; headers?: Record<string, string> }>,
-): { fetchImpl: typeof fetch; calls: { method: string; url: string; body?: unknown }[] } {
+type FakeResponse = { status?: number; body?: unknown; headers?: Record<string, string> }
+
+// A scripted fetch: matches each request by `METHOD path` (path = URL minus the api base) and
+// returns the queued response. A route value may be a SINGLE response or an ARRAY of responses
+// consumed one-per-call (the last entry repeats), so a poll loop that reads the same URL several
+// times can script a state transition (e.g. rebase_in_progress true → false). Asserts the
+// PRIVATE-TOKEN header is always sent.
+function fakeFetch(routes: Record<string, FakeResponse | FakeResponse[]>): {
+  fetchImpl: typeof fetch
+  calls: { method: string; url: string; body?: unknown }[]
+} {
   const calls: { method: string; url: string; body?: unknown }[] = []
+  const counters: Record<string, number> = {}
   const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
     const u = typeof url === 'string' ? url : url.toString()
     const method = (init?.method ?? 'GET').toUpperCase()
@@ -26,10 +33,18 @@ function fakeFetch(
     const key = `${method} ${path}`
     const route = routes[key]
     if (!route) throw new Error(`Unexpected request: ${key}`)
-    const status = route.status ?? 200
-    return new Response(route.body === undefined ? null : JSON.stringify(route.body), {
+    let picked: FakeResponse
+    if (Array.isArray(route)) {
+      const i = counters[key] ?? 0
+      counters[key] = i + 1
+      picked = route[Math.min(i, route.length - 1)]!
+    } else {
+      picked = route
+    }
+    const status = picked.status ?? 200
+    return new Response(picked.body === undefined ? null : JSON.stringify(picked.body), {
       status,
-      headers: { 'content-type': 'application/json', ...route.headers },
+      headers: { 'content-type': 'application/json', ...picked.headers },
     })
   }) as unknown as typeof fetch
 
@@ -46,6 +61,8 @@ function client(routes: Parameters<typeof fakeFetch>[0]) {
     tokenSource: new StaticGitLabTokenSource('tok'),
     clock,
     fetchImpl,
+    // No real delay between rebase polls in tests.
+    sleep: async () => {},
   })
   return { c, calls }
 }
@@ -242,6 +259,178 @@ describe('FetchGitLabClient', () => {
     await expect(c.mergeBranch(connection, ref, { base: 'main', head: 'feat' })).rejects.toThrow(
       /not supported on GitLab/,
     )
+  })
+
+  it('reads the PR base ref and requested reviewers from the MR detail', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/3': {
+        body: { target_branch: 'release', reviewers: [{ username: 'bob' }, { username: 'cara' }] },
+      },
+    })
+    expect(await c.getPullRequestBaseRef(connection, ref, 3)).toBe('release')
+    expect(await c.listRequestedReviewers(connection, ref, 3)).toEqual(['bob', 'cara'])
+  })
+
+  it('maps GitLab approvals to APPROVED reviews + the required count', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/3/approvals': {
+        body: { approved_by: [{ user: { username: 'dee' } }, { user: { username: 'eli' } }] },
+      },
+      'GET /projects/7/approvals': { body: { approvals_before_merge: 2 } },
+    })
+    expect(await c.listPullRequestReviews(connection, ref, 3)).toEqual([
+      { author: 'dee', state: 'APPROVED', submittedAt: 0, commitId: null },
+      { author: 'eli', state: 'APPROVED', submittedAt: 0, commitId: null },
+    ])
+    expect(await c.getRequiredApprovingReviewCount(connection, ref, 'main')).toBe(2)
+  })
+
+  it('defaults the required approval count to 1 when project approvals are unreadable', async () => {
+    const { c } = client({ 'GET /projects/7/approvals': { status: 403 } })
+    expect(await c.getRequiredApprovingReviewCount(connection, ref, 'main')).toBe(1)
+  })
+
+  it('maps resolvable discussions to review threads (MR iid carried in the thread id)', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/3/discussions?per_page=100': {
+        body: [
+          // A plain conversation discussion (not resolvable) is NOT a review thread.
+          { id: 'chat', notes: [{ id: 1, body: 'hi', author: { username: 'x' } }] },
+          {
+            id: 'd1',
+            notes: [
+              {
+                id: 2,
+                body: 'please fix',
+                resolvable: true,
+                resolved: false,
+                author: { username: 'rev' },
+                created_at: '2024-01-01T00:00:00Z',
+                position: { new_path: 'src/a.ts', new_line: 12 },
+              },
+            ],
+          },
+        ],
+      },
+    })
+    const threads = await c.listReviewThreads(connection, ref, 3)
+    expect(threads).toHaveLength(1)
+    expect(threads[0]).toMatchObject({
+      id: '3:d1',
+      isResolved: false,
+      path: 'src/a.ts',
+      line: 12,
+      comments: [
+        { author: 'rev', body: 'please fix', createdAt: Date.parse('2024-01-01T00:00:00Z') },
+      ],
+    })
+  })
+
+  it('resolves and replies to a thread against the MR + discussion the thread id encodes', async () => {
+    const { c, calls } = client({
+      'PUT /projects/7/merge_requests/3/discussions/d1?resolved=true': { status: 200 },
+      'POST /projects/7/merge_requests/3/discussions/d1/notes?body=ok': { status: 201 },
+    })
+    await c.resolveReviewThread(connection, ref, '3:d1')
+    await c.replyToReviewThread(connection, ref, '3:d1', 'ok')
+    expect(calls.map((x) => `${x.method} ${x.url}`)).toEqual([
+      'PUT /projects/7/merge_requests/3/discussions/d1?resolved=true',
+      'POST /projects/7/merge_requests/3/discussions/d1/notes?body=ok',
+    ])
+  })
+
+  it('lists only standalone conversation comments (drops system + threaded notes)', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/3/notes?sort=asc&order_by=created_at&per_page=100': {
+        body: [
+          { id: 1, body: 'hello', author: { username: 'p' }, created_at: '2024-01-01T00:00:00Z' },
+          { id: 2, body: 'assigned', system: true, author: { username: 'p' } },
+          { id: 3, body: 'diff note', type: 'DiffNote', author: { username: 'p' } },
+        ],
+      },
+    })
+    const comments = await c.listIssueComments(connection, ref, 3)
+    expect(comments).toEqual([
+      { id: '1', author: 'p', body: 'hello', createdAt: Date.parse('2024-01-01T00:00:00Z') },
+    ])
+  })
+
+  it('rebasePullRequest polls until the async rebase finishes, then reports merged once the branch advanced', async () => {
+    const { c, calls } = client({
+      // The before-read (head sha BEFORE the rebase).
+      'GET /projects/7/merge_requests/3': { body: { diff_refs: { head_sha: 'old' } } },
+      'PUT /projects/7/merge_requests/3/rebase': { status: 202, body: {} },
+      // The first poll catches the job still running; the second sees it done with an advanced head.
+      'GET /projects/7/merge_requests/3?include_rebase_in_progress=true': [
+        { body: { rebase_in_progress: true } },
+        { body: { rebase_in_progress: false, diff_refs: { head_sha: 'new' }, merge_error: null } },
+      ],
+    })
+    expect(await c.rebasePullRequest(connection, ref, 3)).toBe('merged')
+    // It actually waited for the in-progress poll before concluding (two status reads).
+    const polls = calls.filter((x) =>
+      x.url.startsWith('/projects/7/merge_requests/3?include_rebase_in_progress=true'),
+    )
+    expect(polls).toHaveLength(2)
+  })
+
+  it('rebasePullRequest reports conflict when the branch did not advance and merge_error is set', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/4': { body: { diff_refs: { head_sha: 'old' } } },
+      'PUT /projects/7/merge_requests/4/rebase': { status: 202, body: {} },
+      'GET /projects/7/merge_requests/4?include_rebase_in_progress=true': {
+        body: {
+          rebase_in_progress: false,
+          diff_refs: { head_sha: 'old' },
+          merge_error: 'conflict',
+        },
+      },
+    })
+    expect(await c.rebasePullRequest(connection, ref, 4)).toBe('conflict')
+  })
+
+  it('rebasePullRequest ignores a STALE merge_error once the branch actually advanced', async () => {
+    // merge_error is a persisted MR field shared with merge attempts; a leftover value must not
+    // be read as a fresh rebase conflict when the rebase plainly advanced the branch.
+    const { c } = client({
+      'GET /projects/7/merge_requests/5': { body: { diff_refs: { head_sha: 'old' } } },
+      'PUT /projects/7/merge_requests/5/rebase': { status: 202, body: {} },
+      'GET /projects/7/merge_requests/5?include_rebase_in_progress=true': {
+        body: {
+          rebase_in_progress: false,
+          diff_refs: { head_sha: 'new' },
+          merge_error: 'stale error from a prior merge attempt',
+        },
+      },
+    })
+    expect(await c.rebasePullRequest(connection, ref, 5)).toBe('merged')
+  })
+
+  it('rebasePullRequest treats an already-up-to-date branch (no advance, no error) as merged', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/6': { body: { diff_refs: { head_sha: 'same' } } },
+      'PUT /projects/7/merge_requests/6/rebase': { status: 202, body: {} },
+      'GET /projects/7/merge_requests/6?include_rebase_in_progress=true': {
+        body: { rebase_in_progress: false, diff_refs: { head_sha: 'same' }, merge_error: null },
+      },
+    })
+    expect(await c.rebasePullRequest(connection, ref, 6)).toBe('merged')
+  })
+
+  it('prefers the MR-level approvals_required over the project default when the MR number is known', async () => {
+    const { c } = client({
+      // MR-level effective requirement (accounts for the rule on this MR's target branch).
+      'GET /projects/7/merge_requests/3/approvals': { body: { approvals_required: 2 } },
+    })
+    expect(await c.getRequiredApprovingReviewCount(connection, ref, 'main', 3)).toBe(2)
+  })
+
+  it('falls back to the project approvals_before_merge when the MR-level count is unreadable', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/3/approvals': { status: 404 },
+      'GET /projects/7/approvals': { body: { approvals_before_merge: 1 } },
+    })
+    expect(await c.getRequiredApprovingReviewCount(connection, ref, 'main', 3)).toBe(1)
   })
 })
 

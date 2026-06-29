@@ -84,6 +84,17 @@ interface ProviderConfig {
   mergeMatch: string
   mergeMethod: string
   mergeRoute: Route
+  // ---- human-review gate inputs ----
+  /** The PR/MR detail read backing base-ref (and, on GitLab, the requested reviewers). */
+  baseRoute: Route
+  /** The requested-reviewers read on GitHub (a sub-route); omitted on GitLab (reuses baseRoute). */
+  requestedReviewersRoute?: Route
+  /** The submitted-reviews (GitHub) / approvals (GitLab) read. */
+  reviewsRoute: Route
+  /** The required-approving-review-count read (branch protection / project approvals). */
+  requiredCountRoute: Route
+  /** Whether the provider advances a PR branch by rebasing the MR (GitLab) vs `mergeBranch` (GitHub). */
+  rebases: boolean
 }
 
 const github: ProviderConfig = {
@@ -105,6 +116,23 @@ const github: ProviderConfig = {
   mergeMatch: '/pulls/7/merge',
   mergeMethod: 'PUT',
   mergeRoute: { method: 'PUT', match: '/pulls/7/merge', body: { merged: true } },
+  baseRoute: { method: 'GET', match: '/repos/o/r/pulls/7', body: { base: { ref: 'main' } } },
+  requestedReviewersRoute: {
+    method: 'GET',
+    match: '/pulls/7/requested_reviewers',
+    body: { users: [{ login: 'rev' }] },
+  },
+  reviewsRoute: {
+    method: 'GET',
+    match: '/pulls/7/reviews',
+    body: [{ user: { login: 'app' }, state: 'APPROVED' }],
+  },
+  requiredCountRoute: {
+    method: 'GET',
+    match: '/branches/main/protection/required_pull_request_reviews',
+    body: { required_approving_review_count: 2 },
+  },
+  rebases: false,
 }
 
 const gitlab: ProviderConfig = {
@@ -136,6 +164,24 @@ const gitlab: ProviderConfig = {
   mergeMatch: '/merge_requests/7/merge',
   mergeMethod: 'PUT',
   mergeRoute: { method: 'PUT', match: '/merge_requests/7/merge', body: {} },
+  // GitLab carries the base (target_branch) AND the requested reviewers on the MR detail, so
+  // both reads hit this one route (no separate requested-reviewers sub-route).
+  baseRoute: {
+    method: 'GET',
+    match: '/merge_requests/7',
+    body: { target_branch: 'main', reviewers: [{ username: 'rev' }] },
+  },
+  reviewsRoute: {
+    method: 'GET',
+    match: '/merge_requests/7/approvals',
+    body: { approved_by: [{ user: { username: 'app' } }] },
+  },
+  requiredCountRoute: {
+    method: 'GET',
+    match: '/projects/o%2Fr/approvals',
+    body: { approvals_before_merge: 2 },
+  },
+  rebases: true,
 }
 
 function defineVcsClientConformance(cfg: ProviderConfig): void {
@@ -173,6 +219,49 @@ function defineVcsClientConformance(cfg: ProviderConfig): void {
         const checks = await client.listCheckRuns(1, ref, 'sha1')
         expect(checks.items[0]?.name).toBe('build')
       })
+    })
+
+    it('reads the PR base ref for the human-review gate', async () => {
+      await withFetch(cfg.authOk, [cfg.baseRoute], async () => {
+        const client = cfg.makeClient()!
+        expect(await client.getPullRequestBaseRef!(1, ref, 7)).toBe('main')
+      })
+    })
+
+    it('reads the requested reviewers', async () => {
+      const routes = cfg.requestedReviewersRoute
+        ? [cfg.baseRoute, cfg.requestedReviewersRoute]
+        : [cfg.baseRoute]
+      await withFetch(cfg.authOk, routes, async () => {
+        const client = cfg.makeClient()!
+        expect(await client.listRequestedReviewers!(1, ref, 7)).toEqual(['rev'])
+      })
+    })
+
+    it('normalises an approval to a standing APPROVED review', async () => {
+      await withFetch(cfg.authOk, [cfg.reviewsRoute], async () => {
+        const client = cfg.makeClient()!
+        const reviews = await client.listPullRequestReviews!(1, ref, 7)
+        expect(reviews.some((r) => r.state === 'APPROVED' && r.author === 'app')).toBe(true)
+      })
+    })
+
+    it('reads the required approving review count', async () => {
+      await withFetch(cfg.authOk, [cfg.requiredCountRoute], async () => {
+        const client = cfg.makeClient()!
+        expect(await client.getRequiredApprovingReviewCount!(1, ref, 'main')).toBe(2)
+      })
+    })
+
+    it('exposes the branch-advancing capability appropriate to the provider', () => {
+      const client = cfg.makeClient()!
+      // GitLab advances a PR branch by rebasing the MR (it has no merge-branch-into-branch
+      // endpoint); GitHub uses the Merges API via `mergeBranch` and omits `rebasePullRequest`.
+      // The human-testing gate's BranchUpdater prefers `rebasePullRequest` when present.
+      expect(typeof client.rebasePullRequest === 'function').toBe(cfg.rebases)
+      // BOTH providers expose the human-review reads the gate consumes.
+      expect(typeof client.listReviewThreads).toBe('function')
+      expect(typeof client.getRequiredApprovingReviewCount).toBe('function')
     })
   })
 }

@@ -165,7 +165,9 @@ export class GitHubPullRequestReviewProvider implements PullRequestReviewProvide
     if (!gh.getRequiredApprovingReviewCount) return 1
     const baseRef =
       (await gh.getPullRequestBaseRef?.(target.installationId, ref, number)) ?? target.baseBranch
-    return gh.getRequiredApprovingReviewCount(target.installationId, ref, baseRef)
+    // Pass the PR number too: a provider whose required count is PR-scoped (GitLab's per-MR
+    // approval rule) reads it by number; GitHub ignores it and reads `baseRef`'s protection.
+    return gh.getRequiredApprovingReviewCount(target.installationId, ref, baseRef, number)
   }
 
   async resolveThreads(

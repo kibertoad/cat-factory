@@ -13,6 +13,7 @@ export {
   type TestResponse,
 } from './harness.js'
 export { FakeRepoBootstrapper } from './FakeRepoBootstrapper.js'
+export { FakeVcsClient, type FakeVcsCalls, type FakeVcsClientOptions } from './FakeVcsClient.js'
 export { FakeEnvConfigRepairer } from './FakeEnvConfigRepairer.js'
 export { FakeTaskSourceProvider } from './FakeTaskSourceProvider.js'
 export {

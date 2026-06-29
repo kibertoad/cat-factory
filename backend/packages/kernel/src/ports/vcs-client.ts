@@ -159,11 +159,15 @@ export interface VcsClient {
     ref: VcsRepoRef,
     number: number,
   ): Promise<GitHubPullRequestComment[]>
-  /** The number of approving reviews branch protection requires on `branch`. Optional. */
+  /**
+   * The number of approving reviews required before a PR can merge — read from `branch`'s
+   * protection (GitHub) or the MR's own approval rule (`number`, GitLab). Optional.
+   */
   getRequiredApprovingReviewCount?(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
     branch: string,
+    number?: number,
   ): Promise<number>
   /** The branch a PR actually targets, or null when the PR can't be read. Optional. */
   getPullRequestBaseRef?(
@@ -249,5 +253,18 @@ export interface VcsClient {
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
     input: { base: string; head: string },
+  ): Promise<'merged' | 'noop' | 'conflict'>
+  /**
+   * Bring an open PR's source branch up to date with its target branch server-side, and map
+   * the result to the same verdict as {@link mergeBranch}. Optional: the human-testing gate's
+   * "pull latest base" action prefers this when present (it's the right primitive for a
+   * provider whose only server-side branch-advancing operation is a PR rebase, e.g. GitLab,
+   * which has no merge-branch-into-branch endpoint). A provider with a real `mergeBranch`
+   * (GitHub) omits it and the gate falls back to `mergeBranch`.
+   */
+  rebasePullRequest?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
   ): Promise<'merged' | 'noop' | 'conflict'>
 }

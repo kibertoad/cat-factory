@@ -120,8 +120,8 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
     client.listIssueComments = (i, ref, n) => vcs.listIssueComments!(conn(i), toRepoRef(ref), n)
   }
   if (vcs.getRequiredApprovingReviewCount) {
-    client.getRequiredApprovingReviewCount = (i, ref, branch) =>
-      vcs.getRequiredApprovingReviewCount!(conn(i), toRepoRef(ref), branch)
+    client.getRequiredApprovingReviewCount = (i, ref, branch, n) =>
+      vcs.getRequiredApprovingReviewCount!(conn(i), toRepoRef(ref), branch, n)
   }
   if (vcs.getPullRequestBaseRef) {
     client.getPullRequestBaseRef = (i, ref, n) =>
@@ -137,6 +137,9 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
   if (vcs.resolveReviewThread) {
     client.resolveReviewThread = (i, ref, threadId) =>
       vcs.resolveReviewThread!(conn(i), toRepoRef(ref), threadId)
+  }
+  if (vcs.rebasePullRequest) {
+    client.rebasePullRequest = (i, ref, n) => vcs.rebasePullRequest!(conn(i), toRepoRef(ref), n)
   }
 
   return client
