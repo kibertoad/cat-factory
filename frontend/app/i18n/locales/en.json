@@ -397,7 +397,9 @@
     },
     "fragments": {
       "serviceTitle": "Service best practices",
-      "serviceEmpty": "None. Code-aware agents on this service follow their default guidance."
+      "serviceEmpty": "None. Code-aware agents on this service follow their default guidance.",
+      "manageBoard": "Manage this board's fragment library…",
+      "manageAccount": "Manage account fragments…"
     },
     "releaseHealth": {
       "title": "Post-release health",

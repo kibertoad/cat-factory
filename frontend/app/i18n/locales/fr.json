@@ -361,7 +361,9 @@
     },
     "fragments": {
       "serviceTitle": "Bonnes pratiques du service",
-      "serviceEmpty": "Aucune. Les agents conscients du code sur ce service suivent leurs consignes par défaut."
+      "serviceEmpty": "Aucune. Les agents conscients du code sur ce service suivent leurs consignes par défaut.",
+      "manageBoard": "Gérer la bibliothèque de fragments de ce tableau…",
+      "manageAccount": "Gérer les fragments du compte…"
     },
     "releaseHealth": {
       "title": "Santé post-déploiement",
