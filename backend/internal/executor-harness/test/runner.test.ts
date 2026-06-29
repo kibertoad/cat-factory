@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { JobRegistry, loadRunnerLimits, type RunOptions } from '../src/runner.js'
+import { HarnessFailure } from '../src/failure.js'
 
 // The registry is generic over the job/result shape; the lifecycle/watchdog tests only
 // need a job carrying its id and a result carrying the optional fields they assert on.
@@ -11,6 +12,14 @@ interface TestResult {
   branch?: string
   summary?: string
   error?: string
+  failureCause?:
+    | 'inactivity-timeout'
+    | 'max-duration'
+    | 'agent'
+    | 'git'
+    | 'api'
+    | 'no-usable-output'
+    | 'no-changes'
 }
 
 const job = (): TestJob => ({ jobId: 'exec-1' })
@@ -92,7 +101,7 @@ describe('JobRegistry', () => {
     ])
   })
 
-  it('records a thrown fault as failed', async () => {
+  it('records a thrown fault as failed with the `agent` cause', async () => {
     const registry = new JobRegistry(limits, async () => {
       throw new Error('boom')
     })
@@ -101,6 +110,35 @@ describe('JobRegistry', () => {
     const view = registry.get('exec-1')
     expect(view?.state).toBe('failed')
     expect(view?.error).toBe('boom')
+    expect(view?.failureCause).toBe('agent')
+  })
+
+  it("preserves a thrown HarnessFailure's structured cause (git/api), not a generic `agent`", async () => {
+    const registry = new JobRegistry(limits, async () => {
+      throw new HarnessFailure('git', 'fatal: could not read from remote repository')
+    })
+    registry.start('exec-1', job())
+    await tick()
+    const view = registry.get('exec-1')
+    expect(view?.state).toBe('failed')
+    expect(view?.error).toMatch(/could not read from remote/)
+    expect(view?.failureCause).toBe('git')
+  })
+
+  it('copies a clean-exit result.failureCause onto the failed-but-done view', async () => {
+    // A handler can finish cleanly (state 'done') yet report a failure via result.error +
+    // result.failureCause (e.g. no-usable-output). The registry surfaces that cause.
+    const registry = new JobRegistry(limits, async () => ({
+      summary: 's',
+      error: 'the agent produced no report',
+      failureCause: 'no-usable-output' as const,
+    }))
+    registry.start('exec-1', job())
+    await tick()
+    const view = registry.get('exec-1')
+    expect(view?.state).toBe('done')
+    expect(view?.result?.error).toMatch(/no report/)
+    expect(view?.failureCause).toBe('no-usable-output')
   })
 
   it('re-attaches to a running job instead of starting a duplicate', async () => {
@@ -117,11 +155,13 @@ describe('JobRegistry', () => {
     expect(starts).toBe(1)
   })
 
-  it('aborts a hung job via the inactivity watchdog', async () => {
+  it('aborts a hung job via the inactivity watchdog with a phase + last-tool breadcrumb', async () => {
     const tiny = { maxDurationMs: 60_000, inactivityMs: 20 }
     const registry = new JobRegistry(tiny, (_job, opts: RunOptions) => {
-      // Never produces activity and never resolves on its own — only the abort
-      // signal ends it, exactly as a wedged Pi/git process would.
+      // Enter the 'agent' phase and run one tool, then go silent — so the kill can report
+      // WHERE it hung and which tool last ran, exactly as a wedged Pi process would.
+      opts.onPhase?.('agent')
+      opts.onSpan?.({ tool: 'bash', startedAt: 1, endedAt: 2, ok: true })
       return new Promise<TestResult>((_resolve, reject) => {
         opts.signal?.addEventListener('abort', () => reject(new Error('killed')), { once: true })
       })
@@ -130,7 +170,27 @@ describe('JobRegistry', () => {
     await tick(60)
     const view = registry.get('exec-1')
     expect(view?.state).toBe('failed')
+    // The regex-stable phrase the backend matches is preserved...
     expect(view?.error).toMatch(/no agent activity/)
+    // ...and the breadcrumb names the hung phase + last tool.
+    expect(view?.error).toMatch(/hung in agent phase/)
+    expect(view?.error).toMatch(/last completed tool bash .*ago/)
+    expect(view?.failureCause).toBe('inactivity-timeout')
+    // The extended diagnostic is distinct from the one-line error.
+    expect(view?.detail).toMatch(/Phase timings/)
+    expect(view?.detail).not.toBe(view?.error)
+  })
+
+  it('reports "no tool had completed yet" when a hang happens before any tool', async () => {
+    const tiny = { maxDurationMs: 60_000, inactivityMs: 20 }
+    const registry = new JobRegistry(tiny, (_job, opts: RunOptions) => {
+      return new Promise<TestResult>((_resolve, reject) => {
+        opts.signal?.addEventListener('abort', () => reject(new Error('killed')), { once: true })
+      })
+    })
+    registry.start('exec-1', job())
+    await tick(60)
+    expect(registry.get('exec-1')?.error).toMatch(/no tool had completed yet/)
   })
 
   it('enforces the max-duration cap even when the job keeps producing output', async () => {
@@ -153,5 +213,6 @@ describe('JobRegistry', () => {
     const view = registry.get('exec-1')
     expect(view?.state).toBe('failed')
     expect(view?.error).toMatch(/max duration/)
+    expect(view?.failureCause).toBe('max-duration')
   })
 })

@@ -55,10 +55,12 @@ interface KindEntry {
 function defineKind<TJob extends { jobId: string }, TResult extends JobResultBase>(
   parse: (input: unknown) => TJob,
   handler: (job: TJob, opts: RunOptions) => Promise<TResult>,
+  // Non-secret correlation fields bound on the per-job logger (see JobRegistry.describe).
+  describe?: (job: TJob) => Record<string, unknown>,
 ): KindEntry {
   return {
     parse,
-    registry: new JobRegistry<TJob, TResult>(limits, handler),
+    registry: new JobRegistry<TJob, TResult>(limits, handler, describe),
   } as unknown as KindEntry
 }
 
@@ -71,7 +73,11 @@ function defineKind<TJob extends { jobId: string }, TResult extends JobResultBas
 // `RunnerDispatchKind` (now also just `'agent'`); the harness keeps its own copy so the
 // image carries no runtime deps.
 const KINDS: Record<string, KindEntry> = {
-  agent: defineKind(parseAgentJob, handleAgent),
+  agent: defineKind(parseAgentJob, handleAgent, (job) => ({
+    mode: job.mode,
+    repo: `${job.repo.owner}/${job.repo.name}`,
+    branch: job.branch,
+  })),
 }
 
 async function readBody(req: IncomingMessage): Promise<string> {

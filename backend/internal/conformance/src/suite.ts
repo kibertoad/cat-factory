@@ -3969,6 +3969,37 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(coderStep.startingContainer ?? false).toBe(false)
       })
 
+      it("maps a polled job's structured failureCause → AgentFailureKind and surfaces the detail", async () => {
+        // The harness now reports a STRUCTURED `failureCause` (+ extended `detail`) on a failed
+        // job view; the engine must classify the failure from it WITHOUT regex-matching the error
+        // — a watchdog `inactivity-timeout` becomes `timeout`, and the harness detail is surfaced.
+        // Asserted identically on both runtimes so a facade/transport that drops the cause (the
+        // way the Node pool transport once did) fails here instead of silently degrading to `agent`.
+        const app = harness.makeApp({
+          asyncKinds: ['coder'],
+          pollFailKinds: ['coder'],
+          pollFailCause: 'inactivity-timeout',
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build only',
+          agentKinds: ['coder'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('failed')
+        // The watchdog cause classifies as `timeout`, not the generic `agent`.
+        expect(exec.failure?.kind).toBe('timeout')
+        // The harness's extended diagnostic is surfaced as the failure detail.
+        expect(exec.failure?.detail).toContain('Phase timings')
+      })
+
       it('routes a merger PR to human review when the assessment is unexplained (empty rationale)', async () => {
         // Engine guard: auto-merge only on a CREDIBLE within-threshold assessment. Scores
         // within every ceiling but an EMPTY rationale (the shape a merger that failed to

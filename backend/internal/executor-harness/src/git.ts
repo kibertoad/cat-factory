@@ -6,6 +6,7 @@ import { promisify } from 'node:util'
 import type { BootstrapTargetSpec, PrSpec, RepoSpec } from './job.js'
 import { redactSecrets } from './redact.js'
 import { loadRunnerLimits } from './runner.js'
+import { HarnessFailure } from './failure.js'
 
 // Re-exported so existing importers that pull `redactSecrets` from this module keep
 // working; the single source of truth now lives in ./redact.js.
@@ -125,7 +126,13 @@ async function git(
     })
     return stdout
   } catch (err) {
-    throw redactError(err)
+    // Tag the failure as `git` so the registry's catch records the real cause instead of
+    // the generic `agent`. A watchdog abort still wins: `describeFailure` keys off
+    // `killReason` first, so an abort during a git op keeps the timeout message/cause.
+    const redacted = redactError(err)
+    const failure = new HarnessFailure('git', redacted.message)
+    if (redacted.stack) failure.stack = redacted.stack
+    throw failure
   }
 }
 
@@ -684,6 +691,107 @@ export function gitlabProjectPath(cloneUrl: string): string {
   return encodeURIComponent(path)
 }
 
+/** The abort reason as an Error (the watchdog aborts with one), or a generic fallback. */
+function abortError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error('aborted')
+}
+
+/** Whether a thrown fetch error is an AbortError (caller-initiated, never retried). */
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError'
+}
+
+/**
+ * Parse a `Retry-After` header into ms, bounded so it can't stall the job. Accepts BOTH
+ * forms the spec allows: integer delay-seconds (`120`) and an HTTP-date (`Wed, 21 Oct 2026
+ * 07:28:00 GMT`); the latter is turned into a delay from now. A past/zero/unparseable value
+ * yields undefined so the caller falls back to exponential backoff.
+ */
+function retryAfterMs(res: Response): number | undefined {
+  const raw = res.headers.get('retry-after')
+  if (!raw) return undefined
+  const secs = Number(raw)
+  if (Number.isFinite(secs)) {
+    return secs > 0 ? Math.min(secs * 1000, MAX_RETRY_AFTER_MS) : undefined
+  }
+  const at = Date.parse(raw)
+  if (Number.isNaN(at)) return undefined
+  const ms = at - Date.now()
+  return ms > 0 ? Math.min(ms, MAX_RETRY_AFTER_MS) : undefined
+}
+
+/** Sleep `ms`, rejecting immediately (with the abort reason) if `signal` aborts meanwhile. */
+function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(abortError(signal))
+    const onAbort = (): void => {
+      clearTimeout(timer)
+      reject(abortError(signal as AbortSignal))
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+const MAX_RETRY_AFTER_MS = 8_000
+const RETRY_BASE_MS = 500
+const RETRY_MAX_DELAY_MS = 4_000
+
+/**
+ * Run a single HTTP request with bounded retry for TRANSIENT failures, so a momentary
+ * upstream blip (a 5xx, a 429 rate-limit, or a dropped connection) no longer fails an
+ * otherwise-complete run on its very last step (opening the PR/MR). Up to 3 attempts
+ * (2 retries) with exponential backoff + jitter (honoring a `Retry-After` on a 429),
+ * every wait abort-aware so the inactivity/max-duration watchdog still cancels promptly.
+ *
+ * ONLY transient failures retry: a `>=500`/`429` response, or a network-level fetch
+ * rejection. A 4xx (incl. the 422/409 "already exists" the callers treat as success) is
+ * returned to the caller unretried, and a caller abort is rethrown at once. The response
+ * body is never read here, so the caller's existing status handling is unchanged.
+ */
+async function withApiRetry(
+  fn: () => Promise<Response>,
+  opts: { signal?: AbortSignal; attempts?: number } = {},
+): Promise<Response> {
+  const maxAttempts = opts.attempts ?? 3
+  let lastError: unknown
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (opts.signal?.aborted) throw abortError(opts.signal)
+    let res: Response | undefined
+    try {
+      res = await fn()
+    } catch (err) {
+      // A caller/watchdog abort is terminal; a network error is transient → retry.
+      if (isAbortError(err) || opts.signal?.aborted) throw err
+      lastError = err
+    }
+    if (res) {
+      const transient = res.status >= 500 || res.status === 429
+      if (!transient || attempt >= maxAttempts) return res
+      const after = retryAfterMs(res)
+      // Discard the unread body before retrying so the connection can be reused.
+      await res.body?.cancel().catch(() => {})
+      await abortableDelay(after ?? backoffMs(attempt), opts.signal)
+      continue
+    }
+    if (attempt >= maxAttempts) break
+    await abortableDelay(backoffMs(attempt), opts.signal)
+  }
+  // Exhausted on a network-level rejection (no HTTP response): an upstream API failure.
+  const message =
+    lastError instanceof Error ? lastError.message : 'API request failed after retries'
+  throw new HarnessFailure('api', redactSecrets(message))
+}
+
+/** Exponential backoff (base 500ms, capped 4s) with up to 25% positive jitter. */
+function backoffMs(attempt: number): number {
+  const base = Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_MS * 2 ** (attempt - 1))
+  return base + Math.floor(base * 0.25 * Math.random())
+}
+
 /**
  * Open a PR (GitHub) or merge request (GitLab) for the pushed branch; returns its web URL.
  * The provider is chosen from the EXPLICIT `opts.provider` when the dispatcher set it,
@@ -701,24 +809,28 @@ export async function openPullRequest(opts: OpenPullRequestOptions): Promise<str
   }
   const apiBase = opts.apiBase ?? 'https://api.github.com'
   const path = `${encodeURIComponent(opts.owner)}/${encodeURIComponent(opts.name)}`
-  const res = await fetch(`${apiBase}/repos/${path}/pulls`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${opts.ghToken}`,
-      accept: 'application/vnd.github+json',
-      'user-agent': 'cat-factory-executor',
-      'x-github-api-version': '2022-11-28',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      title: opts.pr.title,
-      head: opts.head,
-      base: opts.base,
-      body: opts.pr.body,
-    }),
-    // Bound on the watchdog so a hung GitHub call can't stall the job.
-    ...(opts.signal ? { signal: opts.signal } : {}),
-  })
+  const res = await withApiRetry(
+    () =>
+      fetch(`${apiBase}/repos/${path}/pulls`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${opts.ghToken}`,
+          accept: 'application/vnd.github+json',
+          'user-agent': 'cat-factory-executor',
+          'x-github-api-version': '2022-11-28',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: opts.pr.title,
+          head: opts.head,
+          base: opts.base,
+          body: opts.pr.body,
+        }),
+        // Bound on the watchdog so a hung GitHub call can't stall the job.
+        ...(opts.signal ? { signal: opts.signal } : {}),
+      }),
+    { signal: opts.signal },
+  )
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
     // A resumed run pushes to a branch that already has an open PR; GitHub answers
@@ -728,12 +840,13 @@ export async function openPullRequest(opts: OpenPullRequestOptions): Promise<str
       const existing = await findOpenPullRequestUrl(opts)
       if (existing) return existing
     }
-    throw new Error(
+    throw new HarnessFailure(
+      'api',
       redactSecrets(`Failed to open PR (HTTP ${res.status}): ${detail.slice(0, 300)}`),
     )
   }
   const body = (await res.json()) as { html_url?: string }
-  if (!body.html_url) throw new Error('GitHub did not return a PR url')
+  if (!body.html_url) throw new HarnessFailure('api', 'GitHub did not return a PR url')
   return body.html_url
 }
 
@@ -759,17 +872,21 @@ async function openGitLabMergeRequest(
 ): Promise<string> {
   const apiBase = gitlabApiBaseFromCloneUrl(opts.cloneUrl)
   const project = gitlabProjectPath(opts.cloneUrl)
-  const res = await fetch(`${apiBase}/projects/${project}/merge_requests`, {
-    method: 'POST',
-    headers: gitlabHeaders(opts.ghToken),
-    body: JSON.stringify({
-      source_branch: opts.head,
-      target_branch: opts.base,
-      title: opts.pr.title,
-      description: opts.pr.body,
-    }),
-    ...(opts.signal ? { signal: opts.signal } : {}),
-  })
+  const res = await withApiRetry(
+    () =>
+      fetch(`${apiBase}/projects/${project}/merge_requests`, {
+        method: 'POST',
+        headers: gitlabHeaders(opts.ghToken),
+        body: JSON.stringify({
+          source_branch: opts.head,
+          target_branch: opts.base,
+          title: opts.pr.title,
+          description: opts.pr.body,
+        }),
+        ...(opts.signal ? { signal: opts.signal } : {}),
+      }),
+    { signal: opts.signal },
+  )
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
     // GitLab returns 409 (sometimes 400) when an open MR already exists for this source
@@ -781,12 +898,13 @@ async function openGitLabMergeRequest(
       const existing = await findOpenMergeRequestUrl(apiBase, project, opts)
       if (existing) return existing
     }
-    throw new Error(
+    throw new HarnessFailure(
+      'api',
       redactSecrets(`Failed to open merge request (HTTP ${res.status}): ${detail.slice(0, 300)}`),
     )
   }
   const body = (await res.json()) as { web_url?: string }
-  if (!body.web_url) throw new Error('GitLab did not return a merge request url')
+  if (!body.web_url) throw new HarnessFailure('api', 'GitLab did not return a merge request url')
   return body.web_url
 }
 
