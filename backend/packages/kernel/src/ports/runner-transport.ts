@@ -58,6 +58,15 @@ export interface RunnerJobResult {
    */
   custom?: unknown
   /**
+   * A tester job's docker-compose dependency stand-up record (explore mode, local infra),
+   * forwarded verbatim from the harness. The stand-up happens INSIDE the container, so its
+   * output never reaches the orchestrator-side provisioning-log store; this carries the
+   * captured (redacted, bounded) logs back so the Tester step can surface WHY the
+   * dependencies failed to come up. Absent for ephemeral / no-infra runs (and any non-tester
+   * kind). See {@link RunnerInfraSetup}.
+   */
+  infraSetup?: RunnerInfraSetup
+  /**
    * Token usage the harness lifted from the agent CLI's own event stream. Reported
    * by the subscription harnesses (Claude Code / Codex), whose traffic bypasses the
    * LLM proxy — so this is the only usage signal for them. The dispatch path folds
@@ -65,6 +74,26 @@ export interface RunnerJobResult {
    * rotation) and the telemetry sink. Absent for the proxy-metered Pi harness.
    */
   usage?: { inputTokens: number; outputTokens: number }
+}
+
+/**
+ * A tester run's in-container docker-compose stand-up record (see
+ * {@link RunnerJobResult.infraSetup}). Mirrors the harness's `InfraSetupRecord`; the engine
+ * persists it on the Tester step (the contracts `testerInfraSetupSchema`) for the test window.
+ */
+export interface RunnerInfraSetup {
+  /** Whether `docker compose up --wait` succeeded (the dependencies are up). */
+  started: boolean
+  /** The repo-relative compose file that was stood up. */
+  composePath?: string
+  /** Epoch ms the stand-up attempt finished. */
+  at: number
+  /** Wall-clock of the stand-up attempt, ms. */
+  durationMs?: number
+  /** Captured (redacted, tail-bounded) stdout+stderr of the stand-up command. */
+  logs?: string
+  /** The verbatim (redacted) failure message when stand-up failed, else absent. */
+  error?: string
 }
 
 /**

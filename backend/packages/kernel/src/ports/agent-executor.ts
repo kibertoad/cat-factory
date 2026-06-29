@@ -301,6 +301,16 @@ export interface AgentRunResult {
    */
   testReport?: unknown
   /**
+   * A `tester` step's in-container docker-compose dependency stand-up record (explore mode,
+   * local infra): whether the dependencies came up and the captured (redacted, bounded)
+   * `docker compose up` logs. The engine persists it on the Tester step so the test window
+   * can surface WHY local infra failed to come up — the failure-class artifact the
+   * orchestrator-side provisioning logs can't capture (the stand-up runs inside the
+   * container). Carried as `unknown` so the port stays free of the contracts schema; the
+   * engine parses it before use. Absent for ephemeral / no-infra runs.
+   */
+  infraSetup?: unknown
+  /**
    * An `on-call` step's structured release-regression assessment (culprit confidence,
    * recommendation, rationale, evidence). The post-release-health gate dispatched the
    * agent on a Datadog regression; the engine validates this, raises a

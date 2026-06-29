@@ -1,7 +1,12 @@
 import * as v from 'valibot'
 import { subscriptionVendorSchema } from './vendor-credentials.js'
 import { agentConfigValuesSchema } from './agent-config.js'
-import { testConcernSchema, testReportSchema, testEnvironmentSchema } from './testing.js'
+import {
+  testConcernSchema,
+  testReportSchema,
+  testEnvironmentSchema,
+  testerInfraSetupSchema,
+} from './testing.js'
 import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from './consensus.js'
 import { followUpsStepStateSchema } from './followUp.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
@@ -871,6 +876,15 @@ export const testerStepStateSchema = v.object({
    * attempts (what each addressed, how it ended) instead of only a bare `attempts` count.
    */
   attemptLog: v.optional(v.nullable(v.array(testerAttemptSchema))),
+  /**
+   * The most recent in-container docker-compose dependency stand-up record (local-infra
+   * tester): whether the dependencies came up and the captured (redacted, bounded)
+   * `docker compose up` logs. Refreshed on each Tester round (it stands the infra up anew),
+   * so the test window can surface WHY local infra failed to come up — the failure-class
+   * artifact the orchestrator-side provisioning logs can't see. Absent for ephemeral /
+   * no-infra runs. See {@link testerInfraSetupSchema}.
+   */
+  infraSetup: v.optional(v.nullable(testerInfraSetupSchema)),
 })
 export type TesterStepState = v.InferOutput<typeof testerStepStateSchema>
 

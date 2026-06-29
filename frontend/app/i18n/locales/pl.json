@@ -2912,7 +2912,14 @@
     },
     "environment": "Środowisko",
     "footer": "Scenariusze to obszary, które Tester postanowił sprawdzić (jego scenariusze akceptacyjne ze specyfikacji). Wyniki i zastrzeżenia są pod nimi grupowane według nazwy.",
-    "infrastructure": "Infrastruktura"
+    "infrastructure": "Infrastruktura",
+    "standup": {
+      "up": "Zależności uruchomione",
+      "failed": "Nie udało się uruchomić zależności",
+      "took": "Czas: {seconds}s",
+      "showLogs": "Pokaż dzienniki uruchamiania",
+      "hideLogs": "Ukryj dzienniki uruchamiania"
+    }
   },
   "visualConfirm": {
     "ariaLabel": "Potwierdzenie wizualne",

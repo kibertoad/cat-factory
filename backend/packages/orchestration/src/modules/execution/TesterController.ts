@@ -8,7 +8,12 @@ import type {
   PipelineStep,
 } from '@cat-factory/kernel'
 import { DEFAULT_MERGE_PRESET, isAsyncAgentExecutor } from '@cat-factory/kernel'
-import { type TestReport, type TesterAttempt, parseTestReport } from '@cat-factory/contracts'
+import {
+  type TestReport,
+  type TesterAttempt,
+  parseTestReport,
+  parseTesterInfraSetup,
+} from '@cat-factory/contracts'
 import { FIXER_AGENT_KIND, TESTER_AGENT_KIND } from './ci.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { AdvanceResult } from './advance.js'
@@ -124,6 +129,12 @@ export class TesterController {
       step.test = { phase: 'testing', attempts: 0, maxAttempts, lastReport: null }
     }
     if (report) step.test.lastReport = report
+    // Persist the in-container docker-compose stand-up record (local-infra tester) so the test
+    // window can surface WHY the dependencies failed to come up — the failure-class artifact the
+    // orchestrator-side provisioning logs can't capture. Refreshed each round (the Tester stands
+    // the infra up anew); left untouched when the run reported none (ephemeral / no-infra).
+    const infraSetup = parseTesterInfraSetup(result.infraSetup)
+    if (infraSetup) step.test.infraSetup = infraSetup
     step.test.phase = 'testing'
     step.subtasks = undefined
 

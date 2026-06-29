@@ -1598,6 +1598,10 @@ function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResul
       return {
         output: result.summary?.trim() || 'Testing complete.',
         testReport: coerceTestReport(result.custom, result.summary),
+        // The in-container docker-compose stand-up record (local-infra tester) — forwarded so
+        // the engine can persist its captured logs on the Tester step. Harness-produced, so
+        // no coercion; the TesterController validates it defensively before persisting.
+        ...(result.infraSetup ? { infraSetup: result.infraSetup } : {}),
       }
     }
     return {

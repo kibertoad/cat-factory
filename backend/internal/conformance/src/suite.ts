@@ -3353,6 +3353,58 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(testerStep.test?.lastReport?.greenlight).toBe(true)
       })
 
+      it('persists the tester docker-compose stand-up record on both stores', async () => {
+        // The in-container compose stand-up (local-infra tester) is captured by the harness and
+        // surfaced on the Tester step so the test window can show WHY local infra failed to come
+        // up. Assert it round-trips through persist → reload onto `step.test.infraSetup`
+        // identically on both runtimes — a FAILED stand-up with captured logs is the high-signal
+        // case the whole feature exists for. (Like `lastReport`, it lives in the step JSON blob,
+        // so this also pins the D1 ⇄ Drizzle mapper parity for the new field.)
+        const green = {
+          greenlight: true,
+          summary: 'covered the unit-level paths',
+          tested: ['login'],
+          outcomes: [{ name: 'login', status: 'passed' as const }],
+          concerns: [],
+        }
+        const infraSetup = {
+          started: false,
+          composePath: 'docker-compose.yml',
+          at: 1_700_000_000_000,
+          durationMs: 4200,
+          error: 'service db exited (1)',
+          logs: 'db-1  | FATAL: database "app" does not exist\ndb-1 exited with code 1',
+        }
+        const app = harness.makeApp({
+          asyncKinds: ['coder', 'tester-api'],
+          asyncPolls: 1,
+          testReports: [green],
+          testerInfraSetup: infraSetup,
+          pullRequest: { url: 'https://gh/pr/9', number: 9, branch: 'cat-factory/task_login' },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code + test',
+          agentKinds: ['coder', 'tester-api'],
+        })
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          agentConfig: { 'tester.environment': 'ephemeral' },
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
+        expect(testerStep.test?.infraSetup).toEqual(infraSetup)
+      })
+
       it('drives the visual-confirmation gate to completion (pass-through or park → approve)', async () => {
         // A `tester-ui` → `visual-confirmation` tail: the UI tester greenlights, then the gate
         // is reached. Whether it parks depends on the runtime's wiring: with NO binary-artifact

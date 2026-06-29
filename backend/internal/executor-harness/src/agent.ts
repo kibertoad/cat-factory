@@ -2,7 +2,8 @@ import { join } from 'node:path'
 import { mkdir, opendir } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import type { AgentInfraSpec, AgentJob, AgentResult } from './job.js'
+import type { AgentInfraSpec, AgentJob, AgentResult, InfraSetupRecord } from './job.js'
+import { redactSecrets } from './redact.js'
 import {
   cloneRepo,
   commitAll,
@@ -53,34 +54,88 @@ import { log, type Logger } from './logger.js'
 
 const exec = promisify(execFile)
 
+/** Cap on the captured compose output kept on the record (tail-biased — failures show last). */
+const MAX_INFRA_LOG_CHARS = 16_000
+
+/**
+ * Combine, redact and tail-bound captured compose stdout+stderr into the stored `logs`
+ * string. Keeps the LAST {@link MAX_INFRA_LOG_CHARS} (where a failure's error lives),
+ * prefixed with a truncation marker when trimmed. Returns undefined for empty output so
+ * the record stays sparse.
+ */
+function captureInfraLogs(stdout: unknown, stderr: unknown): string | undefined {
+  const merged = [String(stdout ?? ''), String(stderr ?? '')]
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join('\n')
+  if (!merged) return undefined
+  const redacted = redactSecrets(merged)
+  if (redacted.length <= MAX_INFRA_LOG_CHARS) return redacted
+  return `…(${redacted.length - MAX_INFRA_LOG_CHARS} earlier chars trimmed)\n${redacted.slice(-MAX_INFRA_LOG_CHARS)}`
+}
+
 /**
  * Bring the service's docker-compose dependencies up (local infra only). Best-effort:
  * runs `docker compose -f <path> up -d --wait` in the checkout. A missing Docker daemon
  * or a compose failure is logged and surfaced to the agent (as a prompt note) rather
  * than failing the job — the agent can still run unit-level tests and report what it
  * could. A no-op for ephemeral / no-infra / no-compose-path runs.
+ *
+ * Whether it succeeds or fails, the (redacted, bounded) command output is captured into a
+ * {@link InfraSetupRecord} returned alongside the prompt `note`, so the backend can surface
+ * the in-container dependency stand-up logs on the Tester step — the failure-class artifact
+ * the orchestrator-side provisioning logs can't see.
  */
 async function standUpInfra(
   dir: string,
   infra: AgentInfraSpec,
   signal: AbortSignal | undefined,
   logger: Logger,
-): Promise<{ started: boolean; note?: string }> {
+): Promise<{ started: boolean; note?: string; record?: InfraSetupRecord }> {
   if (infra.environment !== 'local' || infra.noInfraDependencies || !infra.composePath) {
     return { started: false }
   }
+  const startedAt = Date.now()
   try {
     logger.info('agent(explore): standing up infra', { composePath: infra.composePath })
-    await exec('docker', ['compose', '-f', infra.composePath, 'up', '-d', '--wait'], {
-      cwd: dir,
-      signal,
-      timeout: 5 * 60_000,
-    })
-    return { started: true }
+    // Raise maxBuffer well above the 1MB default so a chatty compose stand-up can't fail the
+    // (best-effort) infra step with ENOBUFS; the captured output is tail-bounded on storage.
+    const { stdout, stderr } = await exec(
+      'docker',
+      ['compose', '-f', infra.composePath, 'up', '-d', '--wait'],
+      { cwd: dir, signal, timeout: 5 * 60_000, maxBuffer: 16 * 1024 * 1024 },
+    )
+    const logs = captureInfraLogs(stdout, stderr)
+    return {
+      started: true,
+      record: {
+        started: true,
+        composePath: infra.composePath,
+        at: Date.now(),
+        durationMs: Date.now() - startedAt,
+        ...(logs ? { logs } : {}),
+      },
+    }
   } catch (err) {
     const note = err instanceof Error ? err.message : String(err)
     logger.warn('agent(explore): infra stand-up failed', { error: note })
-    return { started: false, note }
+    // `execFile` rejections carry the partial stdout/stderr on the error object — capture them
+    // so the stored logs explain the failure (a port clash, a pull-auth error, an exited
+    // dependency), not just the one-line exit message.
+    const e = err as { stdout?: unknown; stderr?: unknown }
+    const logs = captureInfraLogs(e.stdout, e.stderr)
+    return {
+      started: false,
+      note,
+      record: {
+        started: false,
+        composePath: infra.composePath,
+        at: Date.now(),
+        durationMs: Date.now() - startedAt,
+        error: redactSecrets(note),
+        ...(logs ? { logs } : {}),
+      },
+    }
   }
 }
 
@@ -173,6 +228,12 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
         ? `${job.userPrompt}\n\nNote: standing the infra up reported a problem (${standUp.note}). ` +
           `Test what you can and flag any dependency-related gaps as concerns.`
         : job.userPrompt
+      // The compose stand-up record (success or failure, with its captured logs) rides back on
+      // EVERY result branch — the backend surfaces it on the Tester step regardless of whether
+      // the agent then produced a usable report.
+      const infraSetupFields: { infraSetup?: InfraSetupRecord } = standUp.record
+        ? { infraSetup: standUp.record }
+        : {}
 
       try {
         opts.onPhase?.('agent')
@@ -214,6 +275,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
             error: noOutputReason(stats, stderrTail),
             failureCause: 'no-usable-output',
             ...(usage ? { usage } : {}),
+            ...infraSetupFields,
           }
         }
 
@@ -230,6 +292,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
               error: `the agent did not return a usable result: ${unusable}.${agentOutputTail(stderrTail, summary)}`,
               failureCause: 'no-usable-output',
               ...(usage ? { usage } : {}),
+              ...infraSetupFields,
             }
           }
         }
@@ -237,7 +300,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
         // Prose: the summary IS the deliverable.
         if (job.output?.kind !== 'structured') {
           logger.info('agent(explore): done (prose)', { ...stats })
-          return { summary, stats, ...(usage ? { usage } : {}) }
+          return { summary, stats, ...(usage ? { usage } : {}), ...infraSetupFields }
         }
 
         // Structured: parse the agent's JSON. With repair enabled (default) a malformed
@@ -281,6 +344,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
             error: noStructuredReason(stats, stderrTail, diagnostics),
             failureCause: 'no-usable-output',
             ...(usage ? { usage } : {}),
+            ...infraSetupFields,
           }
         }
         // Stamp the run's actual environment authoritatively onto the structured result when
@@ -291,7 +355,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
           ;(custom as Record<string, unknown>).environment = infra.environment
         }
         logger.info('agent(explore): done (structured)', { ...stats })
-        return { summary, custom, stats, ...(usage ? { usage } : {}) }
+        return { summary, custom, stats, ...(usage ? { usage } : {}), ...infraSetupFields }
       } finally {
         if (infra) await tearDownInfra(dir, infra)
       }

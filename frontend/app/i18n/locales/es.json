@@ -2912,7 +2912,14 @@
     },
     "environment": "Entorno",
     "footer": "Los escenarios son las áreas que el Tester decidió ejercitar (sus escenarios de aceptación de la especificación). Los resultados y las incidencias se agrupan bajo ellos por nombre.",
-    "infrastructure": "Infraestructura"
+    "infrastructure": "Infraestructura",
+    "standup": {
+      "up": "Dependencias iniciadas",
+      "failed": "No se pudieron iniciar las dependencias",
+      "took": "Tardó {seconds}s",
+      "showLogs": "Mostrar registros de arranque",
+      "hideLogs": "Ocultar registros de arranque"
+    }
   },
   "visualConfirm": {
     "ariaLabel": "Confirmación visual",

@@ -2912,7 +2912,14 @@
     },
     "environment": "Environnement",
     "footer": "Les scénarios sont les domaines que le Testeur a choisi d'éprouver (ses scénarios d'acceptation de la spécification). Les résultats et les réserves y sont regroupés par nom.",
-    "infrastructure": "Infrastructure"
+    "infrastructure": "Infrastructure",
+    "standup": {
+      "up": "Dépendances démarrées",
+      "failed": "Échec du démarrage des dépendances",
+      "took": "Durée : {seconds}s",
+      "showLogs": "Afficher les journaux de démarrage",
+      "hideLogs": "Masquer les journaux de démarrage"
+    }
   },
   "visualConfirm": {
     "ariaLabel": "Confirmation visuelle",
