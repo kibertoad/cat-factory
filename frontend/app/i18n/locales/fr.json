@@ -2046,7 +2046,6 @@
       "title": "Connecter une source",
       "sourceFallback": "Source",
       "intro": "Connectez {source} pour importer des exigences, des RFC et des PRD, puis générer la structure du tableau ou les joindre aux tâches comme contexte pour les agents.",
-      "personalNote": "Connexion personnelle : cet identifiant vous authentifie et n'est stocké que pour votre compte, jamais partagé avec le reste de l'espace de travail.",
       "disconnect": "Déconnecter",
       "connect": "Connecter",
       "update": "Mettre à jour la connexion",

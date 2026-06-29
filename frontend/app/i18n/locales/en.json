@@ -2100,7 +2100,6 @@
       "title": "Connect source",
       "sourceFallback": "Source",
       "intro": "Connect {source} to import requirements, RFCs and PRDs, then spawn board structure or attach them to tasks as agent context.",
-      "personalNote": "Personal connection — this credential authenticates as you and is stored only for your account, never shared with the rest of the workspace.",
       "disconnect": "Disconnect",
       "connect": "Connect",
       "update": "Update connection",

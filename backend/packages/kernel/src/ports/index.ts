@@ -196,8 +196,6 @@ export type {
 export type {
   DocumentConnectionRecord,
   DocumentConnectionRepository,
-  UserDocumentConnectionRecord,
-  UserDocumentConnectionRepository,
   DocumentRecord,
   DocumentRepository,
 } from './document-repositories.js'

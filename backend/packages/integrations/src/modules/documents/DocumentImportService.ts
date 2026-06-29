@@ -45,17 +45,13 @@ export class DocumentImportService {
   }
 
   /**
-   * Fetch a page (by id or URL) and upsert its projection; returns the document.
-   * `ownerUserId` resolves the credential for a personal (`credentialScope: 'user'`)
-   * source — the acting user — and is ignored for workspace sources. The cached
-   * projection is always workspace-scoped, so a personal source's imported page is
-   * shared with the workspace once fetched (only the *credential* is personal).
+   * Fetch a page (by id or URL) and upsert its projection; returns the document. The
+   * provider authenticates with the workspace's stored credential.
    */
   async import(
     workspaceId: string,
     source: DocumentSourceKind,
     ref: string,
-    ownerUserId = '',
   ): Promise<SourceDocument> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     const provider = this.requireProvider(source)
@@ -63,11 +59,7 @@ export class DocumentImportService {
     if (!externalId) {
       throw new ValidationError(`Could not resolve a ${source} page id from '${ref}'`)
     }
-    const connection = await this.deps.connectionService.requireConnection(
-      workspaceId,
-      source,
-      ownerUserId,
-    )
+    const connection = await this.deps.connectionService.requireConnection(workspaceId, source)
     const content = await provider.fetchDocument(connection.credentials, externalId)
 
     // Preserve any existing block link across a re-import.
@@ -113,18 +105,13 @@ export class DocumentImportService {
     workspaceId: string,
     source: DocumentSourceKind,
     query: string,
-    ownerUserId = '',
   ): Promise<DocumentSearchResult[]> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     const provider = this.requireProvider(source)
     if (!provider.search) {
       throw new ValidationError(`The ${source} source does not support search`)
     }
-    const connection = await this.deps.connectionService.requireConnection(
-      workspaceId,
-      source,
-      ownerUserId,
-    )
+    const connection = await this.deps.connectionService.requireConnection(workspaceId, source)
     return provider.search(connection.credentials, query, workspaceId)
   }
 
