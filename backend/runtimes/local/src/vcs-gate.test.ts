@@ -63,6 +63,22 @@ describe('GitLab-backed engine VCS client drives the gate / merge / branch-updat
     })
   })
 
+  it('surfaces assigned reviewers + conversation comments for a NOT-yet-approved PR', async () => {
+    // The provider reads listRequestedReviewers + listIssueComments only on the not-yet-approved
+    // path — so drive it with no approvals to lock that the GitLab-backed adapter satisfies BOTH.
+    const vcs = new FakeVcsClient({
+      reviews: [],
+      requestedReviewers: ['rev'],
+      comments: [{ id: '1', author: 'p', body: 'please take a look', createdAt: 0 }],
+    })
+    const snapshot = await new GitHubPullRequestReviewProvider(deps(vcs)).getReview('w', 'b')
+    expect(snapshot.approvals).toBe(0)
+    expect(snapshot.assignedReviewers).toEqual(['rev'])
+    expect(snapshot.comments).toEqual([
+      { id: '1', author: 'p', body: 'please take a look', createdAt: 0, isBot: false },
+    ])
+  })
+
   it('updates the PR branch via the MR rebase path (GitLab has no mergeBranch)', async () => {
     const vcs = new FakeVcsClient()
     const outcome = await new GitHubBranchUpdater(deps(vcs)).updateFromBase('w', 'b')

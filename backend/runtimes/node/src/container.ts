@@ -1334,7 +1334,17 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           clock,
           apiBase: config.github.apiBase,
         })
-      : gitlabEngineClient)
+      : undefined)
+
+  // The client the engine's gate / merge / RepoFiles seams read through: the real GitHub client
+  // when present, else the GitLab-backed fallback so a GitLab-only deployment still gates on real
+  // CI and merges for real (the GitHub App wins when both are configured). Kept SEPARATE from
+  // `githubClient` on purpose — the GitHub-issue-specific consumers below (the GitHub Issues task
+  // source, issue writeback, the App projection module) must NOT be fed the GitLab client, or a
+  // GitLab-only deployment would offer a non-functional "GitHub Issues" source (it resolves the
+  // empty github_installations projection). Parity with the Worker, which keeps the App client
+  // distinct from its GitLab engine fallback.
+  const engineVcsClient: GitHubClient | undefined = githubClient ?? gitlabEngineClient
 
   // Task-source integration (Jira + GitHub issues). Tenants connect their own Jira
   // site through the UI (credentials stored per-workspace, encrypted at rest); the
@@ -1408,27 +1418,29 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   })
 
   let githubGateDeps: Partial<CoreDependencies> = {}
-  if (githubClient) {
+  if (engineVcsClient) {
     // The `ci` / `conflicts` gates now live in `@cat-factory/gates`; wire their providers into
     // the gate suite instead of onto the engine's CoreDependencies (single-process startup, so
     // the deployment-global handles are set once here). Parity with the Worker's selectGitHubDeps.
+    // These read through `engineVcsClient` (GitHub App or the GitLab fallback), so a GitLab-only
+    // deployment gates + merges for real too.
     wireCiStatusProvider(
       new GitHubCiStatusProvider({
-        githubClient,
+        githubClient: engineVcsClient,
         resolveRepoTarget,
         blockRepository: repos.blockRepository,
       }),
     )
     wireMergeabilityProvider(
       new GitHubMergeabilityProvider({
-        githubClient,
+        githubClient: engineVcsClient,
         resolveRepoTarget,
         blockRepository: repos.blockRepository,
       }),
     )
     wirePullRequestReviewProvider(
       new GitHubPullRequestReviewProvider({
-        githubClient,
+        githubClient: engineVcsClient,
         resolveRepoTarget,
         blockRepository: repos.blockRepository,
       }),
@@ -1437,21 +1449,21 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       // The engine binds a registered custom kind's pre/post-op hooks to a run's repo
       // via this checkout-free RepoFiles resolver, composed from the same client +
       // repo-target walk the gates/merger use — parity with the Worker.
-      resolveRunRepoContext: makeResolveRunRepoContext(githubClient, resolveRepoTarget),
+      resolveRunRepoContext: makeResolveRunRepoContext(engineVcsClient, resolveRepoTarget),
       // Block-less repo resolver for the environments module's on-demand repo
       // validation / config bootstrap (operator names owner+repo).
       resolveRepoFilesForCoords: makeResolveRepoFilesForCoords(
-        githubClient,
+        engineVcsClient,
         githubInstallationRepository,
         repoProjectionRepository,
       ),
       branchUpdater: new GitHubBranchUpdater({
-        githubClient,
+        githubClient: engineVcsClient,
         resolveRepoTarget,
         blockRepository: repos.blockRepository,
       }),
       pullRequestMerger: new GitHubPullRequestMerger({
-        githubClient,
+        githubClient: engineVcsClient,
         resolveRepoTarget,
         blockRepository: repos.blockRepository,
       }),

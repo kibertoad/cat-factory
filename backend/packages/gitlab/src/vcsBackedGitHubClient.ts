@@ -120,8 +120,8 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
     client.listIssueComments = (i, ref, n) => vcs.listIssueComments!(conn(i), toRepoRef(ref), n)
   }
   if (vcs.getRequiredApprovingReviewCount) {
-    client.getRequiredApprovingReviewCount = (i, ref, branch) =>
-      vcs.getRequiredApprovingReviewCount!(conn(i), toRepoRef(ref), branch)
+    client.getRequiredApprovingReviewCount = (i, ref, branch, n) =>
+      vcs.getRequiredApprovingReviewCount!(conn(i), toRepoRef(ref), branch, n)
   }
   if (vcs.getPullRequestBaseRef) {
     client.getPullRequestBaseRef = (i, ref, n) =>

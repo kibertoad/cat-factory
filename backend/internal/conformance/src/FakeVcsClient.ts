@@ -7,6 +7,7 @@ import type {
   GitHubIssueDetail,
   GitHubIssueSearchHit,
   GitHubPullRequest,
+  GitHubPullRequestComment,
   GitHubPullRequestReview,
   GitHubRepo,
   GitHubReviewThread,
@@ -45,6 +46,8 @@ export interface FakeVcsClientOptions {
   baseRef?: string
   /** Review threads (default: none). */
   reviewThreads?: GitHubReviewThread[]
+  /** Plain MR/PR conversation comments (default: none) — read on the not-yet-approved path. */
+  comments?: GitHubPullRequestComment[]
   /** Outcome of a `rebasePullRequest` call (default: `merged`). */
   rebaseOutcome?: 'merged' | 'noop' | 'conflict'
   /** The repo's default branch (default: `main`). */
@@ -66,12 +69,12 @@ export class FakeVcsClient implements VcsClient {
   private readonly o: Required<
     Omit<
       FakeVcsClientOptions,
-      'checks' | 'reviews' | 'requestedReviewers' | 'reviewThreads' | 'mergeability'
+      'checks' | 'reviews' | 'requestedReviewers' | 'reviewThreads' | 'mergeability' | 'comments'
     >
   > &
     Pick<
       FakeVcsClientOptions,
-      'checks' | 'reviews' | 'requestedReviewers' | 'reviewThreads' | 'mergeability'
+      'checks' | 'reviews' | 'requestedReviewers' | 'reviewThreads' | 'mergeability' | 'comments'
     >
 
   constructor(options: FakeVcsClientOptions = {}) {
@@ -97,6 +100,7 @@ export class FakeVcsClient implements VcsClient {
       ],
       requestedReviewers: options.requestedReviewers ?? [],
       reviewThreads: options.reviewThreads ?? [],
+      comments: options.comments,
       mergeability: options.mergeability ?? { mergeable: true, mergeableState: 'clean' },
     }
   }
@@ -143,6 +147,9 @@ export class FakeVcsClient implements VcsClient {
   }
   async listReviewThreads(): Promise<GitHubReviewThread[]> {
     return this.o.reviewThreads ?? []
+  }
+  async listIssueComments(): Promise<GitHubPullRequestComment[]> {
+    return this.o.comments ?? []
   }
 
   // ---- writes (recorded) --------------------------------------------------

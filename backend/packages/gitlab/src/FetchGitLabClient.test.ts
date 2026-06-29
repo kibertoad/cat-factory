@@ -6,12 +6,19 @@ import { StaticGitLabTokenSource } from './tokenSource.js'
 import { registerGitLab } from './index.js'
 import { GitLabWebhookMapper, GitLabWebhookVerifier } from './webhook.js'
 
-// A scripted fetch: matches each request by `METHOD path` (path = URL minus the api base)
-// and returns the queued response. Asserts the PRIVATE-TOKEN header is always sent.
-function fakeFetch(
-  routes: Record<string, { status?: number; body?: unknown; headers?: Record<string, string> }>,
-): { fetchImpl: typeof fetch; calls: { method: string; url: string; body?: unknown }[] } {
+type FakeResponse = { status?: number; body?: unknown; headers?: Record<string, string> }
+
+// A scripted fetch: matches each request by `METHOD path` (path = URL minus the api base) and
+// returns the queued response. A route value may be a SINGLE response or an ARRAY of responses
+// consumed one-per-call (the last entry repeats), so a poll loop that reads the same URL several
+// times can script a state transition (e.g. rebase_in_progress true → false). Asserts the
+// PRIVATE-TOKEN header is always sent.
+function fakeFetch(routes: Record<string, FakeResponse | FakeResponse[]>): {
+  fetchImpl: typeof fetch
+  calls: { method: string; url: string; body?: unknown }[]
+} {
   const calls: { method: string; url: string; body?: unknown }[] = []
+  const counters: Record<string, number> = {}
   const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
     const u = typeof url === 'string' ? url : url.toString()
     const method = (init?.method ?? 'GET').toUpperCase()
@@ -26,10 +33,18 @@ function fakeFetch(
     const key = `${method} ${path}`
     const route = routes[key]
     if (!route) throw new Error(`Unexpected request: ${key}`)
-    const status = route.status ?? 200
-    return new Response(route.body === undefined ? null : JSON.stringify(route.body), {
+    let picked: FakeResponse
+    if (Array.isArray(route)) {
+      const i = counters[key] ?? 0
+      counters[key] = i + 1
+      picked = route[Math.min(i, route.length - 1)]!
+    } else {
+      picked = route
+    }
+    const status = picked.status ?? 200
+    return new Response(picked.body === undefined ? null : JSON.stringify(picked.body), {
       status,
-      headers: { 'content-type': 'application/json', ...route.headers },
+      headers: { 'content-type': 'application/json', ...picked.headers },
     })
   }) as unknown as typeof fetch
 
@@ -46,6 +61,8 @@ function client(routes: Parameters<typeof fakeFetch>[0]) {
     tokenSource: new StaticGitLabTokenSource('tok'),
     clock,
     fetchImpl,
+    // No real delay between rebase polls in tests.
+    sleep: async () => {},
   })
   return { c, calls }
 }
@@ -338,22 +355,82 @@ describe('FetchGitLabClient', () => {
     ])
   })
 
-  it('rebasePullRequest reports merged on a clean rebase and conflict on a merge_error', async () => {
-    const merged = client({
+  it('rebasePullRequest polls until the async rebase finishes, then reports merged once the branch advanced', async () => {
+    const { c, calls } = client({
+      // The before-read (head sha BEFORE the rebase).
+      'GET /projects/7/merge_requests/3': { body: { diff_refs: { head_sha: 'old' } } },
       'PUT /projects/7/merge_requests/3/rebase': { status: 202, body: {} },
-      'GET /projects/7/merge_requests/3?include_rebase_in_progress=true': {
-        body: { rebase_in_progress: false, merge_error: null },
-      },
+      // The first poll catches the job still running; the second sees it done with an advanced head.
+      'GET /projects/7/merge_requests/3?include_rebase_in_progress=true': [
+        { body: { rebase_in_progress: true } },
+        { body: { rebase_in_progress: false, diff_refs: { head_sha: 'new' }, merge_error: null } },
+      ],
     })
-    expect(await merged.c.rebasePullRequest(connection, ref, 3)).toBe('merged')
+    expect(await c.rebasePullRequest(connection, ref, 3)).toBe('merged')
+    // It actually waited for the in-progress poll before concluding (two status reads).
+    const polls = calls.filter((x) =>
+      x.url.startsWith('/projects/7/merge_requests/3?include_rebase_in_progress=true'),
+    )
+    expect(polls).toHaveLength(2)
+  })
 
-    const conflicted = client({
+  it('rebasePullRequest reports conflict when the branch did not advance and merge_error is set', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/4': { body: { diff_refs: { head_sha: 'old' } } },
       'PUT /projects/7/merge_requests/4/rebase': { status: 202, body: {} },
       'GET /projects/7/merge_requests/4?include_rebase_in_progress=true': {
-        body: { rebase_in_progress: false, merge_error: 'merge conflict' },
+        body: {
+          rebase_in_progress: false,
+          diff_refs: { head_sha: 'old' },
+          merge_error: 'conflict',
+        },
       },
     })
-    expect(await conflicted.c.rebasePullRequest(connection, ref, 4)).toBe('conflict')
+    expect(await c.rebasePullRequest(connection, ref, 4)).toBe('conflict')
+  })
+
+  it('rebasePullRequest ignores a STALE merge_error once the branch actually advanced', async () => {
+    // merge_error is a persisted MR field shared with merge attempts; a leftover value must not
+    // be read as a fresh rebase conflict when the rebase plainly advanced the branch.
+    const { c } = client({
+      'GET /projects/7/merge_requests/5': { body: { diff_refs: { head_sha: 'old' } } },
+      'PUT /projects/7/merge_requests/5/rebase': { status: 202, body: {} },
+      'GET /projects/7/merge_requests/5?include_rebase_in_progress=true': {
+        body: {
+          rebase_in_progress: false,
+          diff_refs: { head_sha: 'new' },
+          merge_error: 'stale error from a prior merge attempt',
+        },
+      },
+    })
+    expect(await c.rebasePullRequest(connection, ref, 5)).toBe('merged')
+  })
+
+  it('rebasePullRequest treats an already-up-to-date branch (no advance, no error) as merged', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/6': { body: { diff_refs: { head_sha: 'same' } } },
+      'PUT /projects/7/merge_requests/6/rebase': { status: 202, body: {} },
+      'GET /projects/7/merge_requests/6?include_rebase_in_progress=true': {
+        body: { rebase_in_progress: false, diff_refs: { head_sha: 'same' }, merge_error: null },
+      },
+    })
+    expect(await c.rebasePullRequest(connection, ref, 6)).toBe('merged')
+  })
+
+  it('prefers the MR-level approvals_required over the project default when the MR number is known', async () => {
+    const { c } = client({
+      // MR-level effective requirement (accounts for the rule on this MR's target branch).
+      'GET /projects/7/merge_requests/3/approvals': { body: { approvals_required: 2 } },
+    })
+    expect(await c.getRequiredApprovingReviewCount(connection, ref, 'main', 3)).toBe(2)
+  })
+
+  it('falls back to the project approvals_before_merge when the MR-level count is unreadable', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/3/approvals': { status: 404 },
+      'GET /projects/7/approvals': { body: { approvals_before_merge: 1 } },
+    })
+    expect(await c.getRequiredApprovingReviewCount(connection, ref, 'main', 3)).toBe(1)
   })
 })
 

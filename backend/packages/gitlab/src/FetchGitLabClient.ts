@@ -436,11 +436,27 @@ export class FetchGitLabClient implements VcsClient {
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
     _branch: string,
+    number?: number,
   ): Promise<number> {
-    // GitLab's required-approval count is project- (or MR-) scoped, not keyed by branch on the
-    // basic API (per-branch protected-branch approval rules need a premium tier + a different
-    // endpoint). Read the project's `approvals_before_merge`; fall back to 1 when it is
-    // unreadable — parity with the GitHub provider's unreadable-protection default.
+    // GitLab's required-approval count is keyed by MR/project, not by branch. The MR `/approvals`
+    // endpoint returns the EFFECTIVE per-MR `approvals_required` (it already accounts for the
+    // approval rules that apply to this MR's target branch), so prefer it when the MR number is
+    // known — the project's `approvals_before_merge` is only the project-wide default and can
+    // under-report a stricter MR/branch rule. Fall back to the project default, then to 1 when
+    // both are unreadable — parity with the GitHub provider's unreadable-protection default.
+    if (number != null) {
+      try {
+        const { json } = await this.request(
+          `/projects/${projectPath(ref)}/merge_requests/${number}/approvals`,
+          { connection },
+        )
+        const n = ((json ?? {}) as { approvals_required?: number }).approvals_required
+        if (typeof n === 'number') return n
+      } catch (err) {
+        if (!(err instanceof GitLabApiError && (err.status === 403 || err.status === 404)))
+          throw err
+      }
+    }
     try {
       const { json } = await this.request(`/projects/${projectPath(ref)}/approvals`, { connection })
       const n = ((json ?? {}) as { approvals_before_merge?: number }).approvals_before_merge
@@ -717,22 +733,39 @@ export class FetchGitLabClient implements VcsClient {
   ): Promise<BranchUpdateOutcome> {
     // GitLab has no "merge branch A into B" endpoint, but the conflicts / human-testing gate
     // always operates on an open MR — and bringing an MR's source branch up to date with its
-    // target branch IS the MR `rebase` endpoint. Kick it off, then poll the MR's rebase
-    // status: `merge_error` set ⇒ the rebase conflicts (escalate to the conflict-resolver),
-    // else the branch was updated ('merged'). Rebase is asynchronous, so poll with a bounded
-    // delay between reads.
+    // target branch IS the MR `rebase` endpoint. Record the source-branch head FIRST, kick the
+    // rebase off, then poll its status. Two GitLab quirks the verdict has to survive:
+    //   1. The rebase runs as a background job, so `rebase_in_progress` is only true once the job
+    //      is actually running — reading it immediately after the PUT can catch the pre-start
+    //      state and look "done" before anything happened. So sleep BEFORE each read.
+    //   2. `merge_error` is a PERSISTED MR field shared with merge attempts; a stale value from a
+    //      prior failed operation must not be read as a fresh rebase conflict. So trust the head
+    //      sha advancing as the positive signal, and only report 'conflict' when the branch did
+    //      NOT advance and an error is set.
+    const before = await this.getMergeRequest(connection, ref, number)
+    const beforeSha = before.diff_refs?.head_sha ?? before.sha ?? null
     await this.request(`/projects/${projectPath(ref)}/merge_requests/${number}/rebase`, {
       connection,
       method: 'PUT',
     })
     for (let attempt = 0; attempt < REBASE_POLL_ATTEMPTS; attempt++) {
+      await (this.deps.sleep ?? defaultSleep)(REBASE_POLL_INTERVAL_MS)
       const { json } = await this.request(
         `/projects/${projectPath(ref)}/merge_requests/${number}?include_rebase_in_progress=true`,
         { connection },
       )
-      const mr = (json ?? {}) as { rebase_in_progress?: boolean; merge_error?: string | null }
-      if (!mr.rebase_in_progress) return mr.merge_error ? 'conflict' : 'merged'
-      await (this.deps.sleep ?? defaultSleep)(REBASE_POLL_INTERVAL_MS)
+      const mr = (json ?? {}) as GlMrDetail & {
+        rebase_in_progress?: boolean
+        merge_error?: string | null
+      }
+      if (mr.rebase_in_progress) continue
+      const afterSha = mr.diff_refs?.head_sha ?? mr.sha ?? null
+      // Branch advanced ⇒ the rebase succeeded, regardless of any stale `merge_error`.
+      if (afterSha != null && afterSha !== beforeSha) return 'merged'
+      // No advance + an error ⇒ a genuine rebase conflict (escalate to the conflict-resolver).
+      if (mr.merge_error) return 'conflict'
+      // No advance, no error ⇒ already up to date (a clean no-op).
+      return 'merged'
     }
     // Still in progress after the cap: surface it (CLAUDE.md "no silent caps") and treat the
     // branch as updated — a genuine conflict still surfaces on the gate's next mergeability
@@ -920,10 +953,14 @@ function parseThreadId(threadId: string): { iid: number; discussionId: string } 
   return { iid: Number(threadId.slice(0, idx)) || 0, discussionId: threadId.slice(idx + 1) }
 }
 
-/** A merge-request detail object — the fields the review reads consume. */
+/** A merge-request detail object — the fields the review + rebase reads consume. */
 interface GlMrDetail {
   target_branch?: string
   reviewers?: Array<{ username?: string }>
+  /** The source-branch head commit (top-level field). */
+  sha?: string | null
+  /** The diff endpoints' commit refs; `head_sha` is the most reliable source-branch head. */
+  diff_refs?: { head_sha?: string | null } | null
 }
 
 /** A single note within a GitLab MR discussion / the MR notes list. */

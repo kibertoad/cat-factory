@@ -29,3 +29,16 @@ one across every runtime facade.
   human-review gate inputs identically and exposes the correct branch-advancing capability per
   provider; a reusable `FakeVcsClient` drives the real gate / merge / branch-update providers
   through the GitLab-backed adapter.
+- **Rebase verdict robustness:** the GitLab MR-rebase poll now sleeps before each status read (so
+  a not-yet-started async rebase is never mistaken for a finished one) and decides the outcome by
+  whether the source-branch head actually advanced, ignoring the persisted `merge_error` field
+  (shared with merge attempts) unless the branch did not move. Covered by poll-transition,
+  stale-`merge_error`, conflict and up-to-date tests.
+- **Accurate required-approval count:** `getRequiredApprovingReviewCount` now reads the effective
+  per-MR `approvals_required` (it accounts for the rule on the MR's target branch) when the PR
+  number is known, falling back to the project default; the port carries the PR number alongside
+  the branch (GitHub still reads branch protection and ignores it).
+- **Node facade wiring:** the GitLab-backed engine client feeds only the gate / merge / RepoFiles
+  seams; GitHub-issue-specific consumers (the GitHub Issues task source, issue writeback) stay
+  gated on a real GitHub client, so a GitLab-only Node deployment no longer offers a
+  non-functional "GitHub Issues" task source (parity with the Worker).

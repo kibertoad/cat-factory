@@ -159,11 +159,15 @@ export interface VcsClient {
     ref: VcsRepoRef,
     number: number,
   ): Promise<GitHubPullRequestComment[]>
-  /** The number of approving reviews branch protection requires on `branch`. Optional. */
+  /**
+   * The number of approving reviews required before a PR can merge — read from `branch`'s
+   * protection (GitHub) or the MR's own approval rule (`number`, GitLab). Optional.
+   */
   getRequiredApprovingReviewCount?(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
     branch: string,
+    number?: number,
   ): Promise<number>
   /** The branch a PR actually targets, or null when the PR can't be read. Optional. */
   getPullRequestBaseRef?(
