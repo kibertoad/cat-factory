@@ -1,5 +1,5 @@
 import type { KubernetesRunnerConfig, RunnerDispatchOptions } from '@cat-factory/kernel'
-import { isCloudMetadataHost } from '@cat-factory/kernel'
+import { isCloudMetadataHost, ValidationError } from '@cat-factory/kernel'
 import { KUBERNETES_RUNNER_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
 
 // Pure helpers for the native Kubernetes runner backend. No I/O here — URL
@@ -17,20 +17,28 @@ export const KUBERNETES_TOKEN_KEY = KUBERNETES_RUNNER_TOKEN_SECRET_KEY
 /** Default port the executor-harness HTTP server listens on inside the pod. */
 export const DEFAULT_HARNESS_PORT = 8080
 
-/** Deterministic per-RUN pod name (one pod per run; steps re-attach to it). */
-export function podName(runId: string): string {
-  const sanitized = runId
+/**
+ * Coerce an arbitrary id into a `<prefix><sanitized>` RFC1123 label (<=`max` chars,
+ * lowercase alphanumeric/hyphens, starts/ends alphanumeric). Shared by the per-run
+ * pod name and the per-PR environment namespace.
+ */
+export function k8sName(value: string, prefix: string, max = 63, fallback = 'x'): string {
+  const sanitized = value
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-+|-+$/g, '')
-  // RFC1123 label: <=63 chars, starts/ends alphanumeric. Reserve room for the prefix.
-  const body = sanitized.slice(0, 63 - 'cf-run-'.length).replace(/-+$/g, '') || 'run'
-  return `cf-run-${body}`
+  const body = sanitized.slice(0, max - prefix.length).replace(/-+$/g, '') || fallback
+  return `${prefix}${body}`
 }
 
-/** kube-apiserver root with any trailing slash stripped. */
-export function apiBase(config: KubernetesRunnerConfig): string {
+/** Deterministic per-RUN pod name (one pod per run; steps re-attach to it). */
+export function podName(runId: string): string {
+  return k8sName(runId, 'cf-run-', 63, 'run')
+}
+
+/** kube-apiserver root with any trailing slash stripped (shared by runner + env). */
+export function apiBase(config: { apiServerUrl: string }): string {
   return config.apiServerUrl.trim().replace(/\/+$/, '')
 }
 
@@ -116,6 +124,19 @@ export function buildPodManifest(
     image: resolveImage(config, options),
     ports: [{ containerPort: port }],
     env: [{ name: 'PORT', value: String(port) }],
+    // A readiness probe on the harness's health endpoint so the pod's `Ready` condition —
+    // which `waitForPodReady` blocks on before `dispatch` POSTs the job — reflects the
+    // harness HTTP server actually LISTENING, not merely the container being Running.
+    // Without it a slow-starting container (e.g. a cpu-throttled small instance) is marked
+    // Ready before it binds the port, and the dispatch POST races into a not-yet-listening
+    // server → the pod-proxy returns 502/503. The probe's failure budget covers a cold start.
+    readinessProbe: {
+      httpGet: { path: '/health', port },
+      initialDelaySeconds: 1,
+      periodSeconds: 2,
+      timeoutSeconds: 2,
+      failureThreshold: 30,
+    },
     ...(resources ? { resources } : {}),
   }
   const spec: Record<string, unknown> = {
@@ -142,7 +163,7 @@ export function buildPodManifest(
 }
 
 /** Coerce an arbitrary id into a valid label value (<=63 chars, alnum/._-). */
-function labelValue(value: string): string {
+export function labelValue(value: string): string {
   return value
     .replace(/[^A-Za-z0-9._-]/g, '-')
     .replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '')
@@ -163,6 +184,30 @@ export function classifyPodReadiness(pod: unknown): PodReadiness {
     : []
   const ready = conditions.find((c) => c.type === 'Ready')
   return ready?.status === 'True' ? 'ready' : 'pending'
+}
+
+/** Classify a Deployment's status JSON: rolled out, still progressing, or failed. */
+export function classifyDeploymentReadiness(deployment: unknown): PodReadiness {
+  const obj = deployment as
+    | { spec?: { replicas?: number }; status?: Record<string, unknown> }
+    | null
+    | undefined
+  const status = obj?.status
+  if (!status) return 'pending'
+  const desired = typeof obj?.spec?.replicas === 'number' ? obj.spec.replicas : 1
+  const available = typeof status.availableReplicas === 'number' ? status.availableReplicas : 0
+  // A zero-replica Deployment is intentionally scaled to nothing — treat as ready.
+  if (desired === 0) return 'ready'
+  if (available >= desired) return 'ready'
+  const conditions = Array.isArray(status.conditions)
+    ? (status.conditions as Array<Record<string, unknown>>)
+    : []
+  // `Progressing=False` with reason `ProgressDeadlineExceeded` is a terminal rollout failure.
+  const progressing = conditions.find((c) => c.type === 'Progressing')
+  if (progressing?.status === 'False' && progressing.reason === 'ProgressDeadlineExceeded') {
+    return 'gone'
+  }
+  return 'pending'
 }
 
 /**
@@ -305,16 +350,21 @@ export function describePodStatus(pod: unknown): string {
  * {@link isCloudMetadataHost} classifier.
  */
 export function assertApiServerUrlSafe(rawUrl: string): void {
+  // A bad/unsupported URL is a caller-input error, so throw ValidationError (→ 422 with
+  // the actionable reason) rather than a plain Error (→ a generic 500 that swallows it);
+  // the connect form relies on the message. Shared by the env + runner-pool backends.
   let url: URL
   try {
     url = new URL(rawUrl)
   } catch {
-    throw new Error(`Invalid Kubernetes apiserver URL: ${rawUrl}`)
+    throw new ValidationError(`Invalid Kubernetes apiserver URL: ${rawUrl}`)
   }
   if (url.protocol !== 'https:') {
-    throw new Error('Kubernetes apiserver URL must use https.')
+    throw new ValidationError('Kubernetes apiserver URL must use https.')
   }
   if (isCloudMetadataHost(url.hostname)) {
-    throw new Error('Kubernetes apiserver URL must not target the cloud metadata endpoint.')
+    throw new ValidationError(
+      'Kubernetes apiserver URL must not target the cloud metadata endpoint.',
+    )
   }
 }

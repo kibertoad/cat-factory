@@ -195,5 +195,9 @@ describe('buildPodManifest', () => {
     expect(pod.spec.restartPolicy).toBe('Never')
     expect(pod.spec.containers[0]!.image).toBe(config.image)
     expect(pod.spec.containers[0]!.ports).toEqual([{ containerPort: 8080 }])
+    // The readiness probe gates the pod's `Ready` condition on the harness actually serving.
+    expect(pod.spec.containers[0]!.readinessProbe).toMatchObject({
+      httpGet: { path: '/health', port: 8080 },
+    })
   })
 })

@@ -1,5 +1,9 @@
 import type { AgentRouting } from '@cat-factory/agents'
-import type { LocalModeConfig, ModelOption } from '@cat-factory/contracts'
+import type {
+  InfrastructureCapabilities,
+  LocalModeConfig,
+  ModelOption,
+} from '@cat-factory/contracts'
 import type { DocumentSourceKind, HarnessKind, ModelRef } from '@cat-factory/kernel'
 import type { SpendPricing } from '@cat-factory/spend'
 
@@ -323,6 +327,12 @@ export interface AppConfig {
    * (the Worker/Node facades leave it undefined). Carries the missing-PAT setup prompt.
    */
   localMode?: LocalModeConfig
+  /**
+   * The deployment's infrastructure execution backends, surfaced via `/auth/config` so the
+   * SPA presents a clear selector of what's available + active. Set by every facade (see
+   * `buildInfrastructureCapabilities`); optional so tests/builders that omit it still type.
+   */
+  infrastructure?: InfrastructureCapabilities
   /**
    * NATIVE LOCAL EXECUTION (local facade only, opt-in via `LOCAL_NATIVE_AGENTS`): the
    * ALLOW-LIST of subscription harnesses that run on the host with the developer's OWN

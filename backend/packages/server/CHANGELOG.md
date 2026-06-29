@@ -1,5 +1,74 @@
 # @cat-factory/server
 
+## 0.48.1
+
+### Patch Changes
+
+- Updated dependencies [614e985]
+  - @cat-factory/integrations@0.35.2
+  - @cat-factory/orchestration@0.41.4
+
+## 0.48.0
+
+### Minor Changes
+
+- 0577404: feat: move infrastructure configuration into its own top-level navbar menu. Agent-container execution + Tester environments + (local mode) the warm-container pool / checkout reuse now live in a dedicated tabbed "Infrastructure" window reached from the navbar, instead of being buried in the Integrations hub and a separate "Local mode" entry. The old bare "delegate to runner pool" toggle is replaced by a clear execution-backend selector that reflects the backends available for THIS deployment (local Docker host / Cloudflare Containers / self-hosted runner pool) and which is active — driven by a new symmetric `infrastructure` capability descriptor on `GET /auth/config` (set by every facade; asserted by the cross-runtime conformance suite). The raw-JSON runner manifest editor is kept but collapsed behind an "Advanced: custom API-based scheduler" disclosure, since the common backends don't need it.
+
+### Patch Changes
+
+- Updated dependencies [0577404]
+  - @cat-factory/contracts@0.52.0
+  - @cat-factory/agents@0.21.17
+  - @cat-factory/integrations@0.35.1
+  - @cat-factory/kernel@0.53.1
+  - @cat-factory/orchestration@0.41.3
+  - @cat-factory/prompt-fragments@0.9.4
+  - @cat-factory/spend@0.10.32
+
+## 0.47.0
+
+### Minor Changes
+
+- 69558f9: Add a Kubernetes-based ephemeral-environment provider, selected per workspace through an
+  env-backend registry that mirrors the runner-pool backends.
+
+  The ephemeral-environment connection is now discriminated by a `kind` field (`manifest` =
+  the generic BYO HTTP management API, `kubernetes` = native per-PR namespaces), resolved
+  through a `registerEnvironmentBackend` provider-registry seam — so a native backend is a
+  single registry entry + a config variant + a UI form, with no new table/service/controller.
+
+  The Kubernetes backend applies an operator-authored set of k3s/Kubernetes manifests into a
+  per-PR namespace over the kube-apiserver (server-side apply), reusing the Kubernetes runner
+  backend's shared apiserver client (Bearer ServiceAccount token + custom-CA TLS). Manifests
+  are read checkout-free from either the PR repo (co-located) or a separate repo; the URL is
+  derived from an ingress host template or read back from an applied Service/Ingress
+  LoadBalancer (k3s Traefik / ServiceLB). It is wired symmetrically into the Cloudflare and
+  Node facades (the Worker rejects a custom-CA config it can't honor), and local mode can
+  point at a developer-run local k3s (its env URL-safety policy is widened to loopback/LAN).
+  See `backend/docs/local-k3s-environments.md`.
+
+  BREAKING (pre-1.0):
+
+  - The `environments/connection` register/test wire shape now takes a discriminated `config`
+    instead of a bare `manifest`, and the `environment_connections` table gains a `kind`
+    column (existing rows backfill to `manifest`).
+  - The `EnvironmentProvider` provision request gains optional `runRepo` / `resolveRepoFiles`
+    seams (additive).
+  - The deployment-wide environment-provider injection option
+    (`buildNodeContainer({ environmentProvider })` / `startLocal({ environmentProvider })`) is
+    removed — native adapters register via `registerEnvironmentBackend` instead.
+
+### Patch Changes
+
+- Updated dependencies [69558f9]
+  - @cat-factory/contracts@0.51.0
+  - @cat-factory/kernel@0.53.0
+  - @cat-factory/integrations@0.35.0
+  - @cat-factory/orchestration@0.41.2
+  - @cat-factory/agents@0.21.16
+  - @cat-factory/prompt-fragments@0.9.3
+  - @cat-factory/spend@0.10.31
+
 ## 0.46.3
 
 ### Patch Changes

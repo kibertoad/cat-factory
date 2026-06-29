@@ -35,7 +35,7 @@ import {
   JiraProvider,
   LinearDocumentProvider,
   LinearTaskProvider,
-  HttpEnvironmentProvider,
+  findRepairCapableProvider,
   NotionProvider,
   EMAIL_CIPHER_INFO,
   ApiKeyService,
@@ -84,6 +84,7 @@ import {
   WebCryptoPasswordHasher,
   WebCryptoPersonalSecretCipher,
   logger,
+  buildInfrastructureCapabilities,
   createScopedModelProviderResolver,
   resolveUrlSafetyPolicy,
   resolveWorkspaceCapabilities,
@@ -1547,19 +1548,19 @@ function selectEnvironmentsDeps(
   db: D1Database,
 ): Partial<CoreDependencies> {
   if (!config.environments.enabled) return {}
-  // The default manifest-driven provider; a trusted in-house adapter (implementing the
-  // EnvironmentProvider port) is injected by replacing `environmentProvider` via the
-  // `overrides` argument to `buildContainer` (spread last), the same seam tests use.
+  // The provider is resolved per-workspace from the env-backend registry by the stored
+  // `kind` (`manifest` | `kubernetes` | a third-party kind imported for side effect); a
+  // workspace picks its backend at connect time. The Worker can't honor a custom CA /
+  // insecure-skip TLS for a Kubernetes apiserver (no undici), so such a config is rejected
+  // at registration here.
   const urlPolicy = resolveUrlSafetyPolicy(config.environments)
   return {
-    environmentProvider: new HttpEnvironmentProvider(urlPolicy ? { urlPolicy } : {}),
-    // The generic manifest provider; its descriptor reflects the manifest's secret keys.
-    environmentProviderKind: 'manifest',
     environmentConnectionRepository: new D1EnvironmentConnectionRepository({ db }),
     environmentRegistryRepository: new D1EnvironmentRegistryRepository({ db }),
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64: config.environments.encryptionKey!,
     }),
+    environmentCustomTlsSupported: false,
     ...(urlPolicy ? { environmentUrlSafetyPolicy: urlPolicy } : {}),
   }
 }
@@ -1657,8 +1658,14 @@ function selectEnvConfigRepairer(
   db: D1Database,
   clock: Clock,
   resolveTransport: ResolveRunnerTransport | null,
-  environmentProvider: CoreDependencies['environmentProvider'],
+  override: CoreDependencies['environmentProvider'],
 ): ContainerEnvConfigRepairer | undefined {
+  const repairUrlPolicy = resolveUrlSafetyPolicy(config.environments)
+  // Prefer the internal override (the conformance suite's fake repair provider) else scan
+  // the env-backend registry for the first repair-capable backend.
+  const environmentProvider = !resolveTransport
+    ? undefined
+    : (override ?? findRepairCapableProvider(repairUrlPolicy ? { urlPolicy: repairUrlPolicy } : {}))
   if (
     !resolveTransport ||
     !environmentProvider ||
@@ -1745,6 +1752,19 @@ export function buildContainer(
   opts: { cloudflareModelsEnabled?: boolean; gateProviders?: GateProviderOverrides } = {},
 ): Container {
   const config = loadConfig(env)
+  // The Worker runs repo-operating agents on per-run Cloudflare Containers (always available),
+  // and can additionally delegate to a self-hosted runner pool when one is configured. Tester
+  // environments run via the environment provider. Surface this so the SPA's infrastructure
+  // selector reads accurately for a Worker deployment.
+  config.infrastructure = buildInfrastructureCapabilities({
+    execution: {
+      available: config.runners.enabled
+        ? ['cloudflare-containers', 'runner-pool']
+        : ['cloudflare-containers'],
+      active: 'cloudflare-containers',
+    },
+    testEnv: { available: ['environment-provider'], active: 'environment-provider' },
+  })
   const db = env.DB
   // Telemetry (llm_call_metrics + agent_context_snapshots) lives in its own D1 database
   // — append-heavy/high-volume/short-retention, unlike the transactional domain. The

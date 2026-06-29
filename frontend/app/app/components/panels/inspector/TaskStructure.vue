@@ -5,7 +5,11 @@ const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
 const fragments = useFragmentsStore()
+const ui = useUiStore()
+const accounts = useAccountsStore()
 const { t } = useI18n()
+
+type MenuItem = { label: string; icon?: string; onSelect: () => void }
 
 // ---- best-practice prompt fragments ----------------------------------------
 // Selected fragments (resolved against the catalog; unknown ids are dropped).
@@ -15,18 +19,40 @@ const selectedFragments = computed(() =>
     .filter((f): f is NonNullable<typeof f> => !!f),
 )
 
+// A trailing group that jumps from "attach a fragment" to authoring/editing the
+// library itself (board tier always; account tier when accounts are enabled).
+// Open to every member — managing fragments is not an admin-only action.
+const manageItems = computed<MenuItem[]>(() => {
+  const items: MenuItem[] = [
+    {
+      label: t('inspector.fragments.manageBoard'),
+      icon: 'i-lucide-book-marked',
+      onSelect: () => ui.openFragmentLibrary(),
+    },
+  ]
+  if (accounts.enabled) {
+    items.push({
+      label: t('inspector.fragments.manageAccount'),
+      icon: 'i-lucide-users',
+      onSelect: () => ui.openAccountSettings('fragments'),
+    })
+  }
+  return items
+})
+
 // Picker menu: fragments suitable for this block's type, not already selected,
-// grouped by category so the dropdown reads like the catalog.
-const fragmentMenu = computed(() => {
+// grouped by category so the dropdown reads like the catalog, with the management
+// links appended as the final group.
+const fragmentMenu = computed<MenuItem[][]>(() => {
   const selected = new Set(props.block.fragmentIds ?? [])
-  const groups = new Map<string, { label: string; onSelect: () => void }[]>()
+  const groups = new Map<string, MenuItem[]>()
   for (const f of fragments.forBlockType(props.block.type)) {
     if (selected.has(f.id)) continue
     const items = groups.get(f.category) ?? []
     items.push({ label: f.title, onSelect: () => addFragment(f.id) })
     groups.set(f.category, items)
   }
-  return [...groups.values()]
+  return [...groups.values(), manageItems.value]
 })
 
 function addFragment(id: string) {
@@ -65,7 +91,7 @@ function removeFragment(id: string) {
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           {{ t('inspector.structure.bestPractices') }}
         </span>
-        <UDropdownMenu v-if="fragmentMenu.length" :items="fragmentMenu">
+        <UDropdownMenu :items="fragmentMenu">
           <UButton
             size="xs"
             variant="ghost"

@@ -337,6 +337,9 @@ importers:
       ai:
         specifier: ^6.0.209
         version: 6.0.209(zod@3.25.76)
+      yaml:
+        specifier: ^2.7.0
+        version: 2.9.0
     devDependencies:
       typescript:
         specifier: 7.0.1-rc

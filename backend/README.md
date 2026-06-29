@@ -458,6 +458,52 @@ Integration tests run via `@cloudflare/vitest-pool-workers` inside the same runt
 against a real local D1 database with the real migrations applied. Only the LLM is faked
 (deterministically); the storage and HTTP stack are real.
 
+#### Kubernetes integration tests (k3d)
+
+The native Kubernetes runner + environment backends have an integration suite that drives
+them against a **real** Kubernetes apiserver — a [k3d](https://k3d.io) (k3s-in-Docker)
+cluster — so the apiserver behaviours the unit tests only mock (pod-proxy round-trip,
+server-side apply, the k3s ServiceLB-assigned URL, real `404`/`409` semantics) are validated
+for real. The suite **self-skips** when the `K8S_IT_*` cluster env is unset, so a normal
+`pnpm test` run is unaffected. To run it locally:
+
+```bash
+# 1. Create a throwaway cluster with the apiserver on a fixed host port. Disable the bundled
+#    Traefik so its LoadBalancer Service doesn't pin host port 80 (the env suite's workload
+#    needs it).
+k3d cluster create cf-it --api-port 127.0.0.1:6443 \
+  --k3s-arg "--disable=traefik@server:*" --wait
+
+# 2. Build the in-pod mock harness + pre-pull nginx, then import both into the cluster.
+docker build -t cat-factory-mock-harness:it \
+  backend/packages/integrations/src/modules/kubernetes/test-support/mock-harness
+docker pull nginx:1.27-alpine
+k3d image import cat-factory-mock-harness:it nginx:1.27-alpine -c cf-it
+
+# 3. Mint a ServiceAccount token + RBAC (cluster-admin on a throwaway cluster) and export the
+#    connection. (CI does the equivalent in the `Test k8s (k3d)` job.)
+kubectl create namespace cat-factory-it
+kubectl create serviceaccount cat-factory-it -n cat-factory-it
+kubectl create clusterrolebinding cat-factory-it \
+  --clusterrole=cluster-admin --serviceaccount=cat-factory-it:cat-factory-it
+export K8S_IT_APISERVER="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
+export K8S_IT_TOKEN="$(kubectl create token cat-factory-it -n cat-factory-it --duration=3600s)"
+export K8S_IT_CA_PEM="$(kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d)"
+export K8S_IT_NAMESPACE=cat-factory-it
+export K8S_IT_RUNNER_IMAGE=cat-factory-mock-harness:it
+# (or skip CA handling on a dev cluster with: export K8S_IT_INSECURE=1)
+
+# 4. Run the suite.
+pnpm --filter @cat-factory/integrations run test:integration
+
+# 5. Clean up.
+k3d cluster delete cf-it
+```
+
+In CI this is the **`Test k8s (k3d)`** job — a required check, but **gated** on a paths
+filter so the cluster spins up only when code under `modules/kubernetes/` (or the contracts /
+ports that define the backends) changes; an unrelated PR skips it.
+
 ### Deploying
 
 This package is a **library**; it carries no production config. Deployment is

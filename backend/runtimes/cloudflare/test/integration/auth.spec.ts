@@ -29,6 +29,19 @@ const authEnv = {
   AUTH_SESSION_SECRET: SECRET,
 }
 
+// The Worker facade always advertises the same infrastructure capabilities
+// (it auto-routes execution to a registered pool, else Cloudflare Containers).
+const INFRASTRUCTURE = {
+  execution: {
+    active: 'cloudflare-containers',
+    available: ['cloudflare-containers', 'runner-pool'],
+  },
+  testEnv: {
+    active: 'environment-provider',
+    available: ['environment-provider'],
+  },
+}
+
 function fetchWith(
   envOverride: typeof env,
   init: { method?: string; path: string; token?: string },
@@ -62,6 +75,7 @@ describe('auth', () => {
       expect(await res.json()).toEqual({
         enabled: false,
         providers: { github: false, password: false, google: false },
+        infrastructure: INFRASTRUCTURE,
       })
     })
 
@@ -70,6 +84,7 @@ describe('auth', () => {
       expect(await res.json()).toEqual({
         enabled: true,
         providers: { github: true, password: false, google: false },
+        infrastructure: INFRASTRUCTURE,
       })
     })
 

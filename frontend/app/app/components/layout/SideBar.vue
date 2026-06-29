@@ -20,7 +20,19 @@ const slack = useSlackStore()
 const library = useFragmentLibraryStore()
 const workspace = useWorkspaceStore()
 const accounts = useAccountsStore()
+const auth = useAuthStore()
+const providerConnections = useProviderConnectionsStore()
 const ui = useUiStore()
+
+// The Infrastructure menu (agent-container execution + test environments) is relevant when
+// either provider integration is available OR we're running the local-mode facade (which
+// always has host-Docker execution + the warm-pool/checkout settings to configure).
+const showInfrastructure = computed(
+  () =>
+    auth.localMode?.enabled === true ||
+    providerConnections.isAvailable('runner-pool') ||
+    providerConnections.isAvailable('environment'),
+)
 
 // `isCompact` (< lg) is the breakpoint at which the navbar is an off-canvas drawer;
 // above it the aside is static and the drawer flag is inert.
@@ -89,6 +101,7 @@ watch(
     void github.probe()
     void slack.probe()
     void library.probe()
+    void providerConnections.ensureLoaded().catch(() => {})
   },
   { immediate: true },
 )
@@ -240,6 +253,32 @@ watch(
           </UButton>
         </div>
       </section>
+
+      <template v-if="showInfrastructure">
+        <USeparator />
+        <section>
+          <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            {{ t('nav.infrastructure') }}
+          </h2>
+          <div class="space-y-1.5">
+            <!-- Where agent containers run + Tester environments + (local mode) the warm
+               pool/checkout reuse. Its own top-level destination, no longer inside the
+               Integrations hub. -->
+            <UButton
+              block
+              color="primary"
+              variant="soft"
+              size="sm"
+              icon="i-lucide-server-cog"
+              class="justify-start"
+              data-testid="nav-infrastructure"
+              @click="ui.openInfrastructure()"
+            >
+              {{ t('nav.infrastructure') }}
+            </UButton>
+          </div>
+        </section>
+      </template>
 
       <template v-if="library.available">
         <USeparator />

@@ -19,6 +19,7 @@ type EnvironmentConnectionRow = typeof environmentConnections.$inferSelect
 function rowToConnection(row: EnvironmentConnectionRow): EnvironmentConnectionRecord {
   return {
     workspaceId: row.workspace_id,
+    kind: row.kind ?? 'manifest',
     providerId: row.provider_id,
     label: row.label,
     baseUrl: row.base_url,
@@ -58,6 +59,7 @@ export class DrizzleEnvironmentConnectionRepository implements EnvironmentConnec
         .where(eq(environmentConnections.workspace_id, record.workspaceId))
       await tx.insert(environmentConnections).values({
         workspace_id: record.workspaceId,
+        kind: record.kind,
         provider_id: record.providerId,
         label: record.label,
         base_url: record.baseUrl,

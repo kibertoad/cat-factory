@@ -405,26 +405,33 @@ export interface CoreDependencies {
 
   // ---- Ephemeral environment integration (optional; wired when configured) -
   // Mirrors the GitHub/Confluence default-off convention. The module assembles
-  // only when the provider, both repositories and the secret cipher are present,
-  // so the engine (deterministic deployer step + env discovery) stays unchanged
-  // when the feature is off. Per-tenant secrets are encrypted via `secretCipher`.
-  environmentProvider?: EnvironmentProvider
+  // only when both repositories and the secret cipher are present (the provider is
+  // resolved per-workspace from the env-backend registry by the stored `kind`), so
+  // the engine (deterministic deployer step + env discovery) stays unchanged when the
+  // feature is off. Per-tenant secrets are encrypted via `secretCipher`.
   environmentConnectionRepository?: EnvironmentConnectionRepository
   environmentRegistryRepository?: EnvironmentRegistryRepository
   secretCipher?: SecretCipher
+  /**
+   * INTERNAL override: when set, this provider is used for every env operation instead of
+   * the kind registry. NOT a public facade seam (a native backend registers via
+   * `registerEnvironmentBackend`) — it exists only for the cross-runtime conformance
+   * suite, which must inject a fake provider (validate-repo / config-repair) through a
+   * schema-locked connect API. Production facades leave it unset → the registry path.
+   */
+  environmentProvider?: EnvironmentProvider
   // ---- Unified provisioning event log (optional; high-churn separate store) --
   // When wired, the env provision/teardown services record their attempts here and
   // the read service backs the "View logs" drawers + the run-details env surface.
   // Absent ⇒ provisioning is entirely unchanged. The repository lives in a
   // physically separate store (its own Postgres schema / D1 binding) per facade.
   provisioningLogRepository?: ProvisioningLogRepository
-  // What the injected environment provider is, so its connection service can surface a
-  // correct descriptor: `native` (own auth, fully described by `describeConfig`) or the
-  // generic `manifest` HTTP provider. The facade that wires the provider sets it (absent
-  // ⇒ `manifest`). `…Id`/`…Label` override the descriptor identity for a native provider.
-  environmentProviderKind?: 'native' | 'manifest'
-  environmentProviderId?: string
-  environmentProviderLabel?: string
+  // Whether this runtime can honor a Kubernetes env backend's custom TLS material (a
+  // private CA / insecure-skip). The Cloudflare Worker can't (no undici) and sets
+  // `false`, so a kubernetes env config with a CA is rejected at registration rather
+  // than dying at first apply. Absent ⇒ supported (Node/local). Mirrors
+  // `runnerCustomTlsSupported`.
+  environmentCustomTlsSupported?: boolean
   // Operator-configured URL/host safety policy for the ENVIRONMENT-provisioning
   // integration (the manifest baseUrl + the returned env URL). Absent => strict
   // (https-only, no private/internal hosts). A trusted facade widens it so an in-house
@@ -1151,18 +1158,8 @@ function createEnvironmentsModule(
   provisioningLog: ProvisioningLogRecorder | undefined,
   eventPublisher: ExecutionEventPublisher | undefined,
 ): EnvironmentsModule | undefined {
-  const {
-    environmentProvider,
-    environmentConnectionRepository,
-    environmentRegistryRepository,
-    secretCipher,
-  } = deps
-  if (
-    !environmentProvider ||
-    !environmentConnectionRepository ||
-    !environmentRegistryRepository ||
-    !secretCipher
-  ) {
+  const { environmentConnectionRepository, environmentRegistryRepository, secretCipher } = deps
+  if (!environmentConnectionRepository || !environmentRegistryRepository || !secretCipher) {
     return undefined
   }
 
@@ -1180,10 +1177,10 @@ function createEnvironmentsModule(
     workspaceRepository: deps.workspaceRepository,
     secretCipher,
     clock: deps.clock,
-    environmentProvider,
-    providerKind: deps.environmentProviderKind ?? 'manifest',
-    ...(deps.environmentProviderId ? { providerId: deps.environmentProviderId } : {}),
-    ...(deps.environmentProviderLabel ? { providerLabel: deps.environmentProviderLabel } : {}),
+    ...(deps.environmentCustomTlsSupported !== undefined
+      ? { customTlsSupported: deps.environmentCustomTlsSupported }
+      : {}),
+    ...(deps.environmentProvider ? { environmentProvider: deps.environmentProvider } : {}),
     ...(deps.environmentUrlSafetyPolicy ? { urlPolicy: deps.environmentUrlSafetyPolicy } : {}),
     ...(deps.resolveRepoFilesForCoords
       ? { resolveRepoFilesForWorkspace: deps.resolveRepoFilesForCoords }
@@ -1219,18 +1216,19 @@ function createEnvironmentsModule(
   }
   const provisioningService = new EnvironmentProvisioningService({
     connectionService,
-    environmentProvider,
     environmentRegistryRepository,
     secretCipher,
     idGenerator: deps.idGenerator,
     clock: deps.clock,
     ...(deps.environmentUrlSafetyPolicy ? { urlPolicy: deps.environmentUrlSafetyPolicy } : {}),
     ...(deps.resolveRunRepoContext ? { resolveRunRepoContext: deps.resolveRunRepoContext } : {}),
+    ...(deps.resolveRepoFilesForCoords
+      ? { resolveRepoFilesForWorkspace: deps.resolveRepoFilesForCoords }
+      : {}),
     ...(provisioningLog ? { provisioningLog } : {}),
   })
   const teardownService = new EnvironmentTeardownService({
     connectionService,
-    environmentProvider,
     environmentRegistryRepository,
     secretCipher,
     clock: deps.clock,

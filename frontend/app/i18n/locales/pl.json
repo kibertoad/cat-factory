@@ -34,7 +34,8 @@
     "configuration": "Konfiguracja",
     "workspaceSettings": "Ustawienia obszaru roboczego",
     "modelConfiguration": "Konfiguracja modelu",
-    "accountSettings": "Ustawienia konta"
+    "accountSettings": "Ustawienia konta",
+    "infrastructure": "Infrastruktura"
   },
   "board": {
     "toolbar": {
@@ -360,7 +361,9 @@
     },
     "fragments": {
       "serviceTitle": "Dobre praktyki usługi",
-      "serviceEmpty": "Brak. Agenci świadomi kodu w tej usłudze stosują swoje domyślne wytyczne."
+      "serviceEmpty": "Brak. Agenci świadomi kodu w tej usłudze stosują swoje domyślne wytyczne.",
+      "manageBoard": "Zarządzaj biblioteką fragmentów tej tablicy…",
+      "manageAccount": "Zarządzaj fragmentami konta…"
     },
     "releaseHealth": {
       "title": "Kondycja po wydaniu",
@@ -1128,7 +1131,6 @@
         "documents": "Dokumenty",
         "taskTrackers": "Narzędzia do śledzenia zadań",
         "observability": "Obserwowalność",
-        "infrastructure": "Infrastruktura",
         "personal": "Osobiste (tylko Ty)"
       },
       "items": {
@@ -1165,16 +1167,6 @@
         "observability": {
           "label": "Kondycja po wydaniu",
           "description": "Obserwuj monitory i SLO po wdrożeniu wydania (Datadog)."
-        },
-        "infrastructure": {
-          "label": "Infrastruktura",
-          "description": "Samodzielnie hostowana pula wykonawców dla agentów kontenerowych oraz efemeryczne środowiska testowe.",
-          "agents": "Agenci: {state}",
-          "envs": "Środowiska: {state}"
-        },
-        "localMode": {
-          "label": "Tryb lokalny",
-          "description": "Pula ciepłych kontenerów oraz ponowne użycie checkoutu na repozytorium dla lokalnego silnika."
         },
         "githubPat": {
           "label": "Mój token GitHub",
@@ -1242,8 +1234,8 @@
       "windowTitle": "Infrastruktura",
       "noneAvailable": "W tym wdrożeniu nie włączono żadnych dostawców infrastruktury.",
       "tabs": {
-        "containerAgents": "Agenci kontenerowi",
-        "testEnvironments": "Środowiska testowe"
+        "testEnvironments": "Środowiska testowe",
+        "agentContainers": "Agenci kontenerowi"
       },
       "kind": {
         "environment": {
@@ -1266,17 +1258,6 @@
         "noSecrets": "Ten manifest nie odwołuje się do żadnych sekretów.",
         "reenterSecrets": "Wprowadź ponownie każdy sekret, aby zapisać — przechowywane sekrety są tylko do zapisu i nie są wyświetlane.",
         "starterHint": "To jest przykład startowy. Zmodyfikuj go, aby pasował do API Twojego dostawcy."
-      },
-      "delegation": {
-        "title": "Delegowanie lokalne",
-        "intro": "Domyślnie ta maszyna uruchamia wszystko lokalnie — agentów kontenerowych na Dockerze hosta, a infrastrukturę Testera przez docker-compose wewnątrz kontenera. Włącz poniższe opcje, aby przekazać dowolne z tych zadań do usługi zewnętrznej. Dotyczy wyłącznie trybu lokalnego.",
-        "agentsToggle": "Uruchamiaj agentów kontenerowych w puli wykonawców",
-        "agentsHint": "Wysyłaj każdego agenta kontenerowego (koder, tester, scalający, bootstrap, …) do samodzielnie hostowanej puli wykonawców tego obszaru roboczego zamiast na Dockera hosta.",
-        "registerPoolPrompt": "Najpierw {link}, aby to włączyć.",
-        "registerPoolLink": "Zarejestruj pulę wykonawców",
-        "envToggle": "Udostępniaj środowiska Testera przez dostawcę",
-        "envHint": "Uruchom środowisko podglądowe Testera przez dostawcę środowisk skonfigurowanego poniżej zamiast przez docker-compose wewnątrz kontenera. Najpierw połącz dostawcę, aby to włączyć.",
-        "updateFailed": "Nie udało się zaktualizować delegowania"
       },
       "viewLogs": "Pokaż dzienniki",
       "hideLogs": "Ukryj dzienniki",
@@ -1305,7 +1286,46 @@
       "backend": {
         "selectorLabel": "Backend wykonawczy",
         "manifest": "Własny pool (manifest)",
-        "kubernetes": "Kubernetes"
+        "kubernetes": "Kubernetes",
+        "environmentSelectorLabel": "Backend środowiska",
+        "environmentManifest": "Własne API HTTP (manifest)"
+      },
+      "kubernetesEnv": {
+        "label": "Nazwa",
+        "labelPlaceholder": "Klaster podglądu",
+        "apiServerUrl": "URL serwera API",
+        "apiServerUrlHelp": "Główny adres kube-apiserver, np. https://10.0.0.1:6443. Orkiestrator stosuje manifesty każdego PR przez apiserver, więc tylko ten endpoint musi być osiągalny.",
+        "apiToken": "Token ServiceAccount",
+        "apiTokenHelp": "Token bearer z uprawnieniami RBAC do tworzenia namespace’ów i stosowania zasobów operatora. Przechowywany w postaci zaszyfrowanej; nie jest ponownie pokazywany.",
+        "manifestSourceLabel": "Źródło manifestów",
+        "sourceColocated": "W repozytorium PR",
+        "sourceSeparate": "Osobne repozytorium",
+        "repo": "Repozytorium manifestów",
+        "repoHelp": "Owner/repo zawierające manifesty Kubernetes, np. acme/preview-manifests.",
+        "ref": "Ref",
+        "refHelp": "Gałąź, tag lub SHA, z którego czytać manifesty. Puste używa domyślnej gałęzi repozytorium.",
+        "path": "Ścieżka manifestu",
+        "pathHelp": "Plik lub katalog w repozytorium zawierający zasoby do zastosowania.",
+        "urlSourceLabel": "URL środowiska",
+        "urlIngressTemplate": "Szablon hosta Ingress",
+        "urlIngressStatus": "Odczytaj stan Ingress",
+        "urlServiceStatus": "Odczytaj stan Service",
+        "hostTemplate": "Szablon hosta",
+        "hostTemplateHelp": "Szablon hosta renderowany ze zmiennymi provisioningu, takimi jak branch i pullNumber; wynikowy host staje się URL-em środowiska.",
+        "ingressName": "Nazwa Ingress",
+        "ingressNameHelp": "Ingress, z którego odczytać host load-balancera. Puste używa jedynego zastosowanego Ingress.",
+        "serviceName": "Nazwa Service",
+        "port": "Port",
+        "scheme": "Schemat URL",
+        "schemeDefault": "https (domyślnie)",
+        "namespaceTemplate": "Szablon namespace",
+        "namespaceTemplateHelp": "Nazwa namespace per PR renderowana ze zmiennych provisioningu, takich jak pullNumber. Puste wyprowadza ją z numeru PR.",
+        "imageTemplate": "Szablon obrazu",
+        "imageTemplateHelp": "Referencja obrazu udostępniana manifestom, renderowana ze zmiennych provisioningu, takich jak branch i sha.",
+        "caCertPem": "Certyfikat CA klastra (PEM)",
+        "caCertPemHelp": "Wklej pakiet CA klastra, aby certyfikat TLS apiservera został zweryfikowany. Pomiń tylko dla publicznie zaufanego CA.",
+        "insecureSkipTlsVerify": "Pomiń weryfikację TLS",
+        "insecureSkipTlsVerifyHelp": "Zdecydowanie odradzane. Wyłącza weryfikację TLS apiservera; używaj tylko dla klastrów kind/dev."
       },
       "kubernetes": {
         "label": "Nazwa",
@@ -1321,6 +1341,10 @@
         "caCertPem": "Certyfikat CA klastra (PEM)",
         "caCertPemHelp": "Wklej pakiet CA klastra, aby certyfikat TLS apiservera został zweryfikowany. Pomiń tylko dla publicznie zaufanego CA.",
         "harnessPort": "Port harnessa"
+      },
+      "advancedManifest": {
+        "summary": "Zaawansowane: niestandardowy harmonogram oparty na API",
+        "intro": "Potrzebne tylko do zintegrowania niestandardowego harmonogramu opartego na API. Typowe backendy (lokalny Docker, Cloudflare Containers i Kubernetes) tego nie wymagają; opisz tutaj API HTTP własnego harmonogramu tylko, jeśli go używasz."
       }
     },
     "serviceFragmentDefaults": {
@@ -1670,6 +1694,22 @@
         "saveFailed": "Nie udało się zapisać runnera",
         "removed": "Runner usunięty",
         "removeFailed": "Nie udało się usunąć runnera"
+      }
+    },
+    "infrastructure": {
+      "active": "Aktywne: {backend}",
+      "registerHint": "Zarejestruj pulę runnerów poniżej, aby to włączyć.",
+      "updateFailed": "Nie udało się zaktualizować backendu wykonawczego",
+      "executionBackend": {
+        "label": "Gdzie działają agenci",
+        "local-docker": "Lokalny Docker (host)",
+        "cloudflare-containers": "Cloudflare Containers (wbudowane)",
+        "runner-pool": "Samodzielnie hostowana pula runnerów"
+      },
+      "testEnvBackend": {
+        "label": "Gdzie działają środowiska testowe",
+        "local-compose": "docker-compose w kontenerze",
+        "environment-provider": "Dostawca środowisk"
       }
     }
   },

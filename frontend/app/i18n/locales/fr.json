@@ -34,7 +34,8 @@
     "configuration": "Configuration",
     "workspaceSettings": "Paramètres de l’espace de travail",
     "modelConfiguration": "Configuration du modèle",
-    "accountSettings": "Paramètres du compte"
+    "accountSettings": "Paramètres du compte",
+    "infrastructure": "Infrastructure"
   },
   "board": {
     "toolbar": {
@@ -360,7 +361,9 @@
     },
     "fragments": {
       "serviceTitle": "Bonnes pratiques du service",
-      "serviceEmpty": "Aucune. Les agents conscients du code sur ce service suivent leurs consignes par défaut."
+      "serviceEmpty": "Aucune. Les agents conscients du code sur ce service suivent leurs consignes par défaut.",
+      "manageBoard": "Gérer la bibliothèque de fragments de ce tableau…",
+      "manageAccount": "Gérer les fragments du compte…"
     },
     "releaseHealth": {
       "title": "Santé post-déploiement",
@@ -1128,7 +1131,6 @@
         "documents": "Documents",
         "taskTrackers": "Outils de suivi des tâches",
         "observability": "Observabilité",
-        "infrastructure": "Infrastructure",
         "personal": "Personnel (vous uniquement)"
       },
       "items": {
@@ -1165,16 +1167,6 @@
         "observability": {
           "label": "Santé après publication",
           "description": "Surveillez les moniteurs et les SLO après la publication d'une version (Datadog)."
-        },
-        "infrastructure": {
-          "label": "Infrastructure",
-          "description": "Pool d'exécuteurs auto-hébergé pour les agents de conteneur et environnements de test éphémères.",
-          "agents": "Agents : {state}",
-          "envs": "Environnements : {state}"
-        },
-        "localMode": {
-          "label": "Mode local",
-          "description": "Pool de conteneurs à chaud et réutilisation du checkout par dépôt pour l'exécuteur local."
         },
         "githubPat": {
           "label": "Mon jeton GitHub",
@@ -1242,8 +1234,8 @@
       "windowTitle": "Infrastructure",
       "noneAvailable": "Aucun fournisseur d'infrastructure n'est activé sur ce déploiement.",
       "tabs": {
-        "containerAgents": "Agents de conteneur",
-        "testEnvironments": "Environnements de test"
+        "testEnvironments": "Environnements de test",
+        "agentContainers": "Agents de conteneur"
       },
       "kind": {
         "environment": {
@@ -1266,17 +1258,6 @@
         "noSecrets": "Ce manifeste ne référence aucun secret.",
         "reenterSecrets": "Saisissez à nouveau chaque secret pour enregistrer : les secrets stockés sont en écriture seule et ne sont pas affichés.",
         "starterHint": "Ceci est un exemple de départ. Modifiez-le pour qu'il corresponde à l'API de votre fournisseur."
-      },
-      "delegation": {
-        "title": "Délégation locale",
-        "intro": "Par défaut, cette machine exécute tout en local : les agents de conteneur sur le Docker de l'hôte, l'infrastructure du Tester via docker-compose dans le conteneur. Activez les options ci-dessous pour déléguer l'une ou l'autre de ces tâches à un service externe. S'applique uniquement en mode local.",
-        "agentsToggle": "Exécuter les agents de conteneur sur le pool d'exécuteurs",
-        "agentsHint": "Envoyez chaque agent de conteneur (codeur, tester, fusionneur, bootstrap, …) au pool d'exécuteurs auto-hébergé de cet espace de travail plutôt qu'au Docker de l'hôte.",
-        "registerPoolPrompt": "{link} d'abord pour activer cette option.",
-        "registerPoolLink": "Enregistrez un pool d'exécuteurs",
-        "envToggle": "Provisionner les environnements du Tester via le fournisseur",
-        "envHint": "Montez l'environnement d'aperçu du Tester via le fournisseur d'environnements configuré ci-dessous plutôt que via docker-compose dans le conteneur. Connectez d'abord un fournisseur pour activer cette option.",
-        "updateFailed": "Impossible de mettre à jour la délégation"
       },
       "viewLogs": "Voir les journaux",
       "hideLogs": "Masquer les journaux",
@@ -1305,7 +1286,46 @@
       "backend": {
         "selectorLabel": "Backend d'exécution",
         "manifest": "Pool auto-hébergé (manifeste)",
-        "kubernetes": "Kubernetes"
+        "kubernetes": "Kubernetes",
+        "environmentSelectorLabel": "Backend d'environnement",
+        "environmentManifest": "API HTTP personnalisée (manifeste)"
+      },
+      "kubernetesEnv": {
+        "label": "Nom",
+        "labelPlaceholder": "Cluster de prévisualisation",
+        "apiServerUrl": "URL du serveur d'API",
+        "apiServerUrlHelp": "La racine du kube-apiserver, p. ex. https://10.0.0.1:6443. L'orchestrateur applique les manifestes de chaque PR via l'apiserver, donc seul ce point d'accès doit être accessible.",
+        "apiToken": "Jeton de ServiceAccount",
+        "apiTokenHelp": "Un jeton bearer avec les droits RBAC pour créer des namespaces et appliquer les ressources de l'opérateur. Stocké chiffré ; jamais réaffiché.",
+        "manifestSourceLabel": "Source des manifestes",
+        "sourceColocated": "Dans le dépôt de la PR",
+        "sourceSeparate": "Dépôt séparé",
+        "repo": "Dépôt des manifestes",
+        "repoHelp": "Le owner/repo qui contient les manifestes Kubernetes, p. ex. acme/preview-manifests.",
+        "ref": "Réf",
+        "refHelp": "Branche, tag ou SHA où lire les manifestes. Vide utilise la branche par défaut du dépôt.",
+        "path": "Chemin du manifeste",
+        "pathHelp": "Fichier ou répertoire du dépôt contenant les ressources à appliquer.",
+        "urlSourceLabel": "URL de l'environnement",
+        "urlIngressTemplate": "Modèle d'hôte Ingress",
+        "urlIngressStatus": "Lire l'état de l'Ingress",
+        "urlServiceStatus": "Lire l'état du Service",
+        "hostTemplate": "Modèle d'hôte",
+        "hostTemplateHelp": "Modèle d'hôte rendu avec les variables de provisionnement telles que branch et pullNumber ; l'hôte obtenu devient l'URL de l'environnement.",
+        "ingressName": "Nom de l'Ingress",
+        "ingressNameHelp": "Ingress dont lire l'hôte du load-balancer. Vide utilise le seul Ingress appliqué.",
+        "serviceName": "Nom du Service",
+        "port": "Port",
+        "scheme": "Schéma d'URL",
+        "schemeDefault": "https (par défaut)",
+        "namespaceTemplate": "Modèle de namespace",
+        "namespaceTemplateHelp": "Nom du namespace par PR rendu avec les variables de provisionnement telles que pullNumber. Vide en dérive un à partir du numéro de la PR.",
+        "imageTemplate": "Modèle d'image",
+        "imageTemplateHelp": "Référence d'image exposée aux manifestes, rendue avec les variables de provisionnement telles que branch et sha.",
+        "caCertPem": "Certificat CA du cluster (PEM)",
+        "caCertPemHelp": "Collez le bundle CA du cluster pour que le certificat TLS de l'apiserver soit vérifié. À omettre uniquement pour une CA publiquement approuvée.",
+        "insecureSkipTlsVerify": "Ignorer la vérification TLS",
+        "insecureSkipTlsVerifyHelp": "Fortement déconseillé. Désactive la vérification TLS de l'apiserver ; à utiliser uniquement pour des clusters kind/dev."
       },
       "kubernetes": {
         "label": "Nom",
@@ -1321,6 +1341,10 @@
         "caCertPem": "Certificat CA du cluster (PEM)",
         "caCertPemHelp": "Collez le bundle CA du cluster pour que le certificat TLS de l'apiserver soit vérifié. À omettre uniquement pour une CA publiquement approuvée.",
         "harnessPort": "Port du harness"
+      },
+      "advancedManifest": {
+        "summary": "Avancé : planificateur personnalisé basé sur une API",
+        "intro": "Nécessaire uniquement pour intégrer un planificateur personnalisé basé sur une API. Les backends courants (Docker local, Cloudflare Containers et Kubernetes) n'en ont pas besoin ; décrivez ici l'API HTTP de votre propre planificateur uniquement si vous en utilisez un."
       }
     },
     "serviceFragmentDefaults": {
@@ -1670,6 +1694,22 @@
         "saveFailed": "Impossible d'enregistrer le runner",
         "removed": "Runner supprimé",
         "removeFailed": "Impossible de supprimer le runner"
+      }
+    },
+    "infrastructure": {
+      "active": "Actif : {backend}",
+      "registerHint": "Enregistrez un pool d'exécuteurs ci-dessous pour l'activer.",
+      "updateFailed": "Impossible de mettre à jour le backend d'exécution",
+      "executionBackend": {
+        "label": "Où s'exécutent les agents",
+        "local-docker": "Docker local (hôte)",
+        "cloudflare-containers": "Cloudflare Containers (intégré)",
+        "runner-pool": "Pool d'exécuteurs auto-hébergé"
+      },
+      "testEnvBackend": {
+        "label": "Où s'exécutent les environnements de test",
+        "local-compose": "docker-compose dans le conteneur",
+        "environment-provider": "Fournisseur d'environnements"
       }
     }
   },

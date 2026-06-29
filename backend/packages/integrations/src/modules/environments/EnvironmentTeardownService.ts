@@ -1,6 +1,5 @@
 import type { Clock } from '@cat-factory/kernel'
 import type { EnvironmentRecord, EnvironmentRegistryRepository } from '@cat-factory/kernel'
-import type { EnvironmentProvider } from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { EnvironmentHandle } from '@cat-factory/kernel'
 import { assertFound } from '@cat-factory/kernel'
@@ -15,7 +14,6 @@ import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningL
 
 export interface EnvironmentTeardownServiceDependencies {
   connectionService: EnvironmentConnectionService
-  environmentProvider: EnvironmentProvider
   environmentRegistryRepository: EnvironmentRegistryRepository
   secretCipher: SecretCipher
   clock: Clock
@@ -54,16 +52,16 @@ export class EnvironmentTeardownService {
   }
 
   private async teardownRecord(record: EnvironmentRecord): Promise<void> {
-    const connection = await this.deps.connectionService
-      .requireConnection(record.workspaceId)
+    const resolved = await this.deps.connectionService
+      .resolveProvider(record.workspaceId)
       .catch(() => null)
     // If the provider was unregistered we can't call its API; just tombstone.
-    if (connection) {
+    if (resolved) {
       const resolveSecret = await this.deps.connectionService.resolveSecrets(record.workspaceId)
       const provisionFields = await this.decryptFields(record.provisionFieldsCipher)
       try {
-        await this.deps.environmentProvider.teardown({
-          manifest: connection.manifest,
+        await resolved.provider.teardown({
+          manifest: resolved.manifest,
           externalId: record.externalId,
           provisionFields,
           resolveSecret,

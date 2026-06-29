@@ -5,12 +5,7 @@ import { makeApp } from '../helpers'
 import { SystemClock } from '../../src/infrastructure/runtime'
 import { sweepExpiredEnvironments } from '../../src/infrastructure/environments/sweep'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
-import {
-  bearerManifest,
-  readyEnvBody,
-  recordingFetch,
-  TEST_API_TOKEN,
-} from './environment.fixtures'
+import { bearerConfig, readyEnvBody, recordingFetch, TEST_API_TOKEN } from './environment.fixtures'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -25,7 +20,7 @@ describe('environment TTL sweep', () => {
     const ws = workspace.id
 
     await app.call('POST', `/workspaces/${ws}/environments/connection`, {
-      manifest: bearerManifest(),
+      config: bearerConfig(),
       secrets: { API_TOKEN: TEST_API_TOKEN },
     })
     await app.call('POST', `/workspaces/${ws}/environments/provision`, { blockId: 'b' })

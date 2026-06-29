@@ -2,7 +2,7 @@ import type { EnvironmentHandle, EnvironmentManifest } from '@cat-factory/kernel
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { makeApp } from '../helpers'
 import {
-  bearerManifest,
+  bearerConfig,
   readyEnvBody,
   recordingFetch,
   TEST_API_TOKEN,
@@ -31,7 +31,7 @@ describe('environment provisioning', () => {
     const ws = workspace.id
 
     await app.call('POST', `/workspaces/${ws}/environments/connection`, {
-      manifest: bearerManifest(),
+      config: bearerConfig(),
       secrets: { API_TOKEN: TEST_API_TOKEN },
     })
 
@@ -126,7 +126,7 @@ describe('environment provisioning', () => {
       const ws = workspace.id
 
       await app.call('POST', `/workspaces/${ws}/environments/connection`, {
-        manifest: bearerManifest({ auth }),
+        config: bearerConfig({ auth }),
         secrets,
       })
       await app.call('POST', `/workspaces/${ws}/environments/provision`, { blockId: 'b' })

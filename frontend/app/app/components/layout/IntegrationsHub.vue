@@ -20,7 +20,6 @@ const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const tracker = useTrackerStore()
 const releaseHealth = useReleaseHealthStore()
-const providerConnections = useProviderConnectionsStore()
 const userSecrets = useUserSecretsStore()
 const apiKeys = useApiKeysStore()
 const workspace = useWorkspaceStore()
@@ -50,7 +49,6 @@ watch(
     if (isOpen) {
       query.value = ''
       void releaseHealth.ensureLoaded().catch(() => {})
-      void providerConnections.ensureLoaded().catch(() => {})
       void userSecrets.load().catch(() => {})
       // Drives the OpenRouter row's "Key connected" badge.
       if (workspace.workspaceId) void apiKeys.load(workspace.workspaceId).catch(() => {})
@@ -258,70 +256,9 @@ const groups = computed<IntegrationGroup[]>(() => {
     })
   }
 
-  // --- Infrastructure (ephemeral environments + self-hosted runner pool) -----
-  // The two providers — container agents (runner pool) and Tester environments — are the
-  // same "bring your own infra" idea and the same custom pool typically backs both, so they
-  // collapse into ONE row opening the tabbed Infrastructure window. The row shows a combined
-  // per-concern summary ("Agents: connected · Envs: not connected"). Each concern still gates
-  // on its own availability probe (a tab whose backend is off simply doesn't render), so the
-  // row appears whenever EITHER is available. The ProviderConfigBanner handles the louder
-  // "missing mandatory fields" warning.
-  const infra: IntegrationItem[] = []
-  const agentsAvailable = providerConnections.isAvailable('runner-pool')
-  const envsAvailable = providerConnections.isAvailable('environment')
-  if (agentsAvailable || envsAvailable) {
-    const agentsConn = providerConnections.connectionFor('runner-pool')
-    const envsConn = providerConnections.connectionFor('environment')
-    // Combined summary across the available concerns only.
-    const stateWord = (conn: unknown) =>
-      conn
-        ? t('layout.integrationsHub.status.connected')
-        : t('layout.integrationsHub.status.notConnected')
-    const parts: string[] = []
-    if (agentsAvailable)
-      parts.push(
-        t('layout.integrationsHub.items.infrastructure.agents', { state: stateWord(agentsConn) }),
-      )
-    if (envsAvailable)
-      parts.push(
-        t('layout.integrationsHub.items.infrastructure.envs', { state: stateWord(envsConn) }),
-      )
-    // Default the window to the agents tab when available (the common case), else envs.
-    const defaultKind = agentsAvailable ? 'runner-pool' : 'environment'
-    // A concern counts as satisfied when it's unavailable (nothing to configure) or connected.
-    // The row is "connected" (green) only when EVERY available concern is connected — a
-    // half-connected state shows the amber "attention" badge instead, so the green badge can't
-    // claim "done" while one concern is still unconfigured.
-    const agentsSatisfied = !agentsAvailable || !!agentsConn
-    const envsSatisfied = !envsAvailable || !!envsConn
-    const allConnected = agentsSatisfied && envsSatisfied
-    const someConnected = !!agentsConn || !!envsConn
-    infra.push({
-      key: 'infrastructure',
-      icon: 'i-lucide-server-cog',
-      label: t('layout.integrationsHub.items.infrastructure.label'),
-      description: t('layout.integrationsHub.items.infrastructure.description'),
-      status: parts.join(' · '),
-      connected: allConnected,
-      attention: someConnected && !allConnected,
-      attentionLabel: parts.join(' · '),
-      onClick: () => go(() => ui.openProviderConnection(defaultKind)),
-    })
-  }
-  // Local-mode-only: the warm-container pool + checkout reuse for the local runner. Shown
-  // only on the local-mode service (the controller 503s elsewhere, and `auth.localMode`
-  // is set from /auth/config).
-  if (auth.localMode?.enabled) {
-    infra.push({
-      key: 'local-mode',
-      icon: 'i-lucide-container',
-      label: t('layout.integrationsHub.items.localMode.label'),
-      description: t('layout.integrationsHub.items.localMode.description'),
-      onClick: () => go(ui.openLocalModeSettings),
-    })
-  }
-  if (infra.length)
-    out.push({ title: t('layout.integrationsHub.groups.infrastructure'), items: infra })
+  // NOTE: Infrastructure (agent-container execution + Tester environments + the local-mode
+  // warm pool/checkout) is no longer listed here — it moved to its OWN top-level navbar menu
+  // (SideBar → "Infrastructure" → the tabbed Infrastructure window). See `ui.openInfrastructure`.
 
   // --- Personal (only you) — fallback when there is no UserMenu to host "My setup" -------
   // Per-user connections normally live in the My-setup hub; with auth disabled they fold in

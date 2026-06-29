@@ -11,6 +11,7 @@ import type { ProviderConnectionKind } from '~/types/providerConnections'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor.vue'
 import KubernetesRunnerForm from '~/components/settings/KubernetesRunnerForm.vue'
+import KubernetesEnvironmentForm from '~/components/settings/KubernetesEnvironmentForm.vue'
 
 const props = defineProps<{ kind: ProviderConnectionKind }>()
 
@@ -185,18 +186,32 @@ async function saveManifest(payload: {
   }
 }
 
-// --- Runner-backend selector (runner-pool only) -------------------------------------
-// The runner-pool tab can configure either the manifest pool OR a native Kubernetes
-// cluster; environments are manifest-only. Defaults to the saved connection's kind.
-const RUNNER_BACKEND_KINDS = ['manifest', 'kubernetes'] as const
-type RunnerBackendKind = (typeof RUNNER_BACKEND_KINDS)[number]
-const backendKind = ref<RunnerBackendKind>('manifest')
-const showBackendSelector = computed(() => props.kind === 'runner-pool')
+// --- Backend selector -----------------------------------------------------------------
+// Both infrastructure tabs can configure either the BYO manifest backend OR a native
+// Kubernetes backend (a runner cluster for runner-pool, per-PR namespaces for environment).
+// The two K8s backends have different config shapes, so each kind renders its own form.
+// Defaults to the saved connection's kind.
+const BACKEND_KINDS = ['manifest', 'kubernetes'] as const
+type BackendKind = (typeof BACKEND_KINDS)[number]
+const backendKind = ref<BackendKind>('manifest')
+const showBackendSelector = computed(() => true)
+const backendSelectorLabel = computed(() =>
+  t(
+    props.kind === 'environment'
+      ? 'settings.providerConnection.backend.environmentSelectorLabel'
+      : 'settings.providerConnection.backend.selectorLabel',
+  ),
+)
+function backendKindLabel(k: BackendKind): string {
+  if (k === 'kubernetes') return t('settings.providerConnection.backend.kubernetes')
+  return t(
+    props.kind === 'environment'
+      ? 'settings.providerConnection.backend.environmentManifest'
+      : 'settings.providerConnection.backend.manifest',
+  )
+}
 const backendKindItems = computed(() =>
-  RUNNER_BACKEND_KINDS.map((k) => ({
-    label: t(`settings.providerConnection.backend.${k}`),
-    value: k,
-  })),
+  BACKEND_KINDS.map((k) => ({ label: backendKindLabel(k), value: k })),
 )
 watch(
   () => connection.value,
@@ -317,17 +332,26 @@ function fieldHelp(key: string): string | undefined {
       }}
     </div>
 
-    <!-- Runner-backend selector: the manifest pool or a native Kubernetes cluster. -->
-    <UFormField
-      v-if="showBackendSelector"
-      :label="t('settings.providerConnection.backend.selectorLabel')"
-    >
+    <!-- Backend selector: the BYO manifest backend or a native Kubernetes backend. -->
+    <UFormField v-if="showBackendSelector" :label="backendSelectorLabel">
       <USelect v-model="backendKind" :items="backendKindItems" />
     </UFormField>
 
-    <!-- Native Kubernetes runner backend. -->
+    <!-- Native Kubernetes runner backend (runner-pool). -->
     <KubernetesRunnerForm
-      v-if="showBackendSelector && backendKind === 'kubernetes'"
+      v-if="kind === 'runner-pool' && backendKind === 'kubernetes'"
+      :connection="connection"
+      :supports-test="descriptor.supportsTest"
+      :testing="testing"
+      :busy="busy"
+      :test-result="testResult"
+      @test="testConfig"
+      @save="saveConfig"
+    />
+
+    <!-- Native Kubernetes ephemeral-environment backend (environment). -->
+    <KubernetesEnvironmentForm
+      v-else-if="kind === 'environment' && backendKind === 'kubernetes'"
       :connection="connection"
       :supports-test="descriptor.supportsTest"
       :testing="testing"
@@ -416,18 +440,31 @@ function fieldHelp(key: string): string | undefined {
       </div>
     </div>
 
-    <!-- MANIFEST-driven provider: the full in-app manifest editor. -->
-    <ProviderManifestEditor
+    <!-- MANIFEST-driven provider: the raw JSON manifest editor. Collapsed by default — it's
+         the advanced path, needed ONLY to integrate a custom API-based scheduler. The common
+         backends (local Docker, Cloudflare Containers, Kubernetes) don't need it. -->
+    <details
       v-else
-      :kind="kind"
-      :saved-manifest="descriptor.savedManifest"
-      :connected="!!connection"
-      :supports-test="descriptor.supportsTest"
-      :testing="testing"
-      :busy="busy"
-      :test-result="testResult"
-      @test="testManifest"
-      @save="saveManifest"
-    />
+      class="rounded-lg border border-slate-700 bg-slate-900/40 p-3"
+      :open="!!connection"
+    >
+      <summary class="cursor-pointer text-sm font-medium text-slate-200">
+        {{ t('settings.providerConnection.advancedManifest.summary') }}
+      </summary>
+      <p class="mt-2 mb-3 text-[11px] text-slate-400">
+        {{ t('settings.providerConnection.advancedManifest.intro') }}
+      </p>
+      <ProviderManifestEditor
+        :kind="kind"
+        :saved-manifest="descriptor.savedManifest"
+        :connected="!!connection"
+        :supports-test="descriptor.supportsTest"
+        :testing="testing"
+        :busy="busy"
+        :test-result="testResult"
+        @test="testManifest"
+        @save="saveManifest"
+      />
+    </details>
   </div>
 </template>
