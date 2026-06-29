@@ -198,7 +198,6 @@ async function saveManifest(payload: {
 // the store until it loads); the two K8s backends have bespoke forms, every other kind
 // (manifest + custom) uses the descriptor-driven flat form. Defaults to the saved kind.
 const backendKind = ref<string>('manifest')
-const showBackendSelector = computed(() => true)
 const backendSelectorLabel = computed(() =>
   t(
     props.kind === 'environment'
@@ -229,10 +228,14 @@ watch(
   { immediate: true },
 )
 
-// Switching the backend kind re-probes its descriptor (so a not-yet-connected custom kind's
-// connect form renders). The default `manifest` kind needs no explicit query.
+// Switching the backend kind re-probes ONLY that kind's descriptor (so a not-yet-connected
+// custom kind's connect form renders). Always pass the explicit kind — including `manifest`,
+// so picking it describes the manifest backend rather than falling back to the stored kind —
+// and use `loadDescriptor` (not `loadKind`) so the stored connection isn't re-fetched and the
+// selector isn't bounced back to the stored kind by the `connection` watch.
 async function onBackendKindChange(k: string) {
-  await store.loadKind(props.kind, k === 'manifest' ? undefined : k)
+  backendKind.value = k
+  await store.loadDescriptor(props.kind, k)
   resetDraft()
 }
 
@@ -347,12 +350,13 @@ function fieldHelp(key: string): string | undefined {
       }}
     </div>
 
-    <!-- Backend selector: the BYO manifest backend or a native Kubernetes backend. -->
-    <UFormField v-if="showBackendSelector" :label="backendSelectorLabel">
+    <!-- Backend selector: the BYO manifest backend, a native Kubernetes backend, or a
+         programmatically-registered custom kind. -->
+    <UFormField :label="backendSelectorLabel">
       <USelect
         v-model="backendKind"
         :items="backendKindItems"
-        @update:model-value="onBackendKindChange"
+        @update:model-value="onBackendKindChange(String($event))"
       />
     </UFormField>
 

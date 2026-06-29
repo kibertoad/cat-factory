@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { customBackendKindSchema } from './primitives.js'
 
 // ---------------------------------------------------------------------------
 // Ephemeral environment provider wire contracts. Every organization rolls its
@@ -274,16 +275,8 @@ export const RESERVED_ENVIRONMENT_BACKEND_KINDS = ['manifest', 'kubernetes'] as 
  * payload (e.g. `{ kind: 'kubernetes', manifest }`) from silently matching this generic
  * member instead of failing.
  */
-export const customEnvironmentBackendKindSchema = v.pipe(
-  v.string(),
-  v.trim(),
-  v.minLength(1),
-  v.maxLength(64),
-  v.regex(/^[a-z0-9][a-z0-9-]*$/, 'must be a lower-kebab slug'),
-  v.check(
-    (k) => !(RESERVED_ENVIRONMENT_BACKEND_KINDS as readonly string[]).includes(k),
-    'reserved backend kind',
-  ),
+export const customEnvironmentBackendKindSchema = customBackendKindSchema(
+  RESERVED_ENVIRONMENT_BACKEND_KINDS,
 )
 
 /**

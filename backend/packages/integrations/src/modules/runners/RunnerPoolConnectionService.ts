@@ -148,12 +148,17 @@ export class RunnerPoolConnectionService {
    */
   async describeProvider(workspaceId: string, kind?: string): Promise<ProviderDescriptor> {
     const record = await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)
-    if (kind !== undefined) this.provider(kind) // validate the requested kind is registered
-    const useStored = !!record && (kind === undefined || kind === record.kind)
+    // Resolve + validate the backend kind exactly like the environment service: an explicit
+    // (e.g. not-yet-connected custom) kind must be a registered backend, else the stored or
+    // default `manifest` kind.
+    const resolvedKind = kind ?? record?.kind ?? 'manifest'
+    this.provider(resolvedKind)
+    const useStored = !!record && resolvedKind === record.kind
     const config = useStored ? (JSON.parse(record!.configJson) as RunnerBackendConfig) : undefined
-    // The manifest backend renders a flat field form (its secret-ref keys + baseUrl);
-    // the native (kubernetes) backend uses an explicit UI form, so it has no flat fields.
-    const manifest = config?.kind === 'manifest' ? config.manifest : undefined
+    // Both the built-in `manifest` backend AND a custom kind ride the generic
+    // `{ kind, manifest }` member, so unwrap the manifest for either to drive the flat field
+    // form (secret-ref keys + baseUrl); only the native `kubernetes` backend has no flat fields.
+    const manifest = config && 'manifest' in config ? config.manifest : undefined
     const configFields = manifest
       ? (this.deps.runnerPoolProvider?.describeConfig?.(manifest) ?? [])
       : []

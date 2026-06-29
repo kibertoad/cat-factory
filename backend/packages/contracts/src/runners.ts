@@ -4,6 +4,7 @@ import {
   environmentRequestTemplateSchema,
   environmentSecretRefSchema,
 } from './environments.js'
+import { customBackendKindSchema } from './primitives.js'
 
 // ---------------------------------------------------------------------------
 // Self-hosted runner-pool wire contracts ("bring your own infra").
@@ -211,17 +212,7 @@ export const RESERVED_RUNNER_BACKEND_KINDS = ['manifest', 'kubernetes'] as const
  * by `kind`) builds the real transport. The reserved-kind guard stops a wrong-shaped
  * built-in payload from silently matching this generic member instead of failing.
  */
-export const customRunnerBackendKindSchema = v.pipe(
-  v.string(),
-  v.trim(),
-  v.minLength(1),
-  v.maxLength(64),
-  v.regex(/^[a-z0-9][a-z0-9-]*$/, 'must be a lower-kebab slug'),
-  v.check(
-    (k) => !(RESERVED_RUNNER_BACKEND_KINDS as readonly string[]).includes(k),
-    'reserved backend kind',
-  ),
-)
+export const customRunnerBackendKindSchema = customBackendKindSchema(RESERVED_RUNNER_BACKEND_KINDS)
 
 /**
  * An "agent runner backend" config, discriminated by `kind`. This is the universal

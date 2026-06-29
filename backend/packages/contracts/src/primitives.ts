@@ -130,6 +130,26 @@ export type AgentState = v.InferOutput<typeof agentStateSchema>
 export const agentKindSchema = v.pipe(v.string(), v.minLength(1))
 export type AgentKind = v.InferOutput<typeof agentKindSchema>
 
+/**
+ * The `kind` slug of a CUSTOM (third-party, programmatically-registered) infra backend —
+ * an environment provider or a runner pool: any lower-kebab slug that isn't one of the
+ * subsystem's reserved built-ins. Shared by `environmentBackendConfigSchema` /
+ * `runnerBackendConfigSchema` so the slug grammar can't drift between the two subsystems.
+ * The reserved-kind `v.check` is load-bearing: it stops a wrong-shaped built-in payload
+ * (e.g. `{ kind: 'kubernetes', manifest }`) from silently matching the generic custom
+ * member instead of failing.
+ */
+export function customBackendKindSchema(reserved: readonly string[]) {
+  return v.pipe(
+    v.string(),
+    v.trim(),
+    v.minLength(1),
+    v.maxLength(64),
+    v.regex(/^[a-z0-9][a-z0-9-]*$/, 'must be a lower-kebab slug'),
+    v.check((k) => !reserved.includes(k), 'reserved backend kind'),
+  )
+}
+
 export const positionSchema = v.object({
   x: v.number(),
   y: v.number(),

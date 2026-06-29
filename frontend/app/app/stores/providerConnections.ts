@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, reactive, ref } from 'vue'
+import type { BackendKindOption } from '@cat-factory/contracts'
 import type {
   ProviderConnection,
   ProviderConnectionKind,
@@ -10,12 +11,6 @@ import type {
 import { useWorkspaceStore } from '~/stores/workspace'
 
 const KINDS: ProviderConnectionKind[] = ['environment', 'runner-pool']
-
-/** A selectable backend kind for the connect form's backend selector. */
-interface BackendKindOption {
-  kind: string
-  label: string
-}
 
 // Built-in fallback so the connect form's backend selector works before the snapshot
 // loads (or on an older backend that doesn't advertise the kinds). The live lists come
@@ -101,6 +96,21 @@ export const useProviderConnectionsStore = defineStore('providerConnections', ()
     }
   }
 
+  /**
+   * Re-probe ONLY the descriptor for a specific backend kind (e.g. a not-yet-connected
+   * custom kind the user just picked), leaving the stored connection untouched. Switching
+   * the selector must NOT re-fetch the connection: that would reassign `state.connection`
+   * and bounce the selector back to the stored kind via the component's `connection` watch.
+   */
+  async function loadDescriptor(kind: ProviderConnectionKind, backendKind?: string) {
+    const ws = useWorkspaceStore()
+    try {
+      state[kind].descriptor = await api.describeProvider(ws.requireId(), kind, backendKind)
+    } catch {
+      // Keep the existing descriptor/availability on a transient describe failure.
+    }
+  }
+
   /** Refresh both providers (used by the banner + after a save/remove). */
   async function load() {
     await Promise.all(KINDS.map((k) => loadKind(k)))
@@ -166,6 +176,7 @@ export const useProviderConnectionsStore = defineStore('providerConnections', ()
     loaded,
     load,
     loadKind,
+    loadDescriptor,
     ensureLoaded,
     descriptorFor,
     connectionFor,
