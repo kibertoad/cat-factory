@@ -79,6 +79,14 @@ export const slackOAuthSecretSchema = v.object({
 })
 export type SlackOAuthSecret = v.InferOutput<typeof slackOAuthSecretSchema>
 
+/** Linear app OAuth credentials (the account's registered Linear OAuth app). */
+export const linearOAuthSecretSchema = v.object({
+  clientId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  clientSecret: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  redirectUrl: v.pipe(v.string(), v.trim(), v.url()),
+})
+export type LinearOAuthSecret = v.InferOutput<typeof linearOAuthSecretSchema>
+
 /**
  * Web-search upstream keys. Brave wins when its key is set, else SearXNG (url +
  * optional key). Both optional so an account can use either.
@@ -100,6 +108,7 @@ export type S3CredentialsSecret = v.InferOutput<typeof s3CredentialsSecretSchema
 /** The decrypted secrets blob (every group optional). */
 export const accountSettingsSecretsSchema = v.object({
   slackOAuth: v.optional(slackOAuthSecretSchema),
+  linearOAuth: v.optional(linearOAuthSecretSchema),
   webSearch: v.optional(webSearchSecretSchema),
   s3: v.optional(s3CredentialsSecretSchema),
 })
@@ -121,6 +130,7 @@ export const updateAccountSettingsSchema = v.object({
   secrets: v.optional(
     v.object({
       slackOAuth: v.optional(v.nullable(slackOAuthSecretSchema)),
+      linearOAuth: v.optional(v.nullable(linearOAuthSecretSchema)),
       webSearch: v.optional(v.nullable(webSearchSecretSchema)),
       s3: v.optional(v.nullable(s3CredentialsSecretSchema)),
     }),
@@ -144,6 +154,7 @@ export type ContentStorageSummary = v.InferOutput<typeof contentStorageSummarySc
 /** Non-secret presence/status for display — NEVER secret values. */
 export const accountSettingsSummarySchema = v.object({
   slackOAuthConfigured: v.boolean(),
+  linearOAuthConfigured: v.boolean(),
   webSearch: v.nullable(v.picklist(['brave', 'searxng'])),
   contentStorage: contentStorageSummarySchema,
 })
@@ -181,6 +192,7 @@ export function accountSettingsSummary(
   const cs = config?.contentStorage
   return {
     slackOAuthConfigured: Boolean(secrets.slackOAuth),
+    linearOAuthConfigured: Boolean(secrets.linearOAuth),
     webSearch,
     contentStorage: {
       backend: cs?.backend ?? null,

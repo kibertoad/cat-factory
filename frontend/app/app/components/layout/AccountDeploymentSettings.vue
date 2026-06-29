@@ -15,8 +15,10 @@ const toast = useToast()
 const { t } = useI18n()
 
 const slack = reactive({ clientId: '', clientSecret: '', redirectUrl: '' })
+const linear = reactive({ clientId: '', clientSecret: '', redirectUrl: '' })
 const web = reactive({ braveApiKey: '', searxngUrl: '', searxngApiKey: '' })
 const savingSlack = ref(false)
+const savingLinear = ref(false)
 const savingWeb = ref(false)
 
 const summary = computed(() => store.view?.summary ?? null)
@@ -200,6 +202,61 @@ async function clearSlack() {
   }
 }
 
+async function saveLinear() {
+  if (!linear.clientId.trim() || !linear.clientSecret.trim() || !linear.redirectUrl.trim()) {
+    toast.add({ title: t('layout.accountDeployment.linear.validation'), color: 'error' })
+    return
+  }
+  savingLinear.value = true
+  try {
+    await store.save(props.accountId, {
+      secrets: {
+        linearOAuth: {
+          clientId: linear.clientId.trim(),
+          clientSecret: linear.clientSecret.trim(),
+          redirectUrl: linear.redirectUrl.trim(),
+        },
+      },
+    })
+    linear.clientId = ''
+    linear.clientSecret = ''
+    linear.redirectUrl = ''
+    toast.add({
+      title: t('layout.accountDeployment.linear.saved'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
+  } catch (e) {
+    toast.add({
+      title: t('layout.accountDeployment.linear.saveFailed'),
+      description: e instanceof Error ? e.message : String(e),
+      color: 'error',
+    })
+  } finally {
+    savingLinear.value = false
+  }
+}
+
+async function clearLinear() {
+  savingLinear.value = true
+  try {
+    await store.save(props.accountId, { secrets: { linearOAuth: null } })
+    toast.add({
+      title: t('layout.accountDeployment.linear.cleared'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
+  } catch (e) {
+    toast.add({
+      title: t('layout.accountDeployment.linear.clearFailed'),
+      description: e instanceof Error ? e.message : String(e),
+      color: 'error',
+    })
+  } finally {
+    savingLinear.value = false
+  }
+}
+
 async function saveWeb() {
   const brave = web.braveApiKey.trim()
   const searxng = web.searxngUrl.trim()
@@ -323,6 +380,68 @@ async function clearWeb() {
           size="xs"
           :loading="savingSlack"
           @click="clearSlack"
+        >
+          {{ t('layout.accountDeployment.clear') }}
+        </UButton>
+      </div>
+    </section>
+
+    <!-- Linear app OAuth -->
+    <section class="space-y-2 border-t border-slate-800 pt-6">
+      <div class="flex items-center gap-2">
+        <h4 class="text-sm font-semibold text-slate-200">
+          {{ t('layout.accountDeployment.linear.title') }}
+        </h4>
+        <UBadge
+          :color="summary?.linearOAuthConfigured ? 'success' : 'neutral'"
+          variant="subtle"
+          size="xs"
+        >
+          {{
+            summary?.linearOAuthConfigured
+              ? t('layout.accountDeployment.configured')
+              : t('layout.accountDeployment.notSet')
+          }}
+        </UBadge>
+      </div>
+      <p class="text-[11px] text-slate-400">
+        {{ t('layout.accountDeployment.linear.description') }}
+      </p>
+      <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <UInput
+          v-model="linear.clientId"
+          :placeholder="t('layout.accountDeployment.linear.clientId')"
+          size="sm"
+        />
+        <UInput
+          v-model="linear.clientSecret"
+          type="password"
+          :placeholder="t('layout.accountDeployment.linear.clientSecret')"
+          size="sm"
+        />
+        <UInput
+          v-model="linear.redirectUrl"
+          :placeholder="t('layout.accountDeployment.linear.redirectUrl')"
+          size="sm"
+        />
+      </div>
+      <div class="flex gap-2">
+        <UButton
+          color="primary"
+          size="xs"
+          icon="i-lucide-save"
+          :loading="savingLinear"
+          @click="saveLinear"
+        >
+          {{ t('common.save') }}
+        </UButton>
+        <UButton
+          v-if="summary?.linearOAuthConfigured"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          :loading="savingLinear"
+          @click="clearLinear"
         >
           {{ t('layout.accountDeployment.clear') }}
         </UButton>

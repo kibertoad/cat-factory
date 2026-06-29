@@ -6,7 +6,7 @@ import {
   type DocumentSourceProvider,
   type NormalizedConnection,
 } from '@cat-factory/kernel'
-import { LinearGraphqlClient } from '../shared/linear.client.js'
+import { LinearGraphqlClient, linearAuthFromCredentials } from '../shared/linear.client.js'
 import {
   LINEAR_DOCS_DESCRIPTOR,
   LINEAR_DOCUMENT_QUERY,
@@ -47,7 +47,7 @@ export class LinearDocumentProvider implements DocumentSourceProvider {
     credentials: DocumentCredentials,
     externalId: string,
   ): Promise<DocumentContent> {
-    const client = new LinearGraphqlClient({ apiKey: credentials.apiKey! })
+    const client = new LinearGraphqlClient(linearAuthFromCredentials(credentials))
     const data = await client.query<{
       document?: Parameters<typeof mapLinearDocument>[0]['document']
     }>(LINEAR_DOCUMENT_QUERY, { id: externalId })
@@ -55,7 +55,7 @@ export class LinearDocumentProvider implements DocumentSourceProvider {
   }
 
   async search(credentials: DocumentCredentials, query: string): Promise<DocumentSearchResult[]> {
-    const client = new LinearGraphqlClient({ apiKey: credentials.apiKey! })
+    const client = new LinearGraphqlClient(linearAuthFromCredentials(credentials))
     const data = await client.query<Parameters<typeof mapLinearDocumentSearch>[0]>(
       LINEAR_DOCUMENTS_SEARCH_QUERY,
       { term: query },

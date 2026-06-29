@@ -29,14 +29,29 @@ export const LINEAR_TASK_DESCRIPTOR: TaskSourceDescriptor = {
   refLabel: 'Issue identifier or URL',
   refPlaceholder: 'ENG-123  or  https://linear.app/acme/issue/ENG-123',
   searchable: true,
+  // Offers the "Connect with Linear" OAuth button (when the deployment configured a
+  // Linear OAuth app); the personal-API-key field above stays as the manual fallback.
+  oauth: true,
 }
 
 // ---- GraphQL operations ----------------------------------------------------
 
+/** Largest page Linear allows on a connection, and the page we always request. */
+const PAGE_SIZE = 100
+
+/**
+ * How many extra connection pages to walk per issue (children / comments), bounding
+ * the per-import fan-out. Mirrors {@link JiraProvider}'s `CHILD_PAGE_CAP` — an epic
+ * with up to ~2100 children/comments imports fully; beyond that it is truncated.
+ */
+export const LINEAR_PAGE_CAP = 20
+
 /**
  * Fetch a single issue with everything the structured {@link TaskContent} needs.
  * Linear's `issue(id:)` resolves the human identifier (`ENG-123`) as well as the
- * UUID, so the stored external id is a valid argument.
+ * UUID, so the stored external id is a valid argument. The `children` and `comments`
+ * connections request the max page plus a `pageInfo` cursor so the provider can walk
+ * the rest (Linear returns only the first page by default — see {@link LinearTaskProvider}).
  */
 export const LINEAR_ISSUE_QUERY = `query Issue($id: String!) {
   issue(id: $id) {
@@ -47,12 +62,32 @@ export const LINEAR_ISSUE_QUERY = `query Issue($id: String!) {
     priorityLabel
     state { name type }
     assignee { name }
-    labels { nodes { name } }
+    labels(first: ${PAGE_SIZE}) { nodes { name } }
     parent { identifier }
-    children { nodes { identifier } }
-    comments { nodes { user { name } createdAt body } }
-    relations { nodes { type relatedIssue { identifier } } }
-    inverseRelations { nodes { type issue { identifier } } }
+    children(first: ${PAGE_SIZE}) { nodes { identifier } pageInfo { hasNextPage endCursor } }
+    comments(first: ${PAGE_SIZE}) { nodes { user { name } createdAt body } pageInfo { hasNextPage endCursor } }
+    relations(first: ${PAGE_SIZE}) { nodes { type relatedIssue { identifier } } }
+    inverseRelations(first: ${PAGE_SIZE}) { nodes { type issue { identifier } } }
+  }
+}`
+
+/** One more page of an issue's child identifiers (the children-pagination walk). */
+export const LINEAR_ISSUE_CHILDREN_QUERY = `query IssueChildren($id: String!, $after: String!) {
+  issue(id: $id) {
+    children(first: ${PAGE_SIZE}, after: $after) {
+      nodes { identifier }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+}`
+
+/** One more page of an issue's comments (the comments-pagination walk). */
+export const LINEAR_ISSUE_COMMENTS_QUERY = `query IssueComments($id: String!, $after: String!) {
+  issue(id: $id) {
+    comments(first: ${PAGE_SIZE}, after: $after) {
+      nodes { user { name } createdAt body }
+      pageInfo { hasNextPage endCursor }
+    }
   }
 }`
 
@@ -63,10 +98,31 @@ export const LINEAR_SEARCH_ISSUES_QUERY = `query SearchIssues($term: String!) {
   }
 }`
 
+/** List the connection's teams (for the ticket-filing team picker). */
+export const LINEAR_TEAMS_QUERY = `query Teams { teams(first: 250) { nodes { id name key } } }`
+
 /** Cheapest authenticated read, for the live "check setup" probe. */
 export const LINEAR_VIEWER_QUERY = `query Viewer { viewer { name } }`
 
 // ---- Response shapes (the slices we read) ----------------------------------
+
+/** A connection's cursor info, present on the paginated children/comments connections. */
+export interface LinearPageInfo {
+  hasNextPage?: boolean
+  endCursor?: string | null
+}
+
+/** One page of an issue's child identifiers. */
+export interface LinearChildrenPage {
+  nodes?: { identifier?: string }[]
+  pageInfo?: LinearPageInfo | null
+}
+
+/** One page of an issue's comments. */
+export interface LinearCommentsPage {
+  nodes?: LinearCommentNode[]
+  pageInfo?: LinearPageInfo | null
+}
 
 interface LinearIssueNode {
   identifier?: string
@@ -78,8 +134,8 @@ interface LinearIssueNode {
   assignee?: { name?: string } | null
   labels?: { nodes?: { name?: string }[] }
   parent?: { identifier?: string } | null
-  children?: { nodes?: { identifier?: string }[] }
-  comments?: { nodes?: LinearCommentNode[] }
+  children?: LinearChildrenPage
+  comments?: LinearCommentsPage
   relations?: { nodes?: { type?: string; relatedIssue?: { identifier?: string } }[] }
   inverseRelations?: { nodes?: { type?: string; issue?: { identifier?: string } }[] }
 }
@@ -88,6 +144,20 @@ interface LinearCommentNode {
   user?: { name?: string }
   createdAt?: string
   body?: string | null
+}
+
+/** Map one page of a `children` connection onto child identifiers (drops blanks). */
+export function mapLinearChildIds(page: LinearChildrenPage | null | undefined): string[] {
+  return (page?.nodes ?? []).map((c) => c.identifier).filter((id): id is string => !!id)
+}
+
+/** Map one page of a `comments` connection onto normalized {@link TaskComment}s. */
+export function mapLinearComments(page: LinearCommentsPage | null | undefined): TaskComment[] {
+  return (page?.nodes ?? []).map((c) => ({
+    author: c.user?.name ?? '',
+    createdAt: c.createdAt ?? '',
+    body: normalizeMarkdown(c.body),
+  }))
 }
 
 /**
@@ -155,19 +225,17 @@ export function mapLinearRelations(issue: LinearIssueNode): TaskDependencyLink[]
   return out
 }
 
-/** Map an `issue` GraphQL payload onto the structured {@link TaskContent}. */
+/**
+ * Map an `issue` GraphQL payload onto the structured {@link TaskContent}. Only the
+ * FIRST page of the `children`/`comments` connections is reflected here; the provider
+ * walks any further pages (see {@link LinearTaskProvider}) and appends them.
+ */
 export function mapLinearIssue(data: { issue?: LinearIssueNode | null }): TaskContent {
   const issue = data.issue
   if (!issue?.identifier) throw new Error('Linear returned no issue for the requested identifier')
-  const childExternalIds = (issue.children?.nodes ?? [])
-    .map((c) => c.identifier)
-    .filter((id): id is string => !!id)
+  const childExternalIds = mapLinearChildIds(issue.children)
   const isEpic = childExternalIds.length > 0
-  const comments: TaskComment[] = (issue.comments?.nodes ?? []).map((c) => ({
-    author: c.user?.name ?? '',
-    createdAt: c.createdAt ?? '',
-    body: normalizeMarkdown(c.body),
-  }))
+  const comments = mapLinearComments(issue.comments)
   return {
     externalId: issue.identifier,
     url: issue.url ?? `https://linear.app/issue/${issue.identifier}`,
@@ -210,6 +278,41 @@ export function mapLinearSearchResults(data: {
       status: node.state?.name ?? '',
       excerpt: '',
     })
+  }
+  return out
+}
+
+/**
+ * Project a fully-fetched {@link TaskContent} onto a lean {@link TaskSearchResult}, so the
+ * exact-match path (a pasted identifier / URL resolved by {@link parseLinearRef}) can
+ * surface the issue as a search hit alongside the free-text results.
+ */
+export function linearIssueSearchHit(content: TaskContent): TaskSearchResult {
+  return {
+    source: 'linear',
+    externalId: content.externalId,
+    title: content.title,
+    url: content.url,
+    status: content.status,
+    excerpt: '',
+  }
+}
+
+/** A Linear team, as offered in the ticket-filing team picker. */
+export interface LinearTeam {
+  id: string
+  name: string
+  key: string
+}
+
+/** Map a `teams` payload onto the picker shape (drops id-less nodes). */
+export function mapLinearTeams(data: {
+  teams?: { nodes?: { id?: string; name?: string; key?: string }[] }
+}): LinearTeam[] {
+  const out: LinearTeam[] = []
+  for (const node of data.teams?.nodes ?? []) {
+    if (!node.id) continue
+    out.push({ id: node.id, name: node.name ?? node.id, key: node.key ?? '' })
   }
   return out
 }

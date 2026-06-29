@@ -789,6 +789,18 @@
         "cleared": "OAuth Slack effacé",
         "clearFailed": "Impossible d'effacer l'OAuth Slack"
       },
+      "linear": {
+        "title": "Application Linear (OAuth)",
+        "description": "Active le flux OAuth « Se connecter avec Linear ». Sans cela, les espaces de travail peuvent toujours connecter Linear en collant une clé API personnelle.",
+        "clientId": "ID client",
+        "clientSecret": "Secret client",
+        "redirectUrl": "URL de redirection",
+        "validation": "Saisissez l'id client, le secret et l'URL de redirection",
+        "saved": "OAuth Linear enregistré",
+        "saveFailed": "Impossible d'enregistrer OAuth Linear",
+        "cleared": "OAuth Linear effacé",
+        "clearFailed": "Impossible d'effacer OAuth Linear"
+      },
       "web": {
         "title": "Recherche web du conteneur",
         "description": "Le fournisseur de recherche que les agents en conteneur atteignent via le proxy du backend. Définissez une clé Brave (recommandé) ou une URL SearXNG auto-hébergée (avec une clé bearer facultative).",
@@ -1318,7 +1330,8 @@
         "jiraProjectKey": "Clé de projet Jira",
         "jiraProjectKeyHelp": "Les nouveaux tickets sont créés dans ce projet.",
         "linearTeamId": "Id d'équipe Linear",
-        "linearTeamIdHelp": "Les nouveaux tickets sont créés dans cette équipe (Linear exige une équipe pour créer un ticket)."
+        "linearTeamIdHelp": "Les nouveaux tickets sont créés dans cette équipe (Linear exige une équipe pour créer un ticket).",
+        "linearTeamSearchPlaceholder": "Rechercher des équipes…"
       },
       "vendor": {
         "github": "GitHub Issues",
@@ -1905,9 +1918,10 @@
       "repository": "Dépôt",
       "repositoryHint": "Dépôts auxquels la GitHub App peut accéder. Vous ne voyez pas le vôtre ? Accordez l'accès à l'App ci-dessous, puis actualisez.",
       "noReposAvailable": "Aucun dépôt disponible pour le moment. Accordez l'accès de l'App à l'un d'eux ci-dessous, puis actualisez.",
-      "filterPlaceholder": "Filtrer par propriétaire/nom…",
-      "clearFilter": "Effacer le filtre",
-      "chooseRepository": "Choisir un dépôt",
+      "searchPlaceholder": "Rechercher des dépôts par propriétaire ou nom…",
+      "searchMinChars": "Saisissez au moins {min} caractère pour rechercher. | Saisissez au moins {min} caractères pour rechercher.",
+      "noMatches": "Aucun dépôt trouvé pour {query}.",
+      "clearSelection": "Effacer la sélection",
       "showingCount": "Affichage de {shown} dépôts sur {total}.",
       "repoLabel": {
         "private": " (privé)",
@@ -2130,7 +2144,9 @@
       "offerHint": "Lorsqu'elle est désactivée, {label} est masquée de l'importation et de la liaison.",
       "disconnect": "Déconnecter",
       "updateConnection": "Mettre à jour la connexion",
-      "connect": "Connecter"
+      "connect": "Connecter",
+      "oauthButton": "Se connecter avec {label}",
+      "oauthOr": "ou connectez-vous avec une clé API"
     }
   },
   "pipeline": {

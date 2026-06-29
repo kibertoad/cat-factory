@@ -121,6 +121,7 @@ export async function bootstrap(options: CliOptions, deps: BootstrapDeps = {}): 
     port,
     apiBase,
     tokenProvided: token !== '',
+    alreadyGitRepo: fs.existsSync(join(targetDir, '.git')),
   })
   return targetDir
 }
@@ -198,6 +199,8 @@ interface NextStepsInput {
   port: number
   apiBase: string
   tokenProvided: boolean
+  /** Whether the target dir is already a git repo (skip the `git init` nudge if so). */
+  alreadyGitRepo: boolean
 }
 
 function printNextSteps(io: Io, input: NextStepsInput): void {
@@ -226,5 +229,11 @@ function printNextSteps(io: Io, input: NextStepsInput): void {
   lines.push(
     '  - local/.env and frontend/.env hold secrets and are gitignored — never commit them.',
   )
+  if (!input.alreadyGitRepo) {
+    lines.push(
+      `  - Not a git repo yet — run \`git init\` in ${input.targetDir} to start tracking (the`,
+      '    generated .gitignore already keeps the .env secrets out).',
+    )
+  }
   io.info(lines.join('\n'))
 }

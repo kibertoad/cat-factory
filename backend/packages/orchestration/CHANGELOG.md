@@ -1,5 +1,32 @@
 # @cat-factory/orchestration
 
+## 0.39.2
+
+### Patch Changes
+
+- Updated dependencies [704c99e]
+  - @cat-factory/integrations@0.30.0
+  - @cat-factory/contracts@0.46.0
+  - @cat-factory/agents@0.21.10
+  - @cat-factory/kernel@0.47.2
+  - @cat-factory/prompt-fragments@0.8.7
+  - @cat-factory/sandbox@0.8.33
+  - @cat-factory/spend@0.10.25
+  - @cat-factory/workspaces@0.9.16
+
+## 0.39.1
+
+### Patch Changes
+
+- 5ad45de: Refactor (internal, no behaviour change): extract the execution engine's per-step
+  dispatch + completion spine out of `ExecutionService` into a new `RunDispatcher`
+  collaborator (the four registries, the completion hub, the gate machinery, the
+  deterministic deployer/tracker steps, the registered pre/post-op cluster, the
+  structured-artifact ingest, and the follow-up companion gate). `ExecutionService`
+  keeps the run-lifecycle preamble + run-control API and delegates; three now-dead
+  constructor fields are dropped. `ExecutionService.ts` drops from 4,620 to ~2,460
+  lines. Public API and wiring are unchanged, so the runtimes stay symmetric.
+
 ## 0.39.0
 
 ### Minor Changes

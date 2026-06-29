@@ -186,3 +186,37 @@ describe('bootstrap (existing files)', () => {
     expect(fs.files.get('/w/p/local/package.json')).not.toBe('{"existing":true}')
   })
 })
+
+describe('bootstrap (git-init nudge)', () => {
+  it('nudges `git init` for a fresh (non-git) target dir', async () => {
+    const fs = memFs()
+    const io = scriptIo()
+    const lines: string[] = []
+    io.info = (m) => {
+      lines.push(m)
+    }
+    await bootstrap(opts({ yes: true, token: 't', dir: 'out' }), {
+      io,
+      fs,
+      cwd: '/work',
+      randomBytes: fixedBytes,
+    })
+    expect(lines.join('\n')).toContain('git init')
+  })
+
+  it('skips the nudge when the target is already a git repo', async () => {
+    const fs = memFs({ '/work/out/.git': '' })
+    const io = scriptIo()
+    const lines: string[] = []
+    io.info = (m) => {
+      lines.push(m)
+    }
+    await bootstrap(opts({ yes: true, token: 't', dir: 'out' }), {
+      io,
+      fs,
+      cwd: '/work',
+      randomBytes: fixedBytes,
+    })
+    expect(lines.join('\n')).not.toContain('git init')
+  })
+})

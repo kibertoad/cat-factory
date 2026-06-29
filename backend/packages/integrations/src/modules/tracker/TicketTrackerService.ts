@@ -10,7 +10,7 @@ import {
   buildLinearIssueCreateVariables,
   parseLinearIssueCreateResponse,
 } from './linear.create.logic.js'
-import { postLinearGraphql } from '../shared/linear.client.js'
+import { linearAuthFromCredentials, postLinearGraphql } from '../shared/linear.client.js'
 import { toBase64 } from './base64.js'
 
 // TicketTrackerService: the runtime-neutral `TicketTrackerProvider` the tech-debt
@@ -30,9 +30,10 @@ export interface JiraConnection {
   apiToken: string
 }
 
-/** Linear credentials (a personal API key against the GraphQL endpoint). */
+/** Linear credentials: an OAuth access token (preferred) or a personal API key. */
 export interface LinearConnection {
-  apiKey: string
+  apiKey?: string
+  token?: string
 }
 
 export interface TicketTrackerServiceDependencies {
@@ -94,11 +95,11 @@ export class TicketTrackerService implements TicketTrackerProvider {
     const { resolveLinearConnection, fetchImpl } = this.deps
     if (!resolveLinearConnection || !fetchImpl || !teamId) return null
     const connection = await resolveLinearConnection(request.workspaceId)
-    if (!connection?.apiKey) return null
+    if (!connection?.token && !connection?.apiKey) return null
 
     const data = await postLinearGraphql<unknown>(
       fetchImpl,
-      { apiKey: connection.apiKey },
+      linearAuthFromCredentials(connection),
       LINEAR_ISSUE_CREATE_MUTATION,
       buildLinearIssueCreateVariables({
         teamId,

@@ -1099,6 +1099,15 @@ function createTasksModule(
     ...(deps.githubInstallationRepository
       ? { installations: deps.githubInstallationRepository }
       : {}),
+    // Linear OAuth app credentials live in per-account deployment settings (sealed),
+    // resolved dynamically — mirroring the Slack OAuth model. Absent ⇒ the "Connect with
+    // Linear" flow isn't offered (manual API-key paste still works).
+    ...(deps.accountSettings
+      ? {
+          resolveLinearOAuth: (accountKey: string) =>
+            deps.accountSettings!.resolve(accountKey).then((s) => s.linearOAuth),
+        }
+      : {}),
   })
   const importService = new TaskImportService({
     registry,
