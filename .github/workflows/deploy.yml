@@ -241,24 +241,16 @@ jobs:
       # wrangler.toml MUST change too — fail loudly here if it didn't. Skipped on the
       # first deploy (no marker) and on manual dispatch (no base_sha, an explicit
       # re-publish where reusing the tag may be intentional).
+      #
+      # Same guard the PR CI runs (scripts/check-runner-image-tag.mjs) — one source of
+      # truth: it asserts the harness version and the deploy/backend tag pins are
+      # consistent, AND (given --since) that an image-source change since the last
+      # successful deploy bumped the tag.
       - name: Guard runner image tag was bumped
         if: ${{ needs.changes.outputs.base_sha != '' }}
         env:
           BASE_SHA: ${{ needs.changes.outputs.base_sha }}
-        run: |
-          extract() { grep -oE 'cat-factory-executor:[^"'\'' ]+' | head -n1; }
-          current="$(extract < deploy/backend/wrangler.toml)"
-          previous="$(git show "${BASE_SHA}:deploy/backend/wrangler.toml" 2>/dev/null | extract || true)"
-          echo "previously-deployed image tag: ${previous:-<none>}"
-          echo "current image tag:             ${current:-<none>}"
-          if [ -z "$current" ]; then
-            echo "::error::Could not read the runner image tag from deploy/backend/wrangler.toml."
-            exit 1
-          fi
-          if [ -n "$previous" ] && [ "$current" = "$previous" ]; then
-            echo "::error::Runner image sources changed but the pinned tag (${current}) was not bumped. Bump it in deploy/backend/package.json (image:publish) AND deploy/backend/wrangler.toml ([[containers]] image), or wrangler will publish over the live tag without rolling out a new digest."
-            exit 1
-          fi
+        run: node scripts/check-runner-image-tag.mjs --since "$BASE_SHA"
 
       - name: Install pnpm
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
