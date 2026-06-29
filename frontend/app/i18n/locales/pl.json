@@ -1299,7 +1299,7 @@
         "jiraProjectKeyHelp": "Nowe zgłoszenia są rejestrowane w tym projekcie.",
         "linearTeamId": "Identyfikator zespołu Linear",
         "linearTeamIdHelp": "Nowe zgłoszenia są tworzone w tym zespole (Linear wymaga zespołu do utworzenia zgłoszenia).",
-        "linearTeamPlaceholder": "Wybierz zespół"
+        "linearTeamSearchPlaceholder": "Szukaj zespołów…"
       },
       "vendor": {
         "github": "GitHub Issues",

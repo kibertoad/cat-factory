@@ -15,7 +15,8 @@ Fill the gaps in Linear support:
   the Jira provider's epic-children pagination.
 - **Team picker for ticket filing**: a new `GET /workspaces/:ws/task-sources/linear/teams`
   endpoint lists the connected workspace's Linear teams, and the issue-tracker settings
-  UI offers a team dropdown instead of requiring a hand-pasted team UUID.
+  UI offers a searchable (typeahead) team picker instead of requiring a hand-pasted team
+  UUID.
 - **OAuth connect flow**: Linear can now be connected via OAuth ("Connect with Linear")
   in addition to a personal API key. New deployment config `LINEAR_OAUTH_CLIENT_ID` /
   `LINEAR_OAUTH_CLIENT_SECRET` / `LINEAR_OAUTH_REDIRECT_URL` (absent ⇒ only the manual

@@ -317,14 +317,17 @@ const STATUS_UI: Record<
         :label="t('settings.issueTracker.filing.linearTeamId')"
         class="w-64"
       >
-        <!-- Picker when the connection's teams loaded; raw-id fallback otherwise. -->
-        <USelect
+        <!-- Typeahead combobox when the connection's teams loaded (built-in client-side
+             filter over the option labels — a large org's team list is too long for a
+             plain dropdown); raw-id fallback otherwise. Mirrors the repo picker. -->
+        <UInputMenu
           v-if="linearConnected && !teamsError && teamOptions.length > 0"
           v-model="linearTeamId"
           :items="teamOptions"
           value-key="value"
           :loading="teamsLoading"
-          :placeholder="t('settings.issueTracker.filing.linearTeamPlaceholder')"
+          icon="i-lucide-search"
+          :placeholder="t('settings.issueTracker.filing.linearTeamSearchPlaceholder')"
           size="sm"
           class="w-full"
         />

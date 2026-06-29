@@ -1299,7 +1299,7 @@
         "jiraProjectKeyHelp": "Нові тикети реєструються в цьому проєкті.",
         "linearTeamId": "Ідентифікатор команди Linear",
         "linearTeamIdHelp": "Нові тикети створюються в цій команді (Linear вимагає команду для створення тикета).",
-        "linearTeamPlaceholder": "Виберіть команду"
+        "linearTeamSearchPlaceholder": "Пошук команд…"
       },
       "vendor": {
         "github": "GitHub Issues",

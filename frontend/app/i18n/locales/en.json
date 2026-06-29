@@ -1341,7 +1341,7 @@
         "jiraProjectKeyHelp": "New tickets are filed under this project.",
         "linearTeamId": "Linear team id",
         "linearTeamIdHelp": "New issues are created under this team (Linear requires a team to create an issue).",
-        "linearTeamPlaceholder": "Select a team"
+        "linearTeamSearchPlaceholder": "Search teams…"
       },
       "vendor": {
         "github": "GitHub Issues",

@@ -1299,7 +1299,7 @@
         "jiraProjectKeyHelp": "Los nuevos tickets se registran en este proyecto.",
         "linearTeamId": "Id de equipo de Linear",
         "linearTeamIdHelp": "Las nuevas incidencias se crean en este equipo (Linear requiere un equipo para crear una incidencia).",
-        "linearTeamPlaceholder": "Selecciona un equipo"
+        "linearTeamSearchPlaceholder": "Buscar equipos…"
       },
       "vendor": {
         "github": "GitHub Issues",
