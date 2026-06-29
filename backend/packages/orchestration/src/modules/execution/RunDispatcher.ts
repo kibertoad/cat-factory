@@ -727,8 +727,9 @@ export class RunDispatcher {
           return { kind: 'continue' }
         }
         // Eviction budget spent — the container is gone for good. Mark it errored and
-        // persist+emit so the failed details show the errored container (failRun
-        // re-reads the run from storage, so an in-memory-only mutation would be lost).
+        // persist so the failed details show the errored container (failRun re-reads the
+        // run from storage, so an in-memory-only mutation would be lost; it emits the
+        // terminal frame, so markContainerErrored deliberately doesn't).
         await this.markContainerErrored(workspaceId, instance, step)
         return {
           kind: 'job_evicted',
@@ -742,8 +743,9 @@ export class RunDispatcher {
       // older image (or a pool transport that doesn't forward the cause) reported none — the
       // same regex the bootstrap path uses, so a watchdog timeout still classifies as `timeout`
       // rather than a generic `agent`. The extended diagnostic surfaces as the failure detail.
-      // Mark the container errored and persist+emit so the failed details show it (failRun
-      // re-reads from storage, so an in-memory-only mutation would be lost).
+      // Mark the container errored and persist so the failed details show it (failRun
+      // re-reads from storage, so an in-memory-only mutation would be lost; failRun emits
+      // the terminal frame, so markContainerErrored deliberately doesn't).
       await this.markContainerErrored(workspaceId, instance, step)
       return {
         kind: 'job_failed',
@@ -797,11 +799,12 @@ export class RunDispatcher {
   }
 
   /**
-   * Mark a container step's container `errored` (preserving the id/url/phase it reached)
-   * and persist + emit, so a failed run's details show the errored container. Called on
-   * the genuine job-failure / exhausted-eviction paths before the result funnels to
-   * `failRun`, which re-reads the run from storage — so an in-memory-only mutation here
-   * would otherwise be lost.
+   * Mark a container step's container `errored` (preserving the id/url/phase it reached) and
+   * PERSIST it, so a failed run's details show the errored container. Called on the genuine
+   * job-failure / exhausted-eviction paths before the result funnels to `failRun`, which
+   * re-reads the run from storage (so an in-memory-only mutation here would be lost) and emits
+   * the terminal frame itself — so we deliberately persist WITHOUT emitting here, to avoid a
+   * redundant transient "errored but still running" broadcast right before the "failed" one.
    */
   private async markContainerErrored(
     workspaceId: string,
@@ -810,7 +813,6 @@ export class RunDispatcher {
   ): Promise<void> {
     step.container = { ...step.container, status: 'errored' }
     await this.executionRepository.upsert(workspaceId, instance)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
   }
 
   /**

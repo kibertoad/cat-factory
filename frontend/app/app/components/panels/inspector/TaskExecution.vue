@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import type { Block } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
-import { gateCompanionFor, COMPANION_STATE_META, isCompanionKind } from '~/utils/pipelineRender'
+import {
+  gateCompanionFor,
+  COMPANION_STATE_META,
+  isCompanionKind,
+  containerPhaseLabel,
+} from '~/utils/pipelineRender'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 
 const props = defineProps<{ block: Block }>()
@@ -68,7 +73,6 @@ function labelForStep(s: {
   agentKind?: string
   approval?: { status: string } | null
   companion?: { exceeded?: boolean } | null
-  startingContainer?: boolean
   container?: { status: string; phase?: string | null } | null
 }) {
   // A step left mid-flight on a failed run reads "Failed", not the misleading "Working".
@@ -85,11 +89,10 @@ function labelForStep(s: {
   // label ("Agent running" / "Preparing workspace"), so a finished cold-boot no longer
   // collapses into a blank "Working". A failed run's mid-flight step isn't booting.
   if (!runFailed.value) {
-    if (s.container?.status === 'starting' || s.startingContainer)
-      return t('inspector.execution.spinningUp')
-    if (s.container?.status === 'up' && s.container.phase) {
-      const key = `panels.stepMeta.container.phase.${s.container.phase}`
-      if (te(key)) return t(key)
+    if (s.container?.status === 'starting') return t('inspector.execution.spinningUp')
+    if (s.container?.status === 'up') {
+      const label = containerPhaseLabel(s.container.phase, { t, te })
+      if (label) return label
     }
   }
   const key = stepLabel[s.state]

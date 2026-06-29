@@ -32,7 +32,13 @@ was no way to see which container the run was on or whether it was up / errored 
 - **API Tester parity.** The Tester result window now reuses the same observability the
   Coder's step detail shows — the container lifecycle (status / phase / id / url), the
   ephemeral environment status, and the run's infrastructure attempts + logs — alongside its
-  test report, instead of the report alone.
+  test report, instead of the report alone. The Tester (and the human-test / visual-confirm
+  gate helpers) now surface the cold-boot `starting` window before the agent comes up, like
+  the Coder, rather than jumping straight to "running".
+- **The legacy `startingContainer` boolean is removed** in favour of the richer `container`
+  projection everywhere (no dual-signal path): every container-backed step — including the
+  gate helpers — now reports its lifecycle through `container`. (Stale persisted steps simply
+  drop the field; backwards compatibility is a non-goal.)
 
 Bumps the `@cat-factory/executor-harness` image to `1.24.0` (and the matching tag in
 `deploy/backend`).

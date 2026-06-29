@@ -427,7 +427,10 @@ export class HumanTestController {
     const handle = await executor.startJob(context)
     step.jobId = handle.jobId
     if (handle.model) step.model = handle.model
-    step.startingContainer = true
+    // The dispatch returned, so the helper's per-run container is up; surface it via the
+    // same `container` projection the Coder/Tester use (the live phase + id/url arrive on
+    // the first poll). A finished cold-boot must NOT linger as a stale "spinning up".
+    step.container = { status: 'up' }
     step.subtasks = undefined
     // Leave the parked decision state: while the helper runs the step is `working` with a
     // live job (like the Tester→Fixer loop), NOT `waiting_decision` on a stale approval. If

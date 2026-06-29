@@ -1167,23 +1167,14 @@ export const pipelineStepSchema = v.object({
   /** Live subtask counts while an async (container) step runs; see {@link stepSubtasksSchema}. */
   subtasks: v.optional(stepSubtasksSchema),
   /**
-   * True while a container-backed step is being dispatched and its per-run
-   * container is cold-booting — i.e. before the container is up and the agent has
-   * begun executing. Set the moment the job is dispatched (the dispatch blocks
-   * until the container accepts the job, so it covers the whole boot window) and
-   * cleared on the first successful poll, when the container is provably up. Lets
-   * the board show an explicit "Spinning up container…" phase instead of a blank
-   * "working" state. Only ever set on async (container) steps.
-   */
-  startingContainer: v.optional(v.boolean()),
-  /**
    * The per-run container this async (container) step runs in — its lifecycle status
    * (starting / up / errored), the agent's current phase (clone / agent / push), and
    * the container's id + reachable URL once up. Lets a run's details surface what the
-   * container is doing and where it lives, rather than the cold-boot badge vanishing
-   * into a blank "working" state. The richer successor to {@link startingContainer} for
-   * the main agent flow; absent on non-container steps and steps not yet dispatched.
-   * See {@link runContainerSchema}.
+   * container is doing and where it lives, so the board shows an explicit "Spinning up
+   * container…" → live-phase progression instead of a blank "working" state. Set the
+   * moment the job is dispatched (the dispatch blocks until the container accepts the
+   * job) and refined on each poll. Only ever set on async (container) steps; absent on
+   * non-container steps and steps not yet dispatched. See {@link runContainerSchema}.
    */
   container: v.optional(v.nullable(runContainerSchema)),
   decision: v.nullable(decisionSchema),

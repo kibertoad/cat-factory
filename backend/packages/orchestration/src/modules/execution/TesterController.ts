@@ -217,15 +217,22 @@ export class TesterController {
       isFinalStep,
       block,
     )
+    // Surface the cold-boot window BEFORE the blocking dispatch (it blocks until the per-run
+    // container is up and accepts the job), so the Tester window shows "spinning up" then the
+    // live phase via the same `container` projection the Coder uses — true parity, instead of
+    // jumping straight to "running".
+    step.container = { status: 'starting' }
+    step.subtasks = undefined
+    if (step.test) step.test.phase = 'testing'
+    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.emitInstance(workspaceId, instance)
+
     const handle = await executor.startJob(context)
     step.jobId = handle.jobId
     if (handle.model) step.model = handle.model
-    // The dispatch returned, so the (per-run) container is up; the live phase + id/url
-    // arrive on the first poll. Surfaced via the same `container` projection the Coder
-    // uses, so the Tester window shows the container lifecycle identically.
+    // The dispatch returned, so the container is up; the live phase + id/url arrive on the
+    // first poll, surfaced via the same `container` projection identically to the Coder.
     step.container = { status: 'up' }
-    step.subtasks = undefined
-    if (step.test) step.test.phase = 'testing'
     await this.deps.stateMachine.persistInstance(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
@@ -403,12 +410,10 @@ export class TesterController {
         { agentKind: TESTER_AGENT_KIND, output: renderReportForFixer(report) },
       ],
     }
-    const handle = await executor.startJob(context)
-    step.jobId = handle.jobId
-    if (handle.model) step.model = handle.model
-    // The fixer's container is up once the dispatch returns; surfaced via the same
-    // `container` projection so the Tester window shows the fixer's container lifecycle.
-    step.container = { status: 'up' }
+    // Surface the cold-boot window before the blocking dispatch, then `up` once it returns —
+    // same `container` projection the Coder uses, so the Tester window shows the fixer's
+    // container spinning up then running rather than jumping straight to "running".
+    step.container = { status: 'starting' }
     step.subtasks = undefined
     step.test = {
       phase: 'fixing',
@@ -419,6 +424,15 @@ export class TesterController {
       // appended when the fixer finishes (see recordFixerOutcome).
       ...(step.test?.attemptLog ? { attemptLog: step.test.attemptLog } : {}),
     }
+    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.emitInstance(workspaceId, instance)
+
+    const handle = await executor.startJob(context)
+    step.jobId = handle.jobId
+    if (handle.model) step.model = handle.model
+    // The fixer's container is up once the dispatch returns; the live phase + id/url arrive
+    // on the first poll.
+    step.container = { status: 'up' }
     await this.deps.stateMachine.persistInstance(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }

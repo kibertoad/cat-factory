@@ -334,10 +334,11 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                  ephemeral environment, and the run's infra attempts + logs — parity with
                  the Coder's step detail. Shown even before a report lands, so the infra
                  spin-up is visible WHILE the Tester is still standing it up. -->
+            <!-- Only when there's genuine infrastructure to show — a container or an ephemeral
+                 environment. A no-infra tester (no container, no env) has no infra attempts
+                 either, so we don't render an empty header + a log toggle over nothing. -->
             <section
-              v-if="
-                step && (step.container || step.startingContainer || stepEnvironment || executionId)
-              "
+              v-if="step && (step.container || stepEnvironment)"
               data-testid="tester-infrastructure"
               class="space-y-3"
             >

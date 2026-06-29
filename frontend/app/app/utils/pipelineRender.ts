@@ -134,6 +134,24 @@ export function isCompanionKind(kind: string): boolean {
 }
 
 /**
+ * The friendly label for a container's live phase (clone → "Preparing workspace",
+ * agent → "Agent running", …), falling back to the raw phase string for an unknown/new
+ * phase (the phase vocabulary is harness-controlled and open-ended). `null` when there's
+ * no phase to show. Kept here so the three views that render it (the step-detail card,
+ * the inspector label, the board node) resolve it identically rather than re-deriving the
+ * key + `te()`-fallback inline. `t`/`te` are passed in since this is a pure util, not a
+ * composable.
+ */
+export function containerPhaseLabel(
+  phase: string | null | undefined,
+  i18n: { t: (key: string) => string; te: (key: string) => boolean },
+): string | null {
+  if (!phase) return null
+  const key = `panels.stepMeta.container.phase.${phase}`
+  return i18n.te(key) ? i18n.t(key) : phase
+}
+
+/**
  * Tailwind classes for a subtask-item status icon. An in-progress item spins only
  * while the run is live: once the run has failed, a step left mid-flight (its item
  * state still `in_progress`) keeps its colour but stops spinning, matching the frozen

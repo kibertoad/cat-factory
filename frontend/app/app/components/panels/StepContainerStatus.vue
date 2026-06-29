@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { PipelineStep, RunContainerStatus } from '~/types/execution'
+import { containerPhaseLabel } from '~/utils/pipelineRender'
 
 // The per-run container lifecycle for a container-backed step: its status (spinning up /
 // running / errored / reclaimed), the live phase (preparing the checkout vs the agent
@@ -13,12 +14,14 @@ const { t, te } = useI18n()
 
 // The container lifecycle to display. The backend persists starting / up / errored; we
 // derive `destroyed` once the container is reclaimed — when this step has finished or the
-// whole run is no longer running (the per-run container goes as a unit). `errored` wins.
+// whole run is no longer running (the per-run container goes as a unit). `errored` wins,
+// and a reclaimed container ALWAYS reads "destroyed" — even one caught mid cold-boot
+// (`starting`) when the run terminated must NOT linger as a perpetual spinner.
 const containerStatus = computed<RunContainerStatus | null>(() => {
   const c = props.step.container
   if (!c) return null
   if (c.status === 'errored') return 'errored'
-  if (c.status === 'up' && (props.step.state === 'done' || props.runFailed)) return 'destroyed'
+  if (props.step.state === 'done' || props.runFailed) return 'destroyed'
   return c.status
 })
 
@@ -56,32 +59,18 @@ const CONTAINER_STATUS_META: Record<
   },
 }
 
-// The friendly phase label (clone → "Preparing workspace", agent → "Agent running", …),
-// falling back to the raw phase string for an unknown/new phase (the phase vocabulary is
-// open-ended). Only meaningful while the container is up.
-const phaseLabel = computed(() => {
-  const phase = props.step.container?.phase
-  if (!phase) return null
-  const key = `panels.stepMeta.container.phase.${phase}`
-  return te(key) ? t(key) : phase
-})
-
-// The legacy boolean cold-boot badge still set by the gate-helper controllers
-// (human-test / visual confirmation), shown only when there's no richer `container`.
-const showLegacyBadge = computed(
-  () => !props.step.container && !!props.step.startingContainer && !props.runFailed,
-)
+// The friendly phase label (clone → "Preparing workspace", …); only meaningful while up.
+const phaseLabel = computed(() => containerPhaseLabel(props.step.container?.phase, { t, te }))
 </script>
 
 <template>
   <!-- Single conditional root so a passed-through `class` (e.g. layout margin) applies
        cleanly. Renders nothing for a non-container step / one not yet dispatched. -->
-  <div v-if="containerStatus || showLegacyBadge" data-testid="step-container-status">
+  <div v-if="containerStatus" data-testid="step-container-status">
     <!-- container lifecycle: status (spinning up / running / errored / reclaimed), the
          live phase (preparing the checkout vs the agent making calls), and the
          container's id + reachable URL once up. -->
     <div
-      v-if="containerStatus"
       class="rounded-lg border px-3 py-2 text-[12px]"
       :class="CONTAINER_STATUS_META[containerStatus].cls"
     >
@@ -122,15 +111,6 @@ const showLegacyBadge = computed(
           </dd>
         </div>
       </dl>
-    </div>
-
-    <!-- legacy cold-boot badge for gate-helper steps that still set only the flag. -->
-    <div
-      v-else
-      class="flex items-center gap-2 rounded-lg border border-sky-900/50 bg-sky-950/30 px-3 py-2 text-[12px] text-sky-300"
-    >
-      <UIcon name="i-lucide-loader-circle" class="h-4 w-4 shrink-0 animate-spin" />
-      <span>{{ t('panels.stepMeta.spinningUpContainer') }}</span>
     </div>
   </div>
 </template>
