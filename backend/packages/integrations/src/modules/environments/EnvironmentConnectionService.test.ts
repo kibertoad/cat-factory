@@ -510,9 +510,11 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
       }),
       repo,
       {
+        // The dispatcher pushes the agent's fix back onto the branch (here: write a valid
+        // config into the fake repo); the SERVICE re-validates afterward.
         dispatchConfigRepair: async () => {
           dispatched = true
-          return { ok: true, issues: [] }
+          repo.store.set('.kargo.yml', VALID)
         },
       },
     )
@@ -526,7 +528,37 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
     })
     expect(dispatched).toBe(true)
     expect(result.usedAgent).toBe(true)
+    // ok comes from the service's POST-repair re-validation (not the dispatcher's return).
     expect(result.ok).toBe(true)
+  })
+
+  it('reports failure when the repair agent did not produce a valid config', async () => {
+    const repo = fakeRepoFiles({ '.kargo.yml': 'broken: [' })
+    const service = serviceWith(
+      bootstrapProvider({
+        bootstrapProviderConfiguration: async () => ({
+          files: [],
+          needsAgent: true,
+          issues: [{ severity: 'error', message: 'cannot merge existing config' }],
+        }),
+        describeRepairAgent: () => ({ prompt: 'fix the kargo config' }),
+      }),
+      repo,
+      {
+        // The agent ran but left the config still invalid (no write), so re-validation fails.
+        dispatchConfigRepair: async () => {},
+      },
+    )
+    await service.register('ws1', { manifest: baseManifest, secrets: {} })
+
+    const result = await service.bootstrapRepo('ws1', {
+      owner: 'o',
+      repo: 'r',
+      inputs: {},
+      allowAgentFallback: true,
+    })
+    expect(result.usedAgent).toBe(true)
+    expect(result.ok).toBe(false)
   })
 
   it('does not dispatch the agent when needsAgent but the caller did not opt in', async () => {
@@ -541,7 +573,6 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
       {
         dispatchConfigRepair: async () => {
           dispatched = true
-          return { ok: true, issues: [] }
         },
       },
     )
