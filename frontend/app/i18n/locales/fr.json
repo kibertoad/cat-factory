@@ -716,13 +716,12 @@
       "loading": "Chargement…"
     },
     "localMode": {
-      "continueWith": "Continuer avec {provider}",
-      "enterPatTitle": "Ou connectez-vous avec un jeton d'accès personnel",
-      "tokenPlaceholder": "collez un jeton {provider}",
+      "continueWithConfigured": "Se connecter avec le PAT {provider} configuré",
+      "noPatTitle": "Aucun jeton de gestion de versions configuré",
+      "noPatBody": "Définissez GITHUB_PAT ou GITLAB_PAT dans votre .env pour vous connecter avec un jeton d'accès personnel, puis redémarrez le serveur.",
       "createToken": "Créer un jeton {provider} ↗",
-      "submit": "Se connecter",
       "orDivider": "ou",
-      "failed": "Échec de la connexion. Vérifiez le jeton et réessayez."
+      "failed": "Échec de la connexion. Vérifiez que le jeton configuré est valide et réessayez."
     },
     "signInRequired": {
       "personalSubscriptions": "Les abonnements personnels sont enregistrés sur votre compte, mais ce déploiement fonctionne sans connexion, ils ne peuvent donc pas être stockés ici. Utilisez le pool de l'espace de travail ou une clé d'API de fournisseur.",

@@ -50,18 +50,19 @@ export const localModeConfigSchema = v.object({
   githubPatSetupUrl: v.optional(v.string()),
   /**
    * Source-control PAT login methods the local facade can serve, so the login screen
-   * renders the right controls without probing. Absent on non-local facades.
-   *  - `configured` — providers with a PAT set server-side (env): one-click "Continue as …".
-   *  - `available`  — providers the user may paste a PAT for inline (a resolver is wired).
-   *  - `setupUrls`  — per-provider "create a PAT" link with the right scopes pre-selected,
-   *    so the paste-a-PAT form can deep-link straight to the token page. The server owns
-   *    the scopes (they differ per provider), so the SPA renders the link rather than
+   * renders the right controls without probing. Absent on non-local facades. The PAT lives
+   * server-side in env — the SPA only selects a provider, it never sees a token.
+   *  - `configured` — providers with a PAT set server-side (env): a "Sign in with configured
+   *    &lt;provider&gt; PAT" button. The ONLY way to sign in (the operational token is the env
+   *    PAT too); a provider with no env PAT gets no button.
+   *  - `setupUrls`  — per-provider "create a PAT" link with the right scopes pre-selected, so
+   *    the "no token configured" notice can deep-link straight to the token page. The server
+   *    owns the scopes (they differ per provider), so the SPA renders the link rather than
    *    hard-coding URLs. Keyed by provider; missing entry ⇒ no deep link for it.
    */
   patLogin: v.optional(
     v.object({
       configured: v.array(vcsProviderSchema),
-      available: v.array(vcsProviderSchema),
       setupUrls: v.optional(v.record(vcsProviderSchema, v.string())),
     }),
   ),

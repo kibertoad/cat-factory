@@ -82,10 +82,11 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   const nativeHarnesses = parseNativeHarnesses(env.LOCAL_NATIVE_AGENTS)
   const nativeAgents = nativeHarnesses.length > 0
   // The source-control PAT-login registry (GitHub + GitLab), assembled provider-agnostically
-  // from env. `configured` providers offer one-click "Continue as @you"; `available` ones
-  // also accept a pasted PAT. Advertised on `localMode.patLogin` so the login screen renders
-  // the right controls, and exposed on the container for the `/auth/pat` endpoint.
-  const { registry: vcsIdentity, configured, available } = buildVcsIdentityRegistry(env)
+  // from env. `configured` providers (their PAT is set in env) offer a "Sign in with configured
+  // <provider> PAT" button — the only sign-in path, since that env token is also the operational
+  // credential. Advertised on `localMode.patLogin` so the login screen renders the right
+  // buttons, and exposed on the container for the `/auth/pat` endpoint.
+  const { registry: vcsIdentity, configured } = buildVcsIdentityRegistry(env)
   const config: AppConfig = {
     ...base,
     ...(pat ? { github: { ...base.github, enabled: true } } : {}),
@@ -93,11 +94,10 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     localMode: {
       enabled: true,
       ...(pat ? {} : { githubPatSetupUrl: githubPatCreationUrl() }),
-      // Scopes-preselected "create a PAT" deep links so the paste-a-PAT login form sends the
-      // developer straight to the right token page (scopes differ per provider).
+      // Scopes-preselected "create a PAT" deep links so the "no token configured" notice sends
+      // the developer straight to the right token page (scopes differ per provider).
       patLogin: {
         configured,
-        available,
         setupUrls: { github: githubPatCreationUrl(), gitlab: gitlabPatCreationUrl() },
       },
     },

@@ -53,6 +53,9 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   AUTH_PASSWORD_ENABLED: 'false',
   ENVIRONMENT: 'test',
   ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+  // Pin the session secret so `applyLocalDefaults` doesn't reach for its persistent-secret
+  // file (~/.cat-factory) during the suite — keep the test hermetic, no home-dir writes.
+  AUTH_SESSION_SECRET: 'test-session-secret',
   // Enable the Slack notification transport so its module + channel wire up through
   // the local facade (parity with the Node/Worker test envs); the conformance Slack
   // CRUD asserts persistence parity and the channel bails when no Slack is connected.

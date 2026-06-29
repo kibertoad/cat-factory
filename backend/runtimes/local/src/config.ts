@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { loadNodeConfig } from '@cat-factory/node-server'
 import type { AppConfig } from '@cat-factory/server'
 import { resolveHostAlias } from './runtimes/index.js'
+import { loadOrCreatePersistentSecret } from './state.js'
 
 // Local mode is a single developer running the whole product on their own machine.
 // It reuses the Node facade's config loader verbatim and only changes the defaults
@@ -42,8 +43,14 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     // Local accounts are created freely (no invite / email-domain gate) — it's the
     // developer's own machine. Hosted facades leave this off (invite/domain-gated signup).
     AUTH_OPEN_SIGNUP: env.AUTH_OPEN_SIGNUP?.trim() || 'true',
-    // Stable within a process; only signs short-lived proxy tokens for local jobs.
-    AUTH_SESSION_SECRET: env.AUTH_SESSION_SECRET?.trim() || randomBytes(32).toString('hex'),
+    // Signs the SPA session JWT (and short-lived proxy tokens for local jobs). Persisted to
+    // ~/.cat-factory across restarts so a signed-in session survives a server restart instead
+    // of being invalidated by a fresh per-process secret (the cause of "re-login every time"
+    // in local dev). An explicit AUTH_SESSION_SECRET still wins; CAT_FACTORY_STATE_DIR moves
+    // the file (used by tests).
+    AUTH_SESSION_SECRET:
+      env.AUTH_SESSION_SECRET?.trim() ||
+      loadOrCreatePersistentSecret('session-secret', { encoding: 'hex' }),
     // The shared key backing credential encryption at rest (document/task/runner/slack
     // integrations, personal subscriptions). `loadNodeConfig` requires it, so generate a
     // per-process key when absent — enough to boot and run a pipeline. Set ENCRYPTION_KEY

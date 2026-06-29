@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
 
 const auth = useAuthStore()
 const { t } = useI18n()
 
-// Local-mode source-control PAT login. GitHub/GitLab are brand names (kept verbatim across
-// locales), as are the token-settings URLs, so they're inline constants rather than catalog
-// keys — same convention as the provider descriptors in ApiKeysSection. The actual link
-// prefers the server's scopes-preselected deep link (`patLogin.setupUrls`); these are the
-// fallback when it's absent.
+// Local-mode source-control PAT login. The PAT lives server-side in env (GITHUB_PAT /
+// GITLAB_PAT); the login screen only SELECTS a configured provider — no token is ever typed
+// into or shown in the browser. GitHub/GitLab are brand names (kept verbatim across locales),
+// as are the token-settings URLs, so they're inline constants rather than catalog keys — same
+// convention as the provider descriptors in ApiKeysSection. The "create a token" link prefers
+// the server's scopes-preselected deep link (`patLogin.setupUrls`); these are the fallback.
 type PatProvider = 'github' | 'gitlab'
+const ALL_PROVIDERS: PatProvider[] = ['github', 'gitlab']
 const PROVIDER_LABELS: Record<PatProvider, string> = { github: 'GitHub', gitlab: 'GitLab' }
 const PROVIDER_ICONS: Record<PatProvider, string> = {
   github: 'i-lucide-github',
@@ -23,44 +25,29 @@ const PROVIDER_TOKEN_URLS: Record<PatProvider, string> = {
 }
 
 const patLoginCfg = computed(() => auth.localMode?.patLogin)
+// Only providers whose PAT is configured in env can sign in (the token is the operational
+// credential too). A provider without one gets no button — see the no-PAT notice instead.
 const configuredProviders = computed<PatProvider[]>(
   () => (patLoginCfg.value?.configured ?? []) as PatProvider[],
 )
-const availableProviders = computed<PatProvider[]>(
-  () => (patLoginCfg.value?.available ?? []) as PatProvider[],
-)
-const showLocalLogin = computed(() => availableProviders.value.length > 0)
+const isLocalMode = computed(() => auth.localMode?.enabled === true)
+const hasConfiguredPat = computed(() => configuredProviders.value.length > 0)
 
-const patProvider = ref<PatProvider>('github')
-const patToken = ref('')
 const patBusy = ref(false)
 const patError = ref<string | null>(null)
 
-// Keep the picker on an actually-available provider.
-watch(
-  availableProviders,
-  (list) => {
-    if (list.length && !list.includes(patProvider.value)) patProvider.value = list[0]!
-  },
-  { immediate: true },
-)
+// Per-provider "create a token" link: prefer the server's scopes-preselected deep link (it
+// owns the per-provider scopes), fall back to the plain token page.
+function tokenCreateUrl(provider: PatProvider): string {
+  return patLoginCfg.value?.setupUrls?.[provider] ?? PROVIDER_TOKEN_URLS[provider]
+}
 
-const patProviderItems = computed(() =>
-  availableProviders.value.map((p) => ({ label: PROVIDER_LABELS[p], value: p })),
-)
-
-// Prefer the server's scopes-preselected deep link (it owns the per-provider scopes);
-// fall back to the plain token page if it wasn't advertised.
-const tokenCreateUrl = computed(
-  () => patLoginCfg.value?.setupUrls?.[patProvider.value] ?? PROVIDER_TOKEN_URLS[patProvider.value],
-)
-
-/** One-click (configured PAT) or pasted-token sign-in; reloads so the app boots signed in. */
-async function submitPat(provider: PatProvider, token?: string) {
+/** Sign in as the account the configured env PAT belongs to; reloads so the app boots in. */
+async function submitPat(provider: PatProvider) {
   patError.value = null
   patBusy.value = true
   try {
-    await auth.patLogin(token ? { provider, token } : { provider })
+    await auth.patLogin({ provider })
     if (typeof window !== 'undefined') window.location.assign(window.location.pathname)
   } catch (e) {
     patError.value = apiErrorEnvelope(e)?.message ?? t('auth.localMode.failed')
@@ -154,9 +141,10 @@ const showOAuthDivider = computed(
         </p>
       </div>
 
-      <!-- Local mode: sign in with a source-control PAT (no OAuth round-trip needed) -->
-      <div v-if="showLocalLogin && mode !== 'forgot'" class="space-y-3">
-        <!-- One-click: a PAT is already configured server-side -->
+      <!-- Local mode: sign in with the env-configured source-control PAT. The token lives
+           server-side (GITHUB_PAT / GITLAB_PAT); we only pick a provider here. -->
+      <div v-if="isLocalMode && mode !== 'forgot'" class="space-y-3">
+        <!-- One button per provider whose PAT is configured in env -->
         <UButton
           v-for="p in configuredProviders"
           :key="p"
@@ -167,53 +155,37 @@ const showOAuthDivider = computed(
           :loading="patBusy"
           @click="submitPat(p)"
         >
-          {{ t('auth.localMode.continueWith', { provider: PROVIDER_LABELS[p] }) }}
+          {{ t('auth.localMode.continueWithConfigured', { provider: PROVIDER_LABELS[p] }) }}
         </UButton>
 
-        <!-- Enter a PAT inline -->
-        <form class="space-y-2" @submit.prevent="submitPat(patProvider, patToken.trim())">
-          <p class="text-xs font-medium text-slate-400">{{ t('auth.localMode.enterPatTitle') }}</p>
-          <USelect
-            v-if="patProviderItems.length > 1"
-            v-model="patProvider"
-            :items="patProviderItems"
-            size="lg"
-            class="w-full"
+        <!-- Neither GITHUB_PAT nor GITLAB_PAT is set: tell the developer how to configure one -->
+        <template v-if="!hasConfiguredPat">
+          <UAlert
+            color="warning"
+            variant="subtle"
+            icon="i-lucide-key-round"
+            :title="t('auth.localMode.noPatTitle')"
+            :description="t('auth.localMode.noPatBody')"
           />
-          <UTextarea
-            v-model="patToken"
-            :rows="2"
-            :placeholder="
-              t('auth.localMode.tokenPlaceholder', { provider: PROVIDER_LABELS[patProvider] })
-            "
-            class="w-full font-mono"
-          />
-          <div class="flex items-center justify-between gap-2">
+          <div class="flex flex-wrap gap-3 px-1">
             <a
-              :href="tokenCreateUrl"
+              v-for="p in ALL_PROVIDERS"
+              :key="p"
+              :href="tokenCreateUrl(p)"
               target="_blank"
               rel="noopener noreferrer"
               class="text-xs text-indigo-400 hover:underline"
             >
-              {{ t('auth.localMode.createToken', { provider: PROVIDER_LABELS[patProvider] }) }}
+              {{ t('auth.localMode.createToken', { provider: PROVIDER_LABELS[p] }) }}
             </a>
-            <UButton
-              size="lg"
-              color="neutral"
-              variant="subtle"
-              type="submit"
-              :loading="patBusy"
-              :disabled="!patToken.trim()"
-            >
-              {{ t('auth.localMode.submit') }}
-            </UButton>
           </div>
-        </form>
+        </template>
+
         <p v-if="patError" class="text-sm text-rose-400">{{ patError }}</p>
       </div>
 
       <div
-        v-if="showLocalLogin && auth.providers.password && mode !== 'forgot'"
+        v-if="isLocalMode && auth.providers.password && mode !== 'forgot'"
         class="my-4 flex items-center gap-3 text-xs text-slate-500"
       >
         <span class="h-px flex-1 bg-slate-800" /> {{ t('auth.localMode.orDivider') }}
