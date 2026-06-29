@@ -41,6 +41,13 @@ export interface RepoSpec {
   baseBranch: string
   cloneUrl: string
   /**
+   * The VCS provider the repo lives on, when the dispatcher set it. Selects GitHub-PR vs
+   * GitLab-MR for the "open the PR" call AUTHORITATIVELY (rather than guessing from the
+   * clone URL host, which can't recognise an arbitrarily-named self-managed GitLab). Absent
+   * ⇒ inferred from the clone URL.
+   */
+  provider?: 'github' | 'gitlab'
+  /**
    * For a monorepo service, the subdirectory (relative to the repo root, e.g.
    * `packages/api`) the agent should run within. Sanitised on parse to a safe
    * relative path so it can never escape the checkout. Absent ⇒ run at the repo root.
@@ -150,9 +157,18 @@ function parseRepoSpec(repo: Record<string, unknown>): RepoSpec {
     baseBranch: str(repo.baseBranch, 'repo.baseBranch'),
     cloneUrl: str(repo.cloneUrl, 'repo.cloneUrl'),
   }
+  const provider = parseVcsProvider(repo.provider)
+  if (provider) spec.provider = provider
   const dir = sanitizeServiceDirectory(repo.serviceDirectory)
   if (dir) spec.serviceDirectory = dir
   return spec
+}
+
+/** Parse the optional `repo.provider` discriminator (defaults to undefined ⇒ host inference). */
+function parseVcsProvider(value: unknown): 'github' | 'gitlab' | undefined {
+  if (value === undefined || value === null) return undefined
+  if (value === 'github' || value === 'gitlab') return value
+  throw new Error("Invalid job: 'repo.provider' must be 'github' or 'gitlab'")
 }
 
 // ---- Host allowlist -------------------------------------------------------

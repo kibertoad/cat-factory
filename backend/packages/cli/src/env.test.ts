@@ -47,6 +47,21 @@ describe('buildLocalEnv', () => {
     const out = buildLocalEnv({ ...base, provider: 'github', containerRuntime: 'orbstack' })
     expect(out).toContain('LOCAL_CONTAINER_RUNTIME=orbstack')
   })
+
+  it('includes container->host reachability + security hints (commented)', () => {
+    const out = buildLocalEnv({ ...base, provider: 'github', containerRuntime: 'docker' })
+    expect(out).toContain('# LOCAL_HARNESS_HOST_ALIAS=')
+    expect(out).toContain('# AUTH_DEV_OPEN=false')
+    // Docker/Podman get the native-Linux add-host-gateway hint...
+    expect(out).toContain('# LOCAL_DOCKER_ADD_HOST_GATEWAY=true')
+  })
+
+  it('omits the docker add-host hint for runtimes without a docker bridge', () => {
+    const out = buildLocalEnv({ ...base, provider: 'github', containerRuntime: 'apple' })
+    expect(out).not.toContain('LOCAL_DOCKER_ADD_HOST_GATEWAY')
+    // ...but the host-alias hint (which Apple most needs) is always present.
+    expect(out).toContain('# LOCAL_HARNESS_HOST_ALIAS=')
+  })
 })
 
 describe('buildFrontendEnv', () => {

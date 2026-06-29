@@ -97,6 +97,7 @@ export function buildLocalEnv(input: LocalEnvInput): string {
       key: 'LOCAL_CONTAINER_RUNTIME',
       value: input.containerRuntime,
     },
+    ...reachabilityEntries(input.containerRuntime),
     {
       comment: [
         'At least one model provider must be configured or no model is selectable.',
@@ -115,6 +116,49 @@ export function buildLocalEnv(input: LocalEnvInput): string {
     { key: '# OPENAI_API_KEY', value: '' },
   ]
   return renderEnvFile(entries)
+}
+
+/**
+ * Container→host reachability + security hints, commented out (sensible defaults apply). Agent
+ * job containers reach this service's LLM proxy over the network, and how they address the host
+ * differs per runtime — surfacing the knobs here (rather than only in the upstream docs) means a
+ * developer who hits "proxy unreachable from the container" has the fix in the file they already
+ * have open. Mirrors the relevant slice of `deploy/local/.env.example`.
+ */
+function reachabilityEntries(runtime: ContainerRuntime): EnvEntry[] {
+  const entries: EnvEntry[] = [
+    {
+      comment: [
+        'Container -> host reachability (defaults apply; uncomment only if the agent container',
+        "can't reach this service's LLM proxy). The harness reaches the host at a per-runtime",
+        'alias: host.docker.internal (docker/podman/orbstack), host.lima.internal (colima), the',
+        'vmnet gateway (apple). On Colima/Apple this is often unreachable — set it to your LAN IP.',
+      ],
+      key: '# LOCAL_HARNESS_HOST_ALIAS',
+      value: '',
+    },
+  ]
+  if (runtime === 'docker' || runtime === 'podman') {
+    entries.push({
+      comment: [
+        'Native Linux Docker only: add --add-host=<alias>:host-gateway so the container can',
+        'resolve the host (needed on Linux; harmless on Docker Desktop/OrbStack).',
+      ],
+      key: '# LOCAL_DOCKER_ADD_HOST_GATEWAY',
+      value: 'true',
+    })
+  }
+  entries.push({
+    comment: [
+      'SECURITY: with the dev gate open the server binds all interfaces so job containers can',
+      'reach the proxy. To lock it down, bind to loopback (works on Docker Desktop; NOT native',
+      'Linux Docker, where containers need the bridge gateway) or close the gate.',
+      'HOST=127.0.0.1',
+    ],
+    key: '# AUTH_DEV_OPEN',
+    value: 'false',
+  })
+  return entries
 }
 
 /** Inputs that flow into the frontend `.env`. */
