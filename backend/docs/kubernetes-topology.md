@@ -18,7 +18,7 @@ See [`runner-pool-integration.md`](./runner-pool-integration.md) and
 | **node-server**               | `@cat-factory/node-server`: the Hono REST API, the WebSocket push transport, and the pg-boss durable-execution workers (the orchestrator).                                                                                                          | Long-lived Deployment, horizontally scalable for the API; pg-boss workers single-or-few. | You, in-cluster.                                          |
 | **LLM proxy**                 | The OpenAI-compatible `/v1` egress route the executor points Pi at. Injects the real vendor key (kept out of the container), meters spend, writes telemetry. Lives in the **same** `@cat-factory/server` app, so it ships in the node-server image. | Same as node-server, or a separate Deployment of the same image scoped to egress.        | You, in-cluster.                                          |
 | **Postgres**                  | Domain DB + the `telemetry` schema (one connection, two schemas). `migrate()` bootstraps it on boot.                                                                                                                                                | StatefulSet, or a managed service (RDS / Cloud SQL / Neon).                              | You, or your cloud.                                       |
-| **Runner pool scheduler API** | Your thin HTTP wrapper the backend calls to `dispatch`/`poll`/`release` a job. The backend never talks to Kubernetes directly.                                                                                                                      | Long-lived Deployment (an operator or small web service).                                | You, in-cluster.                                          |
+| **Runner pool scheduler API** | Your thin HTTP wrapper the backend calls to `dispatch`/`poll`/`release` a job, so the backend stays out of the Kubernetes API. Optional: the node-server can drive Kubernetes directly instead (see "Who owns / hosts what").                        | Long-lived Deployment (an operator or small web service).                                | You, in-cluster.                                          |
 | **executor-harness pods**     | The published `cat-factory-executor` image: clones the repo, runs the Pi coding agent, pushes a branch / opens a PR. Carries **no** secrets; per-job tokens arrive in the dispatch body.                                                            | **Ephemeral** — one K8s Job per pipeline step (`jobId = <executionId>-<agentKind>`).     | You, in-cluster (the trust boundary).                     |
 | **SPA**                       | `@cat-factory/app` (the Nuxt layer) built into a static bundle.                                                                                                                                                                                     | Static.                                                                                  | A CDN / object store / nginx pod; out of cluster is fine. |
 
@@ -98,11 +98,18 @@ flowchart TB
 - **GitHub is reached directly** by the executor (clone/push/PR), authenticated by the
   per-job installation token. It does not go through the proxy.
 
-- **The scheduler API is yours to build.** cat-factory speaks only HTTP `dispatch`/`poll`/
-  `release` to it (described by the JSON manifest you register per workspace); your wrapper
-  translates that into `kubectl`-equivalent calls: `dispatch -> create Job`,
-  `poll -> read Job + harness GET /jobs/{id}`, `release -> delete Job`. Route by `jobId`
-  stickily so a re-dispatch (durable replay) re-attaches instead of duplicating. Use the
+- **The scheduler API is an optional layer.** It exists because cat-factory speaks only HTTP
+  `dispatch`/`poll`/`release` (described by the JSON manifest you register per workspace), so
+  the diagram above factors the Kubernetes translation into a thin wrapper that turns those
+  calls into `kubectl`-equivalent ones: `dispatch -> create Job`, `poll -> read Job + harness
+  GET /jobs/{id}`, `release -> delete Job`. That wrapper is not mandatory, though. Depending on
+  your platform conventions the node-server could talk to the Kubernetes API directly (a
+  RunnerTransport that creates/reads/deletes Jobs itself), collapsing the scheduler hop — at
+  the cost of giving the control-plane pods cluster API credentials and a Job-spec template
+  baked into the deployment rather than a per-workspace manifest. The wrapper keeps that
+  cluster access and the spec-building out of the control plane and behind the registrable
+  manifest seam, which is why it is the shape shown here. Either way, route by `jobId` stickily
+  so a re-dispatch (durable replay) re-attaches instead of duplicating, and use the
   `{{input.instanceType}}` / `{{input.kind}}` manifest variables to pick a node selector,
   resource request, or Job template.
 
