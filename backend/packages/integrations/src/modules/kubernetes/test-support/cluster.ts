@@ -141,6 +141,38 @@ export async function waitFor<T>(
   }
 }
 
+/**
+ * Like {@link waitFor}, but TOLERATES intermediate rejections — `fn` may legitimately throw
+ * for a while before it starts resolving the value we want (e.g. while a released pod is
+ * mid-termination the apiserver pod-proxy returns a transient `502/503` dial error, which
+ * `KubernetesRunnerTransport.poll` surfaces as a throw, before the pod object is finally
+ * removed and the proxy `404`s → eviction). Returns the first value satisfying `ok`; on
+ * timeout it rethrows the last error (or throws if `fn` never produced one).
+ */
+export async function waitForResolved<T>(
+  fn: () => Promise<T>,
+  ok: (value: T) => boolean,
+  { timeoutMs = 120_000, intervalMs = 2_000 }: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs
+  let lastError: unknown
+  let threw = false
+  for (;;) {
+    try {
+      const value = await fn()
+      if (ok(value)) return value
+    } catch (err) {
+      lastError = err
+      threw = true
+    }
+    if (Date.now() >= deadline) {
+      if (threw) throw lastError
+      throw new Error('waitForResolved timed out before the condition held')
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+  }
+}
+
 /** A unique-ish suffix for per-test namespaces / run ids (avoids cross-rerun collisions). */
 export function uniqueSuffix(): string {
   return `${Date.now()}-${Math.floor(Math.random() * 1e6)}`

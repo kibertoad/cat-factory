@@ -55,3 +55,14 @@ server.listen(port, () => {
   // eslint-disable-next-line no-console
   console.log(`mock-harness listening on ${port}`)
 })
+
+// This process is PID 1 in the pod container, and PID 1 gets NO default signal handlers,
+// so without this an explicit SIGTERM (what a pod DELETE sends) is ignored and the kubelet
+// only stops the container at the end of the termination grace period (SIGKILL). Exiting
+// promptly on SIGTERM lets the release→eviction path settle in seconds, not ~30s.
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => {
+    server.close()
+    process.exit(0)
+  })
+}

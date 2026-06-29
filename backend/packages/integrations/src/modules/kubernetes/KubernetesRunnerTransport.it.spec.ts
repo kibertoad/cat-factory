@@ -9,7 +9,7 @@ import {
   runnerConfig,
   tokenResolver,
   uniqueSuffix,
-  waitFor,
+  waitForResolved,
 } from './test-support/cluster.js'
 
 // INTEGRATION: drives KubernetesRunnerTransport against a REAL k3d/Kubernetes apiserver, so
@@ -72,14 +72,16 @@ describe.skipIf(skip !== null)(
       await transport.release(ref)
 
       // `release` issues a graceful pod DELETE, so the apiserver returns before the pod is
-      // actually gone — for the default termination grace period it is still `Terminating`
-      // and the pod-proxy keeps reaching the harness. Poll until the pod has fully
-      // disappeared and the proxy 404s: the transport then reports the recoverable eviction
-      // the engine re-drives from, NOT a hard error.
-      const afterRelease = await waitFor(
+      // actually gone. As it terminates the pod-proxy passes through three phases: it still
+      // reaches the harness (200), then — once the container has stopped but the pod object
+      // lingers — returns a transient 502/503 dial error (which `poll` surfaces as a throw),
+      // and only when the pod object is finally removed does it 404. Poll THROUGH that window
+      // (tolerating the transient throws) until the transport maps the 404 to the recoverable
+      // eviction the engine re-drives from, NOT a hard error.
+      const afterRelease = await waitForResolved(
         () => transport.poll(ref),
         (v) => v.state === 'failed',
-        { timeoutMs: 60_000, intervalMs: 2_000 },
+        { timeoutMs: 90_000, intervalMs: 2_000 },
       )
       expect(afterRelease.state).toBe('failed')
       expect(afterRelease.error).toMatch(/evicted or crashed/)
