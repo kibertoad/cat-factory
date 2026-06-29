@@ -187,19 +187,18 @@ dependency count dropping _together_.
 
 ## Status (take 2)
 
-| #   | Phase                                                 | Status          |
-| --- | ----------------------------------------------------- | --------------- |
-| 1   | `StepGraph` — pure sync step/cursor mutators          | done            |
-| 2   | `RunStateMachine` — async instance/block spine        | done            |
-| —   | XState evaluation (spike + decision)                  | done (rejected) |
-| 3   | Debag the 5 gate controllers onto the spine           | done            |
-| 4   | Move handlers/interceptors out of the file            | deferred        |
-| 5   | Gate-action sub-facades + re-point server controllers | not started     |
-| 6   | Trim constructor + final cleanup                      | not started     |
+| #   | Phase                                                 | Status         |
+| --- | ----------------------------------------------------- | -------------- |
+| 1   | `StepGraph` — pure sync step/cursor mutators          | ✅             |
+| 2   | `RunStateMachine` — async instance/block spine        | ✅             |
+| —   | XState evaluation (spike + decision)                  | ✅ (rejected)  |
+| 3   | Debag the 5 gate controllers onto the spine           | ✅             |
+| 4   | Move handlers/interceptors out of the file            | ⏭️ deferred    |
+| 5   | Gate-action sub-facades + re-point server controllers | ✅             |
+| 6   | Trim constructor + final cleanup                      | 🟡 partial     |
 
-`ExecutionService.ts`: **5,346 → 4,848 lines** so far. Every phase landed as its own commit,
-green on both runtimes (Cloudflare conformance 126, Node conformance/durable-execution 41,
-orchestration unit incl. controller specs).
+`ExecutionService.ts`: **5,346 → 4,620 lines** so far. Every phase landed as its own commit,
+green on both runtimes (Cloudflare conformance 126, Node full suite 202, orchestration unit 298).
 
 - **Phase 1 — `StepGraph`** (`execution/StepGraph.ts`, constructed with just a `Clock`): the
   pure step/cursor mutators (`startStep` / `finishStep` / `pauseStepForInput` /
@@ -224,25 +223,71 @@ orchestration unit incl. controller specs).
   collaborators instead of duplicated callback bags. Controller unit tests updated to grouped
   fakes.
 
+## Phase 5 — gate-window action sub-facades (done)
+
+The dedicated review/test windows drove a parked gate through ~30 near-identical 3-line
+delegations on `ExecutionService` (`reviewRequirements` / `incorporateClarity` /
+`proceedBrainstorm` / `confirmHumanTest` / `approveVisualConfirm` / …), bloating its public
+surface. They are grouped into per-feature sub-facades (`execution/gate-window-facades.ts`),
+exposed as getters on the still-injected `executionService` and consumed by the matching server
+controllers:
+
+- `requirementsReview` / `clarityReview` (`ReviewWindowActions<TReview>` binding the shared
+  `ReviewGateController` + the pre-resolved `ReviewKind`; the requirements one adds the two
+  Requirement-Writer recommendation actions) and `brainstorm` (`BrainstormActions`, stage-keyed
+  so each action resolves the kind through the injected `kindFor`).
+- `humanTest` / `visualConfirm` — exposed as the existing orchestration controllers behind the
+  narrow `HumanTestActions` / `VisualConfirmActions` interfaces, so the engine reuses the
+  controller WITHOUT leaking its engine-internal `evaluate` step-handler entrypoint to the
+  server. Server controllers call e.g. `executionService.humanTest.confirm(...)`.
+
+The composition roots are untouched (the single `executionService` is still what every facade
+injects), so the runtimes stay symmetric. No behaviour change. **Scope note:** the heavier
+run-control methods the original plan also listed (`approveStep` / `rejectStep` /
+`requestStepChanges` / `resolveDecision` / `mergePr`, the follow-up actions, `resolveCompanionExceeded`,
+`requestHumanReviewFix`) were deliberately LEFT on `ExecutionService` — they carry real
+state-machine logic and are the engine's core run-control API, not thin gate-window delegations.
+
+- **Phase 5 done.** Cloudflare conformance 126 ✓; Node full suite 202 ✓; orchestration unit 298 ✓.
+
+## Phase 6 — constructor trim (partial)
+
+Phase 5 frees no constructor deps on its own (the facades close over `reviewGate` / the kinds /
+the controllers, all of which the step handlers still use), so the substantial constructor trim
+remains gated on Phase 4. What landed independently: three **write-only** fields surfaced after
+the Phase 1–3 extractions — `accountRepository`, `environmentTeardown`, `branchUpdater` — were
+removed. Each is now consumed only via its destructured constructor param when building a
+sub-collaborator (`AgentContextBuilder` / `HumanTestController`), never through `this.`. The
+public `ExecutionServiceDependencies` shape is unchanged.
+
 ## Remaining work (deferred follow-ups)
 
 - **Phase 4 — move the handlers/interceptors out of the file (`buildStepHandlerRegistry` /
-  `buildStepCompletionInterceptors`).** SCOPING FINDING: the handler registry is a thin
+  `buildStepCompletionInterceptors`).** SCOPING FINDING (refined): the handler registry is a thin
   _dispatch table_ whose bodies call ~13 engine internals (`recordStepResult`,
   `handleAgentStep`, `evaluateGate` / `dispatchGateHelper`, `runDeployer`, `runTracker`,
   `gateFor`, pre/post-ops) plus the five controllers and the review kinds. Relocating it as-is
   would re-create the callback-bag smell. Doing it well requires **first extracting a second
-  collaborator, `RunDispatcher`** (those engine-internal dispatch methods), so the handlers can
-  depend on a cohesive surface — a move on par with Phase 2 in size/risk. Not a thin
-  relocation; schedule deliberately.
-- **Phase 5 — gate-action sub-facades.** The ~40 public gate-action methods
-  (`reviewRequirements`/`incorporate`/`reReview`/`proceed`/`resolveExceeded` ×
-  {requirements, clarity, brainstorm}; the human-test / visual-confirm actions; `approveStep` /
-  `rejectStep` / `requestStepChanges` / `resolveDecision`; follow-up actions; `mergePr`) are
-  mostly 3-line delegations. Group into per-feature sub-facades exposed as getters on the
-  still-injected `executionService` and re-point the ~12 server controllers — WITHOUT rewiring
-  the composition roots (keeps the runtimes symmetric). Independent of Phase 4 and the bigger
-  line win.
-- **Phase 6 — trim the constructor + final cleanup** once Phases 4–5 land (deps now owned by
-  collaborators drop off; e.g. the `kaizenScheduler` / `llmObservability` fields already moved
-  to `RunStateMachine` in phase 2).
+  collaborator, `RunDispatcher`** — the per-step dispatch + completion spine — so the handlers
+  depend on a cohesive surface. A move on par with Phase 2 in size/risk; not a thin relocation,
+  so schedule it as its own dedicated effort. Concretely, `RunDispatcher` would OWN: the four
+  registries (`buildStepHandlerRegistry` / `buildStepCompletionInterceptors` /
+  `buildStepResolverRegistry` / `buildGateRegistry` + `makeGateContext` / `makeResolverContext`),
+  the completion hub `recordStepResult` + `handleAgentStep` (+ `runAgent` / `previewStepModel` /
+  `currentStepIsNonMetered` / `skipGatedStep` / `attachEnvironmentProjection`), the gate machinery
+  (`evaluateGate` / `dispatchGateHelper` / `pollGate` / `resolveGatePollExhaustion` / `gateFor`),
+  `runDeployer` / `runTracker` (+ `deployInputs` / `deployContext`), the pre/post-op cluster
+  (`runRegisteredPreOps` / `runRegisteredPostOps` / `builtInPostOps` / `builtInRepoOpBranch` /
+  `resolveRepoOpBranch` / `ensureWorkBranch` / `resolveRunRepo`), the ingest helpers
+  (`ingestBlueprint` / `ingestSpec`) and the follow-up gate (`evaluateFollowUpGate` + helpers).
+  `ExecutionService.stepInstance` / `pollAgentJob` / `pollGate` then delegate to it. It composes
+  the existing collaborators (`RunStateMachine` / `StepGraph` / the five controllers /
+  `MergeResolver`) the same structured-deps way `RunStateMachine` does — the merge subgraph
+  (`finalizeMerge` / `resolveMergePreset` / `autoStartDependents` / `applyModuleAssignment`)
+  deliberately STAYS on the engine, threaded in as the one or two cross-cutting callbacks
+  `MergeResolver` already takes, NOT a per-method bag.
+- **Phase 6 (remainder) — finish the constructor trim** once Phase 4 lands: the deps then owned
+  by `RunDispatcher` (the gate/resolver wiring, `ticketTrackerProvider`, `issueWriteback`,
+  `blueprintReconciler`, `prMerger`, the model/capability resolvers, …) drop off
+  `ExecutionService`, mirroring how `kaizenScheduler` / `llmObservability` already moved to
+  `RunStateMachine` in phase 2.

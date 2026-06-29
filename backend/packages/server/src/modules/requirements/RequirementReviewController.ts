@@ -57,7 +57,10 @@ export function requirementReviewController(): Hono<AppEnv> {
     if (!requirements) return unavailable(c)
     const review = await c
       .get('container')
-      .executionService.reviewRequirements(param(c, 'workspaceId'), c.req.valid('param').blockId)
+      .executionService.requirementsReview.review(
+        param(c, 'workspaceId'),
+        c.req.valid('param').blockId,
+      )
     return c.json(review, 201)
   })
 
@@ -100,7 +103,7 @@ export function requirementReviewController(): Hono<AppEnv> {
     if (!requirements) return unavailable(c)
     const review = await c
       .get('container')
-      .executionService.incorporateRequirements(
+      .executionService.requirementsReview.incorporate(
         param(c, 'workspaceId'),
         c.req.valid('param').blockId,
         c.req.valid('json').feedback,
@@ -116,7 +119,10 @@ export function requirementReviewController(): Hono<AppEnv> {
     if (!requirements) return unavailable(c)
     const review = await c
       .get('container')
-      .executionService.reReviewRequirements(param(c, 'workspaceId'), c.req.valid('param').blockId)
+      .executionService.requirementsReview.reReview(
+        param(c, 'workspaceId'),
+        c.req.valid('param').blockId,
+      )
     return c.json(review, 200)
   })
 
@@ -127,7 +133,10 @@ export function requirementReviewController(): Hono<AppEnv> {
     if (!requirements) return unavailable(c)
     const review = await c
       .get('container')
-      .executionService.proceedRequirements(param(c, 'workspaceId'), c.req.valid('param').blockId)
+      .executionService.requirementsReview.proceed(
+        param(c, 'workspaceId'),
+        c.req.valid('param').blockId,
+      )
     return c.json(review, 200)
   })
 
@@ -148,7 +157,12 @@ export function requirementReviewController(): Hono<AppEnv> {
     const body = c.req.valid('json')
     const updated = await c
       .get('container')
-      .executionService.requestRecommendations(workspaceId, blockId, body.itemIds, body.note)
+      .executionService.requirementsReview.requestRecommendations(
+        workspaceId,
+        blockId,
+        body.itemIds,
+        body.note,
+      )
     return c.json(updated, 200)
   })
 
@@ -186,7 +200,7 @@ export function requirementReviewController(): Hono<AppEnv> {
     const { reviewId, recId } = c.req.valid('param')
     const review = await c
       .get('container')
-      .executionService.reRequestRecommendation(
+      .executionService.requirementsReview.reRequestRecommendation(
         param(c, 'workspaceId'),
         reviewId,
         recId,
@@ -202,7 +216,7 @@ export function requirementReviewController(): Hono<AppEnv> {
     if (!requirements) return unavailable(c)
     const review = await c
       .get('container')
-      .executionService.resolveRequirementsExceeded(
+      .executionService.requirementsReview.resolveExceeded(
         param(c, 'workspaceId'),
         c.req.valid('param').blockId,
         c.req.valid('json').choice,

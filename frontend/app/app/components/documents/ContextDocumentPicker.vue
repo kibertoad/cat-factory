@@ -16,6 +16,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ pick: [item: PendingContext] }>()
 
+const { t } = useI18n()
 const documents = useDocumentsStore()
 
 const chosen = computed(() => new Set(props.chosenKeys ?? []))
@@ -182,14 +183,14 @@ onMounted(() => {
       class="w-full"
       :placeholder="
         searchable
-          ? 'Search pages or paste a URL/ID…'
-          : (descriptor?.refPlaceholder ?? 'Paste a page URL or ID…')
+          ? t('documents.picker.searchPlaceholder')
+          : (descriptor?.refPlaceholder ?? t('documents.picker.refPlaceholder'))
       "
       @keydown.enter="refRow && pickRef(refRow)"
     />
 
     <p v-if="searchError" class="px-1 text-[11px] text-amber-400">
-      Search failed: {{ searchError }}
+      {{ t('documents.picker.searchFailed', { error: searchError }) }}
     </p>
 
     <div class="max-h-56 space-y-0.5 overflow-y-auto">
@@ -203,7 +204,9 @@ onMounted(() => {
       >
         <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-indigo-400" />
         <span class="truncate">{{ d.title }}</span>
-        <UBadge color="neutral" variant="soft" size="xs" class="ml-auto shrink-0">imported</UBadge>
+        <UBadge color="neutral" variant="soft" size="xs" class="ml-auto shrink-0">{{
+          t('documents.picker.importedBadge')
+        }}</UBadge>
       </button>
 
       <!-- Source search hits (imported on add). -->
@@ -226,18 +229,22 @@ onMounted(() => {
         @click="pickRef(refRow)"
       >
         <UIcon name="i-lucide-link" class="h-3.5 w-3.5 shrink-0 text-slate-400" />
-        <span class="truncate"
-          >Attach <span class="text-slate-200">{{ refRow }}</span> by reference</span
-        >
+        <span class="truncate">
+          <i18n-t keypath="documents.picker.attachByReference" scope="global">
+            <template #ref>
+              <span class="text-slate-200">{{ refRow }}</span>
+            </template>
+          </i18n-t>
+        </span>
       </button>
 
       <p v-if="empty" class="px-2 py-1.5 text-[11px] text-slate-500">
         {{
           query.trim()
-            ? 'No matching pages.'
+            ? t('documents.picker.noMatches')
             : searchable
-              ? 'Search by title, or pick an imported document.'
-              : 'Paste a page URL or ID to attach it.'
+              ? t('documents.picker.emptySearchable')
+              : t('documents.picker.emptyRefOnly')
         }}
       </p>
     </div>

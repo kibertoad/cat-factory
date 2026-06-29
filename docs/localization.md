@@ -30,15 +30,15 @@ it only records **what is done and what is left**.
 |     2 | **Inspector + step/observability panels**                       | `panels/**` + `panels/inspector/**` + `observability/**` (23 components)                                                               | `inspector.*`, `panels.*`, `observability.*`                             | ✅ merged (#395)         |
 |     3 | **Layout + auth**                                               | `layout/**` (14) + `auth/**` (4)                                                                                                       | `layout.*`, `nav.*`, `auth.*`                                            | ✅ merged (#398)         |
 |     4 | **Settings**                                                    | `settings/**` (12)                                                                                                                     | `settings.*`                                                             | ✅ merged (#401)         |
-|     5 | **Providers + AI onboarding**                                   | `providers/**` (5)                                                                                                                     | `providers.*`                                                            | ✅ done (this PR)        |
-|     6 | Integrations: GitHub / Slack / documents / tasks                | `github/**`, `slack/**`, `documents/**`, `tasks/**`                                                                                    | `github.*`, `slack.*`, `documents.*`, `tasks.*`                          | ⬜ planned               |
+|     5 | **Providers + AI onboarding**                                   | `providers/**` (5)                                                                                                                     | `providers.*`                                                            | ✅ merged (#403)         |
+|     6 | **Integrations: GitHub / Slack / documents / tasks**            | `github/**` (5), `slack/**` (1), `documents/**` (5), `tasks/**` (4)                                                                    | `github.*`, `slack.*`, `documents.*`, `tasks.*`                          | ✅ done (this PR)        |
 |     7 | Pipeline + palette + gates                                      | `pipeline/**`, `palettes/**`, `gates/**`                                                                                               | `pipeline.*`, `palette.*`, `gates.*`                                     | ⬜ planned               |
 |     8 | Agent windows                                                   | `requirements/`, `clarity/`, `consensus/`, `brainstorm/`, `spec/`, `followUp/`, `humanTest/`, `testing/`, `visualConfirm/`, `focus/`   | per-feature                                                              | ⬜ planned               |
 |     9 | Remaining surfaces                                              | `bootstrap/`, `environments/`, `fragments/`, `kaizen/`, `sandbox/`, `recurring/`, `media/`, `provisioning/`                            | per-feature                                                              | ⬜ planned               |
 |     X | Cross-cutting                                                   | `app/utils/catalog.ts` (status/agent-kind/block-type labels), `app/pages/*.vue`                                                        | `catalog.*` etc.                                                         | ⬜ planned               |
 
-Rough scale: **~121 SPA components**; ~74 already resolve copy through i18n after
-phases 0–5. The remaining work is the bulk of phases 6–X below.
+Rough scale: **~121 SPA components**; ~89 already resolve copy through i18n after
+phases 0–6. The remaining work is the bulk of phases 7–X below.
 
 ### Done
 
@@ -76,7 +76,7 @@ phases 0–5. The remaining work is the bulk of phases 6–X below.
   five locales (enum-keyed lookups via exhaustive `Record` maps; spend currency via the
   number formatter).
 
-- **Phase 5 (providers, this PR):** the default-preset mismatch dialog and the AI-provider
+- **Phase 5 (providers, #403):** the default-preset mismatch dialog and the AI-provider
   onboarding modal (the provider-keys / OpenRouter / local-runner routes), the personal
   individual-usage credential prompt (reason-keyed title + connect-vs-unlock flows), the
   direct/proxy provider API-keys section (per-vendor labels + guided steps, scope/provider
@@ -86,24 +86,23 @@ phases 0–5. The remaining work is the bulk of phases 6–X below.
   (3-form for pl/uk) with the number formatter, and per-vendor labels/steps resolve via
   literal `t(...)` keys to keep the typed-key drift guard live.
 
+- **Phase 6 (integrations, this PR):** the GitHub surfaces (the onboarding gate, the
+  installation connect flow, the integration panel's repos/pulls/issues browsing, the
+  add-service-from-repo modal, the repo tree browser), the Slack routing/members panel
+  (routable notification-type labels + role options), the documents surfaces (context-doc
+  picker, import modal, source-connect modal, spawn preview, task context-docs list), and
+  the tasks/issue-tracker surfaces (context-issue picker, context-issues list, import
+  modal, source-connect modal). New keys under `github.*`, `slack.*`, `documents.*` and
+  `tasks.*` in all five bundled locales (256 leaf keys total, full parity); count readouts
+  use plural forms (3-form for pl/uk), statically-known enum labels (PR/issue state, Slack
+  notification types) resolve via literal `t(...)` keys to keep the typed-key drift guard
+  live, and structural emphasis uses `<i18n-t>` slots instead of HTML in message bodies.
+
 The four board/panels components with **no** user-facing text — `AgentChip`,
 `TaskDependencyEdges`, `DependencyConnectOverlay`, `StepResultViewHost` — need no
 migration and are intentionally skipped.
 
 ### Remaining (by area)
-
-**Integrations** (phase 6)
-
-```
-github/AddServiceFromRepoModal.vue, github/GitHubConnect.vue, github/GitHubOnboarding.vue,
-github/GitHubPanel.vue, github/RepoTreeBrowser.vue
-slack/SlackPanel.vue
-documents/ContextDocumentPicker.vue, documents/DocumentImportModal.vue,
-documents/DocumentSourceConnectModal.vue, documents/SpawnPreviewModal.vue,
-documents/TaskContextDocs.vue
-tasks/ContextIssuePicker.vue, tasks/TaskContextIssues.vue, tasks/TaskImportModal.vue,
-tasks/TaskSourceConnectModal.vue
-```
 
 **Pipeline / palette / gates** (phase 7)
 

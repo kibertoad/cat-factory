@@ -13,6 +13,7 @@
 // before that.
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
+const { t } = useI18n()
 const ui = useUiStore()
 const tasks = useTasksStore()
 const toast = useToast()
@@ -58,7 +59,7 @@ async function submit() {
   try {
     await tasks.connect(source.value, credentials)
     toast.add({
-      title: `${descriptor.value!.label} connected`,
+      title: t('tasks.connect.connectedToast', { label: descriptor.value!.label }),
       icon: 'i-lucide-check',
       color: 'success',
     })
@@ -66,7 +67,7 @@ async function submit() {
     await tasks.probe()
   } catch (e) {
     toast.add({
-      title: 'Could not connect',
+      title: t('tasks.connect.connectFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -81,7 +82,9 @@ async function disconnect() {
   await tasks.disconnect(source.value)
   await tasks.probe()
   toast.add({
-    title: `${descriptor.value?.label ?? 'Source'} disconnected`,
+    title: t('tasks.connect.disconnectedToast', {
+      label: descriptor.value?.label ?? t('tasks.connect.sourceFallback'),
+    }),
     icon: 'i-lucide-unplug',
   })
   ui.closeTaskConnect()
@@ -94,7 +97,7 @@ async function toggleEnabled(enabled: boolean) {
     await tasks.setEnabled(source.value, enabled)
   } catch (e) {
     toast.add({
-      title: 'Could not update',
+      title: t('tasks.connect.updateFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -106,25 +109,23 @@ async function toggleEnabled(enabled: boolean) {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="descriptor?.label ?? 'Task source'">
+  <UModal v-model:open="open" :title="descriptor?.label ?? t('tasks.connect.title')">
     <template #title>
-      <IntegrationBackTitle :title="descriptor?.label ?? 'Task source'" @back="back" />
+      <IntegrationBackTitle :title="descriptor?.label ?? t('tasks.connect.title')" @back="back" />
     </template>
     <template #body>
       <div v-if="descriptor" class="space-y-4">
         <p class="text-sm text-slate-400">
-          {{ descriptor.label }} lets you import issues and attach them to tasks as agent context.
+          {{ t('tasks.connect.intro', { label: descriptor.label }) }}
         </p>
 
         <!-- Credentialless source (GitHub Issues): no form, just the on/off toggle. -->
         <template v-if="credentialless">
           <p class="text-[11px] text-slate-500">
-            This source uses the GitHub App already installed on your workspace — there are no
-            credentials to enter.
+            {{ t('tasks.connect.credentialless') }}
           </p>
           <p v-if="!available" class="text-[11px] text-amber-400">
-            Install the workspace's GitHub App (connect GitHub repos) to offer
-            {{ descriptor.label }}.
+            {{ t('tasks.connect.installAppHint', { label: descriptor.label }) }}
           </p>
         </template>
 
@@ -145,7 +146,11 @@ async function toggleEnabled(enabled: boolean) {
           </UFormField>
         </div>
         <p v-else class="text-[11px] text-slate-500">
-          Connected{{ connection?.label ? ` to ${connection.label}` : '' }}.
+          {{
+            connection?.label
+              ? t('tasks.connect.connectedTo', { label: connection.label })
+              : t('tasks.connect.connected')
+          }}
         </p>
 
         <!-- The per-workspace on/off toggle, available once the source is usable. -->
@@ -154,9 +159,9 @@ async function toggleEnabled(enabled: boolean) {
           class="flex items-center justify-between gap-2 rounded-md border border-slate-800 px-3 py-2"
         >
           <div class="text-sm">
-            <div class="font-medium text-slate-200">Offer to this workspace</div>
+            <div class="font-medium text-slate-200">{{ t('tasks.connect.offerToWorkspace') }}</div>
             <div class="text-[11px] text-slate-500">
-              When off, {{ descriptor.label }} is hidden from import and linking.
+              {{ t('tasks.connect.offerHint', { label: descriptor.label }) }}
             </div>
           </div>
           <USwitch
@@ -174,7 +179,7 @@ async function toggleEnabled(enabled: boolean) {
             icon="i-lucide-unplug"
             @click="disconnect"
           >
-            Disconnect
+            {{ t('tasks.connect.disconnect') }}
           </UButton>
           <div v-else />
           <UButton
@@ -185,7 +190,7 @@ async function toggleEnabled(enabled: boolean) {
             :disabled="!canSubmit"
             @click="submit"
           >
-            {{ connected ? 'Update connection' : 'Connect' }}
+            {{ connected ? t('tasks.connect.updateConnection') : t('tasks.connect.connect') }}
           </UButton>
         </div>
       </div>

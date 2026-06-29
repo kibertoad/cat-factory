@@ -97,6 +97,13 @@ import { RunStateMachine, type KaizenScheduler } from './RunStateMachine.js'
 import { inferTechnicalLabel } from './technical.logic.js'
 import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
+import {
+  BrainstormActions,
+  ClarityReviewActions,
+  type HumanTestActions,
+  RequirementReviewActions,
+  type VisualConfirmActions,
+} from './gate-window-facades.js'
 import { TesterController } from './TesterController.js'
 import { HumanTestController } from './HumanTestController.js'
 import { VisualConfirmationController } from './VisualConfirmationController.js'
@@ -133,7 +140,6 @@ import type {
   ClarityReview,
   BrainstormSession,
   BrainstormStage,
-  ResolveRequirementsExceededChoice,
 } from '@cat-factory/kernel'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
 import type {
@@ -500,7 +506,6 @@ export class ExecutionService {
   private readonly blockRepository: BlockRepository
   private readonly pipelineRepository: PipelineRepository
   private readonly executionRepository: ExecutionRepository
-  private readonly accountRepository: AccountRepository
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
   /** The pure step/cursor mutators (start/finish/park/reset + the companion rework loop). */
@@ -516,8 +521,6 @@ export class ExecutionService {
   private readonly clarityReviewService?: ClarityReviewService
   private readonly brainstormServices?: Record<BrainstormStage, BrainstormService>
   private readonly environmentProvisioning?: EnvironmentProvisioningService
-  private readonly environmentTeardown?: EnvironmentTeardownService
-  private readonly branchUpdater?: BranchUpdater
   /** Assembles the per-step agent context (requirements, docs, env, service frame, fragments). */
   private readonly contextBuilder: AgentContextBuilder
   /** Resolves a `merger` step's assessment into an auto-merge or a `merge_review` notification. */
@@ -539,6 +542,12 @@ export class ExecutionService {
   /** The two brainstorm (structured-dialogue) subjects for {@link reviewGate}, by stage. */
   private readonly requirementsBrainstormKind: ReviewKind<BrainstormSession>
   private readonly architectureBrainstormKind: ReviewKind<BrainstormSession>
+  /** Requirements-review window actions (exposed via {@link requirementsReview}). */
+  private readonly requirementsReviewActions: RequirementReviewActions
+  /** Clarity-review (bug triage) window actions (exposed via {@link clarityReview}). */
+  private readonly clarityReviewActions: ClarityReviewActions
+  /** Brainstorm window actions (exposed via {@link brainstorm}). */
+  private readonly brainstormActions: BrainstormActions
   private readonly blueprintReconciler?: BlueprintReconciler
   private readonly notificationService?: NotificationService
   private readonly workspaceSettingsService?: WorkspaceSettingsService
@@ -641,7 +650,6 @@ export class ExecutionService {
     this.blockRepository = blockRepository
     this.pipelineRepository = pipelineRepository
     this.executionRepository = executionRepository
-    this.accountRepository = accountRepository
     this.idGenerator = idGenerator
     this.clock = clock
     this.stepGraph = new StepGraph(clock)
@@ -668,8 +676,6 @@ export class ExecutionService {
     this.clarityReviewService = clarityReviewService
     this.brainstormServices = brainstormServices
     this.environmentProvisioning = environmentProvisioning
-    this.environmentTeardown = environmentTeardown
-    this.branchUpdater = branchUpdater
     this.contextBuilder = new AgentContextBuilder({
       workspaceRepository,
       blockRepository,
@@ -778,6 +784,17 @@ export class ExecutionService {
       'architecture',
       ARCHITECTURE_BRAINSTORM_AGENT_KIND,
     )
+    // Group the per-feature gate-window actions into cohesive sub-facades (exposed as
+    // getters below) so they stop bloating the engine's public surface as ~30 near-identical
+    // 3-line delegations. They close over the same shared collaborators the handlers use.
+    this.requirementsReviewActions = new RequirementReviewActions(
+      this.reviewGate,
+      this.requirementsKind,
+    )
+    this.clarityReviewActions = new ClarityReviewActions(this.reviewGate, this.clarityKind)
+    this.brainstormActions = new BrainstormActions(this.reviewGate, (stage) =>
+      this.brainstormKindFor(stage),
+    )
     this.blueprintReconciler = blueprintReconciler
     this.notificationService = notificationService
     this.workspaceSettingsService = workspaceSettingsService
@@ -793,6 +810,36 @@ export class ExecutionService {
     this.resolveTesterFallbackDefault = resolveTesterFallbackDefault
     this.resolveRequireEnvironmentProvider = resolveRequireEnvironmentProvider
     this.assertAgentBackendConfigured = assertAgentBackendConfigured
+  }
+
+  // ---- gate-window action sub-facades -------------------------------------
+  // Per-feature groupings of the dedicated review/test window actions, consumed by the
+  // matching server controllers. See {@link gate-window-facades}. The `executionService` is
+  // still the single injected object, so the runtimes stay symmetric (no composition-root edit).
+
+  /** Requirements-review window actions (run / incorporate / re-review / proceed / …). */
+  get requirementsReview(): RequirementReviewActions {
+    return this.requirementsReviewActions
+  }
+
+  /** Clarity-review (bug-report triage) window actions. */
+  get clarityReview(): ClarityReviewActions {
+    return this.clarityReviewActions
+  }
+
+  /** Brainstorm (structured-dialogue) window actions, keyed by stage. */
+  get brainstorm(): BrainstormActions {
+    return this.brainstormActions
+  }
+
+  /** Human-testing gate window actions (confirm / request-fix / pull-main / recreate / destroy). */
+  get humanTest(): HumanTestActions {
+    return this.humanTestController
+  }
+
+  /** Visual-confirmation gate window actions (approve / request-fix / recapture). */
+  get visualConfirm(): VisualConfirmActions {
+    return this.visualConfirmationController
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -3746,152 +3793,13 @@ export class ExecutionService {
       : this.requirementsBrainstormKind
   }
 
-  /** Run a fresh brainstorm pass over a block + stage (off-path inspector / window surface). */
-  reviewBrainstorm(
-    workspaceId: string,
-    blockId: string,
-    stage: BrainstormStage,
-  ): Promise<BrainstormSession> {
-    return this.reviewGate.review(this.brainstormKindFor(stage), workspaceId, blockId)
-  }
-
-  /** Incorporate the human's picks ASYNCHRONOUSLY (the brainstorm mirror of {@link incorporateRequirements}). */
-  incorporateBrainstorm(
-    workspaceId: string,
-    blockId: string,
-    stage: BrainstormStage,
-    feedback?: string,
-  ): Promise<BrainstormSession> {
-    return this.reviewGate.incorporate(
-      this.brainstormKindFor(stage),
-      workspaceId,
-      blockId,
-      feedback,
-    )
-  }
-
-  /** Re-run the brainstorm against the converged direction (one more pass). */
-  reReviewBrainstorm(
-    workspaceId: string,
-    blockId: string,
-    stage: BrainstormStage,
-  ): Promise<BrainstormSession> {
-    return this.reviewGate.reReview(this.brainstormKindFor(stage), workspaceId, blockId)
-  }
-
-  /** Proceed: settle the brainstorm (last converged direction wins downstream) and advance. */
-  proceedBrainstorm(
-    workspaceId: string,
-    blockId: string,
-    stage: BrainstormStage,
-  ): Promise<BrainstormSession> {
-    return this.reviewGate.proceed(this.brainstormKindFor(stage), workspaceId, blockId)
-  }
-
-  /** Resolve a brainstorm that hit its iteration cap (extra-round / proceed / stop-reset). */
-  resolveBrainstormExceeded(
-    workspaceId: string,
-    blockId: string,
-    stage: BrainstormStage,
-    choice: ResolveRequirementsExceededChoice,
-  ): Promise<BrainstormSession> {
-    return this.reviewGate.resolveExceeded(
-      this.brainstormKindFor(stage),
-      workspaceId,
-      blockId,
-      choice,
-    )
-  }
-
-  /**
-   * Run a fresh reviewer pass over a block's collected requirements, snapshotting the
-   * task's merge-preset knobs (iteration budget + tolerated severity) onto the review.
-   * Shared by the pipeline gate and the off-path inspector "Run review" surface, so both
-   * honour the task's preset identically.
-   */
-  reviewRequirements(workspaceId: string, blockId: string): Promise<RequirementReview> {
-    return this.reviewGate.review(this.requirementsKind, workspaceId, blockId)
-  }
-
-  /**
-   * Incorporate the human's settled answers ASYNCHRONOUSLY. Validates that every finding is
-   * answered/dismissed, flags the review `incorporating`, records the intent on the parked
-   * gate step, and signals the durable driver to wake — which folds the answers and
-   * re-reviews in the background. Off-path (no parked run) the fold + re-review run inline.
-   */
-  incorporateRequirements(
-    workspaceId: string,
-    blockId: string,
-    feedback?: string,
-  ): Promise<RequirementReview> {
-    return this.reviewGate.incorporate(this.requirementsKind, workspaceId, blockId, feedback)
-  }
-
-  /**
-   * Re-review the incorporated document (one more reviewer pass). On convergence
-   * (`incorporated`) the parked run advances; otherwise the window shows the next cycle
-   * (`ready`) or the iteration-cap choices (`exceeded`).
-   */
-  reReviewRequirements(workspaceId: string, blockId: string): Promise<RequirementReview> {
-    return this.reviewGate.reReview(this.requirementsKind, workspaceId, blockId)
-  }
-
-  /**
-   * Proceed: settle the requirements (the last incorporated doc, if any, becomes what
-   * downstream agents consume) and advance the parked run.
-   */
-  proceedRequirements(workspaceId: string, blockId: string): Promise<RequirementReview> {
-    return this.reviewGate.proceed(this.requirementsKind, workspaceId, blockId)
-  }
-
-  /**
-   * Ask the Requirement Writer to recommend answers for a batch of findings ASYNCHRONOUSLY:
-   * append `pending` placeholder recommendations at once and signal the durable driver to run
-   * the Writer per finding in the background (filling them in + notifying when done). Returns the
-   * review with the placeholders so the SPA shows "generating…" and hands the user back.
-   */
-  requestRecommendations(
-    workspaceId: string,
-    blockId: string,
-    itemIds: string[],
-    note?: string,
-  ): Promise<RequirementReview> {
-    return this.reviewGate.requestRecommendations(
-      this.requirementsKind,
-      workspaceId,
-      blockId,
-      itemIds,
-      note,
-    )
-  }
-
-  /**
-   * Re-request a single recommendation with a "do it differently" note — resets it to `pending`
-   * and drives the Writer through the same async path. Review-scoped (the re-request endpoint
-   * addresses the recommendation by review id).
-   */
-  reRequestRecommendation(
-    workspaceId: string,
-    reviewId: string,
-    recId: string,
-    note: string,
-  ): Promise<RequirementReview> {
-    return this.reviewGate.reRequestRecommendation(
-      this.requirementsKind,
-      workspaceId,
-      reviewId,
-      recId,
-      note,
-    )
-  }
-
   /**
    * Route an iteration-cap resolution to its gate-specific handlers. `stop-reset` is
    * uniform across gates: cancel the run and return the block to phase zero (editable),
    * keeping whatever reference artifact each gate persists (the requirements doc on its
    * own table; a companion's producer output on its branch). Shared by the requirements
-   * gate ({@link resolveRequirementsExceeded}) and the companion gate
-   * ({@link resolveCompanionExceeded}) so the three-way choice lives in one place.
+   * gate (`requirementsReview.resolveExceeded`, via {@link ReviewGateController}) and the
+   * companion gate ({@link resolveCompanionExceeded}) so the three-way choice lives in one place.
    */
   private async dispatchIterationCap(
     workspaceId: string,
@@ -3910,22 +3818,10 @@ export class ExecutionService {
   }
 
   /**
-   * Resolve a requirements review that hit its iteration cap: grant one more round,
-   * proceed with the last incorporated doc, or stop the task and reset it to phase zero.
-   */
-  resolveRequirementsExceeded(
-    workspaceId: string,
-    blockId: string,
-    choice: ResolveRequirementsExceededChoice,
-  ): Promise<RequirementReview> {
-    return this.reviewGate.resolveExceeded(this.requirementsKind, workspaceId, blockId, choice)
-  }
-
-  /**
    * Resolve a companion step parked at its automatic-rework cap (`companion.exceeded`):
    * grant one more round, proceed accepting the producer's current output, or stop the
-   * task and reset it to phase zero. The companion mirror of
-   * {@link resolveRequirementsExceeded}, sharing the iteration-cap dispatch + the
+   * task and reset it to phase zero. The companion mirror of the requirements
+   * iteration-cap resolution (`requirementsReview.resolveExceeded`), sharing the iteration-cap dispatch + the
    * gate-resume plumbing. Idempotent — an already-resolved gate returns the instance
    * unchanged. Scoped by execution + approval id (the execution controller surface),
    * since a companion gate is not block-addressed like the requirements window.
@@ -4014,99 +3910,9 @@ export class ExecutionService {
     return instance ? this.investigationFor(instance) : undefined
   }
 
-  /**
-   * Run a fresh clarity reviewer pass over a block's bug report, snapshotting the task's
-   * merge-preset knobs (iteration budget + tolerated severity) and threading in any
-   * `bug-investigator` output as the triage subject. Shared by the gate + the off-path
-   * inspector "Run review" surface.
-   */
-  reviewClarity(workspaceId: string, blockId: string): Promise<ClarityReview> {
-    return this.reviewGate.review(this.clarityKind, workspaceId, blockId)
-  }
-
-  /** Incorporate the human's settled answers ASYNCHRONOUSLY (the clarity mirror of {@link incorporateRequirements}). */
-  incorporateClarity(
-    workspaceId: string,
-    blockId: string,
-    feedback?: string,
-  ): Promise<ClarityReview> {
-    return this.reviewGate.incorporate(this.clarityKind, workspaceId, blockId, feedback)
-  }
-
-  /** Re-review the clarified report (one more pass). On convergence the parked run advances. */
-  reReviewClarity(workspaceId: string, blockId: string): Promise<ClarityReview> {
-    return this.reviewGate.reReview(this.clarityKind, workspaceId, blockId)
-  }
-
-  /** Proceed: settle the clarity review and advance the parked run. */
-  proceedClarity(workspaceId: string, blockId: string): Promise<ClarityReview> {
-    return this.reviewGate.proceed(this.clarityKind, workspaceId, blockId)
-  }
-
-  /** Resolve a clarity review that hit its iteration cap (extra-round / proceed / stop-reset). */
-  resolveClarityExceeded(
-    workspaceId: string,
-    blockId: string,
-    choice: ResolveRequirementsExceededChoice,
-  ): Promise<ClarityReview> {
-    return this.reviewGate.resolveExceeded(this.clarityKind, workspaceId, blockId, choice)
-  }
-
-  // ---- human-testing gate actions (driven from the dedicated window) -------
-  // Each mutates the parked gate step and wakes the durable driver, which re-enters the gate
-  // and performs the (env / helper) work; see {@link HumanTestController}.
-
-  /** Confirm the change works: tear the ephemeral env down and advance the run. */
-  confirmHumanTest(workspaceId: string, blockId: string): Promise<ExecutionInstance> {
-    return this.humanTestController.confirm(workspaceId, blockId)
-  }
-
-  /** Submit findings and request a fix: dispatch the Tester's `fixer`, then rebuild the env. */
-  requestHumanTestFix(
-    workspaceId: string,
-    blockId: string,
-    findings: string,
-  ): Promise<ExecutionInstance> {
-    return this.humanTestController.requestFix(workspaceId, blockId, findings)
-  }
-
-  /** Pull the repo default branch into the PR branch + redeploy (conflict → conflict-resolver). */
-  pullMainHumanTest(workspaceId: string, blockId: string): Promise<ExecutionInstance> {
-    return this.humanTestController.pullMain(workspaceId, blockId)
-  }
-
-  /** Rebuild the ephemeral environment on demand. */
-  recreateHumanTestEnv(workspaceId: string, blockId: string): Promise<ExecutionInstance> {
-    return this.humanTestController.recreateEnvironment(workspaceId, blockId)
-  }
-
-  /** Destroy the ephemeral environment on demand (the run stays parked). */
-  destroyHumanTestEnv(workspaceId: string, blockId: string): Promise<ExecutionInstance> {
-    return this.humanTestController.destroyEnvironment(workspaceId, blockId)
-  }
-
-  // ---- visual-confirmation gate actions (driven from the dedicated window) --
-  // Each mutates the parked gate step and wakes the durable driver; see
-  // {@link VisualConfirmationController}.
-
-  /** Approve the reviewed screenshots: advance the run. */
-  approveVisualConfirm(workspaceId: string, blockId: string): Promise<ExecutionInstance> {
-    return this.visualConfirmationController.approve(workspaceId, blockId)
-  }
-
-  /** Submit findings and request a fix: dispatch the Tester's `fixer`, then re-park. */
-  requestVisualConfirmFix(
-    workspaceId: string,
-    blockId: string,
-    findings: string,
-  ): Promise<ExecutionInstance> {
-    return this.visualConfirmationController.requestFix(workspaceId, blockId, findings)
-  }
-
-  /** Refresh the screenshot pairs from the latest UI-tester report. */
-  recaptureVisualConfirm(workspaceId: string, blockId: string): Promise<ExecutionInstance> {
-    return this.visualConfirmationController.recapture(workspaceId, blockId)
-  }
+  // The clarity / human-testing / visual-confirmation gate-window actions now live on the
+  // per-feature sub-facades (`clarityReview` / `humanTest` / `visualConfirm`); see the getters
+  // above and {@link gate-window-facades}.
 
   /**
    * Dispatch the `fixer` against the human-review gate's PR branch from a human's freeform

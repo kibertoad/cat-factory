@@ -6,6 +6,7 @@ import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 // board structure. A source selector lets the user choose which connected source
 // to import from (Confluence, Notion, …). Carries an optional target frame from
 // the inspector so "Preview & spawn" lands the structure inside that frame.
+const { t } = useI18n()
 const ui = useUiStore()
 const documents = useDocumentsStore()
 const board = useBoardStore()
@@ -60,10 +61,13 @@ async function doImport() {
   try {
     const doc = await documents.importDocument(source.value, value)
     ref_.value = ''
-    toast.add({ title: `Imported "${doc.title}"`, icon: 'i-lucide-file-down' })
+    toast.add({
+      title: t('documents.import.imported', { title: doc.title }),
+      icon: 'i-lucide-file-down',
+    })
   } catch (e) {
     toast.add({
-      title: 'Import failed',
+      title: t('documents.import.importFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -79,14 +83,14 @@ function preview(externalId: string) {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Import from a document source">
+  <UModal v-model:open="open" :title="t('documents.import.title')">
     <template #title>
-      <IntegrationBackTitle title="Import from a document source" @back="back" />
+      <IntegrationBackTitle :title="t('documents.import.title')" @back="back" />
     </template>
     <template #body>
       <div v-if="!documents.anyConnected" class="space-y-3 text-center">
         <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-slate-500" />
-        <p class="text-sm text-slate-400">Connect a document source first.</p>
+        <p class="text-sm text-slate-400">{{ t('documents.import.connectFirst') }}</p>
         <div class="flex justify-center gap-2">
           <UButton
             v-for="s in documents.sources"
@@ -96,22 +100,29 @@ function preview(externalId: string) {
             :icon="s.icon"
             @click="ui.openDocumentConnect(s.source)"
           >
-            Connect {{ s.label }}
+            {{ t('documents.import.connectSource', { source: s.label }) }}
           </UButton>
         </div>
       </div>
 
       <div v-else class="space-y-4">
         <p v-if="targetFrameTitle" class="text-xs text-slate-400">
-          Spawning into <span class="font-medium text-slate-200">{{ targetFrameTitle }}</span>
+          <i18n-t keypath="documents.import.spawningInto" scope="global">
+            <template #frame>
+              <span class="font-medium text-slate-200">{{ targetFrameTitle }}</span>
+            </template>
+          </i18n-t>
         </p>
 
-        <UFormField v-if="sourceItems.length > 1" label="Source">
+        <UFormField v-if="sourceItems.length > 1" :label="t('documents.import.sourceLabel')">
           <USelect v-model="source" :items="sourceItems" class="w-full" />
         </UFormField>
 
         <div class="flex items-end gap-2">
-          <UFormField :label="descriptor?.refLabel ?? 'Page URL or ID'" class="flex-1">
+          <UFormField
+            :label="descriptor?.refLabel ?? t('documents.import.refLabel')"
+            class="flex-1"
+          >
             <UInput
               v-model="ref_"
               :placeholder="descriptor?.refPlaceholder"
@@ -126,13 +137,13 @@ function preview(externalId: string) {
             :disabled="!ref_.trim()"
             @click="doImport"
           >
-            Import
+            {{ t('documents.import.importButton') }}
           </UButton>
         </div>
 
         <div v-if="sourceDocs.length" class="space-y-2">
           <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            Imported documents
+            {{ t('documents.import.importedHeading') }}
           </h3>
           <div
             v-for="doc in sourceDocs"
@@ -158,12 +169,14 @@ function preview(externalId: string) {
                 icon="i-lucide-wand-sparkles"
                 @click="preview(doc.externalId)"
               >
-                Preview &amp; spawn
+                {{ t('documents.import.previewSpawn') }}
               </UButton>
             </div>
           </div>
         </div>
-        <p v-else class="text-center text-xs text-slate-500">No documents imported yet.</p>
+        <p v-else class="text-center text-xs text-slate-500">
+          {{ t('documents.import.noneImported') }}
+        </p>
       </div>
     </template>
   </UModal>

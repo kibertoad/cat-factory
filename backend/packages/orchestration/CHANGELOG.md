@@ -1,5 +1,27 @@
 # @cat-factory/orchestration
 
+## 0.37.3
+
+### Patch Changes
+
+- 0784fe0: ExecutionService split (take 2), phase 6 (partial): drop three dead constructor fields
+  (`accountRepository`, `environmentTeardown`, `branchUpdater`) that became write-only after the
+  earlier collaborator extractions — each is now consumed only via its destructured constructor
+  param when wiring a sub-collaborator (`AgentContextBuilder` / `HumanTestController`), never
+  through `this.`. The constructor params (and so the public `ExecutionServiceDependencies` shape)
+  are unchanged. The substantial constructor trim still awaits the Phase 4 `RunDispatcher`
+  extraction.
+- 0784fe0: ExecutionService split (take 2), phase 5: group the gate-window actions into per-feature
+  sub-facades. The dedicated review/test windows drove a parked gate through ~30 near-identical
+  3-line delegations on `ExecutionService` (`reviewRequirements` / `incorporateClarity` /
+  `proceedBrainstorm` / `confirmHumanTest` / `approveVisualConfirm` / …), bloating its public
+  surface. They are now grouped into cohesive sub-facades exposed as getters on the still-injected
+  `executionService` — `.requirementsReview` / `.clarityReview` / `.brainstorm` / `.humanTest` /
+  `.visualConfirm` — and the matching server controllers call through them
+  (`executionService.requirementsReview.review(...)` etc.). The composition roots are untouched
+  (the single `executionService` is still what every facade injects), so the runtimes stay
+  symmetric. No behaviour change.
+
 ## 0.37.2
 
 ### Patch Changes

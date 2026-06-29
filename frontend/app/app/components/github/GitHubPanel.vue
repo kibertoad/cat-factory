@@ -12,6 +12,7 @@ import type { GitHubPullRequest, GitHubRepo } from '~/types/domain'
 import GitHubConnect from './GitHubConnect.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
+const { t } = useI18n()
 const ui = useUiStore()
 const github = useGitHubStore()
 const toast = useToast()
@@ -47,29 +48,33 @@ function notifyError(title: string, e: unknown) {
 async function disconnect() {
   try {
     await github.disconnect()
-    toast.add({ title: 'GitHub disconnected', icon: 'i-lucide-unplug' })
+    toast.add({ title: t('github.panel.toast.disconnected'), icon: 'i-lucide-unplug' })
   } catch (e) {
-    notifyError('Could not disconnect', e)
+    notifyError(t('github.panel.errors.disconnect'), e)
   }
 }
 
 async function resync(full = false) {
   try {
     const { status } = await github.resync({ full })
-    toast.add({ title: `Resync ${status}`, icon: 'i-lucide-refresh-cw', color: 'info' })
+    toast.add({
+      title: t('github.panel.toast.resync', { status }),
+      icon: 'i-lucide-refresh-cw',
+      color: 'info',
+    })
   } catch (e) {
-    notifyError('Could not resync', e)
+    notifyError(t('github.panel.errors.resync'), e)
   }
 }
 
 // ---- browse ----------------------------------------------------------------
 type Tab = 'repos' | 'pulls' | 'issues'
 const tab = ref<Tab>('repos')
-const tabs: { id: Tab; label: string; icon: string }[] = [
-  { id: 'repos', label: 'Repositories', icon: 'i-lucide-folder-git-2' },
-  { id: 'pulls', label: 'Pull requests', icon: 'i-lucide-git-pull-request' },
-  { id: 'issues', label: 'Issues', icon: 'i-lucide-circle-dot' },
-]
+const tabs = computed<{ id: Tab; label: string; icon: string }[]>(() => [
+  { id: 'repos', label: t('github.panel.tabs.repos'), icon: 'i-lucide-folder-git-2' },
+  { id: 'pulls', label: t('github.panel.tabs.pulls'), icon: 'i-lucide-git-pull-request' },
+  { id: 'issues', label: t('github.panel.tabs.issues'), icon: 'i-lucide-circle-dot' },
+])
 
 // Manage which repos this board links (the installation is shared across the
 // account; each board picks its own repos).
@@ -82,7 +87,7 @@ async function openManage() {
     await github.loadAvailableRepos()
     selected.value = new Set(github.availableRepos.filter((r) => r.linked).map((r) => r.githubId))
   } catch (e) {
-    notifyError('Could not load repositories', e)
+    notifyError(t('github.panel.errors.loadRepos'), e)
     managing.value = false
   }
 }
@@ -98,9 +103,13 @@ async function saveRepos() {
   try {
     await github.setLinkedRepos([...selected.value])
     managing.value = false
-    toast.add({ title: 'Linked repositories updated', icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('github.panel.toast.reposUpdated'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
-    notifyError('Could not update repositories', e)
+    notifyError(t('github.panel.errors.updateRepos'), e)
   }
 }
 
@@ -120,7 +129,7 @@ async function toggleRepo(repo: GitHubRepo) {
     try {
       await github.loadBranches(repo.githubId)
     } catch (e) {
-      notifyError('Could not load branches', e)
+      notifyError(t('github.panel.errors.loadBranches'), e)
     }
   }
 }
@@ -133,9 +142,13 @@ async function createBranch(repo: GitHubRepo) {
   try {
     await github.createBranch(repo.githubId, { name, fromSha })
     branchForm.value = { name: '', fromSha: '' }
-    toast.add({ title: `Branch ${name} created`, icon: 'i-lucide-check', color: 'success' })
+    toast.add({
+      title: t('github.panel.toast.branchCreated', { name }),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
-    notifyError('Could not create branch', e)
+    notifyError(t('github.panel.errors.createBranch'), e)
   } finally {
     creatingBranch.value = false
   }
@@ -181,12 +194,23 @@ async function openPr() {
     })
     showPrForm.value = false
     prForm.value = { repoGithubId: null, title: '', head: '', base: '' }
-    toast.add({ title: 'Pull request opened', icon: 'i-lucide-check', color: 'success' })
+    toast.add({ title: t('github.panel.toast.prOpened'), icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
-    notifyError('Could not open pull request', e)
+    notifyError(t('github.panel.errors.openPr'), e)
   } finally {
     openingPr.value = false
   }
+}
+
+// PR / issue state labels. The states are a statically-known enum (open/closed,
+// plus the derived `merged` for PRs), so the labels are literal `t()` keys — one
+// per member — which keeps the typed-message-keys drift guard live.
+function prStateLabel(pr: GitHubPullRequest): string {
+  if (pr.merged) return t('github.panel.prState.merged')
+  return pr.state === 'open' ? t('github.panel.prState.open') : t('github.panel.prState.closed')
+}
+function issueStateLabel(state: GitHubPullRequest['state']): string {
+  return state === 'open' ? t('github.panel.issueState.open') : t('github.panel.issueState.closed')
 }
 
 const merging = ref<number | null>(null)
@@ -194,9 +218,13 @@ async function merge(pr: GitHubPullRequest) {
   merging.value = pr.number
   try {
     await github.mergePullRequest(pr.repoGithubId, pr.number, { method: 'squash' })
-    toast.add({ title: `PR #${pr.number} merged`, icon: 'i-lucide-git-merge', color: 'success' })
+    toast.add({
+      title: t('github.panel.toast.prMerged', { number: pr.number }),
+      icon: 'i-lucide-git-merge',
+      color: 'success',
+    })
   } catch (e) {
-    notifyError('Could not merge', e)
+    notifyError(t('github.panel.errors.merge'), e)
   } finally {
     merging.value = null
   }
@@ -213,8 +241,7 @@ async function merge(pr: GitHubPullRequest) {
         <!-- not connected: connect -->
         <template v-if="!github.connected">
           <p class="text-sm text-slate-400">
-            Connect a GitHub App installation to back board blocks with repositories, browse pull
-            requests and issues, and let agents push branches and open PRs.
+            {{ t('github.panel.connectIntro') }}
           </p>
 
           <GitHubConnect />
@@ -233,8 +260,12 @@ async function merge(pr: GitHubPullRequest) {
                   {{ github.connection?.accountLogin }}
                 </div>
                 <div class="text-[11px] text-slate-500">
-                  {{ github.connection?.targetType }} · installation
-                  {{ github.connection?.installationId }}
+                  {{
+                    t('github.panel.installationMeta', {
+                      targetType: github.connection?.targetType,
+                      id: github.connection?.installationId,
+                    })
+                  }}
                 </div>
               </div>
             </div>
@@ -247,7 +278,7 @@ async function merge(pr: GitHubPullRequest) {
                 :loading="github.syncing"
                 @click="resync(false)"
               >
-                Resync
+                {{ t('github.panel.resync') }}
               </UButton>
               <UButton
                 size="xs"
@@ -257,13 +288,14 @@ async function merge(pr: GitHubPullRequest) {
                 :disabled="github.syncing"
                 @click="resync(true)"
               >
-                Backfill
+                {{ t('github.panel.backfill') }}
               </UButton>
               <UButton
                 size="xs"
                 color="error"
                 variant="ghost"
                 icon="i-lucide-unplug"
+                :aria-label="t('github.panel.disconnect')"
                 @click="disconnect"
               />
             </div>
@@ -272,20 +304,21 @@ async function merge(pr: GitHubPullRequest) {
           <!-- tabs -->
           <div class="flex gap-1">
             <UButton
-              v-for="t in tabs"
-              :key="t.id"
+              v-for="tabItem in tabs"
+              :key="tabItem.id"
               size="sm"
-              :color="tab === t.id ? 'primary' : 'neutral'"
-              :variant="tab === t.id ? 'soft' : 'ghost'"
-              :icon="t.icon"
-              @click="tab = t.id"
+              :color="tab === tabItem.id ? 'primary' : 'neutral'"
+              :variant="tab === tabItem.id ? 'soft' : 'ghost'"
+              :icon="tabItem.icon"
+              @click="tab = tabItem.id"
             >
-              {{ t.label }}
+              {{ tabItem.label }}
             </UButton>
           </div>
 
           <div v-if="github.loading" class="flex items-center gap-2 py-6 text-sm text-slate-400">
-            <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" /> Loading…
+            <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" />
+            {{ t('github.panel.loading') }}
           </div>
 
           <!-- repositories -->
@@ -293,7 +326,7 @@ async function merge(pr: GitHubPullRequest) {
             <!-- manage which repos this board links -->
             <div class="flex items-center justify-between">
               <span class="text-[11px] uppercase tracking-wide text-slate-500">
-                Linked to this board
+                {{ t('github.panel.linkedToBoard') }}
               </span>
               <UButton
                 size="xs"
@@ -302,7 +335,7 @@ async function merge(pr: GitHubPullRequest) {
                 icon="i-lucide-list-checks"
                 @click="managing ? (managing = false) : openManage()"
               >
-                {{ managing ? 'Close' : 'Manage repos' }}
+                {{ managing ? t('common.close') : t('github.panel.manageRepos') }}
               </UButton>
             </div>
 
@@ -311,17 +344,17 @@ async function merge(pr: GitHubPullRequest) {
               class="space-y-2 rounded-md border border-slate-700 bg-slate-900/80 p-3"
             >
               <p class="text-[12px] text-slate-400">
-                Pick the repositories this board should track. The GitHub connection is shared
-                across the account; each board links its own repos.
+                {{ t('github.panel.manageHint') }}
               </p>
               <div
                 v-if="github.loadingAvailable"
                 class="flex items-center gap-2 py-3 text-sm text-slate-400"
               >
-                <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" /> Loading repositories…
+                <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" />
+                {{ t('github.panel.loadingRepos') }}
               </div>
               <p v-else-if="!github.availableRepos.length" class="py-2 text-sm text-slate-400">
-                The installation can’t access any repositories yet.
+                {{ t('github.panel.noAvailableRepos') }}
               </p>
               <div v-else class="max-h-64 space-y-1 overflow-y-auto">
                 <button
@@ -338,13 +371,13 @@ async function merge(pr: GitHubPullRequest) {
                   />
                   <span class="truncate text-sm text-slate-200">{{ r.owner }}/{{ r.name }}</span>
                   <UBadge v-if="r.private" color="neutral" variant="subtle" size="sm">
-                    private
+                    {{ t('github.panel.private') }}
                   </UBadge>
                 </button>
               </div>
               <div class="flex items-center justify-end gap-2 pt-1">
                 <UButton color="neutral" variant="ghost" size="sm" @click="managing = false">
-                  Cancel
+                  {{ t('common.cancel') }}
                 </UButton>
                 <UButton
                   color="primary"
@@ -353,14 +386,13 @@ async function merge(pr: GitHubPullRequest) {
                   :loading="github.savingRepos"
                   @click="saveRepos"
                 >
-                  Save selection
+                  {{ t('github.panel.saveSelection') }}
                 </UButton>
               </div>
             </div>
 
             <p v-if="!github.repos.length && !managing" class="py-4 text-sm text-slate-400">
-              No repositories linked yet. Use “Manage repos” to pick which repositories this board
-              tracks.
+              {{ t('github.panel.noLinkedRepos') }}
             </p>
             <div
               v-for="repo in github.repos"
@@ -381,7 +413,7 @@ async function merge(pr: GitHubPullRequest) {
                     {{ repo.owner }}/{{ repo.name }}
                   </span>
                   <UBadge v-if="repo.private" color="neutral" variant="subtle" size="sm">
-                    private
+                    {{ t('github.panel.private') }}
                   </UBadge>
                 </button>
                 <div class="flex items-center gap-2">
@@ -393,7 +425,7 @@ async function merge(pr: GitHubPullRequest) {
                     target="_blank"
                     class="text-[11px] text-indigo-400 hover:underline"
                   >
-                    Open
+                    {{ t('github.panel.open') }}
                   </ULink>
                 </div>
               </div>
@@ -411,7 +443,7 @@ async function merge(pr: GitHubPullRequest) {
                     <UIcon name="i-lucide-git-branch" class="h-3.5 w-3.5 text-slate-500" />
                     {{ b.name }}
                     <UBadge v-if="b.protected" color="warning" variant="subtle" size="sm">
-                      protected
+                      {{ t('github.panel.protected') }}
                     </UBadge>
                   </span>
                   <code class="text-[10px] text-slate-500">{{ b.headSha.slice(0, 7) }}</code>
@@ -419,7 +451,7 @@ async function merge(pr: GitHubPullRequest) {
 
                 <!-- new branch -->
                 <div class="flex items-end gap-2 pt-1">
-                  <UFormField label="New branch" class="flex-1">
+                  <UFormField :label="t('github.panel.newBranch')" class="flex-1">
                     <UInput
                       v-model="branchForm.name"
                       placeholder="feature/x"
@@ -427,10 +459,10 @@ async function merge(pr: GitHubPullRequest) {
                       class="w-full"
                     />
                   </UFormField>
-                  <UFormField label="From SHA" class="flex-1">
+                  <UFormField :label="t('github.panel.fromSha')" class="flex-1">
                     <UInput
                       v-model="branchForm.fromSha"
-                      placeholder="commit sha"
+                      :placeholder="t('github.panel.commitShaPlaceholder')"
                       size="sm"
                       class="w-full"
                     />
@@ -440,6 +472,7 @@ async function merge(pr: GitHubPullRequest) {
                     color="neutral"
                     variant="subtle"
                     icon="i-lucide-git-branch-plus"
+                    :aria-label="t('github.panel.createBranch')"
                     :loading="creatingBranch"
                     :disabled="!branchForm.name.trim() || !branchForm.fromSha.trim()"
                     @click="createBranch(repo)"
@@ -459,7 +492,7 @@ async function merge(pr: GitHubPullRequest) {
                 icon="i-lucide-plus"
                 @click="showPrForm = !showPrForm"
               >
-                Open PR
+                {{ t('github.panel.openPr') }}
               </UButton>
             </div>
 
@@ -467,7 +500,7 @@ async function merge(pr: GitHubPullRequest) {
               v-if="showPrForm"
               class="space-y-2 rounded-md border border-slate-700 bg-slate-900/80 p-3"
             >
-              <UFormField label="Repository">
+              <UFormField :label="t('github.panel.repository')">
                 <UDropdownMenu :items="repoMenu" :content="{ align: 'start' }">
                   <UButton
                     color="neutral"
@@ -476,19 +509,23 @@ async function merge(pr: GitHubPullRequest) {
                     class="w-full justify-between"
                   >
                     <span class="truncate">
-                      {{ prRepo ? `${prRepo.owner}/${prRepo.name}` : 'Choose a repository' }}
+                      {{
+                        prRepo
+                          ? `${prRepo.owner}/${prRepo.name}`
+                          : t('github.panel.chooseRepository')
+                      }}
                     </span>
                   </UButton>
                 </UDropdownMenu>
               </UFormField>
-              <UFormField label="Title">
+              <UFormField :label="t('github.panel.prTitle')">
                 <UInput v-model="prForm.title" class="w-full" />
               </UFormField>
               <div class="grid grid-cols-2 gap-2">
-                <UFormField label="Head branch">
+                <UFormField :label="t('github.panel.headBranch')">
                   <UInput v-model="prForm.head" placeholder="feature/x" class="w-full" />
                 </UFormField>
-                <UFormField label="Base branch">
+                <UFormField :label="t('github.panel.baseBranch')">
                   <UInput v-model="prForm.base" placeholder="main" class="w-full" />
                 </UFormField>
               </div>
@@ -500,13 +537,13 @@ async function merge(pr: GitHubPullRequest) {
                   :disabled="!canOpenPr"
                   @click="openPr"
                 >
-                  Open pull request
+                  {{ t('github.panel.openPullRequest') }}
                 </UButton>
               </div>
             </div>
 
             <p v-if="!github.pulls.length" class="py-4 text-sm text-slate-400">
-              No pull requests synced.
+              {{ t('github.panel.noPulls') }}
             </p>
             <div
               v-for="pr in github.pulls"
@@ -527,7 +564,7 @@ async function merge(pr: GitHubPullRequest) {
                   variant="subtle"
                   size="sm"
                 >
-                  {{ pr.merged ? 'merged' : pr.state }}
+                  {{ prStateLabel(pr) }}
                 </UBadge>
                 <UButton
                   v-if="pr.state === 'open' && !pr.merged"
@@ -535,6 +572,7 @@ async function merge(pr: GitHubPullRequest) {
                   color="neutral"
                   variant="ghost"
                   icon="i-lucide-git-merge"
+                  :aria-label="t('github.panel.mergePr')"
                   :loading="merging === pr.number"
                   @click="merge(pr)"
                 />
@@ -543,7 +581,7 @@ async function merge(pr: GitHubPullRequest) {
                   target="_blank"
                   class="text-[11px] text-indigo-400 hover:underline"
                 >
-                  Open
+                  {{ t('github.panel.open') }}
                 </ULink>
               </div>
             </div>
@@ -552,7 +590,7 @@ async function merge(pr: GitHubPullRequest) {
           <!-- issues -->
           <section v-else class="space-y-2">
             <p v-if="!github.issues.length" class="py-4 text-sm text-slate-400">
-              No issues synced.
+              {{ t('github.panel.noIssues') }}
             </p>
             <div
               v-for="issue in github.issues"
@@ -574,14 +612,14 @@ async function merge(pr: GitHubPullRequest) {
                   variant="subtle"
                   size="sm"
                 >
-                  {{ issue.state }}
+                  {{ issueStateLabel(issue.state) }}
                 </UBadge>
                 <ULink
                   :to="github.issueUrl(issue) ?? '#'"
                   target="_blank"
                   class="text-[11px] text-indigo-400 hover:underline"
                 >
-                  Open
+                  {{ t('github.panel.open') }}
                 </ULink>
               </div>
             </div>

@@ -15,6 +15,7 @@ import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
 
+const { t } = useI18n()
 const ui = useUiStore()
 const github = useGitHubStore()
 const board = useBoardStore()
@@ -39,18 +40,6 @@ async function loadRepos() {
   }
 }
 
-// On open: ensure we know the connection + which repos the App can access, and
-// the workspace's already-tracked repos (to flag ones already on the board).
-watch(
-  open,
-  (isOpen) => {
-    if (!isOpen) return
-    resetSelection()
-    void loadRepos()
-  },
-  { immediate: true },
-)
-
 // If the user connects from inside the modal (the not-connected prompt), pull the
 // repo list as soon as the connection is bound.
 watch(
@@ -72,9 +61,13 @@ const onBoardIds = computed(
 const repoItems = computed(() =>
   github.availableRepos.map((r) => {
     const onBoard = onBoardIds.value.has(r.githubId) && !r.isMonorepo
-    const mono = r.isMonorepo ? ' · monorepo' : ''
+    const suffix = [
+      r.private ? t('github.addService.repoLabel.private') : '',
+      r.isMonorepo ? t('github.addService.repoLabel.monorepo') : '',
+      onBoard ? t('github.addService.repoLabel.onBoard') : '',
+    ].join('')
     return {
-      label: `${r.owner}/${r.name}${r.private ? ' (private)' : ''}${mono}${onBoard ? ' · already on board' : ''}`,
+      label: `${r.owner}/${r.name}${suffix}`,
       // Searched on (lowercased once) — the owner/name, so the filter matches either.
       search: `${r.owner}/${r.name}`.toLowerCase(),
       value: r.githubId,
@@ -152,6 +145,20 @@ const configuredBlock = computed(() =>
   configuredBlockId.value ? board.getBlock(configuredBlockId.value) : undefined,
 )
 
+// On open: ensure we know the connection + which repos the App can access, and
+// the workspace's already-tracked repos (to flag ones already on the board).
+// Declared after every ref resetSelection() touches so the `immediate` run
+// doesn't access them inside their temporal dead zone.
+watch(
+  open,
+  (isOpen) => {
+    if (!isOpen) return
+    resetSelection()
+    void loadRepos()
+  },
+  { immediate: true },
+)
+
 // A monorepo service needs a chosen directory; a whole-repo service can be added once.
 const canAdd = computed(
   () =>
@@ -173,8 +180,8 @@ async function add() {
     configuredBlockId.value = block.id
     configuredDirectory.value = isMonorepo.value ? selectedDirectory.value : undefined
     toast.add({
-      title: 'Service added',
-      description: `${block.title} is on the board — configure it below.`,
+      title: t('github.addService.toast.addedTitle'),
+      description: t('github.addService.toast.addedDescription', { title: block.title }),
       icon: 'i-lucide-check',
       color: 'success',
     })
@@ -182,7 +189,7 @@ async function add() {
     selectedDirectory.value = undefined
   } catch (e) {
     toast.add({
-      title: 'Could not add service',
+      title: t('github.addService.toast.addFailedTitle'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -198,12 +205,11 @@ function done() {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Add a service from a repository" :ui="{ content: 'max-w-xl' }">
+  <UModal v-model:open="open" :title="t('github.addService.title')" :ui="{ content: 'max-w-xl' }">
     <template #body>
       <div class="space-y-6">
         <p class="text-sm text-slate-400">
-          Pick an existing GitHub repository to add as a board service. No bootstrapping — the repo
-          is linked to a new service frame as-is, and tasks you run on it target that repo.
+          {{ t('github.addService.intro') }}
         </p>
 
         <!-- not connected: linking a repo needs the App bound to this workspace -->
@@ -214,8 +220,7 @@ function done() {
           <div class="flex items-start gap-2">
             <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
             <p class="text-sm text-amber-200/90">
-              Connect this workspace to GitHub first. Link an installation the App is already on, or
-              install it.
+              {{ t('github.addService.connectFirst') }}
             </p>
           </div>
           <GitHubConnect />
@@ -223,18 +228,18 @@ function done() {
 
         <template v-else>
           <UFormField
-            label="Repository"
-            description="Repositories the GitHub App can access. Don't see yours? Grant the App access below, then refresh."
+            :label="t('github.addService.repository')"
+            :description="t('github.addService.repositoryHint')"
             required
           >
             <div v-if="!hasRepos" class="text-sm text-slate-400">
-              No repositories available yet — grant the App access to one below, then refresh.
+              {{ t('github.addService.noReposAvailable') }}
             </div>
             <div v-else class="space-y-1.5">
               <UInput
                 v-model="repoSearch"
                 icon="i-lucide-search"
-                placeholder="Filter by owner/name…"
+                :placeholder="t('github.addService.filterPlaceholder')"
                 class="w-full"
                 :ui="{ trailing: 'pe-1' }"
               >
@@ -244,7 +249,7 @@ function done() {
                     variant="link"
                     size="sm"
                     icon="i-lucide-x"
-                    aria-label="Clear filter"
+                    :aria-label="t('github.addService.clearFilter')"
                     @click="repoSearch = ''"
                   />
                 </template>
@@ -252,11 +257,16 @@ function done() {
               <USelect
                 v-model="selectedRepoId"
                 :items="filteredRepoItems"
-                placeholder="Choose a repository"
+                :placeholder="t('github.addService.chooseRepository')"
                 class="w-full"
               />
               <p class="text-xs text-slate-500">
-                Showing {{ filteredRepoItems.length }} of {{ repoItems.length }} repositories.
+                {{
+                  t('github.addService.showingCount', {
+                    shown: filteredRepoItems.length,
+                    total: repoItems.length,
+                  })
+                }}
               </p>
             </div>
           </UFormField>
@@ -265,8 +275,8 @@ function done() {
           <div v-if="selectedRepoId !== undefined" class="space-y-3">
             <USwitch
               :model-value="isMonorepo"
-              label="This is a monorepo (hosts more than one service)"
-              description="Add several services from one repo, each pinned to a subdirectory."
+              :label="t('github.addService.monorepoLabel')"
+              :description="t('github.addService.monorepoDescription')"
               @update:model-value="toggleMonorepo"
             />
 
@@ -275,8 +285,7 @@ function done() {
               class="rounded-md border border-slate-700/60 bg-slate-900/40 p-3"
             >
               <p class="mb-2 text-xs text-slate-400">
-                Browse the repository and pick the directory of the service you want to add. Agents
-                working on this service will run within that subdirectory.
+                {{ t('github.addService.monorepoBrowseHint') }}
               </p>
               <RepoTreeBrowser
                 v-model="selectedDirectory"
@@ -285,10 +294,10 @@ function done() {
               />
               <p class="mt-2 truncate text-xs text-slate-400">
                 <template v-if="selectedDirectory">
-                  Service directory:
+                  {{ t('github.addService.serviceDirectory') }}
                   <code class="text-slate-200">{{ selectedDirectory }}</code>
                 </template>
-                <template v-else>No directory selected yet.</template>
+                <template v-else>{{ t('github.addService.noDirectorySelected') }}</template>
               </p>
             </div>
           </div>
@@ -302,7 +311,7 @@ function done() {
               class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-400"
             >
               <UIcon name="i-lucide-check" class="h-3.5 w-3.5" />
-              {{ configuredBlock.title }} added — configure it
+              {{ t('github.addService.addedConfigure', { title: configuredBlock.title }) }}
             </div>
             <ServiceTestConfig
               :block="configuredBlock"
@@ -319,10 +328,10 @@ function done() {
               size="sm"
               icon="i-lucide-shield-check"
               trailing-icon="i-lucide-external-link"
-              title="Open the App's installation settings to grant it access to a repository"
+              :title="t('github.addService.grantAccessTitle')"
               @click="openManageInstall"
             >
-              Grant the App access to a repo
+              {{ t('github.addService.grantAccess') }}
             </UButton>
             <UButton
               color="neutral"
@@ -332,13 +341,13 @@ function done() {
               :loading="github.loadingAvailable"
               @click="github.loadAvailableRepos()"
             >
-              Refresh list
+              {{ t('github.addService.refreshList') }}
             </UButton>
           </div>
 
           <div class="flex justify-end gap-2">
             <UButton v-if="configuredBlock" color="neutral" variant="soft" size="sm" @click="done">
-              Done
+              {{ t('github.addService.done') }}
             </UButton>
             <UButton
               v-if="!configuredBlock || isMonorepo"
@@ -348,7 +357,11 @@ function done() {
               :disabled="!canAdd"
               @click="add"
             >
-              {{ configuredBlock && isMonorepo ? 'Add another service' : 'Add service' }}
+              {{
+                configuredBlock && isMonorepo
+                  ? t('github.addService.addAnother')
+                  : t('github.addService.add')
+              }}
             </UButton>
           </div>
         </template>
