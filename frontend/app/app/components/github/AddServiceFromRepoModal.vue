@@ -10,6 +10,7 @@
 // pinned to a subdirectory. When the selected repo is a monorepo, the user
 // browses its tree and picks the service's directory before adding (and may add
 // more than one, a subset of the repo's services).
+import { refDebounced } from '@vueuse/core'
 import GitHubConnect from '~/components/github/GitHubConnect.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
@@ -76,15 +77,52 @@ const repoItems = computed(() =>
   }),
 )
 
-// The PAT (or a wide App install) can expose hundreds of repos, too many for a plain
-// dropdown — filter by owner/name. The currently selected repo is always kept in the
-// list so a selection doesn't vanish when the query no longer matches it.
+// The PAT (or a wide App install) can expose hundreds of repos, far too many for a plain
+// dropdown — so the picker is a typeahead combobox. The user types and matching repos
+// surface: matching is a debounced, case-insensitive substring over `owner/name` (so any
+// part of either matches). For a LARGE list the search only kicks in once at least
+// MIN_SEARCH_LEN characters are typed, to keep early keystrokes from listing hundreds of
+// rows; but when the whole list is small enough to browse (<= BROWSE_ALL_MAX) the gate is
+// dropped and every repo is offered up-front (typing then narrows), so a handful of repos
+// stays pickable without having to type — matching the old always-open dropdown.
+const MIN_SEARCH_LEN = 3
+const BROWSE_ALL_MAX = 25
 const repoSearch = ref('')
-const filteredRepoItems = computed(() => {
-  const q = repoSearch.value.trim().toLowerCase()
-  if (!q) return repoItems.value
-  return repoItems.value.filter((r) => r.search.includes(q) || r.value === selectedRepoId.value)
+const repoSearchDebounced = refDebounced(repoSearch, 250)
+// Trimmed (original case) for display; lowercased for matching.
+const repoQueryRaw = computed(() => repoSearchDebounced.value.trim())
+const repoQuery = computed(() => repoQueryRaw.value.toLowerCase())
+
+// Small lists are browseable without typing; large lists require the min-length gate.
+const browseAll = computed(() => repoItems.value.length <= BROWSE_ALL_MAX)
+// True only on a large list whose query is still too short to search.
+const belowMinChars = computed(() => !browseAll.value && repoQuery.value.length < MIN_SEARCH_LEN)
+
+// Matches for the current query. On a small list an empty query lists everything; on a
+// large list nothing surfaces until the query passes the min length.
+const queryMatches = computed(() => {
+  if (belowMinChars.value) return []
+  if (!repoQuery.value) return repoItems.value
+  return repoItems.value.filter((r) => r.search.includes(repoQuery.value))
 })
+
+// Items fed to the combobox: the query matches plus the current selection kept present,
+// so the menu can still render the selected repo's label once the (reset) search term no
+// longer matches it.
+const repoMenuItems = computed(() => {
+  const matches = queryMatches.value
+  if (selectedRepoId.value === undefined) return matches
+  if (matches.some((r) => r.value === selectedRepoId.value)) return matches
+  const selected = repoItems.value.find((r) => r.value === selectedRepoId.value)
+  return selected ? [selected, ...matches] : matches
+})
+
+// The count summary under the field is shown only when it's meaningful: there are matches
+// to count AND the user is actually searching (or browsing a small list). After a
+// selection resets the search term this is false, so the field doesn't claim "Showing 0"
+// or nag "type 3 characters" right under the repo the user just picked. The zero-match and
+// min-length messages are owned by the combobox's own empty state instead.
+const showResultCount = computed(() => !belowMinChars.value && queryMatches.value.length > 0)
 
 const hasRepos = computed(() => github.availableRepos.length > 0)
 const selectedRepo = computed(() =>
@@ -119,6 +157,13 @@ function resetSelection() {
   isMonorepo.value = false
   configuredBlockId.value = undefined
   repoSearch.value = ''
+}
+
+// Clear the current repo selection (the combobox's trailing ✕) so the user can pick a
+// different one — drops the selection-dependent state and resets the search term. The
+// combobox has no built-in deselect, so the field would otherwise stay pinned to a repo.
+function clearSelection() {
+  resetSelection()
 }
 
 // The App's installation settings page — where the user grants it access to a
@@ -236,34 +281,42 @@ function done() {
               {{ t('github.addService.noReposAvailable') }}
             </div>
             <div v-else class="space-y-1.5">
-              <UInput
-                v-model="repoSearch"
+              <UInputMenu
+                v-model="selectedRepoId"
+                v-model:search-term="repoSearch"
+                :items="repoMenuItems"
+                :ignore-filter="true"
+                value-key="value"
+                :loading="github.loadingAvailable"
                 icon="i-lucide-search"
-                :placeholder="t('github.addService.filterPlaceholder')"
+                :placeholder="t('github.addService.searchPlaceholder')"
                 class="w-full"
-                :ui="{ trailing: 'pe-1' }"
               >
-                <template v-if="repoSearch" #trailing>
+                <template v-if="selectedRepoId !== undefined" #trailing>
                   <UButton
                     color="neutral"
                     variant="link"
                     size="sm"
                     icon="i-lucide-x"
-                    :aria-label="t('github.addService.clearFilter')"
-                    @click="repoSearch = ''"
+                    :aria-label="t('github.addService.clearSelection')"
+                    @click.stop="clearSelection"
                   />
                 </template>
-              </UInput>
-              <USelect
-                v-model="selectedRepoId"
-                :items="filteredRepoItems"
-                :placeholder="t('github.addService.chooseRepository')"
-                class="w-full"
-              />
-              <p class="text-xs text-slate-500">
+                <template #empty>
+                  <span v-if="belowMinChars">
+                    {{
+                      t('github.addService.searchMinChars', { min: MIN_SEARCH_LEN }, MIN_SEARCH_LEN)
+                    }}
+                  </span>
+                  <span v-else>{{
+                    t('github.addService.noMatches', { query: repoQueryRaw })
+                  }}</span>
+                </template>
+              </UInputMenu>
+              <p v-if="showResultCount" class="text-xs text-slate-500">
                 {{
                   t('github.addService.showingCount', {
-                    shown: filteredRepoItems.length,
+                    shown: queryMatches.length,
                     total: repoItems.length,
                   })
                 }}

@@ -3,6 +3,7 @@ import {
   LlmFragmentSelector,
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
+  isProxyableProvider,
 } from '@cat-factory/agents'
 import {
   ClaudeDesignProvider,
@@ -81,6 +82,7 @@ import {
   type ServerContainer,
   CompositeAgentExecutor,
   ContainerAgentExecutor,
+  ContainerEnvConfigRepairer,
   ContainerRepoBootstrapper,
   ContainerSessionService,
   FanOutEventPublisher,
@@ -766,6 +768,63 @@ function selectNodeRepoBootstrapper(deps: {
     mintInstallationToken: deps.mintInstallationToken,
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
     model: resolveAgentConfig(deps.config.agents.routing, 'architect').ref,
+    proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
+    githubApiBase: deps.config.github.apiBase,
+  })
+}
+
+/**
+ * Build the live ENVIRONMENT-PROVIDER CONFIG REPAIR agent (PR #416 increment 2) when its
+ * prerequisites are met — the same container prerequisites as the bootstrapper PLUS an
+ * injected provider that supports agent repair (`describeRepairAgent`). The stock manifest
+ * provider has no repair support, so this stays undefined there; it wires only when a
+ * native adapter is injected via the `environmentProvider` seam (so local inherits it too).
+ * NOT the repo bootstrapper: an ordinary clone→edit→push coding job, no history reset.
+ */
+function selectNodeEnvConfigRepairer(deps: {
+  env: NodeJS.ProcessEnv
+  config: AppConfig
+  resolveTransport: ResolveRunnerTransport | null
+  installationRepository: GitHubInstallationRepository
+  mintInstallationToken: ((installationId: number) => Promise<string>) | undefined
+  idGenerator: CoreDependencies['idGenerator']
+  environmentProvider: CoreDependencies['environmentProvider']
+}): ContainerEnvConfigRepairer | undefined {
+  const publicUrl = deps.env.PUBLIC_URL?.trim()
+  const sessionSecret = deps.config.auth.sessionSecret
+  if (
+    !deps.resolveTransport ||
+    !publicUrl ||
+    !sessionSecret ||
+    !deps.mintInstallationToken ||
+    !deps.environmentProvider ||
+    typeof deps.environmentProvider.describeRepairAgent !== 'function'
+  ) {
+    return undefined
+  }
+  // A config fix is coding work, so it follows the `coder` kind's routing. The repair runs on
+  // the Pi harness over the LLM proxy, so the routed model MUST be proxyable. Surface a
+  // misconfiguration HERE (at wiring) rather than letting every repair dispatch throw deep in a
+  // request: if `coder` is routed to a non-proxyable model (e.g. an individual subscription
+  // vendor), leave the fallback unwired — bootstrap then returns the validation issues, exactly
+  // as it does when no provider supports repair.
+  const model = resolveAgentConfig(deps.config.agents.routing, 'coder').ref
+  if (!isProxyableProvider(model.provider)) {
+    logger.warn(
+      { provider: model.provider },
+      'env-config repair: the coder routing model is not proxyable by the LLM proxy; ' +
+        'the agent config-repair fallback is disabled.',
+    )
+    return undefined
+  }
+  return new ContainerEnvConfigRepairer({
+    resolveTransport: deps.resolveTransport,
+    installationRepository: deps.installationRepository,
+    mintInstallationToken: deps.mintInstallationToken,
+    sessionService: new ContainerSessionService({ secret: sessionSecret }),
+    idGenerator: deps.idGenerator,
+    environmentProvider: deps.environmentProvider,
+    model,
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
     githubApiBase: deps.config.github.apiBase,
   })
@@ -1786,6 +1845,24 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // context, so a per-user PAT (when set) is preferred over the App/env token.
     runInitiatorScope: runWithInitiator,
     ...options.overrides,
+  }
+
+  // Wire the live env-config repair agent over the FINAL environment provider (after the
+  // `...options.overrides` above), so an injected native adapter — not the default manifest
+  // provider — is what the repair dispatcher uses. Unwired on a stock deployment (the
+  // generic provider has no `describeRepairAgent`), exactly like the service guard. Local
+  // inherits this through `buildNodeContainer` with no extra wiring.
+  const envConfigRepairer = selectNodeEnvConfigRepairer({
+    env,
+    config,
+    resolveTransport,
+    installationRepository: githubInstallationRepository,
+    mintInstallationToken: bootstrapMintInstallationToken,
+    idGenerator,
+    environmentProvider: dependencies.environmentProvider,
+  })
+  if (envConfigRepairer) {
+    dependencies.dispatchEnvConfigRepair = (input) => envConfigRepairer.repair(input)
   }
 
   return {
