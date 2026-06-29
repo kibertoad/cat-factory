@@ -1,5 +1,15 @@
 # @cat-factory/consensus
 
+## 0.7.77
+
+### Patch Changes
+
+- Updated dependencies [d5a0637]
+- Updated dependencies [915861c]
+  - @cat-factory/kernel@0.55.0
+  - @cat-factory/contracts@0.54.0
+  - @cat-factory/agents@0.22.1
+
 ## 0.7.76
 
 ### Patch Changes
