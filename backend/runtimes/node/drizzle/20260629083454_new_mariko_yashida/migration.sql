@@ -1,0 +1,1 @@
+ALTER TABLE "runner_pool_connections" ADD COLUMN "kind" text DEFAULT 'manifest' NOT NULL;

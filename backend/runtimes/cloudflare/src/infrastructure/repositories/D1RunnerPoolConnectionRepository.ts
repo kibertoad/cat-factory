@@ -6,6 +6,7 @@ import type { D1Database } from '@cloudflare/workers-types'
 
 interface RunnerPoolConnectionRow {
   workspace_id: string
+  kind: string
   provider_id: string
   label: string
   base_url: string
@@ -18,10 +19,14 @@ interface RunnerPoolConnectionRow {
 function rowToRecord(row: RunnerPoolConnectionRow): RunnerPoolConnectionRecord {
   return {
     workspaceId: row.workspace_id,
+    // Rows predating the discriminated backend are the manifest pool (mirrors the
+    // migration's column default).
+    kind: row.kind ?? 'manifest',
     providerId: row.provider_id,
     label: row.label,
     baseUrl: row.base_url,
-    manifestJson: row.manifest_json,
+    // The historical `manifest_json` column now holds the discriminated config blob.
+    configJson: row.manifest_json,
     secretsCipher: row.secrets_cipher,
     createdAt: row.created_at,
     deletedAt: row.deleted_at,
@@ -57,15 +62,16 @@ export class D1RunnerPoolConnectionRepository implements RunnerPoolConnectionRep
     await this.db
       .prepare(
         `INSERT INTO runner_pool_connections
-          (workspace_id, provider_id, label, base_url, manifest_json, secrets_cipher, created_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+          (workspace_id, kind, provider_id, label, base_url, manifest_json, secrets_cipher, created_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
       )
       .bind(
         record.workspaceId,
+        record.kind,
         record.providerId,
         record.label,
         record.baseUrl,
-        record.manifestJson,
+        record.configJson,
         record.secretsCipher,
         record.createdAt,
       )

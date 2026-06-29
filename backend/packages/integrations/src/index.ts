@@ -170,18 +170,33 @@ export {
 export {
   RunnerPoolConnectionService,
   type RunnerPoolConnectionServiceDependencies,
+  type ResolvedRunnerBackend,
   type ResolvedRunnerPool,
 } from './modules/runners/RunnerPoolConnectionService.js'
 export * as runnersLogic from './modules/runners/runners.logic.js'
-// The runtime-neutral self-hosted runner-pool transport: a generic manifest
-// interpreter (`HttpRunnerPoolProvider`) and the per-job `RunnerTransport` adapter
-// (`RunnerPoolTransport`) both runtime facades resolve for a workspace's pool.
+// The universal "agent runner backend" provider-registry seam: maps a backend kind
+// (`manifest` | `kubernetes` | future `nomad`/`eks`) → a RunnerTransport. Built-ins
+// self-register on import; a third-party kind registers via `registerRunnerBackend`.
+export {
+  registerRunnerBackend,
+  runnerBackend,
+  registeredRunnerBackendKinds,
+  manifestRunnerBackend,
+  kubernetesRunnerBackend,
+  type RunnerBackendProvider,
+  type RunnerBackendContext,
+} from './modules/runners/runner-backends.js'
+// The runtime-neutral runner transports: a generic manifest interpreter
+// (`HttpRunnerPoolProvider`) + the per-job `RunnerPoolTransport`, and the native
+// Kubernetes per-run-pod transport (`KubernetesRunnerTransport`, apiserver pod-proxy).
 export {
   HttpRunnerPoolProvider,
   RunnerPoolApiError,
   type HttpRunnerPoolProviderOptions,
 } from './modules/runners/HttpRunnerPoolProvider.js'
 export { RunnerPoolTransport } from './modules/runners/RunnerPoolTransport.js'
+export { KubernetesRunnerTransport } from './modules/kubernetes/KubernetesRunnerTransport.js'
+export * as kubernetesLogic from './modules/kubernetes/kubernetes.logic.js'
 // Unified provisioning event log: the best-effort recorder every spin-up/down site
 // writes through, and the read service behind the "View logs" drawers + run details.
 export {

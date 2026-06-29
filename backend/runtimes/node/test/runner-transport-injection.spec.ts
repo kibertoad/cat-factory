@@ -36,10 +36,12 @@ const connectionRepo = {
   getByWorkspace: () =>
     Promise.resolve({
       workspaceId: 'ws-1',
+      kind: 'manifest',
       providerId: manifest.providerId,
       label: manifest.label,
       baseUrl: manifest.baseUrl,
-      manifestJson: JSON.stringify(manifest),
+      // The discriminated runner-backend config blob (manifest member).
+      configJson: JSON.stringify({ kind: 'manifest', manifest }),
       secretsCipher: null,
       createdAt: 0,
       deletedAt: null,

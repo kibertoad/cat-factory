@@ -36,10 +36,13 @@ export class DrizzleRunnerPoolConnectionRepository implements RunnerPoolConnecti
     if (!row) return null
     return {
       workspaceId: row.workspace_id,
+      // Rows predating the discriminated backend are the manifest pool.
+      kind: row.kind ?? 'manifest',
       providerId: row.provider_id,
       label: row.label,
       baseUrl: row.base_url,
-      manifestJson: row.manifest_json,
+      // The historical `manifest_json` column now holds the discriminated config blob.
+      configJson: row.manifest_json,
       secretsCipher: row.secrets_cipher,
       createdAt: row.created_at,
       deletedAt: row.deleted_at,
@@ -55,10 +58,11 @@ export class DrizzleRunnerPoolConnectionRepository implements RunnerPoolConnecti
       .where(eq(runnerPoolConnections.workspace_id, record.workspaceId))
     await this.db.insert(runnerPoolConnections).values({
       workspace_id: record.workspaceId,
+      kind: record.kind,
       provider_id: record.providerId,
       label: record.label,
       base_url: record.baseUrl,
-      manifest_json: record.manifestJson,
+      manifest_json: record.configJson,
       secrets_cipher: record.secretsCipher,
       created_at: record.createdAt,
       deleted_at: null,

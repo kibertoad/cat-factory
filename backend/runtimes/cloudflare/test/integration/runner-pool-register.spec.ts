@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { makeApp } from '../helpers'
 import { bearerRunnerManifest, RUNNER_API_TOKEN } from './runner-pool.fixtures'
 
-describe('runner pool registration', () => {
+describe('runner backend registration', () => {
   it('stores the secret bundle encrypted and exposes only safe metadata', async () => {
     const app = makeApp()
     const { workspace } = await app.createWorkspace({ seed: false })
@@ -13,9 +13,13 @@ describe('runner pool registration', () => {
     const registered = await app.call<RunnerPoolConnection>(
       'POST',
       `/workspaces/${ws}/runner-pool/connection`,
-      { manifest: bearerRunnerManifest(), secrets: { API_TOKEN: RUNNER_API_TOKEN } },
+      {
+        config: { kind: 'manifest', manifest: bearerRunnerManifest() },
+        secrets: { API_TOKEN: RUNNER_API_TOKEN },
+      },
     )
     expect(registered.status).toBe(201)
+    expect(registered.body.kind).toBe('manifest')
     expect(registered.body.providerId).toBe('acme-pool')
     expect(registered.body.secretKeys).toEqual(['API_TOKEN'])
 
@@ -29,20 +33,78 @@ describe('runner pool registration', () => {
 
     // The secret is encrypted at rest: the raw D1 cell holds no plaintext token.
     const row = await env.DB.prepare(
-      'SELECT secrets_cipher FROM runner_pool_connections WHERE workspace_id = ?',
+      'SELECT kind, secrets_cipher FROM runner_pool_connections WHERE workspace_id = ?',
     )
       .bind(ws)
-      .first<{ secrets_cipher: string }>()
+      .first<{ kind: string; secrets_cipher: string }>()
+    expect(row?.kind).toBe('manifest')
     expect(row?.secrets_cipher).toBeTruthy()
     expect(row!.secrets_cipher).not.toContain(RUNNER_API_TOKEN)
     expect(row!.secrets_cipher.startsWith('v1.')).toBe(true)
+  })
+
+  it('registers a Kubernetes backend (kind + apiToken secret round-trip)', async () => {
+    const app = makeApp()
+    const { workspace } = await app.createWorkspace({ seed: false })
+    const ws = workspace.id
+
+    const registered = await app.call<RunnerPoolConnection>(
+      'POST',
+      `/workspaces/${ws}/runner-pool/connection`,
+      {
+        config: {
+          kind: 'kubernetes',
+          kubernetes: {
+            label: 'Prod cluster',
+            apiServerUrl: 'https://k8s.example:6443',
+            namespace: 'cat-factory',
+            image: 'ghcr.io/acme/executor:1.2.3',
+          },
+        },
+        secrets: { apiToken: 'sa-token-xyz' },
+      },
+    )
+    expect(registered.status).toBe(201)
+    expect(registered.body.kind).toBe('kubernetes')
+    expect(registered.body.providerId).toBe('kubernetes')
+    expect(registered.body.baseUrl).toBe('https://k8s.example:6443')
+    expect(registered.body.secretKeys).toEqual(['apiToken'])
+
+    const row = await env.DB.prepare(
+      'SELECT kind, secrets_cipher FROM runner_pool_connections WHERE workspace_id = ?',
+    )
+      .bind(ws)
+      .first<{ kind: string; secrets_cipher: string }>()
+    expect(row?.kind).toBe('kubernetes')
+    expect(row!.secrets_cipher).not.toContain('sa-token-xyz')
+  })
+
+  it('rejects a Kubernetes backend missing the apiToken secret', async () => {
+    const app = makeApp()
+    const { workspace } = await app.createWorkspace({ seed: false })
+    const res = await app.call('POST', `/workspaces/${workspace.id}/runner-pool/connection`, {
+      config: {
+        kind: 'kubernetes',
+        kubernetes: {
+          label: 'Prod cluster',
+          apiServerUrl: 'https://k8s.example:6443',
+          namespace: 'cat-factory',
+          image: 'ghcr.io/acme/executor:1.2.3',
+        },
+      },
+      secrets: {},
+    })
+    expect(res.status).toBe(422)
   })
 
   it('rejects an internal base URL (SSRF guard)', async () => {
     const app = makeApp()
     const { workspace } = await app.createWorkspace({ seed: false })
     const res = await app.call('POST', `/workspaces/${workspace.id}/runner-pool/connection`, {
-      manifest: bearerRunnerManifest({ baseUrl: 'https://localhost/api' }),
+      config: {
+        kind: 'manifest',
+        manifest: bearerRunnerManifest({ baseUrl: 'https://localhost/api' }),
+      },
       secrets: { API_TOKEN: RUNNER_API_TOKEN },
     })
     expect(res.status).toBe(422)
@@ -52,18 +114,18 @@ describe('runner pool registration', () => {
     const app = makeApp()
     const { workspace } = await app.createWorkspace({ seed: false })
     const res = await app.call('POST', `/workspaces/${workspace.id}/runner-pool/connection`, {
-      manifest: bearerRunnerManifest(),
+      config: { kind: 'manifest', manifest: bearerRunnerManifest() },
       secrets: {},
     })
     expect(res.status).toBe(422)
   })
 
-  it('unregisters the pool (tombstones the binding)', async () => {
+  it('unregisters the backend (tombstones the binding)', async () => {
     const app = makeApp()
     const { workspace } = await app.createWorkspace({ seed: false })
     const ws = workspace.id
     await app.call('POST', `/workspaces/${ws}/runner-pool/connection`, {
-      manifest: bearerRunnerManifest(),
+      config: { kind: 'manifest', manifest: bearerRunnerManifest() },
       secrets: { API_TOKEN: RUNNER_API_TOKEN },
     })
     const del = await app.call('DELETE', `/workspaces/${ws}/runner-pool/connection`)

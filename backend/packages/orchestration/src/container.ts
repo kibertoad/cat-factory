@@ -1190,9 +1190,6 @@ function createRunnersModule(deps: CoreDependencies): RunnersModule | undefined 
     secretCipher: runnerSecretCipher,
     clock: deps.clock,
     ...(deps.runnerPoolProvider ? { runnerPoolProvider: deps.runnerPoolProvider } : {}),
-    providerKind: deps.runnerProviderKind ?? 'manifest',
-    ...(deps.runnerProviderId ? { providerId: deps.runnerProviderId } : {}),
-    ...(deps.runnerProviderLabel ? { providerLabel: deps.runnerProviderLabel } : {}),
     ...(deps.runnerUrlSafetyPolicy ? { urlPolicy: deps.runnerUrlSafetyPolicy } : {}),
   })
   return { connectionService }

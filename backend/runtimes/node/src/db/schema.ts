@@ -929,9 +929,12 @@ export const runnerPoolConnections = pgTable(
   'runner_pool_connections',
   {
     workspace_id: text('workspace_id').notNull(),
+    // Which agent-runner backend this row configures (`manifest` | `kubernetes` | …).
+    kind: text('kind').notNull().default('manifest'),
     provider_id: text('provider_id').notNull(),
     label: text('label').notNull(),
     base_url: text('base_url').notNull(),
+    // Historical name; now holds the whole discriminated `RunnerBackendConfig` JSON.
     manifest_json: text('manifest_json').notNull(),
     secrets_cipher: text('secrets_cipher').notNull(),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),

@@ -1260,9 +1260,29 @@
           "blurb": "Where the Tester agent runs against a live preview environment. Configure the per-workspace settings and credentials your provider needs."
         },
         "runner-pool": {
-          "title": "Self-hosted runner pool",
-          "blurb": "Where the coding agents run when not using Cloudflare Containers. Configure the pool scheduler endpoint and credentials."
+          "title": "Agent runner backend",
+          "blurb": "Where the coding agents run when not using Cloudflare Containers. Choose a self-hosted runner pool (your own scheduler) or a Kubernetes cluster, then configure its endpoint and credentials."
         }
+      },
+      "backend": {
+        "selectorLabel": "Runner backend",
+        "manifest": "Self-hosted pool (manifest)",
+        "kubernetes": "Kubernetes"
+      },
+      "kubernetes": {
+        "label": "Name",
+        "labelPlaceholder": "Production cluster",
+        "apiServerUrl": "API server URL",
+        "apiServerUrlHelp": "The kube-apiserver root, e.g. https://10.0.0.1:6443. The orchestrator reaches each run's pod through the apiserver, so only this endpoint must be reachable.",
+        "namespace": "Namespace",
+        "image": "Executor image",
+        "imageHelp": "The executor-harness image each per-run pod runs.",
+        "imageUi": "UI-tester image",
+        "apiToken": "ServiceAccount token",
+        "apiTokenHelp": "A bearer token with RBAC to create, get and delete pods and pods/proxy in the namespace. Stored encrypted; never shown again.",
+        "caCertPem": "Cluster CA certificate (PEM)",
+        "caCertPemHelp": "Paste the cluster CA bundle so the apiserver's TLS certificate verifies. Omit only for a publicly-trusted CA.",
+        "harnessPort": "Harness port"
       },
       "manifestEditor": {
         "title": "Provider manifest",

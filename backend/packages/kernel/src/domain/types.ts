@@ -137,6 +137,11 @@ export type {
   RunnerPoolManifest,
   RunnerPoolConnection,
   TestRunnerPoolConnectionInput,
+  // The universal runner-backend discriminated config + the Kubernetes backend.
+  RunnerBackendConfig,
+  RunnerBackendKind,
+  KubernetesRunnerConfig,
+  KubernetesResourceQuantities,
   // Repo-bootstrap shapes.
   ReferenceArchitecture,
   CreateReferenceArchitectureInput,

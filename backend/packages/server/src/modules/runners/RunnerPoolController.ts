@@ -43,9 +43,9 @@ export function runnerPoolController(): Hono<AppEnv> {
   buildHonoRoute(app, registerRunnerPoolContract, async (c) => {
     const runners = requireRunners(c)
     if (!runners) return unavailable(c)
-    const { manifest, secrets } = c.req.valid('json')
+    const { config, secrets } = c.req.valid('json')
     const connection = await runners.connectionService.register(param(c, 'workspaceId'), {
-      manifest,
+      config,
       secrets,
     })
     return c.json(connection, 201)

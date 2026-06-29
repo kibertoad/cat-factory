@@ -100,6 +100,74 @@ export const runnerPoolResponseMappingSchema = v.object({
 })
 export type RunnerPoolResponseMapping = v.InferOutput<typeof runnerPoolResponseMappingSchema>
 
+// ---------------------------------------------------------------------------
+// Kubernetes runner backend.
+//
+// A native runner backend that runs each run's executor-harness in a per-run Pod
+// on the org's Kubernetes cluster (target k8s 1.35+) and reaches the harness HTTP
+// server through the kube-apiserver POD-PROXY subresource — so the orchestrator
+// needs only HTTPS to the apiserver (no in-cluster networking, no per-run Service).
+// Unlike the manifest pool, this is NOT a declarative HTTP template: kube-apiserver
+// does not proxy job dispatch/poll to the harness, so a native transport drives it.
+// The ServiceAccount bearer token lives in the encrypted secret bundle (key
+// `apiToken`); everything non-secret is config here.
+// ---------------------------------------------------------------------------
+
+/** CPU/memory pair for a pod resource request or limit (k8s quantity strings). */
+export const kubernetesResourceQuantitiesSchema = v.object({
+  cpu: v.optional(v.string()),
+  memory: v.optional(v.string()),
+})
+export type KubernetesResourceQuantities = v.InferOutput<typeof kubernetesResourceQuantitiesSchema>
+
+/** The secret-bundle key the Kubernetes backend reads the ServiceAccount token from. */
+export const KUBERNETES_RUNNER_TOKEN_SECRET_KEY = 'apiToken'
+
+export const kubernetesRunnerConfigSchema = v.object({
+  /** Human label for the connection (shown in the UI). */
+  label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
+  /** kube-apiserver root URL, e.g. `https://my-cluster.example:6443`. */
+  apiServerUrl: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000)),
+  /** Namespace the per-run pods are created in. */
+  namespace: v.pipe(
+    v.string(),
+    v.trim(),
+    v.regex(/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/, 'must be a valid Kubernetes namespace'),
+  ),
+  /** PEM CA bundle to verify the apiserver TLS cert (omit only for a publicly-trusted CA). */
+  caCertPem: v.optional(v.string()),
+  /** Skip apiserver TLS verification — strongly discouraged; kind/dev clusters only. */
+  insecureSkipTlsVerify: v.optional(v.boolean()),
+  /** The executor-harness image the pod runs (the `default` image variant). */
+  image: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+  /** The heavier UI-tester image (Playwright), used for `image:'ui'` dispatches. */
+  imageUi: v.optional(v.string()),
+  /** Container port the harness HTTP server listens on (default 8080). */
+  harnessPort: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65535))),
+  /** Name of an `imagePullSecrets` entry for a private registry. */
+  imagePullSecretName: v.optional(v.string()),
+  /** ServiceAccount the pod runs as (NOT the token used to call the apiserver). */
+  serviceAccountName: v.optional(v.string()),
+  /** Default pod resource requests/limits applied to every run pod. */
+  resources: v.optional(
+    v.object({
+      requests: v.optional(kubernetesResourceQuantitiesSchema),
+      limits: v.optional(kubernetesResourceQuantitiesSchema),
+    }),
+  ),
+  /** Per-instance-size limit overrides (t-shirt InstanceSize → cpu/memory). */
+  resourcesBySize: v.optional(v.record(v.string(), kubernetesResourceQuantitiesSchema)),
+  /** Pod `nodeSelector`. */
+  nodeSelector: v.optional(v.record(v.string(), v.string())),
+  /** Pod tolerations (passed through to the pod spec verbatim). */
+  tolerations: v.optional(v.array(v.record(v.string(), v.unknown()))),
+  /** Extra pod metadata labels. */
+  labels: v.optional(v.record(v.string(), v.string())),
+  /** Extra pod metadata annotations. */
+  annotations: v.optional(v.record(v.string(), v.string())),
+})
+export type KubernetesRunnerConfig = v.InferOutput<typeof kubernetesRunnerConfigSchema>
+
 /** The full declarative description of an org's runner-pool scheduler API. */
 export const runnerPoolManifestSchema = v.object({
   providerId: v.pipe(v.string(), v.regex(/^[a-z0-9-]+$/), v.minLength(1), v.maxLength(64)),
@@ -117,8 +185,25 @@ export const runnerPoolManifestSchema = v.object({
 })
 export type RunnerPoolManifest = v.InferOutput<typeof runnerPoolManifestSchema>
 
-/** A workspace's pool binding, as exposed to clients (never secret values). */
+/**
+ * An "agent runner backend" config, discriminated by `kind`. This is the universal
+ * abstraction over WHERE repo-operating coding jobs run: today `manifest` (the BYO
+ * HTTP scheduler pool) and `kubernetes` (native per-run pods); future kinds
+ * (`nomad`, `eks`, …) add a member here + a provider in `@cat-factory/integrations`
+ * — no new table/service/controller/UI window. The provider-registry seam keys on
+ * `kind`.
+ */
+export const runnerBackendConfigSchema = v.variant('kind', [
+  v.object({ kind: v.literal('manifest'), manifest: runnerPoolManifestSchema }),
+  v.object({ kind: v.literal('kubernetes'), kubernetes: kubernetesRunnerConfigSchema }),
+])
+export type RunnerBackendConfig = v.InferOutput<typeof runnerBackendConfigSchema>
+export type RunnerBackendKind = RunnerBackendConfig['kind']
+
+/** A workspace's runner-backend binding, as exposed to clients (never secret values). */
 export const runnerPoolConnectionSchema = v.object({
+  /** Which backend kind is configured (`manifest` | `kubernetes` | …). */
+  kind: v.string(),
   providerId: v.string(),
   label: v.string(),
   baseUrl: v.string(),
@@ -131,15 +216,15 @@ export type RunnerPoolConnection = v.InferOutput<typeof runnerPoolConnectionSche
 // ---- Request bodies -------------------------------------------------------
 
 /**
- * Register (or replace) a workspace's runner pool. The org supplies the actual
- * per-tenant scheduler-API secret values here (write-only); they are encrypted
- * and stored in D1 and never returned. Every `secretRef.key` in the manifest
- * must have a matching entry in `secrets`. A native pool adapter is configured
- * through the same manifest path (per-workspace settings on the manifest's
- * `providerConfig` bag), mirroring the environment provider.
+ * Register (or replace) a workspace's runner backend. `config` is the discriminated
+ * backend config (manifest pool or Kubernetes); the org supplies the actual
+ * per-tenant secret values here (write-only) — a manifest's scheduler-API
+ * credentials, or a Kubernetes ServiceAccount token (`apiToken`). Secrets are
+ * encrypted at rest and never returned. Every secret key the chosen backend
+ * references must have a matching entry in `secrets`.
  */
 export const registerRunnerPoolSchema = v.object({
-  manifest: runnerPoolManifestSchema,
+  config: runnerBackendConfigSchema,
   secrets: v.record(v.string(), v.string()),
 })
 export type RegisterRunnerPoolInput = v.InferOutput<typeof registerRunnerPoolSchema>
@@ -151,13 +236,11 @@ export const updateRunnerPoolSecretsSchema = v.object({
 export type UpdateRunnerPoolSecretsInput = v.InferOutput<typeof updateRunnerPoolSecretsSchema>
 
 /**
- * Test (probe) a pool connection before saving. A manifest-driven pool supplies
- * the candidate `manifest` + `secrets`; a native pool provider supplies its
- * `config` + `secrets`. Nothing is persisted by a test.
+ * Test (probe) a runner-backend connection before saving: supply the candidate
+ * discriminated `config` + its `secrets`. Nothing is persisted by a test.
  */
 export const testRunnerPoolConnectionSchema = v.object({
-  manifest: v.optional(runnerPoolManifestSchema),
-  config: v.optional(v.record(v.string(), v.string())),
+  config: v.optional(runnerBackendConfigSchema),
   secrets: v.optional(v.record(v.string(), v.string())),
 })
 export type TestRunnerPoolConnectionInput = v.InferOutput<typeof testRunnerPoolConnectionSchema>

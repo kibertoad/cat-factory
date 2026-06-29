@@ -1271,6 +1271,26 @@
         "saveFailed": "Не вдалося зберегти підключення",
         "removed": "Підключення видалено",
         "removeFailed": "Не вдалося видалити підключення"
+      },
+      "backend": {
+        "selectorLabel": "Бекенд виконавця",
+        "manifest": "Власний пул (маніфест)",
+        "kubernetes": "Kubernetes"
+      },
+      "kubernetes": {
+        "label": "Назва",
+        "labelPlaceholder": "Робочий кластер",
+        "apiServerUrl": "URL сервера API",
+        "apiServerUrlHelp": "Кореневий адрес kube-apiserver, напр. https://10.0.0.1:6443. Оркестратор звертається до пода кожного запуску через apiserver, тож лише цей endpoint має бути доступним.",
+        "namespace": "Простір імен",
+        "image": "Образ виконавця",
+        "imageHelp": "Образ executor-harness, який запускає кожен под запуску.",
+        "imageUi": "Образ UI-тестувальника",
+        "apiToken": "Токен ServiceAccount",
+        "apiTokenHelp": "Bearer-токен з правами RBAC на створення, читання та видалення подів і pods/proxy у просторі імен. Зберігається зашифрованим; більше не показується.",
+        "caCertPem": "Сертифікат CA кластера (PEM)",
+        "caCertPemHelp": "Вставте CA-набір кластера, щоб TLS-сертифікат apiserver проходив перевірку. Пропустіть лише для публічно довіреного CA.",
+        "harnessPort": "Порт harness"
       }
     },
     "serviceFragmentDefaults": {

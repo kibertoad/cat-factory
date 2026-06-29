@@ -25,7 +25,6 @@ import {
   UserSecretService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
-  RunnerPoolTransport,
   ProvisioningLogRecorder,
   LoggingRunnerTransport,
   EMAIL_CIPHER_INFO,
@@ -524,6 +523,7 @@ export function buildNodeResolveTransport(
   injectedPoolProvider?: RunnerPoolProvider,
 ): ResolveRunnerTransport | null {
   if (!config.runners.enabled || !config.runners.encryptionKey) return null
+  const urlPolicy = resolveUrlSafetyPolicy(config.runners)
   const runnerService = new RunnerPoolConnectionService({
     runnerPoolConnectionRepository,
     workspaceRepository,
@@ -532,21 +532,20 @@ export function buildNodeResolveTransport(
       info: RUNNERS_CIPHER_INFO,
     }),
     clock,
+    ...(urlPolicy ? { urlPolicy } : {}),
+    runnerPoolProvider:
+      injectedPoolProvider ?? new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {}),
   })
-  const urlPolicy = resolveUrlSafetyPolicy(config.runners)
-  const poolProvider =
-    injectedPoolProvider ?? new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {})
   return async (workspaceId) => {
     if (workspaceId) {
       const resolved = await runnerService.resolve(workspaceId)
-      if (resolved) {
-        return new RunnerPoolTransport(poolProvider, resolved.manifest, resolved.resolveSecret)
-      }
+      if (resolved) return resolved.transport
     }
     throw new Error(
       `No runner backend available for workspace '${workspaceId ?? '(unknown)'}': the Node ` +
-        `service runs repo-operating agents on a self-hosted runner pool — register one for ` +
-        `this workspace (POST /workspaces/:id/runner-pools).`,
+        `service runs repo-operating agents on a self-hosted runner backend — register a ` +
+        `runner pool or Kubernetes cluster for this workspace (POST ` +
+        `/workspaces/:id/runner-pool/connection).`,
     )
   }
 }
