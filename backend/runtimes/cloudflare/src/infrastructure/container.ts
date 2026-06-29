@@ -35,7 +35,7 @@ import {
   JiraProvider,
   LinearDocumentProvider,
   LinearTaskProvider,
-  HttpEnvironmentProvider,
+  findRepairCapableProvider,
   NotionProvider,
   EMAIL_CIPHER_INFO,
   ApiKeyService,
@@ -1558,19 +1558,19 @@ function selectEnvironmentsDeps(
   db: D1Database,
 ): Partial<CoreDependencies> {
   if (!config.environments.enabled) return {}
-  // The default manifest-driven provider; a trusted in-house adapter (implementing the
-  // EnvironmentProvider port) is injected by replacing `environmentProvider` via the
-  // `overrides` argument to `buildContainer` (spread last), the same seam tests use.
+  // The provider is resolved per-workspace from the env-backend registry by the stored
+  // `kind` (`manifest` | `kubernetes` | a third-party kind imported for side effect); a
+  // workspace picks its backend at connect time. The Worker can't honor a custom CA /
+  // insecure-skip TLS for a Kubernetes apiserver (no undici), so such a config is rejected
+  // at registration here.
   const urlPolicy = resolveUrlSafetyPolicy(config.environments)
   return {
-    environmentProvider: new HttpEnvironmentProvider(urlPolicy ? { urlPolicy } : {}),
-    // The generic manifest provider; its descriptor reflects the manifest's secret keys.
-    environmentProviderKind: 'manifest',
     environmentConnectionRepository: new D1EnvironmentConnectionRepository({ db }),
     environmentRegistryRepository: new D1EnvironmentRegistryRepository({ db }),
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64: config.environments.encryptionKey!,
     }),
+    environmentCustomTlsSupported: false,
     ...(urlPolicy ? { environmentUrlSafetyPolicy: urlPolicy } : {}),
   }
 }
@@ -1668,8 +1668,14 @@ function selectEnvConfigRepairer(
   db: D1Database,
   clock: Clock,
   resolveTransport: ResolveRunnerTransport | null,
-  environmentProvider: CoreDependencies['environmentProvider'],
+  override: CoreDependencies['environmentProvider'],
 ): ContainerEnvConfigRepairer | undefined {
+  const repairUrlPolicy = resolveUrlSafetyPolicy(config.environments)
+  // Prefer the internal override (the conformance suite's fake repair provider) else scan
+  // the env-backend registry for the first repair-capable backend.
+  const environmentProvider = !resolveTransport
+    ? undefined
+    : (override ?? findRepairCapableProvider(repairUrlPolicy ? { urlPolicy: repairUrlPolicy } : {}))
   if (
     !resolveTransport ||
     !environmentProvider ||

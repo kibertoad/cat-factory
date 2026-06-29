@@ -8,8 +8,18 @@ exposes a REST API.
 
 When an org's tooling is too bespoke to describe declaratively (e.g. **Kargo**, whose
 PREnvs are keyed by project + git ref and whose links/status need provider-specific logic),
-you can inject a **native adapter** instead — a hand-written `EnvironmentProvider` that the
-deployment wires in. This document is the contract for writing and wiring one.
+you write a **native adapter** instead — a hand-written `EnvironmentProvider`. This document
+is the contract for writing one.
+
+> **Wiring (updated):** a native adapter is no longer injected by replacing a deployment-wide
+> provider singleton. The env subsystem now uses a per-workspace **backend registry** keyed by
+> a `kind` discriminator (mirroring the runner-pool backends): you register an
+> `EnvironmentBackendProvider` via `registerEnvironmentBackend(...)` as an import side effect,
+> and a workspace selects your `kind` at connect time. The built-in `kubernetes` backend
+> (`backend/packages/integrations/src/modules/environments/environment-backends.ts`) is the
+> worked example. The old `buildNodeContainer({ environmentProvider })` /
+> `startLocal({ environmentProvider })` injection option has been removed. The `EnvironmentProvider`
+> port below is unchanged — your registered backend's `buildProvider` returns one.
 
 ## The port
 

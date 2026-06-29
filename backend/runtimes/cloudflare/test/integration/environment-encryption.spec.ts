@@ -5,7 +5,7 @@ import { makeApp } from '../helpers'
 import { buildContainer } from '../../src/infrastructure/container'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
 import {
-  bearerManifest,
+  bearerConfig,
   readyEnvBody,
   recordingFetch,
   TEST_API_TOKEN,
@@ -23,7 +23,7 @@ describe('environment credential encryption', () => {
     const ws = workspace.id
 
     await app.call('POST', `/workspaces/${ws}/environments/connection`, {
-      manifest: bearerManifest(),
+      config: bearerConfig(),
       secrets: { API_TOKEN: TEST_API_TOKEN },
     })
     const provisioned = await app.call<EnvironmentHandle>(
@@ -57,7 +57,7 @@ describe('environment credential encryption', () => {
     const ws = workspace.id
 
     await app.call('POST', `/workspaces/${ws}/environments/connection`, {
-      manifest: bearerManifest(),
+      config: bearerConfig(),
       secrets: { API_TOKEN: TEST_API_TOKEN },
     })
     const rotated = await app.call<EnvironmentConnection>(

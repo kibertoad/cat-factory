@@ -8,11 +8,11 @@ import type {
   RunnerTransport,
   SecretResolver,
 } from '@cat-factory/kernel'
+import { KubernetesApiClient, safeText } from './KubernetesApiClient.js'
 import {
   apiBase,
   buildPodManifest,
   classifyPodReadiness,
-  KUBERNETES_TOKEN_KEY,
   podName,
   podUrl,
   podsUrl,
@@ -50,10 +50,14 @@ const READY_WAIT_MS = 120_000
 const READY_POLL_INTERVAL_MS = 1_500
 
 export class KubernetesRunnerTransport implements RunnerTransport {
+  private readonly client: KubernetesApiClient
+
   constructor(
     private readonly config: KubernetesRunnerConfig,
-    private readonly resolveSecret: SecretResolver,
-  ) {}
+    resolveSecret: SecretResolver,
+  ) {
+    this.client = new KubernetesApiClient(config, resolveSecret)
+  }
 
   async dispatch(
     ref: RunnerJobRef,
@@ -188,80 +192,13 @@ export class KubernetesRunnerTransport implements RunnerTransport {
     return this.apiFetch(method, proxyUrl(this.config, name, path), body, timeoutMs)
   }
 
-  private async apiFetch(
+  private apiFetch(
     method: string,
     url: string,
     body: unknown,
     timeoutMs: number,
   ): Promise<Response> {
-    const token = this.resolveSecret(KUBERNETES_TOKEN_KEY)
-    if (!token)
-      throw new Error(`Missing Kubernetes ServiceAccount token ('${KUBERNETES_TOKEN_KEY}')`)
-    const headers: Record<string, string> = {
-      authorization: `Bearer ${token}`,
-      accept: 'application/json',
-    }
-    let payload: string | undefined
-    if (body !== undefined && method !== 'GET' && method !== 'DELETE') {
-      payload = JSON.stringify(body)
-      headers['content-type'] = 'application/json'
-    }
-    const init: RequestInit & { dispatcher?: unknown } = {
-      method,
-      headers,
-      body: payload,
-      signal: AbortSignal.timeout(timeoutMs),
-    }
-    const dispatcher = await this.tlsDispatcher()
-    if (dispatcher) init.dispatcher = dispatcher
-    return fetch(url, init)
-  }
-
-  /**
-   * Build the undici dispatcher carrying the cluster CA / insecure-skip flag, when
-   * configured. A kube-apiserver usually presents a private CA, which `fetch` can't
-   * verify without this. Loaded lazily (Node only) so the Worker bundle never pulls
-   * in `undici`; on a runtime without it, a custom-CA/insecure config fails clearly.
-   *
-   * The Agent is cached at MODULE scope keyed by the CA/insecure pair, not per
-   * instance: the wiring builds a fresh transport on every dispatch/poll resolve, so
-   * a per-instance cache would create (and abandon) one Agent — a TLS connection pool
-   * — per poll tick, defeating keep-alive and leaking sockets.
-   */
-  private async tlsDispatcher(): Promise<unknown> {
-    if (!this.config.caCertPem && !this.config.insecureSkipTlsVerify) return undefined
-    const key = `${this.config.insecureSkipTlsVerify ? 'insecure' : 'verify'}:${this.config.caCertPem ?? ''}`
-    const existing = tlsDispatcherCache.get(key)
-    if (existing) return existing
-    // Variable specifier so bundlers don't statically resolve `undici`.
-    const moduleName = 'undici'
-    const undici = (await import(moduleName).catch(() => null)) as {
-      Agent: new (opts: unknown) => unknown
-    } | null
-    if (!undici) {
-      throw new Error(
-        'Kubernetes custom CA / insecure TLS requires the Node runtime (undici is unavailable).',
-      )
-    }
-    const agent = new undici.Agent({
-      connect: {
-        ca: this.config.caCertPem,
-        rejectUnauthorized: !this.config.insecureSkipTlsVerify,
-      },
-    })
-    tlsDispatcherCache.set(key, agent)
-    return agent
-  }
-}
-
-/** Module-scoped undici Agent cache, keyed by the CA/insecure pair (see tlsDispatcher). */
-const tlsDispatcherCache = new Map<string, unknown>()
-
-async function safeText(res: Response): Promise<string> {
-  try {
-    return (await res.text()).slice(0, 300)
-  } catch {
-    return '(no body)'
+    return this.client.fetch(method, url, body, timeoutMs)
   }
 }
 

@@ -9,6 +9,7 @@ import type {
   BootstrapEnvironmentRepoInput,
   BootstrapRepoResult,
   ConnectionTestResult,
+  EnvironmentBackendConfig,
   EnvironmentConnection,
   EnvironmentManifest,
   EnvironmentProvider,
@@ -19,11 +20,14 @@ import type {
   TestEnvironmentConnectionInput,
   ValidateEnvironmentRepoInput,
 } from '@cat-factory/kernel'
-import { ConflictError, STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
+import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import {
-  assertSafeEnvironmentUrl,
+  environmentBackend,
+  type EnvironmentBackendProvider,
+} from './environment-backends.js'
+import {
   missingRequiredConfigKeys,
   stringifyProviderConfig,
 } from './environments.logic.js'
@@ -48,9 +52,11 @@ export interface ConfigRepairDispatch {
 const BOOTSTRAP_CONFIG_BRANCH = 'cat-factory/env-config'
 
 // EnvironmentConnectionService: owns the binding between a workspace and an
-// environment provider. Registration stores the validated manifest and an
-// *encrypted* bundle of the per-tenant management-API secrets; only safe
-// metadata (incl. which secret keys are set) is ever exposed back to clients.
+// environment provider. The connect config is discriminated by `kind`; the registered
+// EnvironmentBackendProvider for that kind validates it, translates it to the stored
+// manifest, and builds the live provider. Registration stores the manifest + an
+// *encrypted* bundle of the per-tenant secrets; only safe metadata (incl. which secret
+// keys are set) is ever exposed back to clients.
 
 export interface EnvironmentConnectionServiceDependencies {
   environmentConnectionRepository: EnvironmentConnectionRepository
@@ -60,21 +66,11 @@ export interface EnvironmentConnectionServiceDependencies {
   /** URL/host safety policy applied to a registered manifest. Defaults to strict. */
   urlPolicy?: UrlSafetyPolicy
   /**
-   * The injected provider, so the service can surface its `describeConfig` /
-   * `testConnection` to the UI. Optional — absent ⇒ no descriptor/test (the SPA
-   * falls back to the manifest editor with no test button).
+   * Whether this runtime can honor a backend's custom TLS material (a private CA /
+   * insecure-skip). The Cloudflare Worker can't (no undici), so it sets `false` and a
+   * kubernetes config with CA/insecure is rejected at registration. Absent/`true` ⇒ ok.
    */
-  environmentProvider?: EnvironmentProvider
-  /**
-   * What the injected provider is: a `native` adapter (its own auth, fully
-   * described by `describeConfig`) or the generic `manifest` HTTP provider.
-   * The facade that wires the provider knows which it injected. Defaults to
-   * `manifest`. `providerId`/`providerLabel` override the descriptor identity
-   * for a native provider (else the manifest's own values are used).
-   */
-  providerKind?: 'native' | 'manifest'
-  providerId?: string
-  providerLabel?: string
+  customTlsSupported?: boolean
   /**
    * Resolve a VCS-neutral, workspace+repo-bound RepoFiles for on-demand repo
    * validation / config bootstrap. Built by the runtime from the workspace's VCS
@@ -88,41 +84,20 @@ export interface EnvironmentConnectionServiceDependencies {
   /**
    * START a durable, asynchronous config-repair run — it dispatches a coding agent that
    * fixes a malformed/partial provider config and pushes the fix back onto the target
-   * branch, then RETURNS IMMEDIATELY with the run's `jobId` (it does NOT await the agent
-   * or re-validate). The run is driven by the durable runner (CF Workflows / Node pg-boss);
-   * on completion it calls back into this service's {@link revalidate} to record the
-   * post-repair outcome. Wired by a runtime over the orchestration `EnvConfigRepairService`.
-   * Absent ⇒ no agent fallback.
+   * branch, then RETURNS IMMEDIATELY with the run's `jobId`. Wired by a runtime over the
+   * orchestration `EnvConfigRepairService`. Absent ⇒ no agent fallback.
    */
   dispatchConfigRepair?: (input: ConfigRepairDispatch) => Promise<{ jobId: string }>
   /** Best-effort provisioning-event log; absent ⇒ no logging. */
   provisioningLog?: ProvisioningLogRecorder
-}
-
-/** Collect every secret key a manifest's auth scheme references. */
-export function referencedSecretKeys(manifest: EnvironmentManifest): string[] {
-  const auth = manifest.auth
-  switch (auth.type) {
-    case 'none':
-      return []
-    case 'api_key':
-    case 'bearer':
-      return [auth.secretRef.key]
-    case 'basic':
-      return [auth.usernameSecretRef.key, auth.passwordSecretRef.key]
-    case 'oauth2_client_credentials':
-      return [auth.clientIdSecretRef.key, auth.clientSecretSecretRef.key]
-    case 'custom_headers':
-      return auth.headers.map((h) => h.secretRef.key)
-  }
-}
-
-/** Validate every URL a manifest will fetch (defence against SSRF). */
-function assertManifestUrlsSafe(manifest: EnvironmentManifest, policy: UrlSafetyPolicy): void {
-  assertSafeEnvironmentUrl(manifest.baseUrl, 'base URL', policy)
-  if (manifest.auth.type === 'oauth2_client_credentials') {
-    assertSafeEnvironmentUrl(manifest.auth.tokenUrl, 'OAuth token URL', policy)
-  }
+  /**
+   * INTERNAL override: when set, this provider is used for every resolved-provider path
+   * (provision/status/teardown/validate/bootstrap/describe) instead of the kind registry.
+   * NOT a public seam — a native backend registers via `registerEnvironmentBackend`. It
+   * exists only for the cross-runtime conformance suite (fake validate-repo / repair
+   * providers injected through the schema-locked connect API). Absent ⇒ the registry path.
+   */
+  environmentProvider?: EnvironmentProvider
 }
 
 export interface ResolvedConnection {
@@ -136,27 +111,35 @@ export class EnvironmentConnectionService {
   /** Register (or replace) a workspace's environment provider. */
   async register(
     workspaceId: string,
-    input: { manifest: EnvironmentManifest; secrets: Record<string, string> },
+    input: { config: EnvironmentBackendConfig; secrets: Record<string, string> },
   ): Promise<EnvironmentConnection> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    // The manifest is validated against the Valibot schema at the controller
-    // (jsonBody); here we enforce the additional SSRF + secret-completeness rules.
-    const manifest = input.manifest
-    assertManifestUrlsSafe(manifest, this.deps.urlPolicy ?? STRICT_URL_SAFETY_POLICY)
+    const backend = this.requireBackend(input.config.kind)
+    backend.assertConfigSafe(input.config, {
+      ...(this.deps.urlPolicy ? { urlPolicy: this.deps.urlPolicy } : {}),
+      ...(this.deps.customTlsSupported !== undefined
+        ? { customTlsSupported: this.deps.customTlsSupported }
+        : {}),
+    })
 
-    // Every secret the manifest references must be supplied.
-    const missing = referencedSecretKeys(manifest).filter((key) => !(key in input.secrets))
+    // Every secret the chosen backend references must be supplied.
+    const missing = backend
+      .referencedSecretKeys(input.config)
+      .filter((key) => !(key in input.secrets))
     if (missing.length) {
       throw new ValidationError(`Missing secret values for: ${missing.join(', ')}`)
     }
 
+    const meta = backend.connectionMeta(input.config)
+    const manifest = backend.toManifest(input.config)
     const existing = await this.deps.environmentConnectionRepository.getByWorkspace(workspaceId)
     const secretsCipher = await this.deps.secretCipher.encrypt(JSON.stringify(input.secrets))
     const record: EnvironmentConnectionRecord = {
       workspaceId,
-      providerId: manifest.providerId,
-      label: manifest.label,
-      baseUrl: manifest.baseUrl,
+      kind: input.config.kind,
+      providerId: meta.providerId,
+      label: meta.label,
+      baseUrl: meta.baseUrl,
       manifestJson: JSON.stringify(manifest),
       secretsCipher,
       createdAt: existing?.createdAt ?? this.deps.clock.now(),
@@ -166,13 +149,15 @@ export class EnvironmentConnectionService {
     return this.toConnection(record, Object.keys(input.secrets))
   }
 
-  /** Rotate/replace the secret bundle without re-sending the manifest. */
+  /** Rotate/replace the secret bundle without re-sending the config. */
   async updateSecrets(
     workspaceId: string,
     secrets: Record<string, string>,
   ): Promise<EnvironmentConnection> {
     const { record, manifest } = await this.requireConnection(workspaceId)
-    const missing = referencedSecretKeys(manifest).filter((key) => !(key in secrets))
+    const backend = this.requireBackend(record.kind)
+    const config = backend.fromManifest(manifest)
+    const missing = backend.referencedSecretKeys(config).filter((key) => !(key in secrets))
     if (missing.length) {
       throw new ValidationError(`Missing secret values for: ${missing.join(', ')}`)
     }
@@ -184,21 +169,17 @@ export class EnvironmentConnectionService {
 
   /**
    * Describe the provider's config fields for the UI (what to render and whether a
-   * connection test is available). For a manifest provider the fields reflect the
-   * secret keys the current manifest references; for a native provider they come
-   * from the provider's own `describeConfig`.
+   * connection test is available). Resolves the backend for the workspace's stored
+   * connection (or the default `manifest` backend when none is registered).
    */
   async describeProvider(workspaceId: string): Promise<ProviderDescriptor> {
-    const provider = this.deps.environmentProvider
     const record = await this.deps.environmentConnectionRepository.getByWorkspace(workspaceId)
+    const kind = record?.kind ?? 'manifest'
+    const backend = this.requireBackend(kind)
+    const provider = this.deps.environmentProvider ?? this.buildProvider(backend)
+    const overridden = !!this.deps.environmentProvider
     const manifest = record ? (JSON.parse(record.manifestJson) as EnvironmentManifest) : undefined
-    const configFields = provider?.describeConfig?.(manifest) ?? []
-    // Everything already supplied for this workspace: the stored secret-bundle keys, a
-    // native adapter's manifest `providerConfig` keys (its non-secret per-workspace
-    // settings), and `baseUrl` when the manifest carries one. The last mirrors the connect
-    // form's write path (a field keyed `baseUrl` is persisted onto the manifest's `baseUrl`,
-    // NOT into providerConfig or the secret bundle) — without it a `required` baseUrl field
-    // would stay in `missingRequired` forever and the banner could never clear.
+    const configFields = provider.describeConfig?.(manifest) ?? []
     const storedKeys: string[] = []
     if (record) {
       storedKeys.push(...Object.keys(await this.decryptSecrets(record)))
@@ -206,48 +187,51 @@ export class EnvironmentConnectionService {
       if (manifest?.baseUrl) storedKeys.push('baseUrl')
     }
     return {
-      providerId: this.deps.providerId ?? manifest?.providerId ?? 'http',
-      label: this.deps.providerLabel ?? manifest?.label ?? 'Custom HTTP provider',
-      kind: this.deps.providerKind ?? 'manifest',
+      providerId: record?.providerId ?? kind,
+      label: record?.label ?? kind,
+      kind: overridden || kind !== 'manifest' ? 'native' : 'manifest',
       configFields,
-      supportsTest: typeof provider?.testConnection === 'function',
-      supportsRepoValidation: typeof provider?.validateRepo === 'function',
-      supportsRepoBootstrap: typeof provider?.bootstrapProviderConfiguration === 'function',
-      ...(provider?.describeBootstrapInputs
+      supportsTest: typeof provider.testConnection === 'function',
+      supportsRepoValidation: typeof provider.validateRepo === 'function',
+      supportsRepoBootstrap: typeof provider.bootstrapProviderConfiguration === 'function',
+      ...(provider.describeBootstrapInputs
         ? { bootstrapInputs: provider.describeBootstrapInputs() }
         : {}),
       missingRequired: missingRequiredConfigKeys(configFields, storedKeys),
-      // The current saved manifest (non-secret — only secret-ref key names, never values),
-      // so the native connect form overlays edits onto the real stored manifest instead of
-      // the bare scaffold, preserving previously-saved providerConfig (incl. nested values).
       ...(manifest ? { savedManifest: manifest as unknown as Record<string, unknown> } : {}),
-      ...(provider?.describeManifestTemplate
+      ...(provider.describeManifestTemplate
         ? { manifestTemplate: provider.describeManifestTemplate() as Record<string, unknown> }
         : {}),
     }
   }
 
   /**
-   * Probe a candidate connection before saving (nothing is persisted). Builds a
-   * secret resolver over the supplied (unsaved) secret values and delegates to the
-   * provider's `testConnection`; a provider without one reports "nothing to test".
+   * Probe a candidate connection before saving (nothing is persisted). Builds the
+   * backend's provider from the candidate config + a resolver over the supplied
+   * (unsaved) secrets and delegates to the provider's `testConnection`.
    */
   async testConnection(
     workspaceId: string,
     input: TestEnvironmentConnectionInput,
   ): Promise<ConnectionTestResult> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    const provider = this.deps.environmentProvider
-    if (!provider?.testConnection) {
+    if (!input.config) return { ok: true, message: 'Nothing to test.' }
+    const backend = this.requireBackend(input.config.kind)
+    backend.assertConfigSafe(input.config, {
+      ...(this.deps.urlPolicy ? { urlPolicy: this.deps.urlPolicy } : {}),
+      ...(this.deps.customTlsSupported !== undefined
+        ? { customTlsSupported: this.deps.customTlsSupported }
+        : {}),
+    })
+    const provider = this.buildProvider(backend)
+    if (!provider.testConnection) {
       return { ok: true, message: 'This provider has no connection test.' }
     }
-    if (input.manifest) {
-      assertManifestUrlsSafe(input.manifest, this.deps.urlPolicy ?? STRICT_URL_SAFETY_POLICY)
-    }
+    const manifest = backend.toManifest(input.config)
     const secrets = input.secrets ?? {}
     return provider.testConnection({
-      manifest: input.manifest,
-      config: input.config ?? {},
+      manifest,
+      config: {},
       resolveSecret: (key) => secrets[key],
     })
   }
@@ -262,8 +246,8 @@ export class EnvironmentConnectionService {
     input: ValidateEnvironmentRepoInput,
   ): Promise<RepoValidationResult> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    const provider = this.deps.environmentProvider
-    if (!provider?.validateRepo) return { ok: true, issues: [] }
+    const provider = await this.providerForWorkspace(workspaceId)
+    if (!provider.validateRepo) return { ok: true, issues: [] }
     const bound = await this.resolveRepo(workspaceId, input.owner, input.repo, input.provider)
     if (!bound) {
       return {
@@ -280,6 +264,7 @@ export class EnvironmentConnectionService {
     const resolveSecret = await this.resolveSecrets(workspaceId)
     const gitRef = input.gitRef ?? bound.baseBranch
     return this.runProviderValidate(
+      provider,
       bound,
       gitRef,
       input.owner,
@@ -300,13 +285,13 @@ export class EnvironmentConnectionService {
     input: BootstrapEnvironmentRepoInput,
   ): Promise<BootstrapRepoResult> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    const provider = this.deps.environmentProvider
+    const provider = await this.providerForWorkspace(workspaceId)
     const fail = (issues: RepoValidationIssue[]): BootstrapRepoResult => ({
       ok: false,
       committed: false,
       issues,
     })
-    if (!provider?.bootstrapProviderConfiguration) {
+    if (!provider.bootstrapProviderConfiguration) {
       return fail([
         { severity: 'error', message: 'This provider does not support config bootstrap.' },
       ])
@@ -342,10 +327,6 @@ export class EnvironmentConnectionService {
     let writeBranch = targetBranch
     if (!generated.needsAgent && generated.files.length) {
       const prMode = !!input.openPr
-      // In PR mode we write to (and re-validate against) a deterministic branch; a re-run
-      // must compare against THAT branch (not the still-unmerged target) so identical
-      // content is a no-op and we never re-commit / open a duplicate PR. First run: the PR
-      // branch doesn't exist yet, so the base/target branch is the correct compare ref.
       let prBranchHead: string | null = null
       if (prMode) {
         writeBranch = BOOTSTRAP_CONFIG_BRANCH
@@ -353,7 +334,6 @@ export class EnvironmentConnectionService {
       }
       const compareBranch = prMode && prBranchHead ? writeBranch : targetBranch
 
-      // Idempotent: only write files whose content actually changes.
       const changed: { path: string; content: string }[] = []
       for (const file of generated.files) {
         const existing = await readRepoFile(file.path, compareBranch)
@@ -367,8 +347,6 @@ export class EnvironmentConnectionService {
             if (base) await bound.repo.createBranch(writeBranch, base)
           }
           await bound.repo.commitFiles({ branch: writeBranch, message, files: changed })
-          // Only open a PR when we just created the branch; a re-run commits onto the
-          // existing branch and its already-open PR picks the new commit up.
           if (!prBranchHead) {
             await bound.repo.openPullRequest({
               title: message,
@@ -385,6 +363,7 @@ export class EnvironmentConnectionService {
     }
 
     let validation = await this.runProviderValidate(
+      provider,
       bound,
       writeBranch,
       input.owner,
@@ -402,13 +381,6 @@ export class EnvironmentConnectionService {
       this.deps.dispatchConfigRepair
     ) {
       usedAgent = true
-      // PR mode: the agent must push its fix to the PR branch, NOT straight to the target
-      // branch. The mechanical path only switches `writeBranch` to the PR branch when it
-      // actually committed generated files; on the `needsAgent` path it never did, so
-      // `writeBranch` is still the target branch here. Establish the PR branch (create it off
-      // the target head + open the PR) before dispatch, so the agent's push lands on the PR
-      // branch and re-validation reads it — otherwise `openPr` would be silently bypassed and
-      // the fix committed directly onto e.g. `main`.
       if (input.openPr && writeBranch === targetBranch) {
         const prBranchHead = await bound.repo.headSha(BOOTSTRAP_CONFIG_BRANCH)
         if (!prBranchHead) {
@@ -425,12 +397,6 @@ export class EnvironmentConnectionService {
         }
         writeBranch = BOOTSTRAP_CONFIG_BRANCH
       }
-      // START the durable repair run and return immediately — the agent pushes its fix back
-      // onto `writeBranch` asynchronously, and the run re-validates (via {@link revalidate})
-      // on completion to settle `ok`/`issues`. So this call does NOT block on the agent and
-      // does NOT re-validate inline; `ok` is reported as `false` (pending) until the repair
-      // run finishes, which the caller tracks via `repairJobId` (snapshot + repair events).
-      // A dispatch/pre-flight failure is recorded on the repair-job row by the run itself.
       const started = await this.deps.dispatchConfigRepair({
         workspaceId,
         owner: input.owner,
@@ -450,8 +416,6 @@ export class EnvironmentConnectionService {
       providerId: manifest?.providerId ?? null,
       blockId: null,
       executionId: null,
-      // The mechanical bootstrap's own outcome: a dispatched async repair means it did NOT
-      // produce a valid config (a repair run is now pending; `repairJobId` in `detail`).
       outcome: validation.ok ? 'success' : 'failure',
       error: validation.ok
         ? null
@@ -461,9 +425,6 @@ export class EnvironmentConnectionService {
       detail: JSON.stringify({ committed, usedAgent, branch: writeBranch, repairJobId }),
     })
 
-    // Surface the provider's own bootstrap diagnostics (e.g. why it bailed with
-    // `needsAgent`) on the mechanical path. Once an async repair was dispatched, `ok` is
-    // pending (false) and the residual issues are the ones the repair will address.
     const generatedIssues = generated.issues ?? []
     return {
       ok: usedAgent ? false : validation.ok,
@@ -475,12 +436,8 @@ export class EnvironmentConnectionService {
   }
 
   /**
-   * Re-validate a repo's provider config after the async repair agent pushed its fix —
-   * re-deriving the bound RepoFiles, parsed manifest, decrypted secrets, and config the
-   * same way {@link bootstrapRepo} does, then running the provider's `validateRepo`. This
-   * is the callback {@link EnvConfigRepairService.pollJob} invokes on a successful repair
-   * run to settle its terminal `ok`/`issues`. Lives here because the decrypted secrets +
-   * manifest config live here (orchestration must not reach into the integration internals).
+   * Re-validate a repo's provider config after the async repair agent pushed its fix.
+   * The callback {@link EnvConfigRepairService.pollJob} invokes on a successful repair.
    */
   async revalidate(input: {
     workspaceId: string
@@ -490,6 +447,7 @@ export class EnvironmentConnectionService {
   }): Promise<RepoValidationResult> {
     const { workspaceId, owner, repo, gitRef } = input
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const provider = await this.providerForWorkspace(workspaceId)
     const bound = await this.resolveRepo(workspaceId, owner, repo)
     if (!bound) {
       return {
@@ -506,7 +464,19 @@ export class EnvironmentConnectionService {
     const manifest = await this.optionalManifest(workspaceId)
     const resolveSecret = await this.resolveSecrets(workspaceId)
     const config = stringifyProviderConfig(manifest?.providerConfig)
-    return this.runProviderValidate(bound, gitRef, owner, repo, config, resolveSecret)
+    return this.runProviderValidate(provider, bound, gitRef, owner, repo, config, resolveSecret)
+  }
+
+  /**
+   * The live provider + stored manifest for a workspace, for the provisioning/teardown
+   * services. Throws when the workspace has no registered connection.
+   */
+  async resolveProvider(
+    workspaceId: string,
+  ): Promise<{ provider: EnvironmentProvider; manifest: EnvironmentManifest }> {
+    const { record, manifest } = await this.requireConnection(workspaceId)
+    const provider = this.deps.environmentProvider ?? this.buildProvider(this.requireBackend(record.kind))
+    return { provider, manifest }
   }
 
   /** Resolve a VCS-neutral bound RepoFiles for the workspace+coords, or null. */
@@ -525,8 +495,9 @@ export class EnvironmentConnectionService {
     )
   }
 
-  /** Run the provider's `validateRepo` with a VCS-neutral reader bound to `gitRef`. */
+  /** Run the given provider's `validateRepo` with a VCS-neutral reader bound to `gitRef`. */
   private async runProviderValidate(
+    provider: EnvironmentProvider,
     bound: RunRepoContext,
     gitRef: string,
     owner: string,
@@ -534,8 +505,7 @@ export class EnvironmentConnectionService {
     config: Record<string, string> | undefined,
     resolveSecret: (key: string) => string | undefined,
   ): Promise<RepoValidationResult> {
-    const provider = this.deps.environmentProvider
-    if (!provider?.validateRepo) return { ok: true, issues: [] }
+    if (!provider.validateRepo) return { ok: true, issues: [] }
     return provider.validateRepo({
       readRepoFile: (path, ref) => bound.repo.getFile(path, ref ?? gitRef),
       defaultGitRef: gitRef,
@@ -556,9 +526,7 @@ export class EnvironmentConnectionService {
 
   /**
    * Resolve the parsed manifest if the workspace has a registered connection, else
-   * undefined — the non-throwing sibling of {@link requireConnection}. The on-demand
-   * repo validate/bootstrap routes are documented to never throw to the client, so they
-   * degrade to "no per-workspace config" rather than a 409 when nothing is registered.
+   * undefined — the non-throwing sibling of {@link requireConnection}.
    */
   async optionalManifest(workspaceId: string): Promise<EnvironmentManifest | undefined> {
     const record = await this.deps.environmentConnectionRepository.getByWorkspace(workspaceId)
@@ -591,6 +559,25 @@ export class EnvironmentConnectionService {
     await this.deps.environmentConnectionRepository.softDelete(workspaceId, this.deps.clock.now())
   }
 
+  // --- internals ----------------------------------------------------------
+
+  private requireBackend(kind: string): EnvironmentBackendProvider {
+    const backend = environmentBackend(kind)
+    if (!backend) throw new ValidationError(`Unknown environment backend kind '${kind}'`)
+    return backend
+  }
+
+  private buildProvider(backend: EnvironmentBackendProvider): EnvironmentProvider {
+    return backend.buildProvider(this.deps.urlPolicy ? { urlPolicy: this.deps.urlPolicy } : {})
+  }
+
+  /** The provider for the workspace's stored kind (or the manifest default when none). */
+  private async providerForWorkspace(workspaceId: string): Promise<EnvironmentProvider> {
+    if (this.deps.environmentProvider) return this.deps.environmentProvider
+    const record = await this.deps.environmentConnectionRepository.getByWorkspace(workspaceId)
+    return this.buildProvider(this.requireBackend(record?.kind ?? 'manifest'))
+  }
+
   private async decryptSecrets(
     record: EnvironmentConnectionRecord,
   ): Promise<Record<string, string>> {
@@ -603,12 +590,21 @@ export class EnvironmentConnectionService {
     record: EnvironmentConnectionRecord,
     secretKeys: string[],
   ): EnvironmentConnection {
+    let config: EnvironmentBackendConfig | undefined
+    try {
+      const backend = this.requireBackend(record.kind)
+      config = backend.fromManifest(JSON.parse(record.manifestJson) as EnvironmentManifest)
+    } catch {
+      config = undefined
+    }
     return {
+      kind: record.kind,
       providerId: record.providerId,
       label: record.label,
       baseUrl: record.baseUrl,
       connectedAt: record.createdAt,
       secretKeys,
+      ...(config ? { config } : {}),
     }
   }
 }

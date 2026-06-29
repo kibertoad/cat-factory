@@ -1,0 +1,1 @@
+ALTER TABLE "environment_connections" ADD COLUMN "kind" text DEFAULT 'manifest' NOT NULL;

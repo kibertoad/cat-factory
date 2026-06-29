@@ -70,12 +70,15 @@ export function providerConnectionsApi({ send, ws }: ApiContext) {
       kind === 'environment'
         ? send(CONTRACTS.environment.register, {
             pathPrefix: ws(workspaceId),
-            body: body as RegisterEnvironmentProviderInput,
+            body: {
+              config: backendConfig(body),
+              secrets: body.secrets,
+            } as RegisterEnvironmentProviderInput,
           })
         : send(CONTRACTS['runner-pool'].register, {
             pathPrefix: ws(workspaceId),
             body: {
-              config: runnerBackendConfig(body),
+              config: backendConfig(body),
               secrets: body.secrets,
             } as RegisterRunnerPoolInput,
           }),
@@ -94,12 +97,15 @@ export function providerConnectionsApi({ send, ws }: ApiContext) {
       kind === 'environment'
         ? send(CONTRACTS.environment.test, {
             pathPrefix: ws(workspaceId),
-            body: body as TestEnvironmentConnectionInput,
+            body: {
+              ...(body.manifest || body.config ? { config: backendConfig(body) } : {}),
+              ...(body.secrets ? { secrets: body.secrets } : {}),
+            } as TestEnvironmentConnectionInput,
           })
         : send(CONTRACTS['runner-pool'].test, {
             pathPrefix: ws(workspaceId),
             body: {
-              ...(body.manifest || body.config ? { config: runnerBackendConfig(body) } : {}),
+              ...(body.manifest || body.config ? { config: backendConfig(body) } : {}),
               ...(body.secrets ? { secrets: body.secrets } : {}),
             } as TestRunnerPoolConnectionInput,
           }),
@@ -110,11 +116,12 @@ export function providerConnectionsApi({ send, ws }: ApiContext) {
 }
 
 /**
- * Resolve the discriminated runner-backend config from a connect-form payload: an
- * explicit `config` (the Kubernetes form) wins; otherwise a bare `manifest` (the manifest
- * editor) is wrapped into the manifest backend kind.
+ * Resolve the discriminated backend config (runner-pool OR environment) from a connect-form
+ * payload: an explicit `config` (the Kubernetes form) wins; otherwise a bare `manifest` (the
+ * manifest editor) is wrapped into the `manifest` backend kind. Both subsystems now take a
+ * discriminated `config`, so the same shape serves each.
  */
-function runnerBackendConfig(
+function backendConfig(
   body: RegisterProviderInput | TestProviderInput,
 ): Record<string, unknown> {
   if (body.config) return body.config

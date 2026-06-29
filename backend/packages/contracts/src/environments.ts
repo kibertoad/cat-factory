@@ -166,6 +166,116 @@ export const environmentManifestSchema = v.object({
 })
 export type EnvironmentManifest = v.InferOutput<typeof environmentManifestSchema>
 
+// ---------------------------------------------------------------------------
+// Kubernetes ephemeral-environment backend.
+//
+// A native backend that deploys an operator-authored set of k3s/Kubernetes
+// manifests into a per-PR namespace, reached over the kube-apiserver via HTTPS
+// (the same client the Kubernetes RUNNER backend uses). Unlike the manifest
+// HTTP provider, this is NOT a declarative HTTP template: the apiserver is driven
+// directly. The ServiceAccount bearer token lives in the encrypted secret bundle
+// (key `apiToken`, shared with the runner backend); everything non-secret is
+// config here.
+// ---------------------------------------------------------------------------
+
+/** The secret-bundle key the Kubernetes env backend reads the ServiceAccount token from. */
+export const KUBERNETES_ENV_TOKEN_SECRET_KEY = 'apiToken'
+
+/**
+ * Where the per-PR manifests are read from. `colocated` reads them from the block's
+ * own repo at the PR head branch; `separate` reads them from a different repo (the
+ * Kubernetes definition often lives outside the service repo).
+ */
+export const kubernetesManifestSourceSchema = v.variant('type', [
+  v.object({
+    type: v.literal('colocated'),
+    /** File or directory path within the PR repo (read at the PR head branch). */
+    path: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+  }),
+  v.object({
+    type: v.literal('separate'),
+    /** `owner/repo` of the manifests repo. */
+    repo: v.pipe(v.string(), v.trim(), v.regex(/^[^/\s]+\/[^/\s]+$/, 'must be "owner/repo"')),
+    /** Branch/tag/sha to read at; absent ⇒ that repo's default branch. */
+    ref: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1))),
+    /** File or directory path within the manifests repo. */
+    path: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+  }),
+])
+export type KubernetesManifestSource = v.InferOutput<typeof kubernetesManifestSourceSchema>
+
+/** How the environment URL is derived once the manifests are applied. */
+export const kubernetesUrlSourceSchema = v.variant('source', [
+  v.object({
+    source: v.literal('ingressTemplate'),
+    /** Host template, e.g. `{{branch}}.preview.example.com`; rendered with the provision vars. */
+    hostTemplate: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+    scheme: v.optional(v.picklist(['http', 'https'])),
+  }),
+  v.object({
+    source: v.literal('ingressStatus'),
+    /** Ingress object to read `.status.loadBalancer` from; absent ⇒ the only Ingress applied. */
+    ingressName: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1))),
+    scheme: v.optional(v.picklist(['http', 'https'])),
+  }),
+  v.object({
+    source: v.literal('serviceStatus'),
+    /** Service object to read `.status.loadBalancer` (k3s ServiceLB) from. */
+    serviceName: v.pipe(v.string(), v.trim(), v.minLength(1)),
+    port: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65535))),
+    scheme: v.optional(v.picklist(['http', 'https'])),
+  }),
+])
+export type KubernetesUrlSource = v.InferOutput<typeof kubernetesUrlSourceSchema>
+
+export const kubernetesEnvironmentConfigSchema = v.object({
+  /** Human label for the connection (shown in the UI). */
+  label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
+  /** kube-apiserver root URL, e.g. `https://my-cluster.example:6443`. */
+  apiServerUrl: urlString,
+  /** PEM CA bundle to verify the apiserver TLS cert (omit only for a publicly-trusted CA). */
+  caCertPem: v.optional(v.string()),
+  /** Skip apiserver TLS verification — strongly discouraged; kind/dev clusters only. */
+  insecureSkipTlsVerify: v.optional(v.boolean()),
+  /**
+   * Namespace name template for the per-PR environment, e.g. `cf-env-{{pullNumber}}`.
+   * Rendered with the provision vars then sanitized to an RFC1123 label; absent ⇒ a
+   * default derived from the PR number / block id.
+   */
+  namespaceTemplate: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
+  /** Where the manifests are read from (co-located in the PR repo, or a separate repo). */
+  manifestSource: kubernetesManifestSourceSchema,
+  /** How the environment URL is derived once applied. */
+  url: kubernetesUrlSourceSchema,
+  /**
+   * Optional image reference made available to the manifests as `{{image}}` (e.g. a
+   * CI-built image tagged by branch/sha). Itself a template over the provision vars.
+   */
+  imageTemplate: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
+  /** Fallback TTL (ms) after which the env is swept + torn down. */
+  defaultTtlMs: v.optional(v.pipe(v.number(), v.minValue(60000))),
+  /** Extra labels stamped on the namespace + every applied resource. */
+  labels: v.optional(v.record(v.string(), v.string())),
+  /** Extra annotations stamped on the namespace. */
+  annotations: v.optional(v.record(v.string(), v.string())),
+})
+export type KubernetesEnvironmentConfig = v.InferOutput<typeof kubernetesEnvironmentConfigSchema>
+
+/**
+ * An ephemeral-environment backend config, discriminated by `kind`. The universal
+ * abstraction over HOW a workspace's preview environments are provisioned: today
+ * `manifest` (the generic BYO HTTP management API) and `kubernetes` (native per-PR
+ * namespaces). Future kinds add a member here + a provider in
+ * `@cat-factory/integrations` — no new table/service/controller. Mirrors
+ * `runnerBackendConfigSchema`; the provider-registry seam keys on `kind`.
+ */
+export const environmentBackendConfigSchema = v.variant('kind', [
+  v.object({ kind: v.literal('manifest'), manifest: environmentManifestSchema }),
+  v.object({ kind: v.literal('kubernetes'), kubernetes: kubernetesEnvironmentConfigSchema }),
+])
+export type EnvironmentBackendConfig = v.InferOutput<typeof environmentBackendConfigSchema>
+export type EnvironmentBackendKind = EnvironmentBackendConfig['kind']
+
 /** Resolved access creds for a provisioned env, as surfaced to a tester agent. */
 export const environmentAccessHandleSchema = v.object({
   scheme: environmentAccessSchemeSchema,
@@ -197,30 +307,35 @@ export type EnvironmentHandle = v.InferOutput<typeof environmentHandleSchema>
 
 /** A workspace's provider binding, as exposed to clients (never secret values). */
 export const environmentConnectionSchema = v.object({
+  /** Which backend kind is configured (`manifest` | `kubernetes` | …). */
+  kind: v.string(),
   providerId: v.string(),
   label: v.string(),
   baseUrl: v.string(),
   connectedAt: v.number(),
   /** Which secret keys are set (names only), so the UI can show completeness. */
   secretKeys: v.array(v.string()),
+  /**
+   * The stored discriminated backend config, sans secrets (those live in the
+   * write-only secret bundle), so the connect form can prefill its non-secret fields
+   * on edit. Omitted only for an unparsable row.
+   */
+  config: v.optional(environmentBackendConfigSchema),
 })
 export type EnvironmentConnection = v.InferOutput<typeof environmentConnectionSchema>
 
 // ---- Request bodies -------------------------------------------------------
 
 /**
- * Register (or replace) a workspace's environment provider. The org supplies the
- * actual per-tenant secret values here (write-only); they are encrypted and
- * stored in D1 and never returned. Every `secretRef.key` in the manifest must
- * have a matching entry in `secrets`.
- *
- * A native adapter is configured through the SAME manifest path (see
- * `backend/docs/native-environment-adapter.md`): its non-secret per-workspace
- * settings ride the manifest's opaque `providerConfig` bag and its secrets via
- * the manifest `auth` scheme — there is deliberately no separate config channel.
+ * Register (or replace) a workspace's environment provider. `config` is the
+ * discriminated backend config (the generic HTTP manifest, or a native Kubernetes
+ * backend); the org supplies the actual per-tenant secret values here (write-only) —
+ * a manifest's management-API credentials, or a Kubernetes ServiceAccount token
+ * (`apiToken`). Secrets are encrypted at rest and never returned. Every secret key
+ * the chosen backend references must have a matching entry in `secrets`.
  */
 export const registerEnvironmentProviderSchema = v.object({
-  manifest: environmentManifestSchema,
+  config: environmentBackendConfigSchema,
   secrets: v.record(v.string(), v.string()),
 })
 export type RegisterEnvironmentProviderInput = v.InferOutput<
@@ -234,13 +349,11 @@ export const updateEnvironmentSecretsSchema = v.object({
 export type UpdateEnvironmentSecretsInput = v.InferOutput<typeof updateEnvironmentSecretsSchema>
 
 /**
- * Test (probe) a provider connection before saving. A manifest-driven provider
- * supplies the candidate `manifest` + `secrets`; a native provider supplies its
- * `config` (non-secret fields) + `secrets`. Nothing is persisted by a test.
+ * Test (probe) a provider connection before saving: supply the candidate
+ * discriminated `config` + its `secrets`. Nothing is persisted by a test.
  */
 export const testEnvironmentConnectionSchema = v.object({
-  manifest: v.optional(environmentManifestSchema),
-  config: v.optional(v.record(v.string(), v.string())),
+  config: v.optional(environmentBackendConfigSchema),
   secrets: v.optional(v.record(v.string(), v.string())),
 })
 export type TestEnvironmentConnectionInput = v.InferOutput<typeof testEnvironmentConnectionSchema>

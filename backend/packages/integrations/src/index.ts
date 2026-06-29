@@ -143,8 +143,21 @@ export {
   type EnvironmentConnectionServiceDependencies,
   type ConfigRepairDispatch,
   type ResolvedConnection,
-  referencedSecretKeys,
 } from './modules/environments/EnvironmentConnectionService.js'
+// The ephemeral-environment backend provider-registry seam: maps a backend kind
+// (`manifest` | `kubernetes` | future `nomad`/…) → an EnvironmentProvider. Built-ins
+// self-register on import; a third-party kind registers via `registerEnvironmentBackend`.
+export {
+  registerEnvironmentBackend,
+  environmentBackend,
+  registeredEnvironmentBackendKinds,
+  findRepairCapableProvider,
+  manifestEnvironmentBackend,
+  kubernetesEnvironmentBackend,
+  type EnvironmentBackendProvider,
+  type EnvironmentBackendContext,
+  type EnvironmentBackendSafetyOptions,
+} from './modules/environments/environment-backends.js'
 export {
   EnvironmentProvisioningService,
   type EnvironmentProvisioningServiceDependencies,
@@ -196,7 +209,13 @@ export {
 } from './modules/runners/HttpRunnerPoolProvider.js'
 export { RunnerPoolTransport } from './modules/runners/RunnerPoolTransport.js'
 export { KubernetesRunnerTransport } from './modules/kubernetes/KubernetesRunnerTransport.js'
+export {
+  KubernetesApiClient,
+  type KubernetesClientConfig,
+} from './modules/kubernetes/KubernetesApiClient.js'
+export { KubernetesEnvironmentProvider } from './modules/kubernetes/KubernetesEnvironmentProvider.js'
 export * as kubernetesLogic from './modules/kubernetes/kubernetes.logic.js'
+export * as kubernetesEnvironmentLogic from './modules/kubernetes/kubernetes-environment.logic.js'
 // Unified provisioning event log: the best-effort recorder every spin-up/down site
 // writes through, and the read service behind the "View logs" drawers + run details.
 export {

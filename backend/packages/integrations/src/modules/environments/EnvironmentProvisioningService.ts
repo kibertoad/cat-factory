@@ -6,6 +6,7 @@ import type {
   ProvisionContext,
   ProvisionedEnvironment,
   ResolveRunRepoContext,
+  RunRepoContext,
   SecretResolver,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
@@ -27,7 +28,6 @@ import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningL
 
 export interface EnvironmentProvisioningServiceDependencies {
   connectionService: EnvironmentConnectionService
-  environmentProvider: EnvironmentProvider
   environmentRegistryRepository: EnvironmentRegistryRepository
   secretCipher: SecretCipher
   idGenerator: IdGenerator
@@ -38,12 +38,21 @@ export interface EnvironmentProvisioningServiceDependencies {
   provisioningLog?: ProvisioningLogRecorder
   /**
    * Resolve the VCS-neutral, run-repo-bound RepoFiles for a block, so provisioning can
-   * pre-flight `provider.validateRepo` (e.g. that a Kargo `.kargo.yml` exists + is valid)
-   * BEFORE calling the provider — failing fast with a clear error instead of an async
-   * failed environment. The same resolver the engine uses for pre/post-ops. Absent (or a
-   * provider without `validateRepo`, or a block-less manual provision) ⇒ no gate.
+   * pre-flight `provider.validateRepo` BEFORE calling the provider — failing fast with a
+   * clear error instead of an async failed environment — and so a native adapter (the
+   * Kubernetes backend) can read CO-LOCATED manifests from the block's repo. Absent (or a
+   * block-less manual provision) ⇒ no run repo.
    */
   resolveRunRepoContext?: ResolveRunRepoContext
+  /**
+   * Resolve a checkout-free RepoFiles bound to an ARBITRARY repo — so a native adapter (the
+   * Kubernetes backend) can read manifests from a SEPARATE repo. Absent ⇒ separate-repo
+   * sources report "no VCS connection".
+   */
+  resolveRepoFilesForWorkspace?: (
+    workspaceId: string,
+    coords: { owner: string; repo: string; provider?: 'github' | 'gitlab' },
+  ) => Promise<RunRepoContext | null>
 }
 
 export interface ProvisionArgs {
@@ -83,14 +92,14 @@ export class EnvironmentProvisioningService {
   /** Provision an environment, persisting an encrypted record keyed by block/run. */
   async provision(args: ProvisionArgs): Promise<EnvironmentHandle> {
     const { workspaceId } = args
-    const { manifest } = await this.deps.connectionService.requireConnection(workspaceId)
+    const { manifest, provider } = await this.deps.connectionService.resolveProvider(workspaceId)
     const resolveSecret = await this.deps.connectionService.resolveSecrets(workspaceId)
 
     // Pre-flight gate: if the provider declares repo-config expectations (e.g. Kargo's
     // `.kargo.yml`), verify them against the block's repo BEFORE provisioning, so a
     // missing/malformed config fails synchronously here instead of as an async failed
     // environment. Skipped for a block-less manual provision or an unconfigured workspace.
-    await this.preflightValidateRepo(args, manifest, resolveSecret)
+    await this.preflightValidateRepo(provider, args, manifest, resolveSecret)
 
     // Expose the block id as `{{input.blockId}}` even on a manual provision, so a
     // manifest can template against it without the caller having to repeat it. The
@@ -100,13 +109,30 @@ export class EnvironmentProvisioningService {
     if (args.blockId) inputs.blockId = args.blockId
     Object.assign(inputs, contextInputs(args.context))
     Object.assign(inputs, args.inputs)
+    // A native adapter (the Kubernetes backend) reads manifests from the run repo
+    // (co-located) or a separate repo; resolve both seams when available.
+    const runRepo =
+      args.blockId && this.deps.resolveRunRepoContext
+        ? await this.deps.resolveRunRepoContext(workspaceId, args.blockId)
+        : null
     let provisioned: ProvisionedEnvironment
     try {
-      provisioned = await this.deps.environmentProvider.provision({
+      provisioned = await provider.provision({
         manifest,
         inputs,
         ...(args.context ? { provisionContext: args.context } : {}),
         resolveSecret,
+        ...(runRepo ? { runRepo } : {}),
+        ...(this.deps.resolveRepoFilesForWorkspace
+          ? {
+              resolveRepoFiles: (coords) =>
+                this.deps.resolveRepoFilesForWorkspace!(workspaceId, {
+                  owner: coords.owner,
+                  repo: coords.repo,
+                  ...(coords.provider ? { provider: coords.provider } : {}),
+                }),
+            }
+          : {}),
       })
     } catch (error) {
       // The provider call threw (network/auth/4xx) — log the verbatim error before
@@ -188,11 +214,11 @@ export class EnvironmentProvisioningService {
    * wired, the provision is block-less, or the repo can't be resolved (unconfigured).
    */
   private async preflightValidateRepo(
+    provider: EnvironmentProvider,
     args: ProvisionArgs,
     manifest: EnvironmentManifest,
     resolveSecret: SecretResolver,
   ): Promise<void> {
-    const provider = this.deps.environmentProvider
     if (!provider.validateRepo || !this.deps.resolveRunRepoContext || !args.blockId) return
     const bound = await this.deps.resolveRunRepoContext(args.workspaceId, args.blockId)
     if (!bound) return
@@ -234,13 +260,13 @@ export class EnvironmentProvisioningService {
       'Environment',
       id,
     )
-    const { manifest } = await this.deps.connectionService.requireConnection(workspaceId)
+    const { manifest, provider } = await this.deps.connectionService.resolveProvider(workspaceId)
     const resolveSecret = await this.deps.connectionService.resolveSecrets(workspaceId)
     const provisionFields = await this.decryptFields(record.provisionFieldsCipher)
 
     let provisioned: ProvisionedEnvironment
     try {
-      provisioned = await this.deps.environmentProvider.status({
+      provisioned = await provider.status({
         manifest,
         externalId: record.externalId,
         provisionFields,

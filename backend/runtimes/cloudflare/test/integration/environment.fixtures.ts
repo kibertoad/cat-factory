@@ -1,4 +1,4 @@
-import type { EnvironmentManifest } from '@cat-factory/kernel'
+import type { EnvironmentBackendConfig, EnvironmentManifest } from '@cat-factory/kernel'
 
 // Shared fixtures for the environment-provider integration tests. The real
 // HttpEnvironmentProvider is exercised against a stubbed global `fetch` that acts
@@ -34,6 +34,13 @@ export function bearerManifest(overrides: Partial<EnvironmentManifest> = {}): En
     },
     ...overrides,
   }
+}
+
+/** The discriminated connect config wrapping {@link bearerManifest} (the `manifest` kind). */
+export function bearerConfig(
+  overrides: Partial<EnvironmentManifest> = {},
+): EnvironmentBackendConfig {
+  return { kind: 'manifest', manifest: bearerManifest(overrides) }
 }
 
 export interface CapturedRequest {

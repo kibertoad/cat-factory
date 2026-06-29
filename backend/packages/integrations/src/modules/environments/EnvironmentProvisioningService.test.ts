@@ -90,13 +90,12 @@ function makeService(
   urlPolicy?: UrlSafetyPolicy,
 ) {
   const connectionService = {
-    requireConnection: async () => ({ record: {} as never, manifest: MANIFEST }),
+    resolveProvider: async () => ({ provider, manifest: MANIFEST }),
     resolveSecrets: async () => () => undefined,
   } as unknown as EnvironmentConnectionService
   let n = 0
   return new EnvironmentProvisioningService({
     connectionService,
-    environmentProvider: provider,
     environmentRegistryRepository: registry,
     secretCipher: fakeCipher,
     idGenerator: { next: (prefix: string) => `${prefix}_${++n}` },
@@ -212,13 +211,12 @@ describe('EnvironmentProvisioningService — repo-config pre-flight gate', () =>
     resolveRunRepoContext?: ResolveRunRepoContext,
   ) {
     const connectionService = {
-      requireConnection: async () => ({ record: {} as never, manifest: MANIFEST }),
+      resolveProvider: async () => ({ provider, manifest: MANIFEST }),
       resolveSecrets: async () => () => undefined,
     } as unknown as EnvironmentConnectionService
     let n = 0
     return new EnvironmentProvisioningService({
       connectionService,
-      environmentProvider: provider,
       environmentRegistryRepository: registry,
       secretCipher: fakeCipher,
       idGenerator: { next: (prefix: string) => `${prefix}_${++n}` },

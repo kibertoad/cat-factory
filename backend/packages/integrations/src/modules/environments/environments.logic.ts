@@ -2,6 +2,7 @@ import type {
   ConnectionTestResult,
   EnvironmentAccessHandle,
   EnvironmentHandle,
+  EnvironmentManifest,
   EnvironmentStatus,
   ProviderConfigField,
 } from '@cat-factory/kernel'
@@ -82,6 +83,32 @@ export function assertSafeEnvironmentUrl(
   if (host === '') throw invalid()
   if (!hostExempt(host, policy) && isBlockedPrivateHost(host)) {
     throw new ValidationError(`Environment ${label} must be a public host`)
+  }
+}
+
+/** Validate every URL a manifest will fetch (defence against SSRF). */
+export function assertManifestUrlsSafe(manifest: EnvironmentManifest, policy: UrlSafetyPolicy): void {
+  assertSafeEnvironmentUrl(manifest.baseUrl, 'base URL', policy)
+  if (manifest.auth.type === 'oauth2_client_credentials') {
+    assertSafeEnvironmentUrl(manifest.auth.tokenUrl, 'OAuth token URL', policy)
+  }
+}
+
+/** Collect every secret key a manifest's auth scheme references. */
+export function referencedSecretKeys(manifest: EnvironmentManifest): string[] {
+  const auth = manifest.auth
+  switch (auth.type) {
+    case 'none':
+      return []
+    case 'api_key':
+    case 'bearer':
+      return [auth.secretRef.key]
+    case 'basic':
+      return [auth.usernameSecretRef.key, auth.passwordSecretRef.key]
+    case 'oauth2_client_credentials':
+      return [auth.clientIdSecretRef.key, auth.clientSecretSecretRef.key]
+    case 'custom_headers':
+      return auth.headers.map((h) => h.secretRef.key)
   }
 }
 

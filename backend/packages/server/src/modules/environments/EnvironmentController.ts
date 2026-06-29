@@ -55,9 +55,9 @@ export function environmentController(): Hono<AppEnv> {
   buildHonoRoute(app, registerEnvironmentProviderContract, async (c) => {
     const env = requireEnvironments(c)
     if (!env) return unavailable(c)
-    const { manifest, secrets } = c.req.valid('json')
+    const { config, secrets } = c.req.valid('json')
     const connection = await env.connectionService.register(param(c, 'workspaceId'), {
-      manifest,
+      config,
       secrets,
     })
     return c.json(connection, 201)

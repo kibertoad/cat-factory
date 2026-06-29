@@ -1266,6 +1266,7 @@ export const environmentConnections = pgTable(
   'environment_connections',
   {
     workspace_id: text('workspace_id').notNull(),
+    kind: text('kind').notNull().default('manifest'),
     provider_id: text('provider_id').notNull(),
     label: text('label').notNull(),
     base_url: text('base_url').notNull(),

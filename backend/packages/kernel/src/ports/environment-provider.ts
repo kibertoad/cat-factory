@@ -5,6 +5,7 @@ import type {
   EnvironmentStatus,
   ProviderConfigField,
 } from '../domain/types.js'
+import type { RunRepoContext } from './repo-files.js'
 
 // Port for an ephemeral-environment provider: the thing that actually calls an
 // org's self-rolled management API to provision/observe/destroy environments.
@@ -40,6 +41,15 @@ export interface ProvisionContext {
   repoName?: string
 }
 
+/** Coordinates for resolving a RepoFiles bound to an arbitrary repo (separate manifests). */
+export interface RepoFilesCoords {
+  owner: string
+  repo: string
+  /** Branch/tag/sha to read at; absent ⇒ that repo's default branch. */
+  ref?: string
+  provider?: 'github' | 'gitlab'
+}
+
 export interface ProvisionEnvironmentRequest {
   manifest: EnvironmentManifest
   /** Provision inputs (`{{input.*}}` in templates). */
@@ -50,6 +60,19 @@ export interface ProvisionEnvironmentRequest {
    */
   provisionContext?: ProvisionContext
   resolveSecret: SecretResolver
+  /**
+   * The block's own run repo, checkout-free + bound to the PR head branch — for a
+   * native adapter that reads co-located manifests from the deployed repo. Absent for
+   * a block-less manual provision or when GitHub isn't connected. The generic HTTP
+   * provider ignores it.
+   */
+  runRepo?: RunRepoContext
+  /**
+   * Resolve a checkout-free RepoFiles bound to an ARBITRARY repo — for a native adapter
+   * that reads manifests from a SEPARATE repo. Returns null when the repo can't be
+   * resolved (no VCS connection). The generic HTTP provider ignores it.
+   */
+  resolveRepoFiles?: (coords: RepoFilesCoords) => Promise<RunRepoContext | null>
 }
 
 export interface EnvironmentStatusRequest {

@@ -165,9 +165,7 @@ export function makeConformanceApp(
     // against real Postgres, identically to the Worker/Node. Overrides are spread last in
     // buildNodeContainer (reused by buildLocalContainer), so they win over the default
     // HttpEnvironmentProvider.
-    ...(opts?.environmentProvider
-      ? { environmentProvider: opts.environmentProvider, environmentProviderKind: 'native' }
-      : {}),
+    ...(opts?.environmentProvider ? { environmentProvider: opts.environmentProvider } : {}),
     ...(opts?.resolveRepoFilesForCoords
       ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
       : {}),

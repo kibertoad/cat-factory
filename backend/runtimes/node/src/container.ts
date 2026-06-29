@@ -14,7 +14,7 @@ import {
   JiraProvider,
   LinearDocumentProvider,
   LinearTaskProvider,
-  HttpEnvironmentProvider,
+  findRepairCapableProvider,
   HttpRunnerPoolProvider,
   NotionProvider,
   ApiKeyService,
@@ -47,7 +47,6 @@ import {
   type AgentExecutor,
   type Clock,
   type DocumentSourceProvider,
-  type EnvironmentProvider,
   type FragmentOwnerKind,
   type EmailSender,
   type GitHubClient,
@@ -479,15 +478,6 @@ export interface NodeContainerOptions {
    */
   realtimeHub?: NodeRealtimeHub
   /**
-   * Override the ephemeral-environment provider. When provided it REPLACES the default
-   * manifest-driven `HttpEnvironmentProvider`, so a trusted in-house adapter package (one
-   * implementing the `EnvironmentProvider` port for an internal env-orchestration platform)
-   * can be wired into a stock build without forking the facade. The environment repos +
-   * secret cipher still wire from config, so `ENVIRONMENTS_ENABLED` + `ENCRYPTION_KEY` are
-   * still required for the module to assemble. Undefined → the default HTTP provider.
-   */
-  environmentProvider?: EnvironmentProvider
-  /**
    * Override the self-hosted runner-pool provider. When provided it REPLACES the default
    * manifest-driven `HttpRunnerPoolProvider` for BOTH the dispatch transport (so jobs
    * actually run through it) AND the connection-management UI (`describeConfig` /
@@ -788,17 +778,24 @@ function selectNodeEnvConfigRepairer(deps: {
   resolveTransport: ResolveRunnerTransport | null
   installationRepository: GitHubInstallationRepository
   mintInstallationToken: ((installationId: number) => Promise<string>) | undefined
-  environmentProvider: CoreDependencies['environmentProvider']
+  override: CoreDependencies['environmentProvider']
 }): ContainerEnvConfigRepairer | undefined {
   const publicUrl = deps.env.PUBLIC_URL?.trim()
   const sessionSecret = deps.config.auth.sessionSecret
+  // Prefer the internal override (the conformance suite's fake repair provider), else scan
+  // the env-backend registry for the first repair-capable backend. Built-ins don't support
+  // repair, so this is undefined on a stock deployment; a third-party backend wires it.
+  const repairUrlPolicy = resolveUrlSafetyPolicy(deps.config.environments)
+  const environmentProvider = !deps.resolveTransport
+    ? undefined
+    : (deps.override ?? findRepairCapableProvider(repairUrlPolicy ? { urlPolicy: repairUrlPolicy } : {}))
   if (
     !deps.resolveTransport ||
     !publicUrl ||
     !sessionSecret ||
     !deps.mintInstallationToken ||
-    !deps.environmentProvider ||
-    typeof deps.environmentProvider.describeRepairAgent !== 'function'
+    !environmentProvider ||
+    typeof environmentProvider.describeRepairAgent !== 'function'
   ) {
     return undefined
   }
@@ -822,7 +819,7 @@ function selectNodeEnvConfigRepairer(deps: {
     installationRepository: deps.installationRepository,
     mintInstallationToken: deps.mintInstallationToken,
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
-    environmentProvider: deps.environmentProvider,
+    environmentProvider,
     model,
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
     githubApiBase: deps.config.github.apiBase,
@@ -1815,7 +1812,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // trusted in-house adapter can replace the default HTTP provider via the seam.
     // The environment integration scopes its own URL/host policy from
     // `config.environments` inside this selector (separate from the runner pool's).
-    ...selectNodeEnvironmentsDeps(config, options.db, options.environmentProvider),
+    ...selectNodeEnvironmentsDeps(config, options.db),
     // Prompt-fragment library (ADR 0006; opt-in): the managed tenant-scoped catalog
     // of best-practice fragments feeding every agent run, wired exactly like the
     // Worker's selectFragmentLibraryDeps (repos + installation resolver + selector).
@@ -1870,7 +1867,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     resolveTransport,
     installationRepository: githubInstallationRepository,
     mintInstallationToken: bootstrapMintInstallationToken,
-    environmentProvider: dependencies.environmentProvider,
+    override: dependencies.environmentProvider,
   })
   // Don't clobber an override-provided repairer (e.g. the conformance suite's fake): an
   // explicit `overrides.envConfigRepairer` wins, exactly like `repoBootstrapper`.
@@ -2026,18 +2023,13 @@ function selectNodeDocumentsDeps(
  * environment-scoped `SecretCipher`. Per-tenant management-API secrets are encrypted at
  * rest with the shared ENCRYPTION_KEY. Disabled → `{}` and the module stays off.
  */
-function selectNodeEnvironmentsDeps(
-  config: AppConfig,
-  db: DrizzleDb,
-  override?: EnvironmentProvider,
-): Partial<CoreDependencies> {
+function selectNodeEnvironmentsDeps(config: AppConfig, db: DrizzleDb): Partial<CoreDependencies> {
   if (!config.environments.enabled || !config.environments.encryptionKey) return {}
+  // The provider is resolved per-workspace from the env-backend registry by the stored
+  // `kind`. Node honors custom-CA / insecure-skip TLS (undici), so a Kubernetes env config
+  // with a CA is allowed (environmentCustomTlsSupported defaults to supported).
   const urlPolicy = resolveUrlSafetyPolicy(config.environments)
   return {
-    environmentProvider: override ?? new HttpEnvironmentProvider(urlPolicy ? { urlPolicy } : {}),
-    // An injected adapter has its own auth (native, fully self-described); the default is
-    // the generic manifest provider whose descriptor reflects the manifest's secret keys.
-    environmentProviderKind: override ? 'native' : 'manifest',
     environmentConnectionRepository: new DrizzleEnvironmentConnectionRepository(db),
     environmentRegistryRepository: new DrizzleEnvironmentRegistryRepository(db),
     secretCipher: new WebCryptoSecretCipher({

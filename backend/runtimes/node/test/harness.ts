@@ -144,13 +144,10 @@ export function makeConformanceApp(
     // Inject the engine's run-repo resolver (a fake in the suite) so the registered
     // custom kind's pre/post-op hooks run + commit identically to a real GitHub-wired facade.
     ...(opts?.resolveRunRepoContext ? { resolveRunRepoContext: opts.resolveRunRepoContext } : {}),
-    // Inject a native environment provider + the block-less coords resolver (both fakes
-    // in the suite) so the on-demand repo-config validate route is asserted end-to-end
-    // against real Postgres, identically to the Worker. Overrides are spread last in
-    // buildNodeContainer, so they win over the default HttpEnvironmentProvider.
-    ...(opts?.environmentProvider
-      ? { environmentProvider: opts.environmentProvider, environmentProviderKind: 'native' }
-      : {}),
+    // Inject a fake environment provider (the internal override) + the block-less coords
+    // resolver (both fakes in the suite) so the on-demand repo-config validate route is
+    // asserted end-to-end against real Postgres, identically to the Worker.
+    ...(opts?.environmentProvider ? { environmentProvider: opts.environmentProvider } : {}),
     ...(opts?.resolveRepoFilesForCoords
       ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
       : {}),
