@@ -243,6 +243,118 @@ describe('FetchGitLabClient', () => {
       /not supported on GitLab/,
     )
   })
+
+  it('reads the PR base ref and requested reviewers from the MR detail', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/3': {
+        body: { target_branch: 'release', reviewers: [{ username: 'bob' }, { username: 'cara' }] },
+      },
+    })
+    expect(await c.getPullRequestBaseRef(connection, ref, 3)).toBe('release')
+    expect(await c.listRequestedReviewers(connection, ref, 3)).toEqual(['bob', 'cara'])
+  })
+
+  it('maps GitLab approvals to APPROVED reviews + the required count', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/3/approvals': {
+        body: { approved_by: [{ user: { username: 'dee' } }, { user: { username: 'eli' } }] },
+      },
+      'GET /projects/7/approvals': { body: { approvals_before_merge: 2 } },
+    })
+    expect(await c.listPullRequestReviews(connection, ref, 3)).toEqual([
+      { author: 'dee', state: 'APPROVED', submittedAt: 0, commitId: null },
+      { author: 'eli', state: 'APPROVED', submittedAt: 0, commitId: null },
+    ])
+    expect(await c.getRequiredApprovingReviewCount(connection, ref, 'main')).toBe(2)
+  })
+
+  it('defaults the required approval count to 1 when project approvals are unreadable', async () => {
+    const { c } = client({ 'GET /projects/7/approvals': { status: 403 } })
+    expect(await c.getRequiredApprovingReviewCount(connection, ref, 'main')).toBe(1)
+  })
+
+  it('maps resolvable discussions to review threads (MR iid carried in the thread id)', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/3/discussions?per_page=100': {
+        body: [
+          // A plain conversation discussion (not resolvable) is NOT a review thread.
+          { id: 'chat', notes: [{ id: 1, body: 'hi', author: { username: 'x' } }] },
+          {
+            id: 'd1',
+            notes: [
+              {
+                id: 2,
+                body: 'please fix',
+                resolvable: true,
+                resolved: false,
+                author: { username: 'rev' },
+                created_at: '2024-01-01T00:00:00Z',
+                position: { new_path: 'src/a.ts', new_line: 12 },
+              },
+            ],
+          },
+        ],
+      },
+    })
+    const threads = await c.listReviewThreads(connection, ref, 3)
+    expect(threads).toHaveLength(1)
+    expect(threads[0]).toMatchObject({
+      id: '3:d1',
+      isResolved: false,
+      path: 'src/a.ts',
+      line: 12,
+      comments: [
+        { author: 'rev', body: 'please fix', createdAt: Date.parse('2024-01-01T00:00:00Z') },
+      ],
+    })
+  })
+
+  it('resolves and replies to a thread against the MR + discussion the thread id encodes', async () => {
+    const { c, calls } = client({
+      'PUT /projects/7/merge_requests/3/discussions/d1?resolved=true': { status: 200 },
+      'POST /projects/7/merge_requests/3/discussions/d1/notes?body=ok': { status: 201 },
+    })
+    await c.resolveReviewThread(connection, ref, '3:d1')
+    await c.replyToReviewThread(connection, ref, '3:d1', 'ok')
+    expect(calls.map((x) => `${x.method} ${x.url}`)).toEqual([
+      'PUT /projects/7/merge_requests/3/discussions/d1?resolved=true',
+      'POST /projects/7/merge_requests/3/discussions/d1/notes?body=ok',
+    ])
+  })
+
+  it('lists only standalone conversation comments (drops system + threaded notes)', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/3/notes?sort=asc&order_by=created_at&per_page=100': {
+        body: [
+          { id: 1, body: 'hello', author: { username: 'p' }, created_at: '2024-01-01T00:00:00Z' },
+          { id: 2, body: 'assigned', system: true, author: { username: 'p' } },
+          { id: 3, body: 'diff note', type: 'DiffNote', author: { username: 'p' } },
+        ],
+      },
+    })
+    const comments = await c.listIssueComments(connection, ref, 3)
+    expect(comments).toEqual([
+      { id: '1', author: 'p', body: 'hello', createdAt: Date.parse('2024-01-01T00:00:00Z') },
+    ])
+  })
+
+  it('rebasePullRequest reports merged on a clean rebase and conflict on a merge_error', async () => {
+    const merged = client({
+      'PUT /projects/7/merge_requests/3/rebase': { status: 202, body: {} },
+      'GET /projects/7/merge_requests/3?include_rebase_in_progress=true': {
+        body: { rebase_in_progress: false, merge_error: null },
+      },
+    })
+    expect(await merged.c.rebasePullRequest(connection, ref, 3)).toBe('merged')
+
+    const conflicted = client({
+      'PUT /projects/7/merge_requests/4/rebase': { status: 202, body: {} },
+      'GET /projects/7/merge_requests/4?include_rebase_in_progress=true': {
+        body: { rebase_in_progress: false, merge_error: 'merge conflict' },
+      },
+    })
+    expect(await conflicted.c.rebasePullRequest(connection, ref, 4)).toBe('conflict')
+  })
 })
 
 describe('GitLab webhook', () => {

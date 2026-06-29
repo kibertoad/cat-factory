@@ -1,6 +1,8 @@
-import { registerVcsProvider, type Clock } from '@cat-factory/kernel'
+import { registerVcsProvider, type Clock, type GitHubClient } from '@cat-factory/kernel'
 import { FetchGitLabClient } from './FetchGitLabClient.js'
 import { GitLabProvisioningClient } from './provisioning.js'
+import { StaticGitLabTokenSource } from './tokenSource.js'
+import { asGitHubClient } from './vcsBackedGitHubClient.js'
 import { GitLabWebhookMapper, GitLabWebhookVerifier } from './webhook.js'
 import type { GitLabTokenSource } from './tokenSource.js'
 
@@ -53,5 +55,33 @@ export function registerGitLab(options: RegisterGitLabOptions): void {
     webhookMapper: new GitLabWebhookMapper(clock),
     webhookVerifier: webhookSecret ? new GitLabWebhookVerifier(webhookSecret) : undefined,
     provisioning: new GitLabProvisioningClient({ tokenSource, fetchImpl }),
+  })
+}
+
+export interface BuildGitLabEngineClientOptions {
+  /** The single deployment PAT (`GITLAB_TOKEN`). */
+  token: string
+  /** REST v4 base, e.g. `https://gitlab.com/api/v4` or a self-managed instance. */
+  apiBase: string
+  clock: Clock
+  fetchImpl?: typeof fetch
+}
+
+/**
+ * Build a GitLab-backed {@link GitHubClient} for the engine's gate / merge / RepoFiles paths:
+ * a {@link FetchGitLabClient} bridged onto the legacy `GitHubClient` port via {@link
+ * asGitHubClient}. This is the SINGLE source of the "engine VCS client over GitLab" wiring,
+ * shared by every facade (Worker / Node, and local through Node) so a GitLab-only deployment
+ * gates on real CI and merges for real exactly as a GitHub-App one does — and the facades
+ * cannot drift in HOW they build it. The GitHub App client wins when both are configured.
+ */
+export function buildGitLabEngineClient(options: BuildGitLabEngineClientOptions): GitHubClient {
+  return asGitHubClient({
+    vcs: new FetchGitLabClient({
+      tokenSource: new StaticGitLabTokenSource(options.token, options.apiBase),
+      clock: options.clock,
+      fetchImpl: options.fetchImpl,
+    }),
+    provider: 'gitlab',
   })
 }

@@ -250,4 +250,17 @@ export interface VcsClient {
     ref: VcsRepoRef,
     input: { base: string; head: string },
   ): Promise<'merged' | 'noop' | 'conflict'>
+  /**
+   * Bring an open PR's source branch up to date with its target branch server-side, and map
+   * the result to the same verdict as {@link mergeBranch}. Optional: the human-testing gate's
+   * "pull latest base" action prefers this when present (it's the right primitive for a
+   * provider whose only server-side branch-advancing operation is a PR rebase, e.g. GitLab,
+   * which has no merge-branch-into-branch endpoint). A provider with a real `mergeBranch`
+   * (GitHub) omits it and the gate falls back to `mergeBranch`.
+   */
+  rebasePullRequest?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<'merged' | 'noop' | 'conflict'>
 }

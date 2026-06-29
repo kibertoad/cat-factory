@@ -7,6 +7,7 @@ import {
   type EmailSender,
   type ExecutionEventPublisher,
   type FragmentOwnerKind,
+  type GitHubClient,
   type IdGenerator,
   type ModelProviderResolver,
   type NotificationChannel,
@@ -204,7 +205,11 @@ import {
   wireIncidentEnrichment,
   wirePullRequestReviewProvider,
 } from '@cat-factory/gates'
-import { registerGitLab, StaticGitLabTokenSource } from '@cat-factory/gitlab'
+import {
+  buildGitLabEngineClient,
+  registerGitLab,
+  StaticGitLabTokenSource,
+} from '@cat-factory/gitlab'
 import { GitHubPullRequestReviewProvider } from '@cat-factory/server'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
@@ -562,6 +567,47 @@ function buildResolveRepoTarget(db: D1Database): ResolveRepoTarget {
  * need GitHub, so they're wired only when the App is configured — without them the
  * `ci` gate passes through and `done` is a board-only flip (graceful degradation).
  */
+/**
+ * The GitHubClient the engine's gate / merge / RepoFiles paths read through: the GitHub App
+ * (preferring the run initiator's per-user PAT when stored), else a GitLab-backed single-token
+ * client (bridged onto the GitHubClient port). Undefined when neither is configured — the gates
+ * then pass through. Shared by the merge-lifecycle and RepoFiles wiring so they resolve the SAME
+ * provider, and so the GitLab fallback can't drift from the App path.
+ */
+function selectEngineVcsClient(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+  clock: Clock,
+  idGenerator: IdGenerator,
+): GitHubClient | undefined {
+  if (config.github.enabled && env.GITHUB_APP_PRIVATE_KEY) {
+    const baseRegistry = buildAppRegistry(env, config, db, clock)
+    // Prefer the run initiator's per-user PAT (when stored) over the App token for the CI gate +
+    // merge reads; the engine sets the initiator in ambient context around those boundaries
+    // (runWithInitiator). Falls back to the App token otherwise.
+    const resolveUserGitHubToken = buildResolveUserGitHubToken(env, db, clock)
+    const registry = resolveUserGitHubToken
+      ? new PatPreferringAppRegistry(baseRegistry, resolveUserGitHubToken)
+      : baseRegistry
+    return new FetchGitHubClient({
+      registry,
+      rateLimitRepository: new D1RateLimitRepository({ db, idGenerator }),
+      idGenerator,
+      clock,
+      apiBase: config.github.apiBase,
+    })
+  }
+  if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
+    return buildGitLabEngineClient({
+      token: env.GITLAB_TOKEN,
+      apiBase: config.gitlab.apiBase,
+      clock,
+    })
+  }
+  return undefined
+}
+
 function selectMergeLifecycleDeps(
   env: Env,
   config: AppConfig,
@@ -589,22 +635,12 @@ function selectMergeLifecycleDeps(
   else if (channels.length > 1)
     deps.notificationChannel = new CompositeNotificationChannel(channels)
 
-  if (config.github.enabled && env.GITHUB_APP_PRIVATE_KEY) {
-    const baseRegistry = buildAppRegistry(env, config, db, clock)
-    // Prefer the run initiator's per-user PAT (when stored) over the App token for the
-    // CI gate + merge reads; the engine sets the initiator in ambient context around
-    // those boundaries (runWithInitiator). Falls back to the App token otherwise.
-    const resolveUserGitHubToken = buildResolveUserGitHubToken(env, db, clock)
-    const registry = resolveUserGitHubToken
-      ? new PatPreferringAppRegistry(baseRegistry, resolveUserGitHubToken)
-      : baseRegistry
-    const githubClient = new FetchGitHubClient({
-      registry,
-      rateLimitRepository: new D1RateLimitRepository({ db, idGenerator }),
-      idGenerator,
-      clock,
-      apiBase: config.github.apiBase,
-    })
+  // The engine's CI gate + merge / mergeability / review providers read through a single
+  // GitHubClient. Prefer the GitHub App; else fall back to a GitLab-backed client (single-token,
+  // bridged onto the GitHubClient port) so a GitLab-only deployment gates on real CI and merges
+  // for real — parity with the App path and with local mode (keep the runtimes symmetric).
+  const githubClient = selectEngineVcsClient(env, config, db, clock, idGenerator)
+  if (githubClient) {
     const resolveRepoTarget = buildResolveRepoTarget(db)
     const blockRepository = new D1BlockRepository({ db })
     // The `ci` / `conflicts` gates now live in `@cat-factory/gates`; wire their providers into
@@ -1320,7 +1356,28 @@ function selectGitHubDeps(
   clock: Clock,
   idGenerator: IdGenerator,
 ): Partial<CoreDependencies> {
-  if (!config.github.enabled) return {}
+  if (!config.github.enabled) {
+    // GitLab-only deployment: the App-shaped connect / projection / provisioning wiring stays
+    // off (GitLab ingests via the neutral `/vcs/:provider/webhooks` route), but the checkout-free
+    // RepoFiles seams — a registered custom kind's pre/post-op hooks + the environments module's
+    // on-demand repo validation — must still work, so wire them from the GitLab-backed client.
+    if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
+      const githubClient = buildGitLabEngineClient({
+        token: env.GITLAB_TOKEN,
+        apiBase: config.gitlab.apiBase,
+        clock,
+      })
+      return {
+        resolveRunRepoContext: makeResolveRunRepoContext(githubClient, buildResolveRepoTarget(db)),
+        resolveRepoFilesForCoords: makeResolveRepoFilesForCoords(
+          githubClient,
+          new D1GitHubInstallationRepository({ db }),
+          new D1RepoProjectionRepository({ db }),
+        ),
+      }
+    }
+    return {}
+  }
 
   const githubInstallationRepository = new D1GitHubInstallationRepository({ db })
   const registry = buildAppRegistry(env, config, db, clock)

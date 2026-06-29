@@ -138,6 +138,9 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
     client.resolveReviewThread = (i, ref, threadId) =>
       vcs.resolveReviewThread!(conn(i), toRepoRef(ref), threadId)
   }
+  if (vcs.rebasePullRequest) {
+    client.rebasePullRequest = (i, ref, n) => vcs.rebasePullRequest!(conn(i), toRepoRef(ref), n)
+  }
 
   return client
 }

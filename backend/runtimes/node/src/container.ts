@@ -123,7 +123,11 @@ import {
   wireIncidentEnrichment,
   wirePullRequestReviewProvider,
 } from '@cat-factory/gates'
-import { registerGitLab, StaticGitLabTokenSource } from '@cat-factory/gitlab'
+import {
+  buildGitLabEngineClient,
+  registerGitLab,
+  StaticGitLabTokenSource,
+} from '@cat-factory/gitlab'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
@@ -1094,11 +1098,21 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // in the process-wide VCS registry so the neutral webhook route + any VcsConnectionRef
   // holder resolves it. A no-op unless GITLAB_TOKEN is set; symmetric with the Worker facade
   // (and inherited by local) per "keep the runtimes symmetric".
+  let gitlabEngineClient: GitHubClient | undefined
   if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
     registerGitLab({
       tokenSource: new StaticGitLabTokenSource(env.GITLAB_TOKEN, config.gitlab.apiBase),
       clock,
       webhookSecret: config.gitlab.webhookSecret || undefined,
+    })
+    // Bridge the GitLab VcsClient onto the legacy GitHubClient port the engine's gate / merge /
+    // RepoFiles paths consume, so a GitLab-only deployment (no GitHub App) gates on real CI and
+    // merges the MR for real — the SAME wiring local mode already does, now on the Node facade
+    // too (keep the runtimes symmetric). The GitHub App client wins when both are configured.
+    gitlabEngineClient = buildGitLabEngineClient({
+      token: env.GITLAB_TOKEN,
+      apiBase: config.gitlab.apiBase,
+      clock,
     })
   }
 
@@ -1320,7 +1334,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           clock,
           apiBase: config.github.apiBase,
         })
-      : undefined)
+      : gitlabEngineClient)
 
   // Task-source integration (Jira + GitHub issues). Tenants connect their own Jira
   // site through the UI (credentials stored per-workspace, encrypted at rest); the

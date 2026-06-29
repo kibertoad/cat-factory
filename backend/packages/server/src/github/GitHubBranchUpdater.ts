@@ -36,13 +36,22 @@ export class GitHubBranchUpdater implements BranchUpdater {
       throw new ConflictError('Could not resolve the repository for this task')
     }
     const ref = { owner: target.owner, repo: target.name }
-    const repo = await this.deps.githubClient.getRepo(target.installationId, ref)
+    const gh = this.deps.githubClient
+    // A provider with no server-side merge-branch-into-branch endpoint (GitLab) advances the PR
+    // branch by REBASING the open MR onto its target — the equivalent "bring the PR branch up to
+    // date with base" operation. Prefer it when exposed and the PR number is known; it rebases
+    // against the MR's own target branch, so no default-branch lookup is needed.
+    const number = block?.pullRequest?.number
+    if (gh.rebasePullRequest && number != null) {
+      return gh.rebasePullRequest(target.installationId, ref, number)
+    }
+    const repo = await gh.getRepo(target.installationId, ref)
     const base = repo.defaultBranch
     if (!base) {
       throw new ConflictError('The repository has no default branch to pull from')
     }
     // base = the PR branch (merge INTO); head = the default branch (merge IN).
-    return this.deps.githubClient.mergeBranch(target.installationId, ref, {
+    return gh.mergeBranch(target.installationId, ref, {
       base: branch,
       head: base,
     })

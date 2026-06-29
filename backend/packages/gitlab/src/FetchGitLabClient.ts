@@ -1,4 +1,5 @@
 import type {
+  BranchUpdateOutcome,
   Clock,
   CommitFilesResult,
   GitHubBranch,
@@ -9,7 +10,10 @@ import type {
   GitHubIssueDetail,
   GitHubIssueSearchHit,
   GitHubPullRequest,
+  GitHubPullRequestComment,
+  GitHubPullRequestReview,
   GitHubRepo,
+  GitHubReviewThread,
   ListOptions,
   Paged,
   RepoContentEntry,
@@ -54,12 +58,17 @@ import {
 
 const PER_PAGE = 100
 const MAX_PAGES = 10
+/** GitLab's MR rebase runs asynchronously; poll its status up to this many times. */
+const REBASE_POLL_ATTEMPTS = 30
+const REBASE_POLL_INTERVAL_MS = 1000
 
 export interface FetchGitLabClientDependencies {
   tokenSource: GitLabTokenSource
   clock: Clock
   /** Injected for tests; defaults to the global `fetch`. */
   fetchImpl?: typeof fetch
+  /** Injected for tests; defaults to a `setTimeout`-based delay (used between rebase polls). */
+  sleep?: (ms: number) => Promise<void>
   /**
    * Optional sink, warned when a listing hits the {@link MAX_PAGES} page cap with more
    * results still available — so a truncated sync is surfaced rather than silently dropped
@@ -375,6 +384,159 @@ export class FetchGitLabClient implements VcsClient {
     return { items }
   }
 
+  // ---- review reads (the human-review gate) -------------------------------
+
+  async getPullRequestBaseRef(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    try {
+      const mr = await this.getMergeRequest(connection, ref, number)
+      return mr.target_branch ?? null
+    } catch (err) {
+      if (err instanceof GitLabApiError && err.status === 404) return null
+      throw err
+    }
+  }
+
+  async listRequestedReviewers(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<string[]> {
+    const mr = await this.getMergeRequest(connection, ref, number)
+    return (mr.reviewers ?? []).map((r) => r.username ?? '').filter(Boolean)
+  }
+
+  async listPullRequestReviews(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<GitHubPullRequestReview[]> {
+    // GitLab models "approval" rather than GitHub's review-event log: there is one current
+    // set of approvers, not a per-event history. Map each current approver to a single
+    // standing APPROVED review — enough for the caller, which reduces to the latest review
+    // per author and counts APPROVED. The approvals payload carries no per-approval
+    // timestamp/commit, so `submittedAt` is 0 and `commitId` is null.
+    const { json } = await this.request(
+      `/projects/${projectPath(ref)}/merge_requests/${number}/approvals`,
+      { connection },
+    )
+    const approvedBy =
+      ((json ?? {}) as { approved_by?: Array<{ user?: { username?: string } | null }> })
+        .approved_by ?? []
+    return approvedBy
+      .map((a) => a.user?.username ?? '')
+      .filter(Boolean)
+      .map((author) => ({ author, state: 'APPROVED', submittedAt: 0, commitId: null }))
+  }
+
+  async getRequiredApprovingReviewCount(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    _branch: string,
+  ): Promise<number> {
+    // GitLab's required-approval count is project- (or MR-) scoped, not keyed by branch on the
+    // basic API (per-branch protected-branch approval rules need a premium tier + a different
+    // endpoint). Read the project's `approvals_before_merge`; fall back to 1 when it is
+    // unreadable — parity with the GitHub provider's unreadable-protection default.
+    try {
+      const { json } = await this.request(`/projects/${projectPath(ref)}/approvals`, { connection })
+      const n = ((json ?? {}) as { approvals_before_merge?: number }).approvals_before_merge
+      return typeof n === 'number' ? n : 1
+    } catch (err) {
+      if (err instanceof GitLabApiError && (err.status === 403 || err.status === 404)) return 1
+      throw err
+    }
+  }
+
+  async listReviewThreads(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<GitHubReviewThread[]> {
+    const discussions = await this.paginate<GlDiscussion>(
+      `/projects/${projectPath(ref)}/merge_requests/${number}/discussions?per_page=${PER_PAGE}`,
+      { connection },
+      (json) => (Array.isArray(json) ? (json as GlDiscussion[]) : []),
+    )
+    const threads: GitHubReviewThread[] = []
+    for (const d of discussions) {
+      const notes = d.notes ?? []
+      // Only diff/review discussions are "resolvable"; a plain conversation discussion (no
+      // resolvable note) is not a review thread — those surface via listIssueComments.
+      const resolvable = notes.filter((n) => n.resolvable && !n.system)
+      if (resolvable.length === 0) continue
+      const first = resolvable[0]!
+      threads.push({
+        // The reply/resolve endpoints are MR-scoped (`/merge_requests/:iid/discussions/:id`),
+        // but the neutral reply/resolve calls receive ONLY the thread id — so carry the MR iid
+        // alongside the discussion id in the opaque thread id (`<iid>:<discussionId>`). The
+        // caller treats it as opaque and hands it back verbatim.
+        id: `${number}:${d.id}`,
+        isResolved: resolvable.every((n) => n.resolved),
+        path: first.position?.new_path ?? first.position?.old_path ?? null,
+        line: first.position?.new_line ?? first.position?.old_line ?? null,
+        comments: resolvable.map((n) => ({
+          author: n.author?.username ?? '',
+          body: n.body ?? '',
+          createdAt: epochMs(n.created_at),
+        })),
+      })
+    }
+    return threads
+  }
+
+  async listIssueComments(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<GitHubPullRequestComment[]> {
+    const notes = await this.paginate<GlNote>(
+      `/projects/${projectPath(ref)}/merge_requests/${number}/notes?sort=asc&order_by=created_at&per_page=${PER_PAGE}`,
+      { connection },
+      (json) => (Array.isArray(json) ? (json as GlNote[]) : []),
+    )
+    // Conversation comments only: drop system notes (label/assignee events) and threaded
+    // diff/discussion notes (those are review threads, surfaced via listReviewThreads). A
+    // standalone MR comment has no `type`.
+    return notes
+      .filter((n) => !n.system && !n.type)
+      .map((n) => ({
+        id: String(n.id ?? ''),
+        author: n.author?.username ?? '',
+        body: n.body ?? '',
+        createdAt: epochMs(n.created_at),
+      }))
+  }
+
+  async replyToReviewThread(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    threadId: string,
+    body: string,
+  ): Promise<void> {
+    const { iid, discussionId } = parseThreadId(threadId)
+    const params = new URLSearchParams({ body })
+    await this.request(
+      `/projects/${projectPath(ref)}/merge_requests/${iid}/discussions/${discussionId}/notes?${params.toString()}`,
+      { connection, method: 'POST' },
+    )
+  }
+
+  async resolveReviewThread(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    threadId: string,
+  ): Promise<void> {
+    const { iid, discussionId } = parseThreadId(threadId)
+    await this.request(
+      `/projects/${projectPath(ref)}/merge_requests/${iid}/discussions/${discussionId}?resolved=true`,
+      { connection, method: 'PUT' },
+    )
+  }
+
   // ---- writes -------------------------------------------------------------
 
   async createBranch(
@@ -548,6 +710,39 @@ export class FetchGitLabClient implements VcsClient {
     )
   }
 
+  async rebasePullRequest(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<BranchUpdateOutcome> {
+    // GitLab has no "merge branch A into B" endpoint, but the conflicts / human-testing gate
+    // always operates on an open MR — and bringing an MR's source branch up to date with its
+    // target branch IS the MR `rebase` endpoint. Kick it off, then poll the MR's rebase
+    // status: `merge_error` set ⇒ the rebase conflicts (escalate to the conflict-resolver),
+    // else the branch was updated ('merged'). Rebase is asynchronous, so poll with a bounded
+    // delay between reads.
+    await this.request(`/projects/${projectPath(ref)}/merge_requests/${number}/rebase`, {
+      connection,
+      method: 'PUT',
+    })
+    for (let attempt = 0; attempt < REBASE_POLL_ATTEMPTS; attempt++) {
+      const { json } = await this.request(
+        `/projects/${projectPath(ref)}/merge_requests/${number}?include_rebase_in_progress=true`,
+        { connection },
+      )
+      const mr = (json ?? {}) as { rebase_in_progress?: boolean; merge_error?: string | null }
+      if (!mr.rebase_in_progress) return mr.merge_error ? 'conflict' : 'merged'
+      await (this.deps.sleep ?? defaultSleep)(REBASE_POLL_INTERVAL_MS)
+    }
+    // Still in progress after the cap: surface it (CLAUDE.md "no silent caps") and treat the
+    // branch as updated — a genuine conflict still surfaces on the gate's next mergeability
+    // probe, so we never wedge the gate on a slow rebase.
+    this.deps.logger?.warn(
+      `GitLab MR !${number} rebase still in progress after ${REBASE_POLL_ATTEMPTS} polls; treating as updated.`,
+    )
+    return 'merged'
+  }
+
   async deleteBranch(connection: VcsConnectionRef, ref: VcsRepoRef, branch: string): Promise<void> {
     try {
       await this.request(
@@ -577,6 +772,18 @@ export class FetchGitLabClient implements VcsClient {
   }
 
   // ---- internals ----------------------------------------------------------
+
+  /** Read a single merge request's detail object (target branch, reviewers, …). */
+  private async getMergeRequest(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<GlMrDetail> {
+    const { json } = await this.request(`/projects/${projectPath(ref)}/merge_requests/${number}`, {
+      connection,
+    })
+    return (json ?? {}) as GlMrDetail
+  }
 
   /** Resolve a project's default branch (for the files API, which needs a concrete ref). */
   private async defaultBranch(connection: VcsConnectionRef, ref: VcsRepoRef): Promise<string> {
@@ -690,4 +897,55 @@ function parseNextLink(link: string | null): string | undefined {
     if (match) return match[1]
   }
   return undefined
+}
+
+const defaultSleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms))
+
+/** Parse an ISO timestamp to epoch ms (0 when absent/unparseable). */
+function epochMs(iso?: string): number {
+  if (!iso) return 0
+  const t = Date.parse(iso)
+  return Number.isNaN(t) ? 0 : t
+}
+
+/**
+ * Recover the `{iid, discussionId}` from a review-thread id minted by {@link
+ * FetchGitLabClient.listReviewThreads} (`<iid>:<discussionId>`). A discussion id can itself
+ * contain no colon, so split on the FIRST colon only.
+ */
+function parseThreadId(threadId: string): { iid: number; discussionId: string } {
+  const idx = threadId.indexOf(':')
+  if (idx < 0) return { iid: 0, discussionId: threadId }
+  return { iid: Number(threadId.slice(0, idx)) || 0, discussionId: threadId.slice(idx + 1) }
+}
+
+/** A merge-request detail object — the fields the review reads consume. */
+interface GlMrDetail {
+  target_branch?: string
+  reviewers?: Array<{ username?: string }>
+}
+
+/** A single note within a GitLab MR discussion / the MR notes list. */
+interface GlNote {
+  id?: number
+  body?: string
+  system?: boolean
+  resolvable?: boolean
+  resolved?: boolean
+  type?: string | null
+  created_at?: string
+  author?: { username?: string } | null
+  position?: {
+    new_path?: string | null
+    old_path?: string | null
+    new_line?: number | null
+    old_line?: number | null
+  } | null
+}
+
+/** A GitLab MR discussion (a thread of {@link GlNote}s). */
+interface GlDiscussion {
+  id: string
+  notes?: GlNote[]
 }

@@ -516,4 +516,16 @@ export interface GitHubClient {
     ref: GitHubRepoRef,
     input: { base: string; head: string },
   ): Promise<'merged' | 'noop' | 'conflict'>
+  /**
+   * Bring an open PR's source branch up to date with its target branch server-side, mapping the
+   * result to the same verdict as {@link mergeBranch}. Optional: the human-testing gate's "pull
+   * latest base" action prefers this when a client exposes it (the right primitive for a
+   * provider whose only server-side branch-advancing operation is a PR rebase, e.g. GitLab,
+   * which has no Merges-API analogue). GitHub omits it and the gate falls back to `mergeBranch`.
+   */
+  rebasePullRequest?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<'merged' | 'noop' | 'conflict'>
 }
