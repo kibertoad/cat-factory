@@ -25,12 +25,12 @@ conformance suite (both Cloudflare D1 and Node Postgres).
 
 | #   | Phase                                                   | Status |
 | --- | ------------------------------------------------------- | ------ |
-| 0   | StepHandler registry scaffolding (fallthrough, no-op)   | ✅     |
-| 1   | Deterministic one-shot step handlers (deployer/tracker) | ✅     |
-| 2   | Post-completion resolvers (blueprint/spec/estimate)     | ✅     |
-| 3   | Verdict interceptors (tester/companion short-circuits)  | ✅     |
-| 4   | Decision/polling/companion gate step handlers           | ✅     |
-| 5   | Container-agent default handler + cleanup               | ✅     |
+| 0   | StepHandler registry scaffolding (fallthrough, no-op)   | done   |
+| 1   | Deterministic one-shot step handlers (deployer/tracker) | done   |
+| 2   | Post-completion resolvers (blueprint/spec/estimate)     | done   |
+| 3   | Verdict interceptors (tester/companion short-circuits)  | done   |
+| 4   | Decision/polling/companion gate step handlers           | done   |
+| 5   | Container-agent default handler + cleanup               | done   |
 
 ## Phase 0 — scaffolding
 
@@ -187,15 +187,15 @@ dependency count dropping _together_.
 
 ## Status (take 2)
 
-| #   | Phase                                                 | Status         |
-| --- | ----------------------------------------------------- | -------------- |
-| 1   | `StepGraph` — pure sync step/cursor mutators          | ✅             |
-| 2   | `RunStateMachine` — async instance/block spine        | ✅             |
-| —   | XState evaluation (spike + decision)                  | ✅ (rejected)  |
-| 3   | Debag the 5 gate controllers onto the spine           | ✅             |
-| 4   | Move handlers/interceptors out of the file            | ⏭️ deferred    |
-| 5   | Gate-action sub-facades + re-point server controllers | ⬜ not started |
-| 6   | Trim constructor + final cleanup                      | ⬜ not started |
+| #   | Phase                                                 | Status          |
+| --- | ----------------------------------------------------- | --------------- |
+| 1   | `StepGraph` — pure sync step/cursor mutators          | done            |
+| 2   | `RunStateMachine` — async instance/block spine        | done            |
+| —   | XState evaluation (spike + decision)                  | done (rejected) |
+| 3   | Debag the 5 gate controllers onto the spine           | done            |
+| 4   | Move handlers/interceptors out of the file            | deferred        |
+| 5   | Gate-action sub-facades + re-point server controllers | not started     |
+| 6   | Trim constructor + final cleanup                      | not started     |
 
 `ExecutionService.ts`: **5,346 → 4,848 lines** so far. Every phase landed as its own commit,
 green on both runtimes (Cloudflare conformance 126, Node conformance/durable-execution 41,
