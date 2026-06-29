@@ -146,6 +146,7 @@
     },
     "failure": {
       "containerFailedToStart": "Le conteneur n’a pas pu démarrer",
+      "environmentFailed": "Échec du provisionnement de l’environnement",
       "bootstrapFailed": "L’initialisation a échoué",
       "runFailed": "L’exécution a échoué",
       "retryBootstrap": "Relancer l’initialisation",

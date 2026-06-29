@@ -166,6 +166,136 @@ export function classifyPodReadiness(pod: unknown): PodReadiness {
 }
 
 /**
+ * Container `state.waiting.reason`s that will NOT self-heal within the readiness window:
+ * a bad/unpullable image, a malformed container config, a failed lifecycle hook, or a
+ * container that keeps crashing on boot. These are deterministic — re-driving the same pod
+ * just hangs the full window again — so the transport must FAIL FAST and NON-recoverably on
+ * them (a `dispatch` failure with the root cause), not poll until the generic timeout and
+ * then mis-tag it as a recoverable eviction.
+ *
+ * This is an explicit ALLOW-LIST of known-terminal kubelet reasons, NOT a deny-list of the
+ * transient ones, ON PURPOSE: the genuinely-transient set is just `ContainerCreating` /
+ * `PodInitializing`, but inverting (treat every other reason as terminal) would kill pods on
+ * any unrecognised or genuinely-transient reason a newer kubelet introduces. A reason we fail
+ * to enumerate here degrades GRACEFULLY — it falls through to the readiness DEADLINE, which
+ * still bounds the wait (it just costs the full window before failing, rather than failing at
+ * once) — whereas a false-terminal would mis-kill a pod that would have recovered. So keep
+ * this list current as kubelet adds reasons, but a miss is a latency cost, not a correctness
+ * bug.
+ */
+const TERMINAL_WAITING_REASONS = new Set([
+  'ImagePullBackOff',
+  'ErrImagePull',
+  'ErrImageNeverPull',
+  'ErrInvalidImageName',
+  'InvalidImageName',
+  'ImageInspectError',
+  'RegistryUnavailable',
+  'CreateContainerConfigError',
+  'CreateContainerError',
+  'PreStartHookError',
+  'PostStartHookError',
+  'CrashLoopBackOff',
+  'RunContainerError',
+])
+
+function statusOf(pod: unknown): Record<string, unknown> | undefined {
+  return (pod as { status?: Record<string, unknown> } | null)?.status
+}
+
+function containerStatuses(
+  status: Record<string, unknown> | undefined,
+): Array<Record<string, unknown>> {
+  return Array.isArray(status?.containerStatuses)
+    ? (status.containerStatuses as Array<Record<string, unknown>>)
+    : []
+}
+
+function waitingOf(cs: Record<string, unknown>): { reason?: string; message?: string } | undefined {
+  const state = cs.state as { waiting?: Record<string, unknown> } | undefined
+  const waiting = state?.waiting
+  if (!waiting) return undefined
+  return {
+    reason: typeof waiting.reason === 'string' ? waiting.reason : undefined,
+    message: typeof waiting.message === 'string' ? waiting.message : undefined,
+  }
+}
+
+/** Format a kubelet `reason`/`message` pair as `"<reason>: <message>"` (bare reason if no message). */
+function joinReasonMessage(reason: string, message?: string): string {
+  return message ? `${reason}: ${message}` : reason
+}
+
+/**
+ * One pass over a pod's container statuses + conditions, yielding BOTH readings the readiness
+ * loop needs so the pod JSON isn't walked (and the two views aren't kept in sync) twice:
+ * - `terminal`: the first container whose `state.waiting.reason` is a known-unrecoverable
+ *   start-up failure (bad image / config / crash loop), formatted as `"<reason>: <message>"`,
+ *   else null — drives the transport's fail-fast path.
+ * - `detail`: a short human-readable reason the pod isn't ready (the first waiting/terminated
+ *   container reason, else a failed pod condition), '' when nothing useful is present — enriches
+ *   an otherwise root-cause-less "terminated"/"not ready in time" error.
+ */
+export function analyzePodStatus(pod: unknown): { terminal: string | null; detail: string } {
+  const status = statusOf(pod)
+  let terminal: string | null = null
+  let detail = ''
+  for (const cs of containerStatuses(status)) {
+    const waiting = waitingOf(cs)
+    if (waiting?.reason) {
+      const formatted = joinReasonMessage(waiting.reason, waiting.message)
+      if (!detail) detail = formatted
+      if (!terminal && TERMINAL_WAITING_REASONS.has(waiting.reason)) terminal = formatted
+      continue
+    }
+    if (!detail) {
+      const terminated = (cs.state as { terminated?: Record<string, unknown> } | undefined)
+        ?.terminated
+      if (terminated && typeof terminated.reason === 'string') {
+        const msg = typeof terminated.message === 'string' ? terminated.message : undefined
+        detail = joinReasonMessage(terminated.reason, msg)
+      }
+    }
+  }
+  if (!detail) {
+    const conditions = Array.isArray(status?.conditions)
+      ? (status.conditions as Array<Record<string, unknown>>)
+      : []
+    const failing = conditions.find(
+      (c) => c.status === 'False' && typeof c.message === 'string' && c.message,
+    )
+    if (failing && typeof failing.message === 'string') {
+      detail =
+        typeof failing.reason === 'string'
+          ? `${failing.reason}: ${failing.message}`
+          : failing.message
+    }
+  }
+  return { terminal, detail }
+}
+
+/**
+ * A terminal, unrecoverable container start-up failure (a bad image / config / crash
+ * loop), formatted as `"<reason>: <message>"`, or null when the pod is just still coming
+ * up. Drives the transport's fail-fast path so a doomed pod surfaces its real reason
+ * (e.g. `ImagePullBackOff: Back-off pulling image "…"`) at once instead of after the
+ * 120s readiness timeout.
+ */
+export function classifyPodStartupFailure(pod: unknown): string | null {
+  return analyzePodStatus(pod).terminal
+}
+
+/**
+ * Best-effort short, human-readable detail of WHY a pod isn't ready — a waiting
+ * container's `reason: message`, else the pod's failed/unready condition message — for
+ * enriching an otherwise root-cause-less "terminated"/"not ready in time" error. Returns
+ * '' when nothing useful is present.
+ */
+export function describePodStatus(pod: unknown): string {
+  return analyzePodStatus(pod).detail
+}
+
+/**
  * Validate the apiserver URL at the write boundary. Unlike the manifest pool's
  * STRICT policy (no private hosts), a kube-apiserver is routinely a private IP or
  * a cluster DNS name, so private hosts are ALLOWED here — the operator is

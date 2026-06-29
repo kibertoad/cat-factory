@@ -296,6 +296,7 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
       find: vi.fn(async () => undefined),
       endpoint: vi.fn(async () => ({ host: '127.0.0.1', port: 51111 })),
       isRunning: vi.fn(async () => true),
+      logs: vi.fn(async () => ''),
       remove: vi.fn(async () => {}),
       removeRun: vi.fn(async () => {}),
       reapExited: vi.fn(async () => 0),
