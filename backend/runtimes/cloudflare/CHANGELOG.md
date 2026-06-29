@@ -1,5 +1,13 @@
 # @cat-factory/worker
 
+## 0.35.2
+
+### Patch Changes
+
+- Updated dependencies [2961b05]
+  - @cat-factory/server@0.43.0
+  - @cat-factory/gitlab@0.3.0
+
 ## 0.35.1
 
 ### Patch Changes
