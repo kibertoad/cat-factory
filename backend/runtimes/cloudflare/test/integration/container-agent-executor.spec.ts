@@ -221,7 +221,10 @@ describe('ContainerAgentExecutor', () => {
     // A container whose GET /jobs/{id} reports the job still running, with the
     // latest todo counts attached — exactly the harness's running JobView.
     const runningWithProgress = {
-      idFromName: (name: string) => ({ name }),
+      // The transport stamps the running poll with the container's DO id (`doId.toString()`),
+      // so the stub id must stringify to a real value — a plain `{ name }` surfaces
+      // "[object Object]"; a real DurableObjectId stringifies to its hex id.
+      idFromName: (name: string) => ({ toString: () => name }),
       get: () => ({
         fetch: () =>
           Promise.resolve(
@@ -249,6 +252,8 @@ describe('ContainerAgentExecutor', () => {
     expect(update).toEqual({
       state: 'running',
       subtasks: { completed: 3, inProgress: 1, total: 8 },
+      // The transport also forwards the per-run container's DO id on a running poll.
+      container: { id: 'ex-1' },
     })
   })
 

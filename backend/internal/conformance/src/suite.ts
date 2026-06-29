@@ -3450,7 +3450,8 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         // surface what each otherwise-opaque fixer sub-job did), with the concerns it was handed.
         expect(testerStep.test?.attemptLog).toHaveLength(1)
         expect(testerStep.test?.attemptLog?.[0]?.outcome).toBe('completed')
-        expect(testerStep.test?.attemptLog?.[0]?.concerns?.[0]?.title).toBe('Login 500')
+        // The fixer was handed the first round's report — the same nit (`naming`).
+        expect(testerStep.test?.attemptLog?.[0]?.concerns?.[0]?.title).toBe('naming')
       })
 
       it('aborts the run (no fixer) when the tester reports it cannot test', async () => {
