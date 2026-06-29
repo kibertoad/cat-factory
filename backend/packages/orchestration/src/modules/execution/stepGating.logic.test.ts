@@ -37,9 +37,9 @@ describe('shouldRunGatedStep', () => {
   })
 
   it('a gating block with no thresholds never triggers on score → skip', () => {
-    expect(
-      shouldRunGatedStep(estimate(1, 1, 1), { enabled: true, onMissingEstimate: 'run' }),
-    ).toBe(false)
+    expect(shouldRunGatedStep(estimate(1, 1, 1), { enabled: true, onMissingEstimate: 'run' })).toBe(
+      false,
+    )
   })
 
   it('falls back to onMissingEstimate when no estimate is present (default run)', () => {

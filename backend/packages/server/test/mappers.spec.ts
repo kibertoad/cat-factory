@@ -112,8 +112,12 @@ describe('blockPatchToColumns', () => {
     // A PATCH body can carry an explicit `null` to clear these optional fields; the
     // mapper treats any falsy value as "clear" (→ a null column). The `BlockPatch`
     // type only models `T | undefined`, so cast to exercise the runtime clear path.
-    expect(blockPatchToColumns({ pullRequest: null } as unknown as BlockPatch).pull_request).toBeNull()
-    expect(blockPatchToColumns({ fragmentIds: null } as unknown as BlockPatch).fragment_ids).toBeNull()
+    expect(
+      blockPatchToColumns({ pullRequest: null } as unknown as BlockPatch).pull_request,
+    ).toBeNull()
+    expect(
+      blockPatchToColumns({ fragmentIds: null } as unknown as BlockPatch).fragment_ids,
+    ).toBeNull()
     expect(blockPatchToColumns({ fragmentIds: ['a'] }).fragment_ids).toBe('["a"]')
   })
 

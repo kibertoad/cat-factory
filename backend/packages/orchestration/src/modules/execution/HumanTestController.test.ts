@@ -157,8 +157,8 @@ describe('HumanTestController', () => {
     expect(
       (deps.agentExecutor as unknown as { startJob: ReturnType<typeof vi.fn> }).startJob,
     ).toHaveBeenCalled()
-    const ctx = (deps.agentExecutor as unknown as { startJob: ReturnType<typeof vi.fn> }).startJob.mock
-      .calls[0]![0]
+    const ctx = (deps.agentExecutor as unknown as { startJob: ReturnType<typeof vi.fn> }).startJob
+      .mock.calls[0]![0]
     expect(ctx.agentKind).toBe('fixer')
     expect(result).toEqual({ kind: 'awaiting_job', jobId: 'job_1', stepIndex: 0 })
     expect(s.humanTest?.phase).toBe('fixing')
@@ -342,8 +342,8 @@ describe('HumanTestController', () => {
       },
     })
     const r1 = await c1.evaluate('ws', instance([s1]), s1, BLOCK, true)
-    const ctx = (conflictDeps.agentExecutor as unknown as { startJob: ReturnType<typeof vi.fn> }).startJob.mock
-      .calls[0]![0]
+    const ctx = (conflictDeps.agentExecutor as unknown as { startJob: ReturnType<typeof vi.fn> })
+      .startJob.mock.calls[0]![0]
     expect(ctx.agentKind).toBe('conflict-resolver')
     expect(r1).toEqual({ kind: 'awaiting_job', jobId: 'job_1', stepIndex: 0 })
     expect(s1.humanTest?.phase).toBe('resolving_conflicts')

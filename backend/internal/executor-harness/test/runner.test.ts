@@ -45,12 +45,15 @@ describe('JobRegistry', () => {
   })
 
   it('surfaces the latest subtask progress on the running job view', async () => {
-    const registry = new JobRegistry<TestJob, TestResult>(limits, async (_job, opts: RunOptions) => {
-      opts.onProgress?.({ completed: 1, inProgress: 1, total: 3 })
-      opts.onProgress?.({ completed: 2, inProgress: 0, total: 3 })
-      await tick(50)
-      return { summary: 's' }
-    })
+    const registry = new JobRegistry<TestJob, TestResult>(
+      limits,
+      async (_job, opts: RunOptions) => {
+        opts.onProgress?.({ completed: 1, inProgress: 1, total: 3 })
+        opts.onProgress?.({ completed: 2, inProgress: 0, total: 3 })
+        await tick(50)
+        return { summary: 's' }
+      },
+    )
     registry.start('exec-1', job())
     await tick()
     const view = registry.get('exec-1')
@@ -59,14 +62,17 @@ describe('JobRegistry', () => {
   })
 
   it('buffers tool spans and drains them on each poll (drain-on-read)', async () => {
-    const registry = new JobRegistry<TestJob, TestResult>(limits, async (_job, opts: RunOptions) => {
-      opts.onSpan?.({ tool: 'read', startedAt: 1, endedAt: 2, ok: true })
-      opts.onSpan?.({ tool: 'edit_file', startedAt: 2, endedAt: 5, ok: true })
-      await tick(50)
-      opts.onSpan?.({ tool: 'run_command', startedAt: 6, endedAt: 9, ok: false })
-      await tick(50)
-      return { summary: 's' }
-    })
+    const registry = new JobRegistry<TestJob, TestResult>(
+      limits,
+      async (_job, opts: RunOptions) => {
+        opts.onSpan?.({ tool: 'read', startedAt: 1, endedAt: 2, ok: true })
+        opts.onSpan?.({ tool: 'edit_file', startedAt: 2, endedAt: 5, ok: true })
+        await tick(50)
+        opts.onSpan?.({ tool: 'run_command', startedAt: 6, endedAt: 9, ok: false })
+        await tick(50)
+        return { summary: 's' }
+      },
+    )
     registry.start('exec-1', job())
     await tick()
 

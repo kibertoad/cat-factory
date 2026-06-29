@@ -160,7 +160,9 @@ describe('example custom agents', () => {
   })
 
   it('post-op commits the rendered report onto the run branch via RepoFiles', async () => {
-    const commitFiles = vi.fn<(input: CommitFilesInput) => Promise<{ sha: string }>>(async () => ({ sha: 'sha' }))
+    const commitFiles = vi.fn<(input: CommitFilesInput) => Promise<{ sha: string }>>(async () => ({
+      sha: 'sha',
+    }))
     // No report on the branch yet (getFile → null), so the idempotency guard lets the commit through.
     const getFile = vi.fn(async () => null)
     const repo = { getFile, commitFiles } as unknown as RepoFiles
