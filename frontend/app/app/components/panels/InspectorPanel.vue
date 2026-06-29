@@ -12,6 +12,7 @@ import TaskDependencies from '~/components/panels/inspector/TaskDependencies.vue
 import TaskStructure from '~/components/panels/inspector/TaskStructure.vue'
 import TaskRunSettings from '~/components/panels/inspector/TaskRunSettings.vue'
 import TaskExecution from '~/components/panels/inspector/TaskExecution.vue'
+import TaskEstimateBadge from '~/components/panels/inspector/TaskEstimateBadge.vue'
 import EpicChildren from '~/components/panels/inspector/EpicChildren.vue'
 import RecurringScheduleSettings from '~/components/panels/inspector/RecurringScheduleSettings.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'

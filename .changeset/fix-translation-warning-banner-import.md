@@ -2,6 +2,6 @@
 '@cat-factory/app': patch
 ---
 
-Fix `Failed to resolve component: TranslationWarningBanner` console error on the board page.
+Fix `Failed to resolve component` console errors on the board page.
 
-The banner lives in `components/layout/`, so its auto-import name is `LayoutTranslationWarningBanner`; the bare `<TranslationWarningBanner />` in `index.vue` never resolved. Added the explicit import to match the sibling layout banners.
+Several components that live in subdirectories of `components/` were used by their bare basename in templates without an explicit import. Nuxt's path-prefixed auto-import registers them under a prefixed name (e.g. `LayoutTranslationWarningBanner`, `PipelineIterationCapPrompt`), so the bare tags never resolved. Added the missing explicit imports for `TranslationWarningBanner` (index.vue), `TaskEstimateBadge` (InspectorPanel.vue), and `IterationCapPrompt` (AgentStepDetail.vue, BrainstormWindow.vue, ClarityReviewWindow.vue, RequirementsReviewWindow.vue).

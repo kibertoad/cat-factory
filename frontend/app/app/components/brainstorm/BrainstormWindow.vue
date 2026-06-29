@@ -7,6 +7,7 @@
 // the user returns to the board, summoned back (a notification) only if the re-run raises new
 // options or hits the iteration cap. The converged direction — not the original description — is
 // what the downstream stage (the requirements review / the architect) consumes.
+import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
 import { parseOutputOutline } from '~/utils/agentOutput'
 import type {
   BrainstormItem,

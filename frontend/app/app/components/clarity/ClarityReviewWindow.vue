@@ -8,6 +8,7 @@
 // findings or hits the iteration cap. The clarified bug report — not the original
 // description — is what every downstream agent step (the bug investigator, the coder)
 // consumes.
+import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
 import { parseOutputOutline } from '~/utils/agentOutput'
 import type {
   ClarityItemStatus,
