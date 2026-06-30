@@ -19,6 +19,9 @@ import type { EnvironmentBackendProvider } from '../environments/environment-bac
 export const kubernetesEnvironmentBackend: EnvironmentBackendProvider = {
   kind: 'kubernetes',
   displayLabel: 'Kubernetes',
+  // Serves both the in-cluster `local-k3s` preset and an external `remote-kubernetes`
+  // apiserver — the difference is config (the apiserver URL), not a separate backend.
+  engines: () => ['local-k3s', 'remote-kubernetes'],
   // Structural (`'kubernetes' in config`) narrowing, not `config.kind === 'kubernetes'`:
   // the open contract union now carries a generic `{ kind: string, manifest }` custom member
   // whose `kind` can equal `'kubernetes'`, so a kind-equality check no longer narrows away
