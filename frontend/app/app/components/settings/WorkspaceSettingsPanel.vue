@@ -65,6 +65,21 @@ const tabs = computed(() => [
   },
 ])
 
+// Tab strip styling: the labels must always fit (never truncate) and the strip must never
+// scroll. So we let the list WRAP onto a second row when the viewport is too narrow
+// (`flex-wrap`), keep each trigger at its content width (`shrink-0`, undoing the theme's
+// `min-w-0`+`truncate` that otherwise ellipsises labels), and drop the sliding `indicator`
+// for a per-trigger bottom border. reka's indicator only tracks `offsetLeft` (not
+// `offsetTop`), so it mis-renders once tabs wrap; a border on each active trigger underlines
+// the right row regardless. A transparent border on every trigger keeps the rows from
+// shifting when the active one gains its colour.
+const tabsUi = {
+  root: 'gap-4',
+  list: 'flex-wrap gap-y-1',
+  trigger: 'shrink-0 border-b-2 border-transparent data-[state=active]:border-primary',
+  indicator: 'hidden',
+}
+
 const TASK_TYPES: CreateTaskType[] = ['feature', 'bug', 'document', 'spike']
 
 // Per-task-type label for the "Max {type} tasks" inputs. An exhaustive Record keyed off
@@ -203,12 +218,7 @@ async function saveBudget() {
       <IntegrationBackTitle :title="t('settings.workspaceSettings.title')" @back="back" />
     </template>
     <template #body>
-      <UTabs
-        v-model="activeTab"
-        :items="tabs"
-        variant="link"
-        :ui="{ root: 'gap-4', list: 'overflow-x-auto' }"
-      >
+      <UTabs v-model="activeTab" :items="tabs" variant="link" :ui="tabsUi">
         <!-- Workspace -->
         <template #workspace>
           <div class="space-y-6">
