@@ -10,9 +10,12 @@ import { loadNodeConfig } from '../src/config.js'
 const ENCRYPTION_KEY = Buffer.alloc(32).toString('base64')
 
 // A minimal env that satisfies the always-on integrations (ENCRYPTION_KEY) and enables
-// the GitHub App so the privileged tier is reachable.
+// the GitHub App so the privileged tier is reachable. `AUTH_DEV_OPEN` keeps the new
+// "remote node mode requires authentication" guard satisfied — these cases configure no
+// login provider and are not about auth, so the dev-open hatch lets them load.
 const GITHUB_ENABLED: NodeJS.ProcessEnv = {
   ENCRYPTION_KEY,
+  AUTH_DEV_OPEN: 'true',
   GITHUB_APP_ID: '123',
   GITHUB_APP_PRIVATE_KEY: 'default-key',
   GITHUB_WEBHOOK_SECRET: 'whsec',
@@ -44,5 +47,37 @@ describe('loadNodeConfig — privileged App tier (ADR 0005)', () => {
   it('leaves privilegedApp undefined when neither is set', () => {
     const config = loadNodeConfig(GITHUB_ENABLED)
     expect(config.github.privilegedApp).toBeUndefined()
+  })
+})
+
+// Remote node mode has no anonymous tier (see config.ts): a hosted deployment must be
+// able to authenticate users from the first request, so loadNodeConfig fails fast when no
+// login provider is configured and the dev-open hatch is off.
+describe('loadNodeConfig — remote node mode requires authentication', () => {
+  it('throws when no auth provider is configured and dev-open is off', () => {
+    expect(() => loadNodeConfig({ ENCRYPTION_KEY })).toThrow(/anonymous access/i)
+  })
+
+  it('boots under the dev-open hatch with no provider (local dev / tests)', () => {
+    expect(() => loadNodeConfig({ ENCRYPTION_KEY, AUTH_DEV_OPEN: 'true' })).not.toThrow()
+  })
+
+  it('boots with password login enabled and a strong session secret', () => {
+    const config = loadNodeConfig({
+      ENCRYPTION_KEY,
+      AUTH_PASSWORD_ENABLED: 'true',
+      AUTH_SESSION_SECRET: 'x'.repeat(32),
+    })
+    expect(config.auth.enabled).toBe(true)
+  })
+
+  it('boots with GitHub OAuth configured', () => {
+    const config = loadNodeConfig({
+      ENCRYPTION_KEY,
+      GITHUB_OAUTH_CLIENT_ID: 'client-id',
+      GITHUB_OAUTH_CLIENT_SECRET: 'client-secret',
+      AUTH_SESSION_SECRET: 'x'.repeat(32),
+    })
+    expect(config.auth.enabled).toBe(true)
   })
 })
