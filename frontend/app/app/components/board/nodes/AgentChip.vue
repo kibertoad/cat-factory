@@ -37,13 +37,13 @@ const dim = computed(() => (props.size === 'sm' ? 'h-7 w-7' : 'h-9 w-9'))
       <UIcon :name="archetype.icon" class="text-base" :style="{ color: archetype.color }" />
       <span
         v-if="step.state === 'working'"
-        class="absolute -bottom-1 -right-1 rounded-full bg-slate-900 p-0.5"
+        class="absolute -bottom-1 -end-1 rounded-full bg-slate-900 p-0.5"
       >
         <UIcon :name="stateIcon.working!" class="h-3 w-3 animate-spin text-indigo-300" />
       </span>
       <span
         v-else-if="stateIcon[step.state]"
-        class="absolute -bottom-1 -right-1 rounded-full bg-slate-900 p-0.5"
+        class="absolute -bottom-1 -end-1 rounded-full bg-slate-900 p-0.5"
       >
         <UIcon
           :name="stateIcon[step.state]!"

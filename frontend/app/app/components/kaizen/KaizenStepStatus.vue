@@ -46,7 +46,7 @@ const tone = computed(() => {
     <div class="flex items-center gap-2">
       <UIcon name="i-lucide-sparkles" class="h-4 w-4 text-teal-400" />
       <h3 class="text-sm font-semibold text-slate-200">Kaizen grading</h3>
-      <span class="ml-auto flex items-center gap-1.5 text-xs">
+      <span class="ms-auto flex items-center gap-1.5 text-xs">
         <template v-if="grading.status === 'scheduled'">
           <UIcon name="i-lucide-clock" class="h-3.5 w-3.5 text-slate-500" />
           <span class="text-slate-400">Scheduled</span>
@@ -75,7 +75,7 @@ const tone = computed(() => {
         <p class="text-[11px] font-medium uppercase tracking-wide text-slate-500">
           Recommendations
         </p>
-        <ul class="mt-1 list-disc space-y-0.5 pl-4 text-xs text-slate-300">
+        <ul class="mt-1 list-disc space-y-0.5 ps-4 text-xs text-slate-300">
           <li v-for="(r, i) in grading.recommendations" :key="i">{{ r }}</li>
         </ul>
       </div>

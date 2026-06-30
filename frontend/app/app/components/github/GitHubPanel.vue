@@ -361,7 +361,7 @@ async function merge(pr: GitHubPullRequest) {
                   v-for="r in github.availableRepos"
                   :key="r.githubId"
                   type="button"
-                  class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition hover:bg-slate-800/60"
+                  class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start transition hover:bg-slate-800/60"
                   @click="toggleSelected(r.githubId)"
                 >
                   <UIcon
@@ -400,7 +400,10 @@ async function merge(pr: GitHubPullRequest) {
               class="rounded-md border border-slate-800 bg-slate-900/60"
             >
               <div class="flex items-center justify-between gap-2 px-3 py-2">
-                <button class="flex min-w-0 items-center gap-2 text-left" @click="toggleRepo(repo)">
+                <button
+                  class="flex min-w-0 items-center gap-2 text-start"
+                  @click="toggleRepo(repo)"
+                >
                   <UIcon
                     :name="
                       expandedRepo === repo.githubId

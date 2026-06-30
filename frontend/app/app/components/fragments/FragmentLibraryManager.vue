@@ -273,7 +273,7 @@ async function unlinkSource(id: string) {
           >
             Live · {{ f.documentRef.source }}
           </UBadge>
-          <span class="ml-auto font-mono text-[11px] text-slate-500">{{ f.id }}</span>
+          <span class="ms-auto font-mono text-[11px] text-slate-500">{{ f.id }}</span>
         </div>
         <p class="mt-1 text-sm text-slate-400">{{ f.summary }}</p>
         <div v-if="f.tags?.length" class="mt-1 flex flex-wrap gap-1">
@@ -303,7 +303,7 @@ async function unlinkSource(id: string) {
           size="xs"
           color="error"
           variant="ghost"
-          class="ml-auto"
+          class="ms-auto"
           @click="removeFragment(f.id)"
         />
       </div>
@@ -363,7 +363,7 @@ async function unlinkSource(id: string) {
             last resolved {{ new Date(f.resolvedAt).toLocaleString() }}
           </p>
         </div>
-        <div class="ml-auto flex gap-1">
+        <div class="ms-auto flex gap-1">
           <UButton
             icon="i-lucide-refresh-cw"
             size="xs"
@@ -448,11 +448,11 @@ async function unlinkSource(id: string) {
           size="xs"
           color="warning"
           variant="subtle"
-          class="ml-auto"
+          class="ms-auto"
         >
           {{ library.sourceChanges[s.id] }} change(s)
         </UBadge>
-        <div class="ml-auto flex gap-1">
+        <div class="ms-auto flex gap-1">
           <UButton
             icon="i-lucide-search-check"
             size="xs"

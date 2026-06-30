@@ -81,7 +81,7 @@ function when(epochMs: number): string {
             "
             >{{ entry.outcome }}</span
           >
-          <span class="ml-auto text-[11px] text-slate-500">{{ when(entry.createdAt) }}</span>
+          <span class="ms-auto text-[11px] text-slate-500">{{ when(entry.createdAt) }}</span>
         </div>
         <div v-if="entry.targetId" class="mt-0.5 text-[11px] text-slate-500">
           {{ entry.providerId ? `${entry.providerId} · ` : '' }}{{ entry.targetId }}

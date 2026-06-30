@@ -49,7 +49,7 @@ function onResize(e: PointerEvent, edge: 'e' | 's' | 'se') {
       zIndex: draggingId === moduleId ? 50 : 5,
     }"
   >
-    <!-- module header / drag handle (`nopan` so a left-drag moves it, not the pane) -->
+    <!-- module header / drag handle (`nopan` so a start-drag moves it, not the pane) -->
     <div
       class="nodrag nopan flex h-[30px] cursor-grab touch-none items-center gap-1 rounded-t-xl bg-violet-500/15 px-2 active:cursor-grabbing"
       @pointerdown="onHandle"
@@ -61,10 +61,10 @@ function onResize(e: PointerEvent, edge: 'e' | 's' | 'se') {
         :style="{ color: MODULE_META.color }"
       />
       <span class="truncate text-[11px] font-semibold text-violet-100">{{ mod.title }}</span>
-      <span v-if="inflight" class="ml-auto shrink-0 text-[9px] text-violet-300/70">
+      <span v-if="inflight" class="ms-auto shrink-0 text-[9px] text-violet-300/70">
         {{ t('board.frame.taskCount', { count: inflight }, inflight) }}
       </span>
-      <span v-else-if="total" class="ml-auto shrink-0 text-[9px] text-violet-300/70">
+      <span v-else-if="total" class="ms-auto shrink-0 text-[9px] text-violet-300/70">
         {{ t('board.frame.taskCount', { count: total }, total) }}
       </span>
     </div>
@@ -77,22 +77,22 @@ function onResize(e: PointerEvent, edge: 'e' | 's' | 'se') {
     <!-- resize handles (drag the borders to resize the module, Miro-style).
          `nopan` (with `nodrag`) so resizing doesn't pan the pane. -->
     <div
-      class="nodrag nopan absolute right-0 top-0 h-full w-2 cursor-ew-resize touch-none hover:bg-violet-400/20 pointer-coarse:w-4"
+      class="nodrag nopan absolute end-0 top-0 h-full w-2 cursor-ew-resize touch-none hover:bg-violet-400/20 pointer-coarse:w-4"
       :title="t('board.frame.dragToResize')"
       @pointerdown="onResize($event, 'e')"
     />
     <div
-      class="nodrag nopan absolute bottom-0 left-0 h-2 w-full cursor-ns-resize touch-none hover:bg-violet-400/20 pointer-coarse:h-4"
+      class="nodrag nopan absolute bottom-0 start-0 h-2 w-full cursor-ns-resize touch-none hover:bg-violet-400/20 pointer-coarse:h-4"
       :title="t('board.frame.dragToResize')"
       @pointerdown="onResize($event, 's')"
     />
     <div
-      class="nodrag nopan absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize touch-none pointer-coarse:h-11 pointer-coarse:w-11"
+      class="nodrag nopan absolute bottom-0 end-0 h-4 w-4 cursor-nwse-resize touch-none pointer-coarse:h-11 pointer-coarse:w-11"
       :title="t('board.frame.dragToResize')"
       @pointerdown="onResize($event, 'se')"
     >
       <span
-        class="absolute bottom-1 right-1 h-2 w-2 rounded-sm border-b-2 border-r-2 border-violet-400/60"
+        class="absolute bottom-1 end-1 h-2 w-2 rounded-sm border-b-2 border-e-2 border-violet-400/60"
       />
     </div>
   </div>

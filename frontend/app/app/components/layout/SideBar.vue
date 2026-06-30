@@ -139,8 +139,10 @@ watch(
     :aria-modal="drawerOpen ? 'true' : undefined"
     :aria-label="isCompact ? t('nav.menu') : undefined"
     :inert="isCompact && !ui.mobileNavOpen"
-    class="fixed inset-y-0 left-0 z-40 flex h-full w-64 shrink-0 flex-col gap-4 overflow-y-auto border-r border-slate-800 bg-slate-900/95 p-3 backdrop-blur transition-transform duration-200 focus:outline-none lg:static lg:z-auto lg:translate-x-0 lg:bg-slate-900/80"
-    :class="ui.mobileNavOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
+    class="fixed inset-y-0 start-0 z-40 flex h-full w-64 shrink-0 flex-col gap-4 overflow-y-auto border-e border-slate-800 bg-slate-900/95 p-3 backdrop-blur transition-transform duration-200 focus:outline-none lg:static lg:z-auto lg:translate-x-0 lg:bg-slate-900/80"
+    :class="
+      ui.mobileNavOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full lg:translate-x-0'
+    "
   >
     <BoardSwitcher />
 
@@ -149,7 +151,7 @@ watch(
          and reach every action below. -->
       <button
         type="button"
-        class="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-2 text-left text-sm text-slate-400 transition hover:border-slate-500 hover:bg-slate-800"
+        class="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-2 text-start text-sm text-slate-400 transition hover:border-slate-500 hover:bg-slate-800"
         @click="ui.openCommandBar()"
       >
         <UIcon name="i-lucide-search" class="h-4 w-4 shrink-0" />

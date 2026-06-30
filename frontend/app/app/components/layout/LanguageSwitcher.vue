@@ -39,7 +39,7 @@ const items = computed<DropdownMenuItem[][]>(() => [
       type="button"
       data-testid="language-switcher"
       :aria-label="t('language.switcher')"
-      class="flex w-full items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-2 text-left transition hover:bg-slate-800/60"
+      class="flex w-full items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-2 text-start transition hover:bg-slate-800/60"
     >
       <UIcon name="i-lucide-languages" class="h-4 w-4 shrink-0 text-slate-400" />
       <div class="min-w-0 flex-1">

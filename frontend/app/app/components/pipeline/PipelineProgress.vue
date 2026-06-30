@@ -213,7 +213,7 @@ const ITEM_ICON: Record<string, string> = {
         <span v-if="currentAgent && instance.status === 'running'" class="text-xs text-slate-500">
           · {{ t('pipeline.progress.currently', { agent: currentAgent }) }}
         </span>
-        <span class="ml-auto font-mono text-sm tabular-nums text-slate-200">{{
+        <span class="ms-auto font-mono text-sm tabular-nums text-slate-200">{{
           t('pipeline.progress.percent', { value: overallPct })
         }}</span>
       </div>
@@ -241,7 +241,7 @@ const ITEM_ICON: Record<string, string> = {
         <!-- connector line to the next step -->
         <span
           v-if="i < steps.length - 1"
-          class="absolute top-9 bottom-0 left-[17px] w-0.5 -translate-x-1/2"
+          class="absolute top-9 bottom-0 start-[17px] w-0.5 -translate-x-1/2"
           :class="connectorDone(i) ? 'bg-emerald-500/60' : 'bg-slate-700'"
         />
 
@@ -306,7 +306,7 @@ const ITEM_ICON: Record<string, string> = {
               </div>
             </div>
             <span
-              class="ml-auto shrink-0 text-[11px] font-medium"
+              class="ms-auto shrink-0 text-[11px] font-medium"
               :style="{ color: stepVisual(s.state).color }"
             >
               {{ stepVisual(s.state).label }}
@@ -495,7 +495,7 @@ const ITEM_ICON: Record<string, string> = {
           <button
             v-if="s.followUps?.enabled"
             type="button"
-            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-2.5 py-1.5 text-left transition hover:border-pink-400/60"
+            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-2.5 py-1.5 text-start transition hover:border-pink-400/60"
             :class="
               followUpPending(s) > 0
                 ? 'border-pink-500/50 bg-pink-500/10 followup-blink'

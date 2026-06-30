@@ -68,7 +68,7 @@ function statusLabel(g: KaizenGrading): string {
               Continuous-improvement grading of agent runs
             </p>
           </div>
-          <div class="ml-auto flex items-center gap-2">
+          <div class="ms-auto flex items-center gap-2">
             <UButton
               icon="i-lucide-refresh-cw"
               size="xs"
@@ -122,9 +122,9 @@ function statusLabel(g: KaizenGrading): string {
                   <UIcon
                     v-if="c.verified"
                     name="i-lucide-badge-check"
-                    class="ml-auto h-3.5 w-3.5 text-emerald-400"
+                    class="ms-auto h-3.5 w-3.5 text-emerald-400"
                   />
-                  <span v-else class="ml-auto text-[11px] text-slate-500">
+                  <span v-else class="ms-auto text-[11px] text-slate-500">
                     {{ c.consecutiveHighGrades }}/5
                   </span>
                 </div>
@@ -145,7 +145,7 @@ function statusLabel(g: KaizenGrading): string {
               Grading history
             </h2>
             <div class="overflow-hidden rounded-lg border border-slate-800">
-              <table class="w-full text-left text-xs">
+              <table class="w-full text-start text-xs">
                 <thead class="bg-slate-900/60 text-[11px] uppercase tracking-wide text-slate-500">
                   <tr>
                     <th class="px-3 py-2 font-medium">When</th>
@@ -178,7 +178,7 @@ function statusLabel(g: KaizenGrading): string {
                       {{ statusLabel(g) }}
                     </td>
                     <td class="px-3 py-2 text-slate-400">
-                      <ul v-if="g.recommendations.length" class="list-disc space-y-0.5 pl-4">
+                      <ul v-if="g.recommendations.length" class="list-disc space-y-0.5 ps-4">
                         <li v-for="(r, i) in g.recommendations" :key="i">{{ r }}</li>
                       </ul>
                       <span v-else-if="g.status === 'complete'" class="text-slate-600">—</span>

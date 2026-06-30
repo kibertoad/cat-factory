@@ -35,7 +35,7 @@ const selected = computed(() => ui.selectedBlockId === props.id)
       <span class="text-[10px] font-semibold uppercase tracking-wide text-violet-300">{{
         t('board.epic.label')
       }}</span>
-      <span class="ml-auto text-[10px] text-slate-400">{{ done }}/{{ total }}</span>
+      <span class="ms-auto text-[10px] text-slate-400">{{ done }}/{{ total }}</span>
     </div>
     <div class="mt-1 truncate text-sm font-medium text-slate-100" :title="block.title">
       {{ block.title }}

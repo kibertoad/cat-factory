@@ -258,7 +258,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             <h1 class="truncate text-base font-semibold text-white">{{ t('clarity.title') }}</h1>
             <p v-if="block" class="truncate text-xs text-slate-500">{{ block.title }}</p>
           </div>
-          <div class="ml-auto flex items-center gap-1.5">
+          <div class="ms-auto flex items-center gap-1.5">
             <UBadge v-if="review" color="neutral" variant="subtle" size="sm">
               {{ t('clarity.iteration', { current: iteration, max: maxIterations }) }}
             </UBadge>
@@ -360,7 +360,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           size="xs"
                           variant="soft"
                           :color="STATUS_COLOR[item.status]"
-                          class="ml-auto"
+                          class="ms-auto"
                         >
                           {{ t(STATUS_LABELS[item.status]) }}
                         </UBadge>
@@ -372,7 +372,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                       <!-- recorded answer -->
                       <div
                         v-if="item.reply"
-                        class="mt-2 rounded-md border-l-2 border-slate-700 bg-slate-950/40 px-3 py-1.5 text-sm text-slate-300"
+                        class="mt-2 rounded-md border-s-2 border-slate-700 bg-slate-950/40 px-3 py-1.5 text-sm text-slate-300"
                       >
                         <span class="text-[10px] uppercase tracking-wide text-slate-500">
                           {{ t('clarity.answerLabel') }}
@@ -449,7 +449,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 <div v-for="s in outline.sections" :key="s.id" class="mb-2">
                   <button
                     v-if="s.title"
-                    class="group flex w-full items-center gap-2 text-left"
+                    class="group flex w-full items-center gap-2 text-start"
                     @click="toggle(s.id)"
                   >
                     <UIcon
@@ -465,7 +465,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   </button>
                   <div
                     v-show="!s.title || !collapsed[s.id]"
-                    class="reader-prose mt-1 pl-5.5 text-[13px] leading-relaxed text-slate-300"
+                    class="reader-prose mt-1 ps-5.5 text-[13px] leading-relaxed text-slate-300"
                     v-html="s.bodyHtml"
                   />
                 </div>
@@ -474,7 +474,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           </div>
 
           <!-- right action rail -->
-          <aside class="hidden w-72 shrink-0 flex-col border-l border-slate-800 lg:flex">
+          <aside class="hidden w-72 shrink-0 flex-col border-s border-slate-800 lg:flex">
             <div class="flex flex-col gap-4 px-4 py-5">
               <div v-if="review" class="space-y-2 text-xs text-slate-400">
                 <div class="flex items-center justify-between">
@@ -491,7 +491,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 </div>
                 <div v-if="review.model" class="flex items-center justify-between">
                   <span>{{ t('clarity.rail.model') }}</span>
-                  <span class="truncate pl-2 text-slate-500">{{ review.model }}</span>
+                  <span class="truncate ps-2 text-slate-500">{{ review.model }}</span>
                 </div>
               </div>
 
@@ -506,6 +506,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   size="sm"
                   block
                   icon="i-lucide-arrow-right"
+                  :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
                   :loading="acting"
                   @click="proceed"
                 >

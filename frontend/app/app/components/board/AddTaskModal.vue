@@ -700,13 +700,13 @@ async function add() {
                   color="neutral"
                   variant="soft"
                   size="xs"
-                  class="ml-1 shrink-0"
+                  class="ms-1 shrink-0"
                 >
                   {{ t('board.addTask.importsOnAdd') }}
                 </UBadge>
                 <button
                   type="button"
-                  class="ml-auto shrink-0 text-slate-400 hover:text-slate-200"
+                  class="ms-auto shrink-0 text-slate-400 hover:text-slate-200"
                   @click="removePending(item)"
                 >
                   <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
@@ -772,13 +772,13 @@ async function add() {
                   color="neutral"
                   variant="soft"
                   size="xs"
-                  class="ml-1 shrink-0"
+                  class="ms-1 shrink-0"
                 >
                   {{ t('board.addTask.importsOnAdd') }}
                 </UBadge>
                 <button
                   type="button"
-                  class="ml-auto shrink-0 text-slate-400 hover:text-slate-200"
+                  class="ms-auto shrink-0 text-slate-400 hover:text-slate-200"
                   @click="removePending(item)"
                 >
                   <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />

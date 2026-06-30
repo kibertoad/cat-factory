@@ -331,7 +331,7 @@ async function doSpawnEpic() {
           >
             <button
               type="button"
-              class="min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-60"
+              class="min-w-0 flex-1 text-start disabled:cursor-not-allowed disabled:opacity-60"
               :disabled="!containerId"
               :title="
                 containerId

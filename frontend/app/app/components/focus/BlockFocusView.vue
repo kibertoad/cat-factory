@@ -61,6 +61,7 @@ function openApprovalFor(approvalId: string) {
       <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">
         <UButton
           icon="i-lucide-arrow-left"
+          :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
           color="neutral"
           variant="ghost"
           size="sm"
@@ -68,7 +69,7 @@ function openApprovalFor(approvalId: string) {
         >
           {{ t('focus.board') }}
         </UButton>
-        <UIcon name="i-lucide-chevron-right" class="h-4 w-4 text-slate-600" />
+        <UIcon name="i-lucide-chevron-right" class="h-4 w-4 text-slate-600 rtl:-scale-x-100" />
         <div
           class="flex h-9 w-9 items-center justify-center rounded-lg"
           :style="{ backgroundColor: typeMeta.accent + '22' }"
@@ -81,10 +82,10 @@ function openApprovalFor(approvalId: string) {
             {{ t('focus.typeSubtitle', { type: typeMeta.label }) }}
           </div>
         </div>
-        <UBadge :color="statusMeta.chip as any" variant="subtle" class="ml-2">
+        <UBadge :color="statusMeta.chip as any" variant="subtle" class="ms-2">
           {{ statusMeta.label }}
         </UBadge>
-        <div class="ml-auto flex items-center gap-2">
+        <div class="ms-auto flex items-center gap-2">
           <UDropdownMenu :items="runMenu">
             <UButton
               color="primary"

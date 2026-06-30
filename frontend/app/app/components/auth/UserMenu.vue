@@ -30,7 +30,7 @@ const items = computed<DropdownMenuItem[][]>(() => [
   <UDropdownMenu v-if="auth.user" :items="items" :content="{ side: 'top', align: 'start' }">
     <button
       type="button"
-      class="flex w-full items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-2 text-left transition hover:bg-slate-800/60"
+      class="flex w-full items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-2 text-start transition hover:bg-slate-800/60"
     >
       <UAvatar
         :src="auth.user.avatarUrl ?? undefined"

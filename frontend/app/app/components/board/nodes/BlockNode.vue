@@ -202,7 +202,7 @@ const ITEM_ICON: Record<string, string> = {
     <!-- decision / approval indicator floats above the card at all zoom levels -->
     <div
       v-if="blockDecisions.length || blockApprovals.length"
-      class="absolute -top-3 left-1/2 z-10 flex -translate-x-1/2 gap-1"
+      class="absolute -top-3 start-1/2 z-10 flex -translate-x-1/2 gap-1"
     >
       <DecisionBadge
         v-if="blockDecisions.length"
@@ -234,16 +234,16 @@ const ITEM_ICON: Record<string, string> = {
       <UIcon
         v-if="bootstrapping"
         name="i-lucide-loader-circle"
-        class="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-amber-400"
+        class="ms-auto h-3.5 w-3.5 shrink-0 animate-spin text-amber-400"
         :title="t('board.frame.bootstrapping')"
       />
       <UIcon
         v-else-if="runFailed"
         name="i-lucide-alert-triangle"
-        class="ml-auto h-3.5 w-3.5 shrink-0 text-rose-400"
+        class="ms-auto h-3.5 w-3.5 shrink-0 text-rose-400"
         :title="t('board.frame.runFailed')"
       />
-      <span v-else-if="hasTasks" class="ml-auto shrink-0 text-[11px] text-slate-300">
+      <span v-else-if="hasTasks" class="ms-auto shrink-0 text-[11px] text-slate-300">
         {{ mergedTasks }}/{{ taskCount }}
       </span>
     </div>
@@ -263,7 +263,7 @@ const ITEM_ICON: Record<string, string> = {
             class="h-3.5 w-3.5 shrink-0 animate-spin text-amber-400"
           />
           <span class="text-amber-300">{{ t('board.frame.bootstrapping') }}</span>
-          <span v-if="bootstrapSubtasks" class="ml-auto text-amber-200/80">
+          <span v-if="bootstrapSubtasks" class="ms-auto text-amber-200/80">
             {{ bootstrapSubtasks.completed }}/{{ bootstrapSubtasks.total }}
           </span>
         </div>
@@ -321,7 +321,7 @@ const ITEM_ICON: Record<string, string> = {
           <span v-if="prTasks" class="text-emerald-400"
             >· {{ t('board.frame.prCount', { count: prTasks }) }}</span
           >
-          <UIcon name="i-lucide-chevron-down" class="ml-auto h-3 w-3" />
+          <UIcon name="i-lucide-chevron-down" class="ms-auto h-3 w-3" />
         </button>
       </div>
     </div>
@@ -341,7 +341,7 @@ const ITEM_ICON: Record<string, string> = {
             class="h-4 w-4 shrink-0 animate-spin text-amber-400"
           />
           <span class="text-amber-300">{{ t('board.frame.bootstrappingRepository') }}</span>
-          <span v-if="bootstrapSubtasks" class="ml-auto text-amber-200/80">
+          <span v-if="bootstrapSubtasks" class="ms-auto text-amber-200/80">
             {{
               t('board.frame.bootstrapStepsCount', {
                 completed: bootstrapSubtasks.completed,
@@ -392,7 +392,7 @@ const ITEM_ICON: Record<string, string> = {
       <div class="p-4">
         <!-- frame header: the whole header (the title row AND the stats line below it)
              is the drag handle for the expanded frame. `nopan` stops Vue Flow's pane
-             from panning on a left-drag that starts here (it pans via d3-zoom's
+             from panning on a start-drag that starts here (it pans via d3-zoom's
              mousedown, which our pointerdown stopPropagation can't intercept), so the
              grab drives the frame move. The action buttons on the right opt out via
              `.nodrag` (onFrameHandle ignores them). `pb-3` provides the gap down to the
@@ -501,22 +501,22 @@ const ITEM_ICON: Record<string, string> = {
                `nopan` (alongside `nodrag`) so the pane doesn't pan while resizing —
                same reason as the header handle above. -->
           <div
-            class="nodrag nopan absolute right-0 top-0 h-full w-2 cursor-ew-resize touch-none hover:bg-sky-400/20 pointer-coarse:w-4"
+            class="nodrag nopan absolute end-0 top-0 h-full w-2 cursor-ew-resize touch-none hover:bg-sky-400/20 pointer-coarse:w-4"
             :title="t('board.frame.dragToResize')"
             @pointerdown="onResize($event, 'e')"
           />
           <div
-            class="nodrag nopan absolute bottom-0 left-0 h-2 w-full cursor-ns-resize touch-none hover:bg-sky-400/20 pointer-coarse:h-4"
+            class="nodrag nopan absolute bottom-0 start-0 h-2 w-full cursor-ns-resize touch-none hover:bg-sky-400/20 pointer-coarse:h-4"
             :title="t('board.frame.dragToResize')"
             @pointerdown="onResize($event, 's')"
           />
           <div
-            class="nodrag nopan absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize touch-none pointer-coarse:h-11 pointer-coarse:w-11"
+            class="nodrag nopan absolute bottom-0 end-0 h-4 w-4 cursor-nwse-resize touch-none pointer-coarse:h-11 pointer-coarse:w-11"
             :title="t('board.frame.dragToResize')"
             @pointerdown="onResize($event, 'se')"
           >
             <span
-              class="absolute bottom-1 right-1 h-2 w-2 rounded-sm border-b-2 border-r-2 border-slate-500"
+              class="absolute bottom-1 end-1 h-2 w-2 rounded-sm border-b-2 border-e-2 border-slate-500"
             />
           </div>
         </div>

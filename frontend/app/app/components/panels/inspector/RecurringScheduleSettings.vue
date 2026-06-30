@@ -212,7 +212,7 @@ function fmtTime(ms: number) {
           {{ runStatusLabel(run.status) }}
         </span>
         <span class="truncate text-slate-500">{{ fmtTime(run.startedAt) }}</span>
-        <span v-if="run.outcome" class="ml-auto truncate text-slate-500">{{ run.outcome }}</span>
+        <span v-if="run.outcome" class="ms-auto truncate text-slate-500">{{ run.outcome }}</span>
       </div>
     </div>
   </div>

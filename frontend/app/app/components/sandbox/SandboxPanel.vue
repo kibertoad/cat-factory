@@ -243,7 +243,7 @@ async function archive(prompt: SandboxPromptVersion) {
               <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
                 Prompt versions
               </span>
-              <div class="max-h-28 space-y-1 overflow-auto pr-1">
+              <div class="max-h-28 space-y-1 overflow-auto pe-1">
                 <label
                   v-for="p in kindPrompts"
                   :key="p.id"
@@ -271,7 +271,7 @@ async function archive(prompt: SandboxPromptVersion) {
               <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
                 Models
               </span>
-              <div class="max-h-28 space-y-1 overflow-auto pr-1">
+              <div class="max-h-28 space-y-1 overflow-auto pe-1">
                 <label
                   v-for="m in store.selectableModels"
                   :key="m.id"
@@ -295,7 +295,7 @@ async function archive(prompt: SandboxPromptVersion) {
               <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
                 Fixtures
               </span>
-              <div class="max-h-28 space-y-1 overflow-auto pr-1">
+              <div class="max-h-28 space-y-1 overflow-auto pe-1">
                 <label
                   v-for="f in kindFixtures"
                   :key="f.id"
@@ -353,13 +353,13 @@ async function archive(prompt: SandboxPromptVersion) {
                 <UBadge variant="soft" size="xs">{{ store.detail.experiment.status }}</UBadge>
               </div>
               <div class="overflow-auto">
-                <table class="w-full text-left text-xs">
+                <table class="w-full text-start text-xs">
                   <thead class="text-slate-500">
                     <tr>
-                      <th class="py-1 pr-2 font-medium">Prompt</th>
-                      <th class="py-1 pr-2 font-medium">Model</th>
-                      <th class="py-1 pr-2 font-medium">Fixture</th>
-                      <th class="py-1 pr-2 font-medium">Score</th>
+                      <th class="py-1 pe-2 font-medium">Prompt</th>
+                      <th class="py-1 pe-2 font-medium">Model</th>
+                      <th class="py-1 pe-2 font-medium">Fixture</th>
+                      <th class="py-1 pe-2 font-medium">Score</th>
                       <th class="py-1 font-medium">Objective</th>
                     </tr>
                   </thead>
@@ -370,12 +370,12 @@ async function archive(prompt: SandboxPromptVersion) {
                       class="cursor-pointer border-t border-slate-800 hover:bg-slate-800/40"
                       @click="selectedRun = run"
                     >
-                      <td class="py-1 pr-2 text-slate-300">{{ run.promptLabel }}</td>
-                      <td class="py-1 pr-2 font-mono text-[11px] text-slate-400">
+                      <td class="py-1 pe-2 text-slate-300">{{ run.promptLabel }}</td>
+                      <td class="py-1 pe-2 font-mono text-[11px] text-slate-400">
                         {{ run.model }}
                       </td>
-                      <td class="py-1 pr-2 text-slate-400">{{ fixtureName }}</td>
-                      <td class="py-1 pr-2">
+                      <td class="py-1 pe-2 text-slate-400">{{ fixtureName }}</td>
+                      <td class="py-1 pe-2">
                         <span
                           v-if="grade"
                           :class="scoreColor(grade.weightedTotal)"
@@ -422,8 +422,8 @@ async function archive(prompt: SandboxPromptVersion) {
                     class="text-[11px] text-slate-400"
                   >
                     <span :class="scoreColor(d.score)" class="font-semibold">{{ d.score }}</span>
-                    <span class="ml-1 text-slate-300">{{ d.key }}</span>
-                    <span v-if="d.rationale" class="ml-1 text-slate-500">— {{ d.rationale }}</span>
+                    <span class="ms-1 text-slate-300">{{ d.key }}</span>
+                    <span v-if="d.rationale" class="ms-1 text-slate-500">— {{ d.rationale }}</span>
                   </p>
                 </div>
               </div>
@@ -434,7 +434,7 @@ async function archive(prompt: SandboxPromptVersion) {
               <button
                 v-for="x in store.experiments"
                 :key="x.id"
-                class="flex w-full items-center justify-between rounded-md border border-slate-800 bg-slate-900/40 px-2 py-1.5 text-left text-sm hover:bg-slate-800/50"
+                class="flex w-full items-center justify-between rounded-md border border-slate-800 bg-slate-900/40 px-2 py-1.5 text-start text-sm hover:bg-slate-800/50"
                 @click="store.openExperiment(x.id)"
               >
                 <span class="truncate text-slate-300">{{ x.name }}</span>
@@ -449,7 +449,7 @@ async function archive(prompt: SandboxPromptVersion) {
 
         <!-- ============================== PROMPTS ============================== -->
         <div v-else-if="tab === 'prompts'" class="grid gap-4 lg:grid-cols-2">
-          <div class="max-h-[28rem] space-y-1.5 overflow-auto pr-1">
+          <div class="max-h-[28rem] space-y-1.5 overflow-auto pe-1">
             <div
               v-for="p in store.prompts"
               :key="p.id"
@@ -520,7 +520,7 @@ async function archive(prompt: SandboxPromptVersion) {
         </div>
 
         <!-- ============================== FIXTURES ============================== -->
-        <div v-else class="max-h-[28rem] space-y-1.5 overflow-auto pr-1">
+        <div v-else class="max-h-[28rem] space-y-1.5 overflow-auto pe-1">
           <div
             v-for="f in store.fixtures"
             :key="f.id"

@@ -246,7 +246,7 @@ const technicalLabel = computed(() => {
           class="cursor-pointer"
           @click="setPipeline('')"
         >
-          {{ selectedPipeline.name }}<UIcon name="i-lucide-x" class="ml-0.5 h-3 w-3" />
+          {{ selectedPipeline.name }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
         </UBadge>
       </div>
       <div v-else class="text-[11px] text-slate-500">
@@ -461,7 +461,7 @@ const technicalLabel = computed(() => {
           class="cursor-pointer"
           @click="setResponsible('')"
         >
-          {{ responsibleLabel }}<UIcon name="i-lucide-x" class="ml-0.5 h-3 w-3" />
+          {{ responsibleLabel }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
         </UBadge>
       </div>
       <div v-else class="text-[11px] text-slate-500">
