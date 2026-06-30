@@ -1292,12 +1292,14 @@
       },
       "testEnvBackend": {
         "label": "Where test environments run",
-        "local-compose": "In-container docker-compose",
-        "local-composeDesc": "Stand the Tester's dependencies up with docker-compose inside the run's container.",
+        "local-compose": "In-container docker-compose (Tester deps)",
+        "local-composeDesc": "Stand the Tester's dependencies up with docker-compose inside the run's container. For a full app preview env, use the Docker Compose preview env option below.",
         "kubernetes": "Kubernetes cluster",
-        "kubernetesDesc": "Provision a per-PR namespace in a Kubernetes cluster you operate.",
+        "kubernetesDesc": "Provision a per-PR namespace in a Kubernetes cluster you operate. Best for Kubernetes-native apps or when you already run a cluster.",
         "environment-provider": "Custom HTTP provider",
-        "environment-providerDesc": "Provision ephemeral environments through your own HTTP management API."
+        "environment-providerDesc": "Provision ephemeral environments through your own HTTP management API. Best when you already have bespoke preview-env tooling.",
+        "compose": "Docker Compose preview env",
+        "composeDesc": "Stand the repo's own docker-compose.yml up on a local Docker daemon as the Tester's URL. Best for local Compose-based apps. Image-based stacks only; needs a Docker daemon, so local deployments only."
       }
     },
     "providerConnection": {
