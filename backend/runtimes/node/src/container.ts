@@ -187,6 +187,7 @@ import {
   DrizzleEnvironmentConnectionRepository,
   DrizzleEnvironmentRegistryRepository,
 } from './repositories/environments.js'
+import { DrizzleCustomManifestTypeRepository } from './repositories/customManifestType.js'
 import {
   DrizzleFragmentSourceRepository,
   DrizzlePromptFragmentRepository,
@@ -2129,6 +2130,8 @@ function selectNodeEnvironmentsDeps(config: AppConfig, db: DrizzleDb): Partial<C
   return {
     environmentConnectionRepository: new DrizzleEnvironmentConnectionRepository(db),
     environmentRegistryRepository: new DrizzleEnvironmentRegistryRepository(db),
+    // The workspace-defined custom-manifest-type catalog is a workspace feature on every facade.
+    customManifestTypeRepository: new DrizzleCustomManifestTypeRepository(db),
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64: config.environments.encryptionKey,
     }),

@@ -647,6 +647,68 @@ export const upsertCustomManifestTypeSchema = v.object({
 })
 export type UpsertCustomManifestTypeInput = v.InferOutput<typeof upsertCustomManifestTypeSchema>
 
+// ---------------------------------------------------------------------------
+// Per-type infra HANDLER wire shapes (the workspace/user "how"): a handler view
+// (safe metadata + non-secret config for connect-form prefill) and the register payload.
+// ---------------------------------------------------------------------------
+
+/** One registered infra handler, as exposed to clients (never secret VALUES). */
+export const environmentHandlerViewSchema = v.object({
+  provisionType: provisionTypeSchema,
+  /** For `custom`: the manifest id this handler is keyed to; `null` otherwise. */
+  manifestId: v.nullable(v.string()),
+  engine: infraEngineSchema,
+  providerId: v.string(),
+  label: v.string(),
+  baseUrl: v.string(),
+  connectedAt: v.number(),
+  /** Which secret keys are set (names only), so the UI can show completeness. */
+  secretKeys: v.array(v.string()),
+  /** For `remote-custom`: the manifest id this provider accepts; `null` otherwise. */
+  acceptsManifestId: v.nullable(v.string()),
+  /** The stored handler config, sans secrets, for connect-form prefill on edit. */
+  config: v.optional(infraHandlerConfigSchema),
+})
+export type EnvironmentHandlerView = v.InferOutput<typeof environmentHandlerViewSchema>
+
+/**
+ * Register (or replace) one per-type infra handler: the engine connection config + its
+ * secret bundle (write-only). `manifestId` keys a `custom` handler to a specific manifest
+ * id; `backendKind` pins the registry backend that builds the provider (else resolved from
+ * the engine). Every secret key the chosen backend references must be supplied.
+ */
+export const registerEnvironmentHandlerSchema = v.object({
+  provisionType: provisionTypeSchema,
+  manifestId: v.optional(v.nullable(manifestIdSchema)),
+  config: infraHandlerConfigSchema,
+  backendKind: v.optional(v.string()),
+  secrets: v.record(v.string(), v.string()),
+})
+export type RegisterEnvironmentHandlerInput = v.InferOutput<typeof registerEnvironmentHandlerSchema>
+
+/**
+ * The body for a per-USER handler override PUT, where the provision type is taken from the
+ * path (`/me/environment-handlers/:workspaceId/:provisionType`) — so the body carries only
+ * the config + secrets (+ optional `manifestId`/`backendKind`), and must NOT re-send a
+ * `provisionType` the handler would ignore.
+ */
+export const upsertEnvironmentUserHandlerBodySchema = v.object({
+  manifestId: v.optional(v.nullable(manifestIdSchema)),
+  config: infraHandlerConfigSchema,
+  backendKind: v.optional(v.string()),
+  secrets: v.record(v.string(), v.string()),
+})
+export type UpsertEnvironmentUserHandlerBody = v.InferOutput<
+  typeof upsertEnvironmentUserHandlerBodySchema
+>
+
+/** The batched per-type handler bundle: every workspace handler + the custom-type catalog. */
+export const environmentHandlersBundleSchema = v.object({
+  handlers: v.array(environmentHandlerViewSchema),
+  customTypes: v.array(customManifestTypeSchema),
+})
+export type EnvironmentHandlersBundle = v.InferOutput<typeof environmentHandlersBundleSchema>
+
 /** Resolved access creds for a provisioned env, as surfaced to a tester agent. */
 export const environmentAccessHandleSchema = v.object({
   scheme: environmentAccessSchemeSchema,

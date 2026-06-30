@@ -163,6 +163,7 @@ import { D1RateLimitRepository } from './repositories/D1RateLimitRepository'
 import { D1DocumentConnectionRepository } from './repositories/D1DocumentConnectionRepository'
 import { D1DocumentRepository } from './repositories/D1DocumentRepository'
 import { D1EnvironmentConnectionRepository } from './repositories/D1EnvironmentConnectionRepository'
+import { D1CustomManifestTypeRepository } from './repositories/D1CustomManifestTypeRepository'
 import { D1EnvironmentRegistryRepository } from './repositories/D1EnvironmentRegistryRepository'
 import { D1ReferenceArchitectureRepository } from './repositories/D1ReferenceArchitectureRepository'
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
@@ -1621,6 +1622,9 @@ function selectEnvironmentsDeps(
   return {
     environmentConnectionRepository: new D1EnvironmentConnectionRepository({ db }),
     environmentRegistryRepository: new D1EnvironmentRegistryRepository({ db }),
+    // The workspace-defined custom-manifest-type catalog (the UI-editable half of the
+    // `custom` provision-type catalog) is a workspace feature on every facade.
+    customManifestTypeRepository: new D1CustomManifestTypeRepository({ db }),
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64: config.environments.encryptionKey!,
     }),

@@ -4,16 +4,24 @@ import {
   getEnvironmentAccessContract,
   getEnvironmentConnectionContract,
   getEnvironmentContract,
+  listEnvironmentHandlersContract,
   listEnvironmentsContract,
   provisionEnvironmentContract,
+  provisionTypeSchema,
+  registerEnvironmentHandlerContract,
   registerEnvironmentProviderContract,
+  removeCustomManifestTypeContract,
   teardownEnvironmentContract,
   testEnvironmentConnectionContract,
+  unregisterEnvironmentHandlerContract,
   unregisterEnvironmentProviderContract,
+  updateEnvironmentHandlerSecretsContract,
   updateEnvironmentSecretsContract,
+  upsertCustomManifestTypeContract,
   validateEnvironmentRepoContract,
 } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
+import * as v from 'valibot'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { EnvironmentsModule } from '@cat-factory/orchestration'
@@ -121,6 +129,79 @@ export function environmentController(): Hono<AppEnv> {
       await env.connectionService.bootstrapRepo(param(c, 'workspaceId'), c.req.valid('json')),
       200,
     )
+  })
+
+  // ---- per-type infra handlers (the workspace "how") + custom-type catalog ----
+
+  // The batched bundle the infra configurator loads: every registered handler + the
+  // custom-manifest-type catalog (registered code types merged with workspace rows).
+  buildHonoRoute(app, listEnvironmentHandlersContract, async (c) => {
+    const env = requireEnvironments(c)
+    if (!env) return unavailable(c)
+    const ws = param(c, 'workspaceId')
+    const [handlers, customTypes] = await Promise.all([
+      env.connectionService.listHandlers(ws),
+      env.connectionService.listCustomTypes(ws),
+    ])
+    return c.json({ handlers, customTypes }, 200)
+  })
+
+  buildHonoRoute(app, registerEnvironmentHandlerContract, async (c) => {
+    const env = requireEnvironments(c)
+    if (!env) return unavailable(c)
+    const body = c.req.valid('json')
+    const view = await env.connectionService.registerHandler(param(c, 'workspaceId'), body)
+    return c.json(view, 201)
+  })
+
+  buildHonoRoute(app, updateEnvironmentHandlerSecretsContract, async (c) => {
+    const env = requireEnvironments(c)
+    if (!env) return unavailable(c)
+    const provisionType = v.parse(provisionTypeSchema, c.req.valid('param').provisionType)
+    const manifestId = c.req.valid('query').manifestId ?? null
+    const view = await env.connectionService.updateHandlerSecrets(
+      param(c, 'workspaceId'),
+      provisionType,
+      manifestId,
+      c.req.valid('json').secrets,
+    )
+    return c.json(view, 200)
+  })
+
+  buildHonoRoute(app, unregisterEnvironmentHandlerContract, async (c) => {
+    const env = requireEnvironments(c)
+    if (!env) return unavailable(c)
+    const provisionType = v.parse(provisionTypeSchema, c.req.valid('param').provisionType)
+    const manifestId = c.req.valid('query').manifestId ?? null
+    await env.connectionService.unregisterHandler(
+      param(c, 'workspaceId'),
+      provisionType,
+      manifestId,
+    )
+    return c.body(null, 204)
+  })
+
+  // Workspace-defined custom-manifest-type catalog CRUD (the UI-editable half of the
+  // `custom` provision-type catalog; the registered code providers are the other half).
+  buildHonoRoute(app, upsertCustomManifestTypeContract, async (c) => {
+    const env = requireEnvironments(c)
+    if (!env) return unavailable(c)
+    const type = await env.connectionService.upsertCustomType(
+      param(c, 'workspaceId'),
+      c.req.valid('param').manifestId,
+      c.req.valid('json'),
+    )
+    return c.json(type, 200)
+  })
+
+  buildHonoRoute(app, removeCustomManifestTypeContract, async (c) => {
+    const env = requireEnvironments(c)
+    if (!env) return unavailable(c)
+    await env.connectionService.removeCustomType(
+      param(c, 'workspaceId'),
+      c.req.valid('param').manifestId,
+    )
+    return c.body(null, 204)
   })
 
   // ---- environment registry ----------------------------------------------

@@ -324,6 +324,167 @@ describe('EnvironmentProvisioningService — failed provisioning is stored', () 
   })
 })
 
+describe('EnvironmentProvisioningService — per-type provisioning records type + engine', () => {
+  /** A service whose `connectionService.resolveProviderForType` returns a fixed engine, capturing the user overrides it saw. */
+  function makeTypeService(
+    provider: EnvironmentProvider,
+    registry: EnvironmentRegistryRepository,
+    opts: {
+      engine?: string
+      resolveUserHandlerOverrides?: (userId: string, workspaceId: string) => Promise<unknown[]>
+    } = {},
+  ) {
+    const seen: { userOverrides?: unknown[] } = {}
+    const connectionService = {
+      // The per-type path: returns provider + manifest + the resolved type/engine.
+      resolveProviderForType: async (
+        _ws: string,
+        service: { type: string },
+        userOverrides: unknown[],
+      ) => {
+        seen.userOverrides = userOverrides
+        return {
+          provider,
+          manifest: MANIFEST,
+          provisionType: service.type,
+          engine: opts.engine ?? 'remote-custom',
+          resolveSecret: () => undefined,
+        }
+      },
+    } as unknown as EnvironmentConnectionService
+    let n = 0
+    const service = new EnvironmentProvisioningService({
+      connectionService,
+      environmentRegistryRepository: registry,
+      secretCipher: fakeCipher,
+      idGenerator: { next: (prefix: string) => `${prefix}_${++n}` },
+      clock: { now: () => 1_700_000_000_000 },
+      ...(opts.resolveUserHandlerOverrides
+        ? { resolveUserHandlerOverrides: opts.resolveUserHandlerOverrides as never }
+        : {}),
+    })
+    return { service, seen }
+  }
+
+  it('records the resolved provisionType + engine on the success record', async () => {
+    const registry = fakeRegistry()
+    const { service } = makeTypeService(recordingProvider(READY), registry, {
+      engine: 'remote-kubernetes',
+    })
+    const handle = await service.provision({
+      workspaceId: 'ws1',
+      blockId: 'blk1',
+      serviceProvisioning: { type: 'kubernetes' },
+    })
+    expect(handle.provisionType).toBe('kubernetes')
+    expect(handle.engine).toBe('remote-kubernetes')
+    expect(registry.records[0]!.provisionType).toBe('kubernetes')
+    expect(registry.records[0]!.engine).toBe('remote-kubernetes')
+  })
+
+  it('records the resolved provisionType + engine on a failed record (provider throws)', async () => {
+    const provider: EnvironmentProvider = {
+      async provision() {
+        throw new Error('apiserver unreachable')
+      },
+      async status() {
+        return READY
+      },
+      async teardown() {
+        return { status: 'torn_down' }
+      },
+    }
+    const registry = fakeRegistry()
+    const { service } = makeTypeService(provider, registry, { engine: 'local-k3s' })
+    await expect(
+      service.provision({
+        workspaceId: 'ws1',
+        blockId: 'blk1',
+        serviceProvisioning: { type: 'kubernetes' },
+      }),
+    ).rejects.toThrow(/apiserver unreachable/)
+    expect(registry.records[0]!.status).toBe('failed')
+    expect(registry.records[0]!.provisionType).toBe('kubernetes')
+    expect(registry.records[0]!.engine).toBe('local-k3s')
+  })
+
+  it('rejects an infraless service (it provisions nothing)', async () => {
+    const { service } = makeTypeService(recordingProvider(READY), fakeRegistry())
+    await expect(
+      service.provision({
+        workspaceId: 'ws1',
+        blockId: 'blk1',
+        serviceProvisioning: { type: 'infraless' },
+      }),
+    ).rejects.toThrow(/infraless/)
+  })
+
+  it('loads the run initiator overrides and passes them to the resolver', async () => {
+    const overrides = [{ provisionType: 'kubernetes' }]
+    const { service, seen } = makeTypeService(recordingProvider(READY), fakeRegistry(), {
+      resolveUserHandlerOverrides: async (userId, ws) => {
+        expect(userId).toBe('user-7')
+        expect(ws).toBe('ws1')
+        return overrides
+      },
+    })
+    await service.provision({
+      workspaceId: 'ws1',
+      blockId: 'blk1',
+      serviceProvisioning: { type: 'kubernetes' },
+      initiatedBy: 'user-7',
+    })
+    expect(seen.userOverrides).toEqual(overrides)
+  })
+
+  it('passes no overrides when the initiator override seam is unwired', async () => {
+    const { service, seen } = makeTypeService(recordingProvider(READY), fakeRegistry())
+    await service.provision({
+      workspaceId: 'ws1',
+      blockId: 'blk1',
+      serviceProvisioning: { type: 'kubernetes' },
+      initiatedBy: 'user-7',
+    })
+    expect(seen.userOverrides).toEqual([])
+  })
+})
+
+describe('EnvironmentProvisioningService — supersedeForBlock (infraless flip)', () => {
+  it('tombstones a prior live environment for the block', async () => {
+    const registry = fakeRegistry()
+    registry.records.push({
+      id: 'env_old',
+      workspaceId: 'ws1',
+      blockId: 'blk1',
+      executionId: null,
+      providerId: 'p',
+      externalId: 'x',
+      url: 'https://old.example',
+      status: 'ready',
+      accessCipher: null,
+      provisionFieldsCipher: null,
+      createdAt: 1,
+      expiresAt: null,
+      lastError: null,
+      provisionType: 'kubernetes',
+      engine: 'remote-kubernetes',
+      deletedAt: null,
+    })
+    const service = makeService(recordingProvider(READY), registry)
+    await service.supersedeForBlock('ws1', 'blk1')
+    expect(registry.records[0]!.deletedAt).toBe(1_700_000_000_000)
+    expect(await registry.getByBlock('ws1', 'blk1')).toBeNull()
+  })
+
+  it('is a no-op when the block has no live environment or no block id', async () => {
+    const registry = fakeRegistry()
+    const service = makeService(recordingProvider(READY), registry)
+    await service.supersedeForBlock('ws1', 'blk1')
+    await service.supersedeForBlock('ws1', null)
+    expect(registry.records).toHaveLength(0)
+  })
+})
+
 describe('EnvironmentProvisioningService — returned URL policy', () => {
   const internalEnv: ProvisionedEnvironment = { ...READY, url: 'https://prenv.kargo.internal' }
 
