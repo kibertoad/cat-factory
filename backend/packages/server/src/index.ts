@@ -85,6 +85,7 @@ export {
 // run-repo resolver each facade threads into the core for a registered kind's pre/post-ops.
 export {
   makeRepoFiles,
+  makeResolveDeployCloneTarget,
   makeResolveRepoFiles,
   makeResolveRepoFilesForCoords,
   makeResolveRunRepoContext,

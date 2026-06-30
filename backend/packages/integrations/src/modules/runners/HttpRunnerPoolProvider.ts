@@ -143,7 +143,7 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     // dispatch spec as first-class `{{input.*}}` variables. They live inside
     // `{{input.job}}` too, but a path/query/header template can't reach into that JSON
     // string — exposing them flat lets a manifest route-by-kind and size declaratively.
-    for (const key of ['kind', 'instanceType', 'cloudProvider'] as const) {
+    for (const key of ['kind', 'instanceType', 'cloudProvider', 'image'] as const) {
       const value = spec?.[key]
       if (typeof value === 'string') input[key] = value
     }

@@ -68,12 +68,20 @@ export function proxyUrl(config: KubernetesRunnerConfig, name: string, path: str
   return `${podsUrl(config)}/${encodeURIComponent(name)}:${port}/proxy${p}`
 }
 
-/** Resolve the image variant a dispatch needs (the heavier UI image when asked + configured). */
+/**
+ * Resolve the image variant a dispatch needs: the heavier UI image for `image:'ui'`, the
+ * separate deploy-harness image for `image:'deploy'` (the container-backed Kubernetes render
+ * path), else the default executor image. Each variant falls back to the default when its image
+ * isn't configured, so an unconfigured `imageDeploy` keeps the pod on the executor image (which
+ * lacks the k8s CLIs — the deploy harness's own preflight then fails loudly rather than the pool
+ * silently mis-running an agent image).
+ */
 export function resolveImage(
   config: KubernetesRunnerConfig,
   options?: RunnerDispatchOptions,
 ): string {
   if (options?.image === 'ui' && config.imageUi) return config.imageUi
+  if (options?.image === 'deploy' && config.imageDeploy) return config.imageDeploy
   return config.image
 }
 

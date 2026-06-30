@@ -1,6 +1,7 @@
 import type { GateProviderOverrides } from '@cat-factory/gates'
-import type { BackendRegistries } from '@cat-factory/integrations'
+import type { BackendRegistries, DeployJobClient } from '@cat-factory/integrations'
 import type {
+  DeployCloneTarget,
   EnvironmentProvider,
   ExecutionEventPublisher,
   ExecutionInstance,
@@ -286,6 +287,21 @@ export interface ConformanceAppOptions {
     workspaceId: string,
     coords: { owner: string; repo: string; provider?: 'github' | 'gitlab' },
   ) => Promise<RunRepoContext | null>
+  /**
+   * Inject the async, container-backed deploy lifecycle seams (slice 9/10) so the suite can
+   * drive a `deployer` step through the CONTAINER render path — dispatch a `deploy` job, poll a
+   * stubbed view, finalize — on EVERY runtime, asserting the deploy dispatch is accepted by the
+   * facade's wiring and the stubbed view settles to an IDENTICAL `ProvisionedEnvironment`. The
+   * suite supplies a fake `deployJobClient` (records the dispatch + replays a canned view) and a
+   * `resolveDeployCloneTarget`; each facade harness threads them into its core overrides exactly
+   * as a real facade composes them (the Worker's `DeployContainer` client / Node's pool client).
+   */
+  deployJobClient?: DeployJobClient
+  resolveDeployCloneTarget?: (
+    workspaceId: string,
+    blockId: string,
+    ref?: string,
+  ) => Promise<DeployCloneTarget | null>
   /**
    * Inject the app-owned backend registries (environment + runner kind → provider), pre-loaded
    * with custom backends, so the suite can assert a deployment-registered custom kind connects,

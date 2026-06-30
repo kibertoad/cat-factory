@@ -45,6 +45,7 @@ import {
   INCIDENT_ENRICHMENT_CIPHER_INFO,
   AccountSettingsService,
   ACCOUNT_SETTINGS_CIPHER_INFO,
+  type DeployJobClient,
 } from '@cat-factory/integrations'
 import {
   type AgentExecutor,
@@ -52,6 +53,7 @@ import {
   type DocumentSourceProvider,
   type FragmentOwnerKind,
   type EmailSender,
+  type DeployCloneTarget,
   type GitHubClient,
   type GitHubInstallationRepository,
   type ModelProviderResolver,
@@ -106,9 +108,11 @@ import {
   WebCryptoWebhookVerifier,
   buildInfrastructureCapabilities,
   buildResolveRepoTarget,
+  makeResolveDeployCloneTarget,
   makeResolveRunRepoContext,
   makeResolveRepoFilesForCoords,
   makeResolveBinaryArtifactStore,
+  RunnerJobClient,
   type BuildBlobBackend,
   type PersistenceRegistry,
   ensureWorkBranchViaRest,
@@ -458,6 +462,36 @@ export interface NodeContainerOptions {
    * workspace's self-hosted pool when runner pools are enabled).
    */
   resolveTransport?: ResolveRunnerTransport | null
+  /**
+   * Override the DEPLOY job transport client (the async, container-backed Kubernetes
+   * render lifecycle — slice 9's `deployJobClient` seam). When provided it REPLACES the
+   * default (`new RunnerJobClient(resolveTransport)` — Node deploys on the workspace's
+   * self-hosted pool, which pulls the `imageDeploy` variant). The local facade injects a
+   * deploy-dedicated transport (the native CLI / a per-run deploy container) instead.
+   * Undefined → the default pool-backed client when a runner transport is wired.
+   */
+  deployJobClient?: DeployJobClient
+  /**
+   * Suppress the DEFAULT pool-backed deploy client (`new RunnerJobClient(resolveTransport)`).
+   * The local facade sets this: its agent transport runs the executor-harness image (or a host
+   * agent process), which lacks `kubectl`/`kustomize`/`helm`, so it must NOT back deploy jobs.
+   * Local injects its own deploy-dedicated `deployJobClient` when configured, else leaves deploy
+   * unwired (a render-needing config then fails loudly). Undefined → the default applies (Node's
+   * self-hosted pool, which pulls the `imageDeploy` variant, legitimately serves deploy).
+   */
+  disableDefaultDeployJobClient?: boolean
+  /**
+   * Override how the manifests-repo clone target is resolved for a deploy job (slice 9's
+   * `resolveDeployCloneTarget` seam). When provided it REPLACES the default
+   * (`makeResolveDeployCloneTarget` over the App token mint + a `github.com` origin), so the
+   * local PAT / GitLab facade can emit the right host + a PAT clone token. Undefined → the
+   * default GitHub-App-backed resolver when the App is configured.
+   */
+  resolveDeployCloneTarget?: (
+    workspaceId: string,
+    blockId: string,
+    ref?: string,
+  ) => Promise<DeployCloneTarget | null>
   /**
    * Override how the container executor mints the push/clone token. When provided it
    * REPLACES the GitHub-App token mint, so a sibling facade can authenticate with a
@@ -1283,6 +1317,40 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         provisioningLogRecorder,
         options.resolveTransport !== undefined ? 'container' : 'runner-pool',
       )
+
+  // The async, container-backed Kubernetes deploy lifecycle (slice 9's `deployJobClient` +
+  // `resolveDeployCloneTarget` seams). Node deploys on the workspace's self-hosted runner pool
+  // (which pulls the `imageDeploy` variant), so the default deploy client wraps the SAME
+  // `resolveTransport` the agent executor uses — the pool is Node's analogue of the Worker's
+  // DeployContainer. The clone-target resolver mints a short-lived install token + a github.com
+  // origin from the App registry. The local facade injects BOTH (a deploy-dedicated native/
+  // container transport + a PAT/GitLab clone target) via `options`, which win here. Absent any
+  // backend ⇒ unwired, so a render-needing config fails loudly (the raw REST path is unaffected).
+  const baseDeployMint =
+    options.mintInstallationToken ??
+    (appRegistry ? (id: number) => appRegistry.installationToken(id) : undefined)
+  const deployJobClient: DeployJobClient | undefined =
+    options.deployJobClient ??
+    (options.disableDefaultDeployJobClient || !resolveTransport
+      ? undefined
+      : new RunnerJobClient(resolveTransport))
+  const resolveDeployCloneTarget =
+    options.resolveDeployCloneTarget ??
+    (baseDeployMint
+      ? makeResolveDeployCloneTarget(
+          resolveRepoTarget,
+          (id) => baseDeployMint(id),
+          options.resolveRepoOrigin
+            ? { resolveCloneUrl: (t) => options.resolveRepoOrigin!(t).cloneUrl }
+            : {},
+        )
+      : undefined)
+  const deployDeps: Partial<CoreDependencies> = config.environments.enabled
+    ? {
+        ...(deployJobClient ? { deployJobClient } : {}),
+        ...(resolveDeployCloneTarget ? { resolveDeployCloneTarget } : {}),
+      }
+    : {}
   // The subscription-token pool (Claude Code / Codex credentials), shared by the
   // container executor (lease + usage feedback) and the vendor-credential controller.
   const subscriptions = buildNodeSubscriptionService(
@@ -1903,6 +1971,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // The environment integration scopes its own URL/host policy from
     // `config.environments` inside this selector (separate from the runner pool's).
     ...selectNodeEnvironmentsDeps(config, options.db),
+    // The async container-backed Kubernetes deploy lifecycle (deployJobClient +
+    // resolveDeployCloneTarget) — pool-backed by default, overridable by the local facade.
+    ...deployDeps,
     // Prompt-fragment library (ADR 0006; opt-in): the managed tenant-scoped catalog
     // of best-practice fragments feeding every agent run, wired exactly like the
     // Worker's selectFragmentLibraryDeps (repos + installation resolver + selector).

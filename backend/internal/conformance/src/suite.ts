@@ -39,6 +39,7 @@ import { clearGateProviders, registerBuiltinGates } from '@cat-factory/gates'
 import type {
   BinaryArtifactStore,
   CiStatusProvider,
+  DeployCloneTarget,
   EnvironmentProvider,
   GateProbe,
   PullRequestReviewProvider,
@@ -46,6 +47,8 @@ import type {
   RepoFiles,
   RepoValidationResult,
   ResolveBinaryArtifactStore,
+  RunnerJobRef,
+  RunnerJobView,
   RunRepoContext,
 } from '@cat-factory/kernel'
 import {
@@ -3179,6 +3182,126 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         // projects onto the step — the cross-runtime persistence + column-mapping assertion.
         expect(deployStep.environment?.status).toBe('failed')
         expect(deployStep.environment?.lastError).toContain('ECONNREFUSED')
+      })
+
+      it('drives the async container-backed deploy lifecycle to an identical environment on every facade', async () => {
+        // Per-service provision types (Phase 2, slice 10): a `deployer` step whose provider needs
+        // RENDERING (kustomize/helm) stands the env up in a deploy CONTAINER — dispatch a `deploy`
+        // job, park, poll, finalize — instead of the synchronous in-Worker REST path. This asserts
+        // the facade's slice-10 wiring end-to-end: the engine DISPATCHES a `deploy`-kind job (with
+        // the `image: 'deploy'` option) through the wired `deployJobClient`, and the stubbed
+        // terminal `RunnerJobView` settles to the SAME `ProvisionedEnvironment` on D1 and Postgres.
+        // A facade that wired the deploy client to the wrong kind/image — or mapped the finalized
+        // record's columns differently — diverges here instead of shipping silently.
+        const dispatched: { ref: RunnerJobRef; kind: string; image?: string }[] = []
+        const doneView: RunnerJobView = {
+          state: 'done',
+          result: {
+            // The harness's structured DeployOutcome on the `custom` channel (namespace/url/status).
+            custom: {
+              namespace: 'preview-pr-1',
+              url: 'https://pr-1.preview.test',
+              status: 'ready',
+            },
+          },
+        }
+        const deployJobClient = {
+          dispatch: async (
+            _workspaceId: string | undefined,
+            ref: RunnerJobRef,
+            _spec: Record<string, unknown>,
+            kind: string,
+            options?: { image?: string },
+          ) => {
+            dispatched.push({ ref, kind, ...(options?.image ? { image: options.image } : {}) })
+          },
+          poll: async () => doneView,
+          release: async () => {},
+        }
+        const resolveDeployCloneTarget = async (): Promise<DeployCloneTarget> => ({
+          cloneUrl: 'https://github.com/acme/app.git',
+          ref: 'main',
+        })
+        // A provider that renders asynchronously: `buildProvisionJob` returns a deploy job (so the
+        // async path runs), `finalizeProvision` maps the harness DeployOutcome → environment. Its
+        // synchronous `provision` must never be reached on this path.
+        const provider = {
+          provision: async () => {
+            throw new Error('the async deploy path must not fall back to synchronous provision')
+          },
+          status: async () => ({ externalId: 'preview-pr-1', status: 'ready', url: null }) as never,
+          teardown: async () => ({ status: 'torn_down' }) as never,
+          asyncProvision: {
+            buildProvisionJob: (req: { deploy?: { ref: RunnerJobRef } }) => ({
+              ref: req.deploy!.ref,
+              spec: { jobId: req.deploy!.ref.jobId, renderer: 'kustomize' },
+              kind: 'deploy' as const,
+              options: { image: 'deploy' as const },
+            }),
+            finalizeProvision: (view: RunnerJobView) => {
+              const outcome = view.result?.custom as {
+                namespace: string
+                url: string | null
+                status: string
+              }
+              return {
+                externalId: outcome.namespace,
+                url: outcome.url,
+                status: outcome.status as never,
+                expiresAt: null,
+                access: null,
+                fields: {},
+              }
+            },
+          },
+        }
+        const app = harness.makeApp(undefined, {
+          environmentProvider: provider as unknown as EnvironmentProvider,
+          deployJobClient: deployJobClient as never,
+          resolveDeployCloneTarget,
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // A registered connection gives the provider its manifest (the legacy single-connection
+        // path the deployer resolves through when the service declares no per-type provisioning).
+        const manifest = {
+          providerId: 'acme-k8s',
+          label: 'Acme Kubernetes',
+          baseUrl: 'https://k8s.test/api',
+          auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
+          provision: { method: 'POST', pathTemplate: '/environments' },
+          response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
+        }
+        const registered = await app.call('POST', `/workspaces/${wsId}/environments/connection`, {
+          config: { kind: 'manifest', manifest },
+          secrets: { API_TOKEN: 'super-secret-env-token' },
+        })
+        expect(registered.status).toBe(201)
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Deploy only',
+          agentKinds: ['deployer'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        // The engine dispatched a `deploy`-kind job (carrying the `image: 'deploy'` variant) through
+        // the wired client — the slice-10 transport-acceptance assertion.
+        expect(dispatched).toHaveLength(1)
+        expect(dispatched[0]!.kind).toBe('deploy')
+        expect(dispatched[0]!.image).toBe('deploy')
+        // The stubbed terminal view finalized into the env record, which round-tripped through the
+        // facade's registry repo (D1 ⇄ Drizzle) and projects onto the step — identical on both runtimes.
+        const deployStep = exec.steps.find((s) => s.agentKind === 'deployer')!
+        expect(deployStep.state).toBe('done')
+        expect(deployStep.environment?.status).toBe('ready')
+        expect(deployStep.environment?.url).toBe('https://pr-1.preview.test')
       })
 
       it('registers, lists, rotates, and removes a per-type infra handler on every facade', async () => {

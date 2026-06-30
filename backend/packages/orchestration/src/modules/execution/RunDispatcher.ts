@@ -1448,6 +1448,12 @@ export class RunDispatcher {
         handle.lastError ?? 'Provisioning failed.',
       )
     }
+    // Refresh `step.environment` from the finalized record so the step projects the live
+    // environment (e.g. `provisioning` → `ready` + its URL). The async deploy path stamped a
+    // `provisioning` projection when it parked (see runDeployerStep); without this re-attach the
+    // step would keep showing that stale snapshot even though the env is now ready. The failure
+    // path already re-attaches (failDeployerStep) — this keeps the success path symmetric.
+    await this.attachEnvironmentProjection(workspaceId, instance.blockId, step)
     const lines = [
       `Provisioned ephemeral environment via '${handle.providerId}'.`,
       `Status: ${handle.status}`,
