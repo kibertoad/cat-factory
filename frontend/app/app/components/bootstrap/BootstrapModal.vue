@@ -14,6 +14,7 @@ const bootstrap = useBootstrapStore()
 const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const open = computed({
   get: () => ui.bootstrapOpen,
@@ -53,18 +54,18 @@ const hasRepoOptions = computed(() => repoOptions.value.length > 0)
 // ---- launch form -----------------------------------------------------------
 type LaunchMode = 'reference' | 'scratch'
 const mode = ref<LaunchMode>('reference')
-const modeItems = [
+const modeItems = computed(() => [
   {
-    label: 'From a reference architecture',
+    label: t('bootstrap.mode.reference.label'),
     value: 'reference' as const,
-    description: 'Clone a managed base repo and adapt it to the new service.',
+    description: t('bootstrap.mode.reference.description'),
   },
   {
-    label: 'From scratch',
+    label: t('bootstrap.mode.scratch.label'),
     value: 'scratch' as const,
-    description: 'Scaffold a brand-new repo from a freeform prompt — no base needed.',
+    description: t('bootstrap.mode.scratch.description'),
   },
-]
+])
 
 const selectedArchId = ref<string | undefined>(undefined)
 const repoName = ref('')
@@ -83,9 +84,9 @@ const REPO_NAME_RE = /^[A-Za-z0-9_.-]+$/
 const repoNameError = computed<string | undefined>(() => {
   const value = repoName.value.trim()
   if (!value) return undefined
-  if (value.includes('/')) return 'Enter just the repository name — drop the “owner/” prefix.'
-  if (!REPO_NAME_RE.test(value)) return 'Only letters, digits, “.”, “_” and “-” are allowed.'
-  if (value.length > 100) return 'Must be 100 characters or fewer.'
+  if (value.includes('/')) return t('bootstrap.repoName.error.hasSlash')
+  if (!REPO_NAME_RE.test(value)) return t('bootstrap.repoName.error.invalidChars')
+  if (value.length > 100) return t('bootstrap.repoName.error.tooLong')
   return undefined
 })
 
@@ -159,14 +160,14 @@ async function openCreateRepo() {
       description: description.value.trim() || undefined,
     })
     toast.add({
-      title: 'Repository created',
+      title: t('bootstrap.toast.repoCreated'),
       description: `${repo.owner}/${repo.name}`,
       icon: 'i-lucide-check',
       color: 'success',
     })
   } catch (e) {
     toast.add({
-      title: 'Could not create repository',
+      title: t('bootstrap.toast.repoCreateFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -214,8 +215,8 @@ async function launch() {
       // The container couldn't even start (pre-flight failure, e.g. the target
       // repo isn't empty) — surfaced synchronously, before any board frame.
       toast.add({
-        title: 'Bootstrap failed',
-        description: job.error ?? 'The bootstrapper reported a failure.',
+        title: t('bootstrap.toast.failed'),
+        description: job.error ?? t('bootstrap.toast.failedFallback'),
         icon: 'i-lucide-triangle-alert',
         color: 'error',
       })
@@ -224,8 +225,8 @@ async function launch() {
       // shows on the board and tracks live progress; the run continues in the
       // background and becomes a real, droppable service when it finishes.
       toast.add({
-        title: 'Bootstrapping started',
-        description: `A container is bootstrapping ${job.repoName} — watch its progress on the board.`,
+        title: t('bootstrap.toast.started'),
+        description: t('bootstrap.toast.startedDesc', { repo: job.repoName }),
         icon: 'i-lucide-loader-circle',
         color: 'info',
       })
@@ -238,7 +239,7 @@ async function launch() {
     }
   } catch (e) {
     toast.add({
-      title: 'Could not bootstrap',
+      title: t('bootstrap.toast.bootstrapFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -329,7 +330,7 @@ async function saveArch() {
     archRepoSlug.value = undefined
   } catch (e) {
     toast.add({
-      title: 'Could not save reference architecture',
+      title: t('bootstrap.toast.saveArchFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -345,7 +346,7 @@ async function removeArch(a: ReferenceArchitecture) {
     if (selectedArchId.value === a.id) selectedArchId.value = undefined
   } catch (e) {
     toast.add({
-      title: 'Could not delete',
+      title: t('bootstrap.toast.deleteFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -359,21 +360,22 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
   succeeded: 'success',
   failed: 'error',
 }
+
+// Exhaustive status→label map of literal `t(...)` keys (keeps the typed-key drift guard live).
+const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
+  pending: t('bootstrap.status.pending'),
+  running: t('bootstrap.status.running'),
+  succeeded: t('bootstrap.status.succeeded'),
+  failed: t('bootstrap.status.failed'),
+}))
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Bootstrap a repository" :ui="{ content: 'max-w-2xl' }">
+  <UModal v-model:open="open" :title="t('bootstrap.title')" :ui="{ content: 'max-w-2xl' }">
     <template #body>
       <div class="space-y-6">
         <p class="text-sm text-slate-400">
-          Create an empty GitHub repository, then let a bootstrapper agent populate it in a sandbox
-          container — either by adapting one of your reference architectures, or from scratch
-          following a freeform prompt. cat-factory pushes the initial commit into that repo;
-          {{
-            github.canCreateRepos
-              ? 'for this account it can create the repository for you too.'
-              : 'you create the repository (one click below), so it needs no repo-creation permission.'
-          }}
+          {{ github.canCreateRepos ? t('bootstrap.intro.canCreate') : t('bootstrap.intro.manual') }}
         </p>
 
         <!-- not connected: a run needs GitHub, so discover & link before launching -->
@@ -384,8 +386,7 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
           <div class="flex items-start gap-2">
             <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
             <p class="text-sm text-amber-200/90">
-              Connect this workspace to GitHub before bootstrapping — a run pushes into a
-              repository. Link an installation the App is already on, or install it.
+              {{ t('bootstrap.github.prompt') }}
             </p>
           </div>
           <GitHubConnect />
@@ -394,38 +395,38 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
         <!-- launch -->
         <section class="space-y-4">
           <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            New repository
+            {{ t('bootstrap.section.newRepo') }}
           </h3>
 
-          <UFormField label="How should we start?" required>
+          <UFormField :label="t('bootstrap.mode.label')" required>
             <URadioGroup v-model="mode" :items="modeItems" />
           </UFormField>
 
           <template v-if="usingReference">
             <UFormField
-              label="Reference architecture"
-              description="The managed base repo to clone and adapt."
+              :label="t('bootstrap.reference.label')"
+              :description="t('bootstrap.reference.description')"
               required
             >
               <div v-if="!bootstrap.hasArchitectures" class="text-sm text-slate-400">
-                No reference architectures yet — add one below, or switch to “From scratch”.
+                {{ t('bootstrap.reference.empty') }}
               </div>
               <USelect
                 v-else
                 v-model="selectedArchId"
                 :items="archOptions"
-                placeholder="Choose a reference architecture"
+                :placeholder="t('bootstrap.reference.placeholder')"
                 class="w-full"
               />
             </UFormField>
           </template>
 
           <UFormField
-            label="Target repository name"
+            :label="t('bootstrap.targetRepo.label')"
             :description="
               repoOwner
-                ? `Create a fresh repo with this name under ${repoOwner}, then bootstrap pushes into it. A prepopulated README, .gitignore or license is fine.`
-                : 'Create a fresh repo with this name, then bootstrap pushes into it. A prepopulated README, .gitignore or license is fine.'
+                ? t('bootstrap.targetRepo.descWithOwner', { owner: repoOwner })
+                : t('bootstrap.targetRepo.descNoOwner')
             "
             required
             :error="repoNameError"
@@ -441,12 +442,16 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
                   :disabled="!repoName.trim() || !!repoNameError"
                   :title="
                     github.canCreateRepos
-                      ? 'Create the repository now'
-                      : `Open GitHub's new-repository page, prefilled`
+                      ? t('bootstrap.createRepo.titleNow')
+                      : t('bootstrap.createRepo.titleGitHub')
                   "
                   @click="openCreateRepo"
                 >
-                  {{ github.canCreateRepos ? 'Create repository' : 'Create on GitHub' }}
+                  {{
+                    github.canCreateRepos
+                      ? t('bootstrap.createRepo.now')
+                      : t('bootstrap.createRepo.onGitHub')
+                  }}
                 </UButton>
               </div>
               <UButton
@@ -456,15 +461,18 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
                 size="sm"
                 icon="i-lucide-shield-check"
                 trailing-icon="i-lucide-external-link"
-                title="Open the App's installation settings to grant it access to the new repo"
+                :title="t('bootstrap.grantAccess.title')"
                 @click="openManageInstall"
               >
-                Grant the App access to this repo
+                {{ t('bootstrap.grantAccess.label') }}
               </UButton>
             </div>
           </UFormField>
 
-          <UFormField label="Description" description="Optional one-line summary for the repo.">
+          <UFormField
+            :label="t('bootstrap.description.label')"
+            :description="t('bootstrap.description.help')"
+          >
             <UInput
               v-model="description"
               placeholder="Handles payment intents and refunds"
@@ -475,13 +483,13 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
           <UFormField
             :label="
               usingReference
-                ? 'Extra instructions for the bootstrapper'
-                : 'What should the bootstrapper build?'
+                ? t('bootstrap.instructions.labelReference')
+                : t('bootstrap.instructions.labelScratch')
             "
             :description="
               usingReference
-                ? 'Optional — appended to the reference architecture’s default instructions.'
-                : 'Describe the new service: stack, structure, and what it should do.'
+                ? t('bootstrap.instructions.descReference')
+                : t('bootstrap.instructions.descScratch')
             "
             :required="!usingReference"
           >
@@ -497,10 +505,10 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
             />
           </UFormField>
 
-          <UFormField label="Visibility">
+          <UFormField :label="t('bootstrap.visibility.label')">
             <div class="flex items-center gap-2">
               <USwitch v-model="isPrivate" />
-              <span class="text-sm text-slate-300">Private repository</span>
+              <span class="text-sm text-slate-300">{{ t('bootstrap.visibility.private') }}</span>
             </div>
           </UFormField>
 
@@ -512,7 +520,7 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
               :disabled="!canLaunch"
               @click="launch"
             >
-              Bootstrap repo
+              {{ t('bootstrap.launch') }}
             </UButton>
           </div>
         </section>
@@ -520,7 +528,7 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
         <!-- recent jobs -->
         <section v-if="agentRuns.bootstrapJobs.length" class="space-y-2">
           <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            Recent runs
+            {{ t('bootstrap.recent.title') }}
           </h3>
           <div
             v-for="job in agentRuns.bootstrapJobs.slice(0, 5)"
@@ -532,8 +540,8 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
               <div class="truncate text-[11px] text-slate-500">
                 {{
                   job.referenceArchitectureName
-                    ? `from ${job.referenceArchitectureName}`
-                    : 'from scratch'
+                    ? t('bootstrap.recent.fromArch', { name: job.referenceArchitectureName })
+                    : t('bootstrap.recent.fromScratch')
                 }}
               </div>
             </div>
@@ -544,10 +552,10 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
                 target="_blank"
                 class="text-[11px] text-indigo-400 hover:underline"
               >
-                Open
+                {{ t('bootstrap.recent.open') }}
               </ULink>
               <UBadge :color="statusColor[job.status]" variant="subtle" size="sm">
-                {{ job.status }}
+                {{ statusLabel[job.status] }}
               </UBadge>
             </div>
           </div>
@@ -559,7 +567,7 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
         <section class="space-y-3">
           <div class="flex items-center justify-between">
             <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Reference architectures
+              {{ t('bootstrap.arch.title') }}
             </h3>
             <UButton
               size="xs"
@@ -568,7 +576,7 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
               icon="i-lucide-plus"
               @click="startCreate"
             >
-              Add
+              {{ t('bootstrap.arch.add') }}
             </UButton>
           </div>
 
@@ -608,8 +616,8 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
           >
             <UFormField
               v-if="hasRepoOptions"
-              label="Pick an existing GitHub repo"
-              description="Choose a repo you can access to fill in its owner and name, or enter them manually below."
+              :label="t('bootstrap.arch.pickRepo.label')"
+              :description="t('bootstrap.arch.pickRepo.description')"
             >
               <USelect
                 v-model="archRepoSlug"
@@ -619,27 +627,31 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
               />
             </UFormField>
 
-            <UFormField label="Name" description="A friendly label for this base." required>
+            <UFormField
+              :label="t('bootstrap.arch.name.label')"
+              :description="t('bootstrap.arch.name.description')"
+              required
+            >
               <UInput v-model="archForm.name" placeholder="Service Template" class="w-full" />
             </UFormField>
             <div class="grid grid-cols-2 gap-2">
-              <UFormField label="Repo owner" required>
+              <UFormField :label="t('bootstrap.arch.repoOwner')" required>
                 <UInput v-model="archForm.repoOwner" placeholder="acme" class="w-full" />
               </UFormField>
-              <UFormField label="Repo name" required>
+              <UFormField :label="t('bootstrap.arch.repoName')" required>
                 <UInput v-model="archForm.repoName" placeholder="service-template" class="w-full" />
               </UFormField>
             </div>
-            <UFormField label="Description">
+            <UFormField :label="t('bootstrap.description.label')">
               <UInput
                 v-model="archForm.description"
-                placeholder="Optional summary of this base"
+                :placeholder="t('bootstrap.arch.descriptionPlaceholder')"
                 class="w-full"
               />
             </UFormField>
             <UFormField
-              label="Default bootstrapper instructions"
-              description="Prepended to the per-run instructions whenever this base is used."
+              :label="t('bootstrap.arch.defaultInstructions.label')"
+              :description="t('bootstrap.arch.defaultInstructions.description')"
             >
               <UTextarea
                 v-model="archForm.defaultInstructions"
@@ -650,7 +662,7 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
             </UFormField>
             <div class="flex justify-end gap-2">
               <UButton color="neutral" variant="ghost" @click="showArchForm = false">
-                Cancel
+                {{ t('common.cancel') }}
               </UButton>
               <UButton
                 color="primary"
@@ -658,7 +670,7 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
                 :disabled="!canSaveArch"
                 @click="saveArch"
               >
-                {{ archForm.id ? 'Save' : 'Add' }}
+                {{ archForm.id ? t('common.save') : t('bootstrap.arch.add') }}
               </UButton>
             </div>
           </div>
