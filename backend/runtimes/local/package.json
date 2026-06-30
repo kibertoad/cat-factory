@@ -42,6 +42,7 @@
     "@cat-factory/node-server": "workspace:*",
     "@cat-factory/orchestration": "workspace:*",
     "@cat-factory/server": "workspace:*",
+    "@hono/node-server": "^2.0.6",
     "drizzle-orm": "1.0.0-rc.4"
   },
   "devDependencies": {

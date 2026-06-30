@@ -9,10 +9,17 @@ import {
   buildNodeContainer,
   buildNodeResolveTransport,
   createDrizzleRepositories,
+  executionRuntime,
   loadNodeConfig,
   withProvisioningLog,
 } from '@cat-factory/node-server'
 import type { NodeContainerOptions } from '@cat-factory/node-server'
+import {
+  InProcessWorkRunner,
+  type MothershipComposition,
+  composeMothership,
+  isMothershipMode,
+} from './mothership.js'
 import { ConflictError } from '@cat-factory/kernel'
 import { WorkspaceSettingsService } from '@cat-factory/orchestration'
 import { buildInfrastructureCapabilities, logger } from '@cat-factory/server'
@@ -23,7 +30,11 @@ import {
   composeEnvironmentBackend,
   createBackendRegistries,
 } from '@cat-factory/integrations'
-import type { HarnessKind, RunnerTransport } from '@cat-factory/kernel'
+import type {
+  HarnessKind,
+  RunnerPoolConnectionRepository,
+  RunnerTransport,
+} from '@cat-factory/kernel'
 import { NativeRoutingRunnerTransport } from './NativeRoutingRunnerTransport.js'
 import { applyLocalDefaults } from './config.js'
 import {
@@ -75,6 +86,13 @@ import { createDockerComposeRuntime } from './compose.js'
 
 export function buildLocalContainer(options: NodeContainerOptions): ServerContainer {
   const env = applyLocalDefaults(options.env ?? process.env)
+  // Mothership mode (docs/initiatives/mothership-mode.md): no local Postgres. Org/durable
+  // state is served remotely (RPC) and credentials stay local (node:sqlite). When on, we
+  // build the composite repositories + credential store here and thread them through the
+  // existing NodeContainer seams with `db` left undefined; the in-process work runner replaces
+  // pg-boss. Off → the standard siloed-Postgres local mode is unchanged.
+  const mothership: MothershipComposition | undefined =
+    isMothershipMode(env) && !options.db ? composeMothership(env) : undefined
   const pat = env.GITHUB_PAT?.trim()
   const gitlabPat = env.GITLAB_PAT?.trim()
   // The push/clone token and the VCS client are provider-agnostic. Prefer a GitHub PAT, else
@@ -129,6 +147,9 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     ...(nativeAgents ? { nativeAmbientAuth: nativeHarnesses } : {}),
     localMode: {
       enabled: true,
+      // Surfaced to the SPA so it can label what is stored locally (credentials) vs delegated
+      // to the mothership (org/durable state). Off → the standard siloed-Postgres local mode.
+      ...(mothership ? { mothership: true } : {}),
       ...(gitToken ? {} : { githubPatSetupUrl: githubPatCreationUrl() }),
       // Scopes-preselected "create a PAT" deep links so the "no token configured" notice sends
       // the developer straight to the right token page (scopes differ per provider).
@@ -159,7 +180,12 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // own) so the chooser reads the same workspace settings the rest of the engine does.
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
-  const repos = options.repos ?? createDrizzleRepositories(options.db, clock)
+  // In mothership mode the repository set is the remote (RPC-backed) composite; otherwise the
+  // Drizzle set over the local Postgres. The credential repos are injected separately below.
+  const repos =
+    options.repos ??
+    mothership?.repos ??
+    createDrizzleRepositories(options.db as Parameters<typeof createDrizzleRepositories>[0], clock)
   const wsSettings = new WorkspaceSettingsService({
     workspaceSettingsRepository: repos.workspaceSettingsRepository,
     workspaceRepository: repos.workspaceRepository,
@@ -262,7 +288,17 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // is non-null and a workspace can register a pool via the API; a native adapter injected
   // through `options.runnerPoolProvider` drives the actual dispatch. The connection repo is
   // also held for the start-time guard's cheap "is a pool registered?" existence check.
-  const runnerPoolConnectionRepository = new DrizzleRunnerPoolConnectionRepository(options.db)
+  // In mothership mode there is no local db, so resolve this repo REMOTELY (like the rest of the
+  // org state) rather than over an undefined db handle — a delegation check then returns a clean
+  // gated `unknown_method` (the repo joins the allow-list in the gating phase, see the tracker)
+  // instead of a `Cannot read properties of undefined` TypeError.
+  const runnerPoolConnectionRepository: RunnerPoolConnectionRepository = mothership
+    ? (
+        mothership.repos as unknown as {
+          runnerPoolConnectionRepository: RunnerPoolConnectionRepository
+        }
+      ).runnerPoolConnectionRepository
+    : new DrizzleRunnerPoolConnectionRepository(options.db!)
   // Build the app-owned backend registries once and share them with BOTH the pool resolver
   // here AND `buildNodeContainer` below (via `backendRegistries`), so the runner backend a
   // workspace's `kind` resolves to is the same instance everywhere. Defaults to the built-ins.
@@ -377,11 +413,27 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     },
   })
 
+  // Mothership mode has no pg-boss: drive runs in-process through the SAME advance/poll loop
+  // with real timer-backed sleeps. Bound to the execution service AFTER the container is built
+  // (the service doesn't exist yet — chicken-and-egg with createCore).
+  const inProcessRunner = mothership
+    ? new InProcessWorkRunner(executionRuntime(config, env).drive, logger)
+    : undefined
+
   const container = buildNodeContainer({
     ...options,
     env,
     config,
     repos,
+    // Mothership credentials stay on the laptop: inject the local node:sqlite store's two repos
+    // so the API-key pool + local-model endpoints are sealed with the LOCAL key (the
+    // mothership's ENCRYPTION_KEY never reaches this machine). Off → Drizzle over Postgres.
+    ...(mothership
+      ? {
+          providerApiKeyRepository: mothership.credentialStore.providerApiKeyRepository,
+          localModelEndpointRepository: mothership.credentialStore.localModelEndpointRepository,
+        }
+      : {}),
     // Share the SAME registries the pool resolver above was built with (so a custom runner
     // backend resolves to one instance across the local chooser + the engine's connection service).
     backendRegistries,
@@ -416,6 +468,10 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       // cross-runtime conformance harness) can override it.
       assertAgentBackendConfigured,
       ...options.overrides,
+      // Mothership mode's in-process work runner (no pg-boss). After `...options.overrides` so an
+      // explicit test override still wins; in mothership boot there is no `boss`, so this is the
+      // only runner wired.
+      ...(inProcessRunner ? { workRunner: inProcessRunner } : {}),
       // The local PAT carries the CI-config scope (GitHub `workflow` — pre-selected by the
       // creation URL; GitLab `api` covers it), so the connection isn't missing that grant —
       // report it granted to suppress the advisory banner. (The App-permissions probe this
@@ -430,10 +486,23 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       // Per-USER infra handler overrides are a LOCAL-mode feature: only the local facade
       // wires the repository, so the per-user override service + controller assemble here
       // (and stay 503 / inert on the Worker + Node facades). A developer can point a
-      // provision type at their own Docker / k3s for the runs they initiate.
-      environmentUserHandlerRepository: new DrizzleEnvironmentUserHandlerRepository(options.db),
+      // provision type at their own Docker / k3s for the runs they initiate. It is backed by
+      // local Postgres, so it only wires when a `db` is present — in mothership mode (`db`
+      // undefined) there is no local database, so the override service stays inert (503),
+      // exactly like `localSettingsService` above; remoting it is a later environments slice.
+      ...(options.db
+        ? {
+            environmentUserHandlerRepository: new DrizzleEnvironmentUserHandlerRepository(
+              options.db,
+            ),
+          }
+        : {}),
     } satisfies Partial<CoreDependencies>,
   })
+
+  // Bind the in-process work runner to the now-built execution service, so `startRun` /
+  // `signalDecision` drive runs in-process (mothership mode; no-op otherwise).
+  inProcessRunner?.bind(container.executionService)
 
   // Surface the local-mode settings service so the dedicated local-settings panel can
   // read/write the warm-pool + checkout config (the controller 503s when this is absent,
@@ -443,6 +512,9 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     ...container,
     vcsIdentity,
     ...(localSettingsService ? { localSettings: { service: localSettingsService } } : {}),
+    // Release the local credential SQLite handle on shutdown (mothership mode owns it; the
+    // boot path calls this from its SIGTERM/SIGINT handler). No-op otherwise.
+    ...(mothership ? { onShutdown: mothership.close } : {}),
   }
 }
 
