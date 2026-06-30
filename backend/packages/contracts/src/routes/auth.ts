@@ -122,6 +122,19 @@ const authConfigViewSchema = v.object({
     google: v.boolean(),
   }),
   localMode: v.optional(localModeConfigSchema),
+  /**
+   * Source-control PAT login offered on a HOSTED facade (remote node): the user pastes their
+   * OWN personal access token to sign in as the account it belongs to, subject to the server's
+   * login/org/domain allowlist. Distinct from `localMode.patLogin` (server-configured one-click
+   * tokens for a single local developer). Absent ⇒ no PAT login (e.g. the Worker, OAuth-only).
+   */
+  patLogin: v.optional(v.object({ providers: v.array(vcsProviderSchema) })),
+  /**
+   * Test-only: the deployment runs with NO authentication (the `TESTING_NO_AUTH` opt-in), so
+   * the SPA may render the board anonymously instead of gating to the login screen. Absent ⇒
+   * normal gating. Set only by the e2e suite; never on a real deployment.
+   */
+  testingNoAuth: v.optional(v.boolean()),
   infrastructure: v.optional(infrastructureCapabilitiesSchema),
 })
 

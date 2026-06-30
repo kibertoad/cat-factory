@@ -141,6 +141,7 @@ import {
   EnvironmentConnectionService,
   EnvironmentProvisioningService,
   EnvironmentTeardownService,
+  EnvironmentUserHandlerService,
   RunnerPoolConnectionService,
   ProvisioningLogRecorder,
   ProvisioningLogService,
@@ -756,6 +757,12 @@ export interface EnvironmentsModule {
   connectionService: EnvironmentConnectionService
   provisioningService: EnvironmentProvisioningService
   teardownService: EnvironmentTeardownService
+  /**
+   * The per-USER infra handler override store (local mode). Present only when the facade
+   * wired `environmentUserHandlerRepository` (the local facade does; Worker/Node don't), so
+   * the per-user-override controller 503s and provisioning ignores user overrides elsewhere.
+   */
+  userHandlerService?: EnvironmentUserHandlerService
   /** The durable env-config-repair service, present only when its deps are wired. */
   envConfigRepair?: EnvConfigRepairModule
 }
@@ -1242,6 +1249,25 @@ function createEnvironmentsModule(
       revalidate: (input) => connectionService.revalidate(input),
     })
   }
+  // The per-USER override store is wired ONLY when its repository is present — which, by
+  // design, ONLY the local facade does (so per-user overrides + the per-user controller are
+  // local-mode-only, with no runtime branch in shared code). Its `resolveOverrides` is the
+  // `resolveUserHandlerOverrides` seam the provisioning service layers over the workspace
+  // handlers for the run initiator.
+  const userHandlerService = deps.environmentUserHandlerRepository
+    ? new EnvironmentUserHandlerService({
+        userHandlerRepository: deps.environmentUserHandlerRepository,
+        environmentBackendRegistry:
+          deps.environmentBackendRegistry ?? defaultEnvironmentBackendRegistry(),
+        secretCipher,
+        clock: deps.clock,
+        ...(deps.environmentCustomTlsSupported !== undefined
+          ? { customTlsSupported: deps.environmentCustomTlsSupported }
+          : {}),
+        ...(deps.environmentUrlSafetyPolicy ? { urlPolicy: deps.environmentUrlSafetyPolicy } : {}),
+        ...(deps.logger ? { logger: deps.logger } : {}),
+      })
+    : undefined
   const provisioningService = new EnvironmentProvisioningService({
     connectionService,
     environmentRegistryRepository,
@@ -1252,6 +1278,12 @@ function createEnvironmentsModule(
     ...(deps.resolveRunRepoContext ? { resolveRunRepoContext: deps.resolveRunRepoContext } : {}),
     ...(deps.resolveRepoFilesForCoords
       ? { resolveRepoFilesForWorkspace: deps.resolveRepoFilesForCoords }
+      : {}),
+    ...(userHandlerService
+      ? {
+          resolveUserHandlerOverrides: (userId, ws) =>
+            userHandlerService.resolveOverrides(userId, ws),
+        }
       : {}),
     ...(provisioningLog ? { provisioningLog } : {}),
   })
@@ -1266,6 +1298,7 @@ function createEnvironmentsModule(
     connectionService,
     provisioningService,
     teardownService,
+    ...(userHandlerService ? { userHandlerService } : {}),
     ...(repairService ? { envConfigRepair: { service: repairService } } : {}),
   }
 }

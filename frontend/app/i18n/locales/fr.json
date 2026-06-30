@@ -772,7 +772,11 @@
       "sendResetLink": "Envoyer le lien de réinitialisation",
       "backToSignIn": "Retour à la connexion",
       "signInFailed": "Échec de la connexion. Vérifiez vos informations et réessayez.",
-      "genericError": "Une erreur s'est produite. Veuillez réessayer."
+      "genericError": "Une erreur s'est produite. Veuillez réessayer.",
+      "notConfiguredTitle": "L'authentification n'est pas configurée",
+      "notConfiguredBody": "Ce déploiement n'a aucune méthode de connexion activée, vous ne pouvez donc pas vous connecter ni accéder à vos espaces de travail. Un administrateur doit configurer un fournisseur d'authentification (OAuth GitHub ou Google, ou connexion par e-mail et mot de passe).",
+      "patPlaceholder": "Jeton d'accès personnel {provider}",
+      "signInWithPat": "Se connecter avec un PAT {provider}"
     },
     "resetPassword": {
       "title": "Réinitialiser le mot de passe",

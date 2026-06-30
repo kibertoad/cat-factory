@@ -772,7 +772,11 @@
       "sendResetLink": "Sıfırlama bağlantısı gönder",
       "backToSignIn": "Oturum açmaya dön",
       "signInFailed": "Oturum açma başarısız. Bilgilerinizi kontrol edip tekrar deneyin.",
-      "genericError": "Bir şeyler ters gitti. Lütfen tekrar deneyin."
+      "genericError": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
+      "notConfiguredTitle": "Kimlik doğrulama yapılandırılmamış",
+      "notConfiguredBody": "Bu dağıtımda etkin bir oturum açma yöntemi yok, bu nedenle oturum açamaz veya çalışma alanlarınıza erişemezsiniz. Bir yönetici, bir kimlik doğrulama sağlayıcısı (GitHub veya Google OAuth ya da e-posta ve parola ile oturum açma) yapılandırmalıdır.",
+      "patPlaceholder": "{provider} kişisel erişim belirteci",
+      "signInWithPat": "{provider} PAT ile oturum aç"
     },
     "resetPassword": {
       "title": "Parolayı sıfırla",

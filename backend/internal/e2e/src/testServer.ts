@@ -81,9 +81,11 @@ const ENCRYPTION_KEY = Buffer.alloc(32).toString('base64')
 
 const env: NodeJS.ProcessEnv = {
   ...process.env,
-  // Open the auth gate (dev-open) and pin a non-production ENVIRONMENT so it's honoured —
-  // the SPA then renders the board with no login. Mirrors the conformance test env.
-  AUTH_DEV_OPEN: 'true',
+  // Run with NO authentication: `TESTING_NO_AUTH` opens the API gate (it implies dev-open)
+  // AND tells the SPA it may render the board anonymously instead of gating to the login
+  // screen (a remote facade otherwise has no anonymous tier). Pin a non-production
+  // ENVIRONMENT so the flag is honoured. Mirrors the conformance test env.
+  TESTING_NO_AUTH: 'true',
   ENVIRONMENT: 'test',
   ENCRYPTION_KEY: process.env.ENCRYPTION_KEY ?? ENCRYPTION_KEY,
   PORT: process.env.PORT ?? '8787',

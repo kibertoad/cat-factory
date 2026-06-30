@@ -9,6 +9,7 @@ import { boardController } from './modules/board/BoardController.js'
 import { bootstrapController } from './modules/bootstrap/BootstrapController.js'
 import { documentSourceController } from './modules/documents/DocumentSourceController.js'
 import { environmentController } from './modules/environments/EnvironmentController.js'
+import { environmentUserHandlerController } from './modules/environments/EnvironmentUserHandlerController.js'
 import { eventsController } from './modules/events/EventsController.js'
 import { executionController } from './modules/execution/ExecutionController.js'
 import { fragmentLibraryController } from './modules/fragmentLibrary/FragmentLibraryController.js'
@@ -95,6 +96,8 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/', accountController())
   app.route('/', personalSubscriptionController())
   app.route('/', localModelEndpointController())
+  // Per-user infra handler overrides (local mode); 503s where the service is unwired.
+  app.route('/', environmentUserHandlerController())
   app.route('/', userSecretController())
   app.route('/', openRouterCatalogController())
   app.route('/', userApiKeyController())

@@ -1,5 +1,66 @@
 # @cat-factory/contracts
 
+## 0.64.0
+
+### Minor Changes
+
+- 9bb75b0: Per-service provision types (slices 3 + 4): the deployer engine step + run-details recording,
+  and the per-type handler controllers + container wiring.
+
+  Slice 3 — engine step:
+
+  - The `deployer` step now resolves the SERVICE frame's declared `provisioning` and routes to the
+    workspace handler for its type (merging the service's manifest source). A service declaring
+    `infraless` records a no-op step output (nothing provisioned); an undeclared service falls
+    through to the legacy single-connection path. The resolved provision type + engine are recorded
+    on the `EnvironmentRecord` (success and failed paths) and surfaced on the step output
+    (`Provision type:` / `Engine:` lines + `model: environment:<engine>:<providerId>`).
+  - `EnvironmentProvisioningService.provision` gains an `initiatedBy` arg and a
+    `resolveUserHandlerOverrides` seam: in local mode the run initiator's per-user handler
+    overrides layer over the workspace handlers.
+
+  Slice 4 — controllers + wiring:
+
+  - New per-type infra handler HTTP surface on `EnvironmentController` (workspace-scoped): a batched
+    `GET …/environments/handlers` bundle (handlers + custom-type catalog), `POST …/handlers`,
+    `PATCH …/handlers/:provisionType/secrets`, `DELETE …/handlers/:provisionType`, plus custom-type
+    CRUD (`PUT|DELETE …/environments/custom-types/:manifestId`).
+  - New **local-mode-only** `EnvironmentUserHandlerController` mounted at the root
+    (`GET /me/environment-handlers/:workspaceId`, `PUT|DELETE …/:provisionType`), backed by the new
+    `EnvironmentUserHandlerService`. The service + per-user overrides are wired ONLY by the local
+    facade (Worker/Node 503 the controller and ignore user overrides), enforced purely by container
+    wiring.
+  - `customManifestTypeRepository` is wired on all three facades (workspace catalog CRUD);
+    `environmentUserHandlerRepository` only on the local facade.
+  - The handler validation/lowering is extracted to a shared `buildInfraHandlerFields` helper used by
+    both the workspace and per-user stores. Cross-runtime conformance asserts the per-type handler
+    CRUD + custom-type CRUD + the `infraless` deployer no-op on every facade.
+
+## 0.63.0
+
+### Minor Changes
+
+- 15c5894: feat(auth): remote node mode — surface the unauthenticated state and support PAT sign-in.
+
+  - A remote facade (node service / Worker) has no anonymous tier, so once the auth handshake
+    resolves with no signed-in user the SPA now routes to the login screen — even when the
+    backend reports auth "disabled" (a dev-open / unconfigured remote). Previously this dropped
+    the user onto a board where every per-user action silently failed with no sign-in affordance.
+    An unreachable backend still falls through to the board's own error UI.
+  - Source-control PAT sign-in now works on the remote node facade: a user pastes their own
+    GitHub/GitLab PAT and is resolved to the account it belongs to. A hosted PAT login is held
+    to the SAME login/org/domain allowlist as GitHub OAuth (admit when the login, an org it
+    belongs to, or its email domain is allowlisted; fail closed when none are configured). Local
+    mode keeps its configured-token, allowlist-exempt flow. `GET /auth/config` advertises the
+    available PAT providers and the login screen renders a PAT option alongside OAuth/password;
+    when a remote deployment has no sign-in method at all the screen explains that instead of
+    showing a blank card.
+  - New `TESTING_NO_AUTH` escape hatch (test-only, refused in a production-like ENVIRONMENT):
+    a stronger `AUTH_DEV_OPEN` that both leaves the API open AND advertises (via `GET
+/auth/config`) that the SPA may render the board anonymously instead of gating to login. The
+    e2e suite opts into it; `AUTH_DEV_OPEN` on its own keeps the SPA's login gate, since a
+    dev-open remote still has no anonymous tier.
+
 ## 0.62.0
 
 ### Minor Changes

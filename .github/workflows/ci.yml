@@ -28,6 +28,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       kubernetes: ${{ steps.filter.outputs.kubernetes }}
+      deployHarness: ${{ steps.filter.outputs.deployHarness }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -63,6 +64,12 @@ jobs:
               - 'backend/packages/contracts/src/environments.ts'
               - 'backend/packages/kernel/src/ports/runner-transport.ts'
               - 'backend/packages/kernel/src/ports/environment-provider.ts'
+              - '.github/workflows/ci.yml'
+            # The deploy-harness integration suite (also in `test-k8s`) drives `handleDeploy`
+            # against the SAME k3d cluster with real kubectl/kustomize, so it only runs when the
+            # harness itself changes.
+            deployHarness:
+              - 'backend/internal/deploy-harness/**'
               - '.github/workflows/ci.yml'
 
   lint:
@@ -598,7 +605,7 @@ jobs:
   test-k8s:
     name: Test k8s (k3d)
     needs: changes
-    if: ${{ needs.changes.outputs.kubernetes == 'true' }}
+    if: ${{ needs.changes.outputs.kubernetes == 'true' || needs.changes.outputs.deployHarness == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -642,17 +649,25 @@ jobs:
 
       # Pin the cluster tooling by downloading the release binaries directly (no third-party
       # action to keep pinned). k3d runs k3s inside Docker and ships the klipper ServiceLB, so
-      # a `type: LoadBalancer` Service actually gets an address.
-      - name: Install k3d + kubectl
+      # a `type: LoadBalancer` Service actually gets an address. kustomize is pinned to the
+      # SAME version the deploy-harness Dockerfile ships (so the integration suite exercises the
+      # `kustomize edit` behaviour the image will actually run); the harness suite needs it for
+      # its image/namespace-override + secretGenerator cases.
+      - name: Install k3d + kubectl + kustomize
         run: |
           K3D_VERSION=v5.7.5
           KUBECTL_VERSION=v1.31.2
+          KUSTOMIZE_VERSION=v5.8.1
           curl -sSfL "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64" -o "$RUNNER_TEMP/k3d"
           curl -sSfL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o "$RUNNER_TEMP/kubectl"
+          curl -sSfL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" -o "$RUNNER_TEMP/kustomize.tar.gz"
+          tar -xzf "$RUNNER_TEMP/kustomize.tar.gz" -C "$RUNNER_TEMP" kustomize
           sudo install -m 0755 "$RUNNER_TEMP/k3d" /usr/local/bin/k3d
           sudo install -m 0755 "$RUNNER_TEMP/kubectl" /usr/local/bin/kubectl
+          sudo install -m 0755 "$RUNNER_TEMP/kustomize" /usr/local/bin/kustomize
           k3d version
           kubectl version --client
+          kustomize version
 
       # Bind the apiserver to 127.0.0.1:6443 so the kubeconfig server (and k3s cert SANs) match
       # the host endpoint the Node test process dials. Disable the bundled Traefik: it is a
@@ -711,11 +726,23 @@ jobs:
             echo 'K8S_CA_EOF'
           } >> "$GITHUB_ENV"
 
+      # The two suites share this one cluster spin-up but are independently gated, so a
+      # Kubernetes-only change doesn't run the deploy-harness suite and vice versa.
       - name: Kubernetes integration tests
+        if: ${{ needs.changes.outputs.kubernetes == 'true' }}
         env:
           K8S_IT_NAMESPACE: cat-factory-it
           K8S_IT_RUNNER_IMAGE: cat-factory-mock-harness:it
         run: pnpm --filter @cat-factory/integrations run test:integration
+
+      # Deploy-harness integration suite: drives `handleDeploy` against the same cluster with the
+      # real kubectl/kustomize CLIs. Reuses the `K8S_IT_*` connection exported above; nginx (its
+      # workload) was imported in the image step, and it creates its own per-test namespaces.
+      - name: Deploy-harness integration tests
+        if: ${{ needs.changes.outputs.deployHarness == 'true' }}
+        env:
+          K8S_IT_NAMESPACE: cat-factory-it
+        run: pnpm --filter @cat-factory/deploy-harness run test:integration
 
       - name: Tear down k3d cluster
         if: ${{ always() }}

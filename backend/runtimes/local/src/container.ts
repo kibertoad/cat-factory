@@ -1,5 +1,6 @@
 import {
   CryptoIdGenerator,
+  DrizzleEnvironmentUserHandlerRepository,
   DrizzleGitHubInstallationRepository,
   DrizzleLocalSettingsRepository,
   DrizzleRunnerPoolConnectionRepository,
@@ -426,6 +427,11 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       // (local-authoritative — after the overrides so a deployment can't accidentally
       // claim DinD support the runtime doesn't have).
       localTestInfraSupported,
+      // Per-USER infra handler overrides are a LOCAL-mode feature: only the local facade
+      // wires the repository, so the per-user override service + controller assemble here
+      // (and stay 503 / inert on the Worker + Node facades). A developer can point a
+      // provision type at their own Docker / k3s for the runs they initiate.
+      environmentUserHandlerRepository: new DrizzleEnvironmentUserHandlerRepository(options.db),
     } satisfies Partial<CoreDependencies>,
   })
 

@@ -41,6 +41,7 @@ export {
   DrizzleGitHubInstallationRepository,
   DrizzleRunnerPoolConnectionRepository,
 } from './repositories/containerExecution.js'
+export { DrizzleEnvironmentUserHandlerRepository } from './repositories/environmentUserHandler.js'
 export * as schema from './db/schema.js'
 export {
   FilesystemBinaryBlobBackend,

@@ -584,10 +584,14 @@ wrangler secret put AUTH_SESSION_SECRET            # any high-entropy random str
 
 Local dev and the test suite run open via the `AUTH_DEV_OPEN=true` escape hatch (in `.dev.vars`,
 gitignored, and the vitest bindings) — **never set it in the deployed `wrangler.toml`**, as that
-would re-open production. As belt-and-braces, set `ENVIRONMENT = "production"` in the deployed
-`[vars]`: when the environment is production-like the worker **refuses** the `AUTH_DEV_OPEN` hatch
-even if it leaks in, so a stray dev flag can't re-open a live deployment. Full details, the OAuth
-flow, and all optional vars are in [`docs/auth.md`](./docs/auth.md).
+would re-open production. `AUTH_DEV_OPEN` opens only the **API gate**; the SPA still routes to the
+login screen on a remote facade (which has no anonymous tier). The end-to-end suite, which needs
+the SPA to boot straight to the board with auth providers off, uses the stronger **`TESTING_NO_AUTH`**
+hatch instead — it implies `AUTH_DEV_OPEN` _and_ tells the SPA (via `/auth/config`) to render
+anonymously. As belt-and-braces, set `ENVIRONMENT = "production"` in the deployed `[vars]`: when the
+environment is production-like the worker **refuses** both hatches even if they leak in, so a stray
+dev flag can't re-open a live deployment. Full details, the OAuth flow, and all optional vars are in
+[`docs/auth.md`](./docs/auth.md).
 
 > Note: this "Login with GitHub" user authentication is distinct from the optional **GitHub App
 > integration** below (how a workspace acts on repos); they use different credentials.

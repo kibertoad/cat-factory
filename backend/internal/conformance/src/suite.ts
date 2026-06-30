@@ -3181,6 +3181,146 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(deployStep.environment?.lastError).toContain('ECONNREFUSED')
       })
 
+      it('registers, lists, rotates, and removes a per-type infra handler on every facade', async () => {
+        // Per-service provision types (slice 4): the per-type handler surface (the workspace
+        // "how"). A workspace registers one handler per provision type; the batched bundle
+        // lists them (sans secret VALUES) alongside the custom-manifest-type catalog. This is
+        // the reshaped-connection store read/written through the controller — a repo that
+        // mangled the handler row, the engine, or the secret-key projection diverges here.
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/environments`
+
+        // A fresh workspace has no handlers and (no registry wired) an empty custom catalog.
+        const empty = await call<{ handlers: unknown[]; customTypes: unknown[] }>(
+          'GET',
+          `${base}/handlers`,
+        )
+        expect(empty.status).toBe(200)
+        expect(empty.body.handlers).toEqual([])
+        expect(empty.body.customTypes).toEqual([])
+
+        // Register a kubernetes handler (engine `remote-kubernetes`, backend `kubernetes`).
+        // The service-owned manifest source is NOT here — it's merged from the service at
+        // provision time — so the handler carries only the apiserver/url engine config.
+        const registered = await call<{
+          provisionType: string
+          engine: string
+          providerId: string
+          secretKeys: string[]
+        }>('POST', `${base}/handlers`, {
+          provisionType: 'kubernetes',
+          config: {
+            engine: 'remote-kubernetes',
+            kubernetes: {
+              label: 'Prod cluster',
+              apiServerUrl: 'https://cluster.example:6443',
+              url: { source: 'ingressTemplate', hostTemplate: '{{branch}}.preview.example.com' },
+            },
+          },
+          secrets: { apiToken: 'sa-token-value' },
+        })
+        expect(registered.status).toBe(201)
+        expect(registered.body.provisionType).toBe('kubernetes')
+        expect(registered.body.engine).toBe('remote-kubernetes')
+        expect(registered.body.secretKeys).toEqual(['apiToken'])
+        expect(JSON.stringify(registered.body)).not.toContain('sa-token-value')
+
+        // It lists back as metadata only (no secret values).
+        const listed = await call<{
+          handlers: { provisionType: string; engine: string }[]
+        }>('GET', `${base}/handlers`)
+        expect(listed.body.handlers.map((h) => h.provisionType)).toEqual(['kubernetes'])
+        expect(listed.body.handlers[0]!.engine).toBe('remote-kubernetes')
+        expect(JSON.stringify(listed.body)).not.toContain('sa-token-value')
+
+        // Rotate the secret bundle for the type without re-sending the config.
+        const rotated = await call<{ secretKeys: string[] }>(
+          'PATCH',
+          `${base}/handlers/kubernetes/secrets`,
+          { secrets: { apiToken: 'rotated-token' } },
+        )
+        expect(rotated.status).toBe(200)
+        expect(rotated.body.secretKeys).toEqual(['apiToken'])
+
+        // Unregister tombstones it; the bundle goes empty again.
+        const del = await call('DELETE', `${base}/handlers/kubernetes`)
+        expect(del.status).toBe(204)
+        const after = await call<{ handlers: unknown[] }>('GET', `${base}/handlers`)
+        expect(after.body.handlers).toEqual([])
+      })
+
+      it('CRUDs the workspace custom-manifest-type catalog on every facade', async () => {
+        // The UI-editable half of the `custom` provision-type catalog. A workspace defines a
+        // manifest type a service can pin (and a `remote-custom` handler can accept); it reads
+        // back in the handlers bundle marked `source: 'workspace'`. The custom_manifest_types
+        // table round-trips through each facade's store (D1 ⇄ Drizzle).
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/environments`
+
+        const created = await call<{ manifestId: string; label: string; source: string }>(
+          'PUT',
+          `${base}/custom-types/terraform`,
+          { label: 'Terraform', description: 'HCL plan + apply' },
+        )
+        expect(created.status).toBe(200)
+        expect(created.body.manifestId).toBe('terraform')
+        expect(created.body.source).toBe('workspace')
+
+        const bundle = await call<{ customTypes: { manifestId: string; label: string }[] }>(
+          'GET',
+          `${base}/handlers`,
+        )
+        expect(bundle.body.customTypes.map((t) => t.manifestId)).toEqual(['terraform'])
+        expect(bundle.body.customTypes[0]!.label).toBe('Terraform')
+
+        const del = await call('DELETE', `${base}/custom-types/terraform`)
+        expect(del.status).toBe(204)
+        const after = await call<{ customTypes: unknown[] }>('GET', `${base}/handlers`)
+        expect(after.body.customTypes).toEqual([])
+      })
+
+      it('runs an `infraless` deployer step as a no-op (no environment) on every facade', async () => {
+        // Per-service provision types (slice 3): the deployer resolves the SERVICE frame's
+        // declared provisioning. A service explicitly declaring `infraless` stands nothing up
+        // — the deployer records a no-op step output and the run completes WITHOUT calling the
+        // provider or persisting an environment. This is the runtime-neutral engine branch; a
+        // facade that wired the deployer differently (or still hit the legacy connection)
+        // diverges here. No connection is registered, proving the provider is never reached.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // Declare the service frame `infraless` (the run targets a task nested under it).
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+          provisioning: { type: 'infraless' },
+        })
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Deploy only',
+          agentKinds: ['deployer'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        // The run completed cleanly and the deployer step is done with the no-op output.
+        expect(exec.status).toBe('done')
+        const deployStep = exec.steps.find((s) => s.agentKind === 'deployer')!
+        expect(deployStep.state).toBe('done')
+        expect(deployStep.output).toContain('infraless')
+        expect(deployStep.environment ?? null).toBeNull()
+
+        // Nothing was provisioned — the registry is empty.
+        const envs = await app.call<{ id: string }[]>('GET', `/workspaces/${wsId}/environments`)
+        expect(envs.body).toHaveLength(0)
+      })
+
       it('describes the provider config + missingRequired identically on every facade', async () => {
         // `GET /provider` self-describes the connect form (configFields) and reports which
         // required-without-default fields the workspace still owes (`missingRequired`, the

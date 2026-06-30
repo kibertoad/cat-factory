@@ -18,7 +18,6 @@ import type {
   EnvironmentProvider,
   InfraEngine,
   InfraHandlerConfig,
-  KubernetesManifestSource,
   ProviderDescriptor,
   ProvisionType,
   RepoValidationIssue,
@@ -39,6 +38,12 @@ import {
   aggregateCustomManifestTypes,
   type CustomManifestTypeRegistry,
 } from './custom-manifest-types.js'
+import {
+  buildInfraHandlerFields,
+  handlerConfigToBackendConfig,
+  type ServiceKubeInputs,
+  toManifestId,
+} from './infra-handler-build.js'
 import { missingRequiredConfigKeys, stringifyProviderConfig } from './environments.logic.js'
 import {
   type InfraHandlerLike,
@@ -70,93 +75,6 @@ function engineToProvisionType(engine: InfraEngine): ProvisionType {
       return 'custom'
     case 'none':
       return 'infraless'
-  }
-}
-
-/**
- * A placeholder manifest source for config validation / metadata extraction, where the
- * real (service-owned) source isn't available. The kube backend's `assertConfigSafe` /
- * `connectionMeta` only read the apiserver/sizing fields, never the source, so a stand-in
- * is safe — the REAL source is merged in at provision time ({@link resolveProviderForType}).
- */
-const PLACEHOLDER_MANIFEST_SOURCE: KubernetesManifestSource = { type: 'colocated', path: '.' }
-
-/**
- * Coerce an env-manifest `providerId` (regex `^[a-z0-9-]+$`, so a leading `-` is allowed) into a
- * valid `manifestId` (`^[a-z0-9][a-z0-9-]*$`) for the compat bridge's `acceptsManifestId`: strip
- * leading non-alphanumerics, cap to 64, and fall back to `custom` if nothing usable remains.
- */
-function toManifestId(providerId: string): string {
-  const id = providerId.replace(/^[^a-z0-9]+/, '').slice(0, 64)
-  return id.length > 0 ? id : 'custom'
-}
-
-/**
- * The service-owned kube provisioning inputs ("what + where" + render inputs) merged into the
- * workspace engine config at provision time: the manifest source plus the container-deploy
- * render fields (image overrides, per-environment helm releases, secret injections).
- */
-type ServiceKubeInputs = Pick<
-  ServiceProvisioning,
-  'manifestSource' | 'images' | 'helmReleases' | 'secretInjections'
->
-
-type KubeHelmRelease = NonNullable<ServiceKubeInputs['helmReleases']>[number]
-
-/**
- * Merge the workspace engine's (cluster-shared) helm releases with the service's
- * (per-environment) ones, keyed by release `name` so a service entry OVERRIDES a same-named
- * engine entry instead of installing the release twice. Engine order is preserved; service-only
- * releases are appended.
- */
-function mergeHelmReleases(
-  engine: KubeHelmRelease[] | undefined,
-  service: KubeHelmRelease[] | undefined,
-): KubeHelmRelease[] {
-  const byName = new Map<string, KubeHelmRelease>()
-  for (const rel of engine ?? []) byName.set(rel.name, rel)
-  for (const rel of service ?? []) byName.set(rel.name, rel)
-  return [...byName.values()]
-}
-
-/**
- * Lower a discriminated-by-`engine` {@link InfraHandlerConfig} into the discriminated-by-`kind`
- * {@link EnvironmentBackendConfig} the backend registry consumes. For a kube engine the source
- * is resolved by precedence: the service-owned `manifestSource` (the split the whole initiative
- * is about) > a legacy source the compat bridge stored inline (a kube handler config MAY carry
- * one — see {@link toHandlerConfig}) > a placeholder (validation/metadata paths, where the kube
- * backend reads only the apiserver/sizing fields, never the source). The service's render inputs
- * (image overrides, secret injections, per-env helm releases) are folded in too; the workspace's
- * shared (`scope: 'shared'`) helm releases on the engine config are merged with the service's by
- * release name (a same-named service release overrides the engine one — no double install).
- */
-function handlerConfigToBackendConfig(
-  config: InfraHandlerConfig,
-  backendKind: string,
-  service?: ServiceKubeInputs,
-): EnvironmentBackendConfig {
-  switch (config.engine) {
-    case 'local-docker':
-    case 'remote-custom':
-      return { kind: backendKind, manifest: config.manifest } as EnvironmentBackendConfig
-    case 'local-k3s':
-    case 'remote-kubernetes': {
-      const kube = config.kubernetes as typeof config.kubernetes & {
-        manifestSource?: KubernetesManifestSource
-      }
-      const source = service?.manifestSource ?? kube.manifestSource ?? PLACEHOLDER_MANIFEST_SOURCE
-      const helmReleases = mergeHelmReleases(kube.helmReleases, service?.helmReleases)
-      return {
-        kind: 'kubernetes',
-        kubernetes: {
-          ...kube,
-          manifestSource: source,
-          ...(helmReleases.length > 0 ? { helmReleases } : {}),
-          ...(service?.images ? { images: service.images } : {}),
-          ...(service?.secretInjections ? { secretInjections: service.secretInjections } : {}),
-        },
-      }
-    }
   }
 }
 
@@ -290,11 +208,24 @@ export class EnvironmentConnectionService {
   /** Every handler the workspace has registered, sans secret values (batched). */
   async listHandlers(workspaceId: string): Promise<EnvironmentHandlerView[]> {
     const records = await this.deps.environmentConnectionRepository.listByWorkspace(workspaceId)
-    const views: EnvironmentHandlerView[] = []
-    for (const record of records) {
-      views.push(this.toHandlerView(record, Object.keys(await this.decryptSecrets(record))))
+    // The secret-key NAMES are derived from the (non-secret) config rather than decrypting
+    // each bundle: registration/rotation guarantee every referenced key is present, so the
+    // referenced set equals the stored set — no per-record decrypt needed just to list names.
+    return records.map((record) =>
+      this.toHandlerView(record, this.referencedSecretKeyNames(record)),
+    )
+  }
+
+  /** Secret key NAMES a stored handler requires, derived from its non-secret config (no decrypt). */
+  private referencedSecretKeyNames(record: EnvironmentConnectionRecord): string[] {
+    try {
+      const { backend, backendConfig } = this.buildFromRecord(record)
+      return backend.referencedSecretKeys(backendConfig)
+    } catch {
+      // A handler whose backend is no longer registered can't be introspected (it can't
+      // provision either) — list it with no key names rather than failing the whole bundle.
+      return []
     }
-    return views
   }
 
   /** Register (or replace) the handler for one provision type (+ optional custom manifest id). */
@@ -920,14 +851,6 @@ export class EnvironmentConnectionService {
     return backend
   }
 
-  /** The registered backend implementing an engine, or throw. */
-  private requireBackendByEngine(engine: InfraEngine): EnvironmentBackendProvider {
-    const backend = this.deps.environmentBackendRegistry.byEngine(engine)
-    if (!backend)
-      throw new ValidationError(`No environment backend is configured for engine '${engine}'`)
-    return backend
-  }
-
   private buildProvider(backend: EnvironmentBackendProvider): EnvironmentProvider {
     return backend.buildProvider(this.deps.urlPolicy ? { urlPolicy: this.deps.urlPolicy } : {})
   }
@@ -982,47 +905,21 @@ export class EnvironmentConnectionService {
     input: RegisterHandlerInput,
   ): Promise<EnvironmentConnectionRecord> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    const engine = input.config.engine
-    const backend = input.backendKind
-      ? this.requireBackend(input.backendKind)
-      : this.requireBackendByEngine(engine)
-    // Validation/metadata only read the apiserver/sizing fields, so the source fallback
-    // (embedded legacy source → placeholder) inside the lowering is sufficient here.
-    const backendConfig = handlerConfigToBackendConfig(input.config, backend.kind)
-    backend.assertConfigSafe(backendConfig, {
+    const fields = buildInfraHandlerFields(this.deps.environmentBackendRegistry, input, {
       ...(this.deps.urlPolicy ? { urlPolicy: this.deps.urlPolicy } : {}),
       ...(this.deps.customTlsSupported !== undefined
         ? { customTlsSupported: this.deps.customTlsSupported }
         : {}),
     })
-    const missing = backend
-      .referencedSecretKeys(backendConfig)
-      .filter((key) => !(key in input.secrets))
-    if (missing.length) {
-      throw new ValidationError(`Missing secret values for: ${missing.join(', ')}`)
-    }
-    const meta = backend.connectionMeta(backendConfig)
-    const provisionType = input.provisionType
-    const manifestId = input.manifestId ?? null
-    const acceptsManifestId =
-      input.config.engine === 'remote-custom' ? input.config.acceptsManifestId : null
     const existing = await this.deps.environmentConnectionRepository.getByWorkspaceAndType(
       workspaceId,
-      provisionType,
-      manifestId,
+      fields.provisionType,
+      fields.manifestId,
     )
     const secretsCipher = await this.deps.secretCipher.encrypt(JSON.stringify(input.secrets))
     const record: EnvironmentConnectionRecord = {
       workspaceId,
-      provisionType,
-      manifestId,
-      engine,
-      backendKind: backend.kind,
-      providerId: meta.providerId,
-      label: meta.label,
-      baseUrl: meta.baseUrl,
-      handlerJson: JSON.stringify(input.config),
-      acceptsManifestId,
+      ...fields,
       secretsCipher,
       createdAt: existing?.createdAt ?? this.deps.clock.now(),
       deletedAt: null,

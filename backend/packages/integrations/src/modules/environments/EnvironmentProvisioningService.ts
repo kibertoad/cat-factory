@@ -1,9 +1,15 @@
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
-import type { EnvironmentRecord, EnvironmentRegistryRepository } from '@cat-factory/kernel'
+import type {
+  EnvironmentConnectionRecord,
+  EnvironmentRecord,
+  EnvironmentRegistryRepository,
+} from '@cat-factory/kernel'
 import type {
   EnvironmentManifest,
   EnvironmentProvider,
+  InfraEngine,
   ProvisionContext,
+  ProvisionType,
   ProvisionedEnvironment,
   ResolveRunRepoContext,
   RunRepoContext,
@@ -54,6 +60,17 @@ export interface EnvironmentProvisioningServiceDependencies {
     workspaceId: string,
     coords: { owner: string; repo: string; provider?: 'github' | 'gitlab' },
   ) => Promise<RunRepoContext | null>
+  /**
+   * Resolve a user's per-type infra handler OVERRIDES (local mode), as connection records the
+   * resolver layers over the workspace handlers — a personal Docker/k3s the run initiator
+   * pointed a provision type at. Wired only by the local facade; absent (Worker/Node) ⇒ no
+   * per-user override and the workspace handler always wins. See
+   * docs/initiatives/per-service-provision-types.md.
+   */
+  resolveUserHandlerOverrides?: (
+    userId: string,
+    workspaceId: string,
+  ) => Promise<EnvironmentConnectionRecord[]>
 }
 
 export interface ProvisionArgs {
@@ -70,6 +87,12 @@ export interface ProvisionArgs {
    * resolution. `infraless` is rejected here (callers short-circuit it).
    */
   serviceProvisioning?: ServiceProvisioning
+  /**
+   * The run initiator's user id. In local mode their per-type handler overrides
+   * (`resolveUserHandlerOverrides`) layer over the workspace handlers, so a personal
+   * engine wins for THIS run. Absent / no override seam ⇒ the workspace handler resolves.
+   */
+  initiatedBy?: string | null
 }
 
 /** Flatten a typed provision context into `{{input.*}}` string vars (skips empties). */
@@ -119,17 +142,29 @@ export class EnvironmentProvisioningService {
     let manifest: EnvironmentManifest
     let provider: EnvironmentProvider
     let resolveSecret: SecretResolver
+    // The resolved provision type + engine, recorded on the env record so run details show
+    // exactly what was stood up (the per-type path); null on the legacy single-connection path.
+    let provisionType: ProvisionType | null = null
+    let engine: InfraEngine | null = null
     if (args.serviceProvisioning) {
       if (args.serviceProvisioning.type === 'infraless') {
         throw new ValidationError('An infraless service provisions no environment')
       }
+      // In local mode the run initiator's personal handlers layer over the workspace's.
+      const userOverrides =
+        args.initiatedBy && this.deps.resolveUserHandlerOverrides
+          ? await this.deps.resolveUserHandlerOverrides(args.initiatedBy, workspaceId)
+          : []
       const resolved = await this.deps.connectionService.resolveProviderForType(
         workspaceId,
         args.serviceProvisioning,
+        userOverrides,
       )
       manifest = resolved.manifest
       provider = resolved.provider
       resolveSecret = resolved.resolveSecret
+      provisionType = resolved.provisionType
+      engine = resolved.engine
     } else {
       const resolved = await this.deps.connectionService.resolveProvider(workspaceId)
       manifest = resolved.manifest
@@ -196,7 +231,14 @@ export class EnvironmentProvisioningService {
       // details can project it (`step.environment.lastError`), even though the provider
       // threw before returning anything. Best-effort — symmetric with the returned-`failed`
       // branch below, which already leaves a record behind.
-      await this.persistFailedEnvironment(workspaceId, args, manifest, message)
+      await this.persistFailedEnvironment(
+        workspaceId,
+        args,
+        manifest,
+        message,
+        provisionType,
+        engine,
+      )
       throw error
     }
     if (provisioned.url) {
@@ -227,9 +269,9 @@ export class EnvironmentProvisioningService {
       // provider gave none.
       lastError:
         provisioned.status === 'failed' ? provisioned.error?.trim() || 'Provisioning failed' : null,
-      // Recorded by the deployer step once per-service provision types land (slice 3).
-      provisionType: null,
-      engine: null,
+      // The resolved provision type + engine (the per-type path); null on the legacy connection.
+      provisionType,
+      engine,
     })
     await this.deps.environmentRegistryRepository.insert(record)
     // A provider that returns `status:'failed'` (rather than throwing) is still a
@@ -389,6 +431,17 @@ export class EnvironmentProvisioningService {
     return record ? recordToHandle(record) : null
   }
 
+  /**
+   * Tombstone any live environment record for a block. Called when a service becomes
+   * `infraless` (the deployer provisions nothing), so a previously-provisioned environment
+   * stops showing as live in the registry instead of being orphaned. This tombstones the
+   * registry projection only — real provider teardown is the teardown service's job (same as
+   * the re-provision path, which also only supersedes the prior record here).
+   */
+  async supersedeForBlock(workspaceId: string, blockId: string | null): Promise<void> {
+    await this.supersedePriorEnvironment(workspaceId, blockId)
+  }
+
   private resolveExpiry(
     provisioned: ProvisionedEnvironment,
     defaultTtlMs: number | undefined,
@@ -446,6 +499,8 @@ export class EnvironmentProvisioningService {
     args: ProvisionArgs,
     manifest: EnvironmentManifest,
     lastError: string,
+    provisionType: ProvisionType | null,
+    engine: InfraEngine | null,
   ): Promise<void> {
     try {
       await this.supersedePriorEnvironment(workspaceId, args.blockId ?? null)
@@ -462,8 +517,8 @@ export class EnvironmentProvisioningService {
         createdAt: this.deps.clock.now(),
         expiresAt: null,
         lastError,
-        provisionType: null,
-        engine: null,
+        provisionType,
+        engine,
       })
       await this.deps.environmentRegistryRepository.insert(record)
     } catch (persistError) {
