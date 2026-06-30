@@ -42,6 +42,13 @@ export interface OnboardingInvitesProbe {
   accept(token: string, userId: string, userEmail: string | null): Promise<string>
 }
 
+/** One account a user can switch between, as the account switcher lists it. */
+export interface OnboardingUserAccount {
+  id: string
+  type: string
+  roles: string[]
+}
+
 export interface OnboardingProbe {
   users: OnboardingUsersProbe
   /** Present only when the facade wires the invitation repository. */
@@ -51,6 +58,16 @@ export interface OnboardingProbe {
     name: string,
   ): Promise<{ accountId: string; ownerUserId: string; ownerEmail: string }>
   members(accountId: string): Promise<{ userId: string }[]>
+  /**
+   * Every account a user can see and switch between (the switcher list) — resolves all of
+   * their memberships' accounts in one batched read, so the suite can assert that
+   * multi-account resolution maps identically across D1 and Postgres.
+   */
+  accountsForUser(user: {
+    id: string
+    login: string
+    name: string | null
+  }): Promise<OnboardingUserAccount[]>
 }
 
 /** The (structural) facade container the probe wraps — every facade's Core satisfies it. */
@@ -62,6 +79,11 @@ export interface OnboardingContainer {
       input: { name: string },
     ): Promise<{ id: string }>
     members(accountId: string): Promise<{ userId: string; email?: string | null }[]>
+    listForUser(user: {
+      id: string
+      login: string
+      name: string | null
+    }): Promise<{ id: string; type: string; roles: string[] | null }[]>
   }
   invitations?: OnboardingInvitesProbe
 }
@@ -72,6 +94,12 @@ export function makeOnboardingProbe(c: OnboardingContainer): OnboardingProbe {
     users: c.userService,
     invitations: c.invitations,
     members: (accountId) => c.accountService.members(accountId),
+    accountsForUser: (user) =>
+      c.accountService
+        .listForUser(user)
+        .then((accounts) =>
+          accounts.map((a) => ({ id: a.id, type: a.type, roles: a.roles ?? [] })),
+        ),
     async makeOrgOwner(name) {
       const subject = `org-owner-${name}-${Math.random().toString(36).slice(2)}`
       const owner = await c.userService.findOrCreateByIdentity('github', subject, {

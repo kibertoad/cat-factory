@@ -23,7 +23,7 @@ import {
 } from '@cat-factory/node-server'
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { BackendRegistries } from '@cat-factory/integrations'
-import type { Clock, ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
+import type { Clock, ExecutionInstance, Service, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type { LocalRunner, UpsertLocalModelEndpointInput } from '@cat-factory/contracts'
 import type { CoreDependencies } from '@cat-factory/orchestration'
@@ -298,6 +298,14 @@ export function makeConformanceApp(
     )
   }
 
+  function seedService(service: Service) {
+    return createDrizzleRepositories(db, SEED_CLOCK).serviceRepository.insert(service)
+  }
+
+  function getService(id: string) {
+    return createDrizzleRepositories(db, SEED_CLOCK).serviceRepository.get(id)
+  }
+
   return {
     call,
     createWorkspace,
@@ -310,6 +318,8 @@ export function makeConformanceApp(
     seedIncorporatedReview,
     seedReadyReview,
     seedIncorporatedClarityReview,
+    seedService,
+    getService,
     onboarding: () => makeOnboardingProbe(container),
     localModelEndpoints: () => {
       const svc = container.localModelEndpoints

@@ -593,6 +593,20 @@ class DrizzleAccountRepository implements AccountRepository {
     return row ? rowToAccount(row) : null
   }
 
+  async listByIds(ids: string[]): Promise<AccountRecord[]> {
+    if (ids.length === 0) return []
+    const out: AccountRecord[] = []
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < ids.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(accounts)
+        .where(inArray(accounts.id, ids.slice(i, i + 500)))
+      for (const row of rows) out.push(rowToAccount(row))
+    }
+    return out
+  }
+
   async create(account: AccountRecord): Promise<void> {
     await this.db.insert(accounts).values({
       id: account.id,
@@ -1916,7 +1930,7 @@ function rowToService(row: typeof services.$inferSelect): Service {
 }
 
 /** Account-owned services (migration 0030). The canonical, shareable board unit. */
-class DrizzleServiceRepository implements ServiceRepository {
+export class DrizzleServiceRepository implements ServiceRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(id: string): Promise<Service | null> {
@@ -1930,6 +1944,20 @@ class DrizzleServiceRepository implements ServiceRepository {
       .from(services)
       .where(eq(services.frame_block_id, frameBlockId))
     return row ? rowToService(row) : null
+  }
+
+  async listByFrameBlocks(frameBlockIds: string[]): Promise<Service[]> {
+    if (frameBlockIds.length === 0) return []
+    const out: Service[] = []
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < frameBlockIds.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(services)
+        .where(inArray(services.frame_block_id, frameBlockIds.slice(i, i + 500)))
+      for (const row of rows) out.push(rowToService(row))
+    }
+    return out
   }
 
   async listByAccount(accountId: string | null): Promise<Service[]> {

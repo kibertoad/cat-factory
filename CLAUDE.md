@@ -141,6 +141,38 @@ yet" is acceptable ONLY for behaviour that genuinely cannot exist on a runtime (
 Cloudflare-Container-only execution path), never for runtime-neutral domain behaviour
 that merely needs a repository wired.
 
+## No N+1 repository access (batch or reuse — never loop point-reads)
+
+**Calling a single-row / single-key repository method inside a loop (`for`, `.map`,
+`Promise.all`, `for await`) over a list is an N+1 and is BANNED.** This is an absolute rule,
+not a "nice to have": every extra row in the list is another database round-trip, so the
+cost grows without bound as data grows. It applies everywhere — the shared service layer
+(`backend/packages/*`), the facade repos (`backend/runtimes/*`), and the HTTP/controller
+layer alike. A point-read (`get`, `getById`, `getByBlock`, `getByFrameBlock`, `getByWorkspace`,
+`getByUrl`, …) belongs OUTSIDE a loop, never inside one.
+
+Do this instead:
+
+- **Batch with one chunked `IN` query.** Collect the keys first, then issue a single batch
+  read via a `listByIds` / `listByFrameBlocks` / `countByServiceIds`-shaped port method, and
+  index the result into a `Map` for per-item lookup. **If no batch method exists, ADD one** —
+  a new chunked-`IN` read on the existing table, mirrored in BOTH the D1 and Drizzle repo with
+  a conformance assertion (see "Keep the runtimes symmetric"). Adding a read method needs no
+  schema migration; it is always preferable to a loop of point-reads.
+- **Reuse an already-fetched list.** When the surrounding code already loaded the rows (e.g. a
+  `listByWorkspace` / `listByAccount` result), index THAT into a `Map<id, row>` and look up
+  from memory rather than re-querying per item.
+- **Hoist invariant reads out of the loop.** A repository read whose arguments don't change
+  across iterations (e.g. one `installations.getByWorkspace(ws)` reused for every provider)
+  must run ONCE before the loop, not on every pass.
+- **Push counts/aggregates into SQL** (`COUNT` / `SUM` / `GROUP BY`) — never load all rows to
+  count, sum, or reduce them in JS.
+
+Copy the existing good citizens: `WorkspaceMountRepository.countByServiceIds`,
+`ServiceRepository.listByIds` / `listByFrameBlocks`, `AccountRepository.listByIds`, and
+`BoardService.removeBlock`'s batched `removeByServices` / `deleteMany`. If you find yourself
+writing `await this.someRepository.getX(item)` inside a loop, STOP and batch it.
+
 ## Resolving conflicting Drizzle migrations (post-merge)
 
 The Node facade's Postgres migrations (`backend/runtimes/node/drizzle/`) use **drizzle-kit
