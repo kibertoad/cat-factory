@@ -259,15 +259,30 @@ The rare slice with NO `db:generate` migration: every addition is nested JSON in
 - Conformance: a kustomize/helm/gateway-shaped handler config round-trips write→read on D1 + Postgres
   (`environment-handlers-suite.ts`).
 
-### Slice 7 — deploy-harness package + image (TODO)
+### Slice 7 — deploy-harness package + image (DONE)
 
 `backend/internal/deploy-harness` (private): slim base + `kubectl`/`kustomize`/`helm` + the job-registry
-scaffolding mirrored from `executor-harness`; same `POST /jobs` + `GET /jobs/{id}` contract with a
-`deploy` `KindEntry`; `handleDeploy` (clone → write `secretInjections`: a `Secret` resource OR a
-`generatorEnvFile` `.env` into the overlay tree → optionally `kustomize edit set namespace` when
-`namespaceTemplate` overrides → `kubectl apply -k` + `helm upgrade --install` → `kubectl rollout
-status` → discover Gateway/HTTPRoute address). New CF `[[containers]]` class + image tag (same
-fresh-immutable-tag discipline as the Pi image).
+scaffolding mirrored from `executor-harness`; same `POST /jobs` + `GET /jobs/{id}` contract (+ optional
+`x-harness-secret` gate) with a `deploy` `KindEntry`; `handleDeploy` (clone → ensure namespace → write
+`secretInjections`: a `Secret` resource OR a `generatorEnvFile` `.env` into the overlay tree →
+`kustomize edit set namespace` when `setNamespace` overrides + `kustomize edit set image` for the
+image overrides → install `scope: 'shared'` helm releases → `kubectl apply -k|-f` → per-environment
+helm releases → `kubectl rollout status` → discover the env URL from Gateway/HTTPRoute/Service/Ingress
+status). Returns a structured `DeployOutcome` (`namespace`/`url`/`status`) on the job result's `custom`
+channel for slice 8's `finalizeProvision` to map. Every templated/secret value arrives ALREADY RESOLVED
+in the job body (the backend resolves against the workspace bundle before dispatch) — the harness never
+touches the bundle; the apiserver + git tokens live only for the job and are scrubbed from any output.
+
+Shipped alongside: pure-logic unit tests (`job`/`url`/`deploy`/`kubeconfig`), a manual
+`scripts/publish-image.sh` + a multi-arch `publish-deploy` job in `docker-publish.yml` (gated on the
+deploy-harness paths), a `deploy/backend` `image:publish:deploy` target, and a changeset.
+
+**Deferred to slice 10 (kept green):** the actual CF `[[containers]]` wrangler block + its Durable
+Object container class. A `[[containers]]` entry that names a non-existent DO class fails the deploy,
+and that DO class IS the `image: 'deploy'` → container-class mapping that slice 10 ("facade wiring")
+owns. So slice 7 ships the IMAGE + its publish plumbing + the publish-target tag; the wrangler binding
+
+- transport mapping land with the facade wiring.
 
 ### Slice 8 — provider render path + Gateway URL (TODO)
 
@@ -284,10 +299,12 @@ unchanged.
 
 ### Slice 10 — facade wiring + local native CLI (TODO)
 
-CF container class + wrangler tag; pool/K8s-pod/local image mapping for `image: 'deploy'`; the
-local-mode `NativeCliDeployTransport` opt-in (`LOCAL_DEPLOY_RUNTIME`); conformance: a `deploy`
-dispatch is accepted by every facade transport, and a stubbed `RunnerJobView` settles to an
-identical `ProvisionedEnvironment` on both runtimes. Changesets + image-tag bump.
+CF container class + wrangler tag (the `[[containers]]` block + the Durable Object container class
+deferred from slice 7 — it IS the `image: 'deploy'` → container-class mapping; the
+`image:publish:deploy` target + image already exist from slice 7); pool/K8s-pod/local image mapping
+for `image: 'deploy'`; the local-mode `NativeCliDeployTransport` opt-in (`LOCAL_DEPLOY_RUNTIME`);
+conformance: a `deploy` dispatch is accepted by every facade transport, and a stubbed `RunnerJobView`
+settles to an identical `ProvisionedEnvironment` on both runtimes. Changesets + image-tag bump.
 
 ### Slice 11 — auto-detect a RECOMMENDED k8s config from the repo (TODO)
 
@@ -341,7 +358,7 @@ LoadBalancer` ⇒ `serviceStatus`); the namespace decision (a pinned `namespace:
 | 4   | Controllers (per-type endpoints + custom-type CRUD + local-only per-user controller) + all three container wirings                                                                                                                | todo   | —    |
 | 5   | Frontend (service provisioning section + auto-detect; infra per-type/engine configurator + custom-type editor + local override; run-details surfacing; stores; i18n)                                                              | todo   | —    |
 | 6   | Phase 2: render contracts (`renderer`/`images`/`helmReleases`/`secretInjections`/gateway URL) + dispatch/port seam (`deploy` kind + `image`, `buildProvisionJob`/`finalizeProvision`); NO migration; conformance round-trip       | done   | —    |
-| 7   | Phase 2: `deploy-harness` package + image (kubectl/kustomize/helm; `deploy` KindEntry + `handleDeploy`; CF container class + tag)                                                                                                 | todo   | —    |
+| 7   | Phase 2: `deploy-harness` package + image (kubectl/kustomize/helm; `deploy` KindEntry + `handleDeploy`; publish plumbing + tag). CF container class/binding deferred to slice 10 (needs the DO class)                             | done   | —    |
 | 8   | Phase 2: `KubernetesEnvironmentProvider` render path (`buildProvisionJob`/`finalizeProvision`; keep native REST) + Gateway-API URL resolvers                                                                                      | todo   | —    |
 | 9   | Phase 2: async deployer lifecycle (`provision()` branch + `pollProvision`; `runDeployerStep` park/poll + eviction re-dispatch) — folds into slice 3                                                                               | todo   | —    |
 | 10  | Phase 2: facade wiring + local `NativeCliDeployTransport` (`LOCAL_DEPLOY_RUNTIME`); deploy-dispatch + finalize conformance; image-tag bump                                                                                        | todo   | —    |

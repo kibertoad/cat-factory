@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "comment": "Typecheck-only: spans src + test (build uses tsconfig.json, which stays src-only so the Docker image never carries tests). rootDir relaxed to the package root.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "."
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}
