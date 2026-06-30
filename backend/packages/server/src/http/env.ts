@@ -22,6 +22,7 @@ import type { Core } from '@cat-factory/orchestration'
 import type { ResolveRepoTarget } from '../agents/ContainerAgentExecutor.js'
 import type { SessionPayload } from '../auth/signing.js'
 import type { AppConfig } from '../config/types.js'
+import type { PersistenceRegistry } from '../persistence/rpc.js'
 import type { RuntimeGateways } from '../runtime/gateways.js'
 
 // The runtime-neutral request context shared by every controller. A facade builds a
@@ -160,6 +161,14 @@ export interface ServerContainer extends Core {
    * `VcsIdentityRegistry`.
    */
   vcsIdentity?: VcsIdentityRegistry
+  /**
+   * The reflective repository registry the mothership-mode machine API
+   * (`POST /internal/persistence`) dispatches over: repo name → repo instance. Attached by a
+   * facade acting as a MOTHERSHIP (both Node + Cloudflare), so a mothership-mode local node
+   * with no database can forward its org/durable repository calls here. Absent on a node that
+   * is not a mothership ⇒ the persistence endpoint 503s. See `../persistence/rpc.ts`.
+   */
+  repositories?: PersistenceRegistry
 }
 
 /** Hono generics shared by the cross-runtime controllers (Variables only — no Bindings). */
