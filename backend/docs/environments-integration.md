@@ -18,6 +18,17 @@ See also [ADR 0003](./adr/0003-ephemeral-environment-provider.md). When your too
 bespoke to describe declaratively, you can instead inject a hand-written **native adapter** —
 see [Native environment adapters](./native-environment-adapter.md).
 
+> **The connection is now per provision type, not one per workspace.** This doc describes the
+> generic HTTP `manifest` backend, which today serves the **`custom` provision type** via the
+> `remote-custom` engine. The single per-workspace `environment_connections` row has been
+> reshaped into per-provision-type **handlers** (keyed by `(workspace_id, provision_type,
+> manifest_id)`), and a service selects its type/source independently of the workspace's
+> handler. A `kubernetes` service additionally has a native render/deploy path (raw apiserver
+> apply, or kustomize/helm/Gateway via a deploy container). See
+> [per-service-provisioning.md](./per-service-provisioning.md) for the full model, the engines,
+> and the per-type / custom-type / detect endpoints. The legacy
+> `/workspaces/:ws/environments/connection` endpoints below remain as the compat bridge.
+
 ## How it works (the sequence of actions)
 
 1. A pipeline on an `environment` block reaches its **`deployer`** step. The engine
