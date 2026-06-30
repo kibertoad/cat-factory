@@ -26,7 +26,9 @@ import {
 } from '@cat-factory/prompt-fragments'
 import { clearRegisteredAgentKinds, registerAgentKind } from '@cat-factory/agents'
 import {
+  composeEnvironmentBackend,
   createBackendRegistries,
+  type ComposeRuntime,
   type EnvironmentBackendProvider,
   type RunnerBackendProvider,
 } from '@cat-factory/integrations'
@@ -2979,6 +2981,75 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(got.body.connection?.kind).toBe('kubernetes')
         expect(got.body.connection?.config?.kubernetes?.apiServerUrl).toBe(
           'https://cluster.example:6443',
+        )
+      })
+
+      it('round-trips a Docker Compose backend connection on every facade', async () => {
+        // The Docker Compose env backend rides the generic manifest member (no typed variant,
+        // no migration): its flat config lives in the stored manifest's `providerConfig`. It is
+        // a runtime-bound backend (needs a Docker daemon, so only local/Node register it by
+        // default), but its CONNECTION persistence is runtime-neutral and must read back
+        // identically — a repo that mangled `providerConfig` in the manifest JSON column, or a
+        // facade that didn't open its env-connection store to the `compose` kind, diverges here.
+        // Registered by reference with a fake runtime (never invoked on the connect/describe
+        // paths) so the assertion needs no real daemon.
+        const fakeRuntime: ComposeRuntime = {
+          compose: async () => ({ code: 0, stdout: '', stderr: '' }),
+          writeProjectFile: async () => '',
+        }
+        const backendRegistries = createBackendRegistries()
+        backendRegistries.environmentBackendRegistry.register(
+          composeEnvironmentBackend(fakeRuntime),
+        )
+
+        const { call, createWorkspace } = harness.makeApp(undefined, { backendRegistries })
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/environments`
+        const manifest = {
+          providerId: 'compose',
+          label: 'Docker Compose',
+          baseUrl: 'http://localhost',
+          auth: { type: 'none' },
+          provision: { method: 'POST', pathTemplate: '' },
+          response: {},
+          providerConfig: { service: 'web', port: '8080', composePath: 'docker-compose.yml' },
+        }
+        const registered = await call<{ kind: string; providerId: string; secretKeys: string[] }>(
+          'POST',
+          `${base}/connection`,
+          { config: { kind: 'compose', manifest }, secrets: {} },
+        )
+        expect(registered.status).toBe(201)
+        expect(registered.body.kind).toBe('compose')
+        expect(registered.body.providerId).toBe('compose')
+        expect(registered.body.secretKeys).toEqual([])
+
+        const got = await call<{
+          connection: {
+            kind: string
+            config?: { manifest?: { providerConfig?: { service?: string } } }
+          } | null
+        }>('GET', `${base}/connection`)
+        expect(got.body.connection?.kind).toBe('compose')
+        expect(got.body.connection?.config?.manifest?.providerConfig?.service).toBe('web')
+
+        // Advertised in the snapshot so the SPA lists it (with its when-to-use guidance).
+        const snap = await call<{ environmentBackendKinds?: { kind: string }[] }>(
+          'GET',
+          `/workspaces/${workspace.id}`,
+        )
+        expect(snap.body.environmentBackendKinds?.map((k) => k.kind)).toEqual(
+          expect.arrayContaining(['compose']),
+        )
+
+        // The descriptor-driven connect form exposes the flat fields (service + port required).
+        const descr = await call<{ kind: string; configFields: { key: string }[] }>(
+          'GET',
+          `${base}/provider?kind=compose`,
+        )
+        expect(descr.status).toBe(200)
+        expect(descr.body.configFields.map((f) => f.key)).toEqual(
+          expect.arrayContaining(['service', 'port']),
         )
       })
 

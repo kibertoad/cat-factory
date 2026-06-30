@@ -17,7 +17,11 @@ import { WorkspaceSettingsService } from '@cat-factory/orchestration'
 import { buildInfrastructureCapabilities, logger } from '@cat-factory/server'
 import type { AppConfig, ResolveRunnerTransport, ServerContainer } from '@cat-factory/server'
 import type { CoreDependencies } from '@cat-factory/orchestration'
-import { LocalSettingsService, createBackendRegistries } from '@cat-factory/integrations'
+import {
+  LocalSettingsService,
+  composeEnvironmentBackend,
+  createBackendRegistries,
+} from '@cat-factory/integrations'
 import type { HarnessKind, RunnerTransport } from '@cat-factory/kernel'
 import { NativeRoutingRunnerTransport } from './NativeRoutingRunnerTransport.js'
 import { applyLocalDefaults } from './config.js'
@@ -41,7 +45,8 @@ import {
   type LocalProcessRunnerTransport,
   createLocalProcessTransportFromEnv,
 } from './LocalProcessRunnerTransport.js'
-import { createRuntimeAdapter } from './runtimes/index.js'
+import { createRuntimeAdapter, resolveRuntimeId, runtimeProfile } from './runtimes/index.js'
+import { createDockerComposeRuntime } from './compose.js'
 
 // The local-mode composition root. It is intentionally thin: the ENTIRE Drizzle/
 // Postgres persistence, pg-boss durable execution, gateways and model provisioning
@@ -263,6 +268,23 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // here AND `buildNodeContainer` below (via `backendRegistries`), so the runner backend a
   // workspace's `kind` resolves to is the same instance everywhere. Defaults to the built-ins.
   const backendRegistries = options.backendRegistries ?? createBackendRegistries()
+  // Docker Compose ephemeral environments (the Checkbox compose-stack mechanic): register the
+  // `compose` env backend by reference, closing over the host docker CLI seam, so a workspace
+  // can stand the PR repo's own `docker-compose.yml` up as a Tester preview env. It needs a
+  // Docker daemon, so it is registered ONLY on the Docker-family runtimes (Apple `container`
+  // can't run compose-on-host the same way — the same asymmetry as `localDind`); the Worker
+  // never registers it. A pre-registered `compose` kind (the conformance harness's fake-runtime
+  // backend) wins — the guard keeps this real-daemon registration from clobbering it.
+  const localRuntimeId = resolveRuntimeId(env)
+  if (
+    runtimeProfile(localRuntimeId).family === 'docker' &&
+    !backendRegistries.environmentBackendRegistry.get('compose')
+  ) {
+    const composeBinary = env.LOCAL_DOCKER_BINARY?.trim() || runtimeProfile(localRuntimeId).binary
+    backendRegistries.environmentBackendRegistry.register(
+      composeEnvironmentBackend(createDockerComposeRuntime({ binary: composeBinary })),
+    )
+  }
   const poolResolve = buildNodeResolveTransport(
     config,
     runnerPoolConnectionRepository,
