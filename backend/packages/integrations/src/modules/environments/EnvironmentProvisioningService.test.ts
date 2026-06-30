@@ -449,6 +449,42 @@ describe('EnvironmentProvisioningService — per-type provisioning records type 
   })
 })
 
+describe('EnvironmentProvisioningService — supersedeForBlock (infraless flip)', () => {
+  it('tombstones a prior live environment for the block', async () => {
+    const registry = fakeRegistry()
+    registry.records.push({
+      id: 'env_old',
+      workspaceId: 'ws1',
+      blockId: 'blk1',
+      executionId: null,
+      providerId: 'p',
+      externalId: 'x',
+      url: 'https://old.example',
+      status: 'ready',
+      accessCipher: null,
+      provisionFieldsCipher: null,
+      createdAt: 1,
+      expiresAt: null,
+      lastError: null,
+      provisionType: 'kubernetes',
+      engine: 'remote-kubernetes',
+      deletedAt: null,
+    })
+    const service = makeService(recordingProvider(READY), registry)
+    await service.supersedeForBlock('ws1', 'blk1')
+    expect(registry.records[0]!.deletedAt).toBe(1_700_000_000_000)
+    expect(await registry.getByBlock('ws1', 'blk1')).toBeNull()
+  })
+
+  it('is a no-op when the block has no live environment or no block id', async () => {
+    const registry = fakeRegistry()
+    const service = makeService(recordingProvider(READY), registry)
+    await service.supersedeForBlock('ws1', 'blk1')
+    await service.supersedeForBlock('ws1', null)
+    expect(registry.records).toHaveLength(0)
+  })
+})
+
 describe('EnvironmentProvisioningService — returned URL policy', () => {
   const internalEnv: ProvisionedEnvironment = { ...READY, url: 'https://prenv.kargo.internal' }
 

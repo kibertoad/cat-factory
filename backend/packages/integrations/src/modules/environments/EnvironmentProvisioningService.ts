@@ -431,6 +431,17 @@ export class EnvironmentProvisioningService {
     return record ? recordToHandle(record) : null
   }
 
+  /**
+   * Tombstone any live environment record for a block. Called when a service becomes
+   * `infraless` (the deployer provisions nothing), so a previously-provisioned environment
+   * stops showing as live in the registry instead of being orphaned. This tombstones the
+   * registry projection only — real provider teardown is the teardown service's job (same as
+   * the re-provision path, which also only supersedes the prior record here).
+   */
+  async supersedeForBlock(workspaceId: string, blockId: string | null): Promise<void> {
+    await this.supersedePriorEnvironment(workspaceId, blockId)
+  }
+
   private resolveExpiry(
     provisioned: ProvisionedEnvironment,
     defaultTtlMs: number | undefined,

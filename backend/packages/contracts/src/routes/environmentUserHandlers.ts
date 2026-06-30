@@ -1,7 +1,10 @@
 import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import { withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
-import { environmentHandlerViewSchema, registerEnvironmentHandlerSchema } from '../environments.js'
+import {
+  environmentHandlerViewSchema,
+  upsertEnvironmentUserHandlerBodySchema,
+} from '../environments.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -31,11 +34,11 @@ export const listEnvironmentUserHandlersContract = defineApiContract({
 export const upsertEnvironmentUserHandlerContract = defineApiContract({
   method: 'put',
   requestPathParamsSchema: workspaceTypeParams,
-  // The `provisionType` is taken from the path; the body's `provisionType` is re-derived
-  // from it in the handler, so the body need only carry the config + secrets (+ manifestId).
+  // The `provisionType` is taken from the path, so the body carries only the config +
+  // secrets (+ optional manifestId/backendKind) and does NOT re-send a provisionType.
   pathResolver: ({ workspaceId, provisionType }) =>
     `/me/environment-handlers/${workspaceId}/${provisionType}`,
-  requestBodySchema: registerEnvironmentHandlerSchema,
+  requestBodySchema: upsertEnvironmentUserHandlerBodySchema,
   responsesByStatusCode: { 201: environmentHandlerViewSchema, ...errorResponses },
 })
 

@@ -1265,6 +1265,7 @@ function createEnvironmentsModule(
           ? { customTlsSupported: deps.environmentCustomTlsSupported }
           : {}),
         ...(deps.environmentUrlSafetyPolicy ? { urlPolicy: deps.environmentUrlSafetyPolicy } : {}),
+        ...(deps.logger ? { logger: deps.logger } : {}),
       })
     : undefined
   const provisioningService = new EnvironmentProvisioningService({

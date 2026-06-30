@@ -208,11 +208,24 @@ export class EnvironmentConnectionService {
   /** Every handler the workspace has registered, sans secret values (batched). */
   async listHandlers(workspaceId: string): Promise<EnvironmentHandlerView[]> {
     const records = await this.deps.environmentConnectionRepository.listByWorkspace(workspaceId)
-    const views: EnvironmentHandlerView[] = []
-    for (const record of records) {
-      views.push(this.toHandlerView(record, Object.keys(await this.decryptSecrets(record))))
+    // The secret-key NAMES are derived from the (non-secret) config rather than decrypting
+    // each bundle: registration/rotation guarantee every referenced key is present, so the
+    // referenced set equals the stored set — no per-record decrypt needed just to list names.
+    return records.map((record) =>
+      this.toHandlerView(record, this.referencedSecretKeyNames(record)),
+    )
+  }
+
+  /** Secret key NAMES a stored handler requires, derived from its non-secret config (no decrypt). */
+  private referencedSecretKeyNames(record: EnvironmentConnectionRecord): string[] {
+    try {
+      const { backend, backendConfig } = this.buildFromRecord(record)
+      return backend.referencedSecretKeys(backendConfig)
+    } catch {
+      // A handler whose backend is no longer registered can't be introspected (it can't
+      // provision either) — list it with no key names rather than failing the whole bundle.
+      return []
     }
-    return views
   }
 
   /** Register (or replace) the handler for one provision type (+ optional custom manifest id). */

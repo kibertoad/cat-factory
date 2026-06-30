@@ -14,7 +14,11 @@ import type {
   EnvironmentHandlerView,
   RegisterHandlerInput,
 } from './EnvironmentConnectionService.js'
-import { buildInfraHandlerFields, resolveHandlerBackend } from './infra-handler-build.js'
+import {
+  buildInfraHandlerFields,
+  handlerConfigToBackendConfig,
+  resolveHandlerBackend,
+} from './infra-handler-build.js'
 
 // ---------------------------------------------------------------------------
 // Per-USER infra handler overrides (local mode): the per-user layer over a workspace's
@@ -36,6 +40,8 @@ export interface EnvironmentUserHandlerServiceDependencies {
   urlPolicy?: UrlSafetyPolicy
   /** Whether this runtime can honor custom TLS material (a private CA / insecure-skip). */
   customTlsSupported?: boolean
+  /** Optional structural logger for best-effort diagnostics (e.g. a dropped override). */
+  logger?: { info(obj: Record<string, unknown>, msg?: string): void }
 }
 
 export class EnvironmentUserHandlerService {
@@ -44,11 +50,9 @@ export class EnvironmentUserHandlerService {
   /** Every override the user has set for a workspace, sans secret values (batched). */
   async list(userId: string, workspaceId: string): Promise<EnvironmentHandlerView[]> {
     const records = await this.deps.userHandlerRepository.listByUserWorkspace(userId, workspaceId)
-    const views: EnvironmentHandlerView[] = []
-    for (const record of records) {
-      views.push(this.toView(record, Object.keys(await this.decryptSecrets(record))))
-    }
-    return views
+    // Secret-key NAMES are derived from the (non-secret) config — upsert guarantees every
+    // referenced key is present — so listing needs no per-record decrypt.
+    return records.map((record) => this.toView(record, this.referencedSecretKeyNames(record)))
   }
 
   /** Register (or replace) the user's override for one provision type (+ optional custom id). */
@@ -101,9 +105,10 @@ export class EnvironmentUserHandlerService {
    * The user's overrides as connection records the resolver layers over the workspace
    * handlers (the `resolveUserHandlerOverrides` seam the provisioning service consumes). The
    * per-user table carries no `backendKind` column (it's local-only, where each engine maps
-   * 1:1 to a backend), so it's re-derived from the engine here; an override whose engine has
-   * no registered backend is dropped (it couldn't build a provider — fall back to the
-   * workspace handler) rather than failing the whole resolution.
+   * 1:1 to a backend), so it's re-derived from the engine here. `upsert` already rejects an
+   * override whose engine has no registered backend, so the drop below only fires if the
+   * backend registry changed shape after the override was stored; it's logged (not silent) so
+   * a fallen-back-to-workspace-handler override is observable rather than a mystery.
    */
   async resolveOverrides(
     userId: string,
@@ -113,7 +118,13 @@ export class EnvironmentUserHandlerService {
     const out: EnvironmentConnectionRecord[] = []
     for (const record of records) {
       const backendKind = this.backendKindFor(record.engine as InfraEngine)
-      if (!backendKind) continue
+      if (!backendKind) {
+        this.deps.logger?.info(
+          { userId, workspaceId, provisionType: record.provisionType, engine: record.engine },
+          'Dropping per-user environment handler override: no backend registered for its engine',
+        )
+        continue
+      }
       out.push({
         workspaceId,
         provisionType: record.provisionType,
@@ -142,12 +153,19 @@ export class EnvironmentUserHandlerService {
     }
   }
 
-  private async decryptSecrets(
-    record: EnvironmentUserHandlerRecord,
-  ): Promise<Record<string, string>> {
-    if (!record.secretsCipher) return {}
-    const parsed = JSON.parse(await this.deps.secretCipher.decrypt(record.secretsCipher))
-    return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {}
+  /** Secret key NAMES an override requires, derived from its non-secret config (no decrypt). */
+  private referencedSecretKeyNames(record: EnvironmentUserHandlerRecord): string[] {
+    try {
+      const config = JSON.parse(record.handlerJson) as InfraHandlerConfig
+      const backend = resolveHandlerBackend(
+        this.deps.environmentBackendRegistry,
+        record.engine as InfraEngine,
+        undefined,
+      )
+      return backend.referencedSecretKeys(handlerConfigToBackendConfig(config, backend.kind))
+    } catch {
+      return []
+    }
   }
 
   private toView(

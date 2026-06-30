@@ -1263,6 +1263,10 @@ export class RunDispatcher {
     // single-connection path (the compat bridge), so existing workspaces keep provisioning.
     const provisioning = await this.resolveServiceProvisioning(workspaceId, block)
     if (provisioning?.type === 'infraless') {
+      // A service flipped to `infraless` provisions nothing — but it may have a prior live
+      // environment from when it declared a real type. Tombstone it so the block stops
+      // showing a stale live environment (no-op when there's none / provisioning unwired).
+      await this.environmentProvisioning?.supersedeForBlock(workspaceId, block.id)
       return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
         output: 'Service is infraless; no environment provisioned.',
         model: 'environment:none',

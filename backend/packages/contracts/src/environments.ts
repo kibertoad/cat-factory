@@ -686,6 +686,22 @@ export const registerEnvironmentHandlerSchema = v.object({
 })
 export type RegisterEnvironmentHandlerInput = v.InferOutput<typeof registerEnvironmentHandlerSchema>
 
+/**
+ * The body for a per-USER handler override PUT, where the provision type is taken from the
+ * path (`/me/environment-handlers/:workspaceId/:provisionType`) — so the body carries only
+ * the config + secrets (+ optional `manifestId`/`backendKind`), and must NOT re-send a
+ * `provisionType` the handler would ignore.
+ */
+export const upsertEnvironmentUserHandlerBodySchema = v.object({
+  manifestId: v.optional(v.nullable(manifestIdSchema)),
+  config: infraHandlerConfigSchema,
+  backendKind: v.optional(v.string()),
+  secrets: v.record(v.string(), v.string()),
+})
+export type UpsertEnvironmentUserHandlerBody = v.InferOutput<
+  typeof upsertEnvironmentUserHandlerBodySchema
+>
+
 /** The batched per-type handler bundle: every workspace handler + the custom-type catalog. */
 export const environmentHandlersBundleSchema = v.object({
   handlers: v.array(environmentHandlerViewSchema),

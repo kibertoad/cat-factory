@@ -1,6 +1,5 @@
 ---
 '@cat-factory/contracts': minor
-'@cat-factory/kernel': minor
 '@cat-factory/integrations': minor
 '@cat-factory/orchestration': minor
 '@cat-factory/server': minor
