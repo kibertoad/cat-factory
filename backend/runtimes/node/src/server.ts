@@ -112,10 +112,11 @@ export async function start(
     throw new Error('DATABASE_URL is required to start the Node server')
   }
   const { db, pool } = createDbClient(databaseUrl)
-  await migrate(db, pool)
-
   const boss = new PgBoss(databaseUrl)
-  await boss.start()
+  // Migrations (Drizzle, app schema) and pg-boss's own schema provisioning are
+  // independent — neither reads the other's tables — so run them concurrently and
+  // overlap the two heaviest blocking boot steps instead of serializing them.
+  await Promise.all([migrate(db, pool), boss.start()])
 
   // Build the repositories once and share them with both the container and the
   // retention sweeper (so the sweeper prunes the very stores the app writes to).
@@ -153,6 +154,20 @@ export async function start(
   await startEnvConfigRepairWorker(boss, container, runtime.drive, logger, {
     concurrency: runtime.concurrency,
   })
+  const app = createApp(container, env)
+  const port = Number(env.PORT ?? 8787)
+  const host = options.host ?? env.HOST?.trim() ?? undefined
+  const server = serve({ fetch: app.fetch, port, ...(host ? { hostname: host } : {}) })
+  // Accept the SPA's WebSocket event-stream upgrades on the same listener and push the
+  // engine's events to subscribers (the Worker uses a per-workspace Durable Object;
+  // `@hono/node-server` doesn't upgrade on its own, so we attach a `ws` server here).
+  const stopRealtime = attachRealtime(server, realtimeHub, container.config.auth, logger)
+  logger.info({ port, host: host ?? '0.0.0.0' }, 'cat-factory node server listening')
+
+  // The background sweepers below only schedule `setInterval`s (no work runs until a
+  // timer fires), so start them AFTER the listener binds — the server accepts requests a
+  // few ms sooner. The pg-boss workers above stay before listen so an enqueued job always
+  // has a consumer.
   const stopSweeper = startStaleRunSweeper(boss, container, runtime.sweeper, runtime.queue, logger)
   // Bound the unbounded tables (`token_usage`, the heavy `llm_call_metrics`): the Worker
   // prunes these from cron, Node has none, so a timer mirrors it. Without this the
@@ -194,16 +209,6 @@ export async function start(
   // Run pending Kaizen gradings on a one-minute timer (the Worker uses cron); no-op
   // unless the Kaizen feature is wired.
   const stopKaizenSweeper = startKaizenSweeper(container, clock, logger)
-
-  const app = createApp(container, env)
-  const port = Number(env.PORT ?? 8787)
-  const host = options.host ?? env.HOST?.trim() ?? undefined
-  const server = serve({ fetch: app.fetch, port, ...(host ? { hostname: host } : {}) })
-  // Accept the SPA's WebSocket event-stream upgrades on the same listener and push the
-  // engine's events to subscribers (the Worker uses a per-workspace Durable Object;
-  // `@hono/node-server` doesn't upgrade on its own, so we attach a `ws` server here).
-  const stopRealtime = attachRealtime(server, realtimeHub, container.config.auth, logger)
-  logger.info({ port, host: host ?? '0.0.0.0' }, 'cat-factory node server listening')
 
   // Ordered graceful shutdown: stop accepting connections, halt the sweeper + pg-boss
   // worker, release the pool, then exit. Without closing the HTTP server the process
