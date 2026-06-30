@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/deploy-harness",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "Container payload: a thin TypeScript wrapper that renders a service's Kubernetes manifests with real kubectl/kustomize/helm and applies them to a per-PR namespace. Carries no secrets (the per-job cluster token + git token arrive in the job body).",
   "type": "module",

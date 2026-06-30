@@ -4,6 +4,7 @@ import type {
   InfraHandlerConfig,
   KubernetesManifestSource,
   ProvisionType,
+  ServiceProvisioning,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
@@ -41,17 +42,48 @@ export function toManifestId(providerId: string): string {
 }
 
 /**
+ * The service-owned kube provisioning inputs ("what + where" + render inputs) merged into the
+ * workspace engine config at provision time: the manifest source plus the container-deploy
+ * render fields (image overrides, per-environment helm releases, secret injections).
+ */
+export type ServiceKubeInputs = Pick<
+  ServiceProvisioning,
+  'manifestSource' | 'images' | 'helmReleases' | 'secretInjections'
+>
+
+type KubeHelmRelease = NonNullable<ServiceKubeInputs['helmReleases']>[number]
+
+/**
+ * Merge the workspace engine's (cluster-shared) helm releases with the service's
+ * (per-environment) ones, keyed by release `name` so a service entry OVERRIDES a same-named
+ * engine entry instead of installing the release twice. Engine order is preserved; service-only
+ * releases are appended.
+ */
+function mergeHelmReleases(
+  engine: KubeHelmRelease[] | undefined,
+  service: KubeHelmRelease[] | undefined,
+): KubeHelmRelease[] {
+  const byName = new Map<string, KubeHelmRelease>()
+  for (const rel of engine ?? []) byName.set(rel.name, rel)
+  for (const rel of service ?? []) byName.set(rel.name, rel)
+  return [...byName.values()]
+}
+
+/**
  * Lower a discriminated-by-`engine` {@link InfraHandlerConfig} into the discriminated-by-`kind`
  * {@link EnvironmentBackendConfig} the backend registry consumes. For a kube engine the source
  * is resolved by precedence: the service-owned `manifestSource` (the split the whole initiative
  * is about) > a legacy source the compat bridge stored inline (a kube handler config MAY carry
  * one) > a placeholder (validation/metadata paths, where the kube backend reads only the
- * apiserver/sizing fields, never the source).
+ * apiserver/sizing fields, never the source). The service's render inputs (image overrides,
+ * secret injections, per-env helm releases) are folded in too; the workspace's shared
+ * (`scope: 'shared'`) helm releases on the engine config are merged with the service's by
+ * release name (a same-named service release overrides the engine one — no double install).
  */
 export function handlerConfigToBackendConfig(
   config: InfraHandlerConfig,
   backendKind: string,
-  manifestSource?: KubernetesManifestSource,
+  service?: ServiceKubeInputs,
 ): EnvironmentBackendConfig {
   switch (config.engine) {
     case 'local-docker':
@@ -62,8 +94,18 @@ export function handlerConfigToBackendConfig(
       const kube = config.kubernetes as typeof config.kubernetes & {
         manifestSource?: KubernetesManifestSource
       }
-      const source = manifestSource ?? kube.manifestSource ?? PLACEHOLDER_MANIFEST_SOURCE
-      return { kind: 'kubernetes', kubernetes: { ...kube, manifestSource: source } }
+      const source = service?.manifestSource ?? kube.manifestSource ?? PLACEHOLDER_MANIFEST_SOURCE
+      const helmReleases = mergeHelmReleases(kube.helmReleases, service?.helmReleases)
+      return {
+        kind: 'kubernetes',
+        kubernetes: {
+          ...kube,
+          manifestSource: source,
+          ...(helmReleases.length > 0 ? { helmReleases } : {}),
+          ...(service?.images ? { images: service.images } : {}),
+          ...(service?.secretInjections ? { secretInjections: service.secretInjections } : {}),
+        },
+      }
     }
   }
 }

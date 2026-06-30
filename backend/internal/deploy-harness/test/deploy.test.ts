@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { rm } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
-import { imageEditArg, renderEnvFile } from '../src/deploy.js'
+import { extractManifestNamespace, imageEditArg, renderEnvFile } from '../src/deploy.js'
 import { writeKubeconfig } from '../src/kubeconfig.js'
 
 describe('imageEditArg', () => {
@@ -29,6 +29,62 @@ describe('renderEnvFile', () => {
         { key: 'B', value: 'two' },
       ]),
     ).toBe('A=1\nB=two\n')
+  })
+})
+
+describe('extractManifestNamespace', () => {
+  it('reads the namespace a workload declares under metadata', () => {
+    const rendered = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cfg
+  namespace: shared-preview
+data:
+  namespace: not-this-one
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: web
+  name: web
+  namespace: shared-preview
+spec:
+  replicas: 1
+`
+    expect(extractManifestNamespace(rendered)).toBe('shared-preview')
+  })
+
+  it('falls back to the first namespaced resource when there is no workload', () => {
+    const rendered = `apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: team-a
+`
+    expect(extractManifestNamespace(rendered)).toBe('team-a')
+  })
+
+  it('ignores a namespace nested outside metadata (a ConfigMap data key)', () => {
+    const rendered = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cfg
+data:
+  namespace: app-config
+`
+    expect(extractManifestNamespace(rendered)).toBeNull()
+  })
+
+  it('returns null when no resource declares a namespace', () => {
+    const rendered = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  replicas: 1
+`
+    expect(extractManifestNamespace(rendered)).toBeNull()
   })
 })
 

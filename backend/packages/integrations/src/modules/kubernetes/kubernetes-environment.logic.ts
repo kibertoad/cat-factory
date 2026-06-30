@@ -1,6 +1,7 @@
 import type {
   EnvironmentManifest,
   KubernetesEnvironmentConfig,
+  KubernetesProvisionConfig,
   KubernetesUrlSource,
 } from '@cat-factory/kernel'
 import { parseAllDocuments } from 'yaml'
@@ -65,12 +66,10 @@ export function isSupportedKind(kind: string): boolean {
  * The config was Valibot-validated at the connect controller boundary, so this trusts
  * the stored shape (a cast) rather than re-parsing (which would pull valibot in here).
  */
-export function parseKubernetesEnvConfig(
-  manifest: EnvironmentManifest,
-): KubernetesEnvironmentConfig {
+export function parseKubernetesEnvConfig(manifest: EnvironmentManifest): KubernetesProvisionConfig {
   const raw = manifest.providerConfig
   if (!raw) throw new Error('Kubernetes environment manifest is missing its providerConfig')
-  return raw as unknown as KubernetesEnvironmentConfig
+  return raw as unknown as KubernetesProvisionConfig
 }
 
 /** Build the stored manifest that carries a Kubernetes env config in its providerConfig. */
@@ -218,6 +217,49 @@ export function extractLoadBalancerAddress(obj: unknown): string | null {
   if (!Array.isArray(ingress) || ingress.length === 0) return null
   const first = ingress[0] as { ip?: string; hostname?: string }
   return first.hostname || first.ip || null
+}
+
+/** A concrete, resolvable host — a wildcard listener/route hostname (`*.example.com`) is not. */
+export function isUsableHost(host: string | undefined): host is string {
+  return !!host && !host.startsWith('*')
+}
+
+/** The first entry of a `{ items: [...] }` list response, or null when empty. */
+export function firstListItem(obj: unknown): unknown {
+  const items = (obj as { items?: unknown[] } | null)?.items
+  return Array.isArray(items) && items.length > 0 ? items[0] : null
+}
+
+/** Read the first Gateway-API `Gateway` address off its `.status.addresses[]`. */
+export function extractGatewayAddress(obj: unknown): string | null {
+  const addresses = (obj as { status?: { addresses?: { value?: string }[] } } | null)?.status
+    ?.addresses
+  if (!Array.isArray(addresses) || addresses.length === 0) return null
+  return addresses[0]?.value || null
+}
+
+/** The first usable (non-wildcard) listener hostname declared on a `Gateway`'s spec. */
+export function extractGatewayListenerHost(obj: unknown): string | null {
+  const listeners = (obj as { spec?: { listeners?: { hostname?: string }[] } } | null)?.spec
+    ?.listeners
+  if (!Array.isArray(listeners)) return null
+  return listeners.map((l) => l?.hostname).find(isUsableHost) ?? null
+}
+
+/** The first usable (non-wildcard) hostname declared on an `HTTPRoute`'s spec. */
+export function extractHttpRouteHost(obj: unknown): string | null {
+  const hostnames = (obj as { spec?: { hostnames?: string[] } } | null)?.spec?.hostnames
+  if (!Array.isArray(hostnames)) return null
+  return hostnames.find(isUsableHost) ?? null
+}
+
+/** The first `parentRef` (name + optional namespace) of an `HTTPRoute`, or null. */
+export function httpRouteParentRef(obj: unknown): { name: string; namespace?: string } | null {
+  const refs = (obj as { spec?: { parentRefs?: { name?: string; namespace?: string }[] } } | null)
+    ?.spec?.parentRefs
+  const ref = Array.isArray(refs) ? refs[0] : undefined
+  if (!ref?.name) return null
+  return { name: ref.name, ...(ref.namespace ? { namespace: ref.namespace } : {}) }
 }
 
 /**

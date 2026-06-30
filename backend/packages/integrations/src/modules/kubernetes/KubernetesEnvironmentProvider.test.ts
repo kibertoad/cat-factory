@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { KubernetesEnvironmentConfig, RepoFiles, RunRepoContext } from '@cat-factory/kernel'
+import type {
+  KubernetesEnvironmentConfig,
+  KubernetesProvisionConfig,
+  RepoFiles,
+  RunRepoContext,
+} from '@cat-factory/kernel'
 import { KubernetesEnvironmentProvider } from './KubernetesEnvironmentProvider.js'
 import { kubernetesConfigToManifest } from './kubernetes-environment.logic.js'
 
@@ -252,6 +257,187 @@ describe('KubernetesEnvironmentProvider.status', () => {
     expect(result.url).toBe('https://lb.example.com')
     // It listed the Ingress collection (no name segment) instead of giving up with null.
     expect(calls.some((c) => c.method === 'GET' && c.url.endsWith('/ingresses'))).toBe(true)
+  })
+})
+
+describe('KubernetesEnvironmentProvider.status — Gateway-API URL', () => {
+  const ready = { body: { items: [{ spec: { replicas: 1 }, status: { availableReplicas: 1 } }] } }
+
+  it('prefers a concrete Gateway listener hostname over the assigned address (gatewayStatus)', async () => {
+    const cfg: KubernetesEnvironmentConfig = {
+      ...config,
+      url: { source: 'gatewayStatus', gatewayName: 'web-gw', scheme: 'https' },
+    }
+    const calls = stubFetch((c) => {
+      if (c.url.includes('/deployments')) return ready
+      if (c.url.endsWith('/gateways/web-gw')) {
+        return {
+          body: {
+            spec: {
+              listeners: [{ hostname: '*.wild.example.com' }, { hostname: 'app.example.com' }],
+            },
+            status: { addresses: [{ value: '203.0.113.5' }] },
+          },
+        }
+      }
+      return { status: 200 }
+    })
+    const result = await new KubernetesEnvironmentProvider().status({
+      manifest: kubernetesConfigToManifest(cfg),
+      externalId: 'cf-env-1',
+      provisionFields: { namespace: 'cf-env-1' },
+      resolveSecret,
+    })
+    expect(result.url).toBe('https://app.example.com')
+    expect(calls.some((c) => c.url.endsWith('/gateways/web-gw'))).toBe(true)
+  })
+
+  it('falls back to the Gateway assigned address and lists when unnamed (gatewayStatus)', async () => {
+    const cfg: KubernetesEnvironmentConfig = {
+      ...config,
+      url: { source: 'gatewayStatus', scheme: 'http' },
+    }
+    const calls = stubFetch((c) => {
+      if (c.url.includes('/deployments')) return ready
+      if (c.url.endsWith('/gateways')) {
+        return { body: { items: [{ status: { addresses: [{ value: 'lb.example.net' }] } }] } }
+      }
+      return { status: 200 }
+    })
+    const result = await new KubernetesEnvironmentProvider().status({
+      manifest: kubernetesConfigToManifest(cfg),
+      externalId: 'cf-env-1',
+      provisionFields: { namespace: 'cf-env-1' },
+      resolveSecret,
+    })
+    expect(result.url).toBe('http://lb.example.net')
+    expect(calls.some((c) => c.url.endsWith('/gateways'))).toBe(true)
+  })
+
+  it("uses the HTTPRoute's own hostname (httpRouteStatus)", async () => {
+    const cfg: KubernetesEnvironmentConfig = {
+      ...config,
+      url: { source: 'httpRouteStatus', httpRouteName: 'web-route', scheme: 'https' },
+    }
+    stubFetch((c) => {
+      if (c.url.includes('/deployments')) return ready
+      if (c.url.endsWith('/httproutes/web-route')) {
+        return { body: { spec: { hostnames: ['route.example.com'] } } }
+      }
+      return { status: 200 }
+    })
+    const result = await new KubernetesEnvironmentProvider().status({
+      manifest: kubernetesConfigToManifest(cfg),
+      externalId: 'cf-env-1',
+      provisionFields: { namespace: 'cf-env-1' },
+      resolveSecret,
+    })
+    expect(result.url).toBe('https://route.example.com')
+  })
+
+  it("falls back to the parent Gateway's address in its own namespace (httpRouteStatus)", async () => {
+    const cfg: KubernetesEnvironmentConfig = {
+      ...config,
+      url: { source: 'httpRouteStatus', scheme: 'https' },
+    }
+    const calls = stubFetch((c) => {
+      if (c.url.includes('/deployments')) return ready
+      if (c.url.endsWith('/httproutes')) {
+        return {
+          body: {
+            items: [{ spec: { parentRefs: [{ name: 'shared-gw', namespace: 'gateways' }] } }],
+          },
+        }
+      }
+      if (c.url.endsWith('/namespaces/gateways/gateways/shared-gw')) {
+        return { body: { status: { addresses: [{ value: 'gw.example.com' }] } } }
+      }
+      return { status: 200 }
+    })
+    const result = await new KubernetesEnvironmentProvider().status({
+      manifest: kubernetesConfigToManifest(cfg),
+      externalId: 'cf-env-1',
+      provisionFields: { namespace: 'cf-env-1' },
+      resolveSecret,
+    })
+    expect(result.url).toBe('https://gw.example.com')
+    // It read the parent gateway in the parentRef's namespace, not the route's.
+    expect(calls.some((c) => c.url.endsWith('/namespaces/gateways/gateways/shared-gw'))).toBe(true)
+  })
+})
+
+describe('KubernetesEnvironmentProvider.asyncProvision', () => {
+  const kustomizeConfig: KubernetesProvisionConfig = {
+    ...config,
+    manifestSource: { type: 'colocated', path: 'k8s/overlays/preview', renderer: 'kustomize' },
+    url: { source: 'gatewayStatus', scheme: 'https' },
+    images: [{ name: 'registry/app', newTagTemplate: '{{branch}}' }],
+  }
+  const deploy = {
+    ref: { runId: 'run-1', jobId: 'job-1' },
+    clone: { cloneUrl: 'https://github.com/acme/web.git', ref: 'feat', token: 'gh-tok' },
+  }
+
+  it('returns null for a raw source with no render fields (use the REST path)', () => {
+    const job = new KubernetesEnvironmentProvider().asyncProvision!.buildProvisionJob({
+      manifest,
+      inputs: { pullNumber: '42', branch: 'feat' },
+      resolveSecret,
+      deploy,
+    })
+    expect(job).toBeNull()
+  })
+
+  it('builds a deploy job for a kustomize source', () => {
+    const job = new KubernetesEnvironmentProvider().asyncProvision!.buildProvisionJob({
+      manifest: kubernetesConfigToManifest(kustomizeConfig),
+      inputs: { pullNumber: '42', branch: 'feat' },
+      resolveSecret,
+      deploy,
+    })
+    expect(job).not.toBeNull()
+    expect(job!.kind).toBe('deploy')
+    expect(job!.ref).toEqual({ runId: 'run-1', jobId: 'job-1' })
+    expect(job!.options).toEqual({ image: 'deploy' })
+    const spec = job!.spec as Record<string, any>
+    expect(spec.source).toEqual({
+      cloneUrl: 'https://github.com/acme/web.git',
+      ref: 'feat',
+      path: 'k8s/overlays/preview',
+      renderer: 'kustomize',
+    })
+    expect(spec.cluster.token).toBe('tok')
+    expect(spec.cluster.namespace).toBe('cf-env-42')
+    expect(spec.images).toEqual([{ name: 'registry/app', newTag: 'feat' }])
+    expect(spec.url).toEqual({ source: 'gatewayStatus', scheme: 'https' })
+  })
+
+  it('throws when rendering is needed but no deploy inputs are provided', () => {
+    expect(() =>
+      new KubernetesEnvironmentProvider().asyncProvision!.buildProvisionJob({
+        manifest: kubernetesConfigToManifest(kustomizeConfig),
+        inputs: { pullNumber: '42', branch: 'feat' },
+        resolveSecret,
+      }),
+    ).toThrow(/deploy inputs/i)
+  })
+
+  it('maps a finished deploy job view into a provisioned environment', () => {
+    const provisioned = new KubernetesEnvironmentProvider().asyncProvision!.finalizeProvision(
+      {
+        state: 'done',
+        result: { custom: { namespace: 'cf-env-42', url: 'https://x.example', status: 'ready' } },
+      },
+      {
+        manifest: kubernetesConfigToManifest(kustomizeConfig),
+        inputs: { pullNumber: '42', branch: 'feat' },
+        resolveSecret,
+        deploy,
+      },
+    )
+    expect(provisioned.externalId).toBe('cf-env-42')
+    expect(provisioned.url).toBe('https://x.example')
+    expect(provisioned.status).toBe('ready')
   })
 })
 

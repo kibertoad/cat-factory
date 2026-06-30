@@ -302,11 +302,39 @@ owns. So slice 7 ships the IMAGE + its publish plumbing + the publish-target tag
 
 - transport mapping land with the facade wiring.
 
-### Slice 8 — provider render path + Gateway URL (TODO)
+### Slice 8 — provider render path + Gateway URL (DONE)
 
-`KubernetesEnvironmentProvider.buildProvisionJob`/`finalizeProvision` (kustomize/helm ⇒ container job;
-raw ⇒ keep the native REST path); the `gatewayStatus`/`httpRouteStatus` URL resolvers (REST). Keep
-REST teardown/status.
+Implemented. `KubernetesEnvironmentProvider` now exposes the `asyncProvision` capability and the
+native REST status path resolves Gateway-API URLs.
+
+- **`asyncProvision.buildProvisionJob`** returns a `deploy`-kind job (`image: 'deploy'`) when the
+  config needs rendering (`needsContainerRender`: `renderer: 'kustomize'`, or any helm release /
+  image override / secret injection), else `null` (the synchronous REST `provision()` path for
+  plain raw manifests). The pure spec builder (`kubernetes-deploy.logic.ts`) renders every template
+  - resolves every `secretRef` backend-side, mirroring the harness's `DeployJob` shape (duplicated,
+    not imported, so the backend never depends on the private deploy-harness package). `setNamespace`
+    is set only for a kustomize source WITH a `namespaceTemplate` (per-PR isolation); absent ⇒ honor
+    the overlay's namespace — the harness reads the namespace the built manifests actually declare and
+    ensures / monitors / reports / tears down THAT namespace (`resolveTargetNamespace` +
+    `extractManifestNamespace`, deploy-harness image `0.2.2`), never a stray per-PR default. Throws if
+    rendering is needed but the engine supplied no deploy inputs, or if the cluster `apiToken` is unset.
+- **`asyncProvision.finalizeProvision`** maps the harness `DeployOutcome` (on `view.result.custom`)
+  → `ProvisionedEnvironment`; a failed view becomes a `failed` env carrying the harness error.
+- **Native REST `status()`** gained `gatewayStatus` (prefer a concrete listener hostname over the
+  assigned `.status.addresses[]` value, skip wildcards) and `httpRouteStatus` (the route's own
+  hostname, else the parent Gateway's address read in the parentRef's namespace) URL resolvers,
+  mirroring the deploy-harness `url.ts` logic over the apiserver REST client. Teardown unchanged.
+- **Contracts**: `kubernetesProvisionConfigSchema` (the combined config + render inputs) is what the
+  deploy adapter consumes (`EnvironmentBackendConfig.kubernetes` now references it).
+  `EnvironmentConnectionService.handlerConfigToBackendConfig` merges the service's render inputs
+  (images / per-env helm releases / secret injections) with the workspace engine config (shared helm
+  releases) — alongside the existing `manifestSource` merge.
+- **Kernel**: `DeployCloneTarget` + `DeployProvisionInputs` (clone coords + token + job ref) on
+  `ProvisionEnvironmentRequest`, populated by the provisioning service in slice 9.
+- **NOT wired yet**: nothing dispatches a deploy job — the provisioning-service `provision()` branch
+  on `buildProvisionJob` + the `runDeployerStep` park/poll is slice 9. Tested as unit/mocked-fetch
+  (`kubernetes-deploy.logic.test.ts`, `KubernetesEnvironmentProvider.test.ts`); no migration (the
+  render fields ride existing JSON), so no conformance/D1⇄Drizzle change.
 
 ### Slice 9 — async deployer lifecycle (TODO; folds into slice 3)
 
@@ -377,7 +405,7 @@ LoadBalancer` ⇒ `serviceStatus`); the namespace decision (a pinned `namespace:
 | 5   | Frontend (service provisioning section + auto-detect; infra per-type/engine configurator + custom-type editor + local override; run-details surfacing; stores; i18n)                                                              | todo   | —    |
 | 6   | Phase 2: render contracts (`renderer`/`images`/`helmReleases`/`secretInjections`/gateway URL) + dispatch/port seam (`deploy` kind + `image`, `buildProvisionJob`/`finalizeProvision`); NO migration; conformance round-trip       | done   | —    |
 | 7   | Phase 2: `deploy-harness` package + image (kubectl/kustomize/helm; `deploy` KindEntry + `handleDeploy`; publish plumbing + tag). CF container class/binding deferred to slice 10 (needs the DO class)                             | done   | —    |
-| 8   | Phase 2: `KubernetesEnvironmentProvider` render path (`buildProvisionJob`/`finalizeProvision`; keep native REST) + Gateway-API URL resolvers                                                                                      | todo   | —    |
+| 8   | Phase 2: `KubernetesEnvironmentProvider` render path (`buildProvisionJob`/`finalizeProvision`; keep native REST) + Gateway-API URL resolvers                                                                                      | done   | —    |
 | 9   | Phase 2: async deployer lifecycle (`provision()` branch + `pollProvision`; `runDeployerStep` park/poll + eviction re-dispatch) — folds into slice 3                                                                               | todo   | —    |
 | 10  | Phase 2: facade wiring + local `NativeCliDeployTransport` (`LOCAL_DEPLOY_RUNTIME`); deploy-dispatch + finalize conformance; image-tag bump                                                                                        | todo   | —    |
 | 11  | Phase 2: auto-detect a recommended `kubernetes` config from the repo (renderer / URL source / namespace / secret `.env` keys / image overrides high-confidence; overlay choice + helm as candidates) — non-binding, user confirms | todo   | —    |

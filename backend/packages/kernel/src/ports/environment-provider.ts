@@ -51,6 +51,33 @@ export interface RepoFilesCoords {
   provider?: 'github' | 'gitlab'
 }
 
+/**
+ * Concrete clone coordinates the deploy container uses to fetch the manifests repo (the
+ * block's own PR repo for `colocated`, or the separate manifests repo for `separate`),
+ * resolved by the provisioning service BEFORE dispatch. `buildProvisionJob` plugs these
+ * straight into the deploy job — it can't mint a token or build a clone URL itself (that is
+ * VCS-specific, server-layer work). The token is short-lived and redacted in any job output.
+ */
+export interface DeployCloneTarget {
+  /** HTTPS clone URL of the manifests repo (e.g. `https://github.com/owner/repo.git`). */
+  cloneUrl: string
+  /** Branch/tag/sha the deploy container checks out (the PR head branch, or the source ref). */
+  ref: string
+  /** Short-lived git token for cloning a private repo; absent ⇒ a public repo. */
+  token?: string
+}
+
+/**
+ * The inputs an ASYNC, container-backed provision needs that the stateless provider can't
+ * derive itself: the deploy job's identity ({@link RunnerJobRef} — the run + the deployer
+ * step's job id) and the manifests-repo clone target. Resolved by the provisioning service
+ * before dispatch and handed to {@link AsyncProvisionCapability.buildProvisionJob}.
+ */
+export interface DeployProvisionInputs {
+  ref: RunnerJobRef
+  clone: DeployCloneTarget
+}
+
 export interface ProvisionEnvironmentRequest {
   manifest: EnvironmentManifest
   /** Provision inputs (`{{input.*}}` in templates). */
@@ -74,6 +101,13 @@ export interface ProvisionEnvironmentRequest {
    * resolved (no VCS connection). The generic HTTP provider ignores it.
    */
   resolveRepoFiles?: (coords: RepoFilesCoords) => Promise<RunRepoContext | null>
+  /**
+   * Inputs for an ASYNC, container-backed provision: the deploy job identity + the manifests
+   * repo clone target. Resolved by the provisioning service before dispatch and consumed by
+   * {@link AsyncProvisionCapability.buildProvisionJob}. Absent ⇒ the async inputs aren't wired
+   * (the synchronous REST `provision()` path runs).
+   */
+  deploy?: DeployProvisionInputs
 }
 
 export interface EnvironmentStatusRequest {

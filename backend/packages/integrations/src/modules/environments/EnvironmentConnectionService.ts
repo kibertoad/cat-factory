@@ -18,7 +18,6 @@ import type {
   EnvironmentProvider,
   InfraEngine,
   InfraHandlerConfig,
-  KubernetesManifestSource,
   ProviderDescriptor,
   ProvisionType,
   RepoValidationIssue,
@@ -42,6 +41,7 @@ import {
 import {
   buildInfraHandlerFields,
   handlerConfigToBackendConfig,
+  type ServiceKubeInputs,
   toManifestId,
 } from './infra-handler-build.js'
 import { missingRequiredConfigKeys, stringifyProviderConfig } from './environments.logic.js'
@@ -314,7 +314,12 @@ export class EnvironmentConnectionService {
       throw new ConflictError(message, 'provision_type_unhandled', { provisionType: service.type })
     }
     const record = resolution.handler!
-    const { provider, manifest } = this.buildFromRecord(record, service.manifestSource ?? undefined)
+    const { provider, manifest } = this.buildFromRecord(record, {
+      ...(service.manifestSource ? { manifestSource: service.manifestSource } : {}),
+      ...(service.images ? { images: service.images } : {}),
+      ...(service.helmReleases ? { helmReleases: service.helmReleases } : {}),
+      ...(service.secretInjections ? { secretInjections: service.secretInjections } : {}),
+    })
     return {
       provider,
       manifest,
@@ -954,11 +959,12 @@ export class EnvironmentConnectionService {
 
   /**
    * Build the live provider + stored manifest from a handler record, merging the SERVICE's
-   * `manifestSource` (a kube engine needs the manifests to apply from the service) when given.
+   * provisioning inputs (a kube engine needs the manifests + render inputs from the service)
+   * when given.
    */
   private buildFromRecord(
     record: EnvironmentConnectionRecord,
-    manifestSource?: KubernetesManifestSource,
+    service?: ServiceKubeInputs,
   ): {
     backend: EnvironmentBackendProvider
     provider: EnvironmentProvider
@@ -967,9 +973,9 @@ export class EnvironmentConnectionService {
   } {
     const config = JSON.parse(record.handlerJson) as InfraHandlerConfig
     const backend = this.requireBackend(record.backendKind)
-    // Pass the service source through (or undefined): a legacy bridge row carries its own kube
+    // Pass the service inputs through (or undefined): a legacy bridge row carries its own kube
     // source inline, and `handlerConfigToBackendConfig` falls back to it before the placeholder.
-    const backendConfig = handlerConfigToBackendConfig(config, backend.kind, manifestSource)
+    const backendConfig = handlerConfigToBackendConfig(config, backend.kind, service)
     return {
       backend,
       provider: this.buildProvider(backend),

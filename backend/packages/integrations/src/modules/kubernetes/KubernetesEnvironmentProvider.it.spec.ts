@@ -22,7 +22,7 @@ import {
 // k3s ships the klipper ServiceLB, so a `type: LoadBalancer` Service actually gets an address
 // — letting us validate the whole apply→roll-out→resolve-URL→teardown path for real: the
 // per-PR namespace create (idempotent 409), server-side apply (`apply-patch+json`), real
-// Deployment readiness, the `.status.loadBalancer` shape `readLoadBalancerAddress` parses, and
+// Deployment readiness, the `.status.loadBalancer` shape `extractLoadBalancerAddress` parses, and
 // the idempotent namespace delete. Self-skips when `K8S_IT_*` is unset.
 
 const env = readClusterEnv()
