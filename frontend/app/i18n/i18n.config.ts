@@ -66,6 +66,16 @@ export default defineI18nConfig(() => ({
       currency: { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol' },
       percent: { style: 'percent', maximumFractionDigits: 1 },
     },
+    ja: {
+      decimal: { style: 'decimal' },
+      currency: { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol' },
+      percent: { style: 'percent', maximumFractionDigits: 1 },
+    },
+    tr: {
+      decimal: { style: 'decimal' },
+      currency: { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol' },
+      percent: { style: 'percent', maximumFractionDigits: 1 },
+    },
   },
   datetimeFormats: {
     en: {
@@ -89,6 +99,14 @@ export default defineI18nConfig(() => ({
       long: { dateStyle: 'long', timeStyle: 'short' },
     },
     he: {
+      short: { dateStyle: 'medium' },
+      long: { dateStyle: 'long', timeStyle: 'short' },
+    },
+    ja: {
+      short: { dateStyle: 'medium' },
+      long: { dateStyle: 'long', timeStyle: 'short' },
+    },
+    tr: {
       short: { dateStyle: 'medium' },
       long: { dateStyle: 'long', timeStyle: 'short' },
     },

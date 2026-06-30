@@ -1,0 +1,3392 @@
+{
+  "language": {
+    "switcher": "言語",
+    "warning": {
+      "title": "非公式翻訳",
+      "body": "この翻訳はコミュニティによって提供されており、不正確な場合があります。誤りを見つけましたか？{repoLink} で報告するか、修正を提案してください。",
+      "repoLinkLabel": "cat-factory リポジトリ",
+      "dismiss": "閉じる"
+    }
+  },
+  "common": {
+    "save": "保存",
+    "cancel": "キャンセル",
+    "retry": "再試行",
+    "block": "ブロック",
+    "actionFailed": "操作に失敗しました",
+    "close": "閉じる"
+  },
+  "nav": {
+    "menu": "ナビゲーションメニュー",
+    "openMenu": "メニューを開く",
+    "closeMenu": "メニューを閉じる",
+    "commandBar": "検索またはコマンドを実行…",
+    "create": "作成",
+    "buildPipeline": "パイプラインを構築",
+    "repositories": "リポジトリ",
+    "addFromRepo": "既存のリポジトリから追加",
+    "bootstrapRepo": "リポジトリをブートストラップ",
+    "integrations": "連携",
+    "infrastructure": "インフラストラクチャ",
+    "sandbox": "サンドボックス",
+    "kaizen": "Kaizen",
+    "workspaceContext": "ワークスペースコンテキスト",
+    "contextFragments": "コンテキストフラグメント",
+    "configuration": "設定",
+    "workspaceSettings": "ワークスペース設定",
+    "modelConfiguration": "モデル設定",
+    "accountSettings": "アカウント設定"
+  },
+  "board": {
+    "toolbar": {
+      "addService": "サービスを追加",
+      "decisionWord": "決定 | 決定",
+      "lod": {
+        "far": "概要",
+        "mid": "サマリー",
+        "close": "詳細",
+        "steps": "ビルドステップ",
+        "subtasks": "サブタスク"
+      },
+      "spendTitle": "今月のトークン消費量",
+      "spendLimitReached": "消費上限に達しました。実行を一時停止しています",
+      "serviceAdded": "{title} を追加しました",
+      "serviceAddFailed": "サービスを追加できませんでした"
+    },
+    "canvas": {
+      "emptyTitle": "ボードが空です",
+      "emptyBody": "サービスを追加して始めましょう。新しいリポジトリをブートストラップするか、既存のリポジトリを取り込みます。",
+      "addBlockFailedTitle": "ブロックを追加できませんでした",
+      "addBlockFailedBody": "バックエンドがリクエストを拒否しました。",
+      "dropOntoTaskTitle": "タスクにドロップ",
+      "dropOntoTaskBody": "パイプラインはサービスではなくタスクに対して実行されます。",
+      "taskBlockedTitle": "タスクがブロックされています",
+      "taskBlockedBody": "依存関係がまだマージされていません。"
+    },
+    "addTask": {
+      "title": "タスクを追加",
+      "newTaskIn": "{container} 内の新しいタスク",
+      "typeLabel": "種類",
+      "types": {
+        "feature": "機能",
+        "bug": "バグ",
+        "document": "ドキュメント",
+        "spike": "スパイク",
+        "recurring": "繰り返し"
+      },
+      "recurringWithFrame": "繰り返しタスクは一定の周期でパイプラインを実行します。続行してスケジュールとプロンプトを設定してください。",
+      "recurringNoFrame": "繰り返しタスクはサービス上に配置する必要があります。サービスフレーム（またはその中のモジュール）から追加してください。",
+      "titleField": "タイトル",
+      "titlePlaceholder": "何を実施する必要がありますか？",
+      "issueIncluded": "{title}（issue から、含む）",
+      "loadingIssue": "リンクされた issue の説明を読み込み中…",
+      "additionalNotes": "追加メモ",
+      "description": "説明",
+      "notesPlaceholder": "エージェントに伝えるべきその他の情報を追加してください。上記の issue の説明に追記されます…",
+      "descriptionPlaceholder": "作業内容を記述してください。コンテキスト、受け入れ基準、エージェントが知っておくべきことなど…",
+      "technical": "技術タスク",
+      "technicalHint": "リファクタリングや非機能的・内部的な変更です。実装担当はタスク定義を主とし、仕様はリグレッションの参照として扱います。オフにすると仕様フェーズに判断を委ねます。",
+      "severity": "重大度",
+      "stepsToReproduce": "再現手順",
+      "stepsToReproducePlaceholder": "観測された挙動と期待される挙動、および再現方法…",
+      "timebox": "タイムボックス（時間）",
+      "timeboxPlaceholder": "例: 8",
+      "documentKind": "ドキュメントの種類",
+      "audience": "対象読者",
+      "audiencePlaceholder": "例: プラットフォームエンジニア",
+      "targetPath": "対象パス",
+      "targetPathPlaceholder": "例: docs/rfcs/0001-foo.md",
+      "outlineHints": "アウトラインのヒント",
+      "outlineHintsPlaceholder": "ドキュメントがカバーすべきセクションや要点",
+      "optional": "任意",
+      "pipeline": "パイプライン",
+      "chooseAtRunTime": "実行時に選択",
+      "mergePolicy": "マージポリシー",
+      "workspaceDefault": "ワークスペースの既定",
+      "defaultPreset": "既定（{name}）— {thresholds}",
+      "defaultModelPreset": "既定（{name}）",
+      "modelPreset": "モデルプリセット",
+      "agentConfiguration": "エージェント設定",
+      "contextDocuments": "コンテキストドキュメント",
+      "contextIssues": "コンテキスト issue",
+      "attach": "添付",
+      "done": "完了",
+      "attachDocDisabledConnect": "まずドキュメントソースを接続してください（連携）",
+      "attachDocDisabledEnable": "まずドキュメント連携を有効にしてください",
+      "attachIssueDisabledConnect": "まず issue トラッカーを接続してください（連携）",
+      "attachIssueDisabledEnable": "まず issue トラッカー連携を有効にしてください",
+      "importsOnAdd": "追加時にインポート",
+      "noDocsHint": "要件、RFC、PRD を添付すると、このタスクの実装中にエージェントが参照できます。",
+      "noIssuesHint": "トラッカーの issue を添付すると、このタスクの実装中にエージェントがその説明やコメントを参照できます。",
+      "plannedHint": "タスクは計画済みの状態で追加されます。パイプラインを開始するまで実行されず、それまでは編集を続けられます。",
+      "continue": "続行",
+      "submit": "タスクを追加",
+      "addFailedTitle": "タスクを追加できませんでした",
+      "linkFailed": "タスクを追加しましたが、{count} 件の添付をリンクできませんでした | タスクを追加しましたが、{count} 件の添付をリンクできませんでした"
+    },
+    "recurring": {
+      "title": "繰り返しパイプラインを追加",
+      "on": "{frame} 上の繰り返しパイプライン",
+      "name": "名前",
+      "namePlaceholder": "例: 週次の依存関係更新",
+      "pipeline": "パイプライン",
+      "pickPipeline": "パイプラインを選択",
+      "prompt": "プロンプト",
+      "promptPlaceholder": "各実行で何をすべきか。作業内容を記述してください。通常のタスクと同じプロンプトです。空欄にするとパイプラインのデフォルトを使用します。",
+      "issueTracker": "課題トラッカー",
+      "issueTrackerHint": "tech-debt パイプラインは、実装前に分析からチケットを起票します。起票先を選択してください (ワークスペース全体に保存されます)。",
+      "githubIssues": "GitHub Issues",
+      "jira": "Jira",
+      "linear": "Linear",
+      "jiraProjectKey": "Jira プロジェクトキー",
+      "jiraProjectKeyPlaceholder": "例: ENG",
+      "linearTeamId": "Linear チーム ID",
+      "footerHint": "サービス内に繰り返しタスクが 1 つ追加され、各実行が前回を置き換えます。実行履歴はインスペクターで確認できます。",
+      "submit": "繰り返しパイプラインを追加",
+      "addFailedTitle": "繰り返しパイプラインを追加できませんでした"
+    },
+    "failure": {
+      "containerFailedToStart": "コンテナの起動に失敗しました",
+      "environmentFailed": "環境のプロビジョニングに失敗しました",
+      "bootstrapFailed": "ブートストラップに失敗しました",
+      "runFailed": "実行に失敗しました",
+      "retryBootstrap": "ブートストラップを再試行",
+      "retryRun": "実行を再試行",
+      "showDetail": "詳細を表示",
+      "retrying": "再試行中…"
+    },
+    "stop": {
+      "label": "停止",
+      "bootstrapStopped": "ブートストラップを停止しました",
+      "runStopped": "実行を停止しました",
+      "stoppedDescription": "コンテナが終了され、実行はキャンセルされました。",
+      "stopFailed": "停止に失敗しました"
+    },
+    "frame": {
+      "status": {
+        "planned": "タスクなし",
+        "ready": "稼働中",
+        "in_progress": "アクティブ",
+        "blocked": "要対応",
+        "pr_ready": "アクティブ",
+        "done": "稼働中"
+      },
+      "shared": "共有",
+      "sharedTitle": "この組織内のワークスペース間で共有",
+      "bootstrapping": "ブートストラップ中…",
+      "bootstrappingRepository": "リポジトリをブートストラップ中…",
+      "bootstrapStepsCount": "{completed}/{total} ステップ",
+      "runFailed": "実行に失敗しました",
+      "mergedOfTotal": "{merged}/{total} マージ済み",
+      "noTasksYet": "タスクはまだありません",
+      "prCount": "{count} 件の PR",
+      "implemented": "{merged}/{total} 実装済み",
+      "prReadyCount": "{count} 件の PR が準備完了",
+      "taskCount": "{count} 件のタスク | {count} 件のタスク",
+      "moduleCount": "{count} 件のモジュール | {count} 件のモジュール",
+      "addTaskTitle": "タスクを追加",
+      "createTaskFromIssueTitle": "課題からタスクを作成",
+      "addRecurringTitle": "繰り返しパイプラインを追加",
+      "collapseTitle": "折りたたむ",
+      "dragService": "サービスをドラッグ",
+      "dragTask": "タスクをドラッグ",
+      "dragToResize": "ドラッグしてサイズ変更",
+      "addFirstTask": "最初のタスクを追加"
+    },
+    "decisionBadge": {
+      "decisionNeeded": "判断が必要",
+      "approvalNeeded": "承認が必要"
+    },
+    "task": {
+      "recurringPipeline": "繰り返しパイプライン",
+      "recurringPipelinePaused": "繰り返しパイプライン (一時停止中)",
+      "dragToConnect": "別のタスクにドラッグして、このタスクへの依存関係を作成します",
+      "failed": "失敗",
+      "decisionNeeded": "判断が必要",
+      "approvalNeeded": "承認が必要",
+      "resolve": "解決",
+      "approve": "承認",
+      "incorporatingAnswers": "回答を反映中…",
+      "reReviewing": "再レビュー中…",
+      "recommending": "推奨を作成中…",
+      "starting": "開始中…",
+      "start": "開始",
+      "blocked": "ブロック中",
+      "startPipeline": "{name} を開始",
+      "pipelineFallback": "パイプライン",
+      "waitingOn": "待機中: {deps}",
+      "blockedByDependenciesTitle": "依存関係によりブロック中",
+      "noPipelineTitle": "パイプラインが定義されていません",
+      "noPipelineBody": "まずビルダーで作成してください。",
+      "pr": "PR",
+      "prNumber": "PR #{number}",
+      "openPrOnGithub": "{pr} を GitHub で開く",
+      "review": "レビュー",
+      "merge": "マージ",
+      "implemented": "実装済み",
+      "module": "モジュール: {name}",
+      "buildSteps": "ビルドステップ",
+      "reviewAndApprove": "レビューして承認",
+      "clickToViewStep": "クリックしてステップの詳細と出力を表示"
+    },
+    "epic": {
+      "label": "エピック",
+      "activeCount": "{count} 件アクティブ",
+      "noTasksYet": "タスクはまだありません"
+    }
+  },
+  "errors": {
+    "action": {
+      "retryFailed": "再試行に失敗しました",
+      "startFailed": "開始に失敗しました",
+      "mergeFailed": "マージに失敗しました",
+      "restartFailed": "再起動に失敗しました"
+    },
+    "conflict": {
+      "title": {
+        "dependencies_unmet": "依存関係によりブロック中",
+        "task_limit_reached": "同時実行数の上限に達しました",
+        "tester_infra_unsupported": "テストインフラが設定されていません",
+        "agent_backend_unconfigured": "エージェントバックエンドが設定されていません",
+        "run_not_retryable": "実行は再試行できません",
+        "no_pr_to_merge": "マージする PR がありません",
+        "github_not_connected": "GitHub が接続されていません",
+        "bootstrap_not_retryable": "ブートストラップは再試行できません",
+        "bootstrap_reference_missing": "リファレンスアーキテクチャが見つかりません"
+      },
+      "fallbackMessage": "この操作は現在の状態と競合します。",
+      "providersUnconfigured": {
+        "title": "このモデルに対応する AI プロバイダーがありません",
+        "body": "{models} に対応するプロバイダーが設定されていません。プロバイダーキーを追加するか、サブスクリプションを接続するか、Cloudflare AI を有効にして実行してください。",
+        "action": "AI を設定"
+      },
+      "binaryStorageUnconfigured": {
+        "title": "このパイプライン用のストレージがありません",
+        "body": "このパイプラインには、バイナリストレージを必要とするエージェントが含まれています（UI テスターがスクリーンショットをアップロードします）。ただし、このアカウントにはコンテンツストレージが設定されていません。実行するにはコンテンツストレージを設定してください。",
+        "action": "ストレージを設定"
+      }
+    }
+  },
+  "personalSubscriptions": {
+    "heading": "個人サブスクリプション (個人利用のみ)",
+    "intro": "Claude (Pro/Max)、GLM (Z.ai Coding Plan)、ChatGPT (Codex) はそれぞれあなた個人にライセンスされているため、あなた専用に保存され、あなたの実行でのみ使用されます。各トークンは個人パスワード (保存されません) で暗号化され、そのような実行を開始する際に入力します。パスワードは手間を省くためにこのブラウザにしばらくキャッシュされます。このパスワードは負担の少ない利便性であり、システムが認証情報を黙って共有しないという透明性のしるしであって、システムキー保持者に対する防壁ではありません。これらのモデルは繰り返しスケジュールでは使用できません。",
+    "vendorField": "サブスクリプション",
+    "labelField": "ラベル (任意)",
+    "labelPlaceholder": "例: my {vendor}",
+    "defaultLabel": "私の {vendor} サブスクリプション",
+    "passwordField": "個人パスワード (6文字以上)",
+    "passwordPlaceholder": "トークンを保護します",
+    "renewsField": "サブスクリプションの更新日 (任意)",
+    "connect": "接続",
+    "replace": "置き換え",
+    "expires": "有効期限 {date}",
+    "noExpiry": "有効期限は未設定",
+    "renewal": {
+      "expired": "{vendor} サブスクリプションの有効期限が切れました。更新して再接続すると、引き続きそのモデルを実行できます。",
+      "soon": "{vendor} サブスクリプションは {count} 日後に更新されます。更新後はここで更新してください。 | {vendor} サブスクリプションは {count} 日後に更新されます。更新後はここで更新してください。"
+    },
+    "toast": {
+      "connected": "{vendor} サブスクリプションを接続しました",
+      "connectFailed": "サブスクリプションを接続できませんでした",
+      "disconnected": "切断しました",
+      "disconnectFailed": "切断できませんでした"
+    },
+    "vendors": {
+      "claude": {
+        "label": "Claude (Pro/Max)",
+        "tokenLabel": "Claude トークン",
+        "step1": "Claude Code をインストールし、Claude Pro/Max アカウントでサインインします。`claude` を一度実行し、ブラウザでのログインを完了してください。",
+        "step2": "長期間有効なトークンを生成します。`claude setup-token` を実行してコピーしてください。",
+        "step3": "下に貼り付け、保護用の個人パスワードを設定してください。"
+      },
+      "glm": {
+        "label": "GLM (Z.ai Coding Plan)",
+        "tokenLabel": "Z.ai API キー",
+        "tokenPlaceholder": "あなたの GLM Coding Plan API キー",
+        "step1": "Z.ai GLM Coding Plan ダッシュボードを開き、Anthropic 互換エンドポイント用の API キーを作成します。",
+        "step2": "GLM Coding Plan は個人にライセンスされるため、ここではユーザーごとに保存されます (プールされません)。",
+        "step3": "キーを下に貼り付け、保護用の個人パスワードを設定してください。"
+      },
+      "codex": {
+        "label": "ChatGPT (Codex)",
+        "tokenLabel": "ChatGPT auth.json",
+        "step1": "Codex CLI をインストールし、ChatGPT アカウントでサインインします。`codex login` を実行し、ブラウザでのフローを完了してください。",
+        "step2": "Codex が書き込んだ認証情報ファイル ~/.codex/auth.json (Windows では %USERPROFILE%\\.codex\\auth.json) を開きます。",
+        "step3": "auth.json の内容全体をコピーして下に貼り付け、保護用の個人パスワードを設定してください。"
+      }
+    }
+  },
+  "inspector": {
+    "container": {
+      "modules": "モジュール ({count})",
+      "taskCount": "{count} 件のタスク | {count} 件のタスク",
+      "allTasks": "すべてのタスク ({count})",
+      "tasks": "タスク ({count})",
+      "addTask": "タスクを追加",
+      "noTasks": "タスクはまだありません。追加して作業を始めましょう。",
+      "servicesHint": "サービスは長期間存続し、完了しません。作業はそのタスクとモジュールで行われます。"
+    },
+    "epicChildren": {
+      "title": "エピックのタスク",
+      "doneCount": "{done}/{total} 完了",
+      "empty": "このエピックに属するタスクはまだありません。エピックの子タスクをインポートするか、タスクのエピックを設定してください。",
+      "unassigned": "未割り当て"
+    },
+    "recurring": {
+      "title": "定期パイプライン",
+      "active": "有効",
+      "paused": "一時停止中",
+      "intervalDays": "{count}日",
+      "intervalHours": "{count}時間",
+      "anyDay": "任意の曜日",
+      "cadence": "{every}ごと · {days}{window} · {timezone}",
+      "weekdays": {
+        "sun": "日",
+        "mon": "月",
+        "tue": "火",
+        "wed": "水",
+        "thu": "木",
+        "fri": "金",
+        "sat": "土"
+      },
+      "nextRun": "次回実行: {time}",
+      "runNow": "今すぐ実行",
+      "pause": "一時停止",
+      "resume": "再開",
+      "editCadence": "周期を編集",
+      "recentRuns": "最近の実行",
+      "runStatus": {
+        "running": "実行中",
+        "done": "完了",
+        "failed": "失敗",
+        "skipped": "スキップ"
+      },
+      "updateFailed": "スケジュールを更新できませんでした",
+      "runNowFailed": "今すぐ実行できませんでした"
+    },
+    "fragments": {
+      "serviceTitle": "サービスのベストプラクティス",
+      "serviceEmpty": "なし。このサービスのコード対応エージェントはデフォルトのガイダンスに従います。",
+      "manageBoard": "このボードのフラグメントライブラリを管理…",
+      "manageAccount": "アカウントのフラグメントを管理…"
+    },
+    "releaseHealth": {
+      "title": "リリース後の健全性",
+      "clear": "クリア",
+      "connectPrompt": "リリース後にこのサービスを監視するには、可観測性インテグレーションを接続してください。",
+      "connectFirst": "まず可観測性インテグレーションを接続してください",
+      "connect": "接続",
+      "hint": "このサービスのリリース後にゲートが監視するモニターと SLO です。id はカンマ区切りで指定します。",
+      "monitorIds": "モニター id",
+      "sloIds": "SLO id",
+      "envTag": "Env タグ (任意)",
+      "saveMonitoring": "監視を保存",
+      "savedToast": "監視を保存しました",
+      "saveFailed": "マッピングを保存できませんでした",
+      "clearFailed": "マッピングをクリアできませんでした"
+    },
+    "testConfig": {
+      "title": "テストインフラ",
+      "defaultEnv": "デフォルトのテスト環境",
+      "defaultEnvHint": "このサービス配下のタスクが生成されるデフォルトの環境です。各タスクはエージェント設定で上書きできます。",
+      "env": {
+        "ephemeral": "エフェメラル環境",
+        "ephemeralHint": "プロビジョニングされた環境に対してテストを実行します",
+        "local": "ローカル (docker-compose)",
+        "localHint": "Tester が依存関係をローカルで立ち上げます"
+      },
+      "composePath": "docker-compose のパス",
+      "browseRepo": "リポジトリ内の compose ファイルを参照",
+      "composeHint": "Tester がサービスの依存関係をローカルで立ち上げる際に使用します。",
+      "selectComposeTitle": "docker-compose ファイルを選択",
+      "selectComposeHint": "リポジトリ内の compose ファイルを選択します。パスはリポジトリルートからの相対で保存されます。",
+      "selected": "選択中: {path}",
+      "noFileSelected": "ファイルが選択されていません。",
+      "useThisFile": "このファイルを使用",
+      "noInfra": "インフラ依存なし (Tester は何も立ち上げません)",
+      "missingInfra": "docker-compose のパスを設定するか、インフラ依存なしを有効にしてください。そうしないと Tester を含むパイプラインは開始しません。",
+      "provisioningTitle": "エフェメラルテスト環境のプロビジョニング",
+      "provisioningHint": "このサービスのエフェメラルテスト環境をプロビジョニングするためのヒント: どのクラウドプロバイダーにデプロイするか、どの程度の大きさのインスタンスを要求するか。ローカル (docker-compose) テストでは無視されます。",
+      "cloudProvider": "クラウドプロバイダー",
+      "instanceSize": "インスタンスサイズ",
+      "providers": {
+        "docker": "Docker (ローカル)",
+        "custom": "カスタム"
+      },
+      "sizes": {
+        "small": "Small",
+        "medium": "中",
+        "large": "大",
+        "xlarge": "特大"
+      }
+    },
+    "agentConfig": {
+      "title": "エージェント設定",
+      "inherited": "サービスから継承",
+      "frozen": "固定: エージェントは開始済みです"
+    },
+    "dependencies": {
+      "title": "依存先",
+      "merged": "マージ済み",
+      "notMerged": "未マージ",
+      "empty": "依存関係はありません。いつでも実行できます。",
+      "blocked": "依存関係がマージされるまでブロックされます。"
+    },
+    "estimate": {
+      "title": "見積もり",
+      "complexity": "複雑度",
+      "risk": "リスク",
+      "impact": "影響度"
+    },
+    "execution": {
+      "stage": {
+        "incorporating": "取り込み中…",
+        "reviewing": "再レビュー中…",
+        "recommending": "推奨中…"
+      },
+      "prNumber": "PR #{number}",
+      "pullRequest": "プルリクエスト",
+      "stepState": {
+        "pending": "保留中",
+        "working": "実行中",
+        "waiting_decision": "判断が必要",
+        "done": "完了"
+      },
+      "failed": "失敗",
+      "needsDecision": "判断が必要",
+      "needsApproval": "承認が必要",
+      "spinningUp": "起動中…",
+      "stop": "停止",
+      "stopTooltip": "実行を停止しますが保持します (閲覧および再実行が可能)",
+      "reset": "リセット",
+      "resetTooltip": "この実行を破棄し、タスクを計画済みにリセットします",
+      "viewDetailsOutput": "詳細を表示して出力を読む",
+      "viewDetails": "ステップの詳細を表示",
+      "companion": "コンパニオン",
+      "companionTooltip": "プロデューサーステップのコンパニオン",
+      "subtasksProgress": "サブタスク {total} 件中 {completed} 件完了、{inProgress} 件進行中",
+      "subtasksDone": "サブタスク {total} 件中 {completed} 件完了",
+      "resolve": "解決",
+      "decide": "判断する",
+      "review": "レビュー",
+      "approve": "承認",
+      "fragmentsTooltip": "このステップに取り込まれたベストプラクティスフラグメント: {fragments}",
+      "standardsApplied": "標準 {count} 件を適用 | 標準 {count} 件を適用",
+      "companionOf": "{label} (コンパニオン)",
+      "merged": "マージ済み",
+      "open": "開く",
+      "mergePr": "PR をマージ"
+    },
+    "structure": {
+      "module": "モジュール",
+      "modulePlaceholder": "例: Sessions (新規の場合は実装時に作成)",
+      "bestPractices": "ベストプラクティス",
+      "bestPracticesEmpty": "なし。エージェントは既定のガイダンスに従います。"
+    },
+    "runSettings": {
+      "unassigned": "未割り当て",
+      "workspaceDefault": "ワークスペースの既定",
+      "workspaceDefaultParen": "(ワークスペースの既定)",
+      "defaultPresetThresholds": "既定 ({name}): {thresholds}",
+      "defaultPreset": "既定 ({name})",
+      "noDefault": "既定なし",
+      "inheritWorkspace": "ワークスペースを継承",
+      "on": "オン",
+      "off": "オフ",
+      "inheritOn": "継承 (オン)",
+      "inheritOff": "継承 (オフ)",
+      "technical": {
+        "unset": "未設定 (自動検出)",
+        "technical": "技術",
+        "business": "ビジネス"
+      },
+      "pipeline": "パイプライン",
+      "pipelineEmpty": "既定なし。このタスクを実行するときにパイプラインを選択してください。",
+      "mergePolicy": "マージポリシー",
+      "mergePresetDetail": "{name}: 複雑度 ≤ {complexity}、リスク ≤ {risk}、影響度 ≤ {impact} のとき自動マージ。CI 修正は最大 {attempts} 回まで。",
+      "mergePresetEmpty": "プリセットが設定されていません。マージャーはすべての PR についてレビュー通知を発行します。",
+      "modelPreset": "モデルプリセット",
+      "modelPresetBase": "ベース {model}",
+      "modelPresetOverrides": "、オーバーライド {count} 件 | 、オーバーライド {count} 件",
+      "modelPresetEmpty": "プリセットが設定されていません。エージェントはデプロイの既定ルーティングで実行されます。",
+      "unavailableModels": "現在の構成では利用できません: {models}。このタスクは該当のステップで失敗します。",
+      "editPresets": "プリセットを編集",
+      "configureVendors": "ベンダーを設定",
+      "modelPresetChangeHint": "これを変更しても、まだ開始していないステップにのみ影響します。",
+      "taskKind": "タスク種別",
+      "technicalHint": {
+        "technical": "技術: 実装者はタスク定義を主とし、仕様をリグレッションの参照として扱います。spec-writer はビジネス仕様を生成しない場合があります。",
+        "business": "ビジネス: 通常どおり仕様が主導します。",
+        "unset": "自動検出: 仕様フェーズから推測します。上書きするには明示的に設定してください。"
+      },
+      "issueWriteback": "Issue への書き戻し",
+      "commentOnPrOpen": "PR オープン時にコメント",
+      "closeOnMerge": "マージ時にクローズ",
+      "writebackHint": "このタスクにリンクされたトラッカーの Issue に書き戻します。ワークスペースの既定を上書きします。",
+      "responsibleProduct": "担当プロダクト",
+      "responsibleEmpty": "未割り当て。要件レビューがこのタスクをフラグしたときに通知するため、プロダクトオーナーを設定してください。",
+      "autoStartDependents": "依存タスクを自動開始",
+      "autoStartHint": "このタスクがマージされたら、それに依存するタスクを (他の依存関係も完了したら) 自動的に開始します。"
+    }
+  },
+  "panels": {
+    "decision": {
+      "title": "判断が必要",
+      "agentOnBlock": "{block} の {agent}",
+      "visualizationHint": "これは可視化です。どの選択でもパイプラインを再開するだけです。"
+    },
+    "stepRestart": {
+      "restartFromStep": "このステップからパイプラインを再開",
+      "restartFromHere": "ここから再開"
+    },
+    "structuredResult": {
+      "fallbackTitle": "エージェントの結果",
+      "titleWithBlock": "{label}: {title}",
+      "fallbackDescription": "構造化されたエージェント出力",
+      "structuredOutput": "構造化出力",
+      "noResult": "まだ結果はありません。",
+      "noResultHint": "構造化出力はこのエージェントの完了後に表示されます。実行中はステップがボード上にライブ進捗を表示します。"
+    },
+    "testReport": {
+      "title": "テストレポート",
+      "greenlit": "承認済み",
+      "needsFixes": "修正が必要",
+      "fixAttempts": "修正試行 {count}/{max} 回",
+      "fixing": "・修正中…",
+      "tested": "テスト済み",
+      "outcomes": "結果",
+      "concerns": "懸念事項"
+    },
+    "stepMeta": {
+      "stateLabel": "状態",
+      "duration": "所要時間",
+      "elapsed": "経過",
+      "step": "ステップ",
+      "stepOf": "{total} 中 {number}",
+      "started": "開始",
+      "finished": "完了",
+      "model": "モデル",
+      "notRecorded": "記録なし",
+      "run": "実行",
+      "clickToCopy": "{id} (クリックでコピー)",
+      "spinningUpContainer": "コンテナを起動中…",
+      "container": {
+        "status": {
+          "starting": "コンテナを起動中…",
+          "up": "コンテナ稼働中",
+          "errored": "コンテナでエラー発生",
+          "destroyed": "コンテナを回収しました"
+        },
+        "phase": {
+          "starting": "起動中",
+          "clone": "ワークスペースを準備中",
+          "agent": "エージェント実行中",
+          "push": "変更をプッシュ中",
+          "done": "仕上げ中"
+        },
+        "id": "コンテナ",
+        "url": "アドレス"
+      },
+      "subtasks": "サブタスク · {completed}/{total}",
+      "standardsApplied": "適用された基準",
+      "decision": "判断",
+      "awaitingChoice": "人による選択を待機中",
+      "approvalGate": "承認ゲート",
+      "companionReview": "コンパニオンレビュー",
+      "correctionIterations": "{count} 回の修正イテレーション。 | {count} 回の修正イテレーション。",
+      "state": {
+        "pending": "保留中",
+        "working": "作業中",
+        "waiting_decision": "入力が必要",
+        "done": "完了",
+        "failed": "失敗"
+      },
+      "approvalStatus": {
+        "pending": "保留中",
+        "approved": "承認済み",
+        "changes_requested": "変更を依頼済み",
+        "rejected": "却下済み"
+      }
+    },
+    "stepDetail": {
+      "contents": "内容",
+      "details": "詳細",
+      "approvalRequired": "承認が必要",
+      "decisionRequired": "判断が必要",
+      "expandAll": "すべてのセクションを展開",
+      "collapseAll": "すべてのセクションを折りたたむ",
+      "copyRawOutput": "生の出力をコピー",
+      "closeEsc": "閉じる (Esc)",
+      "companionCapHeading": "{agent} は {attempts} 回の再作業上限に達しましたが、まだ {threshold} の基準を下回っています。",
+      "companionCapDetail": "自動の再作業をもう1回実行するか、現在の出力を受け入れて次のステップに進むか、タスクを停止してリセットし、入力を編集して再送信してください。",
+      "infraAttempts": "インフラの試行",
+      "hideInfraAttempts": "インフラの試行を非表示",
+      "editingConclusions": "結論を編集中",
+      "editConclusionsPlaceholder": "エージェントの結論を編集してください。編集内容は承認時に保存されます…",
+      "noProseOutput": "このエージェントは文章出力を生成しませんでした。",
+      "approveWithCorrections": "修正して承認",
+      "reviewAndApprove": "レビューして承認",
+      "editHint": "左側で結論を編集してください。編集内容は承認時に保存されます。",
+      "reviewHint": "出力内の任意のブロックをクリックしてコメントするか、下に全体のフィードバックを残してください。",
+      "editingNotice": "結論を直接編集しています。手動の編集はブロックごとのコメントと併用できません。承認して保存するか、キャンセルしてレビューに戻ってください。",
+      "commentingOn": "コメント対象",
+      "commentPlaceholder": "このブロックにコメントを残す…",
+      "addComment": "コメントを追加",
+      "commentN": "コメント {number}",
+      "removeComment": "コメントを削除",
+      "overallFeedback": "全体のフィードバック / 却下理由",
+      "overallFeedbackPlaceholder": "エージェントが行うべき変更を説明してください (ブロックごとのコメントを残した場合は任意)…",
+      "approveWithEdits": "この編集内容で承認",
+      "cancelEdits": "編集をキャンセル",
+      "approveAndProceed": "承認して進む",
+      "rejectConfirmPrompt": "この提案を却下して実行を完全に停止しますか?",
+      "confirmReject": "却下を確定",
+      "requestChanges": "変更を依頼",
+      "reject": "却下",
+      "requestChangesHint": "変更を依頼すると、フィードバックとコメントを反映してこのステップを再実行します。却下すると実行を完全に停止します。"
+    },
+    "inspector": {
+      "frameStatus": {
+        "planned": "タスクなし",
+        "ready": "稼働中",
+        "in_progress": "アクティブ",
+        "blocked": "対応が必要",
+        "pr_ready": "アクティブ",
+        "done": "稼働中"
+      },
+      "deleteRecurringPipeline": "繰り返しパイプラインを削除",
+      "deleteTask": "タスクを削除",
+      "deleteModule": "モジュールを削除",
+      "deleteService": "サービスを削除",
+      "titlePlaceholder": "タイトル…",
+      "reworkedRequirements": "再整理された要件",
+      "agentStepsUseDocument": "エージェントのステップはこのドキュメントを使用します。",
+      "open": "開く",
+      "originalDescriptionFrozen": "元の説明 (固定)",
+      "noDescription": "説明なし",
+      "describeBlock": "このブロックを説明してください…",
+      "taskStartedLocked": "このタスクは開始済みです。詳細はロックされています。",
+      "lastIncorporatedRequirements": "最後に取り込まれた要件",
+      "priorDocHint": "前回のレビューより。これをベースに、上の説明を編集して再送信してください。",
+      "bootstrapping": "ブートストラップ中…",
+      "importIssue": "Issue をインポート",
+      "connectTracker": "トラッカーを接続",
+      "spawnFromDocument": "ドキュメントから生成",
+      "viewRequirements": "要件を表示",
+      "reRun": "再実行",
+      "run": "実行",
+      "focus": "フォーカス"
+    }
+  },
+  "observability": {
+    "modelActivity": "モデルアクティビティ",
+    "viewAllCalls": "すべての呼び出しを表示 →",
+    "providedContext": "提供されたコンテキスト",
+    "exportJson": "JSON をエクスポート",
+    "exportHint": "この実行の LLM 向け JSON エクスポートをダウンロード",
+    "closeEsc": "閉じる (Esc)",
+    "loadingActivity": "モデルアクティビティを読み込み中…",
+    "loadingContext": "提供されたコンテキストを読み込み中…",
+    "noCalls": "この実行で記録されたモデル呼び出しはありません。",
+    "noContext": "この実行で保存されたエージェントコンテキストはありません。ワークスペースで「エージェントコンテキストを完全保存」が有効な場合、ディスパッチごとに記録されます。",
+    "summary": {
+      "calls": "呼び出し",
+      "tokensInOut": "トークン (入力 / 出力)",
+      "transportOverhead": "転送オーバーヘッド",
+      "modelExecution": "モデル実行",
+      "truncated": "{count} 件が切り詰め | {count} 件が切り詰め"
+    },
+    "metricsBar": {
+      "calls": "{count} 件の呼び出し | {count} 件の呼び出し",
+      "promptCompletionTokens": "プロンプト / 完了トークン",
+      "cachedTokens": "({tokens} 件キャッシュ済み)",
+      "cachedTokensHint": "プロバイダーのキャッシュから提供されたプロンプトトークン",
+      "errors": "{count} 件のエラー | {count} 件のエラー",
+      "warnings": "{count} 件の警告 | {count} 件の警告",
+      "outputLimit": "出力上限",
+      "truncatedCalls": "{count} 件の呼び出しが上限で切り詰め | {count} 件の呼び出しが上限で切り詰め",
+      "transportVsExecution": "転送 vs 実行",
+      "transportOverhead": "転送 / プロキシのオーバーヘッド",
+      "modelExecution": "モデル実行"
+    },
+    "call": {
+      "tokensTitle": "{prompt} プロンプト / {completion} 完了トークン",
+      "outputUsedVsLimit": "使用済み出力 vs 上限",
+      "transportVsExecution": "転送オーバーヘッド / モデル実行",
+      "error": "エラー",
+      "ok": "ok",
+      "messages": "{count} 件のメッセージ",
+      "tools": "{count} 件のツール",
+      "streamed": "ストリーミング",
+      "buffered": "バッファ済み",
+      "maxTokens": "max_tokens {value}",
+      "promptCached": "{cached}/{prompt} プロンプトをキャッシュ",
+      "total": "合計 {duration}",
+      "prompt": "プロンプト",
+      "promptPrefixOmitted": "(新規メッセージのみ: 以前の {count} 件を省略)",
+      "response": "レスポンス",
+      "reasoning": "推論"
+    },
+    "context": {
+      "injectedFiles": "注入されたコンテキストファイル",
+      "bestPracticeFragments": "ベストプラクティスのフラグメント",
+      "filesCount": "{count} 件のファイル",
+      "fragmentsCount": "{count} 件のフラグメント",
+      "systemPrompt": "システムプロンプト",
+      "userPrompt": "ユーザープロンプト",
+      "details": "詳細"
+    }
+  },
+  "auth": {
+    "gate": {
+      "loading": "読み込み中…"
+    },
+    "localMode": {
+      "continueWithConfigured": "設定済みの {provider} PAT でサインイン",
+      "noPatTitle": "ソース管理トークンが設定されていません",
+      "noPatBody": ".env に GITHUB_PAT または GITLAB_PAT を設定するとパーソナルアクセストークンでサインインできます。設定後、サーバーを再起動してください。",
+      "createToken": "{provider} トークンを作成 ↗",
+      "orDivider": "または",
+      "failed": "サインインに失敗しました。設定されたトークンが有効か確認して、もう一度お試しください。"
+    },
+    "signInRequired": {
+      "personalSubscriptions": "パーソナルサブスクリプションはアカウントに保存されますが、このデプロイメントはサインインなしで動作するため、ここには保存できません。代わりにワークスペースプールまたはプロバイダー API キーをご利用ください。",
+      "userApiKeys": "パーソナル API キーはアカウントに保存されますが、このデプロイメントはサインインなしで動作するため、ここには保存できません。共有キーを追加するにはスコープを「このワークスペース」に切り替えてください。"
+    },
+    "login": {
+      "appTitle": "Architecture Board",
+      "subtitle": "続行するにはサインインしてください。",
+      "inviteSubtitle": "続行するには招待を承認してください。",
+      "forgotSubtitle": "パスワードをリセットします。",
+      "continueWithGithub": "GitHub で続行",
+      "continueWithGoogle": "Google で続行",
+      "or": "または",
+      "namePlaceholder": "名前 (任意)",
+      "emailPlaceholder": "メールアドレス",
+      "passwordPlaceholder": "パスワード",
+      "createAccount": "アカウントを作成",
+      "signIn": "サインイン",
+      "signUp": "サインアップ",
+      "needAccount": "アカウントが必要ですか? {signUp}",
+      "haveAccount": "すでにアカウントをお持ちですか? {signIn}",
+      "forgotPassword": "パスワードをお忘れですか?",
+      "forgotSent": "そのメールアドレスのアカウントが存在する場合、パスワードリセットリンクを送信します。受信トレイをご確認ください。",
+      "sendResetLink": "リセットリンクを送信",
+      "backToSignIn": "サインインに戻る",
+      "signInFailed": "サインインに失敗しました。入力内容を確認して、もう一度お試しください。",
+      "genericError": "問題が発生しました。もう一度お試しください。"
+    },
+    "resetPassword": {
+      "title": "パスワードをリセット",
+      "subtitle": "アカウントの新しいパスワードを選択してください。",
+      "doneBody": "パスワードがリセットされました。新しいパスワードでサインインできます。",
+      "goToSignIn": "サインインへ進む",
+      "missingToken": "このリセットリンクにトークンがありません。サインイン画面から新しいリンクをリクエストしてください。",
+      "backToSignIn": "サインインに戻る",
+      "newPasswordPlaceholder": "新しいパスワード",
+      "confirmPasswordPlaceholder": "新しいパスワードを確認",
+      "submit": "パスワードをリセット",
+      "errorTooShort": "パスワードは 8 文字以上にしてください。",
+      "errorMismatch": "パスワードが一致しません。",
+      "errorInvalidLink": "このパスワードリセットリンクは無効か、有効期限が切れています。"
+    },
+    "userMenu": {
+      "mySetup": "マイセットアップ",
+      "signOut": "サインアウト"
+    }
+  },
+  "layout": {
+    "accountDeployment": {
+      "title": "デプロイメント統合",
+      "intro": "このアカウント内のすべてのワークスペースで共有され、保存時に封印される認証情報です。保存後に値が表示されることはありません。フィールドを空白のままにすると、保存済みのシークレットが維持されます。",
+      "configured": "設定済み",
+      "notSet": "未設定",
+      "clear": "クリア",
+      "loadFailed": "デプロイメント設定を読み込めませんでした",
+      "slack": {
+        "title": "Slack アプリ (OAuth)",
+        "description": "「Add to Slack」OAuth フローを有効にします。設定しなくても、ワークスペースは bot トークンを貼り付けて Slack に接続できます。",
+        "clientId": "Client ID",
+        "clientSecret": "Client secret",
+        "redirectUrl": "リダイレクト URL",
+        "validation": "client id、secret、リダイレクト URL を入力してください",
+        "saved": "Slack OAuth を保存しました",
+        "saveFailed": "Slack OAuth を保存できませんでした",
+        "cleared": "Slack OAuth をクリアしました",
+        "clearFailed": "Slack OAuth をクリアできませんでした"
+      },
+      "linear": {
+        "title": "Linear アプリ (OAuth)",
+        "description": "「Connect with Linear」OAuth フローを有効にします。設定しなくても、ワークスペースはパーソナル API キーを貼り付けて Linear に接続できます。",
+        "clientId": "Client ID",
+        "clientSecret": "Client secret",
+        "redirectUrl": "リダイレクト URL",
+        "validation": "client id、secret、リダイレクト URL を入力してください",
+        "saved": "Linear OAuth を保存しました",
+        "saveFailed": "Linear OAuth を保存できませんでした",
+        "cleared": "Linear OAuth をクリアしました",
+        "clearFailed": "Linear OAuth を解除できませんでした"
+      },
+      "web": {
+        "title": "コンテナの Web 検索",
+        "description": "コンテナエージェントがバックエンドプロキシ経由で利用する検索アップストリームです。Brave キー（推奨）、またはセルフホストの SearXNG URL（任意の bearer キー付き）を設定してください。",
+        "configured": "設定済み（{provider}）",
+        "braveKey": "Brave API キー",
+        "searxngUrl": "SearXNG URL",
+        "searxngKey": "SearXNG キー（任意）",
+        "validation": "Brave キーまたは SearXNG URL を入力してください",
+        "saved": "Web 検索キーを保存しました",
+        "saveFailed": "Web 検索キーを保存できませんでした",
+        "cleared": "Web 検索キーを解除しました",
+        "clearFailed": "Web 検索キーを解除できませんでした"
+      },
+      "contentStorage": {
+        "title": "コンテンツストレージ",
+        "description": "このアカウントの UI テスター用スクリーンショットおよび参照デザイン画像の保存先です。メタデータは常にデータベースに保存され、ファイルの本体のみが選択したバックエンドに送られます。",
+        "default": "デフォルト（{backend}）",
+        "backends": {
+          "off": "オフ（ストレージ無効）",
+          "fs": "ローカルファイルシステム",
+          "s3": "Amazon S3 / S3 互換",
+          "r2": "Cloudflare R2",
+          "db": "Postgres データベース"
+        },
+        "basePath": "ベースパス（デフォルト: .file-storage）",
+        "region": "リージョン（例: us-east-1）",
+        "bucket": "バケット",
+        "prefix": "キープレフィックス（任意）",
+        "endpoint": "エンドポイント（任意、S3 互換）",
+        "forcePathStyle": "パススタイルアドレッシングを強制（多くの S3 互換ストア）",
+        "accessKeys": "アクセスキー",
+        "accessKeyId": "アクセスキー ID",
+        "secretAccessKey": "シークレットアクセスキー",
+        "keysHint": "キーは保存時に封印され、保存後は表示されません。保存済みのキーを保持するには空欄のままにしてください。",
+        "regionBucketValidation": "S3 のリージョンとバケットを入力してください",
+        "bothKeysValidation": "アクセスキー ID とシークレットの両方を入力してください",
+        "keysValidation": "S3 のアクセスキー ID とシークレットを入力してください",
+        "saved": "コンテンツストレージを保存しました",
+        "saveFailed": "コンテンツストレージを保存できませんでした"
+      }
+    },
+    "accountFragments": {
+      "intro": "このアカウントのすべてのボードで共有されるベストプラクティスのガイドラインです。各ボードはこれらを継承し、上書きや独自の追加ができます。コード対応エージェント（coder、reviewer、architect、fixers）は関連するものをプロンプトに取り込みます。"
+    },
+    "accountTeam": {
+      "roles": {
+        "admin": "管理者",
+        "developer": "開発者",
+        "product": "プロダクト"
+      },
+      "org": {
+        "ctaTitle": "メンバーの招待とロールの管理",
+        "ctaBody": "メンバー、ロール、招待は組織に属します。組織を作成してメンバーを招待し、ロールを管理しましょう。個人のボードはそのまま残ります。",
+        "namePlaceholder": "Acme Inc.",
+        "create": "組織を作成",
+        "created": "組織を作成しました"
+      },
+      "members": {
+        "title": "メンバー",
+        "empty": "まだメンバーがいません。"
+      },
+      "invite": {
+        "title": "メンバーを招待",
+        "submit": "招待",
+        "revoke": "招待を取り消す",
+        "created": "招待を作成しました",
+        "createdEmailed": "メールを送信しました（または下のリストからリンクをコピーしてください）。",
+        "createdShareLink": "承諾用リンクをメンバーに共有してください。",
+        "status": {
+          "pending": "保留中",
+          "accepted": "承諾済み",
+          "revoked": "取り消し済み"
+        }
+      },
+      "email": {
+        "title": "メール送信者",
+        "notEnabled": "このデプロイではメール配信が有効になっていません。招待は共有可能な承諾用リンクを引き続き生成します。",
+        "connectedAs": "{provider} 経由で {from} として接続済み",
+        "disconnect": "切断",
+        "connect": "メール送信者を接続",
+        "connected": "メール送信者を接続しました",
+        "fromPlaceholder": "差出人アドレス",
+        "apiKeyPlaceholder": "プロバイダー API キー",
+        "providers": {
+          "resend": "Resend",
+          "sendgrid": "SendGrid"
+        }
+      },
+      "apiKeys": {
+        "title": "アカウント API キー"
+      },
+      "errors": {
+        "updateRoles": "ロールを更新できませんでした",
+        "loadSettings": "チーム設定を読み込めませんでした",
+        "createOrg": "組織を作成できませんでした",
+        "sendInvite": "招待を送信できませんでした",
+        "revokeInvite": "招待を取り消せませんでした",
+        "connectEmail": "メール送信者を接続できませんでした",
+        "disconnectEmail": "メール送信者を切断できませんでした"
+      }
+    },
+    "boardSwitcher": {
+      "accountFallback": "アカウント",
+      "boardFallback": "ボード",
+      "providers": {
+        "docker": "Docker（ローカル）",
+        "custom": "カスタム"
+      },
+      "account": {
+        "newOrg": "新しい組織…",
+        "settings": "アカウント設定…",
+        "defaultProvider": "デフォルトのクラウドプロバイダー"
+      },
+      "board": {
+        "new": "新しいボード…",
+        "rename": "ボード名を変更…",
+        "delete": "ボードを削除"
+      },
+      "prompt": {
+        "create": "作成",
+        "nameLabel": "名前",
+        "descriptionLabel": "説明",
+        "descriptionHint": "任意",
+        "descriptionPlaceholder": "このボードの用途は何ですか？",
+        "account": {
+          "title": "新しい組織",
+          "placeholder": "Acme Inc."
+        },
+        "board": {
+          "title": "新しいボード",
+          "placeholder": "無題のボード"
+        },
+        "rename": {
+          "title": "ボード設定",
+          "placeholder": "ボード名"
+        }
+      },
+      "toast": {
+        "updateProviderFailed": "デフォルトプロバイダーを更新できませんでした",
+        "switchAccountFailed": "アカウントを切り替えられませんでした",
+        "openBoardFailed": "ボードを開けませんでした",
+        "boardDeleted": "ボードを削除しました",
+        "deleteBoardFailed": "ボードを削除できませんでした"
+      }
+    },
+    "notifications": {
+      "heading": "対応が必要です",
+      "overdue": "期限切れ",
+      "openPr": "PR を開く",
+      "dismiss": "却下",
+      "action": {
+        "merge_review": "マージ",
+        "pipeline_complete": "確認してマージ",
+        "ci_failed": "実行を再試行",
+        "test_failed": "実行を再試行",
+        "requirement_review": "既読にする",
+        "clarity_review": "既読にする",
+        "release_regression": "確認",
+        "decision_required": "既読にする",
+        "human_test_ready": "既読にする",
+        "visual_confirmation_ready": "既読にする",
+        "human_review": "既読にする",
+        "followup_pending": "既読にする",
+        "markRead": "既読にする"
+      }
+    },
+    "aiProvidersBanner": {
+      "setup": {
+        "title": "AIモデルが未設定です",
+        "body": "エージェントの実行にはモデルが必要です。AIは Workers AI を有効にした Cloudflare デプロイでのみ標準で動作します。それ以外の場合は、プロバイダーキー、サブスクリプション、プロキシ、またはローカルランナーを接続して続行してください。",
+        "action": "AIを設定"
+      },
+      "preset": {
+        "title": "デフォルトのモデルプリセットが利用できないモデルを使用しています",
+        "body": "デフォルトプリセットを使用するタスクは失敗します。プリセットを編集するか、不足しているプロバイダーを設定してください。",
+        "action": "プリセットを確認"
+      }
+    },
+    "githubPatBanner": {
+      "title": "GitHub PAT が未設定です",
+      "body": "ローカルモードでは個人アクセストークンを使って GitHub に接続します。トークンがないと、クローン、プッシュ、PR作成、CIゲート、マージを行うエージェントステップが失敗します。",
+      "createToken": "GitHub トークンを作成（スコープは事前選択済み）",
+      "thenSet": "その後 {envVar} を設定して再起動してください。"
+    },
+    "providerConfigBanner": {
+      "titleMany": "プロバイダーの設定が必要です",
+      "titleOne": {
+        "environment": "環境プロバイダーの設定が必要です",
+        "runner-pool": "ランナープールの設定が必要です"
+      },
+      "body": "このインスタンスにはプロバイダーが接続されていますが、必須の設定が不足しているためまだ実行できません。必須項目を入力して接続を完了してください。",
+      "action": {
+        "environment": "環境プロバイダーを設定",
+        "runner-pool": "ランナープールを設定"
+      }
+    },
+    "spendWarningBanner": {
+      "title": "支出上限に達したため、エージェントの実行を一時停止しました",
+      "body": "今月のトークン支出が設定された予算に達したため、これ以上のコストを避けるために実行中のパイプラインを一時停止しました。来月に予算がリセットされると、または上限を引き上げると、実行は自動的に再開されます。",
+      "spent": "支出額",
+      "budget": "予算",
+      "tokens": "トークン",
+      "resume": "それでも再開",
+      "resumeHint": "再開すると支出が続きます。まだ予算を超過している場合は再び一時停止します。"
+    },
+    "personalSetup": {
+      "title": "マイセットアップ",
+      "intro": "あなたが開始する実行に使われる個人的な接続です。あなたにのみ表示されます。",
+      "connected": "接続済み",
+      "notConnected": "未接続",
+      "connectedCount": "接続なし | {count}件接続済み | {count}件接続済み",
+      "sourceControl": {
+        "title": "ソース管理"
+      },
+      "githubToken": {
+        "label": "マイ GitHub トークン",
+        "description": "あなたが開始する実行（プッシュ、PR、CI、マージ）に使われる個人アクセストークンです。"
+      },
+      "models": {
+        "title": "モデル"
+      },
+      "localRunners": {
+        "label": "マイローカルランナー",
+        "description": "自分のマシンで動かすモデルランナー（Ollama、LM Studio、vLLM）。"
+      },
+      "subscriptions": {
+        "label": "マイサブスクリプション",
+        "description": "個人パスワードでアンロックする個人利用プラン（Claude、GLM、Codex）。"
+      }
+    },
+    "integrationBack": {
+      "backToMySetup": "マイセットアップに戻る",
+      "backToIntegrations": "Integrations に戻る"
+    },
+    "commandBar": {
+      "searchPlaceholder": "検索またはコマンドを実行…",
+      "noMatches": "一致するコマンドがありません。",
+      "groups": {
+        "create": "作成",
+        "repositories": "リポジトリ",
+        "integrations": "Integrations",
+        "workspace": "ワークスペース",
+        "account": "アカウント"
+      },
+      "cmd": {
+        "newPipeline": "パイプラインを構築",
+        "addFromRepo": "既存リポジトリからサービスを追加",
+        "bootstrapRepo": "新しいリポジトリをブートストラップ",
+        "githubManage": "GitHub 接続を管理",
+        "githubConnect": "GitHub を接続",
+        "slackManage": "Slack 通知を管理",
+        "slackConnect": "Slack を接続",
+        "sourceManage": "{source} を管理",
+        "sourceConnect": "{source} を接続",
+        "documentImport": "ドキュメントからインポートして生成",
+        "taskImport": "Issue をインポート",
+        "fragments": "コンテキストフラグメントライブラリ",
+        "mergeThresholds": "マージしきい値",
+        "workspaceSettings": "ワークスペース設定",
+        "modelConfiguration": "モデル設定",
+        "serviceFragmentDefaults": "デフォルトのサービスベストプラクティス",
+        "accountSettings": "アカウント設定",
+        "localModels": "マイローカルランナー",
+        "sandbox": "Sandbox を開く"
+      },
+      "keywords": {
+        "newPipeline": "pipeline agents chain パイプライン エージェント チェーン",
+        "addFromRepo": "github import existing GitHub インポート 既存",
+        "bootstrapRepo": "scaffold create reference architecture スキャフォールド 作成 リファレンスアーキテクチャ",
+        "github": "git repos pull requests issues リポジトリ プルリクエスト Issue",
+        "slack": "slack notifications channel mentions Slack 通知 チャンネル メンション",
+        "documentSource": "document source prd rfc ドキュメント ソース PRD RFC",
+        "documentImport": "document import spawn ドキュメント インポート 生成",
+        "taskSource": "task source tracker issues タスク ソース トラッカー Issue",
+        "taskImport": "task import issues タスク インポート Issue",
+        "fragments": "prompt fragments best practice guidelines context プロンプト フラグメント ベストプラクティス ガイドライン コンテキスト",
+        "mergeThresholds": "merge policy preset auto-merge ci マージ ポリシー プリセット 自動マージ CI",
+        "workspaceSettings": "limit running tasks per service waiting escalation overdue notification timeout サービスごとの実行タスク上限 待機 エスカレーション 期限超過 通知 タイムアウト",
+        "modelConfiguration": "model llm routing agent kind default preset configuration モデル LLM ルーティング エージェント種別 デフォルト プリセット 設定",
+        "serviceFragmentDefaults": "fragment best practice guideline service default code-aware フラグメント ベストプラクティス ガイドライン サービス デフォルト コード対応",
+        "accountSettings": "account team members roles invitations email api keys fragment best practice library context organization personal アカウント チーム メンバー ロール 招待 メール APIキー フラグメント ベストプラクティス ライブラリ コンテキスト 組織 個人",
+        "localModels": "local model runner ollama lm studio llamacpp vllm endpoint ローカル モデル ランナー Ollama LM Studio llamacpp vLLM エンドポイント",
+        "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate サンドボックス プロンプト モデル テスト 実験 ジャッジ フィクスチャ ベンチマーク 評価"
+      }
+    },
+    "integrationsHub": {
+      "title": "Integrations",
+      "intro": "このワークスペースが連携できる外部システムを接続・管理します。",
+      "searchPlaceholder": "Integrations を検索…",
+      "noMatches": "\"{query}\" に一致する Integration はありません。",
+      "getStarted": {
+        "title": "はじめに",
+        "body": "コードソースとモデルプロバイダーを接続して、最初のパイプラインを実行しましょう。"
+      },
+      "status": {
+        "connected": "接続済み",
+        "keyConnected": "キー接続済み",
+        "notConnected": "未接続",
+        "needsAttention": "対応が必要",
+        "disabled": "無効",
+        "recommended": "おすすめ"
+      },
+      "groups": {
+        "models": "モデルとプロバイダー",
+        "sourceControl": "ソース管理",
+        "communication": "コミュニケーション",
+        "documents": "ドキュメント",
+        "taskTrackers": "タスクトラッカー",
+        "observability": "オブザーバビリティ",
+        "personal": "個人（あなたのみ）"
+      },
+      "items": {
+        "openrouter": {
+          "description": "300以上のモデルへの単一ゲートウェイ。キーを追加すれば、1か所でモデルを有効化できます。"
+        },
+        "vendors": {
+          "label": "ベンダーとキー",
+          "description": "ワークスペースの LLM サブスクリプションとプロバイダー API キー。"
+        },
+        "github": {
+          "description": "ワークスペースの GitHub App を接続し、リポジトリ、PR、Issue を閲覧します。"
+        },
+        "slack": {
+          "description": "通知をチームの Slack ワークスペースに送信します。"
+        },
+        "documentSource": {
+          "description": "{source} を要件コンテキスト用のドキュメントソースとしてリンクします。"
+        },
+        "documentImport": {
+          "label": "インポートして生成",
+          "description": "接続済みソースからドキュメントを取得し、構造を生成します。"
+        },
+        "taskSource": {
+          "description": "{source} をリンクしてトラッカーの issue をインポート、参照します。"
+        },
+        "taskImport": {
+          "label": "issue をインポート",
+          "description": "接続済みトラッカーから issue をボードに取り込みます。"
+        },
+        "trackerSettings": {
+          "label": "issue トラッカー設定"
+        },
+        "observability": {
+          "label": "リリース後のヘルス",
+          "description": "リリース後にモニターと SLO を監視します (Datadog)。"
+        },
+        "githubPat": {
+          "label": "マイ GitHub トークン",
+          "description": "自分が開始した実行 (push、PR、CI、マージ) に使用するパーソナルアクセストークン。"
+        },
+        "localRunners": {
+          "label": "マイローカルランナー",
+          "description": "自分のマシンで動かすモデルランナー (Ollama、LM Studio、vLLM…)。"
+        }
+      }
+    }
+  },
+  "settings": {
+    "modelConfiguration": {
+      "title": "モデル設定",
+      "subtitle": "モデルを全エージェントに割り当てるプリセット。タスクが 1 つを選択し、デフォルトではワークスペースのデフォルトプリセットになります。",
+      "back": "戻る",
+      "closeEsc": "閉じる (Esc)",
+      "quota": "クォータ",
+      "list": {
+        "intro": "各プリセットは全エージェントに {baseModel} を設定し、エージェントごとの個別上書きも可能です。個々のタスクにピン留めしたモデルはプリセットを上書きします。",
+        "introBaseModel": "ベースモデル",
+        "newPreset": "新規プリセット",
+        "loadingCatalog": "モデルカタログを読み込み中…",
+        "default": "デフォルト",
+        "setDefaultTitle": "ワークスペースのデフォルトに設定",
+        "editTitle": "プリセットを編集",
+        "deleteDisabledTitle": "デフォルトプリセットは削除できません",
+        "deleteTitle": "プリセットを削除",
+        "basePrefix": "ベース:",
+        "overrideCount": "{count} 件の上書き | {count} 件の上書き",
+        "empty": "プリセットはまだありません。1 つ作成してモデルをエージェントに割り当てましょう。"
+      },
+      "editor": {
+        "useBaseModel": "ベースモデルを使用",
+        "baseModel": "ベースモデル",
+        "nameLabel": "名前",
+        "namePlaceholder": "例: Kimi K2.7",
+        "baseModelLabel": "ベースモデル (全エージェントに適用)",
+        "makeDefault": "これをワークスペースのデフォルトにする",
+        "perAgentOverrides": "エージェントごとの上書き",
+        "filterPlaceholder": "エージェントを絞り込み…",
+        "noAgentsMatch": "\"{filter}\" に一致するエージェントはありません。",
+        "saveChanges": "変更を保存",
+        "createPreset": "プリセットを作成"
+      },
+      "toast": {
+        "setDefaultFailed": "デフォルトプリセットを設定できませんでした",
+        "deleteFailed": "プリセットを削除できませんでした",
+        "nameRequiredTitle": "名前が必要です",
+        "nameRequiredBody": "プリセットに名前を付けてください。",
+        "saveFailed": "プリセットを保存できませんでした"
+      }
+    },
+    "account": {
+      "title": "アカウント設定",
+      "noAccount": "アカウントが選択されていません。",
+      "tabs": {
+        "team": "チームとアクセス",
+        "fragments": "コンテキストフラグメント"
+      }
+    },
+    "infrastructure": {
+      "active": "アクティブ: {backend}",
+      "registerHint": "これを有効にするには、下でランナープールを登録してください。",
+      "updateFailed": "実行バックエンドを更新できませんでした",
+      "executionBackend": {
+        "label": "エージェントの実行場所",
+        "local-docker": "ローカル Docker (ホスト)",
+        "local-dockerDesc": "このマシンの Docker デーモン上で各エージェントをコンテナとして実行します。",
+        "cloudflare-containers": "Cloudflare Containers (組み込み)",
+        "cloudflare-containersDesc": "Cloudflare の組み込みの実行ごとコンテナプラットフォームでエージェントを実行します。",
+        "kubernetes": "Kubernetes クラスター",
+        "kubernetesDesc": "自分が運用する Kubernetes クラスターで各エージェントを pod として実行します。",
+        "runner-pool": "カスタムランナープール (HTTP)",
+        "runner-poolDesc": "HTTP マニフェスト API の背後にある自前のスケジューラーへエージェントをディスパッチします。",
+        "k3s": "ローカル Kubernetes (k3s)",
+        "k3sDesc": "このマシンのローカル k3s/k3d クラスター向けに事前設定済み。トークンを貼り付けるだけです。"
+      },
+      "testEnvBackend": {
+        "label": "テスト環境の実行場所",
+        "local-compose": "コンテナ内 docker-compose",
+        "local-composeDesc": "実行のコンテナ内で docker-compose を使って Tester の依存関係を起動します。",
+        "kubernetes": "Kubernetes クラスター",
+        "kubernetesDesc": "自分が運用する Kubernetes クラスターに PR ごとの namespace をプロビジョニングします。",
+        "environment-provider": "カスタム HTTP プロバイダー",
+        "environment-providerDesc": "自前の HTTP 管理 API を通じて一時的な環境をプロビジョニングします。",
+        "compose": "Docker Compose プレビュー環境",
+        "composeDesc": "リポジトリ自身の docker-compose.yml をローカルの Docker デーモンで起動し、テスターの URL として使用します。ローカルの Compose ベースのアプリに最適です。イメージベースのスタックのみ対応。Docker デーモンが必要なため、ローカルデプロイメント専用です。"
+      }
+    },
+    "providerConnection": {
+      "fallbackTitle": "プロバイダー",
+      "windowTitle": "インフラストラクチャ",
+      "noneAvailable": "このデプロイでは有効なインフラストラクチャプロバイダーがありません。",
+      "tabs": {
+        "agentContainers": "エージェントコンテナ",
+        "testEnvironments": "テスト環境"
+      },
+      "kind": {
+        "environment": {
+          "title": "一時環境プロバイダー",
+          "blurb": "Tester エージェントがライブプレビュー環境に対して実行される場所。プロバイダーに必要なワークスペースごとの設定と認証情報を構成します。"
+        },
+        "runner-pool": {
+          "title": "エージェントランナーバックエンド",
+          "blurb": "Cloudflare Containers を使用しない場合にコーディングエージェントが実行される場所。セルフホストのランナープール (自前のスケジューラー) または Kubernetes クラスターを選択し、エンドポイントと認証情報を構成します。"
+        }
+      },
+      "kubernetesEnv": {
+        "label": "名前",
+        "labelPlaceholder": "プレビュークラスター",
+        "apiServerUrl": "API サーバー URL",
+        "apiServerUrlHelp": "kube-apiserver のルート (例: https://10.0.0.1:6443)。オーケストレーターは各 PR のマニフェストを apiserver 経由で適用するため、到達可能である必要があるのはこのエンドポイントだけです。",
+        "apiToken": "ServiceAccount トークン",
+        "apiTokenHelp": "namespace を作成し、オペレーターのリソースを適用する RBAC を持つベアラートークン。暗号化して保存され、再表示されません。",
+        "manifestSourceLabel": "マニフェストソース",
+        "sourceColocated": "PR リポジトリ内に同梱",
+        "sourceSeparate": "別リポジトリ",
+        "repo": "マニフェストリポジトリ",
+        "repoHelp": "Kubernetes マニフェストを保持する owner/repo (例: acme/preview-manifests)。",
+        "ref": "Ref",
+        "refHelp": "マニフェストを読み取るブランチ、タグ、または SHA。空の場合はリポジトリのデフォルトブランチを使用します。",
+        "path": "マニフェストパス",
+        "pathHelp": "適用するリソースを保持するリポジトリ内のファイルまたはディレクトリ。",
+        "urlSourceLabel": "環境 URL",
+        "urlIngressTemplate": "Ingress ホストテンプレート",
+        "urlIngressStatus": "Ingress ステータスを読み取る",
+        "urlServiceStatus": "Service ステータスを読み取る",
+        "hostTemplate": "ホストテンプレート",
+        "hostTemplateHelp": "branch や pullNumber などのプロビジョニング変数でレンダリングされるホストテンプレート。レンダリングされたホストが環境 URL になります。",
+        "ingressName": "Ingress 名",
+        "ingressNameHelp": "ロードバランサーのホストを読み取る Ingress。空の場合は適用された唯一の Ingress を使用します。",
+        "serviceName": "Service 名",
+        "port": "ポート",
+        "scheme": "URL スキーム",
+        "schemeDefault": "https (デフォルト)",
+        "namespaceTemplate": "namespace テンプレート",
+        "namespaceTemplateHelp": "pullNumber などのプロビジョニング変数からレンダリングされる PR ごとの namespace 名。空の場合は PR 番号から導出します。",
+        "imageTemplate": "イメージテンプレート",
+        "imageTemplateHelp": "マニフェストに公開されるイメージ参照。branch や sha などのプロビジョニング変数を用いてレンダリングされます。",
+        "caCertPem": "クラスター CA 証明書 (PEM)",
+        "caCertPemHelp": "apiserver の TLS 証明書を検証できるよう、クラスターの CA バンドルを貼り付けてください。公的に信頼された CA の場合のみ省略できます。",
+        "insecureSkipTlsVerify": "TLS 検証をスキップ",
+        "insecureSkipTlsVerifyHelp": "強く非推奨です。apiserver の TLS 検証を無効にします。kind/開発クラスターでのみ使用してください。"
+      },
+      "kubernetes": {
+        "label": "名前",
+        "labelPlaceholder": "本番クラスター",
+        "apiServerUrl": "API サーバー URL",
+        "apiServerUrlHelp": "kube-apiserver のルート。例 https://10.0.0.1:6443。オーケストレーターは apiserver を経由して各実行の pod に到達するため、到達可能である必要があるのはこのエンドポイントのみです。",
+        "namespace": "Namespace",
+        "image": "Executor イメージ",
+        "imageHelp": "各実行ごとの pod が動かす executor-harness イメージ。",
+        "imageUi": "UI テスター用イメージ",
+        "apiToken": "ServiceAccount トークン",
+        "apiTokenHelp": "namespace 内で pods および pods/proxy の作成、取得、削除を行う RBAC 権限を持つベアラートークン。暗号化して保存され、二度と表示されません。",
+        "caCertPem": "クラスター CA 証明書 (PEM)",
+        "caCertPemHelp": "apiserver の TLS 証明書を検証できるよう、クラスターの CA バンドルを貼り付けてください。公的に信頼された CA の場合のみ省略できます。",
+        "insecureSkipTlsVerify": "TLS 検証をスキップ",
+        "insecureSkipTlsVerifyHelp": "強く非推奨です。apiserver の TLS 検証を無効にします。ローカルの k3s/kind/開発クラスターでのみ使用してください。",
+        "harnessPort": "Harness ポート"
+      },
+      "manifestEditor": {
+        "title": "プロバイダーマニフェスト",
+        "jsonLabel": "マニフェスト (JSON)",
+        "jsonHelp": "プロバイダーの API を宣言的に記述します。ベース URL、認証方式、リクエストテンプレート、レスポンスマッピングを指定します。サーバーが適用するものと同じ契約で検証されます。",
+        "invalidJson": "マニフェストが有効な JSON ではありません。",
+        "invalidShape": "マニフェストが想定される形式に一致しません。",
+        "schemaError": "マニフェストの問題: {message}",
+        "secretsLabel": "シークレット",
+        "noSecrets": "このマニフェストはシークレットを参照していません。",
+        "stored": "現在保存済み: {keys}",
+        "reenterSecrets": "保存するにはすべてのシークレットを再入力してください。保存済みのシークレットは書き込み専用で表示されません。",
+        "starterHint": "これはスターター例です。プロバイダーの API に合わせて編集してください。"
+      },
+      "viewLogs": "ログを表示",
+      "hideLogs": "ログを非表示",
+      "connectedAt": "接続済み · {baseUrl}",
+      "missingConfig": "必須の設定が不足しています: {fields}",
+      "form": {
+        "updateConfiguration": "設定を更新",
+        "connect": "接続",
+        "reenterSecrets": "変更を保存するにはシークレットフィールドを再入力してください。保存済みのシークレットは書き込み専用で表示されません。 | 変更を保存するにはシークレットフィールドを再入力してください。保存済みのシークレットは書き込み専用で表示されません。",
+        "optionalLabel": "{label} (任意)"
+      },
+      "field": {
+        "defaultsTo": "デフォルト値は {value}"
+      },
+      "test": {
+        "button": "接続をテスト",
+        "ok": "接続 OK",
+        "failed": "接続に失敗しました"
+      },
+      "toast": {
+        "saved": "{title} を保存しました",
+        "saveFailed": "接続を保存できませんでした",
+        "removed": "接続を削除しました",
+        "removeFailed": "接続を削除できませんでした"
+      }
+    },
+    "serviceFragmentDefaults": {
+      "intro": "新しいサービスが最初から備えるベストプラクティスのフラグメントを選択します。そのガイダンスは、サービスのタスクで動くすべてのコード対応エージェント (coder、reviewer、architect、fixer) のプロンプトに組み込まれます。サービスごとにインスペクターでセットを調整できます。このデフォルトを変更しても既存のサービスには影響しません。",
+      "defaultFragments": "デフォルトのフラグメント",
+      "addFragment": "フラグメントを追加",
+      "empty": "なし。新しいサービスはサービスレベルのフラグメントなしで始まります。",
+      "saveFailed": "デフォルトのフラグメントを保存できませんでした",
+      "footer": {
+        "question": "フラグメント自体 (手作業で作成したもの、リンクされたドキュメント、リポジトリ) を追加または編集する必要がありますか?",
+        "manageBoard": "このボードのフラグメントライブラリを管理 →",
+        "manageAccount": "アカウントのフラグメントを管理 →"
+      }
+    },
+    "issueTracker": {
+      "filing": {
+        "heading": "チケットの起票先",
+        "description": "技術的負債の定期パイプラインは、実装前に課題を起票し、このトラッカーに登録します。起票をスキップするには {none} を選択してください。",
+        "none": "なし",
+        "githubHint": "GitHub Issues はインストール済みの GitHub App を利用しますが、まだ接続されていません。{link} からインストールしてください。それまで起票はオフのままです。",
+        "githubHintLink": "Integrations → GitHub",
+        "jiraHint": "Jira はまだ接続されていません。課題を起票してリンクするには {link}。",
+        "linearHint": "Linear はまだ接続されていません。課題を起票してリンクするには {link}。",
+        "connectLink": "接続する",
+        "jiraProjectKey": "Jira プロジェクトキー",
+        "jiraProjectKeyHelp": "新しいチケットはこのプロジェクトに登録されます。",
+        "linearTeamId": "Linear チーム ID",
+        "linearTeamIdHelp": "新しい課題はこのチームの下に作成されます (Linear は課題作成にチームを必要とします)。",
+        "linearTeamSearchPlaceholder": "チームを検索…"
+      },
+      "vendor": {
+        "github": "GitHub Issues",
+        "jira": "Jira",
+        "linear": "Linear"
+      },
+      "linking": {
+        "heading": "課題をコンテキストとしてリンク",
+        "description": "ソースが提供されている場合、その課題をインポートしてタスクに添付できます。これにより、エージェントは実装中に課題の説明とコメントを参照できます。これは上記の起票トラッカーとは独立しています。",
+        "github": {
+          "available": "インストール済みの GitHub App を利用します。認証情報は不要です。",
+          "unavailable": "このソースを提供するには GitHub App (Integrations → GitHub) をインストールしてください。"
+        },
+        "checkSetup": "セットアップを確認",
+        "install": "インストール",
+        "connected": "接続済み。",
+        "jira": {
+          "connectHint": "Jira アカウントと API トークンで接続します。"
+        },
+        "linear": {
+          "connectHint": "Linear の個人 API キーで接続します。"
+        },
+        "connect": "接続"
+      },
+      "writeback": {
+        "heading": "ライトバック",
+        "description": "プルリクエストの進行に合わせて、タスクにリンクされた課題に書き戻します。各トグルはワークスペースのデフォルトで、タスクごとにインスペクターで上書きできます。GitHub の課題はネイティブにクローズされ、Jira の課題は {done} カテゴリーの最初のステータスに遷移します。",
+        "done": "完了",
+        "commentOnOpen": {
+          "label": "PR が開いたときにコメント",
+          "help": "リンクされた課題に、新しいプルリクエストのリンクを記載したコメントを投稿します。"
+        },
+        "resolveOnMerge": {
+          "label": "PR がマージされたら解決済みとしてクローズ",
+          "help": "PR がマージされた旨をコメントし、リンクされた課題をクローズ / 解決します。"
+        }
+      },
+      "probeFailure": {
+        "title": "課題追跡を利用できません",
+        "disabled": "このデプロイではタスクソース連携がオフになっています (暗号化キーが設定されていません)。課題追跡を有効にするには、バックエンドで ENCRYPTION_KEY を設定してください。",
+        "serverError": "課題トラッカーサービスがエラーを返しました (HTTP {status}): {message}。通常これは、バックエンドのマイグレーション/設定が完了していないことを意味します。",
+        "loadFailedStatus": "課題トラッカーの設定を読み込めませんでした (HTTP {status}): {message}",
+        "loadFailed": "課題トラッカーの設定を読み込めませんでした: {message}"
+      },
+      "toast": {
+        "saved": "課題トラッカーを保存しました",
+        "saveFailed": "設定を保存できませんでした",
+        "updateFailed": "更新できませんでした",
+        "checkFailed": "確認に失敗しました"
+      }
+    },
+    "userSecrets": {
+      "title": "私の GitHub トークン",
+      "intro": "{you} が開始する実行で使用する個人アクセストークンを保存します。プッシュ、プルリクエスト、CI ゲート、マージはあなたの GitHub アクセスに帰属します。{scope} 保存され、トークンは書き込み専用で二度と表示されません。",
+      "introYou": "あなた",
+      "introScope": "あなた専用に",
+      "connectedStored": "接続済み · トークン保存済み",
+      "replaceToken": "トークンを置き換え",
+      "addToken": "トークンを追加",
+      "labelField": "ラベル (任意)",
+      "optionalField": "{label} (任意)",
+      "testConnection": "接続をテスト",
+      "tokenValid": "トークン有効",
+      "tokenRejected": "トークンが拒否されました",
+      "secretFallback": "シークレット",
+      "toast": {
+        "saved": "{label} を保存しました",
+        "saveFailed": "シークレットを保存できませんでした",
+        "removed": "シークレットを削除しました",
+        "removeFailed": "シークレットを削除できませんでした"
+      }
+    },
+    "mergeThresholds": {
+      "intro": "タスクが選択できる、名前付きの自動マージポリシーです。CI が通過すると、{merger} エージェントが PR を複雑度、リスク、影響度で採点します (0〜100%)。すべてのスコアがプリセットの上限以下のときのみ PR は自動マージされ、そうでない場合はレビュー通知が発行されます。デフォルトプリセットは、いずれも選択しなかったタスクに適用されます。",
+      "mergerAgent": "merger",
+      "concern": {
+        "none": "なし (常に停止)",
+        "low": "低",
+        "medium": "中",
+        "high": "高 (停止しない)"
+      },
+      "presetNamePlaceholder": "プリセット名",
+      "default": "デフォルト",
+      "makeDefault": "デフォルトにする",
+      "deleteDefaultBlocked": "デフォルトプリセットは削除できません",
+      "deletePreset": "プリセットを削除",
+      "field": {
+        "maxComplexity": "最大複雑度 %",
+        "maxRisk": "最大リスク %",
+        "maxImpact": "最大影響度 %",
+        "ciMaxAttempts": "CI 修正の試行回数",
+        "maxRequirementIterations": "要件のイテレーション回数",
+        "maxRequirementConcernAllowed": "この水準以下の懸念を自動承認"
+      },
+      "newPreset": "新しいプリセット",
+      "create": {
+        "name": "名前",
+        "namePlaceholder": "例: 慎重",
+        "complexity": "複雑度%",
+        "risk": "リスク%",
+        "impact": "影響度%",
+        "ciFix": "CI 修正",
+        "reqIter": "要件イテレ",
+        "autoPass": "この水準以下を自動承認"
+      },
+      "add": "追加",
+      "toast": {
+        "saved": "プリセットを保存しました",
+        "saveFailed": "プリセットを保存できませんでした",
+        "created": "プリセットを作成しました",
+        "createFailed": "プリセットを作成できませんでした",
+        "defaultFailed": "デフォルトを設定できませんでした",
+        "deleteFailed": "プリセットを削除できませんでした"
+      }
+    },
+    "observabilityConnection": {
+      "title": "リリース後のヘルス",
+      "intro": "リリースが出荷された後、{gate} ゲートが設定済みのオブザーバビリティモニター/SLO を監視します。リグレッションが発生すると、調査のためにオンコールエージェントを起動します (リバートするかどうかは人間が判断します)。各サービスが監視するモニター/SLO は、そのサービスのインスペクターから割り当てます。",
+      "connection": {
+        "heading": "接続",
+        "provider": "プロバイダー"
+      },
+      "datadog": {
+        "site": "Datadog サイト",
+        "apiKey": "API キー",
+        "appKey": "アプリケーションキー"
+      },
+      "saveConnection": "接続を保存",
+      "disconnect": "切断",
+      "incident": {
+        "heading": "インシデントの補強",
+        "configured": "設定済み",
+        "notSet": "未設定",
+        "description": "任意。リグレッション発生時、オンコール調査は、これらのシステムが同じシグナルからすでに開いているインシデントに投稿されます (再アラートはせず、注釈を付けます)。シークレットは書き込み専用です。空欄のままにすると保存済みの値は変更されません。",
+        "pagerDutyToken": "PagerDuty API トークン",
+        "pagerDutyFromEmail": "PagerDuty From メール",
+        "incidentIoKey": "incident.io API キー",
+        "clear": "クリア"
+      },
+      "status": {
+        "notConnected": "未接続",
+        "connected": "接続済み",
+        "connectedWithSite": "接続済み ({site})"
+      },
+      "toast": {
+        "loadFailed": "オブザーバビリティ設定を読み込めませんでした",
+        "incidentCredsRequired": "PagerDuty または incident.io の認証情報を入力してください",
+        "incidentSaved": "インシデントの補強を保存しました",
+        "incidentSaveFailed": "インシデントの補強を保存できませんでした",
+        "incidentDisconnectFailed": "インシデントの補強を切断できませんでした",
+        "connected": "オブザーバビリティを接続しました",
+        "connectFailed": "接続を保存できませんでした",
+        "disconnectFailed": "切断できませんでした"
+      }
+    },
+    "localMode": {
+      "title": "ローカルモード",
+      "intro": "ローカルコンテナランナーの調整設定で、このマシンのデプロイに保存されます ({poolVars} / {harnessVars} 環境変数を置き換えました)。保存するとウォームプールがライブでサイズ変更され、再起動は不要です。実行中のランは、すでに保持しているコンテナをそのまま使います。",
+      "pool": {
+        "heading": "ウォームコンテナプール",
+        "description": "アイドル状態のハーネスコンテナを待機させておき、ランごとにコールドスタートする代わりに 1 つを再リースします (そのランのリポジトリをすでに保持しているコンテナを優先)。プールサイズ 0 で無効になります。Docker 系ランタイム (Docker/Podman/OrbStack/Colima) が必要です。Apple {appleContainer} では無視されます。",
+        "size": {
+          "label": "プールサイズ",
+          "help": "アイドル状態のウォームコンテナの最大数。0 = プーリングオフ。"
+        },
+        "minWarm": {
+          "label": "起動時にプリウォーム",
+          "help": "サービス起動時に開始するコンテナ数。"
+        },
+        "max": {
+          "label": "最大コンテナ数",
+          "help": "上限 (リース中 + アイドル)。空欄 = プールサイズ。",
+          "placeholder": "(プールサイズ)"
+        },
+        "idleTimeout": {
+          "label": "アイドルタイムアウト (分)",
+          "help": "この時間が経過したアイドル状態のプールコンテナを退避します。"
+        }
+      },
+      "checkout": {
+        "heading": "チェックアウトの再利用",
+        "description": "ウォームコンテナがそのランのリポジトリをすでに保持している場合、ハーネスは新規クローンせずにリポジトリごとのチェックアウトを再利用します (クリーンスイープ + フェッチ + ブランチ切り替え)。",
+        "workspaceRoot": {
+          "label": "ワークスペースルート",
+          "help": "再利用するチェックアウトが置かれる、コンテナ内の絶対ディレクトリ。"
+        },
+        "cleanKeep": {
+          "label": "クリーン時に保持 (カンマ区切り)",
+          "help": "ランごとのクリーンスイープが保持する依存関係キャッシュディレクトリ。"
+        }
+      },
+      "toast": {
+        "saved": "ローカル設定を保存しました",
+        "saveFailed": "ローカル設定を保存できませんでした"
+      }
+    },
+    "openRouterCatalog": {
+      "intro": "1 つのゲートウェイから {models} にアクセスできます。下に OpenRouter キーを追加し、使いたいモデルを有効化してください。モデルはコンテキストウィンドウと価格とともにモデルピッカーに表示され、支出予算に計上されます。",
+      "introModels": "300 以上のモデル",
+      "connectHeading": "OpenRouter キーを接続",
+      "step1": "{link} を開いて API キーを作成します。",
+      "step1Link": "openrouter.ai → Keys ↗",
+      "step2": "キー ({prefix} で始まる) をコピーして下に貼り付けます。",
+      "scope": "スコープ",
+      "scopeWorkspace": "このワークスペース",
+      "scopeUser": "マイキー (自分のみ)",
+      "labelOptional": "ラベル (任意)",
+      "labelPlaceholder": "例: チームキー",
+      "apiKey": "API キー",
+      "connectAndBrowse": "接続して閲覧",
+      "keyConnected": "OpenRouter キーを接続しました",
+      "manageKeys": "ベンダーとキーで管理",
+      "refresh": "カタログを更新",
+      "enableRecommended": "おすすめを有効化",
+      "filterPlaceholder": "名前またはスラッグで絞り込み…",
+      "empty": "まだモデルがありません。{action} を押して OpenRouter のライブ一覧を読み込んでください。",
+      "enabledCount": "有効なモデルなし | {count} 件有効 | {count} 件有効",
+      "context": "{value} ctx",
+      "contextThousands": "{value}K ctx",
+      "price": "{input}/{output} (Mtok あたり)",
+      "toast": {
+        "connected": "OpenRouter キーを接続しました",
+        "connectFailed": "キーを接続できませんでした",
+        "rejected": "OpenRouter がキーを拒否しました。",
+        "unreachable": "OpenRouter に接続できませんでした",
+        "connectFirst": "まず OpenRouter キーを接続してください。",
+        "saved": "OpenRouter カタログを保存しました",
+        "saveFailed": "カタログを保存できませんでした"
+      }
+    },
+    "workspaceSettings": {
+      "title": "ワークスペース設定",
+      "tabs": {
+        "workspace": "ワークスペース",
+        "budget": "予算",
+        "merge": "マージしきい値",
+        "tracker": "課題トラッカー",
+        "fragments": "サービスのベストプラクティス"
+      },
+      "waiting": {
+        "heading": "人による対応待ち",
+        "body": "人による判断 (レビュー、承認、マージ) で待機中の実行は、必要な間だけ待機し、キャンセルされることはありません。この分数を過ぎると通知が赤くなり、受信トレイで {overdue} として表示されます。",
+        "overdue": "期限超過",
+        "escalateAfter": "エスカレーションまでの時間 (分)"
+      },
+      "taskLimit": {
+        "heading": "サービスごとの実行中タスク",
+        "body": "1 つのサービス配下で同時に実行できるタスク数を制限します。上限を超えてタスクを開始しようとすると、実行中のタスクが完了するまで明確なメッセージとともに拒否されます。",
+        "mode": "モード",
+        "maxRunning": "最大実行タスク数",
+        "maxPerType": "{type} タスクの最大数",
+        "modes": {
+          "off": "制限なし",
+          "shared": "すべてのタイプで共有",
+          "per_type": "タスクタイプごと"
+        }
+      },
+      "taskTypes": {
+        "feature": "機能",
+        "bug": "バグ",
+        "document": "ドキュメント",
+        "spike": "スパイク"
+      },
+      "observability": {
+        "heading": "エージェントの可観測性",
+        "body": "各エージェントに提供された完全なコンテキストを保存します。構成されたプロンプト、折り込まれたベストプラクティスのフラグメント、コンテナに注入されたファイルの全内容を保存し、後から可観測性ビューで確認できます。本文は呼び出しごとの LLM テレメトリと同じ期間だけ保持されます。オフにすると保存を停止します (既存のスナップショットは保持期限により削除されます)。",
+        "toggle": "エージェントの完全なコンテキストを保存"
+      },
+      "retention": {
+        "heading": "スクリーンショットの保持",
+        "body": "UI テスターがキャプチャしたスクリーンショットと、それらの照合に使われる参照デザイン画像 (視覚的確認ゲート) を保持する期間です。日次のクリーンアップジョブが、この期間を過ぎた画像データとそのメタデータの両方を削除します。",
+        "days": "保持期間 (日)"
+      },
+      "kaizen": {
+        "heading": "Kaizen エージェント",
+        "body": "各実行が完了するたびに、Kaizen エージェントは各エージェントステップの進み具合を、スムーズで効率的なものから混乱して無秩序なものまで採点し、プロンプトやモデルの改善を提案します。プロンプト + エージェント + モデルの組み合わせが提案なしで高評価を 5 回連続で得ると、検証済みとしてマークされ、以降は採点されなくなります。採点はバックグラウンドで実行され、実行詳細と Kaizen 画面の中に表示されます。採点者のモデルはモデル設定 (「Kaizen」エージェント) で指定します。",
+        "toggle": "Kaizen でエージェントの実行を採点する"
+      },
+      "budget": {
+        "heading": "月間の支出予算",
+        "body": "トークン使用量は LLM 呼び出しごとに計測され、価格付けされ、この予算で制限されます。上限に達すると、このワークスペースの実行は一時停止し、ボードに警告が表示されます。空欄のままにすると組み込みのデフォルト (月額約 100 EUR) を継承します。",
+        "monthlyLimit": "月間上限",
+        "defaultPlaceholder": "デフォルト",
+        "currency": "通貨 (ISO 4217)",
+        "save": "予算を保存"
+      },
+      "toast": {
+        "saved": "設定を保存しました",
+        "saveFailed": "設定を保存できませんでした",
+        "budgetSaved": "予算を保存しました",
+        "budgetSaveFailed": "予算を保存できませんでした"
+      }
+    },
+    "localModelEndpoints": {
+      "title": "マイローカルランナー",
+      "intro": "{ownMachine} で稼働している LLM (Ollama、LM Studio、llama.cpp、vLLM、または OpenAI 互換サーバー) にエージェントを接続します。ランナーは {justForYou} 保存され (ランナーは自分のマシン上に存在します)、有効にしたモデルはモデルピッカーに自動的に表示されます。API キー (ほとんどのランナーは無視します) は書き込み専用で、再表示されることはありません。",
+      "introOwnMachine": "自分のマシン",
+      "introJustForYou": "自分専用に",
+      "modelCount": "モデルなし | {count} 個のモデル | {count} 個のモデル",
+      "keySet": "キー設定済み",
+      "edit": "編集",
+      "editRunner": "ランナーを編集",
+      "addRunner": "ランナーを追加",
+      "runnerType": "ランナータイプ",
+      "labelOptional": "ラベル (任意)",
+      "labelPlaceholder": "マイ {name}",
+      "baseUrl": "ベース URL",
+      "apiKeyOptional": "API キー (任意)",
+      "apiKeyKeepPlaceholder": "保存済みのキーを維持するには空欄のまま",
+      "apiKeyIgnorePlaceholder": "ほとんどのランナーはこれを無視します",
+      "testConnection": "接続をテスト",
+      "unreachable": "ランナーに接続できませんでした。",
+      "reachable": "接続可能 · モデルなし | 接続可能 · {count} 個のモデル | 接続可能 · {count} 個のモデル",
+      "noModels": "報告されたモデルがありません。",
+      "enableModels": "モデルを有効化",
+      "toast": {
+        "saved": "{name} を保存しました",
+        "saveFailed": "ランナーを保存できませんでした",
+        "removed": "ランナーを削除しました",
+        "removeFailed": "ランナーを削除できませんでした"
+      }
+    }
+  },
+  "providers": {
+    "presetMismatch": {
+      "title": "プリセットが利用できないモデルを使用しています",
+      "intro": "ワークスペースのデフォルトモデルプリセット「{name}」は、現在の構成では利用できないモデルを割り当てています。このプリセットを使用するタスクは、それらのステップに到達した時点で失敗します。",
+      "unavailable": "利用不可",
+      "advice": "プリセットを構成済みのモデルに付け替えるか、不足しているプロバイダーを追加してください。",
+      "later": "後で",
+      "configureVendors": "ベンダーを構成",
+      "editPresets": "プリセットを編集",
+      "defaultPresetName": "デフォルトプリセット"
+    },
+    "onboarding": {
+      "title": "AI モデルプロバイダーをセットアップ",
+      "noModelTitle": "このワークスペースではまだ利用可能な AI モデルがありません。",
+      "noModelBody": "エージェントを実行するにはモデルが必要です。AI が設定なしで動作するのは、Workers AI を有効にした Cloudflare デプロイのみです。それ以外の場合は、以下から少なくとも 1 つのソースを接続してください。",
+      "operatorNote": "AWS Bedrock と Cloudflare Workers AI は、この画面からではなく、デプロイ運用者が環境設定で有効化します。",
+      "routes": {
+        "keys": {
+          "title": "プロバイダーキーとサブスクリプション",
+          "body": "直接プロバイダーの API キー (OpenAI、Anthropic、Qwen など) を追加するか、商用のコーディングプランサブスクリプション (Kimi、DeepSeek) または個人向けのもの (Claude、GLM、Codex) を接続します。",
+          "cta": "LLM ベンダーを開く"
+        },
+        "openrouter": {
+          "title": "OpenRouter ゲートウェイ",
+          "body": "OpenRouter ゲートウェイを通じて 1 つのキーでモデルを有効化します。使いたいモデルを参照してオンにします。",
+          "cta": "OpenRouter モデルを参照"
+        },
+        "local": {
+          "title": "マイローカルランナー",
+          "body": "自分で稼働させているモデル (Ollama、LM Studio、llama.cpp、vLLM など) に cat-factory を接続します。API キー不要、支出なし。",
+          "cta": "ローカルランナーを構成"
+        }
+      }
+    },
+    "personalCredential": {
+      "titleWrongPassword": "個人パスワードが正しくありません",
+      "titleNoSubscription": "{vendor} サブスクリプションを接続",
+      "titleExpired": "{vendor} サブスクリプションの有効期限が切れました",
+      "titleDefault": "個人パスワードを入力",
+      "fallbackVendor": "サブスクリプション",
+      "connectBody": "このタスクは {vendor} モデルを使用し、ご自身の {vendor} サブスクリプションで実行されます。まず接続 (または更新) してから、実行を再度開始してください。",
+      "connectCta": "サブスクリプションを接続",
+      "passwordBody": "ご自身の {vendor} サブスクリプションを保護する個人パスワードを入力してください。この実行に限り認証情報のロックを解除し、このブラウザにキャッシュされるため、しばらくは再入力を求められません。",
+      "passwordField": "個人パスワード",
+      "passwordPlaceholder": "個人パスワード",
+      "submit": "ロック解除して実行",
+      "cancel": "キャンセル",
+      "toast": {
+        "started": "実行を開始しました",
+        "startFailed": "実行を開始できませんでした"
+      },
+      "vendors": {
+        "claude": "Claude",
+        "glm": "GLM (Z.ai)",
+        "codex": "ChatGPT (Codex)"
+      }
+    },
+    "apiKeys": {
+      "directHeading": "直接プロバイダーの API キー",
+      "proxyHeading": "プロキシ / ゲートウェイの API キー",
+      "directAccountIntro": "このアカウントの全ワークスペースで共有するベンダー API キーを接続します。キーは暗号化して保存され、プールされて利用状況に応じてローテーションされます。アカウントキーは管理者が管理します。",
+      "directIntro": "ベンダー API キーを接続すると、モデルがそのプロバイダー上で直接実行されます。キーは暗号化して保存され、プールされて利用状況に応じてローテーションされます。キーのスコープをこのワークスペース (チームで共有) または自分専用 (どこでも使える自分のプール) に設定できます。",
+      "proxyAccountIntro": "このアカウントの全ワークスペースで共有するプロキシキー (OpenRouter、LiteLLM) を接続します。プロキシは、単一のキーで多数のベンダーをまとめる仲介役です。キーは暗号化して保存され、プールされて利用状況に応じてローテーションされます。",
+      "proxyIntro": "プロキシキー (OpenRouter、LiteLLM) を接続します。プロキシは、各ベンダーに直接ではなく、単一のゲートウェイを通じて多数のベンダーのモデルに到達する仲介役です。キーは暗号化して保存され、プールされて利用状況に応じてローテーションされます。キーのスコープをこのワークスペース (チームで共有) または自分専用 (どこでも使える自分のプール) に設定できます。",
+      "scopeField": "スコープ",
+      "scopeWorkspace": "このワークスペース",
+      "scopeUser": "自分のキー (自分のみ)",
+      "providerField": "プロバイダー",
+      "proxyField": "プロキシ",
+      "openKeys": "{provider} のキーを開く ↗",
+      "cachingNote": "{provider} モデルのプロンプトキャッシュを有効にします。長いマルチターンの実行で、毎ターン再送信する代わりにキャッシュされたプロンプトプレフィックスを再利用します。",
+      "labelField": "ラベル (任意)",
+      "labelPlaceholder": "例: チームキー",
+      "defaultLabel": "{provider} キー",
+      "keyField": "API キー",
+      "keyPlaceholder": "API キーを貼り付け",
+      "connect": "接続",
+      "connected": "接続済み ({count})",
+      "usage": "今期間 {tokens} トークン · {count} 回の呼び出し | 今期間 {tokens} トークン · {count} 回の呼び出し",
+      "toast": {
+        "connected": "API キーを接続しました",
+        "connectFailed": "キーを接続できませんでした",
+        "removeFailed": "キーを削除できませんでした"
+      },
+      "providers": {
+        "openai": {
+          "label": "OpenAI",
+          "step1": "platform.openai.com → API keys を開き、新しいシークレットキーを作成します。",
+          "step2": "キー (sk-… で始まる) をコピーします。表示は一度だけです。"
+        },
+        "anthropic": {
+          "label": "Anthropic (Claude API)",
+          "step1": "console.anthropic.com → Settings → API Keys を開き、キーを作成します。",
+          "step2": "キー (sk-ant-… で始まる) をコピーします。"
+        },
+        "qwen": {
+          "label": "Qwen (Alibaba DashScope)",
+          "step1": "DashScope コンソール (international) → API-KEY を開き、キーを作成します。",
+          "step2": "キーをコピーします。OpenAI 互換の Qwen エンドポイントを認証します。"
+        },
+        "deepseek": {
+          "label": "DeepSeek",
+          "step1": "platform.deepseek.com → API keys を開き、キーを作成します。",
+          "step2": "キー (sk-… で始まる) をコピーします。"
+        },
+        "moonshot": {
+          "label": "Moonshot (Kimi API)",
+          "step1": "platform.moonshot.ai → API Keys を開き、キーを作成します。",
+          "step2": "キーをコピーします。OpenAI 互換の Moonshot エンドポイントを認証します。"
+        },
+        "openrouter": {
+          "label": "OpenRouter",
+          "step1": "openrouter.ai → Keys を開き、API キーを作成します。",
+          "step2": "キー (sk-or-… で始まる) をコピーします。1 つのゲートウェイで 300 以上のモデルに到達します。"
+        },
+        "litellm": {
+          "label": "LiteLLM (セルフホストゲートウェイ)",
+          "step1": "LiteLLM ゲートウェイで仮想キーを生成します (またはマスターキーを使用します)。",
+          "step2": "ゲートウェイのベース URL は、ここではなくデプロイ運用者が設定します (LITELLM_BASE_URL)。"
+        }
+      }
+    },
+    "vendorCredentials": {
+      "title": "LLM ベンダー",
+      "tabs": {
+        "pool": "ワークスペースプール",
+        "direct": "直接プロバイダー",
+        "proxy": "プロキシ",
+        "personal": "個人サブスクリプション"
+      },
+      "poolIntro": "チーム / 組織での利用が許可されている商用コーディングプランのサブスクリプション (Kimi、DeepSeek) を接続すると、API キーの代わりに Claude Code ハーネス上でエージェントステップを実行できます。トークンは暗号化して保存され、プールされて利用状況に応じてローテーションされます。サブスクリプションモデルは定額のクォータなので、支出予算を消費しません。個人利用のサブスクリプション (Claude、GLM、ChatGPT/Codex) は、個人サブスクリプションタブでユーザーごとに接続します。",
+      "vendorField": "ベンダー",
+      "labelField": "ラベル (任意)",
+      "labelPlaceholder": "例: 仕事用アカウント",
+      "defaultLabel": "{vendor} トークン",
+      "tokenField": "トークン",
+      "tokenPlaceholder": "コーディングプランの API キー",
+      "connect": "接続",
+      "connected": "接続済み ({count})",
+      "usage": "今期間 {tokens} トークン · {count} 回の実行 | 今期間 {tokens} トークン · {count} 回の実行",
+      "toast": {
+        "connected": "トークンを接続しました",
+        "connectFailed": "トークンを接続できませんでした",
+        "removeFailed": "トークンを削除できませんでした"
+      },
+      "vendors": {
+        "kimi": {
+          "label": "Kimi (Moonshot コーディングプラン)",
+          "step1": "Moonshot (Kimi) のコーディングプランコンソールを開き、Anthropic 互換エンドポイント用の API キーを作成します。",
+          "step2": "API キーをコピーします。エージェントステップは Claude Code 経由で Moonshot の Anthropic エンドポイントに対し、完全なコンテキストで実行されます。",
+          "step3": "下にキーを貼り付けます。"
+        },
+        "deepseek": {
+          "label": "DeepSeek (コーディングプラン)",
+          "step1": "DeepSeek のコーディングプランコンソールを開き、Anthropic 互換エンドポイント用の API キーを作成します。",
+          "step2": "API キーをコピーします。エージェントステップは Claude Code 経由で DeepSeek の Anthropic エンドポイントに対し、完全なコンテキストで実行されます。",
+          "step3": "下にキーを貼り付けます。"
+        }
+      }
+    }
+  },
+  "github": {
+    "onboarding": {
+      "title": "cat-factory を GitHub に接続",
+      "intro": "cat-factory はリポジトリ上でプルリクエストを開くことで動作します。続行するにはアカウントまたは組織に GitHub App をインストールしてください。すべてのリポジトリを許可することも、一部を選択することもできます。",
+      "signedInAs": "{login} としてサインイン中",
+      "signOut": "サインアウト"
+    },
+    "connect": {
+      "yourInstallations": "あなたのインストール",
+      "refresh": "更新",
+      "lookingForInstallations": "インストールを検索中…",
+      "noInstallations": "App のインストールがまだ見つかりません。下からインストールするか、ID で接続してください。",
+      "installationMeta": "{targetType} · インストール {id}",
+      "linked": "リンク済み",
+      "linkedTitle": "このワークスペースに既にリンク済み",
+      "inUse": "使用中",
+      "inUseTitle": "別のワークスペースに既に接続済み",
+      "connect": "接続",
+      "or": "または",
+      "installApp": "GitHub App をインストール",
+      "orConnectById": "または ID で接続",
+      "installationId": "インストール ID",
+      "toast": {
+        "connected": "GitHub に接続しました"
+      },
+      "errors": {
+        "listInstallations": "GitHub のインストール一覧を取得できませんでした",
+        "startInstall": "GitHub App のインストールを開始できませんでした",
+        "connect": "接続できませんでした"
+      }
+    },
+    "panel": {
+      "connectIntro": "GitHub App のインストールを接続すると、ボードのブロックにリポジトリを紐付け、プルリクエストやイシューを閲覧し、エージェントがブランチをプッシュして PR を開けるようになります。",
+      "installationMeta": "{targetType} · インストール {id}",
+      "resync": "再同期",
+      "backfill": "バックフィル",
+      "disconnect": "切断",
+      "loading": "読み込み中…",
+      "tabs": {
+        "repos": "リポジトリ",
+        "pulls": "プルリクエスト",
+        "issues": "イシュー"
+      },
+      "linkedToBoard": "このボードにリンク済み",
+      "manageRepos": "リポジトリを管理",
+      "manageHint": "このボードで追跡するリポジトリを選択します。GitHub 接続はアカウント全体で共有され、各ボードがそれぞれのリポジトリをリンクします。",
+      "loadingRepos": "リポジトリを読み込み中…",
+      "noAvailableRepos": "このインストールはまだどのリポジトリにもアクセスできません。",
+      "private": "プライベート",
+      "saveSelection": "選択を保存",
+      "noLinkedRepos": "リンクされたリポジトリはまだありません。このボードが追跡するリポジトリを選ぶには「リポジトリの管理」を使用してください。",
+      "open": "開く",
+      "protected": "保護",
+      "newBranch": "新しいブランチ",
+      "fromSha": "SHAから",
+      "commitShaPlaceholder": "コミットsha",
+      "createBranch": "ブランチを作成",
+      "openPr": "PRを開く",
+      "repository": "リポジトリ",
+      "chooseRepository": "リポジトリを選択",
+      "prTitle": "タイトル",
+      "headBranch": "ヘッドブランチ",
+      "baseBranch": "ベースブランチ",
+      "openPullRequest": "プルリクエストを開く",
+      "noPulls": "同期されたプルリクエストはありません。",
+      "mergePr": "プルリクエストをマージ",
+      "noIssues": "同期されたイシューはありません。",
+      "prState": {
+        "open": "オープン",
+        "closed": "クローズ",
+        "merged": "マージ済み"
+      },
+      "issueState": {
+        "open": "オープン",
+        "closed": "クローズ"
+      },
+      "toast": {
+        "disconnected": "GitHubの接続を解除しました",
+        "resync": "{status}を再同期",
+        "reposUpdated": "リンクされたリポジトリを更新しました",
+        "branchCreated": "ブランチ{name}を作成しました",
+        "prOpened": "プルリクエストを開きました",
+        "prMerged": "PR #{number}をマージしました"
+      },
+      "errors": {
+        "disconnect": "接続を解除できませんでした",
+        "resync": "再同期できませんでした",
+        "loadRepos": "リポジトリを読み込めませんでした",
+        "updateRepos": "リポジトリを更新できませんでした",
+        "loadBranches": "ブランチを読み込めませんでした",
+        "createBranch": "ブランチを作成できませんでした",
+        "openPr": "プルリクエストを開けませんでした",
+        "merge": "マージできませんでした"
+      }
+    },
+    "addService": {
+      "title": "リポジトリからサービスを追加",
+      "intro": "ボードサービスとして追加する既存のGitHubリポジトリを選択してください。ブートストラップはありません。リポジトリはそのまま新しいサービスフレームにリンクされ、その上で実行するタスクはそのリポジトリを対象とします。",
+      "connectFirst": "まずこのワークスペースをGitHubに接続してください。Appがすでにインストールされているインストールをリンクするか、新規にインストールしてください。",
+      "repository": "リポジトリ",
+      "repositoryHint": "GitHub Appがアクセスできるリポジトリ。お探しのものが見つかりませんか?以下でAppにアクセス権を付与してから更新してください。",
+      "noReposAvailable": "利用可能なリポジトリはまだありません。以下でAppに1つのアクセス権を付与してから更新してください。",
+      "searchPlaceholder": "所有者または名前でリポジトリを検索…",
+      "searchMinChars": "検索するには{min}文字以上入力してください。 | 検索するには{min}文字以上入力してください。",
+      "noMatches": "{query}に一致するリポジトリが見つかりませんでした。",
+      "clearSelection": "選択をクリア",
+      "showingCount": "{total}件中{shown}件のリポジトリを表示しています。",
+      "repoLabel": {
+        "private": " (プライベート)",
+        "monorepo": " · モノレポ",
+        "onBoard": " · すでにボード上"
+      },
+      "monorepoLabel": "これはモノレポです (複数のサービスをホストしています)",
+      "monorepoDescription": "1つのリポジトリから複数のサービスを追加し、それぞれをサブディレクトリに固定します。",
+      "monorepoBrowseHint": "リポジトリを参照し、追加したいサービスのディレクトリを選択してください。このサービスで作業するエージェントは、そのサブディレクトリ内で実行されます。",
+      "serviceDirectory": "サービスディレクトリ:",
+      "noDirectorySelected": "ディレクトリはまだ選択されていません。",
+      "addedConfigure": "{title}を追加しました。設定してください",
+      "grantAccess": "Appにリポジトリへのアクセス権を付与",
+      "grantAccessTitle": "Appのインストール設定を開いて、リポジトリへのアクセス権を付与します",
+      "refreshList": "リストを更新",
+      "done": "完了",
+      "add": "サービスを追加",
+      "addAnother": "別のサービスを追加",
+      "toast": {
+        "addedTitle": "サービスを追加しました",
+        "addedDescription": "{title}がボードに追加されました。以下で設定してください。",
+        "addFailedTitle": "サービスを追加できませんでした"
+      }
+    },
+    "repoTree": {
+      "root": "ルート",
+      "loading": "読み込み中…",
+      "noSubdirectories": "ここにサブディレクトリはありません。",
+      "empty": "ここには何もありません。",
+      "select": "選択",
+      "selected": "選択済み",
+      "useThisFolder": "このフォルダを使用",
+      "errors": {
+        "listDirectory": "ディレクトリを一覧表示できませんでした"
+      }
+    }
+  },
+  "slack": {
+    "panel": {
+      "title": "Slack通知",
+      "intro": "ボード通知 (マージレビュー、パイプライン完了、CI失敗) をSlackに投稿します。接続はアカウント全体で共有され、ルーティングはボードごとです。"
+    },
+    "connect": {
+      "addToSlack": "Slackに追加",
+      "orPasteToken": "…またはボットトークンを貼り付け (xoxb-...)",
+      "connect": "接続"
+    },
+    "connected": {
+      "label": "{team}に接続済み",
+      "disconnect": "接続を解除"
+    },
+    "routing": {
+      "heading": "ルーティング",
+      "channelPlaceholder": "#channelまたはチャンネルID",
+      "mentionMembers": "マッピングされたアカウントメンバーを{'@'}メンション",
+      "save": "ルーティングを保存"
+    },
+    "members": {
+      "heading": "メンバーマップ (ユーザーIDからSlackメンバーIDへ)",
+      "hint": "{product}のメンバーは要件レビューの指摘でメンションされ、それ以外の人はタスクを作成した場合のみメンションされます。",
+      "productLabel": "プロダクト",
+      "userIdPlaceholder": "ユーザーID (usr_...)",
+      "slackIdPlaceholder": "SlackメンバーID (U...)",
+      "add": "メンバーを追加",
+      "save": "マップを保存"
+    },
+    "routable": {
+      "merge_review": "マージレビュー",
+      "pipeline_complete": "パイプライン完了",
+      "ci_failed": "CI失敗",
+      "test_failed": "テスト失敗",
+      "requirement_review": "要件レビュー",
+      "clarity_review": "明確性レビュー",
+      "release_regression": "リリースリグレッション",
+      "human_test_ready": "人手テスト準備完了",
+      "visual_confirmation_ready": "ビジュアル確認準備完了"
+    },
+    "role": {
+      "engineering": "エンジニアリング",
+      "product": "プロダクト"
+    },
+    "toast": {
+      "connected": "Slackに接続しました",
+      "routingSaved": "ルーティングを保存しました",
+      "mapSaved": "メンバーマップを保存しました"
+    },
+    "error": {
+      "loadSettings": "Slack設定を読み込めませんでした",
+      "startOAuth": "Slack OAuthを開始できませんでした",
+      "connect": "Slackに接続できませんでした",
+      "disconnect": "Slackの接続を解除できませんでした",
+      "saveRouting": "ルーティングを保存できませんでした",
+      "saveMap": "メンバーマップを保存できませんでした"
+    }
+  },
+  "documents": {
+    "picker": {
+      "searchPlaceholder": "ページを検索、または URL/ID を貼り付け…",
+      "refPlaceholder": "ページの URL または ID を貼り付け…",
+      "searchFailed": "検索に失敗しました: {error}",
+      "importedBadge": "インポート済み",
+      "attachByReference": "{ref} を参照で添付",
+      "noMatches": "一致するページがありません。",
+      "emptySearchable": "タイトルで検索するか、インポート済みドキュメントを選択してください。",
+      "emptyRefOnly": "ページの URL または ID を貼り付けて添付します。"
+    },
+    "import": {
+      "title": "ドキュメントソースからインポート",
+      "connectFirst": "先にドキュメントソースを接続してください。",
+      "connectSource": "{source} を接続",
+      "spawningInto": "{frame} に生成中",
+      "sourceLabel": "ソース",
+      "refLabel": "ページの URL または ID",
+      "importButton": "インポート",
+      "importedHeading": "インポート済みドキュメント",
+      "previewSpawn": "プレビューして生成",
+      "noneImported": "まだドキュメントがインポートされていません。",
+      "imported": "\"{title}\" をインポートしました",
+      "importFailed": "インポートに失敗しました"
+    },
+    "connect": {
+      "title": "ソースを接続",
+      "sourceFallback": "ソース",
+      "intro": "{source} を接続すると、要件、RFC、PRD をインポートし、ボード構造を生成したり、エージェントのコンテキストとしてタスクに添付したりできます。",
+      "disconnect": "切断",
+      "connect": "接続",
+      "update": "接続を更新",
+      "connected": "{source} を接続しました",
+      "disconnected": "{source} を切断しました",
+      "connectFailed": "接続できませんでした"
+    },
+    "spawn": {
+      "title": "構造をプレビュー",
+      "plannerLlm": "AI 生成",
+      "plannerHeadings": "見出しから",
+      "intoFrame": "{frame} に",
+      "asTopLevel": "新しいトップレベルフレームとして",
+      "buildingPlan": "プランを作成中…",
+      "spawnOntoBoard": "ボードに生成",
+      "planFailed": "プランを作成できませんでした",
+      "spawned": "構造を生成しました",
+      "spawnFailed": "生成に失敗しました",
+      "summary": "{frames} · {modules} · {tasks}",
+      "frameCount": "{count} フレーム | {count} フレーム",
+      "moduleCount": "{count} モジュール | {count} モジュール",
+      "taskCount": "{count} タスク | {count} タスク"
+    },
+    "taskDocs": {
+      "heading": "コンテキストドキュメント",
+      "attach": "添付",
+      "importPage": "ページをインポート…",
+      "empty": "要件、RFC、PRD を添付すると、このタスクの実装中にエージェントが参照できます。",
+      "attached": "ドキュメントを添付しました",
+      "attachFailed": "添付できませんでした"
+    }
+  },
+  "tasks": {
+    "picker": {
+      "searchPlaceholder": "課題を検索、または URL/キーを貼り付け…",
+      "refPlaceholder": "課題の URL またはキーを貼り付け…",
+      "searchFailed": "検索に失敗しました: {error}",
+      "imported": "インポート済み",
+      "attachByReference": "{ref} を参照で添付",
+      "noMatches": "一致する課題がありません。",
+      "emptySearchable": "タイトルで検索するか、インポート済みの課題を選択してください。",
+      "emptyRefOnly": "課題の URL またはキーを貼り付けて添付します。"
+    },
+    "contextIssues": {
+      "title": "コンテキスト課題",
+      "attach": "添付",
+      "attached": "課題を添付しました",
+      "attachFailed": "添付できませんでした",
+      "importIssue": "課題をインポート…",
+      "emptyHint": "Jira 課題を添付すると、このタスクの実装中にエージェントがその説明とコメントを参照できます。"
+    },
+    "import": {
+      "titleCreate": "課題からタスクを作成",
+      "titleBrowse": "トラッカーの課題",
+      "connectFirst": "先にタスクソースを接続または有効化してください。",
+      "enableSource": "{label} を有効化",
+      "connectSource": "{label} を接続",
+      "source": "ソース",
+      "refLabel": "課題キーまたは URL",
+      "import": "インポート",
+      "asEpic": "エピックとして",
+      "asEpicTitleReady": "このエピックとその子課題をリンクされたタスクグループとして生成",
+      "asEpicTitleNeedsContainer": "先に子タスクのコンテナを選択してください",
+      "epicChildrenContainer": "エピック子課題のコンテナ",
+      "pickContainer": "フレームまたはモジュールを選択",
+      "searchIssues": "課題を検索",
+      "searchPlaceholder": "タイトルで検索、課題の URL を貼り付け、または課題番号を入力…",
+      "createTasksIn": "タスクの作成先",
+      "needFrameFirst": "課題からタスクを作成するには、先にボードにサービスフレームを追加してください。",
+      "searchFailed": "検索に失敗しました: {error}",
+      "searchResults": "検索結果",
+      "createFromIssue": "この課題からタスクを作成",
+      "pickContainerFirst": "先にコンテナを選択してください",
+      "viewOnGitHub": "{id} を GitHub で表示",
+      "emptyHint": "上で検索するか、課題の URL/キーを貼り付けてタスクを作成します。",
+      "imported": "\"{title}\" をインポートしました",
+      "importFailed": "インポートに失敗しました",
+      "epicSpawned": "エピック \"{title}\" を生成しました",
+      "epicChildren": "{count} 件の子タスクを作成しました | {count} 件の子タスクを作成しました",
+      "epicFailed": "エピックを生成できませんでした"
+    },
+    "connect": {
+      "title": "タスクソース",
+      "sourceFallback": "ソース",
+      "connectedToast": "{label} を接続しました",
+      "connectFailed": "接続できませんでした",
+      "disconnectedToast": "{label} を切断しました",
+      "updateFailed": "更新できませんでした",
+      "intro": "{label} を使うと、課題をインポートしてエージェントのコンテキストとしてタスクに添付できます。",
+      "credentialless": "このソースはワークスペースに既にインストールされている GitHub App を使用するため、入力する認証情報はありません。",
+      "installAppHint": "{label} を提供するには、ワークスペースの GitHub App をインストール（GitHub リポジトリを接続）してください。",
+      "connected": "接続済み。",
+      "connectedTo": "{label} に接続済み。",
+      "offerToWorkspace": "このワークスペースに提供",
+      "offerHint": "オフにすると、{label} はインポートとリンクから非表示になります。",
+      "disconnect": "切断",
+      "updateConnection": "接続を更新",
+      "connect": "接続",
+      "oauthButton": "{label} で接続",
+      "oauthOr": "または API キーで接続"
+    }
+  },
+  "pipeline": {
+    "iterationCap": {
+      "extraRound": "もう1ラウンド",
+      "proceed": "そのまま続行",
+      "stopReset": "停止してタスクをリセット"
+    },
+    "builder": {
+      "title": "パイプラインビルダー",
+      "agentPalette": "エージェントパレット",
+      "addAgent": "エージェントを追加",
+      "pipeline": "パイプライン",
+      "configureModels": "モデルを設定",
+      "configureModelsTooltip": "モデルプリセットを管理(各エージェントが実行するモデル)",
+      "namePlaceholder": "パイプライン名",
+      "labelPlaceholder": "+ ラベル",
+      "gatingNeedsEstimator": "ゲート付きステップの前にはTask Estimatorが必要です。追加しないとパイプラインは保存できません。",
+      "emptyDraft": "左側のエージェントをクリックして、線形パイプラインを組み立てます。",
+      "companionAdd": "{companion}を追加(このステップをレビューし、しきい値を下回ると差し戻します)",
+      "companionRemove": "このステップの{companion}を削除",
+      "disableTooltip": "このステップを無効化(パイプラインには残りますが実行時にスキップされます)",
+      "enableTooltip": "ステップは無効です(実行時にスキップ)。クリックして有効化します。",
+      "approvalAddTooltip": "このステップの後に人による承認を必須にする",
+      "approvalRemoveTooltip": "このステップの後に承認が必要です。クリックしてゲートを削除します。",
+      "consensusEnableTooltip": "このステップでコンセンサス(複数モデルのパネル/ディベート/投票)を有効化",
+      "consensusRevertTooltip": "コンセンサスが有効です。クリックして単一エージェントに戻します。",
+      "followUpEnableTooltip": "フォローアップコンパニオンは無効です。クリックして有効化します(Coderが未解決事項/質問を提示)。",
+      "followUpDisableTooltip": "フォローアップコンパニオンが有効です。Coderが未解決事項/サブタスク/質問を提示します。クリックして無効化します。",
+      "moveUp": "ステップを上に移動",
+      "moveDown": "ステップを下に移動",
+      "removeStep": "このステップをパイプラインから削除",
+      "gateOnEstimate": "見積もりでゲート",
+      "companionGateTooltip": "タスク見積もりがしきい値を超えたときのみこのコンパニオンを実行(前にTask Estimatorが必要)",
+      "consensusGateTooltip": "タスク見積もりがしきい値を超えたときのみコンセンサスを実行(それ以外は標準エージェントが実行)",
+      "runWhenAny": "実行条件(いずれか):",
+      "complexityThreshold": "複雑度 ≥",
+      "riskThreshold": "リスク ≥",
+      "impactThreshold": "影響度 ≥",
+      "strategy": "戦略",
+      "rounds": "ラウンド",
+      "strategyOption": {
+        "specialist-panel": "専門家パネル",
+        "debate": "ディベート",
+        "ranked-voting": "順位付け投票"
+      },
+      "rolePlaceholder": "ロール",
+      "modelIdPlaceholder": "モデルID(任意)",
+      "removeParticipant": "参加者を削除(最低2)",
+      "addParticipant": "参加者を追加",
+      "savedPipelines": "保存済みパイプライン",
+      "hideArchived": "アーカイブを非表示",
+      "archivedCount": "アーカイブ済み({count})",
+      "allLabels": "すべて",
+      "defaultBadge": "デフォルト",
+      "stepCount": "{count}ステップ | {count}ステップ",
+      "unarchive": "アーカイブ解除",
+      "archive": "アーカイブ(デフォルトビューから非表示)",
+      "cloneDefault": "このデフォルトを編集可能なコピーに複製",
+      "clone": "複製",
+      "edit": "このパイプラインを編集",
+      "delete": "このパイプラインを削除",
+      "disabledStepTooltip": "無効、実行時にスキップ",
+      "cancelEdit": "編集をキャンセル",
+      "clear": "クリア",
+      "update": "パイプラインを更新",
+      "save": "パイプラインを保存",
+      "addAgentModal": {
+        "title": "エージェントを追加",
+        "name": "名前",
+        "namePlaceholder": "例: Security Auditor",
+        "description": "説明",
+        "descriptionPlaceholder": "このエージェントは何をしますか?",
+        "linkDoc": "コンテキストドキュメントをリンク",
+        "create": "エージェントを作成"
+      },
+      "toast": {
+        "added": "エージェント「{name}」を追加しました",
+        "placeholderTitle": "プレースホルダー",
+        "updated": "「{name}」を更新しました",
+        "saved": "「{name}」を保存しました",
+        "addOneFirst": "まず少なくとも1つのエージェントを追加してください",
+        "saveFailed": "パイプラインを保存できませんでした",
+        "cloned": "「{name}」を複製しました、「{copy}」を編集中です",
+        "cloneFailed": "パイプラインを複製できませんでした",
+        "updateFailed": "パイプラインを更新できませんでした"
+      }
+    },
+    "progress": {
+      "status": {
+        "running": "実行中",
+        "blocked": "対応が必要",
+        "paused": "一時停止(予算)",
+        "done": "完了",
+        "failed": "失敗"
+      },
+      "state": {
+        "pending": "保留中",
+        "working": "処理中",
+        "waiting_decision": "判断が必要",
+        "done": "完了"
+      },
+      "stage": {
+        "incorporating": "取り込み中…",
+        "reviewing": "再レビュー中…",
+        "recommending": "推奨中…"
+      },
+      "followUp": {
+        "watching": "監視中…",
+        "toDecide": "{count}件の判断待ち",
+        "allDecided": "すべて判断済み"
+      },
+      "agentsComplete": "{completed} / {total}エージェント完了",
+      "currently": "現在{agent}",
+      "percent": "{value}%",
+      "companion": "コンパニオン",
+      "companionTooltip": "プロデューサーステップのコンパニオン",
+      "companionSuffix": "(コンパニオン)",
+      "stepOf": "ステップ {current} / {total}",
+      "viewDetailsOutput": "詳細を表示して出力を読む",
+      "viewDetails": "ステップの詳細を表示",
+      "restartTooltip": "このステップからパイプラインを再開",
+      "restartFromHere": "ここから再開",
+      "spinningUpContainer": "コンテナを起動中…",
+      "subtasks": "{completed}/{total}サブタスク",
+      "subtasksInProgress": "· {count}件処理中",
+      "clickToRead": "クリックしてこのエージェントの出力を読む",
+      "reviewApprove": "{agent}の提案をレビューして承認",
+      "resolve": "解決: {question}"
+    },
+    "health": {
+      "title": "パイプラインの状態",
+      "allValid": "すべてのパイプラインは有効で最新です。",
+      "invalidHeading": "無効なパイプライン",
+      "invalidDescription": "存在しないエージェントを参照しているか設定が誤っているため、開始時に失敗(または誤動作)します。カスタムパイプラインを削除するか、ビルトインを再シードしてカタログ定義を復元してください。",
+      "builtinBadge": "ビルトイン",
+      "reseed": "再シード",
+      "delete": "削除",
+      "updatesHeading": "更新あり",
+      "updatesDescription": "これらのビルトインパイプラインの新しいバージョンが提供されました。再シードして取り込んでください(ラベルとアーカイブ状態は維持されます)。",
+      "reseedAll": "すべて再シード ({count})",
+      "dismiss": "閉じる",
+      "done": "完了",
+      "toast": {
+        "reseedFailed": "パイプラインを再シードできませんでした",
+        "deleteFailed": "パイプラインを削除できませんでした"
+      }
+    }
+  },
+  "palette": {
+    "hint": "エージェントをクリックするとパイプラインに追加されます。",
+    "customAgents": "カスタムエージェント"
+  },
+  "gates": {
+    "subtitle": {
+      "humanReview": "PR の人によるコードレビューを待ち、コメントに応じて fixer をループします",
+      "ci": "CI がグリーンになるまで PR をゲートし、失敗時に CI fixer をループします",
+      "conflicts": "クリーンなマージになるまで PR をゲートし、コンフリクト時に resolver をループします"
+    },
+    "status": {
+      "passed": "合格",
+      "gaveUp": "断念",
+      "fixing": "修正中",
+      "failing": "失敗中",
+      "pending": "保留中",
+      "checking": "チェック中"
+    },
+    "conflict": {
+      "mergeable": "マージ可能",
+      "computing": "マージ可能性を計算中…",
+      "conflicts": "ベースとコンフリクト",
+      "unknown": "不明"
+    },
+    "noActivity": "ゲートのアクティビティはまだありません。",
+    "noActivityHint": "プリチェックは PR が開かれると一度実行されます。ポーリング中、ステップはボード上でライブ状態を表示します。",
+    "passedCi": "CI はグリーンです。",
+    "passedConflicts": "PR はベースとクリーンにマージされます。",
+    "humanReview": {
+      "approvals": "{approved} / {required} 件の承認 | {approved} / {required} 件の承認",
+      "suffixFixing": "· fixer がコメントに対応中…",
+      "suffixFailing": "· 対応すべきレビューコメントあり",
+      "suffixAwaiting": "· レビュー待ち",
+      "reviewPr": "GitHub でプルリクエストをレビュー",
+      "requestFixHeading": "修正をリクエスト",
+      "requestFixDescription": "fixer に今すぐ PR ブランチで行わせる変更を記述してください(自動的に対応されるレビューコメントに加えて)。",
+      "requestFixPlaceholder": "例: ヘルパーの名前を変更し、空入力ケースのユニットテストを追加する",
+      "requestFix": "修正をリクエスト"
+    },
+    "ci": {
+      "failingChecks": "失敗中のチェック",
+      "openOnGithub": "GitHub で {name} を開く",
+      "conclusionFallback": "失敗",
+      "failureFallback": "CI はこのコミットで失敗を報告していません。"
+    },
+    "conflicts": {
+      "mergeability": "マージ可能性",
+      "viewPr": "GitHub でプルリクエストを表示"
+    },
+    "attemptsHeading": "{helper} の試行",
+    "attempt": "試行 {number}",
+    "outcome": {
+      "completed": "完了",
+      "failed": "失敗"
+    },
+    "sidebar": {
+      "state": "状態",
+      "fixRounds": "{count} 回の修正ラウンド | {count} 回の修正ラウンド",
+      "attempts": "{attempts}/{max} 回の試行 | {attempts}/{max} 回の試行",
+      "suffixRunning": "· 実行中…",
+      "suffixNotNeeded": "· まだ不要",
+      "gatedCommit": "ゲート済みコミット",
+      "footer": "ゲートはプログラムによるプリチェックを実行し、失敗した場合のみ {helper} を起動します。グリーンのチェックは何も起動せずに進行します。"
+    }
+  },
+  "requirements": {
+    "title": "要件レビュー",
+    "iteration": "イテレーション {current} / {max}",
+    "intro": "AI レビュアーがこの {level} の収集された要件(説明とリンクされた PRD やトラッカーの課題)を検査し、以下の所見を挙げました。関連するものに{answer}し、無関係なものを{dismiss}してから取り込んでください。レビュアーは要件が明確になるまで再レビューします。",
+    "levelFallback": "項目",
+    "answerVerb": "回答",
+    "dismissVerb": "却下",
+    "empty": "レビューはまだありません。このタスクのパイプラインが開始すると、レビュアーが最初のステップとして自動的に実行されます。",
+    "loadingReview": "レビューを読み込み中…",
+    "reviewing": "要件をレビュー中…",
+    "settled": "要件が確定しました。以下のドキュメントは、下流のすべてのエージェントステップが使用するものです。",
+    "exceeded": {
+      "heading": "{max} 回のイテレーション上限に達しましたが、所見が未解決のままです。",
+      "detail": "もう 1 ラウンドレビューを行うか、最後に取り込んだ要件のまま次のフェーズへ進むか、タスクを停止してリセットし要件を作り直して再送信できます。"
+    },
+    "working": {
+      "incorporating": "回答を要件ドキュメントに取り込み中…これは閉じてかまいません。追加の入力が必要な場合のみ通知します。",
+      "reReviewing": "更新された要件を再レビュー中…これは閉じてかまいません。追加の入力が必要な場合のみ通知します。"
+    },
+    "severity": {
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    },
+    "category": {
+      "gap": "ギャップ",
+      "clarification": "明確化",
+      "assumption": "前提",
+      "risk": "リスク",
+      "question": "質問"
+    },
+    "itemStatus": {
+      "open": "未対応",
+      "answered": "回答済み",
+      "resolved": "解決済み",
+      "dismissed": "却下済み",
+      "recommend_requested": "推奨をリクエスト済み"
+    },
+    "answerLabel": "回答",
+    "answerPlaceholder": "この所見に回答…",
+    "dismissIrrelevant": "無関係として却下",
+    "markedForRecommendation": "推奨対象としてマーク",
+    "recommendSomething": "何か推奨してもらう",
+    "recommendationRequested": "推奨をリクエストしました。下記の提案を確認してください。",
+    "reopen": "再オープン",
+    "recommendedAnswers": "推奨された回答",
+    "recommendationProgress": "{ready} / {total} 件準備完了",
+    "generatingSuggestion": "根拠に基づいた提案を生成中…",
+    "currentStandard": "現在の標準: {title}",
+    "accept": "承認",
+    "reject": "却下",
+    "reRequestPlaceholder": "別の推奨をリクエスト…",
+    "reRequest": "再リクエスト",
+    "finalRequirements": "最終要件",
+    "incorporatedDraft": "取り込まれた要件(ドラフト)",
+    "stats": {
+      "findings": "所見",
+      "open": "未対応",
+      "answered": "回答済み",
+      "model": "モデル"
+    },
+    "actions": {
+      "proceedNothing": "進行(取り込むものなし)",
+      "incorporateAnswers": "回答を取り込む",
+      "requestRecommendations": "{count} 件の推奨をリクエスト | {count} 件の推奨をリクエスト | {count} 件の推奨をリクエスト",
+      "reReview": "問題なし、再レビュー",
+      "reReviewing": "再レビュー中…",
+      "redoIncorporation": "取り込みをやり直す",
+      "redoWithDirection": "この方針でやり直す"
+    },
+    "help": {
+      "canProceed": "すべての指摘が却下されました。手直しせず次のフェーズに進みます。",
+      "canIncorporate": "回答を1つの標準フォーマットのドキュメントにまとめ、自動で再レビューします。",
+      "answerAll": "続行するには、すべての指摘に回答するか却下してください。",
+      "merged": "再レビューはこのドキュメントに対してレビュアーを実行します。まとめ方が気に入らない場合は、代わりにコメントを付けてやり直してください。"
+    },
+    "redoPlaceholder": "まとめ方をどう変えるべきですか?",
+    "settledFooter": "要件が確定しました。パイプラインは左のドキュメントで続行しています。",
+    "toast": {
+      "preparingRecommendations": "{count}件の推奨をバックグラウンドで準備中 | {count}件の推奨をバックグラウンドで準備中 | {count}件の推奨をバックグラウンドで準備中",
+      "preparingRecommendationsDescription": "回答は保存されました。閉じてもかまいません。準備ができたら通知します。",
+      "recommendationsReady": "{count}件の推奨が準備できました | {count}件の推奨が準備できました | {count}件の推奨が準備できました",
+      "incorporating": "回答をバックグラウンドで取り込み中",
+      "incorporatingDescription": "ボードに戻りました。追加の入力が必要な場合のみ通知します。",
+      "reviewerSatisfied": "レビュアーが承認しました。パイプラインを続行します",
+      "iterationLimitReached": "反復回数の上限に達しました。進め方を選択してください",
+      "newFindings": "対応すべき新しい指摘はありません | 対応すべき新しい指摘が{count}件あります | 対応すべき新しい指摘が{count}件あります",
+      "proceeding": "次のフェーズに進みます",
+      "taskReset": "タスクをリセットしました。要件を編集して再送信してください",
+      "extraRoundGranted": "レビューの追加ラウンドが1回付与されました"
+    },
+    "errors": {
+      "saveAnswer": "回答を保存できませんでした",
+      "updateFinding": "指摘を更新できませんでした",
+      "requestRecommendations": "推奨をリクエストできませんでした",
+      "acceptRecommendation": "推奨を承認できませんでした",
+      "rejectRecommendation": "推奨を却下できませんでした",
+      "reRequestRecommendation": "推奨を再リクエストできませんでした",
+      "incorporate": "回答を取り込めませんでした",
+      "reReview": "要件を再レビューできませんでした",
+      "proceed": "続行できませんでした",
+      "resolveReview": "レビューを解決できませんでした"
+    }
+  },
+  "clarity": {
+    "title": "バグ報告のトリアージ",
+    "iteration": "反復 {current} / {max}",
+    "intro": "AIレビュアーがこの{level}のバグ報告を修正可能性の観点でトリアージし、その説明とリンクされたコンテキストを確認して、以下の質問を挙げました。関連するものに{answer}、関連しないものを{dismiss}してから取り込んでください。レビュアーはバグ報告が修正に十分な明確さになるまで再レビューします。",
+    "itemFallback": "項目",
+    "introAnswer": "回答",
+    "introDismiss": "却下",
+    "empty": "まだレビューはありません。このタスクのパイプラインが開始すると、レビュアーが最初のステップとして自動的に実行されます。",
+    "loadingReview": "レビューを読み込み中…",
+    "triaging": "バグ報告をトリアージ中…",
+    "converged": "バグ報告が明確化されました。以下の報告が、下流のすべてのエージェントステップで使用されるものです。",
+    "capHeading": "指摘が未解決のまま、反復回数{max}回の上限に達しました。",
+    "capDetail": "もう1ラウンドレビューを行うか、最後に明確化されたバグ報告のまま次のフェーズに進むか、あるいは停止してタスクをリセットし、バグ報告を作り直して再送信してください。",
+    "incorporatingStage": "回答を明確化されたバグ報告に取り込み中… これを閉じてもかまいません。追加の入力が必要な場合のみ通知します。",
+    "reReviewingStage": "更新されたバグ報告を再レビュー中… これを閉じてもかまいません。追加の入力が必要な場合のみ通知します。",
+    "answerLabel": "回答",
+    "answerPlaceholder": "この指摘に回答…",
+    "refineAnswerPlaceholder": "回答を改善…",
+    "saveAnswer": "回答を保存",
+    "dismissIrrelevant": "無関係として却下",
+    "reopen": "再オープン",
+    "docHeading": "明確化されたバグ報告",
+    "docHeadingDraft": "明確化されたバグ報告(下書き)",
+    "rail": {
+      "findings": "指摘",
+      "open": "未解決",
+      "answered": "回答済み",
+      "model": "モデル"
+    },
+    "proceedNothing": "進む(取り込むものなし)",
+    "incorporateAnswers": "回答を取り込む",
+    "hint": {
+      "proceed": "すべての指摘が却下されました。手直しせず次のフェーズに進みます。",
+      "incorporate": "回答を1つの明確化されたバグ報告にまとめ、自動で再レビューします。",
+      "answerAll": "続行するには、すべての指摘に回答するか却下してください。"
+    },
+    "reReviewing": "再レビュー中…",
+    "looksGoodReReview": "問題なし。再レビュー",
+    "redoIncorporation": "取り込みをやり直す",
+    "redoPlaceholder": "まとめ方をどう変えるべきですか?",
+    "redoWithDirection": "この方針でやり直す",
+    "redoHint": "再レビューはこの報告に対してレビュアーを実行します。まとめ方が気に入らない場合は、代わりにコメントを付けてやり直してください。",
+    "incorporatedFooter": "バグ報告が明確化されました。パイプラインは左の報告で続行しています。",
+    "severity": {
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
+    "category": {
+      "gap": "ギャップ",
+      "clarification": "明確化",
+      "assumption": "前提",
+      "risk": "リスク",
+      "question": "質問"
+    },
+    "itemStatus": {
+      "open": "未解決",
+      "answered": "回答済み",
+      "resolved": "解決済み",
+      "dismissed": "却下済み",
+      "recommend_requested": "推奨リクエスト済み"
+    },
+    "toast": {
+      "clarifyingTitle": "バグ報告をバックグラウンドで明確化中",
+      "clarifyingDescription": "ボードに戻りました。追加の入力が必要な場合のみ通知します。",
+      "reReviewSatisfied": "レビュアーが承認しました。パイプラインを続行します",
+      "reReviewExceeded": "反復回数の上限に達しました。進め方を選択してください",
+      "reReviewNewFindings": "対応すべき新しい指摘はありません | 対応すべき新しい指摘が1件あります | 対応すべき新しい指摘が{count}件あります",
+      "proceeding": "次のフェーズに進みます",
+      "taskReset": "タスクをリセットしました。バグ報告を編集して再送信してください",
+      "extraRoundGranted": "レビューの追加ラウンドが1回付与されました"
+    },
+    "error": {
+      "saveAnswer": "回答を保存できませんでした",
+      "updateFinding": "指摘を更新できませんでした",
+      "incorporate": "回答を取り込めませんでした",
+      "reReview": "バグ報告を再レビューできませんでした",
+      "proceed": "続行できませんでした",
+      "resolve": "レビューを解決できませんでした"
+    }
+  },
+  "consensus": {
+    "titlePrefix": "コンセンサス",
+    "participantCount": "参加者なし | 参加者1名 | 参加者{count}名",
+    "loading": "コンセンサスセッションを読み込み中…",
+    "empty": "このステップではまだコンセンサスセッションが実行されていません。",
+    "failed": "コンセンサスに失敗しました: {error}",
+    "unknownError": "不明なエラー",
+    "synthesizedResult": "統合された結果",
+    "confidence": "確信度 {pct}",
+    "panel": "パネル",
+    "topScore": "最高 {label} {pct}",
+    "expert": "エキスパート {letter}",
+    "participant": "参加者",
+    "strategy": {
+      "specialistPanel": "スペシャリストパネル",
+      "debate": "ディベート",
+      "rankedVoting": "順位付け投票"
+    },
+    "round": {
+      "heading": "ラウンド {n}",
+      "contributions": "貢献",
+      "draft": "独立したドラフト",
+      "critique": "批評と修正",
+      "score": "採点"
+    },
+    "status": {
+      "running": "実行中",
+      "synthesizing": "統合中",
+      "done": "完了",
+      "failed": "失敗"
+    }
+  },
+  "brainstorm": {
+    "title": {
+      "architecture": "アーキテクチャのブレインストーム",
+      "requirements": "要件のブレインストーム"
+    },
+    "subjectNoun": {
+      "architecture": "アプローチ",
+      "requirements": "要件"
+    },
+    "docNoun": {
+      "architecture": "技術的アプローチ",
+      "requirements": "要件の方向性"
+    },
+    "iteration": "イテレーション {current} / {max}",
+    "intro": "AIパートナーが以下の{subject}の選択肢を、それぞれのトレードオフとともに提案しました。採用したいものを{choose}（必要なら方向づけ）し、残りを{dismiss}して統合してください。{doc}に収束するまで再実行されます。",
+    "introChoose": "採用",
+    "introDismiss": "却下",
+    "empty": "まだブレインストームはありません。このタスクのパイプラインがブレインストームステップに到達すると自動的に実行されます。",
+    "loading": "ブレインストームを読み込み中…",
+    "generating": "選択肢を生成中…",
+    "settledBanner": "{doc}は確定しました。以下のドキュメントが次のステージで使用されます。",
+    "exceeded": {
+      "heading": "選択肢が未解決のまま{max}回のイテレーション上限に達しました。",
+      "detail": "もう1ラウンドのブレインストームを行うか、最後の方向性のまま次のフェーズに進むか、タスクを停止してリセットし編集して再送信できます。"
+    },
+    "working": {
+      "incorporating": "選択内容を{doc}にまとめています… このまま閉じても構いません。追加の入力が必要な場合のみ通知します。",
+      "reReviewing": "更新された方向性でブレインストームを再実行しています… このまま閉じても構いません。追加の入力が必要な場合のみ通知します。"
+    },
+    "severity": {
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
+    "category": {
+      "gap": "ギャップ",
+      "clarification": "明確化",
+      "assumption": "前提",
+      "risk": "リスク",
+      "question": "質問"
+    },
+    "itemStatus": {
+      "open": "未対応",
+      "answered": "回答済み",
+      "resolved": "解決済み",
+      "dismissed": "却下済み",
+      "recommend_requested": "推奨を依頼済み"
+    },
+    "yourChoice": "あなたの選択",
+    "replyPlaceholder": {
+      "refine": "選択を調整…",
+      "choose": "この選択肢を採用 / 方向づけ…"
+    },
+    "saveChoice": "選択を保存",
+    "dismiss": "却下",
+    "reopen": "再開",
+    "docDraft": "{doc}（ドラフト）",
+    "rail": {
+      "options": "選択肢",
+      "open": "未対応",
+      "chosen": "採用済み",
+      "model": "モデル"
+    },
+    "proceedNothing": "進む（統合する内容なし）",
+    "incorporateChoices": "選択を統合",
+    "hint": {
+      "allDismissed": "すべての選択肢が却下されました。方向性なしで次のフェーズに進みます。",
+      "incorporate": "選択内容を1つの{doc}にまとめ、ブレインストームを自動的に再実行します。",
+      "chooseAll": "続行するには、すべての選択肢を採用または却下してください。"
+    },
+    "reRunning": "再実行中…",
+    "reRun": "問題なし、再実行",
+    "redoIncorporation": "統合をやり直す",
+    "redoPlaceholder": "方向性をどう変えるべきですか？",
+    "redoWithDirection": "この方向性でやり直す",
+    "mergedHint": "再実行はこの方向性でエージェントを実行します。統合のされ方に不満があれば、代わりにコメント付きでやり直してください。",
+    "incorporatedFooter": "方向性が確定しました。左側のドキュメントでパイプラインが継続中です。",
+    "toast": {
+      "saveChoiceError": "選択を保存できませんでした",
+      "updateOptionError": "選択肢を更新できませんでした",
+      "incorporateError": "選択内容を統合できませんでした",
+      "draftingTitle": "バックグラウンドで{doc}を作成中",
+      "draftingDescription": "ボードに戻りました。追加の入力が必要な場合のみ通知します。",
+      "reReviewSettled": "方向性が確定しました。パイプラインを継続します",
+      "reReviewExceeded": "イテレーション上限に達しました。進め方を選択してください",
+      "reReviewNewOptions": "対応すべき新しい選択肢はありません | 対応すべき新しい選択肢が1件あります | 対応すべき新しい選択肢が{count}件あります",
+      "reReviewError": "ブレインストームを再実行できませんでした",
+      "proceeding": "次のフェーズに進みます",
+      "proceedError": "進めませんでした",
+      "taskReset": "タスクをリセットしました。編集して再送信してください",
+      "extraRoundGranted": "ブレインストームをもう1ラウンド許可しました",
+      "resolveError": "ブレインストームを解決できませんでした"
+    }
+  },
+  "spec": {
+    "title": "要件",
+    "loading": "仕様を読み込み中…",
+    "error": "仕様を読み込めませんでした。このウィンドウを開き直してください。",
+    "overview": "概要",
+    "noFeatureGroups": "機能グループなし",
+    "noSummary": "サービスの概要なし。",
+    "noGherkinForGroup": "このグループのGherkinシナリオはありません。",
+    "noRequirements": "このグループに要件はありません。",
+    "domainRules": "ドメインルール",
+    "ruleRationale": " — {rationale}",
+    "moduleHint": "モジュールなし。左側の機能グループを選択すると要件が表示されます。 | モジュール1件。左側の機能グループを選択すると要件が表示されます。 | モジュール{count}件。左側の機能グループを選択すると要件が表示されます。",
+    "moduleHintGherkin": "モジュールなし。左側の機能グループを選択すると要件が表示されるか、Gherkinシナリオに切り替えられます。 | モジュール1件。左側の機能グループを選択すると要件が表示されるか、Gherkinシナリオに切り替えられます。 | モジュール{count}件。左側の機能グループを選択すると要件が表示されるか、Gherkinシナリオに切り替えられます。",
+    "mode": {
+      "structured": "構造化",
+      "gherkin": "Gherkin",
+      "gherkinTooltip": "Gherkinシナリオ",
+      "gherkinNone": "main にまだシナリオはありません"
+    },
+    "empty": {
+      "title": "まだ仕様はありません",
+      "description": "このサービスはデフォルトブランチに仕様がありません。タスクがパイプラインを実行すると仕様が生成され、main に反映されるとGherkinシナリオとともにここに表示されます。"
+    },
+    "priority": {
+      "must": "Must",
+      "should": "Should",
+      "could": "Could"
+    },
+    "kind": {
+      "functional": "機能要件",
+      "nonfunctional": "非機能要件",
+      "constraint": "制約"
+    },
+    "acceptance": {
+      "given": "Given",
+      "when": "When",
+      "then": "Then"
+    }
+  },
+  "followUp": {
+    "title": "フォローアップ",
+    "titleWithBlock": "フォローアップ — {title}",
+    "subtitle": "Coderが提起した将来を見据えたフォローアップと質問です。すべての項目を決定するとパイプラインが継続します。",
+    "badge": {
+      "toDecide": "{count}件を決定 | {count}件を決定 | {count}件を決定",
+      "allDecided": "すべて決定済み"
+    },
+    "empty": {
+      "title": "まだフォローアップはありません。",
+      "hint": "Coderの作業中、未解決の事項やサブタスク、質問がここにストリーミングされます。ライブで表示されるため、Coderの完了前に対応できます。"
+    },
+    "suggested": "提案:",
+    "viewIssue": "issueを表示",
+    "yourAnswer": "あなたの回答:",
+    "answerPlaceholder": "この質問に回答してください。Coderの次のパスに反映されます…",
+    "status": {
+      "pending": "判断が必要",
+      "filed": "issueとして登録済み",
+      "queued": "Coderに送信済み",
+      "answered": "回答済み",
+      "dismissed": "却下済み"
+    },
+    "actions": {
+      "answerAndSend": "回答して返送",
+      "dismiss": "却下",
+      "fileAsIssue": "issueとして登録",
+      "sendToCoder": "Coderに送信"
+    },
+    "footer": {
+      "summary": "{count}件 · 未決定{undecided}件 | {count}件 · 未決定{undecided}件",
+      "loops": "使用したCoderループ: {loops} / {max}"
+    }
+  },
+  "humanTest": {
+    "title": "人手によるテスト",
+    "titleWithBlock": "人手によるテスト — {title}",
+    "subtitle": "ライブ環境で変更を検証",
+    "notStarted": "このステップはまだ開始されていません。",
+    "confirm": "問題なし — 続行",
+    "phase": {
+      "provisioning": "環境をプロビジョニング中…",
+      "awaitingHuman": "あなたの検証待ち",
+      "fixing": "Fixerが指摘事項に対応中…",
+      "resolvingConflicts": "mainとの競合を解決中…",
+      "passed": "合格"
+    },
+    "envStatus": {
+      "provisioning": "プロビジョニング中…",
+      "ready": "準備完了",
+      "failed": "失敗",
+      "expired": "期限切れ",
+      "tearingDown": "破棄中…",
+      "tornDown": "破棄済み"
+    },
+    "environment": {
+      "heading": "一時環境",
+      "noUrl": "URLはまだありません。",
+      "expires": "有効期限 {date}",
+      "none": "ライブ環境はありません。"
+    },
+    "actions": {
+      "recreate": "再作成",
+      "destroy": "破棄",
+      "pullMain": "mainを取り込んで再デプロイ"
+    },
+    "fix": {
+      "heading": "問題が見つかりましたか?",
+      "cancel": "キャンセル",
+      "requestFix": "修正を依頼",
+      "placeholder": "何が問題だったか説明してください。Fixerエージェントがこれをコンテキストとして受け取り、再テストのために環境が再構築されます。",
+      "send": "Fixerに送信"
+    },
+    "history": {
+      "heading": "履歴(ラウンドなし) | 履歴(1ラウンド) | 履歴({count}ラウンド)",
+      "fixRequested": "修正を依頼しました",
+      "pulledMain": "mainを取り込みました"
+    },
+    "roundOutcome": {
+      "completed": "完了",
+      "failed": "失敗",
+      "inProgress": "進行中"
+    }
+  },
+  "testing": {
+    "title": "テストレポート",
+    "subtitle": "変更の探索的テストとリグレッションテスト",
+    "badge": {
+      "greenlit": "承認",
+      "needsFixes": "修正が必要"
+    },
+    "fixerAttempts": "Fixerの試行",
+    "fixCount": "{attempts}/{max} 修正",
+    "fixingSuffix": "· 修正中…",
+    "fixerTimeline": {
+      "attempt": "試行 {n}",
+      "completed": "完了",
+      "failed": "失敗",
+      "addressed": "対応中"
+    },
+    "empty": {
+      "title": "テストレポートはまだありません。",
+      "hint": "Testerがパスを完了するとレポートが表示されます。実行中はボード上でステップのライブ進捗が表示されます。"
+    },
+    "scenariosOutcomes": "シナリオと結果",
+    "otherChecks": "その他のチェック",
+    "checks": "チェック",
+    "screenshotCount": "スクリーンショット{count}枚 | スクリーンショット{count}枚",
+    "checkCount": "チェック{count}件 | チェック{count}件",
+    "concernCount": "懸念{count}件 | 懸念{count}件",
+    "noDiscreteCheck": "このシナリオには個別のチェックが記録されていません。",
+    "severity": {
+      "critical": "致命的",
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    },
+    "status": {
+      "passed": "合格",
+      "failed": "失敗",
+      "skipped": "スキップ"
+    },
+    "shot": {
+      "failed": "失敗",
+      "failedToLoad": "読み込みに失敗しました",
+      "loading": "読み込み中…"
+    },
+    "screenshotAlt": "{view}(スクリーンショット)",
+    "screenshots": "スクリーンショット",
+    "verdict": {
+      "heading": "判定",
+      "safe": "リリース可能",
+      "withheld": "保留"
+    },
+    "outcomes": {
+      "heading": "結果",
+      "passed": "合格",
+      "failed": "失敗",
+      "skipped": "スキップ",
+      "concerns": "懸念",
+      "blocking": "(ブロッキング{count}件) | (ブロッキング{count}件)"
+    },
+    "environment": "環境",
+    "infrastructure": "インフラ",
+    "standup": {
+      "up": "依存関係を起動しました",
+      "failed": "依存関係の起動に失敗しました",
+      "took": "所要時間 {seconds}秒",
+      "showLogs": "スタンドアップログを表示",
+      "hideLogs": "スタンドアップログを非表示"
+    },
+    "footer": "シナリオはTesterが検証対象に選んだ領域(スペックの受け入れシナリオ)です。結果と懸念は名前ごとにその下にグループ化されます。"
+  },
+  "visualConfirm": {
+    "ariaLabel": "ビジュアル確認",
+    "title": "ビジュアル確認",
+    "titleWithBlock": "ビジュアル確認 — {title}",
+    "subtitle": "リファレンスデザインと照らしてUIをレビュー",
+    "notStarted": "このステップはまだ開始されていません。",
+    "noScreenshots": "スクリーンショットは取得されませんでした。手動で変更をレビューするか、下からリファレンスをアップロードしてください。",
+    "noteIssue": "{view}の問題を記録",
+    "noted": "記録済み",
+    "notePlaceholder": "{view}のどこが問題ですか?",
+    "reviewedManually": "手動でレビューしました",
+    "recapture": "再取得",
+    "approve": "承認 — 続行",
+    "phase": {
+      "awaiting_human": "あなたのレビュー待ち",
+      "fixing": "Fixer が指摘事項に対応中…",
+      "approved": "承認済み"
+    },
+    "outcome": {
+      "completed": "完了",
+      "failed": "失敗",
+      "inProgress": "進行中"
+    },
+    "lightbox": {
+      "actualLabel": "{view} — 実際",
+      "actualAlt": "{view}（実際）",
+      "referenceLabel": "{view} — リファレンス",
+      "referenceAlt": "{view}（リファレンス）"
+    },
+    "upload": {
+      "heading": "リファレンスデザインをアップロード",
+      "viewPlaceholder": "ビュー名（例: login）",
+      "tipReady": "ヒント: 上のペアに画像を直接ドロップするとリファレンスに設定できます。",
+      "tipNeedView": "まずビュー名を入力してからファイルを選択してください。または上のペアに画像を直接ドロップしてください。"
+    },
+    "requestFix": {
+      "heading": "修正をリクエスト",
+      "placeholder": "Fixer に伝えたいその他の事項（上記のビューごとのメモに加えて）。",
+      "foldedHint": "ビューごとのメモは自動的に折り込まれます。",
+      "send": "Fixer に送信"
+    },
+    "history": {
+      "heading": "履歴（ラウンドなし） | 履歴（{count} ラウンド） | 履歴（{count} ラウンド）",
+      "fixRequested": "修正をリクエスト済み"
+    }
+  },
+  "focus": {
+    "board": "ボード",
+    "typeSubtitle": "{type} · フォーカスビュー",
+    "runPipeline": "パイプラインを実行",
+    "rerunPipeline": "パイプラインを再実行",
+    "noPipelineRunning": "実行中のパイプラインはありません",
+    "emptyPipelineHint": "パイプラインを実行して、このブロックで作業するエージェントを可視化します。",
+    "description": "説明",
+    "overallProgress": "全体の進捗",
+    "dependencies": "依存関係",
+    "noDependencies": "なし"
+  },
+  "environments": {
+    "title": "一時環境",
+    "status": {
+      "provisioning": "起動中…",
+      "ready": "実行中",
+      "failed": "エラー",
+      "expired": "期限切れ",
+      "tearing_down": "シャットダウン中…",
+      "torn_down": "シャットダウン済み"
+    },
+    "expires": "{date} に期限切れ",
+    "empty": "この実行に一時環境はありません。"
+  },
+  "provisioning": {
+    "title": "プロビジョニングログ",
+    "refresh": "更新",
+    "empty": "プロビジョニングの試行はまだ記録されていません。",
+    "operation": {
+      "provision": "起動",
+      "teardown": "破棄",
+      "status": "ステータスチェック",
+      "dispatch": "起動",
+      "release": "破棄",
+      "poll-failure": "ヘルスチェック"
+    },
+    "outcome": {
+      "success": "成功",
+      "failure": "失敗"
+    }
+  },
+  "kaizen": {
+    "title": "Kaizen",
+    "subtitle": "エージェント実行の継続的改善グレーディング",
+    "refresh": "更新",
+    "notConfigured": "このデプロイでは Kaizen が設定されていません。",
+    "grading": {
+      "title": "Kaizen グレーディング"
+    },
+    "status": {
+      "scheduled": "予約済み",
+      "grading": "グレーディング中…",
+      "failed": "失敗",
+      "graded": "グレーディング済み"
+    },
+    "gradeValue": "{grade}/5",
+    "scheduledHint": "このステップの Kaizen グレーディングがキューに入っています。実行後にバックグラウンドで動作します。",
+    "recommendations": "推奨事項",
+    "noImprovements": "スムーズなやり取りで、改善点はありません。",
+    "gradedBy": "{model} によるグレーディング",
+    "failedFallback": "グレーディングを完了できませんでした。",
+    "promptVersion": "v{version}",
+    "verifiedCombos": {
+      "title": "検証済みの組み合わせ",
+      "count": "（{count}）",
+      "hint": "プロンプト + エージェント + モデルの組み合わせで、推奨事項なしで 5 回連続で 4 または 5 のグレードを獲得したもの。これらは以降グレーディングされません。",
+      "empty": "組み合わせはまだありません。",
+      "progress": "{count}/5",
+      "modelPrompt": "{model} · プロンプト v{version}"
+    },
+    "history": {
+      "title": "グレーディング履歴",
+      "col": {
+        "when": "日時",
+        "agent": "エージェント",
+        "model": "モデル",
+        "grade": "グレード",
+        "recommendations": "推奨事項"
+      },
+      "empty": "グレーディングはまだありません。"
+    }
+  },
+  "recurring": {
+    "runEvery": "実行間隔",
+    "hours": "時間",
+    "allowedDays": "許可する曜日",
+    "allowedDaysHelp": "すべてオフにすると任意の曜日に実行します。",
+    "weekday": {
+      "sun": "日",
+      "mon": "月",
+      "tue": "火",
+      "wed": "水",
+      "thu": "木",
+      "fri": "金",
+      "sat": "土"
+    },
+    "windowToggle": "1 日の時間帯内のみ（例: 営業時間）",
+    "to": "〜",
+    "timezone": "タイムゾーン"
+  },
+  "media": {
+    "compare": {
+      "mode": {
+        "sideBySide": "横並び",
+        "overlay": "オーバーレイ",
+        "swipe": "スワイプ",
+        "diff": "差分"
+      },
+      "actual": "実際",
+      "reference": "リファレンス",
+      "actualAlt": "{view}（実際）",
+      "referenceAlt": "{view}（リファレンス）",
+      "replace": "置き換え",
+      "failedToLoad": "読み込みに失敗しました",
+      "loading": "読み込み中…",
+      "notCaptured": "未キャプチャ",
+      "dropHint": "ドロップまたはクリックしてリファレンスを追加",
+      "diffHint": "同一のピクセルは黒く表示され、差分が光ります。"
+    },
+    "lightbox": {
+      "ariaLabel": "スクリーンショット: {label}",
+      "ariaLabelFallback": "スクリーンショットビューア",
+      "fallbackTitle": "スクリーンショット",
+      "counter": "{current} / {total}",
+      "zoomOut": "縮小 (-)",
+      "zoomIn": "拡大 (+)",
+      "reset": "リセット (0)",
+      "close": "閉じる (Esc)",
+      "prev": "前へ (←)",
+      "next": "次へ (→)",
+      "failed": "画像の読み込みに失敗しました。",
+      "loading": "読み込み中…"
+    }
+  },
+  "fragments": {
+    "panel": {
+      "title": "プロンプトフラグメントライブラリ"
+    },
+    "intro": {
+      "workspace": "このボードでエージェントが従うベストプラクティスのガイドラインを整備します。フラグメントは組み込みカタログ、アカウント、このボードからマージされ (後の階層が前の階層を上書きします)、各エージェント実行ごとに関連するものが選択されます。",
+      "account": "このアカウントのすべてのボードで共有されるベストプラクティスのガイドラインを整備します。アカウントフラグメントは組み込みカタログの下にマージされ、ボードはその上で独自のものを上書きまたは追加できます。各エージェント実行ごとに関連するものが選択されます。"
+    },
+    "owner": {
+      "workspace": "このボード",
+      "account": "このアカウント"
+    },
+    "tier": {
+      "builtin": "組み込み",
+      "account": "アカウント",
+      "workspace": "このボード"
+    },
+    "tab": {
+      "catalog": "解決済みカタログ",
+      "documents": "ドキュメント",
+      "sources": "リポジトリソース"
+    },
+    "catalog": {
+      "summary": "{count} 件のフラグメントを解決 · {builtin} 件が組み込み。 | {count} 件のフラグメントを解決 · {builtin} 件が組み込み。",
+      "live": "ライブ · {source}"
+    },
+    "authored": {
+      "fromRepo": "リポジトリから",
+      "empty": {
+        "workspace": "ボード固有のフラグメントはまだありません。下から追加するか、id を使って組み込みを上書きしてください。",
+        "account": "アカウント固有のフラグメントはまだありません。下から追加するか、id を使って組み込みを上書きしてください。"
+      },
+      "addTitle": "フラグメントを追加",
+      "titlePlaceholder": "タイトル",
+      "summaryPlaceholder": "1行の要約 (セレクターで使用)",
+      "bodyPlaceholder": "ガイダンス本文 (プロンプトに挿入)",
+      "tagsPlaceholder": "タグ、カンマ区切り (例: backend, db)",
+      "add": "フラグメントを追加"
+    },
+    "documents": {
+      "intro": "Confluence/Notion ページまたは GitHub ファイルをベストプラクティスのフラグメントとしてリンクします。そのガイダンスは実行時にソースから再解決されます。ドキュメントを編集すると、次のエージェント実行は新しいバージョンに従います (再インポート不要)。",
+      "lastResolved": "最終解決 {date}",
+      "refreshTitle": "今すぐソースから再解決",
+      "empty": "ドキュメント連携フラグメントはまだありません。下からリンクしてください。",
+      "linkTitle": "ドキュメントをリンク",
+      "disabledHint": "まず接続済みのドキュメントソースを持つボードを作成してください。アカウントレベルのドキュメントフラグメントは、このアカウントのいずれかのボードを通じて取得されます。",
+      "connectFirst": "まず Integrations でドキュメントソース (Confluence、Notion または GitHub) を接続してください。",
+      "refPlaceholder": "ページ id または URL (例: Confluence/Notion ページや GitHub ファイル URL)",
+      "tagsPlaceholder": "タグ、カンマ区切り (任意)",
+      "link": "リビングフラグメントとしてリンク"
+    },
+    "sources": {
+      "metaSynced": "同期済み · ref {ref}",
+      "metaNever": "未同期 · ref {ref}",
+      "changes": "{count} 件の変更 | {count} 件の変更",
+      "empty": "リンクされたガイドラインリポジトリはありません。下からリンクして Markdown ファイルをフラグメントとしてインポートしてください。",
+      "linkTitle": "ガイドラインリポジトリをリンク",
+      "ownerPlaceholder": "owner",
+      "repoPlaceholder": "repo",
+      "dirPlaceholder": "ディレクトリパス (例: guidelines)",
+      "refPlaceholder": "ref (デフォルト HEAD)",
+      "link": "リンクして同期"
+    },
+    "toast": {
+      "added": "フラグメントを追加しました",
+      "addFailed": "フラグメントを追加できませんでした",
+      "removed": "フラグメントを削除しました",
+      "removeFailed": "フラグメントを削除できませんでした",
+      "documentLinked": "ドキュメントをリビングフラグメントとしてリンクしました",
+      "linkDocumentFailed": "ドキュメントをリンクできませんでした",
+      "refreshed": "ソースからフラグメントを再解決しました",
+      "refreshFailed": "フラグメントを更新できませんでした",
+      "sourceLinked": "ソースをリンクして同期しました",
+      "linkSourceFailed": "ソースをリンクできませんでした",
+      "synced": "同期完了: {updated} 件更新、{removed} 件削除",
+      "syncFailed": "ソースを同期できませんでした",
+      "changesAvailable": "{count} 件の変更が利用可能 | {count} 件の変更が利用可能",
+      "upToDate": "最新です",
+      "checkSourceFailed": "ソースを確認できませんでした",
+      "sourceUnlinked": "ソースのリンクを解除しました",
+      "unlinkSourceFailed": "ソースのリンクを解除できませんでした"
+    }
+  },
+  "sandbox": {
+    "title": "Sandbox: プロンプトとモデルのテスト",
+    "description": "プロンプトのバージョンとモデルを採点付きフィクスチャに対して試し、ジャッジモデルでスコアリングします。",
+    "unavailable": {
+      "title": "このデプロイメントでは Sandbox が有効になっていません。",
+      "body": "専用のデータベースが必要です (Cloudflare では専用の {db}、Node では {schema} Postgres スキーマ)。プロビジョニングして再読み込みしてください。"
+    },
+    "error": {
+      "title": "Sandbox の読み込みに失敗しました。"
+    },
+    "deploymentDefault": "デプロイメントのデフォルト",
+    "defaultRunName": "{kind} sandbox 実行",
+    "baseline": "ベースライン",
+    "versionLabel": "v{version}",
+    "tab": {
+      "experiments": "実験",
+      "prompts": "プロンプト",
+      "fixtures": "フィクスチャ"
+    },
+    "builder": {
+      "title": "新しい実験",
+      "agent": "エージェント",
+      "promptVersions": "プロンプトバージョン",
+      "models": "モデル",
+      "noModels": "選択可能なモデルがありません。プロバイダーキーを設定するか、Cloudflare AI を有効にしてください。",
+      "fixtures": "フィクスチャ",
+      "noFixtures": "このエージェントのフィクスチャはありません。",
+      "judgeModel": "ジャッジモデル",
+      "judgeModelHint": "すべてのセルを採点します",
+      "nameLabel": "名前 (任意)",
+      "cellCount": "{count} 個のセル | {count} 個のセル",
+      "maxCells": "(最大 {max})",
+      "run": "実行"
+    },
+    "experimentStatus": {
+      "draft": "下書き",
+      "running": "実行中",
+      "done": "完了",
+      "failed": "失敗"
+    },
+    "results": {
+      "col": {
+        "prompt": "プロンプト",
+        "model": "モデル",
+        "fixture": "フィクスチャ",
+        "score": "スコア",
+        "objective": "目的"
+      },
+      "failed": "失敗",
+      "past": "過去の実験",
+      "empty": "実験はまだありません。"
+    },
+    "prompts": {
+      "forkTitle": "候補にフォーク",
+      "editTitle": "編集 / バージョン管理",
+      "forkOf": "フォーク · {name}",
+      "newVersionOf": "新しいバージョン · {name}",
+      "saveVersion": "新しいバージョンを保存",
+      "hint": "プロンプトを選んで、出荷済みのベースラインをフォークするか候補をバージョン管理します。保存するたびに、テストに使える不変のバージョンが追加されます。"
+    },
+    "fixtureKind": {
+      "requirements": "要件",
+      "clarity": "明確さ",
+      "architecture": "アーキテクチャ",
+      "code-review": "コードレビュー",
+      "repo-feature": "リポジトリ機能",
+      "repo-bug": "リポジトリのバグ"
+    },
+    "fixtureOrigin": {
+      "builtin": "組み込み",
+      "custom": "カスタム"
+    },
+    "fixtures": {
+      "expectations": "{count}件の採点対象の期待値 | {count}件の採点対象の期待値",
+      "empty": "フィクスチャがありません。"
+    },
+    "toast": {
+      "running": "実験を実行中…",
+      "complete": "実験が完了しました",
+      "runFailed": "実験を実行できませんでした",
+      "versionSaved": "新しいバージョンを保存しました",
+      "saveFailed": "バージョンを保存できませんでした",
+      "archiveFailed": "アーカイブできませんでした"
+    }
+  },
+  "bootstrap": {
+    "title": "リポジトリをブートストラップ",
+    "repoName": {
+      "error": {
+        "hasSlash": "'owner/' プレフィックスを付けず、リポジトリ名のみを入力してください。",
+        "invalidChars": "使用できるのは英数字、'.'、'_'、'-' のみです。",
+        "tooLong": "100文字以内で入力してください。"
+      }
+    },
+    "intro": {
+      "canCreate": "空の GitHub リポジトリを作成し、ブートストラッパーエージェントがサンドボックスコンテナ内でそれを構築します。リファレンスアーキテクチャの1つを適用するか、自由形式のプロンプトに従ってゼロから作成します。cat-factory が初回コミットをそのリポジトリにプッシュします。このアカウントではリポジトリの作成も代行できます。",
+      "manual": "空の GitHub リポジトリを作成し、ブートストラッパーエージェントがサンドボックスコンテナ内でそれを構築します。リファレンスアーキテクチャの1つを適用するか、自由形式のプロンプトに従ってゼロから作成します。cat-factory が初回コミットをそのリポジトリにプッシュします。リポジトリは下のボタン1つで自分で作成するため、リポジトリ作成権限は不要です。"
+    },
+    "github": {
+      "prompt": "ブートストラップの前に、このワークスペースを GitHub に接続してください。実行ではリポジトリにプッシュします。App が既にインストールされているインストールをリンクするか、インストールしてください。"
+    },
+    "section": {
+      "newRepo": "新しいリポジトリ"
+    },
+    "mode": {
+      "label": "どのように開始しますか？",
+      "reference": {
+        "label": "リファレンスアーキテクチャから",
+        "description": "管理対象のベースリポジトリをクローンし、新しいサービスに合わせて適用します。"
+      },
+      "scratch": {
+        "label": "ゼロから",
+        "description": "ベース不要で、自由形式のプロンプトから新しいリポジトリをスキャフォールドします。"
+      }
+    },
+    "reference": {
+      "label": "リファレンスアーキテクチャ",
+      "description": "クローンして適用する管理対象のベースリポジトリ。",
+      "empty": "リファレンスアーキテクチャがまだありません。下で追加するか、'ゼロから' に切り替えてください。",
+      "placeholder": "リファレンスアーキテクチャを選択"
+    },
+    "targetRepo": {
+      "label": "ターゲットリポジトリ名",
+      "descWithOwner": "{owner} の下にこの名前で新しいリポジトリを作成し、ブートストラップがそこにプッシュします。README、.gitignore、ライセンスがあらかじめ入っていても問題ありません。",
+      "descNoOwner": "この名前で新しいリポジトリを作成し、ブートストラップがそこにプッシュします。README、.gitignore、ライセンスがあらかじめ入っていても問題ありません。"
+    },
+    "createRepo": {
+      "now": "リポジトリを作成",
+      "onGitHub": "GitHub で作成",
+      "titleNow": "今すぐリポジトリを作成",
+      "titleGitHub": "GitHub の新規リポジトリ作成ページを事前入力済みで開く"
+    },
+    "grantAccess": {
+      "label": "App にこのリポジトリへのアクセスを許可",
+      "title": "App のインストール設定を開き、新しいリポジトリへのアクセスを許可します"
+    },
+    "description": {
+      "label": "説明",
+      "help": "リポジトリの任意の1行要約。"
+    },
+    "instructions": {
+      "labelReference": "ブートストラッパーへの追加指示",
+      "labelScratch": "ブートストラッパーは何を構築すべきですか？",
+      "descReference": "任意。リファレンスアーキテクチャのデフォルト指示に追記されます。",
+      "descScratch": "新しいサービスを記述してください。スタック、構造、何をすべきか。"
+    },
+    "visibility": {
+      "label": "可視性",
+      "private": "プライベートリポジトリ"
+    },
+    "launch": "リポジトリをブートストラップ",
+    "recent": {
+      "title": "最近の実行",
+      "fromArch": "{name} から",
+      "fromScratch": "ゼロから",
+      "open": "開く"
+    },
+    "status": {
+      "pending": "保留中",
+      "running": "実行中",
+      "succeeded": "成功",
+      "failed": "失敗"
+    },
+    "arch": {
+      "title": "リファレンスアーキテクチャ",
+      "add": "追加",
+      "pickRepo": {
+        "label": "既存の GitHub リポジトリを選択",
+        "description": "アクセスできるリポジトリを選んでオーナーと名前を入力するか、下で手動で入力してください。"
+      },
+      "name": {
+        "label": "名前",
+        "description": "このベースのわかりやすいラベル。"
+      },
+      "repoOwner": "リポジトリオーナー",
+      "repoName": "リポジトリ名",
+      "descriptionPlaceholder": "このベースの任意の要約",
+      "defaultInstructions": {
+        "label": "デフォルトのブートストラッパー指示",
+        "description": "このベースを使用するたびに、実行ごとの指示の前に付加されます。"
+      }
+    },
+    "toast": {
+      "repoCreated": "リポジトリを作成しました",
+      "repoCreateFailed": "リポジトリを作成できませんでした",
+      "failed": "ブートストラップに失敗しました",
+      "failedFallback": "ブートストラッパーが失敗を報告しました。",
+      "started": "ブートストラップを開始しました",
+      "startedDesc": "コンテナが {repo} をブートストラップしています。進捗はボードで確認できます。",
+      "bootstrapFailed": "ブートストラップできませんでした",
+      "saveArchFailed": "リファレンスアーキテクチャを保存できませんでした",
+      "deleteFailed": "削除できませんでした"
+    }
+  }
+}
