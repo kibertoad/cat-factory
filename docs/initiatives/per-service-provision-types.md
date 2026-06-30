@@ -2,6 +2,10 @@
 
 > Initiative tracker + plan of record. A later iteration reads this FIRST to resume
 > without re-deriving context. This is the durable plan; capture every decision here.
+>
+> **All slices (1–11) are done.** The end-state reference for users/operators now lives in
+> [`backend/docs/per-service-provisioning.md`](../../backend/docs/per-service-provisioning.md);
+> this tracker remains the design + slice history.
 
 ## Goal & rationale
 

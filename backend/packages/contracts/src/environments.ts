@@ -727,6 +727,19 @@ export const registerEnvironmentHandlerSchema = v.object({
 export type RegisterEnvironmentHandlerInput = v.InferOutput<typeof registerEnvironmentHandlerSchema>
 
 /**
+ * Probe a per-type infra handler connection before saving (nothing persisted). Carries the
+ * engine connection config + its (write-only) secret bundle, optionally pinning the registry
+ * backend that builds the provider (else resolved from the engine). The same shape as
+ * {@link registerEnvironmentHandlerSchema} minus the persistence-only `provisionType`/`manifestId`.
+ */
+export const testEnvironmentHandlerSchema = v.object({
+  config: infraHandlerConfigSchema,
+  backendKind: v.optional(v.string()),
+  secrets: v.optional(v.record(v.string(), v.string())),
+})
+export type TestEnvironmentHandlerInput = v.InferOutput<typeof testEnvironmentHandlerSchema>
+
+/**
  * The body for a per-USER handler override PUT, where the provision type is taken from the
  * path (`/me/environment-handlers/:workspaceId/:provisionType`) — so the body carries only
  * the config + secrets (+ optional `manifestId`/`backendKind`), and must NOT re-send a

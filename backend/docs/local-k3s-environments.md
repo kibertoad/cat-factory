@@ -8,6 +8,17 @@ in through the app-owned env-backend registry (`EnvironmentBackendRegistry`) —
 third-party adapter uses (registered by reference via `createBackendRegistries()`). Selection is per-workspace: a workspace connects either the generic
 `manifest` HTTP backend or the native `kubernetes` backend.
 
+> **Where the manifest config lives (the per-service split).** Under the current
+> [per-service provisioning](./per-service-provisioning.md) model, **the service (repo) owns
+> the manifest source + render inputs** (`block.provisioning`: colocated/separate path,
+> `renderer`, image overrides, secret injections, per-env helm releases), while the **workspace
+> handler owns the engine** (apiserver URL + token + CA + URL derivation + shared helm). The
+> `kubernetes` backend serves two engines — `local-k3s` (this doc) and `remote-kubernetes`. The
+> setup below is the **engine** side (the apiserver connection); a `raw`-manifest service is
+> applied synchronously over the apiserver REST client (described here), while a
+> `kustomize`/helm/Gateway service is rendered in the **deploy container** — see
+> [per-service-provisioning.md](./per-service-provisioning.md).
+
 ## How it works
 
 - **Provision**: render the namespace name (`namespaceTemplate`, default `cf-env-<pr>`), create
@@ -37,15 +48,19 @@ can use the `kubernetes` backend with no extra code:
 
 1. Bring up a cluster and create a ServiceAccount + token with RBAC to create/patch/delete the
    namespaced resources above (and `namespaces`).
-2. Connect a `kubernetes` environment in the UI (Integrations → Environments), pointing at the
-   apiserver:
+2. Connect a `kubernetes` **handler** in the UI (Infrastructure → environments, the per-type
+   configurator) on the `local-k3s` engine, pointing at the apiserver:
    - `apiServerUrl`: `https://localhost:6443` (or the k3d load-balancer port).
    - `caCertPem`: the cluster CA (k3s self-signs), or set `insecureSkipTlsVerify` for a throwaway
      cluster. Node/local honors custom-CA TLS via undici; the Cloudflare Worker does not, so a
      CA/insecure config is rejected there at registration.
    - `apiToken`: the ServiceAccount token (stored encrypted).
-   - `manifestSource` + `url` (ingress-template host like `{{branch}}.127.0.0.1.nip.io` works with
-     k3s Traefik; or a `serviceStatus` LoadBalancer with k3s ServiceLB).
+   - the **URL derivation** (ingress-template host like `{{branch}}.127.0.0.1.nip.io` works with
+     k3s Traefik; or a `serviceStatus` LoadBalancer with k3s ServiceLB) + the `namespaceTemplate`.
+   The **`manifestSource`** is no longer on this connection — it is declared per-service on the
+   block's `provisioning` (colocated path or a separate repo), and merged with this engine config
+   at provision time. In local mode you can additionally set a per-user "this-machine" override of
+   the handler.
 
 Local mode widens the environment URL-safety policy by default (`ENVIRONMENTS_ALLOW_HTTP_URLS`
 

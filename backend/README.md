@@ -256,7 +256,12 @@ at rest** in D1 (AES-256-GCM via `SecretCipher`, per-record salt + IV, HKDF-deri
 key); the manifest references them by logical key only. The env secret is the
 shared `ENCRYPTION_KEY` master. Configure via `ENVIRONMENTS_ENABLED=true` (the
 `ENCRYPTION_KEY` secret is already required service-wide). New schema is in
-migration `0008_environments.sql`. See
+migration `0008_environments.sql`. The HTTP `manifest` backend is one of several
+provision types: a service declares its own `provisionType`
+(`kubernetes`/`docker-compose`/`custom`/`infraless`) + manifest source, and the workspace
+configures a per-type **handler** (engine + connection); a `kubernetes` service is applied
+raw over the apiserver or rendered via a deploy container (kustomize/helm/Gateway). See
+[`docs/per-service-provisioning.md`](./docs/per-service-provisioning.md),
 [`docs/environments-integration.md`](./docs/environments-integration.md) and
 [`docs/adr/0003-ephemeral-environment-provider.md`](./docs/adr/0003-ephemeral-environment-provider.md).
 
@@ -378,15 +383,27 @@ PUT    /workspaces/:ws/github/repos/:repoId/pulls/:n/merge    merge a pull reque
 POST   /workspaces/:ws/github/repos/:repoId/issues/:n/comments  comment on an issue/PR
 
 # Ephemeral environments (only when ENVIRONMENTS_ENABLED + encryption key are set)
-GET    /workspaces/:ws/environments/connection                  registered provider (safe metadata)
-POST   /workspaces/:ws/environments/connection                  register manifest + secret bundle
-PUT    /workspaces/:ws/environments/connection/secrets          rotate the secret bundle
-DELETE /workspaces/:ws/environments/connection                  unregister
+# Per-service provisioning model — see docs/per-service-provisioning.md
+GET    /workspaces/:ws/environments/handlers                    per-type handler bundle + custom-type catalog
+POST   /workspaces/:ws/environments/handlers                    register/replace a per-type handler (config + secrets)
+PATCH  /workspaces/:ws/environments/handlers/:type/secrets      rotate a handler's secret bundle (?manifestId for custom)
+DELETE /workspaces/:ws/environments/handlers/:type              unregister a handler (?manifestId for custom)
+PUT    /workspaces/:ws/environments/custom-types/:manifestId    upsert a workspace custom manifest type
+DELETE /workspaces/:ws/environments/custom-types/:manifestId    remove a workspace custom manifest type
+POST   /workspaces/:ws/environments/detect-provisioning         non-binding recommended config from the repo
+GET    /workspaces/:ws/environments/connection                  registered provider (safe metadata; compat bridge)
+POST   /workspaces/:ws/environments/connection                  register manifest + secret bundle (compat bridge)
+PUT    /workspaces/:ws/environments/connection/secrets          rotate the secret bundle (compat bridge)
+DELETE /workspaces/:ws/environments/connection                  unregister (compat bridge)
 GET    /workspaces/:ws/environments                             list provisioned environments
 GET    /workspaces/:ws/environments/:id                         one environment (no creds)
 GET    /workspaces/:ws/environments/:id/access                  decrypted access creds (TLS only)
 POST   /workspaces/:ws/environments/provision                   manually provision { blockId?, inputs? }
 POST   /workspaces/:ws/environments/:id/teardown                tear down now
+# Local-mode per-user handler override (root-mounted, no /workspaces prefix)
+GET    /me/environment-handlers/:workspaceId                    list this user's overrides
+PUT    /me/environment-handlers/:workspaceId/:type              upsert an override
+DELETE /me/environment-handlers/:workspaceId/:type              remove an override
 
 # Accounts & tenancy
 GET    /accounts                                             accounts the signed-in user can act within

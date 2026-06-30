@@ -144,6 +144,7 @@ export type {
   EnvironmentHandle,
   EnvironmentConnection,
   TestEnvironmentConnectionInput,
+  TestEnvironmentHandlerInput,
   ValidateEnvironmentRepoInput,
   BootstrapEnvironmentRepoInput,
   BootstrapRepoResult,

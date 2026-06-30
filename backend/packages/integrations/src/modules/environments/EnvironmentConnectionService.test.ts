@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type {
   Clock,
+  EnvironmentBackendConfig,
   EnvironmentConnectionRecord,
   EnvironmentConnectionRepository,
+  EnvironmentConnectionTestRequest,
   EnvironmentManifest,
   EnvironmentProvider,
   ProviderConfigField,
@@ -14,7 +16,11 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
-import { defaultEnvironmentBackendRegistry } from './environment-backends.js'
+import {
+  type EnvironmentBackendProvider,
+  EnvironmentBackendRegistry,
+  defaultEnvironmentBackendRegistry,
+} from './environment-backends.js'
 
 // The app-owned backend registry every service instance resolves a stored `kind` through.
 const registry = defaultEnvironmentBackendRegistry()
@@ -814,5 +820,87 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
     expect(dispatched).toBe(false)
     expect(result.usedAgent).toBeUndefined()
     expect(result.repairJobId).toBeUndefined()
+  })
+})
+
+describe('EnvironmentConnectionService — testHandler (per-type handler probe)', () => {
+  // A backend that records the probe it received, so the test asserts testHandler resolves the
+  // engine to this backend, lowers the kube engine config (apiServerUrl → the probed manifest's
+  // baseUrl), and resolves the supplied (unsaved) secret — all without a real apiserver call.
+  function recordingKubeBackend() {
+    const calls: { token: string | undefined; baseUrl: string }[] = []
+    const backend: EnvironmentBackendProvider = {
+      kind: 'kubernetes',
+      engines: () => ['local-k3s', 'remote-kubernetes'],
+      referencedSecretKeys: () => ['apiToken'],
+      connectionMeta: () => ({ providerId: 'kubernetes', label: 'k', baseUrl: 'b' }),
+      assertConfigSafe: () => {},
+      toManifest: (config) => {
+        if (!('kubernetes' in config)) throw new Error('expected a kubernetes config')
+        return {
+          providerId: 'kubernetes',
+          label: config.kubernetes.label,
+          baseUrl: config.kubernetes.apiServerUrl,
+          auth: { type: 'none' },
+          provision: { method: 'POST', pathTemplate: '/' },
+          response: {},
+        } as EnvironmentManifest
+      },
+      fromManifest: () => ({ kind: 'kubernetes' }) as unknown as EnvironmentBackendConfig,
+      buildProvider: () =>
+        ({
+          testConnection: async (req: EnvironmentConnectionTestRequest) => {
+            calls.push({
+              token: req.resolveSecret('apiToken'),
+              baseUrl: (req.manifest as { baseUrl: string }).baseUrl,
+            })
+            return { ok: true, message: 'reached' }
+          },
+        }) as unknown as EnvironmentProvider,
+    }
+    return { backend, calls }
+  }
+
+  it('lowers a kube engine config + resolves the unsaved token, then probes the backend', async () => {
+    const { backend, calls } = recordingKubeBackend()
+    const service = new EnvironmentConnectionService({
+      environmentConnectionRepository: fakeConnections(),
+      workspaceRepository: fakeWorkspaces,
+      secretCipher: fakeCipher,
+      clock,
+      environmentBackendRegistry: new EnvironmentBackendRegistry().register(backend),
+    })
+
+    const result = await service.testHandler('ws1', {
+      config: {
+        engine: 'remote-kubernetes',
+        kubernetes: {
+          label: 'Cluster',
+          apiServerUrl: 'https://cluster.test:6443',
+          url: { source: 'ingressStatus' },
+        },
+      },
+      secrets: { apiToken: 'sa-token' },
+    })
+
+    expect(result).toEqual({ ok: true, message: 'reached' })
+    expect(calls).toEqual([{ token: 'sa-token', baseUrl: 'https://cluster.test:6443' }])
+  })
+
+  it('rejects an SSRF-unsafe apiserver before any network call', async () => {
+    const service = makeService(fakeConnections())
+    await expect(
+      service.testHandler('ws1', {
+        config: {
+          engine: 'remote-kubernetes',
+          kubernetes: {
+            label: 'Cluster',
+            apiServerUrl: 'https://169.254.169.254',
+            url: { source: 'ingressStatus' },
+          },
+        },
+        secrets: { apiToken: 't' },
+      }),
+    ).rejects.toThrow()
   })
 })

@@ -1302,6 +1302,7 @@
         "remote-kubernetes": "Kubernetes מרוחק"
       },
       "kubernetesEngine": {
+        "localK3sHint": "מולא מראש עבור אשכול k3s/k3d/kind מקומי במחשב הזה. קשרו ServiceAccount לתפקיד, הנפיקו עבורו token באמצעות `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) והדביקו אותו למטה. לאחר מכן בחרו כיצד נגזרת כתובת ה-URL של הסביבה, וערכו את כתובת ה-API server אם האשכול שלכם מאזין ביציאה אחרת.",
         "label": "תווית החיבור",
         "labelPlaceholder": "אשכול תצוגה מקדימה",
         "apiServerUrl": "כתובת ה-API server",

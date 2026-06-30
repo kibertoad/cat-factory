@@ -13,6 +13,7 @@ import {
   registerEnvironmentHandlerSchema,
   registerEnvironmentProviderSchema,
   testEnvironmentConnectionSchema,
+  testEnvironmentHandlerSchema,
   updateEnvironmentSecretsSchema,
   upsertCustomManifestTypeSchema,
   validateEnvironmentRepoSchema,
@@ -131,6 +132,16 @@ export const registerEnvironmentHandlerContract = defineApiContract({
   pathResolver: () => '/environments/handlers',
   requestBodySchema: registerEnvironmentHandlerSchema,
   responsesByStatusCode: { 201: environmentHandlerViewSchema, ...errorResponses },
+})
+
+// Probe a candidate per-type handler connection before saving (nothing persisted). The body
+// is the engine connection config + its secret bundle; the path is distinct from the
+// `:provisionType`-keyed handler routes so it never collides with them.
+export const testEnvironmentHandlerContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/environments/handlers/test',
+  requestBodySchema: testEnvironmentHandlerSchema,
+  responsesByStatusCode: { 200: connectionTestResultSchema, ...errorResponses },
 })
 
 export const updateEnvironmentHandlerSecretsContract = defineApiContract({
