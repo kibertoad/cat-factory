@@ -1,5 +1,13 @@
 # @cat-factory/integrations
 
+## 0.44.1
+
+### Patch Changes
+
+- Updated dependencies [ecf4cc1]
+  - @cat-factory/contracts@0.66.0
+  - @cat-factory/kernel@0.62.1
+
 ## 0.44.0
 
 ### Minor Changes
