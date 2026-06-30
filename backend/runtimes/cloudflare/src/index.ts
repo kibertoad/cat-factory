@@ -42,6 +42,9 @@ export { BootstrapWorkflow } from './infrastructure/workflows/BootstrapWorkflow'
 export { EnvConfigRepairWorkflow } from './infrastructure/workflows/EnvConfigRepairWorkflow'
 // Container-enabled Durable Object backing per-run implementation containers.
 export { ExecutionContainer } from './infrastructure/containers/ExecutionContainer'
+// Container-enabled Durable Object backing per-run DEPLOY containers (the deploy-harness
+// image: real kubectl/kustomize/helm — the `image: 'deploy'` dispatch variant).
+export { DeployContainer } from './infrastructure/containers/DeployContainer'
 // Per-workspace WebSocket fan-out hub (real-time execution/board events).
 export { WorkspaceEventsHub } from './infrastructure/durable-objects/WorkspaceEventsHub'
 

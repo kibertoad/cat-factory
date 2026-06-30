@@ -22,7 +22,7 @@ import {
 } from './mothership.js'
 import { ConflictError } from '@cat-factory/kernel'
 import { WorkspaceSettingsService } from '@cat-factory/orchestration'
-import { buildInfrastructureCapabilities, logger } from '@cat-factory/server'
+import { buildInfrastructureCapabilities, logger, RunnerJobClient } from '@cat-factory/server'
 import type { AppConfig, ResolveRunnerTransport, ServerContainer } from '@cat-factory/server'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import {
@@ -36,6 +36,7 @@ import type {
   RunnerTransport,
 } from '@cat-factory/kernel'
 import { NativeRoutingRunnerTransport } from './NativeRoutingRunnerTransport.js'
+import { buildLocalDeployTransport } from './NativeCliDeployTransport.js'
 import { applyLocalDefaults } from './config.js'
 import {
   buildVcsIdentityRegistry,
@@ -283,6 +284,20 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // kinds fail, loudly). Fire-and-forget: dispatch reuses the same cached promise.
   if (env.LOCAL_HARNESS_IMAGE?.trim()) void resolveContainerTransport().catch(() => {})
 
+  // The DEPLOY job client (the async container-backed Kubernetes render lifecycle). Local runs
+  // it on a DEDICATED deploy backend — the developer's host `kubectl`/`kustomize`/`helm` (native
+  // mode) or a per-job deploy-harness container — NOT the agent transport (which runs the
+  // executor-harness image, lacking the k8s CLIs). When `LOCAL_DEPLOY_RUNTIME`'s prerequisite
+  // isn't configured this is null, so deploy stays UNWIRED (a render-needing config fails loudly;
+  // the raw-manifest REST path is unaffected) — never silently routed to the agent backend (the
+  // `disableDefaultDeployJobClient` flag below stops `buildNodeContainer` falling back). The
+  // clone target is inherited from `buildNodeContainer`'s default, which already uses local's PAT
+  // mint + GitLab-aware `resolveRepoOrigin`.
+  const localDeployTransport = buildLocalDeployTransport(env)
+  const deployJobClient = localDeployTransport
+    ? new RunnerJobClient(() => Promise.resolve(localDeployTransport))
+    : undefined
+
   // The runner-pool resolver (the external opt-in target). In local mode `runners` is
   // enabled (it keys off ENCRYPTION_KEY, which `applyLocalDefaults` always sets), so this
   // is non-null and a workspace can register a pool via the API; a native adapter injected
@@ -441,6 +456,11 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     // with the correct provisioning-log subsystem per branch, so tell buildNodeContainer not
     // to re-wrap with a single subsystem tag.
     resolveTransport,
+    // Deploy runs on its OWN backend (native host CLIs / a deploy-image container), never the
+    // agent transport — so suppress buildNodeContainer's pool-backed default and inject ours
+    // (absent ⇒ deploy unwired, render configs fail loudly).
+    disableDefaultDeployJobClient: true,
+    ...(deployJobClient ? { deployJobClient } : {}),
     skipProvisioningLogWrap: true,
     // Local mode defaults binary-artifact (screenshot) storage to the on-disk filesystem
     // backend (`.file-storage`), so UI-tester screenshots work out of the box with no setup;

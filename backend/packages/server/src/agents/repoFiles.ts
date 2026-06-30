@@ -1,4 +1,5 @@
 import type {
+  DeployCloneTarget,
   GitHubClient,
   GitHubInstallationRepository,
   GitHubRepoRef,
@@ -8,7 +9,11 @@ import type {
   ResolveRunRepoContext,
   RunRepoContext,
 } from '@cat-factory/kernel'
-import type { ResolveRepoTarget } from './ContainerAgentExecutor.js'
+import type {
+  MintInstallationToken,
+  RepoTarget,
+  ResolveRepoTarget,
+} from './ContainerAgentExecutor.js'
 
 // `runRepoOps` lives in @cat-factory/agents (so the orchestration engine can drive the
 // hooks without importing this HTTP layer); re-exported here for the existing callers.
@@ -68,6 +73,47 @@ export function makeResolveRunRepoContext(
         repo: target.name,
       }),
       baseBranch: target.baseBranch,
+    }
+  }
+}
+
+/**
+ * Compose a {@link DeployCloneTarget} resolver for the async, container-backed Kubernetes
+ * deploy path (slice 9's `resolveDeployCloneTarget` provisioning seam) from the wired
+ * {@link GitHubClient} repo-target walk + a {@link MintInstallationToken}. The provisioning
+ * service calls it BEFORE dispatch to hand the deploy container concrete clone coords (HTTPS
+ * URL + ref + a short-lived install token) — VCS-specific, server-layer work the stateless
+ * provider can't do itself. Returns null when the block resolves to no repo (GitHub not
+ * connected / unlinked service), so a render-needing config then fails loudly. `webBaseUrl`
+ * is the git web origin (`https://github.com` by default; a GHE/GitLab host otherwise),
+ * mirroring the bootstrapper's clone-URL derivation.
+ */
+export function makeResolveDeployCloneTarget(
+  resolveRepoTarget: ResolveRepoTarget,
+  mintInstallationToken: MintInstallationToken,
+  options?: {
+    /** Git web origin for the default clone URL (`https://github.com` unless overridden). */
+    webBaseUrl?: string
+    /**
+     * Override how the clone URL is built from the resolved {@link RepoTarget} — e.g. the local
+     * GitLab facade emits its configured GitLab host instead of `github.com`. Wins over
+     * `webBaseUrl`. Structurally the executor's `resolveRepoOrigin().cloneUrl`.
+     */
+    resolveCloneUrl?: (target: RepoTarget) => string
+  },
+): (workspaceId: string, blockId: string, ref?: string) => Promise<DeployCloneTarget | null> {
+  const webBase = (options?.webBaseUrl ?? 'https://github.com').replace(/\/+$/, '')
+  return async (workspaceId, blockId, ref) => {
+    const target = await resolveRepoTarget(workspaceId, blockId)
+    if (!target) return null
+    const token = await mintInstallationToken(target.installationId)
+    const cloneUrl = options?.resolveCloneUrl
+      ? options.resolveCloneUrl(target)
+      : `${webBase}/${target.owner}/${target.name}.git`
+    return {
+      cloneUrl,
+      ref: ref ?? target.baseBranch,
+      ...(token ? { token } : {}),
     }
   }
 }

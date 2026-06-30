@@ -75,7 +75,9 @@ import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
   ContainerEnvConfigRepairer,
+  makeResolveDeployCloneTarget,
   makeResolveRunRepoContext,
+  RunnerJobClient,
   makeResolveRepoFilesForCoords,
   makeResolveBinaryArtifactStore,
   type BuildBlobBackend,
@@ -1634,6 +1636,52 @@ function selectEnvironmentsDeps(
 }
 
 /**
+ * Wire the async, container-backed Kubernetes deploy lifecycle (slice 9's
+ * `EnvironmentProvisioningService` seams) onto the Worker facade: a `deployJobClient` that
+ * dispatches/polls/releases a `deploy`-kind job on the per-run `DeployContainer` (the separate
+ * deploy-harness image — real `kubectl`/`kustomize`/`helm`), plus `resolveDeployCloneTarget` to
+ * hand the container concrete manifests-repo clone coords + a short-lived install token.
+ *
+ * Gated on the environments module, the `DEPLOY_CONTAINER` binding AND the GitHub App
+ * (the clone-target seam needs to mint install tokens + resolve a block's repo). Absent any
+ * prerequisite ⇒ `{}` — a render-needing config then fails loudly (the synchronous raw-manifest
+ * REST path is unaffected), exactly the unwired behaviour slice 9 shipped. Mirrors Node's pool
+ * deploy wiring; the deploy container is the Worker's analogue of Node's self-hosted pool.
+ */
+function selectDeployDeps(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+  clock: Clock,
+): Partial<CoreDependencies> {
+  if (
+    !config.environments.enabled ||
+    !env.DEPLOY_CONTAINER ||
+    !config.github.enabled ||
+    !env.GITHUB_APP_PRIVATE_KEY
+  ) {
+    return {}
+  }
+  // A deploy-DEDICATED transport: the deploy job's `ref.runId` addresses a `DeployContainer`
+  // instance in its own DO namespace (no collision with the agent `EXEC_CONTAINER`), and the
+  // harness keys the job by `ref.jobId`. No instance registry is wired (the `sleepAfter` idle
+  // timer + explicit `release` reclaim it), so cross-namespace reaping stays the exec
+  // container's concern. The client is deploy-only, so `poll`/`release` need no per-ref routing.
+  const deployTransport = new CloudflareContainerTransport(
+    env.DEPLOY_CONTAINER,
+    undefined,
+    env.HARNESS_SHARED_SECRET?.trim() || undefined,
+  )
+  const registry = buildAppRegistry(env, config, db, clock)
+  return {
+    deployJobClient: new RunnerJobClient(async () => deployTransport),
+    resolveDeployCloneTarget: makeResolveDeployCloneTarget(buildResolveRepoTarget(db), (id) =>
+      registry.installationToken(id),
+    ),
+  }
+}
+
+/**
  * Build the self-hosted runner-pool integration's concrete ports when opted in:
  * the D1 connection repository and a dedicated Web Crypto cipher (its own master
  * key + HKDF domain, separate from the environment module's). This assembles
@@ -2086,6 +2134,7 @@ export function buildContainer(
     ...selectRequirementsDeps(env, config, db),
     ...selectSandboxDeps(env.SANDBOX_DB),
     ...selectEnvironmentsDeps(env, config, db),
+    ...selectDeployDeps(env, config, db, clock),
     ...selectRunnersDeps(env, config, db),
     ...selectFragmentLibraryDeps(env, config, db),
     // The pipeline-start guard resolves what's configured for a workspace + initiator.

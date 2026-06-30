@@ -100,6 +100,18 @@ instance_type = "standard-1"
 name = "EXEC_CONTAINER"
 class_name = "ExecutionContainer"
 
+# Per-run DEPLOY container (the separate deploy-harness image: real kubectl/kustomize/helm).
+# The `image: 'deploy'` dispatch variant routes here while agent jobs stay on ExecutionContainer.
+[[containers]]
+class_name = "DeployContainer"
+image = "../../internal/deploy-harness/Dockerfile"
+max_instances = 10
+instance_type = "standard-1"
+
+[[durable_objects.bindings]]
+name = "DEPLOY_CONTAINER"
+class_name = "DeployContainer"
+
 # Per-workspace WebSocket fan-out hub.
 [[durable_objects.bindings]]
 name = "WORKSPACE_EVENTS"
@@ -116,3 +128,7 @@ new_sqlite_classes = ["WorkspaceEventsHub"]
 [[migrations]]
 tag = "v3"
 renamed_classes = [{ from = "ImplementationContainer", to = "ExecutionContainer" }]
+
+[[migrations]]
+tag = "v4"
+new_sqlite_classes = ["DeployContainer"]

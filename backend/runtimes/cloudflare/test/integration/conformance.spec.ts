@@ -65,6 +65,13 @@ const harness: ConformanceHarness = {
         ...(opts?.resolveRepoFilesForCoords
           ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
           : {}),
+        // Inject the async deploy lifecycle (a fake deploy-job client + clone-target resolver) so
+        // the suite drives the container render path through this facade's wiring, identically to
+        // Node — asserting the `deploy` dispatch is accepted and the stubbed view finalizes the same.
+        ...(opts?.deployJobClient ? { deployJobClient: opts.deployJobClient } : {}),
+        ...(opts?.resolveDeployCloneTarget
+          ? { resolveDeployCloneTarget: opts.resolveDeployCloneTarget }
+          : {}),
         // Inject the app-owned backend registries (pre-loaded with custom kinds in the
         // custom-backend suite) via the CoreDependencies overrides the Worker build reads, so a
         // registered custom backend is resolved by reference, exactly like a real deployment.

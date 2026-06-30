@@ -202,6 +202,10 @@ export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
   serviceRepository: {
     listByIds: { scope: { kind: 'serviceList', arg: 0 } },
     listByAccount: { scope: { kind: 'account', arg: 0 } },
+    // The run path resolves the service that owns a frame block (module materialisation /
+    // blueprint reconcile). arg0 is a frame BLOCK id, so the `block` rule resolves it to its
+    // home workspace's account server-side.
+    getByFrameBlock: { scope: { kind: 'block', arg: 0 } },
   },
   workspaceMountRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
@@ -212,6 +216,10 @@ export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
   },
   mergePresetRepository: {
     list: { scope: { kind: 'workspace', arg: 0 } },
+    // The merge lifecycle resolves a task's merge-threshold preset at run time
+    // (`resolveMergePreset` → the merger/requirements gate), reading the workspace default when
+    // the task pins none. Workspace-scoped read on the run path.
+    getDefault: { scope: { kind: 'workspace', arg: 0 } },
     // `MergePresetService.list` lazily seeds the built-in default for a workspace that has
     // none (a write triggered by the board-load read). Member-level (the preset CRUD is not
     // admin-gated), workspace-scoped — the same policy as the block/pipeline mutations above.
@@ -268,6 +276,9 @@ export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
   },
   notificationRepository: {
     listOpen: { scope: { kind: 'workspace', arg: 0 } },
+    // The inbox act/dismiss/escalate flow re-reads a single notification by id after a run
+    // settles (`NotificationService`). `get(workspaceId, id)` is workspace-scoped on arg0.
+    get: { scope: { kind: 'workspace', arg: 0 } },
     // The merger-less pipeline tail raises a block notification on completion
     // (`pipeline_complete`/`merge_review` → `findOpenByBlock` dedup + `upsertOpenForBlock`), so a
     // run persists its inbox card on the mothership. Workspace-scoped, member-level (the inbox
@@ -287,9 +298,38 @@ export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
   tokenUsageRepository: {
     totalsSinceForWorkspace: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // Telemetry is local-first by design (Phase 5), but two READS are on the synchronous run
+  // path before that batch-sync lands — the kaizen grading step summarises an execution's LLM
+  // calls. Until Phase 5 they resolve against the mothership's telemetry store. High-volume
+  // telemetry WRITES (`record`) stay out of the allow-list — they must never hit the RPC.
+  llmCallMetricRepository: {
+    summarizeByExecution: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // Kaizen grading (the merge lifecycle's quality step) reads its prior grade for a step before
+  // (re-)grading and writes the result. Both are workspace-scoped on arg0; the sweeper methods
+  // (`listPending`/`claim`) stay mothership-internal.
+  kaizenGradingRepository: {
+    getByStep: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
+  },
   // Mixed (workspaceId + blockId/stage): the workspace arg stays the scope key.
   requirementReviewRepository: {
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    // The requirements gate reads a review by id (`get(workspaceId, id)`) when driving the
+    // parked run (re-review / incorporate). Workspace-scoped on arg0.
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    // The reviewer/incorporation companion persists the review as the gate iterates.
+    // Member-level (the requirement-review endpoints are not admin-gated), workspace-scoped.
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // The merge lifecycle's kaizen step reads any prior verified model/prompt combo
+  // (`getByKey(workspaceId, comboKey)`) to skip re-grading. Workspace-scoped on arg0.
+  kaizenVerifiedComboRepository: {
+    getByKey: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // Env-config-repair (a Tester sub-flow) lists a workspace's repair jobs on the run path.
+  envConfigRepairJobRepository: {
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
   },
   clarityReviewRepository: {
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },

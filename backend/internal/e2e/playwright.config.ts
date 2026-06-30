@@ -18,6 +18,15 @@ export default defineConfig({
   workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
+  // A retry that passes after a first-attempt failure is a FLAKE, not a pass. Playwright's
+  // default would still exit 0 (the test "eventually" passed), turning the shard job green
+  // and hiding the failure. We want the opposite: a flaky shard must report RED so the
+  // flake is visible. This does NOT block merging — `test-e2e` is deliberately kept out of
+  // the aggregated `Test` gate's `needs` (see ci.yml), so a red shard is a signal to
+  // investigate, not a merge stop. Retries stay on so the merged report still records what
+  // eventually passed (the trace/video for diagnosis). Locally `retries: 0` means nothing
+  // is ever flaky, so this has no effect there.
+  failOnFlakyTests: true,
   // In CI the suite is sharded across jobs (playwright test --shard=i/N), so each shard
   // emits a `blob` report; a follow-on `test-e2e-report` job merges them into one HTML
   // report (`playwright merge-reports`). Locally we just want the live `list` output.
