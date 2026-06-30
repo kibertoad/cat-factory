@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { parse } from 'yaml'
 import type { ProvisionEnvironmentRequest, RunRepoContext } from '@cat-factory/kernel'
 import { ComposeEnvironmentProvider } from './ComposeEnvironmentProvider.js'
 import type { ComposeExecResult, ComposeRuntime } from './compose-environment.logic.js'
@@ -67,12 +68,68 @@ describe('ComposeEnvironmentProvider', () => {
     expect(env.url).toBe('http://localhost:49153')
     expect(env.externalId).toBe('cf-env-shop-42')
     expect(env.fields.project).toBe('cf-env-shop-42')
-    // Project-scoped + both compose files passed to `up`.
+    // Project-scoped + a SINGLE rewritten compose file passed to `up` (no additive override).
     const up = calls.find((a) => a.includes('up'))!
     expect(up).toContain('-p')
     expect(up).toContain('cf-env-shop-42')
-    expect(up.filter((a) => a === '-f')).toHaveLength(2)
+    expect(up.filter((a) => a === '-f')).toHaveLength(1)
     expect(up).toContain('--wait')
+  })
+
+  it('rewrites a pinned host port to ephemeral so concurrent stacks never collide', async () => {
+    const { runtime, written } = fakeRuntime((args) => {
+      if (args.includes('port')) return { code: 0, stdout: '0.0.0.0:49153', stderr: '' }
+      return { code: 0, stdout: '', stderr: '' }
+    })
+    const provider = new ComposeEnvironmentProvider(runtime)
+    const env = await provider.provision(
+      baseReq({
+        runRepo: fakeRunRepo({
+          'docker-compose.yml':
+            'services:\n  web:\n    image: nginx\n    ports:\n      - "8080:8080"\n',
+        }),
+      }),
+    )
+    expect(env.status).toBe('ready')
+    // The written project file publishes the container port to an EPHEMERAL host port (no `8080:8080`).
+    const file = written.find((w) => w.fileName === 'compose.yaml')!
+    expect(parse(file.content).services.web.ports).toEqual(['8080'])
+  })
+
+  it('refuses a stack that bind-mounts a host path (no repo on disk) before touching the daemon', async () => {
+    const { runtime, calls } = fakeRuntime(() => ({ code: 0, stdout: '', stderr: '' }))
+    const provider = new ComposeEnvironmentProvider(runtime)
+    const env = await provider.provision(
+      baseReq({
+        runRepo: fakeRunRepo({
+          'docker-compose.yml':
+            'services:\n  web:\n    image: nginx\n    volumes:\n      - ./src:/app\n',
+        }),
+      }),
+    )
+    expect(env.status).toBe('failed')
+    expect(env.error).toContain('bind-mounts a host path')
+    // It fails fast — the daemon is never invoked.
+    expect(calls).toHaveLength(0)
+  })
+
+  it('sets an auto-teardown expiry from ttlMinutes', async () => {
+    const { runtime } = fakeRuntime((args) => {
+      if (args.includes('port')) return { code: 0, stdout: '0.0.0.0:49153', stderr: '' }
+      return { code: 0, stdout: '', stderr: '' }
+    })
+    const provider = new ComposeEnvironmentProvider(runtime)
+    const before = Date.now()
+    const env = await provider.provision(
+      baseReq({
+        manifest: {
+          ...manifest,
+          providerConfig: { service: 'web', port: '8080', ttlMinutes: '60' },
+        },
+      }),
+    )
+    expect(env.expiresAt).not.toBeNull()
+    expect(env.expiresAt!).toBeGreaterThanOrEqual(before + 60 * 60_000)
   })
 
   it('returns a non-throwing failure carrying the compose error when up fails', async () => {
@@ -141,5 +198,33 @@ describe('ComposeEnvironmentProvider', () => {
     )
     expect(env.status).toBe('ready')
     expect(env.url).toBe('http://localhost:5000')
+  })
+
+  it('testConnection reports reachable only when the daemon answers (not just the CLI)', async () => {
+    const reachable = fakeRuntime((args) => {
+      if (args.includes('version')) return { code: 0, stdout: 'v2.29.0', stderr: '' }
+      if (args.includes('ls')) return { code: 0, stdout: '[]', stderr: '' }
+      return { code: 0, stdout: '', stderr: '' }
+    })
+    const ok = await new ComposeEnvironmentProvider(reachable.runtime).testConnection({
+      config: {},
+      resolveSecret: () => undefined,
+    })
+    expect(ok.ok).toBe(true)
+    expect(ok.message).toContain('v2.29.0')
+
+    // The CLI is installed (version succeeds) but the daemon is down (`ls` fails) ⇒ NOT reachable.
+    const daemonDown = fakeRuntime((args) => {
+      if (args.includes('version')) return { code: 0, stdout: 'v2.29.0', stderr: '' }
+      if (args.includes('ls'))
+        return { code: 1, stdout: '', stderr: 'Cannot connect to the Docker daemon' }
+      return { code: 0, stdout: '', stderr: '' }
+    })
+    const bad = await new ComposeEnvironmentProvider(daemonDown.runtime).testConnection({
+      config: {},
+      resolveSecret: () => undefined,
+    })
+    expect(bad.ok).toBe(false)
+    expect(bad.message).toContain('daemon')
   })
 })

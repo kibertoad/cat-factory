@@ -222,9 +222,11 @@ export { KubernetesEnvironmentProvider } from './modules/kubernetes/KubernetesEn
 export * as kubernetesLogic from './modules/kubernetes/kubernetes.logic.js'
 export * as kubernetesEnvironmentLogic from './modules/kubernetes/kubernetes-environment.logic.js'
 // The Docker Compose environment backend: a host-daemon `EnvironmentProvider` (the Checkbox
-// compose-stack mechanic) registered BY REFERENCE from the local/Node facade (it needs a Docker
-// daemon, so the Worker never registers it). `composeEnvironmentBackend(runtime)` closes over the
-// facade's docker CLI seam; the provider + pure logic are exported for tests + facade wiring.
+// compose-stack mechanic) registered BY REFERENCE from the LOCAL facade only — it drives the
+// host docker CLI on the Docker-family local runtimes, which is a local-mode construct (the
+// plain Node service has no per-run container runtime, and the Worker has no host daemon).
+// `composeEnvironmentBackend(runtime)` closes over the facade's docker CLI seam; the provider +
+// pure logic are exported for tests + facade wiring.
 export {
   ComposeEnvironmentProvider,
   type ComposeEnvironmentProviderOptions,

@@ -13,10 +13,10 @@ import type {
 import {
   type ComposeEnvironmentConfig,
   type ComposeRuntime,
-  buildPublishOverride,
   classifyComposePs,
   parseComposeEnvConfig,
   parseHostPort,
+  prepareComposeProject,
   renderEnvMap,
   renderTemplate,
   resolveProjectName,
@@ -32,11 +32,21 @@ import {
 // docker CLI), so this stays runtime-neutral; it is registered only where a daemon exists
 // (local/Node), never the Cloudflare Worker.
 //
+// The repo compose file is read checkout-free (no working tree) and rewritten into ONE
+// isolation-safe project file before `up` (`prepareComposeProject`): host ports forced ephemeral
+// so concurrent per-PR stacks never collide, the probed service guaranteed to publish its port,
+// and references that can't be honored (build contexts / host bind mounts / relative env_files /
+// privileged) refused up front instead of silently mis-mounting.
+//
 // Per-workspace config rides the stored manifest's `providerConfig` (parsed here); there are no
 // secrets. The provider is a stateless singleton — every call re-reads the config + project from
 // the request, so one instance serves every workspace.
 
 const WAIT_TIMEOUT_S = 300
+// Bound for the plain compose calls (port / ps / down / version-probe) so a wedged daemon can't
+// hang a provision/status/teardown forever; `up` gets a longer bound that clears its own --wait.
+const SHORT_TIMEOUT_MS = 60_000
+const UP_TIMEOUT_MS = (WAIT_TIMEOUT_S + 30) * 1000
 
 export interface ComposeEnvironmentProviderOptions {
   /** Reserved for future URL-policy-aware behaviour; unused today (the URL is always localhost). */
@@ -58,19 +68,23 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     const vars = templateVars(inputs, project, image)
 
     const composeText = renderTemplate(await this.readComposeFile(req, config), vars)
-    const overrideText = buildPublishOverride(config.service, config.port)
-    const basePath = await this.runtime.writeProjectFile(project, 'compose.yaml', composeText)
-    const overridePath = await this.runtime.writeProjectFile(
-      project,
-      'compose.cf-override.yaml',
-      overrideText,
-    )
-    const files = ['-f', basePath, '-f', overridePath]
+    // Rewrite the repo compose into one isolation-safe project file (ephemeral host ports, the
+    // probed service guaranteed to publish, unsupported references rejected). A blocking issue
+    // surfaces as a deterministic failure BEFORE we touch the daemon.
+    const prepared = prepareComposeProject(composeText, config.service, config.port)
+    if (prepared.issues.length > 0) {
+      return this.failed(
+        project,
+        `This Docker Compose stack can't be provisioned as a preview env:\n- ${prepared.issues.join('\n- ')}`,
+      )
+    }
+    const basePath = await this.runtime.writeProjectFile(project, 'compose.yaml', prepared.content)
+    const files = ['-f', basePath]
     const env = config.envTemplate ? renderEnvMap(config.envTemplate, vars) : undefined
 
     const up = await this.runtime.compose(
       ['-p', project, ...files, 'up', '-d', '--wait', '--wait-timeout', String(WAIT_TIMEOUT_S)],
-      { env },
+      { env, timeoutMs: UP_TIMEOUT_MS },
     )
     if (up.code !== 0) {
       // Best-effort cleanup so a retry starts from a clean slate, then surface the verbatim
@@ -81,7 +95,7 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
 
     const portRes = await this.runtime.compose(
       ['-p', project, ...files, 'port', config.service, String(config.port)],
-      { env },
+      { env, timeoutMs: SHORT_TIMEOUT_MS },
     )
     const hostPort = parseHostPort(portRes.stdout)
     if (hostPort === null) {
@@ -97,7 +111,10 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
       externalId: project,
       url,
       status: 'ready',
-      expiresAt: null,
+      // Auto-teardown TTL (the connect form's `ttlMinutes`, default 2h) so a forgotten preview
+      // env is swept off the host instead of leaking containers + volumes forever. Null ⇒ the
+      // operator chose "never expire" (teardown still runs on demand / at run end).
+      expiresAt: config.defaultTtlMs ? Date.now() + config.defaultTtlMs : null,
       access: null,
       // `status()`/`teardown()` re-derive everything from `project`; the URL is captured here so
       // a later status poll returns it without re-running `compose port` (which needs the files).
@@ -117,7 +134,11 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
         fields: {},
       }
     }
-    const ps = await this.runtime.compose(['-p', project, 'ps', '--format', 'json'])
+    // `-a` so a container that's briefly recreating (or a completed one-shot) is still visible —
+    // an empty default `ps` would otherwise flip a healthy env to `failed` mid-recreate.
+    const ps = await this.runtime.compose(['-p', project, 'ps', '-a', '--format', 'json'], {
+      timeoutMs: SHORT_TIMEOUT_MS,
+    })
     const status = ps.code === 0 ? classifyComposePs(ps.stdout) : 'provisioning'
     return {
       externalId: project,
@@ -139,17 +160,31 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
 
   async testConnection(_req: EnvironmentConnectionTestRequest): Promise<ConnectionTestResult> {
     try {
-      const res = await this.runtime.compose(['version', '--short'])
-      if (res.code === 0) {
-        const version = res.stdout.trim()
+      const version = await this.runtime.compose(['version', '--short'], {
+        timeoutMs: SHORT_TIMEOUT_MS,
+      })
+      if (version.code !== 0) {
         return {
-          ok: true,
-          message: version ? `Docker Compose ${version} reachable.` : 'Docker Compose reachable.',
+          ok: false,
+          message: tailOutput(version.stderr || version.stdout) || 'docker compose unavailable',
         }
       }
+      // `version --short` is a client-only call and succeeds even with the daemon stopped, so it
+      // can't confirm reachability on its own. `compose ls` actually contacts the daemon — only a
+      // success there means a real provision could run.
+      const ls = await this.runtime.compose(['ls', '--format', 'json'], {
+        timeoutMs: SHORT_TIMEOUT_MS,
+      })
+      if (ls.code !== 0) {
+        return {
+          ok: false,
+          message: tailOutput(ls.stderr || ls.stdout) || 'Docker daemon is not reachable',
+        }
+      }
+      const v = version.stdout.trim()
       return {
-        ok: false,
-        message: tailOutput(res.stderr || res.stdout) || 'docker compose unavailable',
+        ok: true,
+        message: v ? `Docker Compose ${v} reachable.` : 'Docker Compose reachable.',
       }
     } catch (err) {
       return { ok: false, message: err instanceof Error ? err.message : String(err) }
@@ -200,6 +235,12 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
         label: 'Image override (optional)',
         help: 'Made available to the compose file as {{image}} (e.g. a CI-built tag).',
       },
+      {
+        key: 'ttlMinutes',
+        label: 'Auto-teardown after (minutes)',
+        default: '120',
+        help: 'The stack is swept + torn down this many minutes after it comes up, so a forgotten preview env does not leak containers + volumes on the host. 0 = never expire (teardown still runs on demand / at run end).',
+      },
     ]
   }
 
@@ -232,7 +273,9 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
   /** `down -v` is idempotent (a missing project is a no-op); swallow its result. */
   private async safeDown(project: string): Promise<void> {
     try {
-      await this.runtime.compose(['-p', project, 'down', '-v', '--remove-orphans'])
+      await this.runtime.compose(['-p', project, 'down', '-v', '--remove-orphans'], {
+        timeoutMs: SHORT_TIMEOUT_MS,
+      })
     } catch {
       // teardown is best-effort; the registry tombstones the record regardless.
     }

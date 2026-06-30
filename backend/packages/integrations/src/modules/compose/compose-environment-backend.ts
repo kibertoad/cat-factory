@@ -7,9 +7,10 @@ import { type ComposeRuntime, parseComposeEnvConfig } from './compose-environmen
 import type { EnvironmentBackendProvider } from '../environments/environment-backends.js'
 
 // The Docker Compose environment backend. Unlike the built-in `manifest`/`kubernetes` backends,
-// it is NOT in the default registry: it needs a host Docker daemon, so the local (and Node)
-// facade registers it BY REFERENCE, closing over a `ComposeRuntime` that drives the docker CLI.
-// The Cloudflare Worker never registers it (no daemon) — the documented runtime-bound asymmetry.
+// it is NOT in the default registry: it needs a host Docker daemon, so the LOCAL facade registers
+// it BY REFERENCE, closing over a `ComposeRuntime` that drives the docker CLI. The plain Node
+// service (no per-run container runtime) and the Cloudflare Worker (no daemon) never register it
+// — the documented runtime-bound asymmetry.
 //
 // It rides the contract's generic environment-backend manifest member (kind `compose` is not a
 // reserved built-in), so it needs no new config variant, no table, and no migration: the flat

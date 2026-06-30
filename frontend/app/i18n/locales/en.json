@@ -1287,8 +1287,8 @@
       },
       "testEnvBackend": {
         "label": "Where test environments run",
-        "local-compose": "In-container docker-compose",
-        "local-composeDesc": "Stand the Tester's dependencies up with docker-compose inside the run's container.",
+        "local-compose": "In-container docker-compose (Tester deps)",
+        "local-composeDesc": "Stand the Tester's dependencies up with docker-compose inside the run's container. For a full app preview env, use the Docker Compose preview env option below.",
         "kubernetes": "Kubernetes cluster",
         "kubernetesDesc": "Provision a per-PR namespace in a Kubernetes cluster you operate. Best for Kubernetes-native apps or when you already run a cluster.",
         "environment-provider": "Custom HTTP provider",
