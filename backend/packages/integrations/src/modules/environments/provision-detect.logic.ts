@@ -435,7 +435,7 @@ function bareImageName(image: string): string {
 function inferImageOverrides(scan: ManifestScan): KubernetesImageOverride[] {
   const names =
     scan.kustomizeImages.length > 0
-      ? scan.kustomizeImages
+      ? [...new Set(scan.kustomizeImages)]
       : [...new Set(scan.deploymentImages.map(bareImageName))]
   return names.slice(0, MAX_IMAGES).map((name) => ({ name, newTagTemplate: '{{branch}}' }))
 }
@@ -565,9 +565,14 @@ export async function detectKubernetesProvisioning(
   const notes: ProvisioningDetectionNote[] = []
   const { path, renderer, overlayCandidates } = await resolveManifestSource(scanner, k8s)
 
+  // The colocated path stored on the service must be non-empty (the schema requires
+  // minLength(1)), so represent the repo root as '.'. The raw `path` ('' = repo root for the
+  // reader) is still what the internal scan calls below use to list/read files.
+  const sourcePath = path || '.'
+
   const manifestSource: KubernetesManifestSource = {
     type: 'colocated',
-    path,
+    path: sourcePath,
     ...(renderer === 'kustomize' ? { renderer } : {}),
   }
   notes.push({
@@ -575,8 +580,8 @@ export async function detectKubernetesProvisioning(
     confidence: 'high',
     message:
       renderer === 'kustomize'
-        ? `Found a kustomization at ${path} ⇒ kustomize renderer (needs the container-backed deploy adapter).`
-        : `No kustomization at ${path} ⇒ raw manifests.`,
+        ? `Found a kustomization at ${sourcePath} ⇒ kustomize renderer (needs the container-backed deploy adapter).`
+        : `No kustomization at ${sourcePath} ⇒ raw manifests.`,
   })
   if (overlayCandidates && overlayCandidates.length > 1) {
     const recommended = overlayCandidates.find((o) => o.recommended)

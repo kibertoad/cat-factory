@@ -218,4 +218,29 @@ releases:
     expect(rec.provisioning.type).toBe('kubernetes')
     expect(rec.notes.some((n) => n.field === 'compose')).toBe(true)
   })
+
+  it('represents repo-root manifests as a "." path (never an empty, schema-invalid path)', async () => {
+    const reader = makeReader({
+      'deployment.yaml': deployment('registry/app:1.0.0'),
+      'service.yaml': `
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 8080
+`,
+    })
+    const rec = await detectKubernetesProvisioning(reader)
+    expect(rec.provisioning.type).toBe('kubernetes')
+    // The repo root is the manifest dir; the stored path must be non-empty (schema minLength 1),
+    // and the root scan still resolves the LoadBalancer URL + image override.
+    expect(rec.provisioning.manifestSource).toEqual({ type: 'colocated', path: '.' })
+    expect(rec.urlSource).toEqual({ source: 'serviceStatus', serviceName: 'web', port: 8080 })
+    expect(rec.provisioning.images).toEqual([
+      { name: 'registry/app', newTagTemplate: '{{branch}}' },
+    ])
+  })
 })

@@ -205,6 +205,16 @@ const detecting = ref(false)
 const detectError = ref(false)
 const detectResult = ref<ProvisioningRecommendation | null>(null)
 
+// A detection result is scoped to the inspected block — clear it (and any error) when the
+// selection changes, so block B never shows block A's stale recommendation / overlay chips.
+watch(
+  () => props.block.id,
+  () => {
+    detectResult.value = null
+    detectError.value = false
+  },
+)
+
 async function detectFromRepo() {
   const ctx = repoContext.value
   if (!ctx) return
@@ -222,8 +232,14 @@ async function detectFromRepo() {
       ...(ctx.directory ? { directory: ctx.directory } : {}),
     })
     detectResult.value = rec
-    board.updateBlock(props.block.id, { provisioning: rec.provisioning })
-    if (rec.provisioning.type === 'kubernetes') seedKubeSource(rec.provisioning.manifestSource)
+    // Only prefill when the detector actually inferred something. A `detected: false`
+    // recommendation is `infraless`; applying it would WIPE the service's existing
+    // provisioning (board.updateBlock persists immediately). Leave the current config
+    // untouched and just surface the "nothing found" note.
+    if (rec.detected) {
+      board.updateBlock(props.block.id, { provisioning: rec.provisioning })
+      if (rec.provisioning.type === 'kubernetes') seedKubeSource(rec.provisioning.manifestSource)
+    }
   } catch {
     detectError.value = true
   } finally {
