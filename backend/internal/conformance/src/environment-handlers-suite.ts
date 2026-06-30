@@ -287,7 +287,7 @@ export function defineEnvironmentHandlersSuite(
           label: 'Prod k3s',
           apiServerUrl: 'https://cluster.test:6443',
           namespaceTemplate: 'pr-{{pullNumber}}',
-          url: { source: 'gatewayStatus', gatewayName: 'skynet', scheme: 'https' },
+          url: { source: 'gatewayStatus', gatewayName: 'app-gateway', scheme: 'https' },
           helmReleases: [
             {
               name: 'envoy-gateway',

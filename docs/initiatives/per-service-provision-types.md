@@ -199,9 +199,10 @@ environment:<engine>:<providerId>`. Record `provisionType`/`engine` on the
 
 ## Phase 2 — Kustomize / Helm / Gateway-API rendering (slices 6–10)
 
-Goal: deploy a real Kustomize + Helm + Gateway-API setup (the `lokalise/skynet` shape — a
-`base/` + `overlays/` kustomize tree, a Helm-installed gateway controller, `HTTPRoute`/`Gateway`
-routing, and a `secretGenerator` fed from secrets). The native in-Worker REST adapter applies only
+Goal: deploy a real Kustomize + Helm + Gateway-API setup (a `base/` + `overlays/` kustomize
+tree, a Helm-installed gateway controller, `HTTPRoute`/`Gateway` routing, and a `secretGenerator`
+fed from secrets — a common production ephemeral-environment shape). The native in-Worker REST
+adapter applies only
 raw, apiserver-ready manifests, so rendering moves into a **dedicated deploy container** with real
 `kubectl`/`kustomize`/`helm`, dispatched through the existing runner transport as a new `deploy`
 kind (with `image: 'deploy'`). The raw-manifest REST path is kept for the simple case; a service
@@ -222,6 +223,14 @@ The rare slice with NO `db:generate` migration: every addition is nested JSON in
   `kubernetesSecretInjectionSchema` (+ `*SecretEntrySchema`); `images`/`helmReleases`/
   `secretInjections` on the SERVICE `serviceProvisioningSchema`; shared `helmReleases` on the
   WORKSPACE `kubernetesEngineConfigSchema`; `gatewayStatus`/`httpRouteStatus` URL sources.
+- **Custom-named overlays + the dedicated-overlay ephemeral-env shape are first-class.** The
+  overlay is identified purely by the free-form `manifestSource.path` (e.g. `…/overlays/<env>`),
+  so its name carries no meaning. Two mechanics common to a dedicated ephemeral-env overlay are
+  modelled: (1) the secret injection's `generatorEnvFile` mode writes the resolved `.env` at the
+  path the overlay's OWN `secretGenerator` reads (vs colliding by materializing a duplicate
+  `Secret`); (2) `namespaceTemplate` is honored as "absent ⇒ keep the overlay's pinned namespace
+  (a shared, fixed-namespace env); set ⇒ override for per-PR isolation" — so a shared-namespace
+  redeploy and a per-PR namespace are both expressible.
 - Kernel port seam: `RunnerDispatchKind` → `'agent' | 'deploy'`; `RunnerDispatchOptions.image` →
   `+ 'deploy'`; `EnvironmentProvider.buildProvisionJob?`/`finalizeProvision?` (+ `DeployProvisionJob`).
 - Conformance: a kustomize/helm/gateway-shaped handler config round-trips write→read on D1 + Postgres
@@ -231,9 +240,11 @@ The rare slice with NO `db:generate` migration: every addition is nested JSON in
 
 `backend/internal/deploy-harness` (private): slim base + `kubectl`/`kustomize`/`helm` + the job-registry
 scaffolding mirrored from `executor-harness`; same `POST /jobs` + `GET /jobs/{id}` contract with a
-`deploy` `KindEntry`; `handleDeploy` (clone → secret drop → `kubectl apply -k` + `helm upgrade
---install` → `kubectl rollout status` → discover Gateway/HTTPRoute address). New CF `[[containers]]`
-class + image tag (same fresh-immutable-tag discipline as the Pi image).
+`deploy` `KindEntry`; `handleDeploy` (clone → write `secretInjections`: a `Secret` resource OR a
+`generatorEnvFile` `.env` into the overlay tree → optionally `kustomize edit set namespace` when
+`namespaceTemplate` overrides → `kubectl apply -k` + `helm upgrade --install` → `kubectl rollout
+status` → discover Gateway/HTTPRoute address). New CF `[[containers]]` class + image tag (same
+fresh-immutable-tag discipline as the Pi image).
 
 ### Slice 8 — provider render path + Gateway URL (TODO)
 

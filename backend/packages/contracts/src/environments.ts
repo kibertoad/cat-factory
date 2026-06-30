@@ -419,17 +419,39 @@ export const kubernetesSecretEntrySchema = v.object({
 export type KubernetesSecretEntry = v.InferOutput<typeof kubernetesSecretEntrySchema>
 
 /**
- * A Secret the deploy adapter materializes in the namespace before apply (the kustomize
- * `secretGenerator` / Vault `.env` story): the mapping of logical keys → Secret is in-repo
- * intent; the values resolve from the encrypted bundle at provision time.
+ * How the deploy adapter feeds resolved secret values in before apply, discriminated by
+ * `mode`. The mapping of logical keys is in-repo intent; the values resolve from the
+ * encrypted bundle at provision time (the config carries secret KEYS, never values).
+ *
+ * - `secret`: materialize a `Secret` resource named `secretName` directly in the namespace.
+ * - `generatorEnvFile`: write the entries as a `KEY=value` `.env` file at `envFilePath`
+ *   (repo-relative, inside the overlay tree) BEFORE `kustomize build`, so the overlay's own
+ *   existing `secretGenerator` consumes it. This is the common ephemeral-environment shape
+ *   where a Component declares `secretGenerator: { envs: ['.env'] }`, the Secret is named by
+ *   the overlay, and the real `.env` is supplied at deploy time (e.g. from a secrets manager).
+ *   Use this instead of `secret` when the manifests already declare a `secretGenerator`, so
+ *   the two don't collide.
  */
-export const kubernetesSecretInjectionSchema = v.object({
-  /** Target Secret name in the namespace. */
-  secretName: nonEmpty,
-  /** Secret `type`; absent ⇒ `Opaque`. */
-  secretType: v.optional(nonEmpty),
-  entries: v.array(kubernetesSecretEntrySchema),
-})
+export const kubernetesSecretInjectionSchema = v.variant('mode', [
+  v.object({
+    mode: v.literal('secret'),
+    /** Target Secret name in the namespace. */
+    secretName: nonEmpty,
+    /** Secret `type`; absent ⇒ `Opaque`. */
+    secretType: v.optional(nonEmpty),
+    entries: v.array(kubernetesSecretEntrySchema),
+  }),
+  v.object({
+    mode: v.literal('generatorEnvFile'),
+    /**
+     * Repo-relative path within the overlay tree to write the `KEY=value` env file the
+     * overlay's `secretGenerator` reads (e.g. `overlays/<env>/<component>/.env`). The
+     * overlay names the Secret.
+     */
+    envFilePath: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+    entries: v.array(kubernetesSecretEntrySchema),
+  }),
+])
 export type KubernetesSecretInjection = v.InferOutput<typeof kubernetesSecretInjectionSchema>
 
 /** Built-in environment backend kinds the contract knows by name. */
@@ -516,7 +538,13 @@ export const kubernetesEngineConfigSchema = v.object({
   caCertPem: v.optional(v.string()),
   /** Skip apiserver TLS verification — strongly discouraged; kind/dev clusters only. */
   insecureSkipTlsVerify: v.optional(v.boolean()),
-  /** Namespace name template for the per-PR environment, e.g. `cf-env-{{pullNumber}}`. */
+  /**
+   * Namespace name template for the per-PR environment, e.g. `cf-env-{{pullNumber}}`. With
+   * `renderer: 'kustomize'`, ABSENT ⇒ honor the overlay's own `namespace:` when it pins one
+   * (the shared-namespace ephemeral-env shape, where base + overlay name a fixed namespace);
+   * SET ⇒ override it (the adapter sets the namespace at build time) for true per-PR
+   * isolation. For raw manifests, absent ⇒ a default derived from the PR number / block id.
+   */
   namespaceTemplate: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
   /** How the environment URL is derived once applied. */
   url: kubernetesUrlSourceSchema,

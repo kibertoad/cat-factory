@@ -16,7 +16,10 @@ Contracts (`@cat-factory/contracts` `environments.ts`):
 - New schemas `kubernetesImageOverrideSchema` (structured `images:`-style overrides),
   `kubernetesHelmReleaseSchema` (+ `kubernetesHelmSetSchema`; pinned version,
   `scope: 'per-environment' | 'shared'`), and `kubernetesSecretInjectionSchema` (+
-  `kubernetesSecretEntrySchema`; logical-key → `secretRef`/templated value mapping).
+  `kubernetesSecretEntrySchema`; logical-key → `secretRef`/templated value mapping). The
+  injection has two `mode`s: `secret` (materialize a `Secret` directly) and
+  `generatorEnvFile` (write a `KEY=value` `.env` at `envFilePath` for an overlay's own
+  `secretGenerator` to consume — the common dedicated-overlay ephemeral-env shape).
 - `serviceProvisioningSchema` (the service "what/where") gains optional `images`,
   `helmReleases`, and `secretInjections`; `kubernetesEngineConfigSchema` (the workspace
   "how") gains optional `helmReleases` for cluster-singleton (`scope: 'shared'`) releases.
