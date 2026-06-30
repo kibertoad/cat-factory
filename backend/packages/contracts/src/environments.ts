@@ -876,3 +876,83 @@ export const provisionEnvironmentSchema = v.object({
   inputs: v.optional(v.record(v.string(), v.string())),
 })
 export type ProvisionEnvironmentInput = v.InferOutput<typeof provisionEnvironmentSchema>
+
+// ---------------------------------------------------------------------------
+// Provisioning auto-detection (slice 11): a NON-BINDING recommended provisioning config
+// inferred from a service's repo, read checkout-free over the `RepoFiles` port. A pure-TS
+// heuristic detector proposes the service-owned "what + where" (provision type + manifest
+// source + renderer + image overrides + secret injections + per-env helm releases) plus the
+// engine-level URL source / pinned namespace the WORKSPACE handler owns (surfaced so the
+// operator can apply them to the kube engine config). The user always confirms/edits;
+// nothing is applied silently. See docs/initiatives/per-service-provision-types.md.
+// ---------------------------------------------------------------------------
+
+/** How confident the detector is in an inferred field. */
+export const provisioningDetectionConfidenceSchema = v.picklist(['high', 'low'])
+export type ProvisioningDetectionConfidence = v.InferOutput<
+  typeof provisioningDetectionConfidenceSchema
+>
+
+/** One inferred aspect of the recommendation, with its confidence + a human-readable rationale. */
+export const provisioningDetectionNoteSchema = v.object({
+  /** Which field this note explains: `provisionType` | `renderer` | `url` | `namespace` | `secretInjections` | `images` | `overlay` | `helmReleases` | `compose`. */
+  field: v.string(),
+  confidence: provisioningDetectionConfidenceSchema,
+  /** Rationale for the SPA to surface next to the field (e.g. "kustomization.yaml present ⇒ kustomize"). */
+  message: v.pipe(v.string(), v.maxLength(500)),
+})
+export type ProvisioningDetectionNote = v.InferOutput<typeof provisioningDetectionNoteSchema>
+
+/**
+ * A candidate ephemeral overlay when several exist under `overlays/*`. The detector ranks by
+ * name (`prenv`/`preview`/`pr`/`ephemeral`/`dev`) and pre-selects the top one, but the user
+ * picks — so every candidate is surfaced.
+ */
+export const provisioningOverlayCandidateSchema = v.object({
+  /** Repo-relative overlay directory (the value `manifestSource.path` would take). */
+  path: v.string(),
+  /** The overlay's base name (e.g. `prenv`). */
+  name: v.string(),
+  /** The highest-ranked candidate (the one pre-selected in `provisioning.manifestSource`). */
+  recommended: v.boolean(),
+})
+export type ProvisioningOverlayCandidate = v.InferOutput<typeof provisioningOverlayCandidateSchema>
+
+/**
+ * A non-binding provisioning recommendation detected from a service's repo. `provisioning`
+ * carries the service-owned config to prefill (the "what + where"); `urlSource`/`namespace`
+ * are engine-level suggestions the workspace handler owns (the detector can READ them from
+ * the manifests but they aren't stored on the service); `overlayCandidates` + `notes` drive
+ * the confirm UI. `detected: false` ⇒ nothing inferable (`provisioning.type` is `infraless`).
+ */
+export const provisioningRecommendationSchema = v.object({
+  detected: v.boolean(),
+  /** The prefilled service provisioning the user confirms/edits (the "what + where"). */
+  provisioning: serviceProvisioningSchema,
+  /** Engine-level URL source inferred from the manifest kinds (workspace handler owns it). */
+  urlSource: v.optional(kubernetesUrlSourceSchema),
+  /** A pinned namespace the manifests declare — recommend honoring it (leave `namespaceTemplate` empty). */
+  namespace: v.optional(v.string()),
+  /** Candidate ephemeral overlays to choose among (kustomize with several `overlays/*`). */
+  overlayCandidates: v.optional(v.array(provisioningOverlayCandidateSchema)),
+  /** Per-field confidence + hints for the SPA. */
+  notes: v.array(provisioningDetectionNoteSchema),
+})
+export type ProvisioningRecommendation = v.InferOutput<typeof provisioningRecommendationSchema>
+
+/**
+ * Detect a recommended provisioning config for a service's repo (nothing persisted). The repo
+ * is read at `gitRef` (absent ⇒ default branch); `directory` scopes detection to a monorepo
+ * service subdirectory (absent ⇒ the repo root).
+ */
+export const detectServiceProvisioningSchema = v.object({
+  owner: v.pipe(v.string(), v.minLength(1)),
+  repo: v.pipe(v.string(), v.minLength(1)),
+  /** Branch/tag/sha to read at; absent ⇒ the repo's default branch. */
+  gitRef: v.optional(v.pipe(v.string(), v.minLength(1))),
+  /** Service subdirectory within the repo (monorepo); absent ⇒ the repo root. */
+  directory: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
+  /** Optional VCS provider hint; absent ⇒ the workspace's connected provider. */
+  provider: v.optional(v.picklist(['github', 'gitlab'])),
+})
+export type DetectServiceProvisioningInput = v.InferOutput<typeof detectServiceProvisioningSchema>

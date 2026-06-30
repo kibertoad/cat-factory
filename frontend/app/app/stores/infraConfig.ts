@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, type Ref } from 'vue'
 import type {
   CustomManifestType,
+  DetectServiceProvisioningInput,
   EnvironmentHandlerView,
   ProvisionType,
   RegisterEnvironmentHandlerInput,
@@ -94,6 +95,16 @@ export const useInfraConfigStore = defineStore('infraConfig', () => {
     return saved
   }
 
+  /**
+   * Auto-detect a NON-BINDING recommended provisioning config from a service's repo. The SPA
+   * prefills the confirm form from the result; nothing is persisted server-side. Detection is
+   * pure repo introspection, so it works regardless of which handlers are registered.
+   */
+  async function detectProvisioning(input: DetectServiceProvisioningInput) {
+    const ws = useWorkspaceStore()
+    return api.detectServiceProvisioning(ws.requireId(), input)
+  }
+
   async function unregisterHandler(type: ProvisionType, manifestId?: string | null) {
     const ws = useWorkspaceStore()
     await api.unregisterEnvironmentHandler(ws.requireId(), type, manifestId ?? undefined)
@@ -161,6 +172,7 @@ export const useInfraConfigStore = defineStore('infraConfig', () => {
     ensureLoaded,
     handlerFor,
     registerHandler,
+    detectProvisioning,
     unregisterHandler,
     upsertCustomType,
     removeCustomType,

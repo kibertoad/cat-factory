@@ -1,6 +1,7 @@
 import {
   bootstrapEnvironmentRepoContract,
   describeEnvironmentProviderContract,
+  detectServiceProvisioningContract,
   getEnvironmentAccessContract,
   getEnvironmentConnectionContract,
   getEnvironmentContract,
@@ -127,6 +128,20 @@ export function environmentController(): Hono<AppEnv> {
     if (!env) return unavailable(c)
     return c.json(
       await env.connectionService.bootstrapRepo(param(c, 'workspaceId'), c.req.valid('json')),
+      200,
+    )
+  })
+
+  // Auto-detect a non-binding recommended provisioning config from a service's repo (read
+  // checkout-free over RepoFiles). Nothing persisted — the SPA prefills the confirm form.
+  buildHonoRoute(app, detectServiceProvisioningContract, async (c) => {
+    const env = requireEnvironments(c)
+    if (!env) return unavailable(c)
+    return c.json(
+      await env.connectionService.detectServiceProvisioning(
+        param(c, 'workspaceId'),
+        c.req.valid('json'),
+      ),
       200,
     )
   })

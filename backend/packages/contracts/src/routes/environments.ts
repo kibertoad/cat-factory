@@ -3,11 +3,13 @@ import * as v from 'valibot'
 import {
   bootstrapEnvironmentRepoSchema,
   customManifestTypeSchema,
+  detectServiceProvisioningSchema,
   environmentConnectionSchema,
   environmentHandleSchema,
   environmentHandlerViewSchema,
   environmentHandlersBundleSchema,
   provisionEnvironmentSchema,
+  provisioningRecommendationSchema,
   registerEnvironmentHandlerSchema,
   registerEnvironmentProviderSchema,
   testEnvironmentConnectionSchema,
@@ -98,6 +100,15 @@ export const bootstrapEnvironmentRepoContract = defineApiContract({
   pathResolver: () => '/environments/connection/bootstrap-repo',
   requestBodySchema: bootstrapEnvironmentRepoSchema,
   responsesByStatusCode: { 200: bootstrapRepoResultSchema, ...errorResponses },
+})
+
+// Auto-detect a NON-BINDING recommended provisioning config from a service's repo (read
+// checkout-free over RepoFiles). Nothing persisted — the SPA prefills the confirm form.
+export const detectServiceProvisioningContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/environments/detect-provisioning',
+  requestBodySchema: detectServiceProvisioningSchema,
+  responsesByStatusCode: { 200: provisioningRecommendationSchema, ...errorResponses },
 })
 
 // ---- per-type infra handlers (the workspace "how") + custom-type catalog ----
