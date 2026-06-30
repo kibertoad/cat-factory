@@ -79,6 +79,7 @@ const harness: ConformanceHarness = {
           ? {
               environmentBackendRegistry: opts.backendRegistries.environmentBackendRegistry,
               runnerBackendRegistry: opts.backendRegistries.runnerBackendRegistry,
+              customManifestTypeRegistry: opts.backendRegistries.customManifestTypeRegistry,
             }
           : {}),
         ...fragmentLibraryDeps(),

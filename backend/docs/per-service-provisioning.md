@@ -37,20 +37,20 @@ At run time the `deployer` step **merges** the two — the service's source/rend
 the workspace (or per-user) engine config — resolves a provider, and stands the environment
 up. The resolved **provision type + engine + provider** are recorded on the environment record
 and surfaced in run details. There is **no** user-facing local-vs-remote toggle any more
-(`defaultTestEnvironment` was removed): local-vs-remote is purely *which handler the workspace
-configured*.
+(`defaultTestEnvironment` was removed): local-vs-remote is purely _which handler the workspace
+configured_.
 
 ## Provision types
 
 `provisionType` (`provisionTypeSchema`, `backend/packages/contracts/src/environments.ts`) is
 one of:
 
-| Type             | Service declares                                                                                   | Meaning                                                                |
-| ---------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `kubernetes`     | a **manifest source** (colocated path or a separate repo) + a `renderer` + optional render inputs  | deploy Kubernetes manifests into a per-PR namespace                    |
-| `docker-compose` | a compose path (+ a `localDevOnly` flag)                                                            | run a local docker-compose stack on the runtime's Docker              |
-| `custom`         | a `manifestId` from the catalog (+ optional manifest path)                                          | hand off to a workspace-/code-registered custom backend                |
-| `infraless`      | nothing                                                                                             | no environment — the `deployer` records a no-op, the Tester needs none |
+| Type             | Service declares                                                                                  | Meaning                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `kubernetes`     | a **manifest source** (colocated path or a separate repo) + a `renderer` + optional render inputs | deploy Kubernetes manifests into a per-PR namespace                    |
+| `docker-compose` | a compose path (+ a `localDevOnly` flag)                                                          | run a local docker-compose stack on the runtime's Docker               |
+| `custom`         | a `manifestId` from the catalog (+ optional manifest path)                                        | hand off to a workspace-/code-registered custom backend                |
+| `infraless`      | nothing                                                                                           | no environment — the `deployer` records a no-op, the Tester needs none |
 
 An **undeclared** service (no `provisioning`) falls through to the legacy single-connection
 path via the compat bridge, so pre-existing workspaces keep provisioning unchanged.
@@ -63,13 +63,13 @@ The workspace handler picks an **engine** (`infraEngineSchema`); a registered
 it. Each backend declares the engines it serves via `engines()`; the registry resolves an
 engine to its backend with `byEngine()`.
 
-| Engine             | Built-in backend (`kind`)   | Provision type     | Where it runs                                                  |
-| ------------------ | --------------------------- | ------------------ | ------------------------------------------------------------- |
-| `local-k3s`        | `kubernetes`                | `kubernetes`       | a local/in-cluster k3s (local-facade preset)                  |
-| `remote-kubernetes`| `kubernetes`                | `kubernetes`       | an external managed cluster                                   |
-| `local-docker`     | (local facade)              | `docker-compose`   | the runtime's local Docker — `local-docker` is local-only     |
-| `remote-custom`    | `manifest` (or a custom one)| `custom`           | a BYO HTTP management API, or a code-registered native backend |
-| `none`             | —                           | `infraless`        | nothing is provisioned                                        |
+| Engine              | Built-in backend (`kind`)    | Provision type   | Where it runs                                                  |
+| ------------------- | ---------------------------- | ---------------- | -------------------------------------------------------------- |
+| `local-k3s`         | `kubernetes`                 | `kubernetes`     | a local/in-cluster k3s (local-facade preset)                   |
+| `remote-kubernetes` | `kubernetes`                 | `kubernetes`     | an external managed cluster                                    |
+| `local-docker`      | (local facade)               | `docker-compose` | the runtime's local Docker — `local-docker` is local-only      |
+| `remote-custom`     | `manifest` (or a custom one) | `custom`         | a BYO HTTP management API, or a code-registered native backend |
+| `none`              | —                            | `infraless`      | nothing is provisioned                                         |
 
 The built-in `kubernetes` backend serves `local-k3s` + `remote-kubernetes`; the generic
 `manifest` HTTP backend serves `remote-custom`. A deployment can register a narrower custom
