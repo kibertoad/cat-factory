@@ -235,10 +235,18 @@ export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
   documentRepository: {
     listByBlock: { scope: { kind: 'workspace', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
+    // A URL named in a block's description is resolved against the imported corpus by a
+    // canonical-url point lookup (`AgentContextBuilder.resolveLinkedContext`), on the SAME
+    // per-dispatch run path as `get`/`listByBlock` above — so it must be allow-listed too
+    // (else a task whose description contains any link fails the run with `unknown_method`).
+    getByUrl: { scope: { kind: 'workspace', arg: 0 } },
   },
   taskRepository: {
     listByBlock: { scope: { kind: 'workspace', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
+    // Same as `documentRepository.getByUrl`: a URL in the description resolves against the
+    // imported issue corpus by a point lookup on the run path.
+    getByUrl: { scope: { kind: 'workspace', arg: 0 } },
   },
   // The agent context also resolves the block's provisioned environment per step
   // (`resolveForBlock`/`get`, both workspace-keyed). Reads only — the connect/provision surface
@@ -266,6 +274,11 @@ export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // act/dismiss endpoints are not admin-gated) — the same policy as the block/pipeline writes.
     findOpenByBlock: { scope: { kind: 'workspace', arg: 0 } },
     upsertOpenForBlock: { scope: { kind: 'workspace', arg: 0 } },
+    // Block-less raises (a card with no `blockId`) and every status transition the inbox
+    // performs right after a run settles — act / dismiss / escalate — go through `upsert`
+    // (`NotificationService`), not `upsertOpenForBlock`. Workspace-scoped, member-level (the
+    // inbox act/dismiss endpoints are not admin-gated) — same policy as the writes above.
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
   },
   bootstrapJobRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },

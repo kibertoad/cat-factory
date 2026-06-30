@@ -299,12 +299,18 @@ the board-load + run paths below are green**. The work is in three parts:
 > `taskRepository` / `environmentRegistryRepository` / `environmentConnectionRepository` from the remote
 > registry when `db` is undefined (the sub-helpers built them directly over the absent `db`; their
 > connect/provision surfaces stay db-direct, off the path); and `PILOT_PERSISTENCE_METHODS` gained the
-> workspace-scoped methods the path exercises — `documentRepository.{listByBlock,get}`,
-> `taskRepository.{listByBlock,get}`, `environmentRegistryRepository.{getByBlock,get}`,
+> workspace-scoped methods the path exercises — `documentRepository.{listByBlock,get,getByUrl}`,
+> `taskRepository.{listByBlock,get,getByUrl}`, `environmentRegistryRepository.{getByBlock,get}`,
 > `modelPresetRepository.getDefault`, the board-load lazy default-preset seeds
 > `mergePresetRepository.upsert` / `modelPresetRepository.upsert`, and the completion notification raise
-> `notificationRepository.{findOpenByBlock,upsertOpenForBlock}` (round-trip + cross-account-scope unit
-> tests for each in `persistenceRpc.spec.ts`).
+>
+> - inbox transitions `notificationRepository.{findOpenByBlock,upsertOpenForBlock,upsert}` (round-trip +
+>   cross-account-scope unit tests for each in `persistenceRpc.spec.ts`). The `*.getByUrl` reads back a
+>   URL named in a block's description and `notificationRepository.upsert` backs block-less raises + the
+>   inbox act/dismiss/escalate transitions — both on the same run/post-run path as the methods beside
+>   them, so the integration test now patches the run's task with a URL + Jira/GitHub refs and enables
+>   the environment integration on the local node, so `*.get`/`getByUrl` and
+>   `environmentRegistryRepository.getByBlock` are exercised over the RPC end-to-end (not unit-only).
 >
 > **Residual after slice 4** (none on the basic board-load + run path): decrypting a remotely-sealed
 > PROVISIONED environment's access cipher needs the mothership's key (only the non-secret block→env

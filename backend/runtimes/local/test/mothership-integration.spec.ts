@@ -91,6 +91,14 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
         LOCAL_MOTHERSHIP_URL: mothershipUrl,
         LOCAL_MOTHERSHIP_TOKEN: machineToken,
         LOCAL_MOTHERSHIP_CREDENTIAL_DB: ':memory:',
+        // Opt the local node into the ephemeral-environment integration so `createCore` builds
+        // the provisioning service — that is what makes `AgentContextBuilder` actually resolve
+        // the block's environment per dispatch (`environmentRegistryRepository.getByBlock`,
+        // which returns null when none is provisioned) over the RPC. Without it the env repos
+        // route remotely but are never reached on the run path, so the remote `getByBlock` read
+        // would be unit-tested only, never exercised end-to-end. The mothership already enables
+        // it (MOTHERSHIP_ENV), so the remote registry actually wires the repo.
+        ENVIRONMENTS_ENABLED: 'true',
       },
       overrides: { agentExecutor: new FakeAgentExecutor() },
       // The built-in default model preset routes every kind to a Cloudflare-served model, so the
@@ -173,6 +181,19 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
   })
 
   it('drives a run to a persisted terminal state over the remote persistence RPC', async () => {
+    // Give the task a description that NAMES external references (a URL, a Jira key, a
+    // fully-qualified GitHub ref) so `AgentContextBuilder` resolves each against the imported
+    // corpus on dispatch — exercising the point-lookup run-path reads (`taskRepository.get` /
+    // `getByUrl`, `documentRepository.getByUrl`) over the RPC, not just `listByBlock`. Nothing
+    // is actually imported, so they resolve to nothing; the point is that each method is
+    // allow-listed and round-trips (an un-allow-listed one would fail the run with
+    // `unknown_method`). The patch itself is `blockRepository.update` over the RPC.
+    const patched = await local.call('PATCH', `/workspaces/${workspaceId}/blocks/task_login`, {
+      description:
+        'Issue a session on valid credentials. Spec: https://example.com/spec — see PROJ-123 and acme/repo#7.',
+    })
+    expect(patched.status).toBe(200)
+
     // A minimal one-step pipeline (created over the RPC: pipelineRepository.insert).
     const pipeline = await local.call<Pipeline>('POST', `/workspaces/${workspaceId}/pipelines`, {
       name: 'Code only',
@@ -191,12 +212,15 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
     expect(start.status).toBe(201)
 
     // Poll the snapshot (a remote read each time) until the run settles to a terminal status.
+    // Bounded by a wall-clock deadline rather than a fixed iteration count so a slower CG/CI
+    // box (each poll is a real Postgres RPC round-trip) doesn't spuriously time out the run.
     let execution: ExecutionInstance | undefined
-    for (let i = 0; i < 100; i++) {
+    const deadline = Date.now() + 15_000
+    while (Date.now() < deadline) {
       const snap = await local.call<WorkspaceSnapshot>('GET', `/workspaces/${workspaceId}`)
       execution = snap.body.executions.find((e) => e.blockId === 'task_login')
       if (execution && TERMINAL.has(execution.status)) break
-      await new Promise((r) => setTimeout(r, 10))
+      await new Promise((r) => setTimeout(r, 25))
     }
     expect(execution, 'a run for task_login should exist').toBeDefined()
     expect(execution!.status).toBe('done')

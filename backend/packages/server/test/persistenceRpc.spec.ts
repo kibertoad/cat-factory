@@ -128,10 +128,12 @@ function makeRegistry(): {
     documentRepository: {
       listByBlock: async (ws: string) => [{ ws }],
       get: async (ws: string) => ({ ws }),
+      getByUrl: async (ws: string) => ({ ws }),
     },
     taskRepository: {
       listByBlock: async (ws: string) => [{ ws }],
       get: async (ws: string) => ({ ws }),
+      getByUrl: async (ws: string) => ({ ws }),
     },
     environmentRegistryRepository: {
       getByBlock: async (ws: string) => ({ ws }),
@@ -148,6 +150,7 @@ function makeRegistry(): {
       listOpen: async (ws: string) => [{ ws }],
       findOpenByBlock: async (ws: string) => ({ ws }),
       upsertOpenForBlock: async (ws: string) => ({ ws }),
+      upsert: async (ws: string) => ({ ws }),
     },
     bootstrapJobRepository: {
       listByWorkspace: async (ws: string) => [{ ws }],
@@ -539,8 +542,10 @@ describe('agent-context run-path + lazy-seed surface (workspace-scoped)', () => 
     { repo: 'modelPresetRepository', method: 'getDefault', args: [] },
     { repo: 'documentRepository', method: 'listByBlock', args: ['blk_1'] },
     { repo: 'documentRepository', method: 'get', args: ['notion', 'ext_1'] },
+    { repo: 'documentRepository', method: 'getByUrl', args: ['https://example.com/spec'] },
     { repo: 'taskRepository', method: 'listByBlock', args: ['blk_1'] },
     { repo: 'taskRepository', method: 'get', args: ['jira', 'KEY-1'] },
+    { repo: 'taskRepository', method: 'getByUrl', args: ['https://example.com/issue'] },
     { repo: 'environmentRegistryRepository', method: 'getByBlock', args: ['blk_1'] },
     { repo: 'environmentRegistryRepository', method: 'get', args: ['env_1'] },
     {
@@ -549,6 +554,8 @@ describe('agent-context run-path + lazy-seed surface (workspace-scoped)', () => 
       args: ['blk_1', 'pipeline_complete'],
     },
     { repo: 'notificationRepository', method: 'upsertOpenForBlock', args: [{ id: 'n_1' }] },
+    // Block-less raises + inbox act/dismiss/escalate transitions route through `upsert`.
+    { repo: 'notificationRepository', method: 'upsert', args: [{ id: 'n_1' }] },
   ]
 
   for (const { repo, method, args } of READS) {
