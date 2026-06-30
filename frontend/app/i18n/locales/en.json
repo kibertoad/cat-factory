@@ -1400,6 +1400,8 @@
         "engineLabel": "Engine",
         "customHandlerTitle": "Remote-custom handler",
         "customTypeLabel": "Custom type",
+        "customBackendLabel": "Backend",
+        "customBackendHelp": "Which registered backend provisions this custom environment.",
         "customConnected": "Handler connected.",
         "saved": "Handler saved",
         "removed": "Handler removed",

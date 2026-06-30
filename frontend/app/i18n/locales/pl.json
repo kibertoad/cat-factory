@@ -1809,6 +1809,8 @@
         "engineLabel": "Silnik",
         "customHandlerTitle": "Handler remote-custom",
         "customTypeLabel": "Typ niestandardowy",
+        "customBackendLabel": "Backend",
+        "customBackendHelp": "Który zarejestrowany backend obsługuje to niestandardowe środowisko.",
         "customConnected": "Handler połączony.",
         "saved": "Handler zapisany",
         "removed": "Handler usunięty",

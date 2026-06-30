@@ -1809,6 +1809,8 @@
         "engineLabel": "Moteur",
         "customHandlerTitle": "Gestionnaire remote-custom",
         "customTypeLabel": "Type personnalisé",
+        "customBackendLabel": "Backend",
+        "customBackendHelp": "Quel backend enregistré provisionne cet environnement personnalisé.",
         "customConnected": "Gestionnaire connecté.",
         "saved": "Gestionnaire enregistré",
         "removed": "Gestionnaire supprimé",

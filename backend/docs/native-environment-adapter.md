@@ -97,6 +97,10 @@ export const kargoEnvironmentBackend: EnvironmentBackendProvider = {
     return config.manifest
   },
   fromManifest: (manifest) => ({ kind: 'kargo', manifest }),
+  // REQUIRED: the per-type infra engine(s) this backend serves. An ephemeral-environment
+  // backend rides `remote-custom` — this is what makes it selectable as a run target for a
+  // service's `custom` provision type. Omit it and the backend is unreachable from the UI.
+  engines: () => ['remote-custom'],
   buildProvider: (ctx) => new KargoEnvironmentProvider(ctx.urlPolicy),
 }
 ```

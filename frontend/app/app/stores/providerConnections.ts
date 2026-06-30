@@ -18,8 +18,8 @@ const KINDS: ProviderConnectionKind[] = ['environment', 'runner-pool']
 // additionally carry a deployment's programmatically-registered CUSTOM kinds.
 const BUILTIN_BACKEND_KINDS: Record<ProviderConnectionKind, BackendKindOption[]> = {
   environment: [
-    { kind: 'manifest', label: 'HTTP manifest' },
-    { kind: 'kubernetes', label: 'Kubernetes' },
+    { kind: 'manifest', label: 'HTTP manifest', engines: ['remote-custom'] },
+    { kind: 'kubernetes', label: 'Kubernetes', engines: ['local-k3s', 'remote-kubernetes'] },
   ],
   'runner-pool': [
     { kind: 'manifest', label: 'HTTP manifest pool' },
@@ -111,6 +111,23 @@ export const useProviderConnectionsStore = defineStore('providerConnections', ()
     }
   }
 
+  /**
+   * Fetch (without mutating shared state) the descriptor for a specific backend kind — used by
+   * the per-type infra configurator to prefill a custom backend's manifest template/secret
+   * fields when the operator picks it. Returns null on a transient describe failure.
+   */
+  async function fetchDescriptor(
+    kind: ProviderConnectionKind,
+    backendKind?: string,
+  ): Promise<ProviderDescriptor | null> {
+    const ws = useWorkspaceStore()
+    try {
+      return await api.describeProvider(ws.requireId(), kind, backendKind)
+    } catch {
+      return null
+    }
+  }
+
   /** Refresh both providers (used by the banner + after a save/remove). */
   async function load() {
     await Promise.all(KINDS.map((k) => loadKind(k)))
@@ -177,6 +194,7 @@ export const useProviderConnectionsStore = defineStore('providerConnections', ()
     load,
     loadKind,
     loadDescriptor,
+    fetchDescriptor,
     ensureLoaded,
     descriptorFor,
     connectionFor,

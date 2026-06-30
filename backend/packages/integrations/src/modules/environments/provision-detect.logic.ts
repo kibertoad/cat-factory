@@ -68,6 +68,10 @@ const K8S_DIR_CANDIDATES = [
   'infra/k8s',
   'infra/kubernetes',
 ]
+// Wrapper dirs (e.g. `deploy/`, `deployment/`) frequently nest the actual manifests under a
+// `k8s`/`kubernetes` child (`deployment/k8s/{base,overlays}`); when a candidate has no direct
+// markers we descend one level into such a child so that layout still resolves.
+const K8S_NESTED_SUBDIRS = ['k8s', 'kubernetes', 'manifests']
 // Overlay names ranked most→least likely to be the ephemeral/preview environment.
 const OVERLAY_RANK = [
   'prenv',
@@ -335,29 +339,49 @@ interface KubernetesRoot {
   hasKustomization: boolean
 }
 
+/**
+ * Decide whether `dir` (with its already-listed `entries`) is a k8s manifest root: it is when it
+ * carries a kustomization / an `overlays/` or `base(s)/` subtree, or — lacking those markers — at
+ * least one YAML file that parses as a real manifest (`kind` + `apiVersion`).
+ */
+async function evaluateK8sDir(
+  scanner: Scanner,
+  dir: string,
+  entries: { name: string; type: string; path: string }[],
+): Promise<KubernetesRoot | null> {
+  const hasKustomization = entries.some(
+    (e) => e.type !== 'dir' && KUSTOMIZATION_FILES.includes(e.name),
+  )
+  const hasOverlays = entries.some((e) => e.type === 'dir' && e.name === 'overlays')
+  const hasBase = entries.some((e) => e.type === 'dir' && (e.name === 'base' || e.name === 'bases'))
+  if (hasKustomization || hasOverlays || hasBase) {
+    return { dir, hasOverlays, hasKustomization }
+  }
+  // No kustomize markers — accept the dir only if it holds an actual k8s manifest.
+  for (const entry of entries) {
+    if (entry.type === 'dir' || !isYamlFile(entry.name)) continue
+    const content = await scanner.getFile(joinPath(dir, entry.name))
+    const looksLikeManifest =
+      content !== null && parseDocs(content).some((d) => asString(d.kind) && asString(d.apiVersion))
+    if (looksLikeManifest) return { dir, hasOverlays: false, hasKustomization: false }
+  }
+  return null
+}
+
 async function findKubernetesRoot(scanner: Scanner, root: string): Promise<KubernetesRoot | null> {
   for (const candidate of K8S_DIR_CANDIDATES) {
     const dir = joinPath(root, candidate)
     const entries = await scanner.listDir(dir)
     if (entries.length === 0) continue
-    const hasKustomization = entries.some(
-      (e) => e.type !== 'dir' && KUSTOMIZATION_FILES.includes(e.name),
-    )
-    const hasOverlays = entries.some((e) => e.type === 'dir' && e.name === 'overlays')
-    const hasBase = entries.some(
-      (e) => e.type === 'dir' && (e.name === 'base' || e.name === 'bases'),
-    )
-    if (hasKustomization || hasOverlays || hasBase) {
-      return { dir, hasOverlays, hasKustomization }
-    }
-    // No kustomize markers — accept the dir only if it holds an actual k8s manifest.
+    const direct = await evaluateK8sDir(scanner, dir, entries)
+    if (direct) return direct
+    // A wrapper dir (e.g. `deployment/`) may nest the manifests under a `k8s`/`kubernetes` child
+    // (`deployment/k8s/{base,overlays}`). Descend one level into any such child that exists.
     for (const entry of entries) {
-      if (entry.type === 'dir' || !isYamlFile(entry.name)) continue
-      const content = await scanner.getFile(joinPath(dir, entry.name))
-      const looksLikeManifest =
-        content !== null &&
-        parseDocs(content).some((d) => asString(d.kind) && asString(d.apiVersion))
-      if (looksLikeManifest) return { dir, hasOverlays: false, hasKustomization: false }
+      if (entry.type !== 'dir' || !K8S_NESTED_SUBDIRS.includes(entry.name)) continue
+      const nestedDir = joinPath(dir, entry.name)
+      const nested = await evaluateK8sDir(scanner, nestedDir, await scanner.listDir(nestedDir))
+      if (nested) return nested
     }
   }
   return null

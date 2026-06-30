@@ -1360,6 +1360,8 @@
         "engineLabel": "エンジン",
         "customHandlerTitle": "remote-custom ハンドラー",
         "customTypeLabel": "カスタムタイプ",
+        "customBackendLabel": "バックエンド",
+        "customBackendHelp": "このカスタム環境をプロビジョニングする登録済みバックエンド。",
         "customConnected": "ハンドラーが接続されました。",
         "saved": "ハンドラーを保存しました",
         "removed": "ハンドラーを削除しました",

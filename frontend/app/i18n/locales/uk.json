@@ -1809,6 +1809,8 @@
         "engineLabel": "Рушій",
         "customHandlerTitle": "Обробник remote-custom",
         "customTypeLabel": "Власний тип",
+        "customBackendLabel": "Бекенд",
+        "customBackendHelp": "Який зареєстрований бекенд забезпечує це користувацьке середовище.",
         "customConnected": "Обробник підключено.",
         "saved": "Обробник збережено",
         "removed": "Обробник видалено",

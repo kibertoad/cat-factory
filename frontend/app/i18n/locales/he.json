@@ -1358,6 +1358,8 @@
         "engineLabel": "מנוע",
         "customHandlerTitle": "מטפל remote-custom",
         "customTypeLabel": "סוג מותאם",
+        "customBackendLabel": "Backend",
+        "customBackendHelp": "איזה backend רשום מקצה את הסביבה המותאמת אישית הזו.",
         "customConnected": "המטפל מחובר.",
         "saved": "המטפל נשמר",
         "removed": "המטפל הוסר",
