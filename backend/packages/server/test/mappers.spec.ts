@@ -40,9 +40,8 @@ function fullBlock(): Block {
     pullRequest: { number: 7, url: 'https://gh/pr/7', branch: 'feat/x' },
     mergePresetId: 'mp_1',
     pipelineId: 'pl_1',
-    agentConfig: { 'tester.environment': 'local' },
-    testComposePath: 'docker-compose.yml',
-    noInfraDependencies: true,
+    agentConfig: { 'playwright.e2eTarget': 'ci' },
+    provisioning: { type: 'docker-compose', composePath: 'docker-compose.yml', localDevOnly: true },
     cloudProvider: 'aws',
     instanceSize: 'large',
   } as Block

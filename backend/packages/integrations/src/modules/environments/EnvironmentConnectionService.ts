@@ -40,7 +40,11 @@ import {
   type CustomManifestTypeRegistry,
 } from './custom-manifest-types.js'
 import { missingRequiredConfigKeys, stringifyProviderConfig } from './environments.logic.js'
-import { type InfraHandlerLike, resolveInfraHandler } from './infra-handler.logic.js'
+import {
+  type InfraHandlerLike,
+  type InfraHandlerResolution,
+  resolveInfraHandler,
+} from './infra-handler.logic.js'
 import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningLogService.js'
 
 // ---------------------------------------------------------------------------
@@ -301,6 +305,26 @@ export class EnvironmentConnectionService {
    * serves the type (or a bare `custom` is ambiguous). `infraless` has no provider — callers
    * short-circuit it before calling this.
    */
+  /**
+   * Resolve WHICH workspace handler (if any) serves a service's declared provisioning —
+   * the lightweight resolution shared by {@link resolveProviderForType} and the Tester's
+   * start-time infra gate (`canProvision`). One batched `listByWorkspace` + the pure
+   * {@link resolveInfraHandler}; no provider build / secret decrypt. `infraless` is the
+   * caller's concern (it has no handler) and is rejected here.
+   */
+  async resolveHandlerForType(
+    workspaceId: string,
+    service: ServiceProvisioning,
+    userOverrides: EnvironmentConnectionRecord[] = [],
+  ): Promise<InfraHandlerResolution<EnvironmentConnectionRecord & InfraHandlerLike>> {
+    const handlers = await this.deps.environmentConnectionRepository.listByWorkspace(workspaceId)
+    return resolveInfraHandler<EnvironmentConnectionRecord & InfraHandlerLike>(
+      { type: service.type, ...(service.manifestId ? { manifestId: service.manifestId } : {}) },
+      handlers,
+      userOverrides,
+    )
+  }
+
   async resolveProviderForType(
     workspaceId: string,
     service: ServiceProvisioning,
@@ -309,12 +333,7 @@ export class EnvironmentConnectionService {
     if (service.type === 'infraless') {
       throw new ValidationError('infraless services have no environment provider')
     }
-    const handlers = await this.deps.environmentConnectionRepository.listByWorkspace(workspaceId)
-    const resolution = resolveInfraHandler<EnvironmentConnectionRecord & InfraHandlerLike>(
-      { type: service.type, ...(service.manifestId ? { manifestId: service.manifestId } : {}) },
-      handlers,
-      userOverrides,
-    )
+    const resolution = await this.resolveHandlerForType(workspaceId, service, userOverrides)
     if (!resolution.ok) {
       const message =
         resolution.reason === 'type-mismatch'

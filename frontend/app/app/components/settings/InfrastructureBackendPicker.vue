@@ -117,12 +117,18 @@ const poolConfigurable = computed(
     providerConnections.isAvailable(connectionKind.value),
 )
 
-// The delegation flag is a genuine per-workspace toggle ONLY in local mode.
-const writable = computed(() => isLocal.value && (cap.value?.available.length ?? 0) > 1)
+// The delegation flag is a genuine per-workspace toggle ONLY in local mode, and ONLY on the
+// execution axis: the Tester's environment is now driven by the SERVICE's declared provision
+// type + per-type workspace handlers (no per-workspace test-env delegation toggle), so the
+// testEnv axis is registration-driven (read-only "Active: …" + the connect forms) until the
+// per-type infra configurator lands. See docs/initiatives/per-service-provision-types.md.
+const writable = computed(
+  () => isLocal.value && props.axis === 'execution' && (cap.value?.available.length ?? 0) > 1,
+)
 const delegated = computed(() =>
   props.axis === 'execution'
     ? settings.settings.delegateAgentsToRunnerPool
-    : settings.settings.delegateTestEnvToProvider,
+    : connectionRegistered.value,
 )
 
 // The effective active backend (matches the prior ExecutionBackendSelector logic): local
@@ -214,11 +220,8 @@ const saving = ref(false)
 async function setDelegate(value: boolean) {
   saving.value = true
   try {
-    await settings.update(
-      props.axis === 'execution'
-        ? { delegateAgentsToRunnerPool: value }
-        : { delegateTestEnvToProvider: value },
-    )
+    // Only reachable on the execution axis (`writable` is false for testEnv now).
+    await settings.update({ delegateAgentsToRunnerPool: value })
   } catch (e) {
     toast.add({
       title: t('settings.infrastructure.updateFailed'),

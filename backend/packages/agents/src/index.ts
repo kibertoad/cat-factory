@@ -69,7 +69,6 @@ export { type AgentTuning, type AgentGuardTuning, agentTuningFor } from './agent
 // Agent configuration-contribution catalog (the descriptors surfaced on task
 // creation / inspector, frozen once the contributing step runs).
 export {
-  TESTER_ENVIRONMENT_CONFIG_ID,
   PLAYWRIGHT_E2E_TARGET_CONFIG_ID,
   configContributionsFor,
   configContributionCatalog,

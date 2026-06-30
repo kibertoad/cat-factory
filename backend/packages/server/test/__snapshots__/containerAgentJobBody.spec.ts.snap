@@ -522,7 +522,7 @@ reading the code.",
 }
 `;
 
-exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > tester (local env) 1`] = `
+exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > tester (docker-compose service) 1`] = `
 {
   "kind": "agent",
   "ref": {
@@ -535,6 +535,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > tester (lo
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
     "infra": {
+      "composePath": "docker-compose.yml",
       "environment": "local",
       "noInfraDependencies": false,
     },

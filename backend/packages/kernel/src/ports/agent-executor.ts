@@ -8,6 +8,7 @@ import type {
   EnvironmentStatus,
   InstanceSize,
   PullRequestRef,
+  ServiceProvisioning,
   StepSubtasks,
   StreamedFollowUp,
   TaskEstimate,
@@ -147,9 +148,8 @@ export interface AgentRunContext {
     /**
      * Task-level configuration values contributed by the agents in this task's
      * pipeline (a sparse id→value map; see the agent-config contracts). Folded
-     * into the relevant agents' prompts and job bodies — e.g. the Tester reads
-     * `tester.environment` (local vs ephemeral) and the Playwright agent reads
-     * `playwright.e2eTarget` (ci vs ephemeral). Absent when nothing is set.
+     * into the relevant agents' prompts and job bodies — e.g. the Playwright agent
+     * reads `playwright.e2eTarget` (ci vs ephemeral). Absent when nothing is set.
      */
     agentConfig?: AgentConfigValues
     /**
@@ -193,21 +193,21 @@ export interface AgentRunContext {
   }
   /**
    * Service-level (frame) configuration resolved by the engine from this run's
-   * service frame. Carries what the Tester's local-infra path and the
-   * provisioning layer need: the docker-compose path to stand up dependencies (or
-   * the explicit "no infra" flag), and the cloud provider + abstract instance size
-   * the dispatch resolves to a concrete instance-type id. Absent when no service
-   * frame applies.
+   * service frame. Carries the service-owned provisioning config (the "what + where":
+   * the provision type + in-repo manifest/compose source the Tester's infra stand-up
+   * and the deployer read), and the cloud provider + abstract instance size the
+   * dispatch resolves to a concrete instance-type id. Absent when no service frame
+   * applies.
    */
   service?: {
-    testComposePath?: string
-    noInfraDependencies?: boolean
     /**
-     * The service's default test environment (`local` vs `ephemeral`). A task
-     * inherits this when it doesn't pin its own `tester.environment`; the engine
-     * materialises the resolved choice onto the run's `block.agentConfig`.
+     * The service-owned provisioning config — the provision type it produces
+     * (`kubernetes` / `docker-compose` / `custom` / `infraless`) plus the in-repo
+     * specifics. The Tester reads the type to pick its run mode (compose stand-up for
+     * `docker-compose`, the provisioned env URL for `kubernetes`/`custom`, nothing for
+     * `infraless`); the deployer merges it with the workspace handler at provision time.
      */
-    defaultTestEnvironment?: 'local' | 'ephemeral'
+    provisioning?: ServiceProvisioning
     cloudProvider?: CloudProvider
     instanceSize?: InstanceSize
   }

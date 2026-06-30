@@ -92,7 +92,7 @@ export const TESTER_AGENT_KIND = 'tester-api'
  * against the running app, captures a non-redundant screenshot of each distinct view, and
  * uploads them to the binary-artifact store. Its report carries `screenshots[]`, which the
  * visual-confirmation gate reviews against the supplied reference designs. Shares the
- * Tester→Fixer loop and the `tester.environment` infra choice; always needs a running app.
+ * Tester→Fixer loop and the service's provision-type-driven infra; always needs a running app.
  */
 export const UI_TESTER_AGENT_KIND = 'tester-ui'
 

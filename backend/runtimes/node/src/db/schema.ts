@@ -244,14 +244,9 @@ export const blocks = pgTable(
     pipeline_id: text('pipeline_id'),
     // Task-level agent config-contribution values (JSON id->value map).
     agent_config: text('agent_config'),
-    // Service-level (frame): Tester local-infra docker-compose path, the "no infra
-    // dependencies" flag, the cloud provider and the abstract instance size.
-    test_compose_path: text('test_compose_path'),
-    no_infra_dependencies: integer('no_infra_dependencies'),
-    // Service-level (frame): default test environment tasks are spawned with
-    // ('local' | 'ephemeral'); a task overrides via its tester.environment config.
-    default_test_environment: text('default_test_environment'),
     // Service-owned provisioning config (the "what + where") — serialized ServiceProvisioning.
+    // Carries the provision type + in-repo specifics; the Tester's infra stand-up + the
+    // deployer read it. The cloud provider and abstract instance size follow.
     provisioning: text('provisioning'),
     cloud_provider: text('cloud_provider'),
     instance_size: text('instance_size'),
@@ -1011,12 +1006,10 @@ export const workspaceSettings = pgTable('workspace_settings', {
   // Per-workspace toggle for the Kaizen agent (post-run grading). On by default; integer
   // 0/1 to match the SQLite store.
   kaizen_enabled: integer('kaizen_enabled').notNull().default(1),
-  // LOCAL MODE ONLY toggles (inert on Cloudflare/Node): delegate container agents to the
-  // workspace's runner pool, and/or the Tester's ephemeral environments to the registered
-  // environment provider, instead of the host container runtime / in-container DinD. Off by
-  // default; integer 0/1 to match the SQLite store.
+  // LOCAL MODE ONLY toggle (inert on Cloudflare/Node): delegate container agents to the
+  // workspace's runner pool instead of the host container runtime. Off by default; integer
+  // 0/1 to match the SQLite store.
   delegate_agents_to_runner_pool: integer('delegate_agents_to_runner_pool').notNull().default(0),
-  delegate_test_env_to_provider: integer('delegate_test_env_to_provider').notNull().default(0),
   // Per-workspace spend budget (moved out of env). Both nullable; null ⇒ the built-in
   // DEFAULT_SPEND_PRICING base table.
   spend_currency: text('spend_currency'),

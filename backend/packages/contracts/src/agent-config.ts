@@ -5,9 +5,9 @@ import { agentKindSchema } from './primitives.js'
 // Agent configuration-contribution contracts.
 //
 // Agents (built-in or custom) may *contribute* task-level configuration
-// parameters they care about — e.g. the `tester` agent contributes whether it
-// runs the suite against an ephemeral environment or stands the dependencies up
-// locally. When a pipeline is selected for a task, the union of the contributions
+// parameters they care about — e.g. the `playwright` agent contributes whether it
+// runs the acceptance suite in the project CI or against the provisioned ephemeral
+// environment. When a pipeline is selected for a task, the union of the contributions
 // of that pipeline's agent kinds is surfaced as editable fields on task creation
 // and in the inspector. Each value is editable until the contributing agent's
 // pipeline step starts, at which point it freezes.
@@ -31,13 +31,13 @@ export type AgentConfigOption = v.InferOutput<typeof agentConfigOptionSchema>
 /**
  * A single configuration parameter an agent kind contributes. `id` is a stable,
  * globally-unique key (conventionally namespaced by the kind, e.g.
- * `tester.environment`) used both as the descriptor key and as the key under
+ * `playwright.e2eTarget`) used both as the descriptor key and as the key under
  * which the chosen value is stored in {@link agentConfigValuesSchema}. `type` is a
  * picklist for forward-compatibility — only `select` exists today, but a future
  * `text`/`number`/`boolean` descriptor slots in here without a shape change.
  */
 export const agentConfigDescriptorSchema = v.object({
-  /** Stable, globally-unique id, e.g. `tester.environment`. Also the value-map key. */
+  /** Stable, globally-unique id, e.g. `playwright.e2eTarget`. Also the value-map key. */
   id: v.pipe(v.string(), v.minLength(1)),
   /** The agent kind that contributes (and owns the freeze of) this config. */
   agentKind: agentKindSchema,
@@ -63,7 +63,7 @@ export type AgentConfigCatalog = v.InferOutput<typeof agentConfigCatalogSchema>
  * the chosen value. Sparse — only ids the user has explicitly set are present;
  * everything else resolves to the descriptor's `default` at read time.
  */
-// Keys are descriptor ids (e.g. `tester.environment`) and values are short option
+// Keys are descriptor ids (e.g. `playwright.e2eTarget`) and values are short option
 // values; both are length-capped so a stray client can't persist an unbounded map.
 // Values are NOT validated against the descriptor catalog here (the contracts layer
 // can't see the runtime-registered descriptors) — `resolveAgentConfigValue` falls

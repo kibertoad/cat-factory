@@ -116,16 +116,10 @@ describe('onCallUserPrompt', () => {
 })
 
 describe('testerInfraSpec', () => {
-  it('carries the docker-compose path for a local run', () => {
+  it('carries the docker-compose path for a `docker-compose` service', () => {
     const spec = testerInfraSpec(
       context({
-        block: {
-          id: 'b1',
-          title: 'T',
-          type: 'task',
-          agentConfig: { 'tester.environment': 'local' },
-        },
-        service: { testComposePath: 'docker-compose.yml' },
+        service: { provisioning: { type: 'docker-compose', composePath: 'docker-compose.yml' } },
       } as Record<string, unknown>),
     )
     expect(spec).toMatchObject({
@@ -135,9 +129,19 @@ describe('testerInfraSpec', () => {
     })
   })
 
-  it('carries the provisioned environment URL for an ephemeral run', () => {
+  it('flags no-infra for an `infraless` service (or none declared)', () => {
     const spec = testerInfraSpec(
-      context({ environment: { url: 'https://env.example' } } as Record<string, unknown>),
+      context({ service: { provisioning: { type: 'infraless' } } } as Record<string, unknown>),
+    )
+    expect(spec).toEqual({ environment: 'local', noInfraDependencies: true })
+  })
+
+  it('carries the provisioned environment URL for a `kubernetes`/`custom` service', () => {
+    const spec = testerInfraSpec(
+      context({
+        service: { provisioning: { type: 'kubernetes' } },
+        environment: { url: 'https://env.example' },
+      } as Record<string, unknown>),
     )
     expect(spec).toEqual({ environment: 'ephemeral', environmentUrl: 'https://env.example' })
   })

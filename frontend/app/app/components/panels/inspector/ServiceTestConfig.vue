@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { Block, CloudProvider, InstanceSize } from '~/types/domain'
+import type { Block, CloudProvider, InstanceSize, ProvisionType } from '~/types/domain'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 
-// Service-level (frame) configuration: where the Tester's local-mode infra comes
-// from (a docker-compose path, or an explicit "no infra dependencies" toggle — a
-// Tester pipeline can't start until one is set), plus the cloud provider + instance
-// size the service's container jobs run on. Autodiscovery suggests a compose path
-// when the service is added; it can be set/changed here later — or browsed for in
-// the backing repository.
+// Service-level (frame) configuration: the service-owned PROVISIONING — the provision
+// TYPE this service produces (`infraless` / `docker-compose` / `kubernetes` / `custom`)
+// plus, for docker-compose, the in-repo compose path the Tester stands up — and the
+// cloud provider + instance size the service's container jobs run on. The WORKSPACE
+// configures HOW each type is handled (the engine + connection), so this view only owns
+// the "what + where". Autodiscovery suggests a compose path when the service is added.
 const props = defineProps<{
   block: Block
   // Repo backing this service, supplied by the add-service modal when the block is
@@ -22,33 +22,33 @@ const github = useGitHubStore()
 const services = useServicesStore()
 const { t } = useI18n()
 
-const composePath = computed(() => props.block.testComposePath ?? '')
-const noInfra = computed(() => props.block.noInfraDependencies === true)
+// The service's declared provision type (absent ⇒ treated as `infraless`: no environment
+// is stood up for the Tester). Switching type preserves the compose path so toggling away
+// and back doesn't lose it.
+const provisionType = computed<ProvisionType>(() => props.block.provisioning?.type ?? 'infraless')
+const composePath = computed(() => props.block.provisioning?.composePath ?? '')
 
-// The default test environment a task under this service is spawned with. `local`
-// stands the dependencies up via docker-compose (or "no infra"); `ephemeral` runs
-// against a provisioned environment. A task can override it per-task in its agent
-// settings. Absent ⇒ the built-in `ephemeral`.
-type TestEnvironment = 'local' | 'ephemeral'
-const TEST_ENVIRONMENTS = computed<{ value: TestEnvironment; label: string; hint: string }[]>(
-  () => [
-    {
-      value: 'ephemeral',
-      label: t('inspector.testConfig.env.ephemeral'),
-      hint: t('inspector.testConfig.env.ephemeralHint'),
+const PROVISION_TYPES = computed<{ value: ProvisionType; label: string }[]>(() => [
+  { value: 'infraless', label: t('inspector.testConfig.provisionTypes.infraless') },
+  { value: 'docker-compose', label: t('inspector.testConfig.provisionTypes.docker-compose') },
+  { value: 'kubernetes', label: t('inspector.testConfig.provisionTypes.kubernetes') },
+  { value: 'custom', label: t('inspector.testConfig.provisionTypes.custom') },
+])
+
+function setProvisionType(type: ProvisionType) {
+  // Carry the compose path across a switch so it isn't lost when toggling type.
+  board.updateBlock(props.block.id, {
+    provisioning: {
+      type,
+      ...(type === 'docker-compose' && composePath.value ? { composePath: composePath.value } : {}),
     },
-    {
-      value: 'local',
-      label: t('inspector.testConfig.env.local'),
-      hint: t('inspector.testConfig.env.localHint'),
-    },
-  ],
-)
-const effectiveTestEnv = computed<TestEnvironment>(
-  () => props.block.defaultTestEnvironment ?? 'ephemeral',
-)
-function setDefaultTestEnv(value: TestEnvironment) {
-  board.updateBlock(props.block.id, { defaultTestEnvironment: value })
+  })
+}
+
+function setComposePath(value: string) {
+  board.updateBlock(props.block.id, {
+    provisioning: { type: 'docker-compose', composePath: value.trim() },
+  })
 }
 
 // The provisioning hints (cloud provider + instance size) are advisory inputs to the
@@ -86,13 +86,6 @@ const effectiveProvider = computed<CloudProvider>(
   () => props.block.cloudProvider ?? accounts.activeAccount?.defaultCloudProvider ?? 'cloudflare',
 )
 
-function setComposePath(value: string) {
-  board.updateBlock(props.block.id, { testComposePath: value.trim() })
-}
-function toggleNoInfra(value: boolean) {
-  board.updateBlock(props.block.id, { noInfraDependencies: value })
-}
-
 const PROVIDERS = computed<{ value: CloudProvider; label: string }[]>(() => [
   { value: 'cloudflare', label: 'Cloudflare' },
   { value: 'docker', label: t('inspector.testConfig.providers.docker') },
@@ -114,8 +107,6 @@ function setProvider(value: CloudProvider) {
 function setSize(value: InstanceSize) {
   board.updateBlock(props.block.id, { instanceSize: value })
 }
-
-const missingInfra = computed(() => !noInfra.value && composePath.value.trim() === '')
 </script>
 
 <template>
@@ -125,26 +116,25 @@ const missingInfra = computed(() => !noInfra.value && composePath.value.trim() =
     </div>
 
     <div class="space-y-1">
-      <span class="text-[11px] text-slate-400">{{ t('inspector.testConfig.defaultEnv') }}</span>
+      <span class="text-[11px] text-slate-400">{{ t('inspector.testConfig.provisionType') }}</span>
       <div class="flex flex-wrap gap-1">
         <UButton
-          v-for="e in TEST_ENVIRONMENTS"
-          :key="e.value"
-          :color="effectiveTestEnv === e.value ? 'primary' : 'neutral'"
-          :variant="effectiveTestEnv === e.value ? 'soft' : 'ghost'"
+          v-for="p in PROVISION_TYPES"
+          :key="p.value"
+          :color="provisionType === p.value ? 'primary' : 'neutral'"
+          :variant="provisionType === p.value ? 'soft' : 'ghost'"
           size="xs"
-          :title="e.hint"
-          @click="setDefaultTestEnv(e.value)"
+          @click="setProvisionType(p.value)"
         >
-          {{ e.label }}
+          {{ p.label }}
         </UButton>
       </div>
       <p class="text-[11px] leading-snug text-slate-500">
-        {{ t('inspector.testConfig.defaultEnvHint') }}
+        {{ t('inspector.testConfig.provisionTypeHint') }}
       </p>
     </div>
 
-    <div class="space-y-1">
+    <div v-if="provisionType === 'docker-compose'" class="space-y-1">
       <label class="text-[11px] text-slate-400">{{ t('inspector.testConfig.composePath') }}</label>
       <div class="flex items-center gap-1">
         <UInput
@@ -152,7 +142,6 @@ const missingInfra = computed(() => !noInfra.value && composePath.value.trim() =
           size="xs"
           class="flex-1"
           placeholder="docker-compose.yml"
-          :disabled="noInfra"
           @blur="(e: FocusEvent) => setComposePath((e.target as HTMLInputElement).value)"
           @keydown.enter="
             (e: KeyboardEvent) => setComposePath((e.target as HTMLInputElement).value)
@@ -164,7 +153,6 @@ const missingInfra = computed(() => !noInfra.value && composePath.value.trim() =
           variant="soft"
           color="neutral"
           icon="i-lucide-folder-search"
-          :disabled="noInfra"
           :title="t('inspector.testConfig.browseRepo')"
           @click="openBrowse"
         />
@@ -204,18 +192,6 @@ const missingInfra = computed(() => !noInfra.value && composePath.value.trim() =
         </div>
       </template>
     </UModal>
-
-    <label class="flex items-center gap-2 text-[11px] text-slate-400">
-      <UCheckbox
-        :model-value="noInfra"
-        @update:model-value="(v: boolean | 'indeterminate') => toggleNoInfra(v === true)"
-      />
-      {{ t('inspector.testConfig.noInfra') }}
-    </label>
-
-    <p v-if="missingInfra" class="text-[11px] leading-snug text-amber-500">
-      {{ t('inspector.testConfig.missingInfra') }}
-    </p>
 
     <!-- Provisioning hints: advisory inputs to the ephemeral-environment provisioner.
          Collapsed by default — most services never tune them. -->

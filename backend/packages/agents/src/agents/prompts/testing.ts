@@ -1,11 +1,11 @@
 import type { AgentKind, AgentRunContext } from '@cat-factory/kernel'
 import { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './shared.js'
-import { TESTER_ENVIRONMENT_CONFIG_ID } from '../kinds/configs.js'
 
 // Built-out role prompts for the Tester → Fixer loop. The `tester` clones the PR
-// branch, brings its dependencies up (locally via docker-compose, or against the
-// provisioned ephemeral environment — the task's `tester.environment` config picks
-// which), exercises this task's requirements plus best-judgement regression of
+// branch, brings its dependencies up (locally via docker-compose for a `docker-compose`
+// service, or against the provisioned ephemeral environment for a `kubernetes`/`custom`
+// service — the service's declared provision type picks which), exercises this task's
+// requirements plus best-judgement regression of
 // related behaviour, and returns ONLY a structured JSON report (it makes no commits,
 // like the `merger`). When the report withholds its greenlight the engine dispatches
 // the `fixer` with the report folded in; the fixer commits fixes to the same branch
@@ -142,21 +142,23 @@ export function testingSystemPrompt(kind: AgentKind): string | undefined {
 
 /**
  * The "which environment to run in" section for a Tester step, rendered from the
- * block's contributed `tester.environment` config value. Empty for non-tester kinds
- * or when nothing is set, so callers can append it unconditionally.
+ * service's declared provision type: a `docker-compose` service has its dependencies
+ * stood up locally; a `kubernetes`/`custom` service runs against the provisioned
+ * ephemeral environment; an `infraless` service (or none declared) stands nothing up.
+ * Empty for non-tester kinds, so callers can append it unconditionally.
  */
 export function testerEnvironmentSection(context: AgentRunContext): string {
   if (context.agentKind !== TESTER_AGENT_KIND && context.agentKind !== UI_TESTER_AGENT_KIND)
     return ''
-  const env = context.block.agentConfig?.[TESTER_ENVIRONMENT_CONFIG_ID]
-  if (env === 'ephemeral') {
+  const type = context.service?.provisioning?.type
+  if (type === 'kubernetes' || type === 'custom') {
     return '\nRun mode: ephemeral environment — test against the provided environment URL; do not start the service locally.'
   }
-  if (env === 'local') {
-    if (context.service?.noInfraDependencies) {
-      return '\nRun mode: local, no infra dependencies — just install, build and run the test suite directly (nothing was stood up for you).'
-    }
+  if (type === 'docker-compose') {
     return '\nRun mode: local — the service’s infra dependencies have been stood up on localhost; start the service yourself and test it there.'
+  }
+  if (type === 'infraless') {
+    return '\nRun mode: no infra dependencies — just install, build and run the test suite directly (nothing was stood up for you).'
   }
   return ''
 }

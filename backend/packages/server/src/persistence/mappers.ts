@@ -71,12 +71,6 @@ export interface BlockRow {
   pipeline_id: string | null
   /** Task-level agent-contributed config values, JSON id→value map. */
   agent_config: string | null
-  /** Service-level: docker-compose path for the Tester's local infra. */
-  test_compose_path: string | null
-  /** Service-level: whether the service has no infra dependencies (0/1). */
-  no_infra_dependencies: number | null
-  /** Service-level: default test environment for tasks ('local' | 'ephemeral'). */
-  default_test_environment?: string | null
   /** Service-level: cloud provider the service's jobs run on. */
   cloud_provider: string | null
   /** Service-level: abstract instance size for the service's jobs. */
@@ -414,10 +408,6 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
       }
     },
   },
-  // Service-level fields. An empty compose path clears it.
-  optField('testComposePath', { clearOnEmpty: true }),
-  optBoolIntField('noInfraDependencies'),
-  optField('defaultTestEnvironment'),
   // Service-owned provisioning config (the "what + where") — a JSON object on frame blocks.
   optJsonField('provisioning'),
   optField('cloudProvider'),

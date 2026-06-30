@@ -5,7 +5,7 @@ import { useAgentConfigStore } from '~/stores/agentConfig'
 import { useExecutionStore } from '~/stores/execution'
 
 // Task-level configuration contributed by the agents in this task's selected
-// pipeline (e.g. the Tester's environment: local vs ephemeral). Each value is
+// pipeline (e.g. the Playwright agent's e2e target: CI vs ephemeral). Each value is
 // editable until its contributing agent's step starts, then it freezes (the run is
 // already consuming it). Persisted as a sparse id→value map on the block.
 const props = defineProps<{ block: Block }>()
@@ -29,33 +29,6 @@ const descriptors = computed(() => {
 })
 
 const run = computed(() => execution.getByBlock(props.block.id))
-
-// The Tester's environment descriptor inherits its default from the service frame this
-// task lives under (set in the service inspector); a task only overrides it by clicking.
-// Walk up the parent chain (frame → module → task) to find that default.
-const serviceDefaultTestEnv = computed<'local' | 'ephemeral' | undefined>(() => {
-  let cur: Block | undefined = props.block
-  for (let i = 0; i < 8 && cur; i++) {
-    if (cur.level === 'frame') return cur.defaultTestEnvironment
-    if (!cur.parentId) break
-    cur = board.getBlock(cur.parentId)
-  }
-  return undefined
-})
-
-/** The effective default for a descriptor — the inherited service value for the Tester's
- *  environment, otherwise the descriptor's own static default. */
-function effectiveDefault(d: { id: string; default: string }): string {
-  if (d.id === 'tester.environment' && serviceDefaultTestEnv.value) {
-    return serviceDefaultTestEnv.value
-  }
-  return d.default
-}
-
-/** Whether a descriptor's shown value is inherited (not explicitly pinned on this task). */
-function isInherited(d: { id: string }): boolean {
-  return d.id === 'tester.environment' && props.block.agentConfig?.[d.id] === undefined
-}
 
 /** A descriptor freezes once its contributing agent's step has left `pending`. */
 function isFrozen(agentKind: string): boolean {
@@ -84,9 +57,6 @@ function setValue(id: string, value: string) {
       <div class="flex items-center justify-between">
         <span class="text-[11px] text-slate-400">{{ d.label }}</span>
         <div class="flex items-center gap-1.5">
-          <span v-if="isInherited(d)" class="text-[10px] text-slate-500">{{
-            t('inspector.agentConfig.inherited')
-          }}</span>
           <UIcon
             v-if="isFrozen(d.agentKind)"
             name="i-lucide-lock"
@@ -99,8 +69,8 @@ function setValue(id: string, value: string) {
         <UButton
           v-for="opt in d.options"
           :key="opt.value"
-          :color="valueOf(d.id, effectiveDefault(d)) === opt.value ? 'primary' : 'neutral'"
-          :variant="valueOf(d.id, effectiveDefault(d)) === opt.value ? 'soft' : 'ghost'"
+          :color="valueOf(d.id, d.default) === opt.value ? 'primary' : 'neutral'"
+          :variant="valueOf(d.id, d.default) === opt.value ? 'soft' : 'ghost'"
           size="xs"
           :disabled="isFrozen(d.agentKind)"
           @click="setValue(d.id, opt.value)"
