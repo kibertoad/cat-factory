@@ -10,6 +10,7 @@ import type {
   BrainstormSession,
   ClarityReview,
   Clock,
+  EnvironmentHandle,
   ExecutionEventPublisher,
   ExecutionInstance,
   ExecutionRepository,
@@ -30,6 +31,8 @@ import type {
   ResolveRunRepoContext,
   ResolverContext,
   RunInitiatorScope,
+  RunnerJobRef,
+  RunnerJobView,
   RunRepoContext,
   ServiceProvisioning,
   StepCompletionResolver,
@@ -64,7 +67,11 @@ import {
   TASK_ESTIMATOR_AGENT_KIND,
 } from '@cat-factory/agents'
 import { DEPLOYER_AGENT_KIND, isDeployStep } from '@cat-factory/integrations'
-import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
+import type {
+  EnvironmentProvisioningService,
+  ProvisionArgs,
+  ProvisionDispatch,
+} from '@cat-factory/integrations'
 import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
 import { reviewableArtifactOutput } from './artifact-review.logic.js'
 import {
@@ -500,6 +507,13 @@ export class RunDispatcher {
     // No job in flight: a prior poll already recorded it (and advanced). Let the
     // driver loop and advance whatever step is now current.
     if (!step.jobId) return { kind: 'continue' }
+
+    // A `deployer` step's async job is a CONTAINER-backed deploy (kustomize/helm), polled
+    // through the environment provisioning service — NOT the agent executor. Route it before
+    // the executor resolution below (the deployer never goes through the agent executor).
+    if (isDeployStep(step.agentKind) && this.environmentProvisioning) {
+      return this.pollDeployerJob(workspaceId, instance, step)
+    }
 
     const executor = this.agentExecutor
     if (!isAsyncAgentExecutor(executor)) return { kind: 'noop' }
@@ -1272,20 +1286,160 @@ export class RunDispatcher {
         model: 'environment:none',
       })
     }
-    let handle
+    // A set `jobId` means a prior (possibly replayed) dispatch already started an async deploy
+    // job — re-attach by polling instead of re-provisioning (mirrors {@link handleAgentStep}).
+    if (step.jobId) {
+      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    }
+    // Start provisioning: a raw-manifest config provisions SYNCHRONOUSLY over REST (a final
+    // handle); a config that needs rendering (kustomize/helm/image overrides/secret injections)
+    // dispatches a CONTAINER-backed deploy job we park on and poll (see {@link pollDeployerJob}).
+    const ref: RunnerJobRef = { runId: instance.id, jobId: this.idGenerator.next('deploy') }
+    let dispatch: ProvisionDispatch
     try {
-      handle = await this.environmentProvisioning!.provision({
-        workspaceId,
-        blockId: block.id,
-        executionId: instance.id,
-        inputs: this.deployInputs(block),
-        context: this.deployContext(block),
-        ...(provisioning ? { serviceProvisioning: provisioning } : {}),
-        initiatedBy: instance.initiatedBy,
-      })
+      dispatch = await this.environmentProvisioning!.startProvision(
+        this.deployerProvisionArgs(workspaceId, instance, block, provisioning),
+        ref,
+      )
     } catch (error) {
       return this.failDeployerStep(workspaceId, instance, step, getErrorMessage(error))
     }
+    if (dispatch.kind === 'completed') {
+      return this.completeDeployerStep(workspaceId, instance, step, isFinalStep, dispatch.handle)
+    }
+    // An async deploy job was dispatched: park on it. `dispatch` blocked until the job was
+    // accepted, so the container is up; the live phase + the provisioned outcome arrive on the
+    // deployer poll branch. Surface the env spinning up alongside the parked step.
+    step.jobId = dispatch.ref.jobId
+    step.container = { status: 'up' }
+    await this.attachEnvironmentProjection(workspaceId, instance.blockId, step)
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.runStateMachine.emitInstance(workspaceId, instance)
+    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+  }
+
+  /**
+   * Poll a `deployer` step's dispatched CONTAINER-backed deploy job (the async kustomize/helm
+   * path) through the environment provisioning service — NOT the agent executor. Mirrors
+   * {@link pollAgentJob}: surfaces live container/subtask progress while running, recovers a
+   * container eviction by re-dispatching a fresh deploy job (within the same budgets), and on a
+   * genuine terminal state finalizes the job into an environment record + the step result.
+   */
+  private async pollDeployerJob(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+  ): Promise<AdvanceResult> {
+    const ref: RunnerJobRef = { runId: instance.id, jobId: step.jobId! }
+    let view: RunnerJobView
+    try {
+      view = await this.environmentProvisioning!.pollProvisionJob(workspaceId, ref)
+    } catch {
+      // A transient status-read failure — keep polling (the driver tolerates a bounded run of
+      // read failures before it gives up).
+      return { kind: 'awaiting_job', jobId: step.jobId!, stepIndex: instance.currentStep }
+    }
+    if (view.state === 'running') {
+      let changed = false
+      if (this.applyContainerRunning(step, view)) changed = true
+      if (view.progress && !sameSubtasks(step.subtasks, view.progress)) {
+        step.subtasks = view.progress
+        step.progress = view.progress.total > 0 ? view.progress.completed / view.progress.total : 0
+        changed = true
+      }
+      if (await this.attachEnvironmentProjection(workspaceId, instance.blockId, step)) {
+        changed = true
+      }
+      if (changed) {
+        await this.executionRepository.upsert(workspaceId, instance)
+        await this.runStateMachine.emitInstance(workspaceId, instance)
+      }
+      return { kind: 'awaiting_job', jobId: step.jobId!, stepIndex: instance.currentStep }
+    }
+
+    // The deploy container vanished (evicted/crashed). Recover by re-dispatching a fresh deploy
+    // job — the driver loops back into `advanceInstance` → `runDeployerStep`, which re-provisions
+    // since `step.jobId` is cleared — within the same per-flavour budgets as the agent path.
+    if (view.state === 'failed' && isContainerEvictionError(view.error)) {
+      const transient = isTransientEviction(view.error)
+      const limit = transient ? MAX_TRANSIENT_EVICTION_RECOVERIES : MAX_EVICTION_RECOVERIES
+      const recoveries = transient
+        ? (step.transientEvictionRecoveries ?? 0)
+        : (step.evictionRecoveries ?? 0)
+      if (recoveries < limit) {
+        if (transient) step.transientEvictionRecoveries = recoveries + 1
+        else step.evictionRecoveries = recoveries + 1
+        // Reclaim the dead job's runner before re-dispatching, best-effort.
+        await this.environmentProvisioning!.releaseProvisionJob(workspaceId, ref).catch(() => {})
+        step.jobId = undefined
+        step.subtasks = undefined
+        step.progress = 0
+        step.container = { status: 'starting' }
+        await this.executionRepository.upsert(workspaceId, instance)
+        await this.runStateMachine.emitInstance(workspaceId, instance)
+        return { kind: 'continue' }
+      }
+      await this.markContainerErrored(workspaceId, instance, step)
+      return {
+        kind: 'job_evicted',
+        error: transient
+          ? `${view.error} (still evicting after ${recoveries} automatic restarts through the infrastructure churn — treating as deterministic)`
+          : `${view.error ?? 'Container evicted'} (still evicting after ${recoveries} automatic container restart${recoveries === 1 ? '' : 's'} — treating as deterministic)`,
+      }
+    }
+
+    // Genuine terminal (done, or a non-eviction failure): finalize the deploy job into an
+    // environment record and turn it into the step result. A `failed` view maps to a failed env,
+    // which `completeDeployerStep` surfaces as a displayed step failure.
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    if (!block) return { kind: 'noop' }
+    const isFinalStep = instance.currentStep === instance.steps.length - 1
+    const provisioning = await this.resolveServiceProvisioning(workspaceId, block)
+    step.jobId = undefined
+    step.subtasks = undefined
+    let handle
+    try {
+      handle = await this.environmentProvisioning!.finalizeProvision(
+        this.deployerProvisionArgs(workspaceId, instance, block, provisioning),
+        view,
+      )
+    } catch (error) {
+      return this.failDeployerStep(workspaceId, instance, step, getErrorMessage(error))
+    }
+    return this.completeDeployerStep(workspaceId, instance, step, isFinalStep, handle)
+  }
+
+  /** The {@link ProvisionArgs} a `deployer` step provisions with (synchronous or async). */
+  private deployerProvisionArgs(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block,
+    provisioning: ServiceProvisioning | undefined,
+  ): ProvisionArgs {
+    return {
+      workspaceId,
+      blockId: block.id,
+      executionId: instance.id,
+      inputs: this.deployInputs(block),
+      context: this.deployContext(block),
+      ...(provisioning ? { serviceProvisioning: provisioning } : {}),
+      initiatedBy: instance.initiatedBy,
+    }
+  }
+
+  /**
+   * Turn a provisioned environment handle into the `deployer` step's advance result: a `failed`
+   * env is surfaced as a displayed step failure (its `lastError` renders in the Environment
+   * panel); otherwise the env summary (status / URL / provision type / engine) is recorded as the
+   * step output. Shared by the synchronous and async-finalized provision paths.
+   */
+  private async completeDeployerStep(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    isFinalStep: boolean,
+    handle: EnvironmentHandle,
+  ): Promise<AdvanceResult> {
     if (handle.status === 'failed') {
       return this.failDeployerStep(
         workspaceId,
