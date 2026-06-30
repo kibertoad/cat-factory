@@ -1,5 +1,16 @@
 # @cat-factory/server
 
+## 0.49.3
+
+### Patch Changes
+
+- 123336c: Internal refactor: extract the per-kind prompt material (the blueprint/spec-writer/merger/
+  on-call system prompts, the structured-output shape hints, and the
+  `blueprintUserPrompt`/`specWriterUserPrompt`/`mergerUserPrompt`/`onCallUserPrompt`/
+  `testerInfraSpec`/`prBody` builders) out of `ContainerAgentExecutor.ts` into a dedicated
+  `prompts.ts` module, with co-located characterisation tests. Pure code move — no behaviour,
+  API, or wiring change.
+
 ## 0.49.2
 
 ### Patch Changes
