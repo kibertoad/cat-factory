@@ -1,5 +1,14 @@
 # @cat-factory/server
 
+## 0.49.2
+
+### Patch Changes
+
+- 4ec514a: Internal refactor: extract the runner-output → engine-result normalisation (`toRunResult`
+  and its per-kind coercions) out of `ContainerAgentExecutor.ts` into a dedicated
+  `containerAgentResult.ts` module, with co-located characterisation tests. Pure code move —
+  no behaviour, API, or wiring change.
+
 ## 0.49.1
 
 ### Patch Changes
