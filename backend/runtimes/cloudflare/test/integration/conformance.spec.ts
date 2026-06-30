@@ -52,6 +52,12 @@ const harness: ConformanceHarness = {
         ...(opts?.resolveRunRepoContext
           ? { resolveRunRepoContext: opts.resolveRunRepoContext }
           : {}),
+        // Inject the binary-artifact store resolver so the suite drives the start-time
+        // binary-storage gate deterministically (the Worker binds R2 by default, so a null
+        // resolver is the only way to assert the unconfigured-refusal path on this runtime).
+        ...(opts?.resolveBinaryArtifactStore
+          ? { resolveBinaryArtifactStore: opts.resolveBinaryArtifactStore }
+          : {}),
         // Inject a native environment provider + the block-less coords resolver (both
         // fakes in the suite) so the on-demand repo-config validate route is asserted
         // end-to-end against real D1, identically to Node.

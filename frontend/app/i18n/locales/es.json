@@ -259,6 +259,11 @@
         "title": "No hay proveedor de IA para este modelo",
         "body": "No hay ningún proveedor configurado para {models}. Añade una clave de proveedor, conecta una suscripción o activa Cloudflare AI para ejecutarlo.",
         "action": "Configurar IA"
+      },
+      "binaryStorageUnconfigured": {
+        "title": "No hay almacenamiento para esta canalización",
+        "body": "Esta canalización incluye un agente que necesita almacenamiento binario (el probador de UI sube sus capturas de pantalla), pero esta cuenta no tiene almacenamiento de contenido configurado. Configura el almacenamiento de contenido para ejecutarla.",
+        "action": "Configurar almacenamiento"
       }
     }
   },

@@ -1,5 +1,25 @@
 # @cat-factory/orchestration
 
+## 0.45.0
+
+### Minor Changes
+
+- 5fd0ffa: Refuse to start a pipeline that includes an agent relying on binary-artifact storage when the workspace's account has none configured.
+
+  The requirement is modelled as a new `binary-storage` agent trait (carried today by the UI Tester, which uploads its screenshots), so the system is universal: a future artifact-producing agent just declares the trait instead of the engine hard-coding it. `ExecutionService` enforces it on start/retry/restart and throws a `binary_storage_unconfigured` conflict, which the SPA surfaces as an error prompt with a "Configure storage" jump to the content-storage settings.
+
+### Patch Changes
+
+- Updated dependencies [5fd0ffa]
+  - @cat-factory/contracts@0.58.0
+  - @cat-factory/agents@0.23.0
+  - @cat-factory/integrations@0.38.1
+  - @cat-factory/kernel@0.56.1
+  - @cat-factory/prompt-fragments@0.9.11
+  - @cat-factory/sandbox@0.8.48
+  - @cat-factory/spend@0.10.40
+  - @cat-factory/workspaces@0.9.31
+
 ## 0.44.1
 
 ### Patch Changes

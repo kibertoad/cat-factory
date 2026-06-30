@@ -259,6 +259,11 @@
         "title": "Brak dostawcy AI dla tego modelu",
         "body": "Dla {models} nie skonfigurowano żadnego dostawcy. Dodaj klucz dostawcy, połącz subskrypcję lub włącz Cloudflare AI, aby go uruchomić.",
         "action": "Skonfiguruj AI"
+      },
+      "binaryStorageUnconfigured": {
+        "title": "Brak magazynu dla tego potoku",
+        "body": "Ten potok zawiera agenta, który wymaga magazynu binarnego (tester UI przesyła swoje zrzuty ekranu), ale to konto nie ma skonfigurowanego magazynu treści. Skonfiguruj magazyn treści, aby go uruchomić.",
+        "action": "Skonfiguruj magazyn"
       }
     }
   },

@@ -82,6 +82,12 @@ const K3S_KEYS = {
   label: 'settings.infrastructure.executionBackend.k3s',
   desc: 'settings.infrastructure.executionBackend.k3sDesc',
 }
+// The Docker Compose env backend is test-env-only (it stands the app's own compose stack up as
+// a Tester target). Its desc carries the actionable "when to use this" + the local-only caveat.
+const COMPOSE_KEYS = {
+  label: 'settings.infrastructure.testEnvBackend.compose',
+  desc: 'settings.infrastructure.testEnvBackend.composeDesc',
+}
 
 const cap = computed<{ available: BackendKind[]; active: BackendKind } | null>(() => {
   const c = auth.infrastructure?.[props.axis]
@@ -136,6 +142,8 @@ const effectiveActive = computed<BackendKind | null>(() => {
 function backendKindKeys(kind: string): { label: string; desc: string } | null {
   if (kind === 'kubernetes') return KUBERNETES_KEYS[props.axis]
   if (kind === 'manifest') return BUILTIN_KEYS[delegatedKind.value]
+  // Docker Compose only ever registers on the test-env axis (it's an EnvironmentProvider).
+  if (kind === 'compose' && props.axis === 'testEnv') return COMPOSE_KEYS
   return null
 }
 
