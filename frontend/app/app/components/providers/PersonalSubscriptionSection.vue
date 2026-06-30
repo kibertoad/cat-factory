@@ -179,7 +179,7 @@ async function disconnect(v: SubscriptionVendor) {
     >
       <div>
         <span class="font-medium text-slate-200">{{ sub.label }}</span>
-        <span class="ml-2 text-xs text-slate-500">{{ vendorLabel(sub.vendor) }}</span>
+        <span class="ms-2 text-xs text-slate-500">{{ vendorLabel(sub.vendor) }}</span>
         <div class="text-[11px] text-slate-500">
           <template v-if="sub.expiresAt">
             {{ t('personalSubscriptions.expires', { date: d(new Date(sub.expiresAt), 'short') }) }}
@@ -210,7 +210,7 @@ async function disconnect(v: SubscriptionVendor) {
 
     <!-- connect / replace form -->
     <ol
-      class="list-decimal space-y-1.5 rounded-lg border border-slate-700 bg-slate-900/60 p-4 pl-8 text-sm text-slate-300"
+      class="list-decimal space-y-1.5 rounded-lg border border-slate-700 bg-slate-900/60 p-4 ps-8 text-sm text-slate-300"
     >
       <li v-for="(step, i) in selectedMeta.steps" :key="i">{{ step }}</li>
     </ol>

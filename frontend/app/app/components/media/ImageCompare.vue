@@ -208,7 +208,7 @@ function onRefInput(e: Event) {
             class="w-full cursor-zoom-in"
           />
           <span
-            class="absolute bottom-1 right-1 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] text-slate-300 opacity-0 group-hover:opacity-100"
+            class="absolute bottom-1 end-1 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] text-slate-300 opacity-0 group-hover:opacity-100"
             @click.stop="refInput?.click()"
           >
             {{ t('media.compare.replace') }}
@@ -282,6 +282,11 @@ function onRefInput(e: Event) {
           class="absolute inset-0 block h-full w-full object-contain"
         />
       </div>
+      <!-- The split geometry is physical and unmirrored (the divider is positioned by a
+           `left` percent, the clip-path insets from the right, and the pointer math reads
+           `clientX - rect.left`), so the handle and the corner labels stay PHYSICAL too.
+           Logical (`start-`/`end-`) here would flip the labels under RTL while the image
+           regions stayed put, mislabeling actual vs reference. -->
       <div class="absolute inset-y-0 w-0.5 bg-amber-400" :style="{ left: `${splitPct}%` }">
         <span
           class="absolute top-1/2 left-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-amber-400 text-slate-950 shadow"

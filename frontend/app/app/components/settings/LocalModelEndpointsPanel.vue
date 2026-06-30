@@ -191,7 +191,7 @@ async function remove(p: LocalRunner) {
         >
           <div>
             <span class="font-medium text-slate-200">{{ e.label }}</span>
-            <span class="ml-2 text-xs text-slate-500">{{ LOCAL_RUNNER_LABELS[e.provider] }}</span>
+            <span class="ms-2 text-xs text-slate-500">{{ LOCAL_RUNNER_LABELS[e.provider] }}</span>
             <div class="text-[11px] text-slate-500">
               {{ e.baseUrl }} ·
               {{

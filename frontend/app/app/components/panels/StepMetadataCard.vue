@@ -275,7 +275,7 @@ async function copyRunId() {
             <span :class="v.passed ? 'text-emerald-300' : 'text-amber-300'">
               {{ pctOf(v.rating) }} {{ v.passed ? '≥' : '<' }} {{ pctOf(v.threshold) }}
             </span>
-            <span v-if="v.feedback" class="ml-1 text-slate-400">— {{ v.feedback }}</span>
+            <span v-if="v.feedback" class="ms-1 text-slate-400">— {{ v.feedback }}</span>
           </div>
         </li>
       </ol>

@@ -23,10 +23,11 @@ const backLabel = computed(() =>
     <UButton
       v-if="cameFromHub"
       icon="i-lucide-arrow-left"
+      :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
       color="neutral"
       variant="ghost"
       size="xs"
-      class="-ml-1.5 shrink-0"
+      class="-ms-1.5 shrink-0"
       :aria-label="backLabel"
       @click.stop="emit('back')"
     />

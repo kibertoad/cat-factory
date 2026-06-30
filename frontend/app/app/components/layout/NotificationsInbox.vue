@@ -226,7 +226,7 @@ function revealDecision(n: Notification) {
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-1.5">
                 <button
-                  class="block min-w-0 flex-1 truncate text-left text-sm font-medium text-slate-200 hover:underline"
+                  class="block min-w-0 flex-1 truncate text-start text-sm font-medium text-slate-200 hover:underline"
                   :title="n.title"
                   @click="reveal(n)"
                 >

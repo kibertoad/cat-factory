@@ -64,7 +64,7 @@ function removeDep(depId: string) {
         @click="removeDep(d.id)"
       >
         {{ label(d) }}
-        <UIcon name="i-lucide-x" class="ml-0.5 h-3 w-3" />
+        <UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
       </UBadge>
     </div>
     <div v-else class="text-[11px] text-slate-500">{{ t('inspector.dependencies.empty') }}</div>

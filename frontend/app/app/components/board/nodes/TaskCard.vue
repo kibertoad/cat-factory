@@ -181,7 +181,7 @@ function selectTask() {
     :data-block-id="task.id"
     :data-status="task.status"
     data-testid="task-card"
-    class="nodrag w-full cursor-pointer rounded-lg border bg-slate-950/70 p-2 text-left transition"
+    class="nodrag w-full cursor-pointer rounded-lg border bg-slate-950/70 p-2 text-start transition"
     :class="[
       selected ? 'border-white' : 'border-slate-700 hover:border-slate-500',
       task.status === 'pr_ready' ? 'board-pulse-green' : attention ? 'board-pulse' : '',
@@ -204,7 +204,7 @@ function selectTask() {
         "
       />
       <span
-        class="ml-auto truncate text-[9px] uppercase tracking-wide"
+        class="ms-auto truncate text-[9px] uppercase tracking-wide"
         :class="
           runFailed
             ? 'text-rose-400'

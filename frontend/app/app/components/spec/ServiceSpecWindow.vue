@@ -137,7 +137,7 @@ function kindLabel(item: RequirementItem): string {
               {{ spec?.service || block.title }}
             </p>
           </div>
-          <div class="ml-auto flex items-center gap-1.5">
+          <div class="ms-auto flex items-center gap-1.5">
             <!-- view toggle: Gherkin only when the spec (and its feature files) are on main -->
             <div v-if="present" class="flex items-center rounded-lg border border-slate-700 p-0.5">
               <UButton
@@ -200,7 +200,7 @@ function kindLabel(item: RequirementItem): string {
         <!-- spec body: navigable tree + detail -->
         <div v-else class="flex min-h-0 flex-1">
           <!-- nav: modules → feature groups -->
-          <nav class="w-64 shrink-0 overflow-y-auto border-r border-slate-800 px-3 py-4">
+          <nav class="w-64 shrink-0 overflow-y-auto border-e border-slate-800 px-3 py-4">
             <UButton
               block
               class="mb-2 justify-start"
@@ -222,7 +222,7 @@ function kindLabel(item: RequirementItem): string {
                 <li v-for="(group, gi) in mod.groups ?? []" :key="gi">
                   <button
                     type="button"
-                    class="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition"
+                    class="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-[13px] transition"
                     :class="
                       selected?.m === mi && selected?.g === gi
                         ? 'bg-indigo-500/15 text-indigo-200'

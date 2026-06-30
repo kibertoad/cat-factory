@@ -235,7 +235,7 @@ function manageKeys() {
           <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
             {{ t('settings.openRouterCatalog.connectHeading') }}
           </h4>
-          <ol class="list-decimal space-y-1 pl-5 text-sm text-slate-300">
+          <ol class="list-decimal space-y-1 ps-5 text-sm text-slate-300">
             <li>
               <i18n-t keypath="settings.openRouterCatalog.step1" tag="span" scope="global">
                 <template #link>
@@ -343,7 +343,7 @@ function manageKeys() {
 
           <p v-if="store.refreshError" class="text-xs text-rose-400">{{ store.refreshError }}</p>
 
-          <div v-if="visible.length" class="max-h-96 space-y-1 overflow-y-auto pr-1">
+          <div v-if="visible.length" class="max-h-96 space-y-1 overflow-y-auto pe-1">
             <label
               v-for="m in visible"
               :key="m.id"
@@ -357,7 +357,7 @@ function manageKeys() {
                 <span class="block truncate text-slate-200">{{ m.name }}</span>
                 <span class="block truncate font-mono text-[11px] text-slate-500">{{ m.id }}</span>
               </span>
-              <span class="shrink-0 text-right text-[11px] text-slate-500">
+              <span class="shrink-0 text-end text-[11px] text-slate-500">
                 <span v-if="m.contextLength" class="block">{{
                   contextLabel(m.contextLength)
                 }}</span>

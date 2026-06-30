@@ -66,6 +66,15 @@ describe('disposeReview', () => {
       disposeReview([item('low')], { iteration: 3, maxIterations: 3, concernThreshold: 'high' }),
     ).toBe('auto-pass')
   })
+
+  it('rejects a non-positive cap or sub-1 iteration counter as a wiring bug', () => {
+    expect(() =>
+      disposeReview([item('high')], { iteration: 1, maxIterations: 0, concernThreshold: 'none' }),
+    ).toThrow(/maxIterations/)
+    expect(() =>
+      disposeReview([item('high')], { iteration: 0, maxIterations: 3, concernThreshold: 'none' }),
+    ).toThrow(/iteration/)
+  })
 })
 
 describe('hasNotesToIncorporate', () => {

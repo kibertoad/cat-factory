@@ -199,12 +199,12 @@ onMounted(() => {
         v-for="d in importedRows"
         :key="`imp:${d.externalId}`"
         type="button"
-        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-800/70"
+        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
         @click="pickImported(d.externalId, d.title, d.excerpt)"
       >
         <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-indigo-400" />
         <span class="truncate">{{ d.title }}</span>
-        <UBadge color="neutral" variant="soft" size="xs" class="ml-auto shrink-0">{{
+        <UBadge color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">{{
           t('documents.picker.importedBadge')
         }}</UBadge>
       </button>
@@ -214,7 +214,7 @@ onMounted(() => {
         v-for="r in searchRows"
         :key="`hit:${r.externalId}`"
         type="button"
-        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-800/70"
+        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
         @click="pickSearch(r)"
       >
         <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-slate-400" />
@@ -225,7 +225,7 @@ onMounted(() => {
       <button
         v-if="refRow"
         type="button"
-        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-800/70"
+        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
         @click="pickRef(refRow)"
       >
         <UIcon name="i-lucide-link" class="h-3.5 w-3.5 shrink-0 text-slate-400" />

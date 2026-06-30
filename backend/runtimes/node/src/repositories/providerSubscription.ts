@@ -3,6 +3,8 @@ import type {
   ProviderSubscriptionTokenRepository,
   SubscriptionVendor,
 } from '@cat-factory/kernel'
+import { subscriptionVendorSchema } from '@cat-factory/contracts'
+import { decodeEnum } from '@cat-factory/server'
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { providerSubscriptionTokens } from '../db/schema.js'
@@ -17,7 +19,11 @@ function rowToRecord(row: Row): ProviderSubscriptionTokenRecord {
   return {
     id: row.id,
     workspaceId: row.workspace_id,
-    vendor: row.vendor as SubscriptionVendor,
+    vendor: decodeEnum(subscriptionVendorSchema, row.vendor, {
+      table: 'provider_subscription_tokens',
+      column: 'vendor',
+      id: row.id,
+    }),
     label: row.label,
     tokenCipher: row.token_cipher,
     createdAt: row.created_at,

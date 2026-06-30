@@ -243,7 +243,7 @@ watch(
         <!-- z-30 keeps the trigger above the centered BoardToolbar (z-20), whose
              max-width can otherwise reach this corner on the narrowest viewports. -->
         <UButton
-          class="absolute left-3 top-3 z-30 lg:hidden"
+          class="absolute start-3 top-3 z-30 lg:hidden"
           icon="i-lucide-menu"
           color="neutral"
           variant="soft"

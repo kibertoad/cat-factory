@@ -131,7 +131,7 @@ describe('container-execution persistence (Postgres)', () => {
           id: 'frame1',
           title: 'Svc',
           type: 'service',
-          status: 'todo',
+          status: 'planned',
           level: 'frame',
         },
         {
@@ -139,7 +139,7 @@ describe('container-execution persistence (Postgres)', () => {
           id: 'task1',
           title: 'Task',
           type: 'task',
-          status: 'todo',
+          status: 'planned',
           level: 'task',
           parent_id: 'frame1',
         },
@@ -196,7 +196,7 @@ describe('container-execution persistence (Postgres)', () => {
         id: 'orphan',
         title: 'Orphan',
         type: 'task',
-        status: 'todo',
+        status: 'planned',
         level: 'task',
       })
       // A repo exists but is linked to a different (absent) block, so the orphan

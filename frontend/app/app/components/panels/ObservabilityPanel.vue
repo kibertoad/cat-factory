@@ -158,8 +158,8 @@ function exportJson() {
               {{ block.title }} · {{ instance?.pipelineName }}
             </p>
           </div>
-          <div class="ml-auto flex items-center gap-1.5">
-            <div class="mr-1 flex rounded-lg border border-slate-800 p-0.5 text-[12px]">
+          <div class="ms-auto flex items-center gap-1.5">
+            <div class="me-1 flex rounded-lg border border-slate-800 p-0.5 text-[12px]">
               <button
                 class="rounded-md px-2.5 py-1 transition"
                 :class="
@@ -304,7 +304,7 @@ function exportJson() {
                 :class="!c.ok ? 'border-rose-900/60' : ''"
               >
                 <button
-                  class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-slate-900/70"
+                  class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-slate-900/70"
                   @click="toggle(c)"
                 >
                   <UIcon
@@ -325,7 +325,7 @@ function exportJson() {
                     {{ c.provider }}:{{ c.model }}
                   </span>
                   <div
-                    class="ml-auto flex items-center gap-2.5 text-[11px] tabular-nums text-slate-400"
+                    class="ms-auto flex items-center gap-2.5 text-[11px] tabular-nums text-slate-400"
                   >
                     <span
                       :title="
@@ -456,7 +456,7 @@ function exportJson() {
                 class="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40"
               >
                 <button
-                  class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-slate-900/70"
+                  class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-slate-900/70"
                   @click="toggleCtx(s)"
                 >
                   <UIcon
@@ -474,7 +474,7 @@ function exportJson() {
                     {{ s.model }}
                   </span>
                   <div
-                    class="ml-auto flex items-center gap-2.5 text-[11px] tabular-nums text-slate-400"
+                    class="ms-auto flex items-center gap-2.5 text-[11px] tabular-nums text-slate-400"
                   >
                     <span :title="t('observability.context.injectedFiles')">{{
                       t('observability.context.filesCount', { count: s.contextFiles.length })
