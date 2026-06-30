@@ -1,4 +1,5 @@
 import {
+  detectServiceProvisioningContract,
   listEnvironmentHandlersContract,
   listEnvironmentUserHandlersContract,
   registerEnvironmentHandlerContract,
@@ -9,6 +10,7 @@ import {
   upsertEnvironmentUserHandlerContract,
 } from '@cat-factory/contracts'
 import type {
+  DetectServiceProvisioningInput,
   ProvisionType,
   RegisterEnvironmentHandlerInput,
   UpsertCustomManifestTypeInput,
@@ -32,6 +34,10 @@ export function infraHandlersApi({ send, ws }: ApiContext) {
 
     registerEnvironmentHandler: (workspaceId: string, body: RegisterEnvironmentHandlerInput) =>
       send(registerEnvironmentHandlerContract, { pathPrefix: ws(workspaceId), body }),
+
+    // Auto-detect a non-binding recommended provisioning config from a service's repo.
+    detectServiceProvisioning: (workspaceId: string, body: DetectServiceProvisioningInput) =>
+      send(detectServiceProvisioningContract, { pathPrefix: ws(workspaceId), body }),
 
     // `manifestId` (for a `custom` handler) rides as a query param; absent ⇒ the bare handler.
     unregisterEnvironmentHandler: (
