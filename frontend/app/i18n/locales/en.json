@@ -3071,5 +3071,414 @@
     "overallProgress": "Overall progress",
     "dependencies": "Dependencies",
     "noDependencies": "None"
+  },
+  "environments": {
+    "title": "Ephemeral environment",
+    "status": {
+      "provisioning": "Spinning up…",
+      "ready": "Running",
+      "failed": "Errored",
+      "expired": "Expired",
+      "tearing_down": "Shutting down…",
+      "torn_down": "Shut down"
+    },
+    "expires": "Expires {date}",
+    "empty": "No ephemeral environment for this run."
+  },
+  "provisioning": {
+    "title": "Provisioning logs",
+    "refresh": "Refresh",
+    "empty": "No provisioning attempts recorded yet.",
+    "operation": {
+      "provision": "Spin up",
+      "teardown": "Tear down",
+      "status": "Status check",
+      "dispatch": "Spin up",
+      "release": "Tear down",
+      "poll-failure": "Health check"
+    },
+    "outcome": {
+      "success": "success",
+      "failure": "failure"
+    }
+  },
+  "kaizen": {
+    "title": "Kaizen",
+    "@title": {
+      "description": "Product feature name (Japanese for 'continuous improvement'); keep verbatim in every locale."
+    },
+    "subtitle": "Continuous-improvement grading of agent runs",
+    "refresh": "Refresh",
+    "notConfigured": "Kaizen is not configured on this deployment.",
+    "grading": {
+      "title": "Kaizen grading"
+    },
+    "status": {
+      "scheduled": "Scheduled",
+      "grading": "Grading…",
+      "failed": "Failed",
+      "graded": "Graded"
+    },
+    "gradeValue": "{grade}/5",
+    "scheduledHint": "A Kaizen grading is queued for this step. It runs in the background after the run.",
+    "recommendations": "Recommendations",
+    "noImprovements": "Smooth interaction, nothing to improve.",
+    "gradedBy": "Graded by {model}",
+    "failedFallback": "The grading could not be completed.",
+    "promptVersion": "v{version}",
+    "verifiedCombos": {
+      "title": "Verified combos",
+      "count": "({count})",
+      "hint": "A prompt + agent + model combination that graded 4 or 5 with no recommendations five times in a row. These are no longer graded.",
+      "empty": "No combos yet.",
+      "progress": "{count}/5",
+      "modelPrompt": "{model} · prompt v{version}"
+    },
+    "history": {
+      "title": "Grading history",
+      "col": {
+        "when": "When",
+        "agent": "Agent",
+        "model": "Model",
+        "grade": "Grade",
+        "recommendations": "Recommendations"
+      },
+      "empty": "No gradings yet."
+    }
+  },
+  "recurring": {
+    "runEvery": "Run every",
+    "hours": "hours",
+    "allowedDays": "Allowed days",
+    "allowedDaysHelp": "Leave all off to run any day.",
+    "weekday": {
+      "sun": "Sun",
+      "@sun": {
+        "description": "Three-letter abbreviation of the weekday Sunday (not the star). Keep it short."
+      },
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat"
+    },
+    "windowToggle": "Only within an hour-of-day window (e.g. business hours)",
+    "to": "to",
+    "timezone": "Timezone"
+  },
+  "media": {
+    "compare": {
+      "mode": {
+        "sideBySide": "Side by side",
+        "overlay": "Overlay",
+        "swipe": "Swipe",
+        "diff": "Difference"
+      },
+      "actual": "Actual",
+      "reference": "Reference",
+      "actualAlt": "{view} (actual)",
+      "referenceAlt": "{view} (reference)",
+      "replace": "Replace",
+      "failedToLoad": "Failed to load",
+      "loading": "Loading…",
+      "notCaptured": "Not captured",
+      "dropHint": "Drop or click to add a reference",
+      "diffHint": "Identical pixels appear black; differences glow."
+    },
+    "lightbox": {
+      "ariaLabel": "Screenshot: {label}",
+      "ariaLabelFallback": "Screenshot viewer",
+      "fallbackTitle": "Screenshot",
+      "counter": "{current} / {total}",
+      "zoomOut": "Zoom out (-)",
+      "zoomIn": "Zoom in (+)",
+      "reset": "Reset (0)",
+      "close": "Close (Esc)",
+      "prev": "Previous (←)",
+      "next": "Next (→)",
+      "failed": "Failed to load image.",
+      "loading": "Loading…"
+    }
+  },
+  "fragments": {
+    "panel": {
+      "title": "Prompt-fragment library"
+    },
+    "intro": {
+      "workspace": "Curate the best-practice guidelines agents follow on this board. Fragments are merged from the built-in catalog, your account, and this board (later tiers override earlier ones), then the relevant ones are selected for each agent run.",
+      "account": "Curate best-practice guidelines shared by every board in this account. Account fragments are merged below the built-in catalog and above nothing, and a board can override or add its own on top. The relevant ones are selected for each agent run."
+    },
+    "owner": {
+      "workspace": "This board",
+      "account": "This account"
+    },
+    "tier": {
+      "builtin": "Built-in",
+      "account": "Account",
+      "workspace": "This board"
+    },
+    "tab": {
+      "catalog": "Resolved catalog",
+      "documents": "Documents",
+      "sources": "Repo sources"
+    },
+    "catalog": {
+      "summary": "{count} fragment resolved · {builtin} built-in. | {count} fragments resolved · {builtin} built-in.",
+      "live": "Live · {source}"
+    },
+    "authored": {
+      "fromRepo": "from repo",
+      "empty": {
+        "workspace": "No board-specific fragments yet. Add one below, or override a built-in by using its id.",
+        "account": "No account-specific fragments yet. Add one below, or override a built-in by using its id."
+      },
+      "addTitle": "Add a fragment",
+      "titlePlaceholder": "Title",
+      "summaryPlaceholder": "One-line summary (used by the selector)",
+      "bodyPlaceholder": "Guidance body (injected into the prompt)",
+      "tagsPlaceholder": "Tags, comma-separated (e.g. backend, db)",
+      "add": "Add fragment"
+    },
+    "documents": {
+      "intro": "Link a Confluence/Notion page or a GitHub file as a best-practice fragment. Its guidance is re-resolved from the source at run time: edit the doc and the next agent run follows the new version (no re-import).",
+      "lastResolved": "last resolved {date}",
+      "refreshTitle": "Re-resolve from source now",
+      "empty": "No document-backed fragments yet. Link one below.",
+      "linkTitle": "Link a document",
+      "disabledHint": "Create a board with a connected document source first; account-level document fragments are fetched through one of this account's boards.",
+      "connectFirst": "Connect a document source (Confluence, Notion or GitHub) under Integrations first.",
+      "refPlaceholder": "Page id or URL (e.g. a Confluence/Notion page or GitHub file URL)",
+      "tagsPlaceholder": "Tags, comma-separated (optional)",
+      "link": "Link as living fragment"
+    },
+    "sources": {
+      "metaSynced": "synced · ref {ref}",
+      "metaNever": "never synced · ref {ref}",
+      "changes": "{count} change | {count} changes",
+      "empty": "No linked guideline repos. Link one below to import its Markdown files as fragments.",
+      "linkTitle": "Link a guideline repo",
+      "ownerPlaceholder": "owner",
+      "repoPlaceholder": "repo",
+      "dirPlaceholder": "dir path (e.g. guidelines)",
+      "refPlaceholder": "ref (default HEAD)",
+      "link": "Link & sync"
+    },
+    "toast": {
+      "added": "Fragment added",
+      "addFailed": "Could not add fragment",
+      "removed": "Fragment removed",
+      "removeFailed": "Could not remove fragment",
+      "documentLinked": "Document linked as a living fragment",
+      "linkDocumentFailed": "Could not link document",
+      "refreshed": "Fragment re-resolved from source",
+      "refreshFailed": "Could not refresh fragment",
+      "sourceLinked": "Source linked & synced",
+      "linkSourceFailed": "Could not link source",
+      "synced": "Synced: {updated} updated, {removed} removed",
+      "syncFailed": "Could not sync source",
+      "changesAvailable": "{count} change available | {count} changes available",
+      "upToDate": "Up to date",
+      "checkSourceFailed": "Could not check source",
+      "sourceUnlinked": "Source unlinked",
+      "unlinkSourceFailed": "Could not unlink source"
+    }
+  },
+  "sandbox": {
+    "title": "Sandbox: prompt and model testing",
+    "description": "Try prompt versions and models against graded fixtures, scored by a judge model.",
+    "unavailable": {
+      "title": "The Sandbox isn't enabled for this deployment.",
+      "body": "It needs its own database (a dedicated {db} on Cloudflare, or the {schema} Postgres schema on Node). Provision it and reload.",
+      "@body": {
+        "description": "{db} and {schema} are injected code identifiers (database / schema names) rendered as <code>; keep them as the {placeholders}."
+      }
+    },
+    "error": {
+      "title": "The Sandbox failed to load."
+    },
+    "deploymentDefault": "Deployment default",
+    "defaultRunName": "{kind} sandbox run",
+    "baseline": "baseline",
+    "versionLabel": "v{version}",
+    "tab": {
+      "experiments": "Experiments",
+      "prompts": "Prompts",
+      "fixtures": "Fixtures"
+    },
+    "builder": {
+      "title": "New experiment",
+      "agent": "Agent",
+      "promptVersions": "Prompt versions",
+      "models": "Models",
+      "noModels": "No selectable models. Configure a provider key or enable Cloudflare AI.",
+      "fixtures": "Fixtures",
+      "noFixtures": "No fixtures for this agent.",
+      "judgeModel": "Judge model",
+      "judgeModelHint": "grades every cell",
+      "nameLabel": "Name (optional)",
+      "cellCount": "{count} cell | {count} cells",
+      "maxCells": "(max {max})",
+      "run": "Run"
+    },
+    "experimentStatus": {
+      "draft": "draft",
+      "running": "running",
+      "done": "done",
+      "failed": "failed"
+    },
+    "results": {
+      "col": {
+        "prompt": "Prompt",
+        "model": "Model",
+        "fixture": "Fixture",
+        "score": "Score",
+        "objective": "Objective"
+      },
+      "failed": "failed",
+      "past": "Past experiments",
+      "empty": "No experiments yet."
+    },
+    "prompts": {
+      "forkTitle": "Fork into a candidate",
+      "editTitle": "Edit / version",
+      "forkOf": "Fork · {name}",
+      "newVersionOf": "New version of · {name}",
+      "saveVersion": "Save new version",
+      "hint": "Pick a prompt to fork a shipped baseline or version a candidate. Each save appends an immutable version you can put under test."
+    },
+    "fixtureKind": {
+      "requirements": "requirements",
+      "clarity": "clarity",
+      "architecture": "architecture",
+      "code-review": "code review",
+      "repo-feature": "repo feature",
+      "repo-bug": "repo bug"
+    },
+    "fixtureOrigin": {
+      "builtin": "builtin",
+      "custom": "custom"
+    },
+    "fixtures": {
+      "expectations": "{count} graded expectation | {count} graded expectations",
+      "empty": "No fixtures."
+    },
+    "toast": {
+      "running": "Running experiment…",
+      "complete": "Experiment complete",
+      "runFailed": "Could not run the experiment",
+      "versionSaved": "Saved a new version",
+      "saveFailed": "Could not save the version",
+      "archiveFailed": "Could not archive"
+    }
+  },
+  "bootstrap": {
+    "title": "Bootstrap a repository",
+    "repoName": {
+      "error": {
+        "hasSlash": "Enter just the repository name, without the 'owner/' prefix.",
+        "invalidChars": "Only letters, digits, '.', '_' and '-' are allowed.",
+        "tooLong": "Must be 100 characters or fewer."
+      }
+    },
+    "intro": {
+      "canCreate": "Create an empty GitHub repository, then let a bootstrapper agent populate it in a sandbox container, either by adapting one of your reference architectures or from scratch following a freeform prompt. cat-factory pushes the initial commit into that repo; for this account it can create the repository for you too.",
+      "manual": "Create an empty GitHub repository, then let a bootstrapper agent populate it in a sandbox container, either by adapting one of your reference architectures or from scratch following a freeform prompt. cat-factory pushes the initial commit into that repo; you create the repository (one click below), so it needs no repo-creation permission."
+    },
+    "github": {
+      "prompt": "Connect this workspace to GitHub before bootstrapping; a run pushes into a repository. Link an installation the App is already on, or install it."
+    },
+    "section": {
+      "newRepo": "New repository"
+    },
+    "mode": {
+      "label": "How should we start?",
+      "reference": {
+        "label": "From a reference architecture",
+        "description": "Clone a managed base repo and adapt it to the new service."
+      },
+      "scratch": {
+        "label": "From scratch",
+        "description": "Scaffold a brand-new repo from a freeform prompt, no base needed."
+      }
+    },
+    "reference": {
+      "label": "Reference architecture",
+      "description": "The managed base repo to clone and adapt.",
+      "empty": "No reference architectures yet. Add one below, or switch to 'From scratch'.",
+      "placeholder": "Choose a reference architecture"
+    },
+    "targetRepo": {
+      "label": "Target repository name",
+      "descWithOwner": "Create a fresh repo with this name under {owner}, then bootstrap pushes into it. A prepopulated README, .gitignore or license is fine.",
+      "descNoOwner": "Create a fresh repo with this name, then bootstrap pushes into it. A prepopulated README, .gitignore or license is fine."
+    },
+    "createRepo": {
+      "now": "Create repository",
+      "onGitHub": "Create on GitHub",
+      "titleNow": "Create the repository now",
+      "titleGitHub": "Open GitHub's new-repository page, prefilled"
+    },
+    "grantAccess": {
+      "label": "Grant the App access to this repo",
+      "title": "Open the App's installation settings to grant it access to the new repo"
+    },
+    "description": {
+      "label": "Description",
+      "help": "Optional one-line summary for the repo."
+    },
+    "instructions": {
+      "labelReference": "Extra instructions for the bootstrapper",
+      "labelScratch": "What should the bootstrapper build?",
+      "descReference": "Optional, appended to the reference architecture's default instructions.",
+      "descScratch": "Describe the new service: stack, structure, and what it should do."
+    },
+    "visibility": {
+      "label": "Visibility",
+      "private": "Private repository"
+    },
+    "launch": "Bootstrap repo",
+    "recent": {
+      "title": "Recent runs",
+      "fromArch": "from {name}",
+      "fromScratch": "from scratch",
+      "open": "Open"
+    },
+    "status": {
+      "pending": "pending",
+      "running": "running",
+      "succeeded": "succeeded",
+      "failed": "failed"
+    },
+    "arch": {
+      "title": "Reference architectures",
+      "add": "Add",
+      "pickRepo": {
+        "label": "Pick an existing GitHub repo",
+        "description": "Choose a repo you can access to fill in its owner and name, or enter them manually below."
+      },
+      "name": {
+        "label": "Name",
+        "description": "A friendly label for this base."
+      },
+      "repoOwner": "Repo owner",
+      "repoName": "Repo name",
+      "descriptionPlaceholder": "Optional summary of this base",
+      "defaultInstructions": {
+        "label": "Default bootstrapper instructions",
+        "description": "Prepended to the per-run instructions whenever this base is used."
+      }
+    },
+    "toast": {
+      "repoCreated": "Repository created",
+      "repoCreateFailed": "Could not create repository",
+      "failed": "Bootstrap failed",
+      "failedFallback": "The bootstrapper reported a failure.",
+      "started": "Bootstrapping started",
+      "startedDesc": "A container is bootstrapping {repo}; watch its progress on the board.",
+      "bootstrapFailed": "Could not bootstrap",
+      "saveArchFailed": "Could not save reference architecture",
+      "deleteFailed": "Could not delete"
+    }
   }
 }

@@ -2970,5 +2970,405 @@
     "overallProgress": "Progression globale",
     "dependencies": "Dépendances",
     "noDependencies": "Aucune"
+  },
+  "environments": {
+    "title": "Environnement éphémère",
+    "status": {
+      "provisioning": "Démarrage…",
+      "ready": "En cours d'exécution",
+      "failed": "En erreur",
+      "expired": "Expiré",
+      "tearing_down": "Arrêt…",
+      "torn_down": "Arrêté"
+    },
+    "expires": "Expire le {date}",
+    "empty": "Aucun environnement éphémère pour cette exécution."
+  },
+  "provisioning": {
+    "title": "Journaux de provisionnement",
+    "refresh": "Actualiser",
+    "empty": "Aucune tentative de provisionnement enregistrée pour l'instant.",
+    "operation": {
+      "provision": "Démarrer",
+      "teardown": "Démanteler",
+      "status": "Vérification de l'état",
+      "dispatch": "Démarrer",
+      "release": "Démanteler",
+      "poll-failure": "Contrôle de santé"
+    },
+    "outcome": {
+      "success": "réussite",
+      "failure": "échec"
+    }
+  },
+  "kaizen": {
+    "title": "Kaizen",
+    "subtitle": "Évaluation en amélioration continue des exécutions d'agents",
+    "refresh": "Actualiser",
+    "notConfigured": "Kaizen n'est pas configuré sur ce déploiement.",
+    "grading": {
+      "title": "Évaluation Kaizen"
+    },
+    "status": {
+      "scheduled": "Planifiée",
+      "grading": "Évaluation…",
+      "failed": "Échouée",
+      "graded": "Évaluée"
+    },
+    "gradeValue": "{grade}/5",
+    "scheduledHint": "Une évaluation Kaizen est en file d'attente pour cette étape. Elle s'exécute en arrière-plan après l'exécution.",
+    "recommendations": "Recommandations",
+    "noImprovements": "Interaction fluide, rien à améliorer.",
+    "gradedBy": "Évaluée par {model}",
+    "failedFallback": "L'évaluation n'a pas pu être menée à terme.",
+    "promptVersion": "v{version}",
+    "verifiedCombos": {
+      "title": "Combinaisons vérifiées",
+      "count": "({count})",
+      "hint": "Une combinaison prompt + agent + modèle ayant obtenu 4 ou 5 sans recommandation cinq fois de suite. Elles ne sont plus évaluées.",
+      "empty": "Aucune combinaison pour l'instant.",
+      "progress": "{count}/5",
+      "modelPrompt": "{model} · prompt v{version}"
+    },
+    "history": {
+      "title": "Historique des évaluations",
+      "col": {
+        "when": "Quand",
+        "agent": "Agent",
+        "model": "Modèle",
+        "grade": "Note",
+        "recommendations": "Recommandations"
+      },
+      "empty": "Aucune évaluation pour l'instant."
+    }
+  },
+  "recurring": {
+    "runEvery": "Exécuter toutes les",
+    "hours": "heures",
+    "allowedDays": "Jours autorisés",
+    "allowedDaysHelp": "Laissez tout décoché pour exécuter n'importe quel jour.",
+    "weekday": {
+      "sun": "Dim",
+      "mon": "Lun",
+      "tue": "Mar",
+      "wed": "Mer",
+      "thu": "Jeu",
+      "fri": "Ven",
+      "sat": "Sam"
+    },
+    "windowToggle": "Uniquement dans une plage horaire de la journée (par ex. heures de bureau)",
+    "to": "à",
+    "timezone": "Fuseau horaire"
+  },
+  "media": {
+    "compare": {
+      "mode": {
+        "sideBySide": "Côte à côte",
+        "overlay": "Superposition",
+        "swipe": "Glissement",
+        "diff": "Différence"
+      },
+      "actual": "Réel",
+      "reference": "Référence",
+      "actualAlt": "{view} (réel)",
+      "referenceAlt": "{view} (référence)",
+      "replace": "Remplacer",
+      "failedToLoad": "Échec du chargement",
+      "loading": "Chargement…",
+      "notCaptured": "Non capturé",
+      "dropHint": "Déposez ou cliquez pour ajouter une référence",
+      "diffHint": "Les pixels identiques apparaissent en noir ; les différences ressortent."
+    },
+    "lightbox": {
+      "ariaLabel": "Capture d'écran : {label}",
+      "ariaLabelFallback": "Visionneuse de captures d'écran",
+      "fallbackTitle": "Capture d'écran",
+      "counter": "{current} / {total}",
+      "zoomOut": "Dézoomer (-)",
+      "zoomIn": "Zoomer (+)",
+      "reset": "Réinitialiser (0)",
+      "close": "Fermer (Échap)",
+      "prev": "Précédent (←)",
+      "next": "Suivant (→)",
+      "failed": "Échec du chargement de l'image.",
+      "loading": "Chargement…"
+    }
+  },
+  "fragments": {
+    "panel": {
+      "title": "Bibliothèque de fragments de prompt"
+    },
+    "intro": {
+      "workspace": "Organisez les bonnes pratiques que les agents suivent sur ce tableau. Les fragments sont fusionnés depuis le catalogue intégré, votre compte et ce tableau (les niveaux ultérieurs priment sur les précédents), puis les plus pertinents sont sélectionnés pour chaque exécution d'agent.",
+      "account": "Organisez les bonnes pratiques partagées par tous les tableaux de ce compte. Les fragments du compte sont fusionnés au-dessus du catalogue intégré, et un tableau peut les remplacer ou ajouter les siens par-dessus. Les plus pertinents sont sélectionnés pour chaque exécution d'agent."
+    },
+    "owner": {
+      "workspace": "Ce tableau",
+      "account": "Ce compte"
+    },
+    "tier": {
+      "builtin": "Intégré",
+      "account": "Compte",
+      "workspace": "Ce tableau"
+    },
+    "tab": {
+      "catalog": "Catalogue résolu",
+      "documents": "Documents",
+      "sources": "Dépôts sources"
+    },
+    "catalog": {
+      "summary": "{count} fragment résolu · {builtin} intégrés. | {count} fragments résolus · {builtin} intégrés.",
+      "live": "En direct · {source}"
+    },
+    "authored": {
+      "fromRepo": "depuis un dépôt",
+      "empty": {
+        "workspace": "Aucun fragment propre à ce tableau pour l'instant. Ajoutez-en un ci-dessous, ou remplacez un fragment intégré en utilisant son id.",
+        "account": "Aucun fragment propre à ce compte pour l'instant. Ajoutez-en un ci-dessous, ou remplacez un fragment intégré en utilisant son id."
+      },
+      "addTitle": "Ajouter un fragment",
+      "titlePlaceholder": "Titre",
+      "summaryPlaceholder": "Résumé en une ligne (utilisé par le sélecteur)",
+      "bodyPlaceholder": "Corps de la consigne (injecté dans le prompt)",
+      "tagsPlaceholder": "Étiquettes, séparées par des virgules (par ex. backend, db)",
+      "add": "Ajouter le fragment"
+    },
+    "documents": {
+      "intro": "Liez une page Confluence/Notion ou un fichier GitHub comme fragment de bonnes pratiques. Sa consigne est re-résolue depuis la source à l'exécution : modifiez le document et la prochaine exécution d'agent suit la nouvelle version (sans réimport).",
+      "lastResolved": "dernière résolution {date}",
+      "refreshTitle": "Re-résoudre depuis la source maintenant",
+      "empty": "Aucun fragment adossé à un document pour l'instant. Liez-en un ci-dessous.",
+      "linkTitle": "Lier un document",
+      "disabledHint": "Créez d'abord un tableau avec une source de documents connectée ; les fragments de document au niveau du compte sont récupérés via l'un des tableaux de ce compte.",
+      "connectFirst": "Connectez d'abord une source de documents (Confluence, Notion ou GitHub) dans Intégrations.",
+      "refPlaceholder": "Id ou URL de page (par ex. une page Confluence/Notion ou l'URL d'un fichier GitHub)",
+      "tagsPlaceholder": "Étiquettes, séparées par des virgules (facultatif)",
+      "link": "Lier comme fragment vivant"
+    },
+    "sources": {
+      "metaSynced": "synchronisé · ref {ref}",
+      "metaNever": "jamais synchronisé · ref {ref}",
+      "changes": "{count} changement | {count} changements",
+      "empty": "Aucun dépôt de consignes lié. Liez-en un ci-dessous pour importer ses fichiers Markdown comme fragments.",
+      "linkTitle": "Lier un dépôt de consignes",
+      "ownerPlaceholder": "propriétaire",
+      "repoPlaceholder": "dépôt",
+      "dirPlaceholder": "chemin du répertoire (par ex. guidelines)",
+      "refPlaceholder": "ref (HEAD par défaut)",
+      "link": "Lier et synchroniser"
+    },
+    "toast": {
+      "added": "Fragment ajouté",
+      "addFailed": "Impossible d'ajouter le fragment",
+      "removed": "Fragment supprimé",
+      "removeFailed": "Impossible de supprimer le fragment",
+      "documentLinked": "Document lié comme fragment vivant",
+      "linkDocumentFailed": "Impossible de lier le document",
+      "refreshed": "Fragment re-résolu depuis la source",
+      "refreshFailed": "Impossible d'actualiser le fragment",
+      "sourceLinked": "Source liée et synchronisée",
+      "linkSourceFailed": "Impossible de lier la source",
+      "synced": "Synchronisé : {updated} mis à jour, {removed} supprimés",
+      "syncFailed": "Impossible de synchroniser la source",
+      "changesAvailable": "{count} changement disponible | {count} changements disponibles",
+      "upToDate": "À jour",
+      "checkSourceFailed": "Impossible de vérifier la source",
+      "sourceUnlinked": "Source dissociée",
+      "unlinkSourceFailed": "Impossible de dissocier la source"
+    }
+  },
+  "sandbox": {
+    "title": "Bac à sable : test de prompts et de modèles",
+    "description": "Testez des versions de prompts et des modèles sur des fixtures notées, évaluées par un modèle juge.",
+    "unavailable": {
+      "title": "Le bac à sable n'est pas activé sur ce déploiement.",
+      "body": "Il a besoin de sa propre base de données (une {db} dédiée sur Cloudflare, ou le schéma Postgres {schema} sur Node). Provisionnez-la et rechargez."
+    },
+    "error": {
+      "title": "Le bac à sable n'a pas pu se charger."
+    },
+    "deploymentDefault": "Valeur par défaut du déploiement",
+    "defaultRunName": "exécution de bac à sable {kind}",
+    "baseline": "base",
+    "versionLabel": "v{version}",
+    "tab": {
+      "experiments": "Expériences",
+      "prompts": "Prompts",
+      "fixtures": "Fixtures"
+    },
+    "builder": {
+      "title": "Nouvelle expérience",
+      "agent": "Agent",
+      "promptVersions": "Versions de prompt",
+      "models": "Modèles",
+      "noModels": "Aucun modèle sélectionnable. Configurez une clé de fournisseur ou activez Cloudflare AI.",
+      "fixtures": "Fixtures",
+      "noFixtures": "Aucune fixture pour cet agent.",
+      "judgeModel": "Modèle juge",
+      "judgeModelHint": "note chaque cellule",
+      "nameLabel": "Nom (facultatif)",
+      "cellCount": "{count} cellule | {count} cellules",
+      "maxCells": "(max {max})",
+      "run": "Lancer"
+    },
+    "experimentStatus": {
+      "draft": "brouillon",
+      "running": "en cours",
+      "done": "terminé",
+      "failed": "échoué"
+    },
+    "results": {
+      "col": {
+        "prompt": "Prompt",
+        "model": "Modèle",
+        "fixture": "Fixture",
+        "score": "Score",
+        "objective": "Objectif"
+      },
+      "failed": "échoué",
+      "past": "Expériences passées",
+      "empty": "Aucune expérience pour l'instant."
+    },
+    "prompts": {
+      "forkTitle": "Bifurquer en candidat",
+      "editTitle": "Modifier / versionner",
+      "forkOf": "Bifurcation · {name}",
+      "newVersionOf": "Nouvelle version de · {name}",
+      "saveVersion": "Enregistrer la nouvelle version",
+      "hint": "Choisissez un prompt pour bifurquer une base publiée ou versionner un candidat. Chaque enregistrement ajoute une version immuable que vous pouvez mettre à l'épreuve."
+    },
+    "fixtureKind": {
+      "requirements": "exigences",
+      "clarity": "clarté",
+      "architecture": "architecture",
+      "code-review": "revue de code",
+      "repo-feature": "fonctionnalité de dépôt",
+      "repo-bug": "bogue de dépôt"
+    },
+    "fixtureOrigin": {
+      "builtin": "intégré",
+      "custom": "personnalisé"
+    },
+    "fixtures": {
+      "expectations": "{count} attente notée | {count} attentes notées",
+      "empty": "Aucune fixture."
+    },
+    "toast": {
+      "running": "Exécution de l'expérience…",
+      "complete": "Expérience terminée",
+      "runFailed": "Impossible d'exécuter l'expérience",
+      "versionSaved": "Nouvelle version enregistrée",
+      "saveFailed": "Impossible d'enregistrer la version",
+      "archiveFailed": "Impossible d'archiver"
+    }
+  },
+  "bootstrap": {
+    "title": "Initialiser un dépôt",
+    "repoName": {
+      "error": {
+        "hasSlash": "Saisissez uniquement le nom du dépôt, sans le préfixe « owner/ ».",
+        "invalidChars": "Seuls les lettres, chiffres, « . », « _ » et « - » sont autorisés.",
+        "tooLong": "Doit comporter 100 caractères ou moins."
+      }
+    },
+    "intro": {
+      "canCreate": "Créez un dépôt GitHub vide, puis laissez un agent d'initialisation le remplir dans un conteneur bac à sable, soit en adaptant l'une de vos architectures de référence, soit à partir de zéro selon un prompt libre. cat-factory pousse le commit initial dans ce dépôt ; pour ce compte, il peut aussi créer le dépôt à votre place.",
+      "manual": "Créez un dépôt GitHub vide, puis laissez un agent d'initialisation le remplir dans un conteneur bac à sable, soit en adaptant l'une de vos architectures de référence, soit à partir de zéro selon un prompt libre. cat-factory pousse le commit initial dans ce dépôt ; vous créez le dépôt (en un clic ci-dessous), il n'a donc besoin d'aucune autorisation de création de dépôt."
+    },
+    "github": {
+      "prompt": "Connectez cet espace de travail à GitHub avant l'initialisation ; une exécution pousse dans un dépôt. Liez une installation sur laquelle l'App est déjà présente, ou installez-la."
+    },
+    "section": {
+      "newRepo": "Nouveau dépôt"
+    },
+    "mode": {
+      "label": "Comment commencer ?",
+      "reference": {
+        "label": "À partir d'une architecture de référence",
+        "description": "Clonez un dépôt de base géré et adaptez-le au nouveau service."
+      },
+      "scratch": {
+        "label": "À partir de zéro",
+        "description": "Échafaudez un tout nouveau dépôt à partir d'un prompt libre, sans base nécessaire."
+      }
+    },
+    "reference": {
+      "label": "Architecture de référence",
+      "description": "Le dépôt de base géré à cloner et à adapter.",
+      "empty": "Aucune architecture de référence pour l'instant. Ajoutez-en une ci-dessous, ou passez à « À partir de zéro ».",
+      "placeholder": "Choisissez une architecture de référence"
+    },
+    "targetRepo": {
+      "label": "Nom du dépôt cible",
+      "descWithOwner": "Créez un nouveau dépôt portant ce nom sous {owner}, puis l'initialisation y pousse. Un README, un .gitignore ou une licence préremplis conviennent.",
+      "descNoOwner": "Créez un nouveau dépôt portant ce nom, puis l'initialisation y pousse. Un README, un .gitignore ou une licence préremplis conviennent."
+    },
+    "createRepo": {
+      "now": "Créer le dépôt",
+      "onGitHub": "Créer sur GitHub",
+      "titleNow": "Créer le dépôt maintenant",
+      "titleGitHub": "Ouvrir la page de nouveau dépôt de GitHub, préremplie"
+    },
+    "grantAccess": {
+      "label": "Accorder à l'App l'accès à ce dépôt",
+      "title": "Ouvrir les paramètres d'installation de l'App pour lui accorder l'accès au nouveau dépôt"
+    },
+    "description": {
+      "label": "Description",
+      "help": "Résumé facultatif en une ligne pour le dépôt."
+    },
+    "instructions": {
+      "labelReference": "Instructions supplémentaires pour l'initialiseur",
+      "labelScratch": "Que doit construire l'initialiseur ?",
+      "descReference": "Facultatif, ajouté aux instructions par défaut de l'architecture de référence.",
+      "descScratch": "Décrivez le nouveau service : pile technique, structure et ce qu'il doit faire."
+    },
+    "visibility": {
+      "label": "Visibilité",
+      "private": "Dépôt privé"
+    },
+    "launch": "Initialiser le dépôt",
+    "recent": {
+      "title": "Exécutions récentes",
+      "fromArch": "depuis {name}",
+      "fromScratch": "à partir de zéro",
+      "open": "Ouvrir"
+    },
+    "status": {
+      "pending": "en attente",
+      "running": "en cours",
+      "succeeded": "réussi",
+      "failed": "échoué"
+    },
+    "arch": {
+      "title": "Architectures de référence",
+      "add": "Ajouter",
+      "pickRepo": {
+        "label": "Choisir un dépôt GitHub existant",
+        "description": "Choisissez un dépôt auquel vous avez accès pour renseigner son propriétaire et son nom, ou saisissez-les manuellement ci-dessous."
+      },
+      "name": {
+        "label": "Nom",
+        "description": "Un libellé convivial pour cette base."
+      },
+      "repoOwner": "Propriétaire du dépôt",
+      "repoName": "Nom du dépôt",
+      "descriptionPlaceholder": "Résumé facultatif de cette base",
+      "defaultInstructions": {
+        "label": "Instructions d'initialisation par défaut",
+        "description": "Ajoutées avant les instructions de chaque exécution chaque fois que cette base est utilisée."
+      }
+    },
+    "toast": {
+      "repoCreated": "Dépôt créé",
+      "repoCreateFailed": "Impossible de créer le dépôt",
+      "failed": "Échec de l'initialisation",
+      "failedFallback": "L'initialiseur a signalé un échec.",
+      "started": "Initialisation démarrée",
+      "startedDesc": "Un conteneur initialise {repo} ; suivez sa progression sur le tableau.",
+      "bootstrapFailed": "Impossible d'initialiser",
+      "saveArchFailed": "Impossible d'enregistrer l'architecture de référence",
+      "deleteFailed": "Impossible de supprimer"
+    }
   }
 }
