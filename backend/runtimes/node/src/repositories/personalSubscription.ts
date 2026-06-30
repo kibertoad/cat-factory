@@ -5,6 +5,8 @@ import type {
   SubscriptionActivationRepository,
   SubscriptionVendor,
 } from '@cat-factory/kernel'
+import { subscriptionVendorSchema } from '@cat-factory/contracts'
+import { decodeEnum } from '@cat-factory/server'
 import { and, asc, eq, gt, gte, isNull, lte, ne } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { personalSubscriptions, subscriptionActivations } from '../db/schema.js'
@@ -19,7 +21,11 @@ function toRecord(row: SubRow): PersonalSubscriptionRecord {
   return {
     id: row.id,
     userId: row.user_id,
-    vendor: row.vendor as SubscriptionVendor,
+    vendor: decodeEnum(subscriptionVendorSchema, row.vendor, {
+      table: 'personal_subscriptions',
+      column: 'vendor',
+      id: row.id,
+    }),
     label: row.label,
     tokenCipher: row.token_cipher,
     expiresAt: row.expires_at,
@@ -150,7 +156,11 @@ function toActivation(row: ActRow): SubscriptionActivationRecord {
     id: row.id,
     executionId: row.execution_id,
     userId: row.user_id,
-    vendor: row.vendor as SubscriptionVendor,
+    vendor: decodeEnum(subscriptionVendorSchema, row.vendor, {
+      table: 'subscription_activations',
+      column: 'vendor',
+      id: row.id,
+    }),
     tokenCipher: row.token_cipher,
     createdAt: row.created_at,
     expiresAt: row.expires_at,
