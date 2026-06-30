@@ -2,6 +2,7 @@ import type {
   EnvironmentBackendConfig,
   EnvironmentManifest,
   EnvironmentProvider,
+  InfraEngine,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
 import { STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
@@ -76,6 +77,18 @@ export interface EnvironmentBackendProvider {
   fromManifest(manifest: EnvironmentManifest): EnvironmentBackendConfig
   /** Build the live provider the engine provisions/observes/tears down through. */
   buildProvider(ctx: EnvironmentBackendContext): EnvironmentProvider
+  /**
+   * The per-type infra engines this backend implements (e.g. the Kubernetes backend
+   * serves both `local-k3s` and `remote-kubernetes`). Drives the per-provision-type
+   * handler resolution (`byEngine`). Optional so a pre-existing custom third-party backend
+   * keeps working; the built-ins declare it.
+   */
+  engines?(): InfraEngine[]
+  /**
+   * For a `remote-custom` backend: which custom manifest ids it can consume (matched
+   * against a service's pinned `manifestId`). Empty/undefined ⇒ accepts any.
+   */
+  acceptsManifestIds?(): string[]
 }
 
 /**
@@ -97,6 +110,20 @@ export class EnvironmentBackendRegistry {
   /** The provider for a backend kind, or undefined when unregistered. */
   get(kind: string): EnvironmentBackendProvider | undefined {
     return this.map.get(kind)
+  }
+
+  /**
+   * The registered backend that implements a per-type infra engine
+   * (`local-docker`/`local-k3s`/`remote-kubernetes`/`remote-custom`), or undefined when
+   * none is registered for it (e.g. `local-docker` only on the local facade). Drives the
+   * per-provision-type handler resolution. `none` (infraless) has no backend.
+   */
+  byEngine(engine: InfraEngine): EnvironmentBackendProvider | undefined {
+    if (engine === 'none') return undefined
+    for (const provider of this.map.values()) {
+      if (provider.engines?.().includes(engine)) return provider
+    }
+    return undefined
   }
 
   /** All registered backend kinds (for diagnostics / a UI capabilities list). */
@@ -161,6 +188,9 @@ export const manifestEnvironmentBackend: EnvironmentBackendProvider = {
   fromManifest: (manifest) => ({ kind: 'manifest', manifest }),
   buildProvider: (ctx) =>
     new HttpEnvironmentProvider(ctx.urlPolicy ? { urlPolicy: ctx.urlPolicy } : {}),
+  // The generic BYO HTTP management API is the `remote-custom` engine. A deployment that
+  // registers a narrower custom backend can override `acceptsManifestIds` to constrain it.
+  engines: () => ['remote-custom'],
 }
 
 // --- Built-in: kubernetes (native per-PR namespaces over the apiserver) --------

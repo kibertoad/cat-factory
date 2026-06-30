@@ -11,7 +11,7 @@ import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from 
 import { followUpsStepStateSchema } from './followUp.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
 import { releaseSignalSchema } from './release.js'
-import { environmentStatusSchema } from './environments.js'
+import { environmentStatusSchema, serviceProvisioningSchema } from './environments.js'
 import { documentSourceKindSchema } from './documents.js'
 import {
   agentKindSchema,
@@ -180,6 +180,16 @@ export const blockSchema = v.object({
    * its `tester.environment` agent-config value. Absent ⇒ the built-in `ephemeral`.
    */
   defaultTestEnvironment: v.optional(testEnvironmentSchema),
+  /**
+   * Service-level (frame-only): the service-owned provisioning config — the provision
+   * TYPE this service produces (kubernetes / docker-compose / custom / infraless) plus
+   * the in-repo specifics (manifest source, compose path, custom manifest id). The
+   * workspace/user config separately describes HOW each type is handled (the engine); the
+   * deployer merges the two at run time. See
+   * docs/initiatives/per-service-provision-types.md. Absent ⇒ legacy `defaultTestEnvironment`
+   * behaviour (superseded once the tester collapse lands).
+   */
+  provisioning: v.optional(serviceProvisioningSchema),
   /**
    * Service-level (frame-only): the cloud provider this service's container jobs
    * run on. Absent means the owning account's `defaultCloudProvider`.

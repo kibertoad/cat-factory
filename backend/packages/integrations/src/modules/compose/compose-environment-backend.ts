@@ -22,6 +22,8 @@ export function composeEnvironmentBackend(runtime: ComposeRuntime): EnvironmentB
   return {
     kind: 'compose',
     displayLabel: 'Docker Compose',
+    // The local docker-compose stack is the `local-docker` engine (local facade only).
+    engines: () => ['local-docker'],
     // No secrets — a compose stack authenticates via the images themselves.
     referencedSecretKeys: () => [],
     connectionMeta: (config) => ({

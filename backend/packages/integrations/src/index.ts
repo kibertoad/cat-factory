@@ -160,6 +160,16 @@ export {
   type EnvironmentBackendSafetyOptions,
 } from './modules/environments/environment-backends.js'
 export {
+  resolveInfraHandler,
+  type InfraHandlerLike,
+  type InfraHandlerResolution,
+} from './modules/environments/infra-handler.logic.js'
+export {
+  CustomManifestTypeRegistry,
+  aggregateCustomManifestTypes,
+  type RegisteredCustomManifestType,
+} from './modules/environments/custom-manifest-types.js'
+export {
   EnvironmentProvisioningService,
   type EnvironmentProvisioningServiceDependencies,
   type ProvisionArgs,

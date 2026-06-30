@@ -169,6 +169,54 @@ export const environmentManifestSchema = v.object({
 export type EnvironmentManifest = v.InferOutput<typeof environmentManifestSchema>
 
 // ---------------------------------------------------------------------------
+// Per-service provision type + per-type infra handlers (the what/where ÷ how split).
+//
+// A SERVICE (repo) owns its provisioning config — the "what + where": which provision
+// TYPE it produces and the in-repo specifics (where its k8s manifests live, its compose
+// path, its custom manifest id). The WORKSPACE (and, in local mode, the user) owns HOW
+// each type is handled — the engine + connection. Resolution matches the service's type
+// to a workspace handler; a `remote-custom` handler declares the manifest id it accepts.
+// See docs/initiatives/per-service-provision-types.md.
+// ---------------------------------------------------------------------------
+
+/**
+ * The provision type a service declares — the INPUT SHAPE it produces. `infraless` means
+ * the service stands up no environment (the Tester runs with no infra). A `custom` service
+ * additionally pins a `manifestId` (see {@link serviceProvisioningSchema}).
+ */
+export const provisionTypeSchema = v.picklist([
+  'kubernetes',
+  'docker-compose',
+  'custom',
+  'infraless',
+])
+export type ProvisionType = v.InferOutput<typeof provisionTypeSchema>
+
+/**
+ * The engine a workspace/user handler uses to stand up / connect to an environment for a
+ * provision type. `none` is the synthetic engine for `infraless`. `local-docker` runs a
+ * compose stack locally; `local-k3s`/`remote-kubernetes` drive a kube apiserver;
+ * `remote-custom` is the generic BYO HTTP management API.
+ */
+export const infraEngineSchema = v.picklist([
+  'local-docker',
+  'local-k3s',
+  'remote-kubernetes',
+  'remote-custom',
+  'none',
+])
+export type InfraEngine = v.InferOutput<typeof infraEngineSchema>
+
+/** A custom-manifest-type identifier (lower-kebab slug). */
+export const manifestIdSchema = v.pipe(
+  v.string(),
+  v.regex(/^[a-z0-9][a-z0-9-]*$/),
+  v.minLength(1),
+  v.maxLength(64),
+)
+export type ManifestId = v.InferOutput<typeof manifestIdSchema>
+
+// ---------------------------------------------------------------------------
 // Kubernetes ephemeral-environment backend.
 //
 // A native backend that deploys an operator-authored set of k3s/Kubernetes
@@ -296,6 +344,112 @@ export const environmentBackendConfigSchema = v.variant('kind', [
 export type EnvironmentBackendConfig = v.InferOutput<typeof environmentBackendConfigSchema>
 export type EnvironmentBackendKind = EnvironmentBackendConfig['kind']
 
+// ---------------------------------------------------------------------------
+// Service-owned provisioning config (the "what + where") — on the service-frame Block.
+// ---------------------------------------------------------------------------
+
+/**
+ * The per-type source a service supplies. Only the branch matching the service's
+ * `provisionType` is meaningful; the others are ignored. The service carries NO
+ * engine/credentials — only the in-repo intent. Built by merging with the workspace
+ * handler (the "how") at provision time.
+ */
+export const serviceProvisioningSchema = v.object({
+  type: provisionTypeSchema,
+  /** `kubernetes`: where the per-PR manifests live (colocated in the PR repo, or a separate repo). */
+  manifestSource: v.optional(kubernetesManifestSourceSchema),
+  /** `docker-compose`: path to the compose file relative to the repo root. */
+  composePath: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
+  /** `docker-compose`: the compose stack is for local development only (advisory). */
+  localDevOnly: v.optional(v.boolean()),
+  /** `custom`: the custom-manifest-type id this service produces (matched to a remote-custom handler). */
+  manifestId: v.optional(manifestIdSchema),
+  /** `custom`: optional path to the custom manifest within the repo. */
+  manifestPath: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
+})
+export type ServiceProvisioning = v.InferOutput<typeof serviceProvisioningSchema>
+
+// ---------------------------------------------------------------------------
+// Per-type infra handler config (the "how") — on the workspace/user handler row.
+// ---------------------------------------------------------------------------
+
+/**
+ * The kube engine connection (the "how" for a `kubernetes` provision type), discriminated
+ * from the service-owned `manifestSource` (the "what/where"): apiserver + TLS + namespace
+ * + sizing only. The manifests to apply come from the SERVICE at provision time. Used by
+ * both the `local-k3s` and `remote-kubernetes` engines.
+ */
+export const kubernetesEngineConfigSchema = v.object({
+  label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
+  /** kube-apiserver root URL, e.g. `https://my-cluster.example:6443`. */
+  apiServerUrl: urlString,
+  /** PEM CA bundle to verify the apiserver TLS cert (omit only for a publicly-trusted CA). */
+  caCertPem: v.optional(v.string()),
+  /** Skip apiserver TLS verification — strongly discouraged; kind/dev clusters only. */
+  insecureSkipTlsVerify: v.optional(v.boolean()),
+  /** Namespace name template for the per-PR environment, e.g. `cf-env-{{pullNumber}}`. */
+  namespaceTemplate: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
+  /** How the environment URL is derived once applied. */
+  url: kubernetesUrlSourceSchema,
+  /** Optional image reference made available to the manifests as `{{image}}`. */
+  imageTemplate: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
+  /** Fallback TTL (ms) after which the env is swept + torn down. */
+  defaultTtlMs: v.optional(v.pipe(v.number(), v.minValue(60000))),
+  /** Extra labels stamped on the namespace + every applied resource. */
+  labels: v.optional(v.record(v.string(), v.string())),
+  /** Extra annotations stamped on the namespace. */
+  annotations: v.optional(v.record(v.string(), v.string())),
+})
+export type KubernetesEngineConfig = v.InferOutput<typeof kubernetesEngineConfigSchema>
+
+/**
+ * A per-type infra handler config, discriminated by `engine`. Binds a provision type to the
+ * engine that handles it + that engine's connection config. `local-docker` rides the
+ * generic compose backend (its settings in `providerConfig`); `local-k3s`/`remote-kubernetes`
+ * carry the kube engine connection; `remote-custom` is the generic HTTP manifest API and
+ * declares the manifest id it accepts.
+ */
+export const infraHandlerConfigSchema = v.variant('engine', [
+  v.object({ engine: v.literal('local-docker'), manifest: environmentManifestSchema }),
+  v.object({ engine: v.literal('local-k3s'), kubernetes: kubernetesEngineConfigSchema }),
+  v.object({ engine: v.literal('remote-kubernetes'), kubernetes: kubernetesEngineConfigSchema }),
+  v.object({
+    engine: v.literal('remote-custom'),
+    manifest: environmentManifestSchema,
+    /** Which custom manifest shape this remote provider consumes — matched to a service's `manifestId`. */
+    acceptsManifestId: manifestIdSchema,
+  }),
+])
+export type InfraHandlerConfig = v.InferOutput<typeof infraHandlerConfigSchema>
+
+// ---------------------------------------------------------------------------
+// Custom-manifest-type catalog — the open set of `custom` provision types, aggregated
+// from programmatically-registered providers + workspace-defined (UI-editable) entries.
+// ---------------------------------------------------------------------------
+
+export const customManifestTypeSourceSchema = v.picklist(['registered', 'workspace'])
+export type CustomManifestTypeSource = v.InferOutput<typeof customManifestTypeSourceSchema>
+
+/** A custom manifest type a service can declare (and a remote-custom handler can accept). */
+export const customManifestTypeSchema = v.object({
+  manifestId: manifestIdSchema,
+  label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
+  /** `registered` (from a code provider) or `workspace` (UI-defined). */
+  source: customManifestTypeSourceSchema,
+  /** Optional hint describing the input shape the provider expects. */
+  acceptsInputHint: v.optional(v.pipe(v.string(), v.maxLength(500))),
+  description: v.optional(v.pipe(v.string(), v.maxLength(2000))),
+})
+export type CustomManifestType = v.InferOutput<typeof customManifestTypeSchema>
+
+/** Create/edit a workspace-defined custom manifest type (UI CRUD). */
+export const upsertCustomManifestTypeSchema = v.object({
+  label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
+  acceptsInputHint: v.optional(v.pipe(v.string(), v.maxLength(500))),
+  description: v.optional(v.pipe(v.string(), v.maxLength(2000))),
+})
+export type UpsertCustomManifestTypeInput = v.InferOutput<typeof upsertCustomManifestTypeSchema>
+
 /** Resolved access creds for a provisioned env, as surfaced to a tester agent. */
 export const environmentAccessHandleSchema = v.object({
   scheme: environmentAccessSchemeSchema,
@@ -322,6 +476,18 @@ export const environmentHandleSchema = v.object({
   createdAt: v.number(),
   expiresAt: v.nullable(v.number()),
   lastError: v.nullable(v.string()),
+  /**
+   * The service's declared provision type this environment was stood up for
+   * (`kubernetes` | `docker-compose` | `custom` | `infraless`). Recorded at provision
+   * time so run details can show exactly what was provisioned. Null for legacy rows.
+   */
+  provisionType: v.optional(v.nullable(provisionTypeSchema)),
+  /**
+   * The resolved engine that handled the provisioning (`local-docker` | `local-k3s` |
+   * `remote-kubernetes` | `remote-custom` | `none`). Surfaced in run details alongside
+   * the provider label. Null for legacy rows.
+   */
+  engine: v.optional(v.nullable(infraEngineSchema)),
 })
 export type EnvironmentHandle = v.InferOutput<typeof environmentHandleSchema>
 

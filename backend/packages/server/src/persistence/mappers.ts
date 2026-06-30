@@ -418,6 +418,8 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   optField('testComposePath', { clearOnEmpty: true }),
   optBoolIntField('noInfraDependencies'),
   optField('defaultTestEnvironment'),
+  // Service-owned provisioning config (the "what + where") — a JSON object on frame blocks.
+  optJsonField('provisioning'),
   optField('cloudProvider'),
   optField('instanceSize'),
   // `createdBy` is set at insert time and never patched. LEGACY: a pre-#94 numeric id is
