@@ -102,6 +102,14 @@ export default defineNuxtConfig({
     },
   },
 
+  // Static loader shown before the JS bundle parses + Vue mounts, so the very
+  // first paint isn't a blank white screen. This is a Nuxt *layer*, and Nuxt's
+  // default `spaLoadingTemplate` resolution looks under the CONSUMER's srcDir,
+  // so a file dropped in this layer would be silently ignored when a deployment
+  // `extends` it — anchor it to this layer's dir (the same `~`/`@` rebinding
+  // trap the `css:` block above works around). See the comment at the top.
+  spaLoadingTemplate: join(layerDir, 'app/spa-loading-template.html'),
+
   app: {
     head: {
       title: 'Agent Architecture Board',
