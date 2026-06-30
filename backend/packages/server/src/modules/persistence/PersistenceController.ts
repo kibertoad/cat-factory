@@ -1,0 +1,79 @@
+import { Hono } from 'hono'
+import { HmacSigner, type MachinePayload, TOKEN_AUDIENCE } from '../../auth/signing.js'
+import type { AppEnv } from '../../http/env.js'
+import { type PersistenceRpcRequest, dispatchPersistenceCall } from '../../persistence/rpc.js'
+
+/**
+ * The mothership-mode machine API: `POST /internal/persistence`.
+ *
+ * A mothership-mode local node has no main database — it forwards every org/durable
+ * repository call here, to the hosted mothership, over this ONE reflective endpoint. The
+ * mothership reflects over its real repository registry (`container.repositories`, attached
+ * by each facade) and returns the result.
+ *
+ * Security: this endpoint is gated NOT by the user-session `authGate` (its prefix `/internal`
+ * is in that gate's bypass list) but by its own machine-token check here — a token minted by
+ * the mothership for a whitelisted node, audience-pinned `machine` so a user session / ws
+ * ticket / container token can never be replayed against raw persistence. Every call is then
+ * account-scoped to the token (`dispatchPersistenceCall`): a method outside the per-repo
+ * allow-list is refused, and a call resolving to an account outside the token's scope is a
+ * 404 (matching the auth gate's existence-non-leak policy).
+ *
+ * Mounted on BOTH facades via the shared controller registration, so either a Node or a
+ * Cloudflare deployment can be a mothership. A facade that does not attach `repositories`
+ * (every deployment that isn't acting as a mothership) serves a 503 here.
+ */
+export function persistenceController(): Hono<AppEnv> {
+  const app = new Hono<AppEnv>()
+
+  app.post('/internal/persistence', async (c) => {
+    const container = c.get('container')
+    const registry = container.repositories
+    if (!registry) {
+      return c.json(
+        { ok: false, error: { code: 'internal', message: 'persistence RPC not enabled' } },
+        503,
+      )
+    }
+
+    const secret = container.config.auth.sessionSecret
+    const token = c.req.header('authorization')?.replace(/^Bearer\s+/i, '')
+    const payload = secret
+      ? await new HmacSigner(secret).verify<MachinePayload>(token, { aud: TOKEN_AUDIENCE.machine })
+      : null
+    if (!payload) {
+      return c.json(
+        { ok: false, error: { code: 'forbidden', message: 'invalid machine token' } },
+        403,
+      )
+    }
+
+    let request: PersistenceRpcRequest
+    try {
+      request = (await c.req.json()) as PersistenceRpcRequest
+    } catch {
+      return c.json(
+        { ok: false, error: { code: 'validation', message: 'invalid request body' } },
+        422,
+      )
+    }
+    if (!request || typeof request.repo !== 'string' || typeof request.method !== 'string') {
+      return c.json(
+        { ok: false, error: { code: 'validation', message: 'repo and method are required' } },
+        422,
+      )
+    }
+
+    const workspaceRepository = registry.workspaceRepository
+    const result = await dispatchPersistenceCall(request, {
+      registry,
+      scope: { accountIds: payload.scope.accountIds, userId: payload.userId },
+      resolveAccountId: (workspaceId) =>
+        (workspaceRepository?.accountOf?.(workspaceId) as Promise<string | null | undefined>) ??
+        Promise.resolve(undefined),
+    })
+    return c.json(result.body, result.status as 200 | 400 | 403 | 404 | 409 | 422 | 428 | 500)
+  })
+
+  return app
+}

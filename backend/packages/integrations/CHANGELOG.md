@@ -1,5 +1,37 @@
 # @cat-factory/integrations
 
+## 0.40.0
+
+### Minor Changes
+
+- 1952d6b: Per-service provision types (slice 2a — resolver + registry engine metadata). Adds the
+  pure `resolveInfraHandler` resolution (service provision type → the workspace/user handler
+  that serves it, per-user override winning, `infraless` → the `none` engine, ambiguous bare
+  `custom` rejected), `engines()`/`acceptsManifestIds()` metadata + a `byEngine` lookup on the
+  environment-backend registry (the built-ins map kubernetes → `local-k3s`/`remote-kubernetes`,
+  compose → `local-docker`, manifest → `remote-custom`), and the app-owned
+  `CustomManifestTypeRegistry` + `aggregateCustomManifestTypes` catalog seam. Kernel re-exports
+  the new provision-type contract types. Pure/additive — the connection-table reshape, service
+  consumption, and tester collapse follow in slice 2b.
+
+### Patch Changes
+
+- 1952d6b: Per-service provision types (slice 1 — additive foundation). Adds the
+  `provisionType`/`infraEngine`/`serviceProvisioning`/`infraHandlerConfig` and
+  custom-manifest-type contracts, a `provisioning` field on the service-frame `Block`
+  (persisted as a JSON column on both runtimes and settable via the block update endpoint),
+  and `provisionType`/`engine` fields on the environment handle. Introduces the per-user
+  infra handler override table (`environment_user_handlers`, local-mode) and the workspace
+  custom-manifest-type catalog (`custom_manifest_types`) — mirrored across D1 and Drizzle
+  with a cross-runtime conformance suite — plus `provision_type`/`engine` columns on the
+  `environments` registry. No behaviour is wired yet; the single→multi reshape of
+  `environment_connections`, the resolver, and the UI follow in later slices. See
+  `docs/initiatives/per-service-provision-types.md`.
+- Updated dependencies [1952d6b]
+- Updated dependencies [1952d6b]
+  - @cat-factory/contracts@0.59.0
+  - @cat-factory/kernel@0.57.0
+
 ## 0.39.0
 
 ### Minor Changes

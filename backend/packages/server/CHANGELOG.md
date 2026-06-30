@@ -1,5 +1,44 @@
 # @cat-factory/server
 
+## 0.51.0
+
+### Minor Changes
+
+- bd23c46: Add the mothership-mode persistence-RPC spine (the pilot core of the mothership-mode
+  initiative). A new machine-token audience (`TOKEN_AUDIENCE.machine`) and a reflective
+  `POST /internal/persistence` endpoint let a mothership-mode local node forward its
+  org/durable repository calls to a hosted mothership: the controller reflects over a
+  facade-attached repository registry (`ServerContainer.repositories`) and enforces a per-repo
+  method allow-list plus per-call account scoping (an out-of-scope call is a 404, no existence
+  leak). The client side ships `createRemoteRepositories` — a `Proxy`-backed `CoreRepositories`
+  subset whose wire envelope round-trips `undefined`/`null`, writes a mutated `execution.rev`
+  back in place (the optimistic-concurrency contract), and re-throws `DomainError`s. The
+  endpoint 503s on any facade that has not attached its repository registry, so existing
+  deployments are unaffected.
+
+### Patch Changes
+
+- 1952d6b: Per-service provision types (slice 1 — additive foundation). Adds the
+  `provisionType`/`infraEngine`/`serviceProvisioning`/`infraHandlerConfig` and
+  custom-manifest-type contracts, a `provisioning` field on the service-frame `Block`
+  (persisted as a JSON column on both runtimes and settable via the block update endpoint),
+  and `provisionType`/`engine` fields on the environment handle. Introduces the per-user
+  infra handler override table (`environment_user_handlers`, local-mode) and the workspace
+  custom-manifest-type catalog (`custom_manifest_types`) — mirrored across D1 and Drizzle
+  with a cross-runtime conformance suite — plus `provision_type`/`engine` columns on the
+  `environments` registry. No behaviour is wired yet; the single→multi reshape of
+  `environment_connections`, the resolver, and the UI follow in later slices. See
+  `docs/initiatives/per-service-provision-types.md`.
+- Updated dependencies [1952d6b]
+- Updated dependencies [1952d6b]
+  - @cat-factory/contracts@0.59.0
+  - @cat-factory/kernel@0.57.0
+  - @cat-factory/integrations@0.40.0
+  - @cat-factory/agents@0.23.1
+  - @cat-factory/orchestration@0.45.2
+  - @cat-factory/prompt-fragments@0.9.12
+  - @cat-factory/spend@0.10.41
+
 ## 0.50.3
 
 ### Patch Changes

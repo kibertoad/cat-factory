@@ -92,6 +92,7 @@ import {
   resolveUrlSafetyPolicy,
   resolveWorkspaceCapabilities,
   type MintInstallationToken,
+  type PersistenceRegistry,
   type ServerContainer,
 } from '@cat-factory/server'
 import { type AppConfig, loadConfig } from './config'
@@ -2143,6 +2144,12 @@ export function buildContainer(
     agentRunRepository: new D1AgentRunRepository({ db }),
     // Execution-scoped repo, surfaced for the conformance suite's compareAndSwap parity check.
     executionRepository: dependencies.executionRepository,
+    // The repository registry the mothership-mode machine API (`/internal/persistence`) reflects
+    // over, so a Cloudflare deployment can act as a mothership for mothership-mode local nodes.
+    // The controller gates which repo+method is callable (allow-list) and account-scopes each
+    // call; exposing the whole `dependencies` (which carries every repo under its canonical name)
+    // is safe. Sourced from `dependencies` so both facades attach the registry identically.
+    repositories: dependencies as unknown as PersistenceRegistry,
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
     environmentBackendRegistry,

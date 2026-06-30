@@ -109,6 +109,7 @@ import {
   makeResolveRepoFilesForCoords,
   makeResolveBinaryArtifactStore,
   type BuildBlobBackend,
+  type PersistenceRegistry,
   ensureWorkBranchViaRest,
   logger,
   resolveUrlSafetyPolicy,
@@ -1953,6 +1954,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     agentRunRepository: repos.agentRunRepository,
     // Execution-scoped repo, surfaced for the conformance suite's compareAndSwap parity check.
     executionRepository: repos.executionRepository,
+    // The repository registry the mothership-mode machine API (`/internal/persistence`) reflects
+    // over, so a Node deployment can act as a mothership for mothership-mode local nodes. The
+    // controller gates which repo+method is callable (allow-list) and account-scopes each call;
+    // exposing the whole `dependencies` (which carries every repo under its canonical name) is
+    // safe. Sourced from `dependencies` so both facades attach the registry identically.
+    repositories: dependencies as unknown as PersistenceRegistry,
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
     environmentBackendRegistry,
