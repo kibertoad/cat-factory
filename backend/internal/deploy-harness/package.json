@@ -14,6 +14,7 @@
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:run": "vitest run",
+    "test:integration": "vitest run -c vitest.integration.config.ts",
     "image:publish": "bash scripts/publish-image.sh"
   },
   "devDependencies": {
