@@ -2104,6 +2104,31 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     dependencies.envConfigRepairer = envConfigRepairer
   }
 
+  // Mothership mode (`db` undefined): `AgentContextBuilder` reads a block's linked docs/tasks
+  // (`documentRepository`/`taskRepository`.listByBlock/get) on EVERY container agent dispatch, so
+  // these are on the board-load + run path even though the document/task INTEGRATIONS are opt-in.
+  // The sub-helpers above (`selectNodeDocumentsDeps`/`selectNodeTasksDeps`) build them directly
+  // over the absent `db`, so re-source the context-builder run-path repos from the remote registry —
+  // the connection/provider surfaces they also build stay db-direct (off the run path; a later
+  // integration slice remotes them). Routing is orthogonal to the allow-list: an un-allow-listed
+  // remote method returns a clean `unknown_method`, never a `db`-undefined `TypeError`.
+  if (remoteRepos) {
+    dependencies.documentRepository =
+      remoteRepos.documentRepository as CoreDependencies['documentRepository']
+    dependencies.taskRepository = remoteRepos.taskRepository as CoreDependencies['taskRepository']
+    // The context builder also resolves the block's live environment per step
+    // (`environmentProvisioning.resolveForBlock` → `environmentRegistryRepository.getByBlock`,
+    // null when no env is provisioned — the common path). Route both environment repos so the
+    // service `createCore` builds reads org state remotely. NOTE: a remotely-stored env access
+    // cipher is sealed with the mothership's key, which never reaches the laptop, so actually
+    // DECRYPTING a provisioned env's creds locally is a later (secrets-delegation) slice — only
+    // the non-secret block→env mapping read is on the basic run path here.
+    dependencies.environmentRegistryRepository =
+      remoteRepos.environmentRegistryRepository as CoreDependencies['environmentRegistryRepository']
+    dependencies.environmentConnectionRepository =
+      remoteRepos.environmentConnectionRepository as CoreDependencies['environmentConnectionRepository']
+  }
+
   return {
     ...createCore(dependencies),
     config,
