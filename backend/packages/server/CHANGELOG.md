@@ -1,5 +1,31 @@
 # @cat-factory/server
 
+## 0.59.0
+
+### Minor Changes
+
+- b4c7e60: Provisioning auto-detection now prioritizes the option matching the user's selected
+  provision-type tab.
+
+  The "Detect from repo" affordance sends the currently-selected tab (`kubernetes` vs
+  `docker-compose`) as a new optional `prefer` field on `POST /environments/detect-provisioning`.
+  The detector honors it: on the `docker-compose` tab a compose file wins when present (even if
+  Kubernetes manifests also exist, surfaced as a low-confidence "switch to kubernetes" hint),
+  falling back to the other kind when the preferred one isn't found. With no preference (or any
+  non-compose tab) it keeps the historical kubernetes-first order, so existing behavior is
+  unchanged unless a caller opts in.
+
+### Patch Changes
+
+- Updated dependencies [b4c7e60]
+  - @cat-factory/contracts@0.70.0
+  - @cat-factory/integrations@0.48.0
+  - @cat-factory/agents@0.24.9
+  - @cat-factory/kernel@0.63.1
+  - @cat-factory/orchestration@0.51.1
+  - @cat-factory/prompt-fragments@0.9.24
+  - @cat-factory/spend@0.10.54
+
 ## 0.58.0
 
 ### Minor Changes
