@@ -190,7 +190,7 @@ async function resetRun() {
                  model, subtasks + the prose output when there is one). -->
             <button
               type="button"
-              class="flex min-w-0 cursor-pointer items-center gap-2 text-left transition hover:text-white"
+              class="flex min-w-0 cursor-pointer items-center gap-2 text-start transition hover:text-white"
               :title="
                 s.output
                   ? t('inspector.execution.viewDetailsOutput')
@@ -220,7 +220,7 @@ async function resetRun() {
             </button>
             <span
               v-if="s.subtasks && s.subtasks.total > 0"
-              class="ml-auto font-mono text-[10px] tabular-nums text-slate-300"
+              class="ms-auto font-mono text-[10px] tabular-nums text-slate-300"
               :title="
                 s.subtasks.inProgress > 0
                   ? t('inspector.execution.subtasksProgress', {
@@ -240,7 +240,7 @@ async function resetRun() {
               class="inline-flex items-center gap-1 text-[10px]"
               :class="[
                 stepFailed(s) ? 'text-rose-400' : 'text-slate-400',
-                { 'ml-auto': !s.subtasks },
+                { 'ms-auto': !s.subtasks },
               ]"
             >
               <UIcon v-if="stepFailed(s)" name="i-lucide-circle-x" class="h-3 w-3 shrink-0" />
@@ -300,7 +300,7 @@ async function resetRun() {
           </div>
           <div
             v-if="s.subtasks && s.subtasks.total > 0"
-            class="mt-1 ml-6 h-1 overflow-hidden rounded-full bg-slate-700/60"
+            class="mt-1 ms-6 h-1 overflow-hidden rounded-full bg-slate-700/60"
           >
             <div
               class="h-full rounded-full bg-indigo-400 transition-all duration-500"
@@ -309,7 +309,7 @@ async function resetRun() {
           </div>
           <div
             v-if="s.model"
-            class="mt-0.5 flex items-center gap-1 pl-6 text-[10px] text-slate-500"
+            class="mt-0.5 flex items-center gap-1 ps-6 text-[10px] text-slate-500"
             :title="s.model"
           >
             <UIcon name="i-lucide-cpu" class="h-3 w-3" />
@@ -318,7 +318,7 @@ async function resetRun() {
           <!-- Prompt-fragment standards the library selected for this step. -->
           <div
             v-if="s.selectedFragmentIds && s.selectedFragmentIds.length"
-            class="mt-0.5 flex flex-wrap items-center gap-1 pl-6 text-[10px] text-slate-500"
+            class="mt-0.5 flex flex-wrap items-center gap-1 ps-6 text-[10px] text-slate-500"
             :title="
               t('inspector.execution.fragmentsTooltip', {
                 fragments: s.selectedFragmentIds.join(', '),
@@ -338,7 +338,7 @@ async function resetRun() {
                completed/skipped, so it's clear whether a fix pass ran. -->
           <div
             v-if="gateCompanionFor(s, runFailed)"
-            class="mt-0.5 flex items-center gap-1.5 pl-6 text-[10px]"
+            class="mt-0.5 flex items-center gap-1.5 ps-6 text-[10px]"
           >
             <UIcon
               :name="agentKindMeta(gateCompanionFor(s, runFailed)!.kind).icon"
@@ -356,7 +356,7 @@ async function resetRun() {
               }}
             </span>
             <span
-              class="ml-auto"
+              class="ms-auto"
               :class="COMPANION_STATE_META[gateCompanionFor(s, runFailed)!.state].text"
             >
               {{ COMPANION_STATE_META[gateCompanionFor(s, runFailed)!.state].label }}
@@ -388,7 +388,7 @@ async function resetRun() {
       >
         <span class="flex w-full items-center gap-2">
           {{ prLabel }}
-          <UBadge :color="prMerged ? 'success' : 'info'" variant="subtle" size="sm" class="ml-auto">
+          <UBadge :color="prMerged ? 'success' : 'info'" variant="subtle" size="sm" class="ms-auto">
             {{ prMerged ? t('inspector.execution.merged') : t('inspector.execution.open') }}
           </UBadge>
         </span>

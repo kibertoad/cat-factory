@@ -1,0 +1,3385 @@
+{
+  "language": {
+    "switcher": "שפה",
+    "warning": {
+      "title": "תרגום לא רשמי",
+      "body": "תרגום זה מסופק על ידי הקהילה ועשוי להיות לא מדויק. הבחנת בטעות? אנא דווח עליה או פתח תיקון ב-{repoLink}.",
+      "repoLinkLabel": "מאגר cat-factory",
+      "dismiss": "בטל"
+    }
+  },
+  "common": {
+    "save": "שמור",
+    "cancel": "ביטול",
+    "retry": "נסה שוב",
+    "block": "בלוק",
+    "actionFailed": "הפעולה נכשלה",
+    "close": "סגור"
+  },
+  "nav": {
+    "menu": "תפריט ניווט",
+    "openMenu": "פתח תפריט",
+    "closeMenu": "סגור תפריט",
+    "commandBar": "חפש או הרץ פקודה…",
+    "create": "יצירה",
+    "buildPipeline": "בנה צינור",
+    "repositories": "מאגרים",
+    "addFromRepo": "הוסף ממאגר קיים",
+    "bootstrapRepo": "אתחל מאגר",
+    "integrations": "אינטגרציות",
+    "infrastructure": "תשתית",
+    "sandbox": "ארגז חול",
+    "kaizen": "Kaizen",
+    "workspaceContext": "הקשר סביבת עבודה",
+    "contextFragments": "מקטעי הקשר",
+    "configuration": "תצורה",
+    "workspaceSettings": "הגדרות סביבת עבודה",
+    "modelConfiguration": "תצורת מודל",
+    "accountSettings": "הגדרות חשבון"
+  },
+  "board": {
+    "toolbar": {
+      "addService": "הוסף שירות",
+      "decisionWord": "החלטה | החלטות",
+      "lod": {
+        "far": "סקירה כללית",
+        "mid": "תקציר",
+        "close": "פירוט",
+        "steps": "שלבי בנייה",
+        "subtasks": "תת-משימות"
+      },
+      "spendTitle": "צריכת טוקנים החודש",
+      "spendLimitReached": "הוגעה למגבלת הצריכה — הריצות הושהו",
+      "serviceAdded": "{title} נוסף",
+      "serviceAddFailed": "לא ניתן היה להוסיף את השירות"
+    },
+    "canvas": {
+      "emptyTitle": "הלוח שלך ריק",
+      "emptyBody": "הוסף שירות כדי להתחיל: אתחל מאגר חדש או משוך מאגר קיים שכבר יש לך.",
+      "addBlockFailedTitle": "לא ניתן היה להוסיף בלוק",
+      "addBlockFailedBody": "השרת דחה את הבקשה.",
+      "dropOntoTaskTitle": "גרור על משימה",
+      "dropOntoTaskBody": "צינורות פועלים על משימות, לא על שירותים.",
+      "taskBlockedTitle": "המשימה חסומה",
+      "taskBlockedBody": "התלויות שלה עדיין לא מוזגו."
+    },
+    "addTask": {
+      "title": "הוסף משימה",
+      "newTaskIn": "משימה חדשה ב-{container}",
+      "typeLabel": "סוג",
+      "types": {
+        "feature": "תכונה",
+        "bug": "באג",
+        "document": "מסמך",
+        "spike": "ספייק",
+        "recurring": "מחזורי"
+      },
+      "recurringWithFrame": "משימה מחזורית מריצה צינור במרווחים קבועים. המשך כדי להגדיר את התזמון והפרומפט.",
+      "recurringNoFrame": "משימה מחזורית חייבת להתקיים על שירות. הוסף אותה ממסגרת שירות (או ממודול בתוכה).",
+      "titleField": "כותרת",
+      "titlePlaceholder": "מה צריך לעשות?",
+      "issueIncluded": "{title} (מהאישיו, כלול)",
+      "loadingIssue": "טוען את תיאור האישיו המקושר…",
+      "additionalNotes": "הערות נוספות",
+      "description": "תיאור",
+      "notesPlaceholder": "הוסף כל דבר נוסף שהסוכן צריך לדעת — יצורף לתיאור האישיו שלמעלה…",
+      "descriptionPlaceholder": "תאר את העבודה — הקשר, קריטריוני קבלה, וכל מה שהסוכן צריך לדעת…",
+      "technical": "משימה טכנית",
+      "technicalHint": "שינוי רפקטור / לא פונקציונלי / פנימי. המיישם מתייחס להגדרת המשימה כעיקרית ולמפרט כהפניה לרגרסיה; השאר כבוי כדי לתת לשלב המפרט להחליט.",
+      "severity": "חומרה",
+      "stepsToReproduce": "שלבים לשחזור",
+      "stepsToReproducePlaceholder": "מה נצפה לעומת מה שצופה, וכיצד לשחזר…",
+      "timebox": "תיחום זמן (שעות)",
+      "timeboxPlaceholder": "למשל 8",
+      "documentKind": "סוג מסמך",
+      "audience": "קהל יעד",
+      "audiencePlaceholder": "למשל מהנדסי פלטפורמה",
+      "targetPath": "נתיב יעד",
+      "targetPathPlaceholder": "למשל docs/rfcs/0001-foo.md",
+      "outlineHints": "רמזים למתווה",
+      "outlineHintsPlaceholder": "סעיפים או נקודות שהמסמך צריך לכסות",
+      "optional": "אופציונלי",
+      "pipeline": "צינור",
+      "chooseAtRunTime": "בחר בזמן הריצה",
+      "mergePolicy": "מדיניות מיזוג",
+      "workspaceDefault": "ברירת מחדל של סביבת העבודה",
+      "defaultPreset": "ברירת מחדל ({name}) — {thresholds}",
+      "defaultModelPreset": "ברירת מחדל ({name})",
+      "modelPreset": "הגדרה קבועה של מודל",
+      "agentConfiguration": "תצורת סוכן",
+      "contextDocuments": "מסמכי הקשר",
+      "contextIssues": "אישיו הקשר",
+      "attach": "צרף",
+      "done": "סיום",
+      "attachDocDisabledConnect": "חבר תחילה מקור מסמכים (אינטגרציות)",
+      "attachDocDisabledEnable": "הפעל תחילה את אינטגרציית המסמכים",
+      "attachIssueDisabledConnect": "חבר תחילה מערכת לניהול אישיו (אינטגרציות)",
+      "attachIssueDisabledEnable": "הפעל תחילה את אינטגרציית מערכת האישיו",
+      "importsOnAdd": "מיובא בעת ההוספה",
+      "noDocsHint": "צרף דרישה, RFC או PRD כדי שסוכנים יראו אותם בעת מימוש המשימה.",
+      "noIssuesHint": "צרף אישיו ממערכת המעקב כדי שסוכנים יראו את תיאורו ותגובותיו בעת מימוש המשימה.",
+      "plannedHint": "המשימה נוספת במצב מתוכנן. היא לא תרוץ עד שתתחיל עליה צינור — תוכל להמשיך לערוך אותה עד אז.",
+      "continue": "המשך",
+      "submit": "הוסף משימה",
+      "addFailedTitle": "לא ניתן היה להוסיף משימה",
+      "linkFailed": "המשימה נוספה, אך {count} צרופה לא ניתנה לקישור | המשימה נוספה, אך {count} צרופות לא ניתנו לקישור"
+    },
+    "recurring": {
+      "title": "הוסף צינור מחזורי",
+      "on": "צינור מחזורי על {frame}",
+      "name": "שם",
+      "namePlaceholder": "למשל עדכוני תלויות שבועיים",
+      "pipeline": "צינור",
+      "pickPipeline": "בחר צינור",
+      "prompt": "פרומפט",
+      "promptPlaceholder": "מה כל ריצה צריכה לעשות? תאר את העבודה — אותו פרומפט שמשימה רגילה נושאת. השאר ריק כדי להשתמש בברירת המחדל של הצינור.",
+      "issueTracker": "מערכת לניהול אישיו",
+      "issueTrackerHint": "צינור החוב הטכני פותח כרטיס מהניתוח שלו לפני המימוש. בחר היכן (נשמר עבור כל סביבת העבודה).",
+      "githubIssues": "GitHub Issues",
+      "jira": "Jira",
+      "linear": "Linear",
+      "jiraProjectKey": "מפתח פרויקט Jira",
+      "jiraProjectKeyPlaceholder": "למשל ENG",
+      "linearTeamId": "מזהה צוות Linear",
+      "footerHint": "משימה מחזורית אחת נוספת בתוך השירות; כל ריצה מחליפה את הקודמת. היסטוריית הריצות שלה מוצגת במפקח.",
+      "submit": "הוסף צינור מחזורי",
+      "addFailedTitle": "לא ניתן היה להוסיף צינור מחזורי"
+    },
+    "failure": {
+      "containerFailedToStart": "מכל הקונטיינר נכשל בהפעלה",
+      "environmentFailed": "הקצאת הסביבה נכשלה",
+      "bootstrapFailed": "האתחול נכשל",
+      "runFailed": "הריצה נכשלה",
+      "retryBootstrap": "נסה שוב לאתחל",
+      "retryRun": "נסה שוב להריץ",
+      "showDetail": "הצג פרטים",
+      "retrying": "מנסה שוב…"
+    },
+    "stop": {
+      "label": "עצור",
+      "bootstrapStopped": "האתחול נעצר",
+      "runStopped": "הריצה נעצרה",
+      "stoppedDescription": "הקונטיינר הופסק והריצה בוטלה.",
+      "stopFailed": "העצירה נכשלה"
+    },
+    "frame": {
+      "status": {
+        "planned": "אין משימות",
+        "ready": "פעיל",
+        "in_progress": "פעיל",
+        "blocked": "דורש תשומת לב",
+        "pr_ready": "פעיל",
+        "done": "פעיל"
+      },
+      "shared": "משותף",
+      "sharedTitle": "משותף בין סביבות העבודה בארגון זה",
+      "bootstrapping": "מאתחל…",
+      "bootstrappingRepository": "מאתחל מאגר…",
+      "bootstrapStepsCount": "{completed}/{total} שלבים",
+      "runFailed": "הריצה נכשלה",
+      "mergedOfTotal": "{merged}/{total} מוזגו",
+      "noTasksYet": "אין עדיין משימות",
+      "prCount": "{count} PR",
+      "implemented": "{merged}/{total} מומשו",
+      "prReadyCount": "{count} PR מוכנים",
+      "taskCount": "{count} משימה | {count} משימות",
+      "moduleCount": "{count} מודול | {count} מודולים",
+      "addTaskTitle": "הוסף משימה",
+      "createTaskFromIssueTitle": "צור משימה מאישיו",
+      "addRecurringTitle": "הוסף צינור מחזורי",
+      "collapseTitle": "כווץ",
+      "dragService": "גרור שירות",
+      "dragTask": "גרור משימה",
+      "dragToResize": "גרור לשינוי גודל",
+      "addFirstTask": "הוסף את המשימה הראשונה"
+    },
+    "decisionBadge": {
+      "decisionNeeded": "נדרשת החלטה",
+      "approvalNeeded": "נדרש אישור"
+    },
+    "task": {
+      "recurringPipeline": "צינור מחזורי",
+      "recurringPipelinePaused": "צינור מחזורי (מושהה)",
+      "dragToConnect": "גרור על משימה אחרת כדי לגרום לה להיות תלויה בזו",
+      "failed": "נכשל",
+      "decisionNeeded": "נדרשת החלטה",
+      "approvalNeeded": "נדרש אישור",
+      "resolve": "פתור",
+      "approve": "אשר",
+      "incorporatingAnswers": "משלב תשובות…",
+      "reReviewing": "סוקר מחדש…",
+      "recommending": "ממליץ…",
+      "starting": "מתחיל…",
+      "start": "התחל",
+      "blocked": "חסום",
+      "startPipeline": "התחל {name}",
+      "pipelineFallback": "צינור",
+      "waitingOn": "ממתין ל: {deps}",
+      "blockedByDependenciesTitle": "חסום על ידי תלויות",
+      "noPipelineTitle": "לא הוגדר צינור",
+      "noPipelineBody": "צור אחד תחילה בבונה.",
+      "pr": "PR",
+      "prNumber": "PR #{number}",
+      "openPrOnGithub": "פתח את {pr} ב-GitHub",
+      "review": "סקירה",
+      "merge": "מזג",
+      "implemented": "מומש",
+      "module": "מודול: {name}",
+      "buildSteps": "שלבי בנייה",
+      "reviewAndApprove": "סקור ואשר",
+      "clickToViewStep": "לחץ לצפייה בפרטי השלב ובפלט"
+    },
+    "epic": {
+      "label": "אפיק",
+      "activeCount": "{count} פעילים",
+      "noTasksYet": "אין עדיין משימות"
+    }
+  },
+  "errors": {
+    "action": {
+      "retryFailed": "הניסיון החוזר נכשל",
+      "startFailed": "ההפעלה נכשלה",
+      "mergeFailed": "המיזוג נכשל",
+      "restartFailed": "ההפעלה מחדש נכשלה"
+    },
+    "conflict": {
+      "title": {
+        "dependencies_unmet": "חסום על ידי תלויות",
+        "task_limit_reached": "הושגה מגבלת המקביליות",
+        "tester_infra_unsupported": "תשתית בדיקות אינה מוגדרת",
+        "agent_backend_unconfigured": "קצה עורפי של הסוכן אינו מוגדר",
+        "run_not_retryable": "לא ניתן להריץ מחדש את הריצה",
+        "no_pr_to_merge": "אין PR למיזוג",
+        "github_not_connected": "GitHub אינו מחובר",
+        "bootstrap_not_retryable": "לא ניתן להריץ מחדש את האתחול",
+        "bootstrap_reference_missing": "ארכיטקטורת ההפניה נעלמה"
+      },
+      "fallbackMessage": "פעולה זו מתנגשת עם המצב הנוכחי.",
+      "providersUnconfigured": {
+        "title": "אין ספק AI למודל זה",
+        "body": "לא מוגדר ספק עבור {models}. הוסף מפתח ספק, חבר מנוי, או הפעל את Cloudflare AI כדי להריץ אותו.",
+        "action": "הגדר AI"
+      }
+    }
+  },
+  "personalSubscriptions": {
+    "heading": "מנויים אישיים (לשימוש אישי בלבד)",
+    "intro": "Claude (Pro/Max), GLM (Z.ai Coding Plan) ו-ChatGPT (Codex) מורשים לך כיחיד, ולכן הם נשמרים רק עבורך ורק ההרצות שלך משתמשות בהם. כל טוקן מוצפן תחת סיסמה אישית (שלעולם אינה נשמרת) שאתה מזין כשאתה מתחיל הרצה כזו; היא נשמרת זמנית בדפדפן זה לזמן מה כדי שלא תפריע לך. הסיסמה היא נוחות בעלת חיכוך נמוך ואות שקיפות שהמערכת לא תשתף את אישור הגישה שלך בשקט, לא חומה מפני מי שמחזיק במפתח המערכת. מודלים אלה אינם ניתנים לשימוש בלוחות זמנים חוזרים.",
+    "vendorField": "מנוי",
+    "labelField": "תווית (אופציונלי)",
+    "labelPlaceholder": "למשל ה-{vendor} שלי",
+    "defaultLabel": "מנוי ה-{vendor} שלי",
+    "passwordField": "סיסמה אישית (6 תווים לפחות)",
+    "passwordPlaceholder": "מגן על הטוקן שלך",
+    "renewsField": "המנוי מתחדש בתאריך (אופציונלי)",
+    "connect": "חבר",
+    "replace": "החלף",
+    "expires": "פג בתאריך {date}",
+    "noExpiry": "לא הוגדרה תפוגה",
+    "renewal": {
+      "expired": "מנוי ה-{vendor} שלך פג. חדש אותו והתחבר מחדש כדי להמשיך להריץ את המודלים שלו.",
+      "soon": "מנוי ה-{vendor} שלך מתחדש בעוד יום {count}. עדכן אותו כאן לאחר החידוש. | מנוי ה-{vendor} שלך מתחדש בעוד {count} ימים. עדכן אותו כאן לאחר החידוש."
+    },
+    "toast": {
+      "connected": "מנוי {vendor} מחובר",
+      "connectFailed": "לא ניתן לחבר את המנוי",
+      "disconnected": "נותק",
+      "disconnectFailed": "לא ניתן לנתק"
+    },
+    "vendors": {
+      "claude": {
+        "label": "Claude (Pro/Max)",
+        "tokenLabel": "טוקן Claude",
+        "step1": "התקן את Claude Code והתחבר עם חשבון ה-Claude Pro/Max שלך: הרץ `claude` פעם אחת והשלם את ההתחברות בדפדפן.",
+        "step2": "צור טוקן ארוך-טווח: הרץ `claude setup-token` והעתק אותו.",
+        "step3": "הדבק אותו למטה ובחר סיסמה אישית כדי להגן עליו."
+      },
+      "glm": {
+        "label": "GLM (Z.ai Coding Plan)",
+        "tokenLabel": "מפתח API של Z.ai",
+        "tokenPlaceholder": "מפתח ה-API של תוכנית GLM Coding Plan שלך",
+        "step1": "פתח את לוח המחוונים של GLM Coding Plan ב-Z.ai וצור מפתח API עבור נקודת הקצה התואמת ל-Anthropic.",
+        "step2": "תוכנית GLM Coding Plan מורשית לך כיחיד, ולכן היא נשמרת כאן לפי משתמש (לא משותפת).",
+        "step3": "הדבק את המפתח למטה ובחר סיסמה אישית כדי להגן עליו."
+      },
+      "codex": {
+        "label": "ChatGPT (Codex)",
+        "tokenLabel": "auth.json של ChatGPT",
+        "step1": "התקן את Codex CLI והתחבר עם חשבון ה-ChatGPT שלך: הרץ `codex login` והשלם את התהליך בדפדפן.",
+        "step2": "פתח את קובץ אישורי הגישה ש-Codex כתב ב-~/.codex/auth.json (ב-Windows %USERPROFILE%\\.codex\\auth.json).",
+        "step3": "העתק את כל תוכן auth.json, הדבק אותו למטה ובחר סיסמה אישית כדי להגן עליו."
+      }
+    }
+  },
+  "inspector": {
+    "container": {
+      "modules": "מודולים ({count})",
+      "taskCount": "משימה {count} | {count} משימות",
+      "allTasks": "כל המשימות ({count})",
+      "tasks": "משימות ({count})",
+      "addTask": "הוסף משימה",
+      "noTasks": "אין עדיין משימות. הוסף אחת כדי להתחיל בעבודה.",
+      "servicesHint": "שירותים הם ארוכי טווח ואינם מסתיימים. העבודה מתבצעת במשימות ובמודולים שלהם."
+    },
+    "epicChildren": {
+      "title": "משימות אפיק",
+      "doneCount": "{done}/{total} הושלמו",
+      "empty": "אף משימה אינה שייכת לאפיק זה עדיין. ייבא את צאצאי האפיק, או הגדר אפיק למשימה.",
+      "unassigned": "לא משויך"
+    },
+    "recurring": {
+      "title": "פייפליין חוזר",
+      "active": "פעיל",
+      "paused": "מושהה",
+      "intervalDays": "{count} ימים",
+      "intervalHours": "{count} שעות",
+      "anyDay": "כל יום",
+      "cadence": "כל {every} · {days}{window} · {timezone}",
+      "weekdays": {
+        "sun": "א׳",
+        "mon": "ב׳",
+        "tue": "ג׳",
+        "wed": "ד׳",
+        "thu": "ה׳",
+        "fri": "ו׳",
+        "sat": "ש׳"
+      },
+      "nextRun": "הרצה הבאה: {time}",
+      "runNow": "הרץ עכשיו",
+      "pause": "השהה",
+      "resume": "המשך",
+      "editCadence": "ערוך תדירות",
+      "recentRuns": "הרצות אחרונות",
+      "runStatus": {
+        "running": "פועל",
+        "done": "הושלם",
+        "failed": "נכשל",
+        "skipped": "דולג"
+      },
+      "updateFailed": "לא ניתן לעדכן את לוח הזמנים",
+      "runNowFailed": "לא ניתן להריץ עכשיו"
+    },
+    "fragments": {
+      "serviceTitle": "מומלצות עבודה לשירות",
+      "serviceEmpty": "אין. סוכנים מודעי-קוד בשירות זה פועלים לפי ההנחיות המוגדרות כברירת מחדל.",
+      "manageBoard": "נהל את ספריית הקטעים של לוח זה…",
+      "manageAccount": "נהל קטעי חשבון…"
+    },
+    "releaseHealth": {
+      "title": "תקינות לאחר שחרור",
+      "clear": "נקה",
+      "connectPrompt": "חבר אינטגרציית תצפיתיות כדי לעקוב אחר שירות זה לאחר שחרורים.",
+      "connectFirst": "חבר תחילה אינטגרציית תצפיתיות",
+      "connect": "חבר",
+      "hint": "הצגים וה-SLO שהשער עוקב אחריהם לאחר ששירות זה משוחרר. הפרד מזהים בפסיקים.",
+      "monitorIds": "מזהי צגים",
+      "sloIds": "מזהי SLO",
+      "envTag": "תגית סביבה (אופציונלי)",
+      "saveMonitoring": "שמור ניטור",
+      "savedToast": "הניטור נשמר",
+      "saveFailed": "לא ניתן לשמור את המיפוי",
+      "clearFailed": "לא ניתן לנקות את המיפוי"
+    },
+    "testConfig": {
+      "title": "תשתית בדיקות",
+      "defaultEnv": "סביבת בדיקות ברירת מחדל",
+      "defaultEnvHint": "ברירת המחדל שאיתה נוצרות המשימות תחת שירות זה. כל משימה יכולה לעקוף אותה בהגדרות הסוכן שלה.",
+      "env": {
+        "ephemeral": "סביבה זמנית",
+        "ephemeralHint": "הבדיקות רצות מול סביבה שהוקצתה",
+        "local": "מקומי (docker-compose)",
+        "localHint": "ה-Tester מקים את התלויות מקומית"
+      },
+      "composePath": "נתיב docker-compose",
+      "browseRepo": "עיין במאגר עבור קובץ ה-compose",
+      "composeHint": "משמש את ה-Tester להקמת התלויות של השירות מקומית.",
+      "selectComposeTitle": "בחר את קובץ docker-compose",
+      "selectComposeHint": "בחר את קובץ ה-compose במאגר. הנתיב שלו נשמר ביחס לשורש המאגר.",
+      "selected": "נבחר: {path}",
+      "noFileSelected": "לא נבחר קובץ.",
+      "useThisFile": "השתמש בקובץ זה",
+      "noInfra": "אין תלויות תשתית (ה-Tester אינו מקים דבר)",
+      "missingInfra": "הגדר נתיב docker-compose או הפעל ללא תלויות תשתית, אחרת פייפליין עם Tester לא יתחיל.",
+      "provisioningTitle": "הקצאת סביבת בדיקות זמנית",
+      "provisioningHint": "רמז להקצאת סביבת הבדיקות הזמנית של שירות זה: לאיזה ספק ענן לפרוס וכמה גדול מופע לבקש. מתעלם בבדיקות מקומיות (docker-compose).",
+      "cloudProvider": "ספק ענן",
+      "instanceSize": "גודל מופע",
+      "providers": {
+        "docker": "Docker (מקומי)",
+        "custom": "מותאם אישית"
+      },
+      "sizes": {
+        "small": "קטן",
+        "medium": "בינוני",
+        "large": "גדול",
+        "xlarge": "גדול במיוחד"
+      }
+    },
+    "agentConfig": {
+      "title": "תצורת סוכן",
+      "inherited": "נורש מהשירות",
+      "frozen": "מוקפא: הסוכן כבר התחיל"
+    },
+    "dependencies": {
+      "title": "תלוי ב",
+      "merged": "מוזג",
+      "notMerged": "טרם מוזג",
+      "empty": "אין תלויות. יכול לרוץ בכל עת.",
+      "blocked": "חסום עד שהתלויות ימוזגו."
+    },
+    "estimate": {
+      "title": "הערכה",
+      "complexity": "מורכבות",
+      "risk": "סיכון",
+      "impact": "השפעה"
+    },
+    "execution": {
+      "stage": {
+        "incorporating": "משלב…",
+        "reviewing": "סוקר מחדש…",
+        "recommending": "ממליץ…"
+      },
+      "prNumber": "PR #{number}",
+      "pullRequest": "Pull request",
+      "stepState": {
+        "pending": "ממתין",
+        "working": "עובד",
+        "waiting_decision": "דורש החלטה",
+        "done": "הושלם"
+      },
+      "failed": "נכשל",
+      "needsDecision": "דורש החלטה",
+      "needsApproval": "דורש אישור",
+      "spinningUp": "מאתחל…",
+      "stop": "עצור",
+      "stopTooltip": "עצור את ההרצה אך שמור אותה (ניתנת לקריאה ולחזרה)",
+      "reset": "אפס",
+      "resetTooltip": "השלך הרצה זו ואפס את המשימה למתוכננת",
+      "viewDetailsOutput": "הצג פרטים וקרא פלט",
+      "viewDetails": "הצג פרטי שלב",
+      "companion": "מלווה",
+      "companionTooltip": "מלווה של שלב מייצר",
+      "subtasksProgress": "{completed} מתוך {total} תת-משימות הושלמו, {inProgress} בתהליך",
+      "subtasksDone": "{completed} מתוך {total} תת-משימות הושלמו",
+      "resolve": "פתור",
+      "decide": "החלט",
+      "review": "סקור",
+      "approve": "אשר",
+      "fragmentsTooltip": "קטעי מומלצות עבודה ששולבו בשלב זה: {fragments}",
+      "standardsApplied": "תקן {count} הוחל | {count} תקנים הוחלו",
+      "companionOf": "{label} (מלווה)",
+      "merged": "מוזג",
+      "open": "פתוח",
+      "mergePr": "מזג PR"
+    },
+    "structure": {
+      "module": "מודול",
+      "modulePlaceholder": "למשל Sessions (נוצר במהלך המימוש אם חדש)",
+      "bestPractices": "מומלצות עבודה",
+      "bestPracticesEmpty": "אין. הסוכנים פועלים לפי ההנחיות המוגדרות כברירת מחדל."
+    },
+    "runSettings": {
+      "unassigned": "לא משויך",
+      "workspaceDefault": "ברירת מחדל של מרחב העבודה",
+      "workspaceDefaultParen": "(ברירת מחדל של מרחב העבודה)",
+      "defaultPresetThresholds": "ברירת מחדל ({name}): {thresholds}",
+      "defaultPreset": "ברירת מחדל ({name})",
+      "noDefault": "אין ברירת מחדל",
+      "inheritWorkspace": "ירש ממרחב העבודה",
+      "on": "פעיל",
+      "off": "כבוי",
+      "inheritOn": "ירש (פעיל)",
+      "inheritOff": "ירש (כבוי)",
+      "technical": {
+        "unset": "לא מוגדר (זיהוי אוטומטי)",
+        "technical": "טכני",
+        "business": "עסקי"
+      },
+      "pipeline": "פייפליין",
+      "pipelineEmpty": "אין ברירת מחדל. בחר פייפליין כשאתה מריץ משימה זו.",
+      "mergePolicy": "מדיניות מיזוג",
+      "mergePresetDetail": "{name}: מיזוג אוטומטי כאשר מורכבות ≤ {complexity}, סיכון ≤ {risk}, השפעה ≤ {impact}; עד {attempts} ניסיונות תיקון CI.",
+      "mergePresetEmpty": "לא הוגדר תבנית. הממזג מעלה התראת סקירה עבור כל PR.",
+      "modelPreset": "תבנית מודל",
+      "modelPresetBase": "בסיס {model}",
+      "modelPresetOverrides": ", עקיפה {count} | , {count} עקיפות",
+      "modelPresetEmpty": "לא הוגדר תבנית. הסוכנים רצים לפי ניתוב ברירת המחדל של הפריסה.",
+      "unavailableModels": "אינם זמינים תחת התצורה הנוכחית: {models}. משימה זו תיכשל בשלבים אלה.",
+      "editPresets": "ערוך תבניות",
+      "configureVendors": "הגדר ספקים",
+      "modelPresetChangeHint": "שינוי זה משפיע רק על שלבים שטרם התחילו.",
+      "taskKind": "סוג משימה",
+      "technicalHint": {
+        "technical": "טכני: המממש מתייחס להגדרת המשימה כעיקרית ולמפרט כייחוס רגרסיה; כותב המפרט עשוי לא לייצר מפרטים עסקיים.",
+        "business": "עסקי: המפרט מוביל, כרגיל.",
+        "unset": "זיהוי אוטומטי: נגזר משלב המפרט. הגדר אותו במפורש כדי לעקוף."
+      },
+      "issueWriteback": "כתיבה חזרה לאישו",
+      "commentOnPrOpen": "הגב בפתיחת PR",
+      "closeOnMerge": "סגור במיזוג",
+      "writebackHint": "כותב חזרה לאישו המקושר במעקב של משימה זו. עוקף את ברירת המחדל של מרחב העבודה.",
+      "responsibleProduct": "מוצר אחראי",
+      "responsibleEmpty": "לא משויך. הגדר בעלים של מוצר כדי ליידע אותו כאשר סקירת הדרישות מסמנת משימה זו.",
+      "autoStartDependents": "הפעלה אוטומטית של תלויות",
+      "autoStartHint": "כאשר משימה זו ממוזגת, הפעל אוטומטית את המשימות התלויות בה (לאחר שגם שאר התלויות שלהן הושלמו)."
+    }
+  },
+  "panels": {
+    "decision": {
+      "title": "נדרשת החלטה",
+      "agentOnBlock": "{agent} על {block}",
+      "visualizationHint": "זוהי הצגה חזותית. כל בחירה פשוט ממשיכה את הצינור."
+    },
+    "stepRestart": {
+      "restartFromStep": "הפעל מחדש את הצינור משלב זה",
+      "restartFromHere": "הפעל מחדש מכאן"
+    },
+    "structuredResult": {
+      "fallbackTitle": "תוצאת הסוכן",
+      "titleWithBlock": "{label}: {title}",
+      "fallbackDescription": "פלט מובנה של הסוכן",
+      "structuredOutput": "פלט מובנה",
+      "noResult": "אין עדיין תוצאה.",
+      "noResultHint": "הפלט המובנה מופיע ברגע שהסוכן מסיים. בזמן הריצה השלב מציג התקדמות חיה על הלוח."
+    },
+    "testReport": {
+      "title": "דוח בדיקות",
+      "greenlit": "אושר",
+      "needsFixes": "דורש תיקונים",
+      "fixAttempts": "{count}/{max} ניסיונות תיקון",
+      "fixing": "· מתקן…",
+      "tested": "נבדק",
+      "outcomes": "תוצאות",
+      "concerns": "חששות"
+    },
+    "stepMeta": {
+      "stateLabel": "מצב",
+      "duration": "משך",
+      "elapsed": "חלף",
+      "step": "שלב",
+      "stepOf": "{number} מתוך {total}",
+      "started": "התחיל",
+      "finished": "הסתיים",
+      "model": "מודל",
+      "notRecorded": "לא נרשם",
+      "run": "ריצה",
+      "clickToCopy": "{id} (לחץ להעתקה)",
+      "spinningUpContainer": "מאתחל מכולה…",
+      "container": {
+        "status": {
+          "starting": "מאתחל מכולה…",
+          "up": "המכולה פועלת",
+          "errored": "שגיאה במכולה",
+          "destroyed": "המכולה שוחררה"
+        },
+        "phase": {
+          "starting": "מתחיל",
+          "clone": "מכין סביבת עבודה",
+          "agent": "הסוכן פועל",
+          "push": "דוחף שינויים",
+          "done": "מסיים"
+        },
+        "id": "מכולה",
+        "url": "כתובת"
+      },
+      "subtasks": "תת-משימות · {completed}/{total}",
+      "standardsApplied": "תקנים שהוחלו",
+      "decision": "החלטה",
+      "awaitingChoice": "ממתין לבחירה אנושית",
+      "approvalGate": "שער אישור",
+      "companionReview": "סקירת מלווה",
+      "correctionIterations": "{count} מחזור תיקון. | {count} מחזורי תיקון.",
+      "state": {
+        "pending": "ממתין",
+        "working": "פועל",
+        "waiting_decision": "דורש קלט",
+        "done": "הושלם",
+        "failed": "נכשל"
+      },
+      "approvalStatus": {
+        "pending": "ממתין",
+        "approved": "אושר",
+        "changes_requested": "התבקשו שינויים",
+        "rejected": "נדחה"
+      }
+    },
+    "stepDetail": {
+      "contents": "תוכן",
+      "details": "פרטים",
+      "approvalRequired": "נדרש אישור",
+      "decisionRequired": "נדרשת החלטה",
+      "expandAll": "הרחב את כל המקטעים",
+      "collapseAll": "כווץ את כל המקטעים",
+      "copyRawOutput": "העתק פלט גולמי",
+      "closeEsc": "סגור (Esc)",
+      "companionCapHeading": "{agent} הגיע למגבלת {attempts} ניסיונות עיבוד מחדש, ועדיין מתחת לרף {threshold}.",
+      "companionCapDetail": "בצע סבב עיבוד אוטומטי נוסף, המשך לשלב הבא תוך קבלת הפלט הנוכחי, או עצור ואפס את המשימה כדי לערוך את הקלטים ולשלוח מחדש.",
+      "infraAttempts": "ניסיונות תשתית",
+      "hideInfraAttempts": "הסתר ניסיונות תשתית",
+      "editingConclusions": "עריכת המסקנות",
+      "editConclusionsPlaceholder": "ערוך את מסקנות הסוכן; העריכות שלך נשמרות כשתאשר…",
+      "noProseOutput": "סוכן זה לא הפיק פלט טקסטואלי.",
+      "approveWithCorrections": "אשר עם תיקונים",
+      "reviewAndApprove": "סקור ואשר",
+      "editHint": "ערוך את המסקנות בצד שמאל; העריכות שלך נשמרות כשתאשר.",
+      "reviewHint": "לחץ על כל בלוק בפלט כדי להגיב עליו, או השאר משוב כללי למטה.",
+      "editingNotice": "אתה עורך את המסקנות ישירות. עריכות ידניות לא ניתנות לשילוב עם הערות לכל בלוק. אשר כדי לשמור אותן, או בטל כדי לחזור לסקירה.",
+      "commentingOn": "מגיב על",
+      "commentPlaceholder": "השאר הערה על בלוק זה…",
+      "addComment": "הוסף הערה",
+      "commentN": "הערה {number}",
+      "removeComment": "הסר הערה",
+      "overallFeedback": "משוב כללי / סיבת דחייה",
+      "overallFeedbackPlaceholder": "תאר את השינויים שהסוכן צריך לבצע (אופציונלי אם השארת הערות לכל בלוק)…",
+      "approveWithEdits": "אשר עם עריכות אלה",
+      "cancelEdits": "בטל עריכות",
+      "approveAndProceed": "אשר והמשך",
+      "rejectConfirmPrompt": "לדחות הצעה זו ולעצור את הריצה לחלוטין?",
+      "confirmReject": "אשר דחייה",
+      "requestChanges": "בקש שינויים",
+      "reject": "דחה",
+      "requestChangesHint": "בקשת שינויים מריצה מחדש שלב זה עם המשוב וההערות שלך. דחייה עוצרת את הריצה לחלוטין."
+    },
+    "inspector": {
+      "frameStatus": {
+        "planned": "אין משימות",
+        "ready": "חי",
+        "in_progress": "פעיל",
+        "blocked": "דורש תשומת לב",
+        "pr_ready": "פעיל",
+        "done": "חי"
+      },
+      "deleteRecurringPipeline": "מחק צינור חוזר",
+      "deleteTask": "מחק משימה",
+      "deleteModule": "מחק מודול",
+      "deleteService": "מחק שירות",
+      "titlePlaceholder": "כותרת…",
+      "reworkedRequirements": "דרישות מעובדות מחדש",
+      "agentStepsUseDocument": "שלבי הסוכן משתמשים במסמך זה.",
+      "open": "פתח",
+      "originalDescriptionFrozen": "תיאור מקורי (מוקפא)",
+      "noDescription": "אין תיאור",
+      "describeBlock": "תאר בלוק זה…",
+      "taskStartedLocked": "משימה זו התחילה. פרטיה נעולים.",
+      "lastIncorporatedRequirements": "הדרישות האחרונות ששולבו",
+      "priorDocHint": "מהסקירה הקודמת. השתמש בו כבסיס: ערוך את התיאור למעלה ושלח מחדש.",
+      "bootstrapping": "מאתחל…",
+      "importIssue": "ייבא ניושן",
+      "connectTracker": "חבר מערכת מעקב",
+      "spawnFromDocument": "צור ממסמך",
+      "viewRequirements": "הצג דרישות",
+      "reRun": "הרץ מחדש",
+      "run": "הרץ",
+      "focus": "מקד"
+    }
+  },
+  "observability": {
+    "modelActivity": "פעילות המודל",
+    "viewAllCalls": "הצג את כל הקריאות →",
+    "providedContext": "ההקשר שסופק",
+    "exportJson": "ייצא JSON",
+    "exportHint": "הורד ייצוא JSON ידידותי-LLM של ריצה זו",
+    "closeEsc": "סגור (Esc)",
+    "loadingActivity": "טוען פעילות מודל…",
+    "loadingContext": "טוען את ההקשר שסופק…",
+    "noCalls": "לא נרשמו קריאות מודל עבור ריצה זו.",
+    "noContext": "לא אוחסן הקשר סוכן עבור ריצה זו. הוא נלכד בכל שיגור כשבסביבת העבודה מופעל 'אחסן הקשר סוכן מלא'.",
+    "summary": {
+      "calls": "קריאות",
+      "tokensInOut": "טוקנים (נכנס / יוצא)",
+      "transportOverhead": "תקורת תעבורה",
+      "modelExecution": "הרצת מודל",
+      "truncated": "{count} נקטע | {count} נקטעו"
+    },
+    "metricsBar": {
+      "calls": "{count} קריאה | {count} קריאות",
+      "promptCompletionTokens": "טוקני פרומפט / השלמה",
+      "cachedTokens": "({tokens} במטמון)",
+      "cachedTokensHint": "טוקני פרומפט שהוגשו ממטמון הספק",
+      "errors": "{count} שגיאה | {count} שגיאות",
+      "warnings": "{count} אזהרה | {count} אזהרות",
+      "outputLimit": "מגבלת פלט",
+      "truncatedCalls": "{count} קריאה נקטעה במגבלה | {count} קריאות נקטעו במגבלה",
+      "transportVsExecution": "תעבורה לעומת הרצה",
+      "transportOverhead": "תקורת תעבורה / פרוקסי",
+      "modelExecution": "הרצת מודל"
+    },
+    "call": {
+      "tokensTitle": "{prompt} טוקני פרומפט / {completion} טוקני השלמה",
+      "outputUsedVsLimit": "פלט בשימוש לעומת המגבלה",
+      "transportVsExecution": "תקורת תעבורה / הרצת מודל",
+      "error": "שגיאה",
+      "ok": "תקין",
+      "messages": "{count} הודעות",
+      "tools": "{count} כלים",
+      "streamed": "הוזרם",
+      "buffered": "באגירה",
+      "maxTokens": "max_tokens {value}",
+      "promptCached": "{cached}/{prompt} טוקני פרומפט במטמון",
+      "total": "סך הכל {duration}",
+      "prompt": "פרומפט",
+      "promptPrefixOmitted": "(הודעות חדשות בלבד: {count} מוקדמות יותר הושמטו)",
+      "response": "תגובה",
+      "reasoning": "חשיבה"
+    },
+    "context": {
+      "injectedFiles": "קבצי הקשר שהוזרקו",
+      "bestPracticeFragments": "מקטעי שיטות עבודה מומלצות",
+      "filesCount": "{count} קבצים",
+      "fragmentsCount": "{count} מקטעים",
+      "systemPrompt": "פרומפט מערכת",
+      "userPrompt": "פרומפט משתמש",
+      "details": "פרטים"
+    }
+  },
+  "auth": {
+    "gate": {
+      "loading": "טוען…"
+    },
+    "localMode": {
+      "continueWithConfigured": "התחבר באמצעות PAT מוגדר של {provider}",
+      "noPatTitle": "לא הוגדר טוקן לבקרת מקור",
+      "noPatBody": "הגדר את GITHUB_PAT או GITLAB_PAT בקובץ ה-.env שלך כדי להתחבר עם טוקן גישה אישי, ואז הפעל מחדש את השרת.",
+      "createToken": "צור טוקן {provider} ↗",
+      "orDivider": "או",
+      "failed": "ההתחברות נכשלה. ודא שהטוקן המוגדר תקף ונסה שוב."
+    },
+    "signInRequired": {
+      "personalSubscriptions": "מנויים אישיים נשמרים לחשבונך, אך פריסה זו פועלת ללא התחברות, כך שלא ניתן לאחסן אותם כאן. השתמש במאגר סביבת העבודה או במפתח API של ספק במקום זאת.",
+      "userApiKeys": "מפתחות ה-API האישיים שלך נשמרים לחשבונך, אך פריסה זו פועלת ללא התחברות, כך שלא ניתן לאחסן אותם כאן. החלף את ההיקף ל\"סביבת עבודה זו\" כדי להוסיף מפתח משותף."
+    },
+    "login": {
+      "appTitle": "לוח ארכיטקטורה",
+      "subtitle": "התחבר כדי להמשיך.",
+      "inviteSubtitle": "קבל את ההזמנה שלך כדי להמשיך.",
+      "forgotSubtitle": "אפס את הסיסמה שלך.",
+      "continueWithGithub": "המשך עם GitHub",
+      "continueWithGoogle": "המשך עם Google",
+      "or": "או",
+      "namePlaceholder": "שם (אופציונלי)",
+      "emailPlaceholder": "אימייל",
+      "passwordPlaceholder": "סיסמה",
+      "createAccount": "צור חשבון",
+      "signIn": "התחבר",
+      "signUp": "הרשם",
+      "needAccount": "צריך חשבון? {signUp}",
+      "haveAccount": "כבר יש לך חשבון? {signIn}",
+      "forgotPassword": "שכחת סיסמה?",
+      "forgotSent": "אם קיים חשבון עבור אימייל זה, קישור לאיפוס סיסמה בדרך. בדוק את תיבת הדואר הנכנס שלך.",
+      "sendResetLink": "שלח קישור איפוס",
+      "backToSignIn": "חזרה להתחברות",
+      "signInFailed": "ההתחברות נכשלה. בדוק את הפרטים שלך ונסה שוב.",
+      "genericError": "משהו השתבש. אנא נסה שוב."
+    },
+    "resetPassword": {
+      "title": "אפס סיסמה",
+      "subtitle": "בחר סיסמה חדשה לחשבונך.",
+      "doneBody": "הסיסמה שלך אופסה. כעת תוכל להתחבר עם הסיסמה החדשה שלך.",
+      "goToSignIn": "עבור להתחברות",
+      "missingToken": "בקישור איפוס זה חסר הטוקן שלו. בקש קישור חדש ממסך ההתחברות.",
+      "backToSignIn": "חזרה להתחברות",
+      "newPasswordPlaceholder": "סיסמה חדשה",
+      "confirmPasswordPlaceholder": "אשר סיסמה חדשה",
+      "submit": "אפס סיסמה",
+      "errorTooShort": "הסיסמה חייבת להכיל לפחות 8 תווים.",
+      "errorMismatch": "הסיסמאות אינן תואמות.",
+      "errorInvalidLink": "קישור איפוס הסיסמה הזה אינו תקף או שתוקפו פג."
+    },
+    "userMenu": {
+      "mySetup": "ההגדרות שלי",
+      "signOut": "התנתק"
+    }
+  },
+  "layout": {
+    "accountDeployment": {
+      "title": "אינטגרציות פריסה",
+      "intro": "אישורים המשותפים לכל סביבות העבודה בחשבון זה, מאוחסנים מוצפנים. הערכים לעולם אינם מוצגים לאחר השמירה; השאר שדה ריק כדי לשמור על הסוד המאוחסן.",
+      "configured": "מוגדר",
+      "notSet": "לא הוגדר",
+      "clear": "נקה",
+      "loadFailed": "לא ניתן היה לטעון את הגדרות הפריסה",
+      "slack": {
+        "title": "אפליקציית Slack (OAuth)",
+        "description": "מפעיל את תהליך ה-OAuth של \"הוסף ל-Slack\". בלעדיו, סביבות עבודה עדיין יכולות להתחבר ל-Slack על ידי הדבקת אסימון בוט.",
+        "clientId": "Client ID",
+        "clientSecret": "Client secret",
+        "redirectUrl": "כתובת הפניה (Redirect URL)",
+        "validation": "הזן את ה-client id, ה-secret וכתובת ההפניה",
+        "saved": "Slack OAuth נשמר",
+        "saveFailed": "לא ניתן היה לשמור את Slack OAuth",
+        "cleared": "Slack OAuth נוקה",
+        "clearFailed": "לא ניתן היה לנקות את Slack OAuth"
+      },
+      "linear": {
+        "title": "אפליקציית Linear (OAuth)",
+        "description": "מפעיל את תהליך ה-OAuth של \"התחבר עם Linear\". בלעדיו, סביבות עבודה עדיין יכולות להתחבר ל-Linear על ידי הדבקת מפתח API אישי.",
+        "clientId": "Client ID",
+        "clientSecret": "Client secret",
+        "redirectUrl": "כתובת הפניה (Redirect URL)",
+        "validation": "הזן את ה-client id, ה-secret וכתובת ההפניה",
+        "saved": "Linear OAuth נשמר",
+        "saveFailed": "לא ניתן היה לשמור את Linear OAuth",
+        "cleared": "Linear OAuth נוקה",
+        "clearFailed": "לא ניתן היה לנקות את Linear OAuth"
+      },
+      "web": {
+        "title": "חיפוש אינטרנט בקונטיינר",
+        "description": "מקור החיפוש שאליו ניגשים סוכני קונטיינר דרך פרוקסי ה-backend. הגדר מפתח Brave (מומלץ), או כתובת SearXNG בארחה עצמית (עם מפתח bearer אופציונלי).",
+        "configured": "מוגדר ({provider})",
+        "braveKey": "מפתח API של Brave",
+        "searxngUrl": "כתובת SearXNG",
+        "searxngKey": "מפתח SearXNG (אופציונלי)",
+        "validation": "הזן מפתח Brave או כתובת SearXNG",
+        "saved": "מפתחות חיפוש האינטרנט נשמרו",
+        "saveFailed": "לא ניתן היה לשמור את מפתחות חיפוש האינטרנט",
+        "cleared": "מפתחות חיפוש האינטרנט נוקו",
+        "clearFailed": "לא ניתן היה לנקות את מפתחות חיפוש האינטרנט"
+      },
+      "contentStorage": {
+        "title": "אחסון תוכן",
+        "description": "היכן מאוחסנים צילומי המסך של בודק ה-UI ותמונות עיצוב הייחוס עבור חשבון זה. המטא-נתונים תמיד נמצאים במסד הנתונים; רק בתי הקובץ עוברים ל-backend הנבחר.",
+        "default": "ברירת מחדל ({backend})",
+        "backends": {
+          "off": "כבוי (אחסון מושבת)",
+          "fs": "מערכת קבצים מקומית",
+          "s3": "Amazon S3 / תואם S3",
+          "r2": "Cloudflare R2",
+          "db": "מסד נתונים Postgres"
+        },
+        "basePath": "נתיב בסיס (ברירת מחדל: .file-storage)",
+        "region": "אזור (לדוגמה us-east-1)",
+        "bucket": "Bucket",
+        "prefix": "קידומת מפתח (אופציונלי)",
+        "endpoint": "Endpoint (אופציונלי, תואם S3)",
+        "forcePathStyle": "אכוף מיעון בסגנון נתיב (רוב אחסוני תואמי S3)",
+        "accessKeys": "מפתחות גישה",
+        "accessKeyId": "מזהה מפתח גישה",
+        "secretAccessKey": "מפתח גישה סודי",
+        "keysHint": "המפתחות מאוחסנים מוצפנים ולעולם אינם מוצגים לאחר השמירה; השאר ריק כדי לשמור על המפתחות המאוחסנים.",
+        "regionBucketValidation": "הזן את אזור ה-S3 ואת ה-bucket",
+        "bothKeysValidation": "הזן הן את מזהה מפתח הגישה והן את הסוד",
+        "keysValidation": "הזן את מזהה מפתח הגישה והסוד של S3",
+        "saved": "אחסון התוכן נשמר",
+        "saveFailed": "לא ניתן היה לשמור את אחסון התוכן"
+      }
+    },
+    "accountFragments": {
+      "intro": "הנחיות לשיטות עבודה מומלצות המשותפות לכל הלוחות בחשבון זה. כל לוח יורש אותן ויכול לעקוף או להוסיף משלו. סוכנים מודעי-קוד (מתכנת, סוקר, ארכיטקט, מתקנים) משלבים את הרלוונטיות בפרומפט שלהם."
+    },
+    "accountTeam": {
+      "roles": {
+        "admin": "מנהל",
+        "developer": "מפתח",
+        "product": "מוצר"
+      },
+      "org": {
+        "ctaTitle": "הזמן חברי צוות ונהל תפקידים",
+        "ctaBody": "חברים, תפקידים והזמנות נמצאים בארגון. צור ארגון כדי להזמין חברי צוות ולנהל את תפקידיהם; הלוחות האישיים שלך נשארים כפי שהם.",
+        "namePlaceholder": "Acme Inc.",
+        "create": "צור ארגון",
+        "created": "הארגון נוצר"
+      },
+      "members": {
+        "title": "חברים",
+        "empty": "אין חברים עדיין."
+      },
+      "invite": {
+        "title": "הזמן חבר צוות",
+        "submit": "הזמן",
+        "revoke": "בטל הזמנה",
+        "created": "ההזמנה נוצרה",
+        "createdEmailed": "נשלח אימייל (או העתק את הקישור מהרשימה למטה).",
+        "createdShareLink": "שתף את קישור הקבלה עם חבר הצוות שלך.",
+        "status": {
+          "pending": "ממתין",
+          "accepted": "התקבל",
+          "revoked": "בוטל"
+        }
+      },
+      "email": {
+        "title": "שולח אימייל",
+        "notEnabled": "משלוח אימייל אינו מופעל בפריסה זו. הזמנות עדיין מייצרות קישור קבלה שניתן לשתף.",
+        "connectedAs": "מחובר דרך {provider} בתור {from}",
+        "disconnect": "נתק",
+        "connect": "חבר שולח אימייל",
+        "connected": "שולח האימייל חובר",
+        "fromPlaceholder": "כתובת השולח",
+        "apiKeyPlaceholder": "מפתח API של הספק",
+        "providers": {
+          "resend": "Resend",
+          "sendgrid": "SendGrid"
+        }
+      },
+      "apiKeys": {
+        "title": "מפתחות API של החשבון"
+      },
+      "errors": {
+        "updateRoles": "לא ניתן היה לעדכן תפקידים",
+        "loadSettings": "לא ניתן היה לטעון את הגדרות הצוות",
+        "createOrg": "לא ניתן היה ליצור ארגון",
+        "sendInvite": "לא ניתן היה לשלוח הזמנה",
+        "revokeInvite": "לא ניתן היה לבטל הזמנה",
+        "connectEmail": "לא ניתן היה לחבר שולח אימייל",
+        "disconnectEmail": "לא ניתן היה לנתק שולח אימייל"
+      }
+    },
+    "boardSwitcher": {
+      "accountFallback": "חשבון",
+      "boardFallback": "לוח",
+      "providers": {
+        "docker": "Docker (מקומי)",
+        "custom": "מותאם אישית"
+      },
+      "account": {
+        "newOrg": "ארגון חדש…",
+        "settings": "הגדרות חשבון…",
+        "defaultProvider": "ספק ענן ברירת מחדל"
+      },
+      "board": {
+        "new": "לוח חדש…",
+        "rename": "שנה שם לוח…",
+        "delete": "מחק לוח"
+      },
+      "prompt": {
+        "create": "צור",
+        "nameLabel": "שם",
+        "descriptionLabel": "תיאור",
+        "descriptionHint": "אופציונלי",
+        "descriptionPlaceholder": "למה משמש לוח זה?",
+        "account": {
+          "title": "ארגון חדש",
+          "placeholder": "Acme Inc."
+        },
+        "board": {
+          "title": "לוח חדש",
+          "placeholder": "לוח ללא כותרת"
+        },
+        "rename": {
+          "title": "הגדרות לוח",
+          "placeholder": "שם הלוח"
+        }
+      },
+      "toast": {
+        "updateProviderFailed": "לא ניתן היה לעדכן את ספק ברירת המחדל",
+        "switchAccountFailed": "לא ניתן היה להחליף חשבון",
+        "openBoardFailed": "לא ניתן היה לפתוח את הלוח",
+        "boardDeleted": "הלוח נמחק",
+        "deleteBoardFailed": "לא ניתן היה למחוק את הלוח"
+      }
+    },
+    "notifications": {
+      "heading": "דורש את תשומת לבך",
+      "overdue": "באיחור",
+      "openPr": "פתח PR",
+      "dismiss": "בטל",
+      "action": {
+        "merge_review": "מזג",
+        "pipeline_complete": "אשר ומזג",
+        "ci_failed": "נסה הרצה שוב",
+        "test_failed": "נסה הרצה שוב",
+        "requirement_review": "סמן כנקרא",
+        "clarity_review": "סמן כנקרא",
+        "release_regression": "אשר",
+        "decision_required": "סמן כנקרא",
+        "human_test_ready": "סמן כנקרא",
+        "visual_confirmation_ready": "סמן כנקרא",
+        "human_review": "סמן כנקרא",
+        "followup_pending": "סמן כנקרא",
+        "markRead": "סמן כנקרא"
+      }
+    },
+    "aiProvidersBanner": {
+      "setup": {
+        "title": "לא הוגדר מודל AI",
+        "body": "סוכנים זקוקים למודל כדי לרוץ. AI עובד מהקופסה רק בפריסת Cloudflare עם Workers AI מופעל. אחרת, חבר מפתח ספק, מנוי, פרוקסי או מריץ מקומי כדי להמשיך.",
+        "action": "הגדר AI"
+      },
+      "preset": {
+        "title": "ערכת מודל ברירת המחדל משתמשת במודלים שאינם זמינים",
+        "body": "משימות המשתמשות בערכת ברירת המחדל ייכשלו. ערוך את הערכה או הגדר את הספק החסר.",
+        "action": "סקור ערכה"
+      }
+    },
+    "githubPatBanner": {
+      "title": "GitHub PAT אינו מוגדר",
+      "body": "מצב מקומי ניגש ל-GitHub באמצעות אסימון גישה אישי. בלעדיו, שלבי סוכן המבצעים שכפול, דחיפה, פתיחת PR, בקרת CI או מיזוג ייכשלו.",
+      "createToken": "צור אסימון GitHub (ההרשאות נבחרו מראש)",
+      "thenSet": "לאחר מכן הגדר {envVar} והפעל מחדש."
+    },
+    "providerConfigBanner": {
+      "titleMany": "ספקים זקוקים להגדרה",
+      "titleOne": {
+        "environment": "ספק הסביבה זקוק להגדרה",
+        "runner-pool": "מאגר המריצים זקוק להגדרה"
+      },
+      "body": "ספק מחווט עבור מופע זה אך חסרות לו הגדרות נדרשות, ולכן הוא אינו יכול לרוץ עדיין. הוסף את השדות החובה כדי לסיים את חיבורו.",
+      "action": {
+        "environment": "הגדר ספק סביבה",
+        "runner-pool": "הגדר מאגר מריצים"
+      }
+    },
+    "spendWarningBanner": {
+      "title": "מגבלת ההוצאה הושגה, הרצת הסוכנים הושהתה",
+      "body": "הוצאת האסימונים של החודש הגיעה לתקציב המוגדר, ולכן צינורות פעילים הושהו כדי להימנע מעלות נוספת. ההרצה מתחדשת אוטומטית כשהתקציב מתחדש בחודש הבא, או כאשר המגבלה מועלית.",
+      "spent": "הוצא",
+      "budget": "תקציב",
+      "tokens": "אסימונים",
+      "resume": "המשך בכל זאת",
+      "resumeHint": "המשך ימשיך בהוצאה; הוא יושהה שוב אם עדיין מעל התקציב."
+    },
+    "personalSetup": {
+      "title": "ההגדרות שלי",
+      "intro": "החיבורים האישיים שלך, המשמשים להרצות שאתה מתחיל וגלויים רק לך.",
+      "connected": "מחובר",
+      "notConnected": "לא מחובר",
+      "connectedCount": "לא מחוברים | {count} מחוברים | {count} מחוברים",
+      "sourceControl": {
+        "title": "בקרת מקור"
+      },
+      "githubToken": {
+        "label": "אסימון ה-GitHub שלי",
+        "description": "אסימון גישה אישי המשמש להרצות שאתה מתחיל (דחיפות, PR, CI, מיזוג)."
+      },
+      "models": {
+        "title": "מודלים"
+      },
+      "localRunners": {
+        "label": "המריצים המקומיים שלי",
+        "description": "מריצי מודלים על המכונה שלך (Ollama, LM Studio, vLLM)."
+      },
+      "subscriptions": {
+        "label": "המנויים שלי",
+        "description": "תוכניות לשימוש אישי שאתה פותח באמצעות סיסמה אישית (Claude, GLM, Codex)."
+      }
+    },
+    "integrationBack": {
+      "backToMySetup": "חזרה להגדרות שלי",
+      "backToIntegrations": "חזרה לאינטגרציות"
+    },
+    "commandBar": {
+      "searchPlaceholder": "חפש או הרץ פקודה…",
+      "noMatches": "אין פקודות תואמות.",
+      "groups": {
+        "create": "יצירה",
+        "repositories": "מאגרים",
+        "integrations": "אינטגרציות",
+        "workspace": "סביבת עבודה",
+        "account": "חשבון"
+      },
+      "cmd": {
+        "newPipeline": "בנה צינור",
+        "addFromRepo": "הוסף שירות ממאגר קיים",
+        "bootstrapRepo": "אתחל מאגר חדש",
+        "githubManage": "נהל חיבור GitHub",
+        "githubConnect": "חבר GitHub",
+        "slackManage": "נהל התראות Slack",
+        "slackConnect": "חבר Slack",
+        "sourceManage": "נהל {source}",
+        "sourceConnect": "חבר {source}",
+        "documentImport": "ייבא וצור ממסמכים",
+        "taskImport": "ייבא בעיות",
+        "fragments": "ספריית מקטעי הקשר",
+        "mergeThresholds": "ספי מיזוג",
+        "workspaceSettings": "הגדרות סביבת עבודה",
+        "modelConfiguration": "תצורת מודל",
+        "serviceFragmentDefaults": "שיטות עבודה מומלצות לשירות כברירת מחדל",
+        "accountSettings": "הגדרות חשבון",
+        "localModels": "המריצים המקומיים שלי",
+        "sandbox": "פתח ארגז חול"
+      },
+      "keywords": {
+        "newPipeline": "צינור סוכנים שרשרת",
+        "addFromRepo": "github ייבוא קיים",
+        "bootstrapRepo": "פיגום יצירה ארכיטקטורת ייחוס",
+        "github": "git מאגרים בקשות משיכה בעיות",
+        "slack": "slack התראות ערוץ אזכורים",
+        "documentSource": "מסמך מקור prd rfc",
+        "documentImport": "מסמך ייבוא יצירה",
+        "taskSource": "משימה מקור עוקב בעיות",
+        "taskImport": "משימה ייבוא בעיות",
+        "fragments": "מקטעי פרומפט שיטות עבודה מומלצות הנחיות הקשר",
+        "mergeThresholds": "מדיניות מיזוג ערכה מיזוג-אוטומטי ci",
+        "workspaceSettings": "הגבל משימות פעילות לכל שירות המתנה הסלמה איחור פסק זמן התראה",
+        "modelConfiguration": "מודל llm ניתוב סוג סוכן ברירת מחדל ערכה תצורה",
+        "serviceFragmentDefaults": "מקטע שיטת עבודה מומלצת הנחיה שירות ברירת מחדל מודע-קוד",
+        "accountSettings": "חשבון צוות חברים תפקידים הזמנות אימייל מפתחות api מקטע ספריית שיטות עבודה מומלצות הקשר ארגון אישי",
+        "localModels": "מקומי מודל מריץ ollama lm studio llamacpp vllm endpoint",
+        "sandbox": "ארגז חול פרומפט מודל בדיקה ניסוי שיפוט פיקסצ'ר בנצ'מרק הערכה"
+      }
+    },
+    "integrationsHub": {
+      "title": "אינטגרציות",
+      "intro": "חבר ונהל את המערכות החיצוניות שסביבת עבודה זו יכולה לקשר.",
+      "searchPlaceholder": "חפש אינטגרציות…",
+      "noMatches": "אין אינטגרציות התואמות ל-\"{query}\".",
+      "getStarted": {
+        "title": "צא לדרך",
+        "body": "חבר מקור קוד וספק מודל כדי להריץ את הצינור הראשון שלך."
+      },
+      "status": {
+        "connected": "מחובר",
+        "keyConnected": "מפתח מחובר",
+        "notConnected": "לא מחובר",
+        "needsAttention": "דורש תשומת לב",
+        "disabled": "מושבת",
+        "recommended": "מומלץ"
+      },
+      "groups": {
+        "models": "מודלים וספקים",
+        "sourceControl": "בקרת מקור",
+        "communication": "תקשורת",
+        "documents": "מסמכים",
+        "taskTrackers": "עוקבי משימות",
+        "observability": "תצפיתיות",
+        "personal": "אישי (רק אתה)"
+      },
+      "items": {
+        "openrouter": {
+          "description": "שער אחד ל-300+ מודלים. הוסף את המפתח שלך והפעל מודלים במקום אחד."
+        },
+        "vendors": {
+          "label": "ספקים ומפתחות",
+          "description": "מנויי LLM של סביבת העבודה ומפתחות API של ספקים."
+        },
+        "github": {
+          "description": "חבר את אפליקציית ה-GitHub של סביבת העבודה, עיין במאגרים, ב-PR ובבעיות."
+        },
+        "slack": {
+          "description": "נתב התראות לסביבת ה-Slack של הצוות שלך."
+        },
+        "documentSource": {
+          "description": "קשר את {source} כמקור מסמכים עבור הקשר דרישות."
+        },
+        "documentImport": {
+          "label": "ייבא וצור",
+          "description": "משוך מסמכים ממקור מחובר וצור מבנה."
+        },
+        "taskSource": {
+          "description": "קשר את {source} כדי לייבא ולהפנות לבעיות עוקב."
+        },
+        "taskImport": {
+          "label": "ייבא בעיות",
+          "description": "משוך בעיות מעוקב מחובר אל הלוח."
+        },
+        "trackerSettings": {
+          "label": "הגדרות עוקב בעיות"
+        },
+        "observability": {
+          "label": "בריאות לאחר שחרור",
+          "description": "עקוב אחר מוניטורים ו-SLO לאחר שחרור גרסה (Datadog)."
+        },
+        "githubPat": {
+          "label": "אסימון ה-GitHub שלי",
+          "description": "אסימון גישה אישי המשמש להרצות שאתה מתחיל (דחיפות, PR, CI, מיזוג)."
+        },
+        "localRunners": {
+          "label": "המריצים המקומיים שלי",
+          "description": "מריצי מודלים על המכונה שלך (Ollama, LM Studio, vLLM…)."
+        }
+      }
+    }
+  },
+  "settings": {
+    "modelConfiguration": {
+      "title": "הגדרת מודלים",
+      "subtitle": "תצורות שממפות מודל לכל סוכן. משימה בוחרת אחת; משימות משתמשות כברירת מחדל בתצורת ברירת המחדל של סביבת העבודה.",
+      "back": "חזרה",
+      "closeEsc": "סגירה (Esc)",
+      "quota": "מכסה",
+      "list": {
+        "intro": "כל תצורה קובעת {baseModel} לכל סוכן, עם אפשרות לעקיפות לכל סוכן. מודל מוצמד למשימה בודדת עדיין עוקף את התצורה.",
+        "introBaseModel": "מודל בסיס",
+        "newPreset": "תצורה חדשה",
+        "loadingCatalog": "טוען קטלוג מודלים…",
+        "default": "ברירת מחדל",
+        "setDefaultTitle": "הגדר כברירת מחדל של סביבת העבודה",
+        "editTitle": "עריכת תצורה",
+        "deleteDisabledTitle": "לא ניתן למחוק את תצורת ברירת המחדל",
+        "deleteTitle": "מחיקת תצורה",
+        "basePrefix": "בסיס:",
+        "overrideCount": "עקיפה אחת | {count} עקיפות",
+        "empty": "אין עדיין תצורות. צור אחת כדי למפות מודלים לסוכנים שלך."
+      },
+      "editor": {
+        "useBaseModel": "השתמש במודל הבסיס",
+        "baseModel": "מודל בסיס",
+        "nameLabel": "שם",
+        "namePlaceholder": "לדוגמה Kimi K2.7",
+        "baseModelLabel": "מודל בסיס (חל על כל סוכן)",
+        "makeDefault": "הפוך לברירת המחדל של סביבת העבודה",
+        "perAgentOverrides": "עקיפות לכל סוכן",
+        "filterPlaceholder": "סינון סוכנים…",
+        "noAgentsMatch": "אין סוכנים התואמים ל\"{filter}\".",
+        "saveChanges": "שמירת שינויים",
+        "createPreset": "יצירת תצורה"
+      },
+      "toast": {
+        "setDefaultFailed": "לא ניתן היה להגדיר את תצורת ברירת המחדל",
+        "deleteFailed": "לא ניתן היה למחוק את התצורה",
+        "nameRequiredTitle": "נדרש שם",
+        "nameRequiredBody": "תן לתצורה שם.",
+        "saveFailed": "לא ניתן היה לשמור את התצורה"
+      }
+    },
+    "account": {
+      "title": "הגדרות חשבון",
+      "noAccount": "לא נבחר חשבון.",
+      "tabs": {
+        "team": "צוות וגישה",
+        "fragments": "מקטעי הקשר"
+      }
+    },
+    "infrastructure": {
+      "active": "פעיל: {backend}",
+      "registerHint": "רשום מאגר מריצים למטה כדי לאפשר זאת.",
+      "updateFailed": "לא ניתן היה לעדכן את מנגנון ההרצה",
+      "executionBackend": {
+        "label": "היכן הסוכנים רצים",
+        "local-docker": "Docker מקומי (מארח)",
+        "local-dockerDesc": "הרץ כל סוכן בקונטיינר על דמון ה-Docker של מכונה זו.",
+        "cloudflare-containers": "Cloudflare Containers (מובנה)",
+        "cloudflare-containersDesc": "הרץ סוכנים על פלטפורמת הקונטיינרים המובנית של Cloudflare, אחד לכל הרצה.",
+        "kubernetes": "אשכול Kubernetes",
+        "kubernetesDesc": "הרץ כל סוכן כ-pod באשכול Kubernetes שאתה מפעיל.",
+        "runner-pool": "מאגר מריצים מותאם (HTTP)",
+        "runner-poolDesc": "נתב סוכנים למתזמן משלך מאחורי ממשק מניפסט HTTP.",
+        "k3s": "Kubernetes מקומי (k3s)",
+        "k3sDesc": "ממולא מראש עבור אשכול k3s/k3d מקומי על מכונה זו — רק הדבק אסימון."
+      },
+      "testEnvBackend": {
+        "label": "היכן רצות סביבות הבדיקה",
+        "local-compose": "docker-compose בתוך הקונטיינר",
+        "local-composeDesc": "הקם את תלויות סוכן הבדיקה עם docker-compose בתוך הקונטיינר של ההרצה.",
+        "kubernetes": "אשכול Kubernetes",
+        "kubernetesDesc": "הקצה מרחב שמות לכל PR באשכול Kubernetes שאתה מפעיל.",
+        "environment-provider": "ספק HTTP מותאם",
+        "environment-providerDesc": "הקצה סביבות ארעיות דרך ממשק ניהול HTTP משלך."
+      }
+    },
+    "providerConnection": {
+      "fallbackTitle": "ספק",
+      "windowTitle": "תשתית",
+      "noneAvailable": "אין ספקי תשתית מופעלים בפריסה זו.",
+      "tabs": {
+        "agentContainers": "קונטיינרים של סוכנים",
+        "testEnvironments": "סביבות בדיקה"
+      },
+      "kind": {
+        "environment": {
+          "title": "ספק סביבות ארעיות",
+          "blurb": "היכן סוכן הבדיקה רץ מול סביבת תצוגה מקדימה חיה. הגדר את הגדרות סביבת העבודה והאישורים שהספק שלך זקוק להם."
+        },
+        "runner-pool": {
+          "title": "מנגנון מריצי סוכנים",
+          "blurb": "היכן סוכני הקוד רצים כשלא משתמשים ב-Cloudflare Containers. בחר מאגר מריצים בניהול עצמי (מתזמן משלך) או אשכול Kubernetes, ואז הגדר את נקודת הקצה והאישורים שלו."
+        }
+      },
+      "kubernetesEnv": {
+        "label": "שם",
+        "labelPlaceholder": "אשכול תצוגה מקדימה",
+        "apiServerUrl": "כתובת שרת API",
+        "apiServerUrlHelp": "השורש של kube-apiserver, לדוגמה https://10.0.0.1:6443. המתזמן מחיל את המניפסטים של כל PR דרך ה-apiserver, כך שרק נקודת קצה זו צריכה להיות נגישה.",
+        "apiToken": "אסימון ServiceAccount",
+        "apiTokenHelp": "אסימון נושא עם הרשאות RBAC ליצירת מרחבי שמות והחלת משאבי האופרטור. נשמר מוצפן; לא יוצג שוב לעולם.",
+        "manifestSourceLabel": "מקור מניפסט",
+        "sourceColocated": "ממוקם יחד במאגר ה-PR",
+        "sourceSeparate": "מאגר נפרד",
+        "repo": "מאגר מניפסטים",
+        "repoHelp": "ה-owner/repo המכיל את מניפסטי ה-Kubernetes, לדוגמה acme/preview-manifests.",
+        "ref": "Ref",
+        "refHelp": "ענף, תג או SHA לקריאת המניפסטים. ריק משתמש בענף ברירת המחדל של המאגר.",
+        "path": "נתיב מניפסט",
+        "pathHelp": "קובץ או תיקייה בתוך המאגר המכילים את המשאבים להחלה.",
+        "urlSourceLabel": "כתובת סביבה",
+        "urlIngressTemplate": "תבנית מארח Ingress",
+        "urlIngressStatus": "קרא סטטוס Ingress",
+        "urlServiceStatus": "קרא סטטוס Service",
+        "hostTemplate": "תבנית מארח",
+        "hostTemplateHelp": "תבנית מארח שעוברת עיבוד עם משתני ההקצאה כגון branch ו-pullNumber; המארח המעובד הופך לכתובת הסביבה.",
+        "ingressName": "שם Ingress",
+        "ingressNameHelp": "ה-Ingress שממנו לקרוא את מארח מאזן העומסים. ריק משתמש ב-Ingress היחיד שהוחל.",
+        "serviceName": "שם Service",
+        "port": "פורט",
+        "scheme": "סכמת כתובת",
+        "schemeDefault": "https (ברירת מחדל)",
+        "namespaceTemplate": "תבנית מרחב שמות",
+        "namespaceTemplateHelp": "שם מרחב שמות לכל PR שעובר עיבוד ממשתני ההקצאה כגון pullNumber. ריק גוזר אחד ממספר ה-PR.",
+        "imageTemplate": "תבנית תמונה",
+        "imageTemplateHelp": "הפניה לתמונה החשופה למניפסטים, מעובדת מעל משתני ההקצאה כגון branch ו-sha.",
+        "caCertPem": "אישור CA של האשכול (PEM)",
+        "caCertPemHelp": "הדבק את חבילת ה-CA של האשכול כדי שאישור ה-TLS של ה-apiserver יאומת. השמט רק עבור CA נאמן ציבורית.",
+        "insecureSkipTlsVerify": "דלג על אימות TLS",
+        "insecureSkipTlsVerifyHelp": "מומלץ בחום להימנע. מבטל את אימות ה-TLS של ה-apiserver; השתמש רק עבור אשכולות kind/פיתוח."
+      },
+      "kubernetes": {
+        "label": "שם",
+        "labelPlaceholder": "אשכול ייצור",
+        "apiServerUrl": "כתובת שרת API",
+        "apiServerUrlHelp": "השורש של kube-apiserver, לדוגמה https://10.0.0.1:6443. המתזמן מגיע ל-pod של כל הרצה דרך ה-apiserver, כך שרק נקודת קצה זו צריכה להיות נגישה.",
+        "namespace": "מרחב שמות",
+        "image": "תמונת מריץ",
+        "imageHelp": "תמונת ה-executor-harness שכל pod לכל הרצה מריץ.",
+        "imageUi": "תמונת בודק ממשק",
+        "apiToken": "אסימון ServiceAccount",
+        "apiTokenHelp": "אסימון נושא עם הרשאות RBAC ליצירה, קבלה ומחיקה של pods ו-pods/proxy במרחב השמות. נשמר מוצפן; לא יוצג שוב לעולם.",
+        "caCertPem": "אישור CA של האשכול (PEM)",
+        "caCertPemHelp": "הדבק את חבילת ה-CA של האשכול כדי שאישור ה-TLS של ה-apiserver יאומת. השמט רק עבור CA נאמן ציבורית.",
+        "insecureSkipTlsVerify": "דלג על אימות TLS",
+        "insecureSkipTlsVerifyHelp": "מומלץ בחום להימנע. מבטל את אימות ה-TLS של ה-apiserver; השתמש רק עבור אשכולות k3s/kind/פיתוח מקומיים.",
+        "harnessPort": "פורט המריץ"
+      },
+      "manifestEditor": {
+        "title": "מניפסט ספק",
+        "jsonLabel": "מניפסט (JSON)",
+        "jsonHelp": "תאר את ה-API של הספק שלך באופן הצהרתי: כתובת הבסיס, סכמת האימות, תבניות הבקשה ומיפוי התגובה. מאומת מול אותו חוזה שהשרת אוכף.",
+        "invalidJson": "המניפסט אינו JSON תקין.",
+        "invalidShape": "המניפסט אינו תואם למבנה הצפוי.",
+        "schemaError": "בעיה במניפסט: {message}",
+        "secretsLabel": "סודות",
+        "noSecrets": "מניפסט זה אינו מפנה לסודות.",
+        "stored": "מאוחסן כעת: {keys}",
+        "reenterSecrets": "הזן מחדש כל סוד כדי לשמור. סודות מאוחסנים הם לכתיבה בלבד ואינם מוצגים.",
+        "starterHint": "זוהי דוגמה לפתיחה. ערוך אותה כדי להתאים ל-API של הספק שלך."
+      },
+      "viewLogs": "הצג יומנים",
+      "hideLogs": "הסתר יומנים",
+      "connectedAt": "מחובר · {baseUrl}",
+      "missingConfig": "חסרה הגדרה נדרשת: {fields}",
+      "form": {
+        "updateConfiguration": "עדכן הגדרות",
+        "connect": "התחבר",
+        "reenterSecrets": "הזן מחדש את שדה הסוד כדי לשמור שינויים — סודות מאוחסנים הם לכתיבה בלבד ואינם מוצגים. | הזן מחדש את שדות הסוד כדי לשמור שינויים — סודות מאוחסנים הם לכתיבה בלבד ואינם מוצגים.",
+        "optionalLabel": "{label} (אופציונלי)"
+      },
+      "field": {
+        "defaultsTo": "ברירת מחדל היא {value}"
+      },
+      "test": {
+        "button": "בדוק חיבור",
+        "ok": "החיבור תקין",
+        "failed": "החיבור נכשל"
+      },
+      "toast": {
+        "saved": "{title} נשמר",
+        "saveFailed": "לא ניתן היה לשמור את החיבור",
+        "removed": "החיבור הוסר",
+        "removeFailed": "לא ניתן היה להסיר את החיבור"
+      }
+    },
+    "serviceFragmentDefaults": {
+      "intro": "בחר את מקטעי שיטות העבודה המומלצות שכל שירות חדש מתחיל איתם. ההנחיות שלהם משולבות בהנחיה של כל סוכן מודע-קוד (קודר, סוקר, ארכיטקט, מתקנים) במשימות השירות. אתה יכול לחדד את הסט לכל שירות במפקח שלו; שינוי ברירת מחדל זו אינו משפיע על שירותים קיימים.",
+      "defaultFragments": "מקטעי ברירת מחדל",
+      "addFragment": "הוסף מקטע",
+      "empty": "אין — שירותים חדשים מתחילים ללא מקטעים ברמת השירות.",
+      "saveFailed": "לא ניתן היה לשמור מקטעי ברירת מחדל",
+      "footer": {
+        "question": "צריך להוסיף או לערוך את המקטעים עצמם (כתובים ידנית, מסמכים מקושרים, מאגרים)?",
+        "manageBoard": "נהל את ספריית המקטעים של לוח זה ←",
+        "manageAccount": "נהל מקטעי חשבון ←"
+      }
+    },
+    "issueTracker": {
+      "filing": {
+        "heading": "היכן מוגשים כרטיסים",
+        "description": "צינור החוב הטכני החוזר מעלה כרטיס לפני המימוש ומגיש אותו במעקב זה. בחר {none} כדי לדלג על ההגשה.",
+        "none": "ללא",
+        "githubHint": "GitHub Issues רוכב על אפליקציית ה-GitHub המותקנת שלך, שעדיין אינה מחוברת. התקן אותה תחת {link} — ההגשה נשארת כבויה עד אז.",
+        "githubHintLink": "אינטגרציות ← GitHub",
+        "jiraHint": "Jira עדיין אינו מחובר. {link} כדי להגיש ולקשר כרטיסים.",
+        "linearHint": "Linear עדיין אינו מחובר. {link} כדי להגיש ולקשר כרטיסים.",
+        "connectLink": "חבר אותו",
+        "jiraProjectKey": "מפתח פרויקט Jira",
+        "jiraProjectKeyHelp": "כרטיסים חדשים מוגשים תחת פרויקט זה.",
+        "linearTeamId": "מזהה צוות Linear",
+        "linearTeamIdHelp": "כרטיסים חדשים נוצרים תחת צוות זה (Linear דורש צוות כדי ליצור כרטיס).",
+        "linearTeamSearchPlaceholder": "חיפוש צוותים…"
+      },
+      "vendor": {
+        "github": "GitHub Issues",
+        "jira": "Jira",
+        "linear": "Linear"
+      },
+      "linking": {
+        "heading": "קשר כרטיסים כהקשר",
+        "description": "כשמקור מוצע אתה יכול לייבא את הכרטיסים שלו ולצרף אותם למשימה, כך שסוכנים יראו את תיאור הכרטיס וההערות בזמן המימוש. זה בלתי תלוי במעקב ההגשה למעלה.",
+        "github": {
+          "available": "רוכב על אפליקציית ה-GitHub המותקנת שלך — לא נדרשים אישורים.",
+          "unavailable": "התקן את אפליקציית ה-GitHub (אינטגרציות ← GitHub) כדי להציע מקור זה."
+        },
+        "checkSetup": "בדוק הגדרה",
+        "install": "התקן",
+        "connected": "מחובר.",
+        "jira": {
+          "connectHint": "התחבר עם חשבון Jira ואסימון API."
+        },
+        "linear": {
+          "connectHint": "התחבר עם מפתח API אישי של Linear."
+        },
+        "connect": "התחבר"
+      },
+      "writeback": {
+        "heading": "כתיבה חזרה",
+        "description": "כתוב חזרה לכרטיס(י) המקושרים של משימה ככל שה-pull request שלה מתקדם. כל מתג הוא ברירת המחדל של סביבת העבודה וניתן לעקוף אותו לכל משימה במפקח. כרטיסי GitHub נסגרים באופן מקורי; כרטיסי Jira עוברים לסטטוס הראשון בקטגוריית {done} שלהם.",
+        "done": "בוצע",
+        "commentOnOpen": {
+          "label": "הגב כשנפתח PR",
+          "help": "פרסם הערה על הכרטיס המקושר עם הקישור ל-pull request החדש."
+        },
+        "resolveOnMerge": {
+          "label": "סגור כפתור כשממוזג PR",
+          "help": "הגב שה-PR מוזג, ואז סגור / פתור את הכרטיס המקושר."
+        }
+      },
+      "probeFailure": {
+        "title": "מעקב כרטיסים אינו זמין",
+        "disabled": "האינטגרציה של מקור-המשימות כבויה בפריסה זו (מפתח ההצפנה שלה אינו מוגדר). הגדר ENCRYPTION_KEY בצד השרת כדי לאפשר מעקב כרטיסים.",
+        "serverError": "שירות מעקב הכרטיסים החזיר שגיאה (HTTP {status}): {message}. בדרך כלל זה אומר שצד השרת אינו עבר הגירה/הוגדר במלואו.",
+        "loadFailedStatus": "לא ניתן היה לטעון הגדרות מעקב כרטיסים (HTTP {status}): {message}",
+        "loadFailed": "לא ניתן היה לטעון הגדרות מעקב כרטיסים: {message}"
+      },
+      "toast": {
+        "saved": "מעקב הכרטיסים נשמר",
+        "saveFailed": "לא ניתן היה לשמור הגדרות",
+        "updateFailed": "לא ניתן היה לעדכן",
+        "checkFailed": "הבדיקה נכשלה"
+      }
+    },
+    "userSecrets": {
+      "title": "אסימון ה-GitHub שלי",
+      "intro": "אחסן אסימון גישה אישי המשמש להרצות ש{you} מתחיל — דחיפות, pull requests, שער ה-CI והמיזוגים מיוחסים לגישת ה-GitHub שלך. נשמר {scope}; האסימון הוא לכתיבה בלבד ולא יוצג שוב לעולם.",
+      "introYou": "אתה",
+      "introScope": "רק עבורך",
+      "connectedStored": "מחובר · האסימון מאוחסן",
+      "replaceToken": "החלף אסימון",
+      "addToken": "הוסף אסימון",
+      "labelField": "תווית (אופציונלי)",
+      "optionalField": "{label} (אופציונלי)",
+      "testConnection": "בדוק חיבור",
+      "tokenValid": "האסימון תקין",
+      "tokenRejected": "האסימון נדחה",
+      "secretFallback": "סוד",
+      "toast": {
+        "saved": "{label} נשמר",
+        "saveFailed": "לא ניתן היה לשמור את הסוד",
+        "removed": "הסוד הוסר",
+        "removeFailed": "לא ניתן היה להסיר את הסוד"
+      }
+    },
+    "mergeThresholds": {
+      "intro": "מדיניות מיזוג אוטומטי בעלת שם שמשימה יכולה לבחור. לאחר שה-CI עובר, סוכן ה{merger} מנקד את ה-PR על מורכבות, סיכון והשפעה (0-100%); ה-PR ממוזג אוטומטית רק כשכל ניקוד נמצא ברף או מתחת לרפי התצורה, אחרת מועלית התראת סקירה. תצורת ברירת המחדל שולטת בכל משימה שאינה בוחרת אף אחת.",
+      "mergerAgent": "merger",
+      "concern": {
+        "none": "ללא (תמיד עצור)",
+        "low": "נמוך",
+        "medium": "בינוני",
+        "high": "גבוה (לעולם אל תעצור)"
+      },
+      "presetNamePlaceholder": "שם תצורה",
+      "default": "ברירת מחדל",
+      "makeDefault": "הפוך לברירת מחדל",
+      "deleteDefaultBlocked": "לא ניתן למחוק את תצורת ברירת המחדל",
+      "deletePreset": "מחיקת תצורה",
+      "field": {
+        "maxComplexity": "מורכבות מרבית %",
+        "maxRisk": "סיכון מרבי %",
+        "maxImpact": "השפעה מרבית %",
+        "ciMaxAttempts": "ניסיונות תיקון CI",
+        "maxRequirementIterations": "איטרציות דרישות",
+        "maxRequirementConcernAllowed": "מעבר אוטומטי בחששות ברף או מתחתיו"
+      },
+      "newPreset": "תצורה חדשה",
+      "create": {
+        "name": "שם",
+        "namePlaceholder": "לדוגמה זהיר",
+        "complexity": "מורכבות%",
+        "risk": "סיכון%",
+        "impact": "השפעה%",
+        "ciFix": "תיקון CI",
+        "reqIter": "איטרציות דרישות",
+        "autoPass": "מעבר אוטומטי ברף או מתחתיו"
+      },
+      "add": "הוסף",
+      "toast": {
+        "saved": "התצורה נשמרה",
+        "saveFailed": "לא ניתן היה לשמור את התצורה",
+        "created": "התצורה נוצרה",
+        "createFailed": "לא ניתן היה ליצור תצורה",
+        "defaultFailed": "לא ניתן היה להגדיר ברירת מחדל",
+        "deleteFailed": "לא ניתן היה למחוק את התצורה"
+      }
+    },
+    "observabilityConnection": {
+      "title": "בריאות שלאחר שחרור",
+      "intro": "לאחר ששחרור יוצא, שער ה{gate} עוקב אחר צגי הניטור/SLO המוגדרים. בעת רגרסיה הוא יוצר סוכן כונן לחקירה (אדם מחליט אם לשחזר). מפה אילו צגי ניטור/SLO שירות עוקב אחריהם מתוך המפקח של אותו שירות.",
+      "connection": {
+        "heading": "חיבור",
+        "provider": "ספק"
+      },
+      "datadog": {
+        "site": "אתר Datadog",
+        "apiKey": "מפתח API",
+        "appKey": "מפתח אפליקציה"
+      },
+      "saveConnection": "שמור חיבור",
+      "disconnect": "התנתק",
+      "incident": {
+        "heading": "העשרת תקריות",
+        "configured": "מוגדר",
+        "notSet": "לא מוגדר",
+        "description": "אופציונלי. בעת רגרסיה, חקירת הכונן מתפרסמת על תקרית שמערכות אלו כבר פתחו מאותם אותות (הוסף הערה, לעולם אל תתריע מחדש). סודות הם לכתיבה בלבד: ריק משאיר ערך מאוחסן ללא שינוי.",
+        "pagerDutyToken": "אסימון API של PagerDuty",
+        "pagerDutyFromEmail": "כתובת From של PagerDuty",
+        "incidentIoKey": "מפתח API של incident.io",
+        "clear": "נקה"
+      },
+      "status": {
+        "notConnected": "לא מחובר",
+        "connected": "מחובר",
+        "connectedWithSite": "מחובר ({site})"
+      },
+      "toast": {
+        "loadFailed": "לא ניתן היה לטעון הגדרות תצפיתיות",
+        "incidentCredsRequired": "הזן אישורי PagerDuty או incident.io",
+        "incidentSaved": "העשרת התקריות נשמרה",
+        "incidentSaveFailed": "לא ניתן היה לשמור את העשרת התקריות",
+        "incidentDisconnectFailed": "לא ניתן היה לנתק את העשרת התקריות",
+        "connected": "התצפיתיות מחוברת",
+        "connectFailed": "לא ניתן היה לשמור את החיבור",
+        "disconnectFailed": "לא ניתן היה להתנתק"
+      }
+    },
+    "localMode": {
+      "title": "מצב מקומי",
+      "intro": "כוונון עבור מריץ הקונטיינרים המקומי, נשמר בפריסה של מכונה זו (הוא החליף את משתני הסביבה {poolVars} / {harnessVars}). שמירה משנה את גודל המאגר החם בזמן אמת, ללא צורך באתחול מחדש; הרצות פעילות שומרות את הקונטיינר שהן כבר מחזיקות.",
+      "pool": {
+        "heading": "מאגר קונטיינרים חם",
+        "description": "שמור קונטיינרים של מריץ במצב סרק מוכנים והשכר אחד מחדש (בהעדפה לקונטיינר שכבר מחזיק את מאגר ההרצה) במקום הפעלה קרה לכל הרצה. גודל מאגר 0 מבטל זאת. דורש זמן ריצה ממשפחת Docker (Docker/Podman/OrbStack/Colima); מתעלם ב-Apple {appleContainer}.",
+        "size": {
+          "label": "גודל מאגר",
+          "help": "מרבית קונטיינרים חמים במצב סרק. 0 = מאגר כבוי."
+        },
+        "minWarm": {
+          "label": "חימום מראש באתחול",
+          "help": "קונטיינרים שמופעלים כשהשירות מתחיל."
+        },
+        "max": {
+          "label": "מרבית קונטיינרים",
+          "help": "תקרה קשיחה (מושכרים + סרק). ריק = גודל המאגר.",
+          "placeholder": "(גודל מאגר)"
+        },
+        "idleTimeout": {
+          "label": "פסק זמן סרק (דקות)",
+          "help": "הסר קונטיינר מאגר במצב סרק לאחר."
+        }
+      },
+      "checkout": {
+        "heading": "שימוש חוזר ב-checkout",
+        "description": "כשקונטיינר חם כבר מחזיק את מאגר ההרצה, המריץ משתמש מחדש ב-checkout לכל מאגר (ניקוי + fetch + מעבר ענף) במקום שכפול מחדש.",
+        "workspaceRoot": {
+          "label": "שורש סביבת עבודה",
+          "help": "התיקייה המוחלטת בתוך הקונטיינר שתחתיה חי ה-checkout המשומש מחדש."
+        },
+        "cleanKeep": {
+          "label": "שמור בעת ניקוי (מופרד בפסיקים)",
+          "help": "תיקיות מטמון תלויות שניקוי כל הרצה משמר."
+        }
+      },
+      "toast": {
+        "saved": "ההגדרות המקומיות נשמרו",
+        "saveFailed": "לא ניתן היה לשמור הגדרות מקומיות"
+      }
+    },
+    "openRouterCatalog": {
+      "intro": "הגע ל{models} דרך שער אחד. הוסף את מפתח ה-OpenRouter שלך למטה, ואז אפשר את המודלים שאתה רוצה. הם מופיעים בבוחר המודלים עם חלון ההקשר והמחיר שלהם, ונמדדים מול תקציב ההוצאה שלך.",
+      "introModels": "300+ מודלים",
+      "connectHeading": "חבר את מפתח ה-OpenRouter שלך",
+      "step1": "פתח את {link} וצור מפתח API.",
+      "step1Link": "openrouter.ai ← Keys ↗",
+      "step2": "העתק את המפתח (מתחיל ב-{prefix}) והדבק אותו למטה.",
+      "scope": "היקף",
+      "scopeWorkspace": "סביבת עבודה זו",
+      "scopeUser": "המפתחות שלי (רק אני)",
+      "labelOptional": "תווית (אופציונלי)",
+      "labelPlaceholder": "לדוגמה מפתח צוות",
+      "apiKey": "מפתח API",
+      "connectAndBrowse": "התחבר ועיין",
+      "keyConnected": "מפתח OpenRouter מחובר",
+      "manageKeys": "נהל ב'ספקים ומפתחות'",
+      "refresh": "רענן קטלוג",
+      "enableRecommended": "אפשר מומלצים",
+      "filterPlaceholder": "סינון לפי שם או slug…",
+      "empty": "אין עדיין מודלים. לחץ {action} כדי לטעון את הרשימה החיה של OpenRouter.",
+      "enabledCount": "אין מודלים מאופשרים | {count} מאופשר | {count} מאופשרים",
+      "context": "{value} ctx",
+      "contextThousands": "{value}K ctx",
+      "price": "{input}/{output} לכל Mtok",
+      "toast": {
+        "connected": "מפתח OpenRouter מחובר",
+        "connectFailed": "לא ניתן היה לחבר מפתח",
+        "rejected": "OpenRouter דחה את המפתח.",
+        "unreachable": "לא ניתן היה להגיע ל-OpenRouter",
+        "connectFirst": "חבר תחילה מפתח OpenRouter.",
+        "saved": "קטלוג OpenRouter נשמר",
+        "saveFailed": "לא ניתן היה לשמור קטלוג"
+      }
+    },
+    "workspaceSettings": {
+      "title": "הגדרות סביבת עבודה",
+      "tabs": {
+        "workspace": "סביבת עבודה",
+        "budget": "תקציב",
+        "merge": "רפי מיזוג",
+        "tracker": "מעקב כרטיסים",
+        "fragments": "שיטות עבודה מומלצות לשירות"
+      },
+      "waiting": {
+        "heading": "ממתין לאדם",
+        "body": "הרצה שעצרה על החלטה אנושית (סקירה, אישור, מיזוג) ממתינה כמה שצריך ולעולם אינה מבוטלת. לאחר מספר דקות זה ההתראה שלה הופכת לאדומה ומסומנת כ{overdue} בתיבת הדואר.",
+        "overdue": "באיחור",
+        "escalateAfter": "הסלם לאחר (דקות)"
+      },
+      "taskLimit": {
+        "heading": "משימות רצות לכל שירות",
+        "body": "הגבל כמה משימות יכולות לרוץ בו-זמנית תחת שירות אחד. התחלת משימה מעל המגבלה נדחית עם הודעה ברורה עד שמשימה רצה מסתיימת.",
+        "mode": "מצב",
+        "maxRunning": "מרבית משימות רצות",
+        "maxPerType": "מרבית משימות {type}",
+        "modes": {
+          "off": "ללא מגבלה",
+          "shared": "משותף בין כל הסוגים",
+          "per_type": "לכל סוג משימה"
+        }
+      },
+      "taskTypes": {
+        "feature": "תכונה",
+        "bug": "באג",
+        "document": "מסמך",
+        "spike": "חקירה"
+      },
+      "observability": {
+        "heading": "תצפיתיות סוכנים",
+        "body": "אחסן את ההקשר המלא שניתן לכל סוכן: ההנחיות המורכבות, מקטעי שיטות העבודה המומלצות שמשולבים, והתוכן המלא של הקבצים שמוזרקים לקונטיינר שלו, כך שניתן יהיה לבדוק אותו מאוחר יותר בתצוגת התצפיתיות. הגופים נשמרים לאותו חלון כמו טלמטריית ה-LLM לכל קריאה. כבה כדי להפסיק לאחסן אותו (תצלומים קיימים נגזמים לפי תקופת השמירה).",
+        "toggle": "אחסן הקשר סוכן מלא"
+      },
+      "retention": {
+        "heading": "שמירת צילומי מסך",
+        "body": "כמה זמן לשמור את צילומי המסך שצולמו על ידי בודק הממשק ואת תמונות העיצוב המקוריות שמולן הם נסקרים (שער האישור החזותי). משימת ניקוי יומית מוחקת גם את בתי התמונה וגם את המטא-נתונים שלהם ברגע שהם מתיישנים מעבר לחלון זה.",
+        "days": "שמירה (ימים)"
+      },
+      "kaizen": {
+        "heading": "סוכן Kaizen",
+        "body": "לאחר שכל הרצה מסתיימת, סוכן ה-Kaizen מדרג כיצד התנהל כל שלב סוכן, מחלק ויעיל ועד מבולבל וכאוטי, וממליץ על שיפורי הנחיה/מודל. שילוב הנחיה + סוכן + מודל שמדורג גבוה ללא המלצות חמש פעמים ברציפות מסומן כמאומת ואינו מדורג עוד. הדירוג רץ ברקע ומוצג בתוך פרטי ההרצה ומסך ה-Kaizen. הגדר את מודל המדרג ב'הגדרת מודלים' (סוכן \"Kaizen\").",
+        "toggle": "דרג הרצות סוכנים עם Kaizen"
+      },
+      "budget": {
+        "heading": "תקציב הוצאה חודשי",
+        "body": "שימוש באסימונים נמדד לכל קריאת LLM, מתומחר ומוגבל על ידי תקציב זה. כשמגיעים אליו, הרצות בסביבת עבודה זו מושהות והלוח מציג אזהרה. השאר ריק כדי לרשת את ברירת המחדל המובנית (כ-100 EUR לחודש).",
+        "monthlyLimit": "מגבלה חודשית",
+        "defaultPlaceholder": "ברירת מחדל",
+        "currency": "מטבע (ISO 4217)",
+        "save": "שמור תקציב"
+      },
+      "toast": {
+        "saved": "ההגדרות נשמרו",
+        "saveFailed": "לא ניתן היה לשמור הגדרות",
+        "budgetSaved": "התקציב נשמר",
+        "budgetSaveFailed": "לא ניתן היה לשמור תקציב"
+      }
+    },
+    "localModelEndpoints": {
+      "title": "המריצים המקומיים שלי",
+      "intro": "כוון סוכנים ל-LLM שרץ על {ownMachine} (Ollama, LM Studio, llama.cpp, vLLM, או כל שרת תואם-OpenAI). מריץ נשמר {justForYou} (מריץ חי על המכונה שלך), והמודלים שאתה מאפשר מופיעים אוטומטית בבוחר המודלים. מפתח ה-API (רוב המריצים מתעלמים ממנו) הוא לכתיבה בלבד ולא יוצג שוב לעולם.",
+      "introOwnMachine": "המכונה שלך",
+      "introJustForYou": "רק עבורך",
+      "modelCount": "אין מודלים | {count} מודל | {count} מודלים",
+      "keySet": "מפתח הוגדר",
+      "edit": "ערוך",
+      "editRunner": "ערוך מריץ",
+      "addRunner": "הוסף מריץ",
+      "runnerType": "סוג מריץ",
+      "labelOptional": "תווית (אופציונלי)",
+      "labelPlaceholder": "ה{name} שלי",
+      "baseUrl": "כתובת בסיס",
+      "apiKeyOptional": "מפתח API (אופציונלי)",
+      "apiKeyKeepPlaceholder": "השאר ריק כדי לשמור את המפתח המאוחסן",
+      "apiKeyIgnorePlaceholder": "רוב המריצים מתעלמים מזה",
+      "testConnection": "בדוק חיבור",
+      "unreachable": "לא ניתן היה להגיע למריץ.",
+      "reachable": "נגיש · אין מודלים | נגיש · {count} מודל | נגיש · {count} מודלים",
+      "noModels": "לא דווחו מודלים.",
+      "enableModels": "אפשר מודלים",
+      "toast": {
+        "saved": "{name} נשמר",
+        "saveFailed": "לא ניתן היה לשמור מריץ",
+        "removed": "המריץ הוסר",
+        "removeFailed": "לא ניתן היה להסיר מריץ"
+      }
+    }
+  },
+  "providers": {
+    "presetMismatch": {
+      "title": "התצורה משתמשת במודלים שאינם זמינים",
+      "intro": "תצורת מודל ברירת המחדל של סביבת העבודה \"{name}\" מקצה מודלים שאינם זמינים תחת התצורה הנוכחית. משימות המשתמשות בתצורה זו ייכשלו כשיגיעו לשלבים אלה.",
+      "unavailable": "לא זמין",
+      "advice": "כוון מחדש את התצורה למודלים שהגדרת, או הוסף את הספק החסר.",
+      "later": "מאוחר יותר",
+      "configureVendors": "הגדר ספקים",
+      "editPresets": "ערוך תצורות",
+      "defaultPresetName": "תצורת ברירת מחדל"
+    },
+    "onboarding": {
+      "title": "הגדר ספק מודל AI",
+      "noModelTitle": "אין עדיין מודל AI זמין בסביבת עבודה זו.",
+      "noModelBody": "סוכנים זקוקים למודל כדי לרוץ. AI עובד מהקופסה רק בפריסת Cloudflare עם Workers AI מופעל; אחרת חבר לפחות מקור אחד מטה.",
+      "operatorNote": "AWS Bedrock ו-Cloudflare Workers AI מופעלים על ידי מפעיל הפריסה דרך תצורת הסביבה, ולא ממסך זה.",
+      "routes": {
+        "keys": {
+          "title": "מפתחות ומנויי ספקים",
+          "body": "הוסף מפתח API ישיר של ספק (OpenAI, Anthropic, Qwen, …) או חבר מנוי מסחרי של תוכנית קוד (Kimi, DeepSeek) או אישי (Claude, GLM, Codex).",
+          "cta": "פתח ספקי LLM"
+        },
+        "openrouter": {
+          "title": "שער OpenRouter",
+          "body": "הפעל מודלים דרך שער OpenRouter עם מפתח יחיד. עיין והפעל את המודלים שאתה רוצה.",
+          "cta": "עיין במודלים של OpenRouter"
+        },
+        "local": {
+          "title": "המריצים המקומיים שלי",
+          "body": "כוון את cat-factory למודל שאתה מריץ בעצמך (Ollama, LM Studio, llama.cpp, vLLM, …). ללא מפתח API, ללא הוצאה.",
+          "cta": "הגדר מריצים מקומיים"
+        }
+      }
+    },
+    "personalCredential": {
+      "titleWrongPassword": "סיסמה אישית שגויה",
+      "titleNoSubscription": "חבר את מנוי {vendor} שלך",
+      "titleExpired": "מנוי {vendor} שלך פג",
+      "titleDefault": "הזן את הסיסמה האישית שלך",
+      "fallbackVendor": "מנוי",
+      "connectBody": "משימה זו משתמשת במודל {vendor}, שרץ על מנוי {vendor} שלך. חבר (או חדש) אותו תחילה, ואז הפעל את ההרצה שוב.",
+      "connectCta": "חבר מנוי",
+      "passwordBody": "הזן את הסיסמה האישית המגינה על מנוי {vendor} שלך. היא משחררת את אישור הגישה שלך עבור הרצה זו בלבד ונשמרת במטמון בדפדפן זה כך שלא תישאל שוב למשך זמן מה.",
+      "passwordField": "סיסמה אישית",
+      "passwordPlaceholder": "הסיסמה האישית שלך",
+      "submit": "שחרר והרץ",
+      "cancel": "ביטול",
+      "toast": {
+        "started": "ההרצה התחילה",
+        "startFailed": "לא ניתן להתחיל את ההרצה"
+      },
+      "vendors": {
+        "claude": "Claude",
+        "glm": "GLM (Z.ai)",
+        "codex": "ChatGPT (Codex)"
+      }
+    },
+    "apiKeys": {
+      "directHeading": "מפתחות API ישירים של ספקים",
+      "proxyHeading": "מפתחות API של פרוקסי / שער",
+      "directAccountIntro": "חבר מפתח API של ספק המשותף לכל סביבות העבודה בחשבון זה. המפתחות נשמרים מוצפנים, מאוגדים ומסובבים לפי שימוש. מפתחות חשבון מנוהלים על ידי מנהל.",
+      "directIntro": "חבר מפתח API של ספק כדי שמודלים ירוצו ישירות על אותו ספק. המפתחות נשמרים מוצפנים, מאוגדים ומסובבים לפי שימוש. הגדר היקף למפתח לסביבת עבודה זו (משותף עם הצוות) או לעצמך (המאגר שלך, שמיש בכל מקום).",
+      "proxyAccountIntro": "חבר מפתח פרוקסי (OpenRouter, LiteLLM) המשותף לכל סביבות העבודה בחשבון זה. פרוקסי הוא מתווך החזית בפני ספקים רבים מאחורי מפתח יחיד. המפתחות נשמרים מוצפנים, מאוגדים ומסובבים לפי שימוש.",
+      "proxyIntro": "חבר מפתח פרוקסי (OpenRouter, LiteLLM). פרוקסי הוא מתווך המגיע למודלים של ספקים רבים דרך שער יחיד, במקום אל ספק יחיד ישירות. המפתחות נשמרים מוצפנים, מאוגדים ומסובבים לפי שימוש. הגדר היקף למפתח לסביבת עבודה זו (משותף עם הצוות) או לעצמך (המאגר שלך, שמיש בכל מקום).",
+      "scopeField": "היקף",
+      "scopeWorkspace": "סביבת עבודה זו",
+      "scopeUser": "המפתחות שלי (רק אני)",
+      "providerField": "ספק",
+      "proxyField": "פרוקסי",
+      "openKeys": "פתח מפתחות {provider} ↗",
+      "cachingNote": "מאפשר שמירת מטמון של בקשות עבור מודלים של {provider}, כך שהרצה ארוכה רבת-תורות משתמשת שוב בקידומת הבקשה השמורה במטמון במקום לשלוח אותה מחדש בכל תור.",
+      "labelField": "תווית (אופציונלי)",
+      "labelPlaceholder": "לדוגמה מפתח צוות",
+      "defaultLabel": "מפתח {provider}",
+      "keyField": "מפתח API",
+      "keyPlaceholder": "הדבק את מפתח ה-API",
+      "connect": "חבר",
+      "connected": "מחובר ({count})",
+      "usage": "{tokens} טוקנים בחלון זה · {count} קריאה | {tokens} טוקנים בחלון זה · {count} קריאות",
+      "toast": {
+        "connected": "מפתח API חובר",
+        "connectFailed": "לא ניתן לחבר את המפתח",
+        "removeFailed": "לא ניתן להסיר את המפתח"
+      },
+      "providers": {
+        "openai": {
+          "label": "OpenAI",
+          "step1": "פתח את platform.openai.com → API keys וצור מפתח סודי חדש.",
+          "step2": "העתק את המפתח (מתחיל ב-sk-…); הוא מוצג רק פעם אחת."
+        },
+        "anthropic": {
+          "label": "Anthropic (Claude API)",
+          "step1": "פתח את console.anthropic.com → Settings → API Keys וצור מפתח.",
+          "step2": "העתק את המפתח (מתחיל ב-sk-ant-…)."
+        },
+        "qwen": {
+          "label": "Qwen (Alibaba DashScope)",
+          "step1": "פתח את מסוף DashScope (בינלאומי) → API-KEY וצור מפתח.",
+          "step2": "העתק את המפתח; הוא מאמת את נקודת הקצה של Qwen התואמת ל-OpenAI."
+        },
+        "deepseek": {
+          "label": "DeepSeek",
+          "step1": "פתח את platform.deepseek.com → API keys וצור מפתח.",
+          "step2": "העתק את המפתח (מתחיל ב-sk-…)."
+        },
+        "moonshot": {
+          "label": "Moonshot (Kimi API)",
+          "step1": "פתח את platform.moonshot.ai → API Keys וצור מפתח.",
+          "step2": "העתק את המפתח; הוא מאמת את נקודת הקצה של Moonshot התואמת ל-OpenAI."
+        },
+        "openrouter": {
+          "label": "OpenRouter",
+          "step1": "פתח את openrouter.ai → Keys וצור מפתח API.",
+          "step2": "העתק את המפתח (מתחיל ב-sk-or-…); הוא מגיע ל-300+ מודלים דרך שער יחיד."
+        },
+        "litellm": {
+          "label": "LiteLLM (שער בארחה עצמית)",
+          "step1": "צור מפתח וירטואלי בשער LiteLLM שלך (או השתמש במפתח המאסטר שלו).",
+          "step2": "כתובת הבסיס של השער נקבעת על ידי מפעיל הפריסה שלך (LITELLM_BASE_URL), ולא כאן."
+        }
+      }
+    },
+    "vendorCredentials": {
+      "title": "ספקי LLM",
+      "tabs": {
+        "pool": "מאגר סביבת העבודה",
+        "direct": "ספקים ישירים",
+        "proxy": "פרוקסים",
+        "personal": "מנויים אישיים"
+      },
+      "poolIntro": "חבר מנוי מסחרי של תוכנית קוד (Kimi, DeepSeek) המתיר שימוש צוותי/ארגוני כדי להריץ שלבי סוכן על מנגנון Claude Code במקום מפתח API. הטוקנים נשמרים מוצפנים, מאוגדים ומסובבים לפי שימוש. מודלי מנוי הם מכסה בתעריף קבוע, כך שאינם נמשכים מתקציב ההוצאה שלך. מנויים לשימוש אישי (Claude, GLM, ChatGPT/Codex) מחוברים לכל משתמש בלשונית המנויים האישיים.",
+      "vendorField": "ספק",
+      "labelField": "תווית (אופציונלי)",
+      "labelPlaceholder": "לדוגמה חשבון עבודה",
+      "defaultLabel": "טוקן {vendor}",
+      "tokenField": "טוקן",
+      "tokenPlaceholder": "מפתח ה-API של תוכנית הקוד שלך",
+      "connect": "חבר",
+      "connected": "מחובר ({count})",
+      "usage": "{tokens} טוקנים בחלון זה · {count} הרצה | {tokens} טוקנים בחלון זה · {count} הרצות",
+      "toast": {
+        "connected": "הטוקן חובר",
+        "connectFailed": "לא ניתן לחבר את הטוקן",
+        "removeFailed": "לא ניתן להסיר את הטוקן"
+      },
+      "vendors": {
+        "kimi": {
+          "label": "Kimi (תוכנית קוד של Moonshot)",
+          "step1": "פתח את מסוף תוכנית הקוד של Moonshot (Kimi) וצור מפתח API לנקודת הקצה התואמת ל-Anthropic.",
+          "step2": "העתק את מפתח ה-API. שלבי הסוכן ירוצו דרך Claude Code מול נקודת הקצה של Anthropic של Moonshot עם הקשר מלא.",
+          "step3": "הדבק את המפתח למטה."
+        },
+        "deepseek": {
+          "label": "DeepSeek (תוכנית קוד)",
+          "step1": "פתח את מסוף תוכנית הקוד של DeepSeek וצור מפתח API לנקודת הקצה התואמת ל-Anthropic.",
+          "step2": "העתק את מפתח ה-API. שלבי הסוכן ירוצו דרך Claude Code מול נקודת הקצה של Anthropic של DeepSeek עם הקשר מלא.",
+          "step3": "הדבק את המפתח למטה."
+        }
+      }
+    }
+  },
+  "github": {
+    "onboarding": {
+      "title": "חבר את cat-factory ל-GitHub",
+      "intro": "cat-factory פועל על ידי פתיחת בקשות משיכה במאגרים שלך. התקן את אפליקציית GitHub בחשבון או בארגון שלך כדי להמשיך, ותוכל להעניק לה גישה לכל מאגר או לבחור תת-קבוצה.",
+      "signedInAs": "מחובר כ-{login}",
+      "signOut": "התנתק"
+    },
+    "connect": {
+      "yourInstallations": "ההתקנות שלך",
+      "refresh": "רענן",
+      "lookingForInstallations": "מחפש התקנות…",
+      "noInstallations": "לא נמצאו עדיין התקנות לאפליקציה. התקן אותה למטה, או חבר לפי מזהה.",
+      "installationMeta": "{targetType} · התקנה {id}",
+      "linked": "מקושר",
+      "linkedTitle": "כבר מקושר למרחב עבודה זה",
+      "inUse": "בשימוש",
+      "inUseTitle": "כבר מחובר למרחב עבודה אחר",
+      "connect": "חבר",
+      "or": "או",
+      "installApp": "התקן את אפליקציית GitHub",
+      "orConnectById": "או חבר לפי מזהה",
+      "installationId": "מזהה התקנה",
+      "toast": {
+        "connected": "GitHub חובר"
+      },
+      "errors": {
+        "listInstallations": "לא ניתן היה לרשום את התקנות GitHub",
+        "startInstall": "לא ניתן היה להתחיל את התקנת אפליקציית GitHub",
+        "connect": "לא ניתן היה להתחבר"
+      }
+    },
+    "panel": {
+      "connectIntro": "חבר התקנה של אפליקציית GitHub כדי לגבות בלוקים בלוח עם מאגרים, לעיין בבקשות משיכה ובניושנים, ולאפשר לסוכנים לדחוף ענפים ולפתוח PR-ים.",
+      "installationMeta": "{targetType} · התקנה {id}",
+      "resync": "סנכרן מחדש",
+      "backfill": "מילוי לאחור",
+      "disconnect": "נתק",
+      "loading": "טוען…",
+      "tabs": {
+        "repos": "מאגרים",
+        "pulls": "בקשות משיכה",
+        "issues": "ניושנים"
+      },
+      "linkedToBoard": "מקושר ללוח זה",
+      "manageRepos": "נהל מאגרים",
+      "manageHint": "בחר את המאגרים שלוח זה צריך לעקוב אחריהם. חיבור GitHub משותף בכל החשבון, וכל לוח מקשר את המאגרים שלו.",
+      "loadingRepos": "טוען מאגרים…",
+      "noAvailableRepos": "ההתקנה לא יכולה לגשת לאף מאגר עדיין.",
+      "private": "פרטי",
+      "saveSelection": "שמור בחירה",
+      "noLinkedRepos": "אין עדיין מאגרים מקושרים. השתמש ב'נהל מאגרים' כדי לבחור אילו מאגרים לוח זה עוקב אחריהם.",
+      "open": "פתח",
+      "protected": "מוגן",
+      "newBranch": "ענף חדש",
+      "fromSha": "מ-SHA",
+      "commitShaPlaceholder": "commit sha",
+      "createBranch": "צור ענף",
+      "openPr": "פתח PR",
+      "repository": "מאגר",
+      "chooseRepository": "בחר מאגר",
+      "prTitle": "כותרת",
+      "headBranch": "ענף ראש",
+      "baseBranch": "ענף בסיס",
+      "openPullRequest": "פתח בקשת משיכה",
+      "noPulls": "אין בקשות משיכה מסונכרנות.",
+      "mergePr": "מזג בקשת משיכה",
+      "noIssues": "אין ניושנים מסונכרנים.",
+      "prState": {
+        "open": "פתוח",
+        "closed": "סגור",
+        "merged": "מוזג"
+      },
+      "issueState": {
+        "open": "פתוח",
+        "closed": "סגור"
+      },
+      "toast": {
+        "disconnected": "GitHub נותק",
+        "resync": "סנכרון מחדש {status}",
+        "reposUpdated": "המאגרים המקושרים עודכנו",
+        "branchCreated": "הענף {name} נוצר",
+        "prOpened": "בקשת המשיכה נפתחה",
+        "prMerged": "PR #{number} מוזג"
+      },
+      "errors": {
+        "disconnect": "לא ניתן היה לנתק",
+        "resync": "לא ניתן היה לסנכרן מחדש",
+        "loadRepos": "לא ניתן היה לטעון מאגרים",
+        "updateRepos": "לא ניתן היה לעדכן מאגרים",
+        "loadBranches": "לא ניתן היה לטעון ענפים",
+        "createBranch": "לא ניתן היה ליצור ענף",
+        "openPr": "לא ניתן היה לפתוח בקשת משיכה",
+        "merge": "לא ניתן היה למזג"
+      }
+    },
+    "addService": {
+      "title": "הוסף שירות ממאגר",
+      "intro": "בחר מאגר GitHub קיים כדי להוסיף כשירות בלוח. ללא אתחול: המאגר מקושר למסגרת שירות חדשה כפי שהוא, ומשימות שתריץ עליו ממוקדות באותו מאגר.",
+      "connectFirst": "חבר תחילה את מרחב העבודה ל-GitHub. קשר התקנה שהאפליקציה כבר נמצאת עליה, או התקן אותה.",
+      "repository": "מאגר",
+      "repositoryHint": "מאגרים שאפליקציית GitHub יכולה לגשת אליהם. לא רואה את שלך? הענק לאפליקציה גישה למטה, ואז רענן.",
+      "noReposAvailable": "אין עדיין מאגרים זמינים. הענק לאפליקציה גישה לאחד למטה, ואז רענן.",
+      "searchPlaceholder": "חפש מאגרים לפי בעלים או שם…",
+      "searchMinChars": "הקלד לפחות {min} תו לחיפוש. | הקלד לפחות {min} תווים לחיפוש.",
+      "noMatches": "לא נמצאו מאגרים עבור {query}.",
+      "clearSelection": "נקה בחירה",
+      "showingCount": "מציג {shown} מתוך {total} מאגרים.",
+      "repoLabel": {
+        "private": " (פרטי)",
+        "monorepo": " · מונורפו",
+        "onBoard": " · כבר על הלוח"
+      },
+      "monorepoLabel": "זהו מונורפו (מארח יותר משירות אחד)",
+      "monorepoDescription": "הוסף כמה שירותים ממאגר אחד, כל אחד מוצמד לתת-ספרייה.",
+      "monorepoBrowseHint": "עיין במאגר ובחר את הספרייה של השירות שברצונך להוסיף. סוכנים העובדים על שירות זה ירוצו בתוך אותה תת-ספרייה.",
+      "serviceDirectory": "ספריית שירות:",
+      "noDirectorySelected": "לא נבחרה עדיין ספרייה.",
+      "addedConfigure": "{title} נוסף, הגדר אותו",
+      "grantAccess": "הענק לאפליקציה גישה למאגר",
+      "grantAccessTitle": "פתח את הגדרות ההתקנה של האפליקציה כדי להעניק לה גישה למאגר",
+      "refreshList": "רענן רשימה",
+      "done": "סיום",
+      "add": "הוסף שירות",
+      "addAnother": "הוסף שירות נוסף",
+      "toast": {
+        "addedTitle": "השירות נוסף",
+        "addedDescription": "{title} על הלוח, הגדר אותו למטה.",
+        "addFailedTitle": "לא ניתן היה להוסיף שירות"
+      }
+    },
+    "repoTree": {
+      "root": "שורש",
+      "loading": "טוען…",
+      "noSubdirectories": "אין כאן תת-ספריות.",
+      "empty": "אין כאן כלום.",
+      "select": "בחר",
+      "selected": "נבחר",
+      "useThisFolder": "השתמש בתיקייה זו",
+      "errors": {
+        "listDirectory": "לא ניתן היה לרשום את הספרייה"
+      }
+    }
+  },
+  "slack": {
+    "panel": {
+      "title": "התראות Slack",
+      "intro": "פרסם התראות לוח (סקירות מיזוג, השלמות צינור, כשלי CI) ל-Slack. החיבור משותף בכל החשבון; הניתוב הוא לכל לוח."
+    },
+    "connect": {
+      "addToSlack": "הוסף ל-Slack",
+      "orPasteToken": "...או הדבק טוקן בוט (xoxb-...)",
+      "connect": "חבר"
+    },
+    "connected": {
+      "label": "מחובר אל {team}",
+      "disconnect": "נתק"
+    },
+    "routing": {
+      "heading": "ניתוב",
+      "channelPlaceholder": "#ערוץ או מזהה ערוץ",
+      "mentionMembers": "{'@'}-אזכר חברי חשבון ממופים",
+      "save": "שמור ניתוב"
+    },
+    "members": {
+      "heading": "מפת חברים (מזהה משתמש למזהה חבר Slack)",
+      "hint": "אנשי {product} מאוזכרים בממצאי סקירת דרישות; כל השאר רק כשהם יצרו את המשימה.",
+      "productLabel": "מוצר",
+      "userIdPlaceholder": "מזהה משתמש (usr_...)",
+      "slackIdPlaceholder": "מזהה חבר Slack (U...)",
+      "add": "הוסף חבר",
+      "save": "שמור מפה"
+    },
+    "routable": {
+      "merge_review": "סקירת מיזוג",
+      "pipeline_complete": "הצינור הושלם",
+      "ci_failed": "CI נכשל",
+      "test_failed": "הבדיקות נכשלו",
+      "requirement_review": "סקירת דרישות",
+      "clarity_review": "סקירת בהירות",
+      "release_regression": "רגרסיית שחרור",
+      "human_test_ready": "מוכן לבדיקה אנושית",
+      "visual_confirmation_ready": "מוכן לאישור חזותי"
+    },
+    "role": {
+      "engineering": "הנדסה",
+      "product": "מוצר"
+    },
+    "toast": {
+      "connected": "Slack חובר",
+      "routingSaved": "הניתוב נשמר",
+      "mapSaved": "מפת החברים נשמרה"
+    },
+    "error": {
+      "loadSettings": "לא ניתן לטעון את הגדרות Slack",
+      "startOAuth": "לא ניתן להתחיל את OAuth של Slack",
+      "connect": "לא ניתן לחבר את Slack",
+      "disconnect": "לא ניתן לנתק את Slack",
+      "saveRouting": "לא ניתן לשמור את הניתוב",
+      "saveMap": "לא ניתן לשמור את מפת החברים"
+    }
+  },
+  "documents": {
+    "picker": {
+      "searchPlaceholder": "חפש דפים או הדבק כתובת URL/מזהה…",
+      "refPlaceholder": "הדבק כתובת URL או מזהה של דף…",
+      "searchFailed": "החיפוש נכשל: {error}",
+      "importedBadge": "יובא",
+      "attachByReference": "צרף את {ref} לפי הפניה",
+      "noMatches": "אין דפים תואמים.",
+      "emptySearchable": "חפש לפי כותרת, או בחר מסמך שיובא.",
+      "emptyRefOnly": "הדבק כתובת URL או מזהה של דף כדי לצרף אותו."
+    },
+    "import": {
+      "title": "ייבא ממקור מסמכים",
+      "connectFirst": "חבר תחילה מקור מסמכים.",
+      "connectSource": "חבר את {source}",
+      "spawningInto": "יוצר בתוך {frame}",
+      "sourceLabel": "מקור",
+      "refLabel": "כתובת URL או מזהה של דף",
+      "importButton": "ייבא",
+      "importedHeading": "מסמכים שיובאו",
+      "previewSpawn": "תצוגה מקדימה ויצירה",
+      "noneImported": "אין עדיין מסמכים שיובאו.",
+      "imported": "\"{title}\" יובא",
+      "importFailed": "הייבוא נכשל"
+    },
+    "connect": {
+      "title": "חבר מקור",
+      "sourceFallback": "מקור",
+      "intro": "חבר את {source} כדי לייבא דרישות, RFC ו-PRD, ואז צור מבנה לוח או צרף אותם למשימות כהקשר סוכן.",
+      "disconnect": "נתק",
+      "connect": "חבר",
+      "update": "עדכן חיבור",
+      "connected": "{source} מחובר",
+      "disconnected": "{source} נותק",
+      "connectFailed": "לא ניתן להתחבר"
+    },
+    "spawn": {
+      "title": "תצוגה מקדימה של מבנה",
+      "plannerLlm": "נוצר ע״י AI",
+      "plannerHeadings": "מתוך כותרות",
+      "intoFrame": "לתוך {frame}",
+      "asTopLevel": "כמסגרות חדשות ברמה העליונה",
+      "buildingPlan": "בונה תוכנית…",
+      "spawnOntoBoard": "צור על הלוח",
+      "planFailed": "לא ניתן לבנות תוכנית",
+      "spawned": "המבנה נוצר",
+      "spawnFailed": "היצירה נכשלה",
+      "summary": "{frames} · {modules} · {tasks}",
+      "frameCount": "מסגרת {count} | {count} מסגרות",
+      "moduleCount": "מודול {count} | {count} מודולים",
+      "taskCount": "משימה {count} | {count} משימות"
+    },
+    "taskDocs": {
+      "heading": "מסמכי הקשר",
+      "attach": "צרף",
+      "importPage": "ייבא דף…",
+      "empty": "צרף דרישה, RFC או PRD כדי שהסוכנים יראו אותם בעת מימוש משימה זו.",
+      "attached": "המסמך צורף",
+      "attachFailed": "לא ניתן לצרף"
+    }
+  },
+  "tasks": {
+    "picker": {
+      "searchPlaceholder": "חפש ניושנים או הדבק URL/מפתח…",
+      "refPlaceholder": "הדבק URL או מפתח של ניושן…",
+      "searchFailed": "החיפוש נכשל: {error}",
+      "imported": "מיובא",
+      "attachByReference": "צרף {ref} לפי הפניה",
+      "noMatches": "אין ניושנים תואמים.",
+      "emptySearchable": "חפש לפי כותרת, או בחר ניושן מיובא.",
+      "emptyRefOnly": "הדבק URL או מפתח של ניושן כדי לצרף אותו."
+    },
+    "contextIssues": {
+      "title": "ניושני הקשר",
+      "attach": "צרף",
+      "attached": "הניושן צורף",
+      "attachFailed": "לא ניתן היה לצרף",
+      "importIssue": "ייבא ניושן…",
+      "emptyHint": "צרף ניושן Jira כדי שסוכנים יראו את התיאור וההערות שלו בעת מימוש משימה זו."
+    },
+    "import": {
+      "titleCreate": "צור משימה מניושן",
+      "titleBrowse": "ניושני מערכת מעקב",
+      "connectFirst": "חבר או הפעל תחילה מקור משימות.",
+      "enableSource": "הפעל {label}",
+      "connectSource": "חבר {label}",
+      "source": "מקור",
+      "refLabel": "מפתח או URL של ניושן",
+      "import": "ייבא",
+      "asEpic": "כאפיק",
+      "asEpicTitleReady": "צור אפיק זה ואת צאצאיו כקבוצת משימות מקושרת",
+      "asEpicTitleNeedsContainer": "בחר תחילה מכל למשימות הצאצא",
+      "epicChildrenContainer": "מכל צאצאי האפיק",
+      "pickContainer": "בחר מסגרת או מודול",
+      "searchIssues": "חפש ניושנים",
+      "searchPlaceholder": "חפש לפי כותרת, הדבק URL של ניושן, או הקלד מספר ניושן…",
+      "createTasksIn": "צור משימות ב-",
+      "needFrameFirst": "הוסף תחילה מסגרת שירות ללוח כדי ליצור משימות מניושנים.",
+      "searchFailed": "החיפוש נכשל: {error}",
+      "searchResults": "תוצאות חיפוש",
+      "createFromIssue": "צור משימה מניושן זה",
+      "pickContainerFirst": "בחר תחילה מכל",
+      "viewOnGitHub": "הצג {id} ב-GitHub",
+      "emptyHint": "חפש למעלה, או הדבק URL/מפתח של ניושן כדי ליצור ממנו משימה.",
+      "imported": "יובא \"{title}\"",
+      "importFailed": "הייבוא נכשל",
+      "epicSpawned": "נוצר אפיק \"{title}\"",
+      "epicChildren": "{count} משימת צאצא נוצרה | {count} משימות צאצא נוצרו",
+      "epicFailed": "לא ניתן היה ליצור אפיק"
+    },
+    "connect": {
+      "title": "מקור משימות",
+      "sourceFallback": "מקור",
+      "connectedToast": "{label} חובר",
+      "connectFailed": "לא ניתן היה להתחבר",
+      "disconnectedToast": "{label} נותק",
+      "updateFailed": "לא ניתן היה לעדכן",
+      "intro": "{label} מאפשר לך לייבא ניושנים ולצרף אותם למשימות כהקשר עבור הסוכן.",
+      "credentialless": "מקור זה משתמש באפליקציית GitHub שכבר מותקנת במרחב העבודה שלך, ולכן אין פרטי גישה להזין.",
+      "installAppHint": "התקן את אפליקציית GitHub של מרחב העבודה (חבר מאגרי GitHub) כדי להציע את {label}.",
+      "connected": "מחובר.",
+      "connectedTo": "מחובר ל-{label}.",
+      "offerToWorkspace": "הצע למרחב עבודה זה",
+      "offerHint": "כשכבוי, {label} מוסתר מייבוא וקישור.",
+      "disconnect": "נתק",
+      "updateConnection": "עדכן חיבור",
+      "connect": "חבר",
+      "oauthButton": "התחבר עם {label}",
+      "oauthOr": "או התחבר עם מפתח API"
+    }
+  },
+  "pipeline": {
+    "iterationCap": {
+      "extraRound": "סבב נוסף אחד",
+      "proceed": "המשך בכל זאת",
+      "stopReset": "עצור ואפס את המשימה"
+    },
+    "builder": {
+      "title": "בונה הצינור",
+      "agentPalette": "פלטת הסוכנים",
+      "addAgent": "הוסף סוכן",
+      "pipeline": "צינור",
+      "configureModels": "הגדר מודלים",
+      "configureModelsTooltip": "ניהול תצורות מודלים (על איזה מודל כל סוכן רץ)",
+      "namePlaceholder": "שם הצינור",
+      "labelPlaceholder": "+ תווית",
+      "gatingNeedsEstimator": "שלב עם שער דורש מעריך משימות לפניו. הוסף אחד אחרת הצינור לא יישמר.",
+      "emptyDraft": "לחץ על סוכנים בצד שמאל כדי להרכיב צינור ליניארי.",
+      "companionAdd": "הוסף את {companion} (בודק את השלב הזה, ומחזיר אותו ללולאה מתחת לסף)",
+      "companionRemove": "הסר את {companion} עבור שלב זה",
+      "disableTooltip": "השבת שלב זה (נשמר בצינור אך מדולג בהרצה)",
+      "enableTooltip": "השלב מושבת (מדולג בהרצה). לחץ כדי להפעיל.",
+      "approvalAddTooltip": "דרוש אישור אנושי לאחר שלב זה",
+      "approvalRemoveTooltip": "נדרש אישור לאחר שלב זה. לחץ כדי להסיר את השער.",
+      "consensusEnableTooltip": "הפעל קונצנזוס (פאנל/דיון/הצבעה רב-מודלים) עבור שלב זה",
+      "consensusRevertTooltip": "קונצנזוס מופעל. לחץ כדי לחזור לסוכן יחיד.",
+      "followUpEnableTooltip": "מלווה המעקב מושבת. לחץ כדי להפעיל (Coder מציף קצוות פתוחים / שאלות).",
+      "followUpDisableTooltip": "מלווה המעקב מופעל. Coder מציף קצוות פתוחים / משימות צד / שאלות; לחץ כדי להשבית.",
+      "moveUp": "הזז שלב למעלה",
+      "moveDown": "הזז שלב למטה",
+      "removeStep": "הסר שלב זה מהצינור",
+      "gateOnEstimate": "שער לפי הערכה",
+      "companionGateTooltip": "הרץ מלווה זה רק כשהערכת המשימה חוצה סף (דורש מעריך משימות מוקדם יותר)",
+      "consensusGateTooltip": "הרץ קונצנזוס רק כשהערכת המשימה חוצה סף (אחרת רץ הסוכן הרגיל)",
+      "runWhenAny": "הרץ כאשר (כל אחד):",
+      "complexityThreshold": "מורכבות ≥",
+      "riskThreshold": "סיכון ≥",
+      "impactThreshold": "השפעה ≥",
+      "strategy": "אסטרטגיה",
+      "rounds": "סבבים",
+      "strategyOption": {
+        "specialist-panel": "פאנל מומחים",
+        "debate": "דיון",
+        "ranked-voting": "הצבעה מדורגת"
+      },
+      "rolePlaceholder": "תפקיד",
+      "modelIdPlaceholder": "מזהה מודל (אופציונלי)",
+      "removeParticipant": "הסר משתתף (מינימום 2)",
+      "addParticipant": "הוסף משתתף",
+      "savedPipelines": "צינורות שמורים",
+      "hideArchived": "הסתר מאורכבים",
+      "archivedCount": "מאורכבים ({count})",
+      "allLabels": "הכל",
+      "defaultBadge": "ברירת מחדל",
+      "stepCount": "שלב {count} | {count} שלבים",
+      "unarchive": "בטל ארכוב",
+      "archive": "אַרכֵב (הסתר מתצוגת ברירת המחדל)",
+      "cloneDefault": "שכפל ברירת מחדל זו לעותק הניתן לעריכה",
+      "clone": "שכפל",
+      "edit": "ערוך צינור זה",
+      "delete": "מחק צינור זה",
+      "disabledStepTooltip": "מושבת, מדולג בהרצה",
+      "cancelEdit": "בטל עריכה",
+      "clear": "נקה",
+      "update": "עדכן צינור",
+      "save": "שמור צינור",
+      "addAgentModal": {
+        "title": "הוסף סוכן",
+        "name": "שם",
+        "namePlaceholder": "לדוגמה Security Auditor",
+        "description": "תיאור",
+        "descriptionPlaceholder": "מה הסוכן הזה עושה?",
+        "linkDoc": "קשר מסמך הקשר",
+        "create": "צור סוכן"
+      },
+      "toast": {
+        "added": "נוסף הסוכן \"{name}\"",
+        "placeholderTitle": "מציין מיקום",
+        "updated": "עודכן \"{name}\"",
+        "saved": "נשמר \"{name}\"",
+        "addOneFirst": "הוסף לפחות סוכן אחד תחילה",
+        "saveFailed": "לא ניתן לשמור את הצינור",
+        "cloned": "שוכפל \"{name}\" — עורך כעת את \"{copy}\"",
+        "cloneFailed": "לא ניתן לשכפל את הצינור",
+        "updateFailed": "לא ניתן לעדכן את הצינור"
+      }
+    },
+    "progress": {
+      "status": {
+        "running": "רץ",
+        "blocked": "זקוק לך",
+        "paused": "מושהה (תקציב)",
+        "done": "הושלם",
+        "failed": "נכשל"
+      },
+      "state": {
+        "pending": "ממתין",
+        "working": "עובד",
+        "waiting_decision": "זקוק להחלטה",
+        "done": "בוצע"
+      },
+      "stage": {
+        "incorporating": "משלב…",
+        "reviewing": "בודק מחדש…",
+        "recommending": "ממליץ…"
+      },
+      "followUp": {
+        "watching": "צופה…",
+        "toDecide": "{count} להחלטה",
+        "allDecided": "הכל הוחלט"
+      },
+      "agentsComplete": "{completed} / {total} סוכנים הושלמו",
+      "currently": "כעת {agent}",
+      "percent": "{value}%",
+      "companion": "מלווה",
+      "companionTooltip": "מלווה של שלב מייצר",
+      "companionSuffix": "(מלווה)",
+      "stepOf": "שלב {current} מתוך {total}",
+      "viewDetailsOutput": "הצג פרטים וקרא פלט",
+      "viewDetails": "הצג פרטי שלב",
+      "restartTooltip": "הפעל מחדש את הצינור משלב זה",
+      "restartFromHere": "הפעל מחדש מכאן",
+      "spinningUpContainer": "מאתחל מכולה…",
+      "subtasks": "{completed}/{total} תת-משימות",
+      "subtasksInProgress": "· {count} בתהליך",
+      "clickToRead": "לחץ כדי לקרוא את הפלט של הסוכן הזה",
+      "reviewApprove": "בדוק ואשר את ההצעה של {agent}",
+      "resolve": "פתור: {question}"
+    },
+    "health": {
+      "title": "בריאות הצינור",
+      "allValid": "כל הצינורות תקפים ומעודכנים.",
+      "invalidHeading": "צינורות לא תקפים",
+      "invalidDescription": "אלה מפנים לסוכן חסר או מוגדרים בצורה שגויה, ולכן ייכשלו (או ירוצו בצורה שגויה) בהתחלה. מחק צינור מותאם אישית, או זרע מחדש צינור מובנה כדי לשחזר את הגדרת הקטלוג שלו.",
+      "builtinBadge": "מובנה",
+      "reseed": "זרע מחדש",
+      "delete": "מחק",
+      "updatesHeading": "עדכונים זמינים",
+      "updatesDescription": "גרסה חדשה יותר של צינורות מובנים אלה שוחררה. זרע מחדש כדי לאמץ אותה (התוויות ומצב הארכוב שלך נשמרים).",
+      "reseedAll": "זרע מחדש הכל ({count})",
+      "dismiss": "התעלם",
+      "done": "בוצע",
+      "toast": {
+        "reseedFailed": "לא ניתן לזרוע מחדש את הצינור",
+        "deleteFailed": "לא ניתן למחוק את הצינור"
+      }
+    }
+  },
+  "palette": {
+    "hint": "לחץ על סוכן כדי להוסיף אותו לצינור.",
+    "customAgents": "סוכנים מותאמים אישית"
+  },
+  "gates": {
+    "subtitle": {
+      "humanReview": "ממתין לסקירת קוד אנושית על ה-PR, ומפעיל בלולאה את המתקן על הערות",
+      "ci": "מגדר את ה-PR על CI ירוק, ומפעיל בלולאה את מתקן ה-CI בכישלון",
+      "conflicts": "מגדר את ה-PR על מיזוג נקי, ומפעיל בלולאה את הפותר בהתנגשויות"
+    },
+    "status": {
+      "passed": "עבר",
+      "gaveUp": "ויתר",
+      "fixing": "מתקן",
+      "failing": "נכשל",
+      "pending": "ממתין",
+      "checking": "בודק"
+    },
+    "conflict": {
+      "mergeable": "ניתן למיזוג",
+      "computing": "מחשב יכולת מיזוג…",
+      "conflicts": "התנגשויות עם הבסיס",
+      "unknown": "לא ידוע"
+    },
+    "noActivity": "אין עדיין פעילות שער.",
+    "noActivityHint": "הבדיקה המקדימה רצה ברגע שה-PR נפתח. בזמן שהיא דוגמת, השלב מציג מצב חי על הלוח.",
+    "passedCi": "ה-CI ירוק.",
+    "passedConflicts": "ה-PR מתמזג בצורה נקייה עם הבסיס שלו.",
+    "humanReview": {
+      "approvals": "{approved} / {required} אישור | {approved} / {required} אישורים",
+      "suffixFixing": "· המתקן מטפל בהערות…",
+      "suffixFailing": "· הערות סקירה לטיפול",
+      "suffixAwaiting": "· ממתין לסקירה",
+      "reviewPr": "סקור את בקשת המשיכה ב-GitHub",
+      "requestFixHeading": "בקש תיקון",
+      "requestFixDescription": "תאר שינוי שהמתקן צריך לבצע עכשיו על ענף ה-PR (בנוסף לכל הערות הסקירה, שבהן הוא מטפל אוטומטית).",
+      "requestFixPlaceholder": "למשל שנה את שם הפונקציה והוסף בדיקת יחידה למקרה של קלט ריק",
+      "requestFix": "בקש תיקון"
+    },
+    "ci": {
+      "failingChecks": "בדיקות נכשלות",
+      "openOnGithub": "פתח את {name} ב-GitHub",
+      "conclusionFallback": "כישלון",
+      "failureFallback": "ה-CI לא דיווח על כישלון בקומיט זה."
+    },
+    "conflicts": {
+      "mergeability": "יכולת מיזוג",
+      "viewPr": "הצג את בקשת המשיכה ב-GitHub"
+    },
+    "attemptsHeading": "ניסיונות {helper}",
+    "attempt": "ניסיון {number}",
+    "outcome": {
+      "completed": "הושלם",
+      "failed": "נכשל"
+    },
+    "sidebar": {
+      "state": "מצב",
+      "fixRounds": "{count} סבב תיקון | {count} סבבי תיקון",
+      "attempts": "{attempts}/{max} ניסיון | {attempts}/{max} ניסיונות",
+      "suffixRunning": "· פועל…",
+      "suffixNotNeeded": "· עדיין לא נדרש",
+      "gatedCommit": "קומיט מגודר",
+      "footer": "שער מריץ בדיקה מקדימה תכנותית ומפעיל את {helper} רק כשהיא נכשלת; בדיקה ירוקה מתקדמת בלי להפעיל דבר."
+    }
+  },
+  "requirements": {
+    "title": "סקירת דרישות",
+    "iteration": "איטרציה {current} / {max}",
+    "intro": "סוקר AI בחן את הדרישות שנאספו עבור ה{level} הזה — התיאור שלו בתוספת כל ה-PRD והאישוז המקושרים — והעלה את הממצאים שלהלן. {answer} את הרלוונטיים ו{dismiss} את שאינם רלוונטיים, ולאחר מכן שלב אותם; הסוקר סוקר מחדש עד שהדרישות ברורות.",
+    "levelFallback": "פריט",
+    "answerVerb": "ענה על",
+    "dismissVerb": "בטל",
+    "empty": "אין עדיין סקירה. הסוקר רץ אוטומטית כשלב הראשון כשהפייפליין של משימה זו מתחיל.",
+    "loadingReview": "טוען את הסקירה…",
+    "reviewing": "סוקר את הדרישות…",
+    "settled": "הדרישות נקבעו. המסמך שלהלן הוא מה שכל שלב סוכן במורד הזרם משתמש בו.",
+    "exceeded": {
+      "heading": "הגעת למגבלת {max} האיטרציות כשעדיין יש ממצאים פתוחים.",
+      "detail": "בצע סבב סקירה נוסף, המשך לשלב הבא עם הדרישות האחרונות ששולבו בכל זאת, או עצור ואפס את המשימה כדי שתוכל לשכתב את הדרישות ולהגיש מחדש."
+    },
+    "working": {
+      "incorporating": "משלב את התשובות שלך למסמך דרישות… אתה יכול לסגור את זה — נודיע לך רק אם נדרש קלט נוסף.",
+      "reReviewing": "סוקר מחדש את הדרישות המעודכנות… אתה יכול לסגור את זה — נודיע לך רק אם נדרש קלט נוסף."
+    },
+    "severity": {
+      "high": "גבוהה",
+      "medium": "בינונית",
+      "low": "נמוכה"
+    },
+    "category": {
+      "gap": "פער",
+      "clarification": "הבהרה",
+      "assumption": "הנחה",
+      "risk": "סיכון",
+      "question": "שאלה"
+    },
+    "itemStatus": {
+      "open": "פתוח",
+      "answered": "נענה",
+      "resolved": "נפתר",
+      "dismissed": "בוטל",
+      "recommend_requested": "התבקשה המלצה"
+    },
+    "answerLabel": "תשובה",
+    "answerPlaceholder": "ענה על ממצא זה…",
+    "dismissIrrelevant": "בטל כלא רלוונטי",
+    "markedForRecommendation": "סומן להמלצה",
+    "recommendSomething": "המלץ על משהו",
+    "recommendationRequested": "התבקשה המלצה — סקור את ההצעה שלהלן.",
+    "reopen": "פתח מחדש",
+    "recommendedAnswers": "תשובות מומלצות",
+    "recommendationProgress": "{ready} / {total} מוכנות",
+    "generatingSuggestion": "מייצר הצעה מבוססת…",
+    "currentStandard": "תקן נוכחי: {title}",
+    "accept": "קבל",
+    "reject": "דחה",
+    "reRequestPlaceholder": "בקש המלצה אחרת…",
+    "reRequest": "בקש מחדש",
+    "finalRequirements": "דרישות סופיות",
+    "incorporatedDraft": "דרישות ששולבו (טיוטה)",
+    "stats": {
+      "findings": "ממצאים",
+      "open": "פתוחים",
+      "answered": "נענו",
+      "model": "מודל"
+    },
+    "actions": {
+      "proceedNothing": "המשך (אין מה לשלב)",
+      "incorporateAnswers": "שלב תשובות",
+      "requestRecommendations": "בקש המלצה {count} | בקש המלצה {count} | בקש {count} המלצות",
+      "reReview": "נראה טוב — סקור מחדש",
+      "reReviewing": "סוקר מחדש…",
+      "redoIncorporation": "בצע שילוב מחדש",
+      "redoWithDirection": "בצע מחדש עם הכוונה זו"
+    },
+    "help": {
+      "canProceed": "כל הממצאים בוטלו — המשך לשלב הבא ללא שכתוב.",
+      "canIncorporate": "מקפל את התשובות שלך למסמך אחד בפורמט תקני, ואז סוקר אותו מחדש אוטומטית.",
+      "answerAll": "ענה על כל ממצא או בטל אותו כדי להמשיך.",
+      "merged": "הסקירה מחדש מריצה את הסוקר מול מסמך זה. אם אינך מרוצה מאופן המיזוג, בצע אותו מחדש עם הערה במקום זאת."
+    },
+    "redoPlaceholder": "מה המיזוג צריך לעשות אחרת?",
+    "settledFooter": "הדרישות נקבעו — הפייפליין ממשיך עם המסמך מימין.",
+    "toast": {
+      "preparingRecommendations": "מכין המלצה {count} ברקע | מכין המלצה {count} ברקע | מכין {count} המלצות ברקע",
+      "preparingRecommendationsDescription": "התשובות שלך נשמרו — סגור את זה אם תרצה; נודיע לך כשהן יהיו מוכנות.",
+      "recommendationsReady": "המלצה {count} מוכנה | המלצה {count} מוכנה | {count} המלצות מוכנות",
+      "incorporating": "משלב את התשובות שלך ברקע",
+      "incorporatingDescription": "חזרת ללוח — נודיע לך רק אם נדרש קלט נוסף.",
+      "reviewerSatisfied": "הסוקר מרוצה — ממשיך את הפייפליין",
+      "iterationLimitReached": "הגעת למגבלת האיטרציות — בחר כיצד להמשיך",
+      "newFindings": "אין ממצאים חדשים להגיב עליהם | ממצא חדש {count} להגיב עליו | {count} ממצאים חדשים להגיב עליהם",
+      "proceeding": "ממשיך לשלב הבא",
+      "taskReset": "המשימה אופסה — ערוך את הדרישות והגש מחדש",
+      "extraRoundGranted": "ניתן סבב סקירה נוסף אחד"
+    },
+    "errors": {
+      "saveAnswer": "לא ניתן לשמור את התשובה",
+      "updateFinding": "לא ניתן לעדכן את הממצא",
+      "requestRecommendations": "לא ניתן לבקש המלצות",
+      "acceptRecommendation": "לא ניתן לקבל את ההמלצה",
+      "rejectRecommendation": "לא ניתן לדחות את ההמלצה",
+      "reRequestRecommendation": "לא ניתן לבקש מחדש את ההמלצה",
+      "incorporate": "לא ניתן לשלב את התשובות",
+      "reReview": "לא ניתן לסקור מחדש את הדרישות",
+      "proceed": "לא ניתן להמשיך",
+      "resolveReview": "לא ניתן לפתור את הסקירה"
+    }
+  },
+  "clarity": {
+    "title": "מיון דוחות באגים",
+    "iteration": "איטרציה {current} / {max}",
+    "intro": "סוקר AI מיין את דוח הבאג של {level} זה לפי יכולת התיקון, את תיאורו וכל הקשר מקושר, והעלה את השאלות שלהלן. {answer} את הרלוונטיות ו{dismiss} את הלא רלוונטיות, ואז שלב אותן; הסוקר בודק מחדש עד שדוח הבאג ברור מספיק לתיקון.",
+    "itemFallback": "פריט",
+    "introAnswer": "ענה",
+    "introDismiss": "דחה",
+    "empty": "אין עדיין סקירה. הסוקר רץ אוטומטית כשלב הראשון כשהצינור של משימה זו מתחיל.",
+    "loadingReview": "טוען את הסקירה…",
+    "triaging": "ממיין את דוח הבאג…",
+    "converged": "דוח הבאג הובהר. הדוח שלהלן הוא מה שכל שלב סוכן במורד הזרם משתמש בו.",
+    "capHeading": "הגעת למגבלת {max} האיטרציות כשממצאים עדיין פתוחים.",
+    "capDetail": "בצע סבב סקירה נוסף אחד, המשך לשלב הבא עם דוח הבאג המובהר האחרון בכל זאת, או עצור ואפס את המשימה כדי שתוכל לעבד מחדש את דוח הבאג ולהגיש שוב.",
+    "incorporatingStage": "משלב את התשובות שלך לדוח באג מובהר… תוכל לסגור את זה, נודיע לך רק אם נדרש קלט נוסף.",
+    "reReviewingStage": "בודק מחדש את דוח הבאג המעודכן… תוכל לסגור את זה, נודיע לך רק אם נדרש קלט נוסף.",
+    "answerLabel": "תשובה",
+    "answerPlaceholder": "ענה על ממצא זה…",
+    "refineAnswerPlaceholder": "חדד את התשובה שלך…",
+    "saveAnswer": "שמור תשובה",
+    "dismissIrrelevant": "דחה כלא רלוונטי",
+    "reopen": "פתח מחדש",
+    "docHeading": "דוח באג מובהר",
+    "docHeadingDraft": "דוח באג מובהר (טיוטה)",
+    "rail": {
+      "findings": "ממצאים",
+      "open": "פתוח",
+      "answered": "נענה",
+      "model": "מודל"
+    },
+    "proceedNothing": "המשך (אין מה לשלב)",
+    "incorporateAnswers": "שלב תשובות",
+    "hint": {
+      "proceed": "כל ממצא נדחה, המשך לשלב הבא ללא עיבוד מחדש.",
+      "incorporate": "מקפל את התשובות שלך לדוח באג מובהר אחד, ואז בודק אותו מחדש אוטומטית.",
+      "answerAll": "ענה או דחה כל ממצא כדי להמשיך."
+    },
+    "reReviewing": "בודק מחדש…",
+    "looksGoodReReview": "נראה טוב — בדוק מחדש",
+    "redoIncorporation": "בצע מחדש את השילוב",
+    "redoPlaceholder": "מה המיזוג צריך לעשות אחרת?",
+    "redoWithDirection": "בצע מחדש עם הכוונה זו",
+    "redoHint": "בדיקה מחדש מריצה את הסוקר מול דוח זה. אם אינך מרוצה מאופן המיזוג שלו, בצע אותו מחדש עם הערה במקום.",
+    "incorporatedFooter": "דוח הבאג הובהר, הצינור ממשיך עם הדוח משמאל.",
+    "severity": {
+      "low": "נמוך",
+      "medium": "בינוני",
+      "high": "גבוה"
+    },
+    "category": {
+      "gap": "פער",
+      "clarification": "הבהרה",
+      "assumption": "הנחה",
+      "risk": "סיכון",
+      "question": "שאלה"
+    },
+    "itemStatus": {
+      "open": "פתוח",
+      "answered": "נענה",
+      "resolved": "נפתר",
+      "dismissed": "נדחה",
+      "recommend_requested": "התבקשה המלצה"
+    },
+    "toast": {
+      "clarifyingTitle": "מבהיר את דוח הבאג ברקע",
+      "clarifyingDescription": "חזרת ללוח, נודיע לך רק אם נדרש קלט נוסף.",
+      "reReviewSatisfied": "הסוקר מרוצה — ממשיך את הצינור",
+      "reReviewExceeded": "הגעת למגבלת האיטרציות — בחר כיצד להמשיך",
+      "reReviewNewFindings": "אין ממצאים חדשים להתייחס אליהם | ממצא חדש אחד להתייחס אליו | {count} ממצאים חדשים להתייחס אליהם",
+      "proceeding": "ממשיך לשלב הבא",
+      "taskReset": "המשימה אופסה — ערוך את דוח הבאג והגש שוב",
+      "extraRoundGranted": "ניתן סבב סקירה נוסף אחד"
+    },
+    "error": {
+      "saveAnswer": "לא ניתן לשמור את התשובה",
+      "updateFinding": "לא ניתן לעדכן את הממצא",
+      "incorporate": "לא ניתן לשלב את התשובות",
+      "reReview": "לא ניתן לבדוק מחדש את דוח הבאג",
+      "proceed": "לא ניתן להמשיך",
+      "resolve": "לא ניתן לפתור את הסקירה"
+    }
+  },
+  "consensus": {
+    "titlePrefix": "קונצנזוס",
+    "participantCount": "אין משתתפים | משתתף אחד | {count} משתתפים",
+    "loading": "טוען מושב קונצנזוס…",
+    "empty": "טרם רץ מושב קונצנזוס עבור שלב זה.",
+    "failed": "הקונצנזוס נכשל: {error}",
+    "unknownError": "שגיאה לא ידועה",
+    "synthesizedResult": "תוצאה מסונתזת",
+    "confidence": "ביטחון {pct}",
+    "panel": "פאנל",
+    "topScore": "מוביל {label} {pct}",
+    "expert": "מומחה {letter}",
+    "participant": "משתתף",
+    "strategy": {
+      "specialistPanel": "פאנל מומחים",
+      "debate": "דיון",
+      "rankedVoting": "הצבעה מדורגת"
+    },
+    "round": {
+      "heading": "סבב {n}",
+      "contributions": "תרומות",
+      "draft": "טיוטות עצמאיות",
+      "critique": "ביקורת ותיקון",
+      "score": "ניקוד"
+    },
+    "status": {
+      "running": "פועל",
+      "synthesizing": "מסנתז",
+      "done": "הושלם",
+      "failed": "נכשל"
+    }
+  },
+  "brainstorm": {
+    "title": {
+      "architecture": "סיעור מוחות ארכיטקטורי",
+      "requirements": "סיעור מוחות של דרישות"
+    },
+    "subjectNoun": {
+      "architecture": "גישה",
+      "requirements": "דרישות"
+    },
+    "docNoun": {
+      "architecture": "גישה טכנית",
+      "requirements": "כיוון דרישות"
+    },
+    "iteration": "איטרציה {current} / {max}",
+    "intro": "שותף AI הציע את אפשרויות ה{subject} שלהלן, כל אחת עם יתרונותיה וחסרונותיה. {choose} את אלו שאתה רוצה (וכוון אותן) ו{dismiss} את השאר, ואז שלב; הוא ירוץ מחדש עד שתתכנס ל{doc}.",
+    "introChoose": "בחר",
+    "introDismiss": "דחה",
+    "empty": "אין עדיין סיעור מוחות. הוא רץ אוטומטית כשהצינור של משימה זו מגיע לשלב סיעור המוחות.",
+    "loading": "טוען את סיעור המוחות…",
+    "generating": "מייצר אפשרויות…",
+    "settledBanner": "ה{doc} נקבע. המסמך שלהלן הוא מה שהשלב הבא משתמש בו.",
+    "exceeded": {
+      "heading": "הוגעה למגבלת {max} האיטרציות עם אפשרויות שעדיין פתוחות.",
+      "detail": "בצע סבב סיעור מוחות נוסף, המשך לשלב הבא עם הכיוון האחרון בכל מקרה, או עצור ואפס את המשימה כדי שתוכל לערוך אותה ולהגיש מחדש."
+    },
+    "working": {
+      "incorporating": "משלב את הבחירות שלך ל{doc}… תוכל לסגור זאת — נודיע לך רק אם נדרש קלט נוסף.",
+      "reReviewing": "מריץ מחדש את סיעור המוחות על הכיוון המעודכן… תוכל לסגור זאת — נודיע לך רק אם נדרש קלט נוסף."
+    },
+    "severity": {
+      "low": "נמוכה",
+      "medium": "בינונית",
+      "high": "גבוהה"
+    },
+    "category": {
+      "gap": "פער",
+      "clarification": "הבהרה",
+      "assumption": "הנחה",
+      "risk": "סיכון",
+      "question": "שאלה"
+    },
+    "itemStatus": {
+      "open": "פתוח",
+      "answered": "נענה",
+      "resolved": "נפתר",
+      "dismissed": "נדחה",
+      "recommend_requested": "התבקשה המלצה"
+    },
+    "yourChoice": "הבחירה שלך",
+    "replyPlaceholder": {
+      "refine": "חדד את בחירתך…",
+      "choose": "בחר / כוון אפשרות זו…"
+    },
+    "saveChoice": "שמור בחירה",
+    "dismiss": "דחה",
+    "reopen": "פתח מחדש",
+    "docDraft": "{doc} (טיוטה)",
+    "rail": {
+      "options": "אפשרויות",
+      "open": "פתוחות",
+      "chosen": "נבחרו",
+      "model": "מודל"
+    },
+    "proceedNothing": "המשך (אין מה לשלב)",
+    "incorporateChoices": "שלב בחירות",
+    "hint": {
+      "allDismissed": "כל האפשרויות נדחו — המשך לשלב הבא ללא כיוון.",
+      "incorporate": "משלב את הבחירות שלך ל{doc} אחד, ואז מריץ מחדש את סיעור המוחות אוטומטית.",
+      "chooseAll": "בחר או דחה כל אפשרות כדי להמשיך."
+    },
+    "reRunning": "מריץ מחדש…",
+    "reRun": "נראה טוב — הרץ מחדש",
+    "redoIncorporation": "בצע מחדש את השילוב",
+    "redoPlaceholder": "מה הכיוון צריך לעשות אחרת?",
+    "redoWithDirection": "בצע מחדש עם כיוון זה",
+    "mergedHint": "הרצה מחדש מריצה את הסוכן על כיוון זה. אם אינך מרוצה מאופן השילוב, בצע אותו מחדש עם הערה במקום.",
+    "incorporatedFooter": "הכיוון נקבע — הצינור ממשיך עם המסמך משמאל.",
+    "toast": {
+      "saveChoiceError": "לא ניתן היה לשמור את הבחירה",
+      "updateOptionError": "לא ניתן היה לעדכן את האפשרות",
+      "incorporateError": "לא ניתן היה לשלב את הבחירות",
+      "draftingTitle": "מנסח את ה{doc} ברקע",
+      "draftingDescription": "חזרת ללוח — נודיע לך רק אם נדרש קלט נוסף.",
+      "reReviewSettled": "הכיוון נקבע — ממשיך את הצינור",
+      "reReviewExceeded": "הוגעה למגבלת האיטרציות — בחר כיצד להמשיך",
+      "reReviewNewOptions": "אין אפשרויות חדשות להגיב עליהן | אפשרות חדשה אחת להגיב עליה | {count} אפשרויות חדשות להגיב עליהן",
+      "reReviewError": "לא ניתן היה להריץ מחדש את סיעור המוחות",
+      "proceeding": "ממשיך לשלב הבא",
+      "proceedError": "לא ניתן היה להמשיך",
+      "taskReset": "המשימה אופסה — ערוך אותה והגש מחדש",
+      "extraRoundGranted": "ניתן סבב סיעור מוחות נוסף אחד",
+      "resolveError": "לא ניתן היה לפתור את סיעור המוחות"
+    }
+  },
+  "spec": {
+    "title": "דרישות",
+    "loading": "טוען את המפרט…",
+    "error": "לא ניתן לטעון את המפרט. נסה לפתוח מחדש חלון זה.",
+    "overview": "סקירה כללית",
+    "noFeatureGroups": "אין קבוצות תכונות",
+    "noSummary": "אין סיכום שירות.",
+    "noGherkinForGroup": "אין תרחישי Gherkin לקבוצה זו.",
+    "noRequirements": "אין דרישות בקבוצה זו.",
+    "domainRules": "כללי דומיין",
+    "ruleRationale": " — {rationale}",
+    "moduleHint": "אין מודולים. בחר קבוצת תכונות משמאל כדי להציג את הדרישות שלה. | מודול אחד. בחר קבוצת תכונות משמאל כדי להציג את הדרישות שלה. | {count} מודולים. בחר קבוצת תכונות משמאל כדי להציג את הדרישות שלה.",
+    "moduleHintGherkin": "אין מודולים. בחר קבוצת תכונות משמאל כדי להציג את הדרישות שלה או עבור לתרחישי Gherkin. | מודול אחד. בחר קבוצת תכונות משמאל כדי להציג את הדרישות שלה או עבור לתרחישי Gherkin. | {count} מודולים. בחר קבוצת תכונות משמאל כדי להציג את הדרישות שלה או עבור לתרחישי Gherkin.",
+    "mode": {
+      "structured": "מובנה",
+      "gherkin": "Gherkin",
+      "gherkinTooltip": "תרחישי Gherkin",
+      "gherkinNone": "אין עדיין תרחישים ב-main"
+    },
+    "empty": {
+      "title": "אין עדיין מפרט",
+      "description": "לשירות זה אין מפרט בענף ברירת המחדל שלו. מפרט נוצר כשמשימות מריצות את הצינורות שלהן; ברגע שהוא ינחת ב-main הוא יופיע כאן, עם תרחישי ה-Gherkin שלו."
+    },
+    "priority": {
+      "must": "חובה",
+      "should": "רצוי",
+      "could": "אפשרי"
+    },
+    "kind": {
+      "functional": "פונקציונלי",
+      "nonfunctional": "לא-פונקציונלי",
+      "constraint": "אילוץ"
+    },
+    "acceptance": {
+      "given": "בהינתן",
+      "when": "כאשר",
+      "then": "אז"
+    }
+  },
+  "followUp": {
+    "title": "המשכים",
+    "titleWithBlock": "המשכים — {title}",
+    "subtitle": "המשכים ושאלות צופי-עתיד שה-Coder העלה. הצינור ממשיך ברגע שכל פריט הוכרע.",
+    "badge": {
+      "toDecide": "{count} להכרעה | {count} להכרעה | {count} להכרעה",
+      "allDecided": "הכל הוכרע"
+    },
+    "empty": {
+      "title": "אין עדיין המשכים.",
+      "hint": "ככל שה-Coder עובד הוא משדר כאן קצוות פתוחים, משימות-צד ושאלות. הם מופיעים בזמן אמת, כך שתוכל לפעול עליהם עוד לפני שה-Coder יסיים."
+    },
+    "suggested": "מוצע:",
+    "viewIssue": "הצג ניושן",
+    "yourAnswer": "התשובה שלך:",
+    "answerPlaceholder": "ענה על שאלה זו — היא משולבת במעבר הבא של ה-Coder…",
+    "status": {
+      "pending": "דורש החלטה",
+      "filed": "הוגש כניושן",
+      "queued": "נשלח ל-Coder",
+      "answered": "נענה",
+      "dismissed": "נדחה"
+    },
+    "actions": {
+      "answerAndSend": "ענה ושלח בחזרה",
+      "dismiss": "דחה",
+      "fileAsIssue": "הגש כניושן",
+      "sendToCoder": "שלח ל-Coder"
+    },
+    "footer": {
+      "summary": "{count} פריט · {undecided} לא הוכרעו | {count} פריטים · {undecided} לא הוכרעו",
+      "loops": "לולאות Coder בשימוש: {loops} / {max}"
+    }
+  },
+  "humanTest": {
+    "title": "בדיקה אנושית",
+    "titleWithBlock": "בדיקה אנושית — {title}",
+    "subtitle": "אמת את השינוי בסביבה חיה",
+    "notStarted": "שלב זה עדיין לא התחיל.",
+    "confirm": "נראה טוב — המשך",
+    "phase": {
+      "provisioning": "מקצה סביבה…",
+      "awaitingHuman": "ממתין לאימות שלך",
+      "fixing": "המתקן מטפל בממצאים שלך…",
+      "resolvingConflicts": "פותר התנגשויות עם main…",
+      "passed": "עבר"
+    },
+    "envStatus": {
+      "provisioning": "מקצה…",
+      "ready": "מוכן",
+      "failed": "נכשל",
+      "expired": "פג תוקף",
+      "tearingDown": "מפרק…",
+      "tornDown": "הושמד"
+    },
+    "environment": {
+      "heading": "סביבה זמנית",
+      "noUrl": "אין כתובת עדיין.",
+      "expires": "פג תוקף {date}",
+      "none": "אין סביבה חיה."
+    },
+    "actions": {
+      "recreate": "צור מחדש",
+      "destroy": "השמד",
+      "pullMain": "משוך את main ופרוס מחדש"
+    },
+    "fix": {
+      "heading": "מצאת בעיה?",
+      "cancel": "בטל",
+      "requestFix": "בקש תיקון",
+      "placeholder": "תאר מה השתבש — סוכן המתקן מקבל זאת כהקשר, ולאחר מכן הסביבה נבנית מחדש לבדיקה חוזרת.",
+      "send": "שלח למתקן"
+    },
+    "history": {
+      "heading": "היסטוריה (אין סבבים) | היסטוריה (סבב אחד) | היסטוריה ({count} סבבים)",
+      "fixRequested": "תיקון התבקש",
+      "pulledMain": "נמשך main"
+    },
+    "roundOutcome": {
+      "completed": "הושלם",
+      "failed": "נכשל",
+      "inProgress": "בתהליך"
+    }
+  },
+  "testing": {
+    "title": "דוח בדיקה",
+    "subtitle": "בדיקה חקרנית ובדיקת רגרסיה של השינוי",
+    "badge": {
+      "greenlit": "אושר",
+      "needsFixes": "דורש תיקונים"
+    },
+    "fixerAttempts": "ניסיונות מתקן",
+    "fixCount": "{attempts}/{max} תיקון",
+    "fixingSuffix": "· מתקן…",
+    "fixerTimeline": {
+      "attempt": "ניסיון {n}",
+      "completed": "הושלם",
+      "failed": "נכשל",
+      "addressed": "מטפל"
+    },
+    "empty": {
+      "title": "אין דוח בדיקה עדיין.",
+      "hint": "הדוח מופיע ברגע שהבודק מסיים מעבר. בזמן שהוא רץ, השלב מציג התקדמות חיה על הלוח."
+    },
+    "scenariosOutcomes": "תרחישים ותוצאות",
+    "otherChecks": "בדיקות אחרות",
+    "checks": "בדיקות",
+    "screenshotCount": "{count} צילום מסך | {count} צילומי מסך",
+    "checkCount": "{count} בדיקה | {count} בדיקות",
+    "concernCount": "{count} חשש | {count} חששות",
+    "noDiscreteCheck": "לא נרשמה בדיקה נפרדת עבור תרחיש זה.",
+    "severity": {
+      "critical": "קריטי",
+      "high": "גבוה",
+      "medium": "בינוני",
+      "low": "נמוך"
+    },
+    "status": {
+      "passed": "עבר",
+      "failed": "נכשל",
+      "skipped": "דולג"
+    },
+    "shot": {
+      "failed": "נכשל",
+      "failedToLoad": "הטעינה נכשלה",
+      "loading": "טוען…"
+    },
+    "screenshotAlt": "{view} (צילום מסך)",
+    "screenshots": "צילומי מסך",
+    "verdict": {
+      "heading": "פסיקה",
+      "safe": "בטוח לשחרר",
+      "withheld": "מעוכב"
+    },
+    "outcomes": {
+      "heading": "תוצאות",
+      "passed": "עבר",
+      "failed": "נכשל",
+      "skipped": "דולג",
+      "concerns": "חששות",
+      "blocking": "({count} חוסם) | ({count} חוסמים)"
+    },
+    "environment": "סביבה",
+    "infrastructure": "תשתית",
+    "standup": {
+      "up": "התלויות הופעלו",
+      "failed": "התלויות נכשלו בהפעלה",
+      "took": "ארך {seconds} שניות",
+      "showLogs": "הצג יומני הקמה",
+      "hideLogs": "הסתר יומני הקמה"
+    },
+    "footer": "תרחישים הם התחומים שהבודק בחר לבחון (תרחישי קבלת המפרט שלו). תוצאות וחששות מקובצים תחתם לפי שם."
+  },
+  "visualConfirm": {
+    "ariaLabel": "אישור חזותי",
+    "title": "אישור חזותי",
+    "titleWithBlock": "אישור חזותי — {title}",
+    "subtitle": "סקור את הממשק מול עיצובי הייחוס",
+    "notStarted": "שלב זה עדיין לא התחיל.",
+    "noScreenshots": "לא נלכדו צילומי מסך. סקור את השינוי ידנית, או העלה ייחוס למטה.",
+    "noteIssue": "ציין בעיה עם {view}",
+    "noted": "צוין",
+    "notePlaceholder": "מה נראה שגוי ב-{view}?",
+    "reviewedManually": "סקרתי זאת ידנית",
+    "recapture": "צלם מחדש",
+    "approve": "אשר — המשך",
+    "phase": {
+      "awaiting_human": "ממתין לסקירה שלך",
+      "fixing": "המתקן מטפל בממצאים שלך…",
+      "approved": "אושר"
+    },
+    "outcome": {
+      "completed": "הושלם",
+      "failed": "נכשל",
+      "inProgress": "בתהליך"
+    },
+    "lightbox": {
+      "actualLabel": "{view} — בפועל",
+      "actualAlt": "{view} (בפועל)",
+      "referenceLabel": "{view} — ייחוס",
+      "referenceAlt": "{view} (ייחוס)"
+    },
+    "upload": {
+      "heading": "העלה עיצוב ייחוס",
+      "viewPlaceholder": "שם מסך (למשל login)",
+      "tipReady": "טיפ: גרור תמונה ישירות על זוג למעלה כדי להגדיר את הייחוס שלו.",
+      "tipNeedView": "הזן תחילה שם מסך, ואז בחר קובץ. או גרור תמונה ישירות על זוג למעלה."
+    },
+    "requestFix": {
+      "heading": "בקש תיקון",
+      "placeholder": "כל דבר נוסף שהמתקן צריך לדעת (בנוסף להערות הספציפיות לכל מסך שלמעלה).",
+      "foldedHint": "הערות ספציפיות לכל מסך משולבות אוטומטית.",
+      "send": "שלח למתקן"
+    },
+    "history": {
+      "heading": "היסטוריה (אין סבבים) | היסטוריה ({count} סבב) | היסטוריה ({count} סבבים)",
+      "fixRequested": "התבקש תיקון"
+    }
+  },
+  "focus": {
+    "board": "לוח",
+    "typeSubtitle": "{type} · תצוגת מיקוד",
+    "runPipeline": "הרץ פייפליין",
+    "rerunPipeline": "הרץ פייפליין מחדש",
+    "noPipelineRunning": "אין פייפליין פעיל",
+    "emptyPipelineHint": "הרץ פייפליין כדי להמחיש את הסוכנים העובדים על בלוק זה.",
+    "description": "תיאור",
+    "overallProgress": "התקדמות כוללת",
+    "dependencies": "תלויות",
+    "noDependencies": "אין"
+  },
+  "environments": {
+    "title": "סביבה זמנית",
+    "status": {
+      "provisioning": "מקים…",
+      "ready": "פועלת",
+      "failed": "נכשלה",
+      "expired": "פגה",
+      "tearing_down": "מכבה…",
+      "torn_down": "כובתה"
+    },
+    "expires": "פג תוקף ב-{date}",
+    "empty": "אין סביבה זמנית להרצה הזו."
+  },
+  "provisioning": {
+    "title": "יומני הקמה",
+    "refresh": "רענן",
+    "empty": "עדיין לא נרשמו ניסיונות הקמה.",
+    "operation": {
+      "provision": "הקמה",
+      "teardown": "פירוק",
+      "status": "בדיקת מצב",
+      "dispatch": "הקמה",
+      "release": "פירוק",
+      "poll-failure": "בדיקת תקינות"
+    },
+    "outcome": {
+      "success": "הצלחה",
+      "failure": "כשל"
+    }
+  },
+  "kaizen": {
+    "title": "Kaizen",
+    "subtitle": "ניקוד שיפור מתמיד של הרצות הסוכנים",
+    "refresh": "רענן",
+    "notConfigured": "Kaizen אינו מוגדר בפריסה הזו.",
+    "grading": {
+      "title": "ניקוד Kaizen"
+    },
+    "status": {
+      "scheduled": "מתוזמן",
+      "grading": "מנקד…",
+      "failed": "נכשל",
+      "graded": "נוקד"
+    },
+    "gradeValue": "{grade}/5",
+    "scheduledHint": "ניקוד Kaizen ממתין בתור לשלב הזה. הוא רץ ברקע לאחר ההרצה.",
+    "recommendations": "המלצות",
+    "noImprovements": "אינטראקציה חלקה, אין מה לשפר.",
+    "gradedBy": "נוקד על ידי {model}",
+    "failedFallback": "לא ניתן היה להשלים את הניקוד.",
+    "promptVersion": "גרסה {version}",
+    "verifiedCombos": {
+      "title": "צירופים מאומתים",
+      "count": "({count})",
+      "hint": "צירוף של פרומפט + סוכן + מודל שקיבל ניקוד 4 או 5 ללא המלצות חמש פעמים ברציפות. צירופים אלה אינם מנוקדים עוד.",
+      "empty": "אין עדיין צירופים.",
+      "progress": "{count}/5",
+      "modelPrompt": "{model} · פרומפט גרסה {version}"
+    },
+    "history": {
+      "title": "היסטוריית ניקוד",
+      "col": {
+        "when": "מתי",
+        "agent": "סוכן",
+        "model": "מודל",
+        "grade": "ציון",
+        "recommendations": "המלצות"
+      },
+      "empty": "אין עדיין ניקודים."
+    }
+  },
+  "recurring": {
+    "runEvery": "הרץ כל",
+    "hours": "שעות",
+    "allowedDays": "ימים מותרים",
+    "allowedDaysHelp": "השאר הכול כבוי כדי לרוץ בכל יום.",
+    "weekday": {
+      "sun": "א׳",
+      "mon": "ב׳",
+      "tue": "ג׳",
+      "wed": "ד׳",
+      "thu": "ה׳",
+      "fri": "ו׳",
+      "sat": "ש׳"
+    },
+    "windowToggle": "רק בתוך חלון שעות ביממה (למשל שעות עבודה)",
+    "to": "עד",
+    "timezone": "אזור זמן"
+  },
+  "media": {
+    "compare": {
+      "mode": {
+        "sideBySide": "זה לצד זה",
+        "overlay": "שכבה על גבי שכבה",
+        "swipe": "החלקה",
+        "diff": "הבדל"
+      },
+      "actual": "בפועל",
+      "reference": "ייחוס",
+      "actualAlt": "{view} (בפועל)",
+      "referenceAlt": "{view} (ייחוס)",
+      "replace": "החלף",
+      "failedToLoad": "הטעינה נכשלה",
+      "loading": "טוען…",
+      "notCaptured": "לא נלכד",
+      "dropHint": "גרור או לחץ כדי להוסיף ייחוס",
+      "diffHint": "פיקסלים זהים מופיעים בשחור; ההבדלים זוהרים."
+    },
+    "lightbox": {
+      "ariaLabel": "צילום מסך: {label}",
+      "ariaLabelFallback": "מציג צילומי מסך",
+      "fallbackTitle": "צילום מסך",
+      "counter": "{current} / {total}",
+      "zoomOut": "הקטן (-)",
+      "zoomIn": "הגדל (+)",
+      "reset": "אפס (0)",
+      "close": "סגור (Esc)",
+      "prev": "הקודם (←)",
+      "next": "הבא (→)",
+      "failed": "טעינת התמונה נכשלה.",
+      "loading": "טוען…"
+    }
+  },
+  "fragments": {
+    "panel": {
+      "title": "ספריית מקטעי פרומפט"
+    },
+    "intro": {
+      "workspace": "אצור את ההנחיות המומלצות שהסוכנים עוקבים אחריהן בלוח הזה. המקטעים ממוזגים מהקטלוג המובנה, מהחשבון שלך ומהלוח הזה (שכבות מאוחרות גוברות על מוקדמות), ואז הרלוונטיים נבחרים לכל הרצת סוכן.",
+      "account": "אצור הנחיות מומלצות המשותפות לכל הלוחות בחשבון הזה. מקטעי החשבון ממוזגים מתחת לקטלוג המובנה, ולוח יכול לדרוס או להוסיף משלו מעליהם. הרלוונטיים נבחרים לכל הרצת סוכן."
+    },
+    "owner": {
+      "workspace": "הלוח הזה",
+      "account": "החשבון הזה"
+    },
+    "tier": {
+      "builtin": "מובנה",
+      "account": "חשבון",
+      "workspace": "הלוח הזה"
+    },
+    "tab": {
+      "catalog": "קטלוג מיושב",
+      "documents": "מסמכים",
+      "sources": "מקורות מאגר"
+    },
+    "catalog": {
+      "summary": "מקטע אחד יושב · {builtin} מובנים. | {count} מקטעים יושבו · {builtin} מובנים.",
+      "live": "חי · {source}"
+    },
+    "authored": {
+      "fromRepo": "מהמאגר",
+      "empty": {
+        "workspace": "אין עדיין מקטעים ייעודיים ללוח. הוסף אחד למטה, או דרוס מקטע מובנה באמצעות המזהה שלו.",
+        "account": "אין עדיין מקטעים ייעודיים לחשבון. הוסף אחד למטה, או דרוס מקטע מובנה באמצעות המזהה שלו."
+      },
+      "addTitle": "הוסף מקטע",
+      "titlePlaceholder": "כותרת",
+      "summaryPlaceholder": "תקציר בשורה אחת (בשימוש הבורר)",
+      "bodyPlaceholder": "גוף ההנחיה (מוזרק לפרומפט)",
+      "tagsPlaceholder": "תגיות, מופרדות בפסיקים (למשל backend, db)",
+      "add": "הוסף מקטע"
+    },
+    "documents": {
+      "intro": "קשר עמוד Confluence/Notion או קובץ GitHub כמקטע מומלץ. ההנחיה שלו מיושבת מחדש מהמקור בזמן ההרצה: ערוך את המסמך וההרצה הבאה עוקבת אחר הגרסה החדשה (ללא ייבוא מחדש).",
+      "lastResolved": "יושב לאחרונה {date}",
+      "refreshTitle": "ישב מחדש מהמקור עכשיו",
+      "empty": "אין עדיין מקטעים מבוססי מסמך. קשר אחד למטה.",
+      "linkTitle": "קשר מסמך",
+      "disabledHint": "צור תחילה לוח עם מקור מסמכים מחובר; מקטעי מסמך ברמת החשבון נשלפים דרך אחד הלוחות של החשבון הזה.",
+      "connectFirst": "חבר תחילה מקור מסמכים (Confluence, Notion או GitHub) תחת אינטגרציות.",
+      "refPlaceholder": "מזהה עמוד או כתובת (למשל עמוד Confluence/Notion או כתובת קובץ GitHub)",
+      "tagsPlaceholder": "תגיות, מופרדות בפסיקים (אופציונלי)",
+      "link": "קשר כמקטע חי"
+    },
+    "sources": {
+      "metaSynced": "סונכרן · ref {ref}",
+      "metaNever": "מעולם לא סונכרן · ref {ref}",
+      "changes": "שינוי אחד | {count} שינויים",
+      "empty": "אין מאגרי הנחיות מקושרים. קשר אחד למטה כדי לייבא את קובצי ה-Markdown שלו כמקטעים.",
+      "linkTitle": "קשר מאגר הנחיות",
+      "ownerPlaceholder": "בעלים",
+      "repoPlaceholder": "מאגר",
+      "dirPlaceholder": "נתיב תיקייה (למשל guidelines)",
+      "refPlaceholder": "ref (ברירת מחדל HEAD)",
+      "link": "קשר וסנכרן"
+    },
+    "toast": {
+      "added": "המקטע נוסף",
+      "addFailed": "לא ניתן היה להוסיף מקטע",
+      "removed": "המקטע הוסר",
+      "removeFailed": "לא ניתן היה להסיר מקטע",
+      "documentLinked": "המסמך קושר כמקטע חי",
+      "linkDocumentFailed": "לא ניתן היה לקשר מסמך",
+      "refreshed": "המקטע יושב מחדש מהמקור",
+      "refreshFailed": "לא ניתן היה לרענן מקטע",
+      "sourceLinked": "המקור קושר וסונכרן",
+      "linkSourceFailed": "לא ניתן היה לקשר מקור",
+      "synced": "סונכרן: {updated} עודכנו, {removed} הוסרו",
+      "syncFailed": "לא ניתן היה לסנכרן מקור",
+      "changesAvailable": "שינוי אחד זמין | {count} שינויים זמינים",
+      "upToDate": "מעודכן",
+      "checkSourceFailed": "לא ניתן היה לבדוק את המקור",
+      "sourceUnlinked": "קישור המקור בוטל",
+      "unlinkSourceFailed": "לא ניתן היה לבטל את קישור המקור"
+    }
+  },
+  "sandbox": {
+    "title": "Sandbox: בדיקת פרומפטים ומודלים",
+    "description": "נסה גרסאות פרומפט ומודלים מול fixtures מנוקדים, בניקוד של מודל שופט.",
+    "unavailable": {
+      "title": "ה-Sandbox אינו מופעל בפריסה הזו.",
+      "body": "הוא זקוק למסד נתונים משלו ({db} ייעודי ב-Cloudflare, או סכמת Postgres בשם {schema} ב-Node). הקם אותו וטען מחדש."
+    },
+    "error": {
+      "title": "טעינת ה-Sandbox נכשלה."
+    },
+    "deploymentDefault": "ברירת המחדל של הפריסה",
+    "defaultRunName": "הרצת sandbox מסוג {kind}",
+    "baseline": "בסיס",
+    "versionLabel": "גרסה {version}",
+    "tab": {
+      "experiments": "ניסויים",
+      "prompts": "פרומפטים",
+      "fixtures": "Fixtures"
+    },
+    "builder": {
+      "title": "ניסוי חדש",
+      "agent": "סוכן",
+      "promptVersions": "גרסאות פרומפט",
+      "models": "מודלים",
+      "noModels": "אין מודלים לבחירה. הגדר מפתח ספק או הפעל את Cloudflare AI.",
+      "fixtures": "Fixtures",
+      "noFixtures": "אין fixtures לסוכן הזה.",
+      "judgeModel": "מודל שופט",
+      "judgeModelHint": "מנקד כל תא",
+      "nameLabel": "שם (אופציונלי)",
+      "cellCount": "תא אחד | {count} תאים",
+      "maxCells": "(מקסימום {max})",
+      "run": "הרץ"
+    },
+    "experimentStatus": {
+      "draft": "טיוטה",
+      "running": "פועל",
+      "done": "הושלם",
+      "failed": "נכשל"
+    },
+    "results": {
+      "col": {
+        "prompt": "פרומפט",
+        "model": "מודל",
+        "fixture": "Fixture",
+        "score": "ציון",
+        "objective": "מטרה"
+      },
+      "failed": "נכשל",
+      "past": "ניסויים קודמים",
+      "empty": "אין עדיין ניסויים."
+    },
+    "prompts": {
+      "forkTitle": "פצל למועמד",
+      "editTitle": "ערוך / גרסה",
+      "forkOf": "פיצול · {name}",
+      "newVersionOf": "גרסה חדשה של · {name}",
+      "saveVersion": "שמור גרסה חדשה",
+      "hint": "בחר פרומפט כדי לפצל בסיס משוחרר או לגרסת מועמד. כל שמירה מוסיפה גרסה בלתי ניתנת לשינוי שאפשר להעמיד למבחן."
+    },
+    "fixtureKind": {
+      "requirements": "דרישות",
+      "clarity": "בהירות",
+      "architecture": "ארכיטקטורה",
+      "code-review": "סקירת קוד",
+      "repo-feature": "פיצ׳ר במאגר",
+      "repo-bug": "באג במאגר"
+    },
+    "fixtureOrigin": {
+      "builtin": "מובנה",
+      "custom": "מותאם אישית"
+    },
+    "fixtures": {
+      "expectations": "ציפייה מנוקדת אחת | {count} ציפיות מנוקדות",
+      "empty": "אין fixtures."
+    },
+    "toast": {
+      "running": "מריץ ניסוי…",
+      "complete": "הניסוי הושלם",
+      "runFailed": "לא ניתן היה להריץ את הניסוי",
+      "versionSaved": "נשמרה גרסה חדשה",
+      "saveFailed": "לא ניתן היה לשמור את הגרסה",
+      "archiveFailed": "לא ניתן היה להעביר לארכיון"
+    }
+  },
+  "bootstrap": {
+    "title": "אתחל מאגר",
+    "repoName": {
+      "error": {
+        "hasSlash": "הזן רק את שם המאגר, ללא הקידומת 'owner/'.",
+        "invalidChars": "מותרים רק אותיות, ספרות, '.', '_' ו-'-'.",
+        "tooLong": "חייב להיות 100 תווים או פחות."
+      }
+    },
+    "intro": {
+      "canCreate": "צור מאגר GitHub ריק, ואז תן לסוכן מאתחל לאכלס אותו במכל ארגז חול, בין אם על ידי התאמה של אחת מארכיטקטורות הייחוס שלך או מאפס לפי פרומפט חופשי. cat-factory דוחפת את הקומיט הראשוני לאותו מאגר; לחשבון הזה היא יכולה גם ליצור עבורך את המאגר.",
+      "manual": "צור מאגר GitHub ריק, ואז תן לסוכן מאתחל לאכלס אותו במכל ארגז חול, בין אם על ידי התאמה של אחת מארכיטקטורות הייחוס שלך או מאפס לפי פרומפט חופשי. cat-factory דוחפת את הקומיט הראשוני לאותו מאגר; אתה יוצר את המאגר (לחיצה אחת למטה), כך שאין צורך בהרשאת יצירת מאגר."
+    },
+    "github": {
+      "prompt": "חבר את סביבת העבודה הזו ל-GitHub לפני האתחול; הרצה דוחפת למאגר. קשר התקנה שהאפליקציה כבר מותקנת עליה, או התקן אותה."
+    },
+    "section": {
+      "newRepo": "מאגר חדש"
+    },
+    "mode": {
+      "label": "כיצד נתחיל?",
+      "reference": {
+        "label": "מארכיטקטורת ייחוס",
+        "description": "שכפל מאגר בסיס מנוהל והתאם אותו לשירות החדש."
+      },
+      "scratch": {
+        "label": "מאפס",
+        "description": "פגם מאגר חדש לגמרי מפרומפט חופשי, ללא צורך בבסיס."
+      }
+    },
+    "reference": {
+      "label": "ארכיטקטורת ייחוס",
+      "description": "מאגר הבסיס המנוהל לשכפול והתאמה.",
+      "empty": "אין עדיין ארכיטקטורות ייחוס. הוסף אחת למטה, או עבור ל'מאפס'.",
+      "placeholder": "בחר ארכיטקטורת ייחוס"
+    },
+    "targetRepo": {
+      "label": "שם מאגר היעד",
+      "descWithOwner": "צור מאגר חדש בשם הזה תחת {owner}, ואז האתחול דוחף אליו. README, .gitignore או רישיון מאוכלסים מראש הם בסדר.",
+      "descNoOwner": "צור מאגר חדש בשם הזה, ואז האתחול דוחף אליו. README, .gitignore או רישיון מאוכלסים מראש הם בסדר."
+    },
+    "createRepo": {
+      "now": "צור מאגר",
+      "onGitHub": "צור ב-GitHub",
+      "titleNow": "צור את המאגר עכשיו",
+      "titleGitHub": "פתח את עמוד המאגר החדש של GitHub, מאוכלס מראש"
+    },
+    "grantAccess": {
+      "label": "הענק לאפליקציה גישה למאגר הזה",
+      "title": "פתח את הגדרות ההתקנה של האפליקציה כדי להעניק לה גישה למאגר החדש"
+    },
+    "description": {
+      "label": "תיאור",
+      "help": "תקציר אופציונלי בשורה אחת למאגר."
+    },
+    "instructions": {
+      "labelReference": "הנחיות נוספות למאתחל",
+      "labelScratch": "מה המאתחל צריך לבנות?",
+      "descReference": "אופציונלי, מצורף להנחיות ברירת המחדל של ארכיטקטורת הייחוס.",
+      "descScratch": "תאר את השירות החדש: מחסנית, מבנה, ומה הוא צריך לעשות."
+    },
+    "visibility": {
+      "label": "נראות",
+      "private": "מאגר פרטי"
+    },
+    "launch": "אתחל מאגר",
+    "recent": {
+      "title": "הרצות אחרונות",
+      "fromArch": "מתוך {name}",
+      "fromScratch": "מאפס",
+      "open": "פתח"
+    },
+    "status": {
+      "pending": "ממתין",
+      "running": "פועל",
+      "succeeded": "הצליח",
+      "failed": "נכשל"
+    },
+    "arch": {
+      "title": "ארכיטקטורות ייחוס",
+      "add": "הוסף",
+      "pickRepo": {
+        "label": "בחר מאגר GitHub קיים",
+        "description": "בחר מאגר שיש לך גישה אליו כדי למלא את הבעלים והשם שלו, או הזן אותם ידנית למטה."
+      },
+      "name": {
+        "label": "שם",
+        "description": "תווית ידידותית לבסיס הזה."
+      },
+      "repoOwner": "בעלי המאגר",
+      "repoName": "שם המאגר",
+      "descriptionPlaceholder": "תקציר אופציונלי של הבסיס הזה",
+      "defaultInstructions": {
+        "label": "הנחיות מאתחל ברירת מחדל",
+        "description": "מצורפות לפני ההנחיות הפר-הרצה בכל פעם שנעשה שימוש בבסיס הזה."
+      }
+    },
+    "toast": {
+      "repoCreated": "המאגר נוצר",
+      "repoCreateFailed": "לא ניתן היה ליצור מאגר",
+      "failed": "האתחול נכשל",
+      "failedFallback": "המאתחל דיווח על כשל.",
+      "started": "האתחול החל",
+      "startedDesc": "מכל מאתחל את {repo}; עקוב אחר ההתקדמות בלוח.",
+      "bootstrapFailed": "לא ניתן היה לאתחל",
+      "saveArchFailed": "לא ניתן היה לשמור ארכיטקטורת ייחוס",
+      "deleteFailed": "לא ניתן היה למחוק"
+    }
+  }
+}

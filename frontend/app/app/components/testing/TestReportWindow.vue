@@ -381,7 +381,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                   </span>
                   <span
                     v-if="infraSetup.durationMs != null"
-                    class="ml-auto text-[11px] text-slate-500"
+                    class="ms-auto text-[11px] text-slate-500"
                   >
                     {{
                       t('testing.standup.took', {
@@ -484,7 +484,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                           : t('testing.fixerTimeline.failed')
                       }}
                     </UBadge>
-                    <span class="ml-auto text-[11px] text-slate-500">{{
+                    <span class="ms-auto text-[11px] text-slate-500">{{
                       d(new Date(a.at), 'short')
                     }}</span>
                   </div>
@@ -541,7 +541,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                   class="overflow-hidden rounded-lg border border-slate-800 bg-slate-900/60"
                 >
                   <button
-                    class="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-800/40"
+                    class="flex w-full items-center gap-2 px-3 py-2 text-start hover:bg-slate-800/40"
                     @click="toggle(g.key)"
                   >
                     <UIcon
@@ -584,7 +584,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                     </span>
                   </button>
 
-                  <div v-if="!collapsed.has(g.key)" class="space-y-1 px-3 pb-3 pl-9">
+                  <div v-if="!collapsed.has(g.key)" class="space-y-1 px-3 pb-3 ps-9">
                     <!-- Outcomes -->
                     <div
                       v-for="(o, oi) in g.outcomes"
@@ -710,7 +710,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
 
           <!-- Sidebar: metadata -->
           <aside
-            class="hidden w-60 shrink-0 flex-col gap-4 border-l border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
+            class="hidden w-60 shrink-0 flex-col gap-4 border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
           >
             <div v-if="report">
               <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">

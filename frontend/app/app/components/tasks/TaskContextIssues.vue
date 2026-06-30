@@ -79,7 +79,7 @@ const attachMenu = computed<DropdownMenuItem[][]>(() => {
           class="h-3.5 w-3.5 shrink-0 text-indigo-400"
         />
         <span class="truncate">{{ task.externalId }} · {{ task.title }}</span>
-        <UBadge color="neutral" variant="soft" size="xs" class="ml-auto shrink-0">
+        <UBadge color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">
           {{ task.status }}
         </UBadge>
       </a>

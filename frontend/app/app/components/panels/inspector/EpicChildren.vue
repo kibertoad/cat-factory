@@ -69,7 +69,7 @@ const groups = computed(() => {
           <UIcon name="i-lucide-box" class="h-3 w-3 text-slate-500" />
           {{ group.service?.title ?? t('inspector.epicChildren.unassigned') }}
         </div>
-        <div v-for="(mod, mi) in [...group.modules.values()]" :key="mi" class="pl-1">
+        <div v-for="(mod, mi) in [...group.modules.values()]" :key="mi" class="ps-1">
           <div v-if="mod.module" class="text-[10px] uppercase tracking-wide text-slate-500">
             {{ mod.module.title }}
           </div>
@@ -77,7 +77,7 @@ const groups = computed(() => {
             v-for="task in mod.tasks"
             :key="task.id"
             type="button"
-            class="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-xs text-slate-200 hover:bg-slate-800"
+            class="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-start text-xs text-slate-200 hover:bg-slate-800"
             @click="ui.select(task.id)"
           >
             <span
@@ -85,7 +85,7 @@ const groups = computed(() => {
               :style="{ backgroundColor: STATUS_META[task.status].color }"
             />
             <span class="truncate">{{ task.title }}</span>
-            <span class="ml-auto shrink-0 text-[10px] text-slate-500">
+            <span class="ms-auto shrink-0 text-[10px] text-slate-500">
               {{ STATUS_META[task.status].label }}
             </span>
           </button>

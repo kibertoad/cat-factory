@@ -324,7 +324,7 @@ const conflictVerdict = computed(() => {
                       {{ c.name }}
                       <UIcon
                         name="i-lucide-external-link"
-                        class="ml-0.5 inline h-3 w-3 opacity-60 group-hover:opacity-100"
+                        class="ms-0.5 inline h-3 w-3 opacity-60 group-hover:opacity-100"
                       />
                     </a>
                     <span v-else class="min-w-0 flex-1 truncate text-[13px] text-slate-200">{{
@@ -397,7 +397,7 @@ const conflictVerdict = computed(() => {
                         size="sm"
                         >{{ OUTCOME_LABELS[a.outcome] }}</UBadge
                       >
-                      <span v-if="formatClock(a.at)" class="ml-auto text-[11px] text-slate-500">{{
+                      <span v-if="formatClock(a.at)" class="ms-auto text-[11px] text-slate-500">{{
                         formatClock(a.at)
                       }}</span>
                     </div>
@@ -415,7 +415,7 @@ const conflictVerdict = computed(() => {
 
           <!-- Sidebar: gate state -->
           <aside
-            class="hidden w-60 shrink-0 flex-col gap-4 border-l border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
+            class="hidden w-60 shrink-0 flex-col gap-4 border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
           >
             <div v-if="gate">
               <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">

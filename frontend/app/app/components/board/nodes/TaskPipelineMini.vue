@@ -99,7 +99,7 @@ const ITEM_ICON: Record<string, string> = {
         />
         <span
           v-if="s.subtasks && s.subtasks.total > 0"
-          class="ml-auto shrink-0 font-mono text-[9px] tabular-nums text-slate-400"
+          class="ms-auto shrink-0 font-mono text-[9px] tabular-nums text-slate-400"
         >
           {{ s.subtasks.completed }}/{{ s.subtasks.total }}
         </span>
@@ -108,7 +108,7 @@ const ITEM_ICON: Record<string, string> = {
           :name="
             isFailedStep(s.state, runFailed) ? FAILED_STEP_META.icon : STATE_META[s.state].icon
           "
-          class="ml-auto h-2.5 w-2.5 shrink-0"
+          class="ms-auto h-2.5 w-2.5 shrink-0"
           :class="s.state === 'working' && !runFailed ? 'animate-spin' : ''"
           :style="{
             color: isFailedStep(s.state, runFailed)
@@ -162,7 +162,7 @@ const ITEM_ICON: Record<string, string> = {
           {{ agentKindMeta(companionByStep[i]!.kind).label }}
         </span>
         <span
-          class="ml-auto shrink-0"
+          class="ms-auto shrink-0"
           :class="COMPANION_STATE_META[companionByStep[i]!.state].text"
         >
           {{ COMPANION_STATE_META[companionByStep[i]!.state].label }}

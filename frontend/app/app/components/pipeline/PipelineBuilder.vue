@@ -241,7 +241,7 @@ async function clone(p: Pipeline) {
               {{ t('pipeline.builder.addAgent') }}
             </UButton>
           </div>
-          <div class="flex-1 pr-1 lg:min-h-0 lg:overflow-y-auto">
+          <div class="flex-1 pe-1 lg:min-h-0 lg:overflow-y-auto">
             <AgentPalette @add="add" />
           </div>
         </div>
@@ -309,7 +309,7 @@ async function clone(p: Pipeline) {
             {{ t('pipeline.builder.emptyDraft') }}
           </div>
 
-          <ol v-else class="flex-1 space-y-2 pr-1 lg:min-h-0 lg:overflow-y-auto">
+          <ol v-else class="flex-1 space-y-2 pe-1 lg:min-h-0 lg:overflow-y-auto">
             <li
               v-for="(unit, vi) in pipelines.units"
               :key="unit.index"
@@ -455,7 +455,7 @@ async function clone(p: Pipeline) {
                  gated on the task estimate. -->
               <div
                 v-if="unit.companionIndex !== null"
-                class="ml-6 space-y-2 rounded-md border border-fuchsia-800/40 bg-fuchsia-950/20 p-2 text-xs"
+                class="ms-6 space-y-2 rounded-md border border-fuchsia-800/40 bg-fuchsia-950/20 p-2 text-xs"
               >
                 <div class="flex items-center gap-1.5">
                   <UIcon name="i-lucide-corner-down-right" class="h-3.5 w-3.5 text-slate-500" />
@@ -524,7 +524,7 @@ async function clone(p: Pipeline) {
               <!-- Consensus config (shown when the step is consensus-enabled). -->
               <div
                 v-if="pipelines.draftConsensus[unit.index]?.enabled"
-                class="ml-6 space-y-2 rounded-md border border-emerald-800/40 bg-emerald-950/20 p-2 text-xs"
+                class="ms-6 space-y-2 rounded-md border border-emerald-800/40 bg-emerald-950/20 p-2 text-xs"
               >
                 <div class="flex items-center gap-2">
                   <label class="text-slate-400">{{ t('pipeline.builder.strategy') }}</label>
@@ -538,7 +538,7 @@ async function clone(p: Pipeline) {
                   </select>
                   <label
                     v-if="pipelines.draftConsensus[unit.index]!.strategy === 'debate'"
-                    class="ml-2 text-slate-400"
+                    class="ms-2 text-slate-400"
                     >{{ t('pipeline.builder.rounds') }}</label
                   >
                   <input
@@ -681,7 +681,7 @@ async function clone(p: Pipeline) {
             </UBadge>
           </div>
 
-          <ul class="flex-1 space-y-1.5 pr-1 lg:min-h-0 lg:overflow-y-auto">
+          <ul class="flex-1 space-y-1.5 pe-1 lg:min-h-0 lg:overflow-y-auto">
             <li
               v-for="p in visiblePipelines"
               :key="p.id"
@@ -691,7 +691,7 @@ async function clone(p: Pipeline) {
               <div class="flex items-center gap-2 px-2 py-1.5">
                 <button
                   type="button"
-                  class="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  class="flex min-w-0 flex-1 items-center gap-2 text-start"
                   @click="toggleSaved(p.id)"
                 >
                   <UIcon
@@ -784,7 +784,7 @@ async function clone(p: Pipeline) {
               <!-- Full ordered step list, revealed on click. -->
               <ol
                 v-if="expandedSaved.has(p.id)"
-                class="space-y-1 border-t border-slate-800 px-2 py-2 pl-7"
+                class="space-y-1 border-t border-slate-800 px-2 py-2 ps-7"
               >
                 <li
                   v-for="(k, i) in p.agentKinds"

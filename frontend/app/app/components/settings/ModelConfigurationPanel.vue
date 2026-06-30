@@ -267,10 +267,11 @@ function fail(title: string, e: unknown) {
           <UButton
             v-if="editor"
             icon="i-lucide-arrow-left"
+            :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
             color="neutral"
             variant="ghost"
             size="sm"
-            class="ml-auto"
+            class="ms-auto"
             @click="editor = null"
           >
             {{ t('settings.modelConfiguration.back') }}
@@ -280,7 +281,7 @@ function fail(title: string, e: unknown) {
             color="neutral"
             variant="ghost"
             size="sm"
-            :class="editor ? '' : 'ml-auto'"
+            :class="editor ? '' : 'ms-auto'"
             :title="t('settings.modelConfiguration.closeEsc')"
             @click="open = false"
           />
@@ -330,7 +331,7 @@ function fail(title: string, e: unknown) {
                     <UBadge v-if="p.isDefault" color="primary" variant="subtle" size="xs">
                       {{ t('settings.modelConfiguration.list.default') }}
                     </UBadge>
-                    <div class="ml-auto flex items-center gap-1">
+                    <div class="ms-auto flex items-center gap-1">
                       <UButton
                         v-if="!p.isDefault"
                         size="xs"

@@ -115,7 +115,7 @@ async function spawn() {
           {{ t('documents.spawn.buildingPlan') }}
         </div>
 
-        <div v-else-if="plan" class="max-h-80 space-y-3 overflow-y-auto pr-1">
+        <div v-else-if="plan" class="max-h-80 space-y-3 overflow-y-auto pe-1">
           <div
             v-for="(frame, fi) in plan.frames"
             :key="fi"
@@ -127,7 +127,7 @@ async function spawn() {
               <UBadge variant="subtle" size="sm" color="neutral">{{ frame.type }}</UBadge>
             </div>
 
-            <ul v-if="frame.tasks.length" class="mt-2 space-y-1 pl-6">
+            <ul v-if="frame.tasks.length" class="mt-2 space-y-1 ps-6">
               <li
                 v-for="(task, ti) in frame.tasks"
                 :key="`t-${ti}`"
@@ -138,12 +138,12 @@ async function spawn() {
               </li>
             </ul>
 
-            <div v-for="(mod, mi) in frame.modules" :key="`m-${mi}`" class="mt-2 pl-4">
+            <div v-for="(mod, mi) in frame.modules" :key="`m-${mi}`" class="mt-2 ps-4">
               <div class="flex items-center gap-1.5 text-xs font-medium text-slate-200">
                 <UIcon name="i-lucide-folder" class="h-3.5 w-3.5 text-amber-400" />
                 {{ mod.name }}
               </div>
-              <ul class="mt-1 space-y-1 pl-5">
+              <ul class="mt-1 space-y-1 ps-5">
                 <li
                   v-for="(task, ti) in mod.tasks"
                   :key="`mt-${ti}`"

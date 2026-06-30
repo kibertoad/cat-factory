@@ -315,7 +315,7 @@ const canApprove = computed(
                   type="file"
                   accept="image/png,image/jpeg"
                   :disabled="busy || !uploadView.trim()"
-                  class="text-[12px] text-slate-300 file:mr-2 file:rounded file:border-0 file:bg-slate-800 file:px-2 file:py-1 file:text-slate-200 disabled:opacity-40"
+                  class="text-[12px] text-slate-300 file:me-2 file:rounded file:border-0 file:bg-slate-800 file:px-2 file:py-1 file:text-slate-200 disabled:opacity-40"
                   @change="onFilePicked"
                 />
               </div>
@@ -378,7 +378,7 @@ const canApprove = computed(
                       t('visualConfirm.history.fixRequested')
                     }}</span>
                     <span
-                      class="ml-1.5 rounded px-1 text-[10px] uppercase"
+                      class="ms-1.5 rounded px-1 text-[10px] uppercase"
                       :class="
                         r.outcome === 'completed'
                           ? 'bg-emerald-500/15 text-emerald-300'

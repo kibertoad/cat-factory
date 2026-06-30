@@ -207,7 +207,7 @@ const showOriginalDescription = ref(false)
   <div
     v-if="block && statusMeta && typeMeta"
     data-testid="inspector-panel"
-    class="fixed inset-x-0 bottom-0 z-20 overflow-hidden rounded-t-2xl border border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur lg:absolute lg:inset-x-auto lg:bottom-auto lg:right-4 lg:top-4 lg:w-80 lg:rounded-2xl"
+    class="fixed inset-x-0 bottom-0 z-20 overflow-hidden rounded-t-2xl border border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur lg:absolute lg:inset-x-auto lg:bottom-auto lg:end-4 lg:top-4 lg:w-80 lg:rounded-2xl"
   >
     <div class="h-1.5 w-full" :style="{ backgroundColor: statusMeta.color }" />
     <!-- A tall task (execution steps + scenarios + docs) can overflow the
@@ -487,7 +487,7 @@ const showOriginalDescription = ref(false)
           variant="ghost"
           size="sm"
           icon="i-lucide-trash-2"
-          class="ml-auto"
+          class="ms-auto"
           :title="deleteLabel"
           @click="remove"
         >

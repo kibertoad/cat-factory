@@ -61,14 +61,18 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
           })
         }}
       </span>
-      <div class="ml-auto flex items-center gap-1">
+      <div class="ms-auto flex items-center gap-1">
         <UBadge v-if="m.errors > 0" color="error" variant="subtle" size="sm">
           {{ t('observability.metricsBar.errors', { count: m.errors }, m.errors) }}
         </UBadge>
         <UBadge v-if="m.warnings > 0" color="warning" variant="subtle" size="sm">
           {{ t('observability.metricsBar.warnings', { count: m.warnings }, m.warnings) }}
         </UBadge>
-        <UIcon v-if="clickable" name="i-lucide-chevron-right" class="h-3.5 w-3.5 text-slate-600" />
+        <UIcon
+          v-if="clickable"
+          name="i-lucide-chevron-right"
+          class="h-3.5 w-3.5 text-slate-600 rtl:-scale-x-100"
+        />
       </div>
     </div>
 

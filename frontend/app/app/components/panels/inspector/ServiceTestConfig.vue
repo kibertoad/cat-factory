@@ -222,7 +222,7 @@ const missingInfra = computed(() => !noInfra.value && composePath.value.trim() =
     <div class="border-t border-slate-800 pt-2">
       <button
         type="button"
-        class="flex w-full items-center gap-1.5 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-300"
+        class="flex w-full items-center gap-1.5 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-300"
         @click="showProvisioning = !showProvisioning"
       >
         <UIcon

@@ -112,7 +112,7 @@ function removeFragment(id: string) {
           :title="f.summary"
           @click="removeFragment(f.id)"
         >
-          {{ f.title }}<UIcon name="i-lucide-x" class="ml-0.5 h-3 w-3" />
+          {{ f.title }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
         </UBadge>
       </div>
       <div v-else class="text-[11px] text-slate-500">

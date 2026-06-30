@@ -53,6 +53,7 @@ const emit = defineEmits<{ resolve: [choice: IterationCapChoice] }>()
         variant="soft"
         size="xs"
         icon="i-lucide-arrow-right"
+        :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
         :loading="loading"
         @click="emit('resolve', 'proceed')"
       >

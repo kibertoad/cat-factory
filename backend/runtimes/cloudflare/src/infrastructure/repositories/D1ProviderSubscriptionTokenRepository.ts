@@ -3,6 +3,8 @@ import type {
   ProviderSubscriptionTokenRepository,
   SubscriptionVendor,
 } from '@cat-factory/kernel'
+import { subscriptionVendorSchema } from '@cat-factory/contracts'
+import { decodeEnum } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface ProviderSubscriptionTokenRow {
@@ -24,7 +26,11 @@ function rowToRecord(row: ProviderSubscriptionTokenRow): ProviderSubscriptionTok
   return {
     id: row.id,
     workspaceId: row.workspace_id,
-    vendor: row.vendor as SubscriptionVendor,
+    vendor: decodeEnum(subscriptionVendorSchema, row.vendor, {
+      table: 'provider_subscription_tokens',
+      column: 'vendor',
+      id: row.id,
+    }),
     label: row.label,
     tokenCipher: row.token_cipher,
     createdAt: row.created_at,

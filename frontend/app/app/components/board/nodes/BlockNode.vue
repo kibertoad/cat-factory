@@ -234,16 +234,16 @@ const ITEM_ICON: Record<string, string> = {
       <UIcon
         v-if="bootstrapping"
         name="i-lucide-loader-circle"
-        class="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-amber-400"
+        class="ms-auto h-3.5 w-3.5 shrink-0 animate-spin text-amber-400"
         :title="t('board.frame.bootstrapping')"
       />
       <UIcon
         v-else-if="runFailed"
         name="i-lucide-alert-triangle"
-        class="ml-auto h-3.5 w-3.5 shrink-0 text-rose-400"
+        class="ms-auto h-3.5 w-3.5 shrink-0 text-rose-400"
         :title="t('board.frame.runFailed')"
       />
-      <span v-else-if="hasTasks" class="ml-auto shrink-0 text-[11px] text-slate-300">
+      <span v-else-if="hasTasks" class="ms-auto shrink-0 text-[11px] text-slate-300">
         {{ mergedTasks }}/{{ taskCount }}
       </span>
     </div>
@@ -263,7 +263,7 @@ const ITEM_ICON: Record<string, string> = {
             class="h-3.5 w-3.5 shrink-0 animate-spin text-amber-400"
           />
           <span class="text-amber-300">{{ t('board.frame.bootstrapping') }}</span>
-          <span v-if="bootstrapSubtasks" class="ml-auto text-amber-200/80">
+          <span v-if="bootstrapSubtasks" class="ms-auto text-amber-200/80">
             {{ bootstrapSubtasks.completed }}/{{ bootstrapSubtasks.total }}
           </span>
         </div>
@@ -321,7 +321,7 @@ const ITEM_ICON: Record<string, string> = {
           <span v-if="prTasks" class="text-emerald-400"
             >· {{ t('board.frame.prCount', { count: prTasks }) }}</span
           >
-          <UIcon name="i-lucide-chevron-down" class="ml-auto h-3 w-3" />
+          <UIcon name="i-lucide-chevron-down" class="ms-auto h-3 w-3" />
         </button>
       </div>
     </div>
@@ -341,7 +341,7 @@ const ITEM_ICON: Record<string, string> = {
             class="h-4 w-4 shrink-0 animate-spin text-amber-400"
           />
           <span class="text-amber-300">{{ t('board.frame.bootstrappingRepository') }}</span>
-          <span v-if="bootstrapSubtasks" class="ml-auto text-amber-200/80">
+          <span v-if="bootstrapSubtasks" class="ms-auto text-amber-200/80">
             {{
               t('board.frame.bootstrapStepsCount', {
                 completed: bootstrapSubtasks.completed,
@@ -392,7 +392,7 @@ const ITEM_ICON: Record<string, string> = {
       <div class="p-4">
         <!-- frame header: the whole header (the title row AND the stats line below it)
              is the drag handle for the expanded frame. `nopan` stops Vue Flow's pane
-             from panning on a left-drag that starts here (it pans via d3-zoom's
+             from panning on a start-drag that starts here (it pans via d3-zoom's
              mousedown, which our pointerdown stopPropagation can't intercept), so the
              grab drives the frame move. The action buttons on the right opt out via
              `.nodrag` (onFrameHandle ignores them). `pb-3` provides the gap down to the
@@ -499,7 +499,11 @@ const ITEM_ICON: Record<string, string> = {
 
           <!-- resize handles (drag the borders to resize the service, Miro-style).
                `nopan` (alongside `nodrag`) so the pane doesn't pan while resizing —
-               same reason as the header handle above. -->
+               same reason as the header handle above. These stay PHYSICAL
+               (`right-0`, not `end-0`): the resize math in useFrameResize grows the
+               right/bottom edge from an unmirrored clientX/clientY delta, so a
+               logical (RTL-flipped) grip would render on the opposite edge from the
+               one the drag actually moves. -->
           <div
             class="nodrag nopan absolute right-0 top-0 h-full w-2 cursor-ew-resize touch-none hover:bg-sky-400/20 pointer-coarse:w-4"
             :title="t('board.frame.dragToResize')"

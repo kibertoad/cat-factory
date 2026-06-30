@@ -1,8 +1,11 @@
 import type { AgentFailure, Clock, ExecutionRepository, RunRef } from '@cat-factory/kernel'
 import type { ExecutionInstance } from '@cat-factory/contracts'
+import { tryDecodeRows } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
 import { type ExecutionRow, executionToDetail, rowToExecution } from './mappers'
+
+const runContext = (row: ExecutionRow) => ({ table: 'agent_runs', id: row.id })
 
 /**
  * Execution runs, stored as `kind='execution'` rows of the unified `agent_runs`
@@ -27,7 +30,8 @@ export class D1ExecutionRepository implements ExecutionRepository {
       )
       .bind(workspaceId)
       .all<ExecutionRow>()
-    return results.map(rowToExecution)
+    // Snapshot-facing list read: drop a corrupt run rather than failing the whole board load.
+    return tryDecodeRows(results, rowToExecution, runContext)
   }
 
   async listByService(serviceId: string): Promise<ExecutionInstance[]> {
@@ -37,7 +41,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
       )
       .bind(serviceId)
       .all<ExecutionRow>()
-    return results.map(rowToExecution)
+    return tryDecodeRows(results, rowToExecution, runContext)
   }
 
   async listByServices(serviceIds: string[]): Promise<ExecutionInstance[]> {
@@ -52,7 +56,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
         )
         .bind(...chunk)
         .all<ExecutionRow>()
-      for (const row of results) out.push(rowToExecution(row))
+      out.push(...tryDecodeRows(results, rowToExecution, runContext))
     }
     return out
   }
