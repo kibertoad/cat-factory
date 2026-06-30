@@ -197,6 +197,103 @@ environment:<engine>:<providerId>`. Record `provisionType`/`engine` on the
 
 ---
 
+## Phase 2 — Kustomize / Helm / Gateway-API rendering (slices 6–10)
+
+Goal: deploy a real Kustomize + Helm + Gateway-API setup (a `base/` + `overlays/` kustomize
+tree, a Helm-installed gateway controller, `HTTPRoute`/`Gateway` routing, and a `secretGenerator`
+fed from secrets — a common production ephemeral-environment shape). The native in-Worker REST
+adapter applies only
+raw, apiserver-ready manifests, so rendering moves into a **dedicated deploy container** with real
+`kubectl`/`kustomize`/`helm`, dispatched through the existing runner transport as a new `deploy`
+kind (with `image: 'deploy'`). The raw-manifest REST path is kept for the simple case; a service
+selects by the `renderer` discriminator. Local mode adds an opt-in native-CLI transport
+(`LOCAL_DEPLOY_RUNTIME=native|container`) that shells out to host `kubectl`/`kustomize`/`helm`.
+Rationale for real binaries over an in-process JS renderer: kustomize `secretGenerator` rewrites a
+content-hash secret-name suffix into every reference at build time, so the real secret must be
+present at render time; helm is infeasible to render in-process. Slices 7–10 depend on slice 3
+(`runDeployerStep`), which hosts the async-deployer lifecycle.
+
+### Slice 6 — render contracts + dispatch/port seam (additive; NO migration) — DONE
+
+The rare slice with NO `db:generate` migration: every addition is nested JSON inside the existing
+`handler_json` / service `provisioning` TEXT columns.
+
+- Contracts (`environments.ts`): `renderer: 'raw' | 'kustomize'` on `kubernetesManifestSourceSchema`;
+  new `kubernetesImageOverrideSchema` / `kubernetesHelmReleaseSchema` (+ `*HelmSetSchema`) /
+  `kubernetesSecretInjectionSchema` (+ `*SecretEntrySchema`); `images`/`helmReleases`/
+  `secretInjections` on the SERVICE `serviceProvisioningSchema`; shared `helmReleases` on the
+  WORKSPACE `kubernetesEngineConfigSchema`; `gatewayStatus`/`httpRouteStatus` URL sources.
+- **Custom-named overlays + the dedicated-overlay ephemeral-env shape are first-class.** The
+  overlay is identified purely by the free-form `manifestSource.path` (e.g. `…/overlays/<env>`),
+  so its name carries no meaning. Two mechanics common to a dedicated ephemeral-env overlay are
+  modelled: (1) the secret injection's `generatorEnvFile` mode writes the resolved `.env` at the
+  path the overlay's OWN `secretGenerator` reads (vs colliding by materializing a duplicate
+  `Secret`); (2) `namespaceTemplate` is honored as "absent ⇒ keep the overlay's pinned namespace
+  (a shared, fixed-namespace env); set ⇒ override for per-PR isolation" — so a shared-namespace
+  redeploy and a per-PR namespace are both expressible.
+- Kernel port seam: `RunnerDispatchKind` → `'agent' | 'deploy'`; `RunnerDispatchOptions.image` →
+  `+ 'deploy'`; `EnvironmentProvider.asyncProvision?` (the paired `buildProvisionJob`/`finalizeProvision`
+  capability, grouped so neither can be implemented without the other) + `DeployProvisionJob`.
+- Conformance: a kustomize/helm/gateway-shaped handler config round-trips write→read on D1 + Postgres
+  (`environment-handlers-suite.ts`).
+
+### Slice 7 — deploy-harness package + image (TODO)
+
+`backend/internal/deploy-harness` (private): slim base + `kubectl`/`kustomize`/`helm` + the job-registry
+scaffolding mirrored from `executor-harness`; same `POST /jobs` + `GET /jobs/{id}` contract with a
+`deploy` `KindEntry`; `handleDeploy` (clone → write `secretInjections`: a `Secret` resource OR a
+`generatorEnvFile` `.env` into the overlay tree → optionally `kustomize edit set namespace` when
+`namespaceTemplate` overrides → `kubectl apply -k` + `helm upgrade --install` → `kubectl rollout
+status` → discover Gateway/HTTPRoute address). New CF `[[containers]]` class + image tag (same
+fresh-immutable-tag discipline as the Pi image).
+
+### Slice 8 — provider render path + Gateway URL (TODO)
+
+`KubernetesEnvironmentProvider.buildProvisionJob`/`finalizeProvision` (kustomize/helm ⇒ container job;
+raw ⇒ keep the native REST path); the `gatewayStatus`/`httpRouteStatus` URL resolvers (REST). Keep
+REST teardown/status.
+
+### Slice 9 — async deployer lifecycle (TODO; folds into slice 3)
+
+`EnvironmentProvisioningService` threads `RunnerJobClient`, branches `provision()` on
+`buildProvisionJob`, adds `pollProvision`; `RunDispatcher.runDeployerStep` parks on a deploy job
+(`awaiting_job`) + the deployer poll branch + eviction re-dispatch; the synchronous raw path is
+unchanged.
+
+### Slice 10 — facade wiring + local native CLI (TODO)
+
+CF container class + wrangler tag; pool/K8s-pod/local image mapping for `image: 'deploy'`; the
+local-mode `NativeCliDeployTransport` opt-in (`LOCAL_DEPLOY_RUNTIME`); conformance: a `deploy`
+dispatch is accepted by every facade transport, and a stubbed `RunnerJobView` settles to an
+identical `ProvisionedEnvironment` on both runtimes. Changesets + image-tag bump.
+
+### Slice 11 — auto-detect a RECOMMENDED k8s config from the repo (TODO)
+
+Extend the add-service auto-detect (slice 5) from "which provision type" to "propose a full,
+NON-BINDING recommended `kubernetes` config", read checkout-free over the existing `RepoFiles`
+port (a pure-TS heuristic detector — no checkout, no LLM for the high-confidence parts; mirror the
+existing compose autodiscovery). The user always confirms/edits; nothing is applied silently.
+What's inferable, by confidence:
+
+- **High confidence (deterministic):** `renderer` (`kustomization.yaml` present ⇒ `kustomize`, else
+  `raw`); the URL source from manifest kinds (`Ingress` ⇒ `ingressStatus`/`ingressTemplate` from a
+  static host, `Gateway`/`HTTPRoute` ⇒ `gatewayStatus`/`httpRouteStatus`, `Service type:
+LoadBalancer` ⇒ `serviceStatus`); the namespace decision (a pinned `namespace:` ⇒ recommend
+  honoring it, leave `namespaceTemplate` empty); `secretInjections` in `generatorEnvFile` mode when
+  a `secretGenerator: { envs: ['.env'] }` exists, with the entry KEYS read from a checked-in
+  `.env.example` (values stay the user's); `images` override candidates from the kustomization
+  `images:` block or Deployment container images (default `newTagTemplate: '{{branch}}'`).
+- **Lower confidence (surface candidates, don't auto-pick):** WHICH overlay is the ephemeral one
+  when several exist under `overlays/*` (rank by name — `prenv`/`preview`/`pr`/`ephemeral`/`dev` —
+  and let the user choose); helm releases declared parseably (`helmfile.yaml` / a `Chart.yaml`
+  dependency) ⇒ propose `helmReleases`; a controller installed by a bespoke shell script / CI step
+  is NOT reliably parseable ⇒ leave blank with a hint rather than guess.
+- **Optional later:** an LLM `explore` pass (the read-only agent kind) for the ambiguous cases
+  (pick the ephemeral overlay, infer helm intent from a deploy script), proposing the same config
+  shape the deterministic detector emits — gated/non-binding, never silent.
+
+---
+
 ## Verification (per slice)
 
 - `pnpm typecheck` (full-tree turbo) + `pnpm lint:fix` (whole tree, bare `.` target).
@@ -221,5 +318,11 @@ environment:<engine>:<providerId>`. Record `provisionType`/`engine` on the
 | 3   | `runDeployerStep` merge source+engine + record provisionType/engine; infraless no-op                                                                                                                                              | todo   | —    |
 | 4   | Controllers (per-type endpoints + custom-type CRUD + local-only per-user controller) + all three container wirings                                                                                                                | todo   | —    |
 | 5   | Frontend (service provisioning section + auto-detect; infra per-type/engine configurator + custom-type editor + local override; run-details surfacing; stores; i18n)                                                              | todo   | —    |
+| 6   | Phase 2: render contracts (`renderer`/`images`/`helmReleases`/`secretInjections`/gateway URL) + dispatch/port seam (`deploy` kind + `image`, `buildProvisionJob`/`finalizeProvision`); NO migration; conformance round-trip       | done   | —    |
+| 7   | Phase 2: `deploy-harness` package + image (kubectl/kustomize/helm; `deploy` KindEntry + `handleDeploy`; CF container class + tag)                                                                                                 | todo   | —    |
+| 8   | Phase 2: `KubernetesEnvironmentProvider` render path (`buildProvisionJob`/`finalizeProvision`; keep native REST) + Gateway-API URL resolvers                                                                                      | todo   | —    |
+| 9   | Phase 2: async deployer lifecycle (`provision()` branch + `pollProvision`; `runDeployerStep` park/poll + eviction re-dispatch) — folds into slice 3                                                                               | todo   | —    |
+| 10  | Phase 2: facade wiring + local `NativeCliDeployTransport` (`LOCAL_DEPLOY_RUNTIME`); deploy-dispatch + finalize conformance; image-tag bump                                                                                        | todo   | —    |
+| 11  | Phase 2: auto-detect a recommended `kubernetes` config from the repo (renderer / URL source / namespace / secret `.env` keys / image overrides high-confidence; overlay choice + helm as candidates) — non-binding, user confirms | todo   | —    |
 
 Update the row (status + PR link) at the end of each slice.
