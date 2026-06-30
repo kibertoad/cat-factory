@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import type { ContentStorageBackend, ContentStorageConfig } from '~/types/accountSettings'
 
 // Deployment integration secrets for an account (admin only): the Slack app OAuth
@@ -11,8 +11,29 @@ import type { ContentStorageBackend, ContentStorageConfig } from '~/types/accoun
 const props = defineProps<{ accountId: string }>()
 
 const store = useAccountSettingsStore()
+const ui = useUiStore()
 const toast = useToast()
 const { t } = useI18n()
+
+// Deep-link anchor: the pipeline-start "configure storage" prompt opens this tab with the
+// ui store's scroll target set to `content-storage`, so we bring the storage section (which
+// sits at the bottom of a long tab) into view once rather than leaving the user to hunt for
+// it. Scrolls after the section actually renders (it is gated on the async settings load).
+const storageSection = ref<HTMLElement | null>(null)
+async function maybeScrollToStorage() {
+  if (ui.accountSettingsScrollTarget !== 'content-storage') return
+  await nextTick()
+  const el = storageSection.value
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  ui.clearAccountSettingsScrollTarget()
+}
+watch(
+  () => ui.accountSettingsScrollTarget,
+  () => {
+    void maybeScrollToStorage()
+  },
+)
 
 const slack = reactive({ clientId: '', clientSecret: '', redirectUrl: '' })
 const linear = reactive({ clientId: '', clientSecret: '', redirectUrl: '' })
@@ -71,6 +92,9 @@ onMounted(async () => {
   try {
     await store.load(props.accountId)
     hydrateStorage()
+    // The storage section only renders once the settings load resolves, so attempt the
+    // deep-link scroll here (the up-front watcher misses the target set before mount).
+    void maybeScrollToStorage()
   } catch (e) {
     toast.add({
       title: t('layout.accountDeployment.loadFailed'),
@@ -508,7 +532,12 @@ async function clearWeb() {
     </section>
 
     <!-- Content storage (binary artifacts / screenshots) -->
-    <section v-if="storageCapability" class="space-y-2 border-t border-slate-800 pt-6">
+    <section
+      v-if="storageCapability"
+      id="content-storage"
+      ref="storageSection"
+      class="space-y-2 border-t border-slate-800 pt-6"
+    >
       <div class="flex items-center gap-2">
         <h4 class="text-sm font-semibold text-slate-200">
           {{ t('layout.accountDeployment.contentStorage.title') }}

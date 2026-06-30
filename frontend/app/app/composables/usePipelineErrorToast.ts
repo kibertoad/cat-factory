@@ -103,11 +103,15 @@ export function usePipelineErrorToast() {
 
     // A pipeline step relies on binary-artifact storage (the UI Tester uploads screenshots)
     // but the account has none configured. Explain it and offer the jump to the content-storage
-    // settings — the same shape as the providers-unconfigured case above.
+    // settings — the same shape as the providers-unconfigured case above. Prefer the localized
+    // body (it carries no runtime interpolation) so non-English users see translated copy; the
+    // raw backend prose is only the last-resort fallback when the locale lacks the key.
     if (conflict?.reason === 'binary_storage_unconfigured') {
       toast.add({
         title: t('errors.conflict.binaryStorageUnconfigured.title'),
-        description: conflict.message ?? t('errors.conflict.binaryStorageUnconfigured.body'),
+        description: te('errors.conflict.binaryStorageUnconfigured.body')
+          ? t('errors.conflict.binaryStorageUnconfigured.body')
+          : (conflict.message ?? t('errors.conflict.fallbackMessage')),
         color: 'error',
         icon: 'i-lucide-image',
         actions: [

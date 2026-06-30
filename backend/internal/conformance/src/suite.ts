@@ -3706,22 +3706,10 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         // `binary_storage_unconfigured` conflict the SPA turns into a "configure storage" prompt.
         // Driven with a null-returning store resolver so the refusal is asserted on every runtime
         // (the Worker binds R2 by default, so this is the only way to reach the off path there).
-        const { call, createWorkspace } = harness.makeApp(
-          {
-            asyncKinds: ['coder', 'tester-ui'],
-            asyncPolls: 1,
-            testReports: [
-              {
-                greenlight: true,
-                summary: 'ok',
-                tested: ['dashboard'],
-                outcomes: [{ name: 'dashboard', status: 'passed' as const }],
-                concerns: [],
-              },
-            ],
-          },
-          { resolveBinaryArtifactStore: STORAGE_OFF },
-        )
+        // No agent behaviour is configured: the run is refused at start, so nothing ever dispatches.
+        const { call, createWorkspace } = harness.makeApp(undefined, {
+          resolveBinaryArtifactStore: STORAGE_OFF,
+        })
         const { workspace } = await createWorkspace()
         const wsId = workspace.id
         const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
