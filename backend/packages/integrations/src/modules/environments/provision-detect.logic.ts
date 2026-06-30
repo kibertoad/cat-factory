@@ -5,6 +5,7 @@ import type {
   KubernetesRenderer,
   KubernetesSecretInjection,
   KubernetesUrlSource,
+  ProvisionType,
   ProvisioningDetectionNote,
   ProvisioningOverlayCandidate,
   ProvisioningRecommendation,
@@ -41,6 +42,14 @@ export interface DetectProvisioningOptions {
   directory?: string
   /** Git ref to read at; absent ⇒ the reader's default branch. */
   gitRef?: string
+  /**
+   * The provision type the user currently has SELECTED. The detector prioritizes finding THIS
+   * option before the other: `docker-compose` ⇒ recommend a compose file when one exists (even
+   * if Kubernetes manifests are also present); anything else (incl. absent) ⇒ prefer Kubernetes
+   * (the richer config), the historical default. Only `kubernetes`/`docker-compose` change the
+   * search order — the other types have nothing to auto-detect.
+   */
+  prefer?: ProvisionType
 }
 
 const PINNED_SEMVER = /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
@@ -513,17 +522,31 @@ async function inferHelmReleases(
   return { releases: [], note: null }
 }
 
-function composeRecommendation(composePath: string): ProvisioningRecommendation {
+function composeRecommendation(
+  composePath: string,
+  kubernetesAlsoExists = false,
+): ProvisioningRecommendation {
+  const notes: ProvisioningDetectionNote[] = [
+    {
+      field: 'provisionType',
+      confidence: 'high',
+      message: `Detected a Docker Compose file at ${composePath}.`,
+    },
+  ]
+  // Symmetric to the kubernetes path's `compose` note: when we recommend compose because it's
+  // the selected tab but k8s manifests also exist, say so (the user can switch).
+  if (kubernetesAlsoExists) {
+    notes.push({
+      field: 'kubernetes',
+      confidence: 'low',
+      message:
+        'Kubernetes manifests also exist in this repo; recommending docker-compose because it is your selected provision type. Switch to kubernetes if that is the test target.',
+    })
+  }
   return {
     detected: true,
     provisioning: { type: 'docker-compose', composePath },
-    notes: [
-      {
-        field: 'provisionType',
-        confidence: 'high',
-        message: `Detected a Docker Compose file at ${composePath}.`,
-      },
-    ],
+    notes,
   }
 }
 
@@ -543,10 +566,12 @@ function noneRecommendation(): ProvisioningRecommendation {
 }
 
 /**
- * Detect a recommended provisioning config for a service's repo. Prefers a `kubernetes`
- * recommendation (richer) when manifests are present, falls back to `docker-compose` when only
- * a compose file exists, else `infraless`. Every inferred field carries a confidence note;
- * ambiguous choices (overlay, helm) are surfaced as low-confidence candidates, never auto-applied.
+ * Detect a recommended provisioning config for a service's repo. The search order honors the
+ * user's selected tab via `options.prefer`: on the `docker-compose` tab a compose file wins when
+ * present (even if Kubernetes manifests also exist); otherwise (incl. no preference) it prefers a
+ * `kubernetes` recommendation (richer) when manifests are present. Either way it falls back to the
+ * other kind, then to `infraless` when nothing is found. Every inferred field carries a confidence
+ * note; ambiguous choices (overlay, helm) are surfaced as low-confidence candidates, never auto-applied.
  */
 export async function detectKubernetesProvisioning(
   reader: ProvisioningRepoReader,
@@ -557,6 +582,14 @@ export async function detectKubernetesProvisioning(
 
   const k8s = await findKubernetesRoot(scanner, root)
   const composePath = await findComposeFile(scanner, root)
+
+  // Honor the selected tab: on docker-compose, recommend the compose file first (noting any
+  // co-existing k8s manifests). Falls through to kubernetes when the user is on compose but no
+  // compose file exists. With no preference (or any non-compose tab) we keep the historical
+  // kubernetes-first order.
+  if (options.prefer === 'docker-compose' && composePath) {
+    return composeRecommendation(composePath, k8s !== null)
+  }
 
   if (!k8s) {
     return composePath ? composeRecommendation(composePath) : noneRecommendation()

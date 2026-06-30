@@ -219,6 +219,35 @@ releases:
     expect(rec.notes.some((n) => n.field === 'compose')).toBe(true)
   })
 
+  it('prefers docker-compose over kubernetes when the compose tab is selected', async () => {
+    const reader = makeReader({
+      'docker-compose.yml': 'services: {}',
+      'k8s/deployment.yaml': deployment('registry/app:1.0.0'),
+    })
+    const rec = await detectKubernetesProvisioning(reader, { prefer: 'docker-compose' })
+    expect(rec.detected).toBe(true)
+    expect(rec.provisioning.type).toBe('docker-compose')
+    expect(rec.provisioning.composePath).toBe('docker-compose.yml')
+    // The co-existing k8s manifests are surfaced as a switch-back hint, not auto-picked.
+    expect(rec.notes.some((n) => n.field === 'kubernetes' && n.confidence === 'low')).toBe(true)
+  })
+
+  it('falls back to kubernetes when the compose tab is selected but no compose file exists', async () => {
+    const reader = makeReader({ 'k8s/deployment.yaml': deployment('registry/app:1.0.0') })
+    const rec = await detectKubernetesProvisioning(reader, { prefer: 'docker-compose' })
+    expect(rec.provisioning.type).toBe('kubernetes')
+  })
+
+  it('keeps the kubernetes-first order when the kubernetes tab is selected', async () => {
+    const reader = makeReader({
+      'docker-compose.yml': 'services: {}',
+      'k8s/deployment.yaml': deployment('registry/app:1.0.0'),
+    })
+    const rec = await detectKubernetesProvisioning(reader, { prefer: 'kubernetes' })
+    expect(rec.provisioning.type).toBe('kubernetes')
+    expect(rec.notes.some((n) => n.field === 'compose')).toBe(true)
+  })
+
   it('represents repo-root manifests as a "." path (never an empty, schema-invalid path)', async () => {
     const reader = makeReader({
       'deployment.yaml': deployment('registry/app:1.0.0'),

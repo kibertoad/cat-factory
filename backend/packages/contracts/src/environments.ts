@@ -954,5 +954,13 @@ export const detectServiceProvisioningSchema = v.object({
   directory: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
   /** Optional VCS provider hint; absent ⇒ the workspace's connected provider. */
   provider: v.optional(v.picklist(['github', 'gitlab'])),
+  /**
+   * The provision type the user currently has SELECTED (the active tab). The detector
+   * prioritizes finding THIS option before falling back to the other — e.g. on the
+   * `docker-compose` tab it recommends a compose file when one exists, even if Kubernetes
+   * manifests are also present. Only `kubernetes`/`docker-compose` change the search order
+   * (the others have nothing to auto-detect); absent ⇒ prefer `kubernetes` (the richer config).
+   */
+  prefer: v.optional(provisionTypeSchema),
 })
 export type DetectServiceProvisioningInput = v.InferOutput<typeof detectServiceProvisioningSchema>
