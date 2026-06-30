@@ -38,16 +38,11 @@ allowBuilds:
   sharp: true
   vue-demi: true
   workerd: true
+# The `minimumReleaseAge` supply-chain gate refuses registry packages younger
+# than the configured window. Only ever list wildcard namespaces WE OWN here —
+# our own freshly-published packages are trusted and must never be age-gated.
+# Do NOT add per-version exceptions for third-party packages: when upgrading,
+# pick the latest version that already satisfies the release-age rule instead.
 minimumReleaseAgeExclude:
-  - '@oxfmt/*'
-  - '@oxlint/*'
-  - 'oxfmt'
-  - 'oxlint'
-  - 'workers-ai-provider@3.2.1'
-  - '@toad-contracts/core@0.4.0'
-  - '@toad-contracts/frontend-http-client@0.3.2'
-  - '@toad-contracts/hono@0.3.2'
-  - '@toad-contracts/testing@0.3.2'
-  - '@toad-contracts/valibot@0.5.0'
-  - '@cloudflare/workers-types@4.20260628.1'
-  - 'valibot@1.4.2'
+  - '@cat-factory/*'
+  - '@toad-contracts/*'

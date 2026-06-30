@@ -41,9 +41,9 @@
     "db:migrate:provisioning:local": "wrangler d1 migrations apply cat_factory_provisioning --local"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.85",
-    "@ai-sdk/openai": "^3.0.74",
-    "@ai-sdk/openai-compatible": "^2.0.51",
+    "@ai-sdk/anthropic": "^3.0.89",
+    "@ai-sdk/openai": "^3.0.77",
+    "@ai-sdk/openai-compatible": "^2.0.54",
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/consensus": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
@@ -59,7 +59,7 @@
     "@cat-factory/spend": "workspace:*",
     "@cloudflare/containers": "^0.3.7",
     "@hono/valibot-validator": "^0.6.1",
-    "ai": "^6.0.209",
+    "ai": "^6.0.214",
     "hono": "^4.12.27",
     "pino": "^10.3.1",
     "valibot": "^1.4.2",

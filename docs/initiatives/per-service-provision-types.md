@@ -26,8 +26,8 @@ Target end state — the **what/where ÷ how split** (confirmed with the request
 - **One uniform path — no local/ephemeral toggle.** `defaultTestEnvironment` is removed.
   Every service gets its environment from the workspace's handler for its declared type;
   a `local-docker` handler (a local compose stack) and a remote cluster are just two kinds
-  of handler. `infraless` = no environment. Local-vs-remote is purely *which handler the
-  workspace configured* — never a user-facing toggle or a special tester branch.
+  of handler. `infraless` = no environment. Local-vs-remote is purely _which handler the
+  workspace configured_ — never a user-facing toggle or a special tester branch.
 
 The clean split: **service = what/where** (type + manifest source); **workspace/user =
 how** (the handler/engine + connection). The deployer **merges** the two at run time. Run
@@ -72,9 +72,10 @@ providers **plus** workspace-defined (UI-editable) entries. A `remote-custom` ha
 ## Implementation plan (per slice)
 
 ### Slice 1 — contracts (additive) + new tables + ports + repos + conformance ✅
+
 - Contracts (`backend/packages/contracts/src/environments.ts`): `provisionTypeSchema`,
   `infraEngineSchema`, `manifestIdSchema`, `serviceProvisioningSchema`,
-  `kubernetesEngineConfigSchema` (the split-out kube *engine* config), `infraHandlerConfigSchema`
+  `kubernetesEngineConfigSchema` (the split-out kube _engine_ config), `infraHandlerConfigSchema`
   (discriminated by `engine`), `customManifestTypeSchema` + `upsertCustomManifestTypeSchema`;
   `provisionType`/`engine` on `environmentHandleSchema`. `entities.ts`: a `provisioning`
   field on the service-frame `Block` (additive; `defaultTestEnvironment` kept for now).
@@ -82,15 +83,16 @@ providers **plus** workspace-defined (UI-editable) entries. A `remote-custom` ha
   `CustomManifestTypeRepository`; `provisionType`/`engine` on `EnvironmentRecord` (+ patch).
 - Persistence (D1 migration `0024` ⇄ Drizzle schema + generated migration): new
   `environment_user_handlers` (per-user override; PK `(user_id, workspace_id,
-  provision_type, manifest_id)`, `manifest_id` `''` sentinel for non-custom) and
+provision_type, manifest_id)`, `manifest_id` `''` sentinel for non-custom) and
   `custom_manifest_types` (PK `(workspace_id, manifest_id)`); `provision_type`/`engine`
   columns on `environments`. D1 + Drizzle repos.
 - Conformance: `defineEnvironmentHandlersSuite` (upsert/list/remove, the `''`⇄`null`
   sentinel, catalog CRUD), invoked from both runtimes.
 
 ### Slice 2a — resolver + registry engine metadata + custom-type seam ✅
+
 - `infra-handler.logic.ts`: pure `resolveInfraHandler(service, workspaceHandlers,
-  userOverrides)` — per-user override wins; `infraless` → `none` engine; pinned `custom`
+userOverrides)` — per-user override wins; `infraless` → `none` engine; pinned `custom`
   matches by key or `acceptsManifestId`; bare `custom` resolves only when unambiguous (else
   `type-mismatch`). Unit-tested.
 - `environment-backends.ts`: optional `engines()`/`acceptsManifestIds()` on the provider +
@@ -101,17 +103,18 @@ providers **plus** workspace-defined (UI-editable) entries. A `remote-custom` ha
 - Kernel re-exports the new provision-type contract types.
 
 ### Slice 2b — reshape `environment_connections` + service consumption (TODO — breaking)
+
 - **Persistence**: rekey `environment_connections` to `(workspace_id, provision_type,
-  coalesce(manifest_id,''))`; columns `provision_type`, `manifest_id`, `engine`,
+coalesce(manifest_id,''))`; columns `provision_type`, `manifest_id`, `engine`,
   `accepts_manifest_id` (replace `kind`); keep `provider_id/label/base_url/handler_json
-  (was manifest_json)/secrets_cipher/created_at/deleted_at`. Clean `DROP/CREATE` D1
+(was manifest_json)/secrets_cipher/created_at/deleted_at`. Clean `DROP/CREATE` D1
   migration + Drizzle schema edit + `db:generate`. Kernel port → multi-row API
   (`listByWorkspace` batched, `getByWorkspaceAndType`, `upsert`, `softDelete(ws, type,
-  manifestId, at)`). Rewrite the D1 + Drizzle connection repos. Extend the conformance
+manifestId, at)`). Rewrite the D1 + Drizzle connection repos. Extend the conformance
   suite to cover the reshaped connection repo.
 - **`EnvironmentConnectionService`** → handler-aware: `listHandlers(ws)` (batched),
   `registerHandler(ws, {provisionType, engine, config, secrets})`, `updateSecrets(ws, type,
-  manifestId, secrets)`, `resolveProviderForType(ws, serviceProvisioning, userOverrides?)`
+manifestId, secrets)`, `resolveProviderForType(ws, serviceProvisioning, userOverrides?)`
   (two batched reads → `resolveInfraHandler` → build via `registry.byEngine`, **merging the
   service `manifestSource`**), `unregisterHandler(ws, type, manifestId)`, custom-type CRUD.
   `describe`/`test`/`validate`/`bootstrap` take a `provisionType`/`manifestId` selector.
@@ -130,13 +133,15 @@ providers **plus** workspace-defined (UI-editable) entries. A `remote-custom` ha
   slice 4, but it must compile here).
 
 ### Slice 3 — engine step + run-details recording (TODO)
+
 - `RunDispatcher.runDeployerStep`: resolve the service frame's `provisioning`, pass it (+
   the run-initiator `userId` in local mode) into `provision`; on `infraless` record a no-op
   step output; add `Provision type:` / `Engine:` lines + `model:
-  environment:<engine>:<providerId>`. Record `provisionType`/`engine` on the
+environment:<engine>:<providerId>`. Record `provisionType`/`engine` on the
   `EnvironmentRecord` (both the success and failed-env paths) so the handle carries them.
 
 ### Slice 4 — controllers + container wiring (TODO)
+
 - `EnvironmentController`: per-type routes (`GET …/environments/handlers` batched bundle
   incl. the custom-type catalog; `POST …/handlers`; `PATCH …/handlers/:provisionType/secrets`;
   `DELETE …/handlers/:provisionType`); `describe`/`test`/`validate`/`bootstrap` gain
@@ -152,6 +157,7 @@ providers **plus** workspace-defined (UI-editable) entries. A `remote-custom` ha
   service/controller and threads the run-initiator `userId`.
 
 ### Slice 5 — frontend (TODO)
+
 - **Service view** (`components/panels/inspector/ServiceTestConfig.vue`): a provisioning
   section — provision-type selector + per-type source inputs (kubernetes: colocated path OR
   **separate repo**, reuse `RepoTreeBrowser`; docker-compose: compose path + localDevOnly;
@@ -190,13 +196,13 @@ providers **plus** workspace-defined (UI-editable) entries. A `remote-custom` ha
 
 ## Status checklist
 
-| #  | Slice | Status | PR |
-|----|-------|--------|----|
-| 1  | Contracts (additive) + new tables (`environment_user_handlers`, `custom_manifest_types`) + `environments` columns + ports + repos + conformance | done | #504 |
-| 2a | Resolver (`infra-handler.logic`) + registry `engines()`/`byEngine` + custom-type registry seam | done | #504 |
-| 2b | Reshape `environment_connections` (single→multi) + `EnvironmentConnectionService`/`ProvisioningService` reshape + `tester-infra` collapse (drop `defaultTestEnvironment`) + persist `Block.provisioning` | todo | — |
-| 3  | `runDeployerStep` merge source+engine + record provisionType/engine; infraless no-op | todo | — |
-| 4  | Controllers (per-type endpoints + custom-type CRUD + local-only per-user controller) + all three container wirings | todo | — |
-| 5  | Frontend (service provisioning section + auto-detect; infra per-type/engine configurator + custom-type editor + local override; run-details surfacing; stores; i18n) | todo | — |
+| #   | Slice                                                                                                                                                                                                    | Status | PR   |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---- |
+| 1   | Contracts (additive) + new tables (`environment_user_handlers`, `custom_manifest_types`) + `environments` columns + ports + repos + conformance                                                          | done   | #504 |
+| 2a  | Resolver (`infra-handler.logic`) + registry `engines()`/`byEngine` + custom-type registry seam                                                                                                           | done   | #504 |
+| 2b  | Reshape `environment_connections` (single→multi) + `EnvironmentConnectionService`/`ProvisioningService` reshape + `tester-infra` collapse (drop `defaultTestEnvironment`) + persist `Block.provisioning` | todo   | —    |
+| 3   | `runDeployerStep` merge source+engine + record provisionType/engine; infraless no-op                                                                                                                     | todo   | —    |
+| 4   | Controllers (per-type endpoints + custom-type CRUD + local-only per-user controller) + all three container wirings                                                                                       | todo   | —    |
+| 5   | Frontend (service provisioning section + auto-detect; infra per-type/engine configurator + custom-type editor + local override; run-details surfacing; stores; i18n)                                     | todo   | —    |
 
 Update the row (status + PR link) at the end of each slice.
