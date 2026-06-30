@@ -261,6 +261,10 @@ export type {
   EnvironmentRecord,
   EnvironmentRecordPatch,
   EnvironmentRegistryRepository,
+  EnvironmentUserHandlerRecord,
+  EnvironmentUserHandlerRepository,
+  CustomManifestTypeRecord,
+  CustomManifestTypeRepository,
 } from './environment-repositories.js'
 export type {
   ProvisioningLogRecord,

@@ -102,6 +102,8 @@ function rowToEnvironment(row: EnvironmentRow): EnvironmentRecord {
     expiresAt: row.expires_at,
     lastError: row.last_error,
     deletedAt: row.deleted_at,
+    provisionType: row.provision_type ?? null,
+    engine: row.engine ?? null,
   }
 }
 
@@ -114,6 +116,8 @@ const PATCH_COLUMNS = {
   provisionFieldsCipher: 'provision_fields_cipher',
   expiresAt: 'expires_at',
   lastError: 'last_error',
+  provisionType: 'provision_type',
+  engine: 'engine',
 } as const satisfies Record<keyof EnvironmentRecordPatch, string>
 
 /** Registry of provisioned environments over Postgres (migration 0008). */
@@ -136,6 +140,8 @@ export class DrizzleEnvironmentRegistryRepository implements EnvironmentRegistry
       expires_at: record.expiresAt,
       last_error: record.lastError,
       deleted_at: null,
+      provision_type: record.provisionType,
+      engine: record.engine,
     })
   }
 

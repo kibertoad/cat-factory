@@ -1296,6 +1296,10 @@ export const environments = pgTable(
     expires_at: bigint('expires_at', { mode: 'number' }),
     last_error: text('last_error'),
     deleted_at: bigint('deleted_at', { mode: 'number' }),
+    // The service's declared provision type + the resolved engine that handled it,
+    // recorded at provision time so run details can show exactly what ran where.
+    provision_type: text('provision_type'),
+    engine: text('engine'),
   },
   (t) => [
     index('idx_environments_block')
@@ -1461,6 +1465,51 @@ export const localModelEndpoints = pgTable(
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
   (t) => [primaryKey({ columns: [t.user_id, t.provider] })],
+)
+
+// Per-USER infra handler overrides (local mode): the per-user layer over a workspace's
+// per-type environment handlers, keyed by (user_id, workspace_id, provision_type,
+// manifest_id). `manifest_id` is '' for non-custom types so it sits in the composite PK
+// cleanly. Mirror of D1 migration 0024; see docs/initiatives/per-service-provision-types.md.
+export const environmentUserHandlers = pgTable(
+  'environment_user_handlers',
+  {
+    user_id: text('user_id').notNull(),
+    workspace_id: text('workspace_id').notNull(),
+    provision_type: text('provision_type').notNull(),
+    manifest_id: text('manifest_id').notNull().default(''),
+    engine: text('engine').notNull(),
+    provider_id: text('provider_id').notNull(),
+    label: text('label').notNull(),
+    base_url: text('base_url').notNull(),
+    handler_json: text('handler_json').notNull(),
+    accepts_manifest_id: text('accepts_manifest_id'),
+    secrets_cipher: text('secrets_cipher').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.user_id, t.workspace_id, t.provision_type, t.manifest_id],
+    }),
+  ],
+)
+
+// Workspace-defined custom-manifest-type catalog entries (the UI-editable half of the
+// custom provision-type catalog; the other half comes from registered providers). Keyed
+// by (workspace_id, manifest_id). Mirror of D1 migration 0024.
+export const customManifestTypes = pgTable(
+  'custom_manifest_types',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    manifest_id: text('manifest_id').notNull(),
+    label: text('label').notNull(),
+    accepts_input_hint: text('accepts_input_hint'),
+    description: text('description'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.manifest_id] })],
 )
 
 // Generic per-USER secrets — token-style credentials keyed by (user_id, kind) (a GitHub

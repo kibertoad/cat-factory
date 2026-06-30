@@ -185,6 +185,9 @@ export class EnvironmentProvisioningService {
       // provider gave none.
       lastError:
         provisioned.status === 'failed' ? provisioned.error?.trim() || 'Provisioning failed' : null,
+      // Recorded by the deployer step once per-service provision types land (slice 3).
+      provisionType: null,
+      engine: null,
     })
     await this.deps.environmentRegistryRepository.insert(record)
     // A provider that returns `status:'failed'` (rather than throwing) is still a
@@ -417,6 +420,8 @@ export class EnvironmentProvisioningService {
         createdAt: this.deps.clock.now(),
         expiresAt: null,
         lastError,
+        provisionType: null,
+        engine: null,
       })
       await this.deps.environmentRegistryRepository.insert(record)
     } catch (persistError) {
