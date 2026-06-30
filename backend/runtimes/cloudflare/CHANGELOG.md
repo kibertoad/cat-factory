@@ -1,5 +1,47 @@
 # @cat-factory/worker
 
+## 0.46.0
+
+### Minor Changes
+
+- 15c5894: feat(auth): remote node mode — surface the unauthenticated state and support PAT sign-in.
+
+  - A remote facade (node service / Worker) has no anonymous tier, so once the auth handshake
+    resolves with no signed-in user the SPA now routes to the login screen — even when the
+    backend reports auth "disabled" (a dev-open / unconfigured remote). Previously this dropped
+    the user onto a board where every per-user action silently failed with no sign-in affordance.
+    An unreachable backend still falls through to the board's own error UI.
+  - Source-control PAT sign-in now works on the remote node facade: a user pastes their own
+    GitHub/GitLab PAT and is resolved to the account it belongs to. A hosted PAT login is held
+    to the SAME login/org/domain allowlist as GitHub OAuth (admit when the login, an org it
+    belongs to, or its email domain is allowlisted; fail closed when none are configured). Local
+    mode keeps its configured-token, allowlist-exempt flow. `GET /auth/config` advertises the
+    available PAT providers and the login screen renders a PAT option alongside OAuth/password;
+    when a remote deployment has no sign-in method at all the screen explains that instead of
+    showing a blank card.
+  - New `TESTING_NO_AUTH` escape hatch (test-only, refused in a production-like ENVIRONMENT):
+    a stronger `AUTH_DEV_OPEN` that both leaves the API open AND advertises (via `GET
+/auth/config`) that the SPA may render the board anonymously instead of gating to login. The
+    e2e suite opts into it; `AUTH_DEV_OPEN` on its own keeps the SPA's login gate, since a
+    dev-open remote still has no anonymous tier.
+
+### Patch Changes
+
+- Updated dependencies [15c5894]
+  - @cat-factory/server@0.53.0
+  - @cat-factory/contracts@0.63.0
+  - @cat-factory/kernel@0.61.0
+  - @cat-factory/agents@0.24.1
+  - @cat-factory/consensus@0.7.89
+  - @cat-factory/gates@0.2.42
+  - @cat-factory/gitlab@0.4.12
+  - @cat-factory/integrations@0.42.1
+  - @cat-factory/orchestration@0.47.1
+  - @cat-factory/prompt-fragments@0.9.16
+  - @cat-factory/spend@0.10.46
+  - @cat-factory/observability-langfuse@0.7.85
+  - @cat-factory/provider-cloudflare@0.7.89
+
 ## 0.45.0
 
 ### Minor Changes
