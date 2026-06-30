@@ -6,6 +6,7 @@ import type {
   ExecutionInstance,
   ExecutionRepository,
   LlmCallActivity,
+  ResolveBinaryArtifactStore,
   ResolveRunRepoContext,
   RunRepoContext,
   Service,
@@ -253,6 +254,16 @@ export interface ConformanceAppOptions {
    * supplies a fake backed by an in-memory commit capture.
    */
   resolveRunRepoContext?: ResolveRunRepoContext
+  /**
+   * Inject the per-account binary-artifact store resolver so the suite can drive the
+   * pipeline-start binary-storage gate deterministically on EVERY runtime — the Worker
+   * test env binds R2 (storage ON by default) while Node/local default to OFF, so the two
+   * have no common configurable backend. The suite supplies a non-null resolver to assert a
+   * storage-reliant pipeline (the UI Tester) starts + drives, and a null-returning resolver
+   * to assert it is refused with a `binary_storage_unconfigured` conflict. Each facade
+   * harness threads it into its core overrides exactly as a real facade composes it.
+   */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   /**
    * Inject explicit built-in gate providers (e.g. a faked `CiStatusProvider`). A facade
    * build resets the deployment-global gate providers up-front then re-wires from config;

@@ -28,10 +28,14 @@ interface ConflictDetails {
  * fails THIS typecheck until it is mapped here. (The typed-message-keys feature can't see the
  * `t()` lookup because the key is resolved at runtime via this map, not written as a literal —
  * so the exhaustiveness of the map, not `t()`, is what makes a missing reason a build error.)
- * `providers_unconfigured` is excluded: it has bespoke handling + its own `providersUnconfigured.*`
- * key namespace, so it never reaches the generic lookup below.
+ * `providers_unconfigured` and `binary_storage_unconfigured` are excluded: each has bespoke
+ * handling (a "configure X" action) + its own key namespace, so neither reaches the generic
+ * lookup below.
  */
-const CONFLICT_TITLE_KEYS: Record<Exclude<ConflictReason, 'providers_unconfigured'>, string> = {
+const CONFLICT_TITLE_KEYS: Record<
+  Exclude<ConflictReason, 'providers_unconfigured' | 'binary_storage_unconfigured'>,
+  string
+> = {
   dependencies_unmet: 'errors.conflict.title.dependencies_unmet',
   task_limit_reached: 'errors.conflict.title.task_limit_reached',
   tester_infra_unsupported: 'errors.conflict.title.tester_infra_unsupported',
@@ -97,12 +101,37 @@ export function usePipelineErrorToast() {
       return
     }
 
+    // A pipeline step relies on binary-artifact storage (the UI Tester uploads screenshots)
+    // but the account has none configured. Explain it and offer the jump to the content-storage
+    // settings — the same shape as the providers-unconfigured case above.
+    if (conflict?.reason === 'binary_storage_unconfigured') {
+      toast.add({
+        title: t('errors.conflict.binaryStorageUnconfigured.title'),
+        description: conflict.message ?? t('errors.conflict.binaryStorageUnconfigured.body'),
+        color: 'error',
+        icon: 'i-lucide-image',
+        actions: [
+          {
+            label: t('errors.conflict.binaryStorageUnconfigured.action'),
+            icon: 'i-lucide-settings',
+            onClick: () => ui.openContentStorageSettings(),
+          },
+        ],
+      })
+      return
+    }
+
     if (conflict) {
       // Per-reason title key from the exhaustive map; fall back to the caller's title key when
       // this reason has no mapped/translated copy (`te` = translation-exists, so a key missing
       // in the active locale never leaks as raw text). An unknown reason isn't in the map.
       const reasonKey =
-        CONFLICT_TITLE_KEYS[conflict.reason as Exclude<ConflictReason, 'providers_unconfigured'>]
+        CONFLICT_TITLE_KEYS[
+          conflict.reason as Exclude<
+            ConflictReason,
+            'providers_unconfigured' | 'binary_storage_unconfigured'
+          >
+        ]
       toast.add({
         title: reasonKey && te(reasonKey) ? t(reasonKey) : t(fallbackTitleKey),
         description: conflict.message ?? t('errors.conflict.fallbackMessage'),

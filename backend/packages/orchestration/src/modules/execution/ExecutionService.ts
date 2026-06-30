@@ -15,7 +15,13 @@ import type {
   IssueWritebackProvider,
 } from '@cat-factory/kernel'
 import { DEFAULT_COMPANION_MAX_ATTEMPTS, isLocalRunner } from '@cat-factory/contracts'
-import { companionFor, companionTargets, isCompanionKind } from '@cat-factory/agents'
+import {
+  BINARY_STORAGE_TRAIT,
+  companionFor,
+  companionTargets,
+  hasTrait,
+  isCompanionKind,
+} from '@cat-factory/agents'
 import type { RunInitiatorScope } from '@cat-factory/kernel'
 import { validatePipelineShape } from '../pipelines/pipelineShape.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
@@ -466,6 +472,13 @@ export class ExecutionService {
   /** Start-time assertion that a container-agent backend is configured (local-mode pool). */
   private readonly assertAgentBackendConfigured?: (workspaceId: string) => Promise<void>
   /**
+   * Resolves the per-account binary-artifact store, used by the start gate to refuse a
+   * pipeline carrying a {@link BINARY_STORAGE_TRAIT} kind (e.g. the UI Tester) when the
+   * account has no storage configured. Absent (tests/conformance with no store wired) ⇒
+   * the gate passes through, like the other optional start guards.
+   */
+  private readonly resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /**
    * The per-step dispatch + completion spine (the four registries, the completion hub, the
    * gate machinery, the deterministic deployer/tracker steps, the pre/post-op cluster, the
    * structured-artifact ingest, and the follow-up companion gate). `stepInstance` runs the
@@ -721,6 +734,7 @@ export class ExecutionService {
     this.resolveTesterFallbackDefault = resolveTesterFallbackDefault
     this.resolveRequireEnvironmentProvider = resolveRequireEnvironmentProvider
     this.assertAgentBackendConfigured = assertAgentBackendConfigured
+    this.resolveBinaryArtifactStore = resolveBinaryArtifactStore
   }
 
   // ---- gate-window action sub-facades -------------------------------------
@@ -864,6 +878,31 @@ export class ExecutionService {
   }
 
   /**
+   * Guard a pipeline's start when it carries an agent kind that RELIES on binary-artifact
+   * storage (the {@link BINARY_STORAGE_TRAIT}, e.g. the UI Tester, which uploads its
+   * screenshots there). Such a run would otherwise dispatch and then fail/degrade with no
+   * place to store its artifacts, so refuse it up-front with a clear, actionable
+   * `binary_storage_unconfigured` conflict the SPA turns into a "configure storage" prompt.
+   * The check is trait-driven so it stays universal: a future artifact-producing kind just
+   * carries the trait. Pass-through when no store resolver is wired (tests/conformance with
+   * no storage) — matching the other optional start guards.
+   */
+  private async assertBinaryStorageConfigured(
+    workspaceId: string,
+    agentKinds: readonly string[],
+  ): Promise<void> {
+    if (!agentKinds.some((kind) => hasTrait(kind, BINARY_STORAGE_TRAIT))) return
+    const resolve = this.resolveBinaryArtifactStore
+    if (!resolve) return
+    const store = await resolve(workspaceId)
+    if (store) return
+    throw new ConflictError(
+      'This pipeline includes an agent that needs binary storage (e.g. the UI Tester, which uploads its screenshots), but this account has no content storage configured. Configure content storage to run it.',
+      'binary_storage_unconfigured',
+    )
+  }
+
+  /**
    * Guard a pipeline's start on having a usable provider for every step's canonical
    * model. The model a step runs is resolved by the same precedence the dispatch path
    * uses (block pin → workspace per-kind default); each canonical id must have a usable
@@ -999,6 +1038,11 @@ export class ExecutionService {
     if (pipeline.agentKinds.some(isTesterKind)) {
       await this.assertTesterInfraConfigured(workspaceId, block)
     }
+
+    // Block the start when the pipeline carries an agent that relies on binary-artifact
+    // storage (the UI Tester uploads screenshots) but the account has none configured —
+    // before any side effects, with an actionable error pointing at the storage settings.
+    await this.assertBinaryStorageConfigured(workspaceId, pipeline.agentKinds)
 
     // Block the start when the workspace delegates container agents to a runner pool that
     // isn't registered (local mode opt-in). No-op on Cloudflare/Node (fixed backend) and
@@ -2266,6 +2310,13 @@ export class ExecutionService {
       )
     }
 
+    // Same binary-storage precondition as start(): a retry of a run carrying a
+    // storage-reliant kind (the UI Tester) is refused when the account has no storage.
+    await this.assertBinaryStorageConfigured(
+      workspaceId,
+      previous.steps.map((s) => s.agentKind),
+    )
+
     const { steps, currentStep } = planResumedSteps(previous)
     // Mint the activation before replacing the failed run, so a bad password aborts
     // the retry without losing the retryable terminal run.
@@ -2351,6 +2402,14 @@ export class ExecutionService {
         `Step ${fromStepIndex} is out of range for this run (it has ${previous.steps.length} step(s)).`,
       )
     }
+
+    // Same binary-storage precondition as start(): a restart of a run carrying a
+    // storage-reliant kind (the UI Tester) is refused when the account has no storage —
+    // before any teardown/side effects.
+    await this.assertBinaryStorageConfigured(
+      workspaceId,
+      previous.steps.map((s) => s.agentKind),
+    )
 
     // Tear down whatever was driving the run we're about to replace — its per-run
     // container AND its durable driver — before minting the restart. A `done`/`failed`

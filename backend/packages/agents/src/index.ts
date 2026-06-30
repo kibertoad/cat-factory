@@ -50,6 +50,7 @@ export {
   type AgentTraitDefinition,
   CODE_AWARE_TRAIT,
   SPEC_AWARE_TRAIT,
+  BINARY_STORAGE_TRAIT,
   SPEC_AWARE_GUIDANCE,
   STANDARD_AGENT_TRAITS,
   registerAgentTrait,

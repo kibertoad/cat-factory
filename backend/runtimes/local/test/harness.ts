@@ -126,6 +126,7 @@ export function makeConformanceApp(
   opts?: {
     cloudflareModelsEnabled?: boolean
     resolveRunRepoContext?: CoreDependencies['resolveRunRepoContext']
+    resolveBinaryArtifactStore?: CoreDependencies['resolveBinaryArtifactStore']
     gateProviders?: GateProviderOverrides
     environmentProvider?: CoreDependencies['environmentProvider']
     resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
@@ -161,6 +162,11 @@ export function makeConformanceApp(
     // Inject the engine's run-repo resolver (a fake in the suite) so the registered
     // custom kind's pre/post-op hooks run + commit identically to a real GitHub-wired facade.
     ...(opts?.resolveRunRepoContext ? { resolveRunRepoContext: opts.resolveRunRepoContext } : {}),
+    // Inject the binary-artifact store resolver so the suite drives the start-time
+    // binary-storage gate deterministically (local inherits Node's storage-OFF default).
+    ...(opts?.resolveBinaryArtifactStore
+      ? { resolveBinaryArtifactStore: opts.resolveBinaryArtifactStore }
+      : {}),
     // Inject a native environment provider + the block-less coords resolver (both fakes
     // in the suite) so the on-demand repo-config validate route is asserted end-to-end
     // against real Postgres, identically to the Worker/Node. Overrides are spread last in

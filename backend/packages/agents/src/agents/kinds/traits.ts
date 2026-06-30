@@ -29,6 +29,17 @@ export const CODE_AWARE_TRAIT: AgentTrait = 'code-aware'
  */
 export const SPEC_AWARE_TRAIT: AgentTrait = 'spec-aware'
 
+/**
+ * Binary-storage-aware kinds need the account's binary-artifact store (R2 / S3 / fs /
+ * Postgres) configured to do their job — e.g. the UI Tester uploads its screenshots there.
+ * A pure MARKER trait (no prompt guidance): the execution engine refuses to START a
+ * pipeline carrying such a kind when the workspace's account has no storage configured,
+ * with an actionable `binary_storage_unconfigured` conflict pointing the human at the
+ * content-storage settings. This makes the precondition universal — a future screenshot/
+ * artifact-producing kind just carries the trait instead of the engine hard-coding it.
+ */
+export const BINARY_STORAGE_TRAIT: AgentTrait = 'binary-storage'
+
 /** The guidance appended to a spec-aware kind's system prompt — explains the spec format. */
 export const SPEC_AWARE_GUIDANCE = [
   `This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. It is sharded by a module (domain) → feature (group) taxonomy. When it is present, read it before doing the work:`,
@@ -55,7 +66,9 @@ export const STANDARD_AGENT_TRAITS: Partial<Record<AgentKind, AgentTrait[]>> = {
   fixer: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
   'conflict-resolver': [SPEC_AWARE_TRAIT],
   'tester-api': [SPEC_AWARE_TRAIT],
-  'tester-ui': [SPEC_AWARE_TRAIT],
+  // The UI Tester captures screenshots and uploads them to the binary-artifact store
+  // (the visual-confirmation gate reads them back), so it needs storage configured.
+  'tester-ui': [SPEC_AWARE_TRAIT, BINARY_STORAGE_TRAIT],
   playwright: [SPEC_AWARE_TRAIT],
   blueprints: [SPEC_AWARE_TRAIT],
   'business-documenter': [SPEC_AWARE_TRAIT],

@@ -35,6 +35,7 @@ import {
 // real deployment ships, and so a test that clears the registry can restore them.
 import { clearGateProviders, registerBuiltinGates } from '@cat-factory/gates'
 import type {
+  BinaryArtifactStore,
   CiStatusProvider,
   EnvironmentProvider,
   GateProbe,
@@ -42,6 +43,7 @@ import type {
   PullRequestReviewSnapshot,
   RepoFiles,
   RepoValidationResult,
+  ResolveBinaryArtifactStore,
   RunRepoContext,
 } from '@cat-factory/kernel'
 import {
@@ -52,6 +54,27 @@ import {
 } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from './harness.js'
+
+// Binary-storage start-gate helpers (see the `visual-confirmation` / UI-tester tests).
+// The Worker test env binds R2 (storage ON by default) while Node/local default to OFF and
+// the two share no configurable backend, so the suite injects the resolver directly to drive
+// the gate identically on every runtime: a non-null store ⇒ a storage-reliant pipeline starts,
+// a null-returning resolver ⇒ it is refused with `binary_storage_unconfigured`.
+const EMPTY_BINARY_ARTIFACT_STORE: BinaryArtifactStore = {
+  store: () => Promise.reject(new Error('not used in conformance')),
+  getMetadata: () => Promise.resolve(null),
+  getBlob: () => Promise.resolve(null),
+  getBlobWithMetadata: () => Promise.resolve(null),
+  listByExecution: () => Promise.resolve([]),
+  countByExecution: () => Promise.resolve(0),
+  listByBlock: () => Promise.resolve([]),
+  delete: () => Promise.resolve(),
+  pruneOlderThan: () => Promise.resolve(0),
+}
+/** Storage configured: every workspace resolves the (empty) store, so the gate is satisfied. */
+const STORAGE_ON: ResolveBinaryArtifactStore = () => Promise.resolve(EMPTY_BINARY_ARTIFACT_STORE)
+/** Storage off: the account has no content storage, so the start gate must refuse the run. */
+const STORAGE_OFF: ResolveBinaryArtifactStore = () => Promise.resolve(null)
 
 // The cross-runtime conformance suite: the KEY backend behaviour every deployment
 // facade must implement identically. It is parameterised by a `ConformanceHarness`,
@@ -3677,13 +3700,54 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(testerStep.test?.infraSetup).toEqual(infraSetup)
       })
 
+      it('refuses to start a UI-tester pipeline when the account has no binary storage', async () => {
+        // The `tester-ui` step uploads its screenshots to the binary-artifact store, so the
+        // engine refuses to START the pipeline when the account has none configured — a clear
+        // `binary_storage_unconfigured` conflict the SPA turns into a "configure storage" prompt.
+        // Driven with a null-returning store resolver so the refusal is asserted on every runtime
+        // (the Worker binds R2 by default, so this is the only way to reach the off path there).
+        const { call, createWorkspace } = harness.makeApp(
+          {
+            asyncKinds: ['coder', 'tester-ui'],
+            asyncPolls: 1,
+            testReports: [
+              {
+                greenlight: true,
+                summary: 'ok',
+                tested: ['dashboard'],
+                outcomes: [{ name: 'dashboard', status: 'passed' as const }],
+                concerns: [],
+              },
+            ],
+          },
+          { resolveBinaryArtifactStore: STORAGE_OFF },
+        )
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'UI test (no storage)',
+          agentKinds: ['coder', 'tester-ui', 'visual-confirmation'],
+        })
+        await call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          agentConfig: { 'tester.environment': 'ephemeral' },
+        })
+        const blocked = await call<{
+          error: { code: string; details?: { reason?: string } }
+        }>('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(blocked.status).toBe(409)
+        expect(blocked.body.error.code).toBe('conflict')
+        expect(blocked.body.error.details?.reason).toBe('binary_storage_unconfigured')
+      })
+
       it('drives the visual-confirmation gate to completion (pass-through or park → approve)', async () => {
         // A `tester-ui` → `visual-confirmation` tail: the UI tester greenlights, then the gate
-        // is reached. Whether it parks depends on the runtime's wiring: with NO binary-artifact
-        // store wired (Node conformance harness) it passes through and the run completes; with a
-        // store wired (the Worker test config binds an R2 bucket) it parks awaiting the human, and
-        // approving advances it. Either way the gate kind is engine-delegated and the run finishes —
-        // this pins both the delegation and the approve path across runtimes.
+        // is reached. A `tester-ui` pipeline now needs binary storage configured to START at all
+        // (the start gate), so we inject a non-null store resolver here. With a store wired the
+        // visual-confirmation gate parks awaiting the human; approving advances it. Either way the
+        // gate kind is engine-delegated and the run finishes — this pins both the delegation and
+        // the approve path across runtimes.
         const green = {
           greenlight: true,
           summary: 'ui looks good',
@@ -3691,12 +3755,15 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           outcomes: [{ name: 'dashboard', status: 'passed' as const }],
           concerns: [],
         }
-        const app = harness.makeApp({
-          asyncKinds: ['coder', 'tester-ui'],
-          asyncPolls: 1,
-          testReports: [green],
-          pullRequest: { url: 'https://gh/pr/2', number: 2, branch: 'cat-factory/task_login' },
-        })
+        const app = harness.makeApp(
+          {
+            asyncKinds: ['coder', 'tester-ui'],
+            asyncPolls: 1,
+            testReports: [green],
+            pullRequest: { url: 'https://gh/pr/2', number: 2, branch: 'cat-factory/task_login' },
+          },
+          { resolveBinaryArtifactStore: STORAGE_ON },
+        )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
 
@@ -3735,8 +3802,9 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         // Exercises the gate's fix loop (only reachable when a binary-artifact store is wired, so
         // the gate parks rather than passing through): a parked gate + a human "request a fix"
         // dispatches the Tester's `fixer`, and when that job settles the gate re-parks (recording
-        // the round + bumping attempts) so the human can approve. On a runtime with NO store wired
-        // (the Node harness) the gate passes through and the fix path isn't reachable — we assert
+        // the round + bumping attempts) so the human can approve. A `tester-ui` pipeline now needs
+        // storage to START, so we inject a non-null store resolver — which also makes the gate park
+        // (rather than pass through), so the fix loop is reachable on every runtime. We still assert
         // completion either way, and the fix-loop assertions only when the gate actually parked.
         const green = {
           greenlight: true,
@@ -3745,12 +3813,15 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           outcomes: [{ name: 'dashboard', status: 'passed' as const }],
           concerns: [],
         }
-        const app = harness.makeApp({
-          asyncKinds: ['coder', 'tester-ui', 'fixer'],
-          asyncPolls: 1,
-          testReports: [green],
-          pullRequest: { url: 'https://gh/pr/3', number: 3, branch: 'cat-factory/task_login' },
-        })
+        const app = harness.makeApp(
+          {
+            asyncKinds: ['coder', 'tester-ui', 'fixer'],
+            asyncPolls: 1,
+            testReports: [green],
+            pullRequest: { url: 'https://gh/pr/3', number: 3, branch: 'cat-factory/task_login' },
+          },
+          { resolveBinaryArtifactStore: STORAGE_ON },
+        )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
 

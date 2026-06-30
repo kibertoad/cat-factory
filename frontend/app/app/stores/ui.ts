@@ -464,6 +464,13 @@ export const useUiStore = defineStore('ui', () => {
     accountSettingsTab.value = tab
     accountSettingsOpen.value = true
   }
+  // Deep-link to the content (binary-artifact) storage configuration, which lives in the
+  // account settings' team/deployment tab (`AccountDeploymentSettings`). Used by the
+  // pipeline-start error prompt when a storage-reliant agent (the UI Tester) has no
+  // storage configured.
+  function openContentStorageSettings() {
+    openAccountSettings('team')
+  }
   function closeAccountSettings() {
     accountSettingsOpen.value = false
   }
@@ -739,6 +746,7 @@ export const useUiStore = defineStore('ui', () => {
     closeWorkspaceSettings,
     setWorkspaceSettingsTab,
     openAccountSettings,
+    openContentStorageSettings,
     closeAccountSettings,
     setAccountSettingsTab,
     openObservabilityConnection,
