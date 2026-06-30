@@ -1,5 +1,5 @@
 ---
-'@cat-factory/server': patch
+'@cat-factory/server': minor
 '@cat-factory/node-server': patch
 '@cat-factory/local-server': patch
 ---

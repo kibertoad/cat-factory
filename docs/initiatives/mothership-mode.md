@@ -271,7 +271,7 @@ larger than one hop — split it across several PRs, but **none of the mothershi
 the board-load + run paths below are green**. The work is in three parts:
 
 > **Landed (Phase 3 slice 1):** part 2's workspace-scoped + mixed (workspaceId + entity-id) board-load
-> reads are now allow-listed in `PILOT_PERSISTENCE_METHODS`, each reusing the existing `workspace`
+> reads are now allow-listed in `REMOTE_PERSISTENCE_METHODS`, each reusing the existing `workspace`
 > scope rule (resolve the owning account, reject out-of-scope as 404). Reads only — no new mutation
 > is exposed. Part 3 needed no registry change: the dispatcher already reflects over the full
 > `CoreDependencies` object, so allow-listing a method is enough to expose it. Round-trip +
@@ -323,7 +323,7 @@ the board-load + run paths below are green**. The work is in three parts:
 > board-load + run path, not off it. Fixes: `buildNodeContainer` now routes `documentRepository` /
 > `taskRepository` / `environmentRegistryRepository` / `environmentConnectionRepository` from the remote
 > registry when `db` is undefined (the sub-helpers built them directly over the absent `db`; their
-> connect/provision surfaces stay db-direct, off the path); and `PILOT_PERSISTENCE_METHODS` gained the
+> connect/provision surfaces stay db-direct, off the path); and `REMOTE_PERSISTENCE_METHODS` gained the
 > workspace-scoped methods the path exercises — `documentRepository.{listByBlock,get,getByUrl}`,
 > `taskRepository.{listByBlock,get,getByUrl}`, `environmentRegistryRepository.{getByBlock,get}`,
 > `modelPresetRepository.getDefault`, the board-load lazy default-preset seeds
@@ -360,7 +360,7 @@ the board-load + run paths below are green**. The work is in three parts:
    `tokenUsage`/`llmCallMetric`/`agentContextSnapshot`/`provisioningLog` — are the local-first
    telemetry bucket, Phase 5, NOT remote; they degrade as best-effort no-ops over the remote for now.)
 
-2. **Widen the server allow-list (`PILOT_PERSISTENCE_METHODS`) to the methods a board load + a run
+2. **Widen the server allow-list (`REMOTE_PERSISTENCE_METHODS`) to the methods a board load + a run
    exercise, each with a correct scope rule.** The boundary is security-sensitive: a machine token
    is scoped to ACCOUNTS, not roles, so admin-gated mutations and global sweeper reads stay excluded.
    The concrete map (from a call-graph trace of `GET /workspaces/:id` and the execution lifecycle):
