@@ -31,6 +31,7 @@ import type {
   ResolverContext,
   RunInitiatorScope,
   RunRepoContext,
+  ServiceProvisioning,
   StepCompletionResolver,
   StreamedFollowUp,
   TicketTrackerProvider,
@@ -1255,6 +1256,18 @@ export class RunDispatcher {
     block: Block,
     isFinalStep: boolean,
   ): Promise<AdvanceResult> {
+    // The service frame (the run may target a task/module inside it) owns the provisioning
+    // config — the "what + where". Resolve it so the deployer routes to the workspace handler
+    // for its declared type. A service explicitly declaring `infraless` stands nothing up —
+    // record a no-op step output. An UNDECLARED service falls through to the legacy
+    // single-connection path (the compat bridge), so existing workspaces keep provisioning.
+    const provisioning = await this.resolveServiceProvisioning(workspaceId, block)
+    if (provisioning?.type === 'infraless') {
+      return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
+        output: 'Service is infraless; no environment provisioned.',
+        model: 'environment:none',
+      })
+    }
     let handle
     try {
       handle = await this.environmentProvisioning!.provision({
@@ -1263,6 +1276,8 @@ export class RunDispatcher {
         executionId: instance.id,
         inputs: this.deployInputs(block),
         context: this.deployContext(block),
+        ...(provisioning ? { serviceProvisioning: provisioning } : {}),
+        initiatedBy: instance.initiatedBy,
       })
     } catch (error) {
       return this.failDeployerStep(workspaceId, instance, step, getErrorMessage(error))
@@ -1281,10 +1296,30 @@ export class RunDispatcher {
       `URL: ${handle.url ?? '(pending)'}`,
     ]
     if (handle.expiresAt) lines.push(`Expires: ${new Date(handle.expiresAt).toISOString()}`)
+    if (handle.provisionType) lines.push(`Provision type: ${handle.provisionType}`)
+    if (handle.engine) lines.push(`Engine: ${handle.engine}`)
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
       output: lines.join('\n'),
-      model: `environment:${handle.providerId}`,
+      model: handle.engine
+        ? `environment:${handle.engine}:${handle.providerId}`
+        : `environment:${handle.providerId}`,
     })
+  }
+
+  /**
+   * Resolve the SERVICE frame's declared provisioning for a run block. The run may target a
+   * task/module nested under the frame, so walk up to the frame (mirrors the blueprint /
+   * tester-gate resolution) and read its `provisioning`. Returns null when undeclared.
+   */
+  private async resolveServiceProvisioning(
+    workspaceId: string,
+    block: Block,
+  ): Promise<ServiceProvisioning | undefined> {
+    const frameId =
+      (await this.contextBuilder.resolveServiceFrameId(workspaceId, block.id)) ?? block.id
+    const frame =
+      frameId === block.id ? block : await this.blockRepository.get(workspaceId, frameId)
+    return frame?.provisioning
   }
 
   /**

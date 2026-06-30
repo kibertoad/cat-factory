@@ -173,6 +173,10 @@ export {
   type RegisteredCustomManifestType,
 } from './modules/environments/custom-manifest-types.js'
 export {
+  EnvironmentUserHandlerService,
+  type EnvironmentUserHandlerServiceDependencies,
+} from './modules/environments/EnvironmentUserHandlerService.js'
+export {
   EnvironmentProvisioningService,
   type EnvironmentProvisioningServiceDependencies,
   type ProvisionArgs,
