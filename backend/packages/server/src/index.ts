@@ -206,6 +206,33 @@ export * from './persistence/sandbox-mappers.js'
 // repositories so a corrupt stored value surfaces loudly instead of via an erased `as` cast.
 export * from './persistence/decode.js'
 
+// Mothership-mode persistence RPC: the wire protocol + method table + server dispatcher, and
+// the client-side remote-repository proxy. A facade attaches its repository registry as
+// `ServerContainer.repositories` to act as a mothership; a mothership-mode local node builds
+// `createRemoteRepositories` instead of a database-backed repo set.
+export {
+  type PersistenceRpcRequest,
+  type PersistenceRpcResponse,
+  type PersistenceRpcError,
+  type PersistenceErrorCode,
+  type PersistenceRegistry,
+  type PersistenceMethodTable,
+  type MethodSpec,
+  type ScopeRule,
+  type DispatchOptions,
+  type DispatchResult,
+  PILOT_PERSISTENCE_METHODS,
+  dispatchPersistenceCall,
+  persistenceErrorToThrowable,
+  statusForPersistenceError,
+} from './persistence/rpc.js'
+export {
+  type PersistenceRpcClient,
+  type RemoteRepositories,
+  createRemoteRepositories,
+  HttpPersistenceRpcClient,
+} from './persistence/remoteRepositories.js'
+
 // Per-account binary-artifact store resolution (the blob backend is configured per-account
 // in the UI; each facade supplies its own backend factory + default).
 export {

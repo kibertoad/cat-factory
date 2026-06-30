@@ -94,6 +94,23 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
       })
     })
 
+    describe('mothership-mode machine API', () => {
+      it('serves /internal/persistence with the registry attached + machine-token gate active', async () => {
+        const { call } = harness.makeApp()
+        // The endpoint is mounted by the shared controller and the session auth gate bypasses
+        // `/internal`, so an unauthenticated call reaches the controller. With the facade's
+        // repository registry attached (both runtimes must do this — the symmetric wiring), a
+        // missing/invalid machine token is rejected 403. A facade that FORGOT to attach its
+        // registry would instead 503 here, so this is the drift guard for that symmetric change.
+        const res = await call('POST', '/internal/persistence', {
+          repo: 'workspaceRepository',
+          method: 'get',
+          args: ['ws_x'],
+        })
+        expect(res.status).toBe(403)
+      })
+    })
+
     describe('workspaces', () => {
       it('creates a seeded board and returns a full snapshot', async () => {
         const { call } = harness.makeApp()
