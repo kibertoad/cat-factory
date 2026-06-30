@@ -1,5 +1,22 @@
 # @cat-factory/orchestration
 
+## 0.45.3
+
+### Patch Changes
+
+- 6009266: Refresh dependencies to their latest release-age-compliant versions: the Vercel AI
+  SDK family within its `workers-ai-provider`-compatible majors (`ai` 6.0.214,
+  `@ai-sdk/anthropic` 3.0.89, `@ai-sdk/openai` 3.0.77, `@ai-sdk/openai-compatible`
+  2.0.54, `@ai-sdk/amazon-bedrock` 4.0.124), `drizzle-orm`/`drizzle-kit` 1.0.0-rc.4,
+  and `yaml` 2.9.0, plus refreshed transitive resolutions.
+- Updated dependencies [6009266]
+  - @cat-factory/agents@0.23.2
+  - @cat-factory/integrations@0.40.1
+  - @cat-factory/kernel@0.57.1
+  - @cat-factory/sandbox@0.8.50
+  - @cat-factory/spend@0.10.42
+  - @cat-factory/workspaces@0.9.33
+
 ## 0.45.2
 
 ### Patch Changes
