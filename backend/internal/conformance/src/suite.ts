@@ -174,6 +174,59 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
       })
     })
 
+    describe('execution optimistic concurrency (compareAndSwap)', () => {
+      // The lost-update fix: a human-action write that raced another writer must be REFUSED
+      // (so the loser re-reads and retries) rather than blindly clobbering the run snapshot.
+      // Asserted at the repository layer so D1 and Postgres are proven to behave identically.
+      it('refuses a stale compareAndSwap while a force upsert still bumps rev', async () => {
+        const app = harness.makeApp()
+        const repo = app.executionRepository()
+        const { workspace } = await app.createWorkspace()
+
+        const base: ExecutionInstance = {
+          id: 'exec_cas',
+          blockId: 'blk_cas',
+          pipelineId: 'pl',
+          pipelineName: 'Pipeline',
+          steps: [],
+          currentStep: 0,
+          status: 'running',
+          initiatedBy: null,
+        }
+        // A fresh insert starts at rev 0.
+        await repo.upsert(workspace.id, base)
+        expect((await repo.get(workspace.id, 'exec_cas'))?.rev).toBe(0)
+
+        // Two writers load the SAME revision (a double-submit / driver-vs-human race).
+        const writerA = await repo.get(workspace.id, 'exec_cas')
+        const writerB = await repo.get(workspace.id, 'exec_cas')
+        expect(writerA?.rev).toBe(0)
+        expect(writerB?.rev).toBe(0)
+
+        // The first compareAndSwap lands and bumps the in-memory + stored rev.
+        writerA!.status = 'blocked'
+        expect(await repo.compareAndSwap(workspace.id, writerA!)).toBe(true)
+        expect(writerA!.rev).toBe(1)
+
+        // The second, from the now-stale revision, is refused with NO write.
+        writerB!.status = 'done'
+        expect(await repo.compareAndSwap(workspace.id, writerB!)).toBe(false)
+
+        // The first writer's state survived; the stale write did not clobber it.
+        const afterCas = await repo.get(workspace.id, 'exec_cas')
+        expect(afterCas?.status).toBe('blocked')
+        expect(afterCas?.rev).toBe(1)
+
+        // The force upsert (the durable driver / lifecycle path) always lands AND keeps rev
+        // monotonic, so a later compareAndSwap still detects the row moved.
+        afterCas!.status = 'paused'
+        await repo.upsert(workspace.id, afterCas!)
+        const afterForce = await repo.get(workspace.id, 'exec_cas')
+        expect(afterForce?.status).toBe('paused')
+        expect(afterForce?.rev).toBe(2)
+      })
+    })
+
     describe('pipeline versioning + reseed', () => {
       it('ships catalog versions on the snapshot and reseeds a built-in, preserving organization', async () => {
         const { call, createWorkspace } = harness.makeApp()

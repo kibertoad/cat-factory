@@ -138,6 +138,51 @@ export class DrizzleProviderApiKeyRepository implements ProviderApiKeyRepository
       .where(eq(providerApiKeys.id, id))
   }
 
+  async leaseLeastUsed(
+    scopes: ApiKeyScopeRef[],
+    provider: ApiKeyProvider,
+    now: number,
+    windowMs: number,
+  ): Promise<ProviderApiKeyRecord | null> {
+    if (scopes.length === 0) return null
+    // Pick-and-mark atomically inside one transaction: the winner is selected by the same
+    // policy as `chooseToken` (least rolling-window usage, then least-recently-leased —
+    // NULL last_used_at first — then oldest) under `FOR UPDATE SKIP LOCKED`, so two
+    // concurrent leases never select the same row (the second skips the locked winner and
+    // rotates to the next key) — the fix for the non-transactional read→choose→mark race.
+    const usage = sql`CASE WHEN ${providerApiKeys.window_started_at} IS NULL
+                            OR ${now} - ${providerApiKeys.window_started_at} >= ${windowMs}
+                          THEN 0
+                          ELSE ${providerApiKeys.input_tokens} + ${providerApiKeys.output_tokens} END`
+    return this.db.transaction(async (tx) => {
+      const picked = await tx
+        .select({ id: providerApiKeys.id })
+        .from(providerApiKeys)
+        .where(
+          and(
+            scopeMatch(scopes),
+            eq(providerApiKeys.provider, provider),
+            isNull(providerApiKeys.deleted_at),
+          ),
+        )
+        .orderBy(
+          sql`${usage} ASC`,
+          sql`${providerApiKeys.last_used_at} ASC NULLS FIRST`,
+          asc(providerApiKeys.created_at),
+        )
+        .limit(1)
+        .for('update', { skipLocked: true })
+      const id = picked[0]?.id
+      if (!id) return null
+      const rows = await tx
+        .update(providerApiKeys)
+        .set({ last_used_at: now })
+        .where(eq(providerApiKeys.id, id))
+        .returning()
+      return rows[0] ? rowToRecord(rows[0]) : null
+    })
+  }
+
   async recordUsage(
     id: string,
     usage: { inputTokens: number; outputTokens: number },

@@ -128,4 +128,40 @@ export class D1NotificationRepository implements NotificationRepository {
       )
       .run()
   }
+
+  async upsertOpenForBlock(workspaceId: string, notification: Notification): Promise<void> {
+    // Atomic dedup: the conflict arbiter is the partial unique index on
+    // (workspace_id, block_id, type) WHERE status='open' (migration 0023). A second
+    // concurrent open raise for the same block/type updates the existing row in place
+    // instead of inserting a duplicate. id/severity/created_at/status are deliberately
+    // NOT updated so the existing card keeps its identity, escalated severity and
+    // original timestamp across a re-raise.
+    await this.db
+      .prepare(
+        `INSERT INTO notifications
+           (workspace_id, id, type, status, severity, block_id, execution_id, title, body, payload,
+            created_at, resolved_at)
+         VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (workspace_id, block_id, type) WHERE status = 'open' DO UPDATE SET
+           execution_id = excluded.execution_id,
+           title = excluded.title,
+           body = excluded.body,
+           payload = excluded.payload,
+           resolved_at = excluded.resolved_at`,
+      )
+      .bind(
+        workspaceId,
+        notification.id,
+        notification.type,
+        notification.severity ?? 'normal',
+        notification.blockId,
+        notification.executionId,
+        notification.title,
+        notification.body,
+        notification.payload ? JSON.stringify(notification.payload) : null,
+        notification.createdAt,
+        notification.resolvedAt,
+      )
+      .run()
+  }
 }

@@ -5,7 +5,7 @@ import type {
   NotificationSeverity,
   NotificationType,
 } from '@cat-factory/kernel'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { notifications } from '../db/schema.js'
 
@@ -112,6 +112,42 @@ export class DrizzleNotificationRepository implements NotificationRepository {
           body: values.body,
           payload: values.payload,
           severity: values.severity,
+          resolved_at: values.resolved_at,
+        },
+      })
+  }
+
+  async upsertOpenForBlock(workspaceId: string, notification: Notification): Promise<void> {
+    // Atomic dedup: the conflict arbiter is the partial unique index on
+    // (workspace_id, block_id, type) WHERE status='open'. A second concurrent open raise
+    // for the same block/type updates the existing row in place instead of inserting a
+    // duplicate. id/severity/created_at/status are deliberately NOT updated so the card
+    // keeps its identity, escalated severity and original timestamp across a re-raise.
+    const values = {
+      workspace_id: workspaceId,
+      id: notification.id,
+      type: notification.type,
+      status: 'open',
+      block_id: notification.blockId,
+      execution_id: notification.executionId,
+      title: notification.title,
+      body: notification.body,
+      payload: notification.payload ? JSON.stringify(notification.payload) : null,
+      severity: notification.severity ?? 'normal',
+      created_at: notification.createdAt,
+      resolved_at: notification.resolvedAt,
+    }
+    await this.db
+      .insert(notifications)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [notifications.workspace_id, notifications.block_id, notifications.type],
+        targetWhere: sql`${notifications.status} = 'open'`,
+        set: {
+          execution_id: values.execution_id,
+          title: values.title,
+          body: values.body,
+          payload: values.payload,
           resolved_at: values.resolved_at,
         },
       })

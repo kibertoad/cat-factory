@@ -3,6 +3,7 @@ import type {
   EnvironmentProvider,
   ExecutionEventPublisher,
   ExecutionInstance,
+  ExecutionRepository,
   LlmCallActivity,
   ResolveRunRepoContext,
   RunRepoContext,
@@ -127,6 +128,12 @@ export interface ConformanceApp {
    * {@link seedIncorporatedReview}).
    */
   seedIncorporatedClarityReview(workspaceId: string, blockId: string, report: string): Promise<void>
+  /**
+   * The facade's execution-scoped run repository over its real store, so the suite can
+   * assert the optimistic-concurrency `compareAndSwap` semantics (a stale write is
+   * refused, not clobbering) identically on D1 and Postgres.
+   */
+  executionRepository(): ExecutionRepository
   /**
    * The facade's user-identity + onboarding services over its real store, so the suite
    * can assert identity/invitation behaviour parity (the unauthenticated HTTP `call`

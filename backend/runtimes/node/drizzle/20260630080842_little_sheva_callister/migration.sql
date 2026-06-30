@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "uniq_notifications_open_block" ON "notifications" ("workspace_id","block_id","type") WHERE "status" = 'open';

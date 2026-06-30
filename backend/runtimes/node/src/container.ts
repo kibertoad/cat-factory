@@ -1918,6 +1918,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // GitHub-issue search to the originating service's repo (and refuse it when unlinked).
     resolveRepoTarget,
     agentRunRepository: repos.agentRunRepository,
+    // Execution-scoped repo, surfaced for the conformance suite's compareAndSwap parity check.
+    executionRepository: repos.executionRepository,
     // The consensus transcript store, for the read endpoint (window load / reload).
     consensusSessionRepository: repos.consensusSessionRepository,
     // Resolves the per-account binary-artifact store (screenshots) for the artifact

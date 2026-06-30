@@ -2113,6 +2113,8 @@ export function buildContainer(
     // GitHub-issue search to the originating service's repo (and refuse it when unlinked).
     resolveRepoTarget: buildResolveRepoTarget(db),
     agentRunRepository: new D1AgentRunRepository({ db }),
+    // Execution-scoped repo, surfaced for the conformance suite's compareAndSwap parity check.
+    executionRepository: dependencies.executionRepository,
     // The consensus transcript store, for the read endpoint (the SPA window's initial
     // load / reload). Always wired; live updates ride the `consensus` workspace event.
     consensusSessionRepository: new D1ConsensusSessionRepository({ db }),

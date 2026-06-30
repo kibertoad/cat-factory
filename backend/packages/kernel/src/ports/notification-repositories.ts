@@ -18,6 +18,16 @@ export interface NotificationRepository {
     blockId: string,
     type: NotificationType,
   ): Promise<Notification | null>
-  /** Create or replace a notification (keyed by id). */
+  /** Create or replace a notification (keyed by id). Used for status transitions
+   * (dismiss/act/escalate) and block-less cards. */
   upsert(workspaceId: string, notification: Notification): Promise<void>
+  /**
+   * ATOMICALLY create-or-refresh the SINGLE open notification of `notification.type` for
+   * its block, enforced by a partial unique index on `(workspace_id, block_id, type)`
+   * WHERE status='open'. Block-scoped `raise()` routes here so two concurrent raises can't
+   * stack duplicate open cards (the read-before-write race in {@link findOpenByBlock} →
+   * build → upsert): the existing open row is updated in place, preserving its id,
+   * `createdAt`, and already-escalated `severity`. Requires `notification.blockId` to be set.
+   */
+  upsertOpenForBlock(workspaceId: string, notification: Notification): Promise<void>
 }

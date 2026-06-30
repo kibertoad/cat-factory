@@ -1,0 +1,1 @@
+ALTER TABLE "agent_runs" ADD COLUMN "rev" integer DEFAULT 0 NOT NULL;

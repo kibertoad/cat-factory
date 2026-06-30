@@ -134,6 +134,8 @@ const harness: ConformanceHarness = {
       // layer never touches the agent runner).
       onboarding: () =>
         makeOnboardingProbe(buildContainer(env, { agentExecutor: new FakeAgentExecutor() })),
+      executionRepository: () =>
+        buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).executionRepository,
     }
   },
 }

@@ -34,6 +34,25 @@ function fakeRepo() {
     async upsert(_ws, n) {
       rows.set(n.id, { ...n })
     },
+    async upsertOpenForBlock(_ws, n) {
+      // Mirror the partial-index dedup: an existing open card for (block, type) is updated
+      // in place (id/severity/createdAt preserved); otherwise insert.
+      const existing = [...rows.values()].find(
+        (r) => r.status === 'open' && r.blockId === n.blockId && r.type === n.type,
+      )
+      if (existing) {
+        rows.set(existing.id, {
+          ...existing,
+          executionId: n.executionId,
+          title: n.title,
+          body: n.body,
+          payload: n.payload,
+          resolvedAt: n.resolvedAt,
+        })
+      } else {
+        rows.set(n.id, { ...n })
+      }
+    },
   }
   return { repo, rows }
 }

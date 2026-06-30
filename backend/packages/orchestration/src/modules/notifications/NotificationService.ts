@@ -77,7 +77,15 @@ export class NotificationService {
       createdAt: existing?.createdAt ?? now,
       resolvedAt: null,
     }
-    await this.notifications.upsert(workspaceId, notification)
+    // Block-scoped cards persist through the atomic open-dedup write (a partial unique
+    // index collapses a concurrent double-raise to one open row); block-less cards keep
+    // the plain id-keyed upsert. Either way the read above still drives id reuse,
+    // severity/createdAt preservation and the deliver-or-not decision below.
+    if (input.blockId) {
+      await this.notifications.upsertOpenForBlock(workspaceId, notification)
+    } else {
+      await this.notifications.upsert(workspaceId, notification)
+    }
     if (!existing || this.contentChanged(existing, notification)) {
       await this.deliver(workspaceId, notification)
     }

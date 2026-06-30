@@ -1973,19 +1973,20 @@ export class ExecutionService {
     choice: string,
   ): Promise<ExecutionInstance> {
     await this.requireWorkspace(workspaceId)
-    const instance = assertFound(
-      await this.executionRepository.get(workspaceId, executionId),
-      'Execution',
+    // Optimistic-concurrency write: a second resolve (double-click) or a racing driver
+    // poll can't clobber the chosen decision — the loser re-reads and re-applies.
+    const instance = await this.runStateMachine.mutateInstance(
+      workspaceId,
       executionId,
+      async (inst) => {
+        const step = inst.steps.find((s) => s.decision?.id === decisionId)
+        if (!step || !step.decision) throw new NotFoundError('Decision', decisionId)
+        step.decision.chosen = choice
+        this.stepGraph.startStep(step)
+        if (inst.status === 'blocked') inst.status = 'running'
+        await this.runStateMachine.updateBlockProgress(workspaceId, inst, 'in_progress')
+      },
     )
-    const step = instance.steps.find((s) => s.decision?.id === decisionId)
-    if (!step || !step.decision) throw new NotFoundError('Decision', decisionId)
-
-    step.decision.chosen = choice
-    this.stepGraph.startStep(step)
-    if (instance.status === 'blocked') instance.status = 'running'
-    await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-    await this.executionRepository.upsert(workspaceId, instance)
     // Wake the parked durable run, if any. The DB write above remains the source
     // of truth (so the backstop sweeper can still re-drive it); the signal is an
     // optimisation that lets the workflow continue immediately.
@@ -2046,79 +2047,70 @@ export class ExecutionService {
     review: { feedback?: string; comments?: StepReviewComment[] },
   ): Promise<ExecutionInstance> {
     await this.requireWorkspace(workspaceId)
-    const instance = assertFound(
-      await this.executionRepository.get(workspaceId, executionId),
-      'Execution',
-      executionId,
-    )
-    const step = instance.steps.find((s) => s.approval?.id === approvalId)
-    if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
-    this.assertNotIterativeGate(step)
-    if (step.approval.status === 'approved') {
-      throw new ConflictError(`Approval '${approvalId}' is already approved`)
-    }
-    if (step.approval.status === 'rejected') {
-      throw new ConflictError(`Approval '${approvalId}' was rejected`)
-    }
-    // A re-run is already in flight (and will raise a fresh gate on completion);
-    // acting on this now-stale gate id would dispatch duplicate work.
-    if (step.approval.status === 'changes_requested') {
-      throw new ConflictError(`Approval '${approvalId}' is already being re-run`)
-    }
+    // Optimistic-concurrency write: two concurrent change-requests on the same gate
+    // (the documented double-submit) can't both dispatch a re-run — the loser re-reads,
+    // sees `changes_requested`, and is rejected below instead of clobbering.
+    const instance = await this.runStateMachine.mutateInstance(workspaceId, executionId, (inst) => {
+      const step = inst.steps.find((s) => s.approval?.id === approvalId)
+      if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
+      this.assertNotIterativeGate(step)
+      if (step.approval.status === 'approved') {
+        throw new ConflictError(`Approval '${approvalId}' is already approved`)
+      }
+      if (step.approval.status === 'rejected') {
+        throw new ConflictError(`Approval '${approvalId}' was rejected`)
+      }
+      // A re-run is already in flight (and will raise a fresh gate on completion);
+      // acting on this now-stale gate id would dispatch duplicate work.
+      if (step.approval.status === 'changes_requested') {
+        throw new ConflictError(`Approval '${approvalId}' is already being re-run`)
+      }
 
-    const stepIndex = instance.steps.findIndex((s) => s.approval?.id === approvalId)
+      const stepIndex = inst.steps.findIndex((s) => s.approval?.id === approvalId)
 
-    step.approval.status = 'changes_requested'
-    step.approval.feedback = review.feedback
-    step.approval.comments = review.comments?.length ? review.comments : undefined
+      step.approval.status = 'changes_requested'
+      step.approval.feedback = review.feedback
+      step.approval.comments = review.comments?.length ? review.comments : undefined
 
-    // A companion's gate reviews the PRODUCER's output, not the companion's own work:
-    // requesting changes here must re-run the producer (with the human's feedback
-    // folded in) and re-grade, NOT re-run the companion. Redirect the rework to the
-    // nearest preceding step of one of the companion's target kinds.
-    if (isCompanionKind(step.agentKind)) {
-      const targets = companionTargets(step.agentKind)
-      let producerIndex = -1
-      for (let i = stepIndex - 1; i >= 0; i--) {
-        if (targets.includes(instance.steps[i]!.agentKind)) {
-          producerIndex = i
-          break
+      // A companion's gate reviews the PRODUCER's output, not the companion's own work:
+      // requesting changes here must re-run the producer (with the human's feedback
+      // folded in) and re-grade, NOT re-run the companion. Redirect the rework to the
+      // nearest preceding step of one of the companion's target kinds.
+      if (isCompanionKind(step.agentKind)) {
+        const targets = companionTargets(step.agentKind)
+        let producerIndex = -1
+        for (let i = stepIndex - 1; i >= 0; i--) {
+          if (targets.includes(inst.steps[i]!.agentKind)) {
+            producerIndex = i
+            break
+          }
+        }
+        const producer = producerIndex >= 0 ? inst.steps[producerIndex]! : undefined
+        if (producer) {
+          // Re-run the producer (with the human's feedback) and every step up to and
+          // including the companion, then the companion re-grades. Does NOT touch the
+          // companion's automatic-rework budget — a human-driven iteration is unbounded.
+          const previousProposal = producer.output ?? step.approval.proposal
+          this.stepGraph.rerunProducerThrough(inst, producerIndex, stepIndex, {
+            previousProposal,
+            feedback: review.feedback ?? '',
+            ...(review.comments?.length ? { comments: review.comments } : {}),
+          })
+          if (inst.status === 'blocked') inst.status = 'running'
+          return
         }
       }
-      const producer = producerIndex >= 0 ? instance.steps[producerIndex]! : undefined
-      if (producer) {
-        // Re-run the producer (with the human's feedback) and every step up to and
-        // including the companion, then the companion re-grades. Does NOT touch the
-        // companion's automatic-rework budget — a human-driven iteration is unbounded.
-        const previousProposal = producer.output ?? step.approval.proposal
-        this.stepGraph.rerunProducerThrough(instance, producerIndex, stepIndex, {
-          previousProposal,
-          feedback: review.feedback ?? '',
-          ...(review.comments?.length ? { comments: review.comments } : {}),
-        })
-        if (instance.status === 'blocked') instance.status = 'running'
-        await this.executionRepository.upsert(workspaceId, instance)
-        await this.workRunner.signalDecision(
-          workspaceId,
-          instance.id,
-          approvalId,
-          'changes_requested',
-        )
-        await this.runStateMachine.emitInstance(workspaceId, instance)
-        return instance
-      }
-    }
 
-    // Drop the live job handle so the re-run dispatches fresh work rather than
-    // re-attaching to the finished job (async steps); inline steps ignore this.
-    step.jobId = undefined
-    // A requested re-run is a fresh execution: clear the prior timing so the next
-    // start/finish times this attempt rather than spanning the human gate wait.
-    step.startedAt = null
-    step.finishedAt = null
-    this.stepGraph.startStep(step)
-    if (instance.status === 'blocked') instance.status = 'running'
-    await this.executionRepository.upsert(workspaceId, instance)
+      // Drop the live job handle so the re-run dispatches fresh work rather than
+      // re-attaching to the finished job (async steps); inline steps ignore this.
+      step.jobId = undefined
+      // A requested re-run is a fresh execution: clear the prior timing so the next
+      // start/finish times this attempt rather than spanning the human gate wait.
+      step.startedAt = null
+      step.finishedAt = null
+      this.stepGraph.startStep(step)
+      if (inst.status === 'blocked') inst.status = 'running'
+    })
     await this.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'changes_requested')
     await this.runStateMachine.emitInstance(workspaceId, instance)
     return instance
