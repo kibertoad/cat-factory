@@ -320,7 +320,7 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     return anyPending ? 'provisioning' : 'ready'
   }
 
-  /** Resolve the live URL, reading the LoadBalancer address for status-backed sources. */
+  /** Resolve the live URL, reading the status host/address for status-backed sources. */
   private async resolveLiveUrl(
     client: KubernetesApiClient,
     config: KubernetesEnvironmentConfig,
@@ -330,16 +330,19 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     const url = config.url
     const vars = { ...fields, namespace }
     if (url.source === 'ingressTemplate') return deriveUrl(url, vars, null)
-    const address = await this.readLoadBalancerAddress(client, config, namespace)
+    const address = await this.readStatusHost(client, config, namespace)
     return address ? deriveUrl(url, vars, address) : null
   }
 
   /**
-   * Read the LoadBalancer address backing a status source: the named Service/Ingress, or
-   * — when `ingressStatus` omits the name — the single Ingress applied in the namespace
-   * (the schema/UI documents "absent ⇒ the only Ingress applied"). Null until assigned.
+   * Read the host/address backing a status source: the LoadBalancer address of the named
+   * Service/Ingress (or — when `ingressStatus` omits the name — the single Ingress applied
+   * in the namespace), or the Gateway-API host for `gatewayStatus`/`httpRouteStatus`. Null
+   * until assigned. NOTE: a Gateway/HTTPRoute that DECLARES a concrete hostname resolves
+   * immediately (the host is the intended URL), which can precede the address actually being
+   * programmed — readiness is driven by the Deployments' rollout, not by this URL.
    */
-  private async readLoadBalancerAddress(
+  private async readStatusHost(
     client: KubernetesApiClient,
     config: KubernetesEnvironmentConfig,
     namespace: string,

@@ -227,13 +227,23 @@ export interface BuildDeployJobParams {
 
 /**
  * Build the deploy-job body the backend dispatches to the deploy harness, with every template
- * rendered and every secret resolved. `setNamespace` overrides the overlay's pinned namespace
- * only for a `kustomize` source with a configured `namespaceTemplate` (true per-PR isolation);
- * absent ⇒ the overlay keeps its own namespace (the shared-namespace ephemeral-env shape).
+ * rendered and every secret resolved. `setNamespace` pins the backend-derived namespace (via
+ * `kustomize edit set namespace`) only for a `kustomize` source WITH a configured
+ * `namespaceTemplate` (true per-PR isolation); absent ⇒ the overlay keeps its own namespace and
+ * the harness reads it back from the built manifests for ensure/monitor/teardown (the
+ * shared-namespace ephemeral-env shape — see the harness's `resolveTargetNamespace`). Throws
+ * when the cluster `apiToken` secret is unset, since the harness can't authenticate without it.
  */
 export function buildDeployJobSpec(params: BuildDeployJobParams): DeployJobSpec {
   const { jobId, config, vars, namespace, clone, resolveSecret } = params
   const renderer = config.manifestSource.renderer ?? 'raw'
+  const token = resolveSecret('apiToken')
+  if (!token) {
+    throw new Error(
+      'Cannot build a Kubernetes deploy job: the cluster `apiToken` secret is not set ' +
+        '(the deploy container needs it to authenticate to the apiserver).',
+    )
+  }
   const images = resolveImageOverrides(config.images, vars)
   const secretInjections = resolveSecretInjections(config.secretInjections, vars, resolveSecret)
   const helmReleases = resolveHelmReleases(config.helmReleases, vars, resolveSecret)
@@ -246,7 +256,7 @@ export function buildDeployJobSpec(params: BuildDeployJobParams): DeployJobSpec 
       ...(config.insecureSkipTlsVerify !== undefined
         ? { insecureSkipTlsVerify: config.insecureSkipTlsVerify }
         : {}),
-      token: resolveSecret('apiToken') ?? '',
+      token,
       namespace,
     },
     source: {
@@ -262,6 +272,9 @@ export function buildDeployJobSpec(params: BuildDeployJobParams): DeployJobSpec 
     ...(helmReleases.length > 0 ? { helmReleases } : {}),
     url: toDeployUrlSource(config.url),
     ...(config.labels !== undefined ? { labels: config.labels } : {}),
+    ...(config.rolloutTimeoutSeconds !== undefined
+      ? { rolloutTimeoutSeconds: config.rolloutTimeoutSeconds }
+      : {}),
   }
   return spec
 }

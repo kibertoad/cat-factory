@@ -296,7 +296,10 @@ native REST status path resolves Gateway-API URLs.
   - resolves every `secretRef` backend-side, mirroring the harness's `DeployJob` shape (duplicated,
     not imported, so the backend never depends on the private deploy-harness package). `setNamespace`
     is set only for a kustomize source WITH a `namespaceTemplate` (per-PR isolation); absent ⇒ honor
-    the overlay's namespace. Throws if rendering is needed but the engine supplied no deploy inputs.
+    the overlay's namespace — the harness reads the namespace the built manifests actually declare and
+    ensures / monitors / reports / tears down THAT namespace (`resolveTargetNamespace` +
+    `extractManifestNamespace`, deploy-harness image `0.2.0`), never a stray per-PR default. Throws if
+    rendering is needed but the engine supplied no deploy inputs, or if the cluster `apiToken` is unset.
 - **`asyncProvision.finalizeProvision`** maps the harness `DeployOutcome` (on `view.result.custom`)
   → `ProvisionedEnvironment`; a failed view becomes a `failed` env carrying the harness error.
 - **Native REST `status()`** gained `gatewayStatus` (prefer a concrete listener hostname over the

@@ -21,8 +21,9 @@ import type { JobResultBase, RunOptions } from './runner.js'
 // body (the backend resolves them against the workspace secret bundle before dispatch),
 // so this never touches the bundle. The flow:
 //
-//   clone → ensure namespace → write secrets → kustomize edits (namespace/images) →
-//   shared helm → apply (kubectl apply -k|-f) → per-env helm → rollout status → URL
+//   clone → resolve target namespace → ensure namespace → write secrets →
+//   kustomize edits (namespace/images) → shared helm → apply (kubectl apply -k|-f) →
+//   per-env helm → rollout status → URL
 //
 // It reports its coarse phase for the polled job view and returns a structured outcome
 // the backend maps into a ProvisionedEnvironment (slice 8's finalizeProvision).
@@ -79,10 +80,57 @@ function helmSetArg(path: string, value: string): string {
   return `${path}=${value.replace(/,/g, '\\,')}`
 }
 
+/** Workload kinds whose namespace is the most reliable signal of where the env lives. */
+const WORKLOAD_KINDS = new Set(['Deployment', 'StatefulSet', 'DaemonSet', 'ReplicaSet', 'Pod'])
+
+/** The `kind:` of a single rendered manifest doc, or null. */
+function docKind(doc: string): string | null {
+  const m = doc.match(/^kind:[ \t]*["']?([A-Za-z0-9.]+)["']?[ \t]*$/m)
+  return m ? m[1]! : null
+}
+
+/**
+ * The namespace declared directly under a doc's top-level `metadata:` block, or null. Only a
+ * `namespace:` at the metadata indentation is read, so a `namespace:` key nested elsewhere (a
+ * ConfigMap's `data:`, a deeper spec field) is never mistaken for the resource's namespace.
+ */
+function docNamespace(doc: string): string | null {
+  let inMeta = false
+  for (const line of doc.split('\n')) {
+    if (/^metadata:[ \t]*$/.test(line)) {
+      inMeta = true
+      continue
+    }
+    if (!inMeta) continue
+    if (/^\S/.test(line)) break // a new zero-indent key ends the metadata block
+    const m = line.match(/^[ \t]{2}namespace:[ \t]*["']?([^"'\s]+)["']?[ \t]*$/)
+    if (m) return m[1]!
+  }
+  return null
+}
+
+/**
+ * The namespace a rendered manifest stream targets. kustomize's namespace transformer stamps
+ * `metadata.namespace` on every namespaced resource, so an overlay that pins a namespace
+ * carries it on each doc. Prefer a workload's namespace (Deployment/StatefulSet/…), else the
+ * first namespaced resource. Null when the stream declares no namespace (the caller then keeps
+ * the kubeconfig-context default).
+ */
+export function extractManifestNamespace(rendered: string): string | null {
+  let fallback: string | null = null
+  for (const doc of rendered.split(/^---[ \t]*$/m)) {
+    const ns = docNamespace(doc)
+    if (!ns) continue
+    const kind = docKind(doc)
+    if (kind && WORKLOAD_KINDS.has(kind)) return ns
+    fallback ??= ns
+  }
+  return fallback
+}
+
 export async function handleDeploy(job: DeployJob, opts: RunOptions): Promise<DeployResult> {
   const secrets = jobSecrets(job)
   const log = opts.log
-  const { namespace } = job.cluster
   const kube = await writeKubeconfig(job.cluster)
   const workDir = await mkdtemp(join(tmpdir(), 'deploy-'))
 
@@ -120,6 +168,14 @@ export async function handleDeploy(job: DeployJob, opts: RunOptions): Promise<De
     })
     opts.onActivity?.()
     const sourcePath = join(workDir, job.source.path)
+
+    // Resolve the namespace the manifests actually target BEFORE we create/monitor it. With
+    // per-PR isolation (`setNamespace`) the backend's namespace is pinned and authoritative;
+    // without it, a kustomize overlay may declare its OWN namespace, so we read it back from
+    // the built manifests — every later step (ensure / secrets / helm / rollout / URL /
+    // outcome / teardown) must operate on the namespace the resources land in, not a stray
+    // per-PR default that would be created empty, never torn down, and break URL/rollout.
+    const namespace = await resolveTargetNamespace(cli, job, sourcePath)
 
     // --- ensure namespace -------------------------------------------------
     opts.onPhase?.('namespace')
@@ -189,6 +245,28 @@ type Cli = (
   args: string[],
   extra?: { cwd?: string; input?: string; timeoutMs?: number },
 ) => Promise<{ stdout: string; stderr: string }>
+
+/**
+ * The namespace the deploy targets. With `setNamespace` (per-PR isolation) the backend's
+ * `cluster.namespace` is pinned via `kustomize edit set namespace`, so it is authoritative.
+ * Without it, a kustomize overlay may declare its OWN namespace; build the overlay and read it
+ * back so every later step operates on the namespace the resources actually land in. Falls back
+ * to `cluster.namespace` for a raw source, an overlay that pins no namespace (its resources then
+ * inherit the kubeconfig-context default), or a build that can't be read.
+ */
+async function resolveTargetNamespace(
+  cli: Cli,
+  job: DeployJob,
+  sourcePath: string,
+): Promise<string> {
+  if (job.source.renderer !== 'kustomize' || job.setNamespace) return job.cluster.namespace
+  try {
+    const { stdout } = await cli('kustomize', ['build', sourcePath])
+    return extractManifestNamespace(stdout) ?? job.cluster.namespace
+  } catch {
+    return job.cluster.namespace
+  }
+}
 
 /** Create the namespace if absent (idempotent), stamping any extra labels. */
 async function ensureNamespace(

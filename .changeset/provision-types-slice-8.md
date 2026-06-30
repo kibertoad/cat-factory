@@ -2,6 +2,7 @@
 '@cat-factory/contracts': minor
 '@cat-factory/kernel': minor
 '@cat-factory/integrations': minor
+'@cat-factory/deploy-harness': minor
 ---
 
 Per-service provision types (Phase 2, slice 8): the `KubernetesEnvironmentProvider` render
@@ -28,6 +29,15 @@ REST path can't handle, and maps the harness outcome back into a `ProvisionedEnv
 - Kernel: `DeployCloneTarget` + `DeployProvisionInputs` (the clone coordinates + git token + job
   ref the stateless provider can't derive itself) on `ProvisionEnvironmentRequest`, supplied by
   the provisioning service before dispatch.
+- Deploy harness: when per-PR isolation is NOT requested, the harness now reads the namespace the
+  built manifests actually declare (an overlay's own `namespace:`) and ensures / monitors /
+  reports / tears down THAT namespace instead of the backend's per-PR default — so an
+  overlay-pinned (shared) namespace no longer leaves an empty namespace behind with no URL and a
+  wrong-target teardown. Image tag bumped to `0.2.0`.
+- A new optional `rolloutTimeoutSeconds` on the kube engine config is forwarded to the deploy
+  job (the harness's per-Deployment rollout wait); `buildDeployJobSpec` now fails fast when the
+  cluster `apiToken` secret is unset instead of dispatching an unauthenticated job. Same-named
+  shared/per-env helm releases are merged by name (service overrides engine — no double install).
 
 The async deployer lifecycle (dispatch/poll/park) and facade wiring follow in slices 9–10, so
 nothing dispatches a deploy job yet; this slice adds + unit-tests the provider methods.

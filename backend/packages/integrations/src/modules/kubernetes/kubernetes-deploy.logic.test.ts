@@ -251,6 +251,31 @@ describe('buildDeployJobSpec', () => {
     expect(spec.setNamespace).toBeUndefined()
     expect(spec.ghToken).toBeUndefined()
   })
+
+  it('wires rolloutTimeoutSeconds when configured', () => {
+    const spec = buildDeployJobSpec({
+      jobId: 'job-3',
+      config: { ...baseConfig, rolloutTimeoutSeconds: 600 },
+      vars,
+      namespace: 'cf-env-42',
+      clone: { cloneUrl: 'https://github.com/acme/web.git', ref: 'feat' },
+      resolveSecret,
+    })
+    expect(spec.rolloutTimeoutSeconds).toBe(600)
+  })
+
+  it('throws when the cluster apiToken secret is unset', () => {
+    expect(() =>
+      buildDeployJobSpec({
+        jobId: 'job-4',
+        config: baseConfig,
+        vars,
+        namespace: 'cf-env-42',
+        clone: { cloneUrl: 'https://github.com/acme/web.git', ref: 'feat' },
+        resolveSecret: () => undefined,
+      }),
+    ).toThrow(/apiToken/)
+  })
 })
 
 describe('mapDeployOutcome', () => {

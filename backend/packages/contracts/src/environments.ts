@@ -348,6 +348,12 @@ export const kubernetesEnvironmentConfigSchema = v.object({
   imageTemplate: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
   /** Fallback TTL (ms) after which the env is swept + torn down. */
   defaultTtlMs: v.optional(v.pipe(v.number(), v.minValue(60000))),
+  /**
+   * How long (seconds) the container deploy adapter waits for each Deployment to roll out
+   * before reporting the env still `provisioning` (the backend keeps polling). Only the
+   * container-backed render path honors it; absent ⇒ the harness default (180s).
+   */
+  rolloutTimeoutSeconds: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
   /** Extra labels stamped on the namespace + every applied resource. */
   labels: v.optional(v.record(v.string(), v.string())),
   /** Extra annotations stamped on the namespace. */
@@ -606,6 +612,12 @@ export const kubernetesEngineConfigSchema = v.object({
   imageTemplate: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
   /** Fallback TTL (ms) after which the env is swept + torn down. */
   defaultTtlMs: v.optional(v.pipe(v.number(), v.minValue(60000))),
+  /**
+   * How long (seconds) the container deploy adapter waits for each Deployment to roll out
+   * before reporting the env still `provisioning` (the backend keeps polling). Absent ⇒ the
+   * harness default (180s). Merged into the provision config via `...kube` at provision time.
+   */
+  rolloutTimeoutSeconds: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
   /** Extra labels stamped on the namespace + every applied resource. */
   labels: v.optional(v.record(v.string(), v.string())),
   /** Extra annotations stamped on the namespace. */
