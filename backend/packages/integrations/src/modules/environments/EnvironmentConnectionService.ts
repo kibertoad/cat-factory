@@ -31,6 +31,11 @@ import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import type {
+  DetectServiceProvisioningInput,
+  ProvisioningRecommendation,
+} from '@cat-factory/contracts'
+import { detectKubernetesProvisioning } from './provision-detect.logic.js'
+import type {
   EnvironmentBackendProvider,
   EnvironmentBackendRegistry,
 } from './environment-backends.js'
@@ -556,6 +561,39 @@ export class EnvironmentConnectionService {
       stringifyProviderConfig(manifest?.providerConfig),
       resolveSecret,
     )
+  }
+
+  /**
+   * Auto-detect a NON-BINDING recommended provisioning config for a service's repo, read
+   * checkout-free over the workspace-bound {@link RepoFiles} (no provider/connection needed —
+   * detection is pure repo introspection). Nothing is persisted; the SPA prefills the confirm
+   * form from the recommendation. No VCS resolver / no repo match ⇒ an `infraless` result with
+   * an explanatory note rather than an error.
+   */
+  async detectServiceProvisioning(
+    workspaceId: string,
+    input: DetectServiceProvisioningInput,
+  ): Promise<ProvisioningRecommendation> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const bound = await this.resolveRepo(workspaceId, input.owner, input.repo, input.provider)
+    if (!bound) {
+      return {
+        detected: false,
+        provisioning: { type: 'infraless' },
+        notes: [
+          {
+            field: 'provisionType',
+            confidence: 'low',
+            message:
+              'No VCS connection is configured for this workspace; cannot read the repo to detect provisioning.',
+          },
+        ],
+      }
+    }
+    return detectKubernetesProvisioning(bound.repo, {
+      gitRef: input.gitRef ?? bound.baseBranch,
+      ...(input.directory ? { directory: input.directory } : {}),
+    })
   }
 
   /**

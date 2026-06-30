@@ -7,7 +7,12 @@ import type {
   ProvisionType,
   ServiceProvisioning,
 } from '~/types/domain'
-import type { KubernetesManifestSource, KubernetesRenderer } from '@cat-factory/contracts'
+import type {
+  KubernetesManifestSource,
+  KubernetesRenderer,
+  ProvisioningOverlayCandidate,
+  ProvisioningRecommendation,
+} from '@cat-factory/contracts'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 
 // Service-level (frame) configuration: the service-owned PROVISIONING — the provision
@@ -32,7 +37,11 @@ const infra = useInfraConfigStore()
 const { t } = useI18n()
 
 // The custom-manifest-type catalog feeds the `custom` picker. Cheap + shared (coalesced).
-onMounted(() => void infra.ensureLoaded())
+// The repo list backs the detect-from-repo affordance (owner/name lookup).
+onMounted(() => {
+  void infra.ensureLoaded()
+  void github.ensureLoaded()
+})
 
 // The service's declared provision type (absent ⇒ treated as `infraless`: no environment
 // is stood up for the Tester). Switching type MERGES onto the existing provisioning so each
@@ -52,17 +61,22 @@ const kubeRepo = ref('')
 const kubeRef = ref('')
 const kubePath = ref('')
 const kubeRenderer = ref<KubernetesRenderer>('raw')
+// Seed the local kube edit refs from a persisted manifest source. Reused by the per-block
+// watch AND after a detect-from-repo run (which mutates provisioning without changing block.id,
+// so the watch wouldn't re-fire on its own).
+function seedKubeSource(src?: KubernetesManifestSource) {
+  kubeSourceType.value = src?.type ?? 'colocated'
+  kubePath.value = src?.path ?? ''
+  kubeRenderer.value = src?.renderer ?? 'raw'
+  kubeRepo.value = src?.type === 'separate' ? src.repo : ''
+  kubeRef.value = src?.type === 'separate' ? (src.ref ?? '') : ''
+}
 watch(
   () => props.block.id,
-  () => {
-    const src = props.block.provisioning?.manifestSource
-    kubeSourceType.value = src?.type ?? 'colocated'
-    kubePath.value = src?.path ?? ''
-    kubeRenderer.value = src?.renderer ?? 'raw'
-    kubeRepo.value = src?.type === 'separate' ? src.repo : ''
-    kubeRef.value = src?.type === 'separate' ? (src.ref ?? '') : ''
+  () => seedKubeSource(props.block.provisioning?.manifestSource),
+  {
+    immediate: true,
   },
-  { immediate: true },
 )
 const customManifestId = computed(() => props.block.provisioning?.manifestId ?? '')
 const customManifestPath = computed(() => props.block.provisioning?.manifestPath ?? '')
@@ -183,6 +197,65 @@ function applyPicked() {
   browseOpen.value = false
 }
 
+// Auto-detect (slice 11): read the repo checkout-free and propose a NON-BINDING provisioning
+// config. The user always confirms — the result prefills the form (and the kube edit refs) but
+// every field stays editable, and the engine-level URL/namespace suggestions are surfaced
+// read-only (the workspace handler owns them). Nothing is persisted server-side by detection.
+const detecting = ref(false)
+const detectError = ref(false)
+const detectResult = ref<ProvisioningRecommendation | null>(null)
+
+// A detection result is scoped to the inspected block — clear it (and any error) when the
+// selection changes, so block B never shows block A's stale recommendation / overlay chips.
+watch(
+  () => props.block.id,
+  () => {
+    detectResult.value = null
+    detectError.value = false
+  },
+)
+
+async function detectFromRepo() {
+  const ctx = repoContext.value
+  if (!ctx) return
+  const repo = github.repoFor(ctx.githubId)
+  if (!repo) {
+    detectError.value = true
+    return
+  }
+  detecting.value = true
+  detectError.value = false
+  try {
+    const rec = await infra.detectProvisioning({
+      owner: repo.owner,
+      repo: repo.name,
+      ...(ctx.directory ? { directory: ctx.directory } : {}),
+    })
+    detectResult.value = rec
+    // Only prefill when the detector actually inferred something. A `detected: false`
+    // recommendation is `infraless`; applying it would WIPE the service's existing
+    // provisioning (board.updateBlock persists immediately). Leave the current config
+    // untouched and just surface the "nothing found" note.
+    if (rec.detected) {
+      board.updateBlock(props.block.id, { provisioning: rec.provisioning })
+      if (rec.provisioning.type === 'kubernetes') seedKubeSource(rec.provisioning.manifestSource)
+    }
+  } catch {
+    detectError.value = true
+  } finally {
+    detecting.value = false
+  }
+}
+
+// Switch the recommended manifest path to a different overlay candidate (the user's pick).
+function applyOverlay(candidate: ProvisioningOverlayCandidate) {
+  setKubePath(candidate.path)
+}
+
+function provisionTypeLabel(type: ProvisionType): string {
+  return t(`inspector.testConfig.provisionTypes.${type}`)
+}
+
 // A service with no explicit provider inherits the active account's default (else the
 // built-in `cloudflare`); show that as the selected chip so the inherited value is visible.
 const effectiveProvider = computed<CloudProvider>(
@@ -235,6 +308,90 @@ function setSize(value: InstanceSize) {
       <p class="text-[11px] leading-snug text-slate-500">
         {{ t('inspector.testConfig.provisionTypeHint') }}
       </p>
+    </div>
+
+    <!-- Auto-detect a recommended provisioning config from the repo (slice 11). Non-binding:
+         it prefills the form below + the kube edit refs; the user confirms/edits everything. -->
+    <div v-if="repoContext" class="space-y-2 rounded border border-slate-800 bg-slate-900/40 p-2">
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-[11px] text-slate-400">{{ t('inspector.testConfig.detect.title') }}</span>
+        <UButton
+          size="xs"
+          variant="soft"
+          color="primary"
+          icon="i-lucide-wand-sparkles"
+          :loading="detecting"
+          @click="detectFromRepo"
+        >
+          {{ t('inspector.testConfig.detect.button') }}
+        </UButton>
+      </div>
+      <p class="text-[11px] leading-snug text-slate-500">
+        {{ t('inspector.testConfig.detect.hint') }}
+      </p>
+
+      <p v-if="detectError" class="text-[11px] text-rose-300/80">
+        {{ t('inspector.testConfig.detect.error') }}
+      </p>
+
+      <template v-if="detectResult && !detecting">
+        <p v-if="!detectResult.detected" class="text-[11px] text-amber-300/80">
+          {{ t('inspector.testConfig.detect.none') }}
+        </p>
+        <template v-else>
+          <p class="text-[11px] text-emerald-300/80">
+            {{
+              t('inspector.testConfig.detect.applied', {
+                type: provisionTypeLabel(detectResult.provisioning.type),
+              })
+            }}
+          </p>
+
+          <div v-if="detectResult.overlayCandidates?.length" class="space-y-1">
+            <span class="text-[11px] text-slate-400">{{
+              t('inspector.testConfig.detect.overlayTitle')
+            }}</span>
+            <div class="flex flex-wrap gap-1">
+              <UButton
+                v-for="o in detectResult.overlayCandidates"
+                :key="o.path"
+                :color="kubePath === o.path ? 'primary' : 'neutral'"
+                :variant="kubePath === o.path ? 'soft' : 'ghost'"
+                size="xs"
+                @click="applyOverlay(o)"
+              >
+                {{ o.name }}
+              </UButton>
+            </div>
+          </div>
+
+          <p v-if="detectResult.urlSource" class="text-[11px] text-slate-500">
+            {{
+              t('inspector.testConfig.detect.urlSource', { source: detectResult.urlSource.source })
+            }}
+          </p>
+          <p v-if="detectResult.namespace" class="text-[11px] text-slate-500">
+            {{ t('inspector.testConfig.detect.namespace', { namespace: detectResult.namespace }) }}
+          </p>
+
+          <ul v-if="detectResult.notes.length" class="space-y-0.5">
+            <li
+              v-for="(n, i) in detectResult.notes"
+              :key="i"
+              class="flex items-start gap-1.5 text-[11px] leading-snug text-slate-500"
+            >
+              <span :class="n.confidence === 'high' ? 'text-emerald-400/70' : 'text-amber-400/70'">
+                {{
+                  n.confidence === 'high'
+                    ? t('inspector.testConfig.detect.confidenceHigh')
+                    : t('inspector.testConfig.detect.confidenceLow')
+                }}
+              </span>
+              <span>{{ n.message }}</span>
+            </li>
+          </ul>
+        </template>
+      </template>
     </div>
 
     <div v-if="provisionType === 'docker-compose'" class="space-y-2">

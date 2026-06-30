@@ -437,7 +437,20 @@
       "customManifestIdPlaceholder": "マニフェストタイプを選択",
       "customNoTypes": "カスタムマニフェストタイプはまだ定義されていません。インフラウィンドウで追加してください。",
       "customManifestIdHint": "このサービスが生成するカスタムタイプ。ワークスペースが構成する remote-custom ハンドラーと照合されます。",
-      "customManifestPath": "マニフェストのパス（任意）"
+      "customManifestPath": "マニフェストのパス（任意）",
+      "detect": {
+        "title": "自動検出",
+        "button": "リポジトリから検出",
+        "hint": "リポジトリを調べてプロビジョニング設定を提案します。以下の内容はすべて確認・編集でき、自動保存はされません。",
+        "error": "リポジトリを読み取ってプロビジョニングを検出できませんでした。",
+        "none": "Kubernetes マニフェストや Compose ファイルは検出されませんでした。",
+        "applied": "{type} の設定を提案しました。以下のフィールドを確認して調整してください。",
+        "overlayTitle": "一時環境のオーバーレイ",
+        "urlSource": "推奨される環境 URL ソース: {source}。これはワークスペースのハンドラーが管理します。そちらで設定してください。",
+        "namespace": "マニフェストは名前空間「{namespace}」を固定しています。ワークスペースのハンドラーでそれを尊重することを推奨します。",
+        "confidenceHigh": "検出",
+        "confidenceLow": "提案"
+      }
     },
     "agentConfig": {
       "title": "エージェント設定",

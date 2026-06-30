@@ -437,7 +437,20 @@
       "customManifestIdPlaceholder": "Wybierz typ manifestu",
       "customNoTypes": "Nie zdefiniowano jeszcze niestandardowych typów manifestów. Dodaj jeden w oknie Infrastruktura.",
       "customManifestIdHint": "Niestandardowy typ, który tworzy ta usługa, dopasowany do handlera remote-custom skonfigurowanego przez przestrzeń roboczą.",
-      "customManifestPath": "Ścieżka manifestu (opcjonalnie)"
+      "customManifestPath": "Ścieżka manifestu (opcjonalnie)",
+      "detect": {
+        "title": "Autowykrywanie",
+        "button": "Wykryj z repozytorium",
+        "hint": "Sprawdza repozytorium i proponuje konfigurację provisioningu. Potwierdzasz i edytujesz wszystko poniżej; nic nie jest zapisywane automatycznie.",
+        "error": "Nie udało się odczytać repozytorium, aby wykryć provisioning.",
+        "none": "Nie wykryto manifestów Kubernetes ani pliku Compose.",
+        "applied": "Zaproponowano konfigurację {type}. Przejrzyj i dostosuj pola poniżej.",
+        "overlayTitle": "Tymczasowy overlay",
+        "urlSource": "Sugerowane źródło adresu URL środowiska: {source}. Zarządza tym handler przestrzeni roboczej; ustaw to tam.",
+        "namespace": "Manifesty ustalają przestrzeń nazw \"{namespace}\"; zaleca się jej przestrzeganie w handlerze przestrzeni roboczej.",
+        "confidenceHigh": "Wykryto",
+        "confidenceLow": "Sugestia"
+      }
     },
     "agentConfig": {
       "title": "Konfiguracja agenta",

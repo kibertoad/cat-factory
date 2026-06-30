@@ -474,7 +474,20 @@
       "customManifestIdPlaceholder": "Pick a manifest type",
       "customNoTypes": "No custom manifest types are defined yet. Add one in the Infrastructure window.",
       "customManifestIdHint": "The custom type this service produces, matched to a remote-custom handler the workspace configures.",
-      "customManifestPath": "Manifest path (optional)"
+      "customManifestPath": "Manifest path (optional)",
+      "detect": {
+        "title": "Auto-detect",
+        "button": "Detect from repo",
+        "hint": "Inspect the repository and suggest a provisioning config. You confirm and edit everything below; nothing is saved automatically.",
+        "error": "Could not read the repository to detect provisioning.",
+        "none": "No Kubernetes manifests or Compose file were detected.",
+        "applied": "Suggested a {type} config. Review and adjust the fields below.",
+        "overlayTitle": "Ephemeral overlay",
+        "urlSource": "Suggested environment URL source: {source}. The workspace handler owns this; set it there.",
+        "namespace": "Manifests pin namespace \"{namespace}\"; recommend honoring it on the workspace handler.",
+        "confidenceHigh": "Detected",
+        "confidenceLow": "Suggestion"
+      }
     },
     "agentConfig": {
       "title": "Agent configuration",

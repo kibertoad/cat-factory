@@ -428,12 +428,39 @@ locally, the host CLIs). The raw-manifest REST path is unchanged.
 - **No image-tag bump**: the deploy-harness payload (`src/**`/`Dockerfile`/`PI_*`) is untouched, so
   the `cat-factory-deploy:0.2.2` image from slice 7 is reused as-is.
 
-### Slice 11 — auto-detect a RECOMMENDED k8s config from the repo (TODO)
+### Slice 11 — auto-detect a RECOMMENDED k8s config from the repo (DONE)
 
-Extend the add-service auto-detect (slice 5) from "which provision type" to "propose a full,
-NON-BINDING recommended `kubernetes` config", read checkout-free over the existing `RepoFiles`
-port (a pure-TS heuristic detector — no checkout, no LLM for the high-confidence parts; mirror the
-existing compose autodiscovery). The user always confirms/edits; nothing is applied silently.
+Implemented. A deterministic, pure-TS heuristic detector
+(`integrations/modules/environments/provision-detect.logic.ts`, `detectKubernetesProvisioning`)
+reads a service's repo CHECKOUT-FREE over a minimal `RepoFiles`-shaped reader (targeted directory
+listings + YAML parsing, a hard read budget, no LLM, no clone) and proposes a NON-BINDING
+recommended provisioning config. The user always confirms/edits; nothing is applied silently.
+
+- **Detector**: locates the manifest root (the service dir or a `k8s`/`kubernetes`/`deploy`/…
+  subdir) + any compose file; prefers `kubernetes` when manifests exist, falls back to
+  `docker-compose`, else `infraless`. For kubernetes it infers `renderer` (a `kustomization.yaml`
+  ⇒ `kustomize`), the manifest-source path (walking `overlays/*`, ranking the ephemeral one), the
+  URL source from the manifest kinds (`HTTPRoute` → `Gateway` → `Ingress` → `LoadBalancer
+Service`), a pinned `namespace`, `generatorEnvFile` secret injections (keys read from a
+  `.env.example`), `images` overrides (default `newTagTemplate: '{{branch}}'`), and helm releases
+  from a `helmfile.yaml`/`Chart.yaml` (low confidence, pinned versions only). Every inferred field
+  carries a confidence note; overlay + helm are surfaced as candidates, never auto-picked.
+  Unit-tested with an in-memory fake reader.
+- **Service + controller**: `EnvironmentConnectionService.detectServiceProvisioning` runs the
+  detector over the workspace-bound `RepoFiles` (`resolveRepoFilesForWorkspace`); no VCS
+  connection ⇒ an `infraless` result with a note (not an error). `EnvironmentController` mounts
+  `POST …/environments/detect-provisioning`. Contracts: `provisioningRecommendationSchema` +
+  `detectServiceProvisioningSchema` + the route contract. NO migration (pure repo introspection,
+  nothing persisted).
+- **Frontend**: a "Detect from repo" affordance in `ServiceTestConfig.vue` (the service
+  inspector's test-infra section) prefills `block.provisioning` (+ the local kube edit refs),
+  shows the per-field confidence notes, lets the user pick among overlay candidates, and surfaces
+  the engine-level URL/namespace suggestions read-only (the workspace handler owns them). New
+  `inspector.testConfig.detect.*` keys across all 8 locales; the `infraConfig` store +
+  `infraHandlers` composable gain the detect call.
+- **Deferred (the "optional later" below)**: the LLM `explore` pass for the ambiguous cases — the
+  deterministic detector covers the high-confidence parts and surfaces the rest as candidates.
+
 What's inferable, by confidence:
 
 - **High confidence (deterministic):** `renderer` (`kustomization.yaml` present ⇒ `kustomize`, else
@@ -484,6 +511,6 @@ LoadBalancer` ⇒ `serviceStatus`); the namespace decision (a pinned `namespace:
 | 8   | Phase 2: `KubernetesEnvironmentProvider` render path (`buildProvisionJob`/`finalizeProvision`; keep native REST) + Gateway-API URL resolvers                                                                                                                                                                                             | done   | —    |
 | 9   | Phase 2: async deployer lifecycle (`startProvision`/`pollProvisionJob`/`finalizeProvision`; `runDeployerStep` park/poll + eviction re-dispatch; `deployJobClient`/`resolveDeployCloneTarget` deps) — folds into slice 3                                                                                                                  | done   | —    |
 | 10  | Phase 2: facade wiring (CF `DeployContainer` + `[[containers]]`/binding/`v4` migration; Node pool `image`/`imageDeploy`; local `NativeCliDeployTransport` via `LOCAL_DEPLOY_RUNTIME`) + `deployJobClient`/`resolveDeployCloneTarget` on all three facades; deploy-dispatch + finalize conformance. No image-tag bump (harness untouched) | done   | #537 |
-| 11  | Phase 2: auto-detect a recommended `kubernetes` config from the repo (renderer / URL source / namespace / secret `.env` keys / image overrides high-confidence; overlay choice + helm as candidates) — non-binding, user confirms                                                                                                        | todo   | —    |
+| 11  | Phase 2: auto-detect a recommended `kubernetes` config from the repo (renderer / URL source / namespace / secret `.env` keys / image overrides high-confidence; overlay choice + helm as candidates) — non-binding, user confirms                                                                                                        | done   | #543 |
 
 Update the row (status + PR link) at the end of each slice.

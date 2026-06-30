@@ -437,7 +437,20 @@
       "customManifestIdPlaceholder": "Choisir un type de manifeste",
       "customNoTypes": "Aucun type de manifeste personnalisé n'est encore défini. Ajoutez-en un dans la fenêtre Infrastructure.",
       "customManifestIdHint": "Le type personnalisé que ce service produit, associé à un gestionnaire remote-custom configuré par l'espace de travail.",
-      "customManifestPath": "Chemin du manifeste (facultatif)"
+      "customManifestPath": "Chemin du manifeste (facultatif)",
+      "detect": {
+        "title": "Détection automatique",
+        "button": "Détecter depuis le dépôt",
+        "hint": "Inspecte le dépôt et propose une configuration de provisionnement. Vous confirmez et modifiez tout ci-dessous ; rien n'est enregistré automatiquement.",
+        "error": "Impossible de lire le dépôt pour détecter le provisionnement.",
+        "none": "Aucun manifeste Kubernetes ni fichier Compose détecté.",
+        "applied": "Configuration {type} suggérée. Vérifiez et ajustez les champs ci-dessous.",
+        "overlayTitle": "Overlay éphémère",
+        "urlSource": "Source d'URL d'environnement suggérée : {source}. Le gestionnaire de l'espace de travail la contrôle ; définissez-la là.",
+        "namespace": "Les manifestes fixent l'espace de noms « {namespace} » ; il est recommandé de le respecter sur le gestionnaire de l'espace de travail.",
+        "confidenceHigh": "Détecté",
+        "confidenceLow": "Suggestion"
+      }
     },
     "agentConfig": {
       "title": "Configuration de l'agent",
