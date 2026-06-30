@@ -26,8 +26,7 @@ import {
 } from '@cat-factory/prompt-fragments'
 import { clearRegisteredAgentKinds, registerAgentKind } from '@cat-factory/agents'
 import {
-  registerEnvironmentBackend,
-  registerRunnerBackend,
+  createBackendRegistries,
   type EnvironmentBackendProvider,
   type RunnerBackendProvider,
 } from '@cat-factory/integrations'
@@ -2140,9 +2139,9 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
       // first connect, and be advertised in the snapshot — identically on every runtime. A
       // facade that didn't open its repos/validation to a custom kind fails here.
       //
-      // Registered at suite-collection time (process-global registry, idempotent, survives the
-      // per-request container rebuilds) — exactly how a real deployment registers on import.
-      // The kinds don't collide with the built-ins, so they need no teardown.
+      // Registered BY REFERENCE into an app-owned registry the harness injects through
+      // `makeApp({ backendRegistries })` — exactly how a real deployment registers a custom
+      // backend (no module-global side effect, so module identity is irrelevant).
       const ENV_KIND = 'conformance-env'
       const RUNNER_KIND = 'conformance-runner'
 
@@ -2200,8 +2199,11 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         testConnection: async () => ({ ok: true, message: 'ok' }),
       }
 
-      registerEnvironmentBackend(customEnvBackend)
-      registerRunnerBackend(customRunnerBackend)
+      // The app-owned registries the harness injects, pre-loaded with the built-ins + the two
+      // custom backends — by reference, so the facade sees them regardless of module identity.
+      const backendRegistries = createBackendRegistries()
+      backendRegistries.environmentBackendRegistry.register(customEnvBackend)
+      backendRegistries.runnerBackendRegistry.register(customRunnerBackend)
 
       const envManifest = {
         providerId: ENV_KIND,
@@ -2223,7 +2225,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
       }
 
       it('connects + round-trips a custom ENVIRONMENT backend kind through the store', async () => {
-        const { call, createWorkspace } = harness.makeApp()
+        const { call, createWorkspace } = harness.makeApp(undefined, { backendRegistries })
         const { workspace } = await createWorkspace()
         const base = `/workspaces/${workspace.id}/environments`
 
@@ -2246,7 +2248,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
       })
 
       it('describes a registered custom kind BEFORE the first connect', async () => {
-        const { call, createWorkspace } = harness.makeApp()
+        const { call, createWorkspace } = harness.makeApp(undefined, { backendRegistries })
         const { workspace } = await createWorkspace()
         // No connection yet — the registry still resolves the kind so the SPA can render its form.
         const descr = await call<{ providerId: string; kind: string }>(
@@ -2258,7 +2260,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
       })
 
       it('connects + round-trips a custom RUNNER backend kind through the store', async () => {
-        const { call, createWorkspace } = harness.makeApp()
+        const { call, createWorkspace } = harness.makeApp(undefined, { backendRegistries })
         const { workspace } = await createWorkspace()
         const base = `/workspaces/${workspace.id}/runner-pool/connection`
 
@@ -2278,7 +2280,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
       })
 
       it('advertises the registered backend kinds in the workspace snapshot', async () => {
-        const { call, createWorkspace } = harness.makeApp()
+        const { call, createWorkspace } = harness.makeApp(undefined, { backendRegistries })
         const { workspace } = await createWorkspace()
         const snap = await call<{
           environmentBackendKinds?: { kind: string }[]
@@ -2293,7 +2295,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
       })
 
       it('rejects a config whose kind collides with a reserved built-in (guard)', async () => {
-        const { call, createWorkspace } = harness.makeApp()
+        const { call, createWorkspace } = harness.makeApp(undefined, { backendRegistries })
         const { workspace } = await createWorkspace()
         // A `kubernetes` kind carrying a manifest body (the wrong shape) must be REJECTED by
         // the reserved-kind guard, not silently accepted as the generic custom member.

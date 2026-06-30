@@ -146,14 +146,13 @@ export {
   type ResolvedConnection,
 } from './modules/environments/EnvironmentConnectionService.js'
 // The ephemeral-environment backend provider-registry seam: maps a backend kind
-// (`manifest` | `kubernetes` | future `nomad`/…) → an EnvironmentProvider. Built-ins
-// self-register on import; a third-party kind registers via `registerEnvironmentBackend`.
+// (`manifest` | `kubernetes` | future `nomad`/…) → an EnvironmentProvider. The registry is
+// an app-owned INSTANCE (built via `defaultEnvironmentBackendRegistry` / the unified
+// `createBackendRegistries`, injected through `CoreDependencies`); a third-party kind
+// registers by reference (`registry.register(provider)`), not by import side effect.
 export {
-  registerEnvironmentBackend,
-  environmentBackend,
-  registeredEnvironmentBackendKinds,
-  environmentBackendKinds,
-  findRepairCapableProvider,
+  EnvironmentBackendRegistry,
+  defaultEnvironmentBackendRegistry,
   manifestEnvironmentBackend,
   kubernetesEnvironmentBackend,
   type EnvironmentBackendProvider,
@@ -190,18 +189,21 @@ export {
 } from './modules/runners/RunnerPoolConnectionService.js'
 export * as runnersLogic from './modules/runners/runners.logic.js'
 // The universal "agent runner backend" provider-registry seam: maps a backend kind
-// (`manifest` | `kubernetes` | future `nomad`/`eks`) → a RunnerTransport. Built-ins
-// self-register on import; a third-party kind registers via `registerRunnerBackend`.
+// (`manifest` | `kubernetes` | future `nomad`/`eks`) → a RunnerTransport. The registry is
+// an app-owned INSTANCE (built via `defaultRunnerBackendRegistry` / the unified
+// `createBackendRegistries`, injected through `CoreDependencies`); a third-party kind
+// registers by reference (`registry.register(provider)`), not by import side effect.
 export {
-  registerRunnerBackend,
-  runnerBackend,
-  registeredRunnerBackendKinds,
-  runnerBackendKinds,
+  RunnerBackendRegistry,
+  defaultRunnerBackendRegistry,
   manifestRunnerBackend,
   kubernetesRunnerBackend,
   type RunnerBackendProvider,
   type RunnerBackendContext,
 } from './modules/runners/runner-backends.js'
+// The unified construction entry the composition root calls to build both app-owned backend
+// registries (pre-loaded with the built-in kinds) before injecting them into `CoreDependencies`.
+export { createBackendRegistries, type BackendRegistries } from './modules/backend-registries.js'
 // The runtime-neutral runner transports: a generic manifest interpreter
 // (`HttpRunnerPoolProvider`) + the per-job `RunnerPoolTransport`, and the native
 // Kubernetes per-run-pod transport (`KubernetesRunnerTransport`, apiserver pod-proxy).

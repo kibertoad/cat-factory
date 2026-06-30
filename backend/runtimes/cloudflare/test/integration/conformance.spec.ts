@@ -58,6 +58,15 @@ const harness: ConformanceHarness = {
         ...(opts?.resolveRepoFilesForCoords
           ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
           : {}),
+        // Inject the app-owned backend registries (pre-loaded with custom kinds in the
+        // custom-backend suite) via the CoreDependencies overrides the Worker build reads, so a
+        // registered custom backend is resolved by reference, exactly like a real deployment.
+        ...(opts?.backendRegistries
+          ? {
+              environmentBackendRegistry: opts.backendRegistries.environmentBackendRegistry,
+              runnerBackendRegistry: opts.backendRegistries.runnerBackendRegistry,
+            }
+          : {}),
         ...fragmentLibraryDeps(),
         // A deterministic task source (fake 'jira') over the real D1 task repos, so the
         // shared suite can assert create-task-from-issue parity against D1 too.

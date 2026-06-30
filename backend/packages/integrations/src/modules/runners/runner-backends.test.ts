@@ -2,7 +2,9 @@ import type { RunnerBackendConfig, RunnerPoolManifest } from '@cat-factory/kerne
 import { describe, expect, it } from 'vitest'
 import { KubernetesRunnerTransport } from '../kubernetes/KubernetesRunnerTransport.js'
 import { RunnerPoolTransport } from './RunnerPoolTransport.js'
-import { registeredRunnerBackendKinds, runnerBackend } from './runner-backends.js'
+import { defaultRunnerBackendRegistry } from './runner-backends.js'
+
+const registry = defaultRunnerBackendRegistry()
 
 const manifest: RunnerPoolManifest = {
   providerId: 'acme',
@@ -16,12 +18,12 @@ const manifest: RunnerPoolManifest = {
 
 describe('runner-backend registry', () => {
   it('registers both built-in backend kinds', () => {
-    expect(registeredRunnerBackendKinds().sort()).toEqual(['kubernetes', 'manifest'])
+    expect(registry.kinds().sort()).toEqual(['kubernetes', 'manifest'])
   })
 
   it('builds a RunnerPoolTransport for the manifest kind', () => {
     const config: RunnerBackendConfig = { kind: 'manifest', manifest }
-    const provider = runnerBackend('manifest')!
+    const provider = registry.get('manifest')!
     expect(provider.referencedSecretKeys(config)).toEqual(['API_TOKEN'])
     expect(provider.connectionMeta(config)).toEqual({
       providerId: 'acme',
@@ -42,7 +44,7 @@ describe('runner-backend registry', () => {
         image: 'ghcr.io/acme/executor:1',
       },
     }
-    const provider = runnerBackend('kubernetes')!
+    const provider = registry.get('kubernetes')!
     expect(provider.referencedSecretKeys(config)).toEqual(['apiToken'])
     expect(provider.connectionMeta(config)).toEqual({
       providerId: 'kubernetes',
@@ -63,6 +65,6 @@ describe('runner-backend registry', () => {
         image: 'img',
       },
     }
-    expect(() => runnerBackend('kubernetes')!.assertConfigSafe(config)).toThrow(/https/)
+    expect(() => registry.get('kubernetes')!.assertConfigSafe(config)).toThrow(/https/)
   })
 })

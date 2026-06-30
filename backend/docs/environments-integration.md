@@ -252,13 +252,13 @@ export class MyEnvironmentProvider implements EnvironmentProvider {
 
 The adapter still registers a connection (so secrets are encrypted at rest and the
 module assembles), but the `manifest`'s request templates are ignored in favour of
-your code — the `secrets`, `providerId`, and `label` still apply. **Register it**
-programmatically (an import side effect) under a custom `kind`, on every facade at once:
+your code — the `secrets`, `providerId`, and `label` still apply. Define the backend as a
+value and **register it by reference** into the app-owned registry, under a custom `kind`:
 
 ```ts
-import { registerEnvironmentBackend } from '@cat-factory/integrations'
+import type { EnvironmentBackendProvider } from '@cat-factory/integrations'
 
-registerEnvironmentBackend({
+export const myPlatformBackend: EnvironmentBackendProvider = {
   kind: 'my-platform', // a lower-kebab slug, not a reserved built-in
   displayLabel: 'My Platform',
   referencedSecretKeys: () => ['API_TOKEN'],
@@ -271,12 +271,17 @@ registerEnvironmentBackend({
   toManifest: (c) => c.manifest, // a custom kind rides the generic manifest member
   fromManifest: (manifest) => ({ kind: 'my-platform', manifest }),
   buildProvider: (ctx) => new MyEnvironmentProvider(ctx),
-})
+}
+
+// at the composition root (e.g. via start()'s `buildContainer` seam):
+const backendRegistries = createBackendRegistries()
+backendRegistries.environmentBackendRegistry.register(myPlatformBackend)
+// …pass `backendRegistries` into buildNodeContainer / buildContainer.
 ```
 
-There is **no facade injection option** (the old `buildNodeContainer({ environmentProvider })`
-/ `buildContainer` override is gone): the registry resolves a workspace's stored `kind` to
-your backend on Worker / Node / local alike. Full model + the single-tenant-vs-multi-tenant
+The registry is **app-owned and injected** (no deployment-wide provider singleton): it resolves
+a workspace's stored `kind` to your backend on Worker / Node / local alike, and registration is
+by reference so module identity never matters. Full model + the single-tenant-vs-multi-tenant
 rationale: [`native-environment-adapter.md`](./native-environment-adapter.md).
 
 Because the adapter is code you install and run, the URL it returns is still
