@@ -12,7 +12,7 @@ paste all of it into the Kubernetes engine form (Settings → Infrastructure →
 `Local k3s`). That is a lot of out-of-band `kubectl`/install ceremony for a "just run it
 locally" product, and every step is a place to get a value subtly wrong.
 
-The PR that seeded this initiative (#557) closed the *feedback* gap — selecting `local-k3s`
+The PR that seeded this initiative (#557) closed the _feedback_ gap — selecting `local-k3s`
 now prefills loopback defaults, explains how to mint a token, and offers a **Test connection**
 button — but the user still runs every command themselves.
 
@@ -27,8 +27,8 @@ Concretely, a guided flow:
 1. **Probe** — detect what already exists: a reachable cluster via the current kubeconfig
    (`kubectl version`/`~/.kube/config`), a running k3d/kind cluster (via Docker), or installed
    CLIs (`k3d`, `kind`, `k3s`, `kubectl`). Report what was found + what's missing.
-2. **Offer** — a small set of selections: *use the existing cluster*, *create a k3d cluster*
-   (Docker, no root — the recommended default), or *show me the k3s install command* (needs
+2. **Offer** — a small set of selections: _use the existing cluster_, _create a k3d cluster_
+   (Docker, no root — the recommended default), or _show me the k3s install command_ (needs
    sudo — guided, not silently run).
 3. **Provision** (explicit confirm per action) — run the chosen setup, then create the
    ServiceAccount + minimal RoleBinding and `kubectl create token`.
@@ -64,7 +64,7 @@ CLI-first shape; revisit if the requester prefers the in-app wizard.
   (install, cluster create, token mint) requires an explicit user confirmation. No silent
   privileged shell-out.
 - **k3d-via-Docker is the low-friction default** (no root; Docker is already a local-mode
-  prerequisite for agent containers). `curl | sh` k3s install needs sudo → *guide* it (print the
+  prerequisite for agent containers). `curl | sh` k3s install needs sudo → _guide_ it (print the
   command / require an explicit elevated confirm), don't run it unprompted.
 - **Reuse, don't reinvent, the host shell-out seam.** `ContainerRuntimeAdapter`
   (`runtimes/local/src/runtimes/*`) already detects + drives docker/podman/orbstack/colima/apple
@@ -125,7 +125,7 @@ CLI-first shape; revisit if the requester prefers the in-app wizard.
 - k3d cluster create (Docker, no root); kubeconfig read for the apiserver URL.
 - ServiceAccount + least-privilege RoleBinding + `kubectl create token` (k8s 1.24+),
   idempotent (reuse if present).
-- Each action behind an explicit confirm; the k3s `curl | sh` path is *guided* (printed /
+- Each action behind an explicit confirm; the k3s `curl | sh` path is _guided_ (printed /
   elevated-confirm), not auto-run.
 
 ### Slice 3 — wire + verify (todo)
@@ -146,11 +146,11 @@ CLI-first shape; revisit if the requester prefers the in-app wizard.
 
 ## Per-item status
 
-| Item | Status | PR |
-| --- | --- | --- |
-| Slice 0 — prefill + hint + handler test-connection probe | done | #557 |
-| Decide surface (CLI vs in-app wizard) | todo | — |
-| Slice 1 — pure probe planner + host shell-out seam | todo | — |
-| Slice 2 — provision actions (k3d default; guided k3s) | todo | — |
-| Slice 3 — wire handler + verify via existing probe | todo | — |
-| Slice 4 — docs + SPA deep-link + escape hatch | todo | — |
+| Item                                                     | Status | PR   |
+| -------------------------------------------------------- | ------ | ---- |
+| Slice 0 — prefill + hint + handler test-connection probe | done   | #557 |
+| Decide surface (CLI vs in-app wizard)                    | todo   | —    |
+| Slice 1 — pure probe planner + host shell-out seam       | todo   | —    |
+| Slice 2 — provision actions (k3d default; guided k3s)    | todo   | —    |
+| Slice 3 — wire handler + verify via existing probe       | todo   | —    |
+| Slice 4 — docs + SPA deep-link + escape hatch            | todo   | —    |

@@ -1753,7 +1753,7 @@
         "remote-kubernetes": "Kubernetes remoto"
       },
       "kubernetesEngine": {
-        "localK3sHint": "Precargado para un clúster local k3s/k3d/kind en esta máquina. Vincula una ServiceAccount a un rol, genera su token con `kubectl create token <name> -n <namespace>` (Kubernetes 1.24+) y pégalo abajo. Luego elige cómo se deriva la URL del entorno y edita la URL del API server si tu clúster escucha en otro puerto.",
+        "localK3sHint": "Precargado para un clúster local k3s/k3d/kind en esta máquina. Vincula una ServiceAccount a un rol, genera su token con `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) y pégalo abajo. Luego elige cómo se deriva la URL del entorno y edita la URL del API server si tu clúster escucha en otro puerto.",
         "label": "Etiqueta de la conexión",
         "labelPlaceholder": "Clúster de vista previa",
         "apiServerUrl": "URL del API server",

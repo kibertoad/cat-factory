@@ -1753,7 +1753,7 @@
         "remote-kubernetes": "Віддалений Kubernetes"
       },
       "kubernetesEngine": {
-        "localK3sHint": "Попередньо заповнено для локального кластера k3s/k3d/kind на цьому комп'ютері. Прив'яжіть ServiceAccount до ролі, згенеруйте його токен командою `kubectl create token <name> -n <namespace>` (Kubernetes 1.24+) і вставте його нижче. Потім виберіть, як визначається URL середовища, і змініть URL сервера API, якщо ваш кластер слухає на іншому порту.",
+        "localK3sHint": "Попередньо заповнено для локального кластера k3s/k3d/kind на цьому комп'ютері. Прив'яжіть ServiceAccount до ролі, згенеруйте його токен командою `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) і вставте його нижче. Потім виберіть, як визначається URL середовища, і змініть URL сервера API, якщо ваш кластер слухає на іншому порту.",
         "label": "Мітка з'єднання",
         "labelPlaceholder": "Кластер попереднього перегляду",
         "apiServerUrl": "URL сервера API",
