@@ -351,10 +351,20 @@ jobs:
   # (per-worker isolation in the test harness), so these now run with file parallelism;
   # the conformance suite is split into per-group spec files that fan out across workers.
   test-db:
-    name: Test DB (node/local)
+    name: Test DB (node/local) (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # SHARDED across 2 jobs via vitest's --shard (deterministic file partition), mirroring the
+    # `test-worker` / `test-e2e` sharding. The Postgres-backed lane grew when the mothership-mode
+    # conformance config was added (the local suite now also runs the shared suite against a
+    # remote-RPC backend), so sharding keeps wall-clock roughly flat. Each shard is its own job, so
+    # the Postgres service below is instantiated per shard — a fresh, private datastore each — and
+    # the harness still gives each vitest worker its own database within a shard.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     services:
       postgres:
         image: postgres:18
@@ -411,10 +421,13 @@ jobs:
         run: pnpm build
 
       # Node + Local share this one Postgres server; the harness gives each vitest worker
-      # its own database (`<base>_node_<id>` / `<base>_local_<id>`), so the two facades and
-      # their parallel workers never collide.
-      - name: Run Postgres-backed suites
-        run: pnpm --filter @cat-factory/node-server --filter @cat-factory/local-server -r run test:run
+      # its own database (`<base>_node_<id>` / `<base>_local_<id>` / `<base>_mship_<id>`), so the
+      # two facades, the mothership-mode config, and their parallel workers never collide. Each
+      # package's spec files are partitioned across the shards by vitest's --shard.
+      - name: Run Postgres-backed suites (shard ${{ matrix.shard }}/2)
+        run: |
+          pnpm --filter @cat-factory/node-server exec vitest run --shard=${{ matrix.shard }}/2
+          pnpm --filter @cat-factory/local-server exec vitest run --shard=${{ matrix.shard }}/2
 
   # Playwright e2e: the real SPA against a real Node backend (real Postgres + real
   # WebSocket) with only the external deps faked (see backend/internal/e2e). Needs the
