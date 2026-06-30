@@ -1,5 +1,15 @@
 # @cat-factory/app
 
+## 0.58.1
+
+### Patch Changes
+
+- 77937c4: Show a loading spinner on first SPA load via Nuxt's `spaLoadingTemplate`, so the very
+  first paint is a spinner on the dark board background instead of a blank white screen
+  while the JS bundle parses and Vue mounts.
+- Updated dependencies [1952d6b]
+  - @cat-factory/contracts@0.59.0
+
 ## 0.58.0
 
 ### Minor Changes
