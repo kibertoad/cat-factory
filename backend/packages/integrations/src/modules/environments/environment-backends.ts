@@ -79,11 +79,13 @@ export interface EnvironmentBackendProvider {
   buildProvider(ctx: EnvironmentBackendContext): EnvironmentProvider
   /**
    * The per-type infra engines this backend implements (e.g. the Kubernetes backend
-   * serves both `local-k3s` and `remote-kubernetes`). Drives the per-provision-type
-   * handler resolution (`byEngine`). Optional so a pre-existing custom third-party backend
-   * keeps working; the built-ins declare it.
+   * serves both `local-k3s` and `remote-kubernetes`; a custom ephemeral-environment backend
+   * typically serves `remote-custom`). Drives the per-provision-type handler resolution
+   * (`byEngine`) AND the SPA's per-type backend selector (advertised via the snapshot's
+   * `environmentBackendKinds[].engines`). REQUIRED: a backend that declares no engine is
+   * unreachable as a run target — the type makes that impossible to define by accident.
    */
-  engines?(): InfraEngine[]
+  engines(): InfraEngine[]
   /**
    * For a `remote-custom` backend: which custom manifest ids it can consume (matched
    * against a service's pinned `manifestId`). Empty/undefined ⇒ accepts any.
@@ -121,7 +123,7 @@ export class EnvironmentBackendRegistry {
   byEngine(engine: InfraEngine): EnvironmentBackendProvider | undefined {
     if (engine === 'none') return undefined
     for (const provider of this.map.values()) {
-      if (provider.engines?.().includes(engine)) return provider
+      if (provider.engines().includes(engine)) return provider
     }
     return undefined
   }
@@ -135,8 +137,12 @@ export class EnvironmentBackendRegistry {
    * Registered backend kinds + display labels, for the workspace snapshot → the SPA's
    * provider-connect backend-kind selector. Always includes the built-ins.
    */
-  labelled(): { kind: string; label: string }[] {
-    return [...this.map.values()].map((p) => ({ kind: p.kind, label: p.displayLabel ?? p.kind }))
+  labelled(): { kind: string; label: string; engines: InfraEngine[] }[] {
+    return [...this.map.values()].map((p) => ({
+      kind: p.kind,
+      label: p.displayLabel ?? p.kind,
+      engines: p.engines(),
+    }))
   }
 
   /**

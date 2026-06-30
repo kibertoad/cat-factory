@@ -192,6 +192,11 @@ export interface EnvironmentHandlerView {
   connectedAt: number
   secretKeys: string[]
   acceptsManifestId: string | null
+  /**
+   * The registry backend kind that builds this handler's provider (`manifest`, `kubernetes`,
+   * or a deployment-registered custom kind), so the connect form can pre-select it on edit.
+   */
+  backendKind: string
   /** The stored handler config, sans secrets, for connect-form prefill on edit. */
   config?: InfraHandlerConfig
 }
@@ -388,7 +393,7 @@ export class EnvironmentConnectionService {
     input: { config: EnvironmentBackendConfig; secrets: Record<string, string> },
   ): Promise<EnvironmentConnection> {
     const backend = this.requireBackend(input.config.kind)
-    const engines = backend.engines?.() ?? []
+    const engines = backend.engines()
     // A registered connection is a "remote" handler where the backend offers one.
     const engine = (engines.find((e) => e.startsWith('remote-')) ??
       engines[0] ??
@@ -1056,6 +1061,7 @@ export class EnvironmentConnectionService {
       connectedAt: record.createdAt,
       secretKeys,
       acceptsManifestId: record.acceptsManifestId,
+      backendKind: record.backendKind,
       ...(config ? { config } : {}),
     }
   }

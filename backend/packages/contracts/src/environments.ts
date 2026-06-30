@@ -699,6 +699,13 @@ export const environmentHandlerViewSchema = v.object({
   secretKeys: v.array(v.string()),
   /** For `remote-custom`: the manifest id this provider accepts; `null` otherwise. */
   acceptsManifestId: v.nullable(v.string()),
+  /**
+   * The registry backend kind that builds this handler's provider (`manifest`, `kubernetes`,
+   * or a deployment-registered custom kind). Lets the connect form pre-select the right backend
+   * when editing a saved handler — distinct from `providerId`, which is the connection's own
+   * identifier, not the registry slug.
+   */
+  backendKind: v.string(),
   /** The stored handler config, sans secrets, for connect-form prefill on edit. */
   config: v.optional(infraHandlerConfigSchema),
 })

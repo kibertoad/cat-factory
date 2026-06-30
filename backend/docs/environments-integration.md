@@ -270,6 +270,10 @@ export const myPlatformBackend: EnvironmentBackendProvider = {
   assertConfigSafe: () => {},
   toManifest: (c) => c.manifest, // a custom kind rides the generic manifest member
   fromManifest: (manifest) => ({ kind: 'my-platform', manifest }),
+  // REQUIRED: the per-type infra engine(s) this backend serves. A BYO ephemeral-environment
+  // backend rides `remote-custom`, which makes it selectable for a service's `custom` provision
+  // type. A backend that declares no engine is unreachable as a run target.
+  engines: () => ['remote-custom'],
   buildProvider: (ctx) => new MyEnvironmentProvider(ctx),
 }
 

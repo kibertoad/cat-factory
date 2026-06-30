@@ -188,6 +188,9 @@ export class EnvironmentUserHandlerService {
       connectedAt: record.createdAt,
       secretKeys,
       acceptsManifestId: record.acceptsManifestId,
+      // The per-user table carries no `backendKind` column (local-only, where each engine maps
+      // 1:1 to a backend), so re-derive it from the engine; null ⇒ the generic manifest backend.
+      backendKind: this.backendKindFor(record.engine as InfraEngine) ?? 'manifest',
       ...(config ? { config } : {}),
     }
   }

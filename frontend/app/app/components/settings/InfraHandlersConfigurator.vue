@@ -170,6 +170,58 @@ const customSavedManifest = computed<Record<string, unknown> | undefined>(() => 
     : undefined
 })
 
+// The registry backend that builds the `remote-custom` handler's provider. The generic
+// built-in `manifest` (BYO HTTP API) is the default; a deployment that registered a native
+// custom env backend (e.g. Kargo) can be picked here so the handler is pinned to it instead of
+// silently resolving to the generic manifest provider. Only backends that serve the
+// `remote-custom` engine are offered (the snapshot advertises each backend's engines).
+const providerConnections = useProviderConnectionsStore()
+const customBackendOptions = computed(() =>
+  providerConnections
+    .backendKindsFor('environment')
+    .filter((o) => o.engines?.includes('remote-custom'))
+    .map((o) => ({ label: o.label, value: o.kind })),
+)
+const selectedBackendKind = ref<string>('manifest')
+// When editing a saved handler, reflect the backend it was registered with; when switching to a
+// custom type with no handler yet, fall back to the first offered backend (the generic manifest).
+watch(
+  [customHandler, customBackendOptions],
+  ([handler, options]) => {
+    const valid = (k: string) => options.some((o) => o.value === k)
+    if (handler?.backendKind && valid(handler.backendKind)) {
+      selectedBackendKind.value = handler.backendKind
+    } else if (!valid(selectedBackendKind.value)) {
+      selectedBackendKind.value = options.find((o) => o.value === 'manifest')?.value
+        ? 'manifest'
+        : (options[0]?.value ?? 'manifest')
+    }
+  },
+  { immediate: true },
+)
+
+// For a NEW handler on a NON-generic backend, prefill the editor from that backend's manifest
+// template (its self-described skeleton + secret refs) so the operator isn't faced with the
+// generic starter. A saved handler's own manifest always takes precedence.
+const templateManifest = ref<Record<string, unknown> | undefined>(undefined)
+watch(
+  [selectedBackendKind, customHandler],
+  async ([kind, handler]) => {
+    if (handler || kind === 'manifest') {
+      templateManifest.value = undefined
+      return
+    }
+    const descriptor = await providerConnections.fetchDescriptor('environment', kind)
+    templateManifest.value = descriptor?.manifestTemplate
+  },
+  { immediate: true },
+)
+// The manifest to seed the editor with: a saved handler's stored manifest, else the picked
+// backend's template (custom kinds), else undefined (the editor's generic starter).
+const customEditorManifest = computed<Record<string, unknown> | undefined>(
+  () => customSavedManifest.value ?? templateManifest.value,
+)
+
 async function saveCustom(payload: {
   manifest: Record<string, unknown>
   secrets: Record<string, string>
@@ -186,6 +238,9 @@ async function saveCustom(payload: {
       provisionType: 'custom',
       manifestId: selectedCustomId.value,
       config,
+      // Pin the chosen registry backend so a native custom backend (e.g. Kargo) builds the
+      // provider — absent, the engine would resolve to the generic manifest provider.
+      backendKind: selectedBackendKind.value,
       secrets: payload.secrets,
     })
     toastSaved()
@@ -355,6 +410,15 @@ function notifyError(e: unknown) {
         <UFormField :label="t('settings.infrastructure.handler.customTypeLabel')">
           <USelect v-model="selectedCustomId" :items="customTypeItems" />
         </UFormField>
+        <!-- Which registered backend builds this custom handler's provider. Shown only when a
+             deployment registered a custom backend beyond the generic manifest. -->
+        <UFormField
+          v-if="customBackendOptions.length > 1"
+          :label="t('settings.infrastructure.handler.customBackendLabel')"
+          :help="t('settings.infrastructure.handler.customBackendHelp')"
+        >
+          <USelect v-model="selectedBackendKind" :items="customBackendOptions" />
+        </UFormField>
         <p
           v-if="customHandler"
           class="flex items-center justify-between gap-2 text-[12px] text-slate-300"
@@ -373,9 +437,9 @@ function notifyError(e: unknown) {
         </p>
         <ProviderManifestEditor
           v-if="selectedCustomId"
-          :key="selectedCustomId"
+          :key="`${selectedCustomId}:${selectedBackendKind}`"
           kind="environment"
-          :saved-manifest="customSavedManifest"
+          :saved-manifest="customEditorManifest"
           :connected="!!customHandler"
           :stored-secret-keys="customHandler?.secretKeys ?? []"
           :supports-test="false"

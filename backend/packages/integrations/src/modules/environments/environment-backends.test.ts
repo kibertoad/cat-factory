@@ -102,14 +102,23 @@ describe('environment-backends registry', () => {
         return config.manifest
       },
       fromManifest: (m) => ({ kind: 'acme-cloud', manifest: m }),
+      engines: () => ['remote-custom'],
       buildProvider: (ctx) =>
         new HttpEnvironmentProvider(ctx.urlPolicy ? { urlPolicy: ctx.urlPolicy } : {}),
     }
     customRegistry.register(custom)
     expect(customRegistry.kinds()).toContain('acme-cloud')
-    expect(customRegistry.labelled()).toContainEqual({ kind: 'acme-cloud', label: 'Acme Cloud' })
-    // The built-ins still carry their labels (displayLabel ?? kind).
-    expect(customRegistry.labelled()).toContainEqual({ kind: 'manifest', label: 'HTTP manifest' })
+    expect(customRegistry.labelled()).toContainEqual({
+      kind: 'acme-cloud',
+      label: 'Acme Cloud',
+      engines: ['remote-custom'],
+    })
+    // The built-ins still carry their labels (displayLabel ?? kind) + their engines.
+    expect(customRegistry.labelled()).toContainEqual({
+      kind: 'manifest',
+      label: 'HTTP manifest',
+      engines: ['remote-custom'],
+    })
     // A custom config (manifest-shaped) round-trips through the registered backend.
     const config: EnvironmentBackendConfig = { kind: 'acme-cloud', manifest }
     expect(custom.referencedSecretKeys(config)).toEqual(['ACME_TOKEN'])

@@ -2363,6 +2363,8 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           return config.manifest
         },
         fromManifest: (manifest) => ({ kind: ENV_KIND, manifest }),
+        // A custom ephemeral-environment backend rides the `remote-custom` engine.
+        engines: () => ['remote-custom'],
         // describeProvider builds this to read describeConfig (absent here ⇒ no flat fields).
         buildProvider: () => ({
           provision: async () => ({

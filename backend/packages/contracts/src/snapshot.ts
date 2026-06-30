@@ -18,6 +18,7 @@ import { serviceSchema, workspaceMountSchema } from './services.js'
 import { trackerSettingsSchema } from './tracker.js'
 import { workspaceSettingsSchema } from './workspace-settings.js'
 import { customAgentKindSchema } from './agent-presentation.js'
+import { infraEngineSchema } from './environments.js'
 
 // The full board snapshot returned by GET /workspaces/:id (and POST /workspaces).
 // It lives in its own module because it references both ./entities and
@@ -28,6 +29,13 @@ import { customAgentKindSchema } from './agent-presentation.js'
 export const backendKindOptionSchema = v.object({
   kind: v.string(),
   label: v.string(),
+  /**
+   * The per-type infra engines this backend implements (e.g. a `remote-custom` backend a
+   * deployment registered). Lets the SPA offer the right backends per provision type — e.g.
+   * the custom-handler form lists only backends that serve `remote-custom`. Populated for
+   * environment backends; omitted for runner-pool backends (which have no engine axis).
+   */
+  engines: v.optional(v.array(infraEngineSchema)),
 })
 export type BackendKindOption = v.InferOutput<typeof backendKindOptionSchema>
 

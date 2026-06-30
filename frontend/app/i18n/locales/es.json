@@ -1809,6 +1809,8 @@
         "engineLabel": "Motor",
         "customHandlerTitle": "Gestor remote-custom",
         "customTypeLabel": "Tipo personalizado",
+        "customBackendLabel": "Backend",
+        "customBackendHelp": "Qué backend registrado aprovisiona este entorno personalizado.",
         "customConnected": "Gestor conectado.",
         "saved": "Gestor guardado",
         "removed": "Gestor eliminado",

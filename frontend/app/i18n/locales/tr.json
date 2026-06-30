@@ -1360,6 +1360,8 @@
         "engineLabel": "Motor",
         "customHandlerTitle": "remote-custom işleyici",
         "customTypeLabel": "Özel tür",
+        "customBackendLabel": "Arka uç",
+        "customBackendHelp": "Bu özel ortamı hangi kayıtlı arka ucun sağlayacağı.",
         "customConnected": "İşleyici bağlandı.",
         "saved": "İşleyici kaydedildi",
         "removed": "İşleyici kaldırıldı",
