@@ -416,7 +416,26 @@
         "medium": "Середній",
         "large": "Великий",
         "xlarge": "Дуже великий"
-      }
+      },
+      "renderers": {
+        "raw": "Сирі маніфести",
+        "kustomize": "Kustomize"
+      },
+      "localDevOnly": "Лише для локальної розробки",
+      "manifestSourceLabel": "Джерело маніфестів",
+      "sourceColocated": "У цьому репозиторії",
+      "sourceSeparate": "Окремий репозиторій",
+      "manifestRepo": "Репозиторій маніфестів (власник/репо)",
+      "manifestRef": "Ref (гілка/тег/sha)",
+      "manifestPath": "Шлях до маніфестів",
+      "manifestPathHint": "Файл або каталог маніфестів Kubernetes для кожного PR, відносно кореня репозиторію.",
+      "rendererLabel": "Рендерер",
+      "rendererHint": "Raw застосовує маніфести як є. Kustomize спершу будує overlay (потрібен контейнерний адаптер розгортання).",
+      "customManifestId": "Власний тип маніфесту",
+      "customManifestIdPlaceholder": "Виберіть тип маніфесту",
+      "customNoTypes": "Власні типи маніфестів ще не визначені. Додайте один у вікні Інфраструктура.",
+      "customManifestIdHint": "Власний тип, який створює ця служба, зіставлений з обробником remote-custom, який налаштовує робочий простір.",
+      "customManifestPath": "Шлях до маніфесту (необов'язково)"
     },
     "agentConfig": {
       "title": "Конфігурація агента",
@@ -1709,6 +1728,77 @@
         "label": "Де виконуються тестові середовища",
         "local-compose": "docker-compose у контейнері",
         "environment-provider": "Провайдер середовищ"
+      },
+      "dockerComposeInfo": "Служби Docker Compose піднімаються на локальному Docker середовища виконання — з'єднання не потрібне (контейнер запуску має підтримувати Docker-in-Docker).",
+      "engine": {
+        "local-k3s": "Локальний k3s",
+        "remote-kubernetes": "Віддалений Kubernetes"
+      },
+      "kubernetesEngine": {
+        "label": "Мітка з'єднання",
+        "labelPlaceholder": "Кластер попереднього перегляду",
+        "apiServerUrl": "URL сервера API",
+        "apiServerUrlHelp": "Корінь kube-apiserver, напр. https://my-cluster.example:6443.",
+        "apiToken": "Токен ServiceAccount",
+        "apiTokenHelp": "Лише для запису; введіть знову, щоб змінити. Зберігається зашифрованим і ніколи не повертається.",
+        "urlSourceLabel": "Джерело URL середовища",
+        "urlIngressTemplate": "Шаблон хоста Ingress",
+        "urlIngressStatus": "Статус Ingress",
+        "urlServiceStatus": "Статус Service (LoadBalancer)",
+        "urlGatewayStatus": "Статус Gateway (Gateway API)",
+        "urlHttpRouteStatus": "Статус HTTPRoute (Gateway API)",
+        "hostTemplate": "Шаблон хоста",
+        "hostTemplateHelp": "Шаблон хоста, відрендерений зі змінними провіженінгу (напр. branch, sha).",
+        "ingressName": "Назва Ingress",
+        "serviceName": "Назва Service",
+        "port": "Порт",
+        "gatewayName": "Назва Gateway",
+        "httpRouteName": "Назва HTTPRoute",
+        "scheme": "Схема URL",
+        "schemeDefault": "За замовчуванням",
+        "namespaceTemplate": "Шаблон namespace",
+        "namespaceTemplateHelp": "Назва namespace для кожного PR, відрендерена зі змінними провіженінгу. Для kustomize залиште порожнім, щоб зберегти namespace з overlay.",
+        "imageTemplate": "Шаблон образу",
+        "imageTemplateHelp": "Посилання на образ, доступне маніфестам як змінна образу.",
+        "caCertPem": "Сертифікат CA (PEM)",
+        "caCertPemHelp": "Перевіряє TLS-сертифікат apiserver. Пропускайте лише для публічно довіреного CA.",
+        "insecureSkipTlsVerify": "Пропустити перевірку TLS",
+        "insecureSkipTlsVerifyHelp": "Наполегливо не рекомендується — лише кластери розробки/kind."
+      },
+      "customType": {
+        "title": "Власні типи маніфестів",
+        "hint": "Відкритий каталог власних типів провіженінгу, які служба може закріпити. Додайте власні нижче; типи з коду доступні лише для читання.",
+        "empty": "Поки що немає власних типів маніфестів.",
+        "source": {
+          "registered": "З коду",
+          "workspace": "Робочий простір"
+        },
+        "editTitle": "Редагувати {id}",
+        "addTitle": "Додати тип",
+        "manifestId": "Id маніфесту",
+        "manifestIdHelp": "Slug у нижньому регістрі з дефісами, напр. my-kargo-template.",
+        "label": "Мітка",
+        "acceptsInputHint": "Підказка вводу (необов'язково)",
+        "acceptsInputHintHelp": "Описує форму вводу, яку очікує провайдер.",
+        "description": "Опис (необов'язково)",
+        "add": "Додати тип",
+        "saveFailed": "Не вдалося зберегти власний тип",
+        "removeFailed": "Не вдалося видалити власний тип"
+      },
+      "handler": {
+        "intro": "Налаштуйте, як обробляється кожен тип провіженінгу, оголошений службою — рушій і з'єднання. Маніфести або шлях compose служби (що/де) задаються на службі.",
+        "activeEngine": "Рушій:",
+        "engineLabel": "Рушій",
+        "customHandlerTitle": "Обробник remote-custom",
+        "customTypeLabel": "Власний тип",
+        "customConnected": "Обробник підключено.",
+        "saved": "Обробник збережено",
+        "removed": "Обробник видалено",
+        "saveFailed": "Не вдалося зберегти обробник",
+        "personalOverride": "Особисте перевизначення (ця машина)",
+        "overrideActive": "Активне",
+        "personalOverrideHint": "Перевизначте обробник робочого простору для цього типу провіженінгу на власній машині. Зберігається для кожного користувача.",
+        "removeOverride": "Видалити перевизначення"
       }
     }
   },
@@ -2989,7 +3079,22 @@
       "torn_down": "Вимкнено"
     },
     "expires": "Спливає {date}",
-    "empty": "Для цього запуску немає ефемерного середовища."
+    "empty": "Для цього запуску немає ефемерного середовища.",
+    "provisionTypeLabel": "Тип провіженінгу:",
+    "engineLabel": "Рушій:",
+    "provisionType": {
+      "kubernetes": "Kubernetes",
+      "docker-compose": "Docker Compose",
+      "custom": "Власний",
+      "infraless": "Без інфраструктури"
+    },
+    "engine": {
+      "local-docker": "Локальний Docker",
+      "local-k3s": "Локальний k3s",
+      "remote-kubernetes": "Віддалений Kubernetes",
+      "remote-custom": "Віддалений власний (HTTP)",
+      "none": "Немає"
+    }
   },
   "provisioning": {
     "title": "Журнали провізіювання",

@@ -416,7 +416,26 @@
         "medium": "Orta",
         "large": "Büyük",
         "xlarge": "Çok Büyük"
-      }
+      },
+      "renderers": {
+        "raw": "Ham manifestler",
+        "kustomize": "Kustomize"
+      },
+      "localDevOnly": "Yalnızca yerel geliştirme",
+      "manifestSourceLabel": "Manifest kaynağı",
+      "sourceColocated": "Bu depoda",
+      "sourceSeparate": "Ayrı depo",
+      "manifestRepo": "Manifest deposu (sahip/depo)",
+      "manifestRef": "Ref (dal/etiket/sha)",
+      "manifestPath": "Manifest yolu",
+      "manifestPathHint": "PR başına Kubernetes manifestlerinin dosyası veya dizini; depo köküne göredir.",
+      "rendererLabel": "Oluşturucu",
+      "rendererHint": "Raw manifestleri olduğu gibi uygular. Kustomize önce bir overlay oluşturur (kapsayıcı dağıtım adaptörü gerekir).",
+      "customManifestId": "Özel manifest türü",
+      "customManifestIdPlaceholder": "Bir manifest türü seçin",
+      "customNoTypes": "Henüz özel manifest türü tanımlanmadı. Altyapı penceresinden bir tane ekleyin.",
+      "customManifestIdHint": "Bu servisin ürettiği özel tür; çalışma alanının yapılandırdığı remote-custom işleyiciyle eşleştirilir.",
+      "customManifestPath": "Manifest yolu (isteğe bağlı)"
     },
     "agentConfig": {
       "title": "Ajan yapılandırması",
@@ -1263,6 +1282,77 @@
         "environment-providerDesc": "Geçici ortamları kendi HTTP yönetim API'niz aracılığıyla sağlayın.",
         "compose": "Docker Compose önizleme ortamı",
         "composeDesc": "Deponun kendi docker-compose.yml dosyasını yerel bir Docker daemon üzerinde Tester'ın URL'si olarak ayağa kaldırır. Yerel Compose tabanlı uygulamalar için idealdir. Yalnızca imaj tabanlı stack'ler; bir Docker daemon gerektirir, bu nedenle yalnızca yerel dağıtımlar içindir."
+      },
+      "dockerComposeInfo": "Docker Compose servisleri çalışma zamanının yerel Docker'ında ayağa kalkar — bağlantı gerekmez (çalıştırmanın kapsayıcısı Docker-in-Docker'ı desteklemelidir).",
+      "engine": {
+        "local-k3s": "Yerel k3s",
+        "remote-kubernetes": "Uzak Kubernetes"
+      },
+      "kubernetesEngine": {
+        "label": "Bağlantı etiketi",
+        "labelPlaceholder": "Önizleme kümesi",
+        "apiServerUrl": "API sunucu URL'si",
+        "apiServerUrlHelp": "kube-apiserver kök adresi, ör. https://my-cluster.example:6443.",
+        "apiToken": "ServiceAccount belirteci",
+        "apiTokenHelp": "Yalnızca yazılır; döndürmek için yeniden girin. Şifreli saklanır, asla döndürülmez.",
+        "urlSourceLabel": "Ortam URL kaynağı",
+        "urlIngressTemplate": "Ingress ana bilgisayar şablonu",
+        "urlIngressStatus": "Ingress durumu",
+        "urlServiceStatus": "Service durumu (LoadBalancer)",
+        "urlGatewayStatus": "Gateway durumu (Gateway API)",
+        "urlHttpRouteStatus": "HTTPRoute durumu (Gateway API)",
+        "hostTemplate": "Ana bilgisayar şablonu",
+        "hostTemplateHelp": "Sağlama değişkenleriyle (ör. branch, sha) işlenen ana bilgisayar şablonu.",
+        "ingressName": "Ingress adı",
+        "serviceName": "Service adı",
+        "port": "Bağlantı noktası",
+        "gatewayName": "Gateway adı",
+        "httpRouteName": "HTTPRoute adı",
+        "scheme": "URL şeması",
+        "schemeDefault": "Varsayılan",
+        "namespaceTemplate": "Namespace şablonu",
+        "namespaceTemplateHelp": "PR başına namespace adı, sağlama değişkenleriyle işlenir. kustomize için overlay'in namespace'ine uymak üzere boş bırakın.",
+        "imageTemplate": "İmaj şablonu",
+        "imageTemplateHelp": "Manifestlere imaj değişkeni olarak sunulan bir imaj referansı.",
+        "caCertPem": "CA sertifikası (PEM)",
+        "caCertPemHelp": "apiserver TLS sertifikasını doğrular. Yalnızca herkesçe güvenilen bir CA için atlayın.",
+        "insecureSkipTlsVerify": "TLS doğrulamasını atla",
+        "insecureSkipTlsVerifyHelp": "Kesinlikle önerilmez — yalnızca geliştirme/kind kümeleri."
+      },
+      "customType": {
+        "title": "Özel manifest türleri",
+        "hint": "Bir servisin sabitleyebileceği özel sağlama türlerinin açık kataloğu. Kendinizinkini aşağıya ekleyin; koddan gelen türler salt okunurdur.",
+        "empty": "Henüz özel manifest türü yok.",
+        "source": {
+          "registered": "Koddan",
+          "workspace": "Çalışma alanı"
+        },
+        "editTitle": "{id} düzenle",
+        "addTitle": "Tür ekle",
+        "manifestId": "Manifest kimliği",
+        "manifestIdHelp": "Küçük harf ve tireli bir slug, ör. my-kargo-template.",
+        "label": "Etiket",
+        "acceptsInputHint": "Girdi ipucu (isteğe bağlı)",
+        "acceptsInputHintHelp": "Sağlayıcının beklediği girdi biçimini açıklar.",
+        "description": "Açıklama (isteğe bağlı)",
+        "add": "Tür ekle",
+        "saveFailed": "Özel tür kaydedilemedi",
+        "removeFailed": "Özel tür kaldırılamadı"
+      },
+      "handler": {
+        "intro": "Bir servisin bildirdiği her sağlama türünün nasıl ele alınacağını yapılandırın — motor ve bağlantı. Bir servisin manifestleri veya compose yolu (ne/nerede) serviste ayarlanır.",
+        "activeEngine": "Motor:",
+        "engineLabel": "Motor",
+        "customHandlerTitle": "remote-custom işleyici",
+        "customTypeLabel": "Özel tür",
+        "customConnected": "İşleyici bağlandı.",
+        "saved": "İşleyici kaydedildi",
+        "removed": "İşleyici kaldırıldı",
+        "saveFailed": "İşleyici kaydedilemedi",
+        "personalOverride": "Kişisel geçersiz kılma (bu makine)",
+        "overrideActive": "Etkin",
+        "personalOverrideHint": "Bu sağlama türü için çalışma alanı işleyicisini kendi makinende geçersiz kıl. Kullanıcı başına saklanır.",
+        "removeOverride": "Geçersiz kılmayı kaldır"
       }
     },
     "providerConnection": {
@@ -3002,7 +3092,22 @@
       "torn_down": "Kapatıldı"
     },
     "expires": "Süre bitişi {date}",
-    "empty": "Bu çalışma için geçici ortam yok."
+    "empty": "Bu çalışma için geçici ortam yok.",
+    "provisionTypeLabel": "Sağlama türü:",
+    "engineLabel": "Motor:",
+    "provisionType": {
+      "kubernetes": "Kubernetes",
+      "docker-compose": "Docker Compose",
+      "custom": "Özel",
+      "infraless": "Altyapısız"
+    },
+    "engine": {
+      "local-docker": "Yerel Docker",
+      "local-k3s": "Yerel k3s",
+      "remote-kubernetes": "Uzak Kubernetes",
+      "remote-custom": "Uzak özel (HTTP)",
+      "none": "Yok"
+    }
   },
   "provisioning": {
     "title": "Sağlama günlükleri",

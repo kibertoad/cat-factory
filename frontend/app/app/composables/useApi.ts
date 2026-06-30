@@ -12,6 +12,7 @@ import { fragmentsApi } from './api/fragments'
 import { githubApi } from './api/github'
 import { humanReviewApi } from './api/humanReview'
 import { humanTestApi } from './api/humanTest'
+import { infraHandlersApi } from './api/infraHandlers'
 import { visualConfirmApi } from './api/visualConfirm'
 import { kaizenApi } from './api/kaizen'
 import { localSettingsApi } from './api/localSettings'
@@ -107,6 +108,7 @@ export function useApi() {
     ...notificationsApi(ctx),
     ...presetsApi(ctx),
     ...providerConnectionsApi(ctx),
+    ...infraHandlersApi(ctx),
     ...provisioningLogsApi(ctx),
     ...releaseHealthApi(ctx),
     ...recurringApi(ctx),

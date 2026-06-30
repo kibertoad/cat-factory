@@ -1,14 +1,22 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import type { Block, CloudProvider, InstanceSize, ProvisionType } from '~/types/domain'
+import { computed, onMounted, ref } from 'vue'
+import type {
+  Block,
+  CloudProvider,
+  InstanceSize,
+  ProvisionType,
+  ServiceProvisioning,
+} from '~/types/domain'
+import type { KubernetesManifestSource, KubernetesRenderer } from '@cat-factory/contracts'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 
 // Service-level (frame) configuration: the service-owned PROVISIONING — the provision
 // TYPE this service produces (`infraless` / `docker-compose` / `kubernetes` / `custom`)
-// plus, for docker-compose, the in-repo compose path the Tester stands up — and the
-// cloud provider + instance size the service's container jobs run on. The WORKSPACE
-// configures HOW each type is handled (the engine + connection), so this view only owns
-// the "what + where". Autodiscovery suggests a compose path when the service is added.
+// plus the in-repo specifics it owns (the "what + where"): where its kubernetes manifests
+// live (colocated path or a separate repo) + the renderer, its compose path, or the custom
+// manifest id it pins. The WORKSPACE configures HOW each type is handled (the engine +
+// connection); this view only owns the "what + where". Autodiscovery suggests a compose path
+// when the service is added.
 const props = defineProps<{
   block: Block
   // Repo backing this service, supplied by the add-service modal when the block is
@@ -20,13 +28,35 @@ const board = useBoardStore()
 const accounts = useAccountsStore()
 const github = useGitHubStore()
 const services = useServicesStore()
+const infra = useInfraConfigStore()
 const { t } = useI18n()
 
+// The custom-manifest-type catalog feeds the `custom` picker. Cheap + shared (coalesced).
+onMounted(() => void infra.ensureLoaded())
+
 // The service's declared provision type (absent ⇒ treated as `infraless`: no environment
-// is stood up for the Tester). Switching type preserves the compose path so toggling away
-// and back doesn't lose it.
+// is stood up for the Tester). Switching type MERGES onto the existing provisioning so each
+// type's in-repo specifics survive toggling away and back (only the branch matching the type
+// is meaningful — the others are ignored at provision time).
 const provisionType = computed<ProvisionType>(() => props.block.provisioning?.type ?? 'infraless')
 const composePath = computed(() => props.block.provisioning?.composePath ?? '')
+const localDevOnly = computed(() => props.block.provisioning?.localDevOnly === true)
+const manifestSource = computed<KubernetesManifestSource | undefined>(
+  () => props.block.provisioning?.manifestSource,
+)
+const manifestSourceType = computed<'colocated' | 'separate'>(
+  () => manifestSource.value?.type ?? 'colocated',
+)
+const manifestPath = computed(() => manifestSource.value?.path ?? '')
+const manifestRepo = computed(() =>
+  manifestSource.value?.type === 'separate' ? manifestSource.value.repo : '',
+)
+const manifestRef = computed(() =>
+  manifestSource.value?.type === 'separate' ? (manifestSource.value.ref ?? '') : '',
+)
+const renderer = computed<KubernetesRenderer>(() => manifestSource.value?.renderer ?? 'raw')
+const customManifestId = computed(() => props.block.provisioning?.manifestId ?? '')
+const customManifestPath = computed(() => props.block.provisioning?.manifestPath ?? '')
 
 const PROVISION_TYPES = computed<{ value: ProvisionType; label: string }[]>(() => [
   { value: 'infraless', label: t('inspector.testConfig.provisionTypes.infraless') },
@@ -35,20 +65,69 @@ const PROVISION_TYPES = computed<{ value: ProvisionType; label: string }[]>(() =
   { value: 'custom', label: t('inspector.testConfig.provisionTypes.custom') },
 ])
 
+const RENDERERS = computed<{ value: KubernetesRenderer; label: string }[]>(() => [
+  { value: 'raw', label: t('inspector.testConfig.renderers.raw') },
+  { value: 'kustomize', label: t('inspector.testConfig.renderers.kustomize') },
+])
+
+const customTypeItems = computed(() =>
+  infra.customTypes.map((c) => ({ label: `${c.label} (${c.manifestId})`, value: c.manifestId })),
+)
+
+// Merge a partial onto the current provisioning, preserving the other branches' fields.
+function patchProvisioning(patch: Partial<ServiceProvisioning>) {
+  const current: ServiceProvisioning = props.block.provisioning ?? { type: 'infraless' }
+  board.updateBlock(props.block.id, { provisioning: { ...current, ...patch } })
+}
+
 function setProvisionType(type: ProvisionType) {
-  // Carry the compose path across a switch so it isn't lost when toggling type.
-  board.updateBlock(props.block.id, {
-    provisioning: {
-      type,
-      ...(type === 'docker-compose' && composePath.value ? { composePath: composePath.value } : {}),
-    },
-  })
+  patchProvisioning({ type })
 }
 
 function setComposePath(value: string) {
-  board.updateBlock(props.block.id, {
-    provisioning: { type: 'docker-compose', composePath: value.trim() },
-  })
+  patchProvisioning({ type: 'docker-compose', composePath: value.trim() })
+}
+
+function setLocalDevOnly(value: boolean) {
+  patchProvisioning({ localDevOnly: value })
+}
+
+// Build the discriminated manifest source from the current fields plus an override.
+function setManifestSource(patch: {
+  type?: 'colocated' | 'separate'
+  path?: string
+  repo?: string
+  ref?: string
+  renderer?: KubernetesRenderer
+}) {
+  const type = patch.type ?? manifestSourceType.value
+  const path = (patch.path ?? manifestPath.value).trim()
+  const rdr = patch.renderer ?? renderer.value
+  const next: KubernetesManifestSource =
+    type === 'separate'
+      ? {
+          type: 'separate',
+          repo: (patch.repo ?? manifestRepo.value).trim(),
+          path,
+          ...((patch.ref ?? manifestRef.value).trim()
+            ? { ref: (patch.ref ?? manifestRef.value).trim() }
+            : {}),
+          ...(rdr === 'kustomize' ? { renderer: rdr } : {}),
+        }
+      : {
+          type: 'colocated',
+          path,
+          ...(rdr === 'kustomize' ? { renderer: rdr } : {}),
+        }
+  patchProvisioning({ type: 'kubernetes', manifestSource: next })
+}
+
+function setCustomManifestId(value: string) {
+  patchProvisioning({ type: 'custom', manifestId: value || undefined })
+}
+
+function setCustomManifestPath(value: string) {
+  patchProvisioning({ type: 'custom', manifestPath: value.trim() || undefined })
 }
 
 // The provisioning hints (cloud provider + instance size) are advisory inputs to the
@@ -66,17 +145,22 @@ const repoContext = computed<{ githubId: number; directory?: string | null } | u
   return r ? { githubId: r.githubId } : undefined
 })
 
-// Compose-file picker: browse the repo and pin the compose file. The Tester runs
-// `docker compose -f <path>` from the CLONE ROOT, so the stored path is relative to
-// the repo root (the browser starts inside the service's subdirectory for convenience).
+// Repo-path picker, shared by the compose file (`docker compose -f <path>`) and the
+// kubernetes colocated manifests path. The stored path is relative to the repo root (the
+// browser starts inside the service's subdirectory for convenience).
 const browseOpen = ref(false)
+const browseTarget = ref<'compose' | 'k8s'>('compose')
 const pickedPath = ref<string | undefined>(undefined)
-function openBrowse() {
-  pickedPath.value = composePath.value || undefined
+function openBrowse(target: 'compose' | 'k8s') {
+  browseTarget.value = target
+  pickedPath.value = (target === 'compose' ? composePath.value : manifestPath.value) || undefined
   browseOpen.value = true
 }
 function applyPicked() {
-  if (pickedPath.value) setComposePath(pickedPath.value)
+  if (pickedPath.value) {
+    if (browseTarget.value === 'compose') setComposePath(pickedPath.value)
+    else setManifestSource({ path: pickedPath.value })
+  }
   browseOpen.value = false
 }
 
@@ -134,32 +218,197 @@ function setSize(value: InstanceSize) {
       </p>
     </div>
 
-    <div v-if="provisionType === 'docker-compose'" class="space-y-1">
-      <label class="text-[11px] text-slate-400">{{ t('inspector.testConfig.composePath') }}</label>
-      <div class="flex items-center gap-1">
+    <div v-if="provisionType === 'docker-compose'" class="space-y-2">
+      <div class="space-y-1">
+        <label class="text-[11px] text-slate-400">{{
+          t('inspector.testConfig.composePath')
+        }}</label>
+        <div class="flex items-center gap-1">
+          <UInput
+            :model-value="composePath"
+            size="xs"
+            class="flex-1"
+            placeholder="docker-compose.yml"
+            @blur="(e: FocusEvent) => setComposePath((e.target as HTMLInputElement).value)"
+            @keydown.enter="
+              (e: KeyboardEvent) => setComposePath((e.target as HTMLInputElement).value)
+            "
+          />
+          <UButton
+            v-if="repoContext"
+            size="xs"
+            variant="soft"
+            color="neutral"
+            icon="i-lucide-folder-search"
+            :title="t('inspector.testConfig.browseRepo')"
+            @click="openBrowse('compose')"
+          />
+        </div>
+        <p class="text-[11px] leading-snug text-slate-500">
+          {{ t('inspector.testConfig.composeHint') }}
+        </p>
+      </div>
+      <UCheckbox
+        :model-value="localDevOnly"
+        :label="t('inspector.testConfig.localDevOnly')"
+        size="xs"
+        @update:model-value="(v: boolean | 'indeterminate') => setLocalDevOnly(v === true)"
+      />
+    </div>
+
+    <!-- kubernetes: where the per-PR manifests live (the "what/where"). The engine + cluster
+         connection (the "how") is configured per-type in the Infrastructure window. -->
+    <div v-if="provisionType === 'kubernetes'" class="space-y-2">
+      <div class="space-y-1">
+        <span class="text-[11px] text-slate-400">{{
+          t('inspector.testConfig.manifestSourceLabel')
+        }}</span>
+        <div class="flex flex-wrap gap-1">
+          <UButton
+            :color="manifestSourceType === 'colocated' ? 'primary' : 'neutral'"
+            :variant="manifestSourceType === 'colocated' ? 'soft' : 'ghost'"
+            size="xs"
+            @click="setManifestSource({ type: 'colocated' })"
+          >
+            {{ t('inspector.testConfig.sourceColocated') }}
+          </UButton>
+          <UButton
+            :color="manifestSourceType === 'separate' ? 'primary' : 'neutral'"
+            :variant="manifestSourceType === 'separate' ? 'soft' : 'ghost'"
+            size="xs"
+            @click="setManifestSource({ type: 'separate' })"
+          >
+            {{ t('inspector.testConfig.sourceSeparate') }}
+          </UButton>
+        </div>
+      </div>
+
+      <div v-if="manifestSourceType === 'separate'" class="space-y-1">
+        <label class="text-[11px] text-slate-400">{{
+          t('inspector.testConfig.manifestRepo')
+        }}</label>
         <UInput
-          :model-value="composePath"
+          :model-value="manifestRepo"
           size="xs"
-          class="flex-1"
-          placeholder="docker-compose.yml"
-          @blur="(e: FocusEvent) => setComposePath((e.target as HTMLInputElement).value)"
+          class="font-mono"
+          placeholder="acme/preview-manifests"
+          @blur="
+            (e: FocusEvent) => setManifestSource({ repo: (e.target as HTMLInputElement).value })
+          "
           @keydown.enter="
-            (e: KeyboardEvent) => setComposePath((e.target as HTMLInputElement).value)
+            (e: KeyboardEvent) => setManifestSource({ repo: (e.target as HTMLInputElement).value })
           "
         />
-        <UButton
-          v-if="repoContext"
+      </div>
+      <div v-if="manifestSourceType === 'separate'" class="space-y-1">
+        <label class="text-[11px] text-slate-400">{{
+          t('inspector.testConfig.manifestRef')
+        }}</label>
+        <UInput
+          :model-value="manifestRef"
           size="xs"
-          variant="soft"
-          color="neutral"
-          icon="i-lucide-folder-search"
-          :title="t('inspector.testConfig.browseRepo')"
-          @click="openBrowse"
+          class="font-mono"
+          placeholder="main"
+          @blur="
+            (e: FocusEvent) => setManifestSource({ ref: (e.target as HTMLInputElement).value })
+          "
+          @keydown.enter="
+            (e: KeyboardEvent) => setManifestSource({ ref: (e.target as HTMLInputElement).value })
+          "
         />
       </div>
-      <p class="text-[11px] leading-snug text-slate-500">
-        {{ t('inspector.testConfig.composeHint') }}
-      </p>
+
+      <div class="space-y-1">
+        <label class="text-[11px] text-slate-400">{{
+          t('inspector.testConfig.manifestPath')
+        }}</label>
+        <div class="flex items-center gap-1">
+          <UInput
+            :model-value="manifestPath"
+            size="xs"
+            class="flex-1 font-mono"
+            placeholder="k8s/preview"
+            @blur="
+              (e: FocusEvent) => setManifestSource({ path: (e.target as HTMLInputElement).value })
+            "
+            @keydown.enter="
+              (e: KeyboardEvent) =>
+                setManifestSource({ path: (e.target as HTMLInputElement).value })
+            "
+          />
+          <UButton
+            v-if="repoContext && manifestSourceType === 'colocated'"
+            size="xs"
+            variant="soft"
+            color="neutral"
+            icon="i-lucide-folder-search"
+            :title="t('inspector.testConfig.browseRepo')"
+            @click="openBrowse('k8s')"
+          />
+        </div>
+        <p class="text-[11px] leading-snug text-slate-500">
+          {{ t('inspector.testConfig.manifestPathHint') }}
+        </p>
+      </div>
+
+      <div class="space-y-1">
+        <span class="text-[11px] text-slate-400">{{
+          t('inspector.testConfig.rendererLabel')
+        }}</span>
+        <div class="flex flex-wrap gap-1">
+          <UButton
+            v-for="r in RENDERERS"
+            :key="r.value"
+            :color="renderer === r.value ? 'primary' : 'neutral'"
+            :variant="renderer === r.value ? 'soft' : 'ghost'"
+            size="xs"
+            @click="setManifestSource({ renderer: r.value })"
+          >
+            {{ r.label }}
+          </UButton>
+        </div>
+        <p class="text-[11px] leading-snug text-slate-500">
+          {{ t('inspector.testConfig.rendererHint') }}
+        </p>
+      </div>
+    </div>
+
+    <!-- custom: pin the custom manifest type this service produces (matched to a remote-custom
+         handler the workspace configures). -->
+    <div v-if="provisionType === 'custom'" class="space-y-2">
+      <div class="space-y-1">
+        <label class="text-[11px] text-slate-400">{{
+          t('inspector.testConfig.customManifestId')
+        }}</label>
+        <USelect
+          v-if="customTypeItems.length"
+          :model-value="customManifestId"
+          :items="customTypeItems"
+          size="xs"
+          :placeholder="t('inspector.testConfig.customManifestIdPlaceholder')"
+          @update:model-value="(v: string) => setCustomManifestId(v)"
+        />
+        <p v-else class="text-[11px] leading-snug text-amber-300/80">
+          {{ t('inspector.testConfig.customNoTypes') }}
+        </p>
+        <p class="text-[11px] leading-snug text-slate-500">
+          {{ t('inspector.testConfig.customManifestIdHint') }}
+        </p>
+      </div>
+      <div class="space-y-1">
+        <label class="text-[11px] text-slate-400">{{
+          t('inspector.testConfig.customManifestPath')
+        }}</label>
+        <UInput
+          :model-value="customManifestPath"
+          size="xs"
+          class="font-mono"
+          @blur="(e: FocusEvent) => setCustomManifestPath((e.target as HTMLInputElement).value)"
+          @keydown.enter="
+            (e: KeyboardEvent) => setCustomManifestPath((e.target as HTMLInputElement).value)
+          "
+        />
+      </div>
     </div>
 
     <UModal v-model:open="browseOpen" :title="t('inspector.testConfig.selectComposeTitle')">

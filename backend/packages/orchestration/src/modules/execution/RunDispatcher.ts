@@ -939,6 +939,8 @@ export class RunDispatcher {
             status: handle.status,
             expiresAt: handle.expiresAt,
             lastError: handle.lastError,
+            provisionType: handle.provisionType ?? null,
+            engine: handle.engine ?? null,
           }
         : null
       const prev = step.environment ?? null
