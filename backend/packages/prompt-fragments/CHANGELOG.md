@@ -1,5 +1,12 @@
 # @cat-factory/prompt-fragments
 
+## 0.9.14
+
+### Patch Changes
+
+- Updated dependencies [e4cddb4]
+  - @cat-factory/contracts@0.61.0
+
 ## 0.9.13
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @cat-factory/app
 
+## 0.58.3
+
+### Patch Changes
+
+- Updated dependencies [e4cddb4]
+  - @cat-factory/contracts@0.61.0
+
 ## 0.58.2
 
 ### Patch Changes

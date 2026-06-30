@@ -1,5 +1,13 @@
 # @cat-factory/workspaces
 
+## 0.9.35
+
+### Patch Changes
+
+- Updated dependencies [e4cddb4]
+  - @cat-factory/kernel@0.59.0
+  - @cat-factory/contracts@0.61.0
+
 ## 0.9.34
 
 ### Patch Changes

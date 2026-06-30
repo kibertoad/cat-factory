@@ -1,5 +1,18 @@
 # @cat-factory/server
 
+## 0.51.3
+
+### Patch Changes
+
+- Updated dependencies [e4cddb4]
+  - @cat-factory/kernel@0.59.0
+  - @cat-factory/contracts@0.61.0
+  - @cat-factory/agents@0.23.4
+  - @cat-factory/integrations@0.41.1
+  - @cat-factory/orchestration@0.46.1
+  - @cat-factory/spend@0.10.44
+  - @cat-factory/prompt-fragments@0.9.14
+
 ## 0.51.2
 
 ### Patch Changes
