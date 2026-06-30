@@ -43,7 +43,10 @@ const form = reactive({
   ingressName: '',
   serviceName: '',
   servicePort: '',
-  urlScheme: '' as '' | 'http' | 'https',
+  // 'default' is a non-empty sentinel for "let the apiserver/derivation decide the scheme":
+  // reka-ui's SelectItem reserves the empty string to clear a selection, so it can't be an
+  // option value. The url builder omits `scheme` entirely when this is 'default'.
+  urlScheme: 'default' as 'default' | 'http' | 'https',
 })
 const apiToken = ref('')
 
@@ -66,7 +69,7 @@ const urlSourceItems = computed(() => [
   },
 ])
 const schemeItems = computed(() => [
-  { label: t('settings.providerConnection.kubernetesEnv.schemeDefault'), value: '' },
+  { label: t('settings.providerConnection.kubernetesEnv.schemeDefault'), value: 'default' },
   { label: 'https', value: 'https' },
   { label: 'http', value: 'http' },
 ])
@@ -111,7 +114,8 @@ watch(
       form.serviceName = typeof url.serviceName === 'string' ? url.serviceName : ''
       form.servicePort = typeof url.port === 'number' ? String(url.port) : ''
     }
-    if (url && (url.scheme === 'http' || url.scheme === 'https')) form.urlScheme = url.scheme
+    form.urlScheme =
+      url && (url.scheme === 'http' || url.scheme === 'https') ? url.scheme : 'default'
   },
   { immediate: true },
 )
@@ -171,7 +175,7 @@ function buildUrl(): Record<string, unknown> {
     const port = Number(form.servicePort)
     if (form.servicePort.trim() && Number.isInteger(port)) url.port = port
   }
-  if (form.urlScheme) url.scheme = form.urlScheme
+  if (form.urlScheme !== 'default') url.scheme = form.urlScheme
   return url
 }
 

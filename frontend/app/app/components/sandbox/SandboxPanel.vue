@@ -61,13 +61,14 @@ const name = ref('')
 const selectedPromptIds = ref<string[]>([])
 const selectedModelIds = ref<string[]>([])
 const selectedFixtureIds = ref<string[]>([])
-// The judge model. Empty string = the deployment's routing default (resolved server-side);
+// The judge model. 'default' = the deployment's routing default (resolved server-side);
 // picking one explicitly is the recourse on a deployment that has no default model wired,
-// where leaving it on default makes every run fail at create time.
-const selectedJudgeModel = ref<string>('')
+// where leaving it on default makes every run fail at create time. ('default' is a non-empty
+// sentinel because reka-ui's SelectItem reserves the empty string to clear a selection.)
+const selectedJudgeModel = ref<string>('default')
 
 const judgeModelItems = computed(() => [
-  { label: t('sandbox.deploymentDefault'), value: '' },
+  { label: t('sandbox.deploymentDefault'), value: 'default' },
   ...store.selectableModels.map((m) => ({ label: m.label, value: m.id })),
 ])
 
@@ -112,7 +113,7 @@ async function createAndRun() {
     const created = await store.createExperiment({
       name: name.value.trim() || t('sandbox.defaultRunName', { kind: agentKind.value }),
       agentKind: agentKind.value,
-      judgeModel: selectedJudgeModel.value || undefined,
+      judgeModel: selectedJudgeModel.value === 'default' ? undefined : selectedJudgeModel.value,
       matrix: {
         promptVersionIds: selectedPromptIds.value,
         models: selectedModelIds.value,
