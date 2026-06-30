@@ -1,6 +1,6 @@
 # Initiative: mothership mode for local mode
 
-**Status:** in progress (PR 1 spine landed) · **Owner:** core · **Started:** 2026-06-30
+**Status:** in progress (PR 1 spine + local credential store landed) · **Owner:** core · **Started:** 2026-06-30
 
 > This is the durable source of truth for a multi-PR initiative. Read it FIRST before picking
 > up the next slice; update the checklist at the end of each PR.
@@ -21,6 +21,24 @@
   `buildLocalContainer`, the no-Postgres `startLocal` boot path with an in-process work runner,
   and the `config.mothership` SPA flag. The six pilot repos below are remotely _callable_ now;
   this slice makes a local node _consume_ them.
+  - **Landed (1a):** the local `node:sqlite` credential store
+    (`runtimes/local/src/sqlite/credentialStore.ts`) — `createLocalCredentialStore(path)` plus
+    `SqliteProviderApiKeyRepository` + `SqliteLocalModelEndpointRepository`, the two
+    `local-sqlite` bucket ports, mirroring the Drizzle/D1 repos column-for-column (usage-window
+    rotation, atomic lease-least-used, createdAt-preserving endpoint upsert) and unit-tested
+    against an in-memory db. It stores only the already-sealed cipher envelopes, so the local
+    key wiring (the existing `ENCRYPTION_KEY`-keyed `WebCryptoSecretCipher`, which never carries
+    the mothership's key) belongs to the composition step.
+  - **Still TODO (1b):** the `LOCAL_MOTHERSHIP_URL` switch composing `createRemoteRepositories`
+    (org) + this store (credentials) into one `CoreRepositories`; the no-Postgres `startLocal`
+    boot with an in-process work runner; the `config.mothership` SPA flag. NOTE: a true
+    `db: undefined` boot depends on the `buildNodeContainer` db-undefined audit currently scoped
+    to PR 3 — so 1b either pulls that audit forward or stays a narrow happy-path until PR 3.
+    1b MUST also add a cross-runtime conformance assertion for this store: it ships in 1a with
+    only an isolated unit test because the conformance harness builds through `buildLocalContainer`
+    (Postgres), which the store is not wired into yet — once 1b wires the `local-sqlite` bucket in,
+    bind it to `defineConformanceSuite` so its lease/rotation logic can't drift from the D1/Drizzle
+    repos silently (per "Keep the runtimes symmetric").
 
 ## Goal & rationale
 
@@ -135,8 +153,8 @@ never remotely invocable (mothership-internal cron).
 | `githubInstallationRepository`                              | remote                                           | ⬜ todo | PR 3                            |
 | `runnerPoolConnectionRepository`                            | remote                                           | ⬜ todo | PR 3                            |
 | GitHub projection repos (repo/branch/PR/issue/commit/check) | remote                                           | ⬜ todo | PR 3                            |
-| `providerApiKeyRepository`                                  | local-sqlite                                     | ⬜ todo | PR 1                            |
-| `localModelEndpointRepository`                              | local-sqlite                                     | ⬜ todo | PR 1                            |
+| `providerApiKeyRepository`                                  | local-sqlite                                     | ✅ done | PR 1 (store)                    |
+| `localModelEndpointRepository`                              | local-sqlite                                     | ✅ done | PR 1 (store)                    |
 | `providerSubscriptionTokenRepository`                       | local-sqlite                                     | ⬜ todo | PR 3                            |
 | `personalSubscriptionRepository`                            | local-sqlite                                     | ⬜ todo | PR 3                            |
 | `subscriptionActivationRepository`                          | local-sqlite                                     | ⬜ todo | PR 3                            |
