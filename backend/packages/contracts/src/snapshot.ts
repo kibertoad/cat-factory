@@ -156,5 +156,14 @@ export const workspaceSnapshotSchema = v.object({
    * runtimes), but optional on the wire for forward-compatibility.
    */
   pipelineCatalogVersions: v.optional(v.record(v.string(), v.number())),
+  /**
+   * Current built-in merge-preset catalog versions (`seedMergePresets()`), keyed by preset id.
+   * The SPA compares each persisted built-in's `version` against this to detect a stale copy
+   * (a newer definition is available) and a built-in id present here but absent from the
+   * workspace's presets (a NEW built-in appeared), offering a reseed for either. Static,
+   * workspace-independent; built by the shared `WorkspaceService.snapshot()` (automatically
+   * symmetric across runtimes), optional on the wire for forward-compatibility.
+   */
+  mergePresetCatalogVersions: v.optional(v.record(v.string(), v.number())),
 })
 export type WorkspaceSnapshot = v.InferOutput<typeof workspaceSnapshotSchema>

@@ -3,6 +3,7 @@ import {
   registerServiceForFrame,
   requireWorkspace,
   seedBlocks,
+  seedMergePresets,
   seedPipelines,
 } from '@cat-factory/kernel'
 import type {
@@ -194,7 +195,21 @@ export class WorkspaceService {
     const pipelineCatalogVersions = Object.fromEntries(
       seedPipelines().map((p) => [p.id, p.version ?? 0]),
     )
-    return { workspace, blocks, pipelines, executions, pipelineCatalogVersions }
+    // The current built-in merge-preset catalog versions, so the SPA can flag a workspace's
+    // stale built-in copies AND surface a brand-new built-in it doesn't have yet (see
+    // WorkspaceSnapshot.mergePresetCatalogVersions). Built here so it stays symmetric across
+    // runtimes; the actual preset rows are attached by the facade's WorkspaceController.
+    const mergePresetCatalogVersions = Object.fromEntries(
+      seedMergePresets().map((p) => [p.id, p.version]),
+    )
+    return {
+      workspace,
+      blocks,
+      pipelines,
+      executions,
+      pipelineCatalogVersions,
+      mergePresetCatalogVersions,
+    }
   }
 
   /**

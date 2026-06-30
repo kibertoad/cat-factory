@@ -2112,20 +2112,28 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
     })
 
     describe('merge presets', () => {
-      it('seeds a default, enforces the single-default invariant, and guards the default', async () => {
+      it('seeds the built-in catalog, enforces the single-default invariant, and guards the default', async () => {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
         const base = `/workspaces/${workspace.id}/merge-presets`
 
-        // First list lazily seeds the built-in default (one preset, flagged default).
+        // First list lazily seeds the whole built-in catalog: Balanced (default, auto-merge on)
+        // and "Manual review only" (non-default, auto-merge OFF).
         const initial = await call<MergeThresholdPreset[]>('GET', base)
         expect(initial.status).toBe(200)
-        expect(initial.body).toHaveLength(1)
-        expect(initial.body[0]!.isDefault).toBe(true)
+        expect(initial.body).toHaveLength(2)
+        const balanced = initial.body.find((p) => p.id === 'mp_balanced')!
+        const manual = initial.body.find((p) => p.id === 'mp_manual_review')!
+        expect(balanced.isDefault).toBe(true)
+        expect(balanced.autoMergeEnabled).toBe(true)
+        expect(balanced.version).toBe(1)
+        // "Manual review only" fully prevents auto-merge: every PR is routed to human review.
+        expect(manual.isDefault).toBe(false)
+        expect(manual.autoMergeEnabled).toBe(false)
         // The post-release-health knobs round-trip with their defaults through both stores.
-        expect(initial.body[0]!.releaseWatchWindowMinutes).toBe(30)
-        expect(initial.body[0]!.releaseMaxAttempts).toBe(1)
-        const seededDefaultId = initial.body[0]!.id
+        expect(balanced.releaseWatchWindowMinutes).toBe(30)
+        expect(balanced.releaseMaxAttempts).toBe(1)
+        const seededDefaultId = balanced.id
 
         // Add a non-default preset; the seeded default stays the default.
         const lenient = await call<MergeThresholdPreset>('POST', base, {
@@ -2163,7 +2171,8 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(strict.body.isDefault).toBe(true)
 
         const afterPromote = await call<MergeThresholdPreset[]>('GET', base)
-        expect(afterPromote.body).toHaveLength(3)
+        // Two seeded built-ins + Lenient + Strict.
+        expect(afterPromote.body).toHaveLength(4)
         const defaults = afterPromote.body.filter((p) => p.isDefault)
         expect(defaults.map((p) => p.id)).toEqual([strict.body.id])
         expect(afterPromote.body.find((p) => p.id === seededDefaultId)!.isDefault).toBe(false)
@@ -2183,7 +2192,54 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const del = await call('DELETE', `${base}/${lenient.body.id}`)
         expect(del.status).toBe(204)
         const final = await call<MergeThresholdPreset[]>('GET', base)
-        expect(final.body.map((p) => p.id).sort()).toEqual([seededDefaultId, strict.body.id].sort())
+        expect(final.body.map((p) => p.id).sort()).toEqual(
+          [seededDefaultId, 'mp_manual_review', strict.body.id].sort(),
+        )
+      })
+
+      it('ships catalog versions on the snapshot and reseeds a built-in (drift repair + new appeared)', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+        const base = `/workspaces/${wsId}/merge-presets`
+
+        // The snapshot ships the built-in catalog versions so the SPA can offer a reseed.
+        const snap = await call<{ mergePresetCatalogVersions?: Record<string, number> }>(
+          'GET',
+          `/workspaces/${wsId}`,
+        )
+        expect(snap.body.mergePresetCatalogVersions).toMatchObject({
+          mp_balanced: 1,
+          mp_manual_review: 1,
+        })
+
+        // Seed, then drift a built-in (turn its auto-merge OFF + rename). Reseed must restore the
+        // canonical definition + version while preserving the user's default + ordering.
+        await call('GET', base)
+        await call('PATCH', `${base}/mp_balanced`, {
+          name: 'Tampered',
+          autoMergeEnabled: false,
+        })
+        const reseeded = await call<MergeThresholdPreset>('POST', `${base}/mp_balanced/reseed`)
+        expect(reseeded.status).toBe(200)
+        expect(reseeded.body.name).toBe('Balanced')
+        expect(reseeded.body.autoMergeEnabled).toBe(true)
+        expect(reseeded.body.version).toBe(1)
+        // The default is preserved across a reseed.
+        expect(reseeded.body.isDefault).toBe(true)
+
+        // Reseeding a NEW built-in the workspace doesn't have yet materialises it (the
+        // "appeared upstream" case): delete the manual preset, then reseed it back.
+        await call('DELETE', `${base}/mp_manual_review`)
+        const afterDelete = await call<MergeThresholdPreset[]>('GET', base)
+        expect(afterDelete.body.some((p) => p.id === 'mp_manual_review')).toBe(false)
+        const readded = await call<MergeThresholdPreset>('POST', `${base}/mp_manual_review/reseed`)
+        expect(readded.status).toBe(200)
+        expect(readded.body.autoMergeEnabled).toBe(false)
+
+        // A non-catalog id cannot be reseeded (it would be a custom preset — delete instead).
+        const bad = await call('POST', `${base}/mp_not_a_builtin/reseed`)
+        expect(bad.status).toBe(422)
       })
     })
 

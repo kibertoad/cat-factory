@@ -1486,7 +1486,8 @@
         "maxImpact": "Impact max %",
         "ciMaxAttempts": "Tentatives de correction CI",
         "maxRequirementIterations": "Itérations d'exigences",
-        "maxRequirementConcernAllowed": "Validation auto. des préoccupations jusqu'à"
+        "maxRequirementConcernAllowed": "Validation auto. des préoccupations jusqu'à",
+        "autoMerge": "Fusion automatique"
       },
       "newPreset": "Nouveau préréglage",
       "create": {
@@ -1507,7 +1508,9 @@
         "createFailed": "Impossible de créer le préréglage",
         "defaultFailed": "Impossible de définir par défaut",
         "deleteFailed": "Impossible de supprimer le préréglage"
-      }
+      },
+      "autoMergeOnHint": "Fusionner automatiquement si dans les seuils.",
+      "autoMergeOffHint": "Toujours envoyer la PR en revue humaine."
     },
     "observabilityConnection": {
       "title": "Santé post-publication",
@@ -3484,6 +3487,24 @@
       "bootstrapFailed": "Impossible d'initialiser",
       "saveArchFailed": "Impossible d'enregistrer l'architecture de référence",
       "deleteFailed": "Impossible de supprimer"
+    }
+  },
+  "mergePreset": {
+    "health": {
+      "title": "Mises à jour des presets de fusion",
+      "allValid": "Tous les presets de fusion intégrés sont à jour.",
+      "newHeading": "Nouveaux presets disponibles",
+      "newDescription": "De nouveaux presets de fusion intégrés sont arrivés. Ajoutez-les à la bibliothèque de ce tableau.",
+      "add": "Ajouter",
+      "updatesHeading": "Mises à jour disponibles",
+      "updatesDescription": "Une version plus récente de ces presets de fusion intégrés est arrivée. Régénérez pour l'adopter (le preset par défaut et l'ordre sont conservés).",
+      "reseed": "Régénérer",
+      "reseedAll": "Tout mettre à jour ({count})",
+      "dismiss": "Ignorer",
+      "done": "Terminé",
+      "toast": {
+        "reseedFailed": "Impossible de régénérer le preset de fusion"
+      }
     }
   }
 }

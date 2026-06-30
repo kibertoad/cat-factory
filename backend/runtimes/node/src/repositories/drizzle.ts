@@ -2926,7 +2926,9 @@ function rowToMergePreset(row: MergePresetRow): MergeThresholdPreset {
     releaseWatchWindowMinutes: row.release_watch_window_minutes,
     releaseMaxAttempts: row.release_max_attempts,
     humanReviewGraceMinutes: row.human_review_grace_minutes,
+    autoMergeEnabled: row.auto_merge_enabled === 1,
     isDefault: row.is_default === 1,
+    ...(row.version != null ? { version: row.version } : {}),
     createdAt: row.created_at,
   }
 }
@@ -2991,6 +2993,8 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
       release_watch_window_minutes: preset.releaseWatchWindowMinutes,
       release_max_attempts: preset.releaseMaxAttempts,
       human_review_grace_minutes: preset.humanReviewGraceMinutes,
+      auto_merge_enabled: preset.autoMergeEnabled ? 1 : 0,
+      version: preset.version ?? null,
       is_default: preset.isDefault ? 1 : 0,
       created_at: preset.createdAt,
     }
@@ -3025,6 +3029,8 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
             release_watch_window_minutes: values.release_watch_window_minutes,
             release_max_attempts: values.release_max_attempts,
             human_review_grace_minutes: values.human_review_grace_minutes,
+            auto_merge_enabled: values.auto_merge_enabled,
+            version: values.version,
             is_default: values.is_default,
           },
         })

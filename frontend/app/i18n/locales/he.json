@@ -1585,7 +1585,8 @@
         "maxImpact": "השפעה מרבית %",
         "ciMaxAttempts": "ניסיונות תיקון CI",
         "maxRequirementIterations": "איטרציות דרישות",
-        "maxRequirementConcernAllowed": "מעבר אוטומטי בחששות ברף או מתחתיו"
+        "maxRequirementConcernAllowed": "מעבר אוטומטי בחששות ברף או מתחתיו",
+        "autoMerge": "מיזוג אוטומטי"
       },
       "newPreset": "תצורה חדשה",
       "create": {
@@ -1606,7 +1607,9 @@
         "createFailed": "לא ניתן היה ליצור תצורה",
         "defaultFailed": "לא ניתן היה להגדיר ברירת מחדל",
         "deleteFailed": "לא ניתן היה למחוק את התצורה"
-      }
+      },
+      "autoMergeOnHint": "מזג אוטומטית כשבתוך הספים.",
+      "autoMergeOffHint": "נתב תמיד את ה-PR לבדיקה אנושית."
     },
     "observabilityConnection": {
       "title": "בריאות שלאחר שחרור",
@@ -3495,6 +3498,24 @@
       "bootstrapFailed": "לא ניתן היה לאתחל",
       "saveArchFailed": "לא ניתן היה לשמור ארכיטקטורת ייחוס",
       "deleteFailed": "לא ניתן היה למחוק"
+    }
+  },
+  "mergePreset": {
+    "health": {
+      "title": "עדכוני קביעות מיזוג",
+      "allValid": "כל קביעות המיזוג המובנות מעודכנות.",
+      "newHeading": "קביעות חדשות זמינות",
+      "newDescription": "הגיעו קביעות מיזוג מובנות חדשות. הוסף אותן לספריית הלוח הזה.",
+      "add": "הוסף",
+      "updatesHeading": "עדכונים זמינים",
+      "updatesDescription": "גרסה חדשה יותר של קביעות המיזוג המובנות האלה הגיעה. זרע מחדש כדי לאמץ אותה (ברירת המחדל והסדר נשמרים).",
+      "reseed": "זרע מחדש",
+      "reseedAll": "עדכן הכל ({count})",
+      "dismiss": "התעלם",
+      "done": "בוצע",
+      "toast": {
+        "reseedFailed": "לא ניתן לזרוע מחדש את קביעת המיזוג"
+      }
     }
   }
 }

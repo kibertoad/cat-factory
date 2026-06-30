@@ -1587,7 +1587,8 @@
         "maxImpact": "Maks. etki %",
         "ciMaxAttempts": "CI düzeltme denemeleri",
         "maxRequirementIterations": "Gereksinim yinelemeleri",
-        "maxRequirementConcernAllowed": "Şu düzeyde veya altında otomatik geç"
+        "maxRequirementConcernAllowed": "Şu düzeyde veya altında otomatik geç",
+        "autoMerge": "Otomatik birleştirme"
       },
       "newPreset": "Yeni ön ayar",
       "create": {
@@ -1608,7 +1609,9 @@
         "createFailed": "Ön ayar oluşturulamadı",
         "defaultFailed": "Varsayılan ayarlanamadı",
         "deleteFailed": "Ön ayar silinemedi"
-      }
+      },
+      "autoMergeOnHint": "Eşiklerin içindeyken otomatik birleştir.",
+      "autoMergeOffHint": "PR'yi her zaman insan incelemesine gönder."
     },
     "observabilityConnection": {
       "title": "Sürüm sonrası sağlık",
@@ -3497,6 +3500,24 @@
       "bootstrapFailed": "Başlatılamadı",
       "saveArchFailed": "Referans mimari kaydedilemedi",
       "deleteFailed": "Silinemedi"
+    }
+  },
+  "mergePreset": {
+    "health": {
+      "title": "Birleştirme ön ayarı güncellemeleri",
+      "allValid": "Tüm yerleşik birleştirme ön ayarları güncel.",
+      "newHeading": "Yeni ön ayarlar mevcut",
+      "newDescription": "Yeni yerleşik birleştirme ön ayarları geldi. Bu panonun kütüphanesine ekleyin.",
+      "add": "Ekle",
+      "updatesHeading": "Güncellemeler mevcut",
+      "updatesDescription": "Bu yerleşik birleştirme ön ayarlarının daha yeni bir sürümü geldi. Benimsemek için yeniden tohumlayın (varsayılan ve sıralama korunur).",
+      "reseed": "Yeniden tohumla",
+      "reseedAll": "Tümünü güncelle ({count})",
+      "dismiss": "Yoksay",
+      "done": "Tamam",
+      "toast": {
+        "reseedFailed": "Birleştirme ön ayarı yeniden tohumlanamadı"
+      }
     }
   }
 }

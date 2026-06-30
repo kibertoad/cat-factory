@@ -10,9 +10,11 @@ import type {
 import {
   assertFound,
   ConflictError,
-  DEFAULT_MERGE_PRESET,
   requireWorkspace,
+  seedMergePresets,
+  ValidationError,
 } from '@cat-factory/kernel'
+import type { MergePresetSeed } from '@cat-factory/kernel'
 
 export interface MergePresetServiceDependencies {
   mergePresetRepository: MergePresetRepository
@@ -25,8 +27,10 @@ export interface MergePresetServiceDependencies {
  * CRUD for a workspace's merge threshold presets (the library a task picks its
  * auto-merge policy from). Maintains the invariant that a workspace always has at
  * least one preset, exactly one of which is the default: {@link list} lazily seeds
- * the built-in {@link DEFAULT_MERGE_PRESET} on first use, and the default cannot be
- * deleted. The single-default promotion is enforced in the repository.
+ * the built-in catalog ({@link seedMergePresets}) on first use, and the default cannot
+ * be deleted. The single-default promotion is enforced in the repository. {@link reseed}
+ * restores a built-in to the current catalog (adopting an update, repairing drift, or
+ * materialising a NEW built-in that appeared after the workspace was created).
  */
 export class MergePresetService {
   private readonly presets: MergePresetRepository
@@ -41,10 +45,10 @@ export class MergePresetService {
     this.clock = deps.clock
   }
 
-  /** List a workspace's presets, seeding the built-in default if none exist yet. */
+  /** List a workspace's presets, seeding the built-in catalog if none exist yet. */
   async list(workspaceId: string): Promise<MergeThresholdPreset[]> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
-    await this.ensureDefault(workspaceId)
+    await this.ensureSeeded(workspaceId)
     return this.presets.list(workspaceId)
   }
 
@@ -64,6 +68,7 @@ export class MergePresetService {
       releaseWatchWindowMinutes: input.releaseWatchWindowMinutes,
       releaseMaxAttempts: input.releaseMaxAttempts,
       humanReviewGraceMinutes: input.humanReviewGraceMinutes,
+      autoMergeEnabled: input.autoMergeEnabled,
       // The very first preset must be the default; otherwise honour the request.
       isDefault: existing.length === 0 ? true : input.isDefault,
       createdAt: this.clock.now(),
@@ -105,6 +110,7 @@ export class MergePresetService {
       ...(patch.humanReviewGraceMinutes !== undefined
         ? { humanReviewGraceMinutes: patch.humanReviewGraceMinutes }
         : {}),
+      ...(patch.autoMergeEnabled !== undefined ? { autoMergeEnabled: patch.autoMergeEnabled } : {}),
       ...(patch.isDefault !== undefined ? { isDefault: patch.isDefault } : {}),
     }
     await this.presets.upsert(workspaceId, updated)
@@ -121,24 +127,66 @@ export class MergePresetService {
     await this.presets.remove(workspaceId, id)
   }
 
-  /** Seed the built-in default preset for a workspace that has none yet. Idempotent. */
-  private async ensureDefault(workspaceId: string): Promise<void> {
+  /**
+   * Restore a built-in preset to its current catalog definition ({@link seedMergePresets}).
+   * Used to adopt an improved built-in, repair one whose persisted copy drifted, or
+   * materialise a NEW built-in that appeared after this workspace was seeded (so it has the
+   * old presets but not the new one). The canonical thresholds / `autoMergeEnabled` / `version`
+   * overwrite (or create) the stored row; an existing copy's `isDefault` + `createdAt` are
+   * preserved so reseeding never silently changes which preset is the default or its ordering.
+   * Rejects an id not in the catalog (a custom preset — delete it instead).
+   */
+  async reseed(workspaceId: string, id: string): Promise<MergeThresholdPreset> {
+    await requireWorkspace(this.workspaceRepository, workspaceId)
+    const seed = seedMergePresets().find((p) => p.id === id)
+    if (!seed) {
+      throw new ValidationError(
+        `Merge preset '${id}' is not a built-in (or is no longer in the catalog), so it cannot be reseeded. Delete it instead.`,
+      )
+    }
+    const existing = await this.presets.get(workspaceId, id)
+    const preset: MergeThresholdPreset = {
+      ...this.fromSeed(seed),
+      // Keep the user's default choice + original ordering when the preset already exists.
+      isDefault: existing?.isDefault ?? seed.isDefault,
+      createdAt: existing?.createdAt ?? this.clock.now(),
+    }
+    await this.presets.upsert(workspaceId, preset)
+    return preset
+  }
+
+  /** Seed the built-in preset catalog for a workspace that has none yet. Idempotent. */
+  private async ensureSeeded(workspaceId: string): Promise<void> {
     const current = await this.presets.list(workspaceId)
     if (current.length > 0) return
-    await this.presets.upsert(workspaceId, {
-      id: this.idGenerator.next('mp'),
-      name: DEFAULT_MERGE_PRESET.name,
-      maxComplexity: DEFAULT_MERGE_PRESET.maxComplexity,
-      maxRisk: DEFAULT_MERGE_PRESET.maxRisk,
-      maxImpact: DEFAULT_MERGE_PRESET.maxImpact,
-      ciMaxAttempts: DEFAULT_MERGE_PRESET.ciMaxAttempts,
-      maxRequirementIterations: DEFAULT_MERGE_PRESET.maxRequirementIterations,
-      maxRequirementConcernAllowed: DEFAULT_MERGE_PRESET.maxRequirementConcernAllowed,
-      releaseWatchWindowMinutes: DEFAULT_MERGE_PRESET.releaseWatchWindowMinutes,
-      releaseMaxAttempts: DEFAULT_MERGE_PRESET.releaseMaxAttempts,
-      humanReviewGraceMinutes: DEFAULT_MERGE_PRESET.humanReviewGraceMinutes,
-      isDefault: true,
-      createdAt: this.clock.now(),
-    })
+    const now = this.clock.now()
+    // Stamp createdAt by catalog order so `list` (ordered by created_at) preserves it.
+    let offset = 0
+    for (const seed of seedMergePresets()) {
+      await this.presets.upsert(workspaceId, {
+        ...this.fromSeed(seed),
+        createdAt: now + offset++,
+      })
+    }
+  }
+
+  /** A catalog seed as a persisted preset (its stable id + version, without `createdAt`). */
+  private fromSeed(seed: MergePresetSeed): Omit<MergeThresholdPreset, 'createdAt'> {
+    return {
+      id: seed.id,
+      name: seed.name,
+      maxComplexity: seed.maxComplexity,
+      maxRisk: seed.maxRisk,
+      maxImpact: seed.maxImpact,
+      ciMaxAttempts: seed.ciMaxAttempts,
+      maxRequirementIterations: seed.maxRequirementIterations,
+      maxRequirementConcernAllowed: seed.maxRequirementConcernAllowed,
+      releaseWatchWindowMinutes: seed.releaseWatchWindowMinutes,
+      releaseMaxAttempts: seed.releaseMaxAttempts,
+      humanReviewGraceMinutes: seed.humanReviewGraceMinutes,
+      autoMergeEnabled: seed.autoMergeEnabled,
+      isDefault: seed.isDefault,
+      version: seed.version,
+    }
   }
 }

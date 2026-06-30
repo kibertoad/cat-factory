@@ -2,6 +2,7 @@ import {
   createMergePresetContract,
   deleteMergePresetContract,
   listMergePresetsContract,
+  reseedMergePresetContract,
   updateMergePresetContract,
 } from '@cat-factory/contracts'
 import type { MergePresetsModule } from '@cat-factory/orchestration'
@@ -56,6 +57,16 @@ export function mergePresetController(): Hono<AppEnv> {
     if (!presets) return unavailable(c)
     await presets.service.remove(param(c, 'workspaceId'), c.req.valid('param').presetId)
     return c.body(null, 204)
+  })
+
+  buildHonoRoute(app, reseedMergePresetContract, async (c) => {
+    const presets = requireMergePresets(c)
+    if (!presets) return unavailable(c)
+    const preset = await presets.service.reseed(
+      param(c, 'workspaceId'),
+      c.req.valid('param').presetId,
+    )
+    return c.json(preset, 200)
   })
 
   return app

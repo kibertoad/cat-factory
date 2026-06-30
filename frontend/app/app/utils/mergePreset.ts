@@ -7,6 +7,8 @@ import type { MergeThresholdPreset } from '~/types/merge'
  * rendered as whole percents.
  */
 export function mergePresetThresholds(p: MergeThresholdPreset): string {
+  // Auto-merge disabled: the thresholds don't apply, every PR goes to human review.
+  if (!p.autoMergeEnabled) return `manual review only · ${p.ciMaxAttempts} CI fixes`
   const pct = (n: number) => `${Math.round(n * 100)}%`
   return `cx ≤${pct(p.maxComplexity)} · risk ≤${pct(p.maxRisk)} · impact ≤${pct(
     p.maxImpact,

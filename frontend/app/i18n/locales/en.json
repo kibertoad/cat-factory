@@ -1630,8 +1630,11 @@
         "maxImpact": "Max impact %",
         "ciMaxAttempts": "CI-fix attempts",
         "maxRequirementIterations": "Requirement iterations",
-        "maxRequirementConcernAllowed": "Auto-pass concerns at or below"
+        "maxRequirementConcernAllowed": "Auto-pass concerns at or below",
+        "autoMerge": "Auto-merge"
       },
+      "autoMergeOnHint": "Merge automatically when within thresholds.",
+      "autoMergeOffHint": "Always route the PR to a human review.",
       "newPreset": "New preset",
       "create": {
         "name": "Name",
@@ -2513,6 +2516,24 @@
       "toast": {
         "reseedFailed": "Could not reseed pipeline",
         "deleteFailed": "Could not delete pipeline"
+      }
+    }
+  },
+  "mergePreset": {
+    "health": {
+      "title": "Merge preset updates",
+      "allValid": "All built-in merge presets are up to date.",
+      "newHeading": "New presets available",
+      "newDescription": "New built-in merge presets have shipped. Add them to this board's library.",
+      "add": "Add",
+      "updatesHeading": "Updates available",
+      "updatesDescription": "A newer version of these built-in merge presets has shipped. Reseed to adopt it (the default and ordering are kept).",
+      "reseed": "Reseed",
+      "reseedAll": "Update all ({count})",
+      "dismiss": "Dismiss",
+      "done": "Done",
+      "toast": {
+        "reseedFailed": "Could not reseed merge preset"
       }
     }
   },

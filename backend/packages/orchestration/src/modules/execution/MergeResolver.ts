@@ -17,6 +17,8 @@ interface MergeThresholds {
   maxComplexity: number
   maxRisk: number
   maxImpact: number
+  /** When false, auto-merge is disabled outright — every PR is routed to human review. */
+  autoMergeEnabled: boolean
 }
 
 /** The engine collaborators the merge resolver drives (kept on the engine, shared elsewhere). */
@@ -56,13 +58,16 @@ export class MergeResolver {
     }
 
     const preset = await this.deps.resolveMergePreset(workspaceId, block)
-    // Auto-merge only on a CREDIBLE within-threshold assessment. A credible assessment
-    // explains itself: a merger that actually examined the diff always returns a
-    // rationale, while a merger that failed to inspect the change (the bug that
-    // auto-merged on a bogus 0/0/0) is forced upstream to a conservative, explained
-    // verdict that fails the threshold. The non-empty rationale check is the engine-side
-    // backstop so bare, unexplained scores can never silently merge.
+    // Auto-merge only when the preset ALLOWS it AND the assessment is a CREDIBLE
+    // within-threshold one. A "manual review only" preset (`autoMergeEnabled: false`)
+    // short-circuits here, so every PR is routed to human review regardless of scores.
+    // A credible assessment explains itself: a merger that actually examined the diff
+    // always returns a rationale, while a merger that failed to inspect the change (the
+    // bug that auto-merged on a bogus 0/0/0) is forced upstream to a conservative,
+    // explained verdict that fails the threshold. The non-empty rationale check is the
+    // engine-side backstop so bare, unexplained scores can never silently merge.
     const within =
+      preset.autoMergeEnabled &&
       assessment !== null &&
       assessment.rationale.trim() !== '' &&
       assessment.complexity <= preset.maxComplexity &&

@@ -25,6 +25,9 @@ export { extractJson } from './domain/llm-output.js'
 export {
   BLOCK_TYPE_LABEL,
   DEFAULT_MERGE_PRESET,
+  MERGE_PRESET_SEEDS,
+  seedMergePresets,
+  type MergePresetSeed,
   DEFAULT_CI_MAX_ATTEMPTS,
   DEFAULT_MAX_REQUIREMENT_ITERATIONS,
   CONTEXT_BUDGET,
