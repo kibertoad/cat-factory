@@ -422,6 +422,16 @@ export function disposeReview(
   items: RequirementReviewItem[],
   opts: { iteration: number; maxIterations: number; concernThreshold: RequirementConcernLevel },
 ): ReviewDisposition {
+  // Guard the loop accounting: a non-positive cap or a sub-1 iteration counter (the initial
+  // review is iteration 1) is a wiring bug that would otherwise yield a misleading `exceeded`
+  // / never-converging verdict. `iteration` MAY exceed `maxIterations` — a human-granted
+  // extra round legitimately runs one past the cap — so that is not checked here.
+  if (!Number.isInteger(opts.maxIterations) || opts.maxIterations < 1) {
+    throw new Error(`disposeReview: maxIterations must be a positive integer, got ${opts.maxIterations}`)
+  }
+  if (!Number.isInteger(opts.iteration) || opts.iteration < 1) {
+    throw new Error(`disposeReview: iteration must be a positive integer, got ${opts.iteration}`)
+  }
   const outstanding = items.filter((i) => i.status !== 'dismissed' && i.status !== 'resolved')
   if (outstanding.length === 0) return 'auto-pass'
   const maxRank = Math.max(...outstanding.map((i) => REQUIREMENT_CONCERN_RANK[i.severity]))
