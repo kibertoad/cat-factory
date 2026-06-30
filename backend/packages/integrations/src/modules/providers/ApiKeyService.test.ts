@@ -13,6 +13,7 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { ApiKeyService } from './ApiKeyService.js'
+import { chooseToken } from './providers.logic.js'
 
 // Service-level behaviour of the direct-provider API-key pool over an in-memory repo:
 // encryption-at-rest (the raw key never lands in the row), the THREE-SCOPE merge
@@ -78,6 +79,20 @@ class FakeRepo implements ProviderApiKeyRepository {
   async markLeased(id: string, at: number) {
     const row = this.rows.find((r) => r.id === id)
     if (row) row.lastUsedAt = at
+  }
+  async leaseLeastUsed(
+    scopes: ApiKeyScopeRef[],
+    provider: ApiKeyProvider,
+    now: number,
+    windowMs: number,
+  ) {
+    const pool = this.rows.filter(
+      (r) => r.deletedAt === null && r.provider === provider && this.matches(r, scopes),
+    )
+    const chosen = chooseToken(pool, now, windowMs)
+    if (!chosen) return null
+    chosen.lastUsedAt = now
+    return { ...chosen }
   }
   async recordUsage(
     id: string,

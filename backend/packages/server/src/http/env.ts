@@ -1,5 +1,6 @@
 import type {
   AgentRunRepository,
+  ExecutionRepository,
   ResolveBinaryArtifactStore,
   ConsensusSessionRepository,
   ResolveRunRepoContext,
@@ -33,6 +34,12 @@ export interface ServerContainer extends Core {
   config: AppConfig
   /** Kind-spanning view over agent_runs (retry dispatch + the cron sweeper). */
   agentRunRepository: AgentRunRepository
+  /**
+   * The execution-scoped run repository (`kind='execution'`). Exposed alongside the
+   * kind-spanning {@link agentRunRepository} so the cross-runtime conformance suite can
+   * assert the optimistic-concurrency `compareAndSwap` parity on every facade.
+   */
+  executionRepository: ExecutionRepository
   /**
    * Consensus session transcripts (the optional `@cat-factory/consensus` mechanism's
    * observability surface). Present only when the facade wired the repository; the

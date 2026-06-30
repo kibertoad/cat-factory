@@ -1947,6 +1947,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // GitHub-issue search to the originating service's repo (and refuse it when unlinked).
     resolveRepoTarget,
     agentRunRepository: repos.agentRunRepository,
+    // Execution-scoped repo, surfaced for the conformance suite's compareAndSwap parity check.
+    executionRepository: repos.executionRepository,
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
     environmentBackendRegistry,

@@ -2137,6 +2137,8 @@ export function buildContainer(
     // GitHub-issue search to the originating service's repo (and refuse it when unlinked).
     resolveRepoTarget: buildResolveRepoTarget(db),
     agentRunRepository: new D1AgentRunRepository({ db }),
+    // Execution-scoped repo, surfaced for the conformance suite's compareAndSwap parity check.
+    executionRepository: dependencies.executionRepository,
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
     environmentBackendRegistry,

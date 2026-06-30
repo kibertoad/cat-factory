@@ -4,6 +4,7 @@ import type {
   EnvironmentProvider,
   ExecutionEventPublisher,
   ExecutionInstance,
+  ExecutionRepository,
   LlmCallActivity,
   ResolveRunRepoContext,
   RunRepoContext,
@@ -129,6 +130,12 @@ export interface ConformanceApp {
    * {@link seedIncorporatedReview}).
    */
   seedIncorporatedClarityReview(workspaceId: string, blockId: string, report: string): Promise<void>
+  /**
+   * The facade's execution-scoped run repository over its real store, so the suite can
+   * assert the optimistic-concurrency `compareAndSwap` semantics (a stale write is
+   * refused, not clobbering) identically on D1 and Postgres.
+   */
+  executionRepository(): ExecutionRepository
   /**
    * Seed an account-owned service row linked to a frame block straight into the facade's real
    * service store, so the frame-deletion test can assert the batched frame→service reclaim

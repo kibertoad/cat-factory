@@ -318,6 +318,7 @@ export function makeConformanceApp(
     seedIncorporatedReview,
     seedReadyReview,
     seedIncorporatedClarityReview,
+    executionRepository: () => container.executionRepository,
     seedService,
     getService,
     onboarding: () => makeOnboardingProbe(container),

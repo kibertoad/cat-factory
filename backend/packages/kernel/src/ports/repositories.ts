@@ -128,7 +128,22 @@ export interface ExecutionRepository {
   listByServices(serviceIds: string[]): Promise<ExecutionInstance[]>
   get(workspaceId: string, id: string): Promise<ExecutionInstance | null>
   getByBlock(workspaceId: string, blockId: string): Promise<ExecutionInstance | null>
+  /**
+   * Persist the run (force-write). Bumps the row's monotonic `rev` on every write so a
+   * concurrent {@link ExecutionRepository.compareAndSwap} can detect that the row moved.
+   * Used by the durable driver and lifecycle transitions, which own the run's progress.
+   */
   upsert(workspaceId: string, execution: ExecutionInstance): Promise<void>
+  /**
+   * Optimistic-concurrency write: persist `execution` only if the stored row's `rev`
+   * still equals the `rev` last read onto this instance. Returns `true` (and bumps the
+   * in-memory `execution.rev`) when the write lands; returns `false` with NO write when
+   * another writer advanced the row meanwhile, so the caller can re-read and re-apply
+   * its mutation on fresh state instead of clobbering it. Only updates an existing row
+   * (never inserts) — the run must already exist. The fix for human-action lost-updates
+   * (concurrent resolve-decision / approve / request-changes); see `mutateInstance`.
+   */
+  compareAndSwap(workspaceId: string, execution: ExecutionInstance): Promise<boolean>
   deleteByBlock(workspaceId: string, blockId: string): Promise<void>
   /**
    * Runs still marked `running` whose lease (`updated_at`) is older than the
