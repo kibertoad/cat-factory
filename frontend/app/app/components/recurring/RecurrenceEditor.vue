@@ -8,15 +8,22 @@ import type { Recurrence } from '~/types/recurring'
 const props = defineProps<{ modelValue: Recurrence }>()
 const emit = defineEmits<{ 'update:modelValue': [Recurrence] }>()
 
-const WEEKDAYS = [
-  { value: 0, label: 'Sun' },
-  { value: 1, label: 'Mon' },
-  { value: 2, label: 'Tue' },
-  { value: 3, label: 'Wed' },
-  { value: 4, label: 'Thu' },
-  { value: 5, label: 'Fri' },
-  { value: 6, label: 'Sat' },
-]
+const { t } = useI18n()
+
+// Exhaustive day-index→label map of literal `t(...)` keys (keeps the typed-key drift
+// guard live for this short-form weekday list).
+const WEEKDAY_LABELS = computed<Record<number, string>>(() => ({
+  0: t('recurring.weekday.sun'),
+  1: t('recurring.weekday.mon'),
+  2: t('recurring.weekday.tue'),
+  3: t('recurring.weekday.wed'),
+  4: t('recurring.weekday.thu'),
+  5: t('recurring.weekday.fri'),
+  6: t('recurring.weekday.sat'),
+}))
+const WEEKDAYS = computed(() =>
+  [0, 1, 2, 3, 4, 5, 6].map((value) => ({ value, label: WEEKDAY_LABELS.value[value]! })),
+)
 
 function patch(p: Partial<Recurrence>) {
   emit('update:modelValue', { ...props.modelValue, ...p })
@@ -60,7 +67,7 @@ const timezoneOptions = computed(() =>
 
 <template>
   <div class="space-y-3">
-    <UFormField label="Run every">
+    <UFormField :label="t('recurring.runEvery')">
       <div class="flex items-center gap-2">
         <UInput
           :model-value="modelValue.intervalHours"
@@ -69,11 +76,11 @@ const timezoneOptions = computed(() =>
           class="w-24"
           @update:model-value="patch({ intervalHours: Math.max(1, Number($event) || 1) })"
         />
-        <span class="text-xs text-slate-400">hours</span>
+        <span class="text-xs text-slate-400">{{ t('recurring.hours') }}</span>
       </div>
     </UFormField>
 
-    <UFormField label="Allowed days" help="Leave all off to run any day.">
+    <UFormField :label="t('recurring.allowedDays')" :help="t('recurring.allowedDaysHelp')">
       <div class="flex flex-wrap gap-1">
         <UButton
           v-for="d in WEEKDAYS"
@@ -91,7 +98,7 @@ const timezoneOptions = computed(() =>
     <UFormField>
       <UCheckbox
         :model-value="windowEnabled"
-        label="Only within an hour-of-day window (e.g. business hours)"
+        :label="t('recurring.windowToggle')"
         @update:model-value="toggleWindow(Boolean($event))"
       />
     </UFormField>
@@ -103,7 +110,7 @@ const timezoneOptions = computed(() =>
         class="w-28"
         @update:model-value="patch({ windowStartHour: Number($event) })"
       />
-      <span class="text-xs text-slate-400">to</span>
+      <span class="text-xs text-slate-400">{{ t('recurring.to') }}</span>
       <USelect
         :model-value="modelValue.windowEndHour ?? 24 % 24"
         :items="hours"
@@ -112,7 +119,7 @@ const timezoneOptions = computed(() =>
       />
     </div>
 
-    <UFormField label="Timezone">
+    <UFormField :label="t('recurring.timezone')">
       <USelect
         :model-value="modelValue.timezone"
         :items="timezoneOptions"

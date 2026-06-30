@@ -1,5 +1,47 @@
 # @cat-factory/integrations
 
+## 0.37.1
+
+### Patch Changes
+
+- fdeb466: Eliminate N+1 query loops in the service layer. `ExecutionService.teardownForBlockTree` now
+  resolves runs with a single `listByWorkspace` instead of a per-block `getByBlock`;
+  `TaskConnectionService.listSourceStates` hoists its installation/connection reads out of the
+  per-provider loop; and `BoardService` (`removeBlock` / `addServiceFromRepo`) and
+  `AccountService.listForUser` batch their per-item point reads via two new chunked-`IN`
+  repository methods, `ServiceRepository.listByFrameBlocks` and `AccountRepository.listByIds`
+  (implemented symmetrically on the D1 and Drizzle stores, with cross-runtime conformance
+  coverage). Behavior is unchanged.
+- Updated dependencies [fdeb466]
+  - @cat-factory/kernel@0.55.4
+
+## 0.37.0
+
+### Minor Changes
+
+- 21b2096: Make the environment-backend and runner-backend registries app-owned (DI) instead of
+  module-global Maps. This is the pilot for the registry-DI migration
+  (`docs/initiatives/registry-di-migration.md`): the composition root now constructs each
+  registry instance via `createBackendRegistries()` and injects it through
+  `CoreDependencies`; a deployment registers a custom backend by reference
+  (`registry.register(provider)`), so registration no longer depends on the adapter and
+  server sharing the same `@cat-factory/integrations` module instance.
+
+  BREAKING (`@cat-factory/integrations`): the module-global free functions
+  `registerEnvironmentBackend` / `environmentBackend` / `registeredEnvironmentBackendKinds`
+  / `environmentBackendKinds` / `findRepairCapableProvider` and their runner-backend
+  equivalents (`registerRunnerBackend` / `runnerBackend` / `registeredRunnerBackendKinds`
+  / `runnerBackendKinds`) are removed. Use the new `EnvironmentBackendRegistry` /
+  `RunnerBackendRegistry` classes (methods `register` / `get` / `kinds` / `labelled`, plus
+  `findRepairCapable` on the env registry), the `defaultEnvironmentBackendRegistry()` /
+  `defaultRunnerBackendRegistry()` factories, or the unified `createBackendRegistries()`.
+
+### Patch Changes
+
+- Updated dependencies [21b2096]
+  - @cat-factory/contracts@0.56.1
+  - @cat-factory/kernel@0.55.3
+
 ## 0.36.1
 
 ### Patch Changes

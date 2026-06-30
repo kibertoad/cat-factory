@@ -22,7 +22,8 @@ import {
   migrate,
 } from '@cat-factory/node-server'
 import type { GateProviderOverrides } from '@cat-factory/gates'
-import type { Clock, ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
+import type { BackendRegistries } from '@cat-factory/integrations'
+import type { Clock, ExecutionInstance, Service, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type { LocalRunner, UpsertLocalModelEndpointInput } from '@cat-factory/contracts'
 import type { CoreDependencies } from '@cat-factory/orchestration'
@@ -128,6 +129,7 @@ export function makeConformanceApp(
     gateProviders?: GateProviderOverrides
     environmentProvider?: CoreDependencies['environmentProvider']
     resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
+    backendRegistries?: BackendRegistries
     /**
      * Keep the REAL local-mode Tester default (`local` / host DinD) instead of pinning the
      * neutral `ephemeral` used for the shared assertions. Local-only tests that assert the
@@ -188,6 +190,9 @@ export function makeConformanceApp(
     cloudflareModelsEnabled: opts?.cloudflareModelsEnabled ?? true,
     // Re-wire any faked gate providers after the build's reset (the suite drives the CI gate).
     gateProviders: opts?.gateProviders,
+    // Inject the app-owned backend registries (pre-loaded with custom kinds in the custom-backend
+    // suite) so a registered custom backend is resolved by reference, exactly like a real deployment.
+    ...(opts?.backendRegistries ? { backendRegistries: opts.backendRegistries } : {}),
   })
   const app = createApp(container, TEST_ENV)
 
@@ -293,6 +298,14 @@ export function makeConformanceApp(
     )
   }
 
+  function seedService(service: Service) {
+    return createDrizzleRepositories(db, SEED_CLOCK).serviceRepository.insert(service)
+  }
+
+  function getService(id: string) {
+    return createDrizzleRepositories(db, SEED_CLOCK).serviceRepository.get(id)
+  }
+
   return {
     call,
     createWorkspace,
@@ -306,6 +319,8 @@ export function makeConformanceApp(
     seedReadyReview,
     seedIncorporatedClarityReview,
     executionRepository: () => container.executionRepository,
+    seedService,
+    getService,
     onboarding: () => makeOnboardingProbe(container),
     localModelEndpoints: () => {
       const svc = container.localModelEndpoints

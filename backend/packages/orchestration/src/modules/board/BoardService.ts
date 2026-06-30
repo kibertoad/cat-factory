@@ -340,13 +340,11 @@ export class BoardService {
     // Each subdirectory of a monorepo backs at most one service — reject a duplicate so
     // two frames don't fight over the same subtree (each resolves to the same repo+dir).
     if (repo.isMonorepo && directory && this.serviceRepository) {
-      for (const frame of blocks.filter((b) => b.level === 'frame')) {
-        const existing = await this.serviceRepository.getByFrameBlock(frame.id)
-        if (existing?.repoGithubId === repo.githubId && existing.directory === directory) {
-          throw new ValidationError(
-            `A service for '${directory}' already exists in this repository`,
-          )
-        }
+      // One batched read for every frame's service, not a getByFrameBlock per frame (N+1).
+      const frameIds = blocks.filter((b) => b.level === 'frame').map((b) => b.id)
+      const existing = await this.serviceRepository.listByFrameBlocks(frameIds)
+      if (existing.some((s) => s.repoGithubId === repo.githubId && s.directory === directory)) {
+        throw new ValidationError(`A service for '${directory}' already exists in this repository`)
       }
     }
     const frames = blocks.filter((b) => b.level === 'frame').length
@@ -748,10 +746,13 @@ export class BoardService {
     // org catalog (mountable, badged, yet rendering nothing) on other boards.
     if (this.serviceRepository && this.workspaceMountRepository) {
       const doomedServiceIds = new Set<string>()
-      for (const b of blocks) {
-        if (!doomed.has(b.id) || b.level !== 'frame' || b.parentId !== null) continue
-        const service = await this.serviceRepository.getByFrameBlock(b.id)
-        if (service) doomedServiceIds.add(service.id)
+      // One batched read for every doomed top-level frame's service, not a getByFrameBlock
+      // per frame (N+1).
+      const doomedFrameIds = blocks
+        .filter((b) => doomed.has(b.id) && b.level === 'frame' && b.parentId === null)
+        .map((b) => b.id)
+      for (const service of await this.serviceRepository.listByFrameBlocks(doomedFrameIds)) {
+        doomedServiceIds.add(service.id)
       }
       // The frame block may already be gone (the dangling case), so it isn't in `blocks` above —
       // look the service up directly by the deleted id too, so the orphaned service + its mounts

@@ -61,6 +61,28 @@ changeset so it's visible, but don't engineer around it. (This is why, e.g., fla
 previously-poolable subscription vendor as individual-only can orphan its existing pooled
 tokens with no data migration — that's acceptable, not a bug to fix.)
 
+## For bigger initiatives, always create a tracker document
+
+When you take on a **larger, multi-PR / multi-iteration initiative** (a cross-cutting
+refactor, a migration applied registry-by-registry or file-by-file, a strangler conversion
+spread over several PRs), **always create a tracker document under `docs/initiatives/`**
+before or alongside the first PR — don't carry the plan only in your head or in a single
+PR description. The tracker is the durable source of truth a later agent iteration reads
+FIRST so it can pick the work up without re-deriving context. Capture:
+
+- **Goal & rationale** — the problem, why the change, the intended end state.
+- **The target pattern** — the reference implementation (link the pilot once it lands), so
+  every subsequent slice follows the same shape rather than reinventing it.
+- **A per-item status checklist** — a table of every unit of work (file / package / call
+  site) with status (`done` / `in-progress` / `todo`) + PR link, updated at the end of each
+  PR. This is what makes the work resumable and spreadable across iterations.
+- **Conventions & gotchas carried between iterations** — the non-obvious traps the pilot
+  surfaced (e.g. "keep the runtimes symmetric", ">1 construction site per facade"), so they
+  aren't rediscovered the hard way each slice.
+
+The first example is [`docs/initiatives/registry-di-migration.md`](./docs/initiatives/registry-di-migration.md)
+(moving the module-global plugin registries to app-owned DI, one registry at a time).
+
 ## Known environment quirks
 
 - **Do not validate Cloudflare auth before deployments.** Skip `wrangler whoami`
@@ -118,6 +140,38 @@ conformance assertion in the SAME change, or do not land it. "Node has no X pers
 yet" is acceptable ONLY for behaviour that genuinely cannot exist on a runtime (e.g. a
 Cloudflare-Container-only execution path), never for runtime-neutral domain behaviour
 that merely needs a repository wired.
+
+## No N+1 repository access (batch or reuse — never loop point-reads)
+
+**Calling a single-row / single-key repository method inside a loop (`for`, `.map`,
+`Promise.all`, `for await`) over a list is an N+1 and is BANNED.** This is an absolute rule,
+not a "nice to have": every extra row in the list is another database round-trip, so the
+cost grows without bound as data grows. It applies everywhere — the shared service layer
+(`backend/packages/*`), the facade repos (`backend/runtimes/*`), and the HTTP/controller
+layer alike. A point-read (`get`, `getById`, `getByBlock`, `getByFrameBlock`, `getByWorkspace`,
+`getByUrl`, …) belongs OUTSIDE a loop, never inside one.
+
+Do this instead:
+
+- **Batch with one chunked `IN` query.** Collect the keys first, then issue a single batch
+  read via a `listByIds` / `listByFrameBlocks` / `countByServiceIds`-shaped port method, and
+  index the result into a `Map` for per-item lookup. **If no batch method exists, ADD one** —
+  a new chunked-`IN` read on the existing table, mirrored in BOTH the D1 and Drizzle repo with
+  a conformance assertion (see "Keep the runtimes symmetric"). Adding a read method needs no
+  schema migration; it is always preferable to a loop of point-reads.
+- **Reuse an already-fetched list.** When the surrounding code already loaded the rows (e.g. a
+  `listByWorkspace` / `listByAccount` result), index THAT into a `Map<id, row>` and look up
+  from memory rather than re-querying per item.
+- **Hoist invariant reads out of the loop.** A repository read whose arguments don't change
+  across iterations (e.g. one `installations.getByWorkspace(ws)` reused for every provider)
+  must run ONCE before the loop, not on every pass.
+- **Push counts/aggregates into SQL** (`COUNT` / `SUM` / `GROUP BY`) — never load all rows to
+  count, sum, or reduce them in JS.
+
+Copy the existing good citizens: `WorkspaceMountRepository.countByServiceIds`,
+`ServiceRepository.listByIds` / `listByFrameBlocks`, `AccountRepository.listByIds`, and
+`BoardService.removeBlock`'s batched `removeByServices` / `deleteMany`. If you find yourself
+writing `await this.someRepository.getX(item)` inside a loop, STOP and batch it.
 
 ## Resolving conflicting Drizzle migrations (post-merge)
 

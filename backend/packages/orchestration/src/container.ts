@@ -146,6 +146,10 @@ import {
   SlackConnectionService,
   SlackSettingsService,
   SlackMemberMappingService,
+  defaultEnvironmentBackendRegistry,
+  defaultRunnerBackendRegistry,
+  type EnvironmentBackendRegistry,
+  type RunnerBackendRegistry,
 } from '@cat-factory/integrations'
 import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
 import { EnvConfigRepairService } from './modules/envConfigRepair/EnvConfigRepairService.js'
@@ -414,12 +418,19 @@ export interface CoreDependencies {
   secretCipher?: SecretCipher
   /**
    * INTERNAL override: when set, this provider is used for every env operation instead of
-   * the kind registry. NOT a public facade seam (a native backend registers via
-   * `registerEnvironmentBackend`) — it exists only for the cross-runtime conformance
+   * the kind registry. NOT a public facade seam (a native backend registers into the
+   * injected `environmentBackendRegistry`) — it exists only for the cross-runtime conformance
    * suite, which must inject a fake provider (validate-repo / config-repair) through a
    * schema-locked connect API. Production facades leave it unset → the registry path.
    */
   environmentProvider?: EnvironmentProvider
+  /**
+   * The app-owned environment-backend registry (kind → provider). A facade builds it via
+   * `createBackendRegistries()` and registers any custom backends by reference before
+   * injecting it here. Absent ⇒ a fresh registry with just the built-in `manifest` +
+   * `kubernetes` kinds (`defaultEnvironmentBackendRegistry()`).
+   */
+  environmentBackendRegistry?: EnvironmentBackendRegistry
   // ---- Unified provisioning event log (optional; high-churn separate store) --
   // When wired, the env provision/teardown services record their attempts here and
   // the read service backs the "View logs" drawers + the run-details env surface.
@@ -455,6 +466,13 @@ export interface CoreDependencies {
   // with no test button). The backend KIND is resolved from the stored config via the
   // runner-backend registry, not injected here.
   runnerPoolProvider?: RunnerPoolProvider
+  /**
+   * The app-owned runner-backend registry (kind → provider). A facade builds it via
+   * `createBackendRegistries()` and registers any custom backends by reference before
+   * injecting it here. Absent ⇒ a fresh registry with just the built-in `manifest` +
+   * `kubernetes` kinds (`defaultRunnerBackendRegistry()`).
+   */
+  runnerBackendRegistry?: RunnerBackendRegistry
   // URL/host safety policy for the RUNNER-POOL integration (the scheduler baseUrl).
   // Absent => strict. Scoped independently of `environmentUrlSafetyPolicy` so an
   // operator widening the env allow-list does not silently widen the pool's SSRF guard.
@@ -1177,6 +1195,8 @@ function createEnvironmentsModule(
     workspaceRepository: deps.workspaceRepository,
     secretCipher,
     clock: deps.clock,
+    environmentBackendRegistry:
+      deps.environmentBackendRegistry ?? defaultEnvironmentBackendRegistry(),
     ...(deps.environmentCustomTlsSupported !== undefined
       ? { customTlsSupported: deps.environmentCustomTlsSupported }
       : {}),
@@ -1256,6 +1276,7 @@ function createRunnersModule(deps: CoreDependencies): RunnersModule | undefined 
     workspaceRepository: deps.workspaceRepository,
     secretCipher: runnerSecretCipher,
     clock: deps.clock,
+    runnerBackendRegistry: deps.runnerBackendRegistry ?? defaultRunnerBackendRegistry(),
     ...(deps.runnerPoolProvider ? { runnerPoolProvider: deps.runnerPoolProvider } : {}),
     ...(deps.runnerUrlSafetyPolicy ? { urlPolicy: deps.runnerUrlSafetyPolicy } : {}),
     ...(deps.runnerCustomTlsSupported !== undefined

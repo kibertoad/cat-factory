@@ -1,5 +1,87 @@
 # @cat-factory/worker
 
+## 0.41.11
+
+### Patch Changes
+
+- fdeb466: Eliminate N+1 query loops in the service layer. `ExecutionService.teardownForBlockTree` now
+  resolves runs with a single `listByWorkspace` instead of a per-block `getByBlock`;
+  `TaskConnectionService.listSourceStates` hoists its installation/connection reads out of the
+  per-provider loop; and `BoardService` (`removeBlock` / `addServiceFromRepo`) and
+  `AccountService.listForUser` batch their per-item point reads via two new chunked-`IN`
+  repository methods, `ServiceRepository.listByFrameBlocks` and `AccountRepository.listByIds`
+  (implemented symmetrically on the D1 and Drizzle stores, with cross-runtime conformance
+  coverage). Behavior is unchanged.
+- Updated dependencies [fdeb466]
+  - @cat-factory/kernel@0.55.4
+  - @cat-factory/orchestration@0.43.4
+  - @cat-factory/integrations@0.37.1
+  - @cat-factory/agents@0.22.5
+  - @cat-factory/consensus@0.7.81
+  - @cat-factory/gates@0.2.33
+  - @cat-factory/gitlab@0.4.4
+  - @cat-factory/observability-langfuse@0.7.77
+  - @cat-factory/provider-cloudflare@0.7.81
+  - @cat-factory/server@0.49.6
+  - @cat-factory/spend@0.10.38
+
+## 0.41.10
+
+### Patch Changes
+
+- Updated dependencies [0dd9532]
+  - @cat-factory/server@0.49.5
+
+## 0.41.9
+
+### Patch Changes
+
+- 21b2096: Make the environment-backend and runner-backend registries app-owned (DI) instead of
+  module-global Maps. This is the pilot for the registry-DI migration
+  (`docs/initiatives/registry-di-migration.md`): the composition root now constructs each
+  registry instance via `createBackendRegistries()` and injects it through
+  `CoreDependencies`; a deployment registers a custom backend by reference
+  (`registry.register(provider)`), so registration no longer depends on the adapter and
+  server sharing the same `@cat-factory/integrations` module instance.
+
+  BREAKING (`@cat-factory/integrations`): the module-global free functions
+  `registerEnvironmentBackend` / `environmentBackend` / `registeredEnvironmentBackendKinds`
+  / `environmentBackendKinds` / `findRepairCapableProvider` and their runner-backend
+  equivalents (`registerRunnerBackend` / `runnerBackend` / `registeredRunnerBackendKinds`
+  / `runnerBackendKinds`) are removed. Use the new `EnvironmentBackendRegistry` /
+  `RunnerBackendRegistry` classes (methods `register` / `get` / `kinds` / `labelled`, plus
+  `findRepairCapable` on the env registry), the `defaultEnvironmentBackendRegistry()` /
+  `defaultRunnerBackendRegistry()` factories, or the unified `createBackendRegistries()`.
+
+- Updated dependencies [21b2096]
+  - @cat-factory/integrations@0.37.0
+  - @cat-factory/orchestration@0.43.3
+  - @cat-factory/server@0.49.4
+  - @cat-factory/contracts@0.56.1
+  - @cat-factory/agents@0.22.4
+  - @cat-factory/consensus@0.7.80
+  - @cat-factory/gates@0.2.32
+  - @cat-factory/gitlab@0.4.3
+  - @cat-factory/kernel@0.55.3
+  - @cat-factory/prompt-fragments@0.9.9
+  - @cat-factory/spend@0.10.37
+  - @cat-factory/provider-cloudflare@0.7.80
+  - @cat-factory/observability-langfuse@0.7.76
+
+## 0.41.8
+
+### Patch Changes
+
+- Updated dependencies [123336c]
+  - @cat-factory/server@0.49.3
+
+## 0.41.7
+
+### Patch Changes
+
+- Updated dependencies [4ec514a]
+  - @cat-factory/server@0.49.2
+
 ## 0.41.6
 
 ### Patch Changes

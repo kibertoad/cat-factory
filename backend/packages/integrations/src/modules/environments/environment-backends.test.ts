@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { EnvironmentBackendConfig, EnvironmentManifest } from '@cat-factory/kernel'
 import {
-  environmentBackend,
-  environmentBackendKinds,
-  registerEnvironmentBackend,
-  registeredEnvironmentBackendKinds,
+  defaultEnvironmentBackendRegistry,
   type EnvironmentBackendProvider,
 } from './environment-backends.js'
 import { HttpEnvironmentProvider } from './HttpEnvironmentProvider.js'
@@ -29,13 +26,15 @@ const k8sConfig: EnvironmentBackendConfig = {
   },
 }
 
+const registry = defaultEnvironmentBackendRegistry()
+
 describe('environment-backends registry', () => {
   it('registers both built-in kinds', () => {
-    expect(registeredEnvironmentBackendKinds().sort()).toEqual(['kubernetes', 'manifest'])
+    expect(registry.kinds().sort()).toEqual(['kubernetes', 'manifest'])
   })
 
   it('manifest backend builds an HttpEnvironmentProvider and reports the manifest secret keys', () => {
-    const backend = environmentBackend('manifest')!
+    const backend = registry.get('manifest')!
     const config: EnvironmentBackendConfig = { kind: 'manifest', manifest }
     expect(backend.referencedSecretKeys(config)).toEqual(['API_TOKEN'])
     expect(backend.connectionMeta(config)).toEqual({
@@ -49,7 +48,7 @@ describe('environment-backends registry', () => {
   })
 
   it('kubernetes backend builds a KubernetesEnvironmentProvider and reads apiToken', () => {
-    const backend = environmentBackend('kubernetes')!
+    const backend = registry.get('kubernetes')!
     expect(backend.referencedSecretKeys(k8sConfig)).toEqual(['apiToken'])
     expect(backend.connectionMeta(k8sConfig)).toEqual({
       providerId: 'kubernetes',
@@ -64,7 +63,7 @@ describe('environment-backends registry', () => {
   })
 
   it('kubernetes assertConfigSafe rejects a non-https apiserver URL', () => {
-    const backend = environmentBackend('kubernetes')!
+    const backend = registry.get('kubernetes')!
     const bad: EnvironmentBackendConfig = {
       kind: 'kubernetes',
       kubernetes: { ...k8sConfig.kubernetes, apiServerUrl: 'http://cluster.test:6443' },
@@ -73,7 +72,7 @@ describe('environment-backends registry', () => {
   })
 
   it('kubernetes assertConfigSafe rejects a custom CA when the runtime cannot honor TLS', () => {
-    const backend = environmentBackend('kubernetes')!
+    const backend = registry.get('kubernetes')!
     const withCa: EnvironmentBackendConfig = {
       kind: 'kubernetes',
       kubernetes: { ...k8sConfig.kubernetes, caCertPem: '-----BEGIN CERTIFICATE-----' },
@@ -85,8 +84,9 @@ describe('environment-backends registry', () => {
     expect(() => backend.assertConfigSafe(withCa, { customTlsSupported: true })).not.toThrow()
   })
 
-  // NB: registers an extra kind, so it runs AFTER the exact-set assertion above.
-  it('accepts a programmatically-registered CUSTOM kind + advertises it with its label', () => {
+  it('accepts a CUSTOM kind registered by reference + advertises it with its label', () => {
+    // A fresh registry instance — no shared module state, so registration order is irrelevant.
+    const customRegistry = defaultEnvironmentBackendRegistry()
     const custom: EnvironmentBackendProvider = {
       kind: 'acme-cloud',
       displayLabel: 'Acme Cloud',
@@ -105,14 +105,14 @@ describe('environment-backends registry', () => {
       buildProvider: (ctx) =>
         new HttpEnvironmentProvider(ctx.urlPolicy ? { urlPolicy: ctx.urlPolicy } : {}),
     }
-    registerEnvironmentBackend(custom)
-    expect(registeredEnvironmentBackendKinds()).toContain('acme-cloud')
-    expect(environmentBackendKinds()).toContainEqual({ kind: 'acme-cloud', label: 'Acme Cloud' })
+    customRegistry.register(custom)
+    expect(customRegistry.kinds()).toContain('acme-cloud')
+    expect(customRegistry.labelled()).toContainEqual({ kind: 'acme-cloud', label: 'Acme Cloud' })
     // The built-ins still carry their labels (displayLabel ?? kind).
-    expect(environmentBackendKinds()).toContainEqual({ kind: 'manifest', label: 'HTTP manifest' })
+    expect(customRegistry.labelled()).toContainEqual({ kind: 'manifest', label: 'HTTP manifest' })
     // A custom config (manifest-shaped) round-trips through the registered backend.
     const config: EnvironmentBackendConfig = { kind: 'acme-cloud', manifest }
     expect(custom.referencedSecretKeys(config)).toEqual(['ACME_TOKEN'])
-    expect(environmentBackend('acme-cloud')?.connectionMeta(config).providerId).toBe('acme-cloud')
+    expect(customRegistry.get('acme-cloud')?.connectionMeta(config).providerId).toBe('acme-cloud')
   })
 })

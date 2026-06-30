@@ -1,5 +1,80 @@
 # @cat-factory/local-server
 
+## 0.25.12
+
+### Patch Changes
+
+- Updated dependencies [fdeb466]
+  - @cat-factory/kernel@0.55.4
+  - @cat-factory/orchestration@0.43.4
+  - @cat-factory/integrations@0.37.1
+  - @cat-factory/node-server@0.43.12
+  - @cat-factory/agents@0.22.5
+  - @cat-factory/gitlab@0.4.4
+  - @cat-factory/server@0.49.6
+
+## 0.25.11
+
+### Patch Changes
+
+- Updated dependencies [0dd9532]
+  - @cat-factory/server@0.49.5
+  - @cat-factory/node-server@0.43.11
+
+## 0.25.10
+
+### Patch Changes
+
+- 21b2096: Make the environment-backend and runner-backend registries app-owned (DI) instead of
+  module-global Maps. This is the pilot for the registry-DI migration
+  (`docs/initiatives/registry-di-migration.md`): the composition root now constructs each
+  registry instance via `createBackendRegistries()` and injects it through
+  `CoreDependencies`; a deployment registers a custom backend by reference
+  (`registry.register(provider)`), so registration no longer depends on the adapter and
+  server sharing the same `@cat-factory/integrations` module instance.
+
+  BREAKING (`@cat-factory/integrations`): the module-global free functions
+  `registerEnvironmentBackend` / `environmentBackend` / `registeredEnvironmentBackendKinds`
+  / `environmentBackendKinds` / `findRepairCapableProvider` and their runner-backend
+  equivalents (`registerRunnerBackend` / `runnerBackend` / `registeredRunnerBackendKinds`
+  / `runnerBackendKinds`) are removed. Use the new `EnvironmentBackendRegistry` /
+  `RunnerBackendRegistry` classes (methods `register` / `get` / `kinds` / `labelled`, plus
+  `findRepairCapable` on the env registry), the `defaultEnvironmentBackendRegistry()` /
+  `defaultRunnerBackendRegistry()` factories, or the unified `createBackendRegistries()`.
+
+- Updated dependencies [21b2096]
+  - @cat-factory/integrations@0.37.0
+  - @cat-factory/orchestration@0.43.3
+  - @cat-factory/server@0.49.4
+  - @cat-factory/node-server@0.43.10
+  - @cat-factory/contracts@0.56.1
+  - @cat-factory/agents@0.22.4
+  - @cat-factory/gitlab@0.4.3
+  - @cat-factory/kernel@0.55.3
+
+## 0.25.9
+
+### Patch Changes
+
+- Updated dependencies [123336c]
+  - @cat-factory/server@0.49.3
+  - @cat-factory/node-server@0.43.9
+
+## 0.25.8
+
+### Patch Changes
+
+- Updated dependencies [7536092]
+  - @cat-factory/node-server@0.43.8
+
+## 0.25.7
+
+### Patch Changes
+
+- Updated dependencies [4ec514a]
+  - @cat-factory/server@0.49.2
+  - @cat-factory/node-server@0.43.7
+
 ## 0.25.6
 
 ### Patch Changes
