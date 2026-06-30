@@ -20,7 +20,7 @@ interface GatewayStatus {
 }
 
 interface HttpRoute {
-  spec?: { hostnames?: string[]; parentRefs?: { name?: string }[] }
+  spec?: { hostnames?: string[]; parentRefs?: { name?: string; namespace?: string }[] }
 }
 
 interface ListResponse {
@@ -58,6 +58,11 @@ function firstItem(obj: unknown): unknown {
   return Array.isArray(items) && items.length > 0 ? items[0] : null
 }
 
+/** A concrete, resolvable host — a wildcard listener/route hostname (`*.example.com`) is not. */
+function isUsableHost(host: string | undefined): host is string {
+  return !!host && !host.startsWith('*')
+}
+
 /**
  * Resolve the live URL for a status-backed source by reading the cluster. Returns null
  * until the address/host is assigned (the backend keeps polling), or for `ingressTemplate`
@@ -86,10 +91,11 @@ export async function resolveLiveUrl(
       const obj = url.gatewayName
         ? await getJson(['get', 'gateway', url.gatewayName, ...ns])
         : firstItem(await getJson(['get', 'gateway', ...ns]))
-      // Prefer a listener hostname (a real DNS name) over the raw LB address when present.
-      const listenerHost = (obj as GatewayStatus | null)?.spec?.listeners?.find(
-        (l) => l.hostname,
-      )?.hostname
+      // Prefer a concrete listener hostname (a real DNS name) over the raw LB address; skip
+      // a wildcard listener (`*.example.com`) since it isn't a resolvable env host.
+      const listenerHost = (obj as GatewayStatus | null)?.spec?.listeners
+        ?.map((l) => l.hostname)
+        .find(isUsableHost)
       return buildUrl(listenerHost || extractGatewayAddress(obj), url.scheme)
     }
     case 'httpRouteStatus': {
@@ -98,13 +104,16 @@ export async function resolveLiveUrl(
           ? await getJson(['get', 'httproute', url.httpRouteName, ...ns])
           : firstItem(await getJson(['get', 'httproute', ...ns]))
       ) as HttpRoute | null
-      // A route hostname is the externally-meaningful host; fall back to the parent
-      // Gateway's assigned address when the route declares no hostname.
-      const hostname = route?.spec?.hostnames?.[0]
+      // A concrete route hostname is the externally-meaningful host; fall back to the
+      // parent Gateway's assigned address when the route declares no (usable) hostname.
+      const hostname = route?.spec?.hostnames?.find(isUsableHost)
       if (hostname) return buildUrl(hostname, url.scheme)
-      const parent = route?.spec?.parentRefs?.[0]?.name
-      if (!parent) return null
-      const gw = await getJson(['get', 'gateway', parent, ...ns])
+      const parent = route?.spec?.parentRefs?.[0]
+      if (!parent?.name) return null
+      // The parent Gateway commonly lives in another namespace (a shared cluster gateway),
+      // so read it in the parentRef's namespace when given, not the route's.
+      const gwNs = parent.namespace ? ['-n', parent.namespace, '-o', 'json'] : ns
+      const gw = await getJson(['get', 'gateway', parent.name, ...gwNs])
       return buildUrl(extractGatewayAddress(gw), url.scheme)
     }
     default:

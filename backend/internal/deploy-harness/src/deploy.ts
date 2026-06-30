@@ -88,10 +88,15 @@ export async function handleDeploy(job: DeployJob, opts: RunOptions): Promise<De
 
   // Every CLI call shares the kubeconfig env + the job's redaction set, and resets the
   // inactivity watchdog on completion so a multi-minute apply/helm/rollout isn't killed.
-  const cli = (cmd: string, args: string[], extra: { cwd?: string; input?: string } = {}) =>
+  const cli = (
+    cmd: string,
+    args: string[],
+    extra: { cwd?: string; input?: string; timeoutMs?: number } = {},
+  ) =>
     runCli(cmd, args, {
       ...(extra.cwd ? { cwd: extra.cwd } : {}),
       ...(extra.input !== undefined ? { input: extra.input } : {}),
+      ...(extra.timeoutMs !== undefined ? { timeoutMs: extra.timeoutMs } : {}),
       ...(opts.signal ? { signal: opts.signal } : {}),
       env: kube.env,
       redactSecrets: secrets,
@@ -182,7 +187,7 @@ export async function handleDeploy(job: DeployJob, opts: RunOptions): Promise<De
 type Cli = (
   cmd: string,
   args: string[],
-  extra?: { cwd?: string; input?: string },
+  extra?: { cwd?: string; input?: string; timeoutMs?: number },
 ) => Promise<{ stdout: string; stderr: string }>
 
 /** Create the namespace if absent (idempotent), stamping any extra labels. */
@@ -241,20 +246,37 @@ async function waitForRollouts(
   timeoutSeconds: number | undefined,
   log: RunOptions['log'],
 ): Promise<boolean> {
-  const timeout = `${timeoutSeconds ?? DEFAULT_ROLLOUT_SECONDS}s`
-  const list = await cli('kubectl', ['get', 'deploy', '-n', namespace, '-o', 'name']).catch(() => ({
-    stdout: '',
-    stderr: '',
-  }))
+  const seconds = timeoutSeconds ?? DEFAULT_ROLLOUT_SECONDS
+  const timeout = `${seconds}s`
+  // Give the per-command wall-clock (exec.ts COMMAND_TIMEOUT_MS) headroom over kubectl's
+  // own `--timeout`, so a rollout window larger than that default isn't silently truncated
+  // (kubectl returns its own timeout first; the outer cap is only a backstop).
+  const timeoutMs = seconds * 1000 + 30_000
+  let listFailed = false
+  const list = await cli('kubectl', ['get', 'deploy', '-n', namespace, '-o', 'name']).catch(
+    (err) => {
+      listFailed = true
+      log?.info('could not list deployments for rollout check', {
+        reason: err instanceof Error ? err.message : String(err),
+      })
+      return { stdout: '', stderr: '' }
+    },
+  )
   const names = list.stdout
     .split('\n')
     .map((l) => l.trim())
     .filter(Boolean)
-  if (names.length === 0) return true // nothing to roll out (e.g. only a static Service)
+  // An empty list means "nothing to roll out" ONLY when the read actually succeeded (e.g.
+  // a service with no Deployments). If the list call itself failed (RBAC, expired token, a
+  // transient apiserver error), report not-ready so the env stays `provisioning` and the
+  // backend keeps polling — never falsely `ready` on an unverified namespace.
+  if (names.length === 0) return !listFailed
   let allReady = true
   for (const name of names) {
     try {
-      await cli('kubectl', ['rollout', 'status', name, '-n', namespace, `--timeout=${timeout}`])
+      await cli('kubectl', ['rollout', 'status', name, '-n', namespace, `--timeout=${timeout}`], {
+        timeoutMs,
+      })
     } catch (err) {
       allReady = false
       log?.info('rollout not complete yet', {

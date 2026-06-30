@@ -74,28 +74,31 @@ function send(res: ServerResponse, status: number, body: unknown): void {
 
 const server = createServer((req, res) => {
   void (async () => {
-    if (req.method === 'GET' && req.url === '/health') {
-      return send(res, 200, { status: 'ok' })
-    }
-    if (!authorized(req)) {
-      return send(res, 401, { error: 'unauthorized' })
-    }
-    // Poll a running/finished job: GET /jobs/{id}.
-    if (req.method === 'GET' && req.url?.startsWith('/jobs/')) {
-      const id = decodeURIComponent(req.url.slice('/jobs/'.length))
-      for (const { registry } of Object.values(KINDS)) {
-        const view = registry.get(id)
-        if (view) return send(res, 200, view)
+    // One outer guard so ANY throw in request handling (a malformed `GET /jobs/%` whose
+    // decodeURIComponent throws a URIError, a body read error, …) becomes a clean 400
+    // rather than an unhandled rejection on this discarded promise that leaves the client
+    // hanging with no response.
+    try {
+      if (req.method === 'GET' && req.url === '/health') {
+        return send(res, 200, { status: 'ok' })
       }
-      return send(res, 404, { error: 'job not found' })
-    }
-    // Start (or re-attach to) a job: POST /jobs with the kind in the body. Idempotent —
-    // a re-dispatched POST re-attaches to the job already running for the id.
-    if (req.method === 'POST' && req.url === '/jobs') {
-      let kind: unknown
-      try {
+      if (!authorized(req)) {
+        return send(res, 401, { error: 'unauthorized' })
+      }
+      // Poll a running/finished job: GET /jobs/{id}.
+      if (req.method === 'GET' && req.url?.startsWith('/jobs/')) {
+        const id = decodeURIComponent(req.url.slice('/jobs/'.length))
+        for (const { registry } of Object.values(KINDS)) {
+          const view = registry.get(id)
+          if (view) return send(res, 200, view)
+        }
+        return send(res, 404, { error: 'job not found' })
+      }
+      // Start (or re-attach to) a job: POST /jobs with the kind in the body. Idempotent —
+      // a re-dispatched POST re-attaches to the job already running for the id.
+      if (req.method === 'POST' && req.url === '/jobs') {
         const raw = JSON.parse(await readBody(req)) as Record<string, unknown>
-        kind = raw.kind
+        const kind = raw.kind
         const entry = typeof kind === 'string' ? KINDS[kind] : undefined
         if (!entry) {
           return send(res, 404, { error: `unknown job kind '${String(kind)}'` })
@@ -103,16 +106,13 @@ const server = createServer((req, res) => {
         const job = entry.parse(raw)
         const view = entry.registry.start(job.jobId, job as never)
         return send(res, 202, { jobId: view.id, state: view.state })
-      } catch (error) {
-        const message = redactSecrets(error instanceof Error ? error.message : String(error))
-        log.error('failed to start job', {
-          kind: typeof kind === 'string' ? kind : undefined,
-          error: message,
-        })
-        return send(res, 400, { error: message })
       }
+      return send(res, 404, { error: 'not found' })
+    } catch (error) {
+      const message = redactSecrets(error instanceof Error ? error.message : String(error))
+      log.error('request handler error', { method: req.method, url: req.url, error: message })
+      if (!res.headersSent) send(res, 400, { error: message })
     }
-    return send(res, 404, { error: 'not found' })
   })()
 })
 

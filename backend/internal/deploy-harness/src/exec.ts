@@ -77,8 +77,14 @@ export async function runCli(
       if (opts.signal.aborted) killChildProcess(child)
       else opts.signal.addEventListener('abort', () => killChildProcess(child), { once: true })
     }
-    if (opts.input !== undefined) {
-      child.stdin?.end(opts.input)
+    if (opts.input !== undefined && child.stdin) {
+      // Writing the manifest into stdin can hit a broken pipe (the child already exited,
+      // spawn failed with ENOENT, or we just SIGTERM'd it on an aborted signal above).
+      // Swallow the resulting 'error' event so an EPIPE can't surface as an
+      // uncaughtException and tear down the whole container — the execFile callback still
+      // rejects with the real failure.
+      child.stdin.on('error', () => {})
+      child.stdin.end(opts.input)
     }
   })
 }

@@ -107,4 +107,19 @@ describe('jobSecrets', () => {
     expect(secrets).toContain('secretvalue123')
     expect(secrets).toContain('helmsecretval')
   })
+
+  it('collects resolved secret leaves nested in a helm release values object', () => {
+    const job = parseDeployJob({
+      ...base,
+      helmReleases: [
+        {
+          name: 'app',
+          chart: 'oci://r/app',
+          version: '1.0.0',
+          values: { db: { password: 'nested-values-secret' }, replicas: 2 },
+        },
+      ],
+    })
+    expect(jobSecrets(job)).toContain('nested-values-secret')
+  })
 })

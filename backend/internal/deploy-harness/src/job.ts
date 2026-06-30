@@ -330,6 +330,17 @@ export function parseDeployJob(input: unknown): DeployJob {
   }
 }
 
+/** Add every non-empty string leaf of a (possibly nested) value to the secret set. */
+function collectStringLeaves(value: unknown, into: Set<string>): void {
+  if (typeof value === 'string') {
+    if (value) into.add(value)
+  } else if (Array.isArray(value)) {
+    for (const v of value) collectStringLeaves(v, into)
+  } else if (value && typeof value === 'object') {
+    for (const v of Object.values(value)) collectStringLeaves(v, into)
+  }
+}
+
 /** The credential strings a job carries, for redaction of any surfaced error/output. */
 export function jobSecrets(job: DeployJob): string[] {
   const secrets = new Set<string>()
@@ -340,6 +351,8 @@ export function jobSecrets(job: DeployJob): string[] {
   }
   for (const rel of job.helmReleases ?? []) {
     for (const s of rel.set ?? []) if (s.value) secrets.add(s.value)
+    // A release's `values` object can carry resolved secret material too; redact those leaves.
+    if (rel.values) collectStringLeaves(rel.values, secrets)
   }
   return [...secrets]
 }

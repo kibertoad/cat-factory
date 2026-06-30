@@ -37,7 +37,13 @@ async function authEnv(ghToken: string | undefined): Promise<NodeJS.ProcessEnv> 
   }
 }
 
-/** Shallow-clone `cloneUrl` at `ref` into `dir` (manifests are read-only — no identity set). */
+/**
+ * Shallow-fetch `cloneUrl` at `ref` into `dir` (manifests are read-only — no identity set).
+ * Uses init + `fetch origin <ref>` + detached checkout rather than `git clone --branch`,
+ * because `--branch` only accepts a branch or tag NAME — it rejects a raw commit SHA, while
+ * `ref` is documented to accept a branch, tag, OR sha (GitHub/GitLab allow fetching a
+ * reachable commit by SHA), which is the natural reproducible choice for a per-PR deploy.
+ */
 export async function cloneManifests(opts: {
   cloneUrl: string
   ref: string
@@ -48,14 +54,14 @@ export async function cloneManifests(opts: {
   log?: Logger
 }): Promise<void> {
   const url = authenticatedCloneUrl(opts.cloneUrl)
-  await runCli(
-    'git',
-    ['clone', '--depth', '1', '--branch', opts.ref, '--single-branch', url, opts.dir],
-    {
-      signal: opts.signal,
-      env: await authEnv(opts.ghToken),
-      redactSecrets: opts.redactSecrets,
-      ...(opts.log ? { log: opts.log } : {}),
-    },
-  )
+  const base = {
+    ...(opts.signal ? { signal: opts.signal } : {}),
+    env: await authEnv(opts.ghToken),
+    ...(opts.redactSecrets ? { redactSecrets: opts.redactSecrets } : {}),
+    ...(opts.log ? { log: opts.log } : {}),
+  }
+  await runCli('git', ['init', '--quiet', opts.dir], base)
+  await runCli('git', ['-C', opts.dir, 'remote', 'add', 'origin', url], base)
+  await runCli('git', ['-C', opts.dir, 'fetch', '--depth', '1', 'origin', opts.ref], base)
+  await runCli('git', ['-C', opts.dir, 'checkout', '--quiet', '--detach', 'FETCH_HEAD'], base)
 }
