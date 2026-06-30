@@ -28,7 +28,12 @@ path is unchanged.
   branch in `pollAgentJob` drives the deploy poll — surfacing live container/subtask progress,
   recovering a container eviction by re-dispatching a fresh deploy job within the same budgets as
   the agent path, and finalizing a terminal view into the step result. The infraless no-op and
-  the legacy single-connection fallback are unchanged.
+  the legacy single-connection fallback are unchanged. The deploy job ref is DETERMINISTIC (run
+  id + deployer kind + eviction epoch, via the new `deployer.logic.ts` helpers) so a Workflows
+  replay re-attaches instead of dispatching a duplicate container; a status-read failure during
+  the poll propagates to the driver (so its `jobPollFailureTolerance` fast-fail applies, matching
+  `pollAgentJob`) rather than being swallowed; and a non-eviction terminal failure marks the
+  deploy container `errored`.
 - `CoreDependencies` threads `deployJobClient` + `resolveDeployCloneTarget` into
   `createEnvironmentsModule`'s provisioning service (optional). The facades wire them in slice 10,
   so both runtimes share the identical (unwired) behaviour for now — nothing dispatches a deploy

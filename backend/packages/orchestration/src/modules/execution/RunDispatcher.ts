@@ -32,7 +32,6 @@ import type {
   ResolverContext,
   RunInitiatorScope,
   RunnerJobRef,
-  RunnerJobView,
   RunRepoContext,
   ServiceProvisioning,
   StepCompletionResolver,
@@ -74,6 +73,7 @@ import type {
 } from '@cat-factory/integrations'
 import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
 import { reviewableArtifactOutput } from './artifact-review.logic.js'
+import { deployEvictionEpoch, deployJobId } from './deployer.logic.js'
 import {
   ANALYSIS_AGENT_KIND,
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
@@ -1294,7 +1294,14 @@ export class RunDispatcher {
     // Start provisioning: a raw-manifest config provisions SYNCHRONOUSLY over REST (a final
     // handle); a config that needs rendering (kustomize/helm/image overrides/secret injections)
     // dispatches a CONTAINER-backed deploy job we park on and poll (see {@link pollDeployerJob}).
-    const ref: RunnerJobRef = { runId: instance.id, jobId: this.idGenerator.next('deploy') }
+    // The job ref is DETERMINISTIC (run id + deployer kind + eviction epoch), so a Workflows
+    // replay that re-runs this step reproduces the same id and the transport (idempotent per ref)
+    // re-attaches instead of dispatching a duplicate deploy container. The epoch advances on each
+    // eviction recovery so a fresh job can't re-attach to the dead container's completed job.
+    const ref: RunnerJobRef = {
+      runId: instance.id,
+      jobId: deployJobId(instance.id, deployEvictionEpoch(step)),
+    }
     let dispatch: ProvisionDispatch
     try {
       dispatch = await this.environmentProvisioning!.startProvision(
@@ -1331,14 +1338,12 @@ export class RunDispatcher {
     step: PipelineStep,
   ): Promise<AdvanceResult> {
     const ref: RunnerJobRef = { runId: instance.id, jobId: step.jobId! }
-    let view: RunnerJobView
-    try {
-      view = await this.environmentProvisioning!.pollProvisionJob(workspaceId, ref)
-    } catch {
-      // A transient status-read failure — keep polling (the driver tolerates a bounded run of
-      // read failures before it gives up).
-      return { kind: 'awaiting_job', jobId: step.jobId!, stepIndex: instance.currentStep }
-    }
+    // Let a status-read failure THROW to the driver, exactly as `pollAgentJob` lets
+    // `executor.pollJob` throw: the driver counts consecutive read failures and fast-fails the
+    // run as `timeout` once `jobPollFailureTolerance` is hit. Swallowing it here would hide every
+    // read failure from that counter, so an unreachable deploy container would only stop at the
+    // full `jobMaxPolls` budget with a misleading "did not finish" message.
+    const view = await this.environmentProvisioning!.pollProvisionJob(workspaceId, ref)
     if (view.state === 'running') {
       let changed = false
       if (this.applyContainerRunning(step, view)) changed = true
@@ -1397,6 +1402,10 @@ export class RunDispatcher {
     const provisioning = await this.resolveServiceProvisioning(workspaceId, block)
     step.jobId = undefined
     step.subtasks = undefined
+    // A non-eviction terminal failure means the deploy container itself died with a real error:
+    // reflect it as `errored` (mirrors the agent path's genuine-failure handling) so the failed
+    // run details don't keep showing the container "up". `failDeployerStep` persists it below.
+    if (view.state === 'failed') step.container = { ...step.container, status: 'errored' }
     let handle
     try {
       handle = await this.environmentProvisioning!.finalizeProvision(
