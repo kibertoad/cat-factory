@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS local_model_endpoints (
   label TEXT NOT NULL,
   base_url TEXT NOT NULL,
   api_key_cipher TEXT,
-  models TEXT NOT NULL DEFAULT '[]',
+  models TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (user_id, provider)
@@ -190,11 +190,13 @@ export class SqliteProviderApiKeyRepository implements ProviderApiKeyRepository 
   }
 
   async add(record: ProviderApiKeyRecord): Promise<void> {
+    // A newly added key is always live, so `deleted_at` is forced NULL on insert (matching the
+    // D1 repo) — a tombstone is only ever set later by `softDelete`, never carried in at birth.
     this.db
       .prepare(
         `INSERT INTO provider_api_keys
            (${API_KEY_COLUMNS})
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
       )
       .run(
         record.id,
@@ -209,7 +211,6 @@ export class SqliteProviderApiKeyRepository implements ProviderApiKeyRepository 
         record.inputTokens,
         record.outputTokens,
         record.requestCount,
-        record.deletedAt,
       )
   }
 

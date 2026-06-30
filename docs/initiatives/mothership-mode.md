@@ -34,6 +34,11 @@
     boot with an in-process work runner; the `config.mothership` SPA flag. NOTE: a true
     `db: undefined` boot depends on the `buildNodeContainer` db-undefined audit currently scoped
     to PR 3 — so 1b either pulls that audit forward or stays a narrow happy-path until PR 3.
+    1b MUST also add a cross-runtime conformance assertion for this store: it ships in 1a with
+    only an isolated unit test because the conformance harness builds through `buildLocalContainer`
+    (Postgres), which the store is not wired into yet — once 1b wires the `local-sqlite` bucket in,
+    bind it to `defineConformanceSuite` so its lease/rotation logic can't drift from the D1/Drizzle
+    repos silently (per "Keep the runtimes symmetric").
 
 ## Goal & rationale
 

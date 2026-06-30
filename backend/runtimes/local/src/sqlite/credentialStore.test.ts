@@ -98,14 +98,50 @@ describe('SqliteProviderApiKeyRepository', () => {
     expect(first?.id).toBe('cold')
     expect(first?.lastUsedAt).toBe(20_000)
 
-    // Now both have usage; `hot` still carries its window tokens, `cold` none → cold again.
+    // `cold` now carries a lastUsedAt but still no window usage, `hot` carries 200 in-window
+    // tokens, so `cold` keeps winning on lower rolling-window usage (0 < 200).
     const second = await repo.leaseLeastUsed(scopes, 'openai', 21_000, WINDOW)
     expect(second?.id).toBe('cold')
+  })
+
+  it('orders by rolling-window usage (full input+output token sum) when both keys are live', async () => {
+    const repo = store.providerApiKeyRepository
+    const scopes = [{ scope: 'workspace' as const, scopeId: 'ws_1' }]
+    // Both keys are leased and in an ACTIVE window, so the never-leased / NULLS-FIRST shortcut
+    // never fires — the winner is decided purely by `input_tokens + output_tokens` ASC.
+    // `light` has the larger input count but the smaller TOTAL, so this also pins the sum to
+    // both columns (an input-only sum, or a DESC order, would pick `heavy` and fail).
+    await repo.add(
+      apiKey({
+        id: 'light',
+        createdAt: 1,
+        windowStartedAt: 90_000,
+        inputTokens: 100,
+        outputTokens: 10, // total 110
+        lastUsedAt: 90_000,
+      }),
+    )
+    await repo.add(
+      apiKey({
+        id: 'heavy',
+        createdAt: 2,
+        windowStartedAt: 90_000,
+        inputTokens: 20,
+        outputTokens: 200, // total 220
+        lastUsedAt: 90_000,
+      }),
+    )
+    const leased = await repo.leaseLeastUsed(scopes, 'openai', 100_000, WINDOW)
+    expect(leased?.id).toBe('light')
   })
 
   it('ignores usage from an expired window when leasing', async () => {
     const repo = store.providerApiKeyRepository
     const scopes = [{ scope: 'workspace' as const, scopeId: 'ws_1' }]
+    // `stale` carries huge counters but its window (started 1000) is long expired at now=100000,
+    // so it counts as 0 usage. `busy` is in an ACTIVE window with a small but non-zero usage.
+    // The expiry branch is the ONLY thing that lets `stale` (0) beat `busy` (20): drop or invert
+    // the `now - window_started_at >= windowMs THEN 0` reset and `stale` reads 19998 and loses.
     await repo.add(
       apiKey({
         id: 'stale',
@@ -116,12 +152,41 @@ describe('SqliteProviderApiKeyRepository', () => {
         lastUsedAt: 1000,
       }),
     )
-    await repo.add(apiKey({ id: 'fresh', createdAt: 2, lastUsedAt: 500 }))
-    // At now=100000 the stale window (started 1000) is long expired → counts as 0 usage, so
-    // it ties `fresh` on usage and wins on least-recently-leased (1000 vs ... fresh=500).
-    // fresh was leased earlier (500 < 1000) so fresh wins the tiebreak.
+    await repo.add(
+      apiKey({
+        id: 'busy',
+        createdAt: 2,
+        windowStartedAt: 80_000,
+        inputTokens: 10,
+        outputTokens: 10, // total 20, in-window
+        lastUsedAt: 80_000,
+      }),
+    )
     const leased = await repo.leaseLeastUsed(scopes, 'openai', 100_000, WINDOW)
-    expect(leased?.id).toBe('fresh')
+    expect(leased?.id).toBe('stale')
+  })
+
+  it('never leases a soft-deleted or wrong-provider key', async () => {
+    const repo = store.providerApiKeyRepository
+    const scopes = [{ scope: 'workspace' as const, scopeId: 'ws_1' }]
+    // `del` and `wrong` are both never-leased (0 usage, NULL last_used_at) so each would WIN the
+    // lease ordering if its guard were dropped; `ok` carries usage so it only wins once both are
+    // excluded by the `deleted_at IS NULL` + `provider = ?` filters.
+    await repo.add(apiKey({ id: 'del', provider: 'openai', createdAt: 1 }))
+    await repo.softDelete('workspace', 'ws_1', 'del', 9999)
+    await repo.add(apiKey({ id: 'wrong', provider: 'anthropic', createdAt: 2 }))
+    await repo.add(
+      apiKey({
+        id: 'ok',
+        provider: 'openai',
+        createdAt: 3,
+        windowStartedAt: 95_000,
+        lastUsedAt: 95_000,
+      }),
+    )
+
+    const leased = await repo.leaseLeastUsed(scopes, 'openai', 100_000, WINDOW)
+    expect(leased?.id).toBe('ok')
   })
 
   it('returns null when the pool is empty', async () => {
