@@ -538,8 +538,10 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   })
 
   // Bind the in-process work runner to the now-built execution service, so `startRun` /
-  // `signalDecision` drive runs in-process (mothership mode; no-op otherwise).
-  inProcessRunner?.bind(container.executionService)
+  // `signalDecision` drive runs in-process (mothership mode; no-op otherwise). The kind-spanning
+  // agent-runs reader powers the storage-reconciliation backstop (re-drive a run still `running` in
+  // storage that lost its queue row) — the no-pg-boss analogue of the stale-run sweeper.
+  inProcessRunner?.bind(container.executionService, container.agentRunRepository)
 
   // Surface the local-mode settings service so the dedicated local-settings panel can
   // read/write the warm-pool + checkout config (the controller 503s when this is absent,

@@ -20,6 +20,13 @@ import { DatabaseSync } from 'node:sqlite'
 //   - a row is `queued` (needs a drive, free to claim) or `active` (being driven; `lease_until`
 //     is the crash-detection deadline). `rerun` records that a signal arrived mid-drive so the
 //     finishing driver re-queues exactly once (coalescing), like the in-memory runner did.
+//   - `attempts` counts CONSECUTIVE FAILED drives (the retry budget) — NOT the number of times a
+//     run was driven. A successful drive (a standstill, a coalesced re-queue, or an unbounded-gate
+//     re-arm) resets it to 0; only an errored drive bumps it (`deferFailure`). So a run that
+//     re-arms or coalesces signals forever is never mistaken for a poison pill — eviction
+//     (`evictExhausted`) fires ONLY on genuinely repeated failures, the analogue of pg-boss
+//     dead-lettering a job after `retryLimit` consecutive failures (a re-armed gate, which pg-boss
+//     completes successfully and re-enqueues fresh, likewise keeps its budget intact here).
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS execution_work_queue (
@@ -46,8 +53,18 @@ export function openWorkQueueDb(path: string): DatabaseSync {
   return db
 }
 
-/** A run claimed for driving. `attempts` is the post-claim count (1 on the first drive). */
+/**
+ * A run claimed for driving. `attempts` is the run's CONSECUTIVE-failure count at claim time (0 for
+ * a healthy run); claiming does not change it — only an errored drive (`deferFailure`) does.
+ */
 export interface ClaimedRun {
+  workspaceId: string
+  executionId: string
+  attempts: number
+}
+
+/** A run evicted by {@link SqliteWorkQueue.evictExhausted} (its retry budget was exhausted). */
+export interface EvictedRun {
   workspaceId: string
   executionId: string
   attempts: number
@@ -91,6 +108,27 @@ export class SqliteWorkQueue {
   }
 
   /**
+   * Insert a fresh `queued` row ONLY if the run has no row at all (`ON CONFLICT DO NOTHING`), and
+   * report whether a row was created. The storage-reconciliation backstop uses this: it re-enqueues
+   * a run that storage still reports `running` but that has NO queue entry (its row was lost, or the
+   * enqueue never happened because a previous process died between the storage write and the
+   * enqueue). Crucially it must NOT disturb a run that already has a row — a genuinely deferred gate
+   * re-poll / error backoff is `running` in storage too, and forcing it back to `queued` would yank
+   * it out of its wait. Returns true when a row was inserted (a real orphan was recovered).
+   */
+  enqueueIfAbsent(workspaceId: string, executionId: string, now: number): boolean {
+    const res = this.db
+      .prepare(
+        `INSERT INTO execution_work_queue
+           (execution_id, workspace_id, state, rerun, lease_until, attempts, enqueued_at)
+         VALUES (?, ?, 'queued', 0, 0, 0, ?)
+         ON CONFLICT(execution_id) DO NOTHING`,
+      )
+      .run(executionId, workspaceId, now)
+    return Number(res.changes) > 0
+  }
+
+  /**
    * Flag an in-flight drive so the finishing driver re-queues the run exactly once (the coalescing
    * the in-memory runner did with its `rerun` map). Only ever called while the run's row is
    * `active`; returns true if it matched (it always does under that invariant — kept as a guard).
@@ -122,16 +160,12 @@ export class SqliteWorkQueue {
   /**
    * Claim the oldest drivable run, or null if none. Drivable = `queued`, or `active` whose lease
    * has expired (a drive orphaned by a crash, recovered once the lease lapses). Runs in `exclude`
-   * (being driven in THIS process) are skipped, and a run past `maxAttempts` is evicted as a poison
-   * pill rather than re-driven forever. The claim marks the row `active` with a fresh lease and
-   * bumps `attempts`, so the row is non-claimable again the instant this returns.
+   * (being driven in THIS process) are skipped. The claim marks the row `active` with a fresh lease
+   * (so it is non-claimable again the instant this returns) but does NOT touch `attempts` — the
+   * retry budget tracks consecutive FAILURES, not claims, so eviction is the separate
+   * {@link evictExhausted} pass the runner makes before claiming.
    */
-  claim(
-    now: number,
-    leaseMs: number,
-    maxAttempts: number,
-    exclude: ReadonlySet<string>,
-  ): ClaimedRun | null {
+  claim(now: number, leaseMs: number, exclude: ReadonlySet<string>): ClaimedRun | null {
     const rows = this.db
       .prepare(
         `SELECT execution_id, workspace_id, attempts FROM execution_work_queue
@@ -141,31 +175,58 @@ export class SqliteWorkQueue {
       .all(now) as unknown as ClaimRow[]
     for (const row of rows) {
       if (exclude.has(row.execution_id)) continue
-      if (row.attempts >= maxAttempts) {
-        this.db
-          .prepare('DELETE FROM execution_work_queue WHERE execution_id = ?')
-          .run(row.execution_id)
-        continue
-      }
       this.db
         .prepare(
           `UPDATE execution_work_queue
-             SET state = 'active', rerun = 0, lease_until = ?, attempts = attempts + 1
+             SET state = 'active', rerun = 0, lease_until = ?
            WHERE execution_id = ?`,
         )
         .run(now + leaseMs, row.execution_id)
       return {
         workspaceId: row.workspace_id,
         executionId: row.execution_id,
-        attempts: row.attempts + 1,
+        attempts: row.attempts,
       }
     }
     return null
   }
 
   /**
-   * Settle a finished drive: if a signal arrived mid-drive (`rerun`), re-queue the run for one more
-   * drive and report `requeued: true`; otherwise the run reached a standstill, so delete its row.
+   * Evict every drivable run whose CONSECUTIVE-failure count has reached `maxAttempts` (a poison
+   * pill — repeated drive failures, the analogue of pg-boss dead-lettering after `retryLimit`). The
+   * row is deleted and returned so the runner can fail the run loudly (a notification / `failRun`)
+   * instead of leaving it silently stuck `running` in storage. Only considers drivable rows
+   * (`queued` or lease-expired `active`) and skips `exclude` (a run being driven right now), so it
+   * never reaps a healthy in-flight drive. Runs before the claim pass on each drain.
+   */
+  evictExhausted(now: number, maxAttempts: number, exclude: ReadonlySet<string>): EvictedRun[] {
+    const rows = this.db
+      .prepare(
+        `SELECT execution_id, workspace_id, attempts FROM execution_work_queue
+         WHERE (state = 'queued' OR (state = 'active' AND lease_until <= ?)) AND attempts >= ?
+         ORDER BY enqueued_at ASC`,
+      )
+      .all(now, maxAttempts) as unknown as ClaimRow[]
+    const evicted: EvictedRun[] = []
+    for (const row of rows) {
+      if (exclude.has(row.execution_id)) continue
+      this.db
+        .prepare('DELETE FROM execution_work_queue WHERE execution_id = ?')
+        .run(row.execution_id)
+      evicted.push({
+        workspaceId: row.workspace_id,
+        executionId: row.execution_id,
+        attempts: row.attempts,
+      })
+    }
+    return evicted
+  }
+
+  /**
+   * Settle a SUCCESSFUL drive that reached a standstill: if a signal arrived mid-drive (`rerun`),
+   * re-queue the run for one more drive and report `requeued: true`; otherwise delete its row. Both
+   * are success outcomes, so `attempts` is reset to 0 — the run cleared its work, so its retry
+   * budget starts fresh.
    */
   settle(executionId: string): { requeued: boolean } {
     const row = this.db
@@ -174,7 +235,9 @@ export class SqliteWorkQueue {
     if (row && row.rerun) {
       this.db
         .prepare(
-          `UPDATE execution_work_queue SET state = 'queued', rerun = 0, lease_until = 0 WHERE execution_id = ?`,
+          `UPDATE execution_work_queue
+             SET state = 'queued', rerun = 0, lease_until = 0, attempts = 0
+           WHERE execution_id = ?`,
         )
         .run(executionId)
       return { requeued: true }
@@ -184,15 +247,50 @@ export class SqliteWorkQueue {
   }
 
   /**
-   * Keep a run but hold it off the claim queue until `notBefore`, by leaving it `active` with a
-   * future lease. Used for a re-armed unbounded gate (re-poll after the gate interval) and for an
-   * errored drive (retry after a backoff) — in both cases the lease doubles as crash recovery: if
-   * the process dies during the wait, the lease lapses and the run is reclaimed.
+   * Settle a re-armed unbounded gate (human review): the drive SUCCEEDED but the gate needs another
+   * poll cycle. If a signal coalesced mid-drive (`rerun`), re-queue the run immediately (drivable
+   * now, `requeued: true`) so the new decision is acted on without waiting out the gate interval;
+   * otherwise hold it `active` with a future lease until `notBefore`, then re-poll. Either way
+   * `attempts` resets to 0 — a re-arm is a healthy drive, NOT a failure, so it never counts toward
+   * the poison-pill budget (an unbounded gate re-arms indefinitely). The future lease doubles as
+   * crash recovery: if the process dies during the wait, the lease lapses and the run is reclaimed.
    */
-  defer(executionId: string, notBefore: number): void {
+  deferRearm(executionId: string, notBefore: number): { requeued: boolean } {
+    const row = this.db
+      .prepare('SELECT rerun FROM execution_work_queue WHERE execution_id = ?')
+      .get(executionId) as { rerun: number } | undefined
+    if (row && row.rerun) {
+      this.db
+        .prepare(
+          `UPDATE execution_work_queue
+             SET state = 'queued', rerun = 0, lease_until = 0, attempts = 0
+           WHERE execution_id = ?`,
+        )
+        .run(executionId)
+      return { requeued: true }
+    }
     this.db
       .prepare(
-        `UPDATE execution_work_queue SET state = 'active', rerun = 0, lease_until = ? WHERE execution_id = ?`,
+        `UPDATE execution_work_queue
+           SET state = 'active', rerun = 0, lease_until = ?, attempts = 0
+         WHERE execution_id = ?`,
+      )
+      .run(notBefore, executionId)
+    return { requeued: false }
+  }
+
+  /**
+   * Hold a run that ERRORED off the claim queue until `notBefore` (a backoff before retrying),
+   * bumping `attempts` so a genuinely poison run is evicted once it reaches the cap. The lease
+   * doubles as crash recovery: if the process dies during the backoff, the lease lapses and the run
+   * is reclaimed. This is the ONLY method that grows the retry budget.
+   */
+  deferFailure(executionId: string, notBefore: number): void {
+    this.db
+      .prepare(
+        `UPDATE execution_work_queue
+           SET state = 'active', rerun = 0, lease_until = ?, attempts = attempts + 1
+         WHERE execution_id = ?`,
       )
       .run(notBefore, executionId)
   }

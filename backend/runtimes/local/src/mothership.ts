@@ -7,7 +7,7 @@ import {
   type Logger,
   createRemoteRepositoryRegistry,
 } from '@cat-factory/server'
-import type { WorkRunner } from '@cat-factory/kernel'
+import type { AgentRunRepository, WorkRunner } from '@cat-factory/kernel'
 import { type LocalCredentialStore, createLocalCredentialStore } from './sqlite/credentialStore.js'
 import { SqliteWorkQueue, createWorkQueue } from './sqlite/workQueue.js'
 
@@ -56,8 +56,10 @@ export interface MothershipComposition {
    * six core domain repos, which is NOT enough for a board load or a run end-to-end — those
    * touch many more repos (mounts, settings, presets, notifications, …) that are still
    * un-allow-listed (and the direct-db repos in `buildNodeContainer` have no db here), so they
-   * currently throw. The widened surface is the gating phase in docs/initiatives/mothership-mode.md
-   * (this PR must stay a draft until it lands).
+   * currently throw. Widening that surface is the gating phase tracked in
+   * docs/initiatives/mothership-mode.md; until it lands a mothership node cannot yet serve a board
+   * load or a run end-to-end (this durable-work-queue slice is the execution substrate it will run
+   * on, not the end-to-end enablement itself).
    */
   repos: CoreRepositories
   /** The local-sqlite credential store (kept on the laptop, sealed with the local key). */
@@ -139,9 +141,15 @@ export interface SqliteWorkRunnerOptions {
  *     `driveExecution` advance/poll loop the Node facade uses (real timer-backed sleeps);
  *   - a signal arriving mid-drive coalesces into exactly one follow-up via the row's `rerun` flag;
  *   - a re-armed unbounded gate (human review) is deferred for `reArmDelayMs` then re-polled — the
- *     in-process analogue of the stale-run sweeper re-enqueuing it;
+ *     in-process analogue of the stale-run sweeper re-enqueuing it. A re-arm is a SUCCESSFUL drive,
+ *     so it resets the retry budget: an unbounded gate re-arms forever without ever being mistaken
+ *     for a poison pill;
+ *   - `maxAttempts` bounds CONSECUTIVE drive FAILURES (not total claims): a poison run is evicted
+ *     AND failed loudly, while a healthy run that re-arms / coalesces keeps its budget;
  *   - a periodic recovery poll + a boot-time orphan reset reclaim runs left `active` by a dead
- *     process (the durability pg-boss gets from Postgres, here from the SQLite file).
+ *     process, and a storage-reconciliation pass re-enqueues any run still `running` in storage that
+ *     lost its queue row (the two legs of the durability pg-boss gets from Postgres, here from the
+ *     SQLite file + the `agent_runs` source of truth).
  *
  * The execution service is bound after the container is built (it does not exist when the runner is
  * constructed). The `running` set tracks which runs THIS process is driving, so the claim loop and
@@ -149,6 +157,7 @@ export interface SqliteWorkRunnerOptions {
  */
 export class SqliteWorkRunner implements WorkRunner {
   private exec?: ExecutionService
+  private staleRuns?: AgentRunRepository
   private readonly running = new Set<string>()
   private sweepTimer?: ReturnType<typeof setInterval>
   private stopped = false
@@ -162,11 +171,15 @@ export class SqliteWorkRunner implements WorkRunner {
 
   /**
    * Bind the execution service once the container is built, recover any runs orphaned by a previous
-   * process, drive what's queued, and start the periodic recovery poll. Idempotent / safe to call
-   * once per runner.
+   * process, drive what's queued, and start the periodic recovery poll. `staleRuns` (the
+   * kind-spanning `agent_runs` reader) enables the storage-reconciliation backstop — re-driving a
+   * run that storage reports `running` but that has no queue row at all (its row was lost, or never
+   * enqueued because a prior process died). Idempotent: a second call clears the previous sweep
+   * timer before re-arming, so it never leaks an interval.
    */
-  bind(exec: ExecutionService): void {
+  bind(exec: ExecutionService, staleRuns?: AgentRunRepository): void {
     this.exec = exec
+    this.staleRuns = staleRuns
     // Boot recovery: any row left `active` was orphaned when a previous process died (this process
     // drives nothing yet), so reclaim it for an immediate re-drive.
     const orphans = this.queue.resetOrphans()
@@ -177,10 +190,17 @@ export class SqliteWorkRunner implements WorkRunner {
       )
     }
     this.drain()
+    // Boot-time storage reconciliation: re-enqueue any run `running` in storage with no queue row
+    // (the second leg of pg-boss-style durability — the stale-run sweeper). Best-effort.
+    void this.reconcileStorage()
     // Backstop for runs whose deferred re-arm / error-backoff kick was lost, or whose lease lapsed:
-    // a periodic drain reclaims every queued + lease-expired row. Unref'd so it never holds the
-    // process open on its own.
-    this.sweepTimer = setInterval(() => this.drain(), this.opts.sweepIntervalMs)
+    // a periodic drain reclaims every queued + lease-expired row, evicts exhausted runs, and
+    // reconciles storage orphans. Unref'd so it never holds the process open on its own.
+    if (this.sweepTimer) clearInterval(this.sweepTimer)
+    this.sweepTimer = setInterval(() => {
+      this.drain()
+      void this.reconcileStorage()
+    }, this.opts.sweepIntervalMs)
     this.sweepTimer.unref?.()
   }
 
@@ -224,13 +244,18 @@ export class SqliteWorkRunner implements WorkRunner {
   /** Claim and launch drives up to the concurrency cap. Synchronous; each drive re-drains on finish. */
   private drain(): void {
     if (!this.exec || this.stopped) return
+    // First reap poison runs (consecutive-failure budget exhausted): delete the row AND fail the
+    // run loudly, so it surfaces as a terminal failure instead of silently vanishing from the queue
+    // while storage still reports it `running`.
+    for (const evicted of this.queue.evictExhausted(
+      this.now(),
+      this.opts.maxAttempts,
+      this.running,
+    )) {
+      void this.failEvicted(evicted.workspaceId, evicted.executionId, evicted.attempts)
+    }
     while (this.running.size < this.opts.concurrency) {
-      const job = this.queue.claim(
-        this.now(),
-        this.opts.leaseMs,
-        this.opts.maxAttempts,
-        this.running,
-      )
+      const job = this.queue.claim(this.now(), this.opts.leaseMs, this.running)
       if (!job) break
       void this.driveClaimed(job.workspaceId, job.executionId)
     }
@@ -247,11 +272,14 @@ export class SqliteWorkRunner implements WorkRunner {
       // Shutting down: don't touch the (closing) queue; the in-memory cleanup below still runs.
       if (this.stopped) return
       if (outcome.rearmedGate) {
-        // A re-armed unbounded-wait gate (human review) released without finishing. Hold the run
-        // off the claim queue until the gate's poll interval, then re-poll — the in-process
-        // analogue of the sweeper re-enqueuing it. The future lease doubles as crash recovery.
-        this.queue.defer(executionId, this.now() + this.opts.reArmDelayMs)
-        this.scheduleKick(this.opts.reArmDelayMs)
+        // A re-armed unbounded-wait gate (human review) released without finishing — a SUCCESSFUL
+        // drive, so it resets the retry budget and is never evicted as poison no matter how long
+        // the human takes. If a signal coalesced mid-drive, deferRearm re-queues it NOW (the
+        // trailing drain() picks it up); otherwise it holds the run off the queue until the gate's
+        // poll interval, then re-polls — the in-process analogue of the sweeper re-enqueuing it.
+        // The future lease doubles as crash recovery.
+        const { requeued } = this.queue.deferRearm(executionId, this.now() + this.opts.reArmDelayMs)
+        if (!requeued) this.scheduleKick(this.opts.reArmDelayMs)
       } else {
         // Standstill (or a coalesced signal): settle deletes the row, or re-queues it for one more
         // drive — the trailing drain() below picks the re-queued run straight back up.
@@ -263,8 +291,9 @@ export class SqliteWorkRunner implements WorkRunner {
         { workspaceId, executionId, err: err instanceof Error ? err.message : String(err) },
         'mothership in-process execution driver failed',
       )
-      // Hold the run for a backoff'd retry; the attempts cap evicts a genuinely poison run.
-      this.queue.defer(executionId, this.now() + this.opts.errorBackoffMs)
+      // Hold the run for a backoff'd retry, bumping the consecutive-failure count; once it reaches
+      // the cap the next drain evicts it (and fails it loudly) rather than re-driving forever.
+      this.queue.deferFailure(executionId, this.now() + this.opts.errorBackoffMs)
       this.scheduleKick(this.opts.errorBackoffMs)
     } finally {
       this.running.delete(executionId)
@@ -277,5 +306,70 @@ export class SqliteWorkRunner implements WorkRunner {
   private scheduleKick(delayMs: number): void {
     const timer = setTimeout(() => this.drain(), Math.max(1, delayMs))
     timer.unref?.()
+  }
+
+  /**
+   * Fail an evicted run loudly. A run is evicted only after `maxAttempts` CONSECUTIVE drive errors —
+   * which (because `driveExecution` funnels every recoverable error into `failRun` itself) means
+   * the persistence path kept throwing, e.g. the mothership was unreachable. Mark it `evicted` so
+   * it leaves the `running` limbo it would otherwise sit in forever; best-effort, since the same
+   * broken persistence may make this `failRun` throw too (logged, not rethrown).
+   */
+  private async failEvicted(
+    workspaceId: string,
+    executionId: string,
+    attempts: number,
+  ): Promise<void> {
+    this.log.error(
+      { workspaceId, executionId, attempts },
+      'mothership work queue: evicting run after repeated drive failures',
+    )
+    try {
+      await this.exec?.failRun(
+        workspaceId,
+        executionId,
+        `Execution driver failed ${attempts} times in a row; giving up.`,
+        'evicted',
+        null,
+      )
+    } catch (err) {
+      this.log.error(
+        { workspaceId, executionId, err: err instanceof Error ? err.message : String(err) },
+        'mothership work queue: failed to mark an evicted run failed',
+      )
+    }
+  }
+
+  /**
+   * The second leg of pg-boss-style durability (the stale-run sweeper): re-enqueue any run that
+   * storage still reports `running` but that has NO queue row — its row was lost, or the enqueue
+   * never happened because a prior process died between the storage write and the enqueue. The
+   * queue-local recovery (orphan reset + lease reclaim) only covers rows that EXIST; this reconciles
+   * the queue against the source of truth. `enqueueIfAbsent` makes it safe: a run already deferred /
+   * driving keeps its row untouched. Best-effort — the remote `agentRunRepository` may not yet
+   * allow-list `listStale` (mothership gating phase), so a throw is swallowed.
+   */
+  private async reconcileStorage(): Promise<void> {
+    if (!this.staleRuns || this.stopped) return
+    let recovered = 0
+    try {
+      const stale = await this.staleRuns.listStale(this.now() - this.opts.leaseMs)
+      if (this.stopped) return
+      for (const ref of stale) {
+        if (ref.kind !== 'execution') continue
+        if (this.running.has(ref.id)) continue
+        if (this.queue.enqueueIfAbsent(ref.workspaceId, ref.id, this.now())) recovered++
+      }
+    } catch {
+      // listStale not reachable / not allow-listed yet — the backstop is best-effort.
+      return
+    }
+    if (recovered > 0) {
+      this.log.warn(
+        { recovered },
+        'mothership work queue: re-enqueued runs still running in storage with no queue row',
+      )
+      this.drain()
+    }
   }
 }
