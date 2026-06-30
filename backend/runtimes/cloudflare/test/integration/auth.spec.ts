@@ -88,6 +88,19 @@ describe('auth', () => {
       })
     })
 
+    it('advertises testingNoAuth when TESTING_NO_AUTH is set (SPA renders anonymously)', async () => {
+      const res = await fetchWith(
+        { ...env, TESTING_NO_AUTH: 'true', ENVIRONMENT: 'test' } as typeof env,
+        { path: '/auth/config' },
+      )
+      expect(await res.json()).toEqual({
+        enabled: false,
+        providers: { github: false, password: false, google: false },
+        testingNoAuth: true,
+        infrastructure: INFRASTRUCTURE,
+      })
+    })
+
     it('leaves the API open when auth is unconfigured but AUTH_DEV_OPEN is set', async () => {
       // The base test env sets AUTH_DEV_OPEN=true (mirrors local `.dev.vars`).
       const res = await fetchWith(env, { path: '/workspaces' })

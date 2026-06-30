@@ -772,7 +772,11 @@
       "sendResetLink": "Enviar enlace de restablecimiento",
       "backToSignIn": "Volver al inicio de sesión",
       "signInFailed": "Error al iniciar sesión. Revisa tus datos e inténtalo de nuevo.",
-      "genericError": "Algo salió mal. Inténtalo de nuevo."
+      "genericError": "Algo salió mal. Inténtalo de nuevo.",
+      "notConfiguredTitle": "La autenticación no está configurada",
+      "notConfiguredBody": "Este despliegue no tiene ningún método de inicio de sesión habilitado, por lo que no puedes iniciar sesión ni acceder a tus espacios de trabajo. Un administrador debe configurar un proveedor de autenticación (OAuth de GitHub o Google, o inicio de sesión con correo y contraseña).",
+      "patPlaceholder": "Token de acceso personal de {provider}",
+      "signInWithPat": "Iniciar sesión con un PAT de {provider}"
     },
     "resetPassword": {
       "title": "Restablecer contraseña",

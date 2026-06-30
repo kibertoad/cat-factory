@@ -63,10 +63,10 @@ with no port-forwarding layer:
   so `https://127.0.0.1:6443` reaches it from BOTH inside WSL and from a Windows-host process —
   no `netsh portproxy` / `.wslconfig` change needed. Always use `127.0.0.1` / `localhost`, never
   the WSL `eth0` address (the `172.x` NAT IP is reassigned on every reboot).
-- **Where you run `local-server` matters for the RUNNER path** (see below): running it *inside*
+- **Where you run `local-server` matters for the RUNNER path** (see below): running it _inside_
   WSL (the same distro as k3s) keeps the executor-pod → host-proxy callback to a single hop.
   Running it on the Windows host instead adds a pod → WSL → Windows-gateway hop plus a Windows
-  Firewall inbound rule, so prefer WSL for the runner backend. For *environments* it makes no
+  Firewall inbound rule, so prefer WSL for the runner backend. For _environments_ it makes no
   difference — provisioning only needs outbound HTTPS to `:6443`.
 
 ### ServiceAccount, RBAC, and token
@@ -90,12 +90,12 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata: { name: cat-factory-runner, namespace: cat-factory }
 rules:
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["create", "get", "list", "delete"]
-  - apiGroups: [""]
-    resources: ["pods/proxy"]
-    verbs: ["create", "get"]
+  - apiGroups: ['']
+    resources: ['pods']
+    verbs: ['create', 'get', 'list', 'delete']
+  - apiGroups: ['']
+    resources: ['pods/proxy']
+    verbs: ['create', 'get']
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

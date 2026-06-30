@@ -772,7 +772,11 @@
       "sendResetLink": "Wyślij link resetujący",
       "backToSignIn": "Powrót do logowania",
       "signInFailed": "Logowanie nie powiodło się. Sprawdź swoje dane i spróbuj ponownie.",
-      "genericError": "Coś poszło nie tak. Spróbuj ponownie."
+      "genericError": "Coś poszło nie tak. Spróbuj ponownie.",
+      "notConfiguredTitle": "Uwierzytelnianie nie jest skonfigurowane",
+      "notConfiguredBody": "To wdrożenie nie ma włączonej żadnej metody logowania, więc nie możesz się zalogować ani uzyskać dostępu do swoich przestrzeni roboczych. Administrator musi skonfigurować dostawcę uwierzytelniania (OAuth GitHub lub Google albo logowanie e-mailem i hasłem).",
+      "patPlaceholder": "Osobisty token dostępu {provider}",
+      "signInWithPat": "Zaloguj się tokenem PAT {provider}"
     },
     "resetPassword": {
       "title": "Zresetuj hasło",

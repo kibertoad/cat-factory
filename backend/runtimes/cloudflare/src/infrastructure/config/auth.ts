@@ -27,7 +27,12 @@ export function loadAuthConfig(env: Env): AuthConfig {
   // deployment, so leaving AUTH_DEV_OPEN=true set on a deployed worker can no
   // longer silently re-open the API. Operators should set ENVIRONMENT=production.
   const environment = env.ENVIRONMENT?.trim().toLowerCase() ?? ''
-  const devOpen = env.AUTH_DEV_OPEN?.trim() === 'true' && !PRODUCTION_ENVIRONMENTS.has(environment)
+  const nonProd = !PRODUCTION_ENVIRONMENTS.has(environment)
+  // `TESTING_NO_AUTH` is a stronger `AUTH_DEV_OPEN`: besides leaving the API open it tells the
+  // SPA to render the board anonymously (no login gate). Test-only; honoured only outside a
+  // production-like ENVIRONMENT, and it implies devOpen.
+  const testingNoAuth = env.TESTING_NO_AUTH?.trim() === 'true' && nonProd
+  const devOpen = (env.AUTH_DEV_OPEN?.trim() === 'true' || testingNoAuth) && nonProd
   const strongSecret = sessionSecret.length >= MIN_SESSION_SECRET_LENGTH
   const githubEnabled = clientId !== '' && clientSecret !== '' && strongSecret
   // Google OAuth is offered only when its client id/secret are both present.
@@ -39,6 +44,7 @@ export function loadAuthConfig(env: Env): AuthConfig {
     // Enabled when ANY provider is configured (with a strong session secret).
     enabled: githubEnabled || googleEnabled || passwordEnabled,
     devOpen,
+    testingNoAuth,
     githubEnabled,
     clientId,
     clientSecret,

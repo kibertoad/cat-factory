@@ -812,7 +812,11 @@
       "sendResetLink": "Send reset link",
       "backToSignIn": "Back to sign in",
       "signInFailed": "Sign-in failed. Check your details and try again.",
-      "genericError": "Something went wrong. Please try again."
+      "genericError": "Something went wrong. Please try again.",
+      "notConfiguredTitle": "Authentication isn't configured",
+      "notConfiguredBody": "This deployment has no sign-in method enabled, so you can't sign in or access your workspaces. An administrator needs to configure an authentication provider (GitHub or Google OAuth, or email and password login).",
+      "patPlaceholder": "{provider} personal access token",
+      "signInWithPat": "Sign in with {provider} PAT"
     },
     "resetPassword": {
       "title": "Reset password",

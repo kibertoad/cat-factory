@@ -772,7 +772,11 @@
       "sendResetLink": "שלח קישור איפוס",
       "backToSignIn": "חזרה להתחברות",
       "signInFailed": "ההתחברות נכשלה. בדוק את הפרטים שלך ונסה שוב.",
-      "genericError": "משהו השתבש. אנא נסה שוב."
+      "genericError": "משהו השתבש. אנא נסה שוב.",
+      "notConfiguredTitle": "האימות אינו מוגדר",
+      "notConfiguredBody": "בפריסה זו לא מופעלת אף שיטת התחברות, ולכן לא ניתן להתחבר או לגשת למרחבי העבודה שלך. מנהל המערכת צריך להגדיר ספק אימות (GitHub או Google OAuth, או התחברות עם אימייל וסיסמה).",
+      "patPlaceholder": "אסימון גישה אישי של {provider}",
+      "signInWithPat": "התחברות עם PAT של {provider}"
     },
     "resetPassword": {
       "title": "אפס סיסמה",

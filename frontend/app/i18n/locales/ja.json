@@ -772,7 +772,11 @@
       "sendResetLink": "リセットリンクを送信",
       "backToSignIn": "サインインに戻る",
       "signInFailed": "サインインに失敗しました。入力内容を確認して、もう一度お試しください。",
-      "genericError": "問題が発生しました。もう一度お試しください。"
+      "genericError": "問題が発生しました。もう一度お試しください。",
+      "notConfiguredTitle": "認証が設定されていません",
+      "notConfiguredBody": "このデプロイにはサインイン方法が有効になっていないため、サインインやワークスペースへのアクセスができません。管理者が認証プロバイダー（GitHub または Google の OAuth、あるいはメールアドレスとパスワードによるログイン）を設定する必要があります。",
+      "patPlaceholder": "{provider} のパーソナルアクセストークン",
+      "signInWithPat": "{provider} の PAT でサインイン"
     },
     "resetPassword": {
       "title": "パスワードをリセット",

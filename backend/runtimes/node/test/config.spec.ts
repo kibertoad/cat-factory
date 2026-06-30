@@ -81,3 +81,27 @@ describe('loadNodeConfig — remote node mode requires authentication', () => {
     expect(config.auth.enabled).toBe(true)
   })
 })
+
+// `TESTING_NO_AUTH` is a stronger dev-open used by the e2e suite: it implies the open API of
+// dev-open AND flags `auth.testingNoAuth` so the SPA renders the board anonymously. Honoured
+// only outside a production-like ENVIRONMENT (see config.ts).
+describe('loadNodeConfig — TESTING_NO_AUTH', () => {
+  it('implies dev-open (boots with no provider) and flags testingNoAuth', () => {
+    const config = loadNodeConfig({ ENCRYPTION_KEY, TESTING_NO_AUTH: 'true' })
+    expect(config.auth.testingNoAuth).toBe(true)
+    expect(config.auth.devOpen).toBe(true)
+    expect(config.auth.enabled).toBe(false)
+  })
+
+  it('is refused in a production-like ENVIRONMENT (so it cannot re-open a deployment)', () => {
+    expect(() =>
+      loadNodeConfig({ ENCRYPTION_KEY, TESTING_NO_AUTH: 'true', ENVIRONMENT: 'production' }),
+    ).toThrow(/anonymous access/i)
+  })
+
+  it('defaults off — plain dev-open does not set testingNoAuth', () => {
+    const config = loadNodeConfig({ ENCRYPTION_KEY, AUTH_DEV_OPEN: 'true' })
+    expect(config.auth.testingNoAuth).toBe(false)
+    expect(config.auth.devOpen).toBe(true)
+  })
+})
