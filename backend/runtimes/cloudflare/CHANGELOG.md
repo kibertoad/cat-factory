@@ -1,5 +1,41 @@
 # @cat-factory/worker
 
+## 0.41.9
+
+### Patch Changes
+
+- 21b2096: Make the environment-backend and runner-backend registries app-owned (DI) instead of
+  module-global Maps. This is the pilot for the registry-DI migration
+  (`docs/initiatives/registry-di-migration.md`): the composition root now constructs each
+  registry instance via `createBackendRegistries()` and injects it through
+  `CoreDependencies`; a deployment registers a custom backend by reference
+  (`registry.register(provider)`), so registration no longer depends on the adapter and
+  server sharing the same `@cat-factory/integrations` module instance.
+
+  BREAKING (`@cat-factory/integrations`): the module-global free functions
+  `registerEnvironmentBackend` / `environmentBackend` / `registeredEnvironmentBackendKinds`
+  / `environmentBackendKinds` / `findRepairCapableProvider` and their runner-backend
+  equivalents (`registerRunnerBackend` / `runnerBackend` / `registeredRunnerBackendKinds`
+  / `runnerBackendKinds`) are removed. Use the new `EnvironmentBackendRegistry` /
+  `RunnerBackendRegistry` classes (methods `register` / `get` / `kinds` / `labelled`, plus
+  `findRepairCapable` on the env registry), the `defaultEnvironmentBackendRegistry()` /
+  `defaultRunnerBackendRegistry()` factories, or the unified `createBackendRegistries()`.
+
+- Updated dependencies [21b2096]
+  - @cat-factory/integrations@0.37.0
+  - @cat-factory/orchestration@0.43.3
+  - @cat-factory/server@0.49.4
+  - @cat-factory/contracts@0.56.1
+  - @cat-factory/agents@0.22.4
+  - @cat-factory/consensus@0.7.80
+  - @cat-factory/gates@0.2.32
+  - @cat-factory/gitlab@0.4.3
+  - @cat-factory/kernel@0.55.3
+  - @cat-factory/prompt-fragments@0.9.9
+  - @cat-factory/spend@0.10.37
+  - @cat-factory/provider-cloudflare@0.7.80
+  - @cat-factory/observability-langfuse@0.7.76
+
 ## 0.41.8
 
 ### Patch Changes
