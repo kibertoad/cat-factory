@@ -40,6 +40,12 @@ export interface Membership {
 
 export interface AccountRepository {
   get(id: string): Promise<AccountRecord | null>
+  /**
+   * Accounts by id, in a single query — the batched form of {@link AccountRepository.get} used to
+   * resolve every account a user belongs to without one round-trip per membership. Empty input →
+   * empty.
+   */
+  listByIds(ids: string[]): Promise<AccountRecord[]>
   create(account: AccountRecord): Promise<void>
   rename(id: string, name: string): Promise<void>
   /** Apply a settings patch (today: the default cloud provider). A no-op for an empty patch. */

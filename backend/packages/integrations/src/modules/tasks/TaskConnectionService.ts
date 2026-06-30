@@ -50,7 +50,7 @@ export interface TaskConnectionServiceDependencies {
  * fields to fill in. Today the only such provider is GitHub Issues, which rides the
  * workspace's installed GitHub App. `connect()` and the import credential resolver
  * use this to skip the connection lookup; it does NOT by itself decide availability
- * (see `isAvailable`, where the App-presence check is keyed on the GitHub source).
+ * (see `listSourceStates`, where the App-presence check is keyed on the GitHub source).
  */
 function isCredentialless(provider: TaskSourceProvider): boolean {
   return provider.descriptor.credentialFields.length === 0
@@ -99,11 +99,23 @@ export class TaskConnectionService {
   async listSourceStates(workspaceId: string): Promise<TaskSourceState[]> {
     const settings = await this.deps.taskSourceSettingsRepository.getByWorkspace(workspaceId)
     const enabledBySource = new Map(settings.map((s) => [s.source, s.enabled]))
+    // Resolve availability inputs ONCE up front rather than a per-provider repository read
+    // (N+1): the App presence is workspace-wide, and the credentialed connections are one
+    // listByWorkspace indexed by source.
+    const hasInstallation = this.deps.installations
+      ? (await this.deps.installations.getByWorkspace(workspaceId)) !== null
+      : false
+    const connectedSources = new Set(
+      (await this.deps.taskConnectionRepository.listByWorkspace(workspaceId)).map((c) => c.source),
+    )
     const states: TaskSourceState[] = []
     for (const provider of this.deps.registry.list()) {
+      const available = ridesGitHubApp(provider)
+        ? hasInstallation
+        : connectedSources.has(provider.kind)
       states.push({
         ...provider.descriptor,
-        available: await this.isAvailable(workspaceId, provider),
+        available,
         // No row ⇒ default enabled, so a source is offered as soon as it's available.
         enabled: enabledBySource.get(provider.kind) ?? true,
       })
@@ -112,17 +124,6 @@ export class TaskConnectionService {
   }
 
   /** Whether a source can be used right now (drives the import gate + the UI toggle's enablement). */
-  private async isAvailable(workspaceId: string, provider: TaskSourceProvider): Promise<boolean> {
-    if (ridesGitHubApp(provider)) {
-      // GitHub Issues rides the workspace's installed GitHub App: available once installed.
-      if (!this.deps.installations) return false
-      return (await this.deps.installations.getByWorkspace(workspaceId)) !== null
-    }
-    return (
-      (await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, provider.kind)) !== null
-    )
-  }
-
   /**
    * Live "check setup" probe for a source: gate on availability first (a GitHub
    * App must be installed, a credentialed source must be connected), then delegate

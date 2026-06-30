@@ -2460,8 +2460,16 @@ export class ExecutionService {
    */
   async teardownForBlockTree(workspaceId: string, rootId: string): Promise<void> {
     const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    // Resolve every run in one query and index by block id, rather than a per-block
+    // getByBlock (N+1) over the whole subtree.
+    const runsByBlock = new Map(
+      (await this.executionRepository.listByWorkspace(workspaceId)).map((run) => [
+        run.blockId,
+        run,
+      ]),
+    )
     for (const blockId of descendantIds(blocks, rootId)) {
-      const run = await this.executionRepository.getByBlock(workspaceId, blockId)
+      const run = runsByBlock.get(blockId)
       if (!run) continue
       await this.runStateMachine.stopRunContainer(workspaceId, run)
       await this.workRunner.cancelRun(workspaceId, run.id)

@@ -3255,6 +3255,28 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(res.body.level).toBe('frame')
       })
 
+      it('deletes a top-level frame (resolving its backing service in one batched read)', async () => {
+        // Deleting a top-level frame reclaims the account-owned service it backs — resolved for
+        // every doomed frame in ONE query. Exercised on every runtime so the batched
+        // frame→service lookup can't map differently between stores. The frame here has no
+        // linked service (GitHub is off in conformance), so the reclaim is a no-op and the
+        // delete simply succeeds.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const frame = await app.call<Block>('POST', `/workspaces/${workspace.id}/blocks`, {
+          type: 'service',
+          position: { x: 0, y: 0 },
+        })
+        expect(frame.body.level).toBe('frame')
+        const removed = await app.call(
+          'DELETE',
+          `/workspaces/${workspace.id}/blocks/${frame.body.id}`,
+        )
+        expect(removed.status).toBe(204)
+        const snap = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
+        expect(snap.body.blocks.some((b) => b.id === frame.body.id)).toBe(false)
+      })
+
       it('adds a user-authored task pinning a pipeline', async () => {
         const app = harness.makeApp()
         const { workspace } = await app.createWorkspace()
@@ -5390,6 +5412,26 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
         await expect(
           ob.users.signupWithPassword({ email, password: 'another password' }),
         ).rejects.toMatchObject({ name: 'ConflictError' })
+      })
+
+      it('lists every account a user can switch between (batched multi-membership resolve)', async () => {
+        const ob = harness.makeApp().onboarding()
+        // An org owner belongs to BOTH the org and their auto-seeded personal account, so the
+        // switcher list resolves more than one membership's account in a single batched read —
+        // which must map identically on every store.
+        const org = await ob.makeOrgOwner('Switcher Org')
+        const accounts = await ob.accountsForUser({
+          id: org.ownerUserId,
+          login: 'switcher-owner',
+          name: 'Switcher Owner',
+        })
+        expect(accounts.some((a) => a.id === org.accountId && a.type === 'org')).toBe(true)
+        expect(accounts.some((a) => a.type === 'personal')).toBe(true)
+        // Personal account is listed first (the stable switcher order).
+        expect(accounts[0]?.type).toBe('personal')
+        // Every listed account carries the caller's role(s) — proving the membership join, not
+        // just the id resolve, survives the batched read.
+        expect(accounts.every((a) => a.roles.length > 0)).toBe(true)
       })
 
       it('invites + redeems org membership bound to the invited email', async () => {

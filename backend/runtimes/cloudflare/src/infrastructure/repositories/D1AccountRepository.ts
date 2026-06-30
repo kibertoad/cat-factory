@@ -46,6 +46,16 @@ export class D1AccountRepository implements AccountRepository {
     return row ? rowToAccount(row) : null
   }
 
+  async listByIds(ids: string[]): Promise<AccountRecord[]> {
+    if (ids.length === 0) return []
+    const placeholders = ids.map(() => '?').join(', ')
+    const { results } = await this.db
+      .prepare(`SELECT * FROM accounts WHERE id IN (${placeholders})`)
+      .bind(...ids)
+      .all<AccountRow>()
+    return (results ?? []).map(rowToAccount)
+  }
+
   async create(account: AccountRecord): Promise<void> {
     await this.db
       .prepare(

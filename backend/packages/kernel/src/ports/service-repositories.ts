@@ -20,6 +20,13 @@ export interface ServiceRepository {
   /** The service that owns a given frame block, or null. */
   getByFrameBlock(frameBlockId: string): Promise<Service | null>
   /**
+   * The services owning the given frame blocks, in a single (chunked) query — the batched form
+   * of {@link ServiceRepository.getByFrameBlock} used when resolving many frames at once (e.g. a
+   * board's duplicate-service check or a frame-subtree deletion), without one round-trip per
+   * frame. Empty input → empty.
+   */
+  listByFrameBlocks(frameBlockIds: string[]): Promise<Service[]>
+  /**
    * Every service owned by an account (the org catalog a workspace mounts from).
    * `null` lists the legacy/unscoped org (the auth-disabled path), matching services
    * whose `accountId` is NULL.

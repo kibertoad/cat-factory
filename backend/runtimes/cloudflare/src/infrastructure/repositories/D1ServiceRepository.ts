@@ -48,6 +48,21 @@ export class D1ServiceRepository implements ServiceRepository {
     return row ? rowToService(row) : null
   }
 
+  async listByFrameBlocks(frameBlockIds: string[]): Promise<Service[]> {
+    if (frameBlockIds.length === 0) return []
+    const out: Service[] = []
+    // Chunk the IN list to stay under D1's bound-parameter limit.
+    for (const chunk of chunkForIn(frameBlockIds)) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(`SELECT * FROM services WHERE frame_block_id IN (${placeholders})`)
+        .bind(...chunk)
+        .all<ServiceRow>()
+      for (const row of results ?? []) out.push(rowToService(row))
+    }
+    return out
+  }
+
   async listByAccount(accountId: string | null): Promise<Service[]> {
     // `IS` matches NULL too, so the legacy/unscoped org (accountId null) lists cleanly.
     const { results } = await this.db
