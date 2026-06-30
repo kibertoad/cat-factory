@@ -274,6 +274,48 @@ export function defineEnvironmentHandlersSuite(
       expect(await connections.getByWorkspaceAndType(ws, 'custom', 'other')).toBeNull()
     })
 
+    it('round-trips a kustomize/helm/gateway-shaped kubernetes handler config (JSON column)', async () => {
+      // The render additions (renderer / images / helmReleases / secretInjections / the
+      // gatewayStatus URL source) ride the existing `handler_json` TEXT column as nested
+      // JSON — no new columns. Assert the whole shape survives write→read byte-identical on
+      // whichever store, so a runtime that truncates or re-encodes the blob fails here.
+      const { connections } = makeRepos()
+      const { ws } = ids()
+      const handlerJson = JSON.stringify({
+        engine: 'remote-kubernetes',
+        kubernetes: {
+          label: 'Prod k3s',
+          apiServerUrl: 'https://cluster.test:6443',
+          namespaceTemplate: 'pr-{{pullNumber}}',
+          url: { source: 'gatewayStatus', gatewayName: 'skynet', scheme: 'https' },
+          helmReleases: [
+            {
+              name: 'envoy-gateway',
+              chart: 'oci://docker.io/envoyproxy/gateway-helm',
+              version: 'v1.8.0',
+              scope: 'shared',
+              set: [{ path: 'rateLimit.enabled', valueTemplate: 'true' }],
+            },
+          ],
+        },
+      })
+      await connections.upsert(
+        connection({
+          workspaceId: ws,
+          provisionType: 'kubernetes',
+          engine: 'remote-kubernetes',
+          handlerJson,
+        }),
+      )
+      const read = await connections.getByWorkspaceAndType(ws, 'kubernetes', null)
+      expect(read?.handlerJson).toBe(handlerJson)
+      const parsed = JSON.parse(read!.handlerJson) as {
+        kubernetes: { url: { source: string }; helmReleases: { scope: string }[] }
+      }
+      expect(parsed.kubernetes.url.source).toBe('gatewayStatus')
+      expect(parsed.kubernetes.helmReleases[0]!.scope).toBe('shared')
+    })
+
     it('upsert replaces a handler in place; softDelete tombstones one by type', async () => {
       const { connections } = makeRepos()
       const { ws } = ids()

@@ -197,6 +197,66 @@ environment:<engine>:<providerId>`. Record `provisionType`/`engine` on the
 
 ---
 
+## Phase 2 — Kustomize / Helm / Gateway-API rendering (slices 6–10)
+
+Goal: deploy a real Kustomize + Helm + Gateway-API setup (the `lokalise/skynet` shape — a
+`base/` + `overlays/` kustomize tree, a Helm-installed gateway controller, `HTTPRoute`/`Gateway`
+routing, and a `secretGenerator` fed from secrets). The native in-Worker REST adapter applies only
+raw, apiserver-ready manifests, so rendering moves into a **dedicated deploy container** with real
+`kubectl`/`kustomize`/`helm`, dispatched through the existing runner transport as a new `deploy`
+kind (with `image: 'deploy'`). The raw-manifest REST path is kept for the simple case; a service
+selects by the `renderer` discriminator. Local mode adds an opt-in native-CLI transport
+(`LOCAL_DEPLOY_RUNTIME=native|container`) that shells out to host `kubectl`/`kustomize`/`helm`.
+Rationale for real binaries over an in-process JS renderer: kustomize `secretGenerator` rewrites a
+content-hash secret-name suffix into every reference at build time, so the real secret must be
+present at render time; helm is infeasible to render in-process. Slices 7–10 depend on slice 3
+(`runDeployerStep`), which hosts the async-deployer lifecycle.
+
+### Slice 6 — render contracts + dispatch/port seam (additive; NO migration) — DONE
+
+The rare slice with NO `db:generate` migration: every addition is nested JSON inside the existing
+`handler_json` / service `provisioning` TEXT columns.
+
+- Contracts (`environments.ts`): `renderer: 'raw' | 'kustomize'` on `kubernetesManifestSourceSchema`;
+  new `kubernetesImageOverrideSchema` / `kubernetesHelmReleaseSchema` (+ `*HelmSetSchema`) /
+  `kubernetesSecretInjectionSchema` (+ `*SecretEntrySchema`); `images`/`helmReleases`/
+  `secretInjections` on the SERVICE `serviceProvisioningSchema`; shared `helmReleases` on the
+  WORKSPACE `kubernetesEngineConfigSchema`; `gatewayStatus`/`httpRouteStatus` URL sources.
+- Kernel port seam: `RunnerDispatchKind` → `'agent' | 'deploy'`; `RunnerDispatchOptions.image` →
+  `+ 'deploy'`; `EnvironmentProvider.buildProvisionJob?`/`finalizeProvision?` (+ `DeployProvisionJob`).
+- Conformance: a kustomize/helm/gateway-shaped handler config round-trips write→read on D1 + Postgres
+  (`environment-handlers-suite.ts`).
+
+### Slice 7 — deploy-harness package + image (TODO)
+
+`backend/internal/deploy-harness` (private): slim base + `kubectl`/`kustomize`/`helm` + the job-registry
+scaffolding mirrored from `executor-harness`; same `POST /jobs` + `GET /jobs/{id}` contract with a
+`deploy` `KindEntry`; `handleDeploy` (clone → secret drop → `kubectl apply -k` + `helm upgrade
+--install` → `kubectl rollout status` → discover Gateway/HTTPRoute address). New CF `[[containers]]`
+class + image tag (same fresh-immutable-tag discipline as the Pi image).
+
+### Slice 8 — provider render path + Gateway URL (TODO)
+
+`KubernetesEnvironmentProvider.buildProvisionJob`/`finalizeProvision` (kustomize/helm ⇒ container job;
+raw ⇒ keep the native REST path); the `gatewayStatus`/`httpRouteStatus` URL resolvers (REST). Keep
+REST teardown/status.
+
+### Slice 9 — async deployer lifecycle (TODO; folds into slice 3)
+
+`EnvironmentProvisioningService` threads `RunnerJobClient`, branches `provision()` on
+`buildProvisionJob`, adds `pollProvision`; `RunDispatcher.runDeployerStep` parks on a deploy job
+(`awaiting_job`) + the deployer poll branch + eviction re-dispatch; the synchronous raw path is
+unchanged.
+
+### Slice 10 — facade wiring + local native CLI (TODO)
+
+CF container class + wrangler tag; pool/K8s-pod/local image mapping for `image: 'deploy'`; the
+local-mode `NativeCliDeployTransport` opt-in (`LOCAL_DEPLOY_RUNTIME`); conformance: a `deploy`
+dispatch is accepted by every facade transport, and a stubbed `RunnerJobView` settles to an
+identical `ProvisionedEnvironment` on both runtimes. Changesets + image-tag bump.
+
+---
+
 ## Verification (per slice)
 
 - `pnpm typecheck` (full-tree turbo) + `pnpm lint:fix` (whole tree, bare `.` target).
@@ -221,5 +281,10 @@ environment:<engine>:<providerId>`. Record `provisionType`/`engine` on the
 | 3   | `runDeployerStep` merge source+engine + record provisionType/engine; infraless no-op                                                                                                                                              | todo   | —    |
 | 4   | Controllers (per-type endpoints + custom-type CRUD + local-only per-user controller) + all three container wirings                                                                                                                | todo   | —    |
 | 5   | Frontend (service provisioning section + auto-detect; infra per-type/engine configurator + custom-type editor + local override; run-details surfacing; stores; i18n)                                                              | todo   | —    |
+| 6   | Phase 2: render contracts (`renderer`/`images`/`helmReleases`/`secretInjections`/gateway URL) + dispatch/port seam (`deploy` kind + `image`, `buildProvisionJob`/`finalizeProvision`); NO migration; conformance round-trip       | done   | —    |
+| 7   | Phase 2: `deploy-harness` package + image (kubectl/kustomize/helm; `deploy` KindEntry + `handleDeploy`; CF container class + tag)                                                                                                 | todo   | —    |
+| 8   | Phase 2: `KubernetesEnvironmentProvider` render path (`buildProvisionJob`/`finalizeProvision`; keep native REST) + Gateway-API URL resolvers                                                                                      | todo   | —    |
+| 9   | Phase 2: async deployer lifecycle (`provision()` branch + `pollProvision`; `runDeployerStep` park/poll + eviction re-dispatch) — folds into slice 3                                                                               | todo   | —    |
+| 10  | Phase 2: facade wiring + local `NativeCliDeployTransport` (`LOCAL_DEPLOY_RUNTIME`); deploy-dispatch + finalize conformance; image-tag bump                                                                                        | todo   | —    |
 
 Update the row (status + PR link) at the end of each slice.
