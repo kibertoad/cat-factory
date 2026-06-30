@@ -83,6 +83,12 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *   - `selfUser`      — `args[arg]` is a userId; must equal the token's `userId`.
  *   - `visibility`    — `args[arg]` is a `WorkspaceVisibility`; intersected with the token
  *                       scope so a node can never widen its own visibility.
+ *   - `block`         — `args[arg]` is a blockId with NO workspace arg; resolve the block's
+ *                       owning account server-side (block → home workspace → account).
+ *   - `serviceList`   — `args[arg]` is `string[]` of serviceIds; resolve each service's owning
+ *                       account server-side (services are account-owned). EVERY requested id
+ *                       must resolve to an in-scope account, so a missing or out-of-scope
+ *                       service fails closed. Empty input is allowed (it returns empty).
  */
 export type ScopeRule =
   | { kind: 'workspace'; arg: number }
@@ -91,6 +97,8 @@ export type ScopeRule =
   | { kind: 'accountList'; arg: number }
   | { kind: 'selfUser'; arg: number }
   | { kind: 'visibility'; arg: number }
+  | { kind: 'block'; arg: number }
+  | { kind: 'serviceList'; arg: number }
 
 export interface MethodSpec {
   scope: ScopeRule
@@ -107,13 +115,17 @@ export type PersistenceMethodTable = Record<string, Record<string, MethodSpec>>
  * Every method here binds to an account via its {@link ScopeRule} so a call outside the
  * machine token's scope is refused as 404.
  *
+ * The cross-service board-composition reads keyed on `serviceIds[]`/`accountId`
+ * (`listByServices`, `serviceRepository.listByIds`/`listByAccount`, `countByServiceIds`) and the
+ * entity-id-keyed `blockRepository.findById` are allow-listed here too, each bound by the
+ * {@link ScopeRule} `serviceList` / `block` / `account` kinds that resolve the entity's owning
+ * account server-side before the scope check.
+ *
  * Still EXCLUDED (added in later gate slices, with their own scope rules, or kept
  * mothership-internal):
- *   - Cross-service reads keyed on `serviceIds[]`/`accountId` (`listByServices`,
- *     `serviceRepository.listByIds`/`listByAccount`, `countByServiceIds`) and entity-id-keyed
- *     reads with NO workspaceId arg (`blockRepository.findById`,
- *     `subscriptionActivationRepository.deleteByExecution`) — these need a NEW scope kind that
- *     resolves the entity's owning account server-side, so they are not yet here.
+ *   - `subscriptionActivationRepository.deleteByExecution` — the activation row is the local
+ *     `node:sqlite` bucket (per the per-repo checklist), not the remote surface, so it is not
+ *     exposed here.
  *   - Global sweeper methods (`listStale`, `deleteOlderThan`) and high-impact unscoped ops
  *     (`workspaceRepository.delete`, `accountRepository.create`).
  *
@@ -144,6 +156,10 @@ export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
     update: { scope: { kind: 'workspace', arg: 0 } },
     setService: { scope: { kind: 'workspace', arg: 0 } },
     deleteMany: { scope: { kind: 'workspace', arg: 0 } },
+    // Entity-id-keyed (no workspace arg): resolve the block's home workspace's account server-side.
+    findById: { scope: { kind: 'block', arg: 0 } },
+    // Cross-service: compose a board's blocks from every service it mounts.
+    listByServices: { scope: { kind: 'serviceList', arg: 0 } },
   },
   pipelineRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
@@ -160,6 +176,8 @@ export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
     compareAndSwap: { scope: { kind: 'workspace', arg: 0 }, revWriteBack: 1 },
     deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
     markFailed: { scope: { kind: 'workspace', arg: 0 } },
+    // Cross-service: compose a board's runs from every service it mounts.
+    listByServices: { scope: { kind: 'serviceList', arg: 0 } },
   },
   accountRepository: {
     // Reads only — `rename`/`updateSettings` are admin-gated (see allow-list note above).
@@ -177,8 +195,17 @@ export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // The workspace-scoped reads a `GET /workspaces/:id` snapshot assembles. Each takes the
   // workspaceId as arg0, so they reuse the `workspace` rule (resolve the owning account, reject
   // out-of-scope as 404). Reads only — no mutation is exposed here.
+  //
+  // The cross-service reads (`*.listByServices`, `countByServiceIds`, `serviceRepository.*`)
+  // compose a board from the services it mounts; their arg0 is `serviceIds[]` (the `serviceList`
+  // rule resolves each service's owning account) or an `accountId` (the `account` rule).
+  serviceRepository: {
+    listByIds: { scope: { kind: 'serviceList', arg: 0 } },
+    listByAccount: { scope: { kind: 'account', arg: 0 } },
+  },
   workspaceMountRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    countByServiceIds: { scope: { kind: 'serviceList', arg: 0 } },
   },
   workspaceSettingsRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
@@ -195,6 +222,7 @@ export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
   pipelineScheduleRepository: {
     list: { scope: { kind: 'workspace', arg: 0 } },
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    listByServices: { scope: { kind: 'serviceList', arg: 0 } },
   },
   trackerSettingsRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
@@ -204,6 +232,7 @@ export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
   },
   bootstrapJobRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    listByServices: { scope: { kind: 'serviceList', arg: 0 } },
   },
   tokenUsageRepository: {
     totalsSinceForWorkspace: { scope: { kind: 'workspace', arg: 0 } },
@@ -233,6 +262,17 @@ export interface DispatchOptions {
   scope: { accountIds: string[]; userId: string }
   /** Resolve a workspace's owning account id (the mothership's `WorkspaceRepository.accountOf`). */
   resolveAccountId(workspaceId: string): Promise<string | null | undefined>
+  /**
+   * Resolve a block's owning account id (block → home workspace → account). Required for the
+   * `block` scope kind; a call hitting that kind with no resolver fails closed (404).
+   */
+  resolveBlockAccountId?(blockId: string): Promise<string | null | undefined>
+  /**
+   * Resolve each requested service id's owning account id, keyed by service id (a service that
+   * does not exist is absent from the map). Required for the `serviceList` scope kind; a call
+   * hitting that kind with no resolver fails closed (404).
+   */
+  resolveServiceAccountIds?(serviceIds: string[]): Promise<Map<string, string | null | undefined>>
   /** The method table to enforce (defaults to the pilot set). */
   table?: PersistenceMethodTable
 }
@@ -318,6 +358,29 @@ export async function dispatchPersistenceCall(
     }
     case 'selfUser': {
       if (args[rule.arg] !== opts.scope.userId) return denied
+      break
+    }
+    case 'block': {
+      // Bind via the block's home workspace's account, resolved server-side (the block carries
+      // no workspace arg). An unresolvable block (missing, or no resolver wired) is refused as
+      // 404 — no existence leak, matching the `workspace` rule.
+      const blockId = args[rule.arg]
+      if (typeof blockId !== 'string' || !opts.resolveBlockAccountId) return denied
+      if (!inScope(await opts.resolveBlockAccountId(blockId))) return denied
+      break
+    }
+    case 'serviceList': {
+      // Bind via every requested service's owning account (services are account-owned). EVERY id
+      // must resolve to an in-scope account; a missing or out-of-scope service fails closed. An
+      // empty list is a no-op read (it returns empty), so it needs no service to scope.
+      const ids = args[rule.arg]
+      if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return denied
+      if (ids.length === 0) break
+      if (!opts.resolveServiceAccountIds) return denied
+      const accounts = await opts.resolveServiceAccountIds(ids as string[])
+      for (const id of ids as string[]) {
+        if (!inScope(accounts.get(id))) return denied
+      }
       break
     }
     case 'visibility': {
