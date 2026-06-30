@@ -135,6 +135,52 @@ export FEATURE_FLAG=
     ])
   })
 
+  it('descends into a nested deployment/k8s wrapper to find the overlay tree', async () => {
+    // Mirrors a real repo (kibertoad/simpler-service3): a standard helm/kustomize layout whose
+    // manifests live under `deployment/k8s/{base,overlays}` rather than directly in `deployment/`.
+    // The `deployment` candidate has no direct kustomize markers, so detection must descend into
+    // its `k8s` child instead of bailing out to infraless.
+    const reader = makeReader({
+      'deployment/README.md': '# how to deploy',
+      'deployment/k8s/base/kustomization.yaml': `
+namespace: simpler-service3-prenv
+resources:
+  - namespace.yaml
+  - services/app
+`,
+      'deployment/k8s/base/namespace.yaml': `
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: simpler-service3-prenv
+`,
+      'deployment/k8s/base/services/app/kustomization.yaml': `
+resources:
+  - deployment.yaml
+`,
+      'deployment/k8s/base/services/app/deployment.yaml': deployment('registry/app:1.0.0'),
+      'deployment/k8s/overlays/prenv/kustomization.yaml': `
+resources:
+  - ../../base
+`,
+    })
+    const rec = await detectKubernetesProvisioning(reader)
+    expect(rec.detected).toBe(true)
+    expect(rec.provisioning.type).toBe('kubernetes')
+    expect(rec.provisioning.manifestSource).toEqual({
+      type: 'colocated',
+      path: 'deployment/k8s/overlays/prenv',
+      renderer: 'kustomize',
+    })
+    // The single overlay isn't surfaced as a multi-candidate choice.
+    expect(rec.overlayCandidates).toBeUndefined()
+    // The base's pinned namespace is followed through the overlay → base ref walk.
+    expect(rec.namespace).toBe('simpler-service3-prenv')
+    expect(rec.provisioning.images).toEqual([
+      { name: 'registry/app', newTagTemplate: '{{branch}}' },
+    ])
+  })
+
   it('infers a serviceStatus URL from a LoadBalancer Service', async () => {
     const reader = makeReader({
       'manifests/svc.yaml': `
