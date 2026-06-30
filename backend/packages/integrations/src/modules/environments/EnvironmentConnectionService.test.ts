@@ -210,6 +210,64 @@ describe('EnvironmentConnectionService — per-type handlers', () => {
   })
 })
 
+// The legacy single-connection surface (register/getConnection/unregister/...) is a compat
+// bridge over the per-type handler table: it must keep behaving as one connection per workspace
+// even though rows are now keyed by (workspace, provisionType, manifestId).
+describe('EnvironmentConnectionService — compat bridge', () => {
+  const kubeConfig = (manifestSource: {
+    type: 'separate'
+    repo: string
+    ref?: string
+    path: string
+  }) =>
+    ({
+      kind: 'kubernetes',
+      kubernetes: {
+        label: 'Cluster',
+        apiServerUrl: 'https://cluster.example.test:6443',
+        manifestSource,
+        url: { source: 'ingressTemplate', hostTemplate: '{{branch}}.example.test' },
+      },
+    }) as const
+
+  it('switching provider kind replaces the connection (no stale primary handler)', async () => {
+    const repo = fakeConnections()
+    const service = makeService(repo)
+    // First connect a generic manifest provider, then "switch" to a kubernetes one. These land
+    // on different composite keys, so without the single-row sweep the manifest row would survive
+    // and remain the (oldest) primary.
+    await service.register('ws1', {
+      config: { kind: 'manifest', manifest: baseManifest },
+      secrets: {},
+    })
+    await service.register('ws1', {
+      config: kubeConfig({ type: 'separate', repo: 'org/manifests', path: 'k8s/' }),
+      secrets: { apiToken: 'k8s-tok' },
+    })
+
+    const connection = await service.getConnection('ws1')
+    expect(connection?.kind).toBe('kubernetes')
+    // Exactly one live handler remains — the switch fully replaced the prior connection.
+    expect((await repo.listByWorkspace('ws1')).length).toBe(1)
+  })
+
+  it('preserves a kube manifestSource through register → getConnection (no placeholder)', async () => {
+    const repo = fakeConnections()
+    const service = makeService(repo)
+    const source = { type: 'separate', repo: 'org/manifests', ref: 'main', path: 'k8s/' } as const
+    await service.register('ws1', {
+      config: kubeConfig(source),
+      secrets: { apiToken: 'k8s-tok' },
+    })
+
+    const connection = await service.getConnection('ws1')
+    const config = connection?.config as { kubernetes?: { manifestSource?: unknown } } | undefined
+    // The operator's source must round-trip — a dropped source would surface as the placeholder
+    // { type: 'colocated', path: '.' } and silently provision from the repo root.
+    expect(config?.kubernetes?.manifestSource).toEqual(source)
+  })
+})
+
 // describeProvider.missingRequired drives the unconfigured-provider banner: a `required`
 // field with no `default` and no stored value is "missing". A secret is satisfied by the
 // secret bundle; a non-secret native field by the manifest providerConfig bag; a defaulted

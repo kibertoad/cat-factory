@@ -78,23 +78,40 @@ function engineToProvisionType(engine: InfraEngine): ProvisionType {
 const PLACEHOLDER_MANIFEST_SOURCE: KubernetesManifestSource = { type: 'colocated', path: '.' }
 
 /**
+ * Coerce an env-manifest `providerId` (regex `^[a-z0-9-]+$`, so a leading `-` is allowed) into a
+ * valid `manifestId` (`^[a-z0-9][a-z0-9-]*$`) for the compat bridge's `acceptsManifestId`: strip
+ * leading non-alphanumerics, cap to 64, and fall back to `custom` if nothing usable remains.
+ */
+function toManifestId(providerId: string): string {
+  const id = providerId.replace(/^[^a-z0-9]+/, '').slice(0, 64)
+  return id.length > 0 ? id : 'custom'
+}
+
+/**
  * Lower a discriminated-by-`engine` {@link InfraHandlerConfig} into the discriminated-by-`kind`
- * {@link EnvironmentBackendConfig} the backend registry consumes. For a kube engine the
- * service-owned `manifestSource` is merged into the engine config (the split the whole
- * initiative is about); a placeholder is used for validation/metadata paths.
+ * {@link EnvironmentBackendConfig} the backend registry consumes. For a kube engine the source
+ * is resolved by precedence: the service-owned `manifestSource` (the split the whole initiative
+ * is about) > a legacy source the compat bridge stored inline (a kube handler config MAY carry
+ * one — see {@link toHandlerConfig}) > a placeholder (validation/metadata paths, where the kube
+ * backend reads only the apiserver/sizing fields, never the source).
  */
 function handlerConfigToBackendConfig(
   config: InfraHandlerConfig,
   backendKind: string,
-  manifestSource: KubernetesManifestSource,
+  manifestSource?: KubernetesManifestSource,
 ): EnvironmentBackendConfig {
   switch (config.engine) {
     case 'local-docker':
     case 'remote-custom':
       return { kind: backendKind, manifest: config.manifest } as EnvironmentBackendConfig
     case 'local-k3s':
-    case 'remote-kubernetes':
-      return { kind: 'kubernetes', kubernetes: { ...config.kubernetes, manifestSource } }
+    case 'remote-kubernetes': {
+      const kube = config.kubernetes as typeof config.kubernetes & {
+        manifestSource?: KubernetesManifestSource
+      }
+      const source = manifestSource ?? kube.manifestSource ?? PLACEHOLDER_MANIFEST_SOURCE
+      return { kind: 'kubernetes', kubernetes: { ...kube, manifestSource: source } }
+    }
   }
 }
 
@@ -382,7 +399,35 @@ export class EnvironmentConnectionService {
       backendKind: input.config.kind,
       secrets: input.secrets,
     })
+    // The legacy surface owns exactly ONE live handler per workspace. A register that switches
+    // provider kind lands on a different (workspace, provisionType, manifestId) key, so without
+    // this the prior kind's row would survive and `primaryRecord` (oldest-first) would keep
+    // resolving it — getConnection/resolveProvider/updateSecrets/unregister would all act on the
+    // stale connection. Tombstone any other handler so the just-registered one is unambiguous.
+    await this.clearOtherHandlers(workspaceId, record)
     return this.toConnection(record, Object.keys(input.secrets))
+  }
+
+  /** Tombstone every live handler for the workspace except `keep` (compat-bridge single-row). */
+  private async clearOtherHandlers(
+    workspaceId: string,
+    keep: EnvironmentConnectionRecord,
+  ): Promise<void> {
+    // Bounded by the handful of provision types the legacy bridge can create (not data-scaling),
+    // and over the one already-fetched list — not an N+1 point-read loop.
+    const handlers = await this.deps.environmentConnectionRepository.listByWorkspace(workspaceId)
+    const now = this.deps.clock.now()
+    for (const handler of handlers) {
+      if (handler.provisionType === keep.provisionType && handler.manifestId === keep.manifestId) {
+        continue
+      }
+      await this.deps.environmentConnectionRepository.softDelete(
+        workspaceId,
+        handler.provisionType,
+        handler.manifestId,
+        now,
+      )
+    }
   }
 
   /** Rotate/replace the secret bundle without re-sending the config (legacy single-connection API). */
@@ -876,11 +921,9 @@ export class EnvironmentConnectionService {
     const backend = input.backendKind
       ? this.requireBackend(input.backendKind)
       : this.requireBackendByEngine(engine)
-    const backendConfig = handlerConfigToBackendConfig(
-      input.config,
-      backend.kind,
-      PLACEHOLDER_MANIFEST_SOURCE,
-    )
+    // Validation/metadata only read the apiserver/sizing fields, so the source fallback
+    // (embedded legacy source → placeholder) inside the lowering is sufficient here.
+    const backendConfig = handlerConfigToBackendConfig(input.config, backend.kind)
     backend.assertConfigSafe(backendConfig, {
       ...(this.deps.urlPolicy ? { urlPolicy: this.deps.urlPolicy } : {}),
       ...(this.deps.customTlsSupported !== undefined
@@ -930,12 +973,20 @@ export class EnvironmentConnectionService {
   ): InfraHandlerConfig {
     if (engine === 'local-k3s' || engine === 'remote-kubernetes') {
       if (!('kubernetes' in config)) throw new ValidationError('Expected a kubernetes config')
-      const { manifestSource: _drop, ...engineConfig } = config.kubernetes
-      return { engine, kubernetes: engineConfig }
+      // Keep the workspace-owned `manifestSource` inline (the per-type model puts it on the
+      // service, but a legacy kube connection set it here): dropping it would silently provision
+      // every kube env from the repo root. `handlerConfigToBackendConfig` reads it back.
+      return { engine, kubernetes: config.kubernetes }
     }
     if (engine === 'remote-custom') {
       if (!('manifest' in config)) throw new ValidationError('Expected a manifest config')
-      return { engine, manifest: config.manifest, acceptsManifestId: config.manifest.providerId }
+      // `providerId` permits a leading `-`, which `manifestIdSchema` forbids; coerce it to a
+      // valid manifest id so the stored handler re-validates and can match a service `manifestId`.
+      return {
+        engine,
+        manifest: config.manifest,
+        acceptsManifestId: toManifestId(config.manifest.providerId),
+      }
     }
     if (engine === 'local-docker') {
       if (!('manifest' in config)) throw new ValidationError('Expected a compose config')
@@ -959,11 +1010,9 @@ export class EnvironmentConnectionService {
   } {
     const config = JSON.parse(record.handlerJson) as InfraHandlerConfig
     const backend = this.requireBackend(record.backendKind)
-    const backendConfig = handlerConfigToBackendConfig(
-      config,
-      backend.kind,
-      manifestSource ?? PLACEHOLDER_MANIFEST_SOURCE,
-    )
+    // Pass the service source through (or undefined): a legacy bridge row carries its own kube
+    // source inline, and `handlerConfigToBackendConfig` falls back to it before the placeholder.
+    const backendConfig = handlerConfigToBackendConfig(config, backend.kind, manifestSource)
     return {
       backend,
       provider: this.buildProvider(backend),
