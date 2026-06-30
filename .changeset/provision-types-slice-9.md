@@ -1,4 +1,5 @@
 ---
+'@cat-factory/contracts': patch
 '@cat-factory/integrations': minor
 '@cat-factory/orchestration': minor
 ---
@@ -38,3 +39,25 @@ path is unchanged.
   `createEnvironmentsModule`'s provisioning service (optional). The facades wire them in slice 10,
   so both runtimes share the identical (unwired) behaviour for now — nothing dispatches a deploy
   job until slice 10's facade wiring + deploy-dispatch conformance lands.
+
+Review fixes folded into the slice:
+
+- On a successful async deploy, `completeDeployerStep` now re-projects the environment, so the
+  deployer step's Environment panel shows the final `ready` env + URL instead of staying stuck on
+  the dispatch-time `provisioning` snapshot.
+- A terminal deploy job (done or a genuine failure) now releases its runner via
+  `releaseProvisionJob`, so the one-shot deploy container is reclaimed instead of idling out its
+  `sleepAfter` window / leaking a self-hosted pool slot (the agent path's `stopRunContainer`,
+  run-id keyed + final-step only, never covered the separately dispatched deploy job).
+- The `provisioning` env record `startProvision` writes after dispatch is now best-effort: a failed
+  projection write no longer propagates (which the caller turns into a terminal, non-retried failure
+  that would strand the live deploy container).
+- The deployer step now PINS its resolved provisioning config (`PipelineStep.deployProvisioning`) at
+  dispatch, so the poll/finalize maps the job against the config the container was built from rather
+  than a fresh frame read a person may have edited mid-flight (e.g. flipping to `infraless`).
+- The deploy container's terminal `errored` stamp now keys off the RESOLVED env status, so a `done`
+  view the provider maps to a failed env (harness exited 0, namespace missing) no longer shows the
+  container "up".
+- The eviction-recovery + subtask-progress logic shared with `pollAgentJob` is extracted into
+  `recoverContainerEviction` / `applySubtaskProgress`, so the eviction budgets, the "still
+  evicting…" wording, and the progress-fraction math live in one place for both paths.
