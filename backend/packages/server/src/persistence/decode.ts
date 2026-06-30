@@ -130,3 +130,23 @@ export function tryDecodeRow<T>(map: () => T, context: Record<string, unknown>):
     throw err
   }
 }
+
+/**
+ * Map a list of rows to the domain via {@link tryDecodeRow}, dropping (and logging) any row
+ * whose mapping raises a {@link DataIntegrityError}. The list-read counterpart to the
+ * single-row `map() → throw` policy: a corrupt row must not take down a whole snapshot /
+ * board load, so it is dropped rather than failing the entire query. `context(row)` supplies
+ * the per-row log context (e.g. `{ table, id }`).
+ */
+export function tryDecodeRows<R, T>(
+  rows: readonly R[],
+  map: (row: R) => T,
+  context: (row: R) => Record<string, unknown>,
+): T[] {
+  const out: T[] = []
+  for (const row of rows) {
+    const decoded = tryDecodeRow(() => map(row), context(row))
+    if (decoded !== null) out.push(decoded)
+  }
+  return out
+}

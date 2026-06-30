@@ -7,6 +7,7 @@ import {
   decodeEnumOr,
   decodeJson,
   tryDecodeRow,
+  tryDecodeRows,
 } from '../src/persistence/decode.js'
 
 const ctx = { table: 'blocks', column: 'status', id: 'blk_1' }
@@ -77,6 +78,39 @@ describe('tryDecodeRow', () => {
       tryDecodeRow(() => {
         throw new TypeError('unexpected')
       }, ctx),
+    ).toThrow(TypeError)
+  })
+})
+
+describe('tryDecodeRows', () => {
+  const rows = [{ id: 'a', v: 1 }, { id: 'bad' }, { id: 'b', v: 2 }] as { id: string; v?: number }[]
+  const rowCtx = (row: { id: string }) => ({ table: 'blocks', id: row.id })
+
+  it('maps every row when none are corrupt', () => {
+    expect(tryDecodeRows([rows[0]!, rows[2]!], (r) => r.v, rowCtx)).toEqual([1, 2])
+  })
+
+  it('drops only the corrupt rows and keeps the rest', () => {
+    const out = tryDecodeRows(
+      rows,
+      (r) => {
+        if (r.v === undefined) throw new DataIntegrityError('missing v', rowCtx(r))
+        return r.v
+      },
+      rowCtx,
+    )
+    expect(out).toEqual([1, 2])
+  })
+
+  it('rethrows a non-integrity error (does not silently drop)', () => {
+    expect(() =>
+      tryDecodeRows(
+        rows,
+        () => {
+          throw new TypeError('unexpected')
+        },
+        rowCtx,
+      ),
     ).toThrow(TypeError)
   })
 })

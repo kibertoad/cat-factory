@@ -114,6 +114,7 @@ import { LLM_WARNING_FINISH_REASONS } from '@cat-factory/kernel'
 import { agentRunKindSchema } from '@cat-factory/contracts'
 import {
   decodeEnum,
+  tryDecodeRows,
   type ExecutionRow,
   type SandboxExperimentRow,
   type SandboxFixtureRow,
@@ -267,12 +268,13 @@ class DrizzleBlockRepository implements BlockRepository {
 
   async listByWorkspace(workspaceId: string): Promise<Block[]> {
     const rows = await this.db.select().from(blocks).where(eq(blocks.workspace_id, workspaceId))
-    return rows.map(rowToBlock)
+    // Snapshot-facing list read: drop a corrupt block rather than failing the whole board load.
+    return tryDecodeRows(rows, rowToBlock, (r) => ({ table: 'blocks', id: r.id }))
   }
 
   async listByService(serviceId: string): Promise<Block[]> {
     const rows = await this.db.select().from(blocks).where(eq(blocks.service_id, serviceId))
-    return rows.map(rowToBlock)
+    return tryDecodeRows(rows, rowToBlock, (r) => ({ table: 'blocks', id: r.id }))
   }
 
   async listByServices(serviceIds: string[]): Promise<Block[]> {
@@ -284,7 +286,7 @@ class DrizzleBlockRepository implements BlockRepository {
         .select()
         .from(blocks)
         .where(inArray(blocks.service_id, serviceIds.slice(i, i + 500)))
-      for (const row of rows) out.push(rowToBlock(row))
+      out.push(...tryDecodeRows(rows, rowToBlock, (r) => ({ table: 'blocks', id: r.id })))
     }
     return out
   }
@@ -427,7 +429,12 @@ class DrizzleExecutionRepository implements ExecutionRepository {
       .from(agentRuns)
       .where(and(eq(agentRuns.workspace_id, workspaceId), this.isExecution))
       .orderBy(agentRuns.created_at)
-    return rows.map((r) => rowToExecution(r as ExecutionRow))
+    // Snapshot-facing list read: drop a corrupt run rather than failing the whole board load.
+    return tryDecodeRows(
+      rows,
+      (r) => rowToExecution(r as ExecutionRow),
+      (r) => ({ table: 'agent_runs', id: (r as ExecutionRow).id }),
+    )
   }
 
   async listByService(serviceId: string): Promise<ExecutionInstance[]> {
@@ -436,7 +443,11 @@ class DrizzleExecutionRepository implements ExecutionRepository {
       .from(agentRuns)
       .where(and(eq(agentRuns.service_id, serviceId), this.isExecution))
       .orderBy(agentRuns.created_at)
-    return rows.map((r) => rowToExecution(r as ExecutionRow))
+    return tryDecodeRows(
+      rows,
+      (r) => rowToExecution(r as ExecutionRow),
+      (r) => ({ table: 'agent_runs', id: (r as ExecutionRow).id }),
+    )
   }
 
   async listByServices(serviceIds: string[]): Promise<ExecutionInstance[]> {
@@ -449,7 +460,13 @@ class DrizzleExecutionRepository implements ExecutionRepository {
         .from(agentRuns)
         .where(and(inArray(agentRuns.service_id, serviceIds.slice(i, i + 500)), this.isExecution))
         .orderBy(agentRuns.created_at)
-      for (const r of rows) out.push(rowToExecution(r as ExecutionRow))
+      out.push(
+        ...tryDecodeRows(
+          rows,
+          (r) => rowToExecution(r as ExecutionRow),
+          (r) => ({ table: 'agent_runs', id: (r as ExecutionRow).id }),
+        ),
+      )
     }
     return out
   }
