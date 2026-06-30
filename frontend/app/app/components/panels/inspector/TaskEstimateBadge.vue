@@ -45,7 +45,7 @@ function barClass(n: number): string {
             :style="{ width: `${Math.round(estimate[axis.key] * 100)}%` }"
           />
         </div>
-        <span class="w-9 shrink-0 text-right text-xs tabular-nums text-slate-300">{{
+        <span class="w-9 shrink-0 text-end text-xs tabular-nums text-slate-300">{{
           n(estimate[axis.key], { key: 'percent' })
         }}</span>
       </div>

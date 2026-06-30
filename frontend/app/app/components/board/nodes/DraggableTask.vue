@@ -40,7 +40,7 @@ function onHandle(e: PointerEvent) {
         pointerEvents: draggingId === taskId ? 'none' : undefined,
       }"
     >
-      <!-- drag handle (`nopan` so the pane doesn't pan on a left-drag from here) -->
+      <!-- drag handle (`nopan` so the pane doesn't pan on a start-drag from here) -->
       <div
         class="nodrag nopan flex cursor-grab touch-none items-center justify-center rounded-t-lg border border-b-0 border-slate-700 bg-slate-800/80 py-px active:cursor-grabbing pointer-coarse:py-2"
         :title="t('board.frame.dragTask')"

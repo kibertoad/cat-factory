@@ -49,7 +49,7 @@ function onResize(e: PointerEvent, edge: 'e' | 's' | 'se') {
       zIndex: draggingId === moduleId ? 50 : 5,
     }"
   >
-    <!-- module header / drag handle (`nopan` so a left-drag moves it, not the pane) -->
+    <!-- module header / drag handle (`nopan` so a start-drag moves it, not the pane) -->
     <div
       class="nodrag nopan flex h-[30px] cursor-grab touch-none items-center gap-1 rounded-t-xl bg-violet-500/15 px-2 active:cursor-grabbing"
       @pointerdown="onHandle"
@@ -61,10 +61,10 @@ function onResize(e: PointerEvent, edge: 'e' | 's' | 'se') {
         :style="{ color: MODULE_META.color }"
       />
       <span class="truncate text-[11px] font-semibold text-violet-100">{{ mod.title }}</span>
-      <span v-if="inflight" class="ml-auto shrink-0 text-[9px] text-violet-300/70">
+      <span v-if="inflight" class="ms-auto shrink-0 text-[9px] text-violet-300/70">
         {{ t('board.frame.taskCount', { count: inflight }, inflight) }}
       </span>
-      <span v-else-if="total" class="ml-auto shrink-0 text-[9px] text-violet-300/70">
+      <span v-else-if="total" class="ms-auto shrink-0 text-[9px] text-violet-300/70">
         {{ t('board.frame.taskCount', { count: total }, total) }}
       </span>
     </div>
@@ -75,7 +75,10 @@ function onResize(e: PointerEvent, edge: 'e' | 's' | 'se') {
     </div>
 
     <!-- resize handles (drag the borders to resize the module, Miro-style).
-         `nopan` (with `nodrag`) so resizing doesn't pan the pane. -->
+         `nopan` (with `nodrag`) so resizing doesn't pan the pane. Kept PHYSICAL
+         (`right-0`, not `end-0`) for the same reason as the service-frame grips in
+         BlockNode: the resize delta is unmirrored, so a logical grip would sit on
+         the opposite edge from the one the drag moves. -->
     <div
       class="nodrag nopan absolute right-0 top-0 h-full w-2 cursor-ew-resize touch-none hover:bg-violet-400/20 pointer-coarse:w-4"
       :title="t('board.frame.dragToResize')"

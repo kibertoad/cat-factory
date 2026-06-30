@@ -195,7 +195,7 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
                     t('consensus.expert', { letter: String.fromCharCode(65 + i) })
                   }}</span>
                   <span class="text-slate-400"> · {{ p.role }}</span>
-                  <span v-if="p.modelId" class="ml-1 text-slate-500">({{ p.modelId }})</span>
+                  <span v-if="p.modelId" class="ms-1 text-slate-500">({{ p.modelId }})</span>
                 </div>
               </div>
             </section>
@@ -219,7 +219,7 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
                     <span class="text-xs text-slate-500">{{ roleFor(c.participantId) }}</span>
                     <span
                       v-if="topScore(c)"
-                      class="ml-auto rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-300"
+                      class="ms-auto rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-300"
                       >{{
                         t('consensus.topScore', {
                           label: topScore(c)!.label,

@@ -52,6 +52,7 @@ export default defineNuxtConfig({
       { code: 'pl', language: 'pl-PL', file: 'pl.json', name: 'Polski' },
       { code: 'uk', language: 'uk-UA', file: 'uk.json', name: 'Українська' },
       { code: 'fr', language: 'fr-FR', file: 'fr.json', name: 'Français' },
+      { code: 'he', language: 'he-IL', file: 'he.json', name: 'עברית', dir: 'rtl' },
     ],
     vueI18n: 'i18n.config.ts',
     experimental: {

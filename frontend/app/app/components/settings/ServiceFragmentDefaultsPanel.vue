@@ -97,7 +97,7 @@ function remove(id: string) {
         :title="f.summary"
         @click="remove(f.id)"
       >
-        {{ f.title }}<UIcon name="i-lucide-x" class="ml-0.5 h-3 w-3" />
+        {{ f.title }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
       </UBadge>
     </div>
     <p v-else class="text-[11px] text-slate-500">

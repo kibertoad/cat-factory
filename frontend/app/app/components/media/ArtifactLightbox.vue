@@ -206,7 +206,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
             <UIcon name="i-lucide-maximize" class="h-4 w-4" />
           </button>
           <button
-            class="ml-1 rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            class="ms-1 rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
             :title="t('media.lightbox.close')"
             @click="close"
           >
@@ -223,11 +223,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
       >
         <button
           v-if="total > 1"
-          class="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-300 hover:bg-slate-800 hover:text-white"
+          class="absolute start-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-300 hover:bg-slate-800 hover:text-white"
           :title="t('media.lightbox.prev')"
           @click="go(-1)"
         >
-          <UIcon name="i-lucide-chevron-left" class="h-5 w-5" />
+          <UIcon name="i-lucide-chevron-left" class="h-5 w-5 rtl:-scale-x-100" />
         </button>
 
         <img
@@ -267,11 +267,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
 
         <button
           v-if="total > 1"
-          class="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-300 hover:bg-slate-800 hover:text-white"
+          class="absolute end-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-300 hover:bg-slate-800 hover:text-white"
           :title="t('media.lightbox.next')"
           @click="go(1)"
         >
-          <UIcon name="i-lucide-chevron-right" class="h-5 w-5" />
+          <UIcon name="i-lucide-chevron-right" class="h-5 w-5 rtl:-scale-x-100" />
         </button>
       </div>
     </div>

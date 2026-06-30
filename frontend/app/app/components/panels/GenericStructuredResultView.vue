@@ -122,7 +122,7 @@ const customJson = computed<string | null>(() => {
 
           <!-- Sidebar: shared run metadata + observability rollup -->
           <aside
-            class="hidden w-60 shrink-0 flex-col gap-4 border-l border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
+            class="hidden w-60 shrink-0 flex-col gap-4 border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
           >
             <StepRunMeta
               v-if="step"

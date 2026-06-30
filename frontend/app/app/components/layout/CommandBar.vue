@@ -321,7 +321,7 @@ function indexOf(cmd: Command) {
               v-for="cmd in group.items"
               :key="cmd.id"
               type="button"
-              class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm transition"
+              class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-start text-sm transition"
               :class="
                 indexOf(cmd) === activeIndex
                   ? 'bg-slate-800 text-slate-100'

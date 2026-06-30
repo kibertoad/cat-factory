@@ -192,7 +192,7 @@ function vendorLabel(v: SubscriptionVendor): string {
 
             <!-- guided steps -->
             <ol
-              class="list-decimal space-y-1.5 rounded-lg border border-slate-700 bg-slate-900/60 p-4 pl-8 text-sm text-slate-300"
+              class="list-decimal space-y-1.5 rounded-lg border border-slate-700 bg-slate-900/60 p-4 ps-8 text-sm text-slate-300"
             >
               <li v-for="(step, i) in steps" :key="i">{{ step }}</li>
             </ol>
@@ -239,7 +239,7 @@ function vendorLabel(v: SubscriptionVendor): string {
               >
                 <div>
                   <span class="font-medium text-slate-200">{{ c.label }}</span>
-                  <span class="ml-2 text-xs text-slate-500">{{ vendorLabel(c.vendor) }}</span>
+                  <span class="ms-2 text-xs text-slate-500">{{ vendorLabel(c.vendor) }}</span>
                   <div class="text-[11px] tabular-nums text-slate-500">
                     {{
                       t(

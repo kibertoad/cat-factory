@@ -232,7 +232,7 @@ async function submitPrompt() {
     >
       <button
         type="button"
-        class="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left transition hover:bg-slate-800/60"
+        class="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-start transition hover:bg-slate-800/60"
         :disabled="busy"
       >
         <UIcon
@@ -244,7 +244,7 @@ async function submitPrompt() {
         </span>
         <UIcon
           name="i-lucide-chevrons-up-down"
-          class="ml-auto h-3.5 w-3.5 shrink-0 text-slate-600"
+          class="ms-auto h-3.5 w-3.5 shrink-0 text-slate-600"
         />
       </button>
     </UDropdownMenu>
@@ -253,14 +253,14 @@ async function submitPrompt() {
     <UDropdownMenu :items="boardItems" :content="{ align: 'start' }" class="w-full">
       <button
         type="button"
-        class="flex w-full items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 px-2.5 py-1.5 text-left transition hover:bg-slate-800/60"
+        class="flex w-full items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 px-2.5 py-1.5 text-start transition hover:bg-slate-800/60"
         :disabled="busy"
       >
         <UIcon name="i-lucide-layout-dashboard" class="h-4 w-4 shrink-0 text-indigo-400" />
         <span class="truncate text-sm font-medium text-white">
           {{ workspace.activeWorkspace?.name ?? t('layout.boardSwitcher.boardFallback') }}
         </span>
-        <UIcon name="i-lucide-chevron-down" class="ml-auto h-4 w-4 shrink-0 text-slate-500" />
+        <UIcon name="i-lucide-chevron-down" class="ms-auto h-4 w-4 shrink-0 text-slate-500" />
       </button>
     </UDropdownMenu>
 

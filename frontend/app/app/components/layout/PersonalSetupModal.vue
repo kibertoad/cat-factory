@@ -125,7 +125,7 @@ const groups = computed<PersonalGroup[]>(() => {
               v-for="item in group.items"
               :key="item.key"
               type="button"
-              class="flex w-full items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5 text-left transition hover:border-slate-700 hover:bg-slate-900"
+              class="flex w-full items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5 text-start transition hover:border-slate-700 hover:bg-slate-900"
               @click="item.onClick()"
             >
               <UIcon :name="item.icon" class="h-5 w-5 shrink-0 text-slate-300" />
@@ -141,7 +141,10 @@ const groups = computed<PersonalGroup[]>(() => {
                 </div>
                 <p class="truncate text-xs text-slate-400">{{ item.description }}</p>
               </div>
-              <UIcon name="i-lucide-chevron-right" class="h-4 w-4 shrink-0 text-slate-500" />
+              <UIcon
+                name="i-lucide-chevron-right"
+                class="h-4 w-4 shrink-0 text-slate-500 rtl:-scale-x-100"
+              />
             </button>
           </div>
         </section>

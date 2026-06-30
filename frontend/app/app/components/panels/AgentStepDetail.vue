@@ -185,7 +185,7 @@ async function copyOutput() {
         <!-- ToC sidebar (only meaningful when there are prose headings) -->
         <aside
           v-if="outline.hasToc"
-          class="hidden w-72 shrink-0 flex-col border-r border-slate-800 bg-slate-900/60 md:flex"
+          class="hidden w-72 shrink-0 flex-col border-e border-slate-800 bg-slate-900/60 md:flex"
         >
           <div class="border-b border-slate-800 px-4 py-3">
             <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -194,7 +194,7 @@ async function copyOutput() {
           </div>
           <nav class="flex-1 space-y-0.5 overflow-auto px-2 py-3">
             <button
-              class="block w-full truncate rounded-md px-2 py-1 text-left text-[13px] transition"
+              class="block w-full truncate rounded-md px-2 py-1 text-start text-[13px] transition"
               :class="
                 activeId === 'step-details'
                   ? 'bg-indigo-500/15 font-medium text-indigo-200'
@@ -207,7 +207,7 @@ async function copyOutput() {
             <button
               v-for="s in tocSections"
               :key="s.id"
-              class="block w-full truncate rounded-md px-2 py-1 text-left text-[13px] transition"
+              class="block w-full truncate rounded-md px-2 py-1 text-start text-[13px] transition"
               :class="
                 activeId === s.id
                   ? 'bg-indigo-500/15 font-medium text-indigo-200'
@@ -235,15 +235,15 @@ async function copyOutput() {
               <h1 class="truncate text-base font-semibold text-white">{{ agent.label }}</h1>
               <p v-if="block" class="truncate text-xs text-slate-500">{{ block.title }}</p>
             </div>
-            <div class="ml-auto flex items-center gap-1.5">
+            <div class="ms-auto flex items-center gap-1.5">
               <UBadge
                 v-if="approvalPending && !companionExceeded"
                 color="warning"
                 variant="subtle"
                 size="sm"
-                class="mr-1"
+                class="me-1"
               >
-                <UIcon name="i-lucide-shield-check" class="mr-1 h-3 w-3" />
+                <UIcon name="i-lucide-shield-check" class="me-1 h-3 w-3" />
                 {{ t('panels.stepDetail.approvalRequired') }}
               </UBadge>
               <UBadge
@@ -251,9 +251,9 @@ async function copyOutput() {
                 color="warning"
                 variant="subtle"
                 size="sm"
-                class="mr-1"
+                class="me-1"
               >
-                <UIcon name="i-lucide-alert-triangle" class="mr-1 h-3 w-3" />
+                <UIcon name="i-lucide-alert-triangle" class="me-1 h-3 w-3" />
                 {{ t('panels.stepDetail.decisionRequired') }}
               </UBadge>
               <UButton
@@ -403,7 +403,7 @@ async function copyOutput() {
                 >
                   <button
                     v-if="s.depth > 0"
-                    class="group flex w-full items-center gap-2 rounded-md py-1 text-left transition hover:text-white"
+                    class="group flex w-full items-center gap-2 rounded-md py-1 text-start transition hover:text-white"
                     @click="toggle(s.id)"
                   >
                     <UIcon
@@ -422,7 +422,7 @@ async function copyOutput() {
                     v-show="!collapsed[s.id]"
                     class="reader-prose mt-1 text-[13px] leading-relaxed text-slate-300"
                     :class="[
-                      s.depth > 0 ? 'pl-6' : '',
+                      s.depth > 0 ? 'ps-6' : '',
                       approvalPending && !editing && !companionExceeded ? 'review-mode' : '',
                     ]"
                     @click="onProseClick"
@@ -442,11 +442,11 @@ async function copyOutput() {
         </div>
 
         <!-- review rail (approval mode): per-block comments + overall feedback +
-             Approve / Request changes / Reject. A right-side rail on wide screens; a
+             Approve / Request changes / Reject. A end-side rail on wide screens; a
              bottom sheet (still reachable) below lg, so the gate is always actionable. -->
         <aside
           v-if="approvalPending && !companionExceeded"
-          class="absolute inset-x-0 bottom-0 z-10 flex max-h-[70dvh] flex-col rounded-t-2xl border-t border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:w-96 lg:shrink-0 lg:rounded-none lg:border-l lg:border-t-0 lg:border-slate-800 lg:bg-slate-900/60 lg:shadow-none lg:backdrop-blur-none"
+          class="absolute inset-x-0 bottom-0 z-10 flex max-h-[70dvh] flex-col rounded-t-2xl border-t border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:w-96 lg:shrink-0 lg:rounded-none lg:border-s lg:border-t-0 lg:border-slate-800 lg:bg-slate-900/60 lg:shadow-none lg:backdrop-blur-none"
         >
           <div class="border-b border-slate-800 px-4 py-3">
             <div class="text-[11px] font-semibold uppercase tracking-wide text-amber-400">
