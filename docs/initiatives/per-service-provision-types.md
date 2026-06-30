@@ -266,6 +266,31 @@ local-mode `NativeCliDeployTransport` opt-in (`LOCAL_DEPLOY_RUNTIME`); conforman
 dispatch is accepted by every facade transport, and a stubbed `RunnerJobView` settles to an
 identical `ProvisionedEnvironment` on both runtimes. Changesets + image-tag bump.
 
+### Slice 11 — auto-detect a RECOMMENDED k8s config from the repo (TODO)
+
+Extend the add-service auto-detect (slice 5) from "which provision type" to "propose a full,
+NON-BINDING recommended `kubernetes` config", read checkout-free over the existing `RepoFiles`
+port (a pure-TS heuristic detector — no checkout, no LLM for the high-confidence parts; mirror the
+existing compose autodiscovery). The user always confirms/edits; nothing is applied silently.
+What's inferable, by confidence:
+
+- **High confidence (deterministic):** `renderer` (`kustomization.yaml` present ⇒ `kustomize`, else
+  `raw`); the URL source from manifest kinds (`Ingress` ⇒ `ingressStatus`/`ingressTemplate` from a
+  static host, `Gateway`/`HTTPRoute` ⇒ `gatewayStatus`/`httpRouteStatus`, `Service type:
+LoadBalancer` ⇒ `serviceStatus`); the namespace decision (a pinned `namespace:` ⇒ recommend
+  honoring it, leave `namespaceTemplate` empty); `secretInjections` in `generatorEnvFile` mode when
+  a `secretGenerator: { envs: ['.env'] }` exists, with the entry KEYS read from a checked-in
+  `.env.example` (values stay the user's); `images` override candidates from the kustomization
+  `images:` block or Deployment container images (default `newTagTemplate: '{{branch}}'`).
+- **Lower confidence (surface candidates, don't auto-pick):** WHICH overlay is the ephemeral one
+  when several exist under `overlays/*` (rank by name — `prenv`/`preview`/`pr`/`ephemeral`/`dev` —
+  and let the user choose); helm releases declared parseably (`helmfile.yaml` / a `Chart.yaml`
+  dependency) ⇒ propose `helmReleases`; a controller installed by a bespoke shell script / CI step
+  is NOT reliably parseable ⇒ leave blank with a hint rather than guess.
+- **Optional later:** an LLM `explore` pass (the read-only agent kind) for the ambiguous cases
+  (pick the ephemeral overlay, infer helm intent from a deploy script), proposing the same config
+  shape the deterministic detector emits — gated/non-binding, never silent.
+
 ---
 
 ## Verification (per slice)
@@ -297,5 +322,6 @@ identical `ProvisionedEnvironment` on both runtimes. Changesets + image-tag bump
 | 8   | Phase 2: `KubernetesEnvironmentProvider` render path (`buildProvisionJob`/`finalizeProvision`; keep native REST) + Gateway-API URL resolvers                                                                                      | todo   | —    |
 | 9   | Phase 2: async deployer lifecycle (`provision()` branch + `pollProvision`; `runDeployerStep` park/poll + eviction re-dispatch) — folds into slice 3                                                                               | todo   | —    |
 | 10  | Phase 2: facade wiring + local `NativeCliDeployTransport` (`LOCAL_DEPLOY_RUNTIME`); deploy-dispatch + finalize conformance; image-tag bump                                                                                        | todo   | —    |
+| 11  | Phase 2: auto-detect a recommended `kubernetes` config from the repo (renderer / URL source / namespace / secret `.env` keys / image overrides high-confidence; overlay choice + helm as candidates) — non-binding, user confirms | todo   | —    |
 
 Update the row (status + PR link) at the end of each slice.
