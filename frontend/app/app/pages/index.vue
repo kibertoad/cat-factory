@@ -201,6 +201,10 @@ const githubProbePending = computed(() => github.available === null)
 // active workspace changes. Runs advance durably server-side; progress arrives as
 // pushed events rather than by polling.
 const stream = useWorkspaceStream()
+// Top-level computed so the template auto-unwraps it (a nested ref read as `stream.connected`
+// in the template would not unwrap, since `stream` is a plain object). Drives the headless
+// `workspace-stream` readiness marker the e2e suite waits on.
+const streamConnected = computed(() => stream.connected.value)
 watch(
   () => workspace.workspaceId,
   (id) => {
@@ -235,6 +239,17 @@ watch(
     <GitHubOnboarding v-else-if="workspace.ready && needsGitHubInstall" />
 
     <template v-else-if="workspace.ready">
+      <!-- Headless readiness marker for the e2e suite: reflects whether the real-time
+           WebSocket is actually connected (and thus subscribed + resynced). A live spec must
+           wait for this before driving a run, otherwise the run's first status events are
+           broadcast to a not-yet-subscribed browser and missed, leaving the card stuck on a
+           stale status until its assertion times out (the source of the e2e flakiness). Hidden
+           and inert; no visual or behavioural effect. -->
+      <span
+        data-testid="workspace-stream"
+        :data-connected="streamConnected ? 'true' : 'false'"
+        hidden
+      />
       <SideBar />
       <main class="relative min-w-0 flex-1">
         <BoardCanvas />

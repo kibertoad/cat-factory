@@ -107,6 +107,15 @@ export async function openBoard(page: Page): Promise<void> {
   await page.goto('/')
   await expect(page.getByTestId('board-canvas')).toBeVisible({ timeout: BOOT_TIMEOUT })
   await expect(taskCard(page, 'task_login')).toBeVisible({ timeout: LIVE_TIMEOUT })
+  // Wait for the real-time WebSocket to actually connect before returning. The board paints
+  // from the REST snapshot, but the stream connects asynchronously (it first mints a ticket),
+  // so a spec that drove a run the instant the board appeared could have the run's `in_progress`
+  // / `blocked` events broadcast to a not-yet-subscribed browser and miss them — the card then
+  // sits on a stale status until the assertion times out (intermittent on a loaded CI runner).
+  // Gating every spec's setup on a live channel removes that race at the source.
+  await expect(page.getByTestId('workspace-stream')).toHaveAttribute('data-connected', 'true', {
+    timeout: LIVE_TIMEOUT,
+  })
 }
 
 /** Locate a task card by its block id (the card root carries `data-block-id`). */

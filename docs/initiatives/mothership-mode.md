@@ -21,6 +21,24 @@
 
 ### Landed so far
 
+- **Repository conformance (cross-runtime `[mothership]` config + static drift guard)** — the
+  shared conformance suite now runs against a THIRD configuration: a no-Postgres mothership-mode
+  node whose `CoreRepositories` are RPC-backed by a real in-process Node mothership
+  (`backend/runtimes/local/test/mothership/harness.ts`). The **execution group** is green over the
+  real `/internal/persistence` path, so an un-proxied / mis-scoped / non-serializing run-path
+  repository method fails an EXISTING assertion (no test written twice). The run-path allow-list
+  was widened to match (merge-preset `getDefault`, service `getByFrameBlock`, notification /
+  requirement-review `get`, requirement-review `upsert`, kaizen `getByStep`/`upsert`, the kaizen
+  LLM-metric summary, env-config-repair + kaizen-combo reads). A static guard
+  (`backend/runtimes/node/test/mothership-allowlist.spec.ts`) reflects EVERY Drizzle repository
+  method and fails unless each is allow-listed or explicitly classified
+  (`pending`/`local`/`telemetry`/`admin`/`sweeper`/`onboarding`/`helper`) — so adding a repo/method
+  without proxying it (or recording why not) goes red regardless of behavioural coverage. The
+  `pending` reasons in that guard ARE the remaining Phase-3 surface-completion backlog. The
+  `test-db` CI lane is sharded (vitest `--shard`) so the extra config doesn't grow wall-clock.
+  Remaining: extend the `[mothership]` behavioural config to the core/agents/integration/misc
+  groups (they need mode-skips for HTTP workspace/account creation + user-dependent onboarding
+  flows), and proxy the `pending` methods slice by slice.
 - **PR 0** — this tracker.
 - **PR 1 (spine)** — the persistence-RPC core in `@cat-factory/server`: the `machine` token
   audience, the wire envelope + method allow-list + scope table + dispatcher

@@ -119,6 +119,8 @@ export function makeConformanceApp(
     gateProviders?: GateProviderOverrides
     environmentProvider?: CoreDependencies['environmentProvider']
     resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
+    deployJobClient?: CoreDependencies['deployJobClient']
+    resolveDeployCloneTarget?: CoreDependencies['resolveDeployCloneTarget']
     backendRegistries?: BackendRegistries
   },
 ): ConformanceApp {
@@ -159,6 +161,12 @@ export function makeConformanceApp(
     ...(opts?.environmentProvider ? { environmentProvider: opts.environmentProvider } : {}),
     ...(opts?.resolveRepoFilesForCoords
       ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
+      : {}),
+    // Inject the async deploy lifecycle (a fake deploy-job client + clone-target resolver) so
+    // the suite drives the container render path through Node's wiring, identically to the Worker.
+    ...(opts?.deployJobClient ? { deployJobClient: opts.deployJobClient } : {}),
+    ...(opts?.resolveDeployCloneTarget
+      ? { resolveDeployCloneTarget: opts.resolveDeployCloneTarget }
       : {}),
   }
   const container = buildNodeContainer({

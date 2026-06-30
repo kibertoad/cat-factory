@@ -6,6 +6,7 @@ import type {
   R2Bucket,
   Workflow,
 } from '@cloudflare/workers-types'
+import type { DeployContainer } from './containers/DeployContainer'
 import type { ExecutionContainer } from './containers/ExecutionContainer'
 import type { WorkspaceEventsHub } from './durable-objects/WorkspaceEventsHub'
 
@@ -129,6 +130,15 @@ export interface Env {
    * addresses its own instance; the container runs the Pi coding-agent harness.
    */
   EXEC_CONTAINER?: DurableObjectNamespace<ExecutionContainer>
+  /**
+   * Durable Object namespace backing per-run DEPLOY containers — the separate
+   * deploy-harness image (real `kubectl`/`kustomize`/`helm`) the `image: 'deploy'`
+   * dispatch variant routes to. Each run addresses its own instance, mirroring
+   * `EXEC_CONTAINER`. Absent ⇒ the container-backed Kubernetes render path is
+   * unavailable (a render-needing config fails loudly; the synchronous raw-manifest
+   * REST path is unaffected).
+   */
+  DEPLOY_CONTAINER?: DurableObjectNamespace<DeployContainer>
   /**
    * Optional shared secret authenticating the Worker → harness HTTP calls. When set,
    * it is injected into each per-run container's env (so the harness requires it) and

@@ -56,6 +56,11 @@ Local mode widens the environment URL-safety policy by default (`ENVIRONMENTS_AL
 
 ### Networking from WSL2 (Windows)
 
+> For the **Windows host toolchain** (installing native `kubectl`/`helm`/`kustomize`/`k3d` and
+> bringing up a local k3d cluster — the simpler alternative to a WSL2 k3s), see
+> [`local-kubernetes-setup-windows.md`](./local-kubernetes-setup-windows.md). The notes below
+> apply specifically to running k3s **inside** a WSL2 distro.
+
 On Windows, k3s runs inside a WSL2 distro (e.g. Ubuntu), not natively. Two facts make this work
 with no port-forwarding layer:
 

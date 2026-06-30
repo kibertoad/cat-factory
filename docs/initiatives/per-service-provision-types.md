@@ -381,14 +381,52 @@ synchronous in-Worker REST path.
   unwired-transport / sync fallback); the existing deployer conformance (failure surfacing,
   infraless no-op) still passes over the unchanged synchronous path.
 
-### Slice 10 — facade wiring + local native CLI (TODO)
+### Slice 10 — facade wiring + local native CLI (DONE)
 
-CF container class + wrangler tag (the `[[containers]]` block + the Durable Object container class
-deferred from slice 7 — it IS the `image: 'deploy'` → container-class mapping; the
-`image:publish:deploy` target + image already exist from slice 7); pool/K8s-pod/local image mapping
-for `image: 'deploy'`; the local-mode `NativeCliDeployTransport` opt-in (`LOCAL_DEPLOY_RUNTIME`);
-conformance: a `deploy` dispatch is accepted by every facade transport, and a stubbed `RunnerJobView`
-settles to an identical `ProvisionedEnvironment` on both runtimes. Changesets + image-tag bump.
+Implemented. Slice 9's `deployJobClient` / `resolveDeployCloneTarget` seams are now wired on every
+facade, so a render-needing `deployer` step stands its environment up in a real deploy container (or,
+locally, the host CLIs). The raw-manifest REST path is unchanged.
+
+- **Cloudflare** (`runtimes/cloudflare`): a new per-run `DeployContainer` Durable Object (the
+  deploy-harness image — `kubectl`/`kustomize`/`helm`), the container class deferred from slice 7. It
+  mirrors `ExecutionContainer` (rollout-aware, `shutdown`) and is bound as `DEPLOY_CONTAINER`, with a
+  `[[containers]]` block + binding + a `v4` `new_sqlite_classes` migration in BOTH wranglers
+  (`runtimes/cloudflare` test config → the deploy-harness Dockerfile; `deploy/backend` prod config →
+  the managed-registry `cat-factory-deploy:0.2.2` tag from slice 7) and the class exported from the
+  worker entry. `CloudflareContainerTransport` is widened to accept either container namespace; the
+  `image: 'deploy'` dispatch routes to `DEPLOY_CONTAINER` (agent jobs stay on `EXEC_CONTAINER`).
+  `selectDeployDeps` wires a deploy-DEDICATED `RunnerJobClient` (over the deploy namespace, no
+  instance registry — `sleepAfter`/`release` reclaim it) + `resolveDeployCloneTarget`, gated on the
+  binding + GitHub App.
+- **Node** (`runtimes/node`): the default `deployJobClient` is `new RunnerJobClient(resolveTransport)`
+  — Node deploys on the workspace's self-hosted runner pool, the analogue of the Worker's
+  DeployContainer — plus a `resolveDeployCloneTarget` from the App token mint. Both are injectable
+  (`buildNodeContainer` options) so the local facade overrides them, and a
+  `disableDefaultDeployJobClient` flag stops the agent transport backing deploy (it lacks the k8s
+  CLIs). The pool now forwards the `image` dispatch option: the generic `RunnerPoolTransport` stamps
+  it onto the spec and `HttpRunnerPoolProvider` exposes it as a first-class `{{input.image}}`
+  variable, while the native Kubernetes runner config gains an `imageDeploy` variant (`resolveImage`).
+- **Local** (`runtimes/local`): a new `NativeCliDeployTransport` selected by
+  `LOCAL_DEPLOY_RUNTIME=native|container`. `native` (default) runs the deploy harness as a host
+  process (the `LocalProcessRunnerTransport` machinery, `LOCAL_DEPLOY_HARNESS_ENTRY`) driving the
+  developer's own `kubectl`/`kustomize`/`helm`; `container` runs `LOCAL_DEPLOY_IMAGE` per job through
+  a `JobScopedRunnerTransport` wrapper that re-keys the deploy job by its OWN `jobId` so its container
+  never collides with the run's agent `ExecutionContainer`. Unwired ⇒ deploy stays off (render
+  configs fail loudly). The clone target is inherited from Node's default (the local PAT mint +
+  GitLab-aware `resolveRepoOrigin`).
+- **Shared** (`@cat-factory/server`): exports `makeResolveDeployCloneTarget` (compose a clone-target
+  resolver from a repo-target walk + token mint, with an optional per-facade clone-URL override).
+- **Conformance**: a new shared assertion drives the engine's async render path on every runtime —
+  inject a fake provider with `asyncProvision` + a fake `deployJobClient` + `resolveDeployCloneTarget`,
+  run a `deployer` pipeline, and assert the engine forwarded the provider's `deploy` kind +
+  `image: 'deploy'` option through the wired client AND the stubbed terminal view finalized to an
+  identical `ProvisionedEnvironment` round-tripped through each facade's real registry repo
+  (D1 ⇄ Postgres). Since the fakes are injected as core overrides (spread last, winning over the real
+  facade wiring), this covers the runtime-neutral engine + column round-trip, NOT each facade's
+  transport selection (out of scope for this runtime-neutral suite; only local's selection has a
+  dedicated unit test today).
+- **No image-tag bump**: the deploy-harness payload (`src/**`/`Dockerfile`/`PI_*`) is untouched, so
+  the `cat-factory-deploy:0.2.2` image from slice 7 is reused as-is.
 
 ### Slice 11 — auto-detect a RECOMMENDED k8s config from the repo (DONE)
 
@@ -459,20 +497,20 @@ LoadBalancer` ⇒ `serviceStatus`); the namespace decision (a pinned `namespace:
 
 ## Status checklist
 
-| #   | Slice                                                                                                                                                                                                                             | Status | PR   |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---- |
-| 1   | Contracts (additive) + new tables (`environment_user_handlers`, `custom_manifest_types`) + `environments` columns + ports + repos + conformance                                                                                   | done   | #504 |
-| 2a  | Resolver (`infra-handler.logic`) + registry `engines()`/`byEngine` + custom-type registry seam                                                                                                                                    | done   | #504 |
-| 2b  | Reshape `environment_connections` (single→multi, `backend_kind`) + handler-aware `EnvironmentConnectionService` (`resolveProviderForType` w/ manifestSource merge) + `ProvisioningService` per-type + compat bridge + conformance | done   | #510 |
-| 2c  | Tester collapse: drop `defaultTestEnvironment`/`tester.environment`/`resolveTesterEnvironment`; gate on `infraless` OR a resolved handler (`provision_type_unhandled`)                                                            | done   | —    |
-| 3   | `runDeployerStep` merge source+engine + record provisionType/engine; infraless no-op                                                                                                                                              | done   | —    |
-| 4   | Controllers (per-type endpoints + custom-type CRUD + local-only per-user controller) + all three container wirings (describe/test/validate/bootstrap per-type params deferred to slice 5)                                         | done   | —    |
-| 5   | Frontend (service provisioning section; infra per-type/engine configurator + custom-type editor + local override; run-details surfacing; stores; i18n). Add-service auto-detect carried forward to slice 11                       | done   | —    |
-| 6   | Phase 2: render contracts (`renderer`/`images`/`helmReleases`/`secretInjections`/gateway URL) + dispatch/port seam (`deploy` kind + `image`, `buildProvisionJob`/`finalizeProvision`); NO migration; conformance round-trip       | done   | —    |
-| 7   | Phase 2: `deploy-harness` package + image (kubectl/kustomize/helm; `deploy` KindEntry + `handleDeploy`; publish plumbing + tag). CF container class/binding deferred to slice 10 (needs the DO class)                             | done   | —    |
-| 8   | Phase 2: `KubernetesEnvironmentProvider` render path (`buildProvisionJob`/`finalizeProvision`; keep native REST) + Gateway-API URL resolvers                                                                                      | done   | —    |
-| 9   | Phase 2: async deployer lifecycle (`startProvision`/`pollProvisionJob`/`finalizeProvision`; `runDeployerStep` park/poll + eviction re-dispatch; `deployJobClient`/`resolveDeployCloneTarget` deps) — folds into slice 3           | done   | —    |
-| 10  | Phase 2: facade wiring + local `NativeCliDeployTransport` (`LOCAL_DEPLOY_RUNTIME`); deploy-dispatch + finalize conformance; image-tag bump                                                                                        | todo   | —    |
-| 11  | Phase 2: auto-detect a recommended `kubernetes` config from the repo (renderer / URL source / namespace / secret `.env` keys / image overrides high-confidence; overlay choice + helm as candidates) — non-binding, user confirms | done   | #543 |
+| #   | Slice                                                                                                                                                                                                                                                                                                                                    | Status | PR   |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---- |
+| 1   | Contracts (additive) + new tables (`environment_user_handlers`, `custom_manifest_types`) + `environments` columns + ports + repos + conformance                                                                                                                                                                                          | done   | #504 |
+| 2a  | Resolver (`infra-handler.logic`) + registry `engines()`/`byEngine` + custom-type registry seam                                                                                                                                                                                                                                           | done   | #504 |
+| 2b  | Reshape `environment_connections` (single→multi, `backend_kind`) + handler-aware `EnvironmentConnectionService` (`resolveProviderForType` w/ manifestSource merge) + `ProvisioningService` per-type + compat bridge + conformance                                                                                                        | done   | #510 |
+| 2c  | Tester collapse: drop `defaultTestEnvironment`/`tester.environment`/`resolveTesterEnvironment`; gate on `infraless` OR a resolved handler (`provision_type_unhandled`)                                                                                                                                                                   | done   | —    |
+| 3   | `runDeployerStep` merge source+engine + record provisionType/engine; infraless no-op                                                                                                                                                                                                                                                     | done   | —    |
+| 4   | Controllers (per-type endpoints + custom-type CRUD + local-only per-user controller) + all three container wirings (describe/test/validate/bootstrap per-type params deferred to slice 5)                                                                                                                                                | done   | —    |
+| 5   | Frontend (service provisioning section; infra per-type/engine configurator + custom-type editor + local override; run-details surfacing; stores; i18n). Add-service auto-detect carried forward to slice 11                                                                                                                              | done   | —    |
+| 6   | Phase 2: render contracts (`renderer`/`images`/`helmReleases`/`secretInjections`/gateway URL) + dispatch/port seam (`deploy` kind + `image`, `buildProvisionJob`/`finalizeProvision`); NO migration; conformance round-trip                                                                                                              | done   | —    |
+| 7   | Phase 2: `deploy-harness` package + image (kubectl/kustomize/helm; `deploy` KindEntry + `handleDeploy`; publish plumbing + tag). CF container class/binding deferred to slice 10 (needs the DO class)                                                                                                                                    | done   | —    |
+| 8   | Phase 2: `KubernetesEnvironmentProvider` render path (`buildProvisionJob`/`finalizeProvision`; keep native REST) + Gateway-API URL resolvers                                                                                                                                                                                             | done   | —    |
+| 9   | Phase 2: async deployer lifecycle (`startProvision`/`pollProvisionJob`/`finalizeProvision`; `runDeployerStep` park/poll + eviction re-dispatch; `deployJobClient`/`resolveDeployCloneTarget` deps) — folds into slice 3                                                                                                                  | done   | —    |
+| 10  | Phase 2: facade wiring (CF `DeployContainer` + `[[containers]]`/binding/`v4` migration; Node pool `image`/`imageDeploy`; local `NativeCliDeployTransport` via `LOCAL_DEPLOY_RUNTIME`) + `deployJobClient`/`resolveDeployCloneTarget` on all three facades; deploy-dispatch + finalize conformance. No image-tag bump (harness untouched) | done   | #537 |
+| 11  | Phase 2: auto-detect a recommended `kubernetes` config from the repo (renderer / URL source / namespace / secret `.env` keys / image overrides high-confidence; overlay choice + helm as candidates) — non-binding, user confirms                                                                                                        | done   | #543 |
 
 Update the row (status + PR link) at the end of each slice.

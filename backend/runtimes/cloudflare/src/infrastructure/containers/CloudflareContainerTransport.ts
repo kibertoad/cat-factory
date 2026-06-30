@@ -6,6 +6,7 @@ import type {
 } from '@cat-factory/kernel'
 import { TRANSIENT_EVICTION_MARKER } from '@cat-factory/orchestration'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
+import type { DeployContainer } from './DeployContainer'
 import { type ExecutionContainer, isRolloutSignal } from './ExecutionContainer'
 import type { ContainerInstanceRegistry } from './ContainerInstanceRegistry'
 
@@ -49,7 +50,14 @@ const HARNESS_SECRET_HEADER = 'x-harness-secret'
 
 export class CloudflareContainerTransport implements RunnerTransport {
   constructor(
-    private readonly namespace: DurableObjectNamespace<ExecutionContainer>,
+    // Either per-run container class: `ExecutionContainer` (the agent harness, bound as
+    // `EXEC_CONTAINER`) or `DeployContainer` (the deploy harness, bound as `DEPLOY_CONTAINER`).
+    // Both expose the same `/jobs` HTTP contract on 8080 plus `recentlyRolledOut`/`shutdown`,
+    // so this transport drives either unchanged — a deploy-dedicated instance simply gets the
+    // deploy namespace.
+    private readonly namespace:
+      | DurableObjectNamespace<ExecutionContainer>
+      | DurableObjectNamespace<DeployContainer>,
     /** Live-container inventory + reaper kill path; absent in tests (reaping off). */
     private readonly registry?: ContainerInstanceRegistry,
     /**
