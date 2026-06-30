@@ -1,11 +1,3 @@
-import type {
-  AccountRepository,
-  BlockRepository,
-  ExecutionRepository,
-  MembershipRepository,
-  PipelineRepository,
-  WorkspaceRepository,
-} from '@cat-factory/kernel'
 import {
   type PersistenceRpcRequest,
   type PersistenceRpcResponse,
@@ -13,9 +5,9 @@ import {
 } from './rpc.js'
 
 // The client side of the mothership-mode persistence RPC: a mothership-mode local node
-// builds these `Proxy`-backed repositories instead of Drizzle ones, so every repository
-// call the engine makes is forwarded to the hosted mothership over `POST /internal/persistence`.
-// Each entry mirrors a kernel repository port exactly; the Proxy turns any `repo.method(...args)`
+// builds `Proxy`-backed repositories instead of Drizzle ones, so every repository call the
+// engine makes is forwarded to the hosted mothership over `POST /internal/persistence`.
+// Each proxy mirrors a kernel repository port exactly; it turns any `repo.method(...args)`
 // into one RPC and applies the wire contract: re-throw `DomainError`s, restore a top-level
 // `undefined`, and write a mutated `rev` back onto the caller's object (the optimistic-
 // concurrency contract `ExecutionRepository.compareAndSwap`/`upsert` depend on).
@@ -25,21 +17,18 @@ export interface PersistenceRpcClient {
   call(request: PersistenceRpcRequest): Promise<PersistenceRpcResponse>
 }
 
-/** The repository subset a mothership-mode node resolves remotely in the pilot. */
-export interface RemoteRepositories {
-  workspaceRepository: WorkspaceRepository
-  blockRepository: BlockRepository
-  pipelineRepository: PipelineRepository
-  executionRepository: ExecutionRepository
-  accountRepository: AccountRepository
-  membershipRepository: MembershipRepository
-}
-
 function makeRepoProxy<T extends object>(client: PersistenceRpcClient, repo: string): T {
   return new Proxy(
     {},
     {
-      get(_target, method: string) {
+      get(_target, method) {
+        // Only string method names are RPC-addressable. A non-string access (a symbol such as
+        // `Symbol.toPrimitive` during coercion) AND the `then` property (which `await` /
+        // `Promise.resolve` probe to decide whether a value is a thenable) MUST read as absent.
+        // Otherwise an accidental `await repoProxy` would see a callable `then`, treat the proxy
+        // as a thenable, and forward a bogus `{method:'then'}` RPC. Guarding here (the primitive)
+        // covers both an awaited registry and an awaited individual repo proxy.
+        if (typeof method !== 'string' || method === 'then') return undefined
         return async (...args: unknown[]) => {
           const res = await client.call({ repo, method, args })
           if (!res.ok) throw persistenceErrorToThrowable(res.error)
@@ -57,22 +46,6 @@ function makeRepoProxy<T extends object>(client: PersistenceRpcClient, repo: str
 }
 
 /**
- * Build the remote-backed repository set for a mothership-mode node. Each repo is a thin
- * Proxy over the one persistence transport; no per-method code, so it can never drift from
- * the kernel port signatures it implements.
- */
-export function createRemoteRepositories(client: PersistenceRpcClient): RemoteRepositories {
-  return {
-    workspaceRepository: makeRepoProxy<WorkspaceRepository>(client, 'workspaceRepository'),
-    blockRepository: makeRepoProxy<BlockRepository>(client, 'blockRepository'),
-    pipelineRepository: makeRepoProxy<PipelineRepository>(client, 'pipelineRepository'),
-    executionRepository: makeRepoProxy<ExecutionRepository>(client, 'executionRepository'),
-    accountRepository: makeRepoProxy<AccountRepository>(client, 'accountRepository'),
-    membershipRepository: makeRepoProxy<MembershipRepository>(client, 'membershipRepository'),
-  }
-}
-
-/**
  * A drift-proof, full-surface remote repository registry: a top-level `Proxy` that lazily
  * returns a remote method-proxy for ANY `repoName` accessed (`registry.fooRepository.bar(...)`
  * forwards to one RPC). A mothership-mode local node casts this to its full `CoreRepositories`
@@ -81,7 +54,8 @@ export function createRemoteRepositories(client: PersistenceRpcClient): RemoteRe
  * repo+method actually executes; an un-allow-listed call returns `unknown_method`).
  *
  * Credentials are deliberately NOT part of this set — they stay local (the `node:sqlite`
- * store), composed over the top of this registry by the facade.
+ * store), composed over the top of this registry by the facade. This is the single mechanism
+ * a mothership-mode node uses; there is no narrower typed pilot set to drift from it.
  */
 export function createRemoteRepositoryRegistry(
   client: PersistenceRpcClient,
@@ -91,9 +65,11 @@ export function createRemoteRepositoryRegistry(
     {},
     {
       get(_target, repoName) {
-        // Only string repo names are RPC-addressable; a symbol access (e.g. `then` during an
-        // accidental await, `Symbol.toPrimitive`) is not a repository and must read as absent.
-        if (typeof repoName !== 'string') return undefined
+        // Only string repo names are RPC-addressable; a symbol access (`Symbol.toPrimitive`) or
+        // `then` (probed by an accidental `await registry`) is not a repository and reads as
+        // absent — so the registry itself is never mistaken for a thenable. (The per-repo
+        // `then`/symbol guard in `makeRepoProxy` protects an awaited individual repo proxy too.)
+        if (typeof repoName !== 'string' || repoName === 'then') return undefined
         let proxy = cache.get(repoName)
         if (!proxy) {
           proxy = makeRepoProxy(client, repoName)

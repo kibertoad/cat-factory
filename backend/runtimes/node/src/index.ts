@@ -3,7 +3,13 @@
 // the runtime ports over a Drizzle/Postgres persistence layer (the single store used
 // in dev, test and prod). `start()` boots an HTTP server; `createServer()` returns the
 // app (for embedding/tests); `buildNodeContainer()` is the composition root.
-export { createApp, createServer, start, type CreateServerOptions } from './server.js'
+export {
+  createApp,
+  createServer,
+  serveAppWithRealtime,
+  start,
+  type CreateServerOptions,
+} from './server.js'
 // Real-time WebSocket transport pieces, re-exported so the local facade's mothership boot
 // (which does NOT call `start()`, since there is no Postgres/pg-boss) can stand up the same
 // per-workspace hub + `ws` upgrade listener the standard Node boot does.

@@ -29,7 +29,11 @@ import {
   composeEnvironmentBackend,
   createBackendRegistries,
 } from '@cat-factory/integrations'
-import type { HarnessKind, RunnerTransport } from '@cat-factory/kernel'
+import type {
+  HarnessKind,
+  RunnerPoolConnectionRepository,
+  RunnerTransport,
+} from '@cat-factory/kernel'
 import { NativeRoutingRunnerTransport } from './NativeRoutingRunnerTransport.js'
 import { applyLocalDefaults } from './config.js'
 import {
@@ -285,10 +289,17 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // is non-null and a workspace can register a pool via the API; a native adapter injected
   // through `options.runnerPoolProvider` drives the actual dispatch. The connection repo is
   // also held for the start-time guard's cheap "is a pool registered?" existence check.
-  // In mothership mode (`options.db` undefined) runner-pool delegation is off by default (agents
-  // run on host Docker), so this lazily-constructed repo is never queried on the happy path; the
-  // `!` mirrors `buildNodeContainer`'s documented db-undefined handling.
-  const runnerPoolConnectionRepository = new DrizzleRunnerPoolConnectionRepository(options.db!)
+  // In mothership mode there is no local db, so resolve this repo REMOTELY (like the rest of the
+  // org state) rather than over an undefined db handle — a delegation check then returns a clean
+  // gated `unknown_method` (the repo joins the allow-list in the gating phase, see the tracker)
+  // instead of a `Cannot read properties of undefined` TypeError.
+  const runnerPoolConnectionRepository: RunnerPoolConnectionRepository = mothership
+    ? (
+        mothership.repos as unknown as {
+          runnerPoolConnectionRepository: RunnerPoolConnectionRepository
+        }
+      ).runnerPoolConnectionRepository
+    : new DrizzleRunnerPoolConnectionRepository(options.db!)
   // Build the app-owned backend registries once and share them with BOTH the pool resolver
   // here AND `buildNodeContainer` below (via `backendRegistries`), so the runner backend a
   // workspace's `kind` resolves to is the same instance everywhere. Defaults to the built-ins.
@@ -503,6 +514,9 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     ...container,
     vcsIdentity,
     ...(localSettingsService ? { localSettings: { service: localSettingsService } } : {}),
+    // Release the local credential SQLite handle on shutdown (mothership mode owns it; the
+    // boot path calls this from its SIGTERM/SIGINT handler). No-op otherwise.
+    ...(mothership ? { onShutdown: mothership.close } : {}),
   }
 }
 

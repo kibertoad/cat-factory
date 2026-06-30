@@ -39,7 +39,12 @@ export interface MothershipComposition {
   /**
    * The full {@link CoreRepositories} surface, every entry remote (RPC-backed). The pilot
    * allow-list gates which repo+method actually executes on the mothership; an
-   * un-allow-listed call returns `unknown_method` until a later slice widens the table.
+   * un-allow-listed call returns `unknown_method`. IMPORTANT: the pilot table exposes only the
+   * six core domain repos, which is NOT enough for a board load or a run end-to-end — those
+   * touch many more repos (mounts, settings, presets, notifications, …) that are still
+   * un-allow-listed (and the direct-db repos in `buildNodeContainer` have no db here), so they
+   * currently throw. The widened surface is the gating phase in docs/initiatives/mothership-mode.md
+   * (this PR must stay a draft until it lands).
    */
   repos: CoreRepositories
   /** The local-sqlite credential store (kept on the laptop, sealed with the local key). */
@@ -145,13 +150,16 @@ export class InProcessWorkRunner implements WorkRunner {
         const outcome = await driveExecution(this.exec, workspaceId, executionId, this.cfg, {
           log: this.log,
         })
+        const rerun = this.inflight.get(executionId) === 'rerun'
         // A re-armed unbounded-wait gate (human review) released the drive without finishing;
         // with no stale-run sweeper here, re-arm it ourselves after the gate's poll interval so
-        // it polls again rather than stalling.
-        if (outcome.rearmedGate) {
+        // it polls again rather than stalling. Skip the delayed re-arm when a signal already
+        // queued an immediate re-drive (`rerun`): looping below covers it, and arming both would
+        // leave a stray timer that amplifies polling on every gate+signal coincidence.
+        if (outcome.rearmedGate && !rerun) {
           this.rearmAfterDelay(workspaceId, executionId)
         }
-        if (this.inflight.get(executionId) !== 'rerun') break
+        if (!rerun) break
       }
     } catch (err) {
       this.log.error(

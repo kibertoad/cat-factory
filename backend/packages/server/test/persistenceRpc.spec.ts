@@ -1,7 +1,14 @@
-import { ConflictError, type ExecutionInstance, type Workspace } from '@cat-factory/kernel'
+import {
+  type AccountRepository,
+  ConflictError,
+  type ExecutionInstance,
+  type ExecutionRepository,
+  type MembershipRepository,
+  type Workspace,
+  type WorkspaceRepository,
+} from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
-  createRemoteRepositories,
   createRemoteRepositoryRegistry,
   type PersistenceRpcClient,
 } from '../src/persistence/remoteRepositories.js'
@@ -81,6 +88,9 @@ function makeRegistry(): {
   }
 }
 
+// Exercise the round-trip through the SAME full-surface registry production uses (a
+// mothership-mode node builds `createRemoteRepositoryRegistry`), cast to the typed ports the
+// assertions below touch.
 function remote(accountIds = [ACCOUNT]) {
   const { registry, resolveAccountId } = makeRegistry()
   const client = inProcessClient({
@@ -88,7 +98,12 @@ function remote(accountIds = [ACCOUNT]) {
     resolveAccountId,
     scope: { accountIds, userId: USER },
   })
-  return createRemoteRepositories(client)
+  return createRemoteRepositoryRegistry(client) as unknown as {
+    workspaceRepository: WorkspaceRepository
+    executionRepository: ExecutionRepository
+    accountRepository: AccountRepository
+    membershipRepository: MembershipRepository
+  }
 }
 
 describe('persistence RPC round-trip', () => {

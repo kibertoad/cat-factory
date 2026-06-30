@@ -5,11 +5,19 @@
 '@cat-factory/local-server': minor
 ---
 
-Mothership mode: the no-Postgres local boot (initiative slice 1b). A local node can now run
-with `LOCAL_MOTHERSHIP_URL` set and NO local database — org/durable state is served by the
-hosted mothership over the `/internal/persistence` machine API, while agent/model credentials
-stay on the laptop in the `node:sqlite` store (sealed with the LOCAL key; the mothership's
-`ENCRYPTION_KEY` never reaches the machine).
+Mothership mode: the no-Postgres local boot SPINE (initiative slice 1b). A local node can now
+boot with `LOCAL_MOTHERSHIP_URL` set and NO local database: it composes the remote (RPC-backed)
+org repositories + a local `node:sqlite` credential store (sealed with the LOCAL key; the
+mothership's `ENCRYPTION_KEY` never reaches the machine) and drives runs with an in-process work
+runner instead of pg-boss.
+
+NOT yet functional end-to-end — keep the mothership PR a DRAFT. The pilot allow-list exposes only
+the six core domain repositories remotely, but a board load and a run reach many more org repos
+(mounts, settings, presets, notifications, projections, …) plus stores still built from the
+now-absent local `db`, so those paths currently throw. Routing the full repository surface through
+the remote registry + widening the server allow-list (with the per-method account/role scope rules
+that boundary needs) is the gating phase in `docs/initiatives/mothership-mode.md`; this work must
+not merge until that phase lands. See the tracker for the per-repo task list.
 
 - `@cat-factory/server`: `createRemoteRepositoryRegistry(client)` — a drift-proof, full-surface
   remote repository set (a `Proxy` that lazily forwards any accessed repository to one RPC), so a
@@ -28,8 +36,6 @@ stay on the laptop in the `node:sqlite` store (sealed with the LOCAL key; the mo
 - `@cat-factory/contracts`: `localModeConfig.mothership` is surfaced to the SPA so the UI can
   label what is stored locally vs delegated to the mothership.
 
-Scope note: the pilot allow-list still exposes only the six core domain repositories remotely,
-so a mothership node loads a hosted board and persists executions; the full repository surface
-and login-based machine-token minting land in PR 3 (a static `LOCAL_MOTHERSHIP_TOKEN` is used
-for now). Pre-1.0, no back-compat: the standard siloed-Postgres local mode is unchanged when
+Login-based machine-token minting also lands later (a static `LOCAL_MOTHERSHIP_TOKEN` is used for
+now). Pre-1.0, no back-compat: the standard siloed-Postgres local mode is unchanged when
 `LOCAL_MOTHERSHIP_URL` is unset.

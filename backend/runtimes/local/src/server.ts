@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { serve } from '@hono/node-server'
-import { NodeRealtimeHub, attachRealtime, createApp, start } from '@cat-factory/node-server'
+import type { serve } from '@hono/node-server'
+import { NodeRealtimeHub, createApp, serveAppWithRealtime, start } from '@cat-factory/node-server'
 import { logger } from '@cat-factory/server'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import { applyLocalDefaults } from './config.js'
@@ -117,14 +117,17 @@ async function startLocalMothership(
   })
 
   const app = createApp(container, env)
-  const port = Number(env.PORT ?? 8787)
-  const bindHost = host ?? env.HOST?.trim() ?? undefined
-  const server = serve({ fetch: app.fetch, port, ...(bindHost ? { hostname: bindHost } : {}) })
-  const stopRealtime = attachRealtime(server, realtimeHub, container.config.auth, logger)
-  logger.info(
-    { port, host: bindHost ?? '0.0.0.0' },
-    'cat-factory local (mothership) server listening',
-  )
+  // Shared serve + WebSocket-upgrade helper (one implementation with `start()`, so port/host
+  // resolution can't drift). The shutdown sequence stays local because it differs from `start()`:
+  // no pg-boss/pool to stop, but the local credential SQLite handle to release.
+  const { server, stopRealtime } = serveAppWithRealtime({
+    app,
+    realtimeHub,
+    auth: container.config.auth,
+    env,
+    host,
+    label: 'cat-factory local (mothership) server',
+  })
 
   let shuttingDown = false
   const shutdown = async (signal: string) => {
@@ -133,6 +136,8 @@ async function startLocalMothership(
     logger.info({ signal }, 'shutting down cat-factory local (mothership) server')
     stopRealtime()
     await new Promise<void>((resolve) => server.close(() => resolve()))
+    // Release the local credential SQLite handle (mothership mode owns it).
+    await container.onShutdown?.()
     process.exit(0)
   }
   process.once('SIGTERM', () => void shutdown('SIGTERM'))

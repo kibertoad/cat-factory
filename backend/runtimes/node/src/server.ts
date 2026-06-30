@@ -82,6 +82,33 @@ export function createServer(options: CreateServerOptions): Hono<AppEnv> {
 }
 
 /**
+ * Serve a Hono app over `@hono/node-server` and attach the SPA's WebSocket event-stream upgrade
+ * to the same listener. Shared by {@link start} and the local facade's mothership boot (which
+ * can't call `start()` — it has no Postgres/pg-boss), so the port/host resolution + the realtime
+ * upgrade can never drift between them. The caller owns the rest of its shutdown sequence (which
+ * legitimately differs: pg-boss + sweepers vs the local credential store), so this returns the
+ * server + the realtime stop fn rather than registering signal handlers itself.
+ */
+export function serveAppWithRealtime(opts: {
+  app: Hono<AppEnv>
+  realtimeHub: NodeRealtimeHub
+  auth: Parameters<typeof attachRealtime>[2]
+  env: NodeJS.ProcessEnv
+  host?: string
+  label: string
+}): { server: ReturnType<typeof serve>; stopRealtime: ReturnType<typeof attachRealtime> } {
+  const port = Number(opts.env.PORT ?? 8787)
+  const host = opts.host ?? opts.env.HOST?.trim() ?? undefined
+  const server = serve({ fetch: opts.app.fetch, port, ...(host ? { hostname: host } : {}) })
+  // Accept the SPA's WebSocket event-stream upgrades on the same listener (the Worker uses a
+  // per-workspace Durable Object; `@hono/node-server` doesn't upgrade on its own, so attach a
+  // `ws` server here).
+  const stopRealtime = attachRealtime(server, opts.realtimeHub, opts.auth, logger)
+  logger.info({ port, host: host ?? '0.0.0.0' }, `${opts.label} listening`)
+  return { server, stopRealtime }
+}
+
+/**
  * Boot the Node HTTP server: connect to Postgres (`DATABASE_URL`), ensure the schema,
  * start pg-boss + the durable execution worker + the stale-run sweeper, build the app,
  * and listen. Registers SIGTERM/SIGINT handlers for a clean, ordered shutdown.
@@ -155,14 +182,14 @@ export async function start(
     concurrency: runtime.concurrency,
   })
   const app = createApp(container, env)
-  const port = Number(env.PORT ?? 8787)
-  const host = options.host ?? env.HOST?.trim() ?? undefined
-  const server = serve({ fetch: app.fetch, port, ...(host ? { hostname: host } : {}) })
-  // Accept the SPA's WebSocket event-stream upgrades on the same listener and push the
-  // engine's events to subscribers (the Worker uses a per-workspace Durable Object;
-  // `@hono/node-server` doesn't upgrade on its own, so we attach a `ws` server here).
-  const stopRealtime = attachRealtime(server, realtimeHub, container.config.auth, logger)
-  logger.info({ port, host: host ?? '0.0.0.0' }, 'cat-factory node server listening')
+  const { server, stopRealtime } = serveAppWithRealtime({
+    app,
+    realtimeHub,
+    auth: container.config.auth,
+    env,
+    host: options.host,
+    label: 'cat-factory node server',
+  })
 
   // The background sweepers below only schedule `setInterval`s (no work runs until a
   // timer fires), so start them AFTER the listener binds — the server accepts requests a

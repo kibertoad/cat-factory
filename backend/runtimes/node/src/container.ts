@@ -62,6 +62,7 @@ import {
   type RateLimitRepository,
   type RateLimitSnapshot,
   type ResolveUserGitHubToken,
+  type RunnerPoolConnectionRepository,
   type RunnerPoolProvider,
   type TaskConnectionRepository,
   type TaskSourceProvider,
@@ -418,8 +419,15 @@ export interface NodeContainerOptions {
    * local node runs with NO Postgres (`db` undefined) and supplies {@link repos} (org/durable
    * state served remotely) plus the credential-repo seams below instead. When `db` is
    * undefined, `repos` is REQUIRED; the per-user Postgres services (subscriptions, user
-   * secrets, OpenRouter catalog) turn themselves off, and the handful of stores still built
-   * directly from the db are never queried on the mothership happy path.
+   * secrets, OpenRouter catalog) turn themselves off.
+   *
+   * WARNING (mothership mode is NOT yet functional end-to-end): a board load and a run still
+   * reach a number of stores that are built directly from the db here (notifications, bootstrap,
+   * env-config-repair, subscription-activation, GitHub projections, …) AND org repos that the
+   * pilot allow-list does not yet expose remotely — so those paths currently throw (an undefined
+   * db dereference or a gated `unknown_method`). Routing every such store through the remote
+   * surface + widening the allow-list is the gating phase in docs/initiatives/mothership-mode.md;
+   * the mothership PR must stay a draft until it lands.
    */
   db?: DrizzleDb
   /**
@@ -559,7 +567,9 @@ export interface NodeContainerOptions {
  */
 export function buildNodeResolveTransport(
   config: AppConfig,
-  runnerPoolConnectionRepository: DrizzleRunnerPoolConnectionRepository,
+  // The port, not the Drizzle concrete: in mothership mode the local facade passes a remote
+  // (RPC-backed) connection repo, and the service layer only ever uses the port methods.
+  runnerPoolConnectionRepository: RunnerPoolConnectionRepository,
   workspaceRepository: CoreDependencies['workspaceRepository'],
   clock: Clock,
   // The app-owned runner-backend registry the service resolves a stored `kind` through.
@@ -1119,12 +1129,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     )
   }
   const repos = options.repos ?? createDrizzleRepositories(options.db as DrizzleDb, clock)
-  // The handful of stores still built DIRECTLY from the db below (projections, bootstrap,
-  // notifications, …) are never queried on the mothership happy path (board load + local
-  // credentials), and the Drizzle constructors only stash the handle — no build-time work
-  // (audited) — so binding an `undefined` handle is safe. `db` carries the non-null type for
-  // those lazy constructions; the per-user credential services take the OPTIONAL `options.db`
-  // and turn themselves off when it is absent, so they never query a missing database.
+  // The Drizzle constructors only stash the handle — no build-time work (audited) — so BUILDING
+  // the stores below over an `undefined` db is safe; `db` carries the non-null type for those
+  // constructions, and the per-user credential services take the OPTIONAL `options.db` and turn
+  // themselves off when it is absent. CALLING those stores is a different matter: in mothership
+  // mode the ones built directly from the db (projections, bootstrap, notifications,
+  // subscription-activation, …) WILL throw on a board load / run because there is no db and they
+  // are not yet routed to the remote surface. Remoting them + widening the allow-list is the
+  // gating phase (docs/initiatives/mothership-mode.md); the mothership PR stays a draft until then.
   const db = options.db as DrizzleDb
 
   // The app-owned backend registries (env + runner kind → provider), built once here and
