@@ -25,9 +25,13 @@ are simply dropped):
   `resolveTesterFallbackDefault` / `resolveRequireEnvironmentProvider` wiring.
 
 The start-time Tester gate is rewritten: it passes for an `infraless` (or undeclared) service,
-refuses a `docker-compose` service on a runtime that can't nest containers
-(`tester_infra_unsupported` — "limited mode"), and requires a resolvable workspace handler for a
-`kubernetes`/`custom` service (`provision_type_unhandled`, via the new
-`EnvironmentConnectionService.resolveHandlerForType` / `EnvironmentProvisioningService.canProvision`
-seam). The agent-executor `service` context carries `provisioning` instead of the three legacy
-fields. The service inspector replaces the local/ephemeral toggle with a provision-type selector.
+refuses a `docker-compose` service on a runtime that can't nest containers OR with no compose
+path declared (`tester_infra_unsupported` — "limited mode" / "nothing to stand up"), and requires
+a resolvable workspace handler for a `kubernetes`/`custom` service (`provision_type_unhandled`, via
+the new `EnvironmentConnectionService.resolveHandlerForType` /
+`EnvironmentProvisioningService.canProvision` seam). The Tester's run mode (the `infra` job spec +
+the prompt run-mode line, kept in lock-step) is derived from the provision type AND the run's
+provisioned environment: a service that actually provisioned an env URL (e.g. via a `deployer`
+step) tests against it regardless of declared type, and an undeclared service runs with no infra.
+The agent-executor `service` context carries `provisioning` instead of the three legacy fields. The
+service inspector replaces the local/ephemeral toggle with a provision-type selector.

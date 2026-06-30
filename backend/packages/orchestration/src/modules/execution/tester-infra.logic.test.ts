@@ -4,6 +4,7 @@ import { decideTesterInfra, type TesterInfraInput } from './tester-infra.logic.j
 const base: TesterInfraInput = {
   provisionType: undefined,
   localTestInfraSupported: true,
+  hasComposePath: true,
   handlerResolves: true,
 }
 
@@ -17,12 +18,13 @@ describe('decideTesterInfra', () => {
   })
 
   describe('docker-compose (stood up in-container)', () => {
-    it('passes on a DinD-capable runtime', () => {
+    it('passes on a DinD-capable runtime with a compose path', () => {
       expect(
         decideTesterInfra({
           ...base,
           provisionType: 'docker-compose',
           localTestInfraSupported: true,
+          hasComposePath: true,
         }),
       ).toEqual({ ok: true })
     })
@@ -33,6 +35,28 @@ describe('decideTesterInfra', () => {
           ...base,
           provisionType: 'docker-compose',
           localTestInfraSupported: false,
+        }),
+      ).toEqual({ ok: false, reason: 'limited-local' })
+    })
+
+    it('refuses a DinD-capable runtime when no compose path is declared (nothing to stand up)', () => {
+      expect(
+        decideTesterInfra({
+          ...base,
+          provisionType: 'docker-compose',
+          localTestInfraSupported: true,
+          hasComposePath: false,
+        }),
+      ).toEqual({ ok: false, reason: 'compose-unconfigured' })
+    })
+
+    it('refuses on no-DinD before the compose-path check (limited mode wins)', () => {
+      expect(
+        decideTesterInfra({
+          ...base,
+          provisionType: 'docker-compose',
+          localTestInfraSupported: false,
+          hasComposePath: false,
         }),
       ).toEqual({ ok: false, reason: 'limited-local' })
     })

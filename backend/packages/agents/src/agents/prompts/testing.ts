@@ -141,24 +141,24 @@ export function testingSystemPrompt(kind: AgentKind): string | undefined {
 }
 
 /**
- * The "which environment to run in" section for a Tester step, rendered from the
- * service's declared provision type: a `docker-compose` service has its dependencies
- * stood up locally; a `kubernetes`/`custom` service runs against the provisioned
- * ephemeral environment; an `infraless` service (or none declared) stands nothing up.
- * Empty for non-tester kinds, so callers can append it unconditionally.
+ * The "which environment to run in" section for a Tester step, rendered from the service's
+ * declared provision type AND whether the run provisioned an environment: a `kubernetes`/
+ * `custom` service — or ANY run that provisioned an env URL (e.g. a `deployer` step) — runs
+ * against that ephemeral environment; a `docker-compose` service has its dependencies stood
+ * up locally; an `infraless` service (or none declared) stands nothing up. Empty for
+ * non-tester kinds, so callers can append it unconditionally. Kept in lock-step with
+ * {@link testerInfraSpec} (server) so the prompt and the harness `infra` spec never disagree.
  */
 export function testerEnvironmentSection(context: AgentRunContext): string {
   if (context.agentKind !== TESTER_AGENT_KIND && context.agentKind !== UI_TESTER_AGENT_KIND)
     return ''
   const type = context.service?.provisioning?.type
-  if (type === 'kubernetes' || type === 'custom') {
+  if (type === 'kubernetes' || type === 'custom' || context.environment?.url) {
     return '\nRun mode: ephemeral environment — test against the provided environment URL; do not start the service locally.'
   }
   if (type === 'docker-compose') {
     return '\nRun mode: local — the service’s infra dependencies have been stood up on localhost; start the service yourself and test it there.'
   }
-  if (type === 'infraless') {
-    return '\nRun mode: no infra dependencies — just install, build and run the test suite directly (nothing was stood up for you).'
-  }
-  return ''
+  // `infraless` or none declared — nothing was stood up.
+  return '\nRun mode: no infra dependencies — just install, build and run the test suite directly (nothing was stood up for you).'
 }

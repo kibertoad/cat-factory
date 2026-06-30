@@ -818,10 +818,11 @@ export class ExecutionService {
    * provisioning declared) runs with no infra; a `docker-compose` service stands its stack
    * up in-container (so a runtime without Docker-in-Docker is refused — "limited mode"); a
    * `kubernetes`/`custom` service is provisioned by a workspace handler, so one must resolve
-   * for its type. Throws a {@link ConflictError} (`tester_infra_unsupported` for limited
-   * mode, `provision_type_unhandled` for a missing handler) — surfaced as an actionable
-   * message — otherwise. Passes through when the provisioning seam is unwired (tests / no
-   * environment integration), like the other optional start guards.
+   * for its type. Throws a {@link ConflictError} (`tester_infra_unsupported` when the local
+   * docker-compose infra can't run — no DinD or no compose path declared,
+   * `provision_type_unhandled` for a missing handler) — surfaced as an actionable message —
+   * otherwise. Passes through when the provisioning seam is unwired (tests / no environment
+   * integration), like the other optional start guards.
    */
   private async assertTesterInfraConfigured(workspaceId: string, block: Block): Promise<void> {
     const service = await this.contextBuilder.resolveServiceConfig(workspaceId, block)
@@ -836,10 +837,13 @@ export class ExecutionService {
     const decision = decideTesterInfra({
       provisionType: provisioning?.type,
       localTestInfraSupported: this.localTestInfraSupported,
+      hasComposePath: !!provisioning?.composePath,
       handlerResolves,
     })
     if (decision.ok) return
-    if (decision.reason === 'limited-local') {
+    // A docker-compose service that can't stand its infra up (no DinD, or no compose path)
+    // surfaces as the "test infra not configured" conflict; a missing handler is distinct.
+    if (decision.reason === 'limited-local' || decision.reason === 'compose-unconfigured') {
       throw new ConflictError(TESTER_INFRA_MESSAGES[decision.reason], 'tester_infra_unsupported', {
         infraReason: decision.reason,
       })

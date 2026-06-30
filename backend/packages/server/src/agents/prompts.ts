@@ -274,20 +274,25 @@ export function onCallUserPrompt(context: AgentRunContext, repo: RepoTarget): st
 
 /**
  * The tester's infra stand-up spec for the generic agent job, derived from the service's
- * declared provision type: a `docker-compose` service stands its compose stack up
- * in-container (`environment:'local'` + the compose path); a `kubernetes`/`custom` service
- * runs against the provisioned ephemeral environment URL (`environment:'ephemeral'`); an
- * `infraless` service (or none declared) stands nothing up (`local` + `noInfraDependencies`).
- * The harness `infra` wire shape is unchanged — only its source moved from the old
- * `tester.environment` config to the service's `provisioning`.
+ * declared provision type AND whether the run actually provisioned an environment: a
+ * `kubernetes`/`custom` service — or ANY run that provisioned an env URL (e.g. a `deployer`
+ * step) — runs against that ephemeral environment (`environment:'ephemeral'` + the URL); a
+ * `docker-compose` service stands its compose stack up in-container (`environment:'local'` +
+ * the compose path); an `infraless` service (or none declared) stands nothing up (`local` +
+ * `noInfraDependencies`). The harness `infra` wire shape is unchanged — only its source moved
+ * from the old `tester.environment` config to the service's `provisioning` + the run env.
  */
 export function testerInfraSpec(context: AgentRunContext): Record<string, unknown> {
   const provisioning = context.service?.provisioning
   const type = provisioning?.type
-  if (type === 'kubernetes' || type === 'custom') {
+  const envUrl = context.environment?.url
+  // Prefer a provisioned environment whenever one exists: a `kubernetes`/`custom` service is
+  // provisioned by a workspace handler, and a `deployer` step can provision an env for any
+  // service. Either way the Tester targets that URL rather than standing nothing up locally.
+  if (type === 'kubernetes' || type === 'custom' || envUrl) {
     return {
       environment: 'ephemeral',
-      ...(context.environment?.url ? { environmentUrl: context.environment.url } : {}),
+      ...(envUrl ? { environmentUrl: envUrl } : {}),
     }
   }
   return {

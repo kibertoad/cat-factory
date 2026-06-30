@@ -145,6 +145,13 @@ describe('testerInfraSpec', () => {
     )
     expect(spec).toEqual({ environment: 'ephemeral', environmentUrl: 'https://env.example' })
   })
+
+  it('runs ephemeral against a provisioned env URL even when no provisioning is declared (a deployer step provisioned it)', () => {
+    const spec = testerInfraSpec(
+      context({ environment: { url: 'https://env-1.example' } } as Record<string, unknown>),
+    )
+    expect(spec).toEqual({ environment: 'ephemeral', environmentUrl: 'https://env-1.example' })
+  })
 })
 
 describe('prBody', () => {
