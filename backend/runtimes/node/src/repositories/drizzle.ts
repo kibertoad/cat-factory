@@ -595,8 +595,16 @@ class DrizzleAccountRepository implements AccountRepository {
 
   async listByIds(ids: string[]): Promise<AccountRecord[]> {
     if (ids.length === 0) return []
-    const rows = await this.db.select().from(accounts).where(inArray(accounts.id, ids))
-    return rows.map(rowToAccount)
+    const out: AccountRecord[] = []
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < ids.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(accounts)
+        .where(inArray(accounts.id, ids.slice(i, i + 500)))
+      for (const row of rows) out.push(rowToAccount(row))
+    }
+    return out
   }
 
   async create(account: AccountRecord): Promise<void> {
@@ -1922,7 +1930,7 @@ function rowToService(row: typeof services.$inferSelect): Service {
 }
 
 /** Account-owned services (migration 0030). The canonical, shareable board unit. */
-class DrizzleServiceRepository implements ServiceRepository {
+export class DrizzleServiceRepository implements ServiceRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(id: string): Promise<Service | null> {

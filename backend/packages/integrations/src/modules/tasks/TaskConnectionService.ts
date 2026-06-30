@@ -123,7 +123,6 @@ export class TaskConnectionService {
     return states
   }
 
-  /** Whether a source can be used right now (drives the import gate + the UI toggle's enablement). */
   /**
    * Live "check setup" probe for a source: gate on availability first (a GitHub
    * App must be installed, a credentialed source must be connected), then delegate

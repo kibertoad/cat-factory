@@ -6,6 +6,7 @@ import type {
   LlmCallActivity,
   ResolveRunRepoContext,
   RunRepoContext,
+  Service,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import type { FakeAgentOptions } from './FakeAgentExecutor.js'
@@ -127,6 +128,16 @@ export interface ConformanceApp {
    * {@link seedIncorporatedReview}).
    */
   seedIncorporatedClarityReview(workspaceId: string, blockId: string, report: string): Promise<void>
+  /**
+   * Seed an account-owned service row linked to a frame block straight into the facade's real
+   * service store, so the frame-deletion test can assert the batched frame→service reclaim
+   * actually deletes the backing service on every runtime. The only production path that
+   * creates a service is a GitHub connection (off in conformance), so the suite seeds the row
+   * directly rather than driving that flow.
+   */
+  seedService(service: Service): Promise<void>
+  /** Read a service back by id (null once reclaimed), for the frame-deletion reclaim assertion. */
+  getService(id: string): Promise<Service | null>
   /**
    * The facade's user-identity + onboarding services over its real store, so the suite
    * can assert identity/invitation behaviour parity (the unauthenticated HTTP `call`

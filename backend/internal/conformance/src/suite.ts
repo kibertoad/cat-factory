@@ -3255,12 +3255,13 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(res.body.level).toBe('frame')
       })
 
-      it('deletes a top-level frame (resolving its backing service in one batched read)', async () => {
+      it('deletes a top-level frame and reclaims its backing service in one batched read', async () => {
         // Deleting a top-level frame reclaims the account-owned service it backs — resolved for
-        // every doomed frame in ONE query. Exercised on every runtime so the batched
-        // frame→service lookup can't map differently between stores. The frame here has no
-        // linked service (GitHub is off in conformance), so the reclaim is a no-op and the
-        // delete simply succeeds.
+        // every doomed frame in ONE batched query (`listByFrameBlocks`), then its row + mounts
+        // are deleted. Exercised on every runtime so the batched frame→service lookup can't map
+        // differently between stores. GitHub is off in conformance (the only production path that
+        // mints a service), so seed a real service linked to the frame directly, then assert the
+        // delete actually reclaims it — not just that the block vanished.
         const app = harness.makeApp()
         const { workspace } = await app.createWorkspace()
         const frame = await app.call<Block>('POST', `/workspaces/${workspace.id}/blocks`, {
@@ -3268,6 +3269,18 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           position: { x: 0, y: 0 },
         })
         expect(frame.body.level).toBe('frame')
+        const serviceId = `svc-${frame.body.id}`
+        await app.seedService({
+          id: serviceId,
+          accountId: null,
+          frameBlockId: frame.body.id,
+          installationId: null,
+          repoGithubId: null,
+          createdAt: 1,
+        })
+        // The service resolves by its frame before deletion.
+        expect(await app.getService(serviceId)).not.toBeNull()
+
         const removed = await app.call(
           'DELETE',
           `/workspaces/${workspace.id}/blocks/${frame.body.id}`,
@@ -3275,6 +3288,8 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(removed.status).toBe(204)
         const snap = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
         expect(snap.body.blocks.some((b) => b.id === frame.body.id)).toBe(false)
+        // The batched frame→service resolve found the backing service and reclaimed it.
+        expect(await app.getService(serviceId)).toBeNull()
       })
 
       it('adds a user-authored task pinning a pipeline', async () => {

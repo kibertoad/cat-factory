@@ -5,6 +5,7 @@ import type {
   CloudProvider,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 
 interface AccountRow {
   id: string
@@ -48,12 +49,17 @@ export class D1AccountRepository implements AccountRepository {
 
   async listByIds(ids: string[]): Promise<AccountRecord[]> {
     if (ids.length === 0) return []
-    const placeholders = ids.map(() => '?').join(', ')
-    const { results } = await this.db
-      .prepare(`SELECT * FROM accounts WHERE id IN (${placeholders})`)
-      .bind(...ids)
-      .all<AccountRow>()
-    return (results ?? []).map(rowToAccount)
+    const out: AccountRecord[] = []
+    // Chunk the IN list to stay under D1's bound-parameter limit.
+    for (const chunk of chunkForIn(ids)) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(`SELECT * FROM accounts WHERE id IN (${placeholders})`)
+        .bind(...chunk)
+        .all<AccountRow>()
+      for (const row of results ?? []) out.push(rowToAccount(row))
+    }
+    return out
   }
 
   async create(account: AccountRecord): Promise<void> {
