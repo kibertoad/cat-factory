@@ -1,0 +1,3385 @@
+{
+  "language": {
+    "switcher": "Dil",
+    "warning": {
+      "title": "Resmi olmayan çeviri",
+      "body": "Bu çeviri topluluk tarafından sağlanmıştır ve hatalı olabilir. Bir hata mı fark ettiniz? Lütfen bunu bildirin veya {repoLink} üzerinde bir düzeltme açın.",
+      "repoLinkLabel": "cat-factory deposu",
+      "dismiss": "Kapat"
+    }
+  },
+  "common": {
+    "save": "Kaydet",
+    "cancel": "İptal",
+    "retry": "Yeniden dene",
+    "block": "Blok",
+    "actionFailed": "İşlem başarısız oldu",
+    "close": "Kapat"
+  },
+  "nav": {
+    "menu": "Gezinme menüsü",
+    "openMenu": "Menüyü aç",
+    "closeMenu": "Menüyü kapat",
+    "commandBar": "Arayın veya bir komut çalıştırın…",
+    "create": "Oluştur",
+    "buildPipeline": "Bir işlem hattı oluştur",
+    "repositories": "Depolar",
+    "addFromRepo": "Mevcut depodan ekle",
+    "bootstrapRepo": "Depo başlat",
+    "integrations": "Entegrasyonlar",
+    "infrastructure": "Altyapı",
+    "sandbox": "Deneme alanı",
+    "kaizen": "Kaizen",
+    "workspaceContext": "Çalışma alanı bağlamı",
+    "contextFragments": "Bağlam parçaları",
+    "configuration": "Yapılandırma",
+    "workspaceSettings": "Çalışma alanı ayarları",
+    "modelConfiguration": "Model yapılandırması",
+    "accountSettings": "Hesap ayarları"
+  },
+  "board": {
+    "toolbar": {
+      "addService": "Servis ekle",
+      "decisionWord": "karar | karar",
+      "lod": {
+        "far": "Genel bakış",
+        "mid": "Özet",
+        "close": "Ayrıntı",
+        "steps": "Derleme adımları",
+        "subtasks": "Alt görevler"
+      },
+      "spendTitle": "Bu ayki token harcaması",
+      "spendLimitReached": "Harcama limitine ulaşıldı, çalıştırmalar duraklatıldı",
+      "serviceAdded": "{title} eklendi",
+      "serviceAddFailed": "Servis eklenemedi"
+    },
+    "canvas": {
+      "emptyTitle": "Panonuz boş",
+      "emptyBody": "Başlamak için bir servis ekleyin: yeni bir depo başlatın veya zaten sahip olduğunuz bir depoyu ekleyin.",
+      "addBlockFailedTitle": "Blok eklenemedi",
+      "addBlockFailedBody": "Arka uç isteği reddetti.",
+      "dropOntoTaskTitle": "Bir göreve bırakın",
+      "dropOntoTaskBody": "İşlem hatları servislere değil, görevlere karşı çalışır.",
+      "taskBlockedTitle": "Görev engellendi",
+      "taskBlockedBody": "Bağımlılıkları henüz birleştirilmedi."
+    },
+    "addTask": {
+      "title": "Görev ekle",
+      "newTaskIn": "{container} içinde yeni görev",
+      "typeLabel": "Tür",
+      "types": {
+        "feature": "Özellik",
+        "bug": "Hata",
+        "document": "Belge",
+        "spike": "Spike",
+        "recurring": "Yinelenen"
+      },
+      "recurringWithFrame": "Yinelenen bir görev, bir işlem hattını belirli bir aralıkta çalıştırır. Programı ve istemi ayarlamak için devam edin.",
+      "recurringNoFrame": "Yinelenen bir görev bir serviste bulunmalıdır. Bir servis çerçevesinden (veya içindeki bir modülden) ekleyin.",
+      "titleField": "Başlık",
+      "titlePlaceholder": "Ne yapılması gerekiyor?",
+      "issueIncluded": "{title} (sorundan, dahil edildi)",
+      "loadingIssue": "Bağlantılı sorunun açıklaması yükleniyor…",
+      "additionalNotes": "Ek notlar",
+      "description": "Açıklama",
+      "notesPlaceholder": "Ajanın bilmesi gereken başka bir şey ekleyin, yukarıdaki sorun açıklamasına eklenir…",
+      "descriptionPlaceholder": "İşi tanımlayın: bağlam, kabul kriterleri, ajanın bilmesi gereken her şey…",
+      "technical": "Teknik görev",
+      "technicalHint": "Bir yeniden düzenleme / işlevsel olmayan / dahili değişiklik. Uygulayıcı, görev tanımını birincil, spesifikasyonu ise bir gerileme referansı olarak ele alır; spesifikasyon aşamasının karar vermesi için boş bırakın.",
+      "severity": "Önem derecesi",
+      "stepsToReproduce": "Yeniden oluşturma adımları",
+      "stepsToReproducePlaceholder": "Gözlemlenen ile beklenen, ve nasıl yeniden oluşturulacağı…",
+      "timebox": "Zaman kutusu (saat)",
+      "timeboxPlaceholder": "ör. 8",
+      "documentKind": "Belge türü",
+      "audience": "Hedef kitle",
+      "audiencePlaceholder": "ör. platform mühendisleri",
+      "targetPath": "Hedef yol",
+      "targetPathPlaceholder": "ör. docs/rfcs/0001-foo.md",
+      "outlineHints": "Ana hat ipuçları",
+      "outlineHintsPlaceholder": "Belgenin kapsaması gereken bölümler veya noktalar",
+      "optional": "isteğe bağlı",
+      "pipeline": "İşlem hattı",
+      "chooseAtRunTime": "Çalıştırma sırasında seç",
+      "mergePolicy": "Birleştirme politikası",
+      "workspaceDefault": "Çalışma alanı varsayılanı",
+      "defaultPreset": "Varsayılan ({name}) — {thresholds}",
+      "defaultModelPreset": "Varsayılan ({name})",
+      "modelPreset": "Model ön ayarı",
+      "agentConfiguration": "Ajan yapılandırması",
+      "contextDocuments": "Bağlam belgeleri",
+      "contextIssues": "Bağlam sorunları",
+      "attach": "Ekle",
+      "done": "Tamam",
+      "attachDocDisabledConnect": "Önce bir belge kaynağı bağlayın (Entegrasyonlar)",
+      "attachDocDisabledEnable": "Önce belge entegrasyonunu etkinleştirin",
+      "attachIssueDisabledConnect": "Önce bir sorun izleyici bağlayın (Entegrasyonlar)",
+      "attachIssueDisabledEnable": "Önce sorun izleyici entegrasyonunu etkinleştirin",
+      "importsOnAdd": "eklendiğinde içe aktarılır",
+      "noDocsHint": "Ajanların bu görevi uygularken görebilmesi için bir gereksinim, RFC veya PRD ekleyin.",
+      "noIssuesHint": "Ajanların bu görevi uygularken açıklamasını ve yorumlarını görebilmesi için bir izleyici sorunu ekleyin.",
+      "plannedHint": "Görev planlanmış bir durumda eklenir. Üzerinde bir işlem hattı başlatana kadar çalışmaz, o zamana kadar düzenlemeye devam edebilirsiniz.",
+      "continue": "Devam",
+      "submit": "Görev ekle",
+      "addFailedTitle": "Görev eklenemedi",
+      "linkFailed": "Görev eklendi, ancak {count} ek bağlanamadı | Görev eklendi, ancak {count} ek bağlanamadı"
+    },
+    "recurring": {
+      "title": "Yinelenen bir işlem hattı ekle",
+      "on": "{frame} üzerinde yinelenen işlem hattı",
+      "name": "Ad",
+      "namePlaceholder": "ör. Haftalık bağımlılık güncellemeleri",
+      "pipeline": "Pipeline",
+      "pickPipeline": "Bir pipeline seçin",
+      "prompt": "Komut",
+      "promptPlaceholder": "Her çalıştırma ne yapmalı? İşi tanımlayın - normal bir görevin taşıdığı komutun aynısı. Pipeline'ın varsayılanını kullanmak için boş bırakın.",
+      "issueTracker": "Sorun takipçisi",
+      "issueTrackerHint": "Teknik borç pipeline'ı, uygulamadan önce analizinden bir kayıt oluşturur. Nereye olduğunu seçin (tüm çalışma alanı için kaydedilir).",
+      "githubIssues": "GitHub Issues",
+      "jira": "Jira",
+      "linear": "Linear",
+      "jiraProjectKey": "Jira proje anahtarı",
+      "jiraProjectKeyPlaceholder": "örn. ENG",
+      "linearTeamId": "Linear takım kimliği",
+      "footerHint": "Servisin içine tek bir yinelenen görev eklenir; her çalıştırma bir öncekinin yerini alır. Çalıştırma geçmişi inceleme panelinde görünür.",
+      "submit": "Yinelenen pipeline ekle",
+      "addFailedTitle": "Yinelenen pipeline eklenemedi"
+    },
+    "failure": {
+      "containerFailedToStart": "Konteyner başlatılamadı",
+      "environmentFailed": "Ortam sağlama başarısız oldu",
+      "bootstrapFailed": "Bootstrap başarısız oldu",
+      "runFailed": "Çalıştırma başarısız oldu",
+      "retryBootstrap": "Bootstrap'ı yeniden dene",
+      "retryRun": "Çalıştırmayı yeniden dene",
+      "showDetail": "Ayrıntıyı göster",
+      "retrying": "Yeniden deneniyor…"
+    },
+    "stop": {
+      "label": "Durdur",
+      "bootstrapStopped": "Bootstrap durduruldu",
+      "runStopped": "Çalıştırma durduruldu",
+      "stoppedDescription": "Konteyner sonlandırıldı ve çalıştırma iptal edildi.",
+      "stopFailed": "Durdurma başarısız oldu"
+    },
+    "frame": {
+      "status": {
+        "planned": "Görev yok",
+        "ready": "Canlı",
+        "in_progress": "Etkin",
+        "blocked": "İlgi gerekiyor",
+        "pr_ready": "Etkin",
+        "done": "Canlı"
+      },
+      "shared": "Paylaşılan",
+      "sharedTitle": "Bu organizasyondaki çalışma alanları arasında paylaşılan",
+      "bootstrapping": "Bootstrap yapılıyor…",
+      "bootstrappingRepository": "Depo bootstrap'lanıyor…",
+      "bootstrapStepsCount": "{completed}/{total} adım",
+      "runFailed": "Çalıştırma başarısız oldu",
+      "mergedOfTotal": "{merged}/{total} birleştirildi",
+      "noTasksYet": "Henüz görev yok",
+      "prCount": "{count} PR",
+      "implemented": "{merged}/{total} uygulandı",
+      "prReadyCount": "{count} PR hazır",
+      "taskCount": "{count} görev | {count} görev",
+      "moduleCount": "{count} modül | {count} modül",
+      "addTaskTitle": "Görev ekle",
+      "createTaskFromIssueTitle": "Sorundan görev oluştur",
+      "addRecurringTitle": "Yinelenen pipeline ekle",
+      "collapseTitle": "Daralt",
+      "dragService": "Servisi sürükle",
+      "dragTask": "Görevi sürükle",
+      "dragToResize": "Yeniden boyutlandırmak için sürükle",
+      "addFirstTask": "İlk görevi ekle"
+    },
+    "decisionBadge": {
+      "decisionNeeded": "Karar gerekiyor",
+      "approvalNeeded": "Onay gerekiyor"
+    },
+    "task": {
+      "recurringPipeline": "Yinelenen pipeline",
+      "recurringPipelinePaused": "Yinelenen pipeline (duraklatıldı)",
+      "dragToConnect": "Bu göreve bağımlı kılmak için başka bir görevin üzerine sürükleyin",
+      "failed": "Başarısız",
+      "decisionNeeded": "Karar gerekiyor",
+      "approvalNeeded": "Onay gerekiyor",
+      "resolve": "Çöz",
+      "approve": "Onayla",
+      "incorporatingAnswers": "Yanıtlar dahil ediliyor…",
+      "reReviewing": "Yeniden inceleniyor…",
+      "recommending": "Öneriliyor…",
+      "starting": "Başlatılıyor…",
+      "start": "Başlat",
+      "blocked": "Engellendi",
+      "startPipeline": "{name} başlat",
+      "pipelineFallback": "pipeline",
+      "waitingOn": "Bekleniyor: {deps}",
+      "blockedByDependenciesTitle": "Bağımlılıklar tarafından engellendi",
+      "noPipelineTitle": "Tanımlı pipeline yok",
+      "noPipelineBody": "Önce oluşturucuda bir tane oluşturun.",
+      "pr": "PR",
+      "prNumber": "PR #{number}",
+      "openPrOnGithub": "{pr} öğesini GitHub'da aç",
+      "review": "İncele",
+      "merge": "Birleştir",
+      "implemented": "uygulandı",
+      "module": "Modül: {name}",
+      "buildSteps": "Derleme adımları",
+      "reviewAndApprove": "İncele ve onayla",
+      "clickToViewStep": "Adım ayrıntılarını ve çıktısını görüntülemek için tıklayın"
+    },
+    "epic": {
+      "label": "Epik",
+      "activeCount": "{count} etkin",
+      "noTasksYet": "Henüz görev yok"
+    }
+  },
+  "errors": {
+    "action": {
+      "retryFailed": "Yeniden deneme başarısız oldu",
+      "startFailed": "Başlatılamadı",
+      "mergeFailed": "Birleştirilemedi",
+      "restartFailed": "Yeniden başlatılamadı"
+    },
+    "conflict": {
+      "title": {
+        "dependencies_unmet": "Bağımlılıklar tarafından engellendi",
+        "task_limit_reached": "Eşzamanlılık sınırına ulaşıldı",
+        "tester_infra_unsupported": "Test altyapısı yapılandırılmadı",
+        "agent_backend_unconfigured": "Agent arka ucu yapılandırılmadı",
+        "run_not_retryable": "Çalıştırma yeniden denenemiyor",
+        "no_pr_to_merge": "Birleştirilecek PR yok",
+        "github_not_connected": "GitHub bağlı değil",
+        "bootstrap_not_retryable": "Bootstrap yeniden denenemiyor",
+        "bootstrap_reference_missing": "Referans mimari kayıp"
+      },
+      "fallbackMessage": "Bu eylem mevcut durumla çelişiyor.",
+      "providersUnconfigured": {
+        "title": "Bu model için AI sağlayıcısı yok",
+        "body": "{models} için yapılandırılmış sağlayıcı yok. Çalıştırmak için bir sağlayıcı anahtarı ekleyin, bir abonelik bağlayın veya Cloudflare AI'yı etkinleştirin.",
+        "action": "AI'yı yapılandır"
+      }
+    }
+  },
+  "personalSubscriptions": {
+    "heading": "Kişisel abonelikler (yalnızca bireysel kullanım)",
+    "intro": "Claude (Pro/Max), GLM (Z.ai Coding Plan) ve ChatGPT (Codex) her biri size birey olarak lisanslanmıştır, bu nedenle yalnızca sizin için saklanır ve yalnızca sizin çalıştırmalarınız bunları kullanır. Her token, böyle bir çalıştırmayı başlattığınızda girdiğiniz kişisel bir parolayla (asla saklanmaz) şifrelenir; sizi rahatsız etmemesi için bir süre bu tarayıcıda önbelleğe alınır. Parola, düşük sürtünmeli bir kolaylık ve sistemin kimlik bilgilerinizi sessizce paylaşmayacağına dair bir şeffaflık sinyalidir, sistem anahtarı sahibine karşı bir duvar değildir. Bu modeller yinelenen programlarda kullanılamaz.",
+    "vendorField": "Abonelik",
+    "labelField": "Etiket (isteğe bağlı)",
+    "labelPlaceholder": "ör. benim {vendor}",
+    "defaultLabel": "{vendor} aboneliğim",
+    "passwordField": "Kişisel parola (en az 6 karakter)",
+    "passwordPlaceholder": "token'ınızı korur",
+    "renewsField": "Abonelik yenilenme tarihi (isteğe bağlı)",
+    "connect": "Bağlan",
+    "replace": "Değiştir",
+    "expires": "Son kullanma {date}",
+    "noExpiry": "Son kullanma tarihi ayarlanmadı",
+    "renewal": {
+      "expired": "{vendor} aboneliğinizin süresi doldu. Modellerini çalıştırmaya devam etmek için yenileyip yeniden bağlanın.",
+      "soon": "{vendor} aboneliğiniz {count} gün içinde yenileniyor. Yenilendikten sonra buradan güncelleyin. | {vendor} aboneliğiniz {count} gün içinde yenileniyor. Yenilendikten sonra buradan güncelleyin."
+    },
+    "toast": {
+      "connected": "{vendor} aboneliği bağlandı",
+      "connectFailed": "Abonelik bağlanamadı",
+      "disconnected": "Bağlantı kesildi",
+      "disconnectFailed": "Bağlantı kesilemedi"
+    },
+    "vendors": {
+      "claude": {
+        "label": "Claude (Pro/Max)",
+        "tokenLabel": "Claude token'ı",
+        "step1": "Claude Code'u kurun ve Claude Pro/Max hesabınızla oturum açın: `claude` komutunu bir kez çalıştırıp tarayıcı girişini tamamlayın.",
+        "step2": "Uzun ömürlü bir token oluşturun: `claude setup-token` komutunu çalıştırıp kopyalayın.",
+        "step3": "Aşağıya yapıştırın ve korumak için bir kişisel parola seçin."
+      },
+      "glm": {
+        "label": "GLM (Z.ai Coding Plan)",
+        "tokenLabel": "Z.ai API anahtarı",
+        "tokenPlaceholder": "GLM Coding Plan API anahtarınız",
+        "step1": "Z.ai GLM Coding Plan panonuzu açın ve Anthropic uyumlu uç nokta için bir API anahtarı oluşturun.",
+        "step2": "GLM Coding Plan size birey olarak lisanslanmıştır, bu nedenle burada kullanıcı başına saklanır (havuzlanmaz).",
+        "step3": "Anahtarı aşağıya yapıştırın ve korumak için bir kişisel parola seçin."
+      },
+      "codex": {
+        "label": "ChatGPT (Codex)",
+        "tokenLabel": "ChatGPT auth.json",
+        "step1": "Codex CLI'yi kurun ve ChatGPT hesabınızla oturum açın: `codex login` komutunu çalıştırıp tarayıcı akışını tamamlayın.",
+        "step2": "Codex'in ~/.codex/auth.json (Windows'ta %USERPROFILE%\\.codex\\auth.json) konumuna yazdığı kimlik bilgileri dosyasını açın.",
+        "step3": "auth.json içeriğinin tamamını kopyalayın, aşağıya yapıştırın ve korumak için bir kişisel parola seçin."
+      }
+    }
+  },
+  "inspector": {
+    "container": {
+      "modules": "Modüller ({count})",
+      "taskCount": "{count} görev | {count} görev",
+      "allTasks": "Tüm görevler ({count})",
+      "tasks": "Görevler ({count})",
+      "addTask": "Görev ekle",
+      "noTasks": "Henüz görev yok. Çalışmaya başlamak için bir tane ekleyin.",
+      "servicesHint": "Servisler uzun ömürlüdür ve tamamlanmaz. Çalışma, görevlerinde ve modüllerinde gerçekleşir."
+    },
+    "epicChildren": {
+      "title": "Epic görevleri",
+      "doneCount": "{done}/{total} tamamlandı",
+      "empty": "Bu epic'e henüz hiçbir görev ait değil. Bir epic'in alt görevlerini içe aktarın veya bir görevin epic'ini ayarlayın.",
+      "unassigned": "Atanmamış"
+    },
+    "recurring": {
+      "title": "Yinelenen pipeline",
+      "active": "Etkin",
+      "paused": "Duraklatıldı",
+      "intervalDays": "{count}g",
+      "intervalHours": "{count}s",
+      "anyDay": "herhangi bir gün",
+      "cadence": "Her {every} · {days}{window} · {timezone}",
+      "weekdays": {
+        "sun": "Paz",
+        "mon": "Pzt",
+        "tue": "Sal",
+        "wed": "Çar",
+        "thu": "Per",
+        "fri": "Cum",
+        "sat": "Cmt"
+      },
+      "nextRun": "Sonraki çalışma: {time}",
+      "runNow": "Şimdi çalıştır",
+      "pause": "Duraklat",
+      "resume": "Sürdür",
+      "editCadence": "Sıklığı düzenle",
+      "recentRuns": "Son çalışmalar",
+      "runStatus": {
+        "running": "Çalışıyor",
+        "done": "Tamamlandı",
+        "failed": "Başarısız",
+        "skipped": "Atlandı"
+      },
+      "updateFailed": "Zamanlama güncellenemedi",
+      "runNowFailed": "Şimdi çalıştırılamadı"
+    },
+    "fragments": {
+      "serviceTitle": "Servis en iyi uygulamaları",
+      "serviceEmpty": "Yok. Bu servisteki kod farkında ajanlar varsayılan yönergelerini izler.",
+      "manageBoard": "Bu pano'nun fragman kütüphanesini yönet…",
+      "manageAccount": "Hesap fragmanlarını yönet…"
+    },
+    "releaseHealth": {
+      "title": "Sürüm sonrası sağlık",
+      "clear": "Temizle",
+      "connectPrompt": "Bu servisi sürümlerden sonra izlemek için bir gözlemlenebilirlik entegrasyonu bağlayın.",
+      "connectFirst": "Önce bir gözlemlenebilirlik entegrasyonu bağlayın",
+      "connect": "Bağlan",
+      "hint": "Bu servis yayınlandıktan sonra gate'in izlediği monitörler ve SLO'lar. Id'leri virgülle ayırın.",
+      "monitorIds": "Monitör id'leri",
+      "sloIds": "SLO id'leri",
+      "envTag": "Ortam etiketi (isteğe bağlı)",
+      "saveMonitoring": "İzlemeyi kaydet",
+      "savedToast": "İzleme kaydedildi",
+      "saveFailed": "Eşleme kaydedilemedi",
+      "clearFailed": "Eşleme temizlenemedi"
+    },
+    "testConfig": {
+      "title": "Test altyapısı",
+      "defaultEnv": "Varsayılan test ortamı",
+      "defaultEnvHint": "Bu servisin altındaki görevlerin oluşturulduğu varsayılan ortam. Her görev kendi ajan ayarlarında bunu geçersiz kılabilir.",
+      "env": {
+        "ephemeral": "Geçici ortam",
+        "ephemeralHint": "testler sağlanan bir ortama karşı çalışır",
+        "local": "Yerel (docker-compose)",
+        "localHint": "Tester bağımlılıkları yerel olarak ayağa kaldırır"
+      },
+      "composePath": "docker-compose yolu",
+      "browseRepo": "compose dosyası için depoya göz at",
+      "composeHint": "Tester tarafından servisin bağımlılıklarını yerel olarak ayağa kaldırmak için kullanılır.",
+      "selectComposeTitle": "docker-compose dosyasını seçin",
+      "selectComposeHint": "Depodaki compose dosyasını seçin. Yolu depo köküne göre saklanır.",
+      "selected": "Seçildi: {path}",
+      "noFileSelected": "Dosya seçilmedi.",
+      "useThisFile": "Bu dosyayı kullan",
+      "noInfra": "Altyapı bağımlılığı yok (Tester hiçbir şey ayağa kaldırmaz)",
+      "missingInfra": "Bir docker-compose yolu ayarlayın veya altyapı bağımlılığı yok seçeneğini etkinleştirin, aksi halde Tester içeren bir pipeline başlamaz.",
+      "provisioningTitle": "Geçici ortam sağlama",
+      "provisioningHint": "Bu servisin geçici test ortamını sağlamak için bir ipucu: hangi bulut sağlayıcısına dağıtılacağı ve ne kadar büyük bir örnek isteneceği. Yerel (docker-compose) testleri için yok sayılır.",
+      "cloudProvider": "Bulut sağlayıcı",
+      "instanceSize": "Örnek boyutu",
+      "providers": {
+        "docker": "Docker (yerel)",
+        "custom": "Özel"
+      },
+      "sizes": {
+        "small": "Küçük",
+        "medium": "Orta",
+        "large": "Büyük",
+        "xlarge": "Çok Büyük"
+      }
+    },
+    "agentConfig": {
+      "title": "Ajan yapılandırması",
+      "inherited": "hizmetten devralındı",
+      "frozen": "Donduruldu: ajan başladı"
+    },
+    "dependencies": {
+      "title": "Şuna bağlı",
+      "merged": "Birleştirildi",
+      "notMerged": "Henüz birleştirilmedi",
+      "empty": "Bağımlılık yok. İstediğiniz zaman çalıştırılabilir.",
+      "blocked": "Bağımlılıklar birleştirilene kadar engellendi."
+    },
+    "estimate": {
+      "title": "Tahmin",
+      "complexity": "Karmaşıklık",
+      "risk": "Risk",
+      "impact": "Etki"
+    },
+    "execution": {
+      "stage": {
+        "incorporating": "Dahil ediliyor…",
+        "reviewing": "Yeniden inceleniyor…",
+        "recommending": "Öneriliyor…"
+      },
+      "prNumber": "PR #{number}",
+      "pullRequest": "Pull request",
+      "stepState": {
+        "pending": "Beklemede",
+        "working": "Çalışıyor",
+        "waiting_decision": "Karar gerekiyor",
+        "done": "Tamamlandı"
+      },
+      "failed": "Başarısız",
+      "needsDecision": "Karar gerekiyor",
+      "needsApproval": "Onay gerekiyor",
+      "spinningUp": "Başlatılıyor…",
+      "stop": "Durdur",
+      "stopTooltip": "Çalıştırmayı durdur ancak sakla (okunabilir ve yeniden denenebilir)",
+      "reset": "Sıfırla",
+      "resetTooltip": "Bu çalıştırmayı sil ve görevi planlandı durumuna sıfırla",
+      "viewDetailsOutput": "Ayrıntıları görüntüle ve çıktıyı oku",
+      "viewDetails": "Adım ayrıntılarını görüntüle",
+      "companion": "Yardımcı",
+      "companionTooltip": "Bir üretici adımın yardımcısı",
+      "subtasksProgress": "{total} alt görevden {completed} tanesi tamamlandı, {inProgress} devam ediyor",
+      "subtasksDone": "{total} alt görevden {completed} tanesi tamamlandı",
+      "resolve": "Çöz",
+      "decide": "Karar ver",
+      "review": "İncele",
+      "approve": "Onayla",
+      "fragmentsTooltip": "Bu adıma dahil edilen en iyi uygulama parçaları: {fragments}",
+      "standardsApplied": "{count} standart uygulandı | {count} standart uygulandı",
+      "companionOf": "{label} (yardımcı)",
+      "merged": "Birleştirildi",
+      "open": "Aç",
+      "mergePr": "PR'ı birleştir"
+    },
+    "structure": {
+      "module": "Modül",
+      "modulePlaceholder": "örn. Sessions (yeniyse uygulama sırasında oluşturulur)",
+      "bestPractices": "En iyi uygulamalar",
+      "bestPracticesEmpty": "Yok. Ajanlar varsayılan yönergelerini izler."
+    },
+    "runSettings": {
+      "unassigned": "Atanmamış",
+      "workspaceDefault": "Çalışma alanı varsayılanı",
+      "workspaceDefaultParen": "(çalışma alanı varsayılanı)",
+      "defaultPresetThresholds": "Varsayılan ({name}): {thresholds}",
+      "defaultPreset": "Varsayılan ({name})",
+      "noDefault": "Varsayılan yok",
+      "inheritWorkspace": "Çalışma alanından devral",
+      "on": "Açık",
+      "off": "Kapalı",
+      "inheritOn": "Devral (açık)",
+      "inheritOff": "Devral (kapalı)",
+      "technical": {
+        "unset": "Ayarlanmamış (otomatik algıla)",
+        "technical": "Teknik",
+        "business": "İş"
+      },
+      "pipeline": "Pipeline",
+      "pipelineEmpty": "Varsayılan yok. Bu görevi çalıştırırken bir pipeline seçin.",
+      "mergePolicy": "Birleştirme politikası",
+      "mergePresetDetail": "{name}: karmaşıklık ≤ {complexity}, risk ≤ {risk}, etki ≤ {impact} olduğunda otomatik birleştir; en fazla {attempts} CI düzeltme denemesi.",
+      "mergePresetEmpty": "Yapılandırılmış ön ayar yok. Birleştirici her PR için bir inceleme bildirimi oluşturur.",
+      "modelPreset": "Model ön ayarı",
+      "modelPresetBase": "temel {model}",
+      "modelPresetOverrides": ", {count} geçersiz kılma | , {count} geçersiz kılma",
+      "modelPresetEmpty": "Yapılandırılmış ön ayar yok. Ajanlar dağıtımın varsayılan yönlendirmesiyle çalışır.",
+      "unavailableModels": "Mevcut yapılandırmada kullanılamıyor: {models}. Bu görev o adımlarda başarısız olur.",
+      "editPresets": "Ön ayarları düzenle",
+      "configureVendors": "Sağlayıcıları yapılandır",
+      "modelPresetChangeHint": "Bunu değiştirmek yalnızca henüz başlamamış adımları etkiler.",
+      "taskKind": "Görev türü",
+      "technicalHint": {
+        "technical": "Teknik: uygulayıcı görev tanımını birincil, spesifikasyonu bir regresyon referansı olarak kabul eder; spesifikasyon yazarı iş spesifikasyonu üretmeyebilir.",
+        "business": "İş: spesifikasyon her zamanki gibi önderlik eder.",
+        "unset": "Otomatik algıla: spesifikasyon aşamasından çıkarılır. Geçersiz kılmak için açıkça ayarlayın."
+      },
+      "issueWriteback": "Issue geri yazma",
+      "commentOnPrOpen": "PR açılışında yorum yap",
+      "closeOnMerge": "Birleştirmede kapat",
+      "writebackHint": "Bu görevin bağlı izleyici issue'suna geri yazar. Çalışma alanı varsayılanını geçersiz kılar.",
+      "responsibleProduct": "Sorumlu ürün",
+      "responsibleEmpty": "Atanmamış. Gereksinim incelemesi bu görevi işaretlediğinde bildirim almak için bir ürün sahibi belirleyin.",
+      "autoStartDependents": "Bağımlıları otomatik başlat",
+      "autoStartHint": "Bu görev birleştirildiğinde, ona bağlı görevleri otomatik olarak başlat (diğer bağımlılıkları da tamamlandığında)."
+    }
+  },
+  "panels": {
+    "decision": {
+      "title": "Karar gerekiyor",
+      "agentOnBlock": "{block} üzerinde {agent}",
+      "visualizationHint": "Bu bir görselleştirmedir. Herhangi bir seçim pipeline'ı yeniden başlatır."
+    },
+    "stepRestart": {
+      "restartFromStep": "Pipeline'ı bu adımdan yeniden başlat",
+      "restartFromHere": "Buradan yeniden başlat"
+    },
+    "structuredResult": {
+      "fallbackTitle": "Ajan sonucu",
+      "titleWithBlock": "{label}: {title}",
+      "fallbackDescription": "Yapılandırılmış ajan çıktısı",
+      "structuredOutput": "Yapılandırılmış çıktı",
+      "noResult": "Henüz sonuç yok.",
+      "noResultHint": "Yapılandırılmış çıktı bu ajan tamamlandığında görünür. Çalışırken adım, panoda canlı ilerlemeyi gösterir."
+    },
+    "testReport": {
+      "title": "Test raporu",
+      "greenlit": "Onaylandı",
+      "needsFixes": "Düzeltme gerekiyor",
+      "fixAttempts": "{count}/{max} düzeltme denemesi",
+      "fixing": "· düzeltiliyor…",
+      "tested": "Test edildi",
+      "outcomes": "Sonuçlar",
+      "concerns": "Endişeler"
+    },
+    "stepMeta": {
+      "stateLabel": "Durum",
+      "duration": "Süre",
+      "elapsed": "geçen süre",
+      "step": "Adım",
+      "stepOf": "{total} adımdan {number}.",
+      "started": "Başladı",
+      "finished": "Bitti",
+      "model": "Model",
+      "notRecorded": "Kaydedilmedi",
+      "run": "Çalıştırma",
+      "clickToCopy": "{id} (kopyalamak için tıklayın)",
+      "spinningUpContainer": "Konteyner başlatılıyor…",
+      "container": {
+        "status": {
+          "starting": "Konteyner başlatılıyor…",
+          "up": "Konteyner çalışıyor",
+          "errored": "Konteyner hata verdi",
+          "destroyed": "Konteyner geri alındı"
+        },
+        "phase": {
+          "starting": "Başlatılıyor",
+          "clone": "Çalışma alanı hazırlanıyor",
+          "agent": "Aracı çalışıyor",
+          "push": "Değişiklikler gönderiliyor",
+          "done": "Tamamlanıyor"
+        },
+        "id": "Konteyner",
+        "url": "Adres"
+      },
+      "subtasks": "Alt görevler · {completed}/{total}",
+      "standardsApplied": "Uygulanan standartlar",
+      "decision": "Karar",
+      "awaitingChoice": "Bir kullanıcı seçimi bekleniyor",
+      "approvalGate": "Onay kapısı",
+      "companionReview": "Yardımcı incelemesi",
+      "correctionIterations": "{count} düzeltme yinelemesi. | {count} düzeltme yinelemesi.",
+      "state": {
+        "pending": "Beklemede",
+        "working": "Çalışıyor",
+        "waiting_decision": "Girdi gerekiyor",
+        "done": "Tamamlandı",
+        "failed": "Başarısız"
+      },
+      "approvalStatus": {
+        "pending": "Beklemede",
+        "approved": "Onaylandı",
+        "changes_requested": "Değişiklik istendi",
+        "rejected": "Reddedildi"
+      }
+    },
+    "stepDetail": {
+      "contents": "İçerik",
+      "details": "Ayrıntılar",
+      "approvalRequired": "Onay gerekli",
+      "decisionRequired": "Karar gerekli",
+      "expandAll": "Tüm bölümleri genişlet",
+      "collapseAll": "Tüm bölümleri daralt",
+      "copyRawOutput": "Ham çıktıyı kopyala",
+      "closeEsc": "Kapat (Esc)",
+      "companionCapHeading": "{agent} {attempts} deneme yeniden çalışma sınırına ulaştı, hâlâ {threshold} barının altında.",
+      "companionCapDetail": "Bir otomatik yeniden çalışma turu daha yapın, mevcut çıktıyı kabul ederek sonraki adıma geçin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
+      "infraAttempts": "Altyapı denemeleri",
+      "hideInfraAttempts": "Altyapı denemelerini gizle",
+      "editingConclusions": "Sonuçlar düzenleniyor",
+      "editConclusionsPlaceholder": "Aracının sonuçlarını düzenleyin; düzenlemeleriniz onayladığınızda kaydedilir…",
+      "noProseOutput": "Bu aracı herhangi bir metin çıktısı üretmedi.",
+      "approveWithCorrections": "Düzeltmelerle onayla",
+      "reviewAndApprove": "İncele ve onayla",
+      "editHint": "Soldaki sonuçları düzenleyin; düzenlemeleriniz onayladığınızda kaydedilir.",
+      "reviewHint": "Yorum yapmak için çıktıdaki herhangi bir bloğa tıklayın ya da aşağıya genel geri bildirim bırakın.",
+      "editingNotice": "Sonuçları doğrudan düzenliyorsunuz. Manuel düzenlemeler blok başına yorumlarla birleştirilemez. Kaydetmek için onaylayın ya da incelemeye dönmek için iptal edin.",
+      "commentingOn": "Yorum yapılıyor",
+      "commentPlaceholder": "Bu bloğa bir yorum bırakın…",
+      "addComment": "Yorum ekle",
+      "commentN": "Yorum {number}",
+      "removeComment": "Yorumu kaldır",
+      "overallFeedback": "Genel geri bildirim / reddetme nedeni",
+      "overallFeedbackPlaceholder": "Aracının yapması gereken değişiklikleri açıklayın (blok başına yorum bıraktıysanız isteğe bağlı)…",
+      "approveWithEdits": "Bu düzenlemelerle onayla",
+      "cancelEdits": "Düzenlemeleri iptal et",
+      "approveAndProceed": "Onayla ve devam et",
+      "rejectConfirmPrompt": "Bu öneri reddedilip çalıştırma tamamen durdurulsun mu?",
+      "confirmReject": "Reddetmeyi onayla",
+      "requestChanges": "Değişiklik iste",
+      "reject": "Reddet",
+      "requestChangesHint": "Değişiklik iste bu adımı geri bildiriminiz ve yorumlarınızla yeniden çalıştırır. Reddet çalıştırmayı tamamen durdurur."
+    },
+    "inspector": {
+      "frameStatus": {
+        "planned": "Görev yok",
+        "ready": "Canlı",
+        "in_progress": "Etkin",
+        "blocked": "İlgilenilmesi gerekiyor",
+        "pr_ready": "Etkin",
+        "done": "Canlı"
+      },
+      "deleteRecurringPipeline": "Yinelenen ardışık düzeni sil",
+      "deleteTask": "Görevi sil",
+      "deleteModule": "Modülü sil",
+      "deleteService": "Hizmeti sil",
+      "titlePlaceholder": "Başlık…",
+      "reworkedRequirements": "Yeniden işlenmiş gereksinimler",
+      "agentStepsUseDocument": "Aracı adımları bu belgeyi kullanır.",
+      "open": "Aç",
+      "originalDescriptionFrozen": "Özgün açıklama (donmuş)",
+      "noDescription": "Açıklama yok",
+      "describeBlock": "Bu bloğu açıklayın…",
+      "taskStartedLocked": "Bu görev başladı. Ayrıntıları kilitli.",
+      "lastIncorporatedRequirements": "Son dahil edilen gereksinimler",
+      "priorDocHint": "Önceki incelemeden. Bir temel olarak kullanın: yukarıdaki açıklamayı düzenleyip yeniden gönderin.",
+      "bootstrapping": "Önyükleniyor…",
+      "importIssue": "Sorunu içe aktar",
+      "connectTracker": "Bir izleyici bağla",
+      "spawnFromDocument": "Belgeden oluştur",
+      "viewRequirements": "Gereksinimleri Görüntüle",
+      "reRun": "Yeniden çalıştır",
+      "run": "Çalıştır",
+      "focus": "Odaklan"
+    }
+  },
+  "observability": {
+    "modelActivity": "Model etkinliği",
+    "viewAllCalls": "Tüm çağrıları görüntüle →",
+    "providedContext": "Sağlanan bağlam",
+    "exportJson": "JSON dışa aktar",
+    "exportHint": "Bu çalıştırmanın LLM dostu JSON dışa aktarımını indirin",
+    "closeEsc": "Kapat (Esc)",
+    "loadingActivity": "Model etkinliği yükleniyor…",
+    "loadingContext": "Sağlanan bağlam yükleniyor…",
+    "noCalls": "Bu çalışma için kaydedilmiş model çağrısı yok.",
+    "noContext": "Bu çalışma için saklanmış aracı bağlamı yok. Çalışma alanında 'Tam aracı bağlamını sakla' etkinleştirildiğinde her gönderim için yakalanır.",
+    "summary": {
+      "calls": "Çağrılar",
+      "tokensInOut": "Token (giriş / çıkış)",
+      "transportOverhead": "Taşıma yükü",
+      "modelExecution": "Model yürütme",
+      "truncated": "{count} kesildi | {count} kesildi"
+    },
+    "metricsBar": {
+      "calls": "{count} çağrı | {count} çağrı",
+      "promptCompletionTokens": "İstem / tamamlama token'ları",
+      "cachedTokens": "({tokens} önbelleğe alındı)",
+      "cachedTokensHint": "Sağlayıcının önbelleğinden sunulan istem token'ları",
+      "errors": "{count} hata | {count} hata",
+      "warnings": "{count} uyarı | {count} uyarı",
+      "outputLimit": "Çıkış sınırı",
+      "truncatedCalls": "{count} çağrı sınırda kesildi | {count} çağrı sınırda kesildi",
+      "transportVsExecution": "Taşıma ile yürütme",
+      "transportOverhead": "Taşıma / proxy yükü",
+      "modelExecution": "Model yürütme"
+    },
+    "call": {
+      "tokensTitle": "{prompt} istem / {completion} tamamlama token'ı",
+      "outputUsedVsLimit": "Kullanılan çıkış ile sınır",
+      "transportVsExecution": "Taşıma yükü / model yürütme",
+      "error": "hata",
+      "ok": "tamam",
+      "messages": "{count} mesaj",
+      "tools": "{count} araç",
+      "streamed": "akışlı",
+      "buffered": "ara belleğe alınmış",
+      "maxTokens": "max_tokens {value}",
+      "promptCached": "{cached}/{prompt} istem önbelleğe alındı",
+      "total": "toplam {duration}",
+      "prompt": "İstem",
+      "promptPrefixOmitted": "(yalnızca yeni mesajlar: {count} öncekisi atlandı)",
+      "response": "Yanıt",
+      "reasoning": "Akıl yürütme"
+    },
+    "context": {
+      "injectedFiles": "Eklenen bağlam dosyaları",
+      "bestPracticeFragments": "En iyi uygulama parçaları",
+      "filesCount": "{count} dosya",
+      "fragmentsCount": "{count} parça",
+      "systemPrompt": "Sistem istemi",
+      "userPrompt": "Kullanıcı istemi",
+      "details": "Ayrıntılar"
+    }
+  },
+  "auth": {
+    "gate": {
+      "loading": "Yükleniyor…"
+    },
+    "localMode": {
+      "continueWithConfigured": "Yapılandırılmış {provider} PAT ile oturum aç",
+      "noPatTitle": "Yapılandırılmış kaynak denetimi token'ı yok",
+      "noPatBody": "Kişisel erişim token'ı ile oturum açmak için .env dosyanızda GITHUB_PAT veya GITLAB_PAT ayarlayın, ardından sunucuyu yeniden başlatın.",
+      "createToken": "{provider} token'ı oluştur ↗",
+      "orDivider": "veya",
+      "failed": "Oturum açma başarısız. Yapılandırılan token'ın geçerli olduğunu kontrol edip tekrar deneyin."
+    },
+    "signInRequired": {
+      "personalSubscriptions": "Kişisel abonelikler hesabınıza kaydedilir, ancak bu dağıtım oturum açma olmadan çalıştığından burada saklanamaz. Bunun yerine çalışma alanı havuzunu veya bir sağlayıcı API anahtarını kullanın.",
+      "userApiKeys": "Kişisel API anahtarlarınız hesabınıza kaydedilir, ancak bu dağıtım oturum açma olmadan çalıştığından burada saklanamaz. Paylaşılan bir anahtar eklemek için kapsamı \"Bu çalışma alanı\" olarak değiştirin."
+    },
+    "login": {
+      "appTitle": "Architecture Board",
+      "subtitle": "Devam etmek için oturum açın.",
+      "inviteSubtitle": "Devam etmek için davetinizi kabul edin.",
+      "forgotSubtitle": "Parolanızı sıfırlayın.",
+      "continueWithGithub": "GitHub ile devam et",
+      "continueWithGoogle": "Google ile devam et",
+      "or": "veya",
+      "namePlaceholder": "Ad (isteğe bağlı)",
+      "emailPlaceholder": "E-posta",
+      "passwordPlaceholder": "Parola",
+      "createAccount": "Hesap oluştur",
+      "signIn": "Oturum aç",
+      "signUp": "Kaydol",
+      "needAccount": "Hesabınız yok mu? {signUp}",
+      "haveAccount": "Zaten bir hesabınız var mı? {signIn}",
+      "forgotPassword": "Parolanızı mı unuttunuz?",
+      "forgotSent": "Bu e-posta için bir hesap varsa, parola sıfırlama bağlantısı gönderiliyor. Gelen kutunuzu kontrol edin.",
+      "sendResetLink": "Sıfırlama bağlantısı gönder",
+      "backToSignIn": "Oturum açmaya dön",
+      "signInFailed": "Oturum açma başarısız. Bilgilerinizi kontrol edip tekrar deneyin.",
+      "genericError": "Bir şeyler ters gitti. Lütfen tekrar deneyin."
+    },
+    "resetPassword": {
+      "title": "Parolayı sıfırla",
+      "subtitle": "Hesabınız için yeni bir parola seçin.",
+      "doneBody": "Parolanız sıfırlandı. Artık yeni parolanızla oturum açabilirsiniz.",
+      "goToSignIn": "Oturum açmaya git",
+      "missingToken": "Bu sıfırlama bağlantısında token eksik. Oturum açma ekranından yeni bir bağlantı isteyin.",
+      "backToSignIn": "Oturum açmaya dön",
+      "newPasswordPlaceholder": "Yeni parola",
+      "confirmPasswordPlaceholder": "Yeni parolayı onayla",
+      "submit": "Parolayı sıfırla",
+      "errorTooShort": "Parola en az 8 karakter olmalıdır.",
+      "errorMismatch": "Parolalar eşleşmiyor.",
+      "errorInvalidLink": "Bu parola sıfırlama bağlantısı geçersiz veya süresi dolmuş."
+    },
+    "userMenu": {
+      "mySetup": "Kurulumum",
+      "signOut": "Oturumu kapat"
+    }
+  },
+  "layout": {
+    "accountDeployment": {
+      "title": "Dağıtım entegrasyonları",
+      "intro": "Bu hesaptaki her çalışma alanı tarafından paylaşılan, beklemede mühürlü kimlik bilgileri. Değerler kaydedildikten sonra asla gösterilmez; saklanan sırrı korumak için bir alanı boş bırakın.",
+      "configured": "Yapılandırıldı",
+      "notSet": "Ayarlanmadı",
+      "clear": "Temizle",
+      "loadFailed": "Dağıtım ayarları yüklenemedi",
+      "slack": {
+        "title": "Slack uygulaması (OAuth)",
+        "description": "\"Slack'e Ekle\" OAuth akışını etkinleştirir. Bu olmadan da çalışma alanları bir bot token'ı yapıştırarak Slack'e bağlanabilir.",
+        "clientId": "Client ID",
+        "clientSecret": "Client secret",
+        "redirectUrl": "Yönlendirme URL'si",
+        "validation": "Client id, secret ve yönlendirme URL'sini girin",
+        "saved": "Slack OAuth kaydedildi",
+        "saveFailed": "Slack OAuth kaydedilemedi",
+        "cleared": "Slack OAuth temizlendi",
+        "clearFailed": "Slack OAuth temizlenemedi"
+      },
+      "linear": {
+        "title": "Linear uygulaması (OAuth)",
+        "description": "\"Linear ile Bağlan\" OAuth akışını etkinleştirir. Bu olmadan da çalışma alanları kişisel bir API anahtarı yapıştırarak Linear'a bağlanabilir.",
+        "clientId": "Client ID",
+        "clientSecret": "Client secret",
+        "redirectUrl": "Yönlendirme URL'si",
+        "validation": "Client id, secret ve yönlendirme URL'sini girin",
+        "saved": "Linear OAuth kaydedildi",
+        "saveFailed": "Linear OAuth kaydedilemedi",
+        "cleared": "Linear OAuth temizlendi",
+        "clearFailed": "Linear OAuth temizlenemedi"
+      },
+      "web": {
+        "title": "Konteyner web araması",
+        "description": "Konteyner ajanlarının backend proxy üzerinden eriştiği arama kaynağı. Bir Brave anahtarı (önerilir) veya kendi barındırdığınız bir SearXNG URL'si (isteğe bağlı bir bearer anahtarıyla) ayarlayın.",
+        "configured": "Yapılandırıldı ({provider})",
+        "braveKey": "Brave API anahtarı",
+        "searxngUrl": "SearXNG URL",
+        "searxngKey": "SearXNG anahtarı (isteğe bağlı)",
+        "validation": "Bir Brave anahtarı veya bir SearXNG URL'si girin",
+        "saved": "Web araması anahtarları kaydedildi",
+        "saveFailed": "Web araması anahtarları kaydedilemedi",
+        "cleared": "Web araması anahtarları temizlendi",
+        "clearFailed": "Web araması anahtarları temizlenemedi"
+      },
+      "contentStorage": {
+        "title": "İçerik depolama",
+        "description": "Bu hesaba ait UI test ekran görüntülerinin ve referans tasarım görsellerinin nerede saklandığı. Meta veriler her zaman veritabanında bulunur; yalnızca dosya baytları seçilen kaynağa gider.",
+        "default": "Varsayılan ({backend})",
+        "backends": {
+          "off": "Kapalı (depolama devre dışı)",
+          "fs": "Yerel dosya sistemi",
+          "s3": "Amazon S3 / S3 uyumlu",
+          "r2": "Cloudflare R2",
+          "db": "Postgres veritabanı"
+        },
+        "basePath": "Temel yol (varsayılan: .file-storage)",
+        "region": "Bölge (örn. us-east-1)",
+        "bucket": "Kova",
+        "prefix": "Anahtar öneki (isteğe bağlı)",
+        "endpoint": "Uç nokta (isteğe bağlı, S3 uyumlu)",
+        "forcePathStyle": "Yol tabanlı adreslemeyi zorla (çoğu S3 uyumlu depo)",
+        "accessKeys": "Erişim anahtarları",
+        "accessKeyId": "Erişim anahtarı kimliği",
+        "secretAccessKey": "Gizli erişim anahtarı",
+        "keysHint": "Anahtarlar saklanırken mühürlenir ve kaydedildikten sonra asla gösterilmez; saklanan anahtarları korumak için boş bırakın.",
+        "regionBucketValidation": "S3 bölgesini ve kovasını girin",
+        "bothKeysValidation": "Hem erişim anahtarı kimliğini hem de gizli anahtarı girin",
+        "keysValidation": "S3 erişim anahtarı kimliğini ve gizli anahtarı girin",
+        "saved": "İçerik depolama kaydedildi",
+        "saveFailed": "İçerik depolama kaydedilemedi"
+      }
+    },
+    "accountFragments": {
+      "intro": "Bu hesaptaki her pano tarafından paylaşılan en iyi uygulama yönergeleri. Her pano bunları devralır ve geçersiz kılabilir veya kendine ait olanları ekleyebilir. Kod farkındalığına sahip ajanlar (coder, reviewer, architect, fixers) ilgili olanları istemlerine dahil eder."
+    },
+    "accountTeam": {
+      "roles": {
+        "admin": "Yönetici",
+        "developer": "Geliştirici",
+        "product": "Ürün"
+      },
+      "org": {
+        "ctaTitle": "Takım arkadaşlarını davet et ve rolleri yönet",
+        "ctaBody": "Üyeler, roller ve davetler bir organizasyona aittir. Takım arkadaşlarını davet etmek ve rollerini yönetmek için bir organizasyon oluşturun; kişisel panolarınız olduğu gibi kalır.",
+        "namePlaceholder": "Acme Inc.",
+        "create": "Organizasyon oluştur",
+        "created": "Organizasyon oluşturuldu"
+      },
+      "members": {
+        "title": "Üyeler",
+        "empty": "Henüz üye yok."
+      },
+      "invite": {
+        "title": "Bir takım arkadaşı davet et",
+        "submit": "Davet et",
+        "revoke": "Daveti iptal et",
+        "created": "Davet oluşturuldu",
+        "createdEmailed": "Bir e-posta gönderildi (veya aşağıdaki listeden bağlantıyı kopyalayın).",
+        "createdShareLink": "Kabul bağlantısını takım arkadaşınızla paylaşın.",
+        "status": {
+          "pending": "Beklemede",
+          "accepted": "Kabul edildi",
+          "revoked": "İptal edildi"
+        }
+      },
+      "email": {
+        "title": "E-posta göndericisi",
+        "notEnabled": "Bu dağıtımda e-posta teslimatı etkin değil. Davetler yine de paylaşılabilir bir kabul bağlantısı üretir.",
+        "connectedAs": "{provider} aracılığıyla {from} olarak bağlandı",
+        "disconnect": "Bağlantıyı kes",
+        "connect": "E-posta göndericisi bağla",
+        "connected": "E-posta göndericisi bağlandı",
+        "fromPlaceholder": "Gönderen adresi",
+        "apiKeyPlaceholder": "Sağlayıcı API anahtarı",
+        "providers": {
+          "resend": "Resend",
+          "sendgrid": "SendGrid"
+        }
+      },
+      "apiKeys": {
+        "title": "Hesap API anahtarları"
+      },
+      "errors": {
+        "updateRoles": "Roller güncellenemedi",
+        "loadSettings": "Takım ayarları yüklenemedi",
+        "createOrg": "Organizasyon oluşturulamadı",
+        "sendInvite": "Davet gönderilemedi",
+        "revokeInvite": "Davet iptal edilemedi",
+        "connectEmail": "E-posta göndericisi bağlanamadı",
+        "disconnectEmail": "E-posta göndericisinin bağlantısı kesilemedi"
+      }
+    },
+    "boardSwitcher": {
+      "accountFallback": "Hesap",
+      "boardFallback": "Pano",
+      "providers": {
+        "docker": "Docker (yerel)",
+        "custom": "Özel"
+      },
+      "account": {
+        "newOrg": "Yeni organizasyon…",
+        "settings": "Hesap ayarları…",
+        "defaultProvider": "Varsayılan bulut sağlayıcısı"
+      },
+      "board": {
+        "new": "Yeni pano…",
+        "rename": "Panoyu yeniden adlandır…",
+        "delete": "Panoyu sil"
+      },
+      "prompt": {
+        "create": "Oluştur",
+        "nameLabel": "Ad",
+        "descriptionLabel": "Açıklama",
+        "descriptionHint": "İsteğe bağlı",
+        "descriptionPlaceholder": "Bu pano ne için?",
+        "account": {
+          "title": "Yeni organizasyon",
+          "placeholder": "Acme Inc."
+        },
+        "board": {
+          "title": "Yeni pano",
+          "placeholder": "Adsız pano"
+        },
+        "rename": {
+          "title": "Pano ayarları",
+          "placeholder": "Pano adı"
+        }
+      },
+      "toast": {
+        "updateProviderFailed": "Varsayılan sağlayıcı güncellenemedi",
+        "switchAccountFailed": "Hesap değiştirilemedi",
+        "openBoardFailed": "Pano açılamadı",
+        "boardDeleted": "Pano silindi",
+        "deleteBoardFailed": "Pano silinemedi"
+      }
+    },
+    "notifications": {
+      "heading": "Dikkatinizi gerektiriyor",
+      "overdue": "Gecikmiş",
+      "openPr": "PR'ı aç",
+      "dismiss": "Yoksay",
+      "action": {
+        "merge_review": "Birleştir",
+        "pipeline_complete": "Onayla ve birleştir",
+        "ci_failed": "Çalıştırmayı yeniden dene",
+        "test_failed": "Çalıştırmayı yeniden dene",
+        "requirement_review": "Okundu olarak işaretle",
+        "clarity_review": "Okundu olarak işaretle",
+        "release_regression": "Onayla",
+        "decision_required": "Okundu işaretle",
+        "human_test_ready": "Okundu işaretle",
+        "visual_confirmation_ready": "Okundu işaretle",
+        "human_review": "Okundu işaretle",
+        "followup_pending": "Okundu işaretle",
+        "markRead": "Okundu işaretle"
+      }
+    },
+    "aiProvidersBanner": {
+      "setup": {
+        "title": "Yapılandırılmış AI modeli yok",
+        "body": "Ajanların çalışması için bir model gerekir. AI yalnızca Workers AI etkin bir Cloudflare dağıtımında kutudan çıktığı gibi çalışır. Aksi halde devam etmek için bir sağlayıcı anahtarı, abonelik, proxy veya yerel çalıştırıcı bağlayın.",
+        "action": "AI'ı yapılandır"
+      },
+      "preset": {
+        "title": "Varsayılan model ön ayarı kullanılamayan modeller kullanıyor",
+        "body": "Varsayılan ön ayarı kullanan görevler başarısız olur. Ön ayarı düzenleyin veya eksik sağlayıcıyı yapılandırın.",
+        "action": "Ön ayarı incele"
+      }
+    },
+    "githubPatBanner": {
+      "title": "GitHub PAT yapılandırılmadı",
+      "body": "Yerel mod GitHub'a kişisel erişim belirteciyle erişir. Belirteç olmadan klonlayan, push eden, PR açan, CI'da geçit yapan veya birleştiren ajan adımları başarısız olur.",
+      "createToken": "GitHub belirteci oluştur (kapsamlar önceden seçili)",
+      "thenSet": "Ardından {envVar} ayarlayın ve yeniden başlatın."
+    },
+    "providerConfigBanner": {
+      "titleMany": "Sağlayıcıların yapılandırılması gerekiyor",
+      "titleOne": {
+        "environment": "Ortam sağlayıcısının yapılandırılması gerekiyor",
+        "runner-pool": "Çalıştırıcı havuzunun yapılandırılması gerekiyor"
+      },
+      "body": "Bu örnek için bir sağlayıcı bağlandı ancak gerekli ayarlar eksik, bu yüzden henüz çalışamıyor. Bağlantıyı tamamlamak için zorunlu alanları ekleyin.",
+      "action": {
+        "environment": "Ortam sağlayıcısını yapılandır",
+        "runner-pool": "Çalıştırıcı havuzunu yapılandır"
+      }
+    },
+    "spendWarningBanner": {
+      "title": "Harcama limitine ulaşıldı, ajan yürütmesi duraklatıldı",
+      "body": "Bu ayki belirteç harcaması yapılandırılan bütçeye ulaştı, bu yüzden daha fazla maliyeti önlemek için çalışan boru hatları duraklatıldı. Yürütme, bütçe gelecek ay yenilendiğinde veya limit yükseltildiğinde otomatik olarak devam eder.",
+      "spent": "Harcanan",
+      "budget": "Bütçe",
+      "tokens": "Belirteçler",
+      "resume": "Yine de devam ettir",
+      "resumeHint": "Devam etmek harcamayı sürdürür; hâlâ bütçe aşımı varsa tekrar duraklatılır."
+    },
+    "personalSetup": {
+      "title": "Kurulumum",
+      "intro": "Başlattığınız çalıştırmalar için kullanılan ve yalnızca size görünür kişisel bağlantılarınız.",
+      "connected": "Bağlandı",
+      "notConnected": "Bağlı değil",
+      "connectedCount": "bağlı yok | {count} bağlı | {count} bağlı",
+      "sourceControl": {
+        "title": "Kaynak kontrolü"
+      },
+      "githubToken": {
+        "label": "GitHub belirtecim",
+        "description": "Başlattığınız çalıştırmalar için kullanılan kişisel erişim belirteci (push, PR, CI, birleştirme)."
+      },
+      "models": {
+        "title": "Modeller"
+      },
+      "localRunners": {
+        "label": "Yerel çalıştırıcılarım",
+        "description": "Kendi makinenizdeki model çalıştırıcılarınız (Ollama, LM Studio, vLLM)."
+      },
+      "subscriptions": {
+        "label": "Aboneliklerim",
+        "description": "Kişisel bir parolayla açtığınız bireysel kullanım planları (Claude, GLM, Codex)."
+      }
+    },
+    "integrationBack": {
+      "backToMySetup": "Kurulumuma geri dön",
+      "backToIntegrations": "Entegrasyonlara geri dön"
+    },
+    "commandBar": {
+      "searchPlaceholder": "Ara veya bir komut çalıştır…",
+      "noMatches": "Eşleşen komut yok.",
+      "groups": {
+        "create": "Oluştur",
+        "repositories": "Depolar",
+        "integrations": "Entegrasyonlar",
+        "workspace": "Çalışma alanı",
+        "account": "Hesap"
+      },
+      "cmd": {
+        "newPipeline": "Boru hattı oluştur",
+        "addFromRepo": "Mevcut depodan servis ekle",
+        "bootstrapRepo": "Yeni depo başlat",
+        "githubManage": "GitHub bağlantısını yönet",
+        "githubConnect": "GitHub'a bağlan",
+        "slackManage": "Slack bildirimlerini yönet",
+        "slackConnect": "Slack'e bağlan",
+        "sourceManage": "{source} yönet",
+        "sourceConnect": "{source} bağlan",
+        "documentImport": "Belgelerden içe aktar ve oluştur",
+        "taskImport": "Sorunları içe aktar",
+        "fragments": "Bağlam parçası kitaplığı",
+        "mergeThresholds": "Birleştirme eşikleri",
+        "workspaceSettings": "Çalışma alanı ayarları",
+        "modelConfiguration": "Model yapılandırması",
+        "serviceFragmentDefaults": "Varsayılan servis en iyi uygulamaları",
+        "accountSettings": "Hesap ayarları",
+        "localModels": "Yerel çalıştırıcılarım",
+        "sandbox": "Sandbox'ı aç"
+      },
+      "keywords": {
+        "newPipeline": "boru hattı ajanlar zincir",
+        "addFromRepo": "github içe aktar mevcut",
+        "bootstrapRepo": "iskele oluştur referans mimari",
+        "github": "git depolar çekme istekleri sorunlar",
+        "slack": "slack bildirimler kanal bahsetmeler",
+        "documentSource": "belge kaynak prd rfc",
+        "documentImport": "belge içe aktar oluştur",
+        "taskSource": "görev kaynak izleyici sorunlar",
+        "taskImport": "görev içe aktar sorunlar",
+        "fragments": "prompt parçaları en iyi uygulama yönergeler bağlam",
+        "mergeThresholds": "birleştirme politika ön ayar otomatik birleştirme ci",
+        "workspaceSettings": "limit servis başına çalışan görevler bekleme yükseltme gecikmiş bildirim zaman aşımı",
+        "modelConfiguration": "model llm yönlendirme ajan türü varsayılan ön ayar yapılandırma",
+        "serviceFragmentDefaults": "parça en iyi uygulama yönerge servis varsayılan kod-farkında",
+        "accountSettings": "hesap ekip üyeler roller davetler e-posta api anahtarlar parça en iyi uygulama kitaplık bağlam organizasyon kişisel",
+        "localModels": "yerel model çalıştırıcı ollama lm studio llamacpp vllm uç nokta",
+        "sandbox": "sandbox prompt model test deney yargıç fikstür benchmark değerlendir"
+      }
+    },
+    "integrationsHub": {
+      "title": "Entegrasyonlar",
+      "intro": "Bu çalışma alanının bağlayabileceği harici sistemleri bağlayın ve yönetin.",
+      "searchPlaceholder": "Entegrasyonlarda ara…",
+      "noMatches": "\"{query}\" ile eşleşen entegrasyon yok.",
+      "getStarted": {
+        "title": "Başlayın",
+        "body": "İlk boru hattınızı çalıştırmak için bir kod kaynağı ve bir model sağlayıcısı bağlayın."
+      },
+      "status": {
+        "connected": "Bağlandı",
+        "keyConnected": "Anahtar bağlandı",
+        "notConnected": "Bağlı değil",
+        "needsAttention": "Dikkat gerekiyor",
+        "disabled": "Devre dışı",
+        "recommended": "Önerilen"
+      },
+      "groups": {
+        "models": "Modeller ve sağlayıcılar",
+        "sourceControl": "Kaynak kontrolü",
+        "communication": "İletişim",
+        "documents": "Belgeler",
+        "taskTrackers": "Görev izleyiciler",
+        "observability": "Gözlemlenebilirlik",
+        "personal": "Kişisel (yalnızca siz)"
+      },
+      "items": {
+        "openrouter": {
+          "description": "300+ modele tek bir ağ geçidi. Anahtarınızı ekleyin ve modelleri tek yerde etkinleştirin."
+        },
+        "vendors": {
+          "label": "Sağlayıcılar ve anahtarlar",
+          "description": "Çalışma alanı LLM abonelikleri ve sağlayıcı API anahtarları."
+        },
+        "github": {
+          "description": "Çalışma alanının GitHub App'ini bağlayın, depoları, PR'ları ve sorunları gözatın."
+        },
+        "slack": {
+          "description": "Bildirimleri ekibinizin Slack çalışma alanına yönlendirin."
+        },
+        "documentSource": {
+          "description": "Gereksinim bağlamı için {source} kaynağını belge kaynağı olarak bağlayın."
+        },
+        "documentImport": {
+          "label": "İçe aktar ve oluştur",
+          "description": "Bağlı bir kaynaktan belgeleri çekin ve yapı oluşturun."
+        },
+        "taskSource": {
+          "description": "Tracker sorunlarını içe aktarmak ve referans almak için {source} kaynağını bağlayın."
+        },
+        "taskImport": {
+          "label": "Sorunları içe aktar",
+          "description": "Bağlı bir tracker'dan sorunları panoya çekin."
+        },
+        "trackerSettings": {
+          "label": "Sorun tracker ayarları"
+        },
+        "observability": {
+          "label": "Sürüm sonrası sağlık",
+          "description": "Bir sürüm yayınlandıktan sonra monitörleri ve SLO'ları izleyin (Datadog)."
+        },
+        "githubPat": {
+          "label": "GitHub token'ım",
+          "description": "Başlattığınız çalıştırmalar için kullanılan kişisel erişim token'ı (push'lar, PR'lar, CI, birleştirme)."
+        },
+        "localRunners": {
+          "label": "Yerel runner'larım",
+          "description": "Kendi makinenizdeki model runner'ları (Ollama, LM Studio, vLLM…)."
+        }
+      }
+    }
+  },
+  "settings": {
+    "modelConfiguration": {
+      "title": "Model Yapılandırması",
+      "subtitle": "Her ajana bir model eşleyen hazır ayarlar. Bir görev birini seçer; görevler varsayılan olarak çalışma alanı varsayılan hazır ayarını kullanır.",
+      "back": "Geri",
+      "closeEsc": "Kapat (Esc)",
+      "quota": "kota",
+      "list": {
+        "intro": "Her hazır ayar, isteğe bağlı ajan başına geçersiz kılmalarla birlikte her ajan için bir {baseModel} belirler. Bir görevde sabitlenmiş bir model yine de hazır ayarı geçersiz kılar.",
+        "introBaseModel": "temel model",
+        "newPreset": "Yeni hazır ayar",
+        "loadingCatalog": "Model kataloğu yükleniyor…",
+        "default": "Varsayılan",
+        "setDefaultTitle": "Çalışma alanı varsayılanı olarak ayarla",
+        "editTitle": "Hazır ayarı düzenle",
+        "deleteDisabledTitle": "Varsayılan hazır ayar silinemez",
+        "deleteTitle": "Hazır ayarı sil",
+        "basePrefix": "Temel:",
+        "overrideCount": "{count} geçersiz kılma | {count} geçersiz kılma",
+        "empty": "Henüz hazır ayar yok. Modelleri ajanlarınıza eşlemek için bir tane oluşturun."
+      },
+      "editor": {
+        "useBaseModel": "Temel modeli kullan",
+        "baseModel": "Temel model",
+        "nameLabel": "Ad",
+        "namePlaceholder": "örn. Kimi K2.7",
+        "baseModelLabel": "Temel model (her ajana uygulanır)",
+        "makeDefault": "Bunu çalışma alanı varsayılanı yap",
+        "perAgentOverrides": "Ajan başına geçersiz kılmalar",
+        "filterPlaceholder": "Ajanları filtrele…",
+        "noAgentsMatch": "\"{filter}\" ile eşleşen ajan yok.",
+        "saveChanges": "Değişiklikleri kaydet",
+        "createPreset": "Hazır ayar oluştur"
+      },
+      "toast": {
+        "setDefaultFailed": "Varsayılan hazır ayar ayarlanamadı",
+        "deleteFailed": "Hazır ayar silinemedi",
+        "nameRequiredTitle": "Ad gerekli",
+        "nameRequiredBody": "Hazır ayara bir ad verin.",
+        "saveFailed": "Hazır ayar kaydedilemedi"
+      }
+    },
+    "account": {
+      "title": "Hesap ayarları",
+      "noAccount": "Hiçbir hesap seçilmedi.",
+      "tabs": {
+        "team": "Ekip ve erişim",
+        "fragments": "Bağlam parçaları"
+      }
+    },
+    "infrastructure": {
+      "active": "Etkin: {backend}",
+      "registerHint": "Bunu etkinleştirmek için aşağıdan bir runner havuzu kaydedin.",
+      "updateFailed": "Yürütme arka ucu güncellenemedi",
+      "executionBackend": {
+        "label": "Ajanların çalıştığı yer",
+        "local-docker": "Yerel Docker (host)",
+        "local-dockerDesc": "Her ajanı bu makinenin Docker daemon'ında bir container içinde çalıştırın.",
+        "cloudflare-containers": "Cloudflare Containers (yerleşik)",
+        "cloudflare-containersDesc": "Ajanları Cloudflare'in yerleşik çalıştırma başına container platformunda çalıştırın.",
+        "kubernetes": "Kubernetes kümesi",
+        "kubernetesDesc": "Her ajanı, işlettiğiniz bir Kubernetes kümesinde bir pod olarak çalıştırın.",
+        "runner-pool": "Özel runner havuzu (HTTP)",
+        "runner-poolDesc": "Ajanları bir HTTP manifest API'sinin arkasındaki kendi zamanlayıcınıza gönderin.",
+        "k3s": "Yerel Kubernetes (k3s)",
+        "k3sDesc": "Bu makinedeki yerel bir k3s/k3d kümesi için önceden doldurulmuş — yalnızca bir token yapıştırın."
+      },
+      "testEnvBackend": {
+        "label": "Test ortamlarının çalıştığı yer",
+        "local-compose": "Container içi docker-compose",
+        "local-composeDesc": "Tester'ın bağımlılıklarını çalıştırmanın container'ı içinde docker-compose ile ayağa kaldırın.",
+        "kubernetes": "Kubernetes kümesi",
+        "kubernetesDesc": "İşlettiğiniz bir Kubernetes kümesinde PR başına bir ad alanı sağlayın.",
+        "environment-provider": "Özel HTTP sağlayıcısı",
+        "environment-providerDesc": "Geçici ortamları kendi HTTP yönetim API'niz aracılığıyla sağlayın."
+      }
+    },
+    "providerConnection": {
+      "fallbackTitle": "Sağlayıcı",
+      "windowTitle": "Altyapı",
+      "noneAvailable": "Bu dağıtımda hiçbir altyapı sağlayıcısı etkin değil.",
+      "tabs": {
+        "agentContainers": "Ajan container'ları",
+        "testEnvironments": "Test ortamları"
+      },
+      "kind": {
+        "environment": {
+          "title": "Geçici ortam sağlayıcısı",
+          "blurb": "Tester ajanının canlı bir önizleme ortamına karşı çalıştığı yer. Sağlayıcınızın ihtiyaç duyduğu çalışma alanı başına ayarları ve kimlik bilgilerini yapılandırın."
+        },
+        "runner-pool": {
+          "title": "Ajan runner arka ucu",
+          "blurb": "Cloudflare Containers kullanılmadığında kodlama ajanlarının çalıştığı yer. Bir self-hosted runner havuzu (kendi zamanlayıcınız) veya bir Kubernetes kümesi seçin, ardından uç noktasını ve kimlik bilgilerini yapılandırın."
+        }
+      },
+      "kubernetesEnv": {
+        "label": "Ad",
+        "labelPlaceholder": "Önizleme kümesi",
+        "apiServerUrl": "API sunucu URL'si",
+        "apiServerUrlHelp": "kube-apiserver kök adresi, örn. https://10.0.0.1:6443. Orkestratör her PR'nin manifest'lerini apiserver aracılığıyla uygular, bu yüzden yalnızca bu uç noktanın erişilebilir olması gerekir.",
+        "apiToken": "ServiceAccount token'ı",
+        "apiTokenHelp": "Ad alanları oluşturmak ve operatörün kaynaklarını uygulamak için RBAC'ye sahip bir bearer token. Şifrelenmiş olarak saklanır; bir daha asla gösterilmez.",
+        "manifestSourceLabel": "Manifest kaynağı",
+        "sourceColocated": "PR deposunda bir arada",
+        "sourceSeparate": "Ayrı depo",
+        "repo": "Manifest deposu",
+        "repoHelp": "Kubernetes manifest'lerini tutan owner/repo, örn. acme/preview-manifests.",
+        "ref": "Ref",
+        "refHelp": "Manifest'lerin okunacağı dal, etiket veya SHA. Boş bırakılırsa deponun varsayılan dalı kullanılır.",
+        "path": "Manifest yolu",
+        "pathHelp": "Depo içinde uygulanacak kaynakları tutan dosya veya dizin.",
+        "urlSourceLabel": "Ortam URL'si",
+        "urlIngressTemplate": "Ingress host şablonu",
+        "urlIngressStatus": "Ingress durumunu oku",
+        "urlServiceStatus": "Service durumunu oku",
+        "hostTemplate": "Host şablonu",
+        "hostTemplateHelp": "branch ve pullNumber gibi sağlama değişkenleriyle işlenen host şablonu; işlenen host, ortam URL'si olur.",
+        "ingressName": "Ingress adı",
+        "ingressNameHelp": "Load balancer host'unun okunacağı Ingress. Boş bırakılırsa uygulanan tek Ingress kullanılır.",
+        "serviceName": "Service adı",
+        "port": "Port",
+        "scheme": "URL şeması",
+        "schemeDefault": "https (varsayılan)",
+        "namespaceTemplate": "Ad alanı şablonu",
+        "namespaceTemplateHelp": "pullNumber gibi sağlama değişkenlerinden işlenen PR başına ad alanı adı. Boş bırakılırsa PR numarasından bir tane türetilir.",
+        "imageTemplate": "Görüntü şablonu",
+        "imageTemplateHelp": "Manifestolara açılan, branch ve sha gibi sağlama değişkenleri üzerinden işlenen görüntü referansı.",
+        "caCertPem": "Küme CA sertifikası (PEM)",
+        "caCertPemHelp": "apiserver'ın TLS sertifikasının doğrulanması için küme CA paketini yapıştırın. Yalnızca herkesçe güvenilen bir CA için boş bırakın.",
+        "insecureSkipTlsVerify": "TLS doğrulamasını atla",
+        "insecureSkipTlsVerifyHelp": "Kesinlikle önerilmez. apiserver TLS doğrulamasını devre dışı bırakır; yalnızca kind/dev kümeleri için kullanın."
+      },
+      "kubernetes": {
+        "label": "Ad",
+        "labelPlaceholder": "Üretim kümesi",
+        "apiServerUrl": "API sunucu URL'si",
+        "apiServerUrlHelp": "kube-apiserver kökü, ör. https://10.0.0.1:6443. Orkestratör her çalıştırmanın pod'una apiserver üzerinden ulaşır, bu nedenle yalnızca bu uç noktaya erişilebilir olması gerekir.",
+        "namespace": "Ad alanı",
+        "image": "Executor görüntüsü",
+        "imageHelp": "Her çalıştırma başına pod'un çalıştırdığı executor-harness görüntüsü.",
+        "imageUi": "UI test görüntüsü",
+        "apiToken": "ServiceAccount belirteci",
+        "apiTokenHelp": "Ad alanında pod'ları ve pods/proxy'yi oluşturma, alma ve silme RBAC'ına sahip bir bearer belirteci. Şifrelenmiş olarak saklanır; bir daha gösterilmez.",
+        "caCertPem": "Küme CA sertifikası (PEM)",
+        "caCertPemHelp": "apiserver'ın TLS sertifikasının doğrulanması için küme CA paketini yapıştırın. Yalnızca herkesçe güvenilen bir CA için boş bırakın.",
+        "insecureSkipTlsVerify": "TLS doğrulamasını atla",
+        "insecureSkipTlsVerifyHelp": "Kesinlikle önerilmez. apiserver TLS doğrulamasını devre dışı bırakır; yalnızca yerel k3s/kind/dev kümeleri için kullanın.",
+        "harnessPort": "Harness portu"
+      },
+      "manifestEditor": {
+        "title": "Sağlayıcı manifestosu",
+        "jsonLabel": "Manifesto (JSON)",
+        "jsonHelp": "Sağlayıcınızın API'sini bildirimsel olarak tanımlayın: temel URL, kimlik doğrulama şeması, istek şablonları ve yanıt eşlemesi. Sunucunun uyguladığı aynı sözleşmeye göre doğrulanır.",
+        "invalidJson": "Manifesto geçerli bir JSON değil.",
+        "invalidShape": "Manifesto beklenen biçime uymuyor.",
+        "schemaError": "Manifesto sorunu: {message}",
+        "secretsLabel": "Sırlar",
+        "noSecrets": "Bu manifesto hiçbir sırra başvurmuyor.",
+        "stored": "Şu anda saklanan: {keys}",
+        "reenterSecrets": "Kaydetmek için her sırrı yeniden girin. Saklanan sırlar yalnızca yazılabilir ve gösterilmez.",
+        "starterHint": "Bu bir başlangıç örneğidir. Sağlayıcınızın API'sine uyacak şekilde düzenleyin."
+      },
+      "viewLogs": "Günlükleri görüntüle",
+      "hideLogs": "Günlükleri gizle",
+      "connectedAt": "Bağlandı · {baseUrl}",
+      "missingConfig": "Eksik gerekli yapılandırma: {fields}",
+      "form": {
+        "updateConfiguration": "Yapılandırmayı güncelle",
+        "connect": "Bağlan",
+        "reenterSecrets": "Değişiklikleri kaydetmek için sır alanını yeniden girin — saklanan sırlar yalnızca yazılabilir ve gösterilmez. | Değişiklikleri kaydetmek için sır alanlarını yeniden girin — saklanan sırlar yalnızca yazılabilir ve gösterilmez.",
+        "optionalLabel": "{label} (isteğe bağlı)"
+      },
+      "field": {
+        "defaultsTo": "Varsayılan: {value}"
+      },
+      "test": {
+        "button": "Bağlantıyı test et",
+        "ok": "Bağlantı tamam",
+        "failed": "Bağlantı başarısız"
+      },
+      "toast": {
+        "saved": "{title} kaydedildi",
+        "saveFailed": "Bağlantı kaydedilemedi",
+        "removed": "Bağlantı kaldırıldı",
+        "removeFailed": "Bağlantı kaldırılamadı"
+      }
+    },
+    "serviceFragmentDefaults": {
+      "intro": "Her yeni hizmetin başlangıçta kullandığı en iyi uygulama parçalarını seçin. Bu rehberlik, hizmetin görevlerinde kodu anlayan her ajanın (kodlayıcı, gözden geçiren, mimar, düzeltici) komut istemine katlanır. Her hizmet için bu kümeyi denetçisinde ayrıntılandırabilirsiniz; bu varsayılanı değiştirmek zaten var olan hizmetleri etkilemez.",
+      "defaultFragments": "Varsayılan parçalar",
+      "addFragment": "Parça ekle",
+      "empty": "Yok — yeni hizmetler hiçbir hizmet düzeyi parçası olmadan başlar.",
+      "saveFailed": "Varsayılan parçalar kaydedilemedi",
+      "footer": {
+        "question": "Parçaların kendisini eklemeniz veya düzenlemeniz mi gerekiyor (elle yazılmış, bağlı belgeler, depolar)?",
+        "manageBoard": "Bu panonun parça kütüphanesini yönet →",
+        "manageAccount": "Hesap parçalarını yönet →"
+      }
+    },
+    "issueTracker": {
+      "filing": {
+        "heading": "Biletlerin nereye açıldığı",
+        "description": "Teknik borç yinelenen iş hattı, uygulamadan önce bir sorun açar ve bu izleyiciye kaydeder. Kaydetmeyi atlamak için {none} seçin.",
+        "none": "Yok",
+        "githubHint": "GitHub Issues, henüz bağlanmamış olan yüklü GitHub App'inizi kullanır. Onu {link} altında yükleyin — o zamana kadar kayıt kapalı kalır.",
+        "githubHintLink": "Entegrasyonlar → GitHub",
+        "jiraHint": "Jira henüz bağlanmadı. Sorunları kaydetmek ve bağlamak için {link}.",
+        "linearHint": "Linear henüz bağlanmadı. Sorunları kaydetmek ve bağlamak için {link}.",
+        "connectLink": "Bağlayın",
+        "jiraProjectKey": "Jira proje anahtarı",
+        "jiraProjectKeyHelp": "Yeni biletler bu proje altında açılır.",
+        "linearTeamId": "Linear ekip kimliği",
+        "linearTeamIdHelp": "Yeni sorunlar bu ekip altında oluşturulur (Linear bir sorun oluşturmak için ekip gerektirir).",
+        "linearTeamSearchPlaceholder": "Ekiplerde ara…"
+      },
+      "vendor": {
+        "github": "GitHub Issues",
+        "jira": "Jira",
+        "linear": "Linear"
+      },
+      "linking": {
+        "heading": "Sorunları bağlam olarak bağla",
+        "description": "Bir kaynak sunulduğunda, sorunlarını içe aktarıp bir göreve ekleyebilirsiniz; böylece ajanlar uygularken sorun açıklamasını ve yorumları görür. Bu, yukarıdaki kayıt izleyicisinden bağımsızdır.",
+        "github": {
+          "available": "Yüklü GitHub App'inizi kullanır — kimlik bilgisi gerekmez.",
+          "unavailable": "Bu kaynağı sunmak için GitHub App'i yükleyin (Entegrasyonlar → GitHub)."
+        },
+        "checkSetup": "Kurulumu kontrol et",
+        "install": "Yükle",
+        "connected": "Bağlandı.",
+        "jira": {
+          "connectHint": "Bir Jira hesabı ve API belirteci ile bağlanın."
+        },
+        "linear": {
+          "connectHint": "Bir Linear kişisel API anahtarı ile bağlanın."
+        },
+        "connect": "Bağlan"
+      },
+      "writeback": {
+        "heading": "Geri yazma",
+        "description": "Bir görevin bağlı sorununa/sorunlarına, çekme isteği ilerledikçe geri yazın. Her geçiş çalışma alanı varsayılanıdır ve denetçide görev başına geçersiz kılınabilir. GitHub sorunları yerel olarak kapanır; Jira sorunları {done} kategorilerindeki ilk duruma geçer.",
+        "done": "Bitti",
+        "commentOnOpen": {
+          "label": "Bir PR açıldığında yorum yap",
+          "help": "Bağlı soruna yeni çekme isteğinin bağlantısıyla bir yorum gönder."
+        },
+        "resolveOnMerge": {
+          "label": "Bir PR birleştiğinde çözüldü olarak kapat",
+          "help": "PR'ın birleştiğini belirten bir yorum yap, ardından bağlı sorunu kapat / çöz."
+        }
+      },
+      "probeFailure": {
+        "title": "Sorun takibi kullanılamıyor",
+        "disabled": "Görev kaynağı entegrasyonu bu dağıtımda kapalı (şifreleme anahtarı yapılandırılmamış). Sorun takibini etkinleştirmek için arka uçta ENCRYPTION_KEY ayarlayın.",
+        "serverError": "Sorun izleyici hizmeti bir hata döndürdü (HTTP {status}): {message}. Bu genellikle arka ucun tam olarak taşınmadığı/yapılandırılmadığı anlamına gelir.",
+        "loadFailedStatus": "Sorun izleyici ayarları yüklenemedi (HTTP {status}): {message}",
+        "loadFailed": "Sorun izleyici ayarları yüklenemedi: {message}"
+      },
+      "toast": {
+        "saved": "Sorun izleyici kaydedildi",
+        "saveFailed": "Ayarlar kaydedilemedi",
+        "updateFailed": "Güncellenemedi",
+        "checkFailed": "Kontrol başarısız"
+      }
+    },
+    "userSecrets": {
+      "title": "GitHub belirtecim",
+      "intro": "{you} başlattığınız çalıştırmalar için kullanılan bir kişisel erişim belirteci saklayın — push'lar, çekme istekleri, CI geçidi ve birleştirmeler sizin GitHub erişiminize atfedilir. {scope} saklanır; belirteç yalnızca yazılabilir ve bir daha gösterilmez.",
+      "introYou": "sizin",
+      "introScope": "yalnızca sizin için",
+      "connectedStored": "Bağlandı · belirteç saklandı",
+      "replaceToken": "Belirteci değiştir",
+      "addToken": "Belirteç ekle",
+      "labelField": "Etiket (isteğe bağlı)",
+      "optionalField": "{label} (isteğe bağlı)",
+      "testConnection": "Bağlantıyı test et",
+      "tokenValid": "Belirteç geçerli",
+      "tokenRejected": "Belirteç reddedildi",
+      "secretFallback": "Gizli bilgi",
+      "toast": {
+        "saved": "{label} kaydedildi",
+        "saveFailed": "Gizli bilgi kaydedilemedi",
+        "removed": "Gizli bilgi kaldırıldı",
+        "removeFailed": "Gizli bilgi kaldırılamadı"
+      }
+    },
+    "mergeThresholds": {
+      "intro": "Bir görevin seçebileceği adlandırılmış otomatik birleştirme politikaları. CI geçtikten sonra {merger} aracısı PR'ı karmaşıklık, risk ve etki açısından puanlar (0-100%); PR yalnızca her puan ön ayarın üst sınırlarında veya altında olduğunda otomatik birleşir, aksi halde bir inceleme bildirimi oluşturulur. Varsayılan ön ayar, hiçbirini seçmeyen tüm görevleri yönetir.",
+      "mergerAgent": "merger",
+      "concern": {
+        "none": "Yok (her zaman dur)",
+        "low": "Düşük",
+        "medium": "Orta",
+        "high": "Yüksek (asla durma)"
+      },
+      "presetNamePlaceholder": "Ön ayar adı",
+      "default": "Varsayılan",
+      "makeDefault": "Varsayılan yap",
+      "deleteDefaultBlocked": "Varsayılan ön ayar silinemez",
+      "deletePreset": "Ön ayarı sil",
+      "field": {
+        "maxComplexity": "Maks. karmaşıklık %",
+        "maxRisk": "Maks. risk %",
+        "maxImpact": "Maks. etki %",
+        "ciMaxAttempts": "CI düzeltme denemeleri",
+        "maxRequirementIterations": "Gereksinim yinelemeleri",
+        "maxRequirementConcernAllowed": "Şu düzeyde veya altında otomatik geç"
+      },
+      "newPreset": "Yeni ön ayar",
+      "create": {
+        "name": "Ad",
+        "namePlaceholder": "örn. Temkinli",
+        "complexity": "Krmşk%",
+        "risk": "Risk%",
+        "impact": "Etki%",
+        "ciFix": "CI düzeltme",
+        "reqIter": "Grks. yin.",
+        "autoPass": "Şu düzeyde veya altında otomatik geç"
+      },
+      "add": "Ekle",
+      "toast": {
+        "saved": "Ön ayar kaydedildi",
+        "saveFailed": "Ön ayar kaydedilemedi",
+        "created": "Ön ayar oluşturuldu",
+        "createFailed": "Ön ayar oluşturulamadı",
+        "defaultFailed": "Varsayılan ayarlanamadı",
+        "deleteFailed": "Ön ayar silinemedi"
+      }
+    },
+    "observabilityConnection": {
+      "title": "Sürüm sonrası sağlık",
+      "intro": "Bir sürüm yayınlandıktan sonra {gate} geçidi yapılandırılmış gözlemlenebilirlik monitörlerini/SLO'larını izler. Bir gerileme durumunda araştırması için bir nöbetçi aracısı başlatır (geri alınıp alınmayacağına bir kişi karar verir). Bir hizmetin hangi monitörleri/SLO'ları izlediğini o hizmetin denetçisinden eşleştirin.",
+      "connection": {
+        "heading": "Bağlantı",
+        "provider": "Sağlayıcı"
+      },
+      "datadog": {
+        "site": "Datadog sitesi",
+        "apiKey": "API anahtarı",
+        "appKey": "Uygulama anahtarı"
+      },
+      "saveConnection": "Bağlantıyı kaydet",
+      "disconnect": "Bağlantıyı kes",
+      "incident": {
+        "heading": "Olay zenginleştirme",
+        "configured": "Yapılandırıldı",
+        "notSet": "Ayarlanmadı",
+        "description": "İsteğe bağlı. Bir gerileme durumunda, nöbetçi araştırması bu sistemlerin aynı sinyallerden ZATEN açtığı bir olaya gönderilir (açıklama ekle, asla yeniden uyarma). Gizli bilgiler yalnızca yazılabilir: boş bırakmak kayıtlı bir değeri değiştirmez.",
+        "pagerDutyToken": "PagerDuty API jetonu",
+        "pagerDutyFromEmail": "PagerDuty Gönderen e-postası",
+        "incidentIoKey": "incident.io API anahtarı",
+        "clear": "Temizle"
+      },
+      "status": {
+        "notConnected": "Bağlı değil",
+        "connected": "Bağlandı",
+        "connectedWithSite": "Bağlandı ({site})"
+      },
+      "toast": {
+        "loadFailed": "Gözlemlenebilirlik ayarları yüklenemedi",
+        "incidentCredsRequired": "PagerDuty veya incident.io kimlik bilgilerini girin",
+        "incidentSaved": "Olay zenginleştirme kaydedildi",
+        "incidentSaveFailed": "Olay zenginleştirme kaydedilemedi",
+        "incidentDisconnectFailed": "Olay zenginleştirme bağlantısı kesilemedi",
+        "connected": "Gözlemlenebilirlik bağlandı",
+        "connectFailed": "Bağlantı kaydedilemedi",
+        "disconnectFailed": "Bağlantı kesilemedi"
+      }
+    },
+    "localMode": {
+      "title": "Yerel mod",
+      "intro": "Yerel konteyner çalıştırıcısı için ayarlar, bu makinenin dağıtımında saklanır ({poolVars} / {harnessVars} ortam değişkenlerinin yerini aldı). Kaydetmek sıcak havuzu anında yeniden boyutlandırır, yeniden başlatma gerekmez; devam eden çalıştırmalar zaten tuttukları konteyneri korur.",
+      "pool": {
+        "heading": "Sıcak konteyner havuzu",
+        "description": "Boştaki harness konteynerlerini hazır tutun ve her çalıştırmada soğuk başlatmak yerine birini yeniden kiralayın (çalıştırmanın deposunu zaten tutan bir konteyneri tercih ederek). Havuz boyutu 0 bunu devre dışı bırakır. Docker ailesinden bir çalışma zamanı gerektirir (Docker/Podman/OrbStack/Colima); Apple {appleContainer} üzerinde yok sayılır.",
+        "size": {
+          "label": "Havuz boyutu",
+          "help": "Maks. boştaki sıcak konteyner. 0 = havuzlama kapalı."
+        },
+        "minWarm": {
+          "label": "Açılışta önceden ısıt",
+          "help": "Hizmet açıldığında başlatılan konteynerler."
+        },
+        "max": {
+          "label": "Maks. konteyner",
+          "help": "Kesin üst sınır (kiralanan + boşta). Boş = havuz boyutu.",
+          "placeholder": "(havuz boyutu)"
+        },
+        "idleTimeout": {
+          "label": "Boşta zaman aşımı (dakika)",
+          "help": "Boştaki havuzlanmış bir konteyneri şu süreden sonra tahliye et."
+        }
+      },
+      "checkout": {
+        "heading": "Checkout yeniden kullanımı",
+        "description": "Sıcak bir konteyner çalıştırmanın deposunu zaten tuttuğunda, harness yeniden klonlamak yerine depoya özel checkout'unu yeniden kullanır (temiz tarama + getir + dal değiştir).",
+        "workspaceRoot": {
+          "label": "Çalışma alanı kökü",
+          "help": "Yeniden kullanılan checkout'un altında bulunduğu mutlak konteyner içi dizin."
+        },
+        "cleanKeep": {
+          "label": "Temizlemede koru (virgülle ayrılmış)",
+          "help": "Her çalıştırmadaki temiz taramanın koruduğu bağımlılık önbelleği dizinleri."
+        }
+      },
+      "toast": {
+        "saved": "Yerel ayarlar kaydedildi",
+        "saveFailed": "Yerel ayarlar kaydedilemedi"
+      }
+    },
+    "openRouterCatalog": {
+      "intro": "{models} modeline tek bir ağ geçidi üzerinden erişin. OpenRouter anahtarınızı aşağıya ekleyin, ardından istediğiniz modelleri etkinleştirin. Model seçicide bağlam pencereleri ve fiyatlarıyla görünürler ve harcama bütçenize göre ölçülürler.",
+      "introModels": "300+ model",
+      "connectHeading": "OpenRouter anahtarınızı bağlayın",
+      "step1": "{link} bağlantısını açın ve bir API anahtarı oluşturun.",
+      "step1Link": "openrouter.ai → Keys ↗",
+      "step2": "Anahtarı kopyalayın ({prefix} ile başlar) ve aşağıya yapıştırın.",
+      "scope": "Kapsam",
+      "scopeWorkspace": "Bu çalışma alanı",
+      "scopeUser": "Anahtarlarım (yalnızca ben)",
+      "labelOptional": "Etiket (isteğe bağlı)",
+      "labelPlaceholder": "örn. ekip anahtarı",
+      "apiKey": "API anahtarı",
+      "connectAndBrowse": "Bağlan ve göz at",
+      "keyConnected": "OpenRouter anahtarı bağlandı",
+      "manageKeys": "Sağlayıcılar ve anahtarlar bölümünde yönet",
+      "refresh": "Kataloğu yenile",
+      "enableRecommended": "Önerilenleri etkinleştir",
+      "filterPlaceholder": "Ada veya slug'a göre filtrele…",
+      "empty": "Henüz model yok. OpenRouter'ın canlı listesini yüklemek için {action} düğmesine basın.",
+      "enabledCount": "etkin model yok | {count} etkin | {count} etkin",
+      "context": "{value} bağlam",
+      "contextThousands": "{value}K bağlam",
+      "price": "Mtok başına {input}/{output}",
+      "toast": {
+        "connected": "OpenRouter anahtarı bağlandı",
+        "connectFailed": "Anahtar bağlanamadı",
+        "rejected": "OpenRouter anahtarı reddetti.",
+        "unreachable": "OpenRouter'a ulaşılamadı",
+        "connectFirst": "Önce bir OpenRouter anahtarı bağlayın.",
+        "saved": "OpenRouter kataloğu kaydedildi",
+        "saveFailed": "Katalog kaydedilemedi"
+      }
+    },
+    "workspaceSettings": {
+      "title": "Çalışma alanı ayarları",
+      "tabs": {
+        "workspace": "Çalışma alanı",
+        "budget": "Bütçe",
+        "merge": "Birleştirme eşikleri",
+        "tracker": "Sorun takipçisi",
+        "fragments": "Servis en iyi uygulamaları"
+      },
+      "waiting": {
+        "heading": "Bir kişi bekleniyor",
+        "body": "Bir kişinin kararına (inceleme, onay, birleştirme) takılan bir çalıştırma gerektiği kadar bekler ve asla iptal edilmez. Bu kadar dakika sonra bildirimi kırmızıya döner ve gelen kutusunda {overdue} olarak işaretlenir.",
+        "overdue": "Gecikmiş",
+        "escalateAfter": "Şu kadar sonra yükselt (dakika)"
+      },
+      "taskLimit": {
+        "heading": "Servis başına çalışan görevler",
+        "body": "Bir servis altında aynı anda kaç görevin çalışabileceğini sınırlayın. Sınırın üzerinde bir görev başlatmak, çalışan bir görev bitene kadar net bir mesajla reddedilir.",
+        "mode": "Mod",
+        "maxRunning": "Maksimum çalışan görev",
+        "maxPerType": "Maksimum {type} görevi",
+        "modes": {
+          "off": "Sınır yok",
+          "shared": "Tüm türler arasında paylaşımlı",
+          "per_type": "Görev türüne göre"
+        }
+      },
+      "taskTypes": {
+        "feature": "özellik",
+        "bug": "hata",
+        "document": "belge",
+        "spike": "inceleme"
+      },
+      "observability": {
+        "heading": "Agent gözlemlenebilirliği",
+        "body": "Her agent'a sağlanan tüm bağlamı saklayın: oluşturulan istemler, içine katlanan en iyi uygulama parçaları ve konteynerine enjekte edilen dosyaların tam içeriği; böylece daha sonra gözlemlenebilirlik görünümünde incelenebilir. Gövdeler, çağrı başına LLM telemetrisi ile aynı süre boyunca tutulur. Saklamayı durdurmak için kapatın (mevcut anlık görüntüler saklama ilkesiyle temizlenir).",
+        "toggle": "Tüm agent bağlamını sakla"
+      },
+      "retention": {
+        "heading": "Ekran görüntüsü saklama",
+        "body": "Arayüz test aracının yakaladığı ekran görüntülerinin ve bunların karşılaştırıldığı referans tasarım görsellerinin (görsel doğrulama geçidi) ne kadar süre tutulacağı. Günlük bir temizleme işi, hem görsel baytlarını hem de meta verilerini bu süreyi aştıklarında siler.",
+        "days": "Saklama (gün)"
+      },
+      "kaizen": {
+        "heading": "Kaizen agent'ı",
+        "body": "Her çalıştırma tamamlandıktan sonra Kaizen agent'ı, her agent adımının sorunsuz ve verimli olmaktan kafa karışık ve kaotik olmaya kadar nasıl gittiğini değerlendirir ve istem/model iyileştirmeleri önerir. Üst üste beş kez öneri olmadan yüksek not alan bir istem + agent + model birleşimi doğrulanmış olarak işaretlenir ve artık değerlendirilmez. Değerlendirme arka planda çalışır ve çalıştırma ayrıntıları ile Kaizen ekranında gösterilir. Değerlendiricinin modelini Model Yapılandırması'nda (\"Kaizen\" agent'ı) ayarlayın.",
+        "toggle": "Agent çalıştırmalarını Kaizen ile değerlendir"
+      },
+      "budget": {
+        "heading": "Aylık harcama bütçesi",
+        "body": "Token kullanımı her LLM çağrısı için ölçülür, fiyatlandırılır ve bu bütçeyle sınırlandırılır. Ulaşıldığında bu çalışma alanındaki çalıştırmalar duraklatılır ve panoda bir uyarı gösterilir. Yerleşik varsayılanı (aylık yaklaşık 100 EUR) devralmak için boş bırakın.",
+        "monthlyLimit": "Aylık sınır",
+        "defaultPlaceholder": "Varsayılan",
+        "currency": "Para birimi (ISO 4217)",
+        "save": "Bütçeyi kaydet"
+      },
+      "toast": {
+        "saved": "Ayarlar kaydedildi",
+        "saveFailed": "Ayarlar kaydedilemedi",
+        "budgetSaved": "Bütçe kaydedildi",
+        "budgetSaveFailed": "Bütçe kaydedilemedi"
+      }
+    },
+    "localModelEndpoints": {
+      "title": "Yerel çalıştırıcılarım",
+      "intro": "Agent'ları {ownMachine} üzerinde çalışan bir LLM'e yönlendirin (Ollama, LM Studio, llama.cpp, vLLM veya herhangi bir OpenAI uyumlu sunucu). Bir çalıştırıcı {justForYou} saklanır (çalıştırıcı sizin makinenizde bulunur) ve etkinleştirdiğiniz modeller model seçicide otomatik olarak görünür. API anahtarı (çoğu çalıştırıcı bunu yoksayar) yalnızca yazılabilir ve bir daha asla gösterilmez.",
+      "introOwnMachine": "kendi makineniz",
+      "introJustForYou": "yalnızca sizin için",
+      "modelCount": "model yok | {count} model | {count} model",
+      "keySet": "anahtar ayarlandı",
+      "edit": "Düzenle",
+      "editRunner": "Çalıştırıcıyı düzenle",
+      "addRunner": "Çalıştırıcı ekle",
+      "runnerType": "Çalıştırıcı türü",
+      "labelOptional": "Etiket (isteğe bağlı)",
+      "labelPlaceholder": "{name} çalıştırıcım",
+      "baseUrl": "Temel URL",
+      "apiKeyOptional": "API anahtarı (isteğe bağlı)",
+      "apiKeyKeepPlaceholder": "saklanan anahtarı korumak için boş bırakın",
+      "apiKeyIgnorePlaceholder": "çoğu çalıştırıcı bunu yoksayar",
+      "testConnection": "Bağlantıyı test et",
+      "unreachable": "Çalıştırıcıya ulaşılamadı.",
+      "reachable": "Ulaşılabilir · model yok | Ulaşılabilir · {count} model | Ulaşılabilir · {count} model",
+      "noModels": "Model bildirilmedi.",
+      "enableModels": "Modelleri etkinleştir",
+      "toast": {
+        "saved": "{name} kaydedildi",
+        "saveFailed": "Çalıştırıcı kaydedilemedi",
+        "removed": "Çalıştırıcı kaldırıldı",
+        "removeFailed": "Çalıştırıcı kaldırılamadı"
+      }
+    }
+  },
+  "providers": {
+    "presetMismatch": {
+      "title": "Ön ayar kullanılamayan modeller kullanıyor",
+      "intro": "\"{name}\" çalışma alanı varsayılan model ön ayarı, mevcut yapılandırmada kullanılamayan modeller atıyor. Bu ön ayarı kullanan görevler, bu adımlara ulaştıklarında başarısız olur.",
+      "unavailable": "Kullanılamıyor",
+      "advice": "Ön ayarı yapılandırdığınız modellere yeniden yönlendirin veya eksik sağlayıcıyı ekleyin.",
+      "later": "Sonra",
+      "configureVendors": "Sağlayıcıları yapılandır",
+      "editPresets": "Ön ayarları düzenle",
+      "defaultPresetName": "varsayılan ön ayar"
+    },
+    "onboarding": {
+      "title": "Bir AI model sağlayıcısı kurun",
+      "noModelTitle": "Bu çalışma alanında henüz kullanılabilir bir AI modeli yok.",
+      "noModelBody": "Agent'ların çalışması için bir model gerekir. AI yalnızca Workers AI etkinleştirilmiş bir Cloudflare dağıtımında kutudan çıktığı gibi çalışır; aksi takdirde aşağıdan en az bir kaynak bağlayın.",
+      "operatorNote": "AWS Bedrock ve Cloudflare Workers AI, bu ekrandan değil, dağıtım operatörü tarafından ortam yapılandırması aracılığıyla etkinleştirilir.",
+      "routes": {
+        "keys": {
+          "title": "Sağlayıcı anahtarları ve abonelikler",
+          "body": "Doğrudan bir sağlayıcı API anahtarı ekleyin (OpenAI, Anthropic, Qwen, …) ya da ticari bir kodlama planı aboneliği (Kimi, DeepSeek) veya kişisel bir abonelik (Claude, GLM, Codex) bağlayın.",
+          "cta": "LLM sağlayıcılarını aç"
+        },
+        "openrouter": {
+          "title": "OpenRouter ağ geçidi",
+          "body": "Tek bir anahtarla OpenRouter ağ geçidi üzerinden modelleri etkinleştirin. İstediğiniz modellere göz atın ve açın.",
+          "cta": "OpenRouter modellerine göz at"
+        },
+        "local": {
+          "title": "Yerel çalıştırıcılarım",
+          "body": "cat-factory'yi kendiniz çalıştırdığınız bir modele yönlendirin (Ollama, LM Studio, llama.cpp, vLLM, …). API anahtarı yok, harcama yok.",
+          "cta": "Yerel çalıştırıcıları yapılandır"
+        }
+      }
+    },
+    "personalCredential": {
+      "titleWrongPassword": "Yanlış kişisel parola",
+      "titleNoSubscription": "{vendor} aboneliğinizi bağlayın",
+      "titleExpired": "{vendor} aboneliğinizin süresi doldu",
+      "titleDefault": "Kişisel parolanızı girin",
+      "fallbackVendor": "abonelik",
+      "connectBody": "Bu görev, kendi {vendor} aboneliğiniz üzerinde çalışan bir {vendor} modeli kullanır. Önce onu bağlayın (veya yenileyin), ardından çalıştırmayı tekrar başlatın.",
+      "connectCta": "Aboneliği bağla",
+      "passwordBody": "{vendor} aboneliğinizi koruyan kişisel parolayı girin. Yalnızca bu çalıştırma için kimlik bilgilerinizin kilidini açar ve bu tarayıcıda önbelleğe alınır, böylece bir süre tekrar sorulmaz.",
+      "passwordField": "Kişisel parola",
+      "passwordPlaceholder": "kişisel parolanız",
+      "submit": "Kilidi aç ve çalıştır",
+      "cancel": "İptal",
+      "toast": {
+        "started": "Çalıştırma başlatıldı",
+        "startFailed": "Çalıştırma başlatılamadı"
+      },
+      "vendors": {
+        "claude": "Claude",
+        "glm": "GLM (Z.ai)",
+        "codex": "ChatGPT (Codex)"
+      }
+    },
+    "apiKeys": {
+      "directHeading": "Doğrudan sağlayıcı API anahtarları",
+      "proxyHeading": "Proxy / ağ geçidi API anahtarları",
+      "directAccountIntro": "Bu hesaptaki her çalışma alanı tarafından paylaşılan bir sağlayıcı API anahtarı bağlayın. Anahtarlar şifreli olarak saklanır, havuzlanır ve kullanıma göre döndürülür. Hesap anahtarları yönetici tarafından yönetilir.",
+      "directIntro": "Modellerin doğrudan o sağlayıcıda çalışması için bir sağlayıcı API anahtarı bağlayın. Anahtarlar şifreli olarak saklanır, havuzlanır ve kullanıma göre döndürülür. Bir anahtarı bu çalışma alanına (ekiple paylaşılır) veya size (her yerde kullanılabilen kendi havuzunuz) kapsayın.",
+      "proxyAccountIntro": "Bu hesaptaki her çalışma alanı tarafından paylaşılan bir proxy anahtarı (OpenRouter, LiteLLM) bağlayın. Proxy, birçok sağlayıcıyı tek bir anahtarın arkasında sunan bir aracıdır. Anahtarlar şifreli olarak saklanır, havuzlanır ve kullanıma göre döndürülür.",
+      "proxyIntro": "Bir proxy anahtarı (OpenRouter, LiteLLM) bağlayın. Proxy, doğrudan bir sağlayıcı yerine birçok sağlayıcının modellerine tek bir ağ geçidi üzerinden ulaşan bir aracıdır. Anahtarlar şifreli olarak saklanır, havuzlanır ve kullanıma göre döndürülür. Bir anahtarı bu çalışma alanına (ekiple paylaşılır) veya size (her yerde kullanılabilen kendi havuzunuz) kapsayın.",
+      "scopeField": "Kapsam",
+      "scopeWorkspace": "Bu çalışma alanı",
+      "scopeUser": "Anahtarlarım (yalnızca ben)",
+      "providerField": "Sağlayıcı",
+      "proxyField": "Proxy",
+      "openKeys": "{provider} anahtarlarını aç ↗",
+      "cachingNote": "{provider} modelleri için istem önbelleğe almayı etkinleştirir; böylece uzun çok turlu bir çalışma, önbelleğe alınmış istem önekini her turda yeniden göndermek yerine yeniden kullanır.",
+      "labelField": "Etiket (isteğe bağlı)",
+      "labelPlaceholder": "örn. ekip anahtarı",
+      "defaultLabel": "{provider} anahtarı",
+      "keyField": "API anahtarı",
+      "keyPlaceholder": "API anahtarını yapıştırın",
+      "connect": "Bağla",
+      "connected": "Bağlı ({count})",
+      "usage": "bu pencerede {tokens} tok · {count} çağrı | bu pencerede {tokens} tok · {count} çağrı",
+      "toast": {
+        "connected": "API anahtarı bağlandı",
+        "connectFailed": "Anahtar bağlanamadı",
+        "removeFailed": "Anahtar kaldırılamadı"
+      },
+      "providers": {
+        "openai": {
+          "label": "OpenAI",
+          "step1": "platform.openai.com → API keys adresini açın ve yeni bir gizli anahtar oluşturun.",
+          "step2": "Anahtarı kopyalayın (sk-… ile başlar); yalnızca bir kez gösterilir."
+        },
+        "anthropic": {
+          "label": "Anthropic (Claude API)",
+          "step1": "console.anthropic.com → Settings → API Keys adresini açın ve bir anahtar oluşturun.",
+          "step2": "Anahtarı kopyalayın (sk-ant-… ile başlar)."
+        },
+        "qwen": {
+          "label": "Qwen (Alibaba DashScope)",
+          "step1": "DashScope konsolunu (uluslararası) → API-KEY açın ve bir anahtar oluşturun.",
+          "step2": "Anahtarı kopyalayın; OpenAI uyumlu Qwen uç noktasının kimliğini doğrular."
+        },
+        "deepseek": {
+          "label": "DeepSeek",
+          "step1": "platform.deepseek.com → API keys adresini açın ve bir anahtar oluşturun.",
+          "step2": "Anahtarı kopyalayın (sk-… ile başlar)."
+        },
+        "moonshot": {
+          "label": "Moonshot (Kimi API)",
+          "step1": "platform.moonshot.ai → API Keys adresini açın ve bir anahtar oluşturun.",
+          "step2": "Anahtarı kopyalayın; OpenAI uyumlu Moonshot uç noktasının kimliğini doğrular."
+        },
+        "openrouter": {
+          "label": "OpenRouter",
+          "step1": "openrouter.ai → Keys adresini açın ve bir API anahtarı oluşturun.",
+          "step2": "Anahtarı kopyalayın (sk-or-… ile başlar); tek bir ağ geçidi üzerinden 300'den fazla modele ulaşır."
+        },
+        "litellm": {
+          "label": "LiteLLM (kendi barındırdığınız ağ geçidi)",
+          "step1": "LiteLLM ağ geçidinizde bir sanal anahtar oluşturun (veya ana anahtarını kullanın).",
+          "step2": "Ağ geçidinin temel URL'si burada değil, dağıtım operatörünüz tarafından ayarlanır (LITELLM_BASE_URL)."
+        }
+      }
+    },
+    "vendorCredentials": {
+      "title": "LLM Sağlayıcıları",
+      "tabs": {
+        "pool": "Çalışma alanı havuzu",
+        "direct": "Doğrudan sağlayıcılar",
+        "proxy": "Proxy'ler",
+        "personal": "Kişisel abonelikler"
+      },
+      "poolIntro": "Ekip/kuruluş kullanımına izin veren ticari bir kodlama planı aboneliğini (Kimi, DeepSeek) bağlayarak agent adımlarını bir API anahtarı yerine Claude Code harness'ında çalıştırın. Token'lar şifreli olarak saklanır, havuzlanır ve kullanıma göre döndürülür. Abonelik modelleri sabit kotalıdır, bu nedenle harcama bütçenizi etkilemezler. Bireysel kullanımlı abonelikler (Claude, GLM, ChatGPT/Codex) Kişisel abonelikler sekmesinde kullanıcı başına bağlanır.",
+      "vendorField": "Sağlayıcı",
+      "labelField": "Etiket (isteğe bağlı)",
+      "labelPlaceholder": "örn. iş hesabı",
+      "defaultLabel": "{vendor} token'ı",
+      "tokenField": "Token",
+      "tokenPlaceholder": "kodlama planı API anahtarınız",
+      "connect": "Bağla",
+      "connected": "Bağlı ({count})",
+      "usage": "bu pencerede {tokens} tok · {count} çalışma | bu pencerede {tokens} tok · {count} çalışma",
+      "toast": {
+        "connected": "Token bağlandı",
+        "connectFailed": "Token bağlanamadı",
+        "removeFailed": "Token kaldırılamadı"
+      },
+      "vendors": {
+        "kimi": {
+          "label": "Kimi (Moonshot kodlama planı)",
+          "step1": "Moonshot (Kimi) kodlama planı konsolunuzu açın ve Anthropic uyumlu uç nokta için bir API anahtarı oluşturun.",
+          "step2": "API anahtarını kopyalayın. Agent adımları, tam bağlamla Moonshot'un Anthropic uç noktasına karşı Claude Code üzerinden çalışacaktır.",
+          "step3": "Anahtarı aşağıya yapıştırın."
+        },
+        "deepseek": {
+          "label": "DeepSeek (kodlama planı)",
+          "step1": "DeepSeek kodlama planı konsolunuzu açın ve Anthropic uyumlu uç nokta için bir API anahtarı oluşturun.",
+          "step2": "API anahtarını kopyalayın. Agent adımları, tam bağlamla DeepSeek'in Anthropic uç noktasına karşı Claude Code üzerinden çalışacaktır.",
+          "step3": "Anahtarı aşağıya yapıştırın."
+        }
+      }
+    }
+  },
+  "github": {
+    "onboarding": {
+      "title": "cat-factory'yi GitHub'a bağla",
+      "intro": "cat-factory, depolarınızda pull request'ler açarak çalışır. Devam etmek için GitHub App'i hesabınıza veya kuruluşunuza yükleyin; her depoyu verebilir veya bir alt küme seçebilirsiniz.",
+      "signedInAs": "{login} olarak oturum açıldı",
+      "signOut": "Oturumu kapat"
+    },
+    "connect": {
+      "yourInstallations": "Yüklemeleriniz",
+      "refresh": "Yenile",
+      "lookingForInstallations": "Yüklemeler aranıyor…",
+      "noInstallations": "App için henüz bir yükleme bulunamadı. Aşağıdan yükleyin veya kimlik ile bağlanın.",
+      "installationMeta": "{targetType} · yükleme {id}",
+      "linked": "bağlı",
+      "linkedTitle": "Bu çalışma alanına zaten bağlı",
+      "inUse": "kullanımda",
+      "inUseTitle": "Başka bir çalışma alanına zaten bağlı",
+      "connect": "Bağla",
+      "or": "veya",
+      "installApp": "GitHub App'i yükle",
+      "orConnectById": "veya kimlik ile bağlan",
+      "installationId": "Yükleme kimliği",
+      "toast": {
+        "connected": "GitHub bağlandı"
+      },
+      "errors": {
+        "listInstallations": "GitHub yüklemeleri listelenemedi",
+        "startInstall": "GitHub App yüklemesi başlatılamadı",
+        "connect": "Bağlanamadı"
+      }
+    },
+    "panel": {
+      "connectIntro": "Pano bloklarını depolarla desteklemek, pull request'lere ve sorunlara göz atmak ve agent'ların dal göndermesine ve PR açmasına izin vermek için bir GitHub App yüklemesi bağlayın.",
+      "installationMeta": "{targetType} · yükleme {id}",
+      "resync": "Yeniden eşitle",
+      "backfill": "Geriye doldur",
+      "disconnect": "Bağlantıyı kes",
+      "loading": "Yükleniyor…",
+      "tabs": {
+        "repos": "Depolar",
+        "pulls": "Pull request'ler",
+        "issues": "Sorunlar"
+      },
+      "linkedToBoard": "Bu panoya bağlı",
+      "manageRepos": "Depoları yönet",
+      "manageHint": "Bu panonun izlemesi gereken depoları seçin. GitHub bağlantısı hesap genelinde paylaşılır ve her pano kendi depolarını bağlar.",
+      "loadingRepos": "Depolar yükleniyor…",
+      "noAvailableRepos": "Yükleme henüz herhangi bir depoya erişemiyor.",
+      "private": "özel",
+      "saveSelection": "Seçimi kaydet",
+      "noLinkedRepos": "Henüz bağlı depo yok. Bu panonun hangi depoları takip ettiğini seçmek için Depoları yönet seçeneğini kullanın.",
+      "open": "Aç",
+      "protected": "korumalı",
+      "newBranch": "Yeni dal",
+      "fromSha": "SHA'dan",
+      "commitShaPlaceholder": "commit sha",
+      "createBranch": "Dal oluştur",
+      "openPr": "PR aç",
+      "repository": "Depo",
+      "chooseRepository": "Bir depo seçin",
+      "prTitle": "Başlık",
+      "headBranch": "Head dalı",
+      "baseBranch": "Base dalı",
+      "openPullRequest": "Pull request aç",
+      "noPulls": "Senkronize edilmiş pull request yok.",
+      "mergePr": "Pull request'i birleştir",
+      "noIssues": "Senkronize edilmiş sorun yok.",
+      "prState": {
+        "open": "açık",
+        "closed": "kapalı",
+        "merged": "birleştirildi"
+      },
+      "issueState": {
+        "open": "açık",
+        "closed": "kapalı"
+      },
+      "toast": {
+        "disconnected": "GitHub bağlantısı kesildi",
+        "resync": "{status} yeniden senkronize et",
+        "reposUpdated": "Bağlı depolar güncellendi",
+        "branchCreated": "{name} dalı oluşturuldu",
+        "prOpened": "Pull request açıldı",
+        "prMerged": "PR #{number} birleştirildi"
+      },
+      "errors": {
+        "disconnect": "Bağlantı kesilemedi",
+        "resync": "Yeniden senkronize edilemedi",
+        "loadRepos": "Depolar yüklenemedi",
+        "updateRepos": "Depolar güncellenemedi",
+        "loadBranches": "Dallar yüklenemedi",
+        "createBranch": "Dal oluşturulamadı",
+        "openPr": "Pull request açılamadı",
+        "merge": "Birleştirilemedi"
+      }
+    },
+    "addService": {
+      "title": "Bir depodan servis ekle",
+      "intro": "Pano servisi olarak eklenecek mevcut bir GitHub deposu seçin. Bootstrap yok: depo olduğu gibi yeni bir servis çerçevesine bağlanır ve üzerinde çalıştırdığınız görevler o depoyu hedefler.",
+      "connectFirst": "Önce bu çalışma alanını GitHub'a bağlayın. App'in zaten kurulu olduğu bir kurulumu bağlayın veya kurun.",
+      "repository": "Depo",
+      "repositoryHint": "GitHub App'in erişebildiği depolar. Sizinkini göremiyor musunuz? Aşağıdan App'e erişim verin, sonra yenileyin.",
+      "noReposAvailable": "Henüz kullanılabilir depo yok. Aşağıdan App'e bir depoya erişim verin, sonra yenileyin.",
+      "searchPlaceholder": "Depoları sahip veya ada göre arayın…",
+      "searchMinChars": "Aramak için en az {min} karakter yazın. | Aramak için en az {min} karakter yazın.",
+      "noMatches": "{query} için depo bulunamadı.",
+      "clearSelection": "Seçimi temizle",
+      "showingCount": "{total} depodan {shown} tanesi gösteriliyor.",
+      "repoLabel": {
+        "private": " (özel)",
+        "monorepo": " · monorepo",
+        "onBoard": " · zaten panoda"
+      },
+      "monorepoLabel": "Bu bir monorepo (birden fazla servis barındırır)",
+      "monorepoDescription": "Tek depodan, her biri bir alt dizine sabitlenmiş birkaç servis ekleyin.",
+      "monorepoBrowseHint": "Depoyu inceleyin ve eklemek istediğiniz servisin dizinini seçin. Bu servis üzerinde çalışan ajanlar o alt dizin içinde çalışır.",
+      "serviceDirectory": "Servis dizini:",
+      "noDirectorySelected": "Henüz dizin seçilmedi.",
+      "addedConfigure": "{title} eklendi, yapılandırın",
+      "grantAccess": "App'e bir depoya erişim ver",
+      "grantAccessTitle": "App'e bir depoya erişim vermek için kurulum ayarlarını açın",
+      "refreshList": "Listeyi yenile",
+      "done": "Tamam",
+      "add": "Servis ekle",
+      "addAnother": "Başka bir servis ekle",
+      "toast": {
+        "addedTitle": "Servis eklendi",
+        "addedDescription": "{title} panoda, aşağıdan yapılandırın.",
+        "addFailedTitle": "Servis eklenemedi"
+      }
+    },
+    "repoTree": {
+      "root": "kök",
+      "loading": "Yükleniyor…",
+      "noSubdirectories": "Burada alt dizin yok.",
+      "empty": "Burada bir şey yok.",
+      "select": "Seç",
+      "selected": "Seçildi",
+      "useThisFolder": "Bu klasörü kullan",
+      "errors": {
+        "listDirectory": "Dizin listelenemedi"
+      }
+    }
+  },
+  "slack": {
+    "panel": {
+      "title": "Slack bildirimleri",
+      "intro": "Pano bildirimlerini (birleştirme incelemeleri, pipeline tamamlanmaları, CI hataları) Slack'e gönderin. Bağlantı hesap genelinde paylaşılır; yönlendirme pano başınadır."
+    },
+    "connect": {
+      "addToSlack": "Slack'e ekle",
+      "orPasteToken": "...veya bir bot token'ı yapıştırın (xoxb-...)",
+      "connect": "Bağlan"
+    },
+    "connected": {
+      "label": "{team} ile bağlı",
+      "disconnect": "Bağlantıyı kes"
+    },
+    "routing": {
+      "heading": "Yönlendirme",
+      "channelPlaceholder": "#kanal veya kanal kimliği",
+      "mentionMembers": "Eşlenen hesap üyelerini {'@'} ile etiketle",
+      "save": "Yönlendirmeyi kaydet"
+    },
+    "members": {
+      "heading": "Üye eşlemesi (kullanıcı kimliğinden Slack üye kimliğine)",
+      "hint": "{product} kişileri gereksinim incelemesi bulgularında etiketlenir; diğer herkes yalnızca görevi oluşturduğunda etiketlenir.",
+      "productLabel": "Ürün",
+      "userIdPlaceholder": "Kullanıcı kimliği (usr_...)",
+      "slackIdPlaceholder": "Slack üye kimliği (U...)",
+      "add": "Üye ekle",
+      "save": "Eşlemeyi kaydet"
+    },
+    "routable": {
+      "merge_review": "Birleştirme incelemesi",
+      "pipeline_complete": "Pipeline tamamlandı",
+      "ci_failed": "CI başarısız",
+      "test_failed": "Testler başarısız",
+      "requirement_review": "Gereksinim incelemesi",
+      "clarity_review": "Netlik incelemesi",
+      "release_regression": "Sürüm gerilemesi",
+      "human_test_ready": "İnsan testine hazır",
+      "visual_confirmation_ready": "Görsel onaya hazır"
+    },
+    "role": {
+      "engineering": "Mühendislik",
+      "product": "Ürün"
+    },
+    "toast": {
+      "connected": "Slack bağlandı",
+      "routingSaved": "Yönlendirme kaydedildi",
+      "mapSaved": "Üye eşlemesi kaydedildi"
+    },
+    "error": {
+      "loadSettings": "Slack ayarları yüklenemedi",
+      "startOAuth": "Slack OAuth başlatılamadı",
+      "connect": "Slack bağlanamadı",
+      "disconnect": "Slack bağlantısı kesilemedi",
+      "saveRouting": "Yönlendirme kaydedilemedi",
+      "saveMap": "Üye eşlemesi kaydedilemedi"
+    }
+  },
+  "documents": {
+    "picker": {
+      "searchPlaceholder": "Sayfalarda ara veya bir URL/ID yapıştır…",
+      "refPlaceholder": "Bir sayfa URL'si veya ID'si yapıştır…",
+      "searchFailed": "Arama başarısız: {error}",
+      "importedBadge": "içe aktarıldı",
+      "attachByReference": "{ref} öğesini referansla ekle",
+      "noMatches": "Eşleşen sayfa yok.",
+      "emptySearchable": "Başlığa göre ara veya içe aktarılmış bir belge seç.",
+      "emptyRefOnly": "Eklemek için bir sayfa URL'si veya ID'si yapıştır."
+    },
+    "import": {
+      "title": "Bir belge kaynağından içe aktar",
+      "connectFirst": "Önce bir belge kaynağı bağla.",
+      "connectSource": "{source} bağla",
+      "spawningInto": "{frame} içine oluşturuluyor",
+      "sourceLabel": "Kaynak",
+      "refLabel": "Sayfa URL'si veya ID'si",
+      "importButton": "İçe aktar",
+      "importedHeading": "İçe aktarılan belgeler",
+      "previewSpawn": "Önizle ve oluştur",
+      "noneImported": "Henüz belge içe aktarılmadı.",
+      "imported": "\"{title}\" içe aktarıldı",
+      "importFailed": "İçe aktarma başarısız"
+    },
+    "connect": {
+      "title": "Kaynak bağla",
+      "sourceFallback": "Kaynak",
+      "intro": "Gereksinimleri, RFC'leri ve PRD'leri içe aktarmak için {source} bağla, ardından pano yapısı oluştur veya bunları agent bağlamı olarak görevlere ekle.",
+      "disconnect": "Bağlantıyı kes",
+      "connect": "Bağla",
+      "update": "Bağlantıyı güncelle",
+      "connected": "{source} bağlandı",
+      "disconnected": "{source} bağlantısı kesildi",
+      "connectFailed": "Bağlanamadı"
+    },
+    "spawn": {
+      "title": "Yapıyı önizle",
+      "plannerLlm": "Yapay zeka tarafından oluşturuldu",
+      "plannerHeadings": "Başlıklardan",
+      "intoFrame": "{frame} içine",
+      "asTopLevel": "yeni üst düzey çerçeveler olarak",
+      "buildingPlan": "Plan oluşturuluyor…",
+      "spawnOntoBoard": "Panoya oluştur",
+      "planFailed": "Plan oluşturulamadı",
+      "spawned": "Yapı oluşturuldu",
+      "spawnFailed": "Oluşturma başarısız",
+      "summary": "{frames} · {modules} · {tasks}",
+      "frameCount": "{count} çerçeve | {count} çerçeve",
+      "moduleCount": "{count} modül | {count} modül",
+      "taskCount": "{count} görev | {count} görev"
+    },
+    "taskDocs": {
+      "heading": "Bağlam belgeleri",
+      "attach": "Ekle",
+      "importPage": "Bir sayfa içe aktar…",
+      "empty": "Agentların bu görevi uygularken görebilmesi için bir gereksinim, RFC veya PRD ekle.",
+      "attached": "Belge eklendi",
+      "attachFailed": "Eklenemedi"
+    }
+  },
+  "tasks": {
+    "picker": {
+      "searchPlaceholder": "Sorunlarda ara veya bir URL/anahtar yapıştır…",
+      "refPlaceholder": "Bir sorun URL'si veya anahtarı yapıştır…",
+      "searchFailed": "Arama başarısız: {error}",
+      "imported": "içe aktarıldı",
+      "attachByReference": "{ref} öğesini referansla ekle",
+      "noMatches": "Eşleşen sorun yok.",
+      "emptySearchable": "Başlığa göre ara veya içe aktarılmış bir sorun seç.",
+      "emptyRefOnly": "Eklemek için bir sorun URL'si veya anahtarı yapıştır."
+    },
+    "contextIssues": {
+      "title": "Bağlam sorunları",
+      "attach": "Ekle",
+      "attached": "Sorun eklendi",
+      "attachFailed": "Eklenemedi",
+      "importIssue": "Bir sorun içe aktar…",
+      "emptyHint": "Agentların bu görevi uygularken açıklamasını ve yorumlarını görebilmesi için bir Jira sorunu ekle."
+    },
+    "import": {
+      "titleCreate": "Sorundan görev oluştur",
+      "titleBrowse": "İzleyici sorunları",
+      "connectFirst": "Önce bir görev kaynağı bağla veya etkinleştir.",
+      "enableSource": "{label} etkinleştir",
+      "connectSource": "{label} bağla",
+      "source": "Kaynak",
+      "refLabel": "Sorun anahtarı veya URL'si",
+      "import": "İçe aktar",
+      "asEpic": "Epik olarak",
+      "asEpicTitleReady": "Bu epiği ve alt öğelerini bağlı bir görev grubu olarak oluştur",
+      "asEpicTitleNeedsContainer": "Önce alt görevler için bir kapsayıcı seç",
+      "epicChildrenContainer": "Epik alt öğeleri kapsayıcısı",
+      "pickContainer": "Bir çerçeve veya modül seç",
+      "searchIssues": "Sorunlarda ara",
+      "searchPlaceholder": "Başlığa göre ara, bir sorun URL'si yapıştır veya bir sorun numarası yaz…",
+      "createTasksIn": "Görevleri şurada oluştur",
+      "needFrameFirst": "Sorunlardan görev oluşturmak için önce panoya bir servis çerçevesi ekle.",
+      "searchFailed": "Arama başarısız: {error}",
+      "searchResults": "Arama sonuçları",
+      "createFromIssue": "Bu sorundan bir görev oluştur",
+      "pickContainerFirst": "Önce bir kapsayıcı seç",
+      "viewOnGitHub": "{id} öğesini GitHub'da görüntüle",
+      "emptyHint": "Yukarıda ara veya görev oluşturmak için bir sorun URL'si/anahtarı yapıştır.",
+      "imported": "\"{title}\" içe aktarıldı",
+      "importFailed": "İçe aktarma başarısız",
+      "epicSpawned": "\"{title}\" epiği oluşturuldu",
+      "epicChildren": "{count} alt görev oluşturuldu | {count} alt görev oluşturuldu",
+      "epicFailed": "Epik oluşturulamadı"
+    },
+    "connect": {
+      "title": "Görev kaynağı",
+      "sourceFallback": "Kaynak",
+      "connectedToast": "{label} bağlandı",
+      "connectFailed": "Bağlanamadı",
+      "disconnectedToast": "{label} bağlantısı kesildi",
+      "updateFailed": "Güncellenemedi",
+      "intro": "{label}, sorunları içe aktarmanıza ve bunları agent bağlamı olarak görevlere eklemenize olanak tanır.",
+      "credentialless": "Bu kaynak çalışma alanınızda zaten kurulu olan GitHub App'i kullanır, dolayısıyla girilecek kimlik bilgisi yoktur.",
+      "installAppHint": "{label} sunmak için çalışma alanının GitHub App'ini kur (GitHub depolarını bağla).",
+      "connected": "Bağlandı.",
+      "connectedTo": "{label} kaynağına bağlandı.",
+      "offerToWorkspace": "Bu çalışma alanına sun",
+      "offerHint": "Kapalıyken {label}, içe aktarmadan ve bağlamadan gizlenir.",
+      "disconnect": "Bağlantıyı kes",
+      "updateConnection": "Bağlantıyı güncelle",
+      "connect": "Bağla",
+      "oauthButton": "{label} ile bağlan",
+      "oauthOr": "veya bir API anahtarıyla bağlan"
+    }
+  },
+  "pipeline": {
+    "iterationCap": {
+      "extraRound": "Bir tur daha",
+      "proceed": "Yine de devam et",
+      "stopReset": "Durdur ve görevi sıfırla"
+    },
+    "builder": {
+      "title": "Pipeline oluşturucu",
+      "agentPalette": "Ajan paleti",
+      "addAgent": "Ajan ekle",
+      "pipeline": "Pipeline",
+      "configureModels": "Modelleri yapılandır",
+      "configureModelsTooltip": "Model ön ayarlarını yönet (her ajanın hangi modelde çalışacağı)",
+      "namePlaceholder": "Pipeline adı",
+      "labelPlaceholder": "+ etiket",
+      "gatingNeedsEstimator": "Geçitli bir adımın öncesinde bir Görev Tahmincisi gerekir. Bir tane ekleyin yoksa pipeline kaydedilmez.",
+      "emptyDraft": "Doğrusal bir pipeline oluşturmak için soldaki ajanlara tıklayın.",
+      "companionAdd": "{companion} ekle (bu adımı inceler, eşik altında geri döngüye alır)",
+      "companionRemove": "Bu adım için {companion} öğesini kaldır",
+      "disableTooltip": "Bu adımı devre dışı bırak (pipeline'da tutulur ama çalıştırmada atlanır)",
+      "enableTooltip": "Adım devre dışı (çalıştırmada atlanır). Etkinleştirmek için tıklayın.",
+      "approvalAddTooltip": "Bu adımdan sonra insan onayı iste",
+      "approvalRemoveTooltip": "Bu adımdan sonra onay gerekli. Geçidi kaldırmak için tıklayın.",
+      "consensusEnableTooltip": "Bu adım için fikir birliğini etkinleştir (çoklu model paneli/tartışma/oylama)",
+      "consensusRevertTooltip": "Fikir birliği etkin. Tek ajana dönmek için tıklayın.",
+      "followUpEnableTooltip": "Takip eşlikçisi devre dışı. Etkinleştirmek için tıklayın (Coder, açık uçları / soruları yüzeye çıkarır).",
+      "followUpDisableTooltip": "Takip eşlikçisi etkin. Coder açık uçları / yan görevleri / soruları yüzeye çıkarır; devre dışı bırakmak için tıklayın.",
+      "moveUp": "Adımı yukarı taşı",
+      "moveDown": "Adımı aşağı taşı",
+      "removeStep": "Bu adımı pipeline'dan kaldır",
+      "gateOnEstimate": "Tahmine göre geçit uygula",
+      "companionGateTooltip": "Bu eşlikçiyi yalnızca görev tahmini bir eşiği aştığında çalıştır (daha önce bir Görev Tahmincisi gerekir)",
+      "consensusGateTooltip": "Fikir birliğini yalnızca görev tahmini bir eşiği aştığında çalıştır (aksi halde standart ajan çalışır)",
+      "runWhenAny": "şu durumda çalıştır (herhangi biri):",
+      "complexityThreshold": "karmaşıklık ≥",
+      "riskThreshold": "risk ≥",
+      "impactThreshold": "etki ≥",
+      "strategy": "Strateji",
+      "rounds": "Tur",
+      "strategyOption": {
+        "specialist-panel": "Uzman paneli",
+        "debate": "Tartışma",
+        "ranked-voting": "Sıralı oylama"
+      },
+      "rolePlaceholder": "Rol",
+      "modelIdPlaceholder": "Model kimliği (isteğe bağlı)",
+      "removeParticipant": "Katılımcıyı kaldır (en az 2)",
+      "addParticipant": "Katılımcı ekle",
+      "savedPipelines": "Kayıtlı pipeline'lar",
+      "hideArchived": "Arşivlenenleri gizle",
+      "archivedCount": "Arşivlenen ({count})",
+      "allLabels": "Tümü",
+      "defaultBadge": "varsayılan",
+      "stepCount": "{count} adım | {count} adım",
+      "unarchive": "Arşivden çıkar",
+      "archive": "Arşivle (varsayılan görünümden gizle)",
+      "cloneDefault": "Bu varsayılanı düzenlenebilir bir kopyaya klonla",
+      "clone": "Klonla",
+      "edit": "Bu pipeline'ı düzenle",
+      "delete": "Bu pipeline'ı sil",
+      "disabledStepTooltip": "Devre dışı, çalıştırmada atlanır",
+      "cancelEdit": "Düzenlemeyi iptal et",
+      "clear": "Temizle",
+      "update": "Pipeline'ı güncelle",
+      "save": "Pipeline'ı kaydet",
+      "addAgentModal": {
+        "title": "Ajan ekle",
+        "name": "Ad",
+        "namePlaceholder": "örn. Güvenlik Denetçisi",
+        "description": "Açıklama",
+        "descriptionPlaceholder": "Bu ajan ne yapar?",
+        "linkDoc": "Bağlam belgesi bağla",
+        "create": "Ajan oluştur"
+      },
+      "toast": {
+        "added": "\"{name}\" ajanı eklendi",
+        "placeholderTitle": "Yer tutucu",
+        "updated": "\"{name}\" güncellendi",
+        "saved": "\"{name}\" kaydedildi",
+        "addOneFirst": "Önce en az bir ajan ekleyin",
+        "saveFailed": "Pipeline kaydedilemedi",
+        "cloned": "\"{name}\" klonlandı — şimdi \"{copy}\" düzenleniyor",
+        "cloneFailed": "Pipeline klonlanamadı",
+        "updateFailed": "Pipeline güncellenemedi"
+      }
+    },
+    "progress": {
+      "status": {
+        "running": "Çalışıyor",
+        "blocked": "Sizi bekliyor",
+        "paused": "Duraklatıldı (bütçe)",
+        "done": "Tamamlandı",
+        "failed": "Başarısız"
+      },
+      "state": {
+        "pending": "Beklemede",
+        "working": "Çalışıyor",
+        "waiting_decision": "Karar gerekli",
+        "done": "Tamamlandı"
+      },
+      "stage": {
+        "incorporating": "Dahil ediliyor…",
+        "reviewing": "Yeniden inceleniyor…",
+        "recommending": "Öneriliyor…"
+      },
+      "followUp": {
+        "watching": "İzleniyor…",
+        "toDecide": "{count} karar verilecek",
+        "allDecided": "Tümü karara bağlandı"
+      },
+      "agentsComplete": "{completed} / {total} ajan tamamlandı",
+      "currently": "şu anda {agent}",
+      "percent": "%{value}",
+      "companion": "Eşlikçi",
+      "companionTooltip": "Bir üretici adımının eşlikçisi",
+      "companionSuffix": "(eşlikçi)",
+      "stepOf": "Adım {current} / {total}",
+      "viewDetailsOutput": "Ayrıntıları görüntüle ve çıktıyı oku",
+      "viewDetails": "Adım ayrıntılarını görüntüle",
+      "restartTooltip": "Pipeline'ı bu adımdan yeniden başlat",
+      "restartFromHere": "Buradan yeniden başlat",
+      "spinningUpContainer": "Konteyner başlatılıyor…",
+      "subtasks": "{completed}/{total} alt görev",
+      "subtasksInProgress": "· {count} devam ediyor",
+      "clickToRead": "Bu ajanın çıktısını okumak için tıklayın",
+      "reviewApprove": "{agent} adlı ajanın önerisini incele ve onayla",
+      "resolve": "Çöz: {question}"
+    },
+    "health": {
+      "title": "Pipeline sağlığı",
+      "allValid": "Tüm pipeline'lar geçerli ve güncel.",
+      "invalidHeading": "Geçersiz pipeline'lar",
+      "invalidDescription": "Bunlar eksik bir agent'a referans veriyor veya yanlış yapılandırılmış, bu yüzden başlangıçta başarısız olur (veya hatalı çalışır). Özel bir pipeline'ı silin ya da katalog tanımını geri yüklemek için bir yerleşik pipeline'ı yeniden tohumlayın.",
+      "builtinBadge": "yerleşik",
+      "reseed": "Yeniden tohumla",
+      "delete": "Sil",
+      "updatesHeading": "Güncellemeler mevcut",
+      "updatesDescription": "Bu yerleşik pipeline'ların daha yeni bir sürümü yayınlandı. Benimsemek için yeniden tohumlayın (etiketleriniz ve arşiv durumunuz korunur).",
+      "reseedAll": "Tümünü yeniden tohumla ({count})",
+      "dismiss": "Yoksay",
+      "done": "Tamam",
+      "toast": {
+        "reseedFailed": "Pipeline yeniden tohumlanamadı",
+        "deleteFailed": "Pipeline silinemedi"
+      }
+    }
+  },
+  "palette": {
+    "hint": "Bir agent'ı pipeline'a eklemek için tıklayın.",
+    "customAgents": "Özel agent'lar"
+  },
+  "gates": {
+    "subtitle": {
+      "humanReview": "PR üzerinde bir insan kod incelemesini bekler, yorumlar üzerine düzelticiyi döngüye alır",
+      "ci": "PR'ı yeşil CI üzerinde kapı altına alır, başarısızlıkta CI düzelticiyi döngüye alır",
+      "conflicts": "PR'ı temiz bir birleştirme üzerinde kapı altına alır, çakışmalarda çözücüyü döngüye alır"
+    },
+    "status": {
+      "passed": "Geçti",
+      "gaveUp": "Vazgeçildi",
+      "fixing": "Düzeltiliyor",
+      "failing": "Başarısız oluyor",
+      "pending": "Beklemede",
+      "checking": "Kontrol ediliyor"
+    },
+    "conflict": {
+      "mergeable": "Birleştirilebilir",
+      "computing": "Birleştirilebilirlik hesaplanıyor…",
+      "conflicts": "Tabanla çakışıyor",
+      "unknown": "Bilinmiyor"
+    },
+    "noActivity": "Henüz kapı etkinliği yok.",
+    "noActivityHint": "Ön kontrol, PR açıldığında bir kez çalışır. Yoklama sırasında adım, panoda canlı durumu gösterir.",
+    "passedCi": "CI yeşil.",
+    "passedConflicts": "PR tabanıyla temiz şekilde birleşiyor.",
+    "humanReview": {
+      "approvals": "{approved} / {required} onay | {approved} / {required} onay",
+      "suffixFixing": "· düzeltici yorumları ele alıyor…",
+      "suffixFailing": "· ele alınacak inceleme yorumları",
+      "suffixAwaiting": "· inceleme bekleniyor",
+      "reviewPr": "Çekme isteğini GitHub'da incele",
+      "requestFixHeading": "Bir düzeltme iste",
+      "requestFixDescription": "Düzelticinin PR dalında şimdi yapması için bir değişiklik tanımlayın (otomatik olarak ele aldığı inceleme yorumlarına ek olarak).",
+      "requestFixPlaceholder": "örn. yardımcıyı yeniden adlandır ve boş girdi durumu için bir birim testi ekle",
+      "requestFix": "Düzeltme iste"
+    },
+    "ci": {
+      "failingChecks": "Başarısız olan kontroller",
+      "openOnGithub": "{name} öğesini GitHub'da aç",
+      "conclusionFallback": "başarısızlık",
+      "failureFallback": "CI bu commit'te bir başarısızlık bildirmedi."
+    },
+    "conflicts": {
+      "mergeability": "Birleştirilebilirlik",
+      "viewPr": "Çekme isteğini GitHub'da görüntüle"
+    },
+    "attemptsHeading": "{helper} denemeleri",
+    "attempt": "Deneme {number}",
+    "outcome": {
+      "completed": "tamamlandı",
+      "failed": "başarısız oldu"
+    },
+    "sidebar": {
+      "state": "Durum",
+      "fixRounds": "{count} düzeltme turu | {count} düzeltme turu",
+      "attempts": "{attempts}/{max} deneme | {attempts}/{max} deneme",
+      "suffixRunning": "· çalışıyor…",
+      "suffixNotNeeded": "· henüz gerekli değil",
+      "gatedCommit": "Kapı altındaki commit",
+      "footer": "Bir kapı, programatik bir ön kontrol çalıştırır ve yalnızca başarısız olduğunda {helper} öğesini devreye sokar; yeşil bir kontrol, hiçbir şey devreye girmeden ilerler."
+    }
+  },
+  "requirements": {
+    "title": "Gereksinim incelemesi",
+    "iteration": "Yineleme {current} / {max}",
+    "intro": "Bir AI incelemecisi bu {level} öğesinin toplanan gereksinimlerini — açıklamasını ve bağlı PRD'leri ile izleyici sorunlarını — inceledi ve aşağıdaki bulguları ortaya çıkardı. İlgili olanları {answer}, ilgisiz olanları {dismiss}, ardından bunları dahil edin; incelemeci, gereksinimler netleşene kadar yeniden inceler.",
+    "levelFallback": "öğe",
+    "answerVerb": "Yanıtlayın",
+    "dismissVerb": "yok sayın",
+    "empty": "Henüz inceleme yok. İncelemeci, bu görevin pipeline'ı başladığında ilk adım olarak otomatik çalışır.",
+    "loadingReview": "İnceleme yükleniyor…",
+    "reviewing": "Gereksinimler inceleniyor…",
+    "settled": "Gereksinimler kesinleşti. Aşağıdaki belge, her sonraki agent adımının kullandığı belgedir.",
+    "exceeded": {
+      "heading": "Bulgular hâlâ açıkken {max} yineleme sınırına ulaşıldı.",
+      "detail": "Bir tur daha inceleme yapın, son dahil edilen gereksinimlerle yine de bir sonraki aşamaya geçin ya da görevi durdurup sıfırlayarak gereksinimleri yeniden işleyip tekrar gönderebilirsiniz."
+    },
+    "working": {
+      "incorporating": "Yanıtlarınız bir gereksinim belgesine dahil ediliyor… Bunu kapatabilirsiniz — yalnızca daha fazla girdi gerekirse sizi bilgilendiririz.",
+      "reReviewing": "Güncellenen gereksinimler yeniden inceleniyor… Bunu kapatabilirsiniz — yalnızca daha fazla girdi gerekirse sizi bilgilendiririz."
+    },
+    "severity": {
+      "high": "yüksek",
+      "medium": "orta",
+      "low": "düşük"
+    },
+    "category": {
+      "gap": "boşluk",
+      "clarification": "açıklama",
+      "assumption": "varsayım",
+      "risk": "risk",
+      "question": "soru"
+    },
+    "itemStatus": {
+      "open": "açık",
+      "answered": "yanıtlandı",
+      "resolved": "çözüldü",
+      "dismissed": "yok sayıldı",
+      "recommend_requested": "öneri istendi"
+    },
+    "answerLabel": "Yanıt",
+    "answerPlaceholder": "Bu bulguyu yanıtlayın…",
+    "dismissIrrelevant": "İlgisiz olarak yok say",
+    "markedForRecommendation": "Öneri için işaretlendi",
+    "recommendSomething": "Bir şey öner",
+    "recommendationRequested": "Öneri istendi — aşağıdaki öneriyi inceleyin.",
+    "reopen": "Yeniden aç",
+    "recommendedAnswers": "Önerilen yanıtlar",
+    "recommendationProgress": "{ready} / {total} hazır",
+    "generatingSuggestion": "Temellendirilmiş bir öneri oluşturuluyor…",
+    "currentStandard": "Mevcut standart: {title}",
+    "accept": "Kabul et",
+    "reject": "Reddet",
+    "reRequestPlaceholder": "Farklı bir öneri isteyin…",
+    "reRequest": "Yeniden iste",
+    "finalRequirements": "Nihai gereksinimler",
+    "incorporatedDraft": "Dahil edilen gereksinimler (taslak)",
+    "stats": {
+      "findings": "Bulgular",
+      "open": "Açık",
+      "answered": "Yanıtlanan",
+      "model": "Model"
+    },
+    "actions": {
+      "proceedNothing": "Devam et (dahil edilecek bir şey yok)",
+      "incorporateAnswers": "Yanıtları dahil et",
+      "requestRecommendations": "{count} öneri iste | {count} öneri iste | {count} öneri iste",
+      "reReview": "İyi görünüyor — yeniden incele",
+      "reReviewing": "Yeniden inceleniyor…",
+      "redoIncorporation": "Dahil etmeyi yeniden yap",
+      "redoWithDirection": "Bu yönlendirmeyle yeniden yap"
+    },
+    "help": {
+      "canProceed": "Tüm bulgular göz ardı edildi — yeniden çalışmadan sonraki aşamaya geçin.",
+      "canIncorporate": "Yanıtlarınızı tek bir standart biçimli belgeye katar, ardından otomatik olarak yeniden inceler.",
+      "answerAll": "Devam etmek için her bulguyu yanıtlayın veya göz ardı edin.",
+      "merged": "Yeniden inceleme, denetleyiciyi bu belgeye karşı çalıştırır. Birleştirilme şeklinden memnun değilseniz, bunun yerine bir yorumla yeniden yapın."
+    },
+    "redoPlaceholder": "Birleştirme neyi farklı yapmalı?",
+    "settledFooter": "Gereksinimler sonuçlandırıldı — boru hattı soldaki belgeyle devam ediyor.",
+    "toast": {
+      "preparingRecommendations": "Arka planda {count} öneri hazırlanıyor | Arka planda {count} öneri hazırlanıyor | Arka planda {count} öneri hazırlanıyor",
+      "preparingRecommendationsDescription": "Yanıtlarınız kaydedildi — isterseniz bunu kapatın; hazır olduklarında sizi bilgilendireceğiz.",
+      "recommendationsReady": "{count} öneri hazır | {count} öneri hazır | {count} öneri hazır",
+      "incorporating": "Yanıtlarınız arka planda katılıyor",
+      "incorporatingDescription": "Panoya geri döndünüz — yalnızca daha fazla girdi gerekirse sizi bilgilendireceğiz.",
+      "reviewerSatisfied": "Denetleyici tatmin oldu — boru hattı devam ediyor",
+      "iterationLimitReached": "Yineleme sınırına ulaşıldı — nasıl devam edileceğini seçin",
+      "newFindings": "tepki verilecek yeni bulgu yok | tepki verilecek {count} yeni bulgu | tepki verilecek {count} yeni bulgu",
+      "proceeding": "Sonraki aşamaya geçiliyor",
+      "taskReset": "Görev sıfırlandı — gereksinimleri düzenleyin ve yeniden gönderin",
+      "extraRoundGranted": "Bir inceleme turu daha verildi"
+    },
+    "errors": {
+      "saveAnswer": "Yanıt kaydedilemedi",
+      "updateFinding": "Bulgu güncellenemedi",
+      "requestRecommendations": "Öneriler talep edilemedi",
+      "acceptRecommendation": "Öneri kabul edilemedi",
+      "rejectRecommendation": "Öneri reddedilemedi",
+      "reRequestRecommendation": "Öneri yeniden talep edilemedi",
+      "incorporate": "Yanıtlar katılamadı",
+      "reReview": "Gereksinimler yeniden incelenemedi",
+      "proceed": "Devam edilemedi",
+      "resolveReview": "İnceleme çözümlenemedi"
+    }
+  },
+  "clarity": {
+    "title": "Hata raporu triyajı",
+    "iteration": "Yineleme {current} / {max}",
+    "intro": "Bir AI denetleyicisi bu {level} öğesinin hata raporunu düzeltilebilirlik açısından, açıklamasıyla ve bağlantılı her türlü bağlamla birlikte triyaj etti ve aşağıdaki soruları gündeme getirdi. İlgili olanları {answer}, ilgisiz olanları {dismiss}, ardından bunları dahil edin; denetleyici, hata raporu düzeltilecek kadar net olana dek yeniden inceler.",
+    "itemFallback": "öğe",
+    "introAnswer": "Yanıtlayın",
+    "introDismiss": "göz ardı edin",
+    "empty": "Henüz inceleme yok. Denetleyici, bu görevin boru hattı başladığında ilk adım olarak otomatik çalışır.",
+    "loadingReview": "İnceleme yükleniyor…",
+    "triaging": "Hata raporu triyaj ediliyor…",
+    "converged": "Hata raporu netleştirildi. Aşağıdaki rapor, tüm sonraki agent adımlarının kullandığı rapordur.",
+    "capHeading": "{max} yinelemelik sınıra bulgular hâlâ açıkken ulaşıldı.",
+    "capDetail": "Bir inceleme turu daha yapın, son netleştirilmiş hata raporuyla yine de sonraki aşamaya geçin ya da durup görevi sıfırlayarak hata raporunu yeniden işleyip yeniden gönderin.",
+    "incorporatingStage": "Yanıtlarınız netleştirilmiş bir hata raporuna katılıyor… Bunu kapatabilirsiniz, yalnızca daha fazla girdi gerekirse sizi bilgilendireceğiz.",
+    "reReviewingStage": "Güncellenen hata raporu yeniden inceleniyor… Bunu kapatabilirsiniz, yalnızca daha fazla girdi gerekirse sizi bilgilendireceğiz.",
+    "answerLabel": "Yanıt",
+    "answerPlaceholder": "Bu bulguyu yanıtlayın…",
+    "refineAnswerPlaceholder": "Yanıtınızı iyileştirin…",
+    "saveAnswer": "Yanıtı kaydet",
+    "dismissIrrelevant": "İlgisiz olarak göz ardı et",
+    "reopen": "Yeniden aç",
+    "docHeading": "Netleştirilmiş hata raporu",
+    "docHeadingDraft": "Netleştirilmiş hata raporu (taslak)",
+    "rail": {
+      "findings": "Bulgular",
+      "open": "Açık",
+      "answered": "Yanıtlandı",
+      "model": "Model"
+    },
+    "proceedNothing": "Devam et (katılacak bir şey yok)",
+    "incorporateAnswers": "Yanıtları dahil et",
+    "hint": {
+      "proceed": "Tüm bulgular göz ardı edildi, yeniden çalışmadan sonraki aşamaya geçin.",
+      "incorporate": "Yanıtlarınızı tek bir netleştirilmiş hata raporuna katar, ardından otomatik olarak yeniden inceler.",
+      "answerAll": "Devam etmek için her bulguyu yanıtlayın veya göz ardı edin."
+    },
+    "reReviewing": "Yeniden inceleniyor…",
+    "looksGoodReReview": "İyi görünüyor — yeniden incele",
+    "redoIncorporation": "Dahil etmeyi yeniden yap",
+    "redoPlaceholder": "Birleştirme neyi farklı yapmalı?",
+    "redoWithDirection": "Bu yönlendirmeyle yeniden yap",
+    "redoHint": "Yeniden inceleme, denetleyiciyi bu rapora karşı çalıştırır. Birleştirilme şeklinden memnun değilseniz, bunun yerine bir yorumla yeniden yapın.",
+    "incorporatedFooter": "Hata raporu netleştirildi, boru hattı soldaki raporla devam ediyor.",
+    "severity": {
+      "low": "düşük",
+      "medium": "orta",
+      "high": "yüksek"
+    },
+    "category": {
+      "gap": "eksik",
+      "clarification": "açıklama",
+      "assumption": "varsayım",
+      "risk": "risk",
+      "question": "soru"
+    },
+    "itemStatus": {
+      "open": "açık",
+      "answered": "yanıtlandı",
+      "resolved": "çözüldü",
+      "dismissed": "göz ardı edildi",
+      "recommend_requested": "öneri talep edildi"
+    },
+    "toast": {
+      "clarifyingTitle": "Hata raporu arka planda netleştiriliyor",
+      "clarifyingDescription": "Panoya geri döndünüz, yalnızca daha fazla girdi gerekirse sizi bilgilendireceğiz.",
+      "reReviewSatisfied": "Denetleyici tatmin oldu — boru hattı devam ediyor",
+      "reReviewExceeded": "Yineleme sınırına ulaşıldı — nasıl devam edileceğini seçin",
+      "reReviewNewFindings": "tepki verilecek yeni bulgu yok | tepki verilecek bir yeni bulgu | tepki verilecek {count} yeni bulgu",
+      "proceeding": "Sonraki aşamaya geçiliyor",
+      "taskReset": "Görev sıfırlandı — hata raporunu düzenleyin ve yeniden gönderin",
+      "extraRoundGranted": "Bir inceleme turu daha verildi"
+    },
+    "error": {
+      "saveAnswer": "Yanıt kaydedilemedi",
+      "updateFinding": "Bulgu güncellenemedi",
+      "incorporate": "Yanıtlar dahil edilemedi",
+      "reReview": "Hata raporu yeniden incelenemedi",
+      "proceed": "Devam edilemedi",
+      "resolve": "İnceleme çözümlenemedi"
+    }
+  },
+  "consensus": {
+    "titlePrefix": "Konsensüs",
+    "participantCount": "katılımcı yok | bir katılımcı | {count} katılımcı",
+    "loading": "Konsensüs oturumu yükleniyor…",
+    "empty": "Bu adım için henüz konsensüs oturumu çalışmadı.",
+    "failed": "Konsensüs başarısız oldu: {error}",
+    "unknownError": "bilinmeyen hata",
+    "synthesizedResult": "Sentezlenmiş sonuç",
+    "confidence": "güven {pct}",
+    "panel": "Panel",
+    "topScore": "en yüksek {label} {pct}",
+    "expert": "Uzman {letter}",
+    "participant": "Katılımcı",
+    "strategy": {
+      "specialistPanel": "Uzman paneli",
+      "debate": "Tartışma",
+      "rankedVoting": "Sıralı oylama"
+    },
+    "round": {
+      "heading": "Tur {n}",
+      "contributions": "Katkılar",
+      "draft": "Bağımsız taslaklar",
+      "critique": "Eleştiri ve revizyon",
+      "score": "Puanlama"
+    },
+    "status": {
+      "running": "Çalışıyor",
+      "synthesizing": "Sentezleniyor",
+      "done": "Tamamlandı",
+      "failed": "Başarısız"
+    }
+  },
+  "brainstorm": {
+    "title": {
+      "architecture": "Mimari beyin fırtınası",
+      "requirements": "Gereksinim beyin fırtınası"
+    },
+    "subjectNoun": {
+      "architecture": "yaklaşım",
+      "requirements": "gereksinimler"
+    },
+    "docNoun": {
+      "architecture": "teknik yaklaşım",
+      "requirements": "gereksinim yönü"
+    },
+    "iteration": "Yineleme {current} / {max}",
+    "intro": "Bir yapay zeka ortağı aşağıdaki {subject} seçeneklerini, her biri kendi ödünleşimleriyle önerdi. İstediklerinizi {choose} (ve yönlendirin), kalanları ise {dismiss}, ardından dahil edin; bir {doc} üzerinde uzlaşana kadar yeniden çalışır.",
+    "introChoose": "Seçin",
+    "introDismiss": "yok sayın",
+    "empty": "Henüz beyin fırtınası yok. Bu görevin hattı beyin fırtınası adımına ulaştığında otomatik olarak çalışır.",
+    "loading": "Beyin fırtınası yükleniyor…",
+    "generating": "Seçenekler oluşturuluyor…",
+    "settledBanner": "{doc} kesinleşti. Aşağıdaki belge bir sonraki aşamanın kullandığı belgedir.",
+    "exceeded": {
+      "heading": "{max} yinelemelik sınıra seçenekler hâlâ açıkken ulaşıldı.",
+      "detail": "Bir beyin fırtınası turu daha yapın, son yönle yine de bir sonraki aşamaya geçin ya da görevi durdurup sıfırlayın; böylece düzenleyip yeniden gönderebilirsiniz."
+    },
+    "working": {
+      "incorporating": "Seçimleriniz bir {doc} içine katlanıyor… Bunu kapatabilirsiniz; yalnızca daha fazla girdi gerekirse sizi bilgilendiririz.",
+      "reReviewing": "Güncellenmiş yön üzerinde beyin fırtınası yeniden çalıştırılıyor… Bunu kapatabilirsiniz; yalnızca daha fazla girdi gerekirse sizi bilgilendiririz."
+    },
+    "severity": {
+      "low": "düşük",
+      "medium": "orta",
+      "high": "yüksek"
+    },
+    "category": {
+      "gap": "eksiklik",
+      "clarification": "netleştirme",
+      "assumption": "varsayım",
+      "risk": "risk",
+      "question": "soru"
+    },
+    "itemStatus": {
+      "open": "açık",
+      "answered": "yanıtlandı",
+      "resolved": "çözüldü",
+      "dismissed": "yok sayıldı",
+      "recommend_requested": "öneri istendi"
+    },
+    "yourChoice": "Seçiminiz",
+    "replyPlaceholder": {
+      "refine": "Seçiminizi hassaslaştırın…",
+      "choose": "Bu seçeneği seçin / yönlendirin…"
+    },
+    "saveChoice": "Seçimi kaydet",
+    "dismiss": "Yok say",
+    "reopen": "Yeniden aç",
+    "docDraft": "{doc} (taslak)",
+    "rail": {
+      "options": "Seçenekler",
+      "open": "Açık",
+      "chosen": "Seçilen",
+      "model": "Model"
+    },
+    "proceedNothing": "Devam et (dahil edilecek bir şey yok)",
+    "incorporateChoices": "Seçimleri dahil et",
+    "hint": {
+      "allDismissed": "Tüm seçenekler yok sayıldı; yönsüz olarak bir sonraki aşamaya geçin.",
+      "incorporate": "Seçimlerinizi tek bir {doc} içine katlar, ardından beyin fırtınasını otomatik olarak yeniden çalıştırır.",
+      "chooseAll": "Devam etmek için her seçeneği seçin ya da yok sayın."
+    },
+    "reRunning": "Yeniden çalıştırılıyor…",
+    "reRun": "İyi görünüyor — yeniden çalıştır",
+    "redoIncorporation": "Dahil etmeyi yeniden yap",
+    "redoPlaceholder": "Yön ne farklı yapmalı?",
+    "redoWithDirection": "Bu yönle yeniden yap",
+    "mergedHint": "Yeniden çalıştırma, ajanı bu yöne karşı çalıştırır. Birleştirilme şeklinden memnun değilseniz, bunun yerine bir yorumla yeniden yapın.",
+    "incorporatedFooter": "Yön kesinleşti — hat soldaki belgeyle devam ediyor.",
+    "toast": {
+      "saveChoiceError": "Seçim kaydedilemedi",
+      "updateOptionError": "Seçenek güncellenemedi",
+      "incorporateError": "Seçimler dahil edilemedi",
+      "draftingTitle": "{doc} arka planda hazırlanıyor",
+      "draftingDescription": "Panoya geri döndünüz; yalnızca daha fazla girdi gerekirse sizi bilgilendiririz.",
+      "reReviewSettled": "Yön kesinleşti — hat devam ediyor",
+      "reReviewExceeded": "Yineleme sınırına ulaşıldı — nasıl devam edileceğini seçin",
+      "reReviewNewOptions": "tepki verilecek yeni seçenek yok | tepki verilecek bir yeni seçenek | tepki verilecek {count} yeni seçenek",
+      "reReviewError": "Beyin fırtınası yeniden çalıştırılamadı",
+      "proceeding": "Bir sonraki aşamaya geçiliyor",
+      "proceedError": "Devam edilemedi",
+      "taskReset": "Görev sıfırlandı — düzenleyip yeniden gönderin",
+      "extraRoundGranted": "Bir beyin fırtınası turu daha verildi",
+      "resolveError": "Beyin fırtınası çözülemedi"
+    }
+  },
+  "spec": {
+    "title": "Gereksinimler",
+    "loading": "Belirtim yükleniyor…",
+    "error": "Belirtim yüklenemedi. Bu pencereyi yeniden açmayı deneyin.",
+    "overview": "Genel bakış",
+    "noFeatureGroups": "Özellik grubu yok",
+    "noSummary": "Servis özeti yok.",
+    "noGherkinForGroup": "Bu grup için Gherkin senaryosu yok.",
+    "noRequirements": "Bu grupta gereksinim yok.",
+    "domainRules": "Alan kuralları",
+    "ruleRationale": " — {rationale}",
+    "moduleHint": "modül yok. Gereksinimlerini görüntülemek için soldaki bir özellik grubunu seçin. | 1 modül. Gereksinimlerini görüntülemek için soldaki bir özellik grubunu seçin. | {count} modül. Gereksinimlerini görüntülemek için soldaki bir özellik grubunu seçin.",
+    "moduleHintGherkin": "modül yok. Gereksinimlerini görüntülemek için soldaki bir özellik grubunu seçin ya da Gherkin senaryolarına geçin. | 1 modül. Gereksinimlerini görüntülemek için soldaki bir özellik grubunu seçin ya da Gherkin senaryolarına geçin. | {count} modül. Gereksinimlerini görüntülemek için soldaki bir özellik grubunu seçin ya da Gherkin senaryolarına geçin.",
+    "mode": {
+      "structured": "Yapılandırılmış",
+      "gherkin": "Gherkin",
+      "gherkinTooltip": "Gherkin senaryoları",
+      "gherkinNone": "main üzerinde henüz senaryo yok"
+    },
+    "empty": {
+      "title": "Henüz belirtim yok",
+      "description": "Bu servisin varsayılan dalında belirtim yok. Görevler hatlarını çalıştırdıkça bir belirtim oluşturulur; main üzerine geldiğinde Gherkin senaryolarıyla birlikte burada görünür."
+    },
+    "priority": {
+      "must": "Olmalı",
+      "should": "Yapılmalı",
+      "could": "Olabilir"
+    },
+    "kind": {
+      "functional": "İşlevsel",
+      "nonfunctional": "İşlevsel olmayan",
+      "constraint": "Kısıt"
+    },
+    "acceptance": {
+      "given": "Given",
+      "when": "When",
+      "then": "Then"
+    }
+  },
+  "followUp": {
+    "title": "Takipler",
+    "titleWithBlock": "Takipler — {title}",
+    "subtitle": "Coder'ın ortaya çıkardığı ileriye dönük takipler ve sorular. Her madde karara bağlandığında hat devam eder.",
+    "badge": {
+      "toDecide": "{count} karara bağlanacak | {count} karara bağlanacak | {count} karara bağlanacak",
+      "allDecided": "Tümü karara bağlandı"
+    },
+    "empty": {
+      "title": "Henüz takip yok.",
+      "hint": "Coder çalışırken açık uçları, yan görevleri ve soruları buraya akıtır. Bunlar canlı olarak görünür; böylece Coder daha bitirmeden bunlara göre harekete geçebilirsiniz."
+    },
+    "suggested": "Önerilen:",
+    "viewIssue": "Sorunu görüntüle",
+    "yourAnswer": "Cevabınız:",
+    "answerPlaceholder": "Bu soruyu cevaplayın — Coder'ın bir sonraki turuna dahil edilir…",
+    "status": {
+      "pending": "Karar gerekiyor",
+      "filed": "Sorun olarak kaydedildi",
+      "queued": "Coder'a gönderildi",
+      "answered": "Cevaplandı",
+      "dismissed": "Reddedildi"
+    },
+    "actions": {
+      "answerAndSend": "Cevapla ve geri gönder",
+      "dismiss": "Reddet",
+      "fileAsIssue": "Sorun olarak kaydet",
+      "sendToCoder": "Coder'a gönder"
+    },
+    "footer": {
+      "summary": "{count} öğe · {undecided} kararsız | {count} öğe · {undecided} kararsız",
+      "loops": "Kullanılan Coder turları: {loops} / {max}"
+    }
+  },
+  "humanTest": {
+    "title": "İnsan testi",
+    "titleWithBlock": "İnsan testi — {title}",
+    "subtitle": "Değişikliği canlı bir ortamda doğrulayın",
+    "notStarted": "Bu adım henüz başlamadı.",
+    "confirm": "İyi görünüyor — devam et",
+    "phase": {
+      "provisioning": "Ortam hazırlanıyor…",
+      "awaitingHuman": "Doğrulamanız bekleniyor",
+      "fixing": "Fixer bulgularınızı ele alıyor…",
+      "resolvingConflicts": "main ile çakışmalar çözülüyor…",
+      "passed": "Geçti"
+    },
+    "envStatus": {
+      "provisioning": "Hazırlanıyor…",
+      "ready": "Hazır",
+      "failed": "Başarısız",
+      "expired": "Süresi doldu",
+      "tearingDown": "Kaldırılıyor…",
+      "tornDown": "Yok edildi"
+    },
+    "environment": {
+      "heading": "Geçici ortam",
+      "noUrl": "Henüz URL yok.",
+      "expires": "Sona erme: {date}",
+      "none": "Canlı ortam yok."
+    },
+    "actions": {
+      "recreate": "Yeniden oluştur",
+      "destroy": "Yok et",
+      "pullMain": "main'i çek + yeniden dağıt"
+    },
+    "fix": {
+      "heading": "Bir sorun mu buldunuz?",
+      "cancel": "İptal",
+      "requestFix": "Düzeltme iste",
+      "placeholder": "Neyin yanlış gittiğini açıklayın — Fixer ajanı bunu bağlam olarak alır, ardından ortam yeniden test için yeniden oluşturulur.",
+      "send": "Fixer'a gönder"
+    },
+    "history": {
+      "heading": "Geçmiş (tur yok) | Geçmiş (bir tur) | Geçmiş ({count} tur)",
+      "fixRequested": "Düzeltme istendi",
+      "pulledMain": "main çekildi"
+    },
+    "roundOutcome": {
+      "completed": "tamamlandı",
+      "failed": "başarısız",
+      "inProgress": "devam ediyor"
+    }
+  },
+  "testing": {
+    "title": "Test raporu",
+    "subtitle": "Değişikliğin keşif ve regresyon testi",
+    "badge": {
+      "greenlit": "Onaylandı",
+      "needsFixes": "Düzeltme gerekiyor"
+    },
+    "fixerAttempts": "Fixer denemeleri",
+    "fixCount": "{attempts}/{max} düzeltme",
+    "fixingSuffix": "· düzeltiliyor…",
+    "fixerTimeline": {
+      "attempt": "Deneme {n}",
+      "completed": "Tamamlandı",
+      "failed": "Başarısız",
+      "addressed": "Ele alınıyor"
+    },
+    "empty": {
+      "title": "Henüz test raporu yok.",
+      "hint": "Rapor, Tester bir turu bitirdiğinde görünür. Çalışırken adım, tahtada canlı ilerlemeyi gösterir."
+    },
+    "scenariosOutcomes": "Senaryolar ve sonuçlar",
+    "otherChecks": "Diğer kontroller",
+    "checks": "Kontroller",
+    "screenshotCount": "{count} ekran görüntüsü | {count} ekran görüntüsü",
+    "checkCount": "{count} kontrol | {count} kontrol",
+    "concernCount": "{count} endişe | {count} endişe",
+    "noDiscreteCheck": "Bu senaryo için ayrı bir kontrol kaydedilmedi.",
+    "severity": {
+      "critical": "kritik",
+      "high": "yüksek",
+      "medium": "orta",
+      "low": "düşük"
+    },
+    "status": {
+      "passed": "Geçti",
+      "failed": "Başarısız",
+      "skipped": "Atlandı"
+    },
+    "shot": {
+      "failed": "Başarısız",
+      "failedToLoad": "Yüklenemedi",
+      "loading": "Yükleniyor…"
+    },
+    "screenshotAlt": "{view} (ekran görüntüsü)",
+    "screenshots": "Ekran görüntüleri",
+    "verdict": {
+      "heading": "Karar",
+      "safe": "Yayınlanması güvenli",
+      "withheld": "Onaylanmadı"
+    },
+    "outcomes": {
+      "heading": "Sonuçlar",
+      "passed": "Geçti",
+      "failed": "Başarısız",
+      "skipped": "Atlandı",
+      "concerns": "Endişeler",
+      "blocking": "({count} engelleyici) | ({count} engelleyici)"
+    },
+    "environment": "Ortam",
+    "infrastructure": "Altyapı",
+    "standup": {
+      "up": "Bağımlılıklar başlatıldı",
+      "failed": "Bağımlılıklar başlatılamadı",
+      "took": "{seconds}sn sürdü",
+      "showLogs": "Başlatma günlüklerini göster",
+      "hideLogs": "Başlatma günlüklerini gizle"
+    },
+    "footer": "Senaryolar, Tester'ın test etmek için seçtiği alanlardır (spesifikasyon kabul senaryoları). Sonuçlar ve endişeler ada göre bunların altında gruplanır."
+  },
+  "visualConfirm": {
+    "ariaLabel": "Görsel doğrulama",
+    "title": "Görsel doğrulama",
+    "titleWithBlock": "Görsel doğrulama — {title}",
+    "subtitle": "Arayüzü referans tasarımlarla karşılaştırarak inceleyin",
+    "notStarted": "Bu adım henüz başlamadı.",
+    "noScreenshots": "Hiç ekran görüntüsü yakalanmadı. Değişikliği manuel olarak inceleyin veya aşağıya bir referans yükleyin.",
+    "noteIssue": "{view} ile ilgili bir sorun belirtin",
+    "noted": "belirtildi",
+    "notePlaceholder": "{view} üzerinde ne yanlış görünüyor?",
+    "reviewedManually": "Bunu manuel olarak inceledim",
+    "recapture": "Yeniden yakala",
+    "approve": "Onayla — devam et",
+    "phase": {
+      "awaiting_human": "İncelemeniz bekleniyor",
+      "fixing": "Düzeltici bulgularınızı ele alıyor…",
+      "approved": "Onaylandı"
+    },
+    "outcome": {
+      "completed": "tamamlandı",
+      "failed": "başarısız",
+      "inProgress": "devam ediyor"
+    },
+    "lightbox": {
+      "actualLabel": "{view} — gerçek",
+      "actualAlt": "{view} (gerçek)",
+      "referenceLabel": "{view} — referans",
+      "referenceAlt": "{view} (referans)"
+    },
+    "upload": {
+      "heading": "Referans tasarım yükle",
+      "viewPlaceholder": "Görünüm adı (örn. login)",
+      "tipReady": "İpucu: referansını ayarlamak için bir görseli doğrudan yukarıdaki bir çiftin üzerine bırakın.",
+      "tipNeedView": "Önce bir görünüm adı girin, ardından bir dosya seçin. Veya bir görseli doğrudan yukarıdaki bir çiftin üzerine bırakın."
+    },
+    "requestFix": {
+      "heading": "Düzeltme iste",
+      "placeholder": "Düzelticinin bilmesi gereken başka bir şey (yukarıdaki görünüm bazlı notlara ek olarak).",
+      "foldedHint": "Görünüm bazlı notlar otomatik olarak dahil edilir.",
+      "send": "Düzelticiye gönder"
+    },
+    "history": {
+      "heading": "Geçmiş (tur yok) | Geçmiş ({count} tur) | Geçmiş ({count} tur)",
+      "fixRequested": "Düzeltme istendi"
+    }
+  },
+  "focus": {
+    "board": "Pano",
+    "typeSubtitle": "{type} · odak görünümü",
+    "runPipeline": "Pipeline çalıştır",
+    "rerunPipeline": "Pipeline'ı yeniden çalıştır",
+    "noPipelineRunning": "Çalışan pipeline yok",
+    "emptyPipelineHint": "Bu blok üzerinde çalışan ajanları görselleştirmek için bir pipeline çalıştırın.",
+    "description": "Açıklama",
+    "overallProgress": "Genel ilerleme",
+    "dependencies": "Bağımlılıklar",
+    "noDependencies": "Yok"
+  },
+  "environments": {
+    "title": "Geçici ortam",
+    "status": {
+      "provisioning": "Başlatılıyor…",
+      "ready": "Çalışıyor",
+      "failed": "Hata verdi",
+      "expired": "Süresi doldu",
+      "tearing_down": "Kapatılıyor…",
+      "torn_down": "Kapatıldı"
+    },
+    "expires": "Süre bitişi {date}",
+    "empty": "Bu çalışma için geçici ortam yok."
+  },
+  "provisioning": {
+    "title": "Sağlama günlükleri",
+    "refresh": "Yenile",
+    "empty": "Henüz kaydedilmiş sağlama denemesi yok.",
+    "operation": {
+      "provision": "Başlat",
+      "teardown": "Kapat",
+      "status": "Durum kontrolü",
+      "dispatch": "Başlat",
+      "release": "Kapat",
+      "poll-failure": "Sağlık kontrolü"
+    },
+    "outcome": {
+      "success": "başarılı",
+      "failure": "başarısız"
+    }
+  },
+  "kaizen": {
+    "title": "Kaizen",
+    "subtitle": "Ajan çalışmalarının sürekli iyileştirme değerlendirmesi",
+    "refresh": "Yenile",
+    "notConfigured": "Kaizen bu dağıtımda yapılandırılmamış.",
+    "grading": {
+      "title": "Kaizen değerlendirmesi"
+    },
+    "status": {
+      "scheduled": "Zamanlandı",
+      "grading": "Değerlendiriliyor…",
+      "failed": "Başarısız",
+      "graded": "Değerlendirildi"
+    },
+    "gradeValue": "{grade}/5",
+    "scheduledHint": "Bu adım için bir Kaizen değerlendirmesi kuyruğa alındı. Çalışmadan sonra arka planda yürütülür.",
+    "recommendations": "Öneriler",
+    "noImprovements": "Sorunsuz etkileşim, iyileştirilecek bir şey yok.",
+    "gradedBy": "{model} tarafından değerlendirildi",
+    "failedFallback": "Değerlendirme tamamlanamadı.",
+    "promptVersion": "v{version}",
+    "verifiedCombos": {
+      "title": "Doğrulanmış kombinasyonlar",
+      "count": "({count})",
+      "hint": "Üst üste beş kez öneri olmadan 4 veya 5 alan bir prompt + ajan + model kombinasyonu. Bunlar artık değerlendirilmez.",
+      "empty": "Henüz kombinasyon yok.",
+      "progress": "{count}/5",
+      "modelPrompt": "{model} · prompt v{version}"
+    },
+    "history": {
+      "title": "Değerlendirme geçmişi",
+      "col": {
+        "when": "Ne zaman",
+        "agent": "Ajan",
+        "model": "Model",
+        "grade": "Not",
+        "recommendations": "Öneriler"
+      },
+      "empty": "Henüz değerlendirme yok."
+    }
+  },
+  "recurring": {
+    "runEvery": "Çalıştırma sıklığı",
+    "hours": "saat",
+    "allowedDays": "İzin verilen günler",
+    "allowedDaysHelp": "Herhangi bir günde çalıştırmak için tümünü kapalı bırakın.",
+    "weekday": {
+      "sun": "Paz",
+      "mon": "Pzt",
+      "tue": "Sal",
+      "wed": "Çar",
+      "thu": "Per",
+      "fri": "Cum",
+      "sat": "Cmt"
+    },
+    "windowToggle": "Yalnızca günün belirli bir saat aralığında (örn. mesai saatleri)",
+    "to": "-",
+    "timezone": "Saat dilimi"
+  },
+  "media": {
+    "compare": {
+      "mode": {
+        "sideBySide": "Yan yana",
+        "overlay": "Üst üste",
+        "swipe": "Kaydır",
+        "diff": "Fark"
+      },
+      "actual": "Gerçek",
+      "reference": "Referans",
+      "actualAlt": "{view} (gerçek)",
+      "referenceAlt": "{view} (referans)",
+      "replace": "Değiştir",
+      "failedToLoad": "Yüklenemedi",
+      "loading": "Yükleniyor…",
+      "notCaptured": "Yakalanmadı",
+      "dropHint": "Referans eklemek için bırakın veya tıklayın",
+      "diffHint": "Aynı pikseller siyah görünür; farklılıklar parlar."
+    },
+    "lightbox": {
+      "ariaLabel": "Ekran görüntüsü: {label}",
+      "ariaLabelFallback": "Ekran görüntüsü görüntüleyici",
+      "fallbackTitle": "Ekran görüntüsü",
+      "counter": "{current} / {total}",
+      "zoomOut": "Uzaklaştır (-)",
+      "zoomIn": "Yakınlaştır (+)",
+      "reset": "Sıfırla (0)",
+      "close": "Kapat (Esc)",
+      "prev": "Önceki (←)",
+      "next": "Sonraki (→)",
+      "failed": "Görsel yüklenemedi.",
+      "loading": "Yükleniyor…"
+    }
+  },
+  "fragments": {
+    "panel": {
+      "title": "Prompt parçası kütüphanesi"
+    },
+    "intro": {
+      "workspace": "Aracıların bu panoda izlediği en iyi uygulama yönergelerini düzenleyin. Parçalar yerleşik katalog, hesabınız ve bu panodan birleştirilir (sonraki katmanlar öncekileri geçersiz kılar), ardından her aracı çalıştırması için ilgili olanlar seçilir.",
+      "account": "Bu hesaptaki her panonun paylaştığı en iyi uygulama yönergelerini düzenleyin. Hesap parçaları yerleşik kataloğun altında birleştirilir ve bir pano bunların üzerine kendi parçalarını ekleyebilir veya geçersiz kılabilir. Her aracı çalıştırması için ilgili olanlar seçilir."
+    },
+    "owner": {
+      "workspace": "Bu pano",
+      "account": "Bu hesap"
+    },
+    "tier": {
+      "builtin": "Yerleşik",
+      "account": "Hesap",
+      "workspace": "Bu pano"
+    },
+    "tab": {
+      "catalog": "Çözümlenmiş katalog",
+      "documents": "Belgeler",
+      "sources": "Repo kaynakları"
+    },
+    "catalog": {
+      "summary": "{count} parça çözümlendi · {builtin} yerleşik. | {count} parça çözümlendi · {builtin} yerleşik.",
+      "live": "Canlı · {source}"
+    },
+    "authored": {
+      "fromRepo": "repodan",
+      "empty": {
+        "workspace": "Henüz panoya özel parça yok. Aşağıdan bir tane ekleyin veya kimliğini kullanarak bir yerleşik parçayı geçersiz kılın.",
+        "account": "Henüz hesaba özel parça yok. Aşağıdan bir tane ekleyin veya kimliğini kullanarak bir yerleşik parçayı geçersiz kılın."
+      },
+      "addTitle": "Parça ekle",
+      "titlePlaceholder": "Başlık",
+      "summaryPlaceholder": "Tek satırlık özet (seçici tarafından kullanılır)",
+      "bodyPlaceholder": "Yönerge gövdesi (prompt'a enjekte edilir)",
+      "tagsPlaceholder": "Etiketler, virgülle ayrılmış (örn. backend, db)",
+      "add": "Parça ekle"
+    },
+    "documents": {
+      "intro": "Bir Confluence/Notion sayfasını veya GitHub dosyasını en iyi uygulama parçası olarak bağlayın. Yönergesi, çalıştırma sırasında kaynaktan yeniden çözümlenir: belgeyi düzenleyin ve sonraki aracı çalıştırması yeni sürümü izlesin (yeniden içe aktarma yok).",
+      "lastResolved": "son çözümlenme {date}",
+      "refreshTitle": "Kaynaktan şimdi yeniden çözümle",
+      "empty": "Henüz belge destekli parça yok. Aşağıdan bir tane bağlayın.",
+      "linkTitle": "Bir belge bağla",
+      "disabledHint": "Önce bağlı bir belge kaynağı olan bir pano oluşturun; hesap düzeyindeki belge parçaları bu hesabın panolarından biri üzerinden getirilir.",
+      "connectFirst": "Önce Entegrasyonlar altında bir belge kaynağı (Confluence, Notion veya GitHub) bağlayın.",
+      "refPlaceholder": "Sayfa kimliği veya URL (örn. bir Confluence/Notion sayfası veya GitHub dosya URL'si)",
+      "tagsPlaceholder": "Etiketler, virgülle ayrılmış (isteğe bağlı)",
+      "link": "Canlı parça olarak bağla"
+    },
+    "sources": {
+      "metaSynced": "eşitlendi · ref {ref}",
+      "metaNever": "hiç eşitlenmedi · ref {ref}",
+      "changes": "{count} değişiklik | {count} değişiklik",
+      "empty": "Bağlı yönerge reposu yok. Markdown dosyalarını parça olarak içe aktarmak için aşağıdan bir tane bağlayın.",
+      "linkTitle": "Bir yönerge reposu bağla",
+      "ownerPlaceholder": "sahip",
+      "repoPlaceholder": "repo",
+      "dirPlaceholder": "dizin yolu (örn. guidelines)",
+      "refPlaceholder": "ref (varsayılan HEAD)",
+      "link": "Bağla ve eşitle"
+    },
+    "toast": {
+      "added": "Parça eklendi",
+      "addFailed": "Parça eklenemedi",
+      "removed": "Parça kaldırıldı",
+      "removeFailed": "Parça kaldırılamadı",
+      "documentLinked": "Belge canlı parça olarak bağlandı",
+      "linkDocumentFailed": "Belge bağlanamadı",
+      "refreshed": "Parça kaynaktan yeniden çözümlendi",
+      "refreshFailed": "Parça yenilenemedi",
+      "sourceLinked": "Kaynak bağlandı ve eşitlendi",
+      "linkSourceFailed": "Kaynak bağlanamadı",
+      "synced": "Eşitlendi: {updated} güncellendi, {removed} kaldırıldı",
+      "syncFailed": "Kaynak eşitlenemedi",
+      "changesAvailable": "{count} değişiklik mevcut | {count} değişiklik mevcut",
+      "upToDate": "Güncel",
+      "checkSourceFailed": "Kaynak denetlenemedi",
+      "sourceUnlinked": "Kaynak bağlantısı kaldırıldı",
+      "unlinkSourceFailed": "Kaynak bağlantısı kaldırılamadı"
+    }
+  },
+  "sandbox": {
+    "title": "Sandbox: prompt ve model testi",
+    "description": "Prompt sürümlerini ve modelleri notlandırılmış fixture'lara karşı deneyin, bir hakem modeli tarafından puanlanır.",
+    "unavailable": {
+      "title": "Sandbox bu dağıtım için etkin değil.",
+      "body": "Kendi veritabanına ihtiyaç duyar (Cloudflare'de özel bir {db} veya Node'da {schema} Postgres şeması). Sağlayın ve yeniden yükleyin."
+    },
+    "error": {
+      "title": "Sandbox yüklenemedi."
+    },
+    "deploymentDefault": "Dağıtım varsayılanı",
+    "defaultRunName": "{kind} sandbox çalıştırması",
+    "baseline": "temel",
+    "versionLabel": "v{version}",
+    "tab": {
+      "experiments": "Deneyler",
+      "prompts": "Prompt'lar",
+      "fixtures": "Fixture'lar"
+    },
+    "builder": {
+      "title": "Yeni deney",
+      "agent": "Aracı",
+      "promptVersions": "Prompt sürümleri",
+      "models": "Modeller",
+      "noModels": "Seçilebilir model yok. Bir sağlayıcı anahtarı yapılandırın veya Cloudflare AI'yı etkinleştirin.",
+      "fixtures": "Fixture'lar",
+      "noFixtures": "Bu aracı için fixture yok.",
+      "judgeModel": "Hakem modeli",
+      "judgeModelHint": "her hücreyi notlandırır",
+      "nameLabel": "Ad (isteğe bağlı)",
+      "cellCount": "{count} hücre | {count} hücre",
+      "maxCells": "(en fazla {max})",
+      "run": "Çalıştır"
+    },
+    "experimentStatus": {
+      "draft": "taslak",
+      "running": "çalışıyor",
+      "done": "tamamlandı",
+      "failed": "başarısız"
+    },
+    "results": {
+      "col": {
+        "prompt": "Prompt",
+        "model": "Model",
+        "fixture": "Fixture",
+        "score": "Puan",
+        "objective": "Hedef"
+      },
+      "failed": "başarısız",
+      "past": "Geçmiş deneyler",
+      "empty": "Henüz deney yok."
+    },
+    "prompts": {
+      "forkTitle": "Bir adaya çatalla",
+      "editTitle": "Düzenle / sürümle",
+      "forkOf": "Çatal · {name}",
+      "newVersionOf": "Yeni sürüm · {name}",
+      "saveVersion": "Yeni sürüm kaydet",
+      "hint": "Sevk edilmiş bir temeli çatallamak veya bir adayı sürümlemek için bir prompt seçin. Her kaydetme, teste sokabileceğiniz değiştirilemez bir sürüm ekler."
+    },
+    "fixtureKind": {
+      "requirements": "gereksinimler",
+      "clarity": "netlik",
+      "architecture": "mimari",
+      "code-review": "kod incelemesi",
+      "repo-feature": "depo özelliği",
+      "repo-bug": "depo hatası"
+    },
+    "fixtureOrigin": {
+      "builtin": "yerleşik",
+      "custom": "özel"
+    },
+    "fixtures": {
+      "expectations": "{count} notlanmış beklenti | {count} notlanmış beklenti",
+      "empty": "Fikstür yok."
+    },
+    "toast": {
+      "running": "Deney çalıştırılıyor…",
+      "complete": "Deney tamamlandı",
+      "runFailed": "Deney çalıştırılamadı",
+      "versionSaved": "Yeni bir sürüm kaydedildi",
+      "saveFailed": "Sürüm kaydedilemedi",
+      "archiveFailed": "Arşivlenemedi"
+    }
+  },
+  "bootstrap": {
+    "title": "Bir depo başlat",
+    "repoName": {
+      "error": {
+        "hasSlash": "Yalnızca depo adını girin, 'owner/' önekini eklemeyin.",
+        "invalidChars": "Yalnızca harfler, rakamlar, '.', '_' ve '-' karakterlerine izin verilir.",
+        "tooLong": "En fazla 100 karakter olmalıdır."
+      }
+    },
+    "intro": {
+      "canCreate": "Boş bir GitHub deposu oluşturun, ardından bir başlatıcı ajanının bir sandbox konteynerinde, referans mimarilerinizden birini uyarlayarak veya serbest biçimli bir komut izleyerek sıfırdan doldurmasına izin verin. cat-factory ilk commit'i o depoya gönderir; bu hesap için depoyu sizin yerinize de oluşturabilir.",
+      "manual": "Boş bir GitHub deposu oluşturun, ardından bir başlatıcı ajanının bir sandbox konteynerinde, referans mimarilerinizden birini uyarlayarak veya serbest biçimli bir komut izleyerek sıfırdan doldurmasına izin verin. cat-factory ilk commit'i o depoya gönderir; depoyu siz oluşturursunuz (aşağıdan tek tıkla), bu yüzden depo oluşturma izni gerektirmez."
+    },
+    "github": {
+      "prompt": "Başlatmadan önce bu çalışma alanını GitHub'a bağlayın; bir çalıştırma bir depoya gönderim yapar. App'in zaten kurulu olduğu bir kurulumu bağlayın veya kurun."
+    },
+    "section": {
+      "newRepo": "Yeni depo"
+    },
+    "mode": {
+      "label": "Nasıl başlamalıyız?",
+      "reference": {
+        "label": "Bir referans mimariden",
+        "description": "Yönetilen bir temel depoyu klonlayın ve yeni hizmete uyarlayın."
+      },
+      "scratch": {
+        "label": "Sıfırdan",
+        "description": "Serbest biçimli bir komuttan tamamen yeni bir depo iskeleti oluşturun, temele gerek yok."
+      }
+    },
+    "reference": {
+      "label": "Referans mimari",
+      "description": "Klonlanacak ve uyarlanacak yönetilen temel depo.",
+      "empty": "Henüz referans mimari yok. Aşağıdan bir tane ekleyin veya 'Sıfırdan' seçeneğine geçin.",
+      "placeholder": "Bir referans mimari seçin"
+    },
+    "targetRepo": {
+      "label": "Hedef depo adı",
+      "descWithOwner": "{owner} altında bu adla yeni bir depo oluşturun, ardından başlatma ona gönderim yapar. Önceden doldurulmuş bir README, .gitignore veya lisans sorun değildir.",
+      "descNoOwner": "Bu adla yeni bir depo oluşturun, ardından başlatma ona gönderim yapar. Önceden doldurulmuş bir README, .gitignore veya lisans sorun değildir."
+    },
+    "createRepo": {
+      "now": "Depo oluştur",
+      "onGitHub": "GitHub'da oluştur",
+      "titleNow": "Depoyu şimdi oluştur",
+      "titleGitHub": "GitHub'ın yeni depo sayfasını önceden doldurulmuş olarak açın"
+    },
+    "grantAccess": {
+      "label": "App'e bu depoya erişim verin",
+      "title": "App'in kurulum ayarlarını açarak yeni depoya erişim verin"
+    },
+    "description": {
+      "label": "Açıklama",
+      "help": "Depo için isteğe bağlı tek satırlık özet."
+    },
+    "instructions": {
+      "labelReference": "Başlatıcı için ek talimatlar",
+      "labelScratch": "Başlatıcı ne inşa etmeli?",
+      "descReference": "İsteğe bağlı, referans mimarinin varsayılan talimatlarına eklenir.",
+      "descScratch": "Yeni hizmeti tanımlayın: yığın, yapı ve ne yapması gerektiği."
+    },
+    "visibility": {
+      "label": "Görünürlük",
+      "private": "Özel depo"
+    },
+    "launch": "Depoyu başlat",
+    "recent": {
+      "title": "Son çalıştırmalar",
+      "fromArch": "{name} kaynağından",
+      "fromScratch": "sıfırdan",
+      "open": "Aç"
+    },
+    "status": {
+      "pending": "beklemede",
+      "running": "çalışıyor",
+      "succeeded": "başarılı",
+      "failed": "başarısız"
+    },
+    "arch": {
+      "title": "Referans mimariler",
+      "add": "Ekle",
+      "pickRepo": {
+        "label": "Mevcut bir GitHub deposu seçin",
+        "description": "Sahip ve adını doldurmak için erişebileceğiniz bir depo seçin veya aşağıdan bunları elle girin."
+      },
+      "name": {
+        "label": "Ad",
+        "description": "Bu temel için kullanışlı bir etiket."
+      },
+      "repoOwner": "Depo sahibi",
+      "repoName": "Depo adı",
+      "descriptionPlaceholder": "Bu temelin isteğe bağlı özeti",
+      "defaultInstructions": {
+        "label": "Varsayılan başlatıcı talimatları",
+        "description": "Bu temel her kullanıldığında çalıştırma başına talimatların önüne eklenir."
+      }
+    },
+    "toast": {
+      "repoCreated": "Depo oluşturuldu",
+      "repoCreateFailed": "Depo oluşturulamadı",
+      "failed": "Başlatma başarısız oldu",
+      "failedFallback": "Başlatıcı bir başarısızlık bildirdi.",
+      "started": "Başlatma başladı",
+      "startedDesc": "Bir konteyner {repo} deposunu başlatıyor; ilerlemesini panoda izleyin.",
+      "bootstrapFailed": "Başlatılamadı",
+      "saveArchFailed": "Referans mimari kaydedilemedi",
+      "deleteFailed": "Silinemedi"
+    }
+  }
+}
