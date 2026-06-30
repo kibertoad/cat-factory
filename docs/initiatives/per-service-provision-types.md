@@ -473,6 +473,6 @@ LoadBalancer` ⇒ `serviceStatus`); the namespace decision (a pinned `namespace:
 | 8   | Phase 2: `KubernetesEnvironmentProvider` render path (`buildProvisionJob`/`finalizeProvision`; keep native REST) + Gateway-API URL resolvers                                                                                      | done   | —    |
 | 9   | Phase 2: async deployer lifecycle (`startProvision`/`pollProvisionJob`/`finalizeProvision`; `runDeployerStep` park/poll + eviction re-dispatch; `deployJobClient`/`resolveDeployCloneTarget` deps) — folds into slice 3           | done   | —    |
 | 10  | Phase 2: facade wiring + local `NativeCliDeployTransport` (`LOCAL_DEPLOY_RUNTIME`); deploy-dispatch + finalize conformance; image-tag bump                                                                                        | todo   | —    |
-| 11  | Phase 2: auto-detect a recommended `kubernetes` config from the repo (renderer / URL source / namespace / secret `.env` keys / image overrides high-confidence; overlay choice + helm as candidates) — non-binding, user confirms | done   | —    |
+| 11  | Phase 2: auto-detect a recommended `kubernetes` config from the repo (renderer / URL source / namespace / secret `.env` keys / image overrides high-confidence; overlay choice + helm as candidates) — non-binding, user confirms | done   | #543 |
 
 Update the row (status + PR link) at the end of each slice.
