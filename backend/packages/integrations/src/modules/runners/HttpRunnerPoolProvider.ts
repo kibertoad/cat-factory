@@ -127,7 +127,11 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
    *                         the transport stamped on for a self-provisioning pool
    *                         (present only when the service pins a size/provider), so a
    *                         manifest can map them to a node selector / resource request
-   *                         / queue without decoding `{{input.job}}`.
+   *                         / queue without decoding `{{input.job}}`;
+   *   - `{{input.image}}` — the image variant the dispatch needs (`ui` | `deploy`,
+   *                         present only when stamped on), so a manifest can pull the
+   *                         heavier Playwright image or the deploy-harness image
+   *                         (kubectl/kustomize/helm) instead of the default executor.
    * Reuses the environments interpolation machinery; the second (`provision`)
    * namespace is unused by runner manifests.
    */

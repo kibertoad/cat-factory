@@ -416,14 +416,15 @@ locally, the host CLIs). The raw-manifest REST path is unchanged.
   GitLab-aware `resolveRepoOrigin`).
 - **Shared** (`@cat-factory/server`): exports `makeResolveDeployCloneTarget` (compose a clone-target
   resolver from a repo-target walk + token mint, with an optional per-facade clone-URL override).
-  Fixed a latent bug in `RunDispatcher.completeDeployerStep`: the async deploy SUCCESS path now
-  re-attaches the step's environment projection, so a finalized env shows `ready` + its URL instead of
-  the stale `provisioning` snapshot stamped at park time (the failure path already re-attached).
-- **Conformance**: a new shared assertion drives the full container render path on both runtimes —
+- **Conformance**: a new shared assertion drives the engine's async render path on every runtime —
   inject a fake provider with `asyncProvision` + a fake `deployJobClient` + `resolveDeployCloneTarget`,
-  run a `deployer` pipeline, and assert the engine dispatched a `deploy`-kind job carrying the
-  `image: 'deploy'` variant AND the stubbed terminal view finalized to an identical
-  `ProvisionedEnvironment` (D1 ⇄ Postgres). Threaded through all three facade harnesses' overrides.
+  run a `deployer` pipeline, and assert the engine forwarded the provider's `deploy` kind +
+  `image: 'deploy'` option through the wired client AND the stubbed terminal view finalized to an
+  identical `ProvisionedEnvironment` round-tripped through each facade's real registry repo
+  (D1 ⇄ Postgres). Since the fakes are injected as core overrides (spread last, winning over the real
+  facade wiring), this covers the runtime-neutral engine + column round-trip, NOT each facade's
+  transport selection (out of scope for this runtime-neutral suite; only local's selection has a
+  dedicated unit test today).
 - **No image-tag bump**: the deploy-harness payload (`src/**`/`Dockerfile`/`PI_*`) is untouched, so
   the `cat-factory-deploy:0.2.2` image from slice 7 is reused as-is.
 
@@ -477,7 +478,7 @@ LoadBalancer` ⇒ `serviceStatus`); the namespace decision (a pinned `namespace:
 | 2c  | Tester collapse: drop `defaultTestEnvironment`/`tester.environment`/`resolveTesterEnvironment`; gate on `infraless` OR a resolved handler (`provision_type_unhandled`)                                                                                                                                                                   | done   | —    |
 | 3   | `runDeployerStep` merge source+engine + record provisionType/engine; infraless no-op                                                                                                                                                                                                                                                     | done   | —    |
 | 4   | Controllers (per-type endpoints + custom-type CRUD + local-only per-user controller) + all three container wirings (describe/test/validate/bootstrap per-type params deferred to slice 5)                                                                                                                                                | done   | —    |
-| 5   | Frontend (service provisioning section; infra per-type/engine configurator + custom-type editor + local override; run-details surfacing; stores; i18n). Add-service auto-detect carried forward to slice 11                                                                                                                                | done   | —    |
+| 5   | Frontend (service provisioning section; infra per-type/engine configurator + custom-type editor + local override; run-details surfacing; stores; i18n). Add-service auto-detect carried forward to slice 11                                                                                                                              | done   | —    |
 | 6   | Phase 2: render contracts (`renderer`/`images`/`helmReleases`/`secretInjections`/gateway URL) + dispatch/port seam (`deploy` kind + `image`, `buildProvisionJob`/`finalizeProvision`); NO migration; conformance round-trip                                                                                                              | done   | —    |
 | 7   | Phase 2: `deploy-harness` package + image (kubectl/kustomize/helm; `deploy` KindEntry + `handleDeploy`; publish plumbing + tag). CF container class/binding deferred to slice 10 (needs the DO class)                                                                                                                                    | done   | —    |
 | 8   | Phase 2: `KubernetesEnvironmentProvider` render path (`buildProvisionJob`/`finalizeProvision`; keep native REST) + Gateway-API URL resolvers                                                                                                                                                                                             | done   | —    |

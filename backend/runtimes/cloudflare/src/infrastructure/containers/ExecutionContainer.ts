@@ -3,9 +3,9 @@ import type { StopParams } from '@cloudflare/containers'
 import type { Env } from '../env'
 
 /** DO-storage key recording when a new-version rollout last drained this container. */
-const ROLLED_OUT_AT_KEY = 'rolledOutAt'
+export const ROLLED_OUT_AT_KEY = 'rolledOutAt'
 /** How long after a rollout a 404 poll is still attributed to it (ms). */
-const ROLLOUT_ATTRIBUTION_WINDOW_MS = 120_000
+export const ROLLOUT_ATTRIBUTION_WINDOW_MS = 120_000
 
 /**
  * Whether a container error/stop is the runtime's *new-version rollout* signal — a

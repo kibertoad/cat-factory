@@ -3187,12 +3187,21 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
       it('drives the async container-backed deploy lifecycle to an identical environment on every facade', async () => {
         // Per-service provision types (Phase 2, slice 10): a `deployer` step whose provider needs
         // RENDERING (kustomize/helm) stands the env up in a deploy CONTAINER — dispatch a `deploy`
-        // job, park, poll, finalize — instead of the synchronous in-Worker REST path. This asserts
-        // the facade's slice-10 wiring end-to-end: the engine DISPATCHES a `deploy`-kind job (with
-        // the `image: 'deploy'` option) through the wired `deployJobClient`, and the stubbed
-        // terminal `RunnerJobView` settles to the SAME `ProvisionedEnvironment` on D1 and Postgres.
-        // A facade that wired the deploy client to the wrong kind/image — or mapped the finalized
-        // record's columns differently — diverges here instead of shipping silently.
+        // job, park, poll, finalize — instead of the synchronous in-Worker REST path.
+        //
+        // SCOPE: this injects a FAKE `deployJobClient` + `resolveDeployCloneTarget` as core
+        // overrides, which each facade harness spreads LAST — so they win over the real wiring
+        // (`selectDeployDeps` on the Worker, the pool-backed default on Node, `NativeCliDeployTransport`
+        // locally). It therefore does NOT exercise that per-facade transport selection (a
+        // wrong-namespace / wrong-image-tag wiring would not be caught here — that is out of this
+        // runtime-neutral suite's scope; only local's selection has a dedicated unit test today). What
+        // this asserts cross-runtime is two runtime-NEUTRAL things that must hold
+        // identically on D1 and Postgres: (1) the engine drives the async lifecycle and forwards the
+        // provider's `deploy` kind + `image: 'deploy'` option through whatever client is wired, and
+        // (2) the finalized `RunnerJobView` maps into an env record that round-trips through each
+        // facade's REAL registry repo (D1 ⇄ Drizzle) to the SAME `ProvisionedEnvironment`. A facade
+        // that mapped the finalized record's columns differently diverges here instead of shipping
+        // silently.
         const dispatched: { ref: RunnerJobRef; kind: string; image?: string }[] = []
         const doneView: RunnerJobView = {
           state: 'done',

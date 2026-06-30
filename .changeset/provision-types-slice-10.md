@@ -33,10 +33,10 @@ unchanged.
   it never collides with the run's agent container. The clone target is inherited from Node's default
   (PAT mint + GitLab-aware origin).
 - **Shared**: `@cat-factory/server` exports `makeResolveDeployCloneTarget` (compose a deploy clone
-  resolver from a repo-target walk + token mint, with a per-facade clone-URL override). A latent bug
-  is fixed in `RunDispatcher.completeDeployerStep`: the async deploy success path now refreshes the
-  step's environment projection, so a finalized env shows `ready` + its URL instead of the stale
-  `provisioning` snapshot stamped at park time.
-- **Conformance**: the cross-runtime suite drives the full container render path — dispatch a
-  `deploy` job (asserting the `image: 'deploy'` variant), poll a stubbed view, finalize — and asserts
-  it settles to an identical `ProvisionedEnvironment` on D1 and Postgres.
+  resolver from a repo-target walk + token mint, with a per-facade clone-URL override).
+- **Conformance**: the cross-runtime suite drives the engine's async render path on every facade —
+  it forwards the provider's `deploy` kind + `image: 'deploy'` option through the wired client, polls
+  a stubbed view, and finalizes — asserting the finalized record round-trips through each facade's
+  real registry repo to an identical `ProvisionedEnvironment` on D1 and Postgres. (The per-facade
+  transport selection is out of this runtime-neutral suite's scope; only local's selection has a
+  dedicated unit test today.)

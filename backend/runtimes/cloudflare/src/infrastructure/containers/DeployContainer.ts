@@ -1,12 +1,13 @@
 import { Container } from '@cloudflare/containers'
 import type { StopParams } from '@cloudflare/containers'
 import type { Env } from '../env'
-import { isRolloutSignal } from './ExecutionContainer'
-
-/** DO-storage key recording when a new-version rollout last drained this container. */
-const ROLLED_OUT_AT_KEY = 'rolledOutAt'
-/** How long after a rollout a 404 poll is still attributed to it (ms). */
-const ROLLOUT_ATTRIBUTION_WINDOW_MS = 120_000
+// Share the rollout-attribution machinery with ExecutionContainer so the storage key + window
+// can't drift between the two per-run container classes.
+import {
+  isRolloutSignal,
+  ROLLED_OUT_AT_KEY,
+  ROLLOUT_ATTRIBUTION_WINDOW_MS,
+} from './ExecutionContainer'
 
 // One DEPLOY container per run (addressed by the run id), mirroring {@link ExecutionContainer}
 // but pulling the SEPARATE deploy-harness image (slim base + real `kubectl`/`kustomize`/`helm`)
