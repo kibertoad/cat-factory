@@ -1,6 +1,7 @@
 import { defineEnvironmentHandlersSuite } from '@cat-factory/conformance'
 import { describe, it } from 'vitest'
 import { DrizzleCustomManifestTypeRepository } from '../src/repositories/customManifestType.js'
+import { DrizzleEnvironmentConnectionRepository } from '../src/repositories/environments.js'
 import { DrizzleEnvironmentUserHandlerRepository } from '../src/repositories/environmentUserHandler.js'
 import { setupTestDb } from './harness.js'
 
@@ -16,6 +17,7 @@ if (databaseUrl) {
   defineEnvironmentHandlersSuite('node', () => ({
     userHandlers: new DrizzleEnvironmentUserHandlerRepository(db),
     customTypes: new DrizzleCustomManifestTypeRepository(db),
+    connections: new DrizzleEnvironmentConnectionRepository(db),
   }))
 } else {
   describe.skip('[node] environment handlers (set DATABASE_URL to run)', () => {

@@ -282,7 +282,8 @@
         "no_pr_to_merge": "No PR to merge",
         "github_not_connected": "GitHub not connected",
         "bootstrap_not_retryable": "Bootstrap can’t be retried",
-        "bootstrap_reference_missing": "Reference architecture is gone"
+        "bootstrap_reference_missing": "Reference architecture is gone",
+        "provision_type_unhandled": "No handler for this provision type"
       },
       "fallbackMessage": "This action conflicts with the current state.",
       "providersUnconfigured": {

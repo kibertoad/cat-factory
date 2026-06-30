@@ -1,6 +1,8 @@
 import type {
   CustomManifestTypeRecord,
   CustomManifestTypeRepository,
+  EnvironmentConnectionRecord,
+  EnvironmentConnectionRepository,
   EnvironmentUserHandlerRecord,
   EnvironmentUserHandlerRepository,
 } from '@cat-factory/kernel'
@@ -47,6 +49,26 @@ function customType(
   }
 }
 
+function connection(
+  overrides: Partial<EnvironmentConnectionRecord> &
+    Pick<EnvironmentConnectionRecord, 'workspaceId' | 'provisionType'>,
+): EnvironmentConnectionRecord {
+  return {
+    manifestId: null,
+    engine: 'remote-custom',
+    backendKind: 'manifest',
+    providerId: 'prov',
+    label: 'Provider',
+    baseUrl: 'https://example.test',
+    handlerJson: JSON.stringify({ engine: 'remote-custom', manifest: {}, acceptsManifestId: 'x' }),
+    acceptsManifestId: null,
+    secretsCipher: 'cipher',
+    createdAt: 1,
+    deletedAt: null,
+    ...overrides,
+  }
+}
+
 /**
  * Assert a runtime's {@link EnvironmentUserHandlerRepository} +
  * {@link CustomManifestTypeRepository} behave identically to the others. The factories
@@ -58,6 +80,8 @@ export function defineEnvironmentHandlersSuite(
   makeRepos: () => {
     userHandlers: EnvironmentUserHandlerRepository
     customTypes: CustomManifestTypeRepository
+    /** The reshaped per-provision-type workspace connection/handler repo (slice 2b). */
+    connections: EnvironmentConnectionRepository
   },
 ): void {
   describe(`[${name}] per-service provision-type repository parity`, () => {
@@ -203,6 +227,73 @@ export function defineEnvironmentHandlersSuite(
 
       await customTypes.remove(ws, 'helm')
       expect((await customTypes.listByWorkspace(ws)).map((t) => t.manifestId)).toEqual(['tf'])
+    })
+
+    it('lists a workspace per-type handlers and reads one by type, scoped per workspace', async () => {
+      const { connections } = makeRepos()
+      const { ws } = ids()
+      const other = `${ws}-other`
+      await connections.upsert(
+        connection({ workspaceId: ws, provisionType: 'kubernetes', engine: 'remote-kubernetes' }),
+      )
+      await connections.upsert(
+        connection({ workspaceId: ws, provisionType: 'docker-compose', engine: 'local-docker' }),
+      )
+      await connections.upsert(connection({ workspaceId: other, provisionType: 'kubernetes' }))
+
+      const list = await connections.listByWorkspace(ws)
+      expect(list.map((h) => h.provisionType).sort()).toEqual(['docker-compose', 'kubernetes'])
+      expect((await connections.listByWorkspace(other)).map((h) => h.provisionType)).toEqual([
+        'kubernetes',
+      ])
+      const kube = await connections.getByWorkspaceAndType(ws, 'kubernetes', null)
+      expect(kube?.engine).toBe('remote-kubernetes')
+      // The '' ⇄ null manifestId sentinel round-trips.
+      expect(kube?.manifestId).toBeNull()
+    })
+
+    it('round-trips a custom handler keyed by manifestId, distinct from the bare type', async () => {
+      const { connections } = makeRepos()
+      const { ws } = ids()
+      await connections.upsert(
+        connection({
+          workspaceId: ws,
+          provisionType: 'custom',
+          manifestId: 'helm',
+          engine: 'remote-custom',
+          acceptsManifestId: 'helm',
+        }),
+      )
+      await connections.upsert(
+        connection({ workspaceId: ws, provisionType: 'custom', manifestId: 'terraform' }),
+      )
+      expect((await connections.listByWorkspace(ws)).length).toBe(2)
+      const helm = await connections.getByWorkspaceAndType(ws, 'custom', 'helm')
+      expect(helm?.acceptsManifestId).toBe('helm')
+      // A different manifestId is a different row.
+      expect(await connections.getByWorkspaceAndType(ws, 'custom', 'other')).toBeNull()
+    })
+
+    it('upsert replaces a handler in place; softDelete tombstones one by type', async () => {
+      const { connections } = makeRepos()
+      const { ws } = ids()
+      await connections.upsert(
+        connection({ workspaceId: ws, provisionType: 'kubernetes', label: 'First' }),
+      )
+      await connections.upsert(
+        connection({ workspaceId: ws, provisionType: 'kubernetes', label: 'Second' }),
+      )
+      let list = await connections.listByWorkspace(ws)
+      expect(list).toHaveLength(1)
+      expect(list[0]!.label).toBe('Second')
+
+      await connections.upsert(
+        connection({ workspaceId: ws, provisionType: 'docker-compose', engine: 'local-docker' }),
+      )
+      await connections.softDelete(ws, 'kubernetes', null, 99)
+      list = await connections.listByWorkspace(ws)
+      expect(list.map((h) => h.provisionType)).toEqual(['docker-compose'])
+      expect(await connections.getByWorkspaceAndType(ws, 'kubernetes', null)).toBeNull()
     })
   })
 }

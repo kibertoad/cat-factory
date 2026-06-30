@@ -22,6 +22,9 @@ export const CONFLICT_REASONS = [
   'github_not_connected',
   'bootstrap_not_retryable',
   'bootstrap_reference_missing',
+  // No workspace handler is configured for a service's declared provision type (the
+  // per-service provision-type model — the deployer/tester can't stand the env up).
+  'provision_type_unhandled',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]
