@@ -1,5 +1,18 @@
 # @cat-factory/local-server
 
+## 0.25.12
+
+### Patch Changes
+
+- Updated dependencies [fdeb466]
+  - @cat-factory/kernel@0.55.4
+  - @cat-factory/orchestration@0.43.4
+  - @cat-factory/integrations@0.37.1
+  - @cat-factory/node-server@0.43.12
+  - @cat-factory/agents@0.22.5
+  - @cat-factory/gitlab@0.4.4
+  - @cat-factory/server@0.49.6
+
 ## 0.25.11
 
 ### Patch Changes

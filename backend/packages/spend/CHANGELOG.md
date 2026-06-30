@@ -1,5 +1,12 @@
 # @cat-factory/spend
 
+## 0.10.38
+
+### Patch Changes
+
+- Updated dependencies [fdeb466]
+  - @cat-factory/kernel@0.55.4
+
 ## 0.10.37
 
 ### Patch Changes
