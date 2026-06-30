@@ -3511,6 +3511,7 @@
       "add": "追加",
       "updatesHeading": "更新あり",
       "updatesDescription": "これらの組み込みマージプリセットの新しいバージョンがあります。再シードして取り込みます（既定と並び順は保持されます）。",
+      "versionAvailable": "バージョン {from} → {to} が利用可能です。",
       "reseed": "再シード",
       "reseedAll": "すべて更新 ({count})",
       "dismiss": "閉じる",

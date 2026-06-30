@@ -134,6 +134,9 @@ export class MergePresetService {
    * old presets but not the new one). The canonical thresholds / `autoMergeEnabled` / `version`
    * overwrite (or create) the stored row; an existing copy's `isDefault` + `createdAt` are
    * preserved so reseeding never silently changes which preset is the default or its ordering.
+   * When re-materialising a built-in the workspace had deleted, it only (re)claims the default
+   * if the workspace currently has none, so reseeding a default-flagged built-in (e.g.
+   * `mp_balanced`) can never steal the default away from the user's chosen preset.
    * Rejects an id not in the catalog (a custom preset — delete it instead).
    */
   async reseed(workspaceId: string, id: string): Promise<MergeThresholdPreset> {
@@ -145,10 +148,15 @@ export class MergePresetService {
       )
     }
     const existing = await this.presets.get(workspaceId, id)
+    // Keep the user's default choice when the preset already exists. When re-creating a
+    // deleted built-in, only let it reclaim default if the workspace has none right now;
+    // otherwise the seed's `isDefault` would silently demote the user's chosen default.
+    const isDefault = existing
+      ? existing.isDefault
+      : seed.isDefault && (await this.presets.getDefault(workspaceId)) === null
     const preset: MergeThresholdPreset = {
       ...this.fromSeed(seed),
-      // Keep the user's default choice + original ordering when the preset already exists.
-      isDefault: existing?.isDefault ?? seed.isDefault,
+      isDefault,
       createdAt: existing?.createdAt ?? this.clock.now(),
     }
     await this.presets.upsert(workspaceId, preset)

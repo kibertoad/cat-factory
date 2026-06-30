@@ -3511,6 +3511,7 @@
       "add": "Ekle",
       "updatesHeading": "Güncellemeler mevcut",
       "updatesDescription": "Bu yerleşik birleştirme ön ayarlarının daha yeni bir sürümü geldi. Benimsemek için yeniden tohumlayın (varsayılan ve sıralama korunur).",
+      "versionAvailable": "Sürüm {from} → {to} mevcut.",
       "reseed": "Yeniden tohumla",
       "reseedAll": "Tümünü güncelle ({count})",
       "dismiss": "Yoksay",

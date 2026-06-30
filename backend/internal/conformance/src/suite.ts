@@ -2237,6 +2237,25 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(readded.status).toBe(200)
         expect(readded.body.autoMergeEnabled).toBe(false)
 
+        // Re-materialising a default-flagged built-in must NOT steal the default: promote a
+        // custom preset to default, delete the (now non-default) mp_balanced, then reseed it.
+        // mp_balanced's seed is default-flagged, but the workspace already has a default, so the
+        // reseed re-creates it as NON-default and the user's choice survives.
+        const custom = await call<MergeThresholdPreset>('POST', base, {
+          name: 'My default',
+          maxComplexity: 0.5,
+          maxRisk: 0.5,
+          maxImpact: 0.5,
+          isDefault: true,
+        })
+        expect(custom.body.isDefault).toBe(true)
+        await call('DELETE', `${base}/mp_balanced`)
+        const rebalanced = await call<MergeThresholdPreset>('POST', `${base}/mp_balanced/reseed`)
+        expect(rebalanced.status).toBe(200)
+        expect(rebalanced.body.isDefault).toBe(false)
+        const afterReseed = await call<MergeThresholdPreset[]>('GET', base)
+        expect(afterReseed.body.filter((p) => p.isDefault).map((p) => p.id)).toEqual([custom.body.id])
+
         // A non-catalog id cannot be reseeded (it would be a custom preset — delete instead).
         const bad = await call('POST', `${base}/mp_not_a_builtin/reseed`)
         expect(bad.status).toBe(422)

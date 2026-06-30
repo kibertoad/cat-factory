@@ -11,7 +11,10 @@ export interface MergePresetIssue {
   id: string
   /** The preset name (the stored copy's for `outdated`, the built-in id for a `new` one). */
   name: string
-  message: string
+  /** For an `outdated` issue: the persisted copy's version (the display copy renders it via i18n). */
+  fromVersion?: number
+  /** For an `outdated` issue: the newer catalog version available. */
+  toVersion?: number
 }
 
 /** A built-in's display name for an issue message (humanise its catalog id as a fallback). */
@@ -38,12 +41,7 @@ export function useMergePresetHealth() {
     for (const [id, catalogVersion] of Object.entries(store.catalogVersions)) {
       const stored = byId.get(id)
       if (!stored) {
-        out.push({
-          type: 'new',
-          id,
-          name: builtinName(id, undefined),
-          message: 'A new built-in preset is available to add.',
-        })
+        out.push({ type: 'new', id, name: builtinName(id, undefined) })
         continue
       }
       if (catalogVersion > (stored.version ?? 0)) {
@@ -51,7 +49,8 @@ export function useMergePresetHealth() {
           type: 'outdated',
           id,
           name: stored.name,
-          message: `A newer version of this built-in preset is available (v${stored.version ?? 0} → v${catalogVersion}).`,
+          fromVersion: stored.version ?? 0,
+          toVersion: catalogVersion,
         })
       }
     }

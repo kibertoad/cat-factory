@@ -2528,6 +2528,7 @@
       "add": "Add",
       "updatesHeading": "Updates available",
       "updatesDescription": "A newer version of these built-in merge presets has shipped. Reseed to adopt it (the default and ordering are kept).",
+      "versionAvailable": "Version {from} → {to} available.",
       "reseed": "Reseed",
       "reseedAll": "Update all ({count})",
       "dismiss": "Dismiss",

@@ -3498,6 +3498,7 @@
       "add": "Añadir",
       "updatesHeading": "Actualizaciones disponibles",
       "updatesDescription": "Hay una versión más reciente de estos presets de fusión integrados. Regenera para adoptarla (se conservan el predeterminado y el orden).",
+      "versionAvailable": "Versión {from} → {to} disponible.",
       "reseed": "Regenerar",
       "reseedAll": "Actualizar todos ({count})",
       "dismiss": "Descartar",

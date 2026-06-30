@@ -80,7 +80,6 @@ const reseedableCount = computed(
                 <span class="truncate text-sm font-medium text-slate-100 capitalize">{{
                   i.name
                 }}</span>
-                <p class="text-[11px] text-emerald-400/80">{{ i.message }}</p>
               </div>
               <UButton
                 size="xs"
@@ -114,7 +113,14 @@ const reseedableCount = computed(
             >
               <div class="min-w-0">
                 <span class="truncate text-sm font-medium text-slate-100">{{ i.name }}</span>
-                <p class="text-[11px] text-amber-400/80">{{ i.message }}</p>
+                <p class="text-[11px] text-amber-400/80">
+                  {{
+                    t('mergePreset.health.versionAvailable', {
+                      from: i.fromVersion ?? 0,
+                      to: i.toVersion ?? 0,
+                    })
+                  }}
+                </p>
               </div>
               <UButton
                 size="xs"

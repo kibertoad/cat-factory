@@ -3498,6 +3498,7 @@
       "add": "Dodaj",
       "updatesHeading": "Dostępne aktualizacje",
       "updatesDescription": "Dostępna jest nowsza wersja tych wbudowanych presetów scalania. Zregeneruj, aby ją przyjąć (domyślny i kolejność są zachowane).",
+      "versionAvailable": "Dostępna wersja {from} → {to}.",
       "reseed": "Zregeneruj",
       "reseedAll": "Zaktualizuj wszystkie ({count})",
       "dismiss": "Odrzuć",
