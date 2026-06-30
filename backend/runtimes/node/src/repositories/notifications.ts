@@ -117,12 +117,14 @@ export class DrizzleNotificationRepository implements NotificationRepository {
       })
   }
 
-  async upsertOpenForBlock(workspaceId: string, notification: Notification): Promise<void> {
+  async upsertOpenForBlock(workspaceId: string, notification: Notification): Promise<Notification> {
     // Atomic dedup: the conflict arbiter is the partial unique index on
     // (workspace_id, block_id, type) WHERE status='open'. A second concurrent open raise
     // for the same block/type updates the existing row in place instead of inserting a
     // duplicate. id/severity/created_at/status are deliberately NOT updated so the card
     // keeps its identity, escalated severity and original timestamp across a re-raise.
+    // `.returning()` yields the CANONICAL row so the caller delivers the persisted id, not
+    // its discarded optimistic one (a concurrent loser would otherwise push a phantom-id card).
     const values = {
       workspace_id: workspaceId,
       id: notification.id,
@@ -137,7 +139,7 @@ export class DrizzleNotificationRepository implements NotificationRepository {
       created_at: notification.createdAt,
       resolved_at: notification.resolvedAt,
     }
-    await this.db
+    const rows = await this.db
       .insert(notifications)
       .values(values)
       .onConflictDoUpdate({
@@ -151,5 +153,7 @@ export class DrizzleNotificationRepository implements NotificationRepository {
           resolved_at: values.resolved_at,
         },
       })
+      .returning()
+    return rows[0] ? rowToNotification(rows[0]) : notification
   }
 }

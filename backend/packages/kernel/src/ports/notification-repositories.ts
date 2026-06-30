@@ -28,6 +28,12 @@ export interface NotificationRepository {
    * stack duplicate open cards (the read-before-write race in {@link findOpenByBlock} →
    * build → upsert): the existing open row is updated in place, preserving its id,
    * `createdAt`, and already-escalated `severity`. Requires `notification.blockId` to be set.
+   *
+   * Returns the CANONICAL persisted row (its real id, preserved severity/createdAt) — NOT
+   * the caller's optimistic in-memory copy. When a concurrent raise wins the insert, the
+   * loser's in-memory id is discarded here, so `raise()` delivers and returns the one row
+   * that actually exists; otherwise the loser would push a phantom-id card the inbox can't
+   * resolve (a 404 on action) and the dedup would leak back at the delivery layer.
    */
-  upsertOpenForBlock(workspaceId: string, notification: Notification): Promise<void>
+  upsertOpenForBlock(workspaceId: string, notification: Notification): Promise<Notification>
 }

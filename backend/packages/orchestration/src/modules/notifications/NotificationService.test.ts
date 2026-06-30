@@ -36,22 +36,25 @@ function fakeRepo() {
     },
     async upsertOpenForBlock(_ws, n) {
       // Mirror the partial-index dedup: an existing open card for (block, type) is updated
-      // in place (id/severity/createdAt preserved); otherwise insert.
+      // in place (id/severity/createdAt preserved); otherwise insert. Returns the canonical
+      // persisted row (the existing card's id wins a concurrent double-raise).
       const existing = [...rows.values()].find(
         (r) => r.status === 'open' && r.blockId === n.blockId && r.type === n.type,
       )
       if (existing) {
-        rows.set(existing.id, {
+        const merged = {
           ...existing,
           executionId: n.executionId,
           title: n.title,
           body: n.body,
           payload: n.payload,
           resolvedAt: n.resolvedAt,
-        })
-      } else {
-        rows.set(n.id, { ...n })
+        }
+        rows.set(existing.id, merged)
+        return { ...merged }
       }
+      rows.set(n.id, { ...n })
+      return { ...n }
     },
   }
   return { repo, rows }
@@ -146,6 +149,54 @@ describe('NotificationService', () => {
     // the inbox no longer shows a settled decision as overdue.
     await service.clearWaitingDecision(WS, 'blk_1')
     expect(await service.listOpen(WS)).toHaveLength(0)
+  })
+
+  it('raise returns the canonical persisted card when a concurrent insert won (no phantom id)', async () => {
+    const { repo, rows } = fakeRepo()
+    // A concurrent raise already inserted THE open card for (blk_1, decision_required)…
+    rows.set('ntf_canonical', {
+      id: 'ntf_canonical',
+      type: 'decision_required',
+      status: 'open',
+      severity: 'normal',
+      blockId: 'blk_1',
+      executionId: 'exec_prev',
+      title: 'waiting',
+      body: 'open the task',
+      payload: null,
+      createdAt: 123,
+      resolvedAt: null,
+    })
+    // …but THIS raise's read-before-write missed it (the race the partial index closes), so it
+    // mints a fresh optimistic id that the atomic upsert then discards in favour of the existing row.
+    repo.findOpenByBlock = async () => null
+
+    let seq = 0
+    const idGenerator: IdGenerator = { next: (p = 'id') => `${p}_${++seq}` }
+    const delivered: Notification[] = []
+    const service = new NotificationService({
+      notificationRepository: repo,
+      workspaceRepository: {} as unknown as WorkspaceRepository,
+      idGenerator,
+      clock: { now: () => 2_000_000 },
+      channel: {
+        async deliver(_ws, n) {
+          delivered.push(n)
+        },
+      },
+    })
+
+    const result = await service.raise(WS, raiseInput({ title: 'still waiting' }))
+
+    // The optimistic in-memory id is dropped; the CANONICAL row's id is returned AND delivered —
+    // not a phantom the inbox can't resolve.
+    expect(result.id).toBe('ntf_canonical')
+    expect(delivered.at(-1)?.id).toBe('ntf_canonical')
+    // The dedup held: one open row, carrying the new content, resolvable by the returned id.
+    const open = await service.listOpen(WS)
+    expect(open).toHaveLength(1)
+    expect(open[0]?.title).toBe('still waiting')
+    expect(await service.get(WS, result.id)).not.toBeNull()
   })
 
   it('re-raise preserves an already-escalated severity and the original createdAt', async () => {

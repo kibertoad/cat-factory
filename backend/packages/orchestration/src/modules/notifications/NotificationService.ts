@@ -81,15 +81,21 @@ export class NotificationService {
     // index collapses a concurrent double-raise to one open row); block-less cards keep
     // the plain id-keyed upsert. Either way the read above still drives id reuse,
     // severity/createdAt preservation and the deliver-or-not decision below.
+    //
+    // The block-scoped write returns the CANONICAL persisted row: when a concurrent raise
+    // won the insert, our optimistic id was discarded in favour of the existing card's id,
+    // so we must deliver and return THAT row — delivering our in-memory copy would push a
+    // phantom-id card the inbox can't resolve (404 on action) and leak the dedup back.
+    let persisted = notification
     if (input.blockId) {
-      await this.notifications.upsertOpenForBlock(workspaceId, notification)
+      persisted = await this.notifications.upsertOpenForBlock(workspaceId, notification)
     } else {
       await this.notifications.upsert(workspaceId, notification)
     }
     if (!existing || this.contentChanged(existing, notification)) {
-      await this.deliver(workspaceId, notification)
+      await this.deliver(workspaceId, persisted)
     }
-    return notification
+    return persisted
   }
 
   /** Whether a re-raised notification's user-visible content differs from the open one. */

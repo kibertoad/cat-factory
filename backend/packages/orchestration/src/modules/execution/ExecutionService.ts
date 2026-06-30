@@ -1684,6 +1684,13 @@ export class ExecutionService {
     choice: IterationCapChoice,
   ): Promise<ExecutionInstance> {
     await this.requireWorkspace(workspaceId)
+    // NOTE (optimistic concurrency): unlike the other human-action handlers (resolveDecision /
+    // requestChanges / rejectStep / requestHumanReviewFix), this one is NOT yet routed through
+    // `mutateInstance`. Its two branches persist through the shared gate-resume plumbing
+    // (`dispatchIterationCap` → `advancePastResolvedGate`), which owns its own upsert + signal +
+    // emit, so CAS-guarding it cleanly requires splitting that shared helper into a pure-mutation
+    // part and a side-effect part. Tracked as the remaining slice of the lost-update fix; the
+    // window is small (a human resolving a companion iteration-cap racing the driver).
     const instance = assertFound(
       await this.executionRepository.get(workspaceId, executionId),
       'Execution',
@@ -1787,26 +1794,35 @@ export class ExecutionService {
     if (!block?.executionId) {
       throw new ConflictError('No human-review gate is currently awaiting input')
     }
-    const instance = await this.executionRepository.get(workspaceId, block.executionId)
-    const step = instance?.steps[instance.currentStep]
-    if (!instance || !step || step.agentKind !== HUMAN_REVIEW_AGENT_KIND || !step.gate) {
-      throw new ConflictError('No human-review gate is currently awaiting input')
-    }
-    // The fix is consumed by evaluateGate's pendingFix branch, which dispatches the fixer ONLY
-    // when the gate's provider is wired AND there is an async executor to escalate to. Reject up
-    // front when neither holds, instead of silently parking a pendingFix the gate would discard
-    // on its pass-through (an unwired gate advances) — the caller must see the failure, not a 200.
-    const gate = this.runDispatcher.gateFor(step.agentKind)
-    if (!gate?.wired() || !isAsyncAgentExecutor(this.agentExecutor)) {
-      throw new ConflictError(
-        'The human-review gate cannot dispatch a fix on this deployment (no review provider or async executor configured)',
-      )
-    }
-    step.gate.pendingFix = { instructions, at: this.clock.now() }
-    // Re-arm a decision-parked run so the re-driven loop polls instead of no-oping; a spend-
-    // paused run stays paused.
-    if (instance.status === 'blocked') instance.status = 'running'
-    await this.executionRepository.upsert(workspaceId, instance)
+    // Optimistic-concurrency write: parking the `pendingFix` can race the gate's own poll
+    // (the durable driver advancing the run), so re-read + re-apply on fresh state instead
+    // of clobbering — the lost-update fix, same path as resolveDecision. The validation runs
+    // inside the mutation so it sees the run as it stands at write time.
+    const instance = await this.runStateMachine.mutateInstance(
+      workspaceId,
+      block.executionId,
+      (inst) => {
+        const step = inst.steps[inst.currentStep]
+        if (!step || step.agentKind !== HUMAN_REVIEW_AGENT_KIND || !step.gate) {
+          throw new ConflictError('No human-review gate is currently awaiting input')
+        }
+        // The fix is consumed by evaluateGate's pendingFix branch, which dispatches the fixer
+        // ONLY when the gate's provider is wired AND there is an async executor to escalate to.
+        // Reject up front when neither holds, instead of silently parking a pendingFix the gate
+        // would discard on its pass-through (an unwired gate advances) — the caller must see the
+        // failure, not a 200.
+        const gate = this.runDispatcher.gateFor(step.agentKind)
+        if (!gate?.wired() || !isAsyncAgentExecutor(this.agentExecutor)) {
+          throw new ConflictError(
+            'The human-review gate cannot dispatch a fix on this deployment (no review provider or async executor configured)',
+          )
+        }
+        step.gate.pendingFix = { instructions, at: this.clock.now() }
+        // Re-arm a decision-parked run so the re-driven loop polls instead of no-oping; a spend-
+        // paused run stays paused.
+        if (inst.status === 'blocked') inst.status = 'running'
+      },
+    )
     await this.runStateMachine.emitInstance(workspaceId, instance)
     // Ensure a driver is active to consume the pending fix (idempotent for a live run).
     if (instance.status === 'running') {
@@ -2131,30 +2147,31 @@ export class ExecutionService {
     reason?: string,
   ): Promise<ExecutionInstance> {
     await this.requireWorkspace(workspaceId)
-    const instance = assertFound(
-      await this.executionRepository.get(workspaceId, executionId),
-      'Execution',
-      executionId,
-    )
-    const step = instance.steps.find((s) => s.approval?.id === approvalId)
-    if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
-    this.assertNotIterativeGate(step)
-    if (step.approval.status === 'approved') {
-      throw new ConflictError(`Approval '${approvalId}' is already approved`)
-    }
-    // A re-run is in flight; this gate id is stale (a fresh one is raised on its
-    // completion). Reject the current gate via that fresh id, not this one.
-    if (step.approval.status === 'changes_requested') {
-      throw new ConflictError(`Approval '${approvalId}' is being re-run`)
-    }
-    // Already rejected (and the run already failed): return as-is.
-    if (step.approval.status === 'rejected') {
-      return (await this.executionRepository.get(workspaceId, executionId)) ?? instance
-    }
-
-    step.approval.status = 'rejected'
-    if (reason) step.approval.feedback = reason
-    await this.executionRepository.upsert(workspaceId, instance)
+    // Optimistic-concurrency write: a reject racing the durable driver (or a concurrent
+    // resolve/request-changes on the same gate) re-reads and re-applies instead of
+    // clobbering the other writer — the lost-update fix, same as resolveDecision.
+    let alreadyRejected = false
+    const instance = await this.runStateMachine.mutateInstance(workspaceId, executionId, (inst) => {
+      const step = inst.steps.find((s) => s.approval?.id === approvalId)
+      if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
+      this.assertNotIterativeGate(step)
+      if (step.approval.status === 'approved') {
+        throw new ConflictError(`Approval '${approvalId}' is already approved`)
+      }
+      // A re-run is in flight; this gate id is stale (a fresh one is raised on its
+      // completion). Reject the current gate via that fresh id, not this one.
+      if (step.approval.status === 'changes_requested') {
+        throw new ConflictError(`Approval '${approvalId}' is being re-run`)
+      }
+      // Already rejected (and the run already failed): leave it as-is and skip failRun below.
+      if (step.approval.status === 'rejected') {
+        alreadyRejected = true
+        return
+      }
+      step.approval.status = 'rejected'
+      if (reason) step.approval.feedback = reason
+    })
+    if (alreadyRejected) return instance
     const message = reason
       ? `A reviewer rejected the proposal: ${reason}`
       : 'A reviewer rejected the proposal, stopping the run.'
@@ -2255,7 +2272,10 @@ export class ExecutionService {
     const newId = this.idGenerator.next('exec')
     await activate?.(newId)
     // Replace the terminal failed run for this block with the resumed one (single
-    // run per block, matching the board's by-block projection).
+    // run per block, matching the board's by-block projection). This mints a FRESH run id
+    // (delete + insert), so there is no prior row for a concurrent writer to lose an update
+    // against — the CAS/`mutateInstance` lost-update fix is structurally N/A here; the
+    // one-run-per-block projection is what serialises a double-retry.
     await this.executionRepository.deleteByBlock(workspaceId, previous.blockId)
     const instance: ExecutionInstance = {
       id: newId,
@@ -2344,6 +2364,8 @@ export class ExecutionService {
     // restart without losing the source run.
     const newId = this.idGenerator.next('exec')
     await activate?.(newId)
+    // Like retry(), this mints a FRESH run id (delete + insert), so there is no prior row for
+    // a concurrent writer to lose an update against — the CAS lost-update fix is N/A here.
     await this.executionRepository.deleteByBlock(workspaceId, previous.blockId)
     const instance: ExecutionInstance = {
       id: newId,
@@ -2376,11 +2398,22 @@ export class ExecutionService {
     await this.requireWorkspace(workspaceId)
     const instances = await this.executionRepository.listByWorkspace(workspaceId)
     const paused = instances.filter((e) => e.status === 'paused')
-    for (const instance of paused) {
-      instance.status = 'running'
-      await this.executionRepository.upsert(workspaceId, instance)
-      await this.workRunner.startRun(workspaceId, instance.id)
-      await this.runStateMachine.emitInstance(workspaceId, instance)
+    for (const p of paused) {
+      // Optimistic-concurrency write: only flip + re-drive a run that is STILL paused at
+      // write time, so a resume racing the driver (or a concurrent resume) can't clobber a
+      // run another writer already advanced. A vanished/contended run is skipped (the next
+      // sweep retries) rather than failing the whole batch.
+      let flipped = false
+      const resumed = await this.runStateMachine
+        .mutateInstance(workspaceId, p.id, (inst) => {
+          flipped = inst.status === 'paused'
+          if (flipped) inst.status = 'running'
+        })
+        .catch(() => null)
+      if (resumed && flipped) {
+        await this.workRunner.startRun(workspaceId, resumed.id)
+        await this.runStateMachine.emitInstance(workspaceId, resumed)
+      }
     }
     return this.executionRepository.listByWorkspace(workspaceId)
   }
