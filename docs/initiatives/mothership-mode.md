@@ -1,9 +1,26 @@
 # Initiative: mothership mode for local mode
 
-**Status:** in progress (tracker + pilot scaffolding) · **Owner:** core · **Started:** 2026-06-30
+**Status:** in progress (PR 1 spine landed) · **Owner:** core · **Started:** 2026-06-30
 
 > This is the durable source of truth for a multi-PR initiative. Read it FIRST before picking
 > up the next slice; update the checklist at the end of each PR.
+
+### Landed so far
+
+- **PR 0** — this tracker.
+- **PR 1 (spine)** — the persistence-RPC core in `@cat-factory/server`: the `machine` token
+  audience, the wire envelope + method allow-list + scope table + dispatcher
+  (`src/persistence/rpc.ts`), the `Proxy`-backed `createRemoteRepositories`
+  (`src/persistence/remoteRepositories.ts`), the `POST /internal/persistence` controller, and
+  a unit test covering the full round-trip (reads, undefined/null, rev write-back, DomainError
+  re-throw, allow-list, cross-account scope). BOTH facades attach their repository registry
+  (`ServerContainer.repositories`) so either can be a mothership, guarded by a cross-runtime
+  conformance assertion.
+- **PR 1 (remaining)** — the local-facade *consumer* side: the `node:sqlite` credential store +
+  local cipher, the `LOCAL_MOTHERSHIP_URL` switch composing remote + local repos in
+  `buildLocalContainer`, the no-Postgres `startLocal` boot path with an in-process work runner,
+  and the `config.mothership` SPA flag. The six pilot repos below are remotely *callable* now;
+  this slice makes a local node *consume* them.
 
 ## Goal & rationale
 
