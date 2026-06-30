@@ -1,19 +1,20 @@
 name: Docker publish (runner image)
 
-# Publishes the executor-harness (Pi coding-agent) runner image to public
-# registries (GHCR + Docker Hub) as a multi-arch (amd64 + arm64) image so anyone
-# can `docker pull` it instead of building the Dockerfile locally, e.g. reference
-# it from a backend deployment's wrangler.toml
-# (`image = "ghcr.io/<owner>/cat-factory-executor:<tag>"`) or a self-hosted runner
-# pool. The manual counterpart is `scripts/publish-image.sh` in the harness package.
+# Publishes the container images to public registries (GHCR + Docker Hub) as multi-arch
+# (amd64 + arm64) images so anyone can `docker pull` them instead of building locally:
+#   - the executor-harness (Pi coding-agent) runner image, referenced from a backend
+#     deployment's wrangler.toml or a self-hosted runner pool; and
+#   - the deploy-harness (kubectl/kustomize/helm) image, the container-backed Kubernetes
+#     deploy adapter.
+# The manual counterpart for each is `scripts/publish-image.sh` in its package.
 #
 # Docker Hub publishing is gated on the DOCKERHUB_USERNAME / DOCKERHUB_TOKEN repo
-# secrets: when they are absent (e.g. a fork) the image still publishes to GHCR.
+# secrets: when they are absent (e.g. a fork) the images still publish to GHCR.
 #
-# GATED on changes that affect what is packaged into the image: only fires when a
-# push to main touches the harness sources, the Dockerfile, its tsconfig, or its
-# package.json (so a changeset-driven version bump republishes a freshly-tagged
-# image). Frontend-only or unrelated backend changes never rebuild it.
+# GATED on changes that affect what is packaged into an image: each job only fires when a
+# push to main touches that harness's sources, Dockerfile, tsconfig, or package.json (so a
+# changeset-driven version bump republishes a freshly-tagged image). Frontend-only or
+# unrelated backend changes never rebuild them.
 
 on:
   push:
@@ -23,6 +24,10 @@ on:
       - 'backend/internal/executor-harness/Dockerfile'
       - 'backend/internal/executor-harness/tsconfig.json'
       - 'backend/internal/executor-harness/package.json'
+      - 'backend/internal/deploy-harness/src/**'
+      - 'backend/internal/deploy-harness/Dockerfile'
+      - 'backend/internal/deploy-harness/tsconfig.json'
+      - 'backend/internal/deploy-harness/package.json'
       - '.github/workflows/docker-publish.yml'
   workflow_dispatch:
 
@@ -39,8 +44,42 @@ env:
   PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
+  # Both harness images share this workflow, so detect which one changed and run only
+  # that publish job (a manual dispatch runs both). Avoids re-pushing the executor image
+  # when only the deploy harness changed, and vice versa.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      executor: ${{ steps.filter.outputs.executor }}
+      deploy: ${{ steps.filter.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - id: filter
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        with:
+          filters: |
+            executor:
+              - 'backend/internal/executor-harness/src/**'
+              - 'backend/internal/executor-harness/Dockerfile'
+              - 'backend/internal/executor-harness/tsconfig.json'
+              - 'backend/internal/executor-harness/package.json'
+              - '.github/workflows/docker-publish.yml'
+            deploy:
+              - 'backend/internal/deploy-harness/src/**'
+              - 'backend/internal/deploy-harness/Dockerfile'
+              - 'backend/internal/deploy-harness/tsconfig.json'
+              - 'backend/internal/deploy-harness/package.json'
+              - '.github/workflows/docker-publish.yml'
+
   publish:
     name: Build, test & push
+    needs: changes
+    if: needs.changes.outputs.executor == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -142,6 +181,108 @@ jobs:
       # The published image must not be assembled from layers a less-trusted
       # workflow run could have poisoned, so build it fresh (no-cache) here even
       # though the acceptance step already built one locally.
+      - name: Build & push
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: ${{ env.CONTEXT }}
+          file: ${{ env.CONTEXT }}/Dockerfile
+          platforms: ${{ env.PLATFORMS }}
+          push: true
+          no-cache: true
+          tags: ${{ steps.tags.outputs.tags }}
+
+  # The deploy-harness (kubectl/kustomize/helm) image. Built fresh and pushed multi-arch
+  # like the executor image. No container acceptance suite yet (slice 7 ships pure-logic
+  # unit tests only), so this validates with `test:run` before publishing.
+  publish-deploy:
+    name: Build & push (deploy image)
+    needs: changes
+    if: needs.changes.outputs.deploy == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to GHCR
+    env:
+      GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/cat-factory-deploy
+      DOCKERHUB_IMAGE: docker.io/${{ vars.DOCKERHUB_ORG || github.repository_owner }}/cat-factory-deploy
+      CONTEXT: backend/internal/deploy-harness
+      PLATFORMS: linux/amd64,linux/arm64
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Pure-logic unit tests (no Docker / cluster needed) — the pre-publish gate.
+      - name: Unit tests
+        run: pnpm --filter @cat-factory/deploy-harness run test:run
+
+      - name: Resolve config
+        id: cfg
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
+            echo "dockerhub=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "dockerhub=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve image tags
+        id: tags
+        env:
+          DOCKERHUB_ENABLED: ${{ steps.cfg.outputs.dockerhub }}
+        run: |
+          version="$(node -p "require('./${CONTEXT}/package.json').version")"
+          short_sha="${GITHUB_SHA::7}"
+          emit() {
+            echo "${1}:${version}"
+            echo "${1}:sha-${short_sha}"
+            echo "${1}:latest"
+          }
+          {
+            echo "tags<<EOF"
+            emit "${GHCR_IMAGE}"
+            if [ "${DOCKERHUB_ENABLED}" = "true" ]; then
+              emit "${DOCKERHUB_IMAGE}"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: steps.cfg.outputs.dockerhub == 'true'
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
+        with:
+          platforms: arm64
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
       - name: Build & push
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
