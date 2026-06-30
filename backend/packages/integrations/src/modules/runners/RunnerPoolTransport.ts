@@ -52,8 +52,11 @@ export class RunnerPoolTransport implements RunnerTransport {
     // Cloudflare container, never silently diverging.
     //
     // Forward the harness route kind and the resolved provisioning hints (the
-    // instance-type id + the cloud provider) in the dispatch spec so a pool that
-    // provisions on its own cloud can route to the right endpoint and size the runner.
+    // instance-type id, the cloud provider, and the image variant) in the dispatch spec so a
+    // pool that provisions on its own cloud can route to the right endpoint, size the runner,
+    // and pull the right image — `image: 'deploy'` selects the deploy-harness image (real
+    // kubectl/kustomize/helm) for a container-backed Kubernetes provision, `ui` the heavier
+    // Playwright image, else the default executor image.
     return this.provider.dispatch({
       manifest: this.manifest,
       jobId,
@@ -62,6 +65,7 @@ export class RunnerPoolTransport implements RunnerTransport {
         kind,
         ...(options?.instanceTypeId ? { instanceType: options.instanceTypeId } : {}),
         ...(options?.provider ? { cloudProvider: options.provider } : {}),
+        ...(options?.image ? { image: options.image } : {}),
       },
       resolveSecret: this.resolveSecret,
     })

@@ -158,6 +158,13 @@ export const kubernetesRunnerConfigSchema = v.object({
   image: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
   /** The heavier UI-tester image (Playwright), used for `image:'ui'` dispatches. */
   imageUi: v.optional(v.string()),
+  /**
+   * The separate deploy-harness image (slim base + `kubectl`/`kustomize`/`helm`), used for
+   * `image:'deploy'` dispatches — a container-backed Kubernetes env provision. Absent ⇒ the
+   * pool can't render manifests, so a render-needing config fails loudly (the synchronous
+   * raw-manifest REST path is unaffected); set it to enable the pool's deploy backend.
+   */
+  imageDeploy: v.optional(v.string()),
   /** Container port the harness HTTP server listens on (default 8080). */
   harnessPort: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65535))),
   /** Name of an `imagePullSecrets` entry for a private registry. */
