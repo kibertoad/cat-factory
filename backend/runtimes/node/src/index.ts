@@ -4,6 +4,10 @@
 // in dev, test and prod). `start()` boots an HTTP server; `createServer()` returns the
 // app (for embedding/tests); `buildNodeContainer()` is the composition root.
 export { createApp, createServer, start, type CreateServerOptions } from './server.js'
+// Real-time WebSocket transport pieces, re-exported so the local facade's mothership boot
+// (which does NOT call `start()`, since there is no Postgres/pg-boss) can stand up the same
+// per-workspace hub + `ws` upgrade listener the standard Node boot does.
+export { NodeRealtimeHub, attachRealtime } from './realtime.js'
 export {
   buildNodeContainer,
   buildNodeResolveTransport,
@@ -31,6 +35,10 @@ export { SystemClock, CryptoIdGenerator } from './runtime.js'
 export { ProvisioningLogRecorder } from '@cat-factory/integrations'
 export { createDbClient, type DbClient, type DrizzleDb } from './db/client.js'
 export { migrate } from './db/migrate.js'
+// Execution driver pieces, re-exported so the local facade's mothership boot (no pg-boss)
+// can run the SAME advance/poll loop in-process with real timer-backed sleeps.
+export { executionRuntime, type ExecutionRuntime } from './execution/config.js'
+export { driveExecution, type DriveConfig, type DriveOutcome } from './execution/drive.js'
 export {
   createDrizzleRepositories,
   type CoreRepositories,

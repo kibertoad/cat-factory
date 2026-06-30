@@ -8,10 +8,17 @@ import {
   buildNodeContainer,
   buildNodeResolveTransport,
   createDrizzleRepositories,
+  executionRuntime,
   loadNodeConfig,
   withProvisioningLog,
 } from '@cat-factory/node-server'
 import type { NodeContainerOptions } from '@cat-factory/node-server'
+import {
+  InProcessWorkRunner,
+  type MothershipComposition,
+  composeMothership,
+  isMothershipMode,
+} from './mothership.js'
 import { ConflictError } from '@cat-factory/kernel'
 import { WorkspaceSettingsService } from '@cat-factory/orchestration'
 import { buildInfrastructureCapabilities, logger } from '@cat-factory/server'
@@ -76,6 +83,13 @@ import { createDockerComposeRuntime } from './compose.js'
 
 export function buildLocalContainer(options: NodeContainerOptions): ServerContainer {
   const env = applyLocalDefaults(options.env ?? process.env)
+  // Mothership mode (docs/initiatives/mothership-mode.md): no local Postgres. Org/durable
+  // state is served remotely (RPC) and credentials stay local (node:sqlite). When on, we
+  // build the composite repositories + credential store here and thread them through the
+  // existing NodeContainer seams with `db` left undefined; the in-process work runner replaces
+  // pg-boss. Off → the standard siloed-Postgres local mode is unchanged.
+  const mothership: MothershipComposition | undefined =
+    isMothershipMode(env) && !options.db ? composeMothership(env) : undefined
   const pat = env.GITHUB_PAT?.trim()
   const gitlabPat = env.GITLAB_PAT?.trim()
   // The push/clone token and the VCS client are provider-agnostic. Prefer a GitHub PAT, else
@@ -130,6 +144,9 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     ...(nativeAgents ? { nativeAmbientAuth: nativeHarnesses } : {}),
     localMode: {
       enabled: true,
+      // Surfaced to the SPA so it can label what is stored locally (credentials) vs delegated
+      // to the mothership (org/durable state). Off → the standard siloed-Postgres local mode.
+      ...(mothership ? { mothership: true } : {}),
       ...(gitToken ? {} : { githubPatSetupUrl: githubPatCreationUrl() }),
       // Scopes-preselected "create a PAT" deep links so the "no token configured" notice sends
       // the developer straight to the right token page (scopes differ per provider).
@@ -160,7 +177,12 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // own) so the chooser reads the same workspace settings the rest of the engine does.
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
-  const repos = options.repos ?? createDrizzleRepositories(options.db, clock)
+  // In mothership mode the repository set is the remote (RPC-backed) composite; otherwise the
+  // Drizzle set over the local Postgres. The credential repos are injected separately below.
+  const repos =
+    options.repos ??
+    mothership?.repos ??
+    createDrizzleRepositories(options.db as Parameters<typeof createDrizzleRepositories>[0], clock)
   const wsSettings = new WorkspaceSettingsService({
     workspaceSettingsRepository: repos.workspaceSettingsRepository,
     workspaceRepository: repos.workspaceRepository,
@@ -263,7 +285,10 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // is non-null and a workspace can register a pool via the API; a native adapter injected
   // through `options.runnerPoolProvider` drives the actual dispatch. The connection repo is
   // also held for the start-time guard's cheap "is a pool registered?" existence check.
-  const runnerPoolConnectionRepository = new DrizzleRunnerPoolConnectionRepository(options.db)
+  // In mothership mode (`options.db` undefined) runner-pool delegation is off by default (agents
+  // run on host Docker), so this lazily-constructed repo is never queried on the happy path; the
+  // `!` mirrors `buildNodeContainer`'s documented db-undefined handling.
+  const runnerPoolConnectionRepository = new DrizzleRunnerPoolConnectionRepository(options.db!)
   // Build the app-owned backend registries once and share them with BOTH the pool resolver
   // here AND `buildNodeContainer` below (via `backendRegistries`), so the runner backend a
   // workspace's `kind` resolves to is the same instance everywhere. Defaults to the built-ins.
@@ -390,11 +415,27 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     },
   })
 
+  // Mothership mode has no pg-boss: drive runs in-process through the SAME advance/poll loop
+  // with real timer-backed sleeps. Bound to the execution service AFTER the container is built
+  // (the service doesn't exist yet — chicken-and-egg with createCore).
+  const inProcessRunner = mothership
+    ? new InProcessWorkRunner(executionRuntime(config, env).drive, logger)
+    : undefined
+
   const container = buildNodeContainer({
     ...options,
     env,
     config,
     repos,
+    // Mothership credentials stay on the laptop: inject the local node:sqlite store's two repos
+    // so the API-key pool + local-model endpoints are sealed with the LOCAL key (the
+    // mothership's ENCRYPTION_KEY never reaches this machine). Off → Drizzle over Postgres.
+    ...(mothership
+      ? {
+          providerApiKeyRepository: mothership.credentialStore.providerApiKeyRepository,
+          localModelEndpointRepository: mothership.credentialStore.localModelEndpointRepository,
+        }
+      : {}),
     // Share the SAME registries the pool resolver above was built with (so a custom runner
     // backend resolves to one instance across the local chooser + the engine's connection service).
     backendRegistries,
@@ -432,6 +473,10 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       resolveRequireEnvironmentProvider,
       assertAgentBackendConfigured,
       ...options.overrides,
+      // Mothership mode's in-process work runner (no pg-boss). After `...options.overrides` so an
+      // explicit test override still wins; in mothership boot there is no `boss`, so this is the
+      // only runner wired.
+      ...(inProcessRunner ? { workRunner: inProcessRunner } : {}),
       // The local PAT carries the CI-config scope (GitHub `workflow` — pre-selected by the
       // creation URL; GitLab `api` covers it), so the connection isn't missing that grant —
       // report it granted to suppress the advisory banner. (The App-permissions probe this
@@ -445,6 +490,10 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       localTestInfraSupported,
     } satisfies Partial<CoreDependencies>,
   })
+
+  // Bind the in-process work runner to the now-built execution service, so `startRun` /
+  // `signalDecision` drive runs in-process (mothership mode; no-op otherwise).
+  inProcessRunner?.bind(container.executionService)
 
   // Surface the local-mode settings service so the dedicated local-settings panel can
   // read/write the warm-pool + checkout config (the controller 503s when this is absent,

@@ -44,6 +44,14 @@ export const localModeConfigSchema = v.object({
   /** True on the local-mode facade (a single developer running the whole product locally). */
   enabled: v.boolean(),
   /**
+   * True when the local node runs in MOTHERSHIP mode: it keeps no main database and
+   * delegates all org/durable state to a hosted mothership over the machine API, while
+   * agent/model credentials stay local (the `node:sqlite` store). Lets the SPA label what
+   * is stored locally vs on the mothership. Absent/false ⇒ the standard siloed-Postgres
+   * local mode. See docs/initiatives/mothership-mode.md.
+   */
+  mothership: v.optional(v.boolean()),
+  /**
    * When local mode runs WITHOUT a GitHub PAT, a github.com URL with the needed scopes
    * pre-selected so the developer can create one in a click. Absent once a PAT is set.
    */

@@ -54,8 +54,10 @@ import {
   type EmailSender,
   type GitHubClient,
   type GitHubInstallationRepository,
+  type LocalModelEndpointRepository,
   type ModelProviderResolver,
   type NotificationChannel,
+  type ProviderApiKeyRepository,
   type ProvisioningSubsystem,
   type RateLimitRepository,
   type RateLimitSnapshot,
@@ -224,10 +226,14 @@ function isTruthy(value: string | undefined): boolean {
 const modelResolverCache = new WeakMap<DrizzleDb, ModelProviderResolver>()
 function buildModelProviderResolver(
   env: NodeJS.ProcessEnv,
-  db: DrizzleDb,
+  db: DrizzleDb | undefined,
   apiKeys: ApiKeyService | undefined,
   localModelEndpoints: LocalModelEndpointService | undefined,
 ): ModelProviderResolver {
+  // The cache keys on the db handle (one resolver per Drizzle client). Mothership mode has no
+  // db, so skip the cache entirely (WeakMap keys must be objects) and build a fresh resolver —
+  // a mothership node builds one container, so there is nothing to share it with anyway.
+  if (!db) return createNodeModelProviderResolver(env, apiKeys, localModelEndpoints)
   const cached = modelResolverCache.get(db)
   if (cached) return cached
   const resolver = createNodeModelProviderResolver(env, apiKeys, localModelEndpoints)
@@ -407,13 +413,36 @@ function buildNodeAppRegistry(
 }
 
 export interface NodeContainerOptions {
-  /** The Drizzle/Postgres client (the single persistence layer). */
-  db: DrizzleDb
+  /**
+   * The Drizzle/Postgres client (the single persistence layer). OPTIONAL: a mothership-mode
+   * local node runs with NO Postgres (`db` undefined) and supplies {@link repos} (org/durable
+   * state served remotely) plus the credential-repo seams below instead. When `db` is
+   * undefined, `repos` is REQUIRED; the per-user Postgres services (subscriptions, user
+   * secrets, OpenRouter catalog) turn themselves off, and the handful of stores still built
+   * directly from the db are never queried on the mothership happy path.
+   */
+  db?: DrizzleDb
   /**
    * Pre-built repositories; defaults to building them from {@link db}. Lets the caller
    * (e.g. {@link start}) share one set with the retention sweeper rather than rebuild.
+   * REQUIRED when {@link db} is undefined (mothership mode), where it is the composite of
+   * the remote (RPC-backed) org repos + the local credential repos.
    */
   repos?: ReturnType<typeof createDrizzleRepositories>
+  /**
+   * Override the direct-vendor API-key pool's repository. When provided it REPLACES the
+   * default Drizzle one, so a sibling facade can back the key pool with a different store
+   * (mothership mode injects the local `node:sqlite` credential store, since agent/model
+   * credentials stay on the laptop). Undefined → the Drizzle repo over {@link db} (and the
+   * whole API-key service turns off when neither a db nor this override is present).
+   */
+  providerApiKeyRepository?: ProviderApiKeyRepository
+  /**
+   * Override the per-user locally-run model-endpoint repository (the symmetric local-sqlite
+   * credential seam to {@link providerApiKeyRepository}). Undefined → the Drizzle repo over
+   * {@link db}.
+   */
+  localModelEndpointRepository?: LocalModelEndpointRepository
   /**
    * Started pg-boss instance for durable execution. When present the container wires
    * a {@link PgBossWorkRunner}; otherwise runs fall back to the engine's NoopWorkRunner
@@ -855,13 +884,15 @@ function selectNodeEnvConfigRepairer(deps: {
  */
 function buildNodeSubscriptionService(
   env: NodeJS.ProcessEnv,
-  db: DrizzleDb,
+  db: DrizzleDb | undefined,
   workspaceRepository: CoreDependencies['workspaceRepository'],
   idGenerator: CoreDependencies['idGenerator'],
   clock: Clock,
 ): ProviderSubscriptionService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
-  if (!masterKeyBase64) return undefined
+  // No Postgres (mothership mode): the pooled subscription-token store is not yet a
+  // local-sqlite bucket (PR 3), so the service is off — capability resolution treats it absent.
+  if (!masterKeyBase64 || !db) return undefined
   return new ProviderSubscriptionService({
     providerSubscriptionTokenRepository: new DrizzleProviderSubscriptionTokenRepository(db),
     workspaceRepository,
@@ -882,15 +913,21 @@ function buildNodeSubscriptionService(
  */
 function buildNodeApiKeyService(
   env: NodeJS.ProcessEnv,
-  db: DrizzleDb,
+  db: DrizzleDb | undefined,
   workspaceRepository: CoreDependencies['workspaceRepository'],
   idGenerator: CoreDependencies['idGenerator'],
   clock: Clock,
+  // Mothership mode injects the local `node:sqlite` credential store here, so the key pool
+  // stays on the laptop (the mothership's key never reaches it). Else the Drizzle repo over `db`.
+  repositoryOverride?: ProviderApiKeyRepository,
 ): ApiKeyService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
   if (!masterKeyBase64) return undefined
+  const providerApiKeyRepository =
+    repositoryOverride ?? (db ? new DrizzleProviderApiKeyRepository(db) : undefined)
+  if (!providerApiKeyRepository) return undefined
   return new ApiKeyService({
-    providerApiKeyRepository: new DrizzleProviderApiKeyRepository(db),
+    providerApiKeyRepository,
     workspaceRepository,
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
@@ -909,13 +946,18 @@ function buildNodeApiKeyService(
  */
 function buildNodeLocalModelEndpointService(
   env: NodeJS.ProcessEnv,
-  db: DrizzleDb,
+  db: DrizzleDb | undefined,
   clock: Clock,
+  // The symmetric local-sqlite credential seam (mothership mode); else Drizzle over `db`.
+  repositoryOverride?: LocalModelEndpointRepository,
 ): LocalModelEndpointService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
   if (!masterKeyBase64) return undefined
+  const localModelEndpointRepository =
+    repositoryOverride ?? (db ? new DrizzleLocalModelEndpointRepository(db) : undefined)
+  if (!localModelEndpointRepository) return undefined
   return new LocalModelEndpointService({
-    localModelEndpointRepository: new DrizzleLocalModelEndpointRepository(db),
+    localModelEndpointRepository,
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
       info: 'cat-factory:local-model-endpoints',
@@ -931,11 +973,13 @@ function buildNodeLocalModelEndpointService(
  */
 function buildNodeUserSecretService(
   env: NodeJS.ProcessEnv,
-  db: DrizzleDb,
+  db: DrizzleDb | undefined,
   clock: Clock,
 ): UserSecretService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
-  if (!masterKeyBase64) return undefined
+  // No Postgres (mothership mode): the per-user secret store is not yet a local-sqlite
+  // bucket (PR 3), so it is off.
+  if (!masterKeyBase64 || !db) return undefined
   return new UserSecretService({
     userSecretRepository: new DrizzleUserSecretRepository(db),
     secretCipher: new WebCryptoSecretCipher({ masterKeyBase64, info: 'cat-factory:user-secret' }),
@@ -950,12 +994,14 @@ function buildNodeUserSecretService(
  */
 function buildNodeOpenRouterCatalogService(
   env: NodeJS.ProcessEnv,
-  db: DrizzleDb,
+  db: DrizzleDb | undefined,
   clock: Clock,
   apiKeys: ApiKeyService | undefined,
   spendCurrency: string,
 ): OpenRouterCatalogService | undefined {
-  if (!apiKeys) return undefined
+  // The dynamic-catalog projection is Postgres-only for now (PR 3), so it is off without a db
+  // even though the API-key pool (which it leases through) may be local-sqlite-backed.
+  if (!apiKeys || !db) return undefined
   return new OpenRouterCatalogService({
     providerModelCatalogRepository: new DrizzleProviderModelCatalogRepository(db),
     apiKeys,
@@ -969,12 +1015,14 @@ function buildNodeOpenRouterCatalogService(
 
 function buildNodePersonalSubscriptionService(
   env: NodeJS.ProcessEnv,
-  db: DrizzleDb,
+  db: DrizzleDb | undefined,
   idGenerator: CoreDependencies['idGenerator'],
   clock: Clock,
 ): PersonalSubscriptionService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
-  if (!masterKeyBase64) return undefined
+  // No Postgres (mothership mode): the personal-subscription + activation stores are not yet
+  // local-sqlite buckets (PR 3), so the service is off.
+  if (!masterKeyBase64 || !db) return undefined
   return new PersonalSubscriptionService({
     personalSubscriptionRepository: new DrizzlePersonalSubscriptionRepository(db),
     subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(db),
@@ -1061,7 +1109,23 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   })
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
-  const repos = options.repos ?? createDrizzleRepositories(options.db, clock)
+  // Mothership mode runs with NO Postgres (`options.db` undefined): org/durable state is served
+  // remotely via `options.repos`, so that set is REQUIRED there. (A standard Node/local build
+  // passes `db` and we build the Drizzle set from it.)
+  if (!options.repos && !options.db) {
+    throw new Error(
+      'buildNodeContainer requires `repos` when `db` is undefined (mothership mode supplies the ' +
+        'composite remote + local-credential repositories).',
+    )
+  }
+  const repos = options.repos ?? createDrizzleRepositories(options.db as DrizzleDb, clock)
+  // The handful of stores still built DIRECTLY from the db below (projections, bootstrap,
+  // notifications, …) are never queried on the mothership happy path (board load + local
+  // credentials), and the Drizzle constructors only stash the handle — no build-time work
+  // (audited) — so binding an `undefined` handle is safe. `db` carries the non-null type for
+  // those lazy constructions; the per-user credential services take the OPTIONAL `options.db`
+  // and turn themselves off when it is absent, so they never query a missing database.
+  const db = options.db as DrizzleDb
 
   // The app-owned backend registries (env + runner kind → provider), built once here and
   // injected into the engine + surfaced on the container for the snapshot's backend-kind
@@ -1089,7 +1153,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         // invisible to the others and lost on redeploy. Scaled deployments should pick `s3`.
         return new FilesystemBinaryBlobBackend({ basePath: opts.fs?.basePath })
       case 'db':
-        return new PostgresBinaryBlobBackend(options.db)
+        return new PostgresBinaryBlobBackend(db)
       case 's3':
         if (!opts.s3) return null
         // Omitting credentials is intentional: the S3 client then falls back to the ambient AWS
@@ -1154,18 +1218,24 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // API-key controller, and the LLM proxy key lease.
   const apiKeys = buildNodeApiKeyService(
     env,
-    options.db,
+    db,
     repos.workspaceRepository,
     idGenerator,
     clock,
+    options.providerApiKeyRepository,
   )
   // The per-user locally-run model endpoints store (Ollama / LM Studio / …), shared by
   // the local-runner controller, the per-user model catalog, the inline model provider,
   // and the LLM proxy.
-  const localModelEndpoints = buildNodeLocalModelEndpointService(env, options.db, clock)
+  const localModelEndpoints = buildNodeLocalModelEndpointService(
+    env,
+    db,
+    clock,
+    options.localModelEndpointRepository,
+  )
   // The per-user generic secret store (a GitHub PAT today), shared by the user-secret
   // controller and the run-initiator PAT resolver below.
-  const userSecrets = buildNodeUserSecretService(env, options.db, clock)
+  const userSecrets = buildNodeUserSecretService(env, db, clock)
   // Resolve the run initiator's stored GitHub PAT (when set) — preferred over the
   // App/env token by the container push-token mint + the engine GitHub client.
   const resolveUserGitHubToken: ResolveUserGitHubToken | undefined = userSecrets
@@ -1175,17 +1245,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // the per-workspace model catalog's dynamic OpenRouter entries, and the spend overlay.
   const openRouterCatalog = buildNodeOpenRouterCatalogService(
     env,
-    options.db,
+    db,
     clock,
     apiKeys,
     config.spend.currency,
   )
-  const modelProviderResolver = buildModelProviderResolver(
-    env,
-    options.db,
-    apiKeys,
-    localModelEndpoints,
-  )
+  const modelProviderResolver = buildModelProviderResolver(env, db, apiKeys, localModelEndpoints)
   // Cloudflare Workers AI is opt-in on Node: enabled when the REST creds are present.
   const cloudflareModelsEnabled =
     options.cloudflareModelsEnabled ?? !!(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN)
@@ -1203,12 +1268,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // Persistence the container-execution path needs (built from the same db). The
   // runner-pool repo also backs the `runners` Core module so a pool is registrable
   // via the API; the installation repo backs both token minting and repo resolution.
-  const runnerPoolConnectionRepository = new DrizzleRunnerPoolConnectionRepository(options.db)
+  const runnerPoolConnectionRepository = new DrizzleRunnerPoolConnectionRepository(db)
   const githubInstallationRepository =
-    options.githubInstallationRepository ?? new DrizzleGitHubInstallationRepository(options.db)
+    options.githubInstallationRepository ?? new DrizzleGitHubInstallationRepository(db)
   // The repositories projection (+ sync cursors), shared by `buildResolveRepoTarget`
   // (block→repo resolution) and the GitHub sync/webhook module below.
-  const repoProjectionRepository = new DrizzleRepoProjectionRepository(options.db)
+  const repoProjectionRepository = new DrizzleRepoProjectionRepository(db)
 
   // The GitHub App registry, built once when the App is configured and shared by the
   // container executor's push-token mint, the tech-debt issue filer, and the CI / merge
@@ -1222,7 +1287,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     installationRepository: githubInstallationRepository,
     repoProjectionRepository,
     blockRepository: repos.blockRepository,
-    serviceRepository: new DrizzleServiceFrameRepository(options.db),
+    serviceRepository: new DrizzleServiceFrameRepository(db),
   })
 
   // Best-effort recorder for the provisioning event log (its own Postgres schema).
@@ -1263,19 +1328,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // container executor (lease + usage feedback) and the vendor-credential controller.
   const subscriptions = buildNodeSubscriptionService(
     env,
-    options.db,
+    db,
     repos.workspaceRepository,
     idGenerator,
     clock,
   )
   // The per-user individual-usage subscription store (Claude), shared by the
   // container executor's personal lease and the personal-subscription controller.
-  const personalSubscriptions = buildNodePersonalSubscriptionService(
-    env,
-    options.db,
-    idGenerator,
-    clock,
-  )
+  const personalSubscriptions = buildNodePersonalSubscriptionService(env, db, idGenerator, clock)
   // Agent-context observability sink: records the complete, redacted context provided
   // to each container agent (composed prompts + folded-in fragments + injected files).
   // Gated by the deployment prompt-recording switch + the workspace storeAgentContext
@@ -1376,7 +1436,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // tracker resolves each workspace's own credentials from this same store. GitHub
   // issues reuse the workspace's installed App, so they wire only when `githubClient`
   // is available — kept here, after the client is built, for parity with the Worker.
-  const tasks = selectNodeTasksDeps(config, options.db, githubClient, githubInstallationRepository)
+  const tasks = selectNodeTasksDeps(config, db, githubClient, githubInstallationRepository)
 
   // Issue-tracker writeback (comment-on-PR-open + close-on-merge of a task's linked
   // issue), gated per workspace + per task inside the provider. GitHub uses the same
@@ -1394,7 +1454,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     : undefined
   const issueWritebackProvider = new IssueWritebackService({
     trackerSettingsRepository: repos.trackerSettingsRepository,
-    taskRepository: new DrizzleTaskRepository(options.db),
+    taskRepository: new DrizzleTaskRepository(db),
     fetchImpl: fetch,
     ...(githubClient && resolveWritebackIssue
       ? {
@@ -1508,11 +1568,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           githubClient,
           githubInstallationRepository,
           repoProjectionRepository,
-          branchProjectionRepository: new DrizzleBranchProjectionRepository(options.db),
-          pullRequestProjectionRepository: new DrizzlePullRequestProjectionRepository(options.db),
-          issueProjectionRepository: new DrizzleIssueProjectionRepository(options.db),
-          commitProjectionRepository: new DrizzleCommitProjectionRepository(options.db),
-          checkRunProjectionRepository: new DrizzleCheckRunProjectionRepository(options.db),
+          branchProjectionRepository: new DrizzleBranchProjectionRepository(db),
+          pullRequestProjectionRepository: new DrizzlePullRequestProjectionRepository(db),
+          issueProjectionRepository: new DrizzleIssueProjectionRepository(db),
+          commitProjectionRepository: new DrizzleCommitProjectionRepository(db),
+          checkRunProjectionRepository: new DrizzleCheckRunProjectionRepository(db),
           webhookVerifier: new WebCryptoWebhookVerifier(config.github.webhookSecret),
           // Bound the initial backfill to the commit retention horizon (0 = full).
           commitBackfillHorizonMs: config.retention.commitMs || undefined,
@@ -1545,7 +1605,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // module + ref-arch CRUD then work like the Worker); the container-dispatching
   // `repoBootstrapper` wires only when its prerequisites are met (transport + proxy +
   // token + GitHub client) — the same token source the container executor uses.
-  const bootstrapJobRepository = new DrizzleBootstrapJobRepository(options.db)
+  const bootstrapJobRepository = new DrizzleBootstrapJobRepository(db)
   const bootstrapMintInstallationToken =
     options.mintInstallationToken ??
     (appRegistry ? (id: number) => appRegistry.installationToken(id) : undefined)
@@ -1566,7 +1626,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // events reach EVERY board that mounts it (parity with the Worker's selectEventPublisher).
   // The in-app push is also a notification channel, composed alongside Slack (when
   // enabled) so a raised notification both lands in the inbox live AND fans to Slack.
-  const slackDeps = selectNodeSlackDeps(config, options.db, repos)
+  const slackDeps = selectNodeSlackDeps(config, db, repos)
   const executionEventPublisher = options.realtimeHub
     ? new FanOutEventPublisher(new NodeEventPublisher(options.realtimeHub), {
         workspaceMountRepository: repos.workspaceMountRepository,
@@ -1713,7 +1773,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     pipelineRepository: repos.pipelineRepository,
     executionRepository: repos.executionRepository,
     // Clear a finished run's personal-credential activation promptly (TTL sweep is the backstop).
-    subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(options.db),
+    subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(db),
     // In-org shared services. When a realtime hub is wired (start()), the engine's
     // event publisher (composed above) is a `FanOutEventPublisher` over these two repos,
     // so a shared service's live events reach every board that mounts it — parity with
@@ -1758,7 +1818,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Sandbox (parallel prompt/model testing) — contributed as one sandbox-owned mixin,
     // symmetric with the Worker's `...selectSandboxDeps(db)`; the run-driver reuses the
     // reviewer model config below. The container body never enumerates the five repos.
-    ...createDrizzleSandboxDeps(options.db),
+    ...createDrizzleSandboxDeps(db),
     // Per-workspace runtime settings (human-wait escalation threshold + per-service task
     // limit). Wired unconditionally so the settings API + the limit enforcement + the
     // escalation sweep work identically to the Worker.
@@ -1769,7 +1829,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Notifications subsystem (parity with the Worker, which wires it unconditionally):
     // the inbox + the human-action surfaces. Node has no real-time push, so the rows
     // persist (inbox + snapshot) and any channel composed below — e.g. Slack — delivers.
-    notificationRepository: new DrizzleNotificationRepository(options.db),
+    notificationRepository: new DrizzleNotificationRepository(db),
     ...tasks.deps,
     // Recurring pipelines + the workspace tracker selection. The tracker provider
     // files the tech-debt pipeline's issue by resolving the *workspace's* connected
@@ -1861,31 +1921,31 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // module + API available; `repoBootstrapper` (when wired) dispatches the bootstrap
     // container through the shared runner seam, and `bootstrapRunner` (pg-boss, below)
     // durably drives its poll loop — parity with the Worker's BootstrapWorkflow.
-    referenceArchitectureRepository: new DrizzleReferenceArchitectureRepository(options.db),
+    referenceArchitectureRepository: new DrizzleReferenceArchitectureRepository(db),
     bootstrapJobRepository,
     ...(repoBootstrapper ? { repoBootstrapper } : {}),
     // Env-config-repair runs share the unified agent_runs table (kind-scoped). The job
     // repository is wired unconditionally; the repairer (agent fallback) is wired
     // post-overrides below over the FINAL provider, and the durable runner in the
     // `options.boss` block above — parity with the Worker's EnvConfigRepairWorkflow.
-    envConfigRepairJobRepository: new DrizzleEnvConfigRepairJobRepository(options.db),
+    envConfigRepairJobRepository: new DrizzleEnvConfigRepairJobRepository(db),
     // Document sources (Confluence / Notion / GitHub docs): wired from the shared
     // integration providers exactly like the Worker, so a workspace can connect a
     // source and import requirement/PRD/RFC pages as agent context.
-    ...selectNodeDocumentsDeps(config, options.db, githubClient, githubInstallationRepository),
+    ...selectNodeDocumentsDeps(config, db, githubClient, githubInstallationRepository),
     // Ephemeral environments (opt-in): a workspace registers its own environment
     // management API; the tester provisions/destroys per-run environments from it. A
     // trusted in-house adapter can replace the default HTTP provider via the seam.
     // The environment integration scopes its own URL/host policy from
     // `config.environments` inside this selector (separate from the runner pool's).
-    ...selectNodeEnvironmentsDeps(config, options.db),
+    ...selectNodeEnvironmentsDeps(config, db),
     // Prompt-fragment library (ADR 0006; opt-in): the managed tenant-scoped catalog
     // of best-practice fragments feeding every agent run, wired exactly like the
     // Worker's selectFragmentLibraryDeps (repos + installation resolver + selector).
     ...selectNodeFragmentLibraryDeps(
       config,
       env,
-      options.db,
+      db,
       githubClient,
       githubInstallationRepository,
       modelProviderResolver,

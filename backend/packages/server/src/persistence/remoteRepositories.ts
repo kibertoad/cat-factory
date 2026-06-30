@@ -73,6 +73,39 @@ export function createRemoteRepositories(client: PersistenceRpcClient): RemoteRe
 }
 
 /**
+ * A drift-proof, full-surface remote repository registry: a top-level `Proxy` that lazily
+ * returns a remote method-proxy for ANY `repoName` accessed (`registry.fooRepository.bar(...)`
+ * forwards to one RPC). A mothership-mode local node casts this to its full `CoreRepositories`
+ * shape, so EVERY org/durable repository is remote with no per-repo wiring — a new kernel
+ * repository is automatically remotely-backed (the server-side allow-list still gates which
+ * repo+method actually executes; an un-allow-listed call returns `unknown_method`).
+ *
+ * Credentials are deliberately NOT part of this set — they stay local (the `node:sqlite`
+ * store), composed over the top of this registry by the facade.
+ */
+export function createRemoteRepositoryRegistry(
+  client: PersistenceRpcClient,
+): Record<string, unknown> {
+  const cache = new Map<string, unknown>()
+  return new Proxy(
+    {},
+    {
+      get(_target, repoName) {
+        // Only string repo names are RPC-addressable; a symbol access (e.g. `then` during an
+        // accidental await, `Symbol.toPrimitive`) is not a repository and must read as absent.
+        if (typeof repoName !== 'string') return undefined
+        let proxy = cache.get(repoName)
+        if (!proxy) {
+          proxy = makeRepoProxy(client, repoName)
+          cache.set(repoName, proxy)
+        }
+        return proxy
+      },
+    },
+  )
+}
+
+/**
  * A fetch-based {@link PersistenceRpcClient} that posts to the mothership's
  * `POST /internal/persistence`, presenting the node's machine token. The endpoint always
  * returns the wire envelope (even on a 4xx/5xx), so the body is read regardless of status.

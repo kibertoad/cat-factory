@@ -230,6 +230,7 @@ export {
   type PersistenceRpcClient,
   type RemoteRepositories,
   createRemoteRepositories,
+  createRemoteRepositoryRegistry,
   HttpPersistenceRpcClient,
 } from './persistence/remoteRepositories.js'
 

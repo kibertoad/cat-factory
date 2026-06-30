@@ -37,6 +37,15 @@ export { createLocalGitHubClient, StaticTokenAppRegistry } from './github.js'
 // public; the raw db opener and the repo classes stay internal until the 1b composition
 // step proves a consumer needs them.
 export { createLocalCredentialStore, type LocalCredentialStore } from './sqlite/credentialStore.js'
+// Mothership composition: the remote (RPC) + local-sqlite repository set, the in-process work
+// runner that replaces pg-boss, and the boot-mode probe. `startLocal()` selects the no-Postgres
+// boot automatically when LOCAL_MOTHERSHIP_URL is set.
+export {
+  composeMothership,
+  isMothershipMode,
+  InProcessWorkRunner,
+  type MothershipComposition,
+} from './mothership.js'
 
 // Installation-level extension points, re-exported for parity with the Node facade so
 // a local deployment can register custom agent kinds / pipelines before `startLocal()`.

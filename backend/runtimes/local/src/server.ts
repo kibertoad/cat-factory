@@ -1,10 +1,13 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { start } from '@cat-factory/node-server'
+import { serve } from '@hono/node-server'
+import { NodeRealtimeHub, attachRealtime, createApp, start } from '@cat-factory/node-server'
 import { logger } from '@cat-factory/server'
+import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import { applyLocalDefaults } from './config.js'
 import { buildLocalContainer } from './container.js'
 import { githubPatCreationUrl } from './github.js'
+import { isMothershipMode } from './mothership.js'
 import { createRuntimeAdapter, resolveRuntimeId } from './runtimes/index.js'
 
 const execFileAsync = promisify(execFile)
@@ -68,11 +71,74 @@ export async function startLocal(
     )
   }
 
+  // Mothership mode boots WITHOUT Postgres (no DATABASE_URL / migrate / pg-boss): org/durable
+  // state lives on the mothership and runs are driven by the in-process work runner. Take the
+  // dedicated boot path instead of the Node facade's `start()` (which requires Postgres).
+  if (isMothershipMode(localized)) {
+    return startLocalMothership(localized, options.host)
+  }
+
   return start({
     env,
     host: options.host,
     buildContainer: (o) => buildLocalContainer(o),
   })
+}
+
+/**
+ * Boot the local-mode service in MOTHERSHIP mode: no Postgres, no pg-boss. The container
+ * (built by {@link buildLocalContainer}) composes the remote (RPC-backed) org repositories +
+ * the local `node:sqlite` credential store, and carries the in-process work runner that drives
+ * runs through the same advance/poll loop. This serves the SAME shared Hono app + WebSocket
+ * event transport the Node boot does — only the durable-execution + persistence substrate
+ * differs.
+ *
+ * The periodic Postgres-backed sweepers the Node `start()` runs (retention, recurring-pipeline
+ * fire, notification escalation, Kaizen) are intentionally NOT started here: they prune/scan
+ * stores that live on the mothership (its own cron owns them), and the durable SQLite work
+ * queue + telemetry sync are later initiative slices (PR 2 / PR 5).
+ */
+async function startLocalMothership(
+  env: NodeJS.ProcessEnv,
+  host?: string,
+): Promise<Awaited<ReturnType<typeof serve>>> {
+  logger.info(
+    { mothership: env.LOCAL_MOTHERSHIP_URL },
+    'local mode: booting in MOTHERSHIP mode (no local Postgres; org state served remotely)',
+  )
+  // Shared with the engine's event publisher (wired inside the container) and the HTTP
+  // server's WebSocket upgrade listener below, exactly as the Node `start()` does.
+  const realtimeHub = new NodeRealtimeHub()
+  const container = buildLocalContainer({ env, realtimeHub })
+
+  // Validate registered gates / agent kinds once before serving (parity with `start()`).
+  validateRegistrationsOnce({
+    onWarn: (problem) => logger.warn({ code: problem.code }, problem.message),
+  })
+
+  const app = createApp(container, env)
+  const port = Number(env.PORT ?? 8787)
+  const bindHost = host ?? env.HOST?.trim() ?? undefined
+  const server = serve({ fetch: app.fetch, port, ...(bindHost ? { hostname: bindHost } : {}) })
+  const stopRealtime = attachRealtime(server, realtimeHub, container.config.auth, logger)
+  logger.info(
+    { port, host: bindHost ?? '0.0.0.0' },
+    'cat-factory local (mothership) server listening',
+  )
+
+  let shuttingDown = false
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return
+    shuttingDown = true
+    logger.info({ signal }, 'shutting down cat-factory local (mothership) server')
+    stopRealtime()
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+    process.exit(0)
+  }
+  process.once('SIGTERM', () => void shutdown('SIGTERM'))
+  process.once('SIGINT', () => void shutdown('SIGINT'))
+
+  return server
 }
 
 /**

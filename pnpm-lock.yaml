@@ -717,6 +717,9 @@ importers:
       '@cat-factory/server':
         specifier: workspace:*
         version: link:../../packages/server
+      '@hono/node-server':
+        specifier: ^2.0.6
+        version: 2.0.6(hono@4.12.27)
       drizzle-orm:
         specifier: 1.0.0-rc.3
         version: 1.0.0-rc.3(@cloudflare/workers-types@4.20260628.1)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.22.0)(valibot@1.4.2(typescript@7.0.1-rc))(zod@3.25.76)

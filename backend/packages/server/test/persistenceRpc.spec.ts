@@ -2,6 +2,7 @@ import { ConflictError, type ExecutionInstance, type Workspace } from '@cat-fact
 import { describe, expect, it } from 'vitest'
 import {
   createRemoteRepositories,
+  createRemoteRepositoryRegistry,
   type PersistenceRpcClient,
 } from '../src/persistence/remoteRepositories.js'
 import {
@@ -194,5 +195,50 @@ describe('persistence RPC round-trip', () => {
     )
     // The in-scope subset alone succeeds.
     await expect(repos.accountRepository.listByIds([ACCOUNT])).resolves.toHaveLength(1)
+  })
+})
+
+describe('createRemoteRepositoryRegistry (full-surface, drift-proof)', () => {
+  function registryClient() {
+    const { registry, resolveAccountId } = makeRegistry()
+    return inProcessClient({
+      registry,
+      resolveAccountId,
+      scope: { accountIds: [ACCOUNT], userId: USER },
+    })
+  }
+
+  it('lazily forwards ANY accessed repository name to one RPC', async () => {
+    const repos = createRemoteRepositoryRegistry(registryClient()) as unknown as {
+      workspaceRepository: { get(id: string): Promise<{ id: string } | null> }
+    }
+    // No per-repo wiring: a repo the pilot proxy never enumerated still resolves and forwards.
+    await expect(repos.workspaceRepository.get('ws_in')).resolves.toMatchObject({ id: 'ws_in' })
+  })
+
+  it('returns the SAME proxy per repo name (cached)', () => {
+    const repos = createRemoteRepositoryRegistry(registryClient()) as unknown as Record<
+      string,
+      unknown
+    >
+    expect(repos.workspaceRepository).toBe(repos.workspaceRepository)
+  })
+
+  it('still honours the server-side allow-list (un-allow-listed method → not callable)', async () => {
+    const repos = createRemoteRepositoryRegistry(registryClient()) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+    // A brand-new repo name nobody allow-listed forwards to the RPC, which refuses it.
+    await expect(repos.someFutureRepository!.list!('ws_in')).rejects.toThrow(/not callable/)
+  })
+
+  it('reads a non-string (symbol) access as absent, not a repository', () => {
+    const repos = createRemoteRepositoryRegistry(registryClient()) as unknown as Record<
+      symbol,
+      unknown
+    >
+    // e.g. an accidental `await registry` probes `then`/Symbol.toPrimitive — must be undefined.
+    expect(repos[Symbol.toPrimitive]).toBeUndefined()
   })
 })

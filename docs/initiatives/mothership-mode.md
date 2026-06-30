@@ -1,6 +1,6 @@
 # Initiative: mothership mode for local mode
 
-**Status:** in progress (PR 1 spine + local credential store landed) · **Owner:** core · **Started:** 2026-06-30
+**Status:** in progress (PR 1 COMPLETE — spine + credential store + no-Postgres boot) · **Owner:** core · **Started:** 2026-06-30
 
 > This is the durable source of truth for a multi-PR initiative. Read it FIRST before picking
 > up the next slice; update the checklist at the end of each PR.
@@ -29,16 +29,33 @@
     against an in-memory db. It stores only the already-sealed cipher envelopes, so the local
     key wiring (the existing `ENCRYPTION_KEY`-keyed `WebCryptoSecretCipher`, which never carries
     the mothership's key) belongs to the composition step.
-  - **Still TODO (1b):** the `LOCAL_MOTHERSHIP_URL` switch composing `createRemoteRepositories`
-    (org) + this store (credentials) into one `CoreRepositories`; the no-Postgres `startLocal`
-    boot with an in-process work runner; the `config.mothership` SPA flag. NOTE: a true
-    `db: undefined` boot depends on the `buildNodeContainer` db-undefined audit currently scoped
-    to PR 3 — so 1b either pulls that audit forward or stays a narrow happy-path until PR 3.
-    1b MUST also add a cross-runtime conformance assertion for this store: it ships in 1a with
-    only an isolated unit test because the conformance harness builds through `buildLocalContainer`
-    (Postgres), which the store is not wired into yet — once 1b wires the `local-sqlite` bucket in,
-    bind it to `defineConformanceSuite` so its lease/rotation logic can't drift from the D1/Drizzle
-    repos silently (per "Keep the runtimes symmetric").
+  - **Landed (1b):** the `LOCAL_MOTHERSHIP_URL` switch is live. `createRemoteRepositoryRegistry`
+    (`@cat-factory/server`) is a drift-proof full-surface remote `CoreRepositories` (a `Proxy`
+    lazily forwarding any repo to one RPC); `composeMothership` (`runtimes/local/src/mothership.ts`)
+    pairs it with the local credential store, and `buildLocalContainer` threads both into
+    `buildNodeContainer` with `db: undefined`, injecting the two credential repos. The
+    **`db: undefined` audit was pulled forward** (it was nominally PR 3): `buildNodeContainer` now
+    takes an optional `db`, the per-user Postgres services (subscriptions / user-secrets /
+    OpenRouter catalog) turn off without one, the API-key pool + local-model endpoints accept an
+    injected repository, and the lazily-constructed direct-db repos are documented as
+    never-queried-on-the-mothership-happy-path (Drizzle constructors only stash the handle). The
+    **no-Postgres `startLocal` boot** is a dedicated path (`startLocalMothership`) — no
+    `DATABASE_URL`/`migrate`/pg-boss; it serves the same Hono app + WebSocket transport and drives
+    runs with the new in-process `WorkRunner` (serialized per execution, the pg-boss analogue). The
+    `config.localMode.mothership` flag is surfaced to the SPA. A static `LOCAL_MOTHERSHIP_TOKEN` is
+    used for now (login minting is PR 3). Tests: the remote-registry round-trip + allow-list
+    (`packages/server/test/persistenceRpc.spec.ts`), and `composeMothership` / `InProcessWorkRunner`
+    / the no-Postgres `buildLocalContainer` build (`runtimes/local/src/mothership.test.ts`).
+  - **Deferred from 1b (carried forward):** the full cross-runtime `defineConformanceSuite`
+    binding for the local-sqlite store still wants a **fake mothership server** so the suite can
+    build a real mothership-mode `buildLocalContainer` over a working RPC backend — folded into
+    PR 2 alongside the durable SQLite work queue (the in-process runner is single-process /
+    best-effort, with no durable queue or stale-run sweeper yet). The credential store keeps its
+    isolated unit test (`sqlite/credentialStore.test.ts`) and is now proven _wired into the
+    container_ by the no-Postgres build test. The pilot allow-list still exposes only the six
+    core domain repos remotely, so a mothership node loads a hosted board and persists executions;
+    repos a full execution-to-merge also touches (repo/notification projections) join the
+    allow-list + remote set in PR 3.
 
 ## Goal & rationale
 
@@ -118,53 +135,53 @@ Every persistence port, and where it lives in mothership mode. `remote` = mother
 `local-sqlite` = local `node:sqlite` store; `telemetry` = local-first + batched up; `excluded` =
 never remotely invocable (mothership-internal cron).
 
-| Port                                                        | Bucket                                           | Status  | PR                              |
-| ----------------------------------------------------------- | ------------------------------------------------ | ------- | ------------------------------- |
-| `workspaceRepository`                                       | remote                                           | ⬜ todo | PR 1                            |
-| `blockRepository`                                           | remote                                           | ⬜ todo | PR 1                            |
-| `executionRepository` (CAS/rev)                             | remote                                           | ⬜ todo | PR 1                            |
-| `accountRepository`                                         | remote                                           | ⬜ todo | PR 1                            |
-| `membershipRepository`                                      | remote                                           | ⬜ todo | PR 1                            |
-| `pipelineRepository`                                        | remote                                           | ⬜ todo | PR 1                            |
-| `userRepository`                                            | remote                                           | ⬜ todo | PR 3                            |
-| `invitationRepository`                                      | remote                                           | ⬜ todo | PR 3                            |
-| `passwordResetTokenRepository`                              | remote                                           | ⬜ todo | PR 3                            |
-| `emailConnectionRepository`                                 | remote (delivery delegated)                      | ⬜ todo | PR 4                            |
-| `agentRunRepository`                                        | remote                                           | ⬜ todo | PR 3                            |
-| `modelPresetRepository`                                     | remote                                           | ⬜ todo | PR 3                            |
-| `serviceFragmentDefaultsRepository`                         | remote                                           | ⬜ todo | PR 3                            |
-| `pipelineScheduleRepository`                                | remote                                           | ⬜ todo | PR 3                            |
-| `trackerSettingsRepository`                                 | remote                                           | ⬜ todo | PR 3                            |
-| `serviceRepository`                                         | remote                                           | ⬜ todo | PR 3                            |
-| `workspaceMountRepository`                                  | remote                                           | ⬜ todo | PR 3                            |
-| `requirementReviewRepository`                               | remote                                           | ⬜ todo | PR 3                            |
-| `kaizenGradingRepository`                                   | remote                                           | ⬜ todo | PR 3                            |
-| `kaizenVerifiedComboRepository`                             | remote                                           | ⬜ todo | PR 3                            |
-| `consensusSessionRepository`                                | remote                                           | ⬜ todo | PR 3                            |
-| `clarityReviewRepository`                                   | remote                                           | ⬜ todo | PR 3                            |
-| `brainstormSessionRepository`                               | remote                                           | ⬜ todo | PR 3                            |
-| `mergePresetRepository`                                     | remote                                           | ⬜ todo | PR 3                            |
-| `workspaceSettingsRepository`                               | remote                                           | ⬜ todo | PR 3                            |
-| `observabilityConnectionRepository`                         | remote                                           | ⬜ todo | PR 3                            |
-| `incidentEnrichmentConnectionRepository`                    | remote                                           | ⬜ todo | PR 3                            |
-| `accountSettingsRepository`                                 | remote                                           | ⬜ todo | PR 3                            |
-| `releaseHealthConfigRepository`                             | remote                                           | ⬜ todo | PR 3                            |
-| `binaryArtifactMetadataStore` (metadata)                    | remote; blobs → shared backend (S3 / mothership) | ⬜ todo | PR 3                            |
-| `githubInstallationRepository`                              | remote                                           | ⬜ todo | PR 3                            |
-| `runnerPoolConnectionRepository`                            | remote                                           | ⬜ todo | PR 3                            |
-| GitHub projection repos (repo/branch/PR/issue/commit/check) | remote                                           | ⬜ todo | PR 3                            |
-| `providerApiKeyRepository`                                  | local-sqlite                                     | ✅ done | PR 1 (store)                    |
-| `localModelEndpointRepository`                              | local-sqlite                                     | ✅ done | PR 1 (store)                    |
-| `providerSubscriptionTokenRepository`                       | local-sqlite                                     | ⬜ todo | PR 3                            |
-| `personalSubscriptionRepository`                            | local-sqlite                                     | ⬜ todo | PR 3                            |
-| `subscriptionActivationRepository`                          | local-sqlite                                     | ⬜ todo | PR 3                            |
-| `localSettingsRepository`                                   | local-sqlite                                     | ⬜ todo | PR 3                            |
-| durable execution work queue                                | local-sqlite (replaces pg-boss)                  | ⬜ todo | PR 1 (in-proc) → PR 2 (durable) |
-| cached mothership machine token                             | local-sqlite                                     | ⬜ todo | PR 3                            |
-| `llmCallMetricRepository`                                   | telemetry                                        | ⬜ todo | PR 5                            |
-| `agentContextSnapshotRepository`                            | telemetry                                        | ⬜ todo | PR 5                            |
-| `tokenUsageRepository`                                      | telemetry                                        | ⬜ todo | PR 5                            |
-| `provisioningLogRepository`                                 | telemetry                                        | ⬜ todo | PR 5                            |
+| Port                                                        | Bucket                                           | Status          | PR                              |
+| ----------------------------------------------------------- | ------------------------------------------------ | --------------- | ------------------------------- |
+| `workspaceRepository`                                       | remote                                           | ✅ done         | PR 1                            |
+| `blockRepository`                                           | remote                                           | ✅ done         | PR 1                            |
+| `executionRepository` (CAS/rev)                             | remote                                           | ✅ done         | PR 1                            |
+| `accountRepository`                                         | remote                                           | ✅ done         | PR 1                            |
+| `membershipRepository`                                      | remote                                           | ✅ done         | PR 1                            |
+| `pipelineRepository`                                        | remote                                           | ✅ done         | PR 1                            |
+| `userRepository`                                            | remote                                           | ⬜ todo         | PR 3                            |
+| `invitationRepository`                                      | remote                                           | ⬜ todo         | PR 3                            |
+| `passwordResetTokenRepository`                              | remote                                           | ⬜ todo         | PR 3                            |
+| `emailConnectionRepository`                                 | remote (delivery delegated)                      | ⬜ todo         | PR 4                            |
+| `agentRunRepository`                                        | remote                                           | ⬜ todo         | PR 3                            |
+| `modelPresetRepository`                                     | remote                                           | ⬜ todo         | PR 3                            |
+| `serviceFragmentDefaultsRepository`                         | remote                                           | ⬜ todo         | PR 3                            |
+| `pipelineScheduleRepository`                                | remote                                           | ⬜ todo         | PR 3                            |
+| `trackerSettingsRepository`                                 | remote                                           | ⬜ todo         | PR 3                            |
+| `serviceRepository`                                         | remote                                           | ⬜ todo         | PR 3                            |
+| `workspaceMountRepository`                                  | remote                                           | ⬜ todo         | PR 3                            |
+| `requirementReviewRepository`                               | remote                                           | ⬜ todo         | PR 3                            |
+| `kaizenGradingRepository`                                   | remote                                           | ⬜ todo         | PR 3                            |
+| `kaizenVerifiedComboRepository`                             | remote                                           | ⬜ todo         | PR 3                            |
+| `consensusSessionRepository`                                | remote                                           | ⬜ todo         | PR 3                            |
+| `clarityReviewRepository`                                   | remote                                           | ⬜ todo         | PR 3                            |
+| `brainstormSessionRepository`                               | remote                                           | ⬜ todo         | PR 3                            |
+| `mergePresetRepository`                                     | remote                                           | ⬜ todo         | PR 3                            |
+| `workspaceSettingsRepository`                               | remote                                           | ⬜ todo         | PR 3                            |
+| `observabilityConnectionRepository`                         | remote                                           | ⬜ todo         | PR 3                            |
+| `incidentEnrichmentConnectionRepository`                    | remote                                           | ⬜ todo         | PR 3                            |
+| `accountSettingsRepository`                                 | remote                                           | ⬜ todo         | PR 3                            |
+| `releaseHealthConfigRepository`                             | remote                                           | ⬜ todo         | PR 3                            |
+| `binaryArtifactMetadataStore` (metadata)                    | remote; blobs → shared backend (S3 / mothership) | ⬜ todo         | PR 3                            |
+| `githubInstallationRepository`                              | remote                                           | ⬜ todo         | PR 3                            |
+| `runnerPoolConnectionRepository`                            | remote                                           | ⬜ todo         | PR 3                            |
+| GitHub projection repos (repo/branch/PR/issue/commit/check) | remote                                           | ⬜ todo         | PR 3                            |
+| `providerApiKeyRepository`                                  | local-sqlite                                     | ✅ done         | PR 1 (store)                    |
+| `localModelEndpointRepository`                              | local-sqlite                                     | ✅ done         | PR 1 (store)                    |
+| `providerSubscriptionTokenRepository`                       | local-sqlite                                     | ⬜ todo         | PR 3                            |
+| `personalSubscriptionRepository`                            | local-sqlite                                     | ⬜ todo         | PR 3                            |
+| `subscriptionActivationRepository`                          | local-sqlite                                     | ⬜ todo         | PR 3                            |
+| `localSettingsRepository`                                   | local-sqlite                                     | ⬜ todo         | PR 3                            |
+| durable execution work queue                                | local-sqlite (replaces pg-boss)                  | 🟡 in-proc done | PR 1 (in-proc) → PR 2 (durable) |
+| cached mothership machine token                             | local-sqlite                                     | ⬜ todo         | PR 3                            |
+| `llmCallMetricRepository`                                   | telemetry                                        | ⬜ todo         | PR 5                            |
+| `agentContextSnapshotRepository`                            | telemetry                                        | ⬜ todo         | PR 5                            |
+| `tokenUsageRepository`                                      | telemetry                                        | ⬜ todo         | PR 5                            |
+| `provisioningLogRepository`                                 | telemetry                                        | ⬜ todo         | PR 5                            |
 
 ## Cross-cutting delegation (not per-call repo proxies)
 
@@ -183,13 +200,15 @@ never remotely invocable (mothership-internal cron).
 ## Phased delivery
 
 - **PR 0 — this tracker doc.** No code.
-- **PR 1 — pilot vertical slice (the spine).** `machine` audience; `registerPersistenceController`
-  (scope + allow-list); `PersistenceRpcClient` + `createRemoteRepositories` for the 6 core domain
-  repos; local `node:sqlite` store + local cipher with `providerApiKey` + `localModelEndpoint`;
-  `LOCAL_MOTHERSHIP_URL` switch + no-Postgres `startLocal` boot with an **in-process** work runner;
-  static `LOCAL_MOTHERSHIP_TOKEN` for now; `config.mothership` flag to the SPA. Conformance:
-  rev/undefined/scope round-trip on both runtimes. **Proves:** a Postgres-free local node loads a
-  hosted board and runs a real local-container execution persisted to the mothership.
+- **PR 1 — pilot vertical slice (the spine). ✅ COMPLETE.** `machine` audience;
+  `registerPersistenceController` (scope + allow-list); `PersistenceRpcClient` +
+  `createRemoteRepositories` for the 6 core domain repos (+ `createRemoteRepositoryRegistry` for the
+  full surface); local `node:sqlite` store + local cipher with `providerApiKey` +
+  `localModelEndpoint`; `LOCAL_MOTHERSHIP_URL` switch + no-Postgres `startLocal` boot with an
+  **in-process** work runner; static `LOCAL_MOTHERSHIP_TOKEN` for now; `config.mothership` flag to
+  the SPA. Conformance: rev/undefined/scope round-trip (server spine) + the no-Postgres composition
+  build. **Proves:** a Postgres-free local node loads a hosted board and persists executions to the
+  mothership. (Full execution-to-merge over the wire needs the wider allow-list in PR 3.)
 - **PR 2 — real-time both directions + durable SQLite work queue.**
 - **PR 3 — login-based onboarding + full repository surface** (+ the `db: undefined` audit in
   `buildNodeContainer`).
