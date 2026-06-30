@@ -140,6 +140,43 @@ describe('persistence RPC round-trip', () => {
     ).rejects.toThrow(/not callable/)
   })
 
+  it('refuses admin-gated mutations (membership/account writes) — no role escalation over RPC', async () => {
+    const repos = remote([ACCOUNT])
+    // `membershipRepository.upsert`/`remove` and `accountRepository.rename`/`updateSettings` are
+    // admin-gated in the service layer; the RPC dispatches over the raw repo, so they MUST NOT be
+    // in the allow-list (else an in-scope member could self-promote to admin). Even targeting an
+    // in-scope account, they are rejected as not-callable, never reaching a repo write.
+    const membership = repos.membershipRepository as unknown as {
+      upsert(m: { accountId: string; userId: string; roles: string[] }): Promise<unknown>
+      remove(accountId: string, userId: string): Promise<unknown>
+    }
+    await expect(
+      membership.upsert({ accountId: ACCOUNT, userId: USER, roles: ['admin'] }),
+    ).rejects.toThrow(/not callable/)
+    await expect(membership.remove(ACCOUNT, USER)).rejects.toThrow(/not callable/)
+    const account = repos.accountRepository as unknown as {
+      rename(id: string, name: string): Promise<unknown>
+      updateSettings(id: string, patch: unknown): Promise<unknown>
+    }
+    await expect(account.rename(ACCOUNT, 'pwned')).rejects.toThrow(/not callable/)
+    await expect(account.updateSettings(ACCOUNT, {})).rejects.toThrow(/not callable/)
+  })
+
+  it('refuses prototype-chain method names without crashing (own-property allow-list)', async () => {
+    const repos = remote()
+    const proto = repos.workspaceRepository as unknown as Record<
+      string,
+      (...args: unknown[]) => Promise<unknown>
+    >
+    // Index through a string variable so these hit the proxy (not the static `Object.prototype`
+    // signatures). `constructor`/`toString` resolve to inherited members on a bare bracket access;
+    // the dispatcher must treat them as not-callable (400), never throw an uncaught 500.
+    const invoke = (method: string) => proto[method]!('ws_in')
+    await expect(invoke('constructor')).rejects.toThrow(/not callable/)
+    await expect(invoke('toString')).rejects.toThrow(/not callable/)
+    await expect(invoke('__proto__')).rejects.toThrow(/not callable/)
+  })
+
   it('rejects a workspace outside the token scope as not-found (no existence leak)', async () => {
     const repos = remote([ACCOUNT])
     // ws_out belongs to OTHER_ACCOUNT, which the token is not scoped to.

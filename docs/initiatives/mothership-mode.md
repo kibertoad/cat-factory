@@ -16,11 +16,11 @@
   re-throw, allow-list, cross-account scope). BOTH facades attach their repository registry
   (`ServerContainer.repositories`) so either can be a mothership, guarded by a cross-runtime
   conformance assertion.
-- **PR 1 (remaining)** — the local-facade *consumer* side: the `node:sqlite` credential store +
+- **PR 1 (remaining)** — the local-facade _consumer_ side: the `node:sqlite` credential store +
   local cipher, the `LOCAL_MOTHERSHIP_URL` switch composing remote + local repos in
   `buildLocalContainer`, the no-Postgres `startLocal` boot path with an in-process work runner,
-  and the `config.mothership` SPA flag. The six pilot repos below are remotely *callable* now;
-  this slice makes a local node *consume* them.
+  and the `config.mothership` SPA flag. The six pilot repos below are remotely _callable_ now;
+  this slice makes a local node _consume_ them.
 
 ## Goal & rationale
 
@@ -65,6 +65,12 @@ The **generic persistence-RPC** spine is the template every later slice follows:
    owning account via `workspaceService.accountOf` exactly like `http/authGate.ts`, reject **404**
    if outside the token scope, (c) a **per-repo method allow-list** (global/sweeper methods
    `deleteOlderThan` / `listStale` / bare `delete` are excluded — they stay mothership-internal).
+   The allow-list also excludes **admin-gated mutations** (`accountRepository.rename`/
+   `updateSettings`, `membershipRepository.upsert`/`remove`): the machine token scopes whole
+   accounts, not a role within them, and the RPC bypasses the service-layer `requireAdmin` check,
+   so exposing those raw repo writes would let any in-scope member self-promote to admin. They
+   come back only once a later slice adds a role dimension to the scope (or routes them through
+   the service). The pilot exposes the account/membership **reads** a board load needs.
 2. **Local client** `createRemoteRepositories(rpcClient): CoreRepositories` (`src/persistence/`):
    each entry is a `Proxy` forwarding `(repo, method, args)` to one RPC, decoded with the existing
    shared mappers (`src/persistence/mappers.ts`, `decode.ts`).
@@ -185,8 +191,11 @@ Each PR adds a changeset and updates this checklist.
 - **The mothership `ENCRYPTION_KEY` must never reach the laptop.** Local secrets use a separate local
   key (the one `applyLocalDefaults` already guarantees). A security check asserts this.
 - **Raw-repo RPC is powerful — default-deny.** Method allow-list per repo; global/sweeper methods
-  excluded; every call account-scoped to the token. Treat the `/internal/persistence` surface as the
-  highest-risk new code.
+  AND admin-gated mutations excluded (the RPC bypasses the service-layer `requireAdmin`, and the
+  token scopes accounts not roles); every call account-scoped to the token; the scope switch
+  fails closed on any unknown rule kind; the table is looked up by own-property only so an
+  attacker-supplied `__proto__`/`constructor` can't reach a non-spec member. Treat the
+  `/internal/persistence` surface as the highest-risk new code.
 - **`db: undefined` audit.** `buildNodeContainer` constructs some repos directly from `options.db`
   (projection repos, blob backends) rather than from `options.repos` — each must tolerate a missing
   db in mothership mode and route through the composed repos. This is the single largest correctness

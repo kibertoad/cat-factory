@@ -107,6 +107,17 @@ export type PersistenceMethodTable = Record<string, Record<string, MethodSpec>>
  * (`listStale`), and high-impact unscoped ops (`workspaceRepository.delete`,
  * `accountRepository.create`) are deliberately EXCLUDED — they are added (with their own
  * scope rules) in later slices, or stay mothership-internal. See the initiative tracker.
+ *
+ * Admin-gated mutations are also EXCLUDED here. The RPC dispatches over the raw repository,
+ * bypassing the service layer that normally enforces per-user role checks — e.g.
+ * `AccountService.requireAdmin` guards `accountRepository.rename`/`updateSettings` and
+ * `membershipRepository.upsert`/`remove`. A machine token is scoped to whole ACCOUNTS, not to
+ * a role within them, so exposing those repo methods would let any account member self-promote
+ * to admin or rewrite memberships over the wire. They stay mothership-internal until a later
+ * slice adds a role dimension to the scope (or routes them through the service). Only the
+ * account/membership READS a board load needs are remotely callable. Board-level mutations
+ * (`workspaceRepository.rename`/`setDescription`, block/pipeline/execution CRUD) are
+ * member-level in the service layer, so they remain.
  */
 export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
   workspaceRepository: {
@@ -142,18 +153,16 @@ export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
     markFailed: { scope: { kind: 'workspace', arg: 0 } },
   },
   accountRepository: {
+    // Reads only — `rename`/`updateSettings` are admin-gated (see allow-list note above).
     get: { scope: { kind: 'account', arg: 0 } },
     listByIds: { scope: { kind: 'accountList', arg: 0 } },
-    rename: { scope: { kind: 'account', arg: 0 } },
-    updateSettings: { scope: { kind: 'account', arg: 0 } },
     findPersonalByUser: { scope: { kind: 'selfUser', arg: 0 } },
   },
   membershipRepository: {
+    // Reads only — `upsert`/`remove` are admin-gated (see allow-list note above).
     listByUser: { scope: { kind: 'selfUser', arg: 0 } },
     listByAccount: { scope: { kind: 'account', arg: 0 } },
     get: { scope: { kind: 'account', arg: 0 } },
-    upsert: { scope: { kind: 'accountField', arg: 0, field: 'accountId' } },
-    remove: { scope: { kind: 'account', arg: 0 } },
   },
 }
 
@@ -206,7 +215,13 @@ export async function dispatchPersistenceCall(
   opts: DispatchOptions,
 ): Promise<DispatchResult> {
   const table = opts.table ?? PILOT_PERSISTENCE_METHODS
-  const spec = table[request.repo]?.[request.method]
+  // Own-property lookups only: `request.repo`/`request.method` are attacker-controlled, so a
+  // bracket access could otherwise resolve an inherited member (`__proto__`, `constructor`,
+  // `toString`) to a truthy non-spec value, slip past the `if (!spec)` guard, and crash on
+  // `spec.scope` below. `Object.hasOwn` confines the table to its own keys.
+  const repoTable = Object.hasOwn(table, request.repo) ? table[request.repo] : undefined
+  const spec =
+    repoTable && Object.hasOwn(repoTable, request.method) ? repoTable[request.method] : undefined
   if (!spec) {
     return fail('unknown_method', `Method '${request.repo}.${request.method}' is not callable`)
   }
@@ -260,6 +275,14 @@ export async function dispatchPersistenceCall(
       const accountIds = (requested.accountIds ?? []).filter((id) => inScope(id))
       args[rule.arg] = { accountIds, ownerUserId: opts.scope.userId } satisfies VisibilityScope
       break
+    }
+    default: {
+      // Fail closed: a `ScopeRule` kind with no case above must NEVER reach the method
+      // unscoped. The `never` binding makes adding a kind without a case a compile error,
+      // and the `return denied` is the runtime backstop if one slips through anyway.
+      const _exhaustive: never = rule
+      void _exhaustive
+      return denied
     }
   }
 
