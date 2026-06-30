@@ -212,9 +212,48 @@ export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
   },
   mergePresetRepository: {
     list: { scope: { kind: 'workspace', arg: 0 } },
+    // `MergePresetService.list` lazily seeds the built-in default for a workspace that has
+    // none (a write triggered by the board-load read). Member-level (the preset CRUD is not
+    // admin-gated), workspace-scoped — the same policy as the block/pipeline mutations above.
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
   },
   modelPresetRepository: {
     list: { scope: { kind: 'workspace', arg: 0 } },
+    // The run-start model resolution (`resolvePresetModelForKind` → the personal-credential
+    // gate) reads the workspace's default model preset for the dispatched agent kind.
+    getDefault: { scope: { kind: 'workspace', arg: 0 } },
+    // `ModelPresetService.list` lazily seeds the built-in defaults for a workspace that has none
+    // (a write the board-load read triggers), exactly like `mergePresetRepository.upsert` above.
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // --- Agent-context run-path reads -----------------------------------------------
+  // `AgentContextBuilder` resolves a block's LINKED docs/tasks for EVERY container agent step
+  // (it builds the agent context on each dispatch), so these reads are on the run path, not just
+  // the opt-in document/task integrations' own surfaces. arg0 is the workspaceId → `workspace`
+  // rule. The document/task SOURCE-PROVIDER + connection surfaces (connect/list/disconnect) are
+  // NOT exposed here — they are a later integration slice; only the block-scoped context reads are.
+  documentRepository: {
+    listByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    // A URL named in a block's description is resolved against the imported corpus by a
+    // canonical-url point lookup (`AgentContextBuilder.resolveLinkedContext`), on the SAME
+    // per-dispatch run path as `get`/`listByBlock` above — so it must be allow-listed too
+    // (else a task whose description contains any link fails the run with `unknown_method`).
+    getByUrl: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  taskRepository: {
+    listByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    // Same as `documentRepository.getByUrl`: a URL in the description resolves against the
+    // imported issue corpus by a point lookup on the run path.
+    getByUrl: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // The agent context also resolves the block's provisioned environment per step
+  // (`resolveForBlock`/`get`, both workspace-keyed). Reads only — the connect/provision surface
+  // (and decrypting a remotely-sealed env cipher, which needs the mothership's key) is a later slice.
+  environmentRegistryRepository: {
+    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    get: { scope: { kind: 'workspace', arg: 0 } },
   },
   serviceFragmentDefaultsRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
@@ -229,6 +268,17 @@ export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
   },
   notificationRepository: {
     listOpen: { scope: { kind: 'workspace', arg: 0 } },
+    // The merger-less pipeline tail raises a block notification on completion
+    // (`pipeline_complete`/`merge_review` → `findOpenByBlock` dedup + `upsertOpenForBlock`), so a
+    // run persists its inbox card on the mothership. Workspace-scoped, member-level (the inbox
+    // act/dismiss endpoints are not admin-gated) — the same policy as the block/pipeline writes.
+    findOpenByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    upsertOpenForBlock: { scope: { kind: 'workspace', arg: 0 } },
+    // Block-less raises (a card with no `blockId`) and every status transition the inbox
+    // performs right after a run settles — act / dismiss / escalate — go through `upsert`
+    // (`NotificationService`), not `upsertOpenForBlock`. Workspace-scoped, member-level (the
+    // inbox act/dismiss endpoints are not admin-gated) — same policy as the writes above.
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
   },
   bootstrapJobRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },

@@ -117,8 +117,28 @@ function makeRegistry(): {
       countByServiceIds: async (ids: string[]) => Object.fromEntries(ids.map((id) => [id, 1])),
     },
     workspaceSettingsRepository: { get: async (ws: string) => ({ ws }) },
-    mergePresetRepository: { list: async (ws: string) => [{ ws }] },
-    modelPresetRepository: { list: async (ws: string) => [{ ws }] },
+    // `upsert` is the lazy default-seed the board-load `list` read triggers (member-level write).
+    mergePresetRepository: { list: async (ws: string) => [{ ws }], upsert: async () => undefined },
+    modelPresetRepository: {
+      list: async (ws: string) => [{ ws }],
+      getDefault: async (ws: string) => ({ ws }),
+      upsert: async () => undefined,
+    },
+    // The agent-context run-path reads: a block's linked docs/tasks + provisioned environment.
+    documentRepository: {
+      listByBlock: async (ws: string) => [{ ws }],
+      get: async (ws: string) => ({ ws }),
+      getByUrl: async (ws: string) => ({ ws }),
+    },
+    taskRepository: {
+      listByBlock: async (ws: string) => [{ ws }],
+      get: async (ws: string) => ({ ws }),
+      getByUrl: async (ws: string) => ({ ws }),
+    },
+    environmentRegistryRepository: {
+      getByBlock: async (ws: string) => ({ ws }),
+      get: async (ws: string) => ({ ws }),
+    },
     serviceFragmentDefaultsRepository: { get: async (ws: string) => [{ ws }] },
     pipelineScheduleRepository: {
       list: async (ws: string) => [{ ws }],
@@ -126,7 +146,12 @@ function makeRegistry(): {
       listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
     },
     trackerSettingsRepository: { get: async (ws: string) => ({ ws }) },
-    notificationRepository: { listOpen: async (ws: string) => [{ ws }] },
+    notificationRepository: {
+      listOpen: async (ws: string) => [{ ws }],
+      findOpenByBlock: async (ws: string) => ({ ws }),
+      upsertOpenForBlock: async (ws: string) => ({ ws }),
+      upsert: async (ws: string) => ({ ws }),
+    },
     bootstrapJobRepository: {
       listByWorkspace: async (ws: string) => [{ ws }],
       listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
@@ -494,4 +519,76 @@ describe('cross-service + entity-id read surface (board composition)', () => {
       code: 'not_found',
     })
   })
+})
+
+describe('agent-context run-path + lazy-seed surface (workspace-scoped)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // The reads `AgentContextBuilder` issues for EVERY agent step (linked docs/tasks + the block's
+  // provisioned environment), the run-start model-preset read, and the completion notification
+  // dedup/raise — plus the workspaceId-trailing args of each. All reuse the `workspace` rule.
+  const READS: Array<{ repo: string; method: string; args: unknown[] }> = [
+    { repo: 'modelPresetRepository', method: 'getDefault', args: [] },
+    { repo: 'documentRepository', method: 'listByBlock', args: ['blk_1'] },
+    { repo: 'documentRepository', method: 'get', args: ['notion', 'ext_1'] },
+    { repo: 'documentRepository', method: 'getByUrl', args: ['https://example.com/spec'] },
+    { repo: 'taskRepository', method: 'listByBlock', args: ['blk_1'] },
+    { repo: 'taskRepository', method: 'get', args: ['jira', 'KEY-1'] },
+    { repo: 'taskRepository', method: 'getByUrl', args: ['https://example.com/issue'] },
+    { repo: 'environmentRegistryRepository', method: 'getByBlock', args: ['blk_1'] },
+    { repo: 'environmentRegistryRepository', method: 'get', args: ['env_1'] },
+    {
+      repo: 'notificationRepository',
+      method: 'findOpenByBlock',
+      args: ['blk_1', 'pipeline_complete'],
+    },
+    { repo: 'notificationRepository', method: 'upsertOpenForBlock', args: [{ id: 'n_1' }] },
+    // Block-less raises + inbox act/dismiss/escalate transitions route through `upsert`.
+    { repo: 'notificationRepository', method: 'upsert', args: [{ id: 'n_1' }] },
+  ]
+
+  for (const { repo, method, args } of READS) {
+    it(`forwards ${repo}.${method} for an in-scope workspace`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('ws_in', ...args)
+      const echoed = Array.isArray(result) ? result[0] : result
+      expect(echoed).toMatchObject({ ws: 'ws_in' })
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope workspace (404, no leak)`, async () => {
+      await expect(remoteRegistry()[repo]![method]!('ws_out', ...args)).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
+  }
+
+  // The lazy default-preset seeds a board load triggers (`*PresetService` ensure-default writes).
+  // They return void, so assert they forward in scope and are scope-rejected out of scope.
+  const SEED_WRITES: Array<{ repo: string; method: string }> = [
+    { repo: 'mergePresetRepository', method: 'upsert' },
+    { repo: 'modelPresetRepository', method: 'upsert' },
+  ]
+  for (const { repo, method } of SEED_WRITES) {
+    it(`forwards ${repo}.${method} for an in-scope workspace`, async () => {
+      await expect(
+        remoteRegistry()[repo]![method]!('ws_in', { id: 'p_1' }),
+      ).resolves.toBeUndefined()
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope workspace (404)`, async () => {
+      await expect(remoteRegistry()[repo]![method]!('ws_out', { id: 'p_1' })).rejects.toMatchObject(
+        { code: 'not_found' },
+      )
+    })
+  }
 })

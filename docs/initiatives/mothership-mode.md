@@ -284,10 +284,40 @@ the board-load + run paths below are green**. The work is in three parts:
 > `db`-undefined `TypeError`. Tests: `pickRepoSource` routing in `runtimes/node/test/mothership-repo-source.spec.ts`
 >
 > - the existing no-Postgres build test (which now exercises the remote-sourced repos and still makes
->   no build-time network call). Still open before the gate lifts: the feature-flagged integration repos
->   owned by the sub-helpers (`tasks`/`documents`/`environments`/`fragments`/`slack`) — opt-in and off by
->   default, so off the default board-load + run path — and the **fake-mothership integration test** in
->   part 3 (the runtime board-load + run-to-terminal assertion the build-only test cannot catch).
+>   no build-time network call).
+>
+> **Landed (Phase 3 slice 4):** the **fake-mothership functional integration test** — the gate's exit
+> criteria — and the agent-context run-path repo surface it surfaced.
+> `runtimes/local/test/mothership-integration.spec.ts` boots a stock Node mothership
+> (`buildNodeContainer` over real Postgres) on a 127.0.0.1 loopback and a no-Postgres mothership-mode
+> `buildLocalContainer` whose `CoreRepositories` are the RPC-backed remote registry pointing at it,
+> then asserts a board **loads** over the remote RPC and a run **drives to a persisted terminal state**
+> (`done`) over it — the execution read back straight from the mothership's Postgres. It corrected a
+> wrong assumption from slice 3: `AgentContextBuilder` resolves a block's linked docs/tasks AND its
+> provisioned environment on EVERY agent dispatch, so those feature-flagged sub-helper repos ARE on the
+> board-load + run path, not off it. Fixes: `buildNodeContainer` now routes `documentRepository` /
+> `taskRepository` / `environmentRegistryRepository` / `environmentConnectionRepository` from the remote
+> registry when `db` is undefined (the sub-helpers built them directly over the absent `db`; their
+> connect/provision surfaces stay db-direct, off the path); and `PILOT_PERSISTENCE_METHODS` gained the
+> workspace-scoped methods the path exercises — `documentRepository.{listByBlock,get,getByUrl}`,
+> `taskRepository.{listByBlock,get,getByUrl}`, `environmentRegistryRepository.{getByBlock,get}`,
+> `modelPresetRepository.getDefault`, the board-load lazy default-preset seeds
+> `mergePresetRepository.upsert` / `modelPresetRepository.upsert`, and the completion notification raise
+>
+> - inbox transitions `notificationRepository.{findOpenByBlock,upsertOpenForBlock,upsert}` (round-trip +
+>   cross-account-scope unit tests for each in `persistenceRpc.spec.ts`). The `*.getByUrl` reads back a
+>   URL named in a block's description and `notificationRepository.upsert` backs block-less raises + the
+>   inbox act/dismiss/escalate transitions — both on the same run/post-run path as the methods beside
+>   them, so the integration test now patches the run's task with a URL + Jira/GitHub refs and enables
+>   the environment integration on the local node, so `*.get`/`getByUrl` and
+>   `environmentRegistryRepository.getByBlock` are exercised over the RPC end-to-end (not unit-only).
+>
+> **Residual after slice 4** (none on the basic board-load + run path): decrypting a remotely-sealed
+> PROVISIONED environment's access cipher needs the mothership's key (only the non-secret block→env
+> mapping read is on the path here; full decryption is the later secrets-delegation slice); the
+> kaizen-grading, LLM-metric and subscription-activation calls a run also makes currently degrade as
+> best-effort no-ops over the remote (telemetry is Phase 5 local-first; activation is the local-sqlite
+> bucket); and the `fragments` / `slack` connect/provision surfaces are follow-ups.
 
 1. ✅ **Route every direct-db store through the remote surface when `db` is undefined — DONE
    (slice 3) for the board-load + run path.** The stores `buildNodeContainer` constructed directly
@@ -297,11 +327,13 @@ the board-load + run paths below are green**. The work is in three parts:
    `runnerPoolConnectionRepository`, `githubInstallationRepository`, the GitHub projection repos
    (repo/branch/PR/issue/commit/check), `taskRepository`, `referenceArchitectureRepository`; the
    separate `DrizzleServiceFrameRepository` is gone (`buildResolveRepoTarget` reuses
-   `repos.serviceRepository`). STILL TODO: the feature-flagged integration repos owned by the
-   sub-helpers (`tasks`/`documents`/`environments`/`fragments`/`slack`) — opt-in, off the default
-   board-load + run path, so a follow-up sub-slice. (Telemetry repos —
+   `repos.serviceRepository`). **Slice 4 then routed the feature-flagged sub-helper repos that turned
+   out to be ON the run path** — `documentRepository` / `taskRepository` / `environmentRegistryRepository`
+   / `environmentConnectionRepository` (the `AgentContextBuilder` per-step reads). STILL TODO: the
+   remaining sub-helper surfaces that are genuinely off the basic board-load + run path —
+   `fragments` / `slack` connect/provision — a follow-up sub-slice. (Telemetry repos —
    `tokenUsage`/`llmCallMetric`/`agentContextSnapshot`/`provisioningLog` — are the local-first
-   telemetry bucket, Phase 5, NOT remote.)
+   telemetry bucket, Phase 5, NOT remote; they degrade as best-effort no-ops over the remote for now.)
 
 2. **Widen the server allow-list (`PILOT_PERSISTENCE_METHODS`) to the methods a board load + a run
    exercise, each with a correct scope rule.** The boundary is security-sensitive: a machine token
@@ -329,14 +361,22 @@ the board-load + run paths below are green**. The work is in three parts:
      `bootstrapJobRepository.listByServices`, `pipelineScheduleRepository.listByServices`,
      `workspaceMountRepository.countByServiceIds`.
 
-3. **Expose those repos in the mothership-side `PersistenceRegistry`** (the dispatcher reflects over
-   it) and add round-trip + cross-account-scope tests for every newly-allow-listed method, plus an
-   integration test that actually serves `GET /workspaces/:id` and drives a run in mothership mode
-   over a fake mothership (the build-only test cannot catch these runtime paths).
+3. ✅ **Expose those repos in the mothership-side `PersistenceRegistry`** (the dispatcher reflects
+   over it) and add round-trip + cross-account-scope tests for every newly-allow-listed method, plus
+   an integration test that actually serves `GET /workspaces/:id` and drives a run in mothership mode
+   over a fake mothership — **DONE (slice 4).** `runtimes/local/test/mothership-integration.spec.ts`
+   serves both sides for real (a loopback Node mothership over Postgres + a no-Postgres local node)
+   and asserts the board-load + run-to-terminal. Standing it up also forced the agent-context run-path
+   repos (`documentRepository` / `taskRepository` / `environmentRegistryRepository`) to route remotely
+   - their workspace-scoped reads + the lazy-seed / notification writes onto the allow-list (see the
+     slice-4 note above; unit round-trip + scope tests in `persistenceRpc.spec.ts`).
 
 Exit criteria for the gate: a mothership-mode `buildLocalContainer` loads a board and drives a run
-to a persisted terminal state against a real RPC backend, asserted by that integration test. Only
-then mark PR #514 ready and merge.
+to a persisted terminal state against a real RPC backend, asserted by that integration test. ✅ **MET
+(slice 4)** — `mothership-integration.spec.ts` is green. The residual items listed in the slice-4 note
+(provisioned-env secret decryption; the best-effort kaizen/telemetry/activation no-ops; `fragments` /
+`slack` connect surfaces) are NOT on the basic board-load + run path; a maintainer decides whether to
+lift the ⛔ gate / mark PR #514 ready in light of them.
 
 - **PR 4 — notifications + email + Slack delegation.**
 - **PR 5 — telemetry/logs local-first sync.**
