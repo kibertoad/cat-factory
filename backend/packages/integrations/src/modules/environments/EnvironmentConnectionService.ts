@@ -23,7 +23,10 @@ import type {
 import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
-import { environmentBackend, type EnvironmentBackendProvider } from './environment-backends.js'
+import type {
+  EnvironmentBackendProvider,
+  EnvironmentBackendRegistry,
+} from './environment-backends.js'
 import { missingRequiredConfigKeys, stringifyProviderConfig } from './environments.logic.js'
 import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningLogService.js'
 
@@ -87,11 +90,14 @@ export interface EnvironmentConnectionServiceDependencies {
   /**
    * INTERNAL override: when set, this provider is used for every resolved-provider path
    * (provision/status/teardown/validate/bootstrap/describe) instead of the kind registry.
-   * NOT a public seam — a native backend registers via `registerEnvironmentBackend`. It
-   * exists only for the cross-runtime conformance suite (fake validate-repo / repair
-   * providers injected through the schema-locked connect API). Absent ⇒ the registry path.
+   * NOT a public seam — a native backend registers into the injected
+   * {@link environmentBackendRegistry}. It exists only for the cross-runtime conformance
+   * suite (fake validate-repo / repair providers injected through the schema-locked connect
+   * API). Absent ⇒ the registry path.
    */
   environmentProvider?: EnvironmentProvider
+  /** The app-owned registry resolving a stored backend `kind` to its provider. */
+  environmentBackendRegistry: EnvironmentBackendRegistry
 }
 
 export interface ResolvedConnection {
@@ -566,7 +572,7 @@ export class EnvironmentConnectionService {
   // --- internals ----------------------------------------------------------
 
   private requireBackend(kind: string): EnvironmentBackendProvider {
-    const backend = environmentBackend(kind)
+    const backend = this.deps.environmentBackendRegistry.get(kind)
     if (!backend) throw new ValidationError(`Unknown environment backend kind '${kind}'`)
     return backend
   }

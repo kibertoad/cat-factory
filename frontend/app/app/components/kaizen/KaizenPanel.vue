@@ -9,6 +9,7 @@ import { agentKindMeta } from '~/utils/catalog'
 // grading is scheduled by the engine and run by the background sweep, never from here.
 const ui = useUiStore()
 const kaizen = useKaizenStore()
+const { t, d } = useI18n()
 
 const open = computed(() => ui.kaizenScreenOpen)
 
@@ -31,7 +32,7 @@ function meta(kind: string) {
   return agentKindMeta(kind)
 }
 function when(ms: number): string {
-  return new Date(ms).toLocaleString()
+  return d(new Date(ms), 'long')
 }
 function gradeTone(g: KaizenGrading): string {
   if (g.status === 'failed') return 'text-slate-500'
@@ -42,10 +43,10 @@ function gradeTone(g: KaizenGrading): string {
   return 'text-rose-400'
 }
 function statusLabel(g: KaizenGrading): string {
-  if (g.status === 'scheduled') return 'Scheduled'
-  if (g.status === 'running') return 'Grading…'
-  if (g.status === 'failed') return 'Failed'
-  return g.grade != null ? `${g.grade}/5` : 'Graded'
+  if (g.status === 'scheduled') return t('kaizen.status.scheduled')
+  if (g.status === 'running') return t('kaizen.status.grading')
+  if (g.status === 'failed') return t('kaizen.status.failed')
+  return g.grade != null ? t('kaizen.gradeValue', { grade: g.grade }) : t('kaizen.status.graded')
 }
 </script>
 
@@ -63,9 +64,9 @@ function statusLabel(g: KaizenGrading): string {
             <UIcon name="i-lucide-sparkles" class="h-5 w-5 text-teal-400" />
           </div>
           <div class="min-w-0">
-            <h1 class="truncate text-base font-semibold text-white">Kaizen</h1>
+            <h1 class="truncate text-base font-semibold text-white">{{ t('kaizen.title') }}</h1>
             <p class="truncate text-xs text-slate-500">
-              Continuous-improvement grading of agent runs
+              {{ t('kaizen.subtitle') }}
             </p>
           </div>
           <div class="ml-auto flex items-center gap-2">
@@ -77,10 +78,10 @@ function statusLabel(g: KaizenGrading): string {
               :loading="kaizen.loadingOverview"
               @click="kaizen.loadOverview()"
             >
-              Refresh
+              {{ t('kaizen.refresh') }}
             </UButton>
             <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="close">
-              Close
+              {{ t('common.close') }}
             </UButton>
           </div>
         </header>
@@ -89,7 +90,7 @@ function statusLabel(g: KaizenGrading): string {
           v-if="kaizen.available === false"
           class="flex flex-1 items-center justify-center text-sm text-slate-500"
         >
-          Kaizen is not configured on this deployment.
+          {{ t('kaizen.notConfigured') }}
         </div>
 
         <div v-else class="grid flex-1 grid-cols-1 gap-6 overflow-auto p-6 lg:grid-cols-3">
@@ -97,12 +98,13 @@ function statusLabel(g: KaizenGrading): string {
           <section class="lg:col-span-1">
             <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-200">
               <UIcon name="i-lucide-badge-check" class="h-4 w-4 text-emerald-400" />
-              Verified combos
-              <span class="text-xs font-normal text-slate-500">({{ kaizen.verifiedCount }})</span>
+              {{ t('kaizen.verifiedCombos.title') }}
+              <span class="text-xs font-normal text-slate-500">{{
+                t('kaizen.verifiedCombos.count', { count: kaizen.verifiedCount })
+              }}</span>
             </h2>
             <p class="mb-3 text-[11px] text-slate-500">
-              A prompt + agent + model combination that graded 4 or 5 with no recommendations five
-              times in a row. These are no longer graded.
+              {{ t('kaizen.verifiedCombos.hint') }}
             </p>
             <ul class="space-y-2">
               <li
@@ -125,15 +127,20 @@ function statusLabel(g: KaizenGrading): string {
                     class="ml-auto h-3.5 w-3.5 text-emerald-400"
                   />
                   <span v-else class="ml-auto text-[11px] text-slate-500">
-                    {{ c.consecutiveHighGrades }}/5
+                    {{ t('kaizen.verifiedCombos.progress', { count: c.consecutiveHighGrades }) }}
                   </span>
                 </div>
                 <div class="mt-1 truncate text-[11px] text-slate-500" :title="c.model">
-                  {{ c.model }} · prompt v{{ c.promptVersion }}
+                  {{
+                    t('kaizen.verifiedCombos.modelPrompt', {
+                      model: c.model,
+                      version: c.promptVersion,
+                    })
+                  }}
                 </div>
               </li>
               <li v-if="kaizen.verified.length === 0" class="text-xs text-slate-600">
-                No combos yet.
+                {{ t('kaizen.verifiedCombos.empty') }}
               </li>
             </ul>
           </section>
@@ -142,17 +149,19 @@ function statusLabel(g: KaizenGrading): string {
           <section class="lg:col-span-2">
             <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-200">
               <UIcon name="i-lucide-history" class="h-4 w-4 text-teal-400" />
-              Grading history
+              {{ t('kaizen.history.title') }}
             </h2>
             <div class="overflow-hidden rounded-lg border border-slate-800">
               <table class="w-full text-left text-xs">
                 <thead class="bg-slate-900/60 text-[11px] uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th class="px-3 py-2 font-medium">When</th>
-                    <th class="px-3 py-2 font-medium">Agent</th>
-                    <th class="px-3 py-2 font-medium">Model</th>
-                    <th class="px-3 py-2 font-medium">Grade</th>
-                    <th class="px-3 py-2 font-medium">Recommendations</th>
+                    <th class="px-3 py-2 font-medium">{{ t('kaizen.history.col.when') }}</th>
+                    <th class="px-3 py-2 font-medium">{{ t('kaizen.history.col.agent') }}</th>
+                    <th class="px-3 py-2 font-medium">{{ t('kaizen.history.col.model') }}</th>
+                    <th class="px-3 py-2 font-medium">{{ t('kaizen.history.col.grade') }}</th>
+                    <th class="px-3 py-2 font-medium">
+                      {{ t('kaizen.history.col.recommendations') }}
+                    </th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-800/70">
@@ -168,7 +177,9 @@ function statusLabel(g: KaizenGrading): string {
                           :style="{ color: meta(g.agentKind).color }"
                         />
                         <span class="text-slate-200">{{ meta(g.agentKind).label }}</span>
-                        <span class="text-slate-600">v{{ g.promptVersion }}</span>
+                        <span class="text-slate-600">{{
+                          t('kaizen.promptVersion', { version: g.promptVersion })
+                        }}</span>
                       </span>
                     </td>
                     <td class="max-w-[12rem] truncate px-3 py-2 text-slate-400" :title="g.model">
@@ -187,7 +198,7 @@ function statusLabel(g: KaizenGrading): string {
                   </tr>
                   <tr v-if="kaizen.history.length === 0">
                     <td colspan="5" class="px-3 py-6 text-center text-slate-600">
-                      No gradings yet.
+                      {{ t('kaizen.history.empty') }}
                     </td>
                   </tr>
                 </tbody>

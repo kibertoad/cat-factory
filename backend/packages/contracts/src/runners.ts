@@ -218,9 +218,9 @@ export const customRunnerBackendKindSchema = customBackendKindSchema(RESERVED_RU
  * An "agent runner backend" config, discriminated by `kind`. This is the universal
  * abstraction over WHERE repo-operating coding jobs run: the built-ins `manifest` (the BYO
  * HTTP scheduler pool) and `kubernetes` (native per-run pods), plus any CUSTOM kind a
- * deployment registers programmatically via `registerRunnerBackend` (it rides the generic
- * manifest member — NO new variant needed). Mirrors `environmentBackendConfigSchema`; the
- * provider-registry seam keys on `kind`.
+ * deployment registers by reference into the app-owned `RunnerBackendRegistry` (it rides the
+ * generic manifest member — NO new variant needed). Mirrors `environmentBackendConfigSchema`;
+ * the provider-registry seam keys on `kind`.
  */
 export const runnerBackendConfigSchema = v.variant('kind', [
   v.object({ kind: v.literal('manifest'), manifest: runnerPoolManifestSchema }),

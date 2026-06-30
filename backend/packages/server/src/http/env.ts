@@ -8,11 +8,13 @@ import type {
 } from '@cat-factory/kernel'
 import type {
   ApiKeyService,
+  EnvironmentBackendRegistry,
   LocalModelEndpointService,
   LocalSettingsService,
   OpenRouterCatalogService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
+  RunnerBackendRegistry,
   UserSecretService,
 } from '@cat-factory/integrations'
 import type { Core } from '@cat-factory/orchestration'
@@ -39,6 +41,14 @@ export interface ServerContainer extends Core {
   consensusSessionRepository?: ConsensusSessionRepository
   /** Per-facade runtime seams (real-time delivery, …) the shared controllers use. */
   gateways: RuntimeGateways
+  /**
+   * The app-owned backend registries (kind → provider), built by the facade via
+   * `createBackendRegistries()`. The workspace snapshot reads `.labelled()` off these for
+   * the SPA's provider-connect backend-kind selectors (so a deployment-registered custom
+   * kind shows up). Always present — the facade attaches them alongside `config`/`gateways`.
+   */
+  environmentBackendRegistry: EnvironmentBackendRegistry
+  runnerBackendRegistry: RunnerBackendRegistry
   /**
    * Resolve a block's run repo (installation + repo + default branch) bound to a
    * checkout-free {@link RepoFiles}. The engine uses it to run a registered kind's

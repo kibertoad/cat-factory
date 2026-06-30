@@ -23,22 +23,22 @@ it only records **what is done and what is left**.
 
 ## Progress
 
-| Phase | Area                                                            | Components                                                                                                                             | Namespaces                                                               | Status                   |
-| ----: | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------ |
-|     0 | Pilot (error toasts, language switcher, personal subscriptions) | `usePipelineErrorToast`, `LanguageSwitcher`, `TranslationWarningBanner`, `PersonalSubscriptionSection`, `SideBar` (partial, uses `$t`) | `errors.*`, `language.*`, `personalSubscriptions.*`, `nav.*`, `common.*` | ✅ merged (pre-existing) |
-|     1 | **Board**                                                       | `board/**` (15 components)                                                                                                             | `board.*`                                                                | ✅ merged (#393)         |
-|     2 | **Inspector + step/observability panels**                       | `panels/**` + `panels/inspector/**` + `observability/**` (23 components)                                                               | `inspector.*`, `panels.*`, `observability.*`                             | ✅ merged (#395)         |
-|     3 | **Layout + auth**                                               | `layout/**` (14) + `auth/**` (4)                                                                                                       | `layout.*`, `nav.*`, `auth.*`                                            | ✅ merged (#398)         |
-|     4 | **Settings**                                                    | `settings/**` (12)                                                                                                                     | `settings.*`                                                             | ✅ merged (#401)         |
-|     5 | **Providers + AI onboarding**                                   | `providers/**` (5)                                                                                                                     | `providers.*`                                                            | ✅ merged (#403)         |
-|     6 | **Integrations: GitHub / Slack / documents / tasks**            | `github/**` (5), `slack/**` (1), `documents/**` (5), `tasks/**` (4)                                                                    | `github.*`, `slack.*`, `documents.*`, `tasks.*`                          | ✅ merged (#411)         |
-|     7 | **Pipeline + palette + gates**                                  | `pipeline/**` (5), `palettes/**` (1), `gates/**` (1)                                                                                   | `pipeline.*`, `palette.*`, `gates.*`                                     | ✅ done (this PR)        |
-|     8 | **Agent windows**                                               | `requirements/`, `clarity/`, `consensus/`, `brainstorm/`, `spec/`, `followUp/`, `humanTest/`, `testing/`, `visualConfirm/`, `focus/`   | per-feature                                                              | ✅ done (this PR)        |
-|     9 | Remaining surfaces                                              | `bootstrap/`, `environments/`, `fragments/`, `kaizen/`, `sandbox/`, `recurring/`, `media/`, `provisioning/`                            | per-feature                                                              | ⬜ planned               |
-|     X | Cross-cutting                                                   | `app/utils/catalog.ts` (status/agent-kind/block-type labels), `app/pages/*.vue`                                                        | `catalog.*` etc.                                                         | ⬜ planned               |
+| Phase | Area                                                            | Components                                                                                                                                  | Namespaces                                                                                                          | Status                   |
+| ----: | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+|     0 | Pilot (error toasts, language switcher, personal subscriptions) | `usePipelineErrorToast`, `LanguageSwitcher`, `TranslationWarningBanner`, `PersonalSubscriptionSection`, `SideBar` (partial, uses `$t`)      | `errors.*`, `language.*`, `personalSubscriptions.*`, `nav.*`, `common.*`                                            | ✅ merged (pre-existing) |
+|     1 | **Board**                                                       | `board/**` (15 components)                                                                                                                  | `board.*`                                                                                                           | ✅ merged (#393)         |
+|     2 | **Inspector + step/observability panels**                       | `panels/**` + `panels/inspector/**` + `observability/**` (23 components)                                                                    | `inspector.*`, `panels.*`, `observability.*`                                                                        | ✅ merged (#395)         |
+|     3 | **Layout + auth**                                               | `layout/**` (14) + `auth/**` (4)                                                                                                            | `layout.*`, `nav.*`, `auth.*`                                                                                       | ✅ merged (#398)         |
+|     4 | **Settings**                                                    | `settings/**` (12)                                                                                                                          | `settings.*`                                                                                                        | ✅ merged (#401)         |
+|     5 | **Providers + AI onboarding**                                   | `providers/**` (5)                                                                                                                          | `providers.*`                                                                                                       | ✅ merged (#403)         |
+|     6 | **Integrations: GitHub / Slack / documents / tasks**            | `github/**` (5), `slack/**` (1), `documents/**` (5), `tasks/**` (4)                                                                         | `github.*`, `slack.*`, `documents.*`, `tasks.*`                                                                     | ✅ merged (#411)         |
+|     7 | **Pipeline + palette + gates**                                  | `pipeline/**` (5), `palettes/**` (1), `gates/**` (1)                                                                                        | `pipeline.*`, `palette.*`, `gates.*`                                                                                | ✅ done (this PR)        |
+|     8 | **Agent windows**                                               | `requirements/`, `clarity/`, `consensus/`, `brainstorm/`, `spec/`, `followUp/`, `humanTest/`, `testing/`, `visualConfirm/`, `focus/`        | per-feature                                                                                                         | ✅ done (this PR)        |
+|     9 | **Remaining surfaces**                                          | `bootstrap/` (1), `environments/` (1), `fragments/` (2), `kaizen/` (2), `sandbox/` (1), `recurring/` (1), `media/` (2), `provisioning/` (1) | `bootstrap.*`, `environments.*`, `fragments.*`, `kaizen.*`, `sandbox.*`, `recurring.*`, `media.*`, `provisioning.*` | ✅ done (this PR)        |
+|     X | Cross-cutting                                                   | `app/utils/catalog.ts` (status/agent-kind/block-type labels), `app/pages/*.vue`                                                             | `catalog.*` etc.                                                                                                    | ⬜ planned               |
 
-Rough scale: **~121 SPA components**; ~106 already resolve copy through i18n after
-phases 0–8. The remaining work is phases 9–X below.
+Rough scale: **~121 SPA components**; ~117 already resolve copy through i18n after
+phases 0–9. The remaining work is phase X (cross-cutting) below.
 
 ### Done
 
@@ -136,21 +136,35 @@ phases 0–8. The remaining work is phases 9–X below.
   of literal `t()` keys, percentages via `n(..., 'percent')`. `catalog.ts`-sourced
   status/type labels rendered in these windows stay deferred to phase X.
 
+- **Phase 9 (remaining surfaces, this PR):** the repo-bootstrap modal (launch form with
+  the reference/scratch mode picker, repo-name validation errors, the create-repo /
+  grant-access flows, visibility + instruction fields, the recent-runs list with status
+  badges, and the reference-architecture CRUD form), the Sandbox window (the
+  experiment-matrix builder with cell-count plurals, the results grid + experiment/run
+  status enums, the prompt fork/version editor, the fixtures list with kind/origin enums
+  and expectation-count plurals, the unavailable/error notices via `<i18n-t>` code slots,
+  and every toast), the prompt-fragment library (the manager's four tabs — resolved
+  catalog with a fragment-count plural, hand-authored, document-backed and repo-source
+  fragments, every placeholder + toast — plus the board-scope panel shell), the Kaizen
+  screen (verified-combos + grading-history tables, status enums, grade readouts) and its
+  per-step grading card, the recurrence editor (weekday abbreviations, hour-window
+  toggle, timezone), the ephemeral-environment status panel (status enum + expiry via
+  `d(...)`), the provisioning-logs drawer (operation/outcome enums, timestamps), and the
+  media surfaces — the actual-vs-reference comparator (mode labels, alt text, upload
+  hints) and the screenshot lightbox (toolbar titles, counter, zoom percentage via
+  `n(..., 'percent')`). New keys under `bootstrap.*`, `sandbox.*`, `fragments.*`,
+  `kaizen.*`, `recurring.*`, `environments.*`, `provisioning.*` and `media.*` in all five
+  bundled locales (full parity); plural readouts use 3 forms for pl/uk, enum lookups
+  resolve via exhaustive `Record` maps of literal `t()` keys, and concrete example
+  placeholders (`payments-service`, `acme`, the `e.g. …` hints) stay inline per the
+  convention. `agentKindMeta`/`STATUS_META`-sourced labels rendered in these surfaces
+  stay deferred to phase X.
+
 The four board/panels components with **no** user-facing text — `AgentChip`,
 `TaskDependencyEdges`, `DependencyConnectOverlay`, `StepResultViewHost` — need no
 migration and are intentionally skipped.
 
 ### Remaining (by area)
-
-**Remaining surfaces** (phase 9)
-
-```
-bootstrap/BootstrapModal.vue, environments/EnvironmentStatusPanel.vue,
-fragments/FragmentLibraryManager.vue, fragments/FragmentLibraryPanel.vue,
-kaizen/KaizenPanel.vue, kaizen/KaizenStepStatus.vue, sandbox/SandboxPanel.vue,
-recurring/RecurrenceEditor.vue, media/ArtifactLightbox.vue, media/ImageCompare.vue,
-provisioning/ProvisioningLogsDrawer.vue
-```
 
 **Cross-cutting** (phase X)
 

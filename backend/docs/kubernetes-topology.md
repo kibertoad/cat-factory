@@ -4,7 +4,7 @@ How to run the **Node facade** (`@cat-factory/node-server`) and its agent worklo
 Kubernetes: where the executor image runs, where the backend runs, where the proxy the
 executor reaches the world through lives, and who owns/hosts what.
 
-cat-factory's runner backend is pluggable (`registerRunnerBackend`), and on Kubernetes two
+cat-factory's runner backend is pluggable (the app-owned `RunnerBackendRegistry`), and on Kubernetes two
 backends ship. They differ **only** in how a job is dispatched to a pod; everything else (the
 control plane, the data-plane trust boundary, proxy-only model egress, direct-to-GitHub) is
 identical.

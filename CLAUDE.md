@@ -61,6 +61,28 @@ changeset so it's visible, but don't engineer around it. (This is why, e.g., fla
 previously-poolable subscription vendor as individual-only can orphan its existing pooled
 tokens with no data migration — that's acceptable, not a bug to fix.)
 
+## For bigger initiatives, always create a tracker document
+
+When you take on a **larger, multi-PR / multi-iteration initiative** (a cross-cutting
+refactor, a migration applied registry-by-registry or file-by-file, a strangler conversion
+spread over several PRs), **always create a tracker document under `docs/initiatives/`**
+before or alongside the first PR — don't carry the plan only in your head or in a single
+PR description. The tracker is the durable source of truth a later agent iteration reads
+FIRST so it can pick the work up without re-deriving context. Capture:
+
+- **Goal & rationale** — the problem, why the change, the intended end state.
+- **The target pattern** — the reference implementation (link the pilot once it lands), so
+  every subsequent slice follows the same shape rather than reinventing it.
+- **A per-item status checklist** — a table of every unit of work (file / package / call
+  site) with status (`done` / `in-progress` / `todo`) + PR link, updated at the end of each
+  PR. This is what makes the work resumable and spreadable across iterations.
+- **Conventions & gotchas carried between iterations** — the non-obvious traps the pilot
+  surfaced (e.g. "keep the runtimes symmetric", ">1 construction site per facade"), so they
+  aren't rediscovered the hard way each slice.
+
+The first example is [`docs/initiatives/registry-di-migration.md`](./docs/initiatives/registry-di-migration.md)
+(moving the module-global plugin registries to app-owned DI, one registry at a time).
+
 ## Known environment quirks
 
 - **Do not validate Cloudflare auth before deployments.** Skip `wrangler whoami`

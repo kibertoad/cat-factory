@@ -14,7 +14,10 @@ import {
   JiraProvider,
   LinearDocumentProvider,
   LinearTaskProvider,
-  findRepairCapableProvider,
+  createBackendRegistries,
+  type BackendRegistries,
+  type EnvironmentBackendRegistry,
+  type RunnerBackendRegistry,
   HttpRunnerPoolProvider,
   NotionProvider,
   ApiKeyService,
@@ -484,12 +487,20 @@ export interface NodeContainerOptions {
   /**
    * Override the shared HTTP provider the built-in `manifest` runner backend dispatches/tests
    * through (its OAuth cache reused), e.g. for tests. This is NOT the custom-kind seam: a
-   * bespoke runner backend is registered programmatically via `registerRunnerBackend` (an
-   * import side effect) and selected per-workspace by its `kind`, exactly like a custom
-   * environment backend (`registerEnvironmentBackend`). The per-workspace runner-pool
-   * connection (manifest + secrets) still configures it. Undefined → the default HTTP provider.
+   * bespoke runner backend is registered by reference into the injected
+   * {@link backendRegistries} and selected per-workspace by its `kind`, exactly like a custom
+   * environment backend. The per-workspace runner-pool connection (manifest + secrets) still
+   * configures it. Undefined → the default HTTP provider.
    */
   runnerPoolProvider?: RunnerPoolProvider
+  /**
+   * The app-owned backend registries (environment + runner kind → provider). Defaults to
+   * `createBackendRegistries()` (just the built-in `manifest` + `kubernetes` kinds). A
+   * deployment registers a custom backend by reference here; the cross-runtime conformance
+   * suite injects a registry pre-loaded with a fake custom backend to assert the seam behaves
+   * identically on both runtimes.
+   */
+  backendRegistries?: BackendRegistries
   /**
    * Skip wrapping the resolved transport with the provisioning-log decorator. A sibling
    * facade that pre-wraps each transport branch with its OWN subsystem tag (local mode
@@ -520,9 +531,11 @@ export function buildNodeResolveTransport(
   runnerPoolConnectionRepository: DrizzleRunnerPoolConnectionRepository,
   workspaceRepository: CoreDependencies['workspaceRepository'],
   clock: Clock,
+  // The app-owned runner-backend registry the service resolves a stored `kind` through.
+  runnerBackendRegistry: RunnerBackendRegistry,
   // The shared HTTP provider the built-in `manifest` backend reuses when supplied (e.g.
-  // tests). NOT the custom-kind seam — a bespoke runner backend is a registered `kind`
-  // (`registerRunnerBackend`). Absent → the generic manifest-driven HTTP provider.
+  // tests). NOT the custom-kind seam — a bespoke runner backend is registered by reference
+  // into `runnerBackendRegistry`. Absent → the generic manifest-driven HTTP provider.
   injectedPoolProvider?: RunnerPoolProvider,
 ): ResolveRunnerTransport | null {
   if (!config.runners.enabled || !config.runners.encryptionKey) return null
@@ -535,6 +548,7 @@ export function buildNodeResolveTransport(
       info: RUNNERS_CIPHER_INFO,
     }),
     clock,
+    runnerBackendRegistry,
     ...(urlPolicy ? { urlPolicy } : {}),
     runnerPoolProvider:
       injectedPoolProvider ?? new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {}),
@@ -771,7 +785,7 @@ function selectNodeRepoBootstrapper(deps: {
  * prerequisites are met — the same container prerequisites as the bootstrapper PLUS a
  * registered backend that supports agent repair (`describeRepairAgent`). The stock manifest
  * provider has no repair support, so this stays undefined there; it wires only when a custom
- * backend registered via `registerEnvironmentBackend` implements repair (so local inherits it
+ * backend registered into the env-backend registry implements repair (so local inherits it
  * too). NOT the repo bootstrapper: an ordinary clone→edit→push coding job, no history reset.
  */
 function selectNodeEnvConfigRepairer(deps: {
@@ -781,6 +795,7 @@ function selectNodeEnvConfigRepairer(deps: {
   installationRepository: GitHubInstallationRepository
   mintInstallationToken: ((installationId: number) => Promise<string>) | undefined
   override: CoreDependencies['environmentProvider']
+  environmentBackendRegistry: EnvironmentBackendRegistry
 }): ContainerEnvConfigRepairer | undefined {
   const publicUrl = deps.env.PUBLIC_URL?.trim()
   const sessionSecret = deps.config.auth.sessionSecret
@@ -791,7 +806,9 @@ function selectNodeEnvConfigRepairer(deps: {
   const environmentProvider = !deps.resolveTransport
     ? undefined
     : (deps.override ??
-      findRepairCapableProvider(repairUrlPolicy ? { urlPolicy: repairUrlPolicy } : {}))
+      deps.environmentBackendRegistry.findRepairCapable(
+        repairUrlPolicy ? { urlPolicy: repairUrlPolicy } : {},
+      ))
   if (
     !deps.resolveTransport ||
     !publicUrl ||
@@ -1044,6 +1061,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const idGenerator = new CryptoIdGenerator()
   const repos = options.repos ?? createDrizzleRepositories(options.db, clock)
 
+  // The app-owned backend registries (env + runner kind → provider), built once here and
+  // injected into the engine + surfaced on the container for the snapshot's backend-kind
+  // selectors. A deployment registers a custom backend by reference; the conformance suite
+  // injects a pre-loaded registry. Defaults to just the built-in `manifest`/`kubernetes` kinds.
+  const { environmentBackendRegistry, runnerBackendRegistry } =
+    options.backendRegistries ?? createBackendRegistries()
+
   // Binary-artifact storage (UI screenshots + reference design images) for the
   // visual-confirmation gate. The backend is configured PER ACCOUNT in the UI (no env vars):
   // the metadata always lives in Postgres; the bytes go to the account's chosen blob backend
@@ -1223,6 +1247,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           runnerPoolConnectionRepository,
           repos.workspaceRepository,
           clock,
+          runnerBackendRegistry,
           options.runnerPoolProvider,
         )
   const resolveTransport = options.skipProvisioningLogWrap
@@ -1667,6 +1692,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const dependencies: CoreDependencies = {
     ...releaseHealthDeps,
     ...incidentEnrichmentDeps,
+    // App-owned backend registries (kind → provider) the connection services resolve through.
+    environmentBackendRegistry,
+    runnerBackendRegistry,
     ...(accountSettings ? { accountSettings } : {}),
     // Resolves the per-account binary-artifact store (screenshots) for the visual-confirmation
     // gate; resolving to null (no storage configured) ⇒ the gate passes through.
@@ -1901,6 +1929,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     installationRepository: githubInstallationRepository,
     mintInstallationToken: bootstrapMintInstallationToken,
     override: dependencies.environmentProvider,
+    environmentBackendRegistry,
   })
   // Don't clobber an override-provided repairer (e.g. the conformance suite's fake): an
   // explicit `overrides.envConfigRepairer` wins, exactly like `repoBootstrapper`.
@@ -1918,6 +1947,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // GitHub-issue search to the originating service's repo (and refuse it when unlinked).
     resolveRepoTarget,
     agentRunRepository: repos.agentRunRepository,
+    // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
+    // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
+    environmentBackendRegistry,
+    runnerBackendRegistry,
     // The consensus transcript store, for the read endpoint (window load / reload).
     consensusSessionRepository: repos.consensusSessionRepository,
     // Resolves the per-account binary-artifact store (screenshots) for the artifact

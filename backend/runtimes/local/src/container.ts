@@ -17,7 +17,7 @@ import { WorkspaceSettingsService } from '@cat-factory/orchestration'
 import { buildInfrastructureCapabilities, logger } from '@cat-factory/server'
 import type { AppConfig, ResolveRunnerTransport, ServerContainer } from '@cat-factory/server'
 import type { CoreDependencies } from '@cat-factory/orchestration'
-import { LocalSettingsService } from '@cat-factory/integrations'
+import { LocalSettingsService, createBackendRegistries } from '@cat-factory/integrations'
 import type { HarnessKind, RunnerTransport } from '@cat-factory/kernel'
 import { NativeRoutingRunnerTransport } from './NativeRoutingRunnerTransport.js'
 import { applyLocalDefaults } from './config.js'
@@ -259,11 +259,16 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // through `options.runnerPoolProvider` drives the actual dispatch. The connection repo is
   // also held for the start-time guard's cheap "is a pool registered?" existence check.
   const runnerPoolConnectionRepository = new DrizzleRunnerPoolConnectionRepository(options.db)
+  // Build the app-owned backend registries once and share them with BOTH the pool resolver
+  // here AND `buildNodeContainer` below (via `backendRegistries`), so the runner backend a
+  // workspace's `kind` resolves to is the same instance everywhere. Defaults to the built-ins.
+  const backendRegistries = options.backendRegistries ?? createBackendRegistries()
   const poolResolve = buildNodeResolveTransport(
     config,
     runnerPoolConnectionRepository,
     repos.workspaceRepository,
     clock,
+    backendRegistries.runnerBackendRegistry,
     options.runnerPoolProvider,
   )
 
@@ -368,6 +373,9 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     env,
     config,
     repos,
+    // Share the SAME registries the pool resolver above was built with (so a custom runner
+    // backend resolves to one instance across the local chooser + the engine's connection service).
+    backendRegistries,
     // The per-workspace chooser (host Docker / native local vs the runner pool). Pre-wrapped
     // with the correct provisioning-log subsystem per branch, so tell buildNodeContainer not
     // to re-wrap with a single subsystem tag.

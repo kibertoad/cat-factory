@@ -137,13 +137,13 @@ export const workspaceSnapshotSchema = v.object({
   customAgentKinds: v.optional(v.array(customAgentKindSchema)),
   /**
    * The registered ephemeral-environment / runner-pool backend kinds (built-in + any a
-   * deployment registered via `registerEnvironmentBackend` / `registerRunnerBackend`), each
-   * `{ kind, label }`. The SPA drives the provider-connect backend-kind selector from these
-   * instead of a hardcoded `manifest`/`kubernetes` list, so a programmatically-registered
-   * custom backend becomes a first-class connect option. Static (process-global registry),
-   * workspace-independent; attached by the facade `WorkspaceController` (the registry lives in
-   * `@cat-factory/integrations`, which the `workspaces` package doesn't depend on). Optional on
-   * the wire; the SPA falls back to the built-ins when absent.
+   * deployment registered into the app-owned backend registries), each `{ kind, label }`. The
+   * SPA drives the provider-connect backend-kind selector from these instead of a hardcoded
+   * `manifest`/`kubernetes` list, so a registered custom backend becomes a first-class connect
+   * option. Workspace-independent; attached by the facade `WorkspaceController`, which reads the
+   * registries off the request container (the registries live in `@cat-factory/integrations`,
+   * which the `workspaces` package doesn't depend on). Optional on the wire; the SPA falls back
+   * to the built-ins when absent.
    */
   environmentBackendKinds: v.optional(v.array(backendKindOptionSchema)),
   runnerBackendKinds: v.optional(v.array(backendKindOptionSchema)),

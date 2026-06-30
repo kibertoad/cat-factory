@@ -13,6 +13,7 @@ const props = defineProps<{
 }>()
 
 const kaizen = useKaizenStore()
+const { t } = useI18n()
 
 const grading = computed(() => {
   if (!props.instanceId || props.stepIndex == null) return null
@@ -45,50 +46,52 @@ const tone = computed(() => {
   <section v-if="grading" class="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
     <div class="flex items-center gap-2">
       <UIcon name="i-lucide-sparkles" class="h-4 w-4 text-teal-400" />
-      <h3 class="text-sm font-semibold text-slate-200">Kaizen grading</h3>
+      <h3 class="text-sm font-semibold text-slate-200">{{ t('kaizen.grading.title') }}</h3>
       <span class="ml-auto flex items-center gap-1.5 text-xs">
         <template v-if="grading.status === 'scheduled'">
           <UIcon name="i-lucide-clock" class="h-3.5 w-3.5 text-slate-500" />
-          <span class="text-slate-400">Scheduled</span>
+          <span class="text-slate-400">{{ t('kaizen.status.scheduled') }}</span>
         </template>
         <template v-else-if="grading.status === 'running'">
           <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin text-teal-400" />
-          <span class="text-teal-300">Grading…</span>
+          <span class="text-teal-300">{{ t('kaizen.status.grading') }}</span>
         </template>
         <template v-else-if="grading.status === 'failed'">
           <UIcon name="i-lucide-circle-alert" class="h-3.5 w-3.5 text-rose-400" />
-          <span class="text-rose-400">Failed</span>
+          <span class="text-rose-400">{{ t('kaizen.status.failed') }}</span>
         </template>
         <template v-else>
-          <span class="font-semibold" :class="tone">{{ grading.grade }}/5</span>
+          <span class="font-semibold" :class="tone">{{
+            t('kaizen.gradeValue', { grade: grading.grade })
+          }}</span>
         </template>
       </span>
     </div>
 
     <p v-if="grading.status === 'scheduled'" class="mt-2 text-[11px] text-slate-500">
-      A Kaizen grading is queued for this step. It runs in the background after the run.
+      {{ t('kaizen.scheduledHint') }}
     </p>
 
     <template v-else-if="grading.status === 'complete'">
       <p v-if="grading.summary" class="mt-2 text-xs text-slate-300">{{ grading.summary }}</p>
       <div v-if="grading.recommendations.length" class="mt-2">
         <p class="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-          Recommendations
+          {{ t('kaizen.recommendations') }}
         </p>
         <ul class="mt-1 list-disc space-y-0.5 pl-4 text-xs text-slate-300">
           <li v-for="(r, i) in grading.recommendations" :key="i">{{ r }}</li>
         </ul>
       </div>
       <p v-else class="mt-2 text-[11px] text-emerald-400/80">
-        Smooth interaction — nothing to improve.
+        {{ t('kaizen.noImprovements') }}
       </p>
       <p v-if="grading.graderModel" class="mt-2 text-[10px] text-slate-600">
-        Graded by {{ grading.graderModel }}
+        {{ t('kaizen.gradedBy', { model: grading.graderModel }) }}
       </p>
     </template>
 
     <p v-else-if="grading.status === 'failed'" class="mt-2 text-[11px] text-rose-400/80">
-      {{ grading.error ?? 'The grading could not be completed.' }}
+      {{ grading.error ?? t('kaizen.failedFallback') }}
     </p>
   </section>
 </template>
