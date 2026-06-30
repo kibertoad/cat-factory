@@ -28,12 +28,12 @@ exercise locally matches what ships.
 These match the [`deploy-harness` Dockerfile](../internal/deploy-harness/Dockerfile) pins (the
 image the deploy step actually runs), so local runs reproduce CI/container behaviour:
 
-| Tool      | Version    | Notes                                                            |
-| --------- | ---------- | ---------------------------------------------------------------- |
-| kubectl   | `v1.36.2`  | Docker Desktop ships its own (older) kubectl — see PATH note.    |
-| kustomize | `v5.8.1`   | Standalone; `kubectl` also bundles a `kustomize` subcommand.     |
-| helm      | `v4.2.2`   |                                                                  |
-| k3d       | `v5.9.0`   | Runs k3s in Docker; ships the klipper ServiceLB (LoadBalancer URLs resolve). |
+| Tool      | Version   | Notes                                                                        |
+| --------- | --------- | ---------------------------------------------------------------------------- |
+| kubectl   | `v1.36.2` | Docker Desktop ships its own (older) kubectl — see PATH note.                |
+| kustomize | `v5.8.1`  | Standalone; `kubectl` also bundles a `kustomize` subcommand.                 |
+| helm      | `v4.2.2`  |                                                                              |
+| k3d       | `v5.9.0`  | Runs k3s in Docker; ships the klipper ServiceLB (LoadBalancer URLs resolve). |
 
 > Bump these deliberately and in lockstep with the deploy-harness Dockerfile / the CI
 > `test-k8s` job when the pinned versions move (see CLAUDE.md / CONTRIBUTING).
@@ -100,7 +100,7 @@ you want the pinned `v1.36.2` to win, either:
 - call it explicitly: `& "$env:USERPROFILE\bin\kubectl.exe" ...`, or
 - prepend the bin dir for the session: `$env:Path = "$env:USERPROFILE\bin;$env:Path"`, or
 - (admin) move `%USERPROFILE%\bin` ahead of the Docker entry in the **machine** PATH.
-`helm`, `kustomize`, and `k3d` have no such conflict — Docker Desktop ships none of them.
+  `helm`, `kustomize`, and `k3d` have no such conflict — Docker Desktop ships none of them.
 
 ## Bring up a local k3d cluster
 
