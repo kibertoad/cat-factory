@@ -210,7 +210,7 @@ export * from './persistence/decode.js'
 // Mothership-mode persistence RPC: the wire protocol + method table + server dispatcher, and
 // the client-side remote-repository proxy. A facade attaches its repository registry as
 // `ServerContainer.repositories` to act as a mothership; a mothership-mode local node builds
-// `createRemoteRepositories` instead of a database-backed repo set.
+// `createRemoteRepositoryRegistry` instead of a database-backed repo set.
 export {
   type PersistenceRpcRequest,
   type PersistenceRpcResponse,
@@ -229,8 +229,7 @@ export {
 } from './persistence/rpc.js'
 export {
   type PersistenceRpcClient,
-  type RemoteRepositories,
-  createRemoteRepositories,
+  createRemoteRepositoryRegistry,
   HttpPersistenceRpcClient,
 } from './persistence/remoteRepositories.js'
 

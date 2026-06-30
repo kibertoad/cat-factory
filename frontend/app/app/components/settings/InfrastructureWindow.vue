@@ -12,6 +12,7 @@
 import { computed, ref, watch } from 'vue'
 import type { ProviderConnectionKind } from '~/types/providerConnections'
 import InfrastructureBackendPicker from '~/components/settings/InfrastructureBackendPicker.vue'
+import InfraHandlersConfigurator from '~/components/settings/InfraHandlersConfigurator.vue'
 import LocalContainerPoolSettings from '~/components/settings/LocalContainerPoolSettings.vue'
 
 const { t } = useI18n()
@@ -117,8 +118,10 @@ watch([tabs, () => store.loaded], () => {
           </template>
           <template #environment>
             <div class="space-y-4">
-              <!-- One unified list of where the Tester's ephemeral environments run. -->
-              <InfrastructureBackendPicker axis="testEnv" />
+              <!-- The Tester's environment is driven by each SERVICE's declared provision type
+                   (the "what/where"); the workspace configures HOW each type is handled here —
+                   the engine + connection per provision type, plus the custom-type catalog. -->
+              <InfraHandlersConfigurator />
             </div>
           </template>
         </UTabs>

@@ -6,7 +6,12 @@ import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from 
 import { followUpsStepStateSchema } from './followUp.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
 import { releaseSignalSchema } from './release.js'
-import { environmentStatusSchema, serviceProvisioningSchema } from './environments.js'
+import {
+  environmentStatusSchema,
+  infraEngineSchema,
+  provisionTypeSchema,
+  serviceProvisioningSchema,
+} from './environments.js'
 import { documentSourceKindSchema } from './documents.js'
 import {
   agentKindSchema,
@@ -899,6 +904,19 @@ export const runEnvironmentSchema = v.object({
   expiresAt: v.optional(v.nullable(v.number())),
   /** The verbatim provider error when the environment failed/expired, else null. */
   lastError: v.optional(v.nullable(v.string())),
+  /**
+   * The service's declared provision type this environment was stood up for
+   * (`kubernetes` | `docker-compose` | `custom` | `infraless`), recorded at provision
+   * time so a run's details show exactly what was provisioned. Null for legacy rows /
+   * pre-resolution.
+   */
+  provisionType: v.optional(v.nullable(provisionTypeSchema)),
+  /**
+   * The resolved engine that handled the provisioning (`local-docker` | `local-k3s` |
+   * `remote-kubernetes` | `remote-custom` | `none`), surfaced in run details alongside the
+   * environment state. Null for legacy rows / pre-resolution.
+   */
+  engine: v.optional(v.nullable(infraEngineSchema)),
 })
 export type RunEnvironment = v.InferOutput<typeof runEnvironmentSchema>
 
@@ -1374,6 +1392,15 @@ export const pipelineStepSchema = v.object({
    * a short window, unlike a crash. Absent/0 until the first transient eviction.
    */
   transientEvictionRecoveries: v.optional(v.number()),
+  /**
+   * The service-provisioning config a `deployer` step PINNED when it dispatched its async,
+   * container-backed deploy job, so the later poll/finalize maps the job against the same config
+   * the container was built from — NOT a fresh read of the service frame (which a person may have
+   * edited mid-flight, e.g. flipping it to `infraless`, which would otherwise fail a deploy whose
+   * container already succeeded). Absent for the synchronous raw-manifest path and the undeclared
+   * legacy single-connection path (re-resolution is harmless there). See {@link serviceProvisioningSchema}.
+   */
+  deployProvisioning: v.optional(serviceProvisioningSchema),
 })
 export type PipelineStep = v.InferOutput<typeof pipelineStepSchema>
 

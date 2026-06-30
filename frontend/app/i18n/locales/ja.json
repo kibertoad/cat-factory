@@ -400,6 +400,8 @@
       "composeHint": "Tester がサービスの依存関係をローカルで立ち上げる際に使用します。",
       "selectComposeTitle": "docker-compose ファイルを選択",
       "selectComposeHint": "リポジトリ内の compose ファイルを選択します。パスはリポジトリルートからの相対で保存されます。",
+      "selectManifestTitle": "Kubernetes マニフェストを選択",
+      "selectManifestHint": "リポジトリ内のマニフェストのファイルまたはディレクトリを選択します。パスはリポジトリルートからの相対で保存されます。",
       "selected": "選択中: {path}",
       "noFileSelected": "ファイルが選択されていません。",
       "useThisFile": "このファイルを使用",
@@ -416,7 +418,26 @@
         "medium": "中",
         "large": "大",
         "xlarge": "特大"
-      }
+      },
+      "renderers": {
+        "raw": "そのままのマニフェスト",
+        "kustomize": "Kustomize"
+      },
+      "localDevOnly": "ローカル開発専用",
+      "manifestSourceLabel": "マニフェストの取得元",
+      "sourceColocated": "このリポジトリ内",
+      "sourceSeparate": "別のリポジトリ",
+      "manifestRepo": "マニフェストのリポジトリ (owner/repo)",
+      "manifestRef": "参照 (ブランチ/タグ/sha)",
+      "manifestPath": "マニフェストのパス",
+      "manifestPathHint": "PR ごとの Kubernetes マニフェストのファイルまたはディレクトリ。リポジトリのルートからの相対パス。",
+      "rendererLabel": "レンダラー",
+      "rendererHint": "Raw はマニフェストをそのまま適用します。Kustomize はまずオーバーレイをビルドします（コンテナのデプロイアダプターが必要）。",
+      "customManifestId": "カスタムマニフェストタイプ",
+      "customManifestIdPlaceholder": "マニフェストタイプを選択",
+      "customNoTypes": "カスタムマニフェストタイプはまだ定義されていません。インフラウィンドウで追加してください。",
+      "customManifestIdHint": "このサービスが生成するカスタムタイプ。ワークスペースが構成する remote-custom ハンドラーと照合されます。",
+      "customManifestPath": "マニフェストのパス（任意）"
     },
     "agentConfig": {
       "title": "エージェント設定",
@@ -1263,6 +1284,78 @@
         "environment-providerDesc": "自前の HTTP 管理 API を通じて一時的な環境をプロビジョニングします。",
         "compose": "Docker Compose プレビュー環境",
         "composeDesc": "リポジトリ自身の docker-compose.yml をローカルの Docker デーモンで起動し、テスターの URL として使用します。ローカルの Compose ベースのアプリに最適です。イメージベースのスタックのみ対応。Docker デーモンが必要なため、ローカルデプロイメント専用です。"
+      },
+      "dockerComposeInfo": "Docker Compose サービスはランタイムのローカル Docker 上で起動します。接続は不要です（実行のコンテナが Docker-in-Docker をサポートする必要があります）。",
+      "engine": {
+        "local-k3s": "ローカル k3s",
+        "remote-kubernetes": "リモート Kubernetes"
+      },
+      "kubernetesEngine": {
+        "label": "接続ラベル",
+        "labelPlaceholder": "プレビュークラスター",
+        "apiServerUrl": "API サーバー URL",
+        "apiServerUrlHelp": "kube-apiserver のルート。例: https://my-cluster.example:6443。",
+        "apiToken": "ServiceAccount トークン",
+        "apiTokenHelp": "書き込み専用。ローテーションするには再入力してください。暗号化して保存され、返却されることはありません。",
+        "urlSourceLabel": "環境 URL の取得元",
+        "urlIngressTemplate": "Ingress ホストテンプレート",
+        "urlIngressStatus": "Ingress ステータス",
+        "urlServiceStatus": "Service ステータス (LoadBalancer)",
+        "urlGatewayStatus": "Gateway ステータス (Gateway API)",
+        "urlHttpRouteStatus": "HTTPRoute ステータス (Gateway API)",
+        "hostTemplate": "ホストテンプレート",
+        "hostTemplateHelp": "ホストテンプレート。プロビジョニング変数（例: branch、sha）で描画されます。",
+        "ingressName": "Ingress 名",
+        "serviceName": "Service 名",
+        "port": "ポート",
+        "gatewayName": "Gateway 名",
+        "httpRouteName": "HTTPRoute 名",
+        "scheme": "URL スキーム",
+        "schemeDefault": "デフォルト",
+        "namespaceTemplate": "Namespace テンプレート",
+        "namespaceTemplateHelp": "PR ごとの namespace 名。プロビジョニング変数で描画されます。kustomize の場合は空のままにするとオーバーレイの namespace を尊重します。",
+        "imageTemplate": "イメージテンプレート",
+        "imageTemplateHelp": "イメージ変数としてマニフェストに提供されるイメージ参照。",
+        "caCertPem": "CA 証明書 (PEM)",
+        "caCertPemHelp": "apiserver の TLS 証明書を検証します。公的に信頼された CA の場合のみ省略します。",
+        "insecureSkipTlsVerify": "TLS 検証をスキップ",
+        "insecureSkipTlsVerifyHelp": "強く非推奨: 開発/kind クラスターのみ。"
+      },
+      "customType": {
+        "title": "カスタムマニフェストタイプ",
+        "hint": "サービスが固定できるカスタムプロビジョニングタイプのオープンカタログ。下に独自のものを追加できます。コード由来のタイプは読み取り専用です。",
+        "empty": "カスタムマニフェストタイプはまだありません。",
+        "source": {
+          "registered": "コードから",
+          "workspace": "ワークスペース"
+        },
+        "editTitle": "{id} を編集",
+        "addTitle": "タイプを追加",
+        "manifestId": "マニフェスト ID",
+        "manifestIdHelp": "小文字とハイフンの slug。例: my-kargo-template。",
+        "label": "ラベル",
+        "acceptsInputHint": "入力ヒント（任意）",
+        "acceptsInputHintHelp": "プロバイダーが期待する入力形式を説明します。",
+        "description": "説明（任意）",
+        "add": "タイプを追加",
+        "saveFailed": "カスタムタイプを保存できませんでした",
+        "removeFailed": "カスタムタイプを削除できませんでした"
+      },
+      "handler": {
+        "intro": "サービスが宣言する各プロビジョニングタイプの処理方法（エンジンと接続）を構成します。サービスのマニフェストや compose パス（何を/どこで）はサービス側で設定します。",
+        "activeEngine": "エンジン:",
+        "engineLabel": "エンジン",
+        "customHandlerTitle": "remote-custom ハンドラー",
+        "customTypeLabel": "カスタムタイプ",
+        "customConnected": "ハンドラーが接続されました。",
+        "saved": "ハンドラーを保存しました",
+        "removed": "ハンドラーを削除しました",
+        "saveFailed": "ハンドラーを保存できませんでした",
+        "personalOverride": "個人オーバーライド（このマシン）",
+        "overrideActive": "有効",
+        "personalOverrideHint": "このプロビジョニングタイプのワークスペースハンドラーを自分のマシンで上書きします。ユーザーごとに保存されます。",
+        "removeOverride": "オーバーライドを削除",
+        "loading": "インフラ設定を読み込んでいます…"
       }
     },
     "providerConnection": {
@@ -3002,7 +3095,22 @@
       "torn_down": "シャットダウン済み"
     },
     "expires": "{date} に期限切れ",
-    "empty": "この実行に一時環境はありません。"
+    "empty": "この実行に一時環境はありません。",
+    "provisionTypeLabel": "プロビジョニングタイプ:",
+    "engineLabel": "エンジン:",
+    "provisionType": {
+      "kubernetes": "Kubernetes",
+      "docker-compose": "Docker Compose",
+      "custom": "カスタム",
+      "infraless": "インフラなし"
+    },
+    "engine": {
+      "local-docker": "ローカル Docker",
+      "local-k3s": "ローカル k3s",
+      "remote-kubernetes": "リモート Kubernetes",
+      "remote-custom": "リモートカスタム (HTTP)",
+      "none": "なし"
+    }
   },
   "provisioning": {
     "title": "プロビジョニングログ",

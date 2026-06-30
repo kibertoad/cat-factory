@@ -284,21 +284,29 @@ export class EnvironmentProvisioningService {
     }
     // Persist a `provisioning` record so the run details show the env spinning up while the
     // deploy container renders + applies. {@link finalizeProvision} supersedes it with the
-    // mapped outcome once the job settles.
-    await this.recordProvisioned(
-      args,
-      resolved.manifest,
-      {
-        externalId: null,
-        url: null,
-        status: 'provisioning',
-        expiresAt: null,
-        access: null,
-        fields: {},
-      },
-      resolved.provisionType,
-      resolved.engine,
-    )
+    // mapped outcome once the job settles. BEST-EFFORT: the job is already dispatched and its
+    // ref is about to be persisted on the step, so a failed projection write must NOT propagate
+    // — that would strand the live deploy container (the caller turns a `startProvision` throw
+    // into a terminal, non-retried provisioning failure) for a display-only row. The real record
+    // is written by `finalizeProvision` regardless.
+    try {
+      await this.recordProvisioned(
+        args,
+        resolved.manifest,
+        {
+          externalId: null,
+          url: null,
+          status: 'provisioning',
+          expiresAt: null,
+          access: null,
+          fields: {},
+        },
+        resolved.provisionType,
+        resolved.engine,
+      )
+    } catch {
+      // Ignore — the `provisioning` row is a spinning-up display nicety; the job is in flight.
+    }
     return { kind: 'dispatched', ref: job.ref }
   }
 

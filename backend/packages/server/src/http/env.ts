@@ -50,6 +50,12 @@ export interface ServerContainer extends Core {
   /** Per-facade runtime seams (real-time delivery, …) the shared controllers use. */
   gateways: RuntimeGateways
   /**
+   * Facade-owned resources to release on graceful shutdown (e.g. the local mothership
+   * boot's `node:sqlite` credential-store handle). The boot path invokes it from its
+   * SIGTERM/SIGINT handler; absent on facades that own no extra disposable resource.
+   */
+  onShutdown?: () => void | Promise<void>
+  /**
    * The app-owned backend registries (kind → provider), built by the facade via
    * `createBackendRegistries()`. The workspace snapshot reads `.labelled()` off these for
    * the SPA's provider-connect backend-kind selectors (so a deployment-registered custom

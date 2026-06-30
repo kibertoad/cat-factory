@@ -28,6 +28,7 @@ export type {
   CloudProvider,
   InstanceSize,
   ProvisionType,
+  ServiceProvisioning,
   AgentConfigOption,
   AgentConfigDescriptor,
   TestConcernSeverity,

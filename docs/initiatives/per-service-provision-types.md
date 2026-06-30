@@ -212,28 +212,40 @@ driven entirely by the service's declared `provisioning`.
   slice 4 adds NO migration. The shared `buildInfraHandlerFields` helper validates/lowers a handler
   config for both the workspace and per-user stores.
 
-### Slice 5 — frontend (TODO)
+### Slice 5 — frontend (DONE)
 
-- **Service view** (`components/panels/inspector/ServiceTestConfig.vue`): a provisioning
-  section — provision-type selector + per-type source inputs (kubernetes: colocated path OR
-  **separate repo**, reuse `RepoTreeBrowser`; docker-compose: compose path + localDevOnly;
-  custom: pick a `manifestId` from the catalog). Remove the local/ephemeral toggle. Writes
-  `board.updateBlock(block.id, { provisioning })`. **Auto-detect** at add-service (extend the
-  existing compose autodiscovery to also detect k8s manifests/kustomization), non-binding.
-  `~/types/domain` `Block` gains `provisioning`, loses `defaultTestEnvironment`.
-- **Infra view** (`components/settings/InfrastructureWindow.vue` +
-  `InfrastructureBackendPicker.vue`): a per-provision-type configurator (one section per type)
-  with an engine picker revealing the matching connect form (reuse `ProviderConnectionTab`);
-  the remote-custom section declares its `acceptsManifestId`; a custom-manifest-type editor
-  (list registered + workspace types, add/edit workspace ones); a local-mode per-user-override
-  affordance writing to the user-handler endpoints.
-- **Run details** (`components/environments/EnvironmentStatusPanel.vue`,
-  `components/panels/StepMetadataCard.vue`): provision type + engine/provider lines from the
-  handle's new fields; `~/types/execution` `RunEnvironment` gains them.
-- **Stores** (`stores/providerConnections.ts` + a `stores/infraConfig.ts`) + **i18n**
-  (`inspector.testConfig.provision.*`, `settings.infrastructure.engine.*`,
-  `settings.infrastructure.customType.*`, `environments.provisionType`/`environments.engine`,
-  `provision-type-unhandled`).
+Implemented. The service view, the per-type infra configurator, the run-details surfacing, the
+new store/API, and i18n across all 8 locales.
+
+- **Service view** (`components/panels/inspector/ServiceTestConfig.vue`): the per-type source
+  inputs a service owns. Kubernetes → manifest source (colocated path, browsable in-repo, OR a
+  **separate repo** + ref + path) + renderer (raw / kustomize); docker-compose → compose path
+  (already present) + a `localDevOnly` flag; custom → a `manifestId` picker from the catalog +
+  optional manifest path. Type switches now MERGE onto the existing `provisioning` (each type's
+  fields survive toggling). Writes `board.updateBlock(block.id, { provisioning })`. `~/types/domain`
+  re-exports `ServiceProvisioning`.
+- **Infra view** (`components/settings/InfrastructureWindow.vue` env tab →
+  `InfraHandlersConfigurator.vue`): one section per provision type. Kubernetes → an engine picker
+  (`local-k3s` / `remote-kubernetes`) revealing the new `KubernetesEngineForm` (the kube ENGINE
+  connection — apiserver + URL derivation, split from the service-owned manifest source);
+  docker-compose → informational (runs on the runtime's local Docker); custom → the
+  `CustomManifestTypeEditor` (registered read-only + editable workspace types) + a `remote-custom`
+  HTTP handler per custom type (`ProviderManifestEditor` reused, `acceptsManifestId` = the picked
+  type). Local mode adds a per-user (this-machine) override on the kube handler, written to the
+  `/me/environment-handlers` endpoints. (The per-type configurator REPLACES the testEnv
+  `InfrastructureBackendPicker`.)
+- **Run details** (`components/environments/EnvironmentStatusPanel.vue`): provision type + engine
+  lines from the handle. `runEnvironmentSchema` (contracts) gains `provisionType`/`engine`;
+  `RunDispatcher.attachEnvironmentProjection` maps them from the handle onto the step projection.
+- **Stores/API**: new `composables/api/infraHandlers.ts` (handler bundle + per-type
+  register/rotate/remove + custom-type CRUD + per-user override endpoints) + new
+  `stores/infraConfig.ts`. New i18n keys (`inspector.testConfig.*`,
+  `settings.infrastructure.kubernetesEngine.*` / `customType.*` / `handler.*` / `engine.*`,
+  `environments.provisionType.*` / `engine.*`) across **all 8 locales**.
+- **Carried forward to slice 11**: the add-service **auto-detect** (there is no existing frontend
+  compose autodiscovery to extend, and slice 11 already owns the comprehensive "propose a
+  recommended config from the repo" detector), and surfacing provision type/engine in
+  `StepMetadataCard.vue` (the dedicated `EnvironmentStatusPanel` already carries it).
 
 ---
 
@@ -465,7 +477,7 @@ LoadBalancer` ⇒ `serviceStatus`); the namespace decision (a pinned `namespace:
 | 2c  | Tester collapse: drop `defaultTestEnvironment`/`tester.environment`/`resolveTesterEnvironment`; gate on `infraless` OR a resolved handler (`provision_type_unhandled`)                                                                                                                                                                   | done   | —    |
 | 3   | `runDeployerStep` merge source+engine + record provisionType/engine; infraless no-op                                                                                                                                                                                                                                                     | done   | —    |
 | 4   | Controllers (per-type endpoints + custom-type CRUD + local-only per-user controller) + all three container wirings (describe/test/validate/bootstrap per-type params deferred to slice 5)                                                                                                                                                | done   | —    |
-| 5   | Frontend (service provisioning section + auto-detect; infra per-type/engine configurator + custom-type editor + local override; run-details surfacing; stores; i18n)                                                                                                                                                                     | todo   | —    |
+| 5   | Frontend (service provisioning section; infra per-type/engine configurator + custom-type editor + local override; run-details surfacing; stores; i18n). Add-service auto-detect carried forward to slice 11                                                                                                                                | done   | —    |
 | 6   | Phase 2: render contracts (`renderer`/`images`/`helmReleases`/`secretInjections`/gateway URL) + dispatch/port seam (`deploy` kind + `image`, `buildProvisionJob`/`finalizeProvision`); NO migration; conformance round-trip                                                                                                              | done   | —    |
 | 7   | Phase 2: `deploy-harness` package + image (kubectl/kustomize/helm; `deploy` KindEntry + `handleDeploy`; publish plumbing + tag). CF container class/binding deferred to slice 10 (needs the DO class)                                                                                                                                    | done   | —    |
 | 8   | Phase 2: `KubernetesEnvironmentProvider` render path (`buildProvisionJob`/`finalizeProvision`; keep native REST) + Gateway-API URL resolvers                                                                                                                                                                                             | done   | —    |

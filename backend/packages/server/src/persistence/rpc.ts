@@ -83,6 +83,12 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *   - `selfUser`      — `args[arg]` is a userId; must equal the token's `userId`.
  *   - `visibility`    — `args[arg]` is a `WorkspaceVisibility`; intersected with the token
  *                       scope so a node can never widen its own visibility.
+ *   - `block`         — `args[arg]` is a blockId with NO workspace arg; resolve the block's
+ *                       owning account server-side (block → home workspace → account).
+ *   - `serviceList`   — `args[arg]` is `string[]` of serviceIds; resolve each service's owning
+ *                       account server-side (services are account-owned). EVERY requested id
+ *                       must resolve to an in-scope account, so a missing or out-of-scope
+ *                       service fails closed. Empty input is allowed (it returns empty).
  */
 export type ScopeRule =
   | { kind: 'workspace'; arg: number }
@@ -91,6 +97,8 @@ export type ScopeRule =
   | { kind: 'accountList'; arg: number }
   | { kind: 'selfUser'; arg: number }
   | { kind: 'visibility'; arg: number }
+  | { kind: 'block'; arg: number }
+  | { kind: 'serviceList'; arg: number }
 
 export interface MethodSpec {
   scope: ScopeRule
@@ -102,11 +110,24 @@ export interface MethodSpec {
 export type PersistenceMethodTable = Record<string, Record<string, MethodSpec>>
 
 /**
- * The pilot allow-list: the six core domain repositories needed to load a board and start
- * an execution. Cross-service reads (`listByService`/`findById`), global sweeper methods
- * (`listStale`), and high-impact unscoped ops (`workspaceRepository.delete`,
- * `accountRepository.create`) are deliberately EXCLUDED — they are added (with their own
- * scope rules) in later slices, or stay mothership-internal. See the initiative tracker.
+ * The mothership-mode persistence allow-list: the core domain repositories plus the
+ * workspace-scoped reads a board load (`GET /workspaces/:id`) and an execution exercise.
+ * Every method here binds to an account via its {@link ScopeRule} so a call outside the
+ * machine token's scope is refused as 404.
+ *
+ * The cross-service board-composition reads keyed on `serviceIds[]`/`accountId`
+ * (`listByServices`, `serviceRepository.listByIds`/`listByAccount`, `countByServiceIds`) and the
+ * entity-id-keyed `blockRepository.findById` are allow-listed here too, each bound by the
+ * {@link ScopeRule} `serviceList` / `block` / `account` kinds that resolve the entity's owning
+ * account server-side before the scope check.
+ *
+ * Still EXCLUDED (added in later gate slices, with their own scope rules, or kept
+ * mothership-internal):
+ *   - `subscriptionActivationRepository.deleteByExecution` — the activation row is the local
+ *     `node:sqlite` bucket (per the per-repo checklist), not the remote surface, so it is not
+ *     exposed here.
+ *   - Global sweeper methods (`listStale`, `deleteOlderThan`) and high-impact unscoped ops
+ *     (`workspaceRepository.delete`, `accountRepository.create`).
  *
  * Admin-gated mutations are also EXCLUDED here. The RPC dispatches over the raw repository,
  * bypassing the service layer that normally enforces per-user role checks — e.g.
@@ -135,6 +156,10 @@ export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
     update: { scope: { kind: 'workspace', arg: 0 } },
     setService: { scope: { kind: 'workspace', arg: 0 } },
     deleteMany: { scope: { kind: 'workspace', arg: 0 } },
+    // Entity-id-keyed (no workspace arg): resolve the block's home workspace's account server-side.
+    findById: { scope: { kind: 'block', arg: 0 } },
+    // Cross-service: compose a board's blocks from every service it mounts.
+    listByServices: { scope: { kind: 'serviceList', arg: 0 } },
   },
   pipelineRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
@@ -151,6 +176,8 @@ export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
     compareAndSwap: { scope: { kind: 'workspace', arg: 0 }, revWriteBack: 1 },
     deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
     markFailed: { scope: { kind: 'workspace', arg: 0 } },
+    // Cross-service: compose a board's runs from every service it mounts.
+    listByServices: { scope: { kind: 'serviceList', arg: 0 } },
   },
   accountRepository: {
     // Reads only — `rename`/`updateSettings` are admin-gated (see allow-list note above).
@@ -163,6 +190,112 @@ export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByUser: { scope: { kind: 'selfUser', arg: 0 } },
     listByAccount: { scope: { kind: 'account', arg: 0 } },
     get: { scope: { kind: 'account', arg: 0 } },
+  },
+  // --- Board-load read surface --------------------------------------------------
+  // The workspace-scoped reads a `GET /workspaces/:id` snapshot assembles. Each takes the
+  // workspaceId as arg0, so they reuse the `workspace` rule (resolve the owning account, reject
+  // out-of-scope as 404). Reads only — no mutation is exposed here.
+  //
+  // The cross-service reads (`*.listByServices`, `countByServiceIds`, `serviceRepository.*`)
+  // compose a board from the services it mounts; their arg0 is `serviceIds[]` (the `serviceList`
+  // rule resolves each service's owning account) or an `accountId` (the `account` rule).
+  serviceRepository: {
+    listByIds: { scope: { kind: 'serviceList', arg: 0 } },
+    listByAccount: { scope: { kind: 'account', arg: 0 } },
+  },
+  workspaceMountRepository: {
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    countByServiceIds: { scope: { kind: 'serviceList', arg: 0 } },
+  },
+  workspaceSettingsRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  mergePresetRepository: {
+    list: { scope: { kind: 'workspace', arg: 0 } },
+    // `MergePresetService.list` lazily seeds the built-in default for a workspace that has
+    // none (a write triggered by the board-load read). Member-level (the preset CRUD is not
+    // admin-gated), workspace-scoped — the same policy as the block/pipeline mutations above.
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  modelPresetRepository: {
+    list: { scope: { kind: 'workspace', arg: 0 } },
+    // The run-start model resolution (`resolvePresetModelForKind` → the personal-credential
+    // gate) reads the workspace's default model preset for the dispatched agent kind.
+    getDefault: { scope: { kind: 'workspace', arg: 0 } },
+    // `ModelPresetService.list` lazily seeds the built-in defaults for a workspace that has none
+    // (a write the board-load read triggers), exactly like `mergePresetRepository.upsert` above.
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // --- Agent-context run-path reads -----------------------------------------------
+  // `AgentContextBuilder` resolves a block's LINKED docs/tasks for EVERY container agent step
+  // (it builds the agent context on each dispatch), so these reads are on the run path, not just
+  // the opt-in document/task integrations' own surfaces. arg0 is the workspaceId → `workspace`
+  // rule. The document/task SOURCE-PROVIDER + connection surfaces (connect/list/disconnect) are
+  // NOT exposed here — they are a later integration slice; only the block-scoped context reads are.
+  documentRepository: {
+    listByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    // A URL named in a block's description is resolved against the imported corpus by a
+    // canonical-url point lookup (`AgentContextBuilder.resolveLinkedContext`), on the SAME
+    // per-dispatch run path as `get`/`listByBlock` above — so it must be allow-listed too
+    // (else a task whose description contains any link fails the run with `unknown_method`).
+    getByUrl: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  taskRepository: {
+    listByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    // Same as `documentRepository.getByUrl`: a URL in the description resolves against the
+    // imported issue corpus by a point lookup on the run path.
+    getByUrl: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // The agent context also resolves the block's provisioned environment per step
+  // (`resolveForBlock`/`get`, both workspace-keyed). Reads only — the connect/provision surface
+  // (and decrypting a remotely-sealed env cipher, which needs the mothership's key) is a later slice.
+  environmentRegistryRepository: {
+    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    get: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  serviceFragmentDefaultsRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  pipelineScheduleRepository: {
+    list: { scope: { kind: 'workspace', arg: 0 } },
+    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    listByServices: { scope: { kind: 'serviceList', arg: 0 } },
+  },
+  trackerSettingsRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  notificationRepository: {
+    listOpen: { scope: { kind: 'workspace', arg: 0 } },
+    // The merger-less pipeline tail raises a block notification on completion
+    // (`pipeline_complete`/`merge_review` → `findOpenByBlock` dedup + `upsertOpenForBlock`), so a
+    // run persists its inbox card on the mothership. Workspace-scoped, member-level (the inbox
+    // act/dismiss endpoints are not admin-gated) — the same policy as the block/pipeline writes.
+    findOpenByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    upsertOpenForBlock: { scope: { kind: 'workspace', arg: 0 } },
+    // Block-less raises (a card with no `blockId`) and every status transition the inbox
+    // performs right after a run settles — act / dismiss / escalate — go through `upsert`
+    // (`NotificationService`), not `upsertOpenForBlock`. Workspace-scoped, member-level (the
+    // inbox act/dismiss endpoints are not admin-gated) — same policy as the writes above.
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  bootstrapJobRepository: {
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    listByServices: { scope: { kind: 'serviceList', arg: 0 } },
+  },
+  tokenUsageRepository: {
+    totalsSinceForWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // Mixed (workspaceId + blockId/stage): the workspace arg stays the scope key.
+  requirementReviewRepository: {
+    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  clarityReviewRepository: {
+    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  brainstormSessionRepository: {
+    getByBlockStage: { scope: { kind: 'workspace', arg: 0 } },
   },
 }
 
@@ -179,6 +312,17 @@ export interface DispatchOptions {
   scope: { accountIds: string[]; userId: string }
   /** Resolve a workspace's owning account id (the mothership's `WorkspaceRepository.accountOf`). */
   resolveAccountId(workspaceId: string): Promise<string | null | undefined>
+  /**
+   * Resolve a block's owning account id (block → home workspace → account). Required for the
+   * `block` scope kind; a call hitting that kind with no resolver fails closed (404).
+   */
+  resolveBlockAccountId?(blockId: string): Promise<string | null | undefined>
+  /**
+   * Resolve each requested service id's owning account id, keyed by service id (a service that
+   * does not exist is absent from the map). Required for the `serviceList` scope kind; a call
+   * hitting that kind with no resolver fails closed (404).
+   */
+  resolveServiceAccountIds?(serviceIds: string[]): Promise<Map<string, string | null | undefined>>
   /** The method table to enforce (defaults to the pilot set). */
   table?: PersistenceMethodTable
 }
@@ -264,6 +408,29 @@ export async function dispatchPersistenceCall(
     }
     case 'selfUser': {
       if (args[rule.arg] !== opts.scope.userId) return denied
+      break
+    }
+    case 'block': {
+      // Bind via the block's home workspace's account, resolved server-side (the block carries
+      // no workspace arg). An unresolvable block (missing, or no resolver wired) is refused as
+      // 404 — no existence leak, matching the `workspace` rule.
+      const blockId = args[rule.arg]
+      if (typeof blockId !== 'string' || !opts.resolveBlockAccountId) return denied
+      if (!inScope(await opts.resolveBlockAccountId(blockId))) return denied
+      break
+    }
+    case 'serviceList': {
+      // Bind via every requested service's owning account (services are account-owned). EVERY id
+      // must resolve to an in-scope account; a missing or out-of-scope service fails closed. An
+      // empty list is a no-op read (it returns empty), so it needs no service to scope.
+      const ids = args[rule.arg]
+      if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return denied
+      if (ids.length === 0) break
+      if (!opts.resolveServiceAccountIds) return denied
+      const accounts = await opts.resolveServiceAccountIds(ids as string[])
+      for (const id of ids as string[]) {
+        if (!inScope(accounts.get(id))) return denied
+      }
       break
     }
     case 'visibility': {

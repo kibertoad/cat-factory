@@ -706,4 +706,25 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
     if (result.kind === 'completed') expect(result.handle.status).toBe('ready')
     expect(registry.records[0]!.status).toBe('ready')
   })
+
+  it('still parks when the provisioning-record write fails after dispatch (best-effort)', async () => {
+    const provider = asyncProvider()
+    // A registry whose insert throws AFTER the deploy job is dispatched: the run must still PARK on
+    // the live container, not fail (a failed startProvision is turned into a terminal, non-retried
+    // provisioning failure that would strand the dispatched container). The `provisioning` row is a
+    // display-only nicety — `finalizeProvision` writes the real record when the job settles.
+    const registry = {
+      ...fakeRegistry(),
+      async insert() {
+        throw new Error('registry write failed')
+      },
+    }
+    const client = fakeJobClient({ state: 'running' })
+    const service = makeAsyncService(provider, registry, { deployJobClient: client })
+
+    const result = await service.startProvision({ workspaceId: 'ws1', blockId: 'blk1' }, REF)
+
+    expect(result.kind).toBe('dispatched')
+    expect(client.dispatched).toHaveLength(1)
+  })
 })

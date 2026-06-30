@@ -400,6 +400,8 @@
       "composeHint": "Używane przez Testera do lokalnego postawienia zależności usługi.",
       "selectComposeTitle": "Wybierz plik docker-compose",
       "selectComposeHint": "Wybierz plik compose w repozytorium. Jego ścieżka jest zapisywana względem katalogu głównego repo.",
+      "selectManifestTitle": "Wybierz manifesty Kubernetes",
+      "selectManifestHint": "Wybierz plik lub katalog manifestów w repozytorium. Jego ścieżka jest zapisywana względem katalogu głównego repo.",
       "selected": "Wybrano: {path}",
       "noFileSelected": "Nie wybrano pliku.",
       "useThisFile": "Użyj tego pliku",
@@ -416,7 +418,26 @@
         "medium": "Średni",
         "large": "Duży",
         "xlarge": "Bardzo duży"
-      }
+      },
+      "renderers": {
+        "raw": "Surowe manifesty",
+        "kustomize": "Kustomize"
+      },
+      "localDevOnly": "Tylko do programowania lokalnego",
+      "manifestSourceLabel": "Źródło manifestów",
+      "sourceColocated": "W tym repozytorium",
+      "sourceSeparate": "Osobne repozytorium",
+      "manifestRepo": "Repozytorium manifestów (właściciel/repo)",
+      "manifestRef": "Ref (gałąź/tag/sha)",
+      "manifestPath": "Ścieżka manifestów",
+      "manifestPathHint": "Plik lub katalog manifestów Kubernetes dla danego PR, względem katalogu głównego repozytorium.",
+      "rendererLabel": "Renderer",
+      "rendererHint": "Raw stosuje manifesty bez zmian. Kustomize najpierw buduje overlay (wymaga kontenerowego adaptera wdrożenia).",
+      "customManifestId": "Niestandardowy typ manifestu",
+      "customManifestIdPlaceholder": "Wybierz typ manifestu",
+      "customNoTypes": "Nie zdefiniowano jeszcze niestandardowych typów manifestów. Dodaj jeden w oknie Infrastruktura.",
+      "customManifestIdHint": "Niestandardowy typ, który tworzy ta usługa, dopasowany do handlera remote-custom skonfigurowanego przez przestrzeń roboczą.",
+      "customManifestPath": "Ścieżka manifestu (opcjonalnie)"
     },
     "agentConfig": {
       "title": "Konfiguracja agenta",
@@ -1709,6 +1730,78 @@
         "label": "Gdzie działają środowiska testowe",
         "local-compose": "docker-compose w kontenerze",
         "environment-provider": "Dostawca środowisk"
+      },
+      "dockerComposeInfo": "Usługi Docker Compose są uruchamiane na lokalnym Dockerze środowiska uruchomieniowego: połączenie nie jest potrzebne (kontener uruchomienia musi obsługiwać Docker-in-Docker).",
+      "engine": {
+        "local-k3s": "Lokalny k3s",
+        "remote-kubernetes": "Zdalny Kubernetes"
+      },
+      "kubernetesEngine": {
+        "label": "Etykieta połączenia",
+        "labelPlaceholder": "Klaster podglądu",
+        "apiServerUrl": "URL serwera API",
+        "apiServerUrlHelp": "Główny adres kube-apiserver, np. https://my-cluster.example:6443.",
+        "apiToken": "Token ServiceAccount",
+        "apiTokenHelp": "Tylko do zapisu; wprowadź ponownie, aby zmienić. Przechowywany w postaci zaszyfrowanej, nigdy nie jest zwracany.",
+        "urlSourceLabel": "Źródło URL środowiska",
+        "urlIngressTemplate": "Szablon hosta Ingress",
+        "urlIngressStatus": "Status Ingress",
+        "urlServiceStatus": "Status Service (LoadBalancer)",
+        "urlGatewayStatus": "Status Gateway (Gateway API)",
+        "urlHttpRouteStatus": "Status HTTPRoute (Gateway API)",
+        "hostTemplate": "Szablon hosta",
+        "hostTemplateHelp": "Szablon hosta renderowany ze zmiennymi provisioningu (np. branch, sha).",
+        "ingressName": "Nazwa Ingress",
+        "serviceName": "Nazwa Service",
+        "port": "Port",
+        "gatewayName": "Nazwa Gateway",
+        "httpRouteName": "Nazwa HTTPRoute",
+        "scheme": "Schemat URL",
+        "schemeDefault": "Domyślny",
+        "namespaceTemplate": "Szablon namespace",
+        "namespaceTemplateHelp": "Nazwa namespace dla danego PR, renderowana ze zmiennymi provisioningu. Dla kustomize pozostaw puste, aby uszanować namespace z overlay.",
+        "imageTemplate": "Szablon obrazu",
+        "imageTemplateHelp": "Odwołanie do obrazu udostępnione manifestom jako zmienna obrazu.",
+        "caCertPem": "Certyfikat CA (PEM)",
+        "caCertPemHelp": "Weryfikuje certyfikat TLS apiservera. Pomiń tylko dla publicznie zaufanego CA.",
+        "insecureSkipTlsVerify": "Pomiń weryfikację TLS",
+        "insecureSkipTlsVerifyHelp": "Zdecydowanie odradzane: tylko klastry deweloperskie/kind."
+      },
+      "customType": {
+        "title": "Niestandardowe typy manifestów",
+        "hint": "Otwarty katalog niestandardowych typów provisioningu, które usługa może przypiąć. Dodaj własne poniżej; typy z kodu są tylko do odczytu.",
+        "empty": "Brak niestandardowych typów manifestów.",
+        "source": {
+          "registered": "Z kodu",
+          "workspace": "Przestrzeń robocza"
+        },
+        "editTitle": "Edytuj {id}",
+        "addTitle": "Dodaj typ",
+        "manifestId": "Id manifestu",
+        "manifestIdHelp": "Slug małymi literami z myślnikami, np. my-kargo-template.",
+        "label": "Etykieta",
+        "acceptsInputHint": "Wskazówka wejścia (opcjonalnie)",
+        "acceptsInputHintHelp": "Opisuje format wejścia oczekiwany przez dostawcę.",
+        "description": "Opis (opcjonalnie)",
+        "add": "Dodaj typ",
+        "saveFailed": "Nie udało się zapisać niestandardowego typu",
+        "removeFailed": "Nie udało się usunąć niestandardowego typu"
+      },
+      "handler": {
+        "intro": "Skonfiguruj, jak obsługiwany jest każdy typ provisioningu zadeklarowany przez usługę: silnik i połączenie. Manifesty lub ścieżka compose usługi (co/gdzie) są ustawiane na usłudze.",
+        "activeEngine": "Silnik:",
+        "engineLabel": "Silnik",
+        "customHandlerTitle": "Handler remote-custom",
+        "customTypeLabel": "Typ niestandardowy",
+        "customConnected": "Handler połączony.",
+        "saved": "Handler zapisany",
+        "removed": "Handler usunięty",
+        "saveFailed": "Nie udało się zapisać handlera",
+        "personalOverride": "Osobiste nadpisanie (ta maszyna)",
+        "overrideActive": "Aktywne",
+        "personalOverrideHint": "Nadpisz handler przestrzeni roboczej dla tego typu provisioningu na własnej maszynie. Przechowywane na użytkownika.",
+        "removeOverride": "Usuń nadpisanie",
+        "loading": "Ładowanie ustawień infrastruktury…"
       }
     }
   },
@@ -2989,7 +3082,22 @@
       "torn_down": "Wyłączone"
     },
     "expires": "Wygasa {date}",
-    "empty": "Brak środowiska efemerycznego dla tego uruchomienia."
+    "empty": "Brak środowiska efemerycznego dla tego uruchomienia.",
+    "provisionTypeLabel": "Typ provisioningu:",
+    "engineLabel": "Silnik:",
+    "provisionType": {
+      "kubernetes": "Kubernetes",
+      "docker-compose": "Docker Compose",
+      "custom": "Niestandardowy",
+      "infraless": "Bez infrastruktury"
+    },
+    "engine": {
+      "local-docker": "Lokalny Docker",
+      "local-k3s": "Lokalny k3s",
+      "remote-kubernetes": "Zdalny Kubernetes",
+      "remote-custom": "Zdalny niestandardowy (HTTP)",
+      "none": "Brak"
+    }
   },
   "provisioning": {
     "title": "Dzienniki provisioningu",
