@@ -806,6 +806,7 @@ async function add() {
           color="primary"
           data-testid="add-task-submit"
           :icon="isRecurring ? 'i-lucide-arrow-right' : 'i-lucide-plus'"
+          :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
           :loading="saving"
           :disabled="!canAdd"
           @click="add"

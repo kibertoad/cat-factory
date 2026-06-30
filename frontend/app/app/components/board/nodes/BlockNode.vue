@@ -202,7 +202,7 @@ const ITEM_ICON: Record<string, string> = {
     <!-- decision / approval indicator floats above the card at all zoom levels -->
     <div
       v-if="blockDecisions.length || blockApprovals.length"
-      class="absolute -top-3 start-1/2 z-10 flex -translate-x-1/2 gap-1"
+      class="absolute -top-3 left-1/2 z-10 flex -translate-x-1/2 gap-1"
     >
       <DecisionBadge
         v-if="blockDecisions.length"
@@ -499,24 +499,28 @@ const ITEM_ICON: Record<string, string> = {
 
           <!-- resize handles (drag the borders to resize the service, Miro-style).
                `nopan` (alongside `nodrag`) so the pane doesn't pan while resizing —
-               same reason as the header handle above. -->
+               same reason as the header handle above. These stay PHYSICAL
+               (`right-0`, not `end-0`): the resize math in useFrameResize grows the
+               right/bottom edge from an unmirrored clientX/clientY delta, so a
+               logical (RTL-flipped) grip would render on the opposite edge from the
+               one the drag actually moves. -->
           <div
-            class="nodrag nopan absolute end-0 top-0 h-full w-2 cursor-ew-resize touch-none hover:bg-sky-400/20 pointer-coarse:w-4"
+            class="nodrag nopan absolute right-0 top-0 h-full w-2 cursor-ew-resize touch-none hover:bg-sky-400/20 pointer-coarse:w-4"
             :title="t('board.frame.dragToResize')"
             @pointerdown="onResize($event, 'e')"
           />
           <div
-            class="nodrag nopan absolute bottom-0 start-0 h-2 w-full cursor-ns-resize touch-none hover:bg-sky-400/20 pointer-coarse:h-4"
+            class="nodrag nopan absolute bottom-0 left-0 h-2 w-full cursor-ns-resize touch-none hover:bg-sky-400/20 pointer-coarse:h-4"
             :title="t('board.frame.dragToResize')"
             @pointerdown="onResize($event, 's')"
           />
           <div
-            class="nodrag nopan absolute bottom-0 end-0 h-4 w-4 cursor-nwse-resize touch-none pointer-coarse:h-11 pointer-coarse:w-11"
+            class="nodrag nopan absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize touch-none pointer-coarse:h-11 pointer-coarse:w-11"
             :title="t('board.frame.dragToResize')"
             @pointerdown="onResize($event, 'se')"
           >
             <span
-              class="absolute bottom-1 end-1 h-2 w-2 rounded-sm border-b-2 border-e-2 border-slate-500"
+              class="absolute bottom-1 right-1 h-2 w-2 rounded-sm border-b-2 border-r-2 border-slate-500"
             />
           </div>
         </div>

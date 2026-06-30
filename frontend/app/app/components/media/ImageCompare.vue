@@ -269,19 +269,24 @@ function onRefInput(e: Event) {
           class="absolute inset-0 block h-full w-full object-contain"
         />
       </div>
+      <!-- The split geometry is physical and unmirrored (the divider is positioned by a
+           `left` percent, the clip-path insets from the right, and the pointer math reads
+           `clientX - rect.left`), so the handle and the corner labels stay PHYSICAL too.
+           Logical (`start-`/`end-`) here would flip the labels under RTL while the image
+           regions stayed put, mislabeling actual vs reference. -->
       <div class="absolute inset-y-0 w-0.5 bg-amber-400" :style="{ left: `${splitPct}%` }">
         <span
-          class="absolute top-1/2 start-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-amber-400 text-slate-950 shadow"
+          class="absolute top-1/2 left-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-amber-400 text-slate-950 shadow"
         >
           <UIcon name="i-lucide-move-horizontal" class="h-3.5 w-3.5" />
         </span>
       </div>
       <span
-        class="absolute start-1 top-1 rounded bg-slate-950/70 px-1 text-[9px] uppercase text-slate-300"
+        class="absolute left-1 top-1 rounded bg-slate-950/70 px-1 text-[9px] uppercase text-slate-300"
         >Actual</span
       >
       <span
-        class="absolute end-1 top-1 rounded bg-slate-950/70 px-1 text-[9px] uppercase text-slate-300"
+        class="absolute right-1 top-1 rounded bg-slate-950/70 px-1 text-[9px] uppercase text-slate-300"
         >Reference</span
       >
     </div>
