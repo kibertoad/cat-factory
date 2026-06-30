@@ -264,20 +264,42 @@ the board-load + run paths below are green**. The work is in three parts:
 > resolvers are wired in `PersistenceController` (block → `blockRepository.findById` + `accountOf`;
 > service → `serviceRepository.listByIds`) and the dispatcher fails closed if a kind's resolver is
 > absent. Round-trip + cross-account-scope + unknown-id + empty-list tests are in `persistenceRpc.spec.ts`.
-> Still open before the gate lifts: **part 1** (routing the direct-db stores through the remote
-> registry when `db` is undefined), and the **fake-mothership integration test** in part 3. Note:
-> `subscriptionActivationRepository.deleteByExecution` is NOT exposed remotely — per the per-repo
-> bucket checklist it is the **local-sqlite** bucket (the token is re-sealed with the system key for
-> the run; how that key is available in mothership mode is an open design question for the
-> credential/activation slice), so it stays off the remote surface.
+> Note: `subscriptionActivationRepository.deleteByExecution` is NOT exposed remotely — per the
+> per-repo bucket checklist it is the **local-sqlite** bucket (the token is re-sealed with the system
+> key for the run; how that key is available in mothership mode is an open design question for the
+> credential/activation slice), so it stays off the remote allow-list.
+>
+> **Landed (Phase 3 slice 3):** part 1's `db: undefined` audit for the board-load + run path. The
+> org/durable stores `buildNodeContainer` constructed directly from `options.db` now route through a
+> single `pickRepoSource(remoteRepos, name, build)` seam (exported from `runtimes/node/src/container.ts`):
+> when `db` is undefined, `options.repos` is the full-surface remote `Proxy` (`composeMothership`) and
+> the repo comes from THERE; else the Drizzle repo is built over `db` as before. Routed:
+> `githubInstallationRepository`, `repoProjectionRepository` + the five GitHub projections
+> (branch/PR/issue/commit/check), `runnerPoolConnectionRepository`, `bootstrapJobRepository`,
+> `referenceArchitectureRepository`, `envConfigRepairJobRepository`, `notificationRepository`,
+> `taskRepository` (issue writeback), and `subscriptionActivationRepository`; the separate
+> `DrizzleServiceFrameRepository` construction is gone — `buildResolveRepoTarget` now reuses
+> `repos.serviceRepository` (remote in mothership mode, Drizzle otherwise). Routing is orthogonal to
+> the allow-list: an un-allow-listed remote method returns a clean `unknown_method`, never a
+> `db`-undefined `TypeError`. Tests: `pickRepoSource` routing in `runtimes/node/test/mothership-repo-source.spec.ts`
+>
+> - the existing no-Postgres build test (which now exercises the remote-sourced repos and still makes
+>   no build-time network call). Still open before the gate lifts: the feature-flagged integration repos
+>   owned by the sub-helpers (`tasks`/`documents`/`environments`/`fragments`/`slack`) — opt-in and off by
+>   default, so off the default board-load + run path — and the **fake-mothership integration test** in
+>   part 3 (the runtime board-load + run-to-terminal assertion the build-only test cannot catch).
 
-1. **Route every direct-db store through the remote surface when `db` is undefined.**
-   `buildNodeContainer` (and the local container) build these from `options.db` today; in mothership
-   mode they must come from the remote registry instead (mirror the credential-repo override seam):
-   `notificationRepository`, `bootstrapJobRepository`, `envConfigRepairJobRepository`,
-   `subscriptionActivationRepository`, `runnerPoolConnectionRepository`, `githubInstallationRepository`,
-   the GitHub projection repos (repo/branch/PR/issue/commit/check), `taskRepository`,
-   `referenceArchitectureRepository`, and the `DrizzleServiceFrameRepository`. (Telemetry repos —
+1. ✅ **Route every direct-db store through the remote surface when `db` is undefined — DONE
+   (slice 3) for the board-load + run path.** The stores `buildNodeContainer` constructed directly
+   from `options.db` now route through the `pickRepoSource(remoteRepos, name, build)` seam (sourced
+   from the remote registry when `db` is undefined, else the Drizzle repo): `notificationRepository`,
+   `bootstrapJobRepository`, `envConfigRepairJobRepository`, `subscriptionActivationRepository`,
+   `runnerPoolConnectionRepository`, `githubInstallationRepository`, the GitHub projection repos
+   (repo/branch/PR/issue/commit/check), `taskRepository`, `referenceArchitectureRepository`; the
+   separate `DrizzleServiceFrameRepository` is gone (`buildResolveRepoTarget` reuses
+   `repos.serviceRepository`). STILL TODO: the feature-flagged integration repos owned by the
+   sub-helpers (`tasks`/`documents`/`environments`/`fragments`/`slack`) — opt-in, off the default
+   board-load + run path, so a follow-up sub-slice. (Telemetry repos —
    `tokenUsage`/`llmCallMetric`/`agentContextSnapshot`/`provisioningLog` — are the local-first
    telemetry bucket, Phase 5, NOT remote.)
 

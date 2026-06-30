@@ -150,7 +150,6 @@ import { NodeEventPublisher, type NodeRealtimeHub } from './realtime.js'
 import {
   DrizzleGitHubInstallationRepository,
   DrizzleRunnerPoolConnectionRepository,
-  DrizzleServiceFrameRepository,
 } from './repositories/containerExecution.js'
 import {
   DrizzleBranchProjectionRepository,
@@ -207,6 +206,26 @@ import { CryptoIdGenerator, SystemClock } from './runtime.js'
 // HKDF domain tag separating runner-pool scheduler secrets from any other use of
 // the same master key (mirrors the Worker's `cat-factory:runners`).
 const RUNNERS_CIPHER_INFO = 'cat-factory:runners'
+
+/**
+ * Source one org/durable repository that a standard build constructs directly from the Drizzle
+ * `db`. In mothership mode (no Postgres) `remote` is the full-surface remote registry — a
+ * `Proxy` (`createRemoteRepositoryRegistry`) that forwards any repo name to the hosted
+ * mothership over the `/internal/persistence` RPC — so the repo comes from THERE instead of the
+ * absent db; otherwise `build()` constructs the Drizzle repo over `db` as before. This is the
+ * Phase-3 `db: undefined` audit seam: every direct-db store on the board-load + run path routes
+ * through it. Routing is orthogonal to the server-side allow-list — an un-allow-listed remote
+ * method still returns a clean `unknown_method`, never a `db`-undefined `TypeError`. Mirrors the
+ * credential-repo override seam (`providerApiKeyRepository`), which keeps credentials local while
+ * org state goes remote. See docs/initiatives/mothership-mode.md (Phase 3, part 1).
+ */
+export function pickRepoSource<T>(
+  remote: Record<string, unknown> | undefined,
+  name: string,
+  build: () => T,
+): T {
+  return remote ? (remote[name] as T) : build()
+}
 
 // Memoised per object so a container build shares ONE model provider (hence one inline
 // Langfuse sink) across the agent executor, requirements reviewer, doc planner and
@@ -1132,12 +1151,19 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // The Drizzle constructors only stash the handle — no build-time work (audited) — so BUILDING
   // the stores below over an `undefined` db is safe; `db` carries the non-null type for those
   // constructions, and the per-user credential services take the OPTIONAL `options.db` and turn
-  // themselves off when it is absent. CALLING those stores is a different matter: in mothership
-  // mode the ones built directly from the db (projections, bootstrap, notifications,
-  // subscription-activation, …) WILL throw on a board load / run because there is no db and they
-  // are not yet routed to the remote surface. Remoting them + widening the allow-list is the
-  // gating phase (docs/initiatives/mothership-mode.md); the mothership PR stays a draft until then.
+  // themselves off when it is absent.
   const db = options.db as DrizzleDb
+  // Mothership mode (`options.db` undefined): the org/durable stores a standard build constructs
+  // directly from the db — the GitHub installation + projections, runner-pool connection,
+  // bootstrap + env-config-repair job stores, notifications, reference-architecture library,
+  // task + subscription-activation stores — are sourced from the REMOTE registry instead (here
+  // `options.repos` is the full-surface remote `Proxy` from `composeMothership`, which forwards
+  // any repo name to the mothership over RPC). `pickRepoSource(remoteRepos, name, build)` picks
+  // the remote entry when there is no db, else builds the Drizzle repo — see the Phase-3 audit in
+  // docs/initiatives/mothership-mode.md. The feature-flagged integration repos owned by the
+  // sub-helpers (tasks/documents/environments/fragments/slack) are opt-in and off by default, so
+  // they are NOT on the default board-load + run path and remain a follow-up sub-slice.
+  const remoteRepos = options.db ? undefined : (repos as unknown as Record<string, unknown>)
 
   // The app-owned backend registries (env + runner kind → provider), built once here and
   // injected into the engine + surfaced on the container for the snapshot's backend-kind
@@ -1280,12 +1306,25 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // Persistence the container-execution path needs (built from the same db). The
   // runner-pool repo also backs the `runners` Core module so a pool is registrable
   // via the API; the installation repo backs both token minting and repo resolution.
-  const runnerPoolConnectionRepository = new DrizzleRunnerPoolConnectionRepository(db)
+  const runnerPoolConnectionRepository = pickRepoSource(
+    remoteRepos,
+    'runnerPoolConnectionRepository',
+    () => new DrizzleRunnerPoolConnectionRepository(db),
+  )
   const githubInstallationRepository =
-    options.githubInstallationRepository ?? new DrizzleGitHubInstallationRepository(db)
+    options.githubInstallationRepository ??
+    pickRepoSource(
+      remoteRepos,
+      'githubInstallationRepository',
+      () => new DrizzleGitHubInstallationRepository(db),
+    )
   // The repositories projection (+ sync cursors), shared by `buildResolveRepoTarget`
   // (block→repo resolution) and the GitHub sync/webhook module below.
-  const repoProjectionRepository = new DrizzleRepoProjectionRepository(db)
+  const repoProjectionRepository = pickRepoSource(
+    remoteRepos,
+    'repoProjectionRepository',
+    () => new DrizzleRepoProjectionRepository(db),
+  )
 
   // The GitHub App registry, built once when the App is configured and shared by the
   // container executor's push-token mint, the tech-debt issue filer, and the CI / merge
@@ -1299,7 +1338,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     installationRepository: githubInstallationRepository,
     repoProjectionRepository,
     blockRepository: repos.blockRepository,
-    serviceRepository: new DrizzleServiceFrameRepository(db),
+    // The org service repo (its `getByFrameBlock` is all `buildResolveRepoTarget` needs); already
+    // in `repos`, so it is the Drizzle repo over `db` in a standard build and the remote proxy in
+    // mothership mode — no separate direct-db `DrizzleServiceFrameRepository` construction.
+    serviceRepository: repos.serviceRepository,
   })
 
   // Best-effort recorder for the provisioning event log (its own Postgres schema).
@@ -1466,7 +1508,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     : undefined
   const issueWritebackProvider = new IssueWritebackService({
     trackerSettingsRepository: repos.trackerSettingsRepository,
-    taskRepository: new DrizzleTaskRepository(db),
+    taskRepository: pickRepoSource(
+      remoteRepos,
+      'taskRepository',
+      () => new DrizzleTaskRepository(db),
+    ),
     fetchImpl: fetch,
     ...(githubClient && resolveWritebackIssue
       ? {
@@ -1580,11 +1626,31 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           githubClient,
           githubInstallationRepository,
           repoProjectionRepository,
-          branchProjectionRepository: new DrizzleBranchProjectionRepository(db),
-          pullRequestProjectionRepository: new DrizzlePullRequestProjectionRepository(db),
-          issueProjectionRepository: new DrizzleIssueProjectionRepository(db),
-          commitProjectionRepository: new DrizzleCommitProjectionRepository(db),
-          checkRunProjectionRepository: new DrizzleCheckRunProjectionRepository(db),
+          branchProjectionRepository: pickRepoSource(
+            remoteRepos,
+            'branchProjectionRepository',
+            () => new DrizzleBranchProjectionRepository(db),
+          ),
+          pullRequestProjectionRepository: pickRepoSource(
+            remoteRepos,
+            'pullRequestProjectionRepository',
+            () => new DrizzlePullRequestProjectionRepository(db),
+          ),
+          issueProjectionRepository: pickRepoSource(
+            remoteRepos,
+            'issueProjectionRepository',
+            () => new DrizzleIssueProjectionRepository(db),
+          ),
+          commitProjectionRepository: pickRepoSource(
+            remoteRepos,
+            'commitProjectionRepository',
+            () => new DrizzleCommitProjectionRepository(db),
+          ),
+          checkRunProjectionRepository: pickRepoSource(
+            remoteRepos,
+            'checkRunProjectionRepository',
+            () => new DrizzleCheckRunProjectionRepository(db),
+          ),
           webhookVerifier: new WebCryptoWebhookVerifier(config.github.webhookSecret),
           // Bound the initial backfill to the commit retention horizon (0 = full).
           commitBackfillHorizonMs: config.retention.commitMs || undefined,
@@ -1617,7 +1683,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // module + ref-arch CRUD then work like the Worker); the container-dispatching
   // `repoBootstrapper` wires only when its prerequisites are met (transport + proxy +
   // token + GitHub client) — the same token source the container executor uses.
-  const bootstrapJobRepository = new DrizzleBootstrapJobRepository(db)
+  const bootstrapJobRepository = pickRepoSource(
+    remoteRepos,
+    'bootstrapJobRepository',
+    () => new DrizzleBootstrapJobRepository(db),
+  )
   const bootstrapMintInstallationToken =
     options.mintInstallationToken ??
     (appRegistry ? (id: number) => appRegistry.installationToken(id) : undefined)
@@ -1785,7 +1855,15 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     pipelineRepository: repos.pipelineRepository,
     executionRepository: repos.executionRepository,
     // Clear a finished run's personal-credential activation promptly (TTL sweep is the backstop).
-    subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(db),
+    // Its eventual mothership-mode home is the local-sqlite credential bucket (the activation
+    // re-seals the token for the run); until that lands it routes to the remote registry like the
+    // other org stores, so a no-db build doesn't `TypeError` — `deleteByExecution` is not yet
+    // allow-listed, so it returns a clean `unknown_method` there (see the per-repo checklist).
+    subscriptionActivationRepository: pickRepoSource(
+      remoteRepos,
+      'subscriptionActivationRepository',
+      () => new DrizzleSubscriptionActivationRepository(db),
+    ),
     // In-org shared services. When a realtime hub is wired (start()), the engine's
     // event publisher (composed above) is a `FanOutEventPublisher` over these two repos,
     // so a shared service's live events reach every board that mounts it — parity with
@@ -1841,7 +1919,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Notifications subsystem (parity with the Worker, which wires it unconditionally):
     // the inbox + the human-action surfaces. Node has no real-time push, so the rows
     // persist (inbox + snapshot) and any channel composed below — e.g. Slack — delivers.
-    notificationRepository: new DrizzleNotificationRepository(db),
+    notificationRepository: pickRepoSource(
+      remoteRepos,
+      'notificationRepository',
+      () => new DrizzleNotificationRepository(db),
+    ),
     ...tasks.deps,
     // Recurring pipelines + the workspace tracker selection. The tracker provider
     // files the tech-debt pipeline's issue by resolving the *workspace's* connected
@@ -1933,14 +2015,22 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // module + API available; `repoBootstrapper` (when wired) dispatches the bootstrap
     // container through the shared runner seam, and `bootstrapRunner` (pg-boss, below)
     // durably drives its poll loop — parity with the Worker's BootstrapWorkflow.
-    referenceArchitectureRepository: new DrizzleReferenceArchitectureRepository(db),
+    referenceArchitectureRepository: pickRepoSource(
+      remoteRepos,
+      'referenceArchitectureRepository',
+      () => new DrizzleReferenceArchitectureRepository(db),
+    ),
     bootstrapJobRepository,
     ...(repoBootstrapper ? { repoBootstrapper } : {}),
     // Env-config-repair runs share the unified agent_runs table (kind-scoped). The job
     // repository is wired unconditionally; the repairer (agent fallback) is wired
     // post-overrides below over the FINAL provider, and the durable runner in the
     // `options.boss` block above — parity with the Worker's EnvConfigRepairWorkflow.
-    envConfigRepairJobRepository: new DrizzleEnvConfigRepairJobRepository(db),
+    envConfigRepairJobRepository: pickRepoSource(
+      remoteRepos,
+      'envConfigRepairJobRepository',
+      () => new DrizzleEnvConfigRepairJobRepository(db),
+    ),
     // Document sources (Confluence / Notion / GitHub docs): wired from the shared
     // integration providers exactly like the Worker, so a workspace can connect a
     // source and import requirement/PRD/RFC pages as agent context.
