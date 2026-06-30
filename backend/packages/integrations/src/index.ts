@@ -177,9 +177,11 @@ export {
   type EnvironmentUserHandlerServiceDependencies,
 } from './modules/environments/EnvironmentUserHandlerService.js'
 export {
+  type DeployJobClient,
   EnvironmentProvisioningService,
   type EnvironmentProvisioningServiceDependencies,
   type ProvisionArgs,
+  type ProvisionDispatch,
   type ResolvedEnvironment,
 } from './modules/environments/EnvironmentProvisioningService.js'
 export {

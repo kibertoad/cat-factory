@@ -10,6 +10,7 @@ import type {
   BrainstormSession,
   ClarityReview,
   Clock,
+  EnvironmentHandle,
   ExecutionEventPublisher,
   ExecutionInstance,
   ExecutionRepository,
@@ -30,6 +31,7 @@ import type {
   ResolveRunRepoContext,
   ResolverContext,
   RunInitiatorScope,
+  RunnerJobRef,
   RunRepoContext,
   ServiceProvisioning,
   StepCompletionResolver,
@@ -64,9 +66,14 @@ import {
   TASK_ESTIMATOR_AGENT_KIND,
 } from '@cat-factory/agents'
 import { DEPLOYER_AGENT_KIND, isDeployStep } from '@cat-factory/integrations'
-import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
+import type {
+  EnvironmentProvisioningService,
+  ProvisionArgs,
+  ProvisionDispatch,
+} from '@cat-factory/integrations'
 import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
 import { reviewableArtifactOutput } from './artifact-review.logic.js'
+import { deployEvictionEpoch, deployJobId } from './deployer.logic.js'
 import {
   ANALYSIS_AGENT_KIND,
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
@@ -501,6 +508,13 @@ export class RunDispatcher {
     // driver loop and advance whatever step is now current.
     if (!step.jobId) return { kind: 'continue' }
 
+    // A `deployer` step's async job is a CONTAINER-backed deploy (kustomize/helm), polled
+    // through the environment provisioning service — NOT the agent executor. Route it before
+    // the executor resolution below (the deployer never goes through the agent executor).
+    if (isDeployStep(step.agentKind) && this.environmentProvisioning) {
+      return this.pollDeployerJob(workspaceId, instance, step)
+    }
+
     const executor = this.agentExecutor
     if (!isAsyncAgentExecutor(executor)) return { kind: 'noop' }
 
@@ -526,12 +540,7 @@ export class RunDispatcher {
       // A successful poll proves the container is up: reflect that, the live phase
       // (clone / agent / push) and the container's id/url the transport surfaced.
       if (this.applyContainerRunning(step, update)) changed = true
-      if (update.subtasks && !sameSubtasks(step.subtasks, update.subtasks)) {
-        step.subtasks = update.subtasks
-        step.progress =
-          update.subtasks.total > 0 ? update.subtasks.completed / update.subtasks.total : 0
-        changed = true
-      }
+      if (this.applySubtaskProgress(step, update.subtasks)) changed = true
       // Append any forward-looking items the Coder streamed since the last poll so the
       // Follow-up companion lights up + accrues items LIVE while the container still runs.
       if (this.appendStreamedFollowUps(step, update.followUps)) changed = true
@@ -695,50 +704,18 @@ export class RunDispatcher {
     }
 
     if (update.state === 'failed') {
-      // A container eviction (the per-run container vanished, its in-memory job is
-      // gone) is usually transient. Recover it by dropping the dead handle and
-      // returning `continue`: the driver loops back into `advanceInstance`, which
-      // re-dispatches the SAME step to a fresh container (a new instance boots under
-      // the same id). Two flavours, with separate budgets:
-      //   - one the runtime facade flagged as transient infra churn (e.g. a deploy
-      //     draining the sandbox) is not a sick run, and can recur several times in a
-      //     short window, so it gets the larger MAX_TRANSIENT_EVICTION_RECOVERIES
-      //     budget (recoveries are naturally spaced by the job poll interval, riding
-      //     out the window);
-      //   - any other eviction (crash/OOM) gets the tight MAX_EVICTION_RECOVERIES.
-      // Once a budget is spent the eviction is treated as deterministic and fails the
-      // run as `evicted`. A genuine agent/job failure is never recovered.
-      if (isContainerEvictionError(update.error)) {
-        const transient = isTransientEviction(update.error)
-        const limit = transient ? MAX_TRANSIENT_EVICTION_RECOVERIES : MAX_EVICTION_RECOVERIES
-        const recoveries = transient
-          ? (step.transientEvictionRecoveries ?? 0)
-          : (step.evictionRecoveries ?? 0)
-        if (recoveries < limit) {
-          if (transient) step.transientEvictionRecoveries = recoveries + 1
-          else step.evictionRecoveries = recoveries + 1
-          step.jobId = undefined
-          step.subtasks = undefined
-          step.progress = 0
-          // The container vanished and a fresh one is about to boot for the re-dispatch,
-          // so the details show it spinning up again rather than a stale "up".
-          step.container = { status: 'starting' }
-          await this.executionRepository.upsert(workspaceId, instance)
-          await this.runStateMachine.emitInstance(workspaceId, instance)
-          return { kind: 'continue' }
-        }
-        // Eviction budget spent — the container is gone for good. Mark it errored and
-        // persist so the failed details show the errored container (failRun re-reads the
-        // run from storage, so an in-memory-only mutation would be lost; it emits the
-        // terminal frame, so markContainerErrored deliberately doesn't).
-        await this.markContainerErrored(workspaceId, instance, step)
-        return {
-          kind: 'job_evicted',
-          error: transient
-            ? `${update.error} (still evicting after ${recoveries} automatic restarts through the infrastructure churn — treating as deterministic)`
-            : `${update.error ?? 'Container evicted'} (still evicting after ${recoveries} automatic container restart${recoveries === 1 ? '' : 's'} — treating as deterministic)`,
-        }
-      }
+      // A container eviction (the per-run container vanished, its in-memory job is gone) is
+      // usually transient. The shared recovery drops the dead handle and returns `continue` so
+      // the driver re-dispatches the SAME step to a fresh container, within the per-flavour
+      // budget (transient infra churn vs a crash/OOM); once the budget is spent it fails the run
+      // as `evicted`. Returns null for a genuine agent/job failure, handled below.
+      const recovered = await this.recoverContainerEviction(
+        workspaceId,
+        instance,
+        step,
+        update.error,
+      )
+      if (recovered) return recovered
       // Not an eviction: a genuine agent/job failure. Prefer the harness's STRUCTURED cause
       // to classify it (→ AgentFailureKind), falling back to the error-string regex when an
       // older image (or a pool transport that doesn't forward the cause) reported none — the
@@ -797,6 +774,69 @@ export class RunDispatcher {
     }
     step.container = next
     return true
+  }
+
+  /**
+   * Apply an async step's live subtask counts to the step (and the derived 0..1 progress
+   * fraction), returning whether anything changed. Shared by {@link pollAgentJob} (the agent
+   * executor's `update.subtasks`) and {@link pollDeployerJob} (the deploy job's `view.progress`)
+   * so the progress-fraction math lives in one place.
+   */
+  private applySubtaskProgress(step: PipelineStep, counts: PipelineStep['subtasks']): boolean {
+    if (!counts || sameSubtasks(step.subtasks, counts)) return false
+    step.subtasks = counts
+    step.progress = counts.total > 0 ? counts.completed / counts.total : 0
+    return true
+  }
+
+  /**
+   * Shared container-eviction recovery for an async step (agent or deployer). When `error` is a
+   * container-eviction error and the per-flavour budget (transient vs genuine) isn't spent, resets
+   * the step so the driver re-dispatches a fresh container (returns `continue`); once the budget is
+   * spent, marks the container errored and returns the terminal `job_evicted`. Returns null when
+   * `error` is NOT an eviction, so the caller proceeds with its own genuine-failure handling.
+   * `onBeforeRedispatch` runs the kind-specific reclaim (the deployer releases its separately
+   * dispatched deploy-job runner) before the step state is reset. Keeps the eviction budgets +
+   * the user-facing "still evicting…" wording uniform across the agent and deployer paths.
+   */
+  private async recoverContainerEviction(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    error: string | undefined,
+    onBeforeRedispatch?: () => Promise<void>,
+  ): Promise<AdvanceResult | null> {
+    if (!isContainerEvictionError(error)) return null
+    const transient = isTransientEviction(error)
+    const limit = transient ? MAX_TRANSIENT_EVICTION_RECOVERIES : MAX_EVICTION_RECOVERIES
+    const recoveries = transient
+      ? (step.transientEvictionRecoveries ?? 0)
+      : (step.evictionRecoveries ?? 0)
+    if (recoveries < limit) {
+      if (transient) step.transientEvictionRecoveries = recoveries + 1
+      else step.evictionRecoveries = recoveries + 1
+      if (onBeforeRedispatch) await onBeforeRedispatch()
+      step.jobId = undefined
+      step.subtasks = undefined
+      step.progress = 0
+      // The container vanished and a fresh one is about to boot for the re-dispatch, so the
+      // details show it spinning up again rather than a stale "up".
+      step.container = { status: 'starting' }
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.runStateMachine.emitInstance(workspaceId, instance)
+      return { kind: 'continue' }
+    }
+    // Eviction budget spent — the container is gone for good. Mark it errored and persist so the
+    // failed details show the errored container (failRun re-reads the run from storage, so an
+    // in-memory-only mutation would be lost; it emits the terminal frame, so markContainerErrored
+    // deliberately doesn't).
+    await this.markContainerErrored(workspaceId, instance, step)
+    return {
+      kind: 'job_evicted',
+      error: transient
+        ? `${error} (still evicting after ${recoveries} automatic restarts through the infrastructure churn — treating as deterministic)`
+        : `${error ?? 'Container evicted'} (still evicting after ${recoveries} automatic container restart${recoveries === 1 ? '' : 's'} — treating as deterministic)`,
+    }
   }
 
   /**
@@ -1274,20 +1314,168 @@ export class RunDispatcher {
         model: 'environment:none',
       })
     }
-    let handle
+    // A set `jobId` means a prior (possibly replayed) dispatch already started an async deploy
+    // job — re-attach by polling instead of re-provisioning (mirrors {@link handleAgentStep}).
+    if (step.jobId) {
+      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    }
+    // Start provisioning: a raw-manifest config provisions SYNCHRONOUSLY over REST (a final
+    // handle); a config that needs rendering (kustomize/helm/image overrides/secret injections)
+    // dispatches a CONTAINER-backed deploy job we park on and poll (see {@link pollDeployerJob}).
+    // The job ref is DETERMINISTIC (run id + deployer kind + eviction epoch), so a Workflows
+    // replay that re-runs this step reproduces the same id and the transport (idempotent per ref)
+    // re-attaches instead of dispatching a duplicate deploy container. The epoch advances on each
+    // eviction recovery so a fresh job can't re-attach to the dead container's completed job.
+    const ref: RunnerJobRef = {
+      runId: instance.id,
+      jobId: deployJobId(instance.id, deployEvictionEpoch(step)),
+    }
+    let dispatch: ProvisionDispatch
     try {
-      handle = await this.environmentProvisioning!.provision({
-        workspaceId,
-        blockId: block.id,
-        executionId: instance.id,
-        inputs: this.deployInputs(block),
-        context: this.deployContext(block),
-        ...(provisioning ? { serviceProvisioning: provisioning } : {}),
-        initiatedBy: instance.initiatedBy,
-      })
+      dispatch = await this.environmentProvisioning!.startProvision(
+        this.deployerProvisionArgs(workspaceId, instance, block, provisioning),
+        ref,
+      )
     } catch (error) {
       return this.failDeployerStep(workspaceId, instance, step, getErrorMessage(error))
     }
+    if (dispatch.kind === 'completed') {
+      return this.completeDeployerStep(workspaceId, instance, step, isFinalStep, dispatch.handle)
+    }
+    // An async deploy job was dispatched: park on it. `dispatch` blocked until the job was
+    // accepted, so the container is up; the live phase + the provisioned outcome arrive on the
+    // deployer poll branch. Surface the env spinning up alongside the parked step.
+    step.jobId = dispatch.ref.jobId
+    step.container = { status: 'up' }
+    // Pin the provisioning config the container was built from, so the later poll/finalize maps
+    // the job against THIS config rather than a fresh read of the frame (which a person may edit
+    // mid-flight). Absent for the undeclared legacy path, which re-resolution handles harmlessly.
+    if (provisioning) step.deployProvisioning = provisioning
+    await this.attachEnvironmentProjection(workspaceId, instance.blockId, step)
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.runStateMachine.emitInstance(workspaceId, instance)
+    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+  }
+
+  /**
+   * Poll a `deployer` step's dispatched CONTAINER-backed deploy job (the async kustomize/helm
+   * path) through the environment provisioning service — NOT the agent executor. Mirrors
+   * {@link pollAgentJob}: surfaces live container/subtask progress while running, recovers a
+   * container eviction by re-dispatching a fresh deploy job (within the same budgets), and on a
+   * genuine terminal state finalizes the job into an environment record + the step result.
+   */
+  private async pollDeployerJob(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+  ): Promise<AdvanceResult> {
+    const ref: RunnerJobRef = { runId: instance.id, jobId: step.jobId! }
+    // Let a status-read failure THROW to the driver, exactly as `pollAgentJob` lets
+    // `executor.pollJob` throw: the driver counts consecutive read failures and fast-fails the
+    // run as `timeout` once `jobPollFailureTolerance` is hit. Swallowing it here would hide every
+    // read failure from that counter, so an unreachable deploy container would only stop at the
+    // full `jobMaxPolls` budget with a misleading "did not finish" message.
+    const view = await this.environmentProvisioning!.pollProvisionJob(workspaceId, ref)
+    if (view.state === 'running') {
+      let changed = false
+      if (this.applyContainerRunning(step, view)) changed = true
+      if (this.applySubtaskProgress(step, view.progress)) changed = true
+      if (await this.attachEnvironmentProjection(workspaceId, instance.blockId, step)) {
+        changed = true
+      }
+      if (changed) {
+        await this.executionRepository.upsert(workspaceId, instance)
+        await this.runStateMachine.emitInstance(workspaceId, instance)
+      }
+      return { kind: 'awaiting_job', jobId: step.jobId!, stepIndex: instance.currentStep }
+    }
+
+    // The deploy container vanished (evicted/crashed). The shared recovery re-dispatches a fresh
+    // deploy job (the driver loops back into `runDeployerStep`, which re-provisions since
+    // `step.jobId` is cleared) within the same per-flavour budgets as the agent path, reclaiming
+    // the dead job's runner first. Returns null for a non-eviction failure, handled below.
+    if (view.state === 'failed') {
+      const recovered = await this.recoverContainerEviction(
+        workspaceId,
+        instance,
+        step,
+        view.error,
+        () => this.environmentProvisioning!.releaseProvisionJob(workspaceId, ref).catch(() => {}),
+      )
+      if (recovered) return recovered
+    }
+
+    // Genuine terminal (done, or a non-eviction failure): finalize the deploy job into an
+    // environment record and turn it into the step result. A `failed` view maps to a failed env,
+    // which `completeDeployerStep` surfaces as a displayed step failure.
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    if (!block) return { kind: 'noop' }
+    const isFinalStep = instance.currentStep === instance.steps.length - 1
+    // Map the job against the provisioning config the container was BUILT from (pinned at
+    // dispatch), not a fresh read of the frame a person may have edited mid-flight — else a
+    // config flip (e.g. → `infraless`) would fail a deploy whose container already succeeded.
+    const provisioning =
+      step.deployProvisioning ?? (await this.resolveServiceProvisioning(workspaceId, block))
+    step.jobId = undefined
+    step.subtasks = undefined
+    // The one-shot deploy container reached a terminal state: reclaim its runner now rather than
+    // letting it idle out its sleepAfter window (billed-but-useless compute) / leak a self-hosted
+    // pool slot. The deploy job is dispatched SEPARATELY from the shared per-run container, so the
+    // agent path's `stopRunContainer` (final step only, run-id keyed) never reclaims it.
+    // Best-effort/idempotent.
+    await this.environmentProvisioning!.releaseProvisionJob(workspaceId, ref).catch(() => {})
+    let handle
+    try {
+      handle = await this.environmentProvisioning!.finalizeProvision(
+        this.deployerProvisionArgs(workspaceId, instance, block, provisioning),
+        view,
+      )
+    } catch (error) {
+      // The deploy container is gone (released above) but finalize failed: stamp the container
+      // errored so the failed details don't keep showing it "up". `failDeployerStep` persists it.
+      if (step.container) step.container = { ...step.container, status: 'errored' }
+      return this.failDeployerStep(workspaceId, instance, step, getErrorMessage(error))
+    }
+    // Reflect the container's terminal state from the RESOLVED outcome, not the raw view: a `done`
+    // view the provider maps to a FAILED env (e.g. the harness exited 0 but the namespace is
+    // missing) must still show the container errored — keying off `view.state` alone missed that.
+    if (handle.status === 'failed' && step.container) {
+      step.container = { ...step.container, status: 'errored' }
+    }
+    return this.completeDeployerStep(workspaceId, instance, step, isFinalStep, handle)
+  }
+
+  /** The {@link ProvisionArgs} a `deployer` step provisions with (synchronous or async). */
+  private deployerProvisionArgs(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block,
+    provisioning: ServiceProvisioning | undefined,
+  ): ProvisionArgs {
+    return {
+      workspaceId,
+      blockId: block.id,
+      executionId: instance.id,
+      inputs: this.deployInputs(block),
+      context: this.deployContext(block),
+      ...(provisioning ? { serviceProvisioning: provisioning } : {}),
+      initiatedBy: instance.initiatedBy,
+    }
+  }
+
+  /**
+   * Turn a provisioned environment handle into the `deployer` step's advance result: a `failed`
+   * env is surfaced as a displayed step failure (its `lastError` renders in the Environment
+   * panel); otherwise the env summary (status / URL / provision type / engine) is recorded as the
+   * step output. Shared by the synchronous and async-finalized provision paths.
+   */
+  private async completeDeployerStep(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    isFinalStep: boolean,
+    handle: EnvironmentHandle,
+  ): Promise<AdvanceResult> {
     if (handle.status === 'failed') {
       return this.failDeployerStep(
         workspaceId,
@@ -1296,6 +1484,11 @@ export class RunDispatcher {
         handle.lastError ?? 'Provisioning failed.',
       )
     }
+    // Re-project the now-final environment (ready/expired + URL) so the deployer step's
+    // Environment panel reflects the provisioned outcome rather than the dispatch-time
+    // `provisioning` snapshot the async poll last wrote. (The failed branch above routes to
+    // `failDeployerStep`, which re-projects too; the synchronous path simply surfaces its env.)
+    await this.attachEnvironmentProjection(workspaceId, instance.blockId, step)
     const lines = [
       `Provisioned ephemeral environment via '${handle.providerId}'.`,
       `Status: ${handle.status}`,

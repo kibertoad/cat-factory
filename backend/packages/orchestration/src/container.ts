@@ -1,6 +1,7 @@
 import type {
   Block,
   BlockRepository,
+  DeployCloneTarget,
   ExecutionRepository,
   PipelineRepository,
   ResolveRunRepoContext,
@@ -151,6 +152,7 @@ import {
   defaultEnvironmentBackendRegistry,
   defaultRunnerBackendRegistry,
   type CustomManifestTypeRegistry,
+  type DeployJobClient,
   type EnvironmentBackendRegistry,
   type RunnerBackendRegistry,
 } from '@cat-factory/integrations'
@@ -254,6 +256,26 @@ export interface CoreDependencies {
     workspaceId: string,
     coords: { owner: string; repo: string; provider?: 'github' | 'gitlab' },
   ) => Promise<RunRepoContext | null>
+  /**
+   * Optional: dispatch / poll / release a CONTAINER-backed deploy job (real
+   * `kubectl`/`kustomize`/`helm`) through the workspace's runner transport — the async
+   * provisioning lifecycle the Kubernetes render path uses. A facade passes its
+   * `RunnerJobClient` (structurally a {@link DeployJobClient}). Absent → container provisioning
+   * is unavailable, so a render-needing config fails loudly (the raw-manifest REST path is
+   * unaffected). See docs/initiatives/per-service-provision-types.md (phase 2).
+   */
+  deployJobClient?: DeployJobClient
+  /**
+   * Optional: resolve the manifests-repo clone target (HTTPS URL + ref + short-lived token) a
+   * deploy container clones — VCS-specific, server-layer work the stateless provider can't do.
+   * A facade composes it from its wired `GitHubClient` + `resolveRepoTarget`. Absent → no clone
+   * target, so a render-needing config fails loudly (the synchronous raw path never needs it).
+   */
+  resolveDeployCloneTarget?: (
+    workspaceId: string,
+    blockId: string,
+    ref?: string,
+  ) => Promise<DeployCloneTarget | null>
   /**
    * Optional: the kind-scoped `agent_runs` rows for env-config-repair runs. Wired by a
    * facade alongside {@link envConfigRepairer}; absent → no durable repair runs.
@@ -1284,6 +1306,13 @@ function createEnvironmentsModule(
           resolveUserHandlerOverrides: (userId, ws) =>
             userHandlerService.resolveOverrides(userId, ws),
         }
+      : {}),
+    // The async, container-backed deploy lifecycle (kustomize/helm) is wired when the facade
+    // supplies the runner transport + the clone-target resolver; absent ⇒ only the synchronous
+    // raw-manifest REST path runs (a render-needing config fails loudly).
+    ...(deps.deployJobClient ? { deployJobClient: deps.deployJobClient } : {}),
+    ...(deps.resolveDeployCloneTarget
+      ? { resolveDeployCloneTarget: deps.resolveDeployCloneTarget }
       : {}),
     ...(provisioningLog ? { provisioningLog } : {}),
   })

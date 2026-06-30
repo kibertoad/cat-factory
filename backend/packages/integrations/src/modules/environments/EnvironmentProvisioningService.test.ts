@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ValidationError } from '@cat-factory/kernel'
 import type {
+  DeployProvisionJob,
   EnvironmentProvider,
   EnvironmentRecord,
   EnvironmentRegistryRepository,
@@ -8,10 +9,15 @@ import type {
   ProvisionedEnvironment,
   RepoValidationResult,
   ResolveRunRepoContext,
+  RunnerJobRef,
+  RunnerJobView,
   SecretCipher,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
-import { EnvironmentProvisioningService } from './EnvironmentProvisioningService.js'
+import {
+  type DeployJobClient,
+  EnvironmentProvisioningService,
+} from './EnvironmentProvisioningService.js'
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
 
 // EnvironmentProvisioningService is the seam an in-house adapter (e.g. a PR-environment
@@ -504,5 +510,221 @@ describe('EnvironmentProvisioningService — returned URL policy', () => {
     const handle = await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
     expect(handle.url).toBe('https://prenv.kargo.internal')
     expect(registry.records).toHaveLength(1)
+  })
+})
+
+describe('EnvironmentProvisioningService — async container-backed deploy lifecycle', () => {
+  const CLONE = { cloneUrl: 'https://github.com/acme/web.git', ref: 'feat/x', token: 'gh-tok' }
+  const REF: RunnerJobRef = { runId: 'exec1', jobId: 'deploy_1' }
+
+  /** A provider that renders in a container: builds a deploy job + maps its terminal view. */
+  function asyncProvider(): EnvironmentProvider & { lastBuild?: ProvisionEnvironmentRequest } {
+    const provider: EnvironmentProvider & { lastBuild?: ProvisionEnvironmentRequest } = {
+      // The synchronous REST path is never taken by this provider in the async tests.
+      async provision() {
+        throw new Error('should not call provision() on the async path')
+      },
+      async status() {
+        return READY
+      },
+      async teardown() {
+        return { status: 'torn_down' }
+      },
+      asyncProvision: {
+        buildProvisionJob(req): DeployProvisionJob {
+          provider.lastBuild = req
+          return {
+            ref: req.deploy!.ref,
+            spec: { jobId: req.deploy!.ref.jobId, cloneUrl: req.deploy!.clone.cloneUrl },
+            kind: 'deploy',
+            options: { image: 'deploy' },
+          }
+        },
+        finalizeProvision(view): ProvisionedEnvironment {
+          const outcome = view.result?.custom as { namespace?: string; url?: string } | undefined
+          if (view.state === 'failed' || !outcome?.namespace) {
+            return {
+              externalId: null,
+              url: null,
+              status: 'failed',
+              expiresAt: null,
+              access: null,
+              fields: {},
+              error: view.error ?? 'deploy failed',
+            }
+          }
+          return {
+            externalId: outcome.namespace,
+            url: outcome.url ?? null,
+            status: 'ready',
+            expiresAt: null,
+            access: null,
+            fields: { namespace: outcome.namespace },
+          }
+        },
+      },
+    }
+    return provider
+  }
+
+  /** A fake deploy job client recording dispatch/release + returning a queued poll view. */
+  function fakeJobClient(view: RunnerJobView): DeployJobClient & {
+    dispatched: { ref: RunnerJobRef; spec: Record<string, unknown>; kind: string }[]
+    released: RunnerJobRef[]
+  } {
+    const dispatched: { ref: RunnerJobRef; spec: Record<string, unknown>; kind: string }[] = []
+    const released: RunnerJobRef[] = []
+    return {
+      dispatched,
+      released,
+      async dispatch(_ws, ref, spec, kind) {
+        dispatched.push({ ref, spec, kind })
+      },
+      async poll() {
+        return view
+      },
+      async release(_ws, ref) {
+        released.push(ref)
+      },
+    }
+  }
+
+  function makeAsyncService(
+    provider: EnvironmentProvider,
+    registry: EnvironmentRegistryRepository,
+    opts: {
+      deployJobClient?: DeployJobClient
+      cloneTarget?: typeof CLONE | null
+    } = {},
+  ) {
+    const connectionService = {
+      resolveProvider: async () => ({ provider, manifest: MANIFEST }),
+      resolveSecrets: async () => () => undefined,
+    } as unknown as EnvironmentConnectionService
+    let n = 0
+    return new EnvironmentProvisioningService({
+      connectionService,
+      environmentRegistryRepository: registry,
+      secretCipher: fakeCipher,
+      idGenerator: { next: (prefix: string) => `${prefix}_${++n}` },
+      clock: { now: () => 1_700_000_000_000 },
+      ...(opts.deployJobClient ? { deployJobClient: opts.deployJobClient } : {}),
+      ...(opts.cloneTarget !== null
+        ? { resolveDeployCloneTarget: async () => opts.cloneTarget ?? CLONE }
+        : {}),
+    })
+  }
+
+  it('dispatches a deploy job + persists a provisioning record, then parks', async () => {
+    const provider = asyncProvider()
+    const registry = fakeRegistry()
+    const client = fakeJobClient({ state: 'running' })
+    const service = makeAsyncService(provider, registry, { deployJobClient: client })
+
+    const result = await service.startProvision({ workspaceId: 'ws1', blockId: 'blk1' }, REF)
+
+    expect(result.kind).toBe('dispatched')
+    if (result.kind === 'dispatched') expect(result.ref).toEqual(REF)
+    // The job carried the resolved clone target into the build request.
+    expect(provider.lastBuild?.deploy?.clone.cloneUrl).toBe(CLONE.cloneUrl)
+    expect(client.dispatched).toHaveLength(1)
+    expect(client.dispatched[0]!.kind).toBe('deploy')
+    // A `provisioning` record is left behind so the run details show the env spinning up.
+    expect(registry.records).toHaveLength(1)
+    expect(registry.records[0]!.status).toBe('provisioning')
+    expect(registry.records[0]!.blockId).toBe('blk1')
+  })
+
+  it('finalizes a done deploy view into a ready environment record', async () => {
+    const provider = asyncProvider()
+    const registry = fakeRegistry()
+    const service = makeAsyncService(provider, registry, {
+      deployJobClient: fakeJobClient({ state: 'running' }),
+    })
+    await service.startProvision({ workspaceId: 'ws1', blockId: 'blk1' }, REF)
+
+    const view: RunnerJobView = {
+      state: 'done',
+      result: { custom: { namespace: 'pr-blk1', url: 'https://pr-blk1.example' } },
+    }
+    const handle = await service.finalizeProvision({ workspaceId: 'ws1', blockId: 'blk1' }, view)
+
+    expect(handle.status).toBe('ready')
+    expect(handle.url).toBe('https://pr-blk1.example')
+    expect(handle.externalId).toBe('pr-blk1')
+    // The prior `provisioning` record is superseded; the ready one is the live record.
+    const live = registry.records.find((r) => r.blockId === 'blk1' && !r.deletedAt)
+    expect(live!.status).toBe('ready')
+  })
+
+  it('finalizes a failed deploy view into a failed environment carrying the error', async () => {
+    const provider = asyncProvider()
+    const registry = fakeRegistry()
+    const service = makeAsyncService(provider, registry, {
+      deployJobClient: fakeJobClient({ state: 'running' }),
+    })
+
+    const view: RunnerJobView = { state: 'failed', error: 'helm release failed' }
+    const handle = await service.finalizeProvision({ workspaceId: 'ws1', blockId: 'blk1' }, view)
+
+    expect(handle.status).toBe('failed')
+    expect(handle.lastError).toBe('helm release failed')
+  })
+
+  it('pollProvisionJob returns the transport view', async () => {
+    const client = fakeJobClient({ state: 'running', phase: 'apply' })
+    const service = makeAsyncService(asyncProvider(), fakeRegistry(), { deployJobClient: client })
+    const view = await service.pollProvisionJob('ws1', REF)
+    expect(view.phase).toBe('apply')
+  })
+
+  it('throws + persists a failed env when render is needed but no transport is wired', async () => {
+    const provider = asyncProvider()
+    const registry = fakeRegistry()
+    // No deployJobClient: buildProvisionJob returns a job (render needed) but nothing can run it.
+    const service = makeAsyncService(provider, registry, {})
+
+    await expect(
+      service.startProvision({ workspaceId: 'ws1', blockId: 'blk1' }, REF),
+    ).rejects.toThrow(/no runner transport is wired/i)
+    expect(registry.records).toHaveLength(1)
+    expect(registry.records[0]!.status).toBe('failed')
+  })
+
+  it('falls back to the synchronous path when the provider builds no deploy job', async () => {
+    // A provider whose buildProvisionJob returns null (raw manifests) provisions synchronously.
+    const provider = asyncProvider()
+    provider.asyncProvision!.buildProvisionJob = () => null
+    provider.provision = async () => READY
+    const registry = fakeRegistry()
+    const service = makeAsyncService(provider, registry, {
+      deployJobClient: fakeJobClient({ state: 'running' }),
+    })
+
+    const result = await service.startProvision({ workspaceId: 'ws1', blockId: 'blk1' }, REF)
+    expect(result.kind).toBe('completed')
+    if (result.kind === 'completed') expect(result.handle.status).toBe('ready')
+    expect(registry.records[0]!.status).toBe('ready')
+  })
+
+  it('still parks when the provisioning-record write fails after dispatch (best-effort)', async () => {
+    const provider = asyncProvider()
+    // A registry whose insert throws AFTER the deploy job is dispatched: the run must still PARK on
+    // the live container, not fail (a failed startProvision is turned into a terminal, non-retried
+    // provisioning failure that would strand the dispatched container). The `provisioning` row is a
+    // display-only nicety — `finalizeProvision` writes the real record when the job settles.
+    const registry = {
+      ...fakeRegistry(),
+      async insert() {
+        throw new Error('registry write failed')
+      },
+    }
+    const client = fakeJobClient({ state: 'running' })
+    const service = makeAsyncService(provider, registry, { deployJobClient: client })
+
+    const result = await service.startProvision({ workspaceId: 'ws1', blockId: 'blk1' }, REF)
+
+    expect(result.kind).toBe('dispatched')
+    expect(client.dispatched).toHaveLength(1)
   })
 })

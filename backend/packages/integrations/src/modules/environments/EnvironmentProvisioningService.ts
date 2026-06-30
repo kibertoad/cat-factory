@@ -5,13 +5,21 @@ import type {
   EnvironmentRegistryRepository,
 } from '@cat-factory/kernel'
 import type {
+  DeployCloneTarget,
+  DeployProvisionInputs,
+  DeployProvisionJob,
   EnvironmentManifest,
   EnvironmentProvider,
   InfraEngine,
   ProvisionContext,
+  ProvisionEnvironmentRequest,
   ProvisionType,
   ProvisionedEnvironment,
   ResolveRunRepoContext,
+  RunnerDispatchKind,
+  RunnerDispatchOptions,
+  RunnerJobRef,
+  RunnerJobView,
   RunRepoContext,
   SecretResolver,
   ServiceProvisioning,
@@ -19,7 +27,12 @@ import type {
 } from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { EnvironmentAccessHandle, EnvironmentHandle } from '@cat-factory/kernel'
-import { assertFound, STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
+import {
+  assertFound,
+  getErrorMessage,
+  STRICT_URL_SAFETY_POLICY,
+  ValidationError,
+} from '@cat-factory/kernel'
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
 import {
   assertSafeEnvironmentUrl,
@@ -71,7 +84,65 @@ export interface EnvironmentProvisioningServiceDependencies {
     userId: string,
     workspaceId: string,
   ) => Promise<EnvironmentConnectionRecord[]>
+  /**
+   * Dispatch / poll / release a CONTAINER-backed deploy job (real `kubectl`/`kustomize`/`helm`)
+   * through the workspace's runner transport — the async-provision lifecycle a provider exposes
+   * via {@link AsyncProvisionCapability}. Absent ⇒ container provisioning is unavailable, so a
+   * config that needs rendering fails loudly (the synchronous in-Worker REST path is unaffected).
+   * Wired by each facade in the same place the agent executor's transport is. Typed structurally
+   * (not the server's `RunnerJobClient`) so integrations stays runtime-neutral.
+   */
+  deployJobClient?: DeployJobClient
+  /**
+   * Resolve the manifests-repo clone target (HTTPS URL + ref + short-lived token) a deploy
+   * container clones — VCS-specific, server-layer work the stateless provider can't do itself.
+   * Absent (or a block-less provision) ⇒ no clone target, so a render-needing config makes
+   * `buildProvisionJob` throw loudly. The synchronous raw-manifest path never needs it.
+   */
+  resolveDeployCloneTarget?: (
+    workspaceId: string,
+    blockId: string,
+    ref?: string,
+  ) => Promise<DeployCloneTarget | null>
 }
+
+/**
+ * The structural subset of the server's `RunnerJobClient` the provisioning service needs to
+ * run a container-backed deploy job: dispatch it, poll its view, and release its runner.
+ * Defined here (not imported from `@cat-factory/server`) so the integrations layer stays
+ * runtime-neutral; the facade passes its `RunnerJobClient`, which is structurally compatible.
+ */
+export interface DeployJobClient {
+  dispatch(
+    workspaceId: string | undefined,
+    ref: RunnerJobRef,
+    spec: Record<string, unknown>,
+    kind: RunnerDispatchKind,
+    options?: RunnerDispatchOptions,
+  ): Promise<void>
+  poll(workspaceId: string | undefined, ref: RunnerJobRef): Promise<RunnerJobView>
+  release(workspaceId: string | undefined, ref: RunnerJobRef): Promise<void>
+}
+
+/** The provider + manifest + secret resolver + resolved type/engine for one provision. */
+interface ResolvedProvision {
+  manifest: EnvironmentManifest
+  provider: EnvironmentProvider
+  resolveSecret: SecretResolver
+  /** The resolved provision type + engine (the per-type path); null on the legacy connection. */
+  provisionType: ProvisionType | null
+  engine: InfraEngine | null
+}
+
+/**
+ * The outcome of {@link EnvironmentProvisioningService.startProvision}: either the environment
+ * was provisioned SYNCHRONOUSLY (the in-Worker REST path for raw manifests — `handle` is final)
+ * or a CONTAINER-backed deploy job was dispatched (`ref`) and the caller must park on it and poll
+ * via {@link EnvironmentProvisioningService.pollProvisionJob} until it settles.
+ */
+export type ProvisionDispatch =
+  | { kind: 'completed'; handle: EnvironmentHandle }
+  | { kind: 'dispatched'; ref: RunnerJobRef }
 
 export interface ProvisionArgs {
   workspaceId: string
@@ -138,14 +209,157 @@ export class EnvironmentProvisioningService {
 
   /** Provision an environment, persisting an encrypted record keyed by block/run. */
   async provision(args: ProvisionArgs): Promise<EnvironmentHandle> {
+    const resolved = await this.resolveProvision(args)
+    // Pre-flight gate: if the provider declares repo-config expectations (e.g. Kargo's
+    // `.kargo.yml`), verify them against the block's repo BEFORE provisioning, so a
+    // missing/malformed config fails synchronously here instead of as an async failed
+    // environment. Skipped for a block-less manual provision or an unconfigured workspace.
+    await this.preflightValidateRepo(
+      resolved.provider,
+      args,
+      resolved.manifest,
+      resolved.resolveSecret,
+    )
+    const req = await this.buildProvisionRequest(args, resolved.manifest, resolved.resolveSecret)
+    return this.provisionSync(args, resolved, req)
+  }
+
+  /**
+   * Start provisioning a SERVICE's environment for a run, either synchronously (the in-Worker
+   * REST path for raw manifests — returns a final `completed` handle) or by dispatching a
+   * CONTAINER-backed deploy job (kustomize / helm / image overrides / secret injections —
+   * returns `dispatched` with the job ref for the caller to park on and poll). The provider's
+   * {@link AsyncProvisionCapability.buildProvisionJob} decides which path applies; this is the
+   * deployer step's entry point. The synchronous path is identical to {@link provision}.
+   */
+  async startProvision(args: ProvisionArgs, ref: RunnerJobRef): Promise<ProvisionDispatch> {
+    const resolved = await this.resolveProvision(args)
+    await this.preflightValidateRepo(
+      resolved.provider,
+      args,
+      resolved.manifest,
+      resolved.resolveSecret,
+    )
+    // Resolve the deploy inputs (job ref + clone target) when the async seam is wired, so a
+    // provider that renders in a container gets what it needs; absent ⇒ a render-needing config
+    // makes `buildProvisionJob` throw loudly (surfaced as a failed env below).
+    const deploy = await this.resolveDeployInputs(args, ref)
+    const req = await this.buildProvisionRequest(
+      args,
+      resolved.manifest,
+      resolved.resolveSecret,
+      deploy,
+    )
+    let job: DeployProvisionJob | null = null
+    try {
+      job = resolved.provider.asyncProvision?.buildProvisionJob(req) ?? null
+    } catch (error) {
+      // `buildProvisionJob` throws when rendering is needed but the deploy inputs aren't wired.
+      // Persist a failed env so the deployer step shows the cause, then propagate.
+      await this.captureProvisionFailure(args, resolved, getErrorMessage(error))
+      throw error
+    }
+    if (!job) {
+      // Raw manifests / no async provider: the synchronous in-Worker REST path.
+      const handle = await this.provisionSync(args, resolved, req)
+      return { kind: 'completed', handle }
+    }
+    if (!this.deps.deployJobClient) {
+      const message =
+        'This environment needs the container deploy adapter, but no runner transport is wired.'
+      await this.captureProvisionFailure(args, resolved, message)
+      throw new ValidationError(message)
+    }
+    try {
+      await this.deps.deployJobClient.dispatch(
+        args.workspaceId,
+        job.ref,
+        job.spec,
+        job.kind,
+        job.options,
+      )
+    } catch (error) {
+      await this.captureProvisionFailure(args, resolved, getErrorMessage(error))
+      throw error
+    }
+    // Persist a `provisioning` record so the run details show the env spinning up while the
+    // deploy container renders + applies. {@link finalizeProvision} supersedes it with the
+    // mapped outcome once the job settles. BEST-EFFORT: the job is already dispatched and its
+    // ref is about to be persisted on the step, so a failed projection write must NOT propagate
+    // — that would strand the live deploy container (the caller turns a `startProvision` throw
+    // into a terminal, non-retried provisioning failure) for a display-only row. The real record
+    // is written by `finalizeProvision` regardless.
+    try {
+      await this.recordProvisioned(
+        args,
+        resolved.manifest,
+        {
+          externalId: null,
+          url: null,
+          status: 'provisioning',
+          expiresAt: null,
+          access: null,
+          fields: {},
+        },
+        resolved.provisionType,
+        resolved.engine,
+      )
+    } catch {
+      // Ignore — the `provisioning` row is a spinning-up display nicety; the job is in flight.
+    }
+    return { kind: 'dispatched', ref: job.ref }
+  }
+
+  /** Poll a dispatched deploy job's current view. Throws when no runner transport is wired. */
+  async pollProvisionJob(workspaceId: string, ref: RunnerJobRef): Promise<RunnerJobView> {
+    if (!this.deps.deployJobClient) {
+      throw new Error('No runner transport is wired to poll the deploy job')
+    }
+    return this.deps.deployJobClient.poll(workspaceId, ref)
+  }
+
+  /**
+   * Settle a deploy job that reached a terminal state: map its view into a
+   * {@link ProvisionedEnvironment} via the provider's
+   * {@link AsyncProvisionCapability.finalizeProvision} and persist the env record (superseding
+   * the `provisioning` row from {@link startProvision}). A failed view becomes a `failed` env
+   * carrying the harness error, so the deployer step's details project it.
+   */
+  async finalizeProvision(args: ProvisionArgs, view: RunnerJobView): Promise<EnvironmentHandle> {
+    const resolved = await this.resolveProvision(args)
+    const capability = resolved.provider.asyncProvision
+    if (!capability) {
+      throw new Error('The resolved provider has no async deploy capability to finalize')
+    }
+    // finalizeProvision only reads the manifest + inputs (it maps the harness view), so the
+    // deploy clone inputs aren't needed here — skip minting a fresh clone token.
+    const req = await this.buildProvisionRequest(args, resolved.manifest, resolved.resolveSecret)
+    const provisioned = capability.finalizeProvision(view, req)
+    if (provisioned.url) {
+      assertSafeEnvironmentUrl(provisioned.url, 'environment URL', this.urlPolicy)
+    }
+    return this.recordProvisioned(
+      args,
+      resolved.manifest,
+      provisioned,
+      resolved.provisionType,
+      resolved.engine,
+    )
+  }
+
+  /** Best-effort reclaim a deploy job's runner (e.g. before an eviction re-dispatch). */
+  async releaseProvisionJob(workspaceId: string, ref: RunnerJobRef): Promise<void> {
+    await this.deps.deployJobClient?.release(workspaceId, ref)
+  }
+
+  /**
+   * Resolve the provider + manifest + secret resolver for a provision: the SERVICE-declared
+   * per-type handler (matching the type to a workspace handler, layering the run initiator's
+   * local per-user override, and recording the resolved type/engine) or — undeclared — the
+   * legacy single-connection path. `infraless` is rejected (callers short-circuit it).
+   */
+  private async resolveProvision(args: ProvisionArgs): Promise<ResolvedProvision> {
     const { workspaceId } = args
-    let manifest: EnvironmentManifest
-    let provider: EnvironmentProvider
-    let resolveSecret: SecretResolver
-    // The resolved provision type + engine, recorded on the env record so run details show
-    // exactly what was stood up (the per-type path); null on the legacy single-connection path.
-    let provisionType: ProvisionType | null = null
-    let engine: InfraEngine | null = null
     if (args.serviceProvisioning) {
       if (args.serviceProvisioning.type === 'infraless') {
         throw new ValidationError('An infraless service provisions no environment')
@@ -160,91 +374,166 @@ export class EnvironmentProvisioningService {
         args.serviceProvisioning,
         userOverrides,
       )
-      manifest = resolved.manifest
-      provider = resolved.provider
-      resolveSecret = resolved.resolveSecret
-      provisionType = resolved.provisionType
-      engine = resolved.engine
-    } else {
-      const resolved = await this.deps.connectionService.resolveProvider(workspaceId)
-      manifest = resolved.manifest
-      provider = resolved.provider
-      resolveSecret = await this.deps.connectionService.resolveSecrets(workspaceId)
+      return {
+        manifest: resolved.manifest,
+        provider: resolved.provider,
+        resolveSecret: resolved.resolveSecret,
+        provisionType: resolved.provisionType,
+        engine: resolved.engine,
+      }
     }
+    const resolved = await this.deps.connectionService.resolveProvider(workspaceId)
+    return {
+      manifest: resolved.manifest,
+      provider: resolved.provider,
+      resolveSecret: await this.deps.connectionService.resolveSecrets(workspaceId),
+      provisionType: null,
+      engine: null,
+    }
+  }
 
-    // Pre-flight gate: if the provider declares repo-config expectations (e.g. Kargo's
-    // `.kargo.yml`), verify them against the block's repo BEFORE provisioning, so a
-    // missing/malformed config fails synchronously here instead of as an async failed
-    // environment. Skipped for a block-less manual provision or an unconfigured workspace.
-    await this.preflightValidateRepo(provider, args, manifest, resolveSecret)
-
-    // Expose the block id as `{{input.blockId}}` even on a manual provision, so a
-    // manifest can template against it without the caller having to repeat it. The
-    // typed git/PR/repo context is flattened into the same namespace for the manifest
-    // path. Explicit inputs win over the derived block id + context.
+  /**
+   * Build the {@link ProvisionEnvironmentRequest} from the provision args + resolved manifest:
+   * the `{{input.*}}` vars (block id + typed context + explicit inputs), the run/separate repo
+   * seams a native adapter reads manifests through, and — for an ASYNC container provision — the
+   * deploy inputs (job ref + clone target). Shared by the synchronous and async paths.
+   */
+  private async buildProvisionRequest(
+    args: ProvisionArgs,
+    manifest: EnvironmentManifest,
+    resolveSecret: SecretResolver,
+    deploy?: DeployProvisionInputs,
+  ): Promise<ProvisionEnvironmentRequest> {
+    const { workspaceId } = args
+    // Expose the block id as `{{input.blockId}}` even on a manual provision, so a manifest can
+    // template against it without the caller repeating it. The typed git/PR/repo context is
+    // flattened into the same namespace. Explicit inputs win over the derived block id + context.
     const inputs: Record<string, string> = {}
     if (args.blockId) inputs.blockId = args.blockId
     Object.assign(inputs, contextInputs(args.context))
     Object.assign(inputs, args.inputs)
-    // A native adapter (the Kubernetes backend) reads manifests from the run repo
-    // (co-located) or a separate repo; resolve both seams when available.
+    // A native adapter (the Kubernetes backend) reads manifests from the run repo (co-located)
+    // or a separate repo; resolve both seams when available.
     const runRepo =
       args.blockId && this.deps.resolveRunRepoContext
         ? await this.deps.resolveRunRepoContext(workspaceId, args.blockId)
         : null
+    return {
+      manifest,
+      inputs,
+      ...(args.context ? { provisionContext: args.context } : {}),
+      resolveSecret,
+      ...(runRepo ? { runRepo } : {}),
+      ...(this.deps.resolveRepoFilesForWorkspace
+        ? {
+            resolveRepoFiles: (coords) =>
+              this.deps.resolveRepoFilesForWorkspace!(workspaceId, {
+                owner: coords.owner,
+                repo: coords.repo,
+                ...(coords.provider ? { provider: coords.provider } : {}),
+              }),
+          }
+        : {}),
+      ...(deploy ? { deploy } : {}),
+    }
+  }
+
+  /**
+   * Resolve the async deploy inputs ({@link DeployProvisionInputs}: the job ref + the
+   * manifests-repo clone target) for a run block. Returns undefined when the clone-target seam is
+   * unwired or the provision is block-less — so `buildProvisionJob` either uses the synchronous
+   * path (raw manifests) or throws loudly (a render-needing config with no transport).
+   */
+  private async resolveDeployInputs(
+    args: ProvisionArgs,
+    ref: RunnerJobRef,
+  ): Promise<DeployProvisionInputs | undefined> {
+    if (!this.deps.resolveDeployCloneTarget || !args.blockId) return undefined
+    const clone = await this.deps.resolveDeployCloneTarget(
+      args.workspaceId,
+      args.blockId,
+      args.context?.branch,
+    )
+    if (!clone) return undefined
+    return { ref, clone }
+  }
+
+  /**
+   * Run the SYNCHRONOUS provider provision (the in-Worker REST path), capture a thrown or
+   * returned failure as a `failed` env record, and persist the outcome. Shared by
+   * {@link provision} and {@link startProvision}'s raw-manifest fallback.
+   */
+  private async provisionSync(
+    args: ProvisionArgs,
+    resolved: ResolvedProvision,
+    req: ProvisionEnvironmentRequest,
+  ): Promise<EnvironmentHandle> {
     let provisioned: ProvisionedEnvironment
     try {
-      provisioned = await provider.provision({
-        manifest,
-        inputs,
-        ...(args.context ? { provisionContext: args.context } : {}),
-        resolveSecret,
-        ...(runRepo ? { runRepo } : {}),
-        ...(this.deps.resolveRepoFilesForWorkspace
-          ? {
-              resolveRepoFiles: (coords) =>
-                this.deps.resolveRepoFilesForWorkspace!(workspaceId, {
-                  owner: coords.owner,
-                  repo: coords.repo,
-                  ...(coords.provider ? { provider: coords.provider } : {}),
-                }),
-            }
-          : {}),
-      })
+      provisioned = await resolved.provider.provision(req)
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      // The provider call threw (network/auth/4xx) — log the verbatim error before
-      // it bubbles to the caller, so the attempt shows in the env provider's logs.
-      await this.deps.provisioningLog?.record({
-        workspaceId,
-        subsystem: 'environment',
-        operation: 'provision',
-        targetId: null,
-        providerId: manifest.providerId,
-        blockId: args.blockId ?? null,
-        executionId: args.executionId ?? null,
-        outcome: 'failure',
-        error: message,
-        detail: null,
-      })
-      // Persist a `failed` record carrying the REAL provider error so the deployer step's
-      // details can project it (`step.environment.lastError`), even though the provider
-      // threw before returning anything. Best-effort — symmetric with the returned-`failed`
-      // branch below, which already leaves a record behind.
-      await this.persistFailedEnvironment(
-        workspaceId,
-        args,
-        manifest,
-        message,
-        provisionType,
-        engine,
-      )
+      // The provider call threw (network/auth/4xx) — record the verbatim error as a failed env
+      // (so the deployer step projects it) and re-throw.
+      await this.captureProvisionFailure(args, resolved, getErrorMessage(error))
       throw error
     }
     if (provisioned.url) {
       assertSafeEnvironmentUrl(provisioned.url, 'environment URL', this.urlPolicy)
     }
+    return this.recordProvisioned(
+      args,
+      resolved.manifest,
+      provisioned,
+      resolved.provisionType,
+      resolved.engine,
+    )
+  }
 
+  /**
+   * Log + persist a `failed` env record carrying the REAL provisioning error, so the deployer
+   * step's details project it (`step.environment.lastError`) even when the provider threw (or
+   * the deploy job couldn't be built/dispatched) before any environment existed. Best-effort.
+   */
+  private async captureProvisionFailure(
+    args: ProvisionArgs,
+    resolved: ResolvedProvision,
+    message: string,
+  ): Promise<void> {
+    await this.deps.provisioningLog?.record({
+      workspaceId: args.workspaceId,
+      subsystem: 'environment',
+      operation: 'provision',
+      targetId: null,
+      providerId: resolved.manifest.providerId,
+      blockId: args.blockId ?? null,
+      executionId: args.executionId ?? null,
+      outcome: 'failure',
+      error: message,
+      detail: null,
+    })
+    await this.persistFailedEnvironment(
+      args.workspaceId,
+      args,
+      resolved.manifest,
+      message,
+      resolved.provisionType,
+      resolved.engine,
+    )
+  }
+
+  /**
+   * Persist a provisioned environment: supersede the block's prior live one, insert the encrypted
+   * record (capturing the resolved type/engine + a non-throwing provider's `failed` reason), log
+   * the outcome, and return the handle. Shared by the synchronous path and the async finalizer.
+   */
+  private async recordProvisioned(
+    args: ProvisionArgs,
+    manifest: EnvironmentManifest,
+    provisioned: ProvisionedEnvironment,
+    provisionType: ProvisionType | null,
+    engine: InfraEngine | null,
+  ): Promise<EnvironmentHandle> {
+    const { workspaceId } = args
     // A block holds at most one live environment: supersede any prior one.
     await this.supersedePriorEnvironment(workspaceId, args.blockId ?? null)
 

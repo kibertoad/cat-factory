@@ -11,8 +11,8 @@ import type {
   SlackSettingsRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { getGlobalDispatcher, MockAgent, setGlobalDispatcher } from 'undici'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fetch as undiciFetch, getGlobalDispatcher, MockAgent, setGlobalDispatcher } from 'undici'
 import { SlackApiClient } from './SlackApiClient.js'
 import { SlackNotificationChannel } from './SlackNotificationChannel.js'
 
@@ -29,9 +29,15 @@ beforeEach(() => {
   agent = new MockAgent()
   agent.disableNetConnect()
   setGlobalDispatcher(agent)
+  // Node's built-in `fetch` binds to its OWN bundled undici (v7 on Node 24), which ignores a
+  // dispatcher set on the userland `undici` package (v8) — so the MockAgent above would be
+  // silently bypassed and the channel would post to the REAL Slack API. Route the SUT's `fetch`
+  // through the userland undici's fetch, which honours the dispatcher we set.
+  vi.stubGlobal('fetch', undiciFetch)
 })
 
 afterEach(async () => {
+  vi.unstubAllGlobals()
   setGlobalDispatcher(previousDispatcher)
   await agent.close()
 })

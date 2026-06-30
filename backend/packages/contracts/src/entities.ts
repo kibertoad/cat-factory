@@ -1392,6 +1392,15 @@ export const pipelineStepSchema = v.object({
    * a short window, unlike a crash. Absent/0 until the first transient eviction.
    */
   transientEvictionRecoveries: v.optional(v.number()),
+  /**
+   * The service-provisioning config a `deployer` step PINNED when it dispatched its async,
+   * container-backed deploy job, so the later poll/finalize maps the job against the same config
+   * the container was built from — NOT a fresh read of the service frame (which a person may have
+   * edited mid-flight, e.g. flipping it to `infraless`, which would otherwise fail a deploy whose
+   * container already succeeded). Absent for the synchronous raw-manifest path and the undeclared
+   * legacy single-connection path (re-resolution is harmless there). See {@link serviceProvisioningSchema}.
+   */
+  deployProvisioning: v.optional(serviceProvisioningSchema),
 })
 export type PipelineStep = v.InferOutput<typeof pipelineStepSchema>
 

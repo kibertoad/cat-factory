@@ -348,12 +348,38 @@ native REST status path resolves Gateway-API URLs.
   (`kubernetes-deploy.logic.test.ts`, `KubernetesEnvironmentProvider.test.ts`); no migration (the
   render fields ride existing JSON), so no conformance/D1⇄Drizzle change.
 
-### Slice 9 — async deployer lifecycle (TODO; folds into slice 3)
+### Slice 9 — async deployer lifecycle (DONE; folds into slice 3)
 
-`EnvironmentProvisioningService` threads `RunnerJobClient`, branches `provision()` on
-`buildProvisionJob`, adds `pollProvision`; `RunDispatcher.runDeployerStep` parks on a deploy job
-(`awaiting_job`) + the deployer poll branch + eviction re-dispatch; the synchronous raw path is
-unchanged.
+Implemented. The deployer can now stand an environment up in a CONTAINER (real
+`kubectl`/`kustomize`/`helm`) via dispatch → park → poll → finalize, alongside the unchanged
+synchronous in-Worker REST path.
+
+- **`EnvironmentProvisioningService` (done)**: gains the async lifecycle next to `provision()`.
+  `startProvision(args, ref)` resolves the provider and either provisions SYNCHRONOUSLY (raw
+  manifests → a final `completed` handle) or, when `provider.asyncProvision.buildProvisionJob`
+  returns a job, dispatches a `deploy`-kind job via the new `deployJobClient`, persists a
+  `provisioning` env record, and returns `dispatched` with the job ref. `pollProvisionJob` polls
+  the deploy view; `finalizeProvision` maps a terminal view → the env record (a failed view → a
+  `failed` env carrying the harness error, superseding the dispatch-time `provisioning` row);
+  `releaseProvisionJob` reclaims the runner. Two new optional deps: `deployJobClient` (typed
+  structurally as `DeployJobClient`, so integrations stays runtime-neutral; the facade passes its
+  `RunnerJobClient`) and `resolveDeployCloneTarget` (the VCS-specific manifests-repo clone target
+  the stateless provider can't derive). The shared `provision()` internals were extracted
+  (`resolveProvision` / `buildProvisionRequest` / `provisionSync` / `recordProvisioned` /
+  `captureProvisionFailure`) so the sync + async paths can't drift.
+- **`RunDispatcher` (done)**: `runDeployerStep` dispatches via `startProvision` and parks on
+  `awaiting_job` for an async job (re-attaching on replay via `step.jobId`); a new
+  `pollDeployerJob` branch in `pollAgentJob` drives the deploy poll — live container/subtask
+  progress while running, container-eviction recovery by re-dispatching a fresh deploy job within
+  the same budgets as the agent path, and finalize-into-step-result on a terminal view. Extracted
+  `completeDeployerStep` + `deployerProvisionArgs`; the infraless no-op + legacy fallback are
+  unchanged.
+- **Wiring (done)**: `CoreDependencies` threads `deployJobClient` + `resolveDeployCloneTarget`
+  into `createEnvironmentsModule` (optional). Both runtimes share the identical (unwired)
+  behaviour — nothing dispatches a deploy job until slice 10 wires the facade transport +
+  clone-target resolver. Unit-tested with fakes (dispatch / poll / finalize success+failure /
+  unwired-transport / sync fallback); the existing deployer conformance (failure surfacing,
+  infraless no-op) still passes over the unchanged synchronous path.
 
 ### Slice 10 — facade wiring + local native CLI (TODO)
 
@@ -418,7 +444,7 @@ LoadBalancer` ⇒ `serviceStatus`); the namespace decision (a pinned `namespace:
 | 6   | Phase 2: render contracts (`renderer`/`images`/`helmReleases`/`secretInjections`/gateway URL) + dispatch/port seam (`deploy` kind + `image`, `buildProvisionJob`/`finalizeProvision`); NO migration; conformance round-trip       | done   | —    |
 | 7   | Phase 2: `deploy-harness` package + image (kubectl/kustomize/helm; `deploy` KindEntry + `handleDeploy`; publish plumbing + tag). CF container class/binding deferred to slice 10 (needs the DO class)                             | done   | —    |
 | 8   | Phase 2: `KubernetesEnvironmentProvider` render path (`buildProvisionJob`/`finalizeProvision`; keep native REST) + Gateway-API URL resolvers                                                                                      | done   | —    |
-| 9   | Phase 2: async deployer lifecycle (`provision()` branch + `pollProvision`; `runDeployerStep` park/poll + eviction re-dispatch) — folds into slice 3                                                                               | todo   | —    |
+| 9   | Phase 2: async deployer lifecycle (`startProvision`/`pollProvisionJob`/`finalizeProvision`; `runDeployerStep` park/poll + eviction re-dispatch; `deployJobClient`/`resolveDeployCloneTarget` deps) — folds into slice 3           | done   | —    |
 | 10  | Phase 2: facade wiring + local `NativeCliDeployTransport` (`LOCAL_DEPLOY_RUNTIME`); deploy-dispatch + finalize conformance; image-tag bump                                                                                        | todo   | —    |
 | 11  | Phase 2: auto-detect a recommended `kubernetes` config from the repo (renderer / URL source / namespace / secret `.env` keys / image overrides high-confidence; overlay choice + helm as candidates) — non-binding, user confirms | todo   | —    |
 
