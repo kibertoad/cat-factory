@@ -400,6 +400,8 @@
       "composeHint": "Tester tarafından servisin bağımlılıklarını yerel olarak ayağa kaldırmak için kullanılır.",
       "selectComposeTitle": "docker-compose dosyasını seçin",
       "selectComposeHint": "Depodaki compose dosyasını seçin. Yolu depo köküne göre saklanır.",
+      "selectManifestTitle": "Kubernetes manifestolarını seçin",
+      "selectManifestHint": "Depodaki manifesto dosyasını veya dizinini seçin. Yolu depo köküne göre saklanır.",
       "selected": "Seçildi: {path}",
       "noFileSelected": "Dosya seçilmedi.",
       "useThisFile": "Bu dosyayı kullan",
@@ -1283,7 +1285,7 @@
         "compose": "Docker Compose önizleme ortamı",
         "composeDesc": "Deponun kendi docker-compose.yml dosyasını yerel bir Docker daemon üzerinde Tester'ın URL'si olarak ayağa kaldırır. Yerel Compose tabanlı uygulamalar için idealdir. Yalnızca imaj tabanlı stack'ler; bir Docker daemon gerektirir, bu nedenle yalnızca yerel dağıtımlar içindir."
       },
-      "dockerComposeInfo": "Docker Compose servisleri çalışma zamanının yerel Docker'ında ayağa kalkar — bağlantı gerekmez (çalıştırmanın kapsayıcısı Docker-in-Docker'ı desteklemelidir).",
+      "dockerComposeInfo": "Docker Compose servisleri çalışma zamanının yerel Docker'ında ayağa kalkar: bağlantı gerekmez (çalıştırmanın kapsayıcısı Docker-in-Docker'ı desteklemelidir).",
       "engine": {
         "local-k3s": "Yerel k3s",
         "remote-kubernetes": "Uzak Kubernetes"
@@ -1317,7 +1319,7 @@
         "caCertPem": "CA sertifikası (PEM)",
         "caCertPemHelp": "apiserver TLS sertifikasını doğrular. Yalnızca herkesçe güvenilen bir CA için atlayın.",
         "insecureSkipTlsVerify": "TLS doğrulamasını atla",
-        "insecureSkipTlsVerifyHelp": "Kesinlikle önerilmez — yalnızca geliştirme/kind kümeleri."
+        "insecureSkipTlsVerifyHelp": "Kesinlikle önerilmez: yalnızca geliştirme/kind kümeleri."
       },
       "customType": {
         "title": "Özel manifest türleri",
@@ -1340,7 +1342,7 @@
         "removeFailed": "Özel tür kaldırılamadı"
       },
       "handler": {
-        "intro": "Bir servisin bildirdiği her sağlama türünün nasıl ele alınacağını yapılandırın — motor ve bağlantı. Bir servisin manifestleri veya compose yolu (ne/nerede) serviste ayarlanır.",
+        "intro": "Bir servisin bildirdiği her sağlama türünün nasıl ele alınacağını yapılandırın: motor ve bağlantı. Bir servisin manifestleri veya compose yolu (ne/nerede) serviste ayarlanır.",
         "activeEngine": "Motor:",
         "engineLabel": "Motor",
         "customHandlerTitle": "remote-custom işleyici",
@@ -1352,7 +1354,8 @@
         "personalOverride": "Kişisel geçersiz kılma (bu makine)",
         "overrideActive": "Etkin",
         "personalOverrideHint": "Bu sağlama türü için çalışma alanı işleyicisini kendi makinende geçersiz kıl. Kullanıcı başına saklanır.",
-        "removeOverride": "Geçersiz kılmayı kaldır"
+        "removeOverride": "Geçersiz kılmayı kaldır",
+        "loading": "Altyapı ayarları yükleniyor…"
       }
     },
     "providerConnection": {

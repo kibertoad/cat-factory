@@ -400,6 +400,8 @@
       "composeHint": "Lo usa el Tester para levantar localmente las dependencias del servicio.",
       "selectComposeTitle": "Selecciona el archivo docker-compose",
       "selectComposeHint": "Elige el archivo de compose en el repositorio. Su ruta se guarda relativa a la raíz del repo.",
+      "selectManifestTitle": "Selecciona los manifiestos de Kubernetes",
+      "selectManifestHint": "Elige el archivo o directorio de manifiestos en el repositorio. Su ruta se guarda relativa a la raíz del repo.",
       "selected": "Seleccionado: {path}",
       "noFileSelected": "Ningún archivo seleccionado.",
       "useThisFile": "Usar este archivo",
@@ -1729,7 +1731,7 @@
         "local-compose": "docker-compose en contenedor",
         "environment-provider": "Proveedor de entornos"
       },
-      "dockerComposeInfo": "Los servicios de Docker Compose se levantan en el Docker local del runtime — no hace falta conexión (el contenedor de la ejecución debe admitir Docker-in-Docker).",
+      "dockerComposeInfo": "Los servicios de Docker Compose se levantan en el Docker local del runtime: no hace falta conexión (el contenedor de la ejecución debe admitir Docker-in-Docker).",
       "engine": {
         "local-k3s": "k3s local",
         "remote-kubernetes": "Kubernetes remoto"
@@ -1763,7 +1765,7 @@
         "caCertPem": "Certificado CA (PEM)",
         "caCertPemHelp": "Verifica el certificado TLS del apiserver. Omítelo solo con una CA de confianza pública.",
         "insecureSkipTlsVerify": "Omitir la verificación TLS",
-        "insecureSkipTlsVerifyHelp": "Muy desaconsejado — solo clústeres de desarrollo/kind."
+        "insecureSkipTlsVerifyHelp": "Muy desaconsejado: solo clústeres de desarrollo/kind."
       },
       "customType": {
         "title": "Tipos de manifiesto personalizados",
@@ -1786,7 +1788,7 @@
         "removeFailed": "No se pudo eliminar el tipo personalizado"
       },
       "handler": {
-        "intro": "Configura cómo se gestiona cada tipo de aprovisionamiento que declara un servicio — el motor y la conexión. Los manifiestos o la ruta de compose de un servicio (el qué/dónde) se definen en el servicio.",
+        "intro": "Configura cómo se gestiona cada tipo de aprovisionamiento que declara un servicio: el motor y la conexión. Los manifiestos o la ruta de compose de un servicio (el qué/dónde) se definen en el servicio.",
         "activeEngine": "Motor:",
         "engineLabel": "Motor",
         "customHandlerTitle": "Gestor remote-custom",
@@ -1798,7 +1800,8 @@
         "personalOverride": "Anulación personal (esta máquina)",
         "overrideActive": "Activa",
         "personalOverrideHint": "Anula el gestor del espacio de trabajo para este tipo de aprovisionamiento en tu propia máquina. Se guarda por usuario.",
-        "removeOverride": "Quitar anulación"
+        "removeOverride": "Quitar anulación",
+        "loading": "Cargando la configuración de infraestructura…"
       }
     }
   },

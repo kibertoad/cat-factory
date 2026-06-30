@@ -400,6 +400,8 @@
       "composeHint": "Używane przez Testera do lokalnego postawienia zależności usługi.",
       "selectComposeTitle": "Wybierz plik docker-compose",
       "selectComposeHint": "Wybierz plik compose w repozytorium. Jego ścieżka jest zapisywana względem katalogu głównego repo.",
+      "selectManifestTitle": "Wybierz manifesty Kubernetes",
+      "selectManifestHint": "Wybierz plik lub katalog manifestów w repozytorium. Jego ścieżka jest zapisywana względem katalogu głównego repo.",
       "selected": "Wybrano: {path}",
       "noFileSelected": "Nie wybrano pliku.",
       "useThisFile": "Użyj tego pliku",
@@ -1729,7 +1731,7 @@
         "local-compose": "docker-compose w kontenerze",
         "environment-provider": "Dostawca środowisk"
       },
-      "dockerComposeInfo": "Usługi Docker Compose są uruchamiane na lokalnym Dockerze środowiska uruchomieniowego — połączenie nie jest potrzebne (kontener uruchomienia musi obsługiwać Docker-in-Docker).",
+      "dockerComposeInfo": "Usługi Docker Compose są uruchamiane na lokalnym Dockerze środowiska uruchomieniowego: połączenie nie jest potrzebne (kontener uruchomienia musi obsługiwać Docker-in-Docker).",
       "engine": {
         "local-k3s": "Lokalny k3s",
         "remote-kubernetes": "Zdalny Kubernetes"
@@ -1763,7 +1765,7 @@
         "caCertPem": "Certyfikat CA (PEM)",
         "caCertPemHelp": "Weryfikuje certyfikat TLS apiservera. Pomiń tylko dla publicznie zaufanego CA.",
         "insecureSkipTlsVerify": "Pomiń weryfikację TLS",
-        "insecureSkipTlsVerifyHelp": "Zdecydowanie odradzane — tylko klastry deweloperskie/kind."
+        "insecureSkipTlsVerifyHelp": "Zdecydowanie odradzane: tylko klastry deweloperskie/kind."
       },
       "customType": {
         "title": "Niestandardowe typy manifestów",
@@ -1786,7 +1788,7 @@
         "removeFailed": "Nie udało się usunąć niestandardowego typu"
       },
       "handler": {
-        "intro": "Skonfiguruj, jak obsługiwany jest każdy typ provisioningu zadeklarowany przez usługę — silnik i połączenie. Manifesty lub ścieżka compose usługi (co/gdzie) są ustawiane na usłudze.",
+        "intro": "Skonfiguruj, jak obsługiwany jest każdy typ provisioningu zadeklarowany przez usługę: silnik i połączenie. Manifesty lub ścieżka compose usługi (co/gdzie) są ustawiane na usłudze.",
         "activeEngine": "Silnik:",
         "engineLabel": "Silnik",
         "customHandlerTitle": "Handler remote-custom",
@@ -1798,7 +1800,8 @@
         "personalOverride": "Osobiste nadpisanie (ta maszyna)",
         "overrideActive": "Aktywne",
         "personalOverrideHint": "Nadpisz handler przestrzeni roboczej dla tego typu provisioningu na własnej maszynie. Przechowywane na użytkownika.",
-        "removeOverride": "Usuń nadpisanie"
+        "removeOverride": "Usuń nadpisanie",
+        "loading": "Ładowanie ustawień infrastruktury…"
       }
     }
   },

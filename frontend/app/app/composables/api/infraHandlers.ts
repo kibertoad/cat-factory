@@ -5,7 +5,6 @@ import {
   removeCustomManifestTypeContract,
   removeEnvironmentUserHandlerContract,
   unregisterEnvironmentHandlerContract,
-  updateEnvironmentHandlerSecretsContract,
   upsertCustomManifestTypeContract,
   upsertEnvironmentUserHandlerContract,
 } from '@cat-factory/contracts'
@@ -20,7 +19,7 @@ import type { ApiContext } from './context'
 /**
  * Per-provision-type infra HANDLER config (the workspace + per-user "how"): the batched
  * handler bundle (every workspace handler + the custom-manifest-type catalog),
- * register/rotate/remove for a workspace handler, custom-type CRUD, and — local mode only —
+ * register/remove for a workspace handler, custom-type CRUD, and — local mode only —
  * the per-user override handlers (mounted at `/me/...`, so user-scoped, no `/workspaces`
  * prefix; these 503 off the local facade). See EnvironmentController +
  * EnvironmentUserHandlerController in @cat-factory/server.
@@ -35,19 +34,6 @@ export function infraHandlersApi({ send, ws }: ApiContext) {
       send(registerEnvironmentHandlerContract, { pathPrefix: ws(workspaceId), body }),
 
     // `manifestId` (for a `custom` handler) rides as a query param; absent ⇒ the bare handler.
-    updateEnvironmentHandlerSecrets: (
-      workspaceId: string,
-      provisionType: ProvisionType,
-      secrets: Record<string, string>,
-      manifestId?: string,
-    ) =>
-      send(updateEnvironmentHandlerSecretsContract, {
-        pathPrefix: ws(workspaceId),
-        pathParams: { provisionType },
-        queryParams: { manifestId },
-        body: { secrets },
-      }),
-
     unregisterEnvironmentHandler: (
       workspaceId: string,
       provisionType: ProvisionType,

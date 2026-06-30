@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { ref, type Ref } from 'vue'
 import type {
   CustomManifestType,
   EnvironmentHandlerView,
@@ -9,6 +9,19 @@ import type {
   UpsertEnvironmentUserHandlerBody,
 } from '@cat-factory/contracts'
 import { useWorkspaceStore } from '~/stores/workspace'
+
+// One predicate for "this handler is the (type, manifestId) one" — custom handlers are keyed by
+// manifestId, the rest by type alone (manifestId null). Defined once and reused across both the
+// workspace and per-user handler sets so the match key lives in a single place.
+const sameHandler = (h: EnvironmentHandlerView, type: ProvisionType, manifestId?: string | null) =>
+  h.provisionType === type && (h.manifestId ?? null) === (manifestId ?? null)
+
+// Replace the matching entry in a handler-list ref, or append it.
+function upsertInto(list: Ref<EnvironmentHandlerView[]>, saved: EnvironmentHandlerView) {
+  const idx = list.value.findIndex((h) => sameHandler(h, saved.provisionType, saved.manifestId))
+  if (idx >= 0) list.value[idx] = saved
+  else list.value.push(saved)
+}
 
 /**
  * The per-provision-type infra handlers (the workspace + per-user "how"): for each provision
@@ -34,14 +47,6 @@ export const useInfraConfigStore = defineStore('infraConfig', () => {
   // Per-user overrides probe independently (local mode only).
   const userOverridesAvailable = ref<boolean | null>(null)
   let inFlight: Promise<void> | null = null
-
-  /** The workspace-defined (UI-editable) custom types, separated from the read-only registered ones. */
-  const workspaceCustomTypes = computed(() =>
-    customTypes.value.filter((t) => t.source === 'workspace'),
-  )
-  const registeredCustomTypes = computed(() =>
-    customTypes.value.filter((t) => t.source === 'registered'),
-  )
 
   /** Force a refresh of the workspace handler bundle (used after a save/remove). */
   async function load() {
@@ -79,54 +84,20 @@ export const useInfraConfigStore = defineStore('infraConfig', () => {
     type: ProvisionType,
     manifestId?: string | null,
   ): EnvironmentHandlerView | undefined {
-    return handlers.value.find(
-      (h) => h.provisionType === type && (h.manifestId ?? null) === (manifestId ?? null),
-    )
-  }
-
-  function customTypeById(manifestId: string): CustomManifestType | undefined {
-    return customTypes.value.find((t) => t.manifestId === manifestId)
+    return handlers.value.find((h) => sameHandler(h, type, manifestId))
   }
 
   async function registerHandler(input: RegisterEnvironmentHandlerInput) {
     const ws = useWorkspaceStore()
     const saved = await api.registerEnvironmentHandler(ws.requireId(), input)
-    upsertHandlerLocal(saved)
-    return saved
-  }
-
-  async function updateHandlerSecrets(
-    type: ProvisionType,
-    secrets: Record<string, string>,
-    manifestId?: string | null,
-  ) {
-    const ws = useWorkspaceStore()
-    const saved = await api.updateEnvironmentHandlerSecrets(
-      ws.requireId(),
-      type,
-      secrets,
-      manifestId ?? undefined,
-    )
-    upsertHandlerLocal(saved)
+    upsertInto(handlers, saved)
     return saved
   }
 
   async function unregisterHandler(type: ProvisionType, manifestId?: string | null) {
     const ws = useWorkspaceStore()
     await api.unregisterEnvironmentHandler(ws.requireId(), type, manifestId ?? undefined)
-    handlers.value = handlers.value.filter(
-      (h) => !(h.provisionType === type && (h.manifestId ?? null) === (manifestId ?? null)),
-    )
-  }
-
-  function upsertHandlerLocal(saved: EnvironmentHandlerView) {
-    const idx = handlers.value.findIndex(
-      (h) =>
-        h.provisionType === saved.provisionType &&
-        (h.manifestId ?? null) === (saved.manifestId ?? null),
-    )
-    if (idx >= 0) handlers.value[idx] = saved
-    else handlers.value.push(saved)
+    handlers.value = handlers.value.filter((h) => !sameHandler(h, type, manifestId))
   }
 
   // ---- Custom-manifest-type catalog CRUD (workspace-defined entries only) ----
@@ -163,37 +134,25 @@ export const useInfraConfigStore = defineStore('infraConfig', () => {
     type: ProvisionType,
     manifestId?: string | null,
   ): EnvironmentHandlerView | undefined {
-    return userHandlers.value.find(
-      (h) => h.provisionType === type && (h.manifestId ?? null) === (manifestId ?? null),
-    )
+    return userHandlers.value.find((h) => sameHandler(h, type, manifestId))
   }
 
   async function upsertUserHandler(type: ProvisionType, body: UpsertEnvironmentUserHandlerBody) {
     const ws = useWorkspaceStore()
     const saved = await api.upsertEnvironmentUserHandler(ws.requireId(), type, body)
-    const idx = userHandlers.value.findIndex(
-      (h) =>
-        h.provisionType === saved.provisionType &&
-        (h.manifestId ?? null) === (saved.manifestId ?? null),
-    )
-    if (idx >= 0) userHandlers.value[idx] = saved
-    else userHandlers.value.push(saved)
+    upsertInto(userHandlers, saved)
     return saved
   }
 
   async function removeUserHandler(type: ProvisionType, manifestId?: string | null) {
     const ws = useWorkspaceStore()
     await api.removeEnvironmentUserHandler(ws.requireId(), type, manifestId ?? undefined)
-    userHandlers.value = userHandlers.value.filter(
-      (h) => !(h.provisionType === type && (h.manifestId ?? null) === (manifestId ?? null)),
-    )
+    userHandlers.value = userHandlers.value.filter((h) => !sameHandler(h, type, manifestId))
   }
 
   return {
     handlers,
     customTypes,
-    workspaceCustomTypes,
-    registeredCustomTypes,
     userHandlers,
     loading,
     available,
@@ -201,9 +160,7 @@ export const useInfraConfigStore = defineStore('infraConfig', () => {
     load,
     ensureLoaded,
     handlerFor,
-    customTypeById,
     registerHandler,
-    updateHandlerSecrets,
     unregisterHandler,
     upsertCustomType,
     removeCustomType,

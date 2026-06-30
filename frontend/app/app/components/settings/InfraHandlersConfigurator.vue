@@ -15,7 +15,13 @@ import type {
   CustomManifestType,
   EnvironmentHandlerView,
   InfraEngine,
+  InfraHandlerConfig,
 } from '@cat-factory/contracts'
+
+// The discriminated config branches the two handler forms produce, so the save handlers stay
+// typed end-to-end (no `as never`): a wrong shape fails the typecheck here, not server-side.
+type KubeHandlerConfig = Extract<InfraHandlerConfig, { engine: 'local-k3s' | 'remote-kubernetes' }>
+type RemoteCustomConfig = Extract<InfraHandlerConfig, { engine: 'remote-custom' }>
 import KubernetesEngineForm from '~/components/settings/KubernetesEngineForm.vue'
 import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor.vue'
 import CustomManifestTypeEditor from '~/components/settings/CustomManifestTypeEditor.vue'
@@ -47,29 +53,38 @@ const KUBE_ENGINE_KEYS: Record<'local-k3s' | 'remote-kubernetes', string> = {
 }
 
 const kubeHandler = computed(() => infra.handlerFor('kubernetes') ?? null)
-// The engine to configure: the registered handler's engine, else the first valid one.
+// The registered handler's engine, shown verbatim in the "active engine" line so it reflects
+// what is SAVED (not the unsaved picker selection below).
+const kubeHandlerEngineLabel = computed(() => {
+  const e = kubeHandler.value?.engine
+  return e === 'local-k3s' || e === 'remote-kubernetes' ? t(KUBE_ENGINE_KEYS[e]) : ''
+})
+// The engine to configure: the registered handler's engine when it's valid for this mode, else
+// the first valid one. Only adopt the handler's engine if the picker actually offers it, so a
+// `local-k3s` handler viewed in a non-local deployment can't select an unlisted/unsupported
+// engine (which would re-register a handler the runtime can't run).
 const selectedKubeEngine = ref<'local-k3s' | 'remote-kubernetes'>('remote-kubernetes')
 watch(
   [kubeHandler, kubeEngines],
   ([h, engines]) => {
     const e = h?.engine
-    if (e === 'local-k3s' || e === 'remote-kubernetes') selectedKubeEngine.value = e
-    else if (!engines.includes(selectedKubeEngine.value)) selectedKubeEngine.value = engines[0]!
+    if ((e === 'local-k3s' || e === 'remote-kubernetes') && engines.includes(e)) {
+      selectedKubeEngine.value = e
+    } else if (!engines.includes(selectedKubeEngine.value)) {
+      selectedKubeEngine.value = engines[0]!
+    }
   },
   { immediate: true },
 )
 
 const busy = ref(false)
 
-async function saveKube(payload: {
-  config: Record<string, unknown>
-  secrets: Record<string, string>
-}) {
+async function saveKube(payload: { config: KubeHandlerConfig; secrets: Record<string, string> }) {
   busy.value = true
   try {
     await infra.registerHandler({
       provisionType: 'kubernetes',
-      config: payload.config as never,
+      config: payload.config,
       secrets: payload.secrets,
     })
     toastSaved()
@@ -99,13 +114,13 @@ const kubeUserHandler = computed(() => infra.userHandlerFor('kubernetes') ?? nul
 const userOverridesOn = computed(() => isLocal.value && infra.userOverridesAvailable === true)
 
 async function saveKubeOverride(payload: {
-  config: Record<string, unknown>
+  config: KubeHandlerConfig
   secrets: Record<string, string>
 }) {
   busy.value = true
   try {
     await infra.upsertUserHandler('kubernetes', {
-      config: payload.config as never,
+      config: payload.config,
       secrets: payload.secrets,
     })
     toastSaved()
@@ -162,14 +177,15 @@ async function saveCustom(payload: {
   if (!selectedCustomId.value) return
   busy.value = true
   try {
+    const config: RemoteCustomConfig = {
+      engine: 'remote-custom',
+      manifest: payload.manifest as RemoteCustomConfig['manifest'],
+      acceptsManifestId: selectedCustomId.value,
+    }
     await infra.registerHandler({
       provisionType: 'custom',
       manifestId: selectedCustomId.value,
-      config: {
-        engine: 'remote-custom',
-        manifest: payload.manifest,
-        acceptsManifestId: selectedCustomId.value,
-      } as never,
+      config,
       secrets: payload.secrets,
     })
     toastSaved()
@@ -214,7 +230,10 @@ function notifyError(e: unknown) {
 </script>
 
 <template>
-  <div v-if="infra.available !== false" class="space-y-5">
+  <!-- Only render the configurator once the handler bundle has actually resolved (available
+       === true). While it's still being probed (null) show a loading line instead of flashing
+       the full form, and render nothing when the integration is off (false). -->
+  <div v-if="infra.available === true" class="space-y-5">
     <p class="text-xs text-slate-400">{{ t('settings.infrastructure.handler.intro') }}</p>
 
     <!-- kubernetes -->
@@ -228,7 +247,7 @@ function notifyError(e: unknown) {
       >
         <span>
           {{ t('settings.infrastructure.handler.activeEngine') }}
-          <span class="text-slate-200">{{ t(KUBE_ENGINE_KEYS[selectedKubeEngine]) }}</span>
+          <span class="text-slate-200">{{ kubeHandlerEngineLabel }}</span>
         </span>
         <UButton
           icon="i-lucide-trash-2"
@@ -368,4 +387,7 @@ function notifyError(e: unknown) {
       </div>
     </section>
   </div>
+  <p v-else-if="infra.available === null" class="text-xs text-slate-500">
+    {{ t('settings.infrastructure.handler.loading') }}
+  </p>
 </template>

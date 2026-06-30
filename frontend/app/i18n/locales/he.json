@@ -400,6 +400,8 @@
       "composeHint": "משמש את ה-Tester להקמת התלויות של השירות מקומית.",
       "selectComposeTitle": "בחר את קובץ docker-compose",
       "selectComposeHint": "בחר את קובץ ה-compose במאגר. הנתיב שלו נשמר ביחס לשורש המאגר.",
+      "selectManifestTitle": "בחר את מניפסטי ה-Kubernetes",
+      "selectManifestHint": "בחר את קובץ או תיקיית המניפסטים במאגר. הנתיב שלו נשמר ביחס לשורש המאגר.",
       "selected": "נבחר: {path}",
       "noFileSelected": "לא נבחר קובץ.",
       "useThisFile": "השתמש בקובץ זה",
@@ -1281,7 +1283,7 @@
         "environment-provider": "ספק HTTP מותאם",
         "environment-providerDesc": "הקצה סביבות ארעיות דרך ממשק ניהול HTTP משלך."
       },
-      "dockerComposeInfo": "שירותי Docker Compose עולים על ה-Docker המקומי של זמן הריצה — אין צורך בחיבור (הקונטיינר של הריצה חייב לתמוך ב-Docker-in-Docker).",
+      "dockerComposeInfo": "שירותי Docker Compose עולים על ה-Docker המקומי של זמן הריצה: אין צורך בחיבור (הקונטיינר של הריצה חייב לתמוך ב-Docker-in-Docker).",
       "engine": {
         "local-k3s": "k3s מקומי",
         "remote-kubernetes": "Kubernetes מרוחק"
@@ -1315,7 +1317,7 @@
         "caCertPem": "תעודת CA (PEM)",
         "caCertPemHelp": "מאמתת את תעודת ה-TLS של ה-apiserver. השמט רק עבור CA מהימן ציבורית.",
         "insecureSkipTlsVerify": "דלג על אימות TLS",
-        "insecureSkipTlsVerifyHelp": "מומלץ מאוד להימנע — אשכולות פיתוח/kind בלבד."
+        "insecureSkipTlsVerifyHelp": "מומלץ מאוד להימנע: אשכולות פיתוח/kind בלבד."
       },
       "customType": {
         "title": "סוגי מניפסט מותאמים",
@@ -1338,7 +1340,7 @@
         "removeFailed": "לא ניתן להסיר את הסוג המותאם"
       },
       "handler": {
-        "intro": "הגדר כיצד מטופל כל סוג אספקה שהשירות מצהיר עליו — המנוע והחיבור. המניפסטים או נתיב ה-compose של שירות (מה/היכן) מוגדרים על השירות.",
+        "intro": "הגדר כיצד מטופל כל סוג אספקה שהשירות מצהיר עליו: המנוע והחיבור. המניפסטים או נתיב ה-compose של שירות (מה/היכן) מוגדרים על השירות.",
         "activeEngine": "מנוע:",
         "engineLabel": "מנוע",
         "customHandlerTitle": "מטפל remote-custom",
@@ -1350,7 +1352,8 @@
         "personalOverride": "עקיפה אישית (המכונה הזו)",
         "overrideActive": "פעילה",
         "personalOverrideHint": "עקוף את מטפל מרחב העבודה עבור סוג אספקה זה במכונה שלך. נשמר לכל משתמש.",
-        "removeOverride": "הסר עקיפה"
+        "removeOverride": "הסר עקיפה",
+        "loading": "טוען הגדרות תשתית…"
       }
     },
     "providerConnection": {

@@ -400,6 +400,8 @@
       "composeHint": "Utilisé par le Testeur pour mettre en place les dépendances du service localement.",
       "selectComposeTitle": "Sélectionner le fichier docker-compose",
       "selectComposeHint": "Choisissez le fichier compose dans le dépôt. Son chemin est stocké relativement à la racine du dépôt.",
+      "selectManifestTitle": "Sélectionner les manifestes Kubernetes",
+      "selectManifestHint": "Choisissez le fichier ou le dossier de manifestes dans le dépôt. Son chemin est stocké relativement à la racine du dépôt.",
       "selected": "Sélectionné : {path}",
       "noFileSelected": "Aucun fichier sélectionné.",
       "useThisFile": "Utiliser ce fichier",
@@ -1729,7 +1731,7 @@
         "local-compose": "docker-compose dans le conteneur",
         "environment-provider": "Fournisseur d'environnements"
       },
-      "dockerComposeInfo": "Les services Docker Compose démarrent sur le Docker local du runtime — aucune connexion requise (le conteneur de l'exécution doit prendre en charge Docker-in-Docker).",
+      "dockerComposeInfo": "Les services Docker Compose démarrent sur le Docker local du runtime: aucune connexion requise (le conteneur de l'exécution doit prendre en charge Docker-in-Docker).",
       "engine": {
         "local-k3s": "k3s local",
         "remote-kubernetes": "Kubernetes distant"
@@ -1763,7 +1765,7 @@
         "caCertPem": "Certificat CA (PEM)",
         "caCertPemHelp": "Vérifie le certificat TLS de l'apiserver. À omettre uniquement pour une CA publiquement fiable.",
         "insecureSkipTlsVerify": "Ignorer la vérification TLS",
-        "insecureSkipTlsVerifyHelp": "Fortement déconseillé — clusters de dev/kind uniquement."
+        "insecureSkipTlsVerifyHelp": "Fortement déconseillé: clusters de dev/kind uniquement."
       },
       "customType": {
         "title": "Types de manifeste personnalisés",
@@ -1786,7 +1788,7 @@
         "removeFailed": "Impossible de supprimer le type personnalisé"
       },
       "handler": {
-        "intro": "Configurez la manière dont chaque type de provisionnement déclaré par un service est géré — le moteur et la connexion. Les manifestes ou le chemin compose d'un service (le quoi/où) se définissent sur le service.",
+        "intro": "Configurez la manière dont chaque type de provisionnement déclaré par un service est géré: le moteur et la connexion. Les manifestes ou le chemin compose d'un service (le quoi/où) se définissent sur le service.",
         "activeEngine": "Moteur :",
         "engineLabel": "Moteur",
         "customHandlerTitle": "Gestionnaire remote-custom",
@@ -1798,7 +1800,8 @@
         "personalOverride": "Surcharge personnelle (cette machine)",
         "overrideActive": "Active",
         "personalOverrideHint": "Surchargez le gestionnaire de l'espace de travail pour ce type de provisionnement sur votre propre machine. Stocké par utilisateur.",
-        "removeOverride": "Supprimer la surcharge"
+        "removeOverride": "Supprimer la surcharge",
+        "loading": "Chargement de la configuration de l'infrastructure…"
       }
     }
   },

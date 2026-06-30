@@ -400,6 +400,8 @@
       "composeHint": "Tester がサービスの依存関係をローカルで立ち上げる際に使用します。",
       "selectComposeTitle": "docker-compose ファイルを選択",
       "selectComposeHint": "リポジトリ内の compose ファイルを選択します。パスはリポジトリルートからの相対で保存されます。",
+      "selectManifestTitle": "Kubernetes マニフェストを選択",
+      "selectManifestHint": "リポジトリ内のマニフェストのファイルまたはディレクトリを選択します。パスはリポジトリルートからの相対で保存されます。",
       "selected": "選択中: {path}",
       "noFileSelected": "ファイルが選択されていません。",
       "useThisFile": "このファイルを使用",
@@ -1317,7 +1319,7 @@
         "caCertPem": "CA 証明書 (PEM)",
         "caCertPemHelp": "apiserver の TLS 証明書を検証します。公的に信頼された CA の場合のみ省略します。",
         "insecureSkipTlsVerify": "TLS 検証をスキップ",
-        "insecureSkipTlsVerifyHelp": "強く非推奨 — 開発/kind クラスターのみ。"
+        "insecureSkipTlsVerifyHelp": "強く非推奨: 開発/kind クラスターのみ。"
       },
       "customType": {
         "title": "カスタムマニフェストタイプ",
@@ -1352,7 +1354,8 @@
         "personalOverride": "個人オーバーライド（このマシン）",
         "overrideActive": "有効",
         "personalOverrideHint": "このプロビジョニングタイプのワークスペースハンドラーを自分のマシンで上書きします。ユーザーごとに保存されます。",
-        "removeOverride": "オーバーライドを削除"
+        "removeOverride": "オーバーライドを削除",
+        "loading": "インフラ設定を読み込んでいます…"
       }
     },
     "providerConnection": {

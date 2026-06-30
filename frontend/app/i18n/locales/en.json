@@ -437,6 +437,8 @@
       "composeHint": "Used by the Tester to stand up the service's dependencies locally.",
       "selectComposeTitle": "Select the docker-compose file",
       "selectComposeHint": "Pick the compose file in the repository. Its path is stored relative to the repo root.",
+      "selectManifestTitle": "Select the Kubernetes manifests",
+      "selectManifestHint": "Pick the manifests file or directory in the repository. Its path is stored relative to the repo root.",
       "selected": "Selected: {path}",
       "noFileSelected": "No file selected.",
       "useThisFile": "Use this file",
@@ -1323,7 +1325,7 @@
         "compose": "Docker Compose preview env",
         "composeDesc": "Stand the repo's own docker-compose.yml up on a local Docker daemon as the Tester's URL. Best for local Compose-based apps. Image-based stacks only; needs a Docker daemon, so local deployments only."
       },
-      "dockerComposeInfo": "Docker Compose services stand up on the runtime's local Docker — no connection needed (the run's container must support Docker-in-Docker).",
+      "dockerComposeInfo": "Docker Compose services stand up on the runtime's local Docker: no connection needed (the run's container must support Docker-in-Docker).",
       "engine": {
         "local-k3s": "Local k3s",
         "remote-kubernetes": "Remote Kubernetes"
@@ -1357,7 +1359,7 @@
         "caCertPem": "CA certificate (PEM)",
         "caCertPemHelp": "Verifies the apiserver TLS cert. Omit only for a publicly-trusted CA.",
         "insecureSkipTlsVerify": "Skip TLS verification",
-        "insecureSkipTlsVerifyHelp": "Strongly discouraged — dev/kind clusters only."
+        "insecureSkipTlsVerifyHelp": "Strongly discouraged: dev/kind clusters only."
       },
       "customType": {
         "title": "Custom manifest types",
@@ -1380,7 +1382,7 @@
         "removeFailed": "Could not remove the custom type"
       },
       "handler": {
-        "intro": "Configure how each provision type a service declares is handled — the engine and connection. A service's manifests/compose path (the what/where) is set on the service.",
+        "intro": "Configure how each provision type a service declares is handled: the engine and connection. A service's manifests/compose path (the what/where) is set on the service.",
         "activeEngine": "Engine:",
         "engineLabel": "Engine",
         "customHandlerTitle": "Remote-custom handler",
@@ -1392,7 +1394,8 @@
         "personalOverride": "Personal override (this machine)",
         "overrideActive": "Active",
         "personalOverrideHint": "Override the workspace handler for this provision type on your own machine. Stored per user.",
-        "removeOverride": "Remove override"
+        "removeOverride": "Remove override",
+        "loading": "Loading infrastructure settings…"
       }
     },
     "providerConnection": {

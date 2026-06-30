@@ -8,7 +8,18 @@
 // single-connection backend, which still carries the manifest source inline).
 import { computed, reactive, ref, watch } from 'vue'
 import { KUBERNETES_ENV_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
-import type { EnvironmentHandlerView, InfraEngine } from '@cat-factory/contracts'
+import type {
+  EnvironmentHandlerView,
+  InfraEngine,
+  InfraHandlerConfig,
+} from '@cat-factory/contracts'
+
+// The kube branch of the discriminated handler config this form produces (the `local-k3s` /
+// `remote-kubernetes` engines share `kubernetesEngineConfigSchema`). Emitting this typed
+// (rather than a bare `Record`) lets the parent pass it straight to registerHandler with no
+// `as never` cast, so a wrong config shape is caught at the call site instead of server-side.
+type KubeHandlerConfig = Extract<InfraHandlerConfig, { engine: 'local-k3s' | 'remote-kubernetes' }>
+type KubeHandlerPayload = { config: KubeHandlerConfig; secrets: Record<string, string> }
 
 const props = defineProps<{
   /** `local-k3s` or `remote-kubernetes` — the engine this handler is registered under. */
@@ -22,8 +33,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  test: [payload: { config: Record<string, unknown>; secrets: Record<string, string> }]
-  save: [payload: { config: Record<string, unknown>; secrets: Record<string, string> }]
+  test: [payload: KubeHandlerPayload]
+  save: [payload: KubeHandlerPayload]
 }>()
 
 const { t } = useI18n()
@@ -138,7 +149,7 @@ function buildUrl(): Record<string, unknown> {
   return url
 }
 
-function buildPayload(): { config: Record<string, unknown>; secrets: Record<string, string> } {
+function buildPayload(): KubeHandlerPayload {
   const kubernetes: Record<string, unknown> = {
     label: form.label.trim(),
     apiServerUrl: form.apiServerUrl.trim(),
@@ -148,8 +159,10 @@ function buildPayload(): { config: Record<string, unknown>; secrets: Record<stri
   if (form.insecureSkipTlsVerify) kubernetes.insecureSkipTlsVerify = true
   if (form.namespaceTemplate.trim()) kubernetes.namespaceTemplate = form.namespaceTemplate.trim()
   if (form.imageTemplate.trim()) kubernetes.imageTemplate = form.imageTemplate.trim()
+  // One honest assertion at the boundary that actually builds the shape (the reactive form is
+  // dynamically assembled, then validated server-side); the emitted config flows typed onward.
   return {
-    config: { engine: props.engine, kubernetes },
+    config: { engine: props.engine, kubernetes } as unknown as KubeHandlerConfig,
     secrets: { [KUBERNETES_ENV_TOKEN_SECRET_KEY]: apiToken.value.trim() },
   }
 }
