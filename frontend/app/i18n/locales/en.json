@@ -3291,7 +3291,7 @@
       "title": "The Sandbox isn't enabled for this deployment.",
       "body": "It needs its own database (a dedicated {db} on Cloudflare, or the {schema} Postgres schema on Node). Provision it and reload.",
       "@body": {
-        "description": "{db} and {schema} are injected code identifiers (database / schema names) rendered as <code>; keep them as the {placeholders}."
+        "description": "{db} and {schema} are injected code identifiers (database / schema names) shown as inline code; keep them as the {placeholders}."
       }
     },
     "error": {
