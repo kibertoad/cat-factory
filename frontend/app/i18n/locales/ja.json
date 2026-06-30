@@ -259,6 +259,11 @@
         "title": "このモデルに対応する AI プロバイダーがありません",
         "body": "{models} に対応するプロバイダーが設定されていません。プロバイダーキーを追加するか、サブスクリプションを接続するか、Cloudflare AI を有効にして実行してください。",
         "action": "AI を設定"
+      },
+      "binaryStorageUnconfigured": {
+        "title": "このパイプライン用のストレージがありません",
+        "body": "このパイプラインには、バイナリストレージを必要とするエージェントが含まれています（UI テスターがスクリーンショットをアップロードします）。ただし、このアカウントにはコンテンツストレージが設定されていません。実行するにはコンテンツストレージを設定してください。",
+        "action": "ストレージを設定"
       }
     }
   },
@@ -1253,7 +1258,9 @@
         "kubernetes": "Kubernetes クラスター",
         "kubernetesDesc": "自分が運用する Kubernetes クラスターに PR ごとの namespace をプロビジョニングします。",
         "environment-provider": "カスタム HTTP プロバイダー",
-        "environment-providerDesc": "自前の HTTP 管理 API を通じて一時的な環境をプロビジョニングします。"
+        "environment-providerDesc": "自前の HTTP 管理 API を通じて一時的な環境をプロビジョニングします。",
+        "compose": "Docker Compose プレビュー環境",
+        "composeDesc": "リポジトリ自身の docker-compose.yml をローカルの Docker デーモンで起動し、テスターの URL として使用します。ローカルの Compose ベースのアプリに最適です。イメージベースのスタックのみ対応。Docker デーモンが必要なため、ローカルデプロイメント専用です。"
       }
     },
     "providerConnection": {

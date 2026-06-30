@@ -259,6 +259,11 @@
         "title": "Bu model için AI sağlayıcısı yok",
         "body": "{models} için yapılandırılmış sağlayıcı yok. Çalıştırmak için bir sağlayıcı anahtarı ekleyin, bir abonelik bağlayın veya Cloudflare AI'yı etkinleştirin.",
         "action": "AI'yı yapılandır"
+      },
+      "binaryStorageUnconfigured": {
+        "title": "Bu işlem hattı için depolama yok",
+        "body": "Bu işlem hattı, ikili depolama gerektiren bir ajan içeriyor (UI test ekran görüntülerini yükler), ancak bu hesapta yapılandırılmış içerik depolaması yok. Çalıştırmak için içerik depolaması yapılandırın.",
+        "action": "Depolamayı yapılandır"
       }
     }
   },
@@ -1253,7 +1258,9 @@
         "kubernetes": "Kubernetes kümesi",
         "kubernetesDesc": "İşlettiğiniz bir Kubernetes kümesinde PR başına bir ad alanı sağlayın.",
         "environment-provider": "Özel HTTP sağlayıcısı",
-        "environment-providerDesc": "Geçici ortamları kendi HTTP yönetim API'niz aracılığıyla sağlayın."
+        "environment-providerDesc": "Geçici ortamları kendi HTTP yönetim API'niz aracılığıyla sağlayın.",
+        "compose": "Docker Compose önizleme ortamı",
+        "composeDesc": "Deponun kendi docker-compose.yml dosyasını yerel bir Docker daemon üzerinde Tester'ın URL'si olarak ayağa kaldırır. Yerel Compose tabanlı uygulamalar için idealdir. Yalnızca imaj tabanlı stack'ler; bir Docker daemon gerektirir, bu nedenle yalnızca yerel dağıtımlar içindir."
       }
     },
     "providerConnection": {
