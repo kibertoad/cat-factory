@@ -129,6 +129,12 @@ const authConfigViewSchema = v.object({
    * tokens for a single local developer). Absent ⇒ no PAT login (e.g. the Worker, OAuth-only).
    */
   patLogin: v.optional(v.object({ providers: v.array(vcsProviderSchema) })),
+  /**
+   * Test-only: the deployment runs with NO authentication (the `TESTING_NO_AUTH` opt-in), so
+   * the SPA may render the board anonymously instead of gating to the login screen. Absent ⇒
+   * normal gating. Set only by the e2e suite; never on a real deployment.
+   */
+  testingNoAuth: v.optional(v.boolean()),
   infrastructure: v.optional(infrastructureCapabilitiesSchema),
 })
 

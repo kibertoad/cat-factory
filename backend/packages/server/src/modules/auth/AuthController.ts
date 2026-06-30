@@ -272,6 +272,9 @@ export function authController(): Hono<AppEnv> {
         },
         ...(localMode ? { localMode } : {}),
         ...(patProviders.length > 0 ? { patLogin: { providers: patProviders } } : {}),
+        // Test-only: advertise that the deployment runs with no auth, so the SPA renders the
+        // board anonymously rather than gating to login. Only ever true under `TESTING_NO_AUTH`.
+        ...(cfg.testingNoAuth ? { testingNoAuth: true } : {}),
         ...(infrastructure ? { infrastructure } : {}),
       },
       200,

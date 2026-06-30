@@ -4,6 +4,7 @@
 '@cat-factory/contracts': minor
 '@cat-factory/kernel': minor
 '@cat-factory/node-server': minor
+'@cat-factory/worker': minor
 ---
 
 feat(auth): remote node mode — surface the unauthenticated state and support PAT sign-in.
@@ -21,3 +22,8 @@ feat(auth): remote node mode — surface the unauthenticated state and support P
   available PAT providers and the login screen renders a PAT option alongside OAuth/password;
   when a remote deployment has no sign-in method at all the screen explains that instead of
   showing a blank card.
+- New `TESTING_NO_AUTH` escape hatch (test-only, refused in a production-like ENVIRONMENT):
+  a stronger `AUTH_DEV_OPEN` that both leaves the API open AND advertises (via `GET
+/auth/config`) that the SPA may render the board anonymously instead of gating to login. The
+  e2e suite opts into it; `AUTH_DEV_OPEN` on its own keeps the SPA's login gate, since a
+  dev-open remote still has no anonymous tier.

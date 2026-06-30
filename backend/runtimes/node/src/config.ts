@@ -228,7 +228,12 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   const googleEnabled = googleClientId !== '' && googleClientSecret !== '' && strongSecret
   const passwordEnabled = env.AUTH_PASSWORD_ENABLED?.trim() === 'true' && strongSecret
 
-  const devOpen = env.AUTH_DEV_OPEN?.trim() === 'true' && !PRODUCTION_ENVIRONMENTS.has(environment)
+  const nonProd = !PRODUCTION_ENVIRONMENTS.has(environment)
+  // `TESTING_NO_AUTH` is a stronger `AUTH_DEV_OPEN`: besides leaving the API open it tells the
+  // SPA to render the board anonymously (no login gate). The e2e suite opts in; everything else
+  // leaves it off. Honoured only outside a production-like ENVIRONMENT, and it implies devOpen.
+  const testingNoAuth = env.TESTING_NO_AUTH?.trim() === 'true' && nonProd
+  const devOpen = (env.AUTH_DEV_OPEN?.trim() === 'true' || testingNoAuth) && nonProd
 
   // Fail fast on the silent-brick footgun: OAuth credentials are set (so real auth is
   // intended) but the session secret is missing/too short, which would disable the auth
@@ -310,6 +315,7 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     auth: {
       enabled: authEnabled,
       devOpen,
+      testingNoAuth,
       githubEnabled,
       clientId,
       clientSecret,

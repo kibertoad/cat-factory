@@ -32,6 +32,12 @@ export const useAuthStore = defineStore(
      */
     const patProviders = ref<('github' | 'gitlab')[]>([])
     /**
+     * Test-only: the backend advertised that it runs with NO authentication (its
+     * `TESTING_NO_AUTH` opt-in). When set, the SPA renders the board anonymously instead of
+     * gating to the login screen — even on a remote facade. Only ever true under the e2e suite.
+     */
+    const testingNoAuth = ref(false)
+    /**
      * Local-mode signals from the backend. Present only when running the local facade;
      * `githubPatSetupUrl` is set when local mode has no GitHub PAT configured (drives the
      * setup banner). Null on every other facade.
@@ -87,6 +93,8 @@ export const useAuthStore = defineStore(
      */
     const needsLogin = computed(() => {
       if (!configLoaded.value || user.value !== null) return false
+      // A deployment that explicitly runs with no auth (the test opt-in) renders anonymously.
+      if (testingNoAuth.value) return false
       if (isLocalFacade.value) return required.value || localMode.value?.enabled === true
       return true
     })
@@ -109,6 +117,7 @@ export const useAuthStore = defineStore(
         required.value = config.enabled
         if (config.providers) providers.value = config.providers
         patProviders.value = config.patLogin?.providers ?? []
+        testingNoAuth.value = config.testingNoAuth ?? false
         localMode.value = config.localMode ?? null
         infrastructure.value = config.infrastructure ?? null
         configLoaded.value = true
@@ -263,6 +272,7 @@ export const useAuthStore = defineStore(
       required,
       providers,
       patProviders,
+      testingNoAuth,
       localMode,
       infrastructure,
       autoLoginProvider,

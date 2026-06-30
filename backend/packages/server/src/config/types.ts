@@ -72,6 +72,15 @@ export interface AuthConfig {
   enabled: boolean
   /** Local-dev/test ONLY: permit running with auth unconfigured (open API). */
   devOpen: boolean
+  /**
+   * Test ONLY: run the product with NO authentication at all — the open API of `devOpen`
+   * (which this implies) PLUS a signal to the SPA that it may render the board anonymously
+   * instead of gating to the login screen. `devOpen` alone keeps the SPA's login gate on a
+   * remote facade (a misconfigured/dev-open deployment still has no anonymous tier); this
+   * flag is the explicit "there is genuinely no auth here" opt-in the e2e suite uses. Never
+   * honoured in a production-like ENVIRONMENT.
+   */
+  testingNoAuth: boolean
   /** GitHub OAuth is offered only when a client id/secret are set. */
   githubEnabled: boolean
   clientId: string

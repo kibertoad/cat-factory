@@ -282,6 +282,12 @@ export interface Env {
    * so an unconfigured deployment fails closed instead of serving data openly.
    */
   AUTH_DEV_OPEN?: string
+  /**
+   * Test ONLY: a stronger `AUTH_DEV_OPEN` — leaves the API open AND tells the SPA it may
+   * render the board anonymously (no login gate). The e2e suite opts in; never set on a
+   * deployed worker. Refused in a production-like ENVIRONMENT, same as AUTH_DEV_OPEN.
+   */
+  TESTING_NO_AUTH?: string
   /** Set 'true' to offer email/password signup + login (needs a strong session secret). */
   AUTH_PASSWORD_ENABLED?: string
   /**
