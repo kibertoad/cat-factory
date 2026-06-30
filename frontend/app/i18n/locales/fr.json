@@ -259,6 +259,11 @@
         "title": "Aucun fournisseur d’IA pour ce modèle",
         "body": "Aucun fournisseur n’est configuré pour {models}. Ajoutez une clé de fournisseur, connectez un abonnement ou activez Cloudflare AI pour l’exécuter.",
         "action": "Configurer l’IA"
+      },
+      "binaryStorageUnconfigured": {
+        "title": "Aucun stockage pour ce pipeline",
+        "body": "Ce pipeline inclut un agent qui a besoin d’un stockage binaire (le testeur d’UI téléverse ses captures d’écran), mais aucun stockage de contenu n’est configuré pour ce compte. Configurez le stockage de contenu pour l’exécuter.",
+        "action": "Configurer le stockage"
       }
     }
   },

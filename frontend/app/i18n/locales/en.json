@@ -292,6 +292,11 @@
           "description": "Keep the named placeholder for the model list intact (a comma-separated list of model ids is injected at runtime)."
         },
         "action": "Configure AI"
+      },
+      "binaryStorageUnconfigured": {
+        "title": "No storage for this pipeline",
+        "body": "This pipeline includes an agent that needs binary storage (the UI Tester uploads its screenshots), but this account has no content storage configured. Configure content storage to run it.",
+        "action": "Configure storage"
       }
     }
   },

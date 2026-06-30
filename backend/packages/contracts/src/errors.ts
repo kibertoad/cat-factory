@@ -15,6 +15,7 @@ export const CONFLICT_REASONS = [
   'dependencies_unmet',
   'task_limit_reached',
   'tester_infra_unsupported',
+  'binary_storage_unconfigured',
   'agent_backend_unconfigured',
   'run_not_retryable',
   'no_pr_to_merge',

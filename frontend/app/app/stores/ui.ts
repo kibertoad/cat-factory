@@ -121,6 +121,11 @@ export const useUiStore = defineStore('ui', () => {
   // straight to a tab.
   const accountSettingsOpen = ref(false)
   const accountSettingsTab = ref('team')
+  // A one-shot deep-link anchor: when a surface opens account settings AND wants to land on a
+  // specific section within the (long) tab body, it sets this to that section's id. The owning
+  // panel scrolls the matching element into view once, then calls `clearAccountSettingsScrollTarget`
+  // so a later plain open doesn't re-scroll. Null when no section was requested.
+  const accountSettingsScrollTarget = ref<string | null>(null)
   // Observability integration: the post-release-health connection panel (Datadog
   // today, pluggable). NB: distinct from `observabilityInstanceId` below, which is the
   // LLM per-call observability panel.
@@ -464,8 +469,21 @@ export const useUiStore = defineStore('ui', () => {
     accountSettingsTab.value = tab
     accountSettingsOpen.value = true
   }
+  // Deep-link to the content (binary-artifact) storage configuration, which lives near the
+  // bottom of the account settings' team tab (`AccountDeploymentSettings`). Used by the
+  // pipeline-start error prompt when a storage-reliant agent (the UI Tester) has no storage
+  // configured. Sets a scroll anchor so the panel brings the storage section into view rather
+  // than dropping the user at the top of the long team tab to hunt for it.
+  function openContentStorageSettings() {
+    accountSettingsScrollTarget.value = 'content-storage'
+    openAccountSettings('team')
+  }
+  function clearAccountSettingsScrollTarget() {
+    accountSettingsScrollTarget.value = null
+  }
   function closeAccountSettings() {
     accountSettingsOpen.value = false
+    accountSettingsScrollTarget.value = null
   }
   function setAccountSettingsTab(tab: string) {
     accountSettingsTab.value = tab
@@ -664,6 +682,7 @@ export const useUiStore = defineStore('ui', () => {
     workspaceSettingsTab,
     accountSettingsOpen,
     accountSettingsTab,
+    accountSettingsScrollTarget,
     observabilityConnectionOpen,
     infrastructureOpen,
     infrastructureTab,
@@ -739,6 +758,8 @@ export const useUiStore = defineStore('ui', () => {
     closeWorkspaceSettings,
     setWorkspaceSettingsTab,
     openAccountSettings,
+    openContentStorageSettings,
+    clearAccountSettingsScrollTarget,
     closeAccountSettings,
     setAccountSettingsTab,
     openObservabilityConnection,
