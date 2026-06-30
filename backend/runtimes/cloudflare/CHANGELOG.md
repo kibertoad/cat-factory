@@ -1,5 +1,43 @@
 # @cat-factory/worker
 
+## 0.49.0
+
+### Minor Changes
+
+- f568a8c: Add a built-in "Manual review only" merge-threshold preset and reseeding for the
+  merge-preset catalog (mirroring pipelines).
+
+  - "Manual review only" sets a new `autoMergeEnabled: false` flag, so the `merger` step
+    never auto-merges a task using it — every PR is routed to a human `merge_review`
+    notification regardless of the assessment scores. The flag is editable on any preset via
+    a toggle in the Merge thresholds settings.
+  - Built-in merge presets now carry a stable id (`mp_balanced`, `mp_manual_review`) and a
+    monotonic `version`. The workspace snapshot ships `mergePresetCatalogVersions`, and the
+    SPA surfaces a once-per-session startup advisory when a built-in preset is outdated or a
+    new built-in appeared upstream, offering a one-click reseed
+    (`POST /workspaces/:ws/merge-presets/:id/reseed`).
+
+  Breaking (pre-1.0, no migration): `merge_threshold_presets` gains `auto_merge_enabled`
+  (default on) and `version` columns (D1 + Drizzle). First read of a workspace's presets now
+  seeds the whole built-in catalog (Balanced + Manual review only), not just the default.
+
+### Patch Changes
+
+- Updated dependencies [f568a8c]
+  - @cat-factory/kernel@0.63.0
+  - @cat-factory/contracts@0.69.0
+  - @cat-factory/orchestration@0.51.0
+  - @cat-factory/server@0.58.0
+  - @cat-factory/agents@0.24.8
+  - @cat-factory/consensus@0.7.96
+  - @cat-factory/gates@0.2.49
+  - @cat-factory/gitlab@0.4.19
+  - @cat-factory/integrations@0.47.1
+  - @cat-factory/observability-langfuse@0.7.92
+  - @cat-factory/provider-cloudflare@0.7.96
+  - @cat-factory/spend@0.10.53
+  - @cat-factory/prompt-fragments@0.9.23
+
 ## 0.48.2
 
 ### Patch Changes

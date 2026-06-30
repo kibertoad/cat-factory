@@ -1,5 +1,13 @@
 # @cat-factory/gitlab
 
+## 0.4.19
+
+### Patch Changes
+
+- Updated dependencies [f568a8c]
+  - @cat-factory/kernel@0.63.0
+  - @cat-factory/contracts@0.69.0
+
 ## 0.4.18
 
 ### Patch Changes
