@@ -144,6 +144,9 @@ export {
   type EnvironmentConnectionServiceDependencies,
   type ConfigRepairDispatch,
   type ResolvedConnection,
+  type RegisterHandlerInput,
+  type EnvironmentHandlerView,
+  type ResolvedTypeProvider,
 } from './modules/environments/EnvironmentConnectionService.js'
 // The ephemeral-environment backend provider-registry seam: maps a backend kind
 // (`manifest` | `kubernetes` | future `nomad`/…) → an EnvironmentProvider. The registry is

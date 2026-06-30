@@ -5,12 +5,12 @@ import type {
   EnvironmentRecordPatch,
   EnvironmentRegistryRepository,
 } from '@cat-factory/kernel'
-import { and, desc, eq, isNotNull, isNull, lte } from 'drizzle-orm'
+import { and, asc, desc, eq, isNotNull, isNull, lte } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { environmentConnections, environments } from '../db/schema.js'
 
 // Drizzle/Postgres mirrors of the ephemeral-environment D1 repositories (migration
-// 0008). All rows are workspace-scoped; credentials are opaque ciphertext (encrypted
+// 0025). All rows are workspace-scoped; credentials are opaque ciphertext (encrypted
 // upstream by the SecretCipher). Behaviourally identical to the D1 repos so the
 // cross-runtime conformance suite asserts the same behaviour against both stores.
 
@@ -19,22 +19,26 @@ type EnvironmentConnectionRow = typeof environmentConnections.$inferSelect
 function rowToConnection(row: EnvironmentConnectionRow): EnvironmentConnectionRecord {
   return {
     workspaceId: row.workspace_id,
-    kind: row.kind ?? 'manifest',
+    provisionType: row.provision_type,
+    manifestId: row.manifest_id === '' ? null : row.manifest_id,
+    engine: row.engine,
+    backendKind: row.backend_kind,
     providerId: row.provider_id,
     label: row.label,
     baseUrl: row.base_url,
-    manifestJson: row.manifest_json,
+    handlerJson: row.handler_json,
+    acceptsManifestId: row.accepts_manifest_id,
     secretsCipher: row.secrets_cipher,
     createdAt: row.created_at,
     deletedAt: row.deleted_at,
   }
 }
 
-/** Workspace → environment-provider bindings over Postgres (migration 0008). */
+/** Workspace → per-type environment handler bindings over Postgres (migration 0025). */
 export class DrizzleEnvironmentConnectionRepository implements EnvironmentConnectionRepository {
   constructor(private readonly db: DrizzleDb) {}
 
-  async getByWorkspace(workspaceId: string): Promise<EnvironmentConnectionRecord | null> {
+  async listByWorkspace(workspaceId: string): Promise<EnvironmentConnectionRecord[]> {
     const rows = await this.db
       .select()
       .from(environmentConnections)
@@ -44,26 +48,56 @@ export class DrizzleEnvironmentConnectionRepository implements EnvironmentConnec
           isNull(environmentConnections.deleted_at),
         ),
       )
+      .orderBy(asc(environmentConnections.created_at))
+    return rows.map(rowToConnection)
+  }
+
+  async getByWorkspaceAndType(
+    workspaceId: string,
+    provisionType: string,
+    manifestId: string | null,
+  ): Promise<EnvironmentConnectionRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(environmentConnections)
+      .where(
+        and(
+          eq(environmentConnections.workspace_id, workspaceId),
+          eq(environmentConnections.provision_type, provisionType),
+          eq(environmentConnections.manifest_id, manifestId ?? ''),
+          isNull(environmentConnections.deleted_at),
+        ),
+      )
       .limit(1)
     return rows[0] ? rowToConnection(rows[0]) : null
   }
 
   async upsert(record: EnvironmentConnectionRecord): Promise<void> {
-    // A workspace has a single live provider: clear any prior binding (live or
-    // tombstoned) before inserting, so re-registering a different provider can't
-    // collide on the (workspace_id, provider_id) primary key. Delete + insert run in
-    // one transaction so a concurrent reader never sees the binding transiently absent.
+    // Clear any prior row (live or tombstoned) on the same composite key first, so a
+    // re-register that changes the engine/provider can't collide on the primary key.
+    // Delete + insert run in one transaction so a concurrent reader never sees the
+    // binding transiently absent.
     await this.db.transaction(async (tx) => {
       await tx
         .delete(environmentConnections)
-        .where(eq(environmentConnections.workspace_id, record.workspaceId))
+        .where(
+          and(
+            eq(environmentConnections.workspace_id, record.workspaceId),
+            eq(environmentConnections.provision_type, record.provisionType),
+            eq(environmentConnections.manifest_id, record.manifestId ?? ''),
+          ),
+        )
       await tx.insert(environmentConnections).values({
         workspace_id: record.workspaceId,
-        kind: record.kind,
+        provision_type: record.provisionType,
+        manifest_id: record.manifestId ?? '',
+        engine: record.engine,
+        backend_kind: record.backendKind,
         provider_id: record.providerId,
         label: record.label,
         base_url: record.baseUrl,
-        manifest_json: record.manifestJson,
+        handler_json: record.handlerJson,
+        accepts_manifest_id: record.acceptsManifestId,
         secrets_cipher: record.secretsCipher,
         created_at: record.createdAt,
         deleted_at: null,
@@ -71,13 +105,20 @@ export class DrizzleEnvironmentConnectionRepository implements EnvironmentConnec
     })
   }
 
-  async softDelete(workspaceId: string, at: number): Promise<void> {
+  async softDelete(
+    workspaceId: string,
+    provisionType: string,
+    manifestId: string | null,
+    at: number,
+  ): Promise<void> {
     await this.db
       .update(environmentConnections)
       .set({ deleted_at: at })
       .where(
         and(
           eq(environmentConnections.workspace_id, workspaceId),
+          eq(environmentConnections.provision_type, provisionType),
+          eq(environmentConnections.manifest_id, manifestId ?? ''),
           isNull(environmentConnections.deleted_at),
         ),
       )

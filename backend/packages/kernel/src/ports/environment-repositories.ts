@@ -7,41 +7,69 @@ import type { EnvironmentStatus } from '../domain/types.js'
 // SecretCipher port) — these records never hold plaintext secrets.
 
 /**
- * A workspace's binding to an environment provider: the validated manifest and
- * the encrypted per-tenant secret bundle (the management-API credentials). The
- * bundle is decrypted only in-memory, at call time, by the provisioning path.
+ * A workspace's per-provision-type infra HANDLER: how a service's declared provision type
+ * (the "what + where") is stood up (the "how"). Keyed by `(workspaceId, provisionType,
+ * manifestId)` — a workspace declares one handler per type, plus one per pinned custom
+ * `manifestId`. The serialized {@link handlerJson} (the engine connection, sans secrets) and
+ * the encrypted secret bundle are decrypted/built only in-memory, at provision time. See
+ * docs/initiatives/per-service-provision-types.md.
+ *
+ * `manifestId` is `null` for the non-custom types; on SQLite/Postgres it sits in the
+ * composite primary key as the `''` sentinel (the repos map `'' ⇄ null`), exactly like
+ * {@link EnvironmentUserHandlerRecord}.
  */
 export interface EnvironmentConnectionRecord {
   workspaceId: string
+  /** The provision type this handler serves (`kubernetes` | `docker-compose` | `custom`). */
+  provisionType: string
+  /** For `custom`: which manifest id this handler is keyed to; `null` otherwise. */
+  manifestId: string | null
+  /** The engine that handles the type (`local-docker` | `local-k3s` | `remote-kubernetes` | `remote-custom`). */
+  engine: string
   /**
-   * Which backend kind interprets this connection (`manifest` | `kubernetes` | …).
-   * Selects the registered environment-backend provider; absent rows default to
-   * `manifest`. Mirrors `RunnerPoolConnectionRecord.kind`.
+   * The environment-backend REGISTRY kind that builds this handler's provider (`manifest` |
+   * `kubernetes` | `compose` | a custom kind). Distinct from {@link engine}: several backends
+   * can serve the same engine (e.g. a custom backend riding `remote-custom`), so the engine
+   * alone can't recover the exact provider — the registry is keyed by this kind.
    */
-  kind: string
+  backendKind: string
   providerId: string
   label: string
   baseUrl: string
   /**
-   * The stored manifest, serialized as JSON. For a native backend (e.g. `kubernetes`)
-   * the per-workspace settings ride the manifest's `providerConfig` bag — the backend
-   * registry builds + reads it. See `backend/docs/native-environment-adapter.md`.
+   * The serialized handler config (an `InfraHandlerConfig` — the engine connection, sans
+   * secrets), as JSON. A native engine (`local-k3s`/`remote-kubernetes`) carries only the
+   * apiserver/sizing here; the manifests to apply come from the SERVICE at provision time
+   * (the deployer merges the two). Renamed from the pre-reshape `manifestJson`.
    */
-  manifestJson: string
+  handlerJson: string
+  /** For a `remote-custom` engine: the custom manifest id this provider accepts; `null` otherwise. */
+  acceptsManifestId: string | null
   /** Ciphertext of the `{ key: value }` secret bundle (SecretCipher envelope). */
   secretsCipher: string
   createdAt: number
-  /** Set when the workspace unregisters (tombstone). */
+  /** Set when the workspace unregisters this handler (tombstone). */
   deletedAt: number | null
 }
 
 export interface EnvironmentConnectionRepository {
-  /** The workspace's live connection, or null if not registered. */
-  getByWorkspace(workspaceId: string): Promise<EnvironmentConnectionRecord | null>
-  /** Create or replace the live connection for a workspace. */
+  /** Every live handler the workspace has registered (batched — no per-type point reads). */
+  listByWorkspace(workspaceId: string): Promise<EnvironmentConnectionRecord[]>
+  /** The live handler for one provision type (+ custom manifest id), or null. */
+  getByWorkspaceAndType(
+    workspaceId: string,
+    provisionType: string,
+    manifestId: string | null,
+  ): Promise<EnvironmentConnectionRecord | null>
+  /** Create or replace one handler (keyed by workspace + provisionType + manifestId). */
   upsert(record: EnvironmentConnectionRecord): Promise<void>
-  /** Tombstone the workspace's connection. */
-  softDelete(workspaceId: string, at: number): Promise<void>
+  /** Tombstone one handler. */
+  softDelete(
+    workspaceId: string,
+    provisionType: string,
+    manifestId: string | null,
+    at: number,
+  ): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
