@@ -386,6 +386,38 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   `@cat-factory/app` layer + the Pages `wrangler.toml`. `NUXT_PUBLIC_API_BASE` is
   baked in at `nuxt generate` time.
 
+## Updating dependencies (the `minimumReleaseAge` supply-chain gate)
+
+Installs run behind a **`minimumReleaseAge` gate** (configured in the managed
+environment, ~24h): pnpm strictly verifies the lockfile and **rejects any registry
+package published more recently than the cutoff** (`ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`).
+The allow-list is `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`. The policy for it:
+
+- **Only ever list wildcard namespaces WE OWN** there — today `@cat-factory/*` and
+  `@toad-contracts/*`. Our own freshly-published packages are trusted and must never be
+  age-gated, so a wildcard (not per-version pins) keeps them installable the moment they
+  publish.
+- **Never add a per-version exception for a third-party package** (`some-pkg@1.2.3`), and
+  do not let a non-strict `pnpm install` auto-append them — if you see third-party entries
+  accrue in `minimumReleaseAgeExclude`, delete them. (pnpm's non-strict mode silently
+  appends a pin for every too-new version it resolves; that churn is exactly what this
+  policy forbids.)
+- **When upgrading, pick the latest version that already satisfies the release-age rule**,
+  not the absolute newest. Concretely: find the newest version published before the cutoff
+  (`npm view <pkg> time --json`), stay within the compatible major (see the AI-SDK pin
+  below), and set that as the range. If `pnpm install`/`update` resolves something too new,
+  pass the explicit compliant version (`pnpm update -r <pkg>@<compliant-version>`) rather
+  than excluding it. A dep whose only newer releases are all inside the cutoff window stays
+  where it is until they age out.
+- **Do not touch the executor-harness** (`backend/internal/executor-harness`) during a
+  dependency sweep — its deps feed the published runner image (see the image-tag rules
+  below), so bumping them is a separate, deliberate, image-bumping change.
+- **The Vercel AI SDK family (`ai`, `@ai-sdk/*`) is held to the major that pairs with
+  `workers-ai-provider`.** `workers-ai-provider`'s peers require `ai@^6` + `@ai-sdk/*@^3`
+  (provider/openai/anthropic), so do NOT bump `ai` to v7 (or the `@ai-sdk/*` packages past
+  their `ai@6`-compatible majors) until `workers-ai-provider` ships a release whose peers
+  accept it. Upgrade only within those majors.
+
 ## Releases & changesets
 
 - Versioning/publishing is [changesets](https://github.com/changesets/changesets)

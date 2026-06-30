@@ -1,5 +1,61 @@
 # @cat-factory/orchestration
 
+## 0.46.0
+
+### Minor Changes
+
+- 337d94d: Per-service provision types (slice 2b — reshape `environment_connections` + handler-aware
+  service). **Breaking:** `environment_connections` is rekeyed from a single per-workspace
+  provider binding (`(workspace_id, provider_id)`, discriminated by `kind`) into a multi-row
+  per-provision-type HANDLER table `(workspace_id, provision_type, manifest_id)` with
+  `engine` / `backend_kind` / `accepts_manifest_id` columns and `handler_json` (was
+  `manifest_json`); pre-reshape rows are dropped (BC is a non-goal). The kernel
+  `EnvironmentConnectionRepository` port becomes a multi-row API (`listByWorkspace`,
+  `getByWorkspaceAndType`, `upsert`, per-type `softDelete`), mirrored in the D1 + Drizzle repos
+  and the cross-runtime conformance suite.
+
+  `EnvironmentConnectionService` gains the final handler-aware API — `registerHandler` /
+  `listHandlers` / `updateHandlerSecrets` / `unregisterHandler`, custom-manifest-type CRUD, and
+  `resolveProviderForType`, which matches a service's declared provisioning to a workspace
+  handler and **merges the service-owned `manifestSource` into the engine config** at resolve
+  time (the what/where ÷ how split). `EnvironmentProvisioningService.provision` accepts the
+  service's `provisioning` and resolves per-type (short-circuiting `infraless`). A new
+  `provision_type_unhandled` conflict reason is added (wire vocabulary + SPA title).
+
+  The existing single-connection HTTP surface (register/describe/test/connection endpoints) is
+  preserved as a thin **compat bridge** over the new table, so the current infrastructure UI
+  keeps working unchanged; the per-type HTTP endpoints + the frontend rebuild follow in later
+  slices, as does the tester collapse (dropping `defaultTestEnvironment`).
+
+### Patch Changes
+
+- Updated dependencies [337d94d]
+  - @cat-factory/kernel@0.58.0
+  - @cat-factory/contracts@0.60.0
+  - @cat-factory/integrations@0.41.0
+  - @cat-factory/agents@0.23.3
+  - @cat-factory/sandbox@0.8.51
+  - @cat-factory/spend@0.10.43
+  - @cat-factory/workspaces@0.9.34
+  - @cat-factory/prompt-fragments@0.9.13
+
+## 0.45.3
+
+### Patch Changes
+
+- 6009266: Refresh dependencies to their latest release-age-compliant versions: the Vercel AI
+  SDK family within its `workers-ai-provider`-compatible majors (`ai` 6.0.214,
+  `@ai-sdk/anthropic` 3.0.89, `@ai-sdk/openai` 3.0.77, `@ai-sdk/openai-compatible`
+  2.0.54, `@ai-sdk/amazon-bedrock` 4.0.124), `drizzle-orm`/`drizzle-kit` 1.0.0-rc.4,
+  and `yaml` 2.9.0, plus refreshed transitive resolutions.
+- Updated dependencies [6009266]
+  - @cat-factory/agents@0.23.2
+  - @cat-factory/integrations@0.40.1
+  - @cat-factory/kernel@0.57.1
+  - @cat-factory/sandbox@0.8.50
+  - @cat-factory/spend@0.10.42
+  - @cat-factory/workspaces@0.9.33
+
 ## 0.45.2
 
 ### Patch Changes

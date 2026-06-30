@@ -8,6 +8,7 @@ import type {
   ResolveRunRepoContext,
   RunRepoContext,
   SecretResolver,
+  ServiceProvisioning,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
@@ -62,6 +63,13 @@ export interface ProvisionArgs {
   inputs?: Record<string, string>
   /** Typed git/PR/repo context; passed to the provider and flattened into `inputs`. */
   context?: ProvisionContext
+  /**
+   * The service's declared provisioning (the "what + where"). When given, the provider is
+   * resolved by matching its type to a workspace handler and merging the service's
+   * `manifestSource` — the per-provision-type path. Absent ⇒ the legacy single-connection
+   * resolution. `infraless` is rejected here (callers short-circuit it).
+   */
+  serviceProvisioning?: ServiceProvisioning
 }
 
 /** Flatten a typed provision context into `{{input.*}}` string vars (skips empties). */
@@ -92,8 +100,26 @@ export class EnvironmentProvisioningService {
   /** Provision an environment, persisting an encrypted record keyed by block/run. */
   async provision(args: ProvisionArgs): Promise<EnvironmentHandle> {
     const { workspaceId } = args
-    const { manifest, provider } = await this.deps.connectionService.resolveProvider(workspaceId)
-    const resolveSecret = await this.deps.connectionService.resolveSecrets(workspaceId)
+    let manifest: EnvironmentManifest
+    let provider: EnvironmentProvider
+    let resolveSecret: SecretResolver
+    if (args.serviceProvisioning) {
+      if (args.serviceProvisioning.type === 'infraless') {
+        throw new ValidationError('An infraless service provisions no environment')
+      }
+      const resolved = await this.deps.connectionService.resolveProviderForType(
+        workspaceId,
+        args.serviceProvisioning,
+      )
+      manifest = resolved.manifest
+      provider = resolved.provider
+      resolveSecret = resolved.resolveSecret
+    } else {
+      const resolved = await this.deps.connectionService.resolveProvider(workspaceId)
+      manifest = resolved.manifest
+      provider = resolved.provider
+      resolveSecret = await this.deps.connectionService.resolveSecrets(workspaceId)
+    }
 
     // Pre-flight gate: if the provider declares repo-config expectations (e.g. Kargo's
     // `.kargo.yml`), verify them against the block's repo BEFORE provisioning, so a

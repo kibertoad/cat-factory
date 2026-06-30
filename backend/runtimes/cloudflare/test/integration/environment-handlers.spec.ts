@@ -1,6 +1,7 @@
 import { defineEnvironmentHandlersSuite } from '@cat-factory/conformance'
 import { env } from 'cloudflare:test'
 import { D1CustomManifestTypeRepository } from '../../src/infrastructure/repositories/D1CustomManifestTypeRepository'
+import { D1EnvironmentConnectionRepository } from '../../src/infrastructure/repositories/D1EnvironmentConnectionRepository'
 import { D1EnvironmentUserHandlerRepository } from '../../src/infrastructure/repositories/D1EnvironmentUserHandlerRepository'
 
 // Cross-runtime parity for the per-service provision-type persistence against the Worker's
@@ -9,4 +10,5 @@ import { D1EnvironmentUserHandlerRepository } from '../../src/infrastructure/rep
 defineEnvironmentHandlersSuite('cloudflare', () => ({
   userHandlers: new D1EnvironmentUserHandlerRepository({ db: env.DB }),
   customTypes: new D1CustomManifestTypeRepository({ db: env.DB }),
+  connections: new D1EnvironmentConnectionRepository({ db: env.DB }),
 }))

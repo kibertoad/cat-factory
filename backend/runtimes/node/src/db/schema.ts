@@ -1252,27 +1252,34 @@ export const documents = pgTable(
   ],
 )
 
-// Ephemeral-environment integration (mirror of D1 migration 0008). A workspace's
-// binding to its own environment-management API (a declarative manifest) and the
-// registry of environments provisioned from it. Credentials are opaque ciphertext
-// (SecretCipher envelopes), never plaintext. At most one live provider per workspace
-// (the partial unique index lets a tombstoned binding be replaced).
+// Ephemeral-environment integration (mirror of D1 migration 0025). A workspace's per-
+// provision-type infra HANDLERS (how a service's declared provision type is stood up) and
+// the registry of environments provisioned from them. Keyed by (workspace_id,
+// provision_type, manifest_id) — one handler per type, plus one per pinned custom manifest
+// id ('' for non-custom). `handler_json` carries the engine connection (sans secrets); the
+// manifests to apply come from the service at provision time. Credentials are opaque
+// ciphertext (SecretCipher envelopes), never plaintext. See
+// docs/initiatives/per-service-provision-types.md.
 export const environmentConnections = pgTable(
   'environment_connections',
   {
     workspace_id: text('workspace_id').notNull(),
-    kind: text('kind').notNull().default('manifest'),
+    provision_type: text('provision_type').notNull(),
+    manifest_id: text('manifest_id').notNull().default(''),
+    engine: text('engine').notNull(),
+    backend_kind: text('backend_kind').notNull(),
     provider_id: text('provider_id').notNull(),
     label: text('label').notNull(),
     base_url: text('base_url').notNull(),
-    manifest_json: text('manifest_json').notNull(),
+    handler_json: text('handler_json').notNull(),
+    accepts_manifest_id: text('accepts_manifest_id'),
     secrets_cipher: text('secrets_cipher').notNull(),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     deleted_at: bigint('deleted_at', { mode: 'number' }),
   },
   (t) => [
-    primaryKey({ columns: [t.workspace_id, t.provider_id] }),
-    uniqueIndex('idx_environment_conn_workspace')
+    primaryKey({ columns: [t.workspace_id, t.provision_type, t.manifest_id] }),
+    index('idx_environment_conn_workspace')
       .on(t.workspace_id)
       .where(sql`${t.deleted_at} IS NULL`),
   ],

@@ -1,5 +1,54 @@
 # @cat-factory/local-server
 
+## 0.27.2
+
+### Patch Changes
+
+- Updated dependencies [337d94d]
+  - @cat-factory/kernel@0.58.0
+  - @cat-factory/contracts@0.60.0
+  - @cat-factory/integrations@0.41.0
+  - @cat-factory/orchestration@0.46.0
+  - @cat-factory/node-server@0.46.0
+  - @cat-factory/agents@0.23.3
+  - @cat-factory/gitlab@0.4.9
+  - @cat-factory/server@0.51.2
+
+## 0.27.1
+
+### Patch Changes
+
+- 6009266: Refresh dependencies to their latest release-age-compliant versions: the Vercel AI
+  SDK family within its `workers-ai-provider`-compatible majors (`ai` 6.0.214,
+  `@ai-sdk/anthropic` 3.0.89, `@ai-sdk/openai` 3.0.77, `@ai-sdk/openai-compatible`
+  2.0.54, `@ai-sdk/amazon-bedrock` 4.0.124), `drizzle-orm`/`drizzle-kit` 1.0.0-rc.4,
+  and `yaml` 2.9.0, plus refreshed transitive resolutions.
+- Updated dependencies [6009266]
+  - @cat-factory/agents@0.23.2
+  - @cat-factory/integrations@0.40.1
+  - @cat-factory/kernel@0.57.1
+  - @cat-factory/orchestration@0.45.3
+  - @cat-factory/node-server@0.45.1
+  - @cat-factory/server@0.51.1
+  - @cat-factory/gitlab@0.4.8
+
+## 0.27.0
+
+### Minor Changes
+
+- 1c326f9: Add the mothership-mode local `node:sqlite` credential store (the consumer-side foundation
+  of the mothership-mode initiative). In mothership mode a local node keeps NO main database
+  (org/durable state is forwarded to the hosted mothership over the persistence RPC), but the
+  agent/model credentials stay on the developer's machine, sealed with the LOCAL key so the
+  mothership's `ENCRYPTION_KEY` never reaches the laptop. This ships their persistence: a
+  file-based `node:sqlite` store implementing the two `local-sqlite` bucket ports,
+  `SqliteProviderApiKeyRepository` (the direct-vendor API-key pool, with usage-window rotation
+  and atomic lease-least-used) and `SqliteLocalModelEndpointRepository` (per-user local model
+  endpoints), behind a `createLocalCredentialStore(path)` factory. The schema and behaviour
+  mirror the Drizzle/D1 repositories column-for-column so a mothership-mode node pools and
+  rotates keys identically to a Postgres one. Not yet wired into `buildLocalContainer`: the
+  `LOCAL_MOTHERSHIP_URL` composition switch + no-Postgres boot land in the next slice.
+
 ## 0.26.1
 
 ### Patch Changes

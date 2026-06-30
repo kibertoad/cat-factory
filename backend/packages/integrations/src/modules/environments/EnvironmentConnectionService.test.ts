@@ -32,18 +32,23 @@ const fakeCipher: SecretCipher = {
 function fakeConnections(): EnvironmentConnectionRepository & {
   records: Map<string, EnvironmentConnectionRecord>
 } {
+  const key = (ws: string, type: string, manifestId: string | null) =>
+    `${ws}|${type}|${manifestId ?? ''}`
   const records = new Map<string, EnvironmentConnectionRecord>()
   return {
     records,
-    async getByWorkspace(workspaceId) {
-      const r = records.get(workspaceId)
+    async listByWorkspace(workspaceId) {
+      return [...records.values()].filter((r) => r.workspaceId === workspaceId && !r.deletedAt)
+    },
+    async getByWorkspaceAndType(workspaceId, provisionType, manifestId) {
+      const r = records.get(key(workspaceId, provisionType, manifestId))
       return r && !r.deletedAt ? r : null
     },
     async upsert(record) {
-      records.set(record.workspaceId, record)
+      records.set(key(record.workspaceId, record.provisionType, record.manifestId), record)
     },
-    async softDelete(workspaceId, at) {
-      const r = records.get(workspaceId)
+    async softDelete(workspaceId, provisionType, manifestId, at) {
+      const r = records.get(key(workspaceId, provisionType, manifestId))
       if (r) r.deletedAt = at
     },
   }
@@ -120,6 +125,146 @@ describe('EnvironmentConnectionService — providerConfig round-trip', () => {
 
     const { manifest: resolved } = await service.requireConnection('ws1')
     expect(resolved.providerConfig).toEqual({ project: 'acme-web', nested: { a: [1, 2], b: true } })
+  })
+})
+
+// The per-provision-type handler API (the final design): register handlers keyed by type,
+// list them, and resolve the live provider for a service by matching its declared type to a
+// handler and merging the service-owned manifestSource (the "what/where ÷ how" split).
+describe('EnvironmentConnectionService — per-type handlers', () => {
+  const composeManifest: EnvironmentManifest = {
+    providerId: 'kargo',
+    label: 'Bespoke Envs',
+    baseUrl: 'https://envs.test/api',
+    auth: { type: 'none' },
+    provision: { method: 'POST', pathTemplate: '/envs' },
+    response: {},
+  }
+
+  it('registers a handler and lists it back with safe metadata + config (no secrets)', async () => {
+    const service = makeService(fakeConnections())
+    const view = await service.registerHandler('ws1', {
+      provisionType: 'custom',
+      manifestId: 'kargo',
+      config: { engine: 'remote-custom', manifest: composeManifest, acceptsManifestId: 'kargo' },
+      secrets: { TOKEN: 'tok' },
+    })
+    expect(view.provisionType).toBe('custom')
+    expect(view.manifestId).toBe('kargo')
+    expect(view.engine).toBe('remote-custom')
+    expect(view.acceptsManifestId).toBe('kargo')
+
+    const list = await service.listHandlers('ws1')
+    expect(list).toHaveLength(1)
+    expect(list[0]!.engine).toBe('remote-custom')
+    expect(JSON.stringify(list)).not.toContain('tok')
+  })
+
+  it('resolves the provider for a service type and exposes the stored secret', async () => {
+    const service = makeService(fakeConnections())
+    await service.registerHandler('ws1', {
+      provisionType: 'custom',
+      manifestId: 'kargo',
+      config: { engine: 'remote-custom', manifest: composeManifest, acceptsManifestId: 'kargo' },
+      secrets: { TOKEN: 'tok' },
+    })
+    const resolved = await service.resolveProviderForType('ws1', {
+      type: 'custom',
+      manifestId: 'kargo',
+    })
+    expect(resolved.engine).toBe('remote-custom')
+    expect(resolved.provisionType).toBe('custom')
+    expect(resolved.manifest.providerId).toBe('kargo')
+    expect(resolved.resolveSecret('TOKEN')).toBe('tok')
+  })
+
+  it('throws provision_type_unhandled when no handler serves the service type', async () => {
+    const service = makeService(fakeConnections())
+    await expect(service.resolveProviderForType('ws1', { type: 'kubernetes' })).rejects.toThrow(
+      /no handler/i,
+    )
+  })
+
+  it('merges the service manifestSource into a kube handler at resolve time', async () => {
+    const service = makeService(fakeConnections())
+    await service.registerHandler('ws1', {
+      provisionType: 'kubernetes',
+      config: {
+        engine: 'remote-kubernetes',
+        kubernetes: {
+          label: 'Cluster',
+          apiServerUrl: 'https://cluster.example.test:6443',
+          url: { source: 'ingressTemplate', hostTemplate: '{{branch}}.example.test' },
+        },
+      },
+      secrets: { apiToken: 'k8s-tok' },
+    })
+    // The service supplies the manifests to apply (the "what/where"); the handler the engine.
+    const resolved = await service.resolveProviderForType('ws1', {
+      type: 'kubernetes',
+      manifestSource: { type: 'colocated', path: 'deploy/k8s' },
+    })
+    expect(resolved.engine).toBe('remote-kubernetes')
+    // The merged manifestSource rides the built manifest's providerConfig.
+    expect(JSON.stringify(resolved.manifest)).toContain('deploy/k8s')
+  })
+})
+
+// The legacy single-connection surface (register/getConnection/unregister/...) is a compat
+// bridge over the per-type handler table: it must keep behaving as one connection per workspace
+// even though rows are now keyed by (workspace, provisionType, manifestId).
+describe('EnvironmentConnectionService — compat bridge', () => {
+  const kubeConfig = (manifestSource: {
+    type: 'separate'
+    repo: string
+    ref?: string
+    path: string
+  }) =>
+    ({
+      kind: 'kubernetes',
+      kubernetes: {
+        label: 'Cluster',
+        apiServerUrl: 'https://cluster.example.test:6443',
+        manifestSource,
+        url: { source: 'ingressTemplate', hostTemplate: '{{branch}}.example.test' },
+      },
+    }) as const
+
+  it('switching provider kind replaces the connection (no stale primary handler)', async () => {
+    const repo = fakeConnections()
+    const service = makeService(repo)
+    // First connect a generic manifest provider, then "switch" to a kubernetes one. These land
+    // on different composite keys, so without the single-row sweep the manifest row would survive
+    // and remain the (oldest) primary.
+    await service.register('ws1', {
+      config: { kind: 'manifest', manifest: baseManifest },
+      secrets: {},
+    })
+    await service.register('ws1', {
+      config: kubeConfig({ type: 'separate', repo: 'org/manifests', path: 'k8s/' }),
+      secrets: { apiToken: 'k8s-tok' },
+    })
+
+    const connection = await service.getConnection('ws1')
+    expect(connection?.kind).toBe('kubernetes')
+    // Exactly one live handler remains — the switch fully replaced the prior connection.
+    expect((await repo.listByWorkspace('ws1')).length).toBe(1)
+  })
+
+  it('preserves a kube manifestSource through register → getConnection (no placeholder)', async () => {
+    const repo = fakeConnections()
+    const service = makeService(repo)
+    const source = { type: 'separate', repo: 'org/manifests', ref: 'main', path: 'k8s/' } as const
+    await service.register('ws1', {
+      config: kubeConfig(source),
+      secrets: { apiToken: 'k8s-tok' },
+    })
+
+    const connection = await service.getConnection('ws1')
+    const config = connection?.config as { kubernetes?: { manifestSource?: unknown } } | undefined
+    // The operator's source must round-trip — a dropped source would surface as the placeholder
+    // { type: 'colocated', path: '.' } and silently provision from the repo root.
+    expect(config?.kubernetes?.manifestSource).toEqual(source)
   })
 })
 

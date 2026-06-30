@@ -103,10 +103,12 @@ export interface RunnerInfraSetup {
  * manifest-driven `agent` kind — the job body's `mode` (explore | coding) and its data
  * select the flow. `kind` travels in the job body to the harness's single `POST /jobs`
  * endpoint. The Cloudflare backend and a self-hosted runner pool both serve it from the
- * same executor-harness image, so runtime parity is automatic. Kept as a (now single-member)
- * type so the transport seam stays explicit and a future second kind has a home.
+ * same executor-harness image, so runtime parity is automatic. Kept as a multi-member type
+ * so the transport seam stays explicit. `deploy` is the second kind: it targets the
+ * container-backed deploy adapter (real `kubectl`/`kustomize`/`helm`) on a SEPARATE image
+ * (`image: 'deploy'`), used to render + apply a service's Kubernetes manifests.
  */
-export type RunnerDispatchKind = 'agent'
+export type RunnerDispatchKind = 'agent' | 'deploy'
 
 /**
  * Optional, transport-level provisioning hints resolved per-service at dispatch.
@@ -131,10 +133,12 @@ export interface RunnerDispatchOptions {
    * Which executor image variant this job needs. `default` is the standard harness
    * image; `ui` is the heavier UI-tester image that bundles Playwright + a browser
    * (the `tester-ui` kind needs it, and only it — every other kind uses `default`, so
-   * the browser never bloats their cold-start). A transport maps this to a distinct
-   * container class (Cloudflare) or image tag (a self-hosted pool / local Docker).
+   * the browser never bloats their cold-start). `deploy` is the separate deploy-harness
+   * image (slim base + `kubectl`/`kustomize`/`helm`) the `deploy` dispatch kind uses, so
+   * the k8s CLIs never bloat an agent run's cold-start. A transport maps this to a
+   * distinct container class (Cloudflare) or image tag (a self-hosted pool / local Docker).
    */
-  image?: 'default' | 'ui'
+  image?: 'default' | 'ui' | 'deploy'
 }
 
 /**

@@ -47,8 +47,10 @@ import type {
 } from '@cat-factory/kernel'
 import type { EnvironmentProvider, RunnerPoolProvider, UrlSafetyPolicy } from '@cat-factory/kernel'
 import type {
+  CustomManifestTypeRepository,
   EnvironmentConnectionRepository,
   EnvironmentRegistryRepository,
+  EnvironmentUserHandlerRepository,
 } from '@cat-factory/kernel'
 import type { RunnerPoolConnectionRepository } from '@cat-factory/kernel'
 import type { BootstrapJobRepository, ReferenceArchitectureRepository } from '@cat-factory/kernel'
@@ -148,6 +150,7 @@ import {
   SlackMemberMappingService,
   defaultEnvironmentBackendRegistry,
   defaultRunnerBackendRegistry,
+  type CustomManifestTypeRegistry,
   type EnvironmentBackendRegistry,
   type RunnerBackendRegistry,
 } from '@cat-factory/integrations'
@@ -415,6 +418,19 @@ export interface CoreDependencies {
   // feature is off. Per-tenant secrets are encrypted via `secretCipher`.
   environmentConnectionRepository?: EnvironmentConnectionRepository
   environmentRegistryRepository?: EnvironmentRegistryRepository
+  /**
+   * Workspace-defined custom-manifest-type catalog (the UI-editable half of the custom
+   * provision-type catalog). Absent ⇒ the catalog is the registered code types only.
+   */
+  customManifestTypeRepository?: CustomManifestTypeRepository
+  /**
+   * Per-USER infra handler overrides (local mode): the per-user layer over a workspace's
+   * per-type handlers. Persisted in both runtimes; the local-only behaviour is enforced at
+   * the controller mount (slice 4). Absent ⇒ no per-user overrides.
+   */
+  environmentUserHandlerRepository?: EnvironmentUserHandlerRepository
+  /** The app-owned registry of code-defined custom manifest types (merged into the catalog). */
+  customManifestTypeRegistry?: CustomManifestTypeRegistry
   secretCipher?: SecretCipher
   /**
    * INTERNAL override: when set, this provider is used for every env operation instead of
@@ -1197,6 +1213,12 @@ function createEnvironmentsModule(
     clock: deps.clock,
     environmentBackendRegistry:
       deps.environmentBackendRegistry ?? defaultEnvironmentBackendRegistry(),
+    ...(deps.customManifestTypeRepository
+      ? { customManifestTypeRepository: deps.customManifestTypeRepository }
+      : {}),
+    ...(deps.customManifestTypeRegistry
+      ? { customManifestTypeRegistry: deps.customManifestTypeRegistry }
+      : {}),
     ...(deps.environmentCustomTlsSupported !== undefined
       ? { customTlsSupported: deps.environmentCustomTlsSupported }
       : {}),
