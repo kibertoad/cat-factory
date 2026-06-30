@@ -1,10 +1,11 @@
 import type { NotificationRepository } from '@cat-factory/kernel'
-import type {
-  Notification,
-  NotificationPayload,
-  NotificationSeverity,
-  NotificationType,
+import type { Notification, NotificationPayload, NotificationType } from '@cat-factory/contracts'
+import {
+  notificationSeveritySchema,
+  notificationStatusSchema,
+  notificationTypeSchema,
 } from '@cat-factory/contracts'
+import { decodeEnum, decodeEnumOr } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface NotificationRow {
@@ -30,11 +31,15 @@ function rowToNotification(row: NotificationRow): Notification {
       payload = null
     }
   }
+  const ctx = { table: 'notifications', id: row.id }
   return {
     id: row.id,
-    type: row.type as NotificationType,
-    status: row.status as Notification['status'],
-    severity: (row.severity as NotificationSeverity | null) ?? 'normal',
+    type: decodeEnum(notificationTypeSchema, row.type, { ...ctx, column: 'type' }),
+    status: decodeEnum(notificationStatusSchema, row.status, { ...ctx, column: 'status' }),
+    severity: decodeEnumOr(notificationSeveritySchema, row.severity ?? 'normal', 'normal', {
+      ...ctx,
+      column: 'severity',
+    }),
     blockId: row.block_id,
     executionId: row.execution_id,
     title: row.title,
@@ -127,5 +132,46 @@ export class D1NotificationRepository implements NotificationRepository {
         notification.resolvedAt,
       )
       .run()
+  }
+
+  async upsertOpenForBlock(workspaceId: string, notification: Notification): Promise<Notification> {
+    // Atomic dedup: the conflict arbiter is the partial unique index on
+    // (workspace_id, block_id, type) WHERE status='open' (migration 0023). A second
+    // concurrent open raise for the same block/type updates the existing row in place
+    // instead of inserting a duplicate. id/severity/created_at/status are deliberately
+    // NOT updated so the existing card keeps its identity, escalated severity and
+    // original timestamp across a re-raise. RETURNING * yields the CANONICAL row so the
+    // caller delivers the persisted id, not its discarded optimistic one (a concurrent
+    // loser would otherwise push a phantom-id card).
+    const row = await this.db
+      .prepare(
+        `INSERT INTO notifications
+           (workspace_id, id, type, status, severity, block_id, execution_id, title, body, payload,
+            created_at, resolved_at)
+         VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (workspace_id, block_id, type) WHERE status = 'open' DO UPDATE SET
+           execution_id = excluded.execution_id,
+           title = excluded.title,
+           body = excluded.body,
+           payload = excluded.payload,
+           resolved_at = excluded.resolved_at
+         RETURNING *`,
+      )
+      .bind(
+        workspaceId,
+        notification.id,
+        notification.type,
+        notification.severity ?? 'normal',
+        notification.blockId,
+        notification.executionId,
+        notification.title,
+        notification.body,
+        notification.payload ? JSON.stringify(notification.payload) : null,
+        notification.createdAt,
+        notification.resolvedAt,
+      )
+      .first<NotificationRow>()
+    // RETURNING always yields the inserted-or-updated row for this statement.
+    return row ? rowToNotification(row) : notification
   }
 }

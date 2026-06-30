@@ -1417,6 +1417,15 @@ export const executionInstanceSchema = v.object({
    * signed-in user (auth-disabled/local dev) and for legacy runs.
    */
   initiatedBy: v.optional(v.nullable(v.string())),
+  /**
+   * Optimistic-concurrency token: a monotonic revision of the persisted run row,
+   * bumped on every write. Read back by the repository and used by
+   * `compareAndSwap` so a human-action write (resolve decision / approve /
+   * request changes) that raced another writer is detected and retried on fresh
+   * state instead of silently clobbering it. Internal; defaults to 0 for a run
+   * that has never been persisted and is ignored by clients.
+   */
+  rev: v.optional(v.number()),
 })
 export type ExecutionInstance = v.InferOutput<typeof executionInstanceSchema>
 

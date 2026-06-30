@@ -1,8 +1,11 @@
 import type { AgentFailure, Clock, ExecutionRepository, RunRef } from '@cat-factory/kernel'
 import type { ExecutionInstance } from '@cat-factory/contracts'
+import { tryDecodeRows } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
 import { type ExecutionRow, executionToDetail, rowToExecution } from './mappers'
+
+const runContext = (row: ExecutionRow) => ({ table: 'agent_runs', id: row.id })
 
 /**
  * Execution runs, stored as `kind='execution'` rows of the unified `agent_runs`
@@ -27,7 +30,8 @@ export class D1ExecutionRepository implements ExecutionRepository {
       )
       .bind(workspaceId)
       .all<ExecutionRow>()
-    return results.map(rowToExecution)
+    // Snapshot-facing list read: drop a corrupt run rather than failing the whole board load.
+    return tryDecodeRows(results, rowToExecution, runContext)
   }
 
   async listByService(serviceId: string): Promise<ExecutionInstance[]> {
@@ -37,7 +41,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
       )
       .bind(serviceId)
       .all<ExecutionRow>()
-    return results.map(rowToExecution)
+    return tryDecodeRows(results, rowToExecution, runContext)
   }
 
   async listByServices(serviceIds: string[]): Promise<ExecutionInstance[]> {
@@ -52,7 +56,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
         )
         .bind(...chunk)
         .all<ExecutionRow>()
-      for (const row of results) out.push(rowToExecution(row))
+      out.push(...tryDecodeRows(results, rowToExecution, runContext))
     }
     return out
   }
@@ -86,19 +90,23 @@ export class D1ExecutionRepository implements ExecutionRepository {
     // sharing): a shared service's runs surface on every board that mounts it via
     // `listByService`. Derived here (not carried on ExecutionInstance) and refreshed on every
     // write so it follows a reparent that re-homes the block to another service.
-    await this.db
+    // `rev` is bumped on every write (and read back via RETURNING onto the instance) so a
+    // concurrent compareAndSwap can detect the row moved. A fresh insert starts at 0.
+    const row = await this.db
       .prepare(
         `INSERT INTO agent_runs
            (workspace_id, id, kind, block_id, status, detail, created_at, updated_at,
-            workflow_instance_id, service_id)
+            workflow_instance_id, service_id, rev)
          VALUES (?, ?, 'execution', ?, ?, ?, ?, ?, ?,
-            (SELECT service_id FROM blocks WHERE workspace_id = ? AND id = ?))
+            (SELECT service_id FROM blocks WHERE workspace_id = ? AND id = ?), 0)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            block_id = excluded.block_id,
            status = excluded.status,
            detail = excluded.detail,
            updated_at = excluded.updated_at,
-           service_id = excluded.service_id`,
+           service_id = excluded.service_id,
+           rev = agent_runs.rev + 1
+         RETURNING rev`,
       )
       .bind(
         workspaceId,
@@ -113,7 +121,43 @@ export class D1ExecutionRepository implements ExecutionRepository {
         workspaceId,
         execution.blockId,
       )
-      .run()
+      .first<{ rev: number }>()
+    if (row) execution.rev = row.rev
+  }
+
+  async compareAndSwap(workspaceId: string, execution: ExecutionInstance): Promise<boolean> {
+    // Conditional update guarded on the rev last read onto this instance; only writes
+    // when the stored row is unchanged. No insert — the run must already exist.
+    const expected = execution.rev ?? 0
+    const detail = executionToDetail(execution)
+    const now = this.clock.now()
+    const row = await this.db
+      .prepare(
+        `UPDATE agent_runs SET
+           block_id = ?,
+           status = ?,
+           detail = ?,
+           updated_at = ?,
+           service_id = (SELECT service_id FROM blocks WHERE workspace_id = ? AND id = ?),
+           rev = rev + 1
+         WHERE workspace_id = ? AND id = ? AND kind = 'execution' AND rev = ?
+         RETURNING rev`,
+      )
+      .bind(
+        execution.blockId,
+        execution.status,
+        detail,
+        now,
+        workspaceId,
+        execution.blockId,
+        workspaceId,
+        execution.id,
+        expected,
+      )
+      .first<{ rev: number }>()
+    if (!row) return false
+    execution.rev = row.rev
+    return true
   }
 
   async deleteByBlock(workspaceId: string, blockId: string): Promise<void> {

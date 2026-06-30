@@ -1,5 +1,150 @@
 # @cat-factory/node-server
 
+## 0.44.0
+
+### Minor Changes
+
+- f9a173f: Fix three concurrency hazards in the backend with database-native primitives.
+
+  - **Optimistic concurrency on execution runs.** `agent_runs` gains a monotonic `rev`
+    column; the execution repo's `upsert` bumps it on every write and a new
+    `compareAndSwap` performs a guarded conditional write. The in-place human-action handlers
+    (resolve decision / request changes / reject / request-human-review-fix / resume-paused)
+    now go through a `mutateInstance` retry helper, so a double-submit or a write that raced
+    the durable driver is re-applied on fresh state instead of silently clobbering the other
+    writer (lost update). (`retry` / `restart-from-step` mint a fresh run id, so the same-row
+    hazard is structurally absent there.)
+  - **Atomic API-key pool lease.** The non-transactional `listForPool → chooseToken →
+markLeased` is replaced by a single atomic select-and-mark (`leaseLeastUsed`: Postgres
+    `FOR UPDATE SKIP LOCKED`; D1 a single serialised write), so two concurrent dispatches
+    can no longer grab the same key before usage is recorded.
+  - **Notification open-card dedup.** A partial unique index on
+    `(workspace_id, block_id, type) WHERE status='open'` plus an atomic
+    `upsertOpenForBlock` replaces the racy `findOpenByBlock` read-before-write, so two
+    concurrent raises can't stack duplicate open cards. `upsertOpenForBlock` returns the
+    CANONICAL persisted row, so when a concurrent raise wins the insert the loser delivers
+    and returns that row's id rather than a phantom id (which would show a duplicate inbox
+    card and 404 when acted on).
+
+  BREAKING (pre-1.0, no data migration): `agent_runs` adds a non-null `rev` column and the
+  `notifications` table adds a partial unique index, mirrored across the D1 and Drizzle
+  migrations. The `ExecutionRepository`, `ProviderApiKeyRepository` and
+  `NotificationRepository` ports each gain a method.
+
+### Patch Changes
+
+- Updated dependencies [f9a173f]
+  - @cat-factory/contracts@0.57.0
+  - @cat-factory/kernel@0.56.0
+  - @cat-factory/server@0.50.0
+  - @cat-factory/orchestration@0.44.0
+  - @cat-factory/integrations@0.38.0
+  - @cat-factory/agents@0.22.6
+  - @cat-factory/consensus@0.7.82
+  - @cat-factory/gates@0.2.34
+  - @cat-factory/gitlab@0.4.5
+  - @cat-factory/prompt-fragments@0.9.10
+  - @cat-factory/spend@0.10.39
+  - @cat-factory/observability-langfuse@0.7.78
+  - @cat-factory/provider-bedrock@0.7.82
+  - @cat-factory/provider-cloudflare@0.7.82
+  - @cat-factory/provider-s3@0.2.28
+
+## 0.43.12
+
+### Patch Changes
+
+- fdeb466: Eliminate N+1 query loops in the service layer. `ExecutionService.teardownForBlockTree` now
+  resolves runs with a single `listByWorkspace` instead of a per-block `getByBlock`;
+  `TaskConnectionService.listSourceStates` hoists its installation/connection reads out of the
+  per-provider loop; and `BoardService` (`removeBlock` / `addServiceFromRepo`) and
+  `AccountService.listForUser` batch their per-item point reads via two new chunked-`IN`
+  repository methods, `ServiceRepository.listByFrameBlocks` and `AccountRepository.listByIds`
+  (implemented symmetrically on the D1 and Drizzle stores, with cross-runtime conformance
+  coverage). Behavior is unchanged.
+- Updated dependencies [fdeb466]
+  - @cat-factory/kernel@0.55.4
+  - @cat-factory/orchestration@0.43.4
+  - @cat-factory/integrations@0.37.1
+  - @cat-factory/agents@0.22.5
+  - @cat-factory/consensus@0.7.81
+  - @cat-factory/gates@0.2.33
+  - @cat-factory/gitlab@0.4.4
+  - @cat-factory/observability-langfuse@0.7.77
+  - @cat-factory/provider-bedrock@0.7.81
+  - @cat-factory/provider-cloudflare@0.7.81
+  - @cat-factory/provider-s3@0.2.27
+  - @cat-factory/server@0.49.6
+  - @cat-factory/spend@0.10.38
+
+## 0.43.11
+
+### Patch Changes
+
+- Updated dependencies [0dd9532]
+  - @cat-factory/server@0.49.5
+
+## 0.43.10
+
+### Patch Changes
+
+- 21b2096: Make the environment-backend and runner-backend registries app-owned (DI) instead of
+  module-global Maps. This is the pilot for the registry-DI migration
+  (`docs/initiatives/registry-di-migration.md`): the composition root now constructs each
+  registry instance via `createBackendRegistries()` and injects it through
+  `CoreDependencies`; a deployment registers a custom backend by reference
+  (`registry.register(provider)`), so registration no longer depends on the adapter and
+  server sharing the same `@cat-factory/integrations` module instance.
+
+  BREAKING (`@cat-factory/integrations`): the module-global free functions
+  `registerEnvironmentBackend` / `environmentBackend` / `registeredEnvironmentBackendKinds`
+  / `environmentBackendKinds` / `findRepairCapableProvider` and their runner-backend
+  equivalents (`registerRunnerBackend` / `runnerBackend` / `registeredRunnerBackendKinds`
+  / `runnerBackendKinds`) are removed. Use the new `EnvironmentBackendRegistry` /
+  `RunnerBackendRegistry` classes (methods `register` / `get` / `kinds` / `labelled`, plus
+  `findRepairCapable` on the env registry), the `defaultEnvironmentBackendRegistry()` /
+  `defaultRunnerBackendRegistry()` factories, or the unified `createBackendRegistries()`.
+
+- Updated dependencies [21b2096]
+  - @cat-factory/integrations@0.37.0
+  - @cat-factory/orchestration@0.43.3
+  - @cat-factory/server@0.49.4
+  - @cat-factory/contracts@0.56.1
+  - @cat-factory/agents@0.22.4
+  - @cat-factory/consensus@0.7.80
+  - @cat-factory/gates@0.2.32
+  - @cat-factory/gitlab@0.4.3
+  - @cat-factory/kernel@0.55.3
+  - @cat-factory/prompt-fragments@0.9.9
+  - @cat-factory/spend@0.10.37
+  - @cat-factory/provider-bedrock@0.7.80
+  - @cat-factory/provider-cloudflare@0.7.80
+  - @cat-factory/observability-langfuse@0.7.76
+  - @cat-factory/provider-s3@0.2.26
+
+## 0.43.9
+
+### Patch Changes
+
+- Updated dependencies [123336c]
+  - @cat-factory/server@0.49.3
+
+## 0.43.8
+
+### Patch Changes
+
+- 7536092: Startup-time optimizations (no behavior change):
+
+  - **Node server boot**: run `migrate()` and `pgBoss.start()` concurrently (they touch
+    independent schemas) and start the pure-timer background sweepers after the HTTP
+    listener binds, so the server accepts requests sooner. The local facade inherits this
+    via the shared `start()`.
+  - **SPA workspace init**: fetch the accounts list and workspace list concurrently instead
+    of sequentially on first board load.
+  - **SPA bundle**: code-split the occasional, store-gated `BlockFocusView`,
+    `TaskSourceConnectModal`, `TaskImportModal`, and `RecurringPipelineModal` into their own
+    chunks (mounted only while open), matching the existing async-panel pattern.
+
 ## 0.43.7
 
 ### Patch Changes

@@ -15,7 +15,8 @@ import {
   makeReadyReviewWithOpenItem,
 } from '@cat-factory/conformance'
 import type { GateProviderOverrides } from '@cat-factory/gates'
-import type { ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
+import type { BackendRegistries } from '@cat-factory/integrations'
+import type { ExecutionInstance, Service, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type {
   LocalRunner,
@@ -29,6 +30,7 @@ import { migrate } from '../src/db/migrate.js'
 import {
   DrizzleClarityReviewRepository,
   DrizzleRequirementReviewRepository,
+  DrizzleServiceRepository,
 } from '../src/repositories/drizzle.js'
 import { createApp } from '../src/server.js'
 
@@ -116,6 +118,7 @@ export function makeConformanceApp(
     gateProviders?: GateProviderOverrides
     environmentProvider?: CoreDependencies['environmentProvider']
     resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
+    backendRegistries?: BackendRegistries
   },
 ): ConformanceApp {
   // Record emitted run snapshots so the suite can assert intermediate transitions
@@ -163,6 +166,9 @@ export function makeConformanceApp(
     cloudflareModelsEnabled: opts?.cloudflareModelsEnabled ?? true,
     // Re-wire any faked gate providers after the build's reset (the suite drives the CI gate).
     gateProviders: opts?.gateProviders,
+    // Inject the app-owned backend registries (pre-loaded with custom kinds in the custom-backend
+    // suite) so a registered custom backend is resolved by reference, exactly like a real deployment.
+    ...(opts?.backendRegistries ? { backendRegistries: opts.backendRegistries } : {}),
   })
   const app = createApp(container, TEST_ENV)
 
@@ -265,6 +271,14 @@ export function makeConformanceApp(
     )
   }
 
+  function seedService(service: Service) {
+    return new DrizzleServiceRepository(db).insert(service)
+  }
+
+  function getService(id: string) {
+    return new DrizzleServiceRepository(db).get(id)
+  }
+
   return {
     call,
     createWorkspace,
@@ -277,6 +291,9 @@ export function makeConformanceApp(
     seedIncorporatedReview,
     seedReadyReview,
     seedIncorporatedClarityReview,
+    executionRepository: () => container.executionRepository,
+    seedService,
+    getService,
     onboarding: () => makeOnboardingProbe(container),
     localModelEndpoints: () => {
       const svc = container.localModelEndpoints

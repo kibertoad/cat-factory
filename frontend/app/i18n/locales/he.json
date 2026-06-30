@@ -2981,5 +2981,405 @@
     "overallProgress": "התקדמות כוללת",
     "dependencies": "תלויות",
     "noDependencies": "אין"
+  },
+  "environments": {
+    "title": "סביבה זמנית",
+    "status": {
+      "provisioning": "מקים…",
+      "ready": "פועלת",
+      "failed": "נכשלה",
+      "expired": "פגה",
+      "tearing_down": "מכבה…",
+      "torn_down": "כובתה"
+    },
+    "expires": "פג תוקף ב-{date}",
+    "empty": "אין סביבה זמנית להרצה הזו."
+  },
+  "provisioning": {
+    "title": "יומני הקמה",
+    "refresh": "רענן",
+    "empty": "עדיין לא נרשמו ניסיונות הקמה.",
+    "operation": {
+      "provision": "הקמה",
+      "teardown": "פירוק",
+      "status": "בדיקת מצב",
+      "dispatch": "הקמה",
+      "release": "פירוק",
+      "poll-failure": "בדיקת תקינות"
+    },
+    "outcome": {
+      "success": "הצלחה",
+      "failure": "כשל"
+    }
+  },
+  "kaizen": {
+    "title": "Kaizen",
+    "subtitle": "ניקוד שיפור מתמיד של הרצות הסוכנים",
+    "refresh": "רענן",
+    "notConfigured": "Kaizen אינו מוגדר בפריסה הזו.",
+    "grading": {
+      "title": "ניקוד Kaizen"
+    },
+    "status": {
+      "scheduled": "מתוזמן",
+      "grading": "מנקד…",
+      "failed": "נכשל",
+      "graded": "נוקד"
+    },
+    "gradeValue": "{grade}/5",
+    "scheduledHint": "ניקוד Kaizen ממתין בתור לשלב הזה. הוא רץ ברקע לאחר ההרצה.",
+    "recommendations": "המלצות",
+    "noImprovements": "אינטראקציה חלקה, אין מה לשפר.",
+    "gradedBy": "נוקד על ידי {model}",
+    "failedFallback": "לא ניתן היה להשלים את הניקוד.",
+    "promptVersion": "גרסה {version}",
+    "verifiedCombos": {
+      "title": "צירופים מאומתים",
+      "count": "({count})",
+      "hint": "צירוף של פרומפט + סוכן + מודל שקיבל ניקוד 4 או 5 ללא המלצות חמש פעמים ברציפות. צירופים אלה אינם מנוקדים עוד.",
+      "empty": "אין עדיין צירופים.",
+      "progress": "{count}/5",
+      "modelPrompt": "{model} · פרומפט גרסה {version}"
+    },
+    "history": {
+      "title": "היסטוריית ניקוד",
+      "col": {
+        "when": "מתי",
+        "agent": "סוכן",
+        "model": "מודל",
+        "grade": "ציון",
+        "recommendations": "המלצות"
+      },
+      "empty": "אין עדיין ניקודים."
+    }
+  },
+  "recurring": {
+    "runEvery": "הרץ כל",
+    "hours": "שעות",
+    "allowedDays": "ימים מותרים",
+    "allowedDaysHelp": "השאר הכול כבוי כדי לרוץ בכל יום.",
+    "weekday": {
+      "sun": "א׳",
+      "mon": "ב׳",
+      "tue": "ג׳",
+      "wed": "ד׳",
+      "thu": "ה׳",
+      "fri": "ו׳",
+      "sat": "ש׳"
+    },
+    "windowToggle": "רק בתוך חלון שעות ביממה (למשל שעות עבודה)",
+    "to": "עד",
+    "timezone": "אזור זמן"
+  },
+  "media": {
+    "compare": {
+      "mode": {
+        "sideBySide": "זה לצד זה",
+        "overlay": "שכבה על גבי שכבה",
+        "swipe": "החלקה",
+        "diff": "הבדל"
+      },
+      "actual": "בפועל",
+      "reference": "ייחוס",
+      "actualAlt": "{view} (בפועל)",
+      "referenceAlt": "{view} (ייחוס)",
+      "replace": "החלף",
+      "failedToLoad": "הטעינה נכשלה",
+      "loading": "טוען…",
+      "notCaptured": "לא נלכד",
+      "dropHint": "גרור או לחץ כדי להוסיף ייחוס",
+      "diffHint": "פיקסלים זהים מופיעים בשחור; ההבדלים זוהרים."
+    },
+    "lightbox": {
+      "ariaLabel": "צילום מסך: {label}",
+      "ariaLabelFallback": "מציג צילומי מסך",
+      "fallbackTitle": "צילום מסך",
+      "counter": "{current} / {total}",
+      "zoomOut": "הקטן (-)",
+      "zoomIn": "הגדל (+)",
+      "reset": "אפס (0)",
+      "close": "סגור (Esc)",
+      "prev": "הקודם (←)",
+      "next": "הבא (→)",
+      "failed": "טעינת התמונה נכשלה.",
+      "loading": "טוען…"
+    }
+  },
+  "fragments": {
+    "panel": {
+      "title": "ספריית מקטעי פרומפט"
+    },
+    "intro": {
+      "workspace": "אצור את ההנחיות המומלצות שהסוכנים עוקבים אחריהן בלוח הזה. המקטעים ממוזגים מהקטלוג המובנה, מהחשבון שלך ומהלוח הזה (שכבות מאוחרות גוברות על מוקדמות), ואז הרלוונטיים נבחרים לכל הרצת סוכן.",
+      "account": "אצור הנחיות מומלצות המשותפות לכל הלוחות בחשבון הזה. מקטעי החשבון ממוזגים מתחת לקטלוג המובנה, ולוח יכול לדרוס או להוסיף משלו מעליהם. הרלוונטיים נבחרים לכל הרצת סוכן."
+    },
+    "owner": {
+      "workspace": "הלוח הזה",
+      "account": "החשבון הזה"
+    },
+    "tier": {
+      "builtin": "מובנה",
+      "account": "חשבון",
+      "workspace": "הלוח הזה"
+    },
+    "tab": {
+      "catalog": "קטלוג מיושב",
+      "documents": "מסמכים",
+      "sources": "מקורות מאגר"
+    },
+    "catalog": {
+      "summary": "מקטע אחד יושב · {builtin} מובנים. | {count} מקטעים יושבו · {builtin} מובנים.",
+      "live": "חי · {source}"
+    },
+    "authored": {
+      "fromRepo": "מהמאגר",
+      "empty": {
+        "workspace": "אין עדיין מקטעים ייעודיים ללוח. הוסף אחד למטה, או דרוס מקטע מובנה באמצעות המזהה שלו.",
+        "account": "אין עדיין מקטעים ייעודיים לחשבון. הוסף אחד למטה, או דרוס מקטע מובנה באמצעות המזהה שלו."
+      },
+      "addTitle": "הוסף מקטע",
+      "titlePlaceholder": "כותרת",
+      "summaryPlaceholder": "תקציר בשורה אחת (בשימוש הבורר)",
+      "bodyPlaceholder": "גוף ההנחיה (מוזרק לפרומפט)",
+      "tagsPlaceholder": "תגיות, מופרדות בפסיקים (למשל backend, db)",
+      "add": "הוסף מקטע"
+    },
+    "documents": {
+      "intro": "קשר עמוד Confluence/Notion או קובץ GitHub כמקטע מומלץ. ההנחיה שלו מיושבת מחדש מהמקור בזמן ההרצה: ערוך את המסמך וההרצה הבאה עוקבת אחר הגרסה החדשה (ללא ייבוא מחדש).",
+      "lastResolved": "יושב לאחרונה {date}",
+      "refreshTitle": "ישב מחדש מהמקור עכשיו",
+      "empty": "אין עדיין מקטעים מבוססי מסמך. קשר אחד למטה.",
+      "linkTitle": "קשר מסמך",
+      "disabledHint": "צור תחילה לוח עם מקור מסמכים מחובר; מקטעי מסמך ברמת החשבון נשלפים דרך אחד הלוחות של החשבון הזה.",
+      "connectFirst": "חבר תחילה מקור מסמכים (Confluence, Notion או GitHub) תחת אינטגרציות.",
+      "refPlaceholder": "מזהה עמוד או כתובת (למשל עמוד Confluence/Notion או כתובת קובץ GitHub)",
+      "tagsPlaceholder": "תגיות, מופרדות בפסיקים (אופציונלי)",
+      "link": "קשר כמקטע חי"
+    },
+    "sources": {
+      "metaSynced": "סונכרן · ref {ref}",
+      "metaNever": "מעולם לא סונכרן · ref {ref}",
+      "changes": "שינוי אחד | {count} שינויים",
+      "empty": "אין מאגרי הנחיות מקושרים. קשר אחד למטה כדי לייבא את קובצי ה-Markdown שלו כמקטעים.",
+      "linkTitle": "קשר מאגר הנחיות",
+      "ownerPlaceholder": "בעלים",
+      "repoPlaceholder": "מאגר",
+      "dirPlaceholder": "נתיב תיקייה (למשל guidelines)",
+      "refPlaceholder": "ref (ברירת מחדל HEAD)",
+      "link": "קשר וסנכרן"
+    },
+    "toast": {
+      "added": "המקטע נוסף",
+      "addFailed": "לא ניתן היה להוסיף מקטע",
+      "removed": "המקטע הוסר",
+      "removeFailed": "לא ניתן היה להסיר מקטע",
+      "documentLinked": "המסמך קושר כמקטע חי",
+      "linkDocumentFailed": "לא ניתן היה לקשר מסמך",
+      "refreshed": "המקטע יושב מחדש מהמקור",
+      "refreshFailed": "לא ניתן היה לרענן מקטע",
+      "sourceLinked": "המקור קושר וסונכרן",
+      "linkSourceFailed": "לא ניתן היה לקשר מקור",
+      "synced": "סונכרן: {updated} עודכנו, {removed} הוסרו",
+      "syncFailed": "לא ניתן היה לסנכרן מקור",
+      "changesAvailable": "שינוי אחד זמין | {count} שינויים זמינים",
+      "upToDate": "מעודכן",
+      "checkSourceFailed": "לא ניתן היה לבדוק את המקור",
+      "sourceUnlinked": "קישור המקור בוטל",
+      "unlinkSourceFailed": "לא ניתן היה לבטל את קישור המקור"
+    }
+  },
+  "sandbox": {
+    "title": "Sandbox: בדיקת פרומפטים ומודלים",
+    "description": "נסה גרסאות פרומפט ומודלים מול fixtures מנוקדים, בניקוד של מודל שופט.",
+    "unavailable": {
+      "title": "ה-Sandbox אינו מופעל בפריסה הזו.",
+      "body": "הוא זקוק למסד נתונים משלו ({db} ייעודי ב-Cloudflare, או סכמת Postgres בשם {schema} ב-Node). הקם אותו וטען מחדש."
+    },
+    "error": {
+      "title": "טעינת ה-Sandbox נכשלה."
+    },
+    "deploymentDefault": "ברירת המחדל של הפריסה",
+    "defaultRunName": "הרצת sandbox מסוג {kind}",
+    "baseline": "בסיס",
+    "versionLabel": "גרסה {version}",
+    "tab": {
+      "experiments": "ניסויים",
+      "prompts": "פרומפטים",
+      "fixtures": "Fixtures"
+    },
+    "builder": {
+      "title": "ניסוי חדש",
+      "agent": "סוכן",
+      "promptVersions": "גרסאות פרומפט",
+      "models": "מודלים",
+      "noModels": "אין מודלים לבחירה. הגדר מפתח ספק או הפעל את Cloudflare AI.",
+      "fixtures": "Fixtures",
+      "noFixtures": "אין fixtures לסוכן הזה.",
+      "judgeModel": "מודל שופט",
+      "judgeModelHint": "מנקד כל תא",
+      "nameLabel": "שם (אופציונלי)",
+      "cellCount": "תא אחד | {count} תאים",
+      "maxCells": "(מקסימום {max})",
+      "run": "הרץ"
+    },
+    "experimentStatus": {
+      "draft": "טיוטה",
+      "running": "פועל",
+      "done": "הושלם",
+      "failed": "נכשל"
+    },
+    "results": {
+      "col": {
+        "prompt": "פרומפט",
+        "model": "מודל",
+        "fixture": "Fixture",
+        "score": "ציון",
+        "objective": "מטרה"
+      },
+      "failed": "נכשל",
+      "past": "ניסויים קודמים",
+      "empty": "אין עדיין ניסויים."
+    },
+    "prompts": {
+      "forkTitle": "פצל למועמד",
+      "editTitle": "ערוך / גרסה",
+      "forkOf": "פיצול · {name}",
+      "newVersionOf": "גרסה חדשה של · {name}",
+      "saveVersion": "שמור גרסה חדשה",
+      "hint": "בחר פרומפט כדי לפצל בסיס משוחרר או לגרסת מועמד. כל שמירה מוסיפה גרסה בלתי ניתנת לשינוי שאפשר להעמיד למבחן."
+    },
+    "fixtureKind": {
+      "requirements": "דרישות",
+      "clarity": "בהירות",
+      "architecture": "ארכיטקטורה",
+      "code-review": "סקירת קוד",
+      "repo-feature": "פיצ׳ר במאגר",
+      "repo-bug": "באג במאגר"
+    },
+    "fixtureOrigin": {
+      "builtin": "מובנה",
+      "custom": "מותאם אישית"
+    },
+    "fixtures": {
+      "expectations": "ציפייה מנוקדת אחת | {count} ציפיות מנוקדות",
+      "empty": "אין fixtures."
+    },
+    "toast": {
+      "running": "מריץ ניסוי…",
+      "complete": "הניסוי הושלם",
+      "runFailed": "לא ניתן היה להריץ את הניסוי",
+      "versionSaved": "נשמרה גרסה חדשה",
+      "saveFailed": "לא ניתן היה לשמור את הגרסה",
+      "archiveFailed": "לא ניתן היה להעביר לארכיון"
+    }
+  },
+  "bootstrap": {
+    "title": "אתחל מאגר",
+    "repoName": {
+      "error": {
+        "hasSlash": "הזן רק את שם המאגר, ללא הקידומת 'owner/'.",
+        "invalidChars": "מותרים רק אותיות, ספרות, '.', '_' ו-'-'.",
+        "tooLong": "חייב להיות 100 תווים או פחות."
+      }
+    },
+    "intro": {
+      "canCreate": "צור מאגר GitHub ריק, ואז תן לסוכן מאתחל לאכלס אותו במכל ארגז חול, בין אם על ידי התאמה של אחת מארכיטקטורות הייחוס שלך או מאפס לפי פרומפט חופשי. cat-factory דוחפת את הקומיט הראשוני לאותו מאגר; לחשבון הזה היא יכולה גם ליצור עבורך את המאגר.",
+      "manual": "צור מאגר GitHub ריק, ואז תן לסוכן מאתחל לאכלס אותו במכל ארגז חול, בין אם על ידי התאמה של אחת מארכיטקטורות הייחוס שלך או מאפס לפי פרומפט חופשי. cat-factory דוחפת את הקומיט הראשוני לאותו מאגר; אתה יוצר את המאגר (לחיצה אחת למטה), כך שאין צורך בהרשאת יצירת מאגר."
+    },
+    "github": {
+      "prompt": "חבר את סביבת העבודה הזו ל-GitHub לפני האתחול; הרצה דוחפת למאגר. קשר התקנה שהאפליקציה כבר מותקנת עליה, או התקן אותה."
+    },
+    "section": {
+      "newRepo": "מאגר חדש"
+    },
+    "mode": {
+      "label": "כיצד נתחיל?",
+      "reference": {
+        "label": "מארכיטקטורת ייחוס",
+        "description": "שכפל מאגר בסיס מנוהל והתאם אותו לשירות החדש."
+      },
+      "scratch": {
+        "label": "מאפס",
+        "description": "פגם מאגר חדש לגמרי מפרומפט חופשי, ללא צורך בבסיס."
+      }
+    },
+    "reference": {
+      "label": "ארכיטקטורת ייחוס",
+      "description": "מאגר הבסיס המנוהל לשכפול והתאמה.",
+      "empty": "אין עדיין ארכיטקטורות ייחוס. הוסף אחת למטה, או עבור ל'מאפס'.",
+      "placeholder": "בחר ארכיטקטורת ייחוס"
+    },
+    "targetRepo": {
+      "label": "שם מאגר היעד",
+      "descWithOwner": "צור מאגר חדש בשם הזה תחת {owner}, ואז האתחול דוחף אליו. README, .gitignore או רישיון מאוכלסים מראש הם בסדר.",
+      "descNoOwner": "צור מאגר חדש בשם הזה, ואז האתחול דוחף אליו. README, .gitignore או רישיון מאוכלסים מראש הם בסדר."
+    },
+    "createRepo": {
+      "now": "צור מאגר",
+      "onGitHub": "צור ב-GitHub",
+      "titleNow": "צור את המאגר עכשיו",
+      "titleGitHub": "פתח את עמוד המאגר החדש של GitHub, מאוכלס מראש"
+    },
+    "grantAccess": {
+      "label": "הענק לאפליקציה גישה למאגר הזה",
+      "title": "פתח את הגדרות ההתקנה של האפליקציה כדי להעניק לה גישה למאגר החדש"
+    },
+    "description": {
+      "label": "תיאור",
+      "help": "תקציר אופציונלי בשורה אחת למאגר."
+    },
+    "instructions": {
+      "labelReference": "הנחיות נוספות למאתחל",
+      "labelScratch": "מה המאתחל צריך לבנות?",
+      "descReference": "אופציונלי, מצורף להנחיות ברירת המחדל של ארכיטקטורת הייחוס.",
+      "descScratch": "תאר את השירות החדש: מחסנית, מבנה, ומה הוא צריך לעשות."
+    },
+    "visibility": {
+      "label": "נראות",
+      "private": "מאגר פרטי"
+    },
+    "launch": "אתחל מאגר",
+    "recent": {
+      "title": "הרצות אחרונות",
+      "fromArch": "מתוך {name}",
+      "fromScratch": "מאפס",
+      "open": "פתח"
+    },
+    "status": {
+      "pending": "ממתין",
+      "running": "פועל",
+      "succeeded": "הצליח",
+      "failed": "נכשל"
+    },
+    "arch": {
+      "title": "ארכיטקטורות ייחוס",
+      "add": "הוסף",
+      "pickRepo": {
+        "label": "בחר מאגר GitHub קיים",
+        "description": "בחר מאגר שיש לך גישה אליו כדי למלא את הבעלים והשם שלו, או הזן אותם ידנית למטה."
+      },
+      "name": {
+        "label": "שם",
+        "description": "תווית ידידותית לבסיס הזה."
+      },
+      "repoOwner": "בעלי המאגר",
+      "repoName": "שם המאגר",
+      "descriptionPlaceholder": "תקציר אופציונלי של הבסיס הזה",
+      "defaultInstructions": {
+        "label": "הנחיות מאתחל ברירת מחדל",
+        "description": "מצורפות לפני ההנחיות הפר-הרצה בכל פעם שנעשה שימוש בבסיס הזה."
+      }
+    },
+    "toast": {
+      "repoCreated": "המאגר נוצר",
+      "repoCreateFailed": "לא ניתן היה ליצור מאגר",
+      "failed": "האתחול נכשל",
+      "failedFallback": "המאתחל דיווח על כשל.",
+      "started": "האתחול החל",
+      "startedDesc": "מכל מאתחל את {repo}; עקוב אחר ההתקדמות בלוח.",
+      "bootstrapFailed": "לא ניתן היה לאתחל",
+      "saveArchFailed": "לא ניתן היה לשמור ארכיטקטורת ייחוס",
+      "deleteFailed": "לא ניתן היה למחוק"
+    }
   }
 }

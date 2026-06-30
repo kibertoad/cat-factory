@@ -23,6 +23,8 @@ const emit = defineEmits<{
   (e: 'uploadReference', file: File): void
 }>()
 
+const { t } = useI18n()
+
 type Mode = 'side-by-side' | 'overlay' | 'swipe' | 'diff'
 
 const actualUrl = computed(() => props.blobs.urlFor(props.actualId))
@@ -32,14 +34,15 @@ const hasBoth = computed(() => !!actualUrl.value && !!refUrl.value)
 const diffFailed = ref(false)
 const MODES = computed<{ id: Mode; icon: string; label: string }[]>(() => {
   const base: { id: Mode; icon: string; label: string }[] = [
-    { id: 'side-by-side', icon: 'i-lucide-columns-2', label: 'Side by side' },
+    { id: 'side-by-side', icon: 'i-lucide-columns-2', label: t('media.compare.mode.sideBySide') },
   ]
   if (hasBoth.value) {
     base.push(
-      { id: 'overlay', icon: 'i-lucide-layers', label: 'Overlay' },
-      { id: 'swipe', icon: 'i-lucide-flip-horizontal-2', label: 'Swipe' },
+      { id: 'overlay', icon: 'i-lucide-layers', label: t('media.compare.mode.overlay') },
+      { id: 'swipe', icon: 'i-lucide-flip-horizontal-2', label: t('media.compare.mode.swipe') },
     )
-    if (!diffFailed.value) base.push({ id: 'diff', icon: 'i-lucide-contrast', label: 'Difference' })
+    if (!diffFailed.value)
+      base.push({ id: 'diff', icon: 'i-lucide-contrast', label: t('media.compare.mode.diff') })
   }
   return base
 })
@@ -162,13 +165,19 @@ function onRefInput(e: Event) {
     <!-- SIDE BY SIDE -->
     <div v-if="mode === 'side-by-side'" class="grid grid-cols-2 gap-3">
       <figure class="space-y-1">
-        <figcaption class="text-[10px] uppercase tracking-wide text-slate-500">Actual</figcaption>
+        <figcaption class="text-[10px] uppercase tracking-wide text-slate-500">
+          {{ t('media.compare.actual') }}
+        </figcaption>
         <button
           v-if="actualUrl"
           class="block w-full overflow-hidden rounded border border-slate-800 hover:border-slate-600"
           @click="actualId && emit('expand', actualId)"
         >
-          <img :src="actualUrl" :alt="`${view} (actual)`" class="w-full cursor-zoom-in" />
+          <img
+            :src="actualUrl"
+            :alt="t('media.compare.actualAlt', { view })"
+            class="w-full cursor-zoom-in"
+          />
         </button>
         <div
           v-else
@@ -176,29 +185,33 @@ function onRefInput(e: Event) {
         >
           {{
             props.blobs.statusFor(actualId) === 'error'
-              ? 'Failed to load'
+              ? t('media.compare.failedToLoad')
               : actualId
-                ? 'Loading…'
-                : 'Not captured'
+                ? t('media.compare.loading')
+                : t('media.compare.notCaptured')
           }}
         </div>
       </figure>
 
       <figure class="space-y-1">
         <figcaption class="text-[10px] uppercase tracking-wide text-slate-500">
-          Reference
+          {{ t('media.compare.reference') }}
         </figcaption>
         <button
           v-if="refUrl"
           class="group relative block w-full overflow-hidden rounded border border-slate-800 hover:border-slate-600"
           @click="referenceId && emit('expand', referenceId)"
         >
-          <img :src="refUrl" :alt="`${view} (reference)`" class="w-full cursor-zoom-in" />
+          <img
+            :src="refUrl"
+            :alt="t('media.compare.referenceAlt', { view })"
+            class="w-full cursor-zoom-in"
+          />
           <span
             class="absolute bottom-1 end-1 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] text-slate-300 opacity-0 group-hover:opacity-100"
             @click.stop="refInput?.click()"
           >
-            Replace
+            {{ t('media.compare.replace') }}
           </span>
         </button>
         <!-- Drop zone when no reference yet -->
@@ -216,7 +229,7 @@ function onRefInput(e: Event) {
           @drop.prevent="onDrop"
         >
           <UIcon name="i-lucide-image-up" class="h-5 w-5" />
-          <span>Drop or click to add a reference</span>
+          <span>{{ t('media.compare.dropHint') }}</span>
         </div>
       </figure>
     </div>
@@ -224,17 +237,17 @@ function onRefInput(e: Event) {
     <!-- OVERLAY (onion-skin) -->
     <div v-else-if="mode === 'overlay'" class="space-y-2">
       <div class="relative w-full overflow-hidden rounded border border-slate-800">
-        <img :src="refUrl" :alt="`${view} (reference)`" class="w-full" />
+        <img :src="refUrl" :alt="t('media.compare.referenceAlt', { view })" class="w-full" />
         <!-- object-contain so a differing aspect ratio onion-skins undistorted over the reference. -->
         <img
           :src="actualUrl"
-          :alt="`${view} (actual)`"
+          :alt="t('media.compare.actualAlt', { view })"
           class="absolute inset-0 h-full w-full object-contain"
           :style="{ opacity: overlayOpacity / 100 }"
         />
       </div>
       <div class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-slate-500">
-        <span>Reference</span>
+        <span>{{ t('media.compare.reference') }}</span>
         <input
           v-model.number="overlayOpacity"
           type="range"
@@ -242,7 +255,7 @@ function onRefInput(e: Event) {
           max="100"
           class="flex-1 accent-amber-500"
         />
-        <span>Actual</span>
+        <span>{{ t('media.compare.actual') }}</span>
       </div>
     </div>
 
@@ -256,7 +269,7 @@ function onRefInput(e: Event) {
       @pointerup="onSwipeUp"
       @pointercancel="onSwipeUp"
     >
-      <img :src="refUrl" :alt="`${view} (reference)`" class="block w-full" />
+      <img :src="refUrl" :alt="t('media.compare.referenceAlt', { view })" class="block w-full" />
       <div
         class="absolute inset-0 overflow-hidden"
         :style="{ clipPath: `inset(0 ${100 - splitPct}% 0 0)` }"
@@ -265,7 +278,7 @@ function onRefInput(e: Event) {
              ratio doesn't stretch it; the split then compares like-for-like. -->
         <img
           :src="actualUrl"
-          :alt="`${view} (actual)`"
+          :alt="t('media.compare.actualAlt', { view })"
           class="absolute inset-0 block h-full w-full object-contain"
         />
       </div>
@@ -283,18 +296,18 @@ function onRefInput(e: Event) {
       </div>
       <span
         class="absolute left-1 top-1 rounded bg-slate-950/70 px-1 text-[9px] uppercase text-slate-300"
-        >Actual</span
+        >{{ t('media.compare.actual') }}</span
       >
       <span
         class="absolute right-1 top-1 rounded bg-slate-950/70 px-1 text-[9px] uppercase text-slate-300"
-        >Reference</span
+        >{{ t('media.compare.reference') }}</span
       >
     </div>
 
     <!-- DIFF (canvas) -->
     <div v-else-if="mode === 'diff'" class="space-y-1">
       <canvas ref="diffCanvas" class="w-full rounded border border-slate-800 bg-black" />
-      <p class="text-[10px] text-slate-500">Identical pixels appear black; differences glow.</p>
+      <p class="text-[10px] text-slate-500">{{ t('media.compare.diffHint') }}</p>
     </div>
 
     <!-- Hidden file input shared by replace/drop zone -->

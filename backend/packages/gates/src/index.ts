@@ -40,7 +40,9 @@ export {
   wirePullRequestReviewProvider,
   clearGateProviders,
   applyGateProviders,
+  warnUnwiredGates,
   type GateProviderOverrides,
+  type GateWiringLogger,
 } from './providers.js'
 export { ciGate, conflictsGate, postReleaseHealthGate, humanReviewGate } from './gates.js'
 export {

@@ -36,7 +36,9 @@ import {
   JiraProvider,
   LinearDocumentProvider,
   LinearTaskProvider,
-  findRepairCapableProvider,
+  createBackendRegistries,
+  type EnvironmentBackendRegistry,
+  type RunnerBackendRegistry,
   NotionProvider,
   EMAIL_CIPHER_INFO,
   ApiKeyService,
@@ -204,6 +206,7 @@ import {
   wireReleaseHealthProvider,
   wireIncidentEnrichment,
   wirePullRequestReviewProvider,
+  warnUnwiredGates,
 } from '@cat-factory/gates'
 import {
   buildGitLabEngineClient,
@@ -416,10 +419,12 @@ function buildResolveTransport(
   config: AppConfig,
   db: D1Database,
   clock: Clock,
-  provisioningLog?: ProvisioningLogRecorder,
+  provisioningLog: ProvisioningLogRecorder | undefined,
+  // The app-owned runner-backend registry the service resolves a stored `kind` through.
+  runnerBackendRegistry: RunnerBackendRegistry,
   // The shared HTTP provider the built-in `manifest` backend reuses when supplied (its OAuth
-  // cache reused). NOT the custom-kind seam — a bespoke runner backend is a registered `kind`
-  // (`registerRunnerBackend`). Absent → the generic manifest-driven HTTP provider.
+  // cache reused). NOT the custom-kind seam — a bespoke runner backend is registered by
+  // reference into `runnerBackendRegistry`. Absent → the generic manifest-driven HTTP provider.
   injectedPoolProvider?: RunnerPoolProvider,
 ): ResolveRunnerTransport | null {
   // The Cloudflare backend folds in instance-level reaping: the registry records
@@ -453,6 +458,7 @@ function buildResolveTransport(
         info: 'cat-factory:runners',
       }),
       clock,
+      runnerBackendRegistry,
       ...(urlPolicy ? { urlPolicy } : {}),
       runnerPoolProvider:
         injectedPoolProvider ?? new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {}),
@@ -1716,13 +1722,17 @@ function selectEnvConfigRepairer(
   clock: Clock,
   resolveTransport: ResolveRunnerTransport | null,
   override: CoreDependencies['environmentProvider'],
+  environmentBackendRegistry: EnvironmentBackendRegistry,
 ): ContainerEnvConfigRepairer | undefined {
   const repairUrlPolicy = resolveUrlSafetyPolicy(config.environments)
   // Prefer the internal override (the conformance suite's fake repair provider) else scan
   // the env-backend registry for the first repair-capable backend.
   const environmentProvider = !resolveTransport
     ? undefined
-    : (override ?? findRepairCapableProvider(repairUrlPolicy ? { urlPolicy: repairUrlPolicy } : {}))
+    : (override ??
+      environmentBackendRegistry.findRepairCapable(
+        repairUrlPolicy ? { urlPolicy: repairUrlPolicy } : {},
+      ))
   if (
     !resolveTransport ||
     !environmentProvider ||
@@ -1830,6 +1840,16 @@ export function buildContainer(
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
 
+  // The app-owned backend registries (env + runner kind → provider), built once and injected
+  // into the engine + surfaced on the container for the snapshot's backend-kind selectors. A
+  // deployment registers a custom backend by reference; the conformance suite injects a
+  // pre-loaded registry via `overrides`. Defaults to the built-in `manifest`/`kubernetes` kinds.
+  const defaultRegistries = createBackendRegistries()
+  const environmentBackendRegistry =
+    overrides.environmentBackendRegistry ?? defaultRegistries.environmentBackendRegistry
+  const runnerBackendRegistry =
+    overrides.runnerBackendRegistry ?? defaultRegistries.runnerBackendRegistry
+
   // Binary-artifact storage (UI screenshots + reference design images) for the
   // visual-confirmation gate. The backend is configured PER ACCOUNT in the UI: an account can
   // keep the deployment's R2 bucket (the default when the ARTIFACT_BUCKET binding is present)
@@ -1882,14 +1902,15 @@ export function buildContainer(
   // `overrides.runnerPoolProvider` swaps the shared HTTP provider the built-in `manifest` pool
   // reuses (its OAuth cache); the `...overrides` spread (last, below) already routes it to the
   // connection-management UI, so thread it here too so it ALSO drives the manifest backend's
-  // dispatch transport. (A bespoke runner backend is a registered `kind` via
-  // `registerRunnerBackend`, NOT this provider override.)
+  // dispatch transport. (A bespoke runner backend is registered by reference into
+  // `runnerBackendRegistry`, NOT this provider override.)
   const resolveTransport = buildResolveTransport(
     env,
     config,
     db,
     clock,
     provisioningLogRecorder,
+    runnerBackendRegistry,
     overrides.runnerPoolProvider,
   )
 
@@ -1967,6 +1988,9 @@ export function buildContainer(
   })
 
   const dependencies: CoreDependencies = {
+    // App-owned backend registries (kind → provider) the connection services resolve through.
+    environmentBackendRegistry,
+    runnerBackendRegistry,
     // Resolves the per-account binary-artifact store (screenshots) for the
     // visual-confirmation gate; resolving to null ⇒ the gate passes through.
     resolveBinaryArtifactStore,
@@ -2091,6 +2115,7 @@ export function buildContainer(
     clock,
     resolveTransport,
     dependencies.environmentProvider,
+    environmentBackendRegistry,
   )
   // Don't clobber an override-provided repairer (e.g. the conformance suite's fake): an
   // explicit `overrides.envConfigRepairer` wins, exactly like `repoBootstrapper`.
@@ -2102,6 +2127,9 @@ export function buildContainer(
   // `select*Deps` spreads above (the conformance suite drives the externalized CI gate over a
   // faked verdict). Production leaves `gateProviders` undefined, so this is a no-op outside tests.
   applyGateProviders(opts.gateProviders)
+  // Surface any gate left as a silent pass-through (no provider wired) so a misconfigured
+  // deployment is visible in the logs instead of quietly auto-merging without checking CI.
+  warnUnwiredGates(logger)
 
   return {
     ...createCore(dependencies),
@@ -2113,6 +2141,12 @@ export function buildContainer(
     // GitHub-issue search to the originating service's repo (and refuse it when unlinked).
     resolveRepoTarget: buildResolveRepoTarget(db),
     agentRunRepository: new D1AgentRunRepository({ db }),
+    // Execution-scoped repo, surfaced for the conformance suite's compareAndSwap parity check.
+    executionRepository: dependencies.executionRepository,
+    // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
+    // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
+    environmentBackendRegistry,
+    runnerBackendRegistry,
     // The consensus transcript store, for the read endpoint (the SPA window's initial
     // load / reload). Always wired; live updates ride the `consensus` workspace event.
     consensusSessionRepository: new D1ConsensusSessionRepository({ db }),

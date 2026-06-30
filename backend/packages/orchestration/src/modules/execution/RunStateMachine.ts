@@ -13,7 +13,7 @@ import type {
   SubscriptionActivationRepository,
   WorkRunner,
 } from '@cat-factory/kernel'
-import { isAsyncAgentExecutor } from '@cat-factory/kernel'
+import { assertFound, ConflictError, isAsyncAgentExecutor } from '@cat-factory/kernel'
 import { MERGER_AGENT_KIND } from './ci.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
@@ -53,6 +53,11 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
     'The deployer step could not provision its ephemeral environment — the environment provider failed, so the run never reached the steps that need it. The provider’s verbatim error is shown below. Most often this is a transient provider/network blip (retrying re-runs the provisioning) or a misconfigured provider connection / repo config. Fix the cause if it persists, then retry.',
   unknown: 'The run failed for an unclassified reason. Review the run, then retry.',
 }
+
+/** How many times {@link RunStateMachine.mutateInstance} re-reads + re-applies a mutation
+ * before giving up on a hot-contended run. Generous: real contention is one human action
+ * racing the driver, which settles in one retry; the cap only bounds a pathological loop. */
+const MAX_MUTATE_ATTEMPTS = 8
 
 /** Collaborators the {@link RunStateMachine} needs to persist, emit and transition a run. */
 export interface RunStateMachineDeps {
@@ -117,6 +122,41 @@ export class RunStateMachine {
   /** Persist the instance (the single write seam shared by the engine + controllers). */
   persistInstance(workspaceId: string, instance: ExecutionInstance): Promise<void> {
     return this.executionRepository.upsert(workspaceId, instance)
+  }
+
+  /**
+   * Apply a pure in-memory mutation to a run under OPTIMISTIC CONCURRENCY: load the run,
+   * run `mutate`, then `compareAndSwap`. If another writer advanced the row in between
+   * (a racing human action, or the durable driver), reload and re-apply `mutate` on the
+   * fresh state (bounded retries) so the mutation is never lost to a clobbering blind
+   * write. This is the lost-update fix for the human-action handlers (resolve decision /
+   * approve / request changes), where two requests — or a request and a driver poll —
+   * otherwise each persist a full snapshot from a stale read and the last write wins.
+   *
+   * `mutate` MUST be idempotent w.r.t. external systems: it can run several times, so do
+   * all non-idempotent work (signalling the durable driver, emitting events, dispatching
+   * containers) AFTER this resolves, on the returned instance. A domain error thrown from
+   * `mutate` (e.g. the gate is already resolved on the fresh state) propagates immediately
+   * and is not retried. Throws {@link NotFoundError} if the run is gone, or
+   * {@link ConflictError} if the row stays contended past the retry budget.
+   */
+  async mutateInstance(
+    workspaceId: string,
+    executionId: string,
+    mutate: (instance: ExecutionInstance) => void | Promise<void>,
+  ): Promise<ExecutionInstance> {
+    for (let attempt = 0; attempt < MAX_MUTATE_ATTEMPTS; attempt++) {
+      const instance = assertFound(
+        await this.executionRepository.get(workspaceId, executionId),
+        'Execution',
+        executionId,
+      )
+      await mutate(instance)
+      if (await this.executionRepository.compareAndSwap(workspaceId, instance)) {
+        return instance
+      }
+    }
+    throw new ConflictError(`Execution '${executionId}' is being modified concurrently; retry`)
   }
 
   async emitInstance(workspaceId: string, instance: ExecutionInstance): Promise<void> {

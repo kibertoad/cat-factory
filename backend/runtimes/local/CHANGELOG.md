@@ -1,5 +1,113 @@
 # @cat-factory/local-server
 
+## 0.25.13
+
+### Patch Changes
+
+- f9a173f: Fix three concurrency hazards in the backend with database-native primitives.
+
+  - **Optimistic concurrency on execution runs.** `agent_runs` gains a monotonic `rev`
+    column; the execution repo's `upsert` bumps it on every write and a new
+    `compareAndSwap` performs a guarded conditional write. The in-place human-action handlers
+    (resolve decision / request changes / reject / request-human-review-fix / resume-paused)
+    now go through a `mutateInstance` retry helper, so a double-submit or a write that raced
+    the durable driver is re-applied on fresh state instead of silently clobbering the other
+    writer (lost update). (`retry` / `restart-from-step` mint a fresh run id, so the same-row
+    hazard is structurally absent there.)
+  - **Atomic API-key pool lease.** The non-transactional `listForPool → chooseToken →
+markLeased` is replaced by a single atomic select-and-mark (`leaseLeastUsed`: Postgres
+    `FOR UPDATE SKIP LOCKED`; D1 a single serialised write), so two concurrent dispatches
+    can no longer grab the same key before usage is recorded.
+  - **Notification open-card dedup.** A partial unique index on
+    `(workspace_id, block_id, type) WHERE status='open'` plus an atomic
+    `upsertOpenForBlock` replaces the racy `findOpenByBlock` read-before-write, so two
+    concurrent raises can't stack duplicate open cards. `upsertOpenForBlock` returns the
+    CANONICAL persisted row, so when a concurrent raise wins the insert the loser delivers
+    and returns that row's id rather than a phantom id (which would show a duplicate inbox
+    card and 404 when acted on).
+
+  BREAKING (pre-1.0, no data migration): `agent_runs` adds a non-null `rev` column and the
+  `notifications` table adds a partial unique index, mirrored across the D1 and Drizzle
+  migrations. The `ExecutionRepository`, `ProviderApiKeyRepository` and
+  `NotificationRepository` ports each gain a method.
+
+- Updated dependencies [f9a173f]
+  - @cat-factory/contracts@0.57.0
+  - @cat-factory/kernel@0.56.0
+  - @cat-factory/server@0.50.0
+  - @cat-factory/orchestration@0.44.0
+  - @cat-factory/integrations@0.38.0
+  - @cat-factory/node-server@0.44.0
+  - @cat-factory/agents@0.22.6
+  - @cat-factory/gitlab@0.4.5
+
+## 0.25.12
+
+### Patch Changes
+
+- Updated dependencies [fdeb466]
+  - @cat-factory/kernel@0.55.4
+  - @cat-factory/orchestration@0.43.4
+  - @cat-factory/integrations@0.37.1
+  - @cat-factory/node-server@0.43.12
+  - @cat-factory/agents@0.22.5
+  - @cat-factory/gitlab@0.4.4
+  - @cat-factory/server@0.49.6
+
+## 0.25.11
+
+### Patch Changes
+
+- Updated dependencies [0dd9532]
+  - @cat-factory/server@0.49.5
+  - @cat-factory/node-server@0.43.11
+
+## 0.25.10
+
+### Patch Changes
+
+- 21b2096: Make the environment-backend and runner-backend registries app-owned (DI) instead of
+  module-global Maps. This is the pilot for the registry-DI migration
+  (`docs/initiatives/registry-di-migration.md`): the composition root now constructs each
+  registry instance via `createBackendRegistries()` and injects it through
+  `CoreDependencies`; a deployment registers a custom backend by reference
+  (`registry.register(provider)`), so registration no longer depends on the adapter and
+  server sharing the same `@cat-factory/integrations` module instance.
+
+  BREAKING (`@cat-factory/integrations`): the module-global free functions
+  `registerEnvironmentBackend` / `environmentBackend` / `registeredEnvironmentBackendKinds`
+  / `environmentBackendKinds` / `findRepairCapableProvider` and their runner-backend
+  equivalents (`registerRunnerBackend` / `runnerBackend` / `registeredRunnerBackendKinds`
+  / `runnerBackendKinds`) are removed. Use the new `EnvironmentBackendRegistry` /
+  `RunnerBackendRegistry` classes (methods `register` / `get` / `kinds` / `labelled`, plus
+  `findRepairCapable` on the env registry), the `defaultEnvironmentBackendRegistry()` /
+  `defaultRunnerBackendRegistry()` factories, or the unified `createBackendRegistries()`.
+
+- Updated dependencies [21b2096]
+  - @cat-factory/integrations@0.37.0
+  - @cat-factory/orchestration@0.43.3
+  - @cat-factory/server@0.49.4
+  - @cat-factory/node-server@0.43.10
+  - @cat-factory/contracts@0.56.1
+  - @cat-factory/agents@0.22.4
+  - @cat-factory/gitlab@0.4.3
+  - @cat-factory/kernel@0.55.3
+
+## 0.25.9
+
+### Patch Changes
+
+- Updated dependencies [123336c]
+  - @cat-factory/server@0.49.3
+  - @cat-factory/node-server@0.43.9
+
+## 0.25.8
+
+### Patch Changes
+
+- Updated dependencies [7536092]
+  - @cat-factory/node-server@0.43.8
+
 ## 0.25.7
 
 ### Patch Changes

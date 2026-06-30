@@ -10,7 +10,7 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { ConflictError } from '@cat-factory/kernel'
-import { DEFAULT_USAGE_WINDOW_MS, chooseToken } from './providers.logic.js'
+import { DEFAULT_USAGE_WINDOW_MS } from './providers.logic.js'
 
 // ApiKeyService: owns the direct-provider API-key pool (OpenAI/Anthropic/Qwen/
 // DeepSeek/Moonshot). Keys are onboarded via the UI and stored *encrypted* (a
@@ -170,14 +170,20 @@ export class ApiKeyService {
     opts?: PoolScopeOpts,
   ): Promise<LeasedApiKey> {
     const scopes = await this.poolScopes(workspaceId, opts)
-    const rows = await this.deps.providerApiKeyRepository.listForPool(scopes, provider)
-    const chosen = chooseToken(rows, this.deps.clock.now(), this.windowMs)
+    // Atomic select-and-mark: the repo picks the least-loaded key AND stamps it leased in a
+    // single transaction (the previous read→chooseToken→markLeased was non-transactional, so
+    // two concurrent dispatches could both grab the same key before either recorded usage).
+    const chosen = await this.deps.providerApiKeyRepository.leaseLeastUsed(
+      scopes,
+      provider,
+      this.deps.clock.now(),
+      this.windowMs,
+    )
     if (!chosen) {
       throw new ConflictError(
         `No ${provider} API key is configured for this workspace, its account, or your user`,
       )
     }
-    await this.deps.providerApiKeyRepository.markLeased(chosen.id, this.deps.clock.now())
     const secret = await this.deps.secretCipher.decrypt(chosen.keyCipher)
     return { keyId: chosen.id, provider, secret }
   }

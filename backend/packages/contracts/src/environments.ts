@@ -155,8 +155,9 @@ export const environmentManifestSchema = v.object({
   /**
    * Opaque, provider-specific configuration for a CUSTOM backend (e.g. a Kargo project,
    * link-selection key, status map). The generic HttpEnvironmentProvider ignores it
-   * entirely; a custom backend — registered programmatically via `registerEnvironmentBackend`
-   * (see `backend/docs/native-environment-adapter.md`) — reads + validates it off the per-call
+   * entirely; a custom backend — registered by reference into the app-owned
+   * `EnvironmentBackendRegistry` (see `backend/docs/native-environment-adapter.md`) — reads
+   * + validates it off the per-call
    * `manifest`. This is the per-WORKSPACE config carrier: a custom backend rides the generic
    * manifest member of `environmentBackendConfigSchema`, so its bespoke settings live here and
    * its credentials in the secret bundle. NOT covered by the manifest URL/SSRF checks (which
@@ -283,8 +284,8 @@ export const customEnvironmentBackendKindSchema = customBackendKindSchema(
  * An ephemeral-environment backend config, discriminated by `kind`. The universal
  * abstraction over HOW a workspace's preview environments are provisioned: the built-ins
  * `manifest` (the generic BYO HTTP management API) and `kubernetes` (native per-PR
- * namespaces), plus any CUSTOM kind a deployment registers programmatically via
- * `registerEnvironmentBackend` (it rides the generic manifest member — NO new variant
+ * namespaces), plus any CUSTOM kind a deployment registers by reference into the app-owned
+ * `EnvironmentBackendRegistry` (it rides the generic manifest member — NO new variant
  * needed). Mirrors `runnerBackendConfigSchema`; the provider-registry seam keys on `kind`.
  */
 export const environmentBackendConfigSchema = v.variant('kind', [

@@ -1,8 +1,11 @@
 import type { BlockPatch, BlockRepository } from '@cat-factory/kernel'
 import type { Block } from '@cat-factory/contracts'
+import { tryDecodeRows } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
 import { type BlockRow, blockInsertValues, blockPatchToColumns, rowToBlock } from './mappers'
+
+const blockContext = (row: BlockRow) => ({ table: 'blocks', id: row.id })
 
 export class D1BlockRepository implements BlockRepository {
   private readonly db: D1Database
@@ -16,7 +19,8 @@ export class D1BlockRepository implements BlockRepository {
       .prepare('SELECT * FROM blocks WHERE workspace_id = ? ORDER BY rowid')
       .bind(workspaceId)
       .all<BlockRow>()
-    return results.map(rowToBlock)
+    // Snapshot-facing list read: drop a corrupt block rather than failing the whole board load.
+    return tryDecodeRows(results, rowToBlock, blockContext)
   }
 
   async listByService(serviceId: string): Promise<Block[]> {
@@ -24,7 +28,7 @@ export class D1BlockRepository implements BlockRepository {
       .prepare('SELECT * FROM blocks WHERE service_id = ? ORDER BY rowid')
       .bind(serviceId)
       .all<BlockRow>()
-    return results.map(rowToBlock)
+    return tryDecodeRows(results, rowToBlock, blockContext)
   }
 
   async listByServices(serviceIds: string[]): Promise<Block[]> {
@@ -37,7 +41,7 @@ export class D1BlockRepository implements BlockRepository {
         .prepare(`SELECT * FROM blocks WHERE service_id IN (${placeholders}) ORDER BY rowid`)
         .bind(...chunk)
         .all<BlockRow>()
-      for (const row of results) out.push(rowToBlock(row))
+      out.push(...tryDecodeRows(results, rowToBlock, blockContext))
     }
     return out
   }

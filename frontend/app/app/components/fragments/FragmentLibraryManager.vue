@@ -30,6 +30,7 @@ const library =
     : useFragmentLibrary(props.kind, props.ownerId)
 const documents = useDocumentsStore()
 const toast = useToast()
+const { t, d } = useI18n()
 
 const isWorkspace = props.kind === 'workspace'
 /** Linking a document at the account scope needs a workspace connection to fetch through. */
@@ -60,13 +61,16 @@ const tabs = computed<Tab[]>(() =>
 )
 const tab = ref<Tab>(props.showCatalog ? 'catalog' : 'authored')
 
-const ownerLabel = isWorkspace ? 'This board' : 'This account'
+const ownerLabel = computed(() =>
+  isWorkspace ? t('fragments.owner.workspace') : t('fragments.owner.account'),
+)
 
-const tierLabel: Record<ResolvedFragment['tier'], string> = {
-  builtin: 'Built-in',
-  account: 'Account',
-  workspace: 'This board',
-}
+// Exhaustive tier→label map of literal `t(...)` keys (keeps the typed-key drift guard live).
+const tierLabel = computed<Record<ResolvedFragment['tier'], string>>(() => ({
+  builtin: t('fragments.tier.builtin'),
+  account: t('fragments.tier.account'),
+  workspace: t('fragments.tier.workspace'),
+}))
 // `as const` keeps the literal color names (assignable to UBadge's `color`
 // union) instead of widening to `string`; `satisfies` still checks the shape.
 const tierColor = {
@@ -75,11 +79,11 @@ const tierColor = {
   workspace: 'primary',
 } as const satisfies Record<ResolvedFragment['tier'], string>
 
-function tabLabel(t: Tab): string {
-  if (t === 'catalog') return 'Resolved catalog'
-  if (t === 'authored') return ownerLabel
-  if (t === 'documents') return 'Documents'
-  return 'Repo sources'
+function tabLabel(which: Tab): string {
+  if (which === 'catalog') return t('fragments.tab.catalog')
+  if (which === 'authored') return ownerLabel.value
+  if (which === 'documents') return t('fragments.tab.documents')
+  return t('fragments.tab.sources')
 }
 
 function notifyError(title: string, e: unknown) {
@@ -110,18 +114,18 @@ async function createFragment() {
         .filter(Boolean),
     })
     draft.value = { title: '', summary: '', body: '', tags: '' }
-    toast.add({ title: 'Fragment added', icon: 'i-lucide-check' })
+    toast.add({ title: t('fragments.toast.added'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError('Could not add fragment', e)
+    notifyError(t('fragments.toast.addFailed'), e)
   }
 }
 
 async function removeFragment(id: string) {
   try {
     await library.remove(id)
-    toast.add({ title: 'Fragment removed', icon: 'i-lucide-trash-2' })
+    toast.add({ title: t('fragments.toast.removed'), icon: 'i-lucide-trash-2' })
   } catch (e) {
-    notifyError('Could not remove fragment', e)
+    notifyError(t('fragments.toast.removeFailed'), e)
   }
 }
 
@@ -148,18 +152,18 @@ async function linkDocumentFragment() {
         .filter(Boolean),
     })
     docDraft.value = { source: '', ref: '', tags: '' }
-    toast.add({ title: 'Document linked as a living fragment', icon: 'i-lucide-link' })
+    toast.add({ title: t('fragments.toast.documentLinked'), icon: 'i-lucide-link' })
   } catch (e) {
-    notifyError('Could not link document', e)
+    notifyError(t('fragments.toast.linkDocumentFailed'), e)
   }
 }
 
 async function refreshFragment(id: string) {
   try {
     await library.refreshDocumentFragment(id)
-    toast.add({ title: 'Fragment re-resolved from source', icon: 'i-lucide-refresh-cw' })
+    toast.add({ title: t('fragments.toast.refreshed'), icon: 'i-lucide-refresh-cw' })
   } catch (e) {
-    notifyError('Could not refresh fragment', e)
+    notifyError(t('fragments.toast.refreshFailed'), e)
   }
 }
 
@@ -180,9 +184,9 @@ async function linkSource() {
     })
     sourceDraft.value = { repoOwner: '', repoName: '', dirPath: '', gitRef: '' }
     await library.syncSource(source.id)
-    toast.add({ title: 'Source linked & synced', icon: 'i-lucide-git-branch' })
+    toast.add({ title: t('fragments.toast.sourceLinked'), icon: 'i-lucide-git-branch' })
   } catch (e) {
-    notifyError('Could not link source', e)
+    notifyError(t('fragments.toast.linkSourceFailed'), e)
   }
 }
 
@@ -190,12 +194,15 @@ async function syncSource(id: string) {
   try {
     const result = await library.syncSource(id)
     toast.add({
-      title: `Synced: ${result.upserted} updated, ${result.tombstoned} removed`,
+      title: t('fragments.toast.synced', {
+        updated: result.upserted,
+        removed: result.tombstoned,
+      }),
       icon: 'i-lucide-refresh-cw',
       color: 'info',
     })
   } catch (e) {
-    notifyError('Could not sync source', e)
+    notifyError(t('fragments.toast.syncFailed'), e)
   }
 }
 
@@ -203,20 +210,22 @@ async function checkSource(id: string) {
   try {
     const status = await library.checkSource(id)
     toast.add({
-      title: status.changed ? `${status.changedCount} change(s) available` : 'Up to date',
+      title: status.changed
+        ? t('fragments.toast.changesAvailable', { count: status.changedCount }, status.changedCount)
+        : t('fragments.toast.upToDate'),
       icon: status.changed ? 'i-lucide-bell-dot' : 'i-lucide-check',
     })
   } catch (e) {
-    notifyError('Could not check source', e)
+    notifyError(t('fragments.toast.checkSourceFailed'), e)
   }
 }
 
 async function unlinkSource(id: string) {
   try {
     await library.unlinkSource(id)
-    toast.add({ title: 'Source unlinked', icon: 'i-lucide-unplug' })
+    toast.add({ title: t('fragments.toast.sourceUnlinked'), icon: 'i-lucide-unplug' })
   } catch (e) {
-    notifyError('Could not unlink source', e)
+    notifyError(t('fragments.toast.unlinkSourceFailed'), e)
   }
 }
 </script>
@@ -225,14 +234,10 @@ async function unlinkSource(id: string) {
   <div class="flex flex-col gap-4">
     <p class="text-sm text-slate-400">
       <template v-if="isWorkspace">
-        Curate the best-practice guidelines agents follow on this board. Fragments are merged from
-        the built-in catalog, your account, and this board — later tiers override earlier ones —
-        then the relevant ones are selected for each agent run.
+        {{ t('fragments.intro.workspace') }}
       </template>
       <template v-else>
-        Curate best-practice guidelines shared by every board in this account. Account fragments are
-        merged below the built-in catalog and above nothing, and a board can override or add its own
-        on top. The relevant ones are selected for each agent run.
+        {{ t('fragments.intro.account') }}
       </template>
     </p>
 
@@ -252,7 +257,13 @@ async function unlinkSource(id: string) {
     <!-- Resolved (merged) catalog — workspace scope only -->
     <div v-if="tab === 'catalog'" class="flex flex-col gap-2">
       <p class="text-xs text-slate-500">
-        {{ library.resolved.length }} fragment(s) resolved · {{ library.builtinCount }} built-in.
+        {{
+          t(
+            'fragments.catalog.summary',
+            { count: library.resolved.length, builtin: library.builtinCount },
+            library.resolved.length,
+          )
+        }}
       </p>
       <div
         v-for="f in library.resolved"
@@ -271,7 +282,7 @@ async function unlinkSource(id: string) {
             variant="subtle"
             icon="i-lucide-radio"
           >
-            Live · {{ f.documentRef.source }}
+            {{ t('fragments.catalog.live', { source: f.documentRef.source }) }}
           </UBadge>
           <span class="ms-auto font-mono text-[11px] text-slate-500">{{ f.id }}</span>
         </div>
@@ -294,7 +305,9 @@ async function unlinkSource(id: string) {
         <div class="min-w-0">
           <div class="flex items-center gap-2">
             <span class="font-medium text-slate-100">{{ f.title }}</span>
-            <UBadge v-if="f.source" size="xs" color="info" variant="subtle">from repo</UBadge>
+            <UBadge v-if="f.source" size="xs" color="info" variant="subtle">{{
+              t('fragments.authored.fromRepo')
+            }}</UBadge>
           </div>
           <p class="text-sm text-slate-400">{{ f.summary }}</p>
         </div>
@@ -308,21 +321,27 @@ async function unlinkSource(id: string) {
         />
       </div>
       <p v-if="!library.fragments.length" class="text-sm text-slate-500">
-        No {{ isWorkspace ? 'board' : 'account' }}-specific fragments yet. Add one below, or
-        override a built-in by using its id.
+        {{
+          isWorkspace
+            ? t('fragments.authored.empty.workspace')
+            : t('fragments.authored.empty.account')
+        }}
       </p>
 
       <div class="rounded-md border border-slate-800 p-3">
-        <p class="mb-2 text-sm font-medium">Add a fragment</p>
+        <p class="mb-2 text-sm font-medium">{{ t('fragments.authored.addTitle') }}</p>
         <div class="flex flex-col gap-2">
-          <UInput v-model="draft.title" placeholder="Title" />
-          <UInput v-model="draft.summary" placeholder="One-line summary (used by the selector)" />
+          <UInput v-model="draft.title" :placeholder="t('fragments.authored.titlePlaceholder')" />
+          <UInput
+            v-model="draft.summary"
+            :placeholder="t('fragments.authored.summaryPlaceholder')"
+          />
           <UTextarea
             v-model="draft.body"
-            placeholder="Guidance body (injected into the prompt)"
+            :placeholder="t('fragments.authored.bodyPlaceholder')"
             :rows="4"
           />
-          <UInput v-model="draft.tags" placeholder="Tags, comma-separated (e.g. backend, db)" />
+          <UInput v-model="draft.tags" :placeholder="t('fragments.authored.tagsPlaceholder')" />
           <UButton
             icon="i-lucide-plus"
             size="sm"
@@ -331,7 +350,7 @@ async function unlinkSource(id: string) {
             class="self-start"
             @click="createFragment"
           >
-            Add fragment
+            {{ t('fragments.authored.add') }}
           </UButton>
         </div>
       </div>
@@ -340,9 +359,7 @@ async function unlinkSource(id: string) {
     <!-- Document-backed (living) fragments -->
     <div v-else-if="tab === 'documents'" class="flex flex-col gap-3">
       <p class="text-xs text-slate-500">
-        Link a Confluence/Notion page or a GitHub file as a best-practice fragment. Its guidance is
-        re-resolved from the source at run time — edit the doc and the next agent run follows the
-        new version (no re-import).
+        {{ t('fragments.documents.intro') }}
       </p>
 
       <div
@@ -360,7 +377,7 @@ async function unlinkSource(id: string) {
           </div>
           <p class="text-sm text-slate-400">{{ f.summary }}</p>
           <p v-if="f.resolvedAt" class="text-[11px] text-slate-500">
-            last resolved {{ new Date(f.resolvedAt).toLocaleString() }}
+            {{ t('fragments.documents.lastResolved', { date: d(new Date(f.resolvedAt), 'long') }) }}
           </p>
         </div>
         <div class="ms-auto flex gap-1">
@@ -369,7 +386,7 @@ async function unlinkSource(id: string) {
             size="xs"
             variant="ghost"
             :loading="library.loading"
-            title="Re-resolve from source now"
+            :title="t('fragments.documents.refreshTitle')"
             @click="refreshFragment(f.id)"
           />
           <UButton
@@ -382,17 +399,16 @@ async function unlinkSource(id: string) {
         </div>
       </div>
       <p v-if="!documentFragments.length" class="text-sm text-slate-500">
-        No document-backed fragments yet. Link one below.
+        {{ t('fragments.documents.empty') }}
       </p>
 
       <div class="rounded-md border border-slate-800 p-3">
-        <p class="mb-2 text-sm font-medium">Link a document</p>
+        <p class="mb-2 text-sm font-medium">{{ t('fragments.documents.linkTitle') }}</p>
         <div v-if="docLinkDisabled" class="text-sm text-slate-500">
-          Create a board with a connected document source first — account-level document fragments
-          are fetched through one of this account's boards.
+          {{ t('fragments.documents.disabledHint') }}
         </div>
         <div v-else-if="!documents.connectedSources.length" class="text-sm text-slate-500">
-          Connect a document source (Confluence, Notion or GitHub) under Integrations first.
+          {{ t('fragments.documents.connectFirst') }}
         </div>
         <div v-else class="flex flex-col gap-2">
           <div class="flex flex-wrap gap-2">
@@ -407,11 +423,8 @@ async function unlinkSource(id: string) {
               {{ s.label }}
             </UButton>
           </div>
-          <UInput
-            v-model="docDraft.ref"
-            placeholder="Page id or URL (e.g. a Confluence/Notion page or GitHub file URL)"
-          />
-          <UInput v-model="docDraft.tags" placeholder="Tags, comma-separated (optional)" />
+          <UInput v-model="docDraft.ref" :placeholder="t('fragments.documents.refPlaceholder')" />
+          <UInput v-model="docDraft.tags" :placeholder="t('fragments.documents.tagsPlaceholder')" />
           <UButton
             icon="i-lucide-link"
             size="sm"
@@ -420,7 +433,7 @@ async function unlinkSource(id: string) {
             class="self-start"
             @click="linkDocumentFragment"
           >
-            Link as living fragment
+            {{ t('fragments.documents.link') }}
           </UButton>
         </div>
       </div>
@@ -440,7 +453,11 @@ async function unlinkSource(id: string) {
             }}<span class="text-slate-500">/{{ s.dirPath || '' }}</span>
           </span>
           <p class="text-xs text-slate-500">
-            {{ s.lastSyncedAt ? 'synced' : 'never synced' }} · ref {{ s.gitRef }}
+            {{
+              s.lastSyncedAt
+                ? t('fragments.sources.metaSynced', { ref: s.gitRef })
+                : t('fragments.sources.metaNever', { ref: s.gitRef })
+            }}
           </p>
         </div>
         <UBadge
@@ -450,7 +467,13 @@ async function unlinkSource(id: string) {
           variant="subtle"
           class="ms-auto"
         >
-          {{ library.sourceChanges[s.id] }} change(s)
+          {{
+            t(
+              'fragments.sources.changes',
+              { count: library.sourceChanges[s.id] },
+              library.sourceChanges[s.id] ?? 0,
+            )
+          }}
         </UBadge>
         <div class="ms-auto flex gap-1">
           <UButton
@@ -476,23 +499,35 @@ async function unlinkSource(id: string) {
         </div>
       </div>
       <p v-if="!library.sources.length" class="text-sm text-slate-500">
-        No linked guideline repos. Link one below to import its Markdown files as fragments.
+        {{ t('fragments.sources.empty') }}
       </p>
 
       <div class="rounded-md border border-slate-800 p-3">
-        <p class="mb-2 text-sm font-medium">Link a guideline repo</p>
+        <p class="mb-2 text-sm font-medium">{{ t('fragments.sources.linkTitle') }}</p>
         <div class="flex flex-col gap-2">
           <div class="flex gap-2">
-            <UInput v-model="sourceDraft.repoOwner" placeholder="owner" class="flex-1" />
-            <UInput v-model="sourceDraft.repoName" placeholder="repo" class="flex-1" />
+            <UInput
+              v-model="sourceDraft.repoOwner"
+              :placeholder="t('fragments.sources.ownerPlaceholder')"
+              class="flex-1"
+            />
+            <UInput
+              v-model="sourceDraft.repoName"
+              :placeholder="t('fragments.sources.repoPlaceholder')"
+              class="flex-1"
+            />
           </div>
           <div class="flex gap-2">
             <UInput
               v-model="sourceDraft.dirPath"
-              placeholder="dir path (e.g. guidelines)"
+              :placeholder="t('fragments.sources.dirPlaceholder')"
               class="flex-1"
             />
-            <UInput v-model="sourceDraft.gitRef" placeholder="ref (default HEAD)" class="flex-1" />
+            <UInput
+              v-model="sourceDraft.gitRef"
+              :placeholder="t('fragments.sources.refPlaceholder')"
+              class="flex-1"
+            />
           </div>
           <UButton
             icon="i-lucide-link"
@@ -502,7 +537,7 @@ async function unlinkSource(id: string) {
             class="self-start"
             @click="linkSource"
           >
-            Link & sync
+            {{ t('fragments.sources.link') }}
           </UButton>
         </div>
       </div>

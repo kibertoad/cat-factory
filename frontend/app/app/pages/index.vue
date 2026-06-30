@@ -14,11 +14,7 @@ import InspectorPanel from '~/components/panels/InspectorPanel.vue'
 import DecisionModal from '~/components/panels/DecisionModal.vue'
 import AgentStepDetail from '~/components/panels/AgentStepDetail.vue'
 import StepResultViewHost from '~/components/panels/StepResultViewHost.vue'
-import BlockFocusView from '~/components/focus/BlockFocusView.vue'
-import TaskSourceConnectModal from '~/components/tasks/TaskSourceConnectModal.vue'
-import TaskImportModal from '~/components/tasks/TaskImportModal.vue'
 import AddTaskModal from '~/components/board/AddTaskModal.vue'
-import RecurringPipelineModal from '~/components/board/RecurringPipelineModal.vue'
 import GitHubOnboarding from '~/components/github/GitHubOnboarding.vue'
 import CommandBar from '~/components/layout/CommandBar.vue'
 import PersonalCredentialModal from '~/components/providers/PersonalCredentialModal.vue'
@@ -30,6 +26,17 @@ const ObservabilityPanel = defineAsyncComponent(
   () => import('~/components/panels/ObservabilityPanel.vue'),
 )
 const KaizenPanel = defineAsyncComponent(() => import('~/components/kaizen/KaizenPanel.vue'))
+// Occasional, externally store-gated surfaces — deferred to their own chunks like the
+// sibling document modals above. Each mounts only while its ui open-flag is set, so it
+// loads on first open instead of bloating the initial bundle.
+const BlockFocusView = defineAsyncComponent(() => import('~/components/focus/BlockFocusView.vue'))
+const TaskSourceConnectModal = defineAsyncComponent(
+  () => import('~/components/tasks/TaskSourceConnectModal.vue'),
+)
+const TaskImportModal = defineAsyncComponent(() => import('~/components/tasks/TaskImportModal.vue'))
+const RecurringPipelineModal = defineAsyncComponent(
+  () => import('~/components/board/RecurringPipelineModal.vue'),
+)
 const DocumentSourceConnectModal = defineAsyncComponent(
   () => import('~/components/documents/DocumentSourceConnectModal.vue'),
 )
@@ -248,7 +255,12 @@ watch(
         <BoardToolbar />
         <SpendWarningBanner />
         <InspectorPanel />
-        <BlockFocusView />
+        <!-- Code-split focus view. The fade lives here (not inside the component) so the
+             leave animation still plays when `focusBlockId` clears and the v-if unmounts
+             the chunk — an inner Transition would be torn down before it could run. -->
+        <Transition name="focus-fade">
+          <BlockFocusView v-if="ui.focusBlockId" />
+        </Transition>
       </main>
 
       <!-- Always-mounted, fast-path surfaces. -->
@@ -256,15 +268,15 @@ watch(
       <DecisionModal />
       <AgentStepDetail />
       <StepResultViewHost />
-      <TaskSourceConnectModal />
-      <TaskImportModal />
       <AddTaskModal />
-      <RecurringPipelineModal />
       <CommandBar />
       <PersonalCredentialModal />
 
       <!-- Lazy panels: mounted only while their ui open-flag is set, so each loads on
            first open (its own chunk) rather than bloating the initial bundle. -->
+      <TaskSourceConnectModal v-if="ui.taskConnect" />
+      <TaskImportModal v-if="ui.taskImport" />
+      <RecurringPipelineModal v-if="ui.addRecurringFrameId" />
       <ObservabilityPanel v-if="ui.observabilityInstanceId" />
       <KaizenPanel v-if="ui.kaizenScreenOpen" />
       <DocumentSourceConnectModal v-if="ui.documentConnect" />

@@ -17,6 +17,7 @@ import { FakeTaskSourceProvider } from '../fakes/FakeTaskSourceProvider'
 import { buildContainer } from '../../src/infrastructure/container'
 import { D1RequirementReviewRepository } from '../../src/infrastructure/repositories/D1RequirementReviewRepository'
 import { D1ClarityReviewRepository } from '../../src/infrastructure/repositories/D1ClarityReviewRepository'
+import { D1ServiceRepository } from '../../src/infrastructure/repositories/D1ServiceRepository'
 
 // Run the shared cross-runtime conformance suite against the Cloudflare Worker
 // facade (the real Hono app over a real local D1, inside workerd). The Node
@@ -58,6 +59,15 @@ const harness: ConformanceHarness = {
         ...(opts?.resolveRepoFilesForCoords
           ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
           : {}),
+        // Inject the app-owned backend registries (pre-loaded with custom kinds in the
+        // custom-backend suite) via the CoreDependencies overrides the Worker build reads, so a
+        // registered custom backend is resolved by reference, exactly like a real deployment.
+        ...(opts?.backendRegistries
+          ? {
+              environmentBackendRegistry: opts.backendRegistries.environmentBackendRegistry,
+              runnerBackendRegistry: opts.backendRegistries.runnerBackendRegistry,
+            }
+          : {}),
         ...fragmentLibraryDeps(),
         // A deterministic task source (fake 'jira') over the real D1 task repos, so the
         // shared suite can assert create-task-from-issue parity against D1 too.
@@ -95,6 +105,8 @@ const harness: ConformanceHarness = {
           workspaceId,
           makeIncorporatedClarityReview(blockId, report),
         ),
+      seedService: (service) => new D1ServiceRepository({ db: env.DB }).insert(service),
+      getService: (id) => new D1ServiceRepository({ db: env.DB }).get(id),
       localModelEndpoints: () => {
         const svc = buildContainer(env, {
           agentExecutor: new FakeAgentExecutor(),
@@ -134,6 +146,8 @@ const harness: ConformanceHarness = {
       // layer never touches the agent runner).
       onboarding: () =>
         makeOnboardingProbe(buildContainer(env, { agentExecutor: new FakeAgentExecutor() })),
+      executionRepository: () =>
+        buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).executionRepository,
     }
   },
 }

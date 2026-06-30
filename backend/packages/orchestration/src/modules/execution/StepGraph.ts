@@ -124,9 +124,24 @@ export class StepGraph {
     companionIndex: number,
     rework: NonNullable<PipelineStep['rework']>,
   ): void {
-    const companionStep = instance.steps[companionIndex]!
+    const companionStep = instance.steps[companionIndex]
+    if (!companionStep) {
+      throw new Error(`loopCompanionProducer: no step at index ${companionIndex}`)
+    }
+    if (!companionStep.companion) {
+      throw new Error(
+        `loopCompanionProducer: step '${companionStep.agentKind}' has no companion budget to charge`,
+      )
+    }
     const producerIndex = this.companionProducerIndex(instance, companionIndex)
-    companionStep.companion!.attempts += 1
+    // `companionProducerIndex` returns -1 when nothing precedes the companion; rerunning
+    // from -1 would index `steps[-1]` and crash deep in a reset. Surface the real cause.
+    if (producerIndex < 0) {
+      throw new Error(
+        `loopCompanionProducer: companion '${companionStep.agentKind}' has no preceding producer to rework`,
+      )
+    }
+    companionStep.companion.attempts += 1
     this.rerunProducerThrough(instance, producerIndex, companionIndex, rework)
     if (instance.status === 'blocked') instance.status = 'running'
   }

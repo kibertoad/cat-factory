@@ -1,5 +1,36 @@
 # @cat-factory/workspaces
 
+## 0.9.30
+
+### Patch Changes
+
+- Updated dependencies [f9a173f]
+  - @cat-factory/contracts@0.57.0
+  - @cat-factory/kernel@0.56.0
+
+## 0.9.29
+
+### Patch Changes
+
+- fdeb466: Eliminate N+1 query loops in the service layer. `ExecutionService.teardownForBlockTree` now
+  resolves runs with a single `listByWorkspace` instead of a per-block `getByBlock`;
+  `TaskConnectionService.listSourceStates` hoists its installation/connection reads out of the
+  per-provider loop; and `BoardService` (`removeBlock` / `addServiceFromRepo`) and
+  `AccountService.listForUser` batch their per-item point reads via two new chunked-`IN`
+  repository methods, `ServiceRepository.listByFrameBlocks` and `AccountRepository.listByIds`
+  (implemented symmetrically on the D1 and Drizzle stores, with cross-runtime conformance
+  coverage). Behavior is unchanged.
+- Updated dependencies [fdeb466]
+  - @cat-factory/kernel@0.55.4
+
+## 0.9.28
+
+### Patch Changes
+
+- Updated dependencies [21b2096]
+  - @cat-factory/contracts@0.56.1
+  - @cat-factory/kernel@0.55.3
+
 ## 0.9.27
 
 ### Patch Changes

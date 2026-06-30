@@ -86,6 +86,23 @@ export interface ProviderApiKeyRepository {
    */
   markLeased(id: string, at: number): Promise<void>
   /**
+   * ATOMICALLY lease the least-loaded live key for one provider across the merged scope
+   * pool — select-and-mark in a SINGLE statement (Postgres: `FOR UPDATE SKIP LOCKED`;
+   * D1: a single write the engine serialises) so two concurrent dispatches can't both
+   * grab the same key. This replaces the non-transactional read→`chooseToken`→`markLeased`
+   * sequence at the lease hot path, where two callers would otherwise read the same pool
+   * snapshot and both pick the same least-used key. Selection mirrors {@link chooseToken}:
+   * least rolling-window usage wins, ties break by least-recently-leased (never-leased
+   * first) then oldest-created. Stamps `lastUsedAt = now` on the winner and returns it (with
+   * the bumped value), or null when the pool is empty. `windowMs` sizes the usage window.
+   */
+  leaseLeastUsed(
+    scopes: ApiKeyScopeRef[],
+    provider: ApiKeyProvider,
+    now: number,
+    windowMs: number,
+  ): Promise<ProviderApiKeyRecord | null>
+  /**
    * Fold a completed call's usage into the key's rolling-window counters (keyed by
    * row id, see markLeased). When `windowStartedAt` is null or older than
    * `windowMs`, the window resets to `at` and the counters start from this call.

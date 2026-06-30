@@ -6,11 +6,39 @@
 // and Fixtures (the graded inputs each run is scored against). Loaded on demand when the
 // window opens; 503 (the deployment hasn't provisioned the Sandbox DB) shows a notice.
 import { computed, ref, watch } from 'vue'
-import type { SandboxGrade, SandboxPromptVersion, SandboxRun } from '~/types/sandbox'
+import type {
+  SandboxExperimentStatus,
+  SandboxFixtureKind,
+  SandboxGrade,
+  SandboxPromptVersion,
+  SandboxRun,
+} from '~/types/sandbox'
 
 const ui = useUiStore()
 const store = useSandboxStore()
 const toast = useToast()
+const { t } = useI18n()
+
+// Exhaustive enum→label maps of literal `t(...)` keys (keeps the typed-key drift guard
+// live for these runtime-indexed status/kind/origin lookups).
+const EXPERIMENT_STATUS_LABEL = computed<Record<SandboxExperimentStatus, string>>(() => ({
+  draft: t('sandbox.experimentStatus.draft'),
+  running: t('sandbox.experimentStatus.running'),
+  done: t('sandbox.experimentStatus.done'),
+  failed: t('sandbox.experimentStatus.failed'),
+}))
+const FIXTURE_KIND_LABEL = computed<Record<SandboxFixtureKind, string>>(() => ({
+  requirements: t('sandbox.fixtureKind.requirements'),
+  clarity: t('sandbox.fixtureKind.clarity'),
+  architecture: t('sandbox.fixtureKind.architecture'),
+  'code-review': t('sandbox.fixtureKind.code-review'),
+  'repo-feature': t('sandbox.fixtureKind.repo-feature'),
+  'repo-bug': t('sandbox.fixtureKind.repo-bug'),
+}))
+const FIXTURE_ORIGIN_LABEL = computed<Record<'builtin' | 'custom', string>>(() => ({
+  builtin: t('sandbox.fixtureOrigin.builtin'),
+  custom: t('sandbox.fixtureOrigin.custom'),
+}))
 
 const open = computed({
   get: () => ui.sandboxOpen,
@@ -39,7 +67,7 @@ const selectedFixtureIds = ref<string[]>([])
 const selectedJudgeModel = ref<string>('')
 
 const judgeModelItems = computed(() => [
-  { label: 'Deployment default', value: '' },
+  { label: t('sandbox.deploymentDefault'), value: '' },
   ...store.selectableModels.map((m) => ({ label: m.label, value: m.id })),
 ])
 
@@ -82,7 +110,7 @@ async function createAndRun() {
   if (!canRun.value) return
   try {
     const created = await store.createExperiment({
-      name: name.value.trim() || `${agentKind.value} — sandbox run`,
+      name: name.value.trim() || t('sandbox.defaultRunName', { kind: agentKind.value }),
       agentKind: agentKind.value,
       judgeModel: selectedJudgeModel.value || undefined,
       matrix: {
@@ -92,12 +120,12 @@ async function createAndRun() {
       },
     })
     name.value = ''
-    toast.add({ title: 'Running experiment…', icon: 'i-lucide-flask-conical', color: 'info' })
+    toast.add({ title: t('sandbox.toast.running'), icon: 'i-lucide-flask-conical', color: 'info' })
     await store.launch(created.id)
-    toast.add({ title: 'Experiment complete', icon: 'i-lucide-check', color: 'success' })
+    toast.add({ title: t('sandbox.toast.complete'), icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
     toast.add({
-      title: 'Could not run the experiment',
+      title: t('sandbox.toast.runFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -149,11 +177,11 @@ async function saveVersion() {
   savingPrompt.value = true
   try {
     await store.saveVersion(editing.value.id, editText.value)
-    toast.add({ title: 'Saved a new version', icon: 'i-lucide-check', color: 'success' })
+    toast.add({ title: t('sandbox.toast.versionSaved'), icon: 'i-lucide-check', color: 'success' })
     editing.value = null
   } catch (e) {
     toast.add({
-      title: 'Could not save the version',
+      title: t('sandbox.toast.saveFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -169,7 +197,7 @@ async function archive(prompt: SandboxPromptVersion) {
     if (editing.value?.id === prompt.id) editing.value = null
   } catch (e) {
     toast.add({
-      title: 'Could not archive',
+      title: t('sandbox.toast.archiveFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -181,8 +209,8 @@ async function archive(prompt: SandboxPromptVersion) {
 <template>
   <UModal
     v-model:open="open"
-    title="Sandbox — prompt & model testing"
-    description="Try prompt versions and models against graded fixtures, scored by a judge model."
+    :title="t('sandbox.title')"
+    :description="t('sandbox.description')"
     :ui="{ content: 'max-w-5xl' }"
   >
     <template #body>
@@ -194,21 +222,21 @@ async function archive(prompt: SandboxPromptVersion) {
         v-else-if="!store.available"
         class="rounded-lg border border-slate-700 bg-slate-900/50 p-6 text-sm text-slate-300"
       >
-        <p class="font-medium text-slate-200">The Sandbox isn't enabled for this deployment.</p>
-        <p class="mt-1 text-slate-400">
-          It needs its own database (a dedicated <code>SANDBOX_DB</code> on Cloudflare, or the
-          <code>sandbox</code> Postgres schema on Node). Provision it and reload.
-        </p>
+        <p class="font-medium text-slate-200">{{ t('sandbox.unavailable.title') }}</p>
+        <i18n-t keypath="sandbox.unavailable.body" tag="p" class="mt-1 text-slate-400">
+          <template #db><code>SANDBOX_DB</code></template>
+          <template #schema><code>sandbox</code></template>
+        </i18n-t>
       </div>
 
       <div
         v-else-if="store.error"
         class="rounded-lg border border-rose-800 bg-rose-950/40 p-6 text-sm text-rose-200"
       >
-        <p class="font-medium text-rose-100">The Sandbox failed to load.</p>
+        <p class="font-medium text-rose-100">{{ t('sandbox.error.title') }}</p>
         <p class="mt-1 text-rose-300">{{ store.error }}</p>
         <UButton class="mt-3" size="xs" color="neutral" variant="subtle" @click="store.load()">
-          Retry
+          {{ t('common.retry') }}
         </UButton>
       </div>
 
@@ -216,9 +244,17 @@ async function archive(prompt: SandboxPromptVersion) {
         <UTabs
           v-model="tab"
           :items="[
-            { label: 'Experiments', value: 'experiments', icon: 'i-lucide-flask-conical' },
-            { label: 'Prompts', value: 'prompts', icon: 'i-lucide-file-text' },
-            { label: 'Fixtures', value: 'fixtures', icon: 'i-lucide-clipboard-list' },
+            {
+              label: t('sandbox.tab.experiments'),
+              value: 'experiments',
+              icon: 'i-lucide-flask-conical',
+            },
+            { label: t('sandbox.tab.prompts'), value: 'prompts', icon: 'i-lucide-file-text' },
+            {
+              label: t('sandbox.tab.fixtures'),
+              value: 'fixtures',
+              icon: 'i-lucide-clipboard-list',
+            },
           ]"
         />
 
@@ -227,10 +263,10 @@ async function archive(prompt: SandboxPromptVersion) {
           <!-- builder -->
           <div class="space-y-3 rounded-lg border border-slate-700 bg-slate-900/40 p-3">
             <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              New experiment
+              {{ t('sandbox.builder.title') }}
             </p>
 
-            <UFormField label="Agent">
+            <UFormField :label="t('sandbox.builder.agent')">
               <USelect
                 v-model="agentKind"
                 :items="store.agentKinds.map((k) => ({ label: k.label, value: k.agentKind }))"
@@ -241,7 +277,7 @@ async function archive(prompt: SandboxPromptVersion) {
 
             <div>
               <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                Prompt versions
+                {{ t('sandbox.builder.promptVersions') }}
               </span>
               <div class="max-h-28 space-y-1 overflow-auto pe-1">
                 <label
@@ -261,7 +297,11 @@ async function archive(prompt: SandboxPromptVersion) {
                     variant="soft"
                     size="xs"
                   >
-                    {{ p.origin === 'baseline' ? 'baseline' : `v${p.version}` }}
+                    {{
+                      p.origin === 'baseline'
+                        ? t('sandbox.baseline')
+                        : t('sandbox.versionLabel', { version: p.version })
+                    }}
                   </UBadge>
                 </label>
               </div>
@@ -269,7 +309,7 @@ async function archive(prompt: SandboxPromptVersion) {
 
             <div>
               <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                Models
+                {{ t('sandbox.builder.models') }}
               </span>
               <div class="max-h-28 space-y-1 overflow-auto pe-1">
                 <label
@@ -286,14 +326,14 @@ async function archive(prompt: SandboxPromptVersion) {
                   <span class="truncate">{{ m.label }}</span>
                 </label>
                 <p v-if="!store.selectableModels.length" class="text-xs text-slate-500">
-                  No selectable models — configure a provider key or enable Cloudflare AI.
+                  {{ t('sandbox.builder.noModels') }}
                 </p>
               </div>
             </div>
 
             <div>
               <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                Fixtures
+                {{ t('sandbox.builder.fixtures') }}
               </span>
               <div class="max-h-28 space-y-1 overflow-auto pe-1">
                 <label
@@ -310,24 +350,30 @@ async function archive(prompt: SandboxPromptVersion) {
                   <span class="truncate">{{ f.name }}</span>
                 </label>
                 <p v-if="!kindFixtures.length" class="text-xs text-slate-500">
-                  No fixtures for this agent.
+                  {{ t('sandbox.builder.noFixtures') }}
                 </p>
               </div>
             </div>
 
-            <UFormField label="Judge model" hint="grades every cell">
+            <UFormField
+              :label="t('sandbox.builder.judgeModel')"
+              :hint="t('sandbox.builder.judgeModelHint')"
+            >
               <USelect v-model="selectedJudgeModel" :items="judgeModelItems" />
             </UFormField>
 
-            <UFormField label="Name (optional)">
-              <UInput v-model="name" :placeholder="`${agentKind} — sandbox run`" />
+            <UFormField :label="t('sandbox.builder.nameLabel')">
+              <UInput
+                v-model="name"
+                :placeholder="t('sandbox.defaultRunName', { kind: agentKind })"
+              />
             </UFormField>
 
             <div class="flex items-center justify-between">
               <span class="text-xs text-slate-500">
-                {{ cellCount }} cell{{ cellCount === 1 ? '' : 's' }}
+                {{ t('sandbox.builder.cellCount', { count: cellCount }, cellCount) }}
                 <span v-if="cellCount > store.maxCells" class="text-rose-400">
-                  (max {{ store.maxCells }})
+                  {{ t('sandbox.builder.maxCells', { max: store.maxCells }) }}
                 </span>
               </span>
               <UButton
@@ -338,7 +384,7 @@ async function archive(prompt: SandboxPromptVersion) {
                 :disabled="!canRun"
                 @click="createAndRun()"
               >
-                Run
+                {{ t('sandbox.builder.run') }}
               </UButton>
             </div>
           </div>
@@ -350,17 +396,19 @@ async function archive(prompt: SandboxPromptVersion) {
                 <p class="text-sm font-medium text-slate-200">
                   {{ store.detail.experiment.name }}
                 </p>
-                <UBadge variant="soft" size="xs">{{ store.detail.experiment.status }}</UBadge>
+                <UBadge variant="soft" size="xs">{{
+                  EXPERIMENT_STATUS_LABEL[store.detail.experiment.status]
+                }}</UBadge>
               </div>
               <div class="overflow-auto">
                 <table class="w-full text-start text-xs">
                   <thead class="text-slate-500">
                     <tr>
-                      <th class="py-1 pe-2 font-medium">Prompt</th>
-                      <th class="py-1 pe-2 font-medium">Model</th>
-                      <th class="py-1 pe-2 font-medium">Fixture</th>
-                      <th class="py-1 pe-2 font-medium">Score</th>
-                      <th class="py-1 font-medium">Objective</th>
+                      <th class="py-1 pe-2 font-medium">{{ t('sandbox.results.col.prompt') }}</th>
+                      <th class="py-1 pe-2 font-medium">{{ t('sandbox.results.col.model') }}</th>
+                      <th class="py-1 pe-2 font-medium">{{ t('sandbox.results.col.fixture') }}</th>
+                      <th class="py-1 pe-2 font-medium">{{ t('sandbox.results.col.score') }}</th>
+                      <th class="py-1 font-medium">{{ t('sandbox.results.col.objective') }}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -383,9 +431,9 @@ async function archive(prompt: SandboxPromptVersion) {
                         >
                           {{ grade.weightedTotal.toFixed(2) }}
                         </span>
-                        <span v-else-if="run.status === 'failed'" class="text-rose-400"
-                          >failed</span
-                        >
+                        <span v-else-if="run.status === 'failed'" class="text-rose-400">{{
+                          t('sandbox.results.failed')
+                        }}</span>
                         <span v-else class="text-slate-600">—</span>
                       </td>
                       <td class="py-1">
@@ -429,7 +477,9 @@ async function archive(prompt: SandboxPromptVersion) {
               </div>
             </div>
 
-            <p class="text-[11px] uppercase tracking-wide text-slate-500">Past experiments</p>
+            <p class="text-[11px] uppercase tracking-wide text-slate-500">
+              {{ t('sandbox.results.past') }}
+            </p>
             <div class="max-h-56 space-y-1 overflow-auto">
               <button
                 v-for="x in store.experiments"
@@ -438,10 +488,10 @@ async function archive(prompt: SandboxPromptVersion) {
                 @click="store.openExperiment(x.id)"
               >
                 <span class="truncate text-slate-300">{{ x.name }}</span>
-                <UBadge variant="soft" size="xs">{{ x.status }}</UBadge>
+                <UBadge variant="soft" size="xs">{{ EXPERIMENT_STATUS_LABEL[x.status] }}</UBadge>
               </button>
               <p v-if="!store.experiments.length" class="text-xs text-slate-500">
-                No experiments yet.
+                {{ t('sandbox.results.empty') }}
               </p>
             </div>
           </div>
@@ -463,7 +513,11 @@ async function archive(prompt: SandboxPromptVersion) {
                     variant="soft"
                     size="xs"
                   >
-                    {{ p.origin === 'baseline' ? 'baseline' : `v${p.version}` }}
+                    {{
+                      p.origin === 'baseline'
+                        ? t('sandbox.baseline')
+                        : t('sandbox.versionLabel', { version: p.version })
+                    }}
                   </UBadge>
                 </div>
                 <span class="text-[11px] text-slate-500">{{ p.agentKind }}</span>
@@ -474,7 +528,11 @@ async function archive(prompt: SandboxPromptVersion) {
                   color="neutral"
                   variant="ghost"
                   size="xs"
-                  :title="p.origin === 'baseline' ? 'Fork into a candidate' : 'Edit / version'"
+                  :title="
+                    p.origin === 'baseline'
+                      ? t('sandbox.prompts.forkTitle')
+                      : t('sandbox.prompts.editTitle')
+                  "
                   @click="edit(p)"
                 />
                 <UButton
@@ -494,12 +552,16 @@ async function archive(prompt: SandboxPromptVersion) {
             class="space-y-2 rounded-lg border border-slate-700 bg-slate-900/40 p-3"
           >
             <p class="text-[11px] uppercase tracking-wide text-slate-500">
-              {{ editing.origin === 'baseline' ? 'Fork' : 'New version of' }} · {{ editing.name }}
+              {{
+                editing.origin === 'baseline'
+                  ? t('sandbox.prompts.forkOf', { name: editing.name })
+                  : t('sandbox.prompts.newVersionOf', { name: editing.name })
+              }}
             </p>
             <UTextarea v-model="editText" :rows="16" class="w-full font-mono text-xs" autoresize />
             <div class="flex justify-end gap-2">
               <UButton color="neutral" variant="ghost" size="sm" @click="editing = null">
-                Cancel
+                {{ t('common.cancel') }}
               </UButton>
               <UButton
                 color="primary"
@@ -509,13 +571,12 @@ async function archive(prompt: SandboxPromptVersion) {
                 :disabled="!editText.trim()"
                 @click="saveVersion()"
               >
-                Save new version
+                {{ t('sandbox.prompts.saveVersion') }}
               </UButton>
             </div>
           </div>
           <p v-else class="self-start text-xs text-slate-500">
-            Pick a prompt to fork a shipped baseline or version a candidate. Each save appends an
-            immutable version you can put under test.
+            {{ t('sandbox.prompts.hint') }}
           </p>
         </div>
 
@@ -529,23 +590,29 @@ async function archive(prompt: SandboxPromptVersion) {
             <div class="flex items-center justify-between">
               <span class="text-slate-200">{{ f.name }}</span>
               <div class="flex items-center gap-1.5">
-                <UBadge variant="soft" size="xs">{{ f.kind }}</UBadge>
+                <UBadge variant="soft" size="xs">{{ FIXTURE_KIND_LABEL[f.kind] }}</UBadge>
                 <UBadge
                   :color="f.origin === 'builtin' ? 'neutral' : 'primary'"
                   variant="soft"
                   size="xs"
                 >
-                  {{ f.origin }}
+                  {{ FIXTURE_ORIGIN_LABEL[f.origin] }}
                 </UBadge>
               </div>
             </div>
             <p v-if="f.objective?.kind === 'findings'" class="mt-0.5 text-[11px] text-slate-500">
-              {{ f.objective.expectations.length }} graded expectation{{
-                f.objective.expectations.length === 1 ? '' : 's'
+              {{
+                t(
+                  'sandbox.fixtures.expectations',
+                  { count: f.objective.expectations.length },
+                  f.objective.expectations.length,
+                )
               }}
             </p>
           </div>
-          <p v-if="!store.fixtures.length" class="text-xs text-slate-500">No fixtures.</p>
+          <p v-if="!store.fixtures.length" class="text-xs text-slate-500">
+            {{ t('sandbox.fixtures.empty') }}
+          </p>
         </div>
       </div>
     </template>

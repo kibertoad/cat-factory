@@ -6,9 +6,15 @@
 // panels' drawer, or `executionId` for a run's "Infrastructure attempts" drawer (which
 // surfaces that run's container/runner/env attempts). Loaded on mount + re-loadable.
 import { onMounted } from 'vue'
-import type { ProvisioningOperation, ProvisioningSubsystem } from '~/types/provisioningLogs'
+import type {
+  ProvisioningOperation,
+  ProvisioningOutcome,
+  ProvisioningSubsystem,
+} from '~/types/provisioningLogs'
 
 const props = defineProps<{ subsystem?: ProvisioningSubsystem; executionId?: string }>()
+
+const { t, d } = useI18n()
 
 const store = useProvisioningLogsStore()
 const state = computed(() =>
@@ -24,17 +30,24 @@ function reload() {
 
 onMounted(reload)
 
-const OPERATION_LABEL: Record<ProvisioningOperation, string> = {
-  provision: 'Spin up',
-  teardown: 'Tear down',
-  status: 'Status check',
-  dispatch: 'Spin up',
-  release: 'Tear down',
-  'poll-failure': 'Health check',
-}
+// Exhaustive enum→label maps of literal `t(...)` keys (keeps the typed-key drift guard
+// live for these runtime-indexed lookups).
+const OPERATION_LABEL = computed<Record<ProvisioningOperation, string>>(() => ({
+  provision: t('provisioning.operation.provision'),
+  teardown: t('provisioning.operation.teardown'),
+  status: t('provisioning.operation.status'),
+  dispatch: t('provisioning.operation.dispatch'),
+  release: t('provisioning.operation.release'),
+  'poll-failure': t('provisioning.operation.poll-failure'),
+}))
+
+const OUTCOME_LABEL = computed<Record<ProvisioningOutcome, string>>(() => ({
+  success: t('provisioning.outcome.success'),
+  failure: t('provisioning.outcome.failure'),
+}))
 
 function when(epochMs: number): string {
-  return new Date(epochMs).toLocaleString()
+  return d(new Date(epochMs), 'long')
 }
 </script>
 
@@ -42,7 +55,7 @@ function when(epochMs: number): string {
   <div class="rounded-lg border border-slate-700 bg-slate-900/50">
     <div class="flex items-center justify-between border-b border-slate-800 px-3 py-2">
       <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        Provisioning logs
+        {{ t('provisioning.title') }}
       </p>
       <UButton
         icon="i-lucide-rotate-ccw"
@@ -51,7 +64,7 @@ function when(epochMs: number): string {
         :loading="state.loading"
         @click="reload"
       >
-        Refresh
+        {{ t('provisioning.refresh') }}
       </UButton>
     </div>
 
@@ -60,7 +73,7 @@ function when(epochMs: number): string {
       v-else-if="!state.loading && state.entries.length === 0"
       class="px-3 py-3 text-[12px] text-slate-500"
     >
-      No provisioning attempts recorded yet.
+      {{ t('provisioning.empty') }}
     </p>
 
     <ul v-else class="max-h-80 divide-y divide-slate-800 overflow-auto">
@@ -79,7 +92,7 @@ function when(epochMs: number): string {
                 ? 'bg-emerald-950/60 text-emerald-300'
                 : 'bg-rose-950/60 text-rose-300'
             "
-            >{{ entry.outcome }}</span
+            >{{ OUTCOME_LABEL[entry.outcome] }}</span
           >
           <span class="ms-auto text-[11px] text-slate-500">{{ when(entry.createdAt) }}</span>
         </div>
