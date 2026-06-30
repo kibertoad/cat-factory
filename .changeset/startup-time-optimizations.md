@@ -1,6 +1,6 @@
 ---
-"@cat-factory/app": patch
-"@cat-factory/node-server": patch
+'@cat-factory/app': patch
+'@cat-factory/node-server': patch
 ---
 
 Startup-time optimizations (no behavior change):

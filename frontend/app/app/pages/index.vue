@@ -33,9 +33,7 @@ const BlockFocusView = defineAsyncComponent(() => import('~/components/focus/Blo
 const TaskSourceConnectModal = defineAsyncComponent(
   () => import('~/components/tasks/TaskSourceConnectModal.vue'),
 )
-const TaskImportModal = defineAsyncComponent(
-  () => import('~/components/tasks/TaskImportModal.vue'),
-)
+const TaskImportModal = defineAsyncComponent(() => import('~/components/tasks/TaskImportModal.vue'))
 const RecurringPipelineModal = defineAsyncComponent(
   () => import('~/components/board/RecurringPipelineModal.vue'),
 )
@@ -257,7 +255,12 @@ watch(
         <BoardToolbar />
         <SpendWarningBanner />
         <InspectorPanel />
-        <BlockFocusView v-if="ui.focusBlockId" />
+        <!-- Code-split focus view. The fade lives here (not inside the component) so the
+             leave animation still plays when `focusBlockId` clears and the v-if unmounts
+             the chunk — an inner Transition would be torn down before it could run. -->
+        <Transition name="focus-fade">
+          <BlockFocusView v-if="ui.focusBlockId" />
+        </Transition>
       </main>
 
       <!-- Always-mounted, fast-path surfaces. -->
