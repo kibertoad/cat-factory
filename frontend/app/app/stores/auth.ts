@@ -26,6 +26,12 @@ export const useAuthStore = defineStore(
     /** Which login providers the backend offers (drives the login UI). */
     const providers = ref({ github: false, password: false, google: false })
     /**
+     * Source-control providers a HOSTED facade (remote node) accepts a user-supplied PAT for.
+     * Drives the login screen's "sign in with a PAT" option on non-local deployments. Empty on
+     * the Worker (OAuth-only) and in local mode (which uses `localMode.patLogin` instead).
+     */
+    const patProviders = ref<('github' | 'gitlab')[]>([])
+    /**
      * Local-mode signals from the backend. Present only when running the local facade;
      * `githubPatSetupUrl` is set when local mode has no GitHub PAT configured (drives the
      * setup banner). Null on every other facade.
@@ -48,18 +54,42 @@ export const useAuthStore = defineStore(
     const autoLoginProvider = ref<'github' | 'gitlab' | null>(null)
     /** True once the initial auth handshake has settled. */
     const ready = ref(false)
+    /**
+     * True only once `getAuthConfig()` has resolved successfully. Distinguishes "the backend
+     * told us auth is off" from "we never reached the backend" (the bootstrap catch path),
+     * so an unreachable backend falls through to the board's own error UI instead of being
+     * mistaken for an unauthenticated session and gated to the login screen.
+     */
+    const configLoaded = ref(false)
+    /**
+     * Whether this is the local-mode facade. Only the local facade reports `localMode`; the
+     * remote node service and the Cloudflare Worker never do. Used to tell "a developer's
+     * own machine (anonymous-but-dev-open is its own thing)" apart from "a remote deployment
+     * that has no anonymous tier".
+     */
+    const isLocalFacade = computed(() => localMode.value !== null)
 
     /** May the app render? True when auth is off, or on with a known user. */
     const isAuthenticated = computed(() => !required.value || user.value !== null)
 
     /**
-     * Whether the SPA must show the login screen before the board. Auth-enabled deployments
-     * gate on a user as before; local mode ALSO gates (even though its API stays dev-open),
-     * because anonymous local use can't store per-user credentials — see the login flow.
+     * Whether the SPA must show the login screen before the board.
+     *
+     * - Auth-enabled deployments gate on a user as before.
+     * - Local mode ALSO gates (even though its API stays dev-open), because anonymous local
+     *   use can't store per-user credentials — see the login flow.
+     * - A REMOTE facade (node service / Worker) has NO anonymous tier: once the auth handshake
+     *   has resolved and there's no user, gate — even when the backend reports auth "disabled"
+     *   (a misconfigured/dev-open remote running without a provider). Previously this slipped
+     *   through and dropped the user onto a board where every per-user action silently failed
+     *   with no sign-in affordance; the login screen now surfaces that state (offering a
+     *   provider, or explaining that none is configured).
      */
-    const needsLogin = computed(
-      () => (required.value || localMode.value?.enabled === true) && user.value === null,
-    )
+    const needsLogin = computed(() => {
+      if (!configLoaded.value || user.value !== null) return false
+      if (isLocalFacade.value) return required.value || localMode.value?.enabled === true
+      return true
+    })
 
     /** Pull a token handed back in the post-login URL fragment (#token=…). */
     function consumeRedirectToken() {
@@ -78,10 +108,13 @@ export const useAuthStore = defineStore(
         const config = await api.getAuthConfig()
         required.value = config.enabled
         if (config.providers) providers.value = config.providers
+        patProviders.value = config.patLogin?.providers ?? []
         localMode.value = config.localMode ?? null
         infrastructure.value = config.infrastructure ?? null
+        configLoaded.value = true
       } catch {
-        // Backend unreachable — let the board's own error UI handle it.
+        // Backend unreachable — let the board's own error UI handle it (configLoaded stays
+        // false, so we never mistake this for an unauthenticated session and gate it).
         required.value = false
         ready.value = true
         return
@@ -229,10 +262,13 @@ export const useAuthStore = defineStore(
       user,
       required,
       providers,
+      patProviders,
       localMode,
       infrastructure,
       autoLoginProvider,
       ready,
+      configLoaded,
+      isLocalFacade,
       isAuthenticated,
       needsLogin,
       bootstrap,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
 
 const auth = useAuthStore()
@@ -122,6 +122,51 @@ function setMode(next: 'login' | 'signup' | 'forgot') {
 
 const showOAuthDivider = computed(
   () => auth.providers.password && (auth.providers.github || auth.providers.google),
+)
+
+// Hosted (remote node) PAT login: the user pastes their OWN source-control PAT, which the
+// server resolves to an account and holds to its login/org/domain allowlist. The available
+// providers come from the server (`auth.patProviders`); empty in local mode (which uses the
+// configured-token flow above) and on OAuth-only facades like the Worker.
+const remotePatProviders = computed<PatProvider[]>(() =>
+  isLocalMode.value ? [] : (auth.patProviders as PatProvider[]),
+)
+const remotePatProvider = ref<PatProvider>('github')
+watch(
+  remotePatProviders,
+  (list) => {
+    if (list.length && !list.includes(remotePatProvider.value)) remotePatProvider.value = list[0]!
+  },
+  { immediate: true },
+)
+const remotePatToken = ref('')
+const remotePatBusy = ref(false)
+const remotePatError = ref<string | null>(null)
+
+async function submitRemotePat() {
+  remotePatError.value = null
+  remotePatBusy.value = true
+  try {
+    await auth.patLogin({ provider: remotePatProvider.value, token: remotePatToken.value.trim() })
+    if (typeof window !== 'undefined') window.location.assign(window.location.pathname)
+  } catch (e) {
+    remotePatError.value = apiErrorEnvelope(e)?.message ?? t('auth.login.signInFailed')
+  } finally {
+    remotePatBusy.value = false
+  }
+}
+
+// A remote deployment (node service / Worker) that advertises no sign-in method at all:
+// no OAuth, no password, no PAT, and not local mode. The auth gate still routes here (a
+// remote facade has no anonymous tier), so instead of a blank card we explain that
+// authentication isn't configured and there's nothing to sign in with yet.
+const noSignInMethod = computed(
+  () =>
+    !isLocalMode.value &&
+    !auth.providers.github &&
+    !auth.providers.google &&
+    !auth.providers.password &&
+    remotePatProviders.value.length === 0,
 )
 </script>
 
@@ -295,6 +340,76 @@ const showOAuthDivider = computed(
           </button>
         </p>
       </form>
+
+      <!-- Hosted (remote node) PAT login: paste your own source-control PAT -->
+      <template v-if="remotePatProviders.length > 0 && mode !== 'forgot'">
+        <div
+          v-if="auth.providers.github || auth.providers.google || auth.providers.password"
+          class="my-4 flex items-center gap-3 text-xs text-slate-500"
+        >
+          <span class="h-px flex-1 bg-slate-800" /> {{ t('auth.login.or') }}
+          <span class="h-px flex-1 bg-slate-800" />
+        </div>
+        <form class="space-y-3" @submit.prevent="submitRemotePat">
+          <div v-if="remotePatProviders.length > 1" class="flex gap-2">
+            <UButton
+              v-for="p in remotePatProviders"
+              :key="p"
+              :color="p === remotePatProvider ? 'primary' : 'neutral'"
+              :variant="p === remotePatProvider ? 'solid' : 'subtle'"
+              :icon="PROVIDER_ICONS[p]"
+              size="sm"
+              @click="remotePatProvider = p"
+            >
+              {{ PROVIDER_LABELS[p] }}
+            </UButton>
+          </div>
+          <UInput
+            v-model="remotePatToken"
+            type="password"
+            required
+            :placeholder="
+              t('auth.login.patPlaceholder', { provider: PROVIDER_LABELS[remotePatProvider] })
+            "
+            icon="i-lucide-key-round"
+            size="lg"
+            class="w-full"
+          />
+          <p v-if="remotePatError" class="text-sm text-rose-400">{{ remotePatError }}</p>
+          <UButton
+            block
+            size="lg"
+            color="primary"
+            type="submit"
+            :icon="PROVIDER_ICONS[remotePatProvider]"
+            :loading="remotePatBusy"
+          >
+            {{ t('auth.login.signInWithPat', { provider: PROVIDER_LABELS[remotePatProvider] }) }}
+          </UButton>
+          <p class="px-1 text-center">
+            <a
+              :href="tokenCreateUrl(remotePatProvider)"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-xs text-indigo-400 hover:underline"
+            >
+              {{
+                t('auth.localMode.createToken', { provider: PROVIDER_LABELS[remotePatProvider] })
+              }}
+            </a>
+          </p>
+        </form>
+      </template>
+
+      <!-- No sign-in method configured on a remote deployment: explain, don't show a blank card -->
+      <UAlert
+        v-if="noSignInMethod"
+        color="warning"
+        variant="subtle"
+        icon="i-lucide-shield-alert"
+        :title="t('auth.login.notConfiguredTitle')"
+        :description="t('auth.login.notConfiguredBody')"
+      />
 
       <!-- Forgot password: request a reset link by email -->
       <form

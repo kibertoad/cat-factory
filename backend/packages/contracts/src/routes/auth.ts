@@ -122,6 +122,13 @@ const authConfigViewSchema = v.object({
     google: v.boolean(),
   }),
   localMode: v.optional(localModeConfigSchema),
+  /**
+   * Source-control PAT login offered on a HOSTED facade (remote node): the user pastes their
+   * OWN personal access token to sign in as the account it belongs to, subject to the server's
+   * login/org/domain allowlist. Distinct from `localMode.patLogin` (server-configured one-click
+   * tokens for a single local developer). Absent ⇒ no PAT login (e.g. the Worker, OAuth-only).
+   */
+  patLogin: v.optional(v.object({ providers: v.array(vcsProviderSchema) })),
   infrastructure: v.optional(infrastructureCapabilitiesSchema),
 })
 

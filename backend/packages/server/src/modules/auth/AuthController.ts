@@ -29,7 +29,7 @@ import {
 } from '../../auth/signing.js'
 import type { AuthConfig } from '../../config/types.js'
 import type { AppEnv } from '../../http/env.js'
-import type { UserRecord } from '@cat-factory/kernel'
+import type { UserRecord, VcsIdentity, VcsIdentityResolver } from '@cat-factory/kernel'
 import { ConflictError, NotFoundError, ValidationError } from '@cat-factory/kernel'
 
 // Authentication endpoints. The SPA is handed a signed session token (via the URL
@@ -174,6 +174,36 @@ async function isGitHubSignInAllowed(
   return orgs.some((org) => cfg.allowedOrgs.includes(org))
 }
 
+/**
+ * Hosted PAT-login allowlist. A remote deployment has no anonymous tier and must not admit an
+ * arbitrary source-control account just because the PAT is valid, so a PAT login is held to
+ * the SAME OR gate the rest of auth applies — extended across all three keys the user named:
+ * admit when the resolved login is allowlisted (`allowedLogins`), OR an org it belongs to is
+ * (`allowedOrgs`, GitHub `read:org`), OR its email domain is (`allowedEmailDomains`, the same
+ * rule password/Google self-signup uses). Fail closed: with every list empty, deny — matching
+ * `isGitHubSignInAllowed`. Local mode bypasses this (a single developer on their own machine);
+ * the caller gates on `config.localMode`.
+ */
+async function isPatIdentityAllowed(
+  cfg: AuthConfig,
+  resolver: VcsIdentityResolver,
+  identity: VcsIdentity,
+  pat: string,
+): Promise<boolean> {
+  if (cfg.allowedLogins.includes(identity.login.toLowerCase())) return true
+  if (identity.email && emailDomainAllowed(identity.email, cfg)) return true
+  if (cfg.allowedOrgs.length > 0 && resolver.resolveOrgs) {
+    try {
+      const orgs = await resolver.resolveOrgs(pat)
+      if (orgs.some((org) => cfg.allowedOrgs.includes(org.toLowerCase()))) return true
+    } catch {
+      // Org enumeration failed (the token lacks org-read scope, or a transient API error).
+      // Treat as "no qualifying org" rather than admitting — fail closed.
+    }
+  }
+  return false
+}
+
 // Best-effort in-process throttle for the password endpoints. It bounds naive online
 // brute-force / credential-stuffing bursts without any new infrastructure, but is
 // deliberately modest: the window is per-isolate (each Workers isolate / Node process
@@ -222,7 +252,16 @@ export function authController(): Hono<AppEnv> {
   // setup banner when the GitHub PAT is missing.
   buildHonoRoute(app, authConfigContract, (c) => {
     const cfg = authConfig(c)
-    const { localMode, infrastructure } = c.get('container').config
+    const container = c.get('container')
+    const { localMode, infrastructure } = container.config
+    // On a hosted facade (no `localMode`), advertise the source-control providers a user may
+    // sign in with by pasting their OWN PAT — so the login screen offers a PAT option alongside
+    // OAuth/password. Local mode keeps its richer `localMode.patLogin` (server-configured
+    // one-click tokens), so don't duplicate it there.
+    const patProviders =
+      !localMode && container.vcsIdentity
+        ? (Object.keys(container.vcsIdentity) as (keyof typeof container.vcsIdentity)[])
+        : []
     return c.json(
       {
         enabled: cfg.enabled,
@@ -232,6 +271,7 @@ export function authController(): Hono<AppEnv> {
           google: !!cfg.google,
         },
         ...(localMode ? { localMode } : {}),
+        ...(patProviders.length > 0 ? { patLogin: { providers: patProviders } } : {}),
         ...(infrastructure ? { infrastructure } : {}),
       },
       200,
@@ -485,6 +525,19 @@ export function authController(): Hono<AppEnv> {
           },
         },
         401,
+      )
+    }
+    // Hosted facades (remote node) have no anonymous tier, so a PAT login is held to the same
+    // login/org/domain allowlist as OAuth — a valid token alone must not admit an arbitrary
+    // account. Local mode (a single developer's own machine) is exempt and signs in any valid
+    // token, as before.
+    if (
+      !container.config.localMode &&
+      !(await isPatIdentityAllowed(cfg, entry.resolver, identity, pat))
+    ) {
+      return c.json(
+        { error: { code: 'forbidden', message: `@${identity.login} is not allowed to sign in` } },
+        403,
       )
     }
     const user = await container.userService.findOrCreateByIdentity(provider, identity.externalId, {

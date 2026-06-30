@@ -14,6 +14,10 @@ interface GitHubUserResponse {
   email?: string | null
 }
 
+interface GitHubOrgResponse {
+  login?: string
+}
+
 export interface GitHubIdentityResolverOptions {
   /** REST API base, e.g. `https://api.github.com` (no trailing slash needed). */
   apiBase: string
@@ -55,5 +59,26 @@ export class GitHubIdentityResolver implements VcsIdentityResolver {
       avatarUrl: user.avatar_url ?? null,
       email: user.email ?? null,
     }
+  }
+
+  // The orgs the PAT's account belongs to (lowercased), for a hosted facade's PAT-login org
+  // allowlist. Mirrors `GitHubOAuth.fetchUserOrgs`, but authenticates with the raw PAT — so it
+  // sees the orgs the token is authorized for (a fine-grained PAT must grant org read, or a
+  // classic PAT `read:org`; orgs it can't see simply don't appear and won't admit the user).
+  async resolveOrgs(token: string): Promise<string[]> {
+    const res = await this.fetchImpl(`${this.apiBase}/user/orgs?per_page=100`, {
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: 'application/vnd.github+json',
+        'x-github-api-version': '2022-11-28',
+        'user-agent': 'cat-factory',
+      },
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`GitHub /user/orgs failed (HTTP ${res.status}): ${text.slice(0, 200)}`)
+    }
+    const orgs = (await res.json()) as GitHubOrgResponse[]
+    return orgs.flatMap((org) => (org.login ? [org.login.toLowerCase()] : []))
   }
 }
