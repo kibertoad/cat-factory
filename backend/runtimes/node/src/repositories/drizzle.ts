@@ -14,7 +14,6 @@ import type {
   EmailConnectionRecord,
   EmailConnectionRepository,
   EmailProviderKind,
-  AgentRunKind,
   AgentContextSnapshot,
   AgentContextSnapshotRepository,
   CloudProvider,
@@ -112,7 +111,9 @@ import type {
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import { LLM_WARNING_FINISH_REASONS } from '@cat-factory/kernel'
+import { agentRunKindSchema } from '@cat-factory/contracts'
 import {
+  decodeEnum,
   type ExecutionRow,
   type SandboxExperimentRow,
   type SandboxFixtureRow,
@@ -558,7 +559,13 @@ class DrizzleAgentRunRepository implements AgentRunRepository {
       .select({ kind: agentRuns.kind })
       .from(agentRuns)
       .where(and(eq(agentRuns.workspace_id, workspaceId), eq(agentRuns.id, id)))
-    return row ? { workspaceId, id, kind: row.kind as AgentRunKind } : null
+    return row
+      ? {
+          workspaceId,
+          id,
+          kind: decodeEnum(agentRunKindSchema, row.kind, { table: 'agent_runs', column: 'kind', id }),
+        }
+      : null
   }
 
   async listStale(olderThanEpochMs: number): Promise<AgentRunRef[]> {
@@ -567,7 +574,11 @@ class DrizzleAgentRunRepository implements AgentRunRepository {
       .from(agentRuns)
       .where(and(eq(agentRuns.status, 'running'), lt(agentRuns.updated_at, olderThanEpochMs)))
       .orderBy(agentRuns.updated_at)
-    return rows.map((r) => ({ workspaceId: r.workspaceId, id: r.id, kind: r.kind as AgentRunKind }))
+    return rows.map((r) => ({
+      workspaceId: r.workspaceId,
+      id: r.id,
+      kind: decodeEnum(agentRunKindSchema, r.kind, { table: 'agent_runs', column: 'kind', id: r.id }),
+    }))
   }
 }
 

@@ -1,10 +1,11 @@
 import type { NotificationRepository } from '@cat-factory/kernel'
-import type {
-  Notification,
-  NotificationPayload,
-  NotificationSeverity,
-  NotificationType,
+import type { Notification, NotificationPayload, NotificationType } from '@cat-factory/contracts'
+import {
+  notificationSeveritySchema,
+  notificationStatusSchema,
+  notificationTypeSchema,
 } from '@cat-factory/contracts'
+import { decodeEnum, decodeEnumOr } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface NotificationRow {
@@ -30,11 +31,15 @@ function rowToNotification(row: NotificationRow): Notification {
       payload = null
     }
   }
+  const ctx = { table: 'notifications', id: row.id }
   return {
     id: row.id,
-    type: row.type as NotificationType,
-    status: row.status as Notification['status'],
-    severity: (row.severity as NotificationSeverity | null) ?? 'normal',
+    type: decodeEnum(notificationTypeSchema, row.type, { ...ctx, column: 'type' }),
+    status: decodeEnum(notificationStatusSchema, row.status, { ...ctx, column: 'status' }),
+    severity: decodeEnumOr(notificationSeveritySchema, row.severity ?? 'normal', 'normal', {
+      ...ctx,
+      column: 'severity',
+    }),
     blockId: row.block_id,
     executionId: row.execution_id,
     title: row.title,

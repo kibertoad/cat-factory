@@ -2,9 +2,14 @@ import type {
   Notification,
   NotificationPayload,
   NotificationRepository,
-  NotificationSeverity,
   NotificationType,
 } from '@cat-factory/kernel'
+import {
+  notificationSeveritySchema,
+  notificationStatusSchema,
+  notificationTypeSchema,
+} from '@cat-factory/contracts'
+import { decodeEnum, decodeEnumOr } from '@cat-factory/server'
 import { and, desc, eq } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { notifications } from '../db/schema.js'
@@ -26,11 +31,15 @@ function rowToNotification(row: NotificationRow): Notification {
       payload = null
     }
   }
+  const ctx = { table: 'notifications', id: row.id }
   return {
     id: row.id,
-    type: row.type as NotificationType,
-    status: row.status as Notification['status'],
-    severity: (row.severity as NotificationSeverity | null) ?? 'normal',
+    type: decodeEnum(notificationTypeSchema, row.type, { ...ctx, column: 'type' }),
+    status: decodeEnum(notificationStatusSchema, row.status, { ...ctx, column: 'status' }),
+    severity: decodeEnumOr(notificationSeveritySchema, row.severity ?? 'normal', 'normal', {
+      ...ctx,
+      column: 'severity',
+    }),
     blockId: row.block_id,
     executionId: row.execution_id,
     title: row.title,

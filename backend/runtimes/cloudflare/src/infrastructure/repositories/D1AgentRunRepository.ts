@@ -1,5 +1,6 @@
-import type { AgentRunKind } from '@cat-factory/contracts'
+import { agentRunKindSchema } from '@cat-factory/contracts'
 import type { AgentRunRef, AgentRunRepository } from '@cat-factory/kernel'
+import { decodeEnum } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 
 /**
@@ -21,7 +22,13 @@ export class D1AgentRunRepository implements AgentRunRepository {
       .prepare('SELECT kind FROM agent_runs WHERE workspace_id = ? AND id = ?')
       .bind(workspaceId, id)
       .first<{ kind: string }>()
-    return row ? { workspaceId, id, kind: row.kind as AgentRunKind } : null
+    return row
+      ? {
+          workspaceId,
+          id,
+          kind: decodeEnum(agentRunKindSchema, row.kind, { table: 'agent_runs', column: 'kind', id }),
+        }
+      : null
   }
 
   async listStale(olderThanEpochMs: number): Promise<AgentRunRef[]> {
@@ -36,7 +43,11 @@ export class D1AgentRunRepository implements AgentRunRepository {
     return (results ?? []).map((r) => ({
       workspaceId: r.workspace_id,
       id: r.id,
-      kind: r.kind as AgentRunKind,
+      kind: decodeEnum(agentRunKindSchema, r.kind, {
+        table: 'agent_runs',
+        column: 'kind',
+        id: r.id,
+      }),
     }))
   }
 }

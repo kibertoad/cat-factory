@@ -13,6 +13,7 @@ import {
   rowToPipeline,
   rowToWorkspace,
 } from '../src/persistence/mappers.js'
+import { DataIntegrityError } from '../src/persistence/decode.js'
 
 // The row<->domain mappers are shared verbatim by the D1 (SQLite) and Drizzle
 // (Postgres) repos, so a bug here breaks BOTH stores identically. These exercise the
@@ -153,7 +154,7 @@ describe('block insert/read of the less-common columns', () => {
         type: 'task',
         description: '',
         position: { x: 0, y: 0 },
-        status: 'todo',
+        status: 'planned',
         progress: 0,
         dependsOn: [],
         executionId: null,
@@ -325,8 +326,13 @@ describe('rowToExecution', () => {
     expect(exec.pipelineId).toBe('')
   })
 
-  it('coerces a null block_id to an empty string', () => {
-    expect(rowToExecution({ ...base, block_id: null }).blockId).toBe('')
+  it('rejects a null block_id as corrupt instead of coercing it', () => {
+    expect(() => rowToExecution({ ...base, block_id: null })).toThrow(DataIntegrityError)
+  })
+
+  it('rejects an out-of-bounds currentStep', () => {
+    const detail = JSON.stringify({ pipelineId: 'pl', pipelineName: 'P', steps: [], currentStep: 3 })
+    expect(() => rowToExecution({ ...base, detail })).toThrow(DataIntegrityError)
   })
 
   it('parses a valid failure but ignores garbage / partial shapes', () => {

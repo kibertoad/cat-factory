@@ -3,12 +3,21 @@ import type {
   AgentFailure,
   Block,
   ExecutionInstance,
-  ExecutionStatus,
   Pipeline,
   PipelineStep,
   Workspace,
 } from '@cat-factory/contracts'
-import { agentFailureKindSchema } from '@cat-factory/contracts'
+import {
+  agentFailureKindSchema,
+  blockLevelSchema,
+  blockStatusSchema,
+  executionStatusSchema,
+} from '@cat-factory/contracts'
+import { array, string, type GenericSchema } from 'valibot'
+import { DataIntegrityError, decodeEnum, decodeJson } from './decode.js'
+
+/** Contract for `blocks.depends_on`: a JSON array of block-id strings. */
+const dependsOnSchema = array(string())
 
 // Row <-> domain mapping for the D1 (SQLite) tables. JSON-shaped columns are
 // (de)serialised here so the repositories stay focused on SQL.
@@ -181,6 +190,32 @@ function scalarField<D, P>(prop: string, column = toSnake(prop)): FieldMapper<D,
 }
 
 /**
+ * A required enum scalar. Identical to {@link scalarField} on insert/patch, but on READ it
+ * re-validates the stored value against its Valibot contract via {@link decodeEnum} — so a
+ * corrupt/out-of-contract enum surfaces as a logged {@link DataIntegrityError} (→ 500) at
+ * the row, instead of an erased `as` cast smuggling a fake-valid value into the domain.
+ */
+function enumField<D, P>(
+  prop: string,
+  schema: GenericSchema<unknown, unknown>,
+  table: string,
+  column = toSnake(prop),
+): FieldMapper<D, P> {
+  return {
+    read: (row, out) => {
+      out[prop] = decodeEnum(schema, row[column], { table, column, id: row.id })
+    },
+    insert: (d, out) => {
+      out[column] = (d as AnyRow)[prop]
+    },
+    patch: (p, out) => {
+      const value = (p as AnyRow)[prop]
+      if (value !== undefined) out[column] = value
+    },
+  }
+}
+
+/**
  * An optional scalar: read only when the column is non-null (so the domain key stays
  * absent), insert null when unset. With `clearOnEmpty` a falsy patch value (the empty
  * string from a "clear the selection" dropdown) writes null; otherwise the defined value
@@ -308,12 +343,16 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
       }
     },
   },
-  scalarField('status'),
+  enumField('status', blockStatusSchema, 'blocks'),
   scalarField('progress'),
   // `dependsOn` is a required (always-present) JSON array, unlike the optional JSON fields.
   {
     read: (row, out) => {
-      out.dependsOn = JSON.parse(row.depends_on as string)
+      out.dependsOn = decodeJson(dependsOnSchema, row.depends_on as string, {
+        table: 'blocks',
+        column: 'depends_on',
+        id: row.id,
+      })
     },
     insert: (b, out) => {
       out.depends_on = JSON.stringify(b.dependsOn)
@@ -323,7 +362,7 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
     },
   },
   scalarField('executionId'),
-  scalarField('level'),
+  enumField('level', blockLevelSchema, 'blocks'),
   scalarField('parentId'),
   // Epic membership; an empty string / null detaches the task from its epic.
   optField('epicId', { clearOnEmpty: true }),
@@ -540,16 +579,38 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
   } catch {
     detail = {}
   }
+  // An execution with no owning block is structurally impossible — surface the corrupt
+  // row loudly instead of coercing it to an empty id that callers read as "no block".
+  if (!row.block_id) {
+    throw new DataIntegrityError('Execution row has no block_id', { table: 'agent_runs', id: row.id })
+  }
+  const steps = (detail.steps ?? []).map((s) => ({ ...s, runId: row.id }))
+  const currentStep = detail.currentStep ?? 0
+  // `currentStep` indexes `steps`; it ranges over [0, steps.length] (the upper bound is the
+  // legitimate "ran off the end / complete" cursor). Anything outside that wedges the driver
+  // on silent no-ops, so reject it at read.
+  if (currentStep < 0 || currentStep > steps.length) {
+    throw new DataIntegrityError('Execution currentStep is out of bounds', {
+      table: 'agent_runs',
+      id: row.id,
+      currentStep,
+      steps: steps.length,
+    })
+  }
   return {
     id: row.id,
-    blockId: row.block_id ?? '',
+    blockId: row.block_id,
     pipelineId: detail.pipelineId ?? '',
     pipelineName: detail.pipelineName ?? '',
     // Stamp each step with its run id (a projection of the row id) so a lone step is
     // self-describing for debugging; never read back from the detail JSON.
-    steps: (detail.steps ?? []).map((s) => ({ ...s, runId: row.id })),
-    currentStep: detail.currentStep ?? 0,
-    status: row.status as ExecutionStatus,
+    steps,
+    currentStep,
+    status: decodeEnum(executionStatusSchema, row.status, {
+      table: 'agent_runs',
+      column: 'status',
+      id: row.id,
+    }),
     failure: parseAgentFailure(row.failure),
     // LEGACY: drop a pre-#94 numeric initiator id to null (see the LEGACY USER-ID REPAIR
     // note; after 2026-07-15 revert to `detail.initiatedBy ?? null`).
