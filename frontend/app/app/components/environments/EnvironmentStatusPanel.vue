@@ -7,27 +7,50 @@ import type { RunEnvironment, HumanTestEnvironmentStatus } from '~/types/executi
 
 defineProps<{ environment: RunEnvironment | null; degradedReason?: string | null }>()
 
-const ENV_STATUS_META: Record<
-  HumanTestEnvironmentStatus,
-  { label: string; color: string; icon: string }
-> = {
-  provisioning: { label: 'Spinning up…', color: 'text-amber-300', icon: 'i-lucide-loader-circle' },
-  ready: { label: 'Running', color: 'text-emerald-300', icon: 'i-lucide-circle-dot' },
-  failed: { label: 'Errored', color: 'text-rose-300', icon: 'i-lucide-circle-alert' },
-  expired: { label: 'Expired', color: 'text-slate-400', icon: 'i-lucide-circle-off' },
+const { t, d } = useI18n()
+
+// Exhaustive enum→label map of literal `t(...)` keys (keeps the typed-key drift guard
+// live); the color/icon stay static, English-neutral styling.
+const ENV_STATUS_META = computed<
+  Record<HumanTestEnvironmentStatus, { label: string; color: string; icon: string }>
+>(() => ({
+  provisioning: {
+    label: t('environments.status.provisioning'),
+    color: 'text-amber-300',
+    icon: 'i-lucide-loader-circle',
+  },
+  ready: {
+    label: t('environments.status.ready'),
+    color: 'text-emerald-300',
+    icon: 'i-lucide-circle-dot',
+  },
+  failed: {
+    label: t('environments.status.failed'),
+    color: 'text-rose-300',
+    icon: 'i-lucide-circle-alert',
+  },
+  expired: {
+    label: t('environments.status.expired'),
+    color: 'text-slate-400',
+    icon: 'i-lucide-circle-off',
+  },
   tearing_down: {
-    label: 'Shutting down…',
+    label: t('environments.status.tearing_down'),
     color: 'text-slate-400',
     icon: 'i-lucide-loader-circle',
   },
-  torn_down: { label: 'Shut down', color: 'text-slate-400', icon: 'i-lucide-circle-off' },
-}
+  torn_down: {
+    label: t('environments.status.torn_down'),
+    color: 'text-slate-400',
+    icon: 'i-lucide-circle-off',
+  },
+}))
 </script>
 
 <template>
   <section class="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
     <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-      Ephemeral environment
+      {{ t('environments.title') }}
     </h3>
     <div v-if="environment" class="space-y-2">
       <div class="flex items-center gap-2 text-[13px]">
@@ -57,7 +80,7 @@ const ENV_STATUS_META: Record<
         {{ environment.url }}
       </a>
       <p v-if="environment.expiresAt" class="text-[11px] text-slate-500">
-        Expires {{ new Date(environment.expiresAt).toLocaleString() }}
+        {{ t('environments.expires', { date: d(new Date(environment.expiresAt), 'long') }) }}
       </p>
       <!-- The verbatim provider error when the environment failed/expired. -->
       <pre
@@ -70,7 +93,7 @@ const ENV_STATUS_META: Record<
       >
     </div>
     <p v-else class="text-[12px] text-slate-500">
-      {{ degradedReason ?? 'No ephemeral environment for this run.' }}
+      {{ degradedReason ?? t('environments.empty') }}
     </p>
   </section>
 </template>

@@ -7,6 +7,7 @@ import FragmentLibraryManager from '~/components/fragments/FragmentLibraryManage
 
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
+const { t } = useI18n()
 
 const open = computed({
   get: () => ui.fragmentLibraryOpen,
@@ -17,7 +18,7 @@ const open = computed({
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Prompt-fragment library" :ui="{ content: 'max-w-3xl' }">
+  <UModal v-model:open="open" :title="t('fragments.panel.title')" :ui="{ content: 'max-w-3xl' }">
     <template #body>
       <FragmentLibraryManager
         v-if="workspace.workspaceId"
