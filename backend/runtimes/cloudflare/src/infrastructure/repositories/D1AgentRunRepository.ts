@@ -26,7 +26,11 @@ export class D1AgentRunRepository implements AgentRunRepository {
       ? {
           workspaceId,
           id,
-          kind: decodeEnum(agentRunKindSchema, row.kind, { table: 'agent_runs', column: 'kind', id }),
+          kind: decodeEnum(agentRunKindSchema, row.kind, {
+            table: 'agent_runs',
+            column: 'kind',
+            id,
+          }),
         }
       : null
   }

@@ -331,7 +331,12 @@ describe('rowToExecution', () => {
   })
 
   it('rejects an out-of-bounds currentStep', () => {
-    const detail = JSON.stringify({ pipelineId: 'pl', pipelineName: 'P', steps: [], currentStep: 3 })
+    const detail = JSON.stringify({
+      pipelineId: 'pl',
+      pipelineName: 'P',
+      steps: [],
+      currentStep: 3,
+    })
     expect(() => rowToExecution({ ...base, detail })).toThrow(DataIntegrityError)
   })
 

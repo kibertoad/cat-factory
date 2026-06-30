@@ -582,7 +582,10 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
   // An execution with no owning block is structurally impossible — surface the corrupt
   // row loudly instead of coercing it to an empty id that callers read as "no block".
   if (!row.block_id) {
-    throw new DataIntegrityError('Execution row has no block_id', { table: 'agent_runs', id: row.id })
+    throw new DataIntegrityError('Execution row has no block_id', {
+      table: 'agent_runs',
+      id: row.id,
+    })
   }
   const steps = (detail.steps ?? []).map((s) => ({ ...s, runId: row.id }))
   const currentStep = detail.currentStep ?? 0

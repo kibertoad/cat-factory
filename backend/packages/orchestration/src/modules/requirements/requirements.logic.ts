@@ -427,7 +427,9 @@ export function disposeReview(
   // / never-converging verdict. `iteration` MAY exceed `maxIterations` — a human-granted
   // extra round legitimately runs one past the cap — so that is not checked here.
   if (!Number.isInteger(opts.maxIterations) || opts.maxIterations < 1) {
-    throw new Error(`disposeReview: maxIterations must be a positive integer, got ${opts.maxIterations}`)
+    throw new Error(
+      `disposeReview: maxIterations must be a positive integer, got ${opts.maxIterations}`,
+    )
   }
   if (!Number.isInteger(opts.iteration) || opts.iteration < 1) {
     throw new Error(`disposeReview: iteration must be a positive integer, got ${opts.iteration}`)

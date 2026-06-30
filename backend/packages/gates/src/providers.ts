@@ -94,7 +94,11 @@ const PASS_THROUGH_GATES: ReadonlyArray<{
   token: ProviderToken<unknown>
   effect: string
 }> = [
-  { gate: 'ci', token: CI_STATUS_PROVIDER, effect: 'CI is never checked — PRs advance as if green' },
+  {
+    gate: 'ci',
+    token: CI_STATUS_PROVIDER,
+    effect: 'CI is never checked — PRs advance as if green',
+  },
   {
     gate: 'conflicts',
     token: MERGEABILITY_PROVIDER,

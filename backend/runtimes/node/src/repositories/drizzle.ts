@@ -563,7 +563,11 @@ class DrizzleAgentRunRepository implements AgentRunRepository {
       ? {
           workspaceId,
           id,
-          kind: decodeEnum(agentRunKindSchema, row.kind, { table: 'agent_runs', column: 'kind', id }),
+          kind: decodeEnum(agentRunKindSchema, row.kind, {
+            table: 'agent_runs',
+            column: 'kind',
+            id,
+          }),
         }
       : null
   }
@@ -577,7 +581,11 @@ class DrizzleAgentRunRepository implements AgentRunRepository {
     return rows.map((r) => ({
       workspaceId: r.workspaceId,
       id: r.id,
-      kind: decodeEnum(agentRunKindSchema, r.kind, { table: 'agent_runs', column: 'kind', id: r.id }),
+      kind: decodeEnum(agentRunKindSchema, r.kind, {
+        table: 'agent_runs',
+        column: 'kind',
+        id: r.id,
+      }),
     }))
   }
 }
