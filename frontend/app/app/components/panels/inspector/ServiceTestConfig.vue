@@ -230,6 +230,9 @@ async function detectFromRepo() {
       owner: repo.owner,
       repo: repo.name,
       ...(ctx.directory ? { directory: ctx.directory } : {}),
+      // Prioritize the option matching the currently-selected tab (kubernetes vs
+      // docker-compose); the detector falls back to the other when the preferred isn't found.
+      prefer: provisionType.value,
     })
     detectResult.value = rec
     // Only prefill when the detector actually inferred something. A `detected: false`

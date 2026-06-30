@@ -593,6 +593,7 @@ export class EnvironmentConnectionService {
     return detectKubernetesProvisioning(bound.repo, {
       gitRef: input.gitRef ?? bound.baseBranch,
       ...(input.directory ? { directory: input.directory } : {}),
+      ...(input.prefer ? { prefer: input.prefer } : {}),
     })
   }
 
