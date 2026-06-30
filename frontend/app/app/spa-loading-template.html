@@ -1,0 +1,32 @@
+<!-- Early SPA loading shell painted before the JS bundle parses + Vue mounts
+     (Nuxt removes it on mount). Self-contained: main.css/icon fonts aren't loaded
+     yet, so styles + spinner are inline pure-CSS. Spinner-only keeps it
+     locale-neutral. Wired via app.spaLoadingTemplate in nuxt.config.ts. -->
+<div class="cf-spa-loader" role="status" aria-label="Loading">
+  <div class="cf-spa-loader__spinner"></div>
+</div>
+<style>
+  .cf-spa-loader {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* --board-bg / slate-950, matching the board surface AuthGate renders on. */
+    background-color: #0b1020;
+  }
+  .cf-spa-loader__spinner {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 9999px;
+    /* Track in slate-700, the active arc in indigo-500 (the app's primary). */
+    border: 3px solid #334155;
+    border-top-color: #6366f1;
+    animation: cf-spa-spin 1s linear infinite;
+  }
+  @keyframes cf-spa-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+</style>
