@@ -79,6 +79,51 @@ watch(
 
 const busy = ref(false)
 
+// Connection-probe state for the kube engine forms (workspace + per-user override kept
+// separate so a probe result lands on the form it came from). The probe reaches the apiserver
+// with the supplied config + token via the per-type handler test endpoint — nothing persisted.
+type TestResult = { ok: boolean; message?: string } | null
+const kubeTesting = ref(false)
+const kubeTestResult = ref<TestResult>(null)
+const kubeOverrideTesting = ref(false)
+const kubeOverrideTestResult = ref<TestResult>(null)
+
+async function testKube(payload: { config: KubeHandlerConfig; secrets: Record<string, string> }) {
+  kubeTesting.value = true
+  kubeTestResult.value = null
+  try {
+    kubeTestResult.value = await infra.testHandler({
+      config: payload.config,
+      secrets: payload.secrets,
+    })
+  } catch (e) {
+    kubeTestResult.value = { ok: false, message: e instanceof Error ? e.message : String(e) }
+  } finally {
+    kubeTesting.value = false
+  }
+}
+
+async function testKubeOverride(payload: {
+  config: KubeHandlerConfig
+  secrets: Record<string, string>
+}) {
+  kubeOverrideTesting.value = true
+  kubeOverrideTestResult.value = null
+  try {
+    kubeOverrideTestResult.value = await infra.testHandler({
+      config: payload.config,
+      secrets: payload.secrets,
+    })
+  } catch (e) {
+    kubeOverrideTestResult.value = {
+      ok: false,
+      message: e instanceof Error ? e.message : String(e),
+    }
+  } finally {
+    kubeOverrideTesting.value = false
+  }
+}
+
 async function saveKube(payload: { config: KubeHandlerConfig; secrets: Record<string, string> }) {
   busy.value = true
   try {
@@ -335,10 +380,11 @@ function notifyError(e: unknown) {
       <KubernetesEngineForm
         :engine="selectedKubeEngine"
         :handler="kubeHandler"
-        :supports-test="false"
-        :testing="false"
+        :supports-test="true"
+        :testing="kubeTesting"
         :busy="busy"
-        :test-result="null"
+        :test-result="kubeTestResult"
+        @test="testKube"
         @save="saveKube"
       />
 
@@ -377,10 +423,11 @@ function notifyError(e: unknown) {
           <KubernetesEngineForm
             :engine="selectedKubeEngine"
             :handler="kubeUserHandler"
-            :supports-test="false"
-            :testing="false"
+            :supports-test="true"
+            :testing="kubeOverrideTesting"
             :busy="busy"
-            :test-result="null"
+            :test-result="kubeOverrideTestResult"
+            @test="testKubeOverride"
             @save="saveKubeOverride"
           />
         </div>

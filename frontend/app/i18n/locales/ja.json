@@ -1304,6 +1304,7 @@
         "remote-kubernetes": "リモート Kubernetes"
       },
       "kubernetesEngine": {
+        "localK3sHint": "このマシン上のローカル k3s/k3d/kind クラスター向けにあらかじめ入力されています。ServiceAccount をロールにバインドし、`kubectl create token NAME -n NAMESPACE`（Kubernetes 1.24 以降）でトークンを発行して下記に貼り付けてください。その後、環境 URL の導出方法を選択し、クラスターが別のポートで待ち受けている場合は API サーバー URL を編集してください。",
         "label": "接続ラベル",
         "labelPlaceholder": "プレビュークラスター",
         "apiServerUrl": "API サーバー URL",

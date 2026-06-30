@@ -14,6 +14,7 @@ import {
   removeCustomManifestTypeContract,
   teardownEnvironmentContract,
   testEnvironmentConnectionContract,
+  testEnvironmentHandlerContract,
   unregisterEnvironmentHandlerContract,
   unregisterEnvironmentProviderContract,
   updateEnvironmentHandlerSecretsContract,
@@ -167,6 +168,17 @@ export function environmentController(): Hono<AppEnv> {
     const body = c.req.valid('json')
     const view = await env.connectionService.registerHandler(param(c, 'workspaceId'), body)
     return c.json(view, 201)
+  })
+
+  // Probe a candidate per-type handler connection before saving (nothing persisted) — e.g.
+  // the Kubernetes engine form's "Test connection" reaches the apiserver with the supplied token.
+  buildHonoRoute(app, testEnvironmentHandlerContract, async (c) => {
+    const env = requireEnvironments(c)
+    if (!env) return unavailable(c)
+    return c.json(
+      await env.connectionService.testHandler(param(c, 'workspaceId'), c.req.valid('json')),
+      200,
+    )
   })
 
   buildHonoRoute(app, updateEnvironmentHandlerSecretsContract, async (c) => {
