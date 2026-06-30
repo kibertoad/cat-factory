@@ -1499,7 +1499,8 @@
         "maxImpact": "Maks. wpływ %",
         "ciMaxAttempts": "Próby naprawy CI",
         "maxRequirementIterations": "Iteracje wymagań",
-        "maxRequirementConcernAllowed": "Automatyczne zaliczenie zastrzeżeń do"
+        "maxRequirementConcernAllowed": "Automatyczne zaliczenie zastrzeżeń do",
+        "autoMerge": "Auto-scalanie"
       },
       "newPreset": "Nowe ustawienie",
       "create": {
@@ -1520,7 +1521,9 @@
         "createFailed": "Nie można utworzyć ustawienia",
         "defaultFailed": "Nie można ustawić jako domyślne",
         "deleteFailed": "Nie można usunąć ustawienia"
-      }
+      },
+      "autoMergeOnHint": "Scalaj automatycznie, gdy mieści się w progach.",
+      "autoMergeOffHint": "Zawsze kieruj PR do recenzji człowieka."
     },
     "observabilityConnection": {
       "title": "Kondycja po wydaniu",
@@ -3497,6 +3500,25 @@
       "bootstrapFailed": "Nie udało się zainicjować",
       "saveArchFailed": "Nie udało się zapisać architektury referencyjnej",
       "deleteFailed": "Nie udało się usunąć"
+    }
+  },
+  "mergePreset": {
+    "health": {
+      "title": "Aktualizacje presetów scalania",
+      "allValid": "Wszystkie wbudowane presety scalania są aktualne.",
+      "newHeading": "Dostępne nowe presety",
+      "newDescription": "Pojawiły się nowe wbudowane presety scalania. Dodaj je do biblioteki tej tablicy.",
+      "add": "Dodaj",
+      "updatesHeading": "Dostępne aktualizacje",
+      "updatesDescription": "Dostępna jest nowsza wersja tych wbudowanych presetów scalania. Zregeneruj, aby ją przyjąć (domyślny i kolejność są zachowane).",
+      "versionAvailable": "Dostępna wersja {from} → {to}.",
+      "reseed": "Zregeneruj",
+      "reseedAll": "Zaktualizuj wszystkie ({count})",
+      "dismiss": "Odrzuć",
+      "done": "Gotowe",
+      "toast": {
+        "reseedFailed": "Nie udało się zregenerować presetu scalania"
+      }
     }
   }
 }

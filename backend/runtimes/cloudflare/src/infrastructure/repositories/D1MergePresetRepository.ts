@@ -14,6 +14,8 @@ interface MergePresetRow {
   release_watch_window_minutes: number
   release_max_attempts: number
   human_review_grace_minutes: number
+  auto_merge_enabled: number
+  version: number | null
   is_default: number
   created_at: number
 }
@@ -31,7 +33,9 @@ function rowToPreset(row: MergePresetRow): MergeThresholdPreset {
     releaseWatchWindowMinutes: row.release_watch_window_minutes,
     releaseMaxAttempts: row.release_max_attempts,
     humanReviewGraceMinutes: row.human_review_grace_minutes,
+    autoMergeEnabled: row.auto_merge_enabled === 1,
     isDefault: row.is_default === 1,
+    ...(row.version != null ? { version: row.version } : {}),
     createdAt: row.created_at,
   }
 }
@@ -97,8 +101,8 @@ export class D1MergePresetRepository implements MergePresetRepository {
            (workspace_id, id, name, max_complexity, max_risk, max_impact, ci_max_attempts,
             max_requirement_iterations, max_requirement_concern_allowed,
             release_watch_window_minutes, release_max_attempts, human_review_grace_minutes,
-            is_default, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            auto_merge_enabled, version, is_default, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            name = excluded.name,
            max_complexity = excluded.max_complexity,
@@ -110,6 +114,8 @@ export class D1MergePresetRepository implements MergePresetRepository {
            release_watch_window_minutes = excluded.release_watch_window_minutes,
            release_max_attempts = excluded.release_max_attempts,
            human_review_grace_minutes = excluded.human_review_grace_minutes,
+           auto_merge_enabled = excluded.auto_merge_enabled,
+           version = excluded.version,
            is_default = excluded.is_default`,
       )
       .bind(
@@ -125,6 +131,8 @@ export class D1MergePresetRepository implements MergePresetRepository {
         preset.releaseWatchWindowMinutes,
         preset.releaseMaxAttempts,
         preset.humanReviewGraceMinutes,
+        preset.autoMergeEnabled ? 1 : 0,
+        preset.version ?? null,
         preset.isDefault ? 1 : 0,
         preset.createdAt,
       )

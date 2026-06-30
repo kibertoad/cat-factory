@@ -13,9 +13,18 @@ export const useMergePresetsStore = defineStore('mergePresets', () => {
   const api = useApi()
 
   const presets = ref<MergeThresholdPreset[]>([])
+  /**
+   * Current built-in catalog versions (`seedMergePresets()`), keyed by preset id, from the
+   * workspace snapshot. The keys ARE the set of built-in ids: a stored preset whose id is a
+   * key here is a built-in (and is outdated when its `version` is below the catalog value),
+   * and a key with no matching stored preset is a NEW built-in the workspace can add. Drives
+   * `useMergePresetHealth`.
+   */
+  const catalogVersions = ref<Record<string, number>>({})
 
-  function hydrate(list: MergeThresholdPreset[]) {
+  function hydrate(list: MergeThresholdPreset[], versions?: Record<string, number>) {
     presets.value = [...list].sort((a, b) => a.createdAt - b.createdAt)
+    if (versions) catalogVersions.value = versions
   }
 
   /** The workspace default (fallback for a task that picks none). */
@@ -50,5 +59,27 @@ export const useMergePresetsStore = defineStore('mergePresets', () => {
     await ws.refresh()
   }
 
-  return { presets, defaultPreset, resolve, hydrate, create, update, remove }
+  /**
+   * Reseed a built-in preset from the backend's current catalog: adopt an updated definition,
+   * repair a drifted one, or materialise a NEW built-in that appeared after the workspace was
+   * created. The `presetId` is the catalog id (e.g. `mp_balanced`). Refreshes the snapshot.
+   */
+  async function reseed(presetId: string) {
+    const ws = useWorkspaceStore()
+    const updated = await api.reseedMergePreset(ws.requireId(), presetId)
+    await ws.refresh()
+    return updated
+  }
+
+  return {
+    presets,
+    catalogVersions,
+    defaultPreset,
+    resolve,
+    hydrate,
+    create,
+    update,
+    remove,
+    reseed,
+  }
 })

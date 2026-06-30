@@ -1038,6 +1038,10 @@ export const mergeThresholdPresets = pgTable(
     release_watch_window_minutes: integer('release_watch_window_minutes').notNull().default(30),
     release_max_attempts: integer('release_max_attempts').notNull().default(1),
     human_review_grace_minutes: integer('human_review_grace_minutes').notNull().default(10),
+    // When 0 the `merger` step never auto-merges — every PR is routed to human review.
+    auto_merge_enabled: integer('auto_merge_enabled').notNull().default(1),
+    // Monotonic catalog version for a built-in preset (NULL on custom; treated as 0).
+    version: integer('version'),
     is_default: integer('is_default').notNull().default(0),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },

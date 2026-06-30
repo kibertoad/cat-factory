@@ -1966,6 +1966,7 @@ export class ExecutionService {
     releaseWatchWindowMinutes: number
     releaseMaxAttempts: number
     humanReviewGraceMinutes: number
+    autoMergeEnabled: boolean
   }> {
     if (this.mergePresetRepository) {
       if (block.mergePresetId) {

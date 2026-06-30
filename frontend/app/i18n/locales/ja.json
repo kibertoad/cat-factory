@@ -1600,7 +1600,8 @@
         "maxImpact": "最大影響度 %",
         "ciMaxAttempts": "CI 修正の試行回数",
         "maxRequirementIterations": "要件のイテレーション回数",
-        "maxRequirementConcernAllowed": "この水準以下の懸念を自動承認"
+        "maxRequirementConcernAllowed": "この水準以下の懸念を自動承認",
+        "autoMerge": "自動マージ"
       },
       "newPreset": "新しいプリセット",
       "create": {
@@ -1621,7 +1622,9 @@
         "createFailed": "プリセットを作成できませんでした",
         "defaultFailed": "デフォルトを設定できませんでした",
         "deleteFailed": "プリセットを削除できませんでした"
-      }
+      },
+      "autoMergeOnHint": "しきい値内なら自動的にマージします。",
+      "autoMergeOffHint": "常にPRを人間のレビューに回します。"
     },
     "observabilityConnection": {
       "title": "リリース後のヘルス",
@@ -3510,6 +3513,25 @@
       "bootstrapFailed": "ブートストラップできませんでした",
       "saveArchFailed": "リファレンスアーキテクチャを保存できませんでした",
       "deleteFailed": "削除できませんでした"
+    }
+  },
+  "mergePreset": {
+    "health": {
+      "title": "マージプリセットの更新",
+      "allValid": "組み込みのマージプリセットはすべて最新です。",
+      "newHeading": "新しいプリセットがあります",
+      "newDescription": "新しい組み込みマージプリセットが追加されました。このボードのライブラリに追加してください。",
+      "add": "追加",
+      "updatesHeading": "更新あり",
+      "updatesDescription": "これらの組み込みマージプリセットの新しいバージョンがあります。再シードして取り込みます（既定と並び順は保持されます）。",
+      "versionAvailable": "バージョン {from} → {to} が利用可能です。",
+      "reseed": "再シード",
+      "reseedAll": "すべて更新 ({count})",
+      "dismiss": "閉じる",
+      "done": "完了",
+      "toast": {
+        "reseedFailed": "マージプリセットを再シードできませんでした"
+      }
     }
   }
 }

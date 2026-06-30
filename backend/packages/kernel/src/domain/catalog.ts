@@ -1,4 +1,4 @@
-import type { BlockType, ModelPreset, WorkspaceSettings } from './types.js'
+import type { BlockType, ModelPreset, RequirementConcernLevel, WorkspaceSettings } from './types.js'
 
 // Static catalogs and constants used across the domain.
 
@@ -48,7 +48,92 @@ export const DEFAULT_MERGE_PRESET = {
   // leaving a series of comments isn't churned mid-stream. Only applies to the unapproved
   // path (an approved PR's comments are addressed immediately).
   humanReviewGraceMinutes: 10,
+  // Auto-merge is allowed: a within-threshold, credibly-explained assessment merges the PR.
+  autoMergeEnabled: true,
 } as const
+
+/**
+ * A built-in merge-preset template (no `createdAt` yet, but with a STABLE id so a
+ * workspace's persisted copy can be matched against the catalog and reseeded). The
+ * service stamps each with `createdAt` on first seed; {@link seedMergePresets} lists
+ * the built-ins. Mirrors {@link ModelPresetSeed} / the pipeline seed shape, including
+ * the monotonic `version` that drives the "reseed available" advisory.
+ */
+export interface MergePresetSeed {
+  /** Stable catalog id (e.g. `mp_balanced`), used to match a stored copy for reseeding. */
+  id: string
+  name: string
+  maxComplexity: number
+  maxRisk: number
+  maxImpact: number
+  ciMaxAttempts: number
+  maxRequirementIterations: number
+  maxRequirementConcernAllowed: RequirementConcernLevel
+  releaseWatchWindowMinutes: number
+  releaseMaxAttempts: number
+  humanReviewGraceMinutes: number
+  /** When false, the `merger` step never auto-merges — every PR is routed to human review. */
+  autoMergeEnabled: boolean
+  /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
+  isDefault: boolean
+  /**
+   * Monotonic seed version. When the current catalog version for this id exceeds a
+   * workspace's persisted copy, the SPA offers to reseed it. Bump this when a built-in's
+   * definition changes upstream so existing workspaces are advised to adopt the update.
+   */
+  version: number
+}
+
+/**
+ * The built-in merge threshold presets seeded for every workspace. `Balanced` is the
+ * default auto-merge policy; `Manual review only` disables auto-merge entirely
+ * (`autoMergeEnabled: false`), so every PR on a task using it is routed to a human
+ * `merge_review` notification regardless of the assessment. A workspace keeps at least
+ * these until the operator edits the library. To ship a new built-in (or a new version
+ * of one), add it here / bump its `version`; existing workspaces are then advised to
+ * reseed (new presets appear, changed ones flag an update).
+ */
+export const MERGE_PRESET_SEEDS: MergePresetSeed[] = [
+  {
+    id: 'mp_balanced',
+    name: DEFAULT_MERGE_PRESET.name,
+    maxComplexity: DEFAULT_MERGE_PRESET.maxComplexity,
+    maxRisk: DEFAULT_MERGE_PRESET.maxRisk,
+    maxImpact: DEFAULT_MERGE_PRESET.maxImpact,
+    ciMaxAttempts: DEFAULT_MERGE_PRESET.ciMaxAttempts,
+    maxRequirementIterations: DEFAULT_MERGE_PRESET.maxRequirementIterations,
+    maxRequirementConcernAllowed: DEFAULT_MERGE_PRESET.maxRequirementConcernAllowed,
+    releaseWatchWindowMinutes: DEFAULT_MERGE_PRESET.releaseWatchWindowMinutes,
+    releaseMaxAttempts: DEFAULT_MERGE_PRESET.releaseMaxAttempts,
+    humanReviewGraceMinutes: DEFAULT_MERGE_PRESET.humanReviewGraceMinutes,
+    autoMergeEnabled: DEFAULT_MERGE_PRESET.autoMergeEnabled,
+    isDefault: true,
+    version: 1,
+  },
+  {
+    id: 'mp_manual_review',
+    name: 'Manual review only',
+    // Thresholds are irrelevant while auto-merge is off, but keep them valid + conservative.
+    maxComplexity: 0,
+    maxRisk: 0,
+    maxImpact: 0,
+    ciMaxAttempts: DEFAULT_MERGE_PRESET.ciMaxAttempts,
+    maxRequirementIterations: DEFAULT_MERGE_PRESET.maxRequirementIterations,
+    maxRequirementConcernAllowed: 'none',
+    releaseWatchWindowMinutes: DEFAULT_MERGE_PRESET.releaseWatchWindowMinutes,
+    releaseMaxAttempts: DEFAULT_MERGE_PRESET.releaseMaxAttempts,
+    humanReviewGraceMinutes: DEFAULT_MERGE_PRESET.humanReviewGraceMinutes,
+    // The whole point of this preset: never auto-merge — always raise a human review.
+    autoMergeEnabled: false,
+    isDefault: false,
+    version: 1,
+  },
+]
+
+/** The built-in merge presets, fresh copies so callers can stamp ids/timestamps safely. */
+export function seedMergePresets(): MergePresetSeed[] {
+  return MERGE_PRESET_SEEDS.map((p) => ({ ...p }))
+}
 
 /** Fallback CI-fixer attempt budget when no preset resolves (defensive default). */
 export const DEFAULT_CI_MAX_ATTEMPTS = DEFAULT_MERGE_PRESET.ciMaxAttempts

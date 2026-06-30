@@ -40,6 +40,7 @@ interface Draft {
   ciMaxAttempts: number
   maxRequirementIterations: number
   maxRequirementConcernAllowed: RequirementConcernLevel
+  autoMergeEnabled: boolean
 }
 const drafts = reactive<Record<string, Draft>>({})
 
@@ -52,6 +53,7 @@ function toDraft(p: MergeThresholdPreset): Draft {
     ciMaxAttempts: p.ciMaxAttempts,
     maxRequirementIterations: p.maxRequirementIterations,
     maxRequirementConcernAllowed: p.maxRequirementConcernAllowed,
+    autoMergeEnabled: p.autoMergeEnabled,
   }
 }
 
@@ -88,6 +90,7 @@ async function save(p: MergeThresholdPreset) {
       ciMaxAttempts: d.ciMaxAttempts,
       maxRequirementIterations: d.maxRequirementIterations,
       maxRequirementConcernAllowed: d.maxRequirementConcernAllowed,
+      autoMergeEnabled: d.autoMergeEnabled,
     })
     toast.add({
       title: t('settings.mergeThresholds.toast.saved'),
@@ -133,6 +136,7 @@ const draft = reactive<Draft>({
   ciMaxAttempts: 10,
   maxRequirementIterations: 6,
   maxRequirementConcernAllowed: 'none',
+  autoMergeEnabled: true,
 })
 
 async function create() {
@@ -147,8 +151,10 @@ async function create() {
       ciMaxAttempts: draft.ciMaxAttempts,
       maxRequirementIterations: draft.maxRequirementIterations,
       maxRequirementConcernAllowed: draft.maxRequirementConcernAllowed,
+      autoMergeEnabled: draft.autoMergeEnabled,
     })
     draft.name = ''
+    draft.autoMergeEnabled = true
     toast.add({
       title: t('settings.mergeThresholds.toast.created'),
       icon: 'i-lucide-check',
@@ -290,7 +296,17 @@ async function create() {
         </label>
       </div>
 
-      <div class="mt-3 flex justify-end">
+      <div class="mt-3 flex items-center justify-between gap-3">
+        <USwitch
+          v-model="drafts[p.id]!.autoMergeEnabled"
+          size="sm"
+          :label="t('settings.mergeThresholds.field.autoMerge')"
+          :description="
+            drafts[p.id]!.autoMergeEnabled
+              ? t('settings.mergeThresholds.autoMergeOnHint')
+              : t('settings.mergeThresholds.autoMergeOffHint')
+          "
+        />
         <UButton
           color="primary"
           variant="soft"
@@ -373,6 +389,11 @@ async function create() {
             size="sm"
           />
         </label>
+        <USwitch
+          v-model="draft.autoMergeEnabled"
+          size="sm"
+          :label="t('settings.mergeThresholds.field.autoMerge')"
+        />
         <UButton
           color="primary"
           size="sm"

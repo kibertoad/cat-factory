@@ -62,6 +62,10 @@ const FragmentLibraryPanel = defineAsyncComponent(
 const PipelineHealthModal = defineAsyncComponent(
   () => import('~/components/pipeline/PipelineHealthModal.vue'),
 )
+// Startup advisory for new / outdated built-in merge presets — same once-per-session pattern.
+const MergePresetHealthModal = defineAsyncComponent(
+  () => import('~/components/settings/MergePresetHealthModal.vue'),
+)
 const IntegrationsHub = defineAsyncComponent(
   () => import('~/components/layout/IntegrationsHub.vue'),
 )
@@ -147,6 +151,18 @@ watch(
   () => [workspace.ready, pipelineIssues.value],
   () => {
     if (workspace.ready && pipelineIssues.value) ui.maybeOpenPipelineHealth()
+  },
+  { immediate: true },
+)
+// Same advisory for built-in merge presets: surface new / outdated ones once per session. Defers
+// to the pipeline advisory when both fire, so at most one modal auto-opens on a given load.
+const { hasIssues: mergePresetIssues } = useMergePresetHealth()
+watch(
+  () => [workspace.ready, mergePresetIssues.value, ui.pipelineHealthOpen],
+  () => {
+    if (workspace.ready && mergePresetIssues.value && !ui.pipelineHealthOpen) {
+      ui.maybeOpenMergePresetHealth()
+    }
   },
   { immediate: true },
 )
@@ -303,6 +319,7 @@ watch(
       <SlackPanel v-if="ui.slackOpen" />
       <FragmentLibraryPanel v-if="ui.fragmentLibraryOpen" />
       <PipelineHealthModal v-if="ui.pipelineHealthOpen" />
+      <MergePresetHealthModal v-if="ui.mergePresetHealthOpen" />
       <IntegrationsHub v-if="ui.integrationsOpen" />
       <PersonalSetupModal v-if="ui.personalSetupOpen" />
       <WorkspaceSettingsPanel v-if="ui.workspaceSettingsOpen" />

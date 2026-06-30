@@ -98,8 +98,22 @@ export const mergeThresholdPresetSchema = v.object({
    * PR's outstanding comments are addressed immediately.
    */
   humanReviewGraceMinutes: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /**
+   * When false the `merger` step never auto-merges: every PR is routed to a human
+   * `merge_review` notification regardless of the assessment scores. The built-in
+   * "Manual review only" preset sets this; a custom preset may too. Defaults to true
+   * (the historical behaviour: auto-merge a within-threshold, explained assessment).
+   */
+  autoMergeEnabled: v.boolean(),
   /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
   isDefault: v.boolean(),
+  /**
+   * Monotonic seed version for a BUILT-IN preset (`seedMergePresets()` assigns it). When the
+   * current catalog version for this id exceeds the persisted copy's `version`, the SPA offers
+   * to reseed it. Absent on user-created presets (not version-tracked) and on rows persisted
+   * before versioning existed (treated as 0).
+   */
+  version: v.optional(v.number()),
   createdAt: v.number(),
 })
 export type MergeThresholdPreset = v.InferOutput<typeof mergeThresholdPresetSchema>
@@ -126,6 +140,8 @@ export const createMergePresetSchema = v.object({
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema, 30),
   releaseMaxAttempts: v.optional(releaseAttemptsSchema, 1),
   humanReviewGraceMinutes: v.optional(graceMinutesSchema, 10),
+  /** Allow auto-merge of a within-threshold, explained assessment (default true). */
+  autoMergeEnabled: v.optional(v.boolean(), true),
   /** Make this the workspace default (demotes the previous default). */
   isDefault: v.optional(v.boolean(), false),
 })
@@ -143,6 +159,7 @@ export const updateMergePresetSchema = v.object({
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema),
   releaseMaxAttempts: v.optional(releaseAttemptsSchema),
   humanReviewGraceMinutes: v.optional(graceMinutesSchema),
+  autoMergeEnabled: v.optional(v.boolean()),
   isDefault: v.optional(v.boolean()),
 })
 export type UpdateMergePresetInput = v.InferOutput<typeof updateMergePresetSchema>

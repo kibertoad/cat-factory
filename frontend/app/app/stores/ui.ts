@@ -24,6 +24,11 @@ export const useUiStore = defineStore('ui', () => {
   // session so it does not re-pop on every snapshot re-hydration.
   const pipelineHealthOpen = ref(false)
   const pipelineHealthSeen = ref(false)
+  // Merge-preset health startup advisory: lists built-ins with a newer catalog version (reseed)
+  // and new built-in presets the workspace can add. `mergePresetHealthSeen` gates auto-open to
+  // once per session so it does not re-pop on every snapshot re-hydration (mirrors pipelines).
+  const mergePresetHealthOpen = ref(false)
+  const mergePresetHealthSeen = ref(false)
   const decisionContext = ref<{ instanceId: string; decisionId: string } | null>(null)
 
   // Document-source integration modals, keyed by source. `documentImport` and
@@ -248,6 +253,22 @@ export const useUiStore = defineStore('ui', () => {
 
   function closePipelineHealth() {
     pipelineHealthOpen.value = false
+  }
+
+  /** Auto-open the merge-preset health advisory once per session (no-op after it's been shown). */
+  function maybeOpenMergePresetHealth() {
+    if (mergePresetHealthSeen.value) return
+    mergePresetHealthSeen.value = true
+    mergePresetHealthOpen.value = true
+  }
+
+  function openMergePresetHealth() {
+    mergePresetHealthSeen.value = true
+    mergePresetHealthOpen.value = true
+  }
+
+  function closeMergePresetHealth() {
+    mergePresetHealthOpen.value = false
   }
 
   function openDecision(instanceId: string, decisionId: string) {
@@ -658,6 +679,8 @@ export const useUiStore = defineStore('ui', () => {
     builderOpen,
     pipelineHealthOpen,
     pipelineHealthSeen,
+    mergePresetHealthOpen,
+    mergePresetHealthSeen,
     decisionContext,
     documentConnect,
     documentImport,
@@ -715,6 +738,9 @@ export const useUiStore = defineStore('ui', () => {
     maybeOpenPipelineHealth,
     openPipelineHealth,
     closePipelineHealth,
+    maybeOpenMergePresetHealth,
+    openMergePresetHealth,
+    closeMergePresetHealth,
     openDecision,
     closeDecision,
     openApprovalDetail,
