@@ -486,8 +486,17 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       // Per-USER infra handler overrides are a LOCAL-mode feature: only the local facade
       // wires the repository, so the per-user override service + controller assemble here
       // (and stay 503 / inert on the Worker + Node facades). A developer can point a
-      // provision type at their own Docker / k3s for the runs they initiate.
-      environmentUserHandlerRepository: new DrizzleEnvironmentUserHandlerRepository(options.db),
+      // provision type at their own Docker / k3s for the runs they initiate. It is backed by
+      // local Postgres, so it only wires when a `db` is present — in mothership mode (`db`
+      // undefined) there is no local database, so the override service stays inert (503),
+      // exactly like `localSettingsService` above; remoting it is a later environments slice.
+      ...(options.db
+        ? {
+            environmentUserHandlerRepository: new DrizzleEnvironmentUserHandlerRepository(
+              options.db,
+            ),
+          }
+        : {}),
     } satisfies Partial<CoreDependencies>,
   })
 

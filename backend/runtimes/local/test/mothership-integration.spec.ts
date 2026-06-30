@@ -51,6 +51,13 @@ const MOTHERSHIP_ENV: NodeJS.ProcessEnv = {
   ENCRYPTION_KEY,
   // The shared secret the machine token is signed with and the mothership verifies against.
   AUTH_SESSION_SECRET: SESSION_SECRET,
+  // A hosted (remote-node) backend has no anonymous tier: `loadNodeConfig` refuses to boot
+  // unless a login provider is configured or AUTH_DEV_OPEN is set. The mothership is NOT
+  // dev-open (it only answers the machine-token RPC here), so configure a login provider —
+  // password login over the session secret above. The test never makes a user-authenticated
+  // HTTP call to the mothership (seeding goes through its services; the local node carries the
+  // dev-open gate), so this only satisfies the boot guard.
+  AUTH_PASSWORD_ENABLED: 'true',
   ENVIRONMENTS_ENABLED: 'true',
   PROMPT_LIBRARY_ENABLED: 'true',
   DOCUMENT_SOURCES: 'confluence,notion,github,figma,zeplin,linear',
