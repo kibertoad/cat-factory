@@ -1,5 +1,158 @@
 # @cat-factory/server
 
+## 0.55.0
+
+### Minor Changes
+
+- f9678df: Mothership mode (Phase 3 slice 1): widen the persistence-RPC allow-list to the workspace-scoped
+  board-load read surface. `PILOT_PERSISTENCE_METHODS` now exposes the reads a `GET /workspaces/:id`
+  snapshot assembles — `workspaceMountRepository.listByWorkspace`, `workspaceSettingsRepository.get`,
+  `mergePresetRepository.list`, `modelPresetRepository.list`, `serviceFragmentDefaultsRepository.get`,
+  `pipelineScheduleRepository.list`/`getByBlock`, `trackerSettingsRepository.get`,
+  `notificationRepository.listOpen`, `bootstrapJobRepository.listByWorkspace`,
+  `tokenUsageRepository.totalsSinceForWorkspace`, and the per-block reviews
+  (`requirementReviewRepository.getByBlock`, `clarityReviewRepository.getByBlock`,
+  `brainstormSessionRepository.getByBlockStage`).
+
+  Every newly-listed method takes the workspaceId as arg0, so they reuse the existing `workspace`
+  scope rule (resolve the owning account; reject anything outside the machine token's scope as 404).
+  Reads only — no new mutation is exposed, and the admin-gated mutations / global sweeper reads stay
+  excluded. No registry change was needed: the dispatcher already reflects over the full
+  `CoreDependencies` object, so allow-listing a method is enough. Round-trip + cross-account-scope
+  tests for every newly-listed method are in `packages/server/test/persistenceRpc.spec.ts`.
+
+  Still a DRAFT-gated initiative (see `docs/initiatives/mothership-mode.md`): the cross-service +
+  entity-id-keyed reads (which need a new scope kind), routing the direct-db stores through the
+  remote registry, and the fake-mothership integration test remain before the mothership boot can
+  ship.
+
+- f9678df: Mothership mode (Phase 3 slice 2): widen the persistence-RPC allow-list to the cross-service
+  entity-id-keyed board-composition reads, via two new scope kinds that resolve the entity's owning
+  account server-side before the scope check.
+
+  - `serviceList` (arg0 = `serviceIds[]`): resolve each service's owning account; EVERY requested id
+    must be in scope (a missing or out-of-scope service fails closed as 404); an empty list is a
+    no-op read that binds no service. Exposes `serviceRepository.listByIds`,
+    `blockRepository.listByServices`, `executionRepository.listByServices`,
+    `bootstrapJobRepository.listByServices`, `pipelineScheduleRepository.listByServices`, and
+    `workspaceMountRepository.countByServiceIds`.
+  - `block` (arg0 = blockId, no workspace arg): resolve the block's home workspace, then that
+    workspace's account. Exposes `blockRepository.findById`.
+  - `serviceRepository.listByAccount` reuses the existing `account` rule, so the `null` (auth-disabled,
+    unscoped) org listing is refused over a scoped machine token.
+
+  The two resolvers (`resolveBlockAccountId`, `resolveServiceAccountIds`) are wired in
+  `PersistenceController` and the dispatcher fails closed when a kind's resolver is absent. Round-trip,
+  cross-account-scope, unknown-id, and empty-list tests for every newly-listed method are in
+  `packages/server/test/persistenceRpc.spec.ts`.
+
+  `subscriptionActivationRepository.deleteByExecution` is deliberately NOT exposed: per the per-repo
+  bucket checklist it is the local-sqlite bucket, not the remote surface.
+
+  Still a DRAFT-gated initiative (see `docs/initiatives/mothership-mode.md`): routing the direct-db
+  stores through the remote registry when `db` is undefined, and the fake-mothership integration test,
+  remain before the mothership boot can ship.
+
+- f9678df: Mothership mode (Phase 3 slice 4): the fake-mothership functional integration test — the merge
+  gate's exit criteria — plus the agent-context run-path repo surface it surfaced.
+
+  New test `runtimes/local/test/mothership-integration.spec.ts` boots a stock Node mothership
+  (`buildNodeContainer` over real Postgres) on a 127.0.0.1 loopback and a no-Postgres mothership-mode
+  `buildLocalContainer` whose `CoreRepositories` are the RPC-backed remote registry pointing at it,
+  then asserts the two things the build-only tests can't: a board **loads** over the remote
+  persistence RPC, and a run **drives to a persisted terminal state** (`done`) over it, with the
+  execution read back straight from the mothership's Postgres. Only the agent executor is faked; the
+  whole persistence path is real, so an un-allow-listed method, a mis-scoped call, or an unrouted
+  direct-db store fails the test instead of a developer's first board load.
+
+  Standing it up surfaced that `AgentContextBuilder` resolves a block's linked docs/tasks and its
+  provisioned environment on EVERY agent dispatch — so those feature-flagged sub-helper repos are on
+  the board-load + run path, not off it as previously assumed. Fixes:
+
+  - `@cat-factory/node-server`: in mothership mode (`db` undefined) route the context-builder
+    run-path repos — `documentRepository`, `taskRepository`, `environmentRegistryRepository` /
+    `environmentConnectionRepository` — from the remote registry (the sub-helpers built them directly
+    over the absent `db`). Their connect/provision surfaces stay db-direct (off the run path).
+  - `@cat-factory/server`: widen `PILOT_PERSISTENCE_METHODS` to the run/board methods the path
+    exercises, each workspace-scoped: `documentRepository.{listByBlock,get,getByUrl}`,
+    `taskRepository.{listByBlock,get,getByUrl}`, `environmentRegistryRepository.{getByBlock,get}`, the
+    run-start `modelPresetRepository.getDefault`, the board-load lazy default-preset seeds
+    `mergePresetRepository.upsert` / `modelPresetRepository.upsert`, and the completion notification
+    raise + inbox transitions `notificationRepository.{findOpenByBlock,upsertOpenForBlock,upsert}`.
+    (`*.getByUrl` resolves a URL named in a block's description, and `notificationRepository.upsert`
+    backs block-less raises + inbox act/dismiss/escalate — both squarely on the same run/post-run
+    path as the reads they sit next to, so omitting them would fail any task whose description
+    contains a link, or any inbox action after a run.) Round-trip + cross-account-scope unit tests
+    for each are added to `persistenceRpc.spec.ts`, and the integration test patches a task with a
+    URL + Jira/GitHub refs and enables the environment integration so these reads round-trip over the
+    RPC end-to-end (not just in the unit suite).
+
+  Still DRAFT-gated (`docs/initiatives/mothership-mode.md`): decrypting a remotely-sealed provisioned
+  environment's access cipher needs the mothership's key (a later secrets-delegation slice); the
+  kaizen-grading, LLM-metric and subscription-activation calls a run also makes degrade as best-effort
+  no-ops over the remote (telemetry is Phase 5 local-first; activation is the local-sqlite bucket); and
+  the remaining sub-helper surfaces (fragments / slack connect/provision) are follow-ups.
+
+- f9678df: Mothership mode: the no-Postgres local boot SPINE (initiative slice 1b). A local node can now
+  boot with `LOCAL_MOTHERSHIP_URL` set and NO local database: it composes the remote (RPC-backed)
+  org repositories + a local `node:sqlite` credential store (sealed with the LOCAL key; the
+  mothership's `ENCRYPTION_KEY` never reaches the machine) and drives runs with an in-process work
+  runner instead of pg-boss.
+
+  NOT yet functional end-to-end — keep the mothership PR a DRAFT. The pilot allow-list exposes only
+  the six core domain repositories remotely, but a board load and a run reach many more org repos
+  (mounts, settings, presets, notifications, projections, …) plus stores still built from the
+  now-absent local `db`, so those paths currently throw. Routing the full repository surface through
+  the remote registry + widening the server allow-list (with the per-method account/role scope rules
+  that boundary needs) is the gating phase in `docs/initiatives/mothership-mode.md`; this work must
+  not merge until that phase lands. See the tracker for the per-repo task list.
+
+  - `@cat-factory/server`: `createRemoteRepositoryRegistry(client)` — a drift-proof, full-surface
+    remote repository set (a `Proxy` that lazily forwards any accessed repository to one RPC), so a
+    mothership-mode node backs its entire `CoreRepositories` surface remotely with no per-repo
+    wiring. The server-side allow-list still gates which repo+method actually executes.
+  - `@cat-factory/node-server`: `buildNodeContainer` now tolerates `db: undefined` — the per-user
+    Postgres services (subscriptions, user secrets, OpenRouter catalog) turn themselves off, the
+    API-key pool + local-model endpoints accept injected repositories, and the composite `repos`
+    is required in that mode. Re-exports the execution driver + realtime pieces the local
+    mothership boot reuses.
+  - `@cat-factory/local-server`: `composeMothership` wires the remote repos + the local credential
+    store; `buildLocalContainer` composes them with `db: undefined`, injects the credential repos,
+    and drives runs with the new in-process `WorkRunner` (the no-pg-boss analogue, serialized per
+    execution); `startLocal()` takes the dedicated no-Postgres boot path automatically when
+    `LOCAL_MOTHERSHIP_URL` is set.
+  - `@cat-factory/contracts`: `localModeConfig.mothership` is surfaced to the SPA so the UI can
+    label what is stored locally vs delegated to the mothership.
+
+  Login-based machine-token minting also lands later (a static `LOCAL_MOTHERSHIP_TOKEN` is used for
+  now). Pre-1.0, no back-compat: the standard siloed-Postgres local mode is unchanged when
+  `LOCAL_MOTHERSHIP_URL` is unset.
+
+### Patch Changes
+
+- f9678df: Mothership Phase 3 review fixes:
+
+  - `ExecutionService.start` now clears a replaced block's prior per-run subscription activation
+    best-effort (try/catch), mirroring the terminal cleanup in `RunStateMachine.emit`. In mothership
+    mode `subscriptionActivationRepository` is remote and `deleteByExecution` is not yet allow-listed
+    (it throws `unknown_method`), so the previously-unguarded call would break re-running any block;
+    the TTL sweep reclaims the stale row as the backstop.
+  - The persistence RPC controller memoises the `block` / `serviceList` scope reads
+    (`blockRepository.findById` / `serviceRepository.listByIds`) per request, so when the request
+    also dispatches that same read it reuses the resolver's result instead of issuing a second
+    identical query.
+
+- Updated dependencies [f9678df]
+- Updated dependencies [f9678df]
+- Updated dependencies [858799e]
+  - @cat-factory/contracts@0.65.0
+  - @cat-factory/orchestration@0.48.1
+  - @cat-factory/kernel@0.62.0
+  - @cat-factory/integrations@0.44.0
+  - @cat-factory/agents@0.24.3
+  - @cat-factory/prompt-fragments@0.9.18
+  - @cat-factory/spend@0.10.48
+
 ## 0.54.0
 
 ### Minor Changes
