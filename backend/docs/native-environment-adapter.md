@@ -11,10 +11,11 @@ PREnvs are keyed by project + git ref and whose links/status need provider-speci
 you write a **native adapter** instead — a hand-written `EnvironmentProvider`. This document
 is the contract for writing one.
 
-> **Wiring in one line:** the env subsystem uses a per-workspace **backend registry** keyed by
+> **Wiring in one line:** the env subsystem uses an **app-owned backend registry** keyed by
 > a `kind` discriminator (mirroring the runner-pool backends): you register an
-> `EnvironmentBackendProvider` via `registerEnvironmentBackend(...)` as an import side effect,
-> and a workspace selects your `kind` at connect time. The built-in `kubernetes` backend
+> `EnvironmentBackendProvider` **by reference** into the `EnvironmentBackendRegistry` the
+> facade builds (`registry.register(provider)`), and a workspace selects your `kind` at
+> connect time. The built-in `kubernetes` backend
 > (`backend/packages/integrations/src/modules/environments/environment-backends.ts`) is the
 > worked example. There is no facade injection option (the old
 > `buildNodeContainer({ environmentProvider })` / `startLocal({ environmentProvider })`
@@ -72,16 +73,16 @@ and the `provisionFields` captured at provision time.
 
 A native backend is **registered programmatically** as an import side effect — the same
 seam the built-in `manifest` and `kubernetes` backends use, and the analogue of custom agent
-kinds / gates / model providers. There is **no facade injection option** (the old
-`buildNodeContainer({ environmentProvider })` / `startLocal({ environmentProvider })`
-deployment-wide singletons were removed): you register an `EnvironmentBackendProvider`, which
-maps a discriminated connect config → an `EnvironmentProvider`.
+kinds / gates / model providers. The registry is **app-owned and injected** (no deployment-wide
+provider singleton): you define an `EnvironmentBackendProvider` — which maps a discriminated
+connect config → an `EnvironmentProvider` — and register it **by reference** into the registry
+the facade builds, then hand that registry to the container build.
 
 ```ts
-// my-org-backends.ts — imported for side effect by the deployment's entry module.
-import { registerEnvironmentBackend } from '@cat-factory/integrations'
+// my-org-backends.ts — a plain value, NOT a side-effect import.
+import type { EnvironmentBackendProvider } from '@cat-factory/integrations'
 
-registerEnvironmentBackend({
+export const kargoEnvironmentBackend: EnvironmentBackendProvider = {
   kind: 'kargo', // any lower-kebab slug that isn't a reserved built-in
   displayLabel: 'Kargo PREnvs', // shown in the connect-form backend selector
   referencedSecretKeys: () => ['kargo_token'],
@@ -97,10 +98,26 @@ registerEnvironmentBackend({
   },
   fromManifest: (manifest) => ({ kind: 'kargo', manifest }),
   buildProvider: (ctx) => new KargoEnvironmentProvider(ctx.urlPolicy),
-})
+}
 ```
 
-This works on **every** runtime (Worker / Node / local): `EnvironmentConnectionService`
+```ts
+// main.ts — register by reference, then pass the registries to the container build. `start()`
+// exposes a `buildContainer` seam exactly for this facade-level customization (local mode uses it).
+import { start, buildNodeContainer } from '@cat-factory/node-server'
+import { createBackendRegistries } from '@cat-factory/integrations'
+import { kargoEnvironmentBackend } from './my-org-backends.js'
+
+const backendRegistries = createBackendRegistries()
+backendRegistries.environmentBackendRegistry.register(kargoEnvironmentBackend)
+
+await start({ buildContainer: (opts) => buildNodeContainer({ ...opts, backendRegistries }) })
+```
+
+Because registration is by reference into the injected registry, your backend is seen
+regardless of module identity — there is no "must share the same `@cat-factory/integrations`
+instance" footgun. This works on **every** runtime (Worker / Node / local):
+`EnvironmentConnectionService`
 resolves a workspace's stored connection `kind` to the registered backend and builds its
 provider. So one seam serves both a **single-tenant** install (register one bespoke backend)
 and a **multi-tenant** deployment (each workspace selects a `kind`). Registering code is
@@ -173,8 +190,9 @@ piece — but it uses the **exact same extension pattern**: see [Custom runner b
 ## Custom runner backends
 
 The self-hosted runner-pool subsystem is the mirror image of this one, so a custom runner
-backend is registered the same way: `registerRunnerBackend(provider)` (from
-`@cat-factory/integrations`), where `provider` is a `RunnerBackendProvider` — the analogue of
+backend is registered the same way: `backendRegistries.runnerBackendRegistry.register(provider)`
+on the `RunnerBackendRegistry` (from `@cat-factory/integrations` via `createBackendRegistries()`),
+where `provider` is a `RunnerBackendProvider` — the analogue of
 `EnvironmentBackendProvider`, with `buildTransport(config, ctx) → RunnerTransport` and
 `testConnection` in place of `buildProvider`. It rides the generic
 `runnerBackendConfigSchema` manifest member (no new config variant), is advertised to the SPA

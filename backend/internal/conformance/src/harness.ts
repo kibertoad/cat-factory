@@ -1,4 +1,5 @@
 import type { GateProviderOverrides } from '@cat-factory/gates'
+import type { BackendRegistries } from '@cat-factory/integrations'
 import type {
   EnvironmentProvider,
   ExecutionEventPublisher,
@@ -256,4 +257,12 @@ export interface ConformanceAppOptions {
     workspaceId: string,
     coords: { owner: string; repo: string; provider?: 'github' | 'gitlab' },
   ) => Promise<RunRepoContext | null>
+  /**
+   * Inject the app-owned backend registries (environment + runner kind → provider), pre-loaded
+   * with custom backends, so the suite can assert a deployment-registered custom kind connects,
+   * round-trips, and is advertised in the snapshot — on EVERY runtime. Each facade harness
+   * threads it into its container build (`buildNodeContainer({ backendRegistries })` / the
+   * Worker's `buildContainer` overrides). Absent → the facade's default built-in-only registry.
+   */
+  backendRegistries?: BackendRegistries
 }

@@ -67,9 +67,10 @@ A workspace's runner connection is a **discriminated "agent runner backend"**
   namespace (allow only the apiserver/kubelet) so the harness is reachable solely via
   the proxy.
 
-Beyond the built-ins, a deployment can register its **own** runner backend kind
-programmatically (an import side effect via `registerRunnerBackend`, mirroring custom
-agent kinds / gates / env backends). A custom kind rides the contract's **generic
+Beyond the built-ins, a deployment can register its **own** runner backend kind by reference
+into the app-owned `RunnerBackendRegistry` (`createBackendRegistries()` →
+`runnerBackendRegistry.register(provider)`, mirroring custom env backends). A custom kind
+rides the contract's **generic
 manifest member** (`runnerBackendConfigSchema`), so it needs **no new config variant** and
 no new table, service, controller, or window — it becomes a first-class option in the same
 connect form (advertised to the SPA via the workspace snapshot's `runnerBackendKinds`, with

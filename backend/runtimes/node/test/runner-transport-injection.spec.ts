@@ -1,7 +1,11 @@
 import type { RunnerPoolManifest, RunnerPoolProvider } from '@cat-factory/kernel'
 import type { AppConfig } from '@cat-factory/server'
+import { defaultRunnerBackendRegistry } from '@cat-factory/integrations'
 import { describe, expect, it } from 'vitest'
 import { buildNodeResolveTransport } from '../src/container.js'
+
+// The app-owned runner-backend registry the resolver resolves a stored `kind` through.
+const registry = defaultRunnerBackendRegistry()
 
 // The native runner-adapter seam: `buildNodeResolveTransport` must drive the actual
 // dispatch through an INJECTED `runnerPoolProvider` (e.g. a Kargo adapter) when one is
@@ -74,6 +78,7 @@ describe('buildNodeResolveTransport native runner-adapter seam', () => {
       connectionRepo,
       workspaceRepo,
       clock,
+      registry,
     )
     expect(resolve).toBeNull()
   })
@@ -85,6 +90,7 @@ describe('buildNodeResolveTransport native runner-adapter seam', () => {
       connectionRepo,
       workspaceRepo,
       clock,
+      registry,
       provider,
     )
     expect(resolve).not.toBeNull()
@@ -98,7 +104,7 @@ describe('buildNodeResolveTransport native runner-adapter seam', () => {
     const emptyRepo = {
       getByWorkspace: () => Promise.resolve(null),
     } as unknown as typeof connectionRepo
-    const resolve = buildNodeResolveTransport(config, emptyRepo, workspaceRepo, clock)
+    const resolve = buildNodeResolveTransport(config, emptyRepo, workspaceRepo, clock, registry)
     await expect(resolve!('ws-1')).rejects.toThrow(/No runner backend available/)
   })
 })

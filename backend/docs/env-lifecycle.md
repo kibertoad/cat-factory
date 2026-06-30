@@ -177,8 +177,8 @@ A facade wires the dispatcher only when the container prerequisites are met **an
 backend actually supports agent repair (`describeRepairAgent`) — so a stock deployment running the
 generic manifest provider is unchanged (no `describeRepairAgent` ⇒ the service guard skips the
 fallback). The repairer is built over the first repair-capable provider in the env-backend registry
-(`findRepairCapableProvider`), so a custom backend registered via `registerEnvironmentBackend` that
-implements `describeRepairAgent` is the one the dispatcher repairs through. The repair agent runs on
+(`EnvironmentBackendRegistry.findRepairCapable`), so a custom backend registered (by reference)
+into that registry that implements `describeRepairAgent` is the one the dispatcher repairs through. The repair agent runs on
 the `coder` kind's routing model.
 
 **Bonus / stretch — true in-container validation:** package `validateRepo` as a runnable the

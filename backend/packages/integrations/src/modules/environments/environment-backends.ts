@@ -6,7 +6,8 @@ import type {
 } from '@cat-factory/kernel'
 import { STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
 // The native Kubernetes environment backend lives in the kubernetes module (all K8s code
-// colocated). Imported here purely to self-register, mirroring the manifest built-in.
+// colocated). Imported here so `defaultEnvironmentBackendRegistry()` can register it
+// alongside the manifest built-in.
 import { kubernetesEnvironmentBackend } from '../kubernetes/kubernetes-environment-backend.js'
 import { assertManifestUrlsSafe, referencedSecretKeys } from './environments.logic.js'
 import { HttpEnvironmentProvider } from './HttpEnvironmentProvider.js'
@@ -16,11 +17,16 @@ import { HttpEnvironmentProvider } from './HttpEnvironmentProvider.js'
 // namespaces, plus any CUSTOM kind) registers an EnvironmentBackendProvider that maps its
 // config → an EnvironmentProvider. The connection service resolves a workspace's stored
 // `kind` to the registered backend. A CUSTOM third-party kind needs only a registry entry
-// (an import side effect) — it rides the contract's generic manifest member, so NO new
-// config variant and no new table/service/controller; its connect form is derived from the
-// provider's `describeConfig`/`describeManifestTemplate` (or falls back to the raw manifest
-// editor). Mirrors `runner-backends.ts` and the registerGate / model-provider / agent-kind
-// seams: built-ins self-register on import; a third-party kind registers for side effect.
+// — it rides the contract's generic manifest member, so NO new config variant and no new
+// table/service/controller; its connect form is derived from the provider's
+// `describeConfig`/`describeManifestTemplate` (or falls back to the raw manifest editor).
+//
+// The registry is an INSTANCE owned by the composition root (`EnvironmentBackendRegistry`),
+// NOT a module-global Map. The app builds it via `defaultEnvironmentBackendRegistry()` /
+// `createBackendRegistries()` and injects it (through `CoreDependencies`) into the
+// connection service; a deployment registers a custom backend by reference
+// (`registry.register(provider)`), so the old "must share the same module instance to be
+// seen" footgun is gone. See `docs/initiatives/registry-di-migration.md`.
 //
 // The stored connection always persists an EnvironmentManifest (the K8s config rides
 // its `providerConfig`), so a backend supplies `toManifest`/`fromManifest` to translate
@@ -72,46 +78,60 @@ export interface EnvironmentBackendProvider {
   buildProvider(ctx: EnvironmentBackendContext): EnvironmentProvider
 }
 
-const REGISTRY = new Map<string, EnvironmentBackendProvider>()
-
-/** Register an environment-backend provider (built-ins on import; third-party for side effect). */
-export function registerEnvironmentBackend(provider: EnvironmentBackendProvider): void {
-  REGISTRY.set(provider.kind, provider)
-}
-
-/** The provider for a backend kind, or undefined when unregistered. */
-export function environmentBackend(kind: string): EnvironmentBackendProvider | undefined {
-  return REGISTRY.get(kind)
-}
-
-/** All registered backend kinds (for diagnostics / a UI capabilities list). */
-export function registeredEnvironmentBackendKinds(): string[] {
-  return [...REGISTRY.keys()]
-}
-
 /**
- * Registered backend kinds + display labels, for the workspace snapshot → the SPA's
- * provider-connect backend-kind selector. Always includes the built-ins.
+ * The app-owned registry of environment-backend providers, keyed by `kind`. Constructed by
+ * the composition root (via {@link defaultEnvironmentBackendRegistry} /
+ * `createBackendRegistries`) and injected into the connection service. A deployment teaches
+ * the platform a custom backend by holding the same instance and calling {@link register}
+ * — registration is by reference, so it never depends on module identity.
  */
-export function environmentBackendKinds(): { kind: string; label: string }[] {
-  return [...REGISTRY.values()].map((p) => ({ kind: p.kind, label: p.displayLabel ?? p.kind }))
-}
+export class EnvironmentBackendRegistry {
+  private readonly map = new Map<string, EnvironmentBackendProvider>()
 
-/**
- * The first registered backend whose provider supports agent-based config repair
- * (`describeRepairAgent`) — used by a facade to wire the env-config-repair agent. Built-ins
- * don't support repair, so this is undefined on a stock deployment; a third-party backend
- * that implements it gets the repairer wired. Replaces the old per-deployment injected
- * provider the facade used to scan.
- */
-export function findRepairCapableProvider(
-  ctx: EnvironmentBackendContext,
-): EnvironmentProvider | undefined {
-  for (const kind of registeredEnvironmentBackendKinds()) {
-    const provider = REGISTRY.get(kind)!.buildProvider(ctx)
-    if (typeof provider.describeRepairAgent === 'function') return provider
+  /** Register (or replace by `kind`) a backend provider. Returns `this` for chaining. */
+  register(provider: EnvironmentBackendProvider): this {
+    this.map.set(provider.kind, provider)
+    return this
   }
-  return undefined
+
+  /** The provider for a backend kind, or undefined when unregistered. */
+  get(kind: string): EnvironmentBackendProvider | undefined {
+    return this.map.get(kind)
+  }
+
+  /** All registered backend kinds (for diagnostics / a UI capabilities list). */
+  kinds(): string[] {
+    return [...this.map.keys()]
+  }
+
+  /**
+   * Registered backend kinds + display labels, for the workspace snapshot → the SPA's
+   * provider-connect backend-kind selector. Always includes the built-ins.
+   */
+  labelled(): { kind: string; label: string }[] {
+    return [...this.map.values()].map((p) => ({ kind: p.kind, label: p.displayLabel ?? p.kind }))
+  }
+
+  /**
+   * The first registered backend whose provider supports agent-based config repair
+   * (`describeRepairAgent`) — used by a facade to wire the env-config-repair agent. Built-ins
+   * don't support repair, so this is undefined on a stock deployment; a third-party backend
+   * that implements it gets the repairer wired.
+   */
+  findRepairCapable(ctx: EnvironmentBackendContext): EnvironmentProvider | undefined {
+    for (const provider of this.map.values()) {
+      const built = provider.buildProvider(ctx)
+      if (typeof built.describeRepairAgent === 'function') return built
+    }
+    return undefined
+  }
+}
+
+/** A registry pre-loaded with the built-in `manifest` + `kubernetes` backends. */
+export function defaultEnvironmentBackendRegistry(): EnvironmentBackendRegistry {
+  return new EnvironmentBackendRegistry()
+    .register(manifestEnvironmentBackend)
+    .register(kubernetesEnvironmentBackend)
 }
 
 // --- Built-in: manifest (the generic BYO HTTP management API) -----------------
@@ -145,8 +165,7 @@ export const manifestEnvironmentBackend: EnvironmentBackendProvider = {
 
 // --- Built-in: kubernetes (native per-PR namespaces over the apiserver) --------
 // Defined in the kubernetes module (see the import above) so all K8s code is colocated;
-// re-exported here so the package's public surface (index.ts) is unchanged.
+// re-exported here so the package's public surface (index.ts) is unchanged. The built-ins
+// are registered into the default registry by `defaultEnvironmentBackendRegistry()` above
+// (no module-load side effect).
 export { kubernetesEnvironmentBackend }
-
-registerEnvironmentBackend(manifestEnvironmentBackend)
-registerEnvironmentBackend(kubernetesEnvironmentBackend)

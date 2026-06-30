@@ -4,8 +4,8 @@ The Kubernetes environment backend provisions a per-PR preview environment by ap
 operator-authored set of Kubernetes/k3s manifests into a fresh namespace, reached over the
 kube-apiserver. It reuses the same apiserver client (bearer token + custom-CA TLS) as the
 [native Kubernetes runner backend](./adr/0003-ephemeral-environment-provider.md), and plugs
-in through the env-backend registry (`registerEnvironmentBackend`) — the same seam a
-third-party adapter uses. Selection is per-workspace: a workspace connects either the generic
+in through the app-owned env-backend registry (`EnvironmentBackendRegistry`) — the same seam a
+third-party adapter uses (registered by reference via `createBackendRegistries()`). Selection is per-workspace: a workspace connects either the generic
 `manifest` HTTP backend or the native `kubernetes` backend.
 
 ## How it works
