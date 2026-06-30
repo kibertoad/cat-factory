@@ -232,8 +232,9 @@ from `@cat-factory/integrations` (`environmentsLogic.assertSafeEnvironmentUrl`).
 ## Reference: a native Kargo adapter (sketch)
 
 This is the `EnvironmentProvider` (the port) that
-[`buildProvider`](#registering-the-backend) returns — register it with
-`registerEnvironmentBackend({ kind: 'kargo', …, buildProvider: (ctx) => new KargoEnvironmentProvider(ctx.urlPolicy) })`.
+[`buildProvider`](#registering-the-backend) returns — wire it by defining a
+`kargoEnvironmentBackend` value whose `buildProvider: (ctx) => new KargoEnvironmentProvider(ctx.urlPolicy)`
+and registering it by reference (`backendRegistries.environmentBackendRegistry.register(kargoEnvironmentBackend)`).
 
 ```ts
 import type {
