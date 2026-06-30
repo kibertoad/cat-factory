@@ -400,6 +400,8 @@
       "composeHint": "Lo usa el Tester para levantar localmente las dependencias del servicio.",
       "selectComposeTitle": "Selecciona el archivo docker-compose",
       "selectComposeHint": "Elige el archivo de compose en el repositorio. Su ruta se guarda relativa a la raíz del repo.",
+      "selectManifestTitle": "Selecciona los manifiestos de Kubernetes",
+      "selectManifestHint": "Elige el archivo o directorio de manifiestos en el repositorio. Su ruta se guarda relativa a la raíz del repo.",
       "selected": "Seleccionado: {path}",
       "noFileSelected": "Ningún archivo seleccionado.",
       "useThisFile": "Usar este archivo",
@@ -416,7 +418,26 @@
         "medium": "Mediano",
         "large": "Grande",
         "xlarge": "Extra grande"
-      }
+      },
+      "renderers": {
+        "raw": "Manifiestos sin procesar",
+        "kustomize": "Kustomize"
+      },
+      "localDevOnly": "Solo para desarrollo local",
+      "manifestSourceLabel": "Origen de los manifiestos",
+      "sourceColocated": "En este repositorio",
+      "sourceSeparate": "Repositorio aparte",
+      "manifestRepo": "Repo de manifiestos (propietario/repo)",
+      "manifestRef": "Ref (rama/etiqueta/sha)",
+      "manifestPath": "Ruta de los manifiestos",
+      "manifestPathHint": "Archivo o directorio de los manifiestos de Kubernetes por PR, relativo a la raíz del repositorio.",
+      "rendererLabel": "Renderizador",
+      "rendererHint": "Raw aplica los manifiestos tal cual. Kustomize construye primero un overlay (requiere el adaptador de despliegue en contenedor).",
+      "customManifestId": "Tipo de manifiesto personalizado",
+      "customManifestIdPlaceholder": "Elige un tipo de manifiesto",
+      "customNoTypes": "Aún no hay tipos de manifiesto personalizados. Añade uno en la ventana de Infraestructura.",
+      "customManifestIdHint": "El tipo personalizado que produce este servicio, emparejado con un gestor remote-custom que configura el espacio de trabajo.",
+      "customManifestPath": "Ruta del manifiesto (opcional)"
     },
     "agentConfig": {
       "title": "Configuración del agente",
@@ -1709,6 +1730,78 @@
         "label": "Dónde se ejecutan los entornos de prueba",
         "local-compose": "docker-compose en contenedor",
         "environment-provider": "Proveedor de entornos"
+      },
+      "dockerComposeInfo": "Los servicios de Docker Compose se levantan en el Docker local del runtime: no hace falta conexión (el contenedor de la ejecución debe admitir Docker-in-Docker).",
+      "engine": {
+        "local-k3s": "k3s local",
+        "remote-kubernetes": "Kubernetes remoto"
+      },
+      "kubernetesEngine": {
+        "label": "Etiqueta de la conexión",
+        "labelPlaceholder": "Clúster de vista previa",
+        "apiServerUrl": "URL del API server",
+        "apiServerUrlHelp": "La raíz del kube-apiserver, p. ej. https://my-cluster.example:6443.",
+        "apiToken": "Token de ServiceAccount",
+        "apiTokenHelp": "Solo escritura; vuelve a introducirlo para rotarlo. Se guarda cifrado y nunca se devuelve.",
+        "urlSourceLabel": "Origen de la URL del entorno",
+        "urlIngressTemplate": "Plantilla de host de Ingress",
+        "urlIngressStatus": "Estado de Ingress",
+        "urlServiceStatus": "Estado de Service (LoadBalancer)",
+        "urlGatewayStatus": "Estado de Gateway (Gateway API)",
+        "urlHttpRouteStatus": "Estado de HTTPRoute (Gateway API)",
+        "hostTemplate": "Plantilla de host",
+        "hostTemplateHelp": "La plantilla de host, renderizada con las variables de aprovisionamiento (p. ej. branch, sha).",
+        "ingressName": "Nombre del Ingress",
+        "serviceName": "Nombre del Service",
+        "port": "Puerto",
+        "gatewayName": "Nombre del Gateway",
+        "httpRouteName": "Nombre del HTTPRoute",
+        "scheme": "Esquema de URL",
+        "schemeDefault": "Predeterminado",
+        "namespaceTemplate": "Plantilla de namespace",
+        "namespaceTemplateHelp": "El nombre del namespace por PR, renderizado con las variables de aprovisionamiento. Para kustomize, déjalo vacío para respetar el namespace del overlay.",
+        "imageTemplate": "Plantilla de imagen",
+        "imageTemplateHelp": "Una referencia de imagen disponible para los manifiestos como la variable de imagen.",
+        "caCertPem": "Certificado CA (PEM)",
+        "caCertPemHelp": "Verifica el certificado TLS del apiserver. Omítelo solo con una CA de confianza pública.",
+        "insecureSkipTlsVerify": "Omitir la verificación TLS",
+        "insecureSkipTlsVerifyHelp": "Muy desaconsejado: solo clústeres de desarrollo/kind."
+      },
+      "customType": {
+        "title": "Tipos de manifiesto personalizados",
+        "hint": "El catálogo abierto de tipos de aprovisionamiento personalizados que un servicio puede fijar. Añade los tuyos abajo; los tipos del código son de solo lectura.",
+        "empty": "Aún no hay tipos de manifiesto personalizados.",
+        "source": {
+          "registered": "Del código",
+          "workspace": "Espacio de trabajo"
+        },
+        "editTitle": "Editar {id}",
+        "addTitle": "Añadir un tipo",
+        "manifestId": "Id del manifiesto",
+        "manifestIdHelp": "Un slug en minúsculas y guiones, p. ej. my-kargo-template.",
+        "label": "Etiqueta",
+        "acceptsInputHint": "Pista de entrada (opcional)",
+        "acceptsInputHintHelp": "Describe la forma de entrada que espera el proveedor.",
+        "description": "Descripción (opcional)",
+        "add": "Añadir tipo",
+        "saveFailed": "No se pudo guardar el tipo personalizado",
+        "removeFailed": "No se pudo eliminar el tipo personalizado"
+      },
+      "handler": {
+        "intro": "Configura cómo se gestiona cada tipo de aprovisionamiento que declara un servicio: el motor y la conexión. Los manifiestos o la ruta de compose de un servicio (el qué/dónde) se definen en el servicio.",
+        "activeEngine": "Motor:",
+        "engineLabel": "Motor",
+        "customHandlerTitle": "Gestor remote-custom",
+        "customTypeLabel": "Tipo personalizado",
+        "customConnected": "Gestor conectado.",
+        "saved": "Gestor guardado",
+        "removed": "Gestor eliminado",
+        "saveFailed": "No se pudo guardar el gestor",
+        "personalOverride": "Anulación personal (esta máquina)",
+        "overrideActive": "Activa",
+        "personalOverrideHint": "Anula el gestor del espacio de trabajo para este tipo de aprovisionamiento en tu propia máquina. Se guarda por usuario.",
+        "removeOverride": "Quitar anulación",
+        "loading": "Cargando la configuración de infraestructura…"
       }
     }
   },
@@ -2989,7 +3082,22 @@
       "torn_down": "Apagado"
     },
     "expires": "Caduca el {date}",
-    "empty": "No hay entorno efímero para esta ejecución."
+    "empty": "No hay entorno efímero para esta ejecución.",
+    "provisionTypeLabel": "Tipo de aprovisionamiento:",
+    "engineLabel": "Motor:",
+    "provisionType": {
+      "kubernetes": "Kubernetes",
+      "docker-compose": "Docker Compose",
+      "custom": "Personalizado",
+      "infraless": "Sin infraestructura"
+    },
+    "engine": {
+      "local-docker": "Docker local",
+      "local-k3s": "k3s local",
+      "remote-kubernetes": "Kubernetes remoto",
+      "remote-custom": "Personalizado remoto (HTTP)",
+      "none": "Ninguno"
+    }
   },
   "provisioning": {
     "title": "Registros de aprovisionamiento",

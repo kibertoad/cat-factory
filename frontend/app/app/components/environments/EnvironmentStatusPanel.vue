@@ -3,11 +3,38 @@
 // the live URL, the TTL, and — when it failed/expired — the verbatim provider error.
 // Used in a run's details (AgentStepDetail) so the Tester (and any env-consuming step)
 // shows whether the env is spinning up / running / shut down / errored, with the error.
+import type { InfraEngine, ProvisionType } from '@cat-factory/contracts'
 import type { RunEnvironment, HumanTestEnvironmentStatus } from '~/types/execution'
 
-defineProps<{ environment: RunEnvironment | null; degradedReason?: string | null }>()
+const props = defineProps<{ environment: RunEnvironment | null; degradedReason?: string | null }>()
 
 const { t, d } = useI18n()
+
+// Exhaustive enum→key maps (keep the typed-key drift guard live) for the resolved
+// provision type + engine recorded on the handle, so run details state exactly what was
+// stood up and how. `infraless`/`none` are filtered out of the display below.
+const PROVISION_TYPE_KEYS: Record<ProvisionType, string> = {
+  kubernetes: 'environments.provisionType.kubernetes',
+  'docker-compose': 'environments.provisionType.docker-compose',
+  custom: 'environments.provisionType.custom',
+  infraless: 'environments.provisionType.infraless',
+}
+const ENGINE_KEYS: Record<InfraEngine, string> = {
+  'local-docker': 'environments.engine.local-docker',
+  'local-k3s': 'environments.engine.local-k3s',
+  'remote-kubernetes': 'environments.engine.remote-kubernetes',
+  'remote-custom': 'environments.engine.remote-custom',
+  none: 'environments.engine.none',
+}
+
+const provisionTypeLabel = computed(() => {
+  const pt = props.environment?.provisionType
+  return pt ? t(PROVISION_TYPE_KEYS[pt]) : null
+})
+const engineLabel = computed(() => {
+  const e = props.environment?.engine
+  return e && e !== 'none' ? t(ENGINE_KEYS[e]) : null
+})
 
 // Exhaustive enum→label map of literal `t(...)` keys (keeps the typed-key drift guard
 // live); the color/icon stay static, English-neutral styling.
@@ -82,6 +109,18 @@ const ENV_STATUS_META = computed<
       <p v-if="environment.expiresAt" class="text-[11px] text-slate-500">
         {{ t('environments.expires', { date: d(new Date(environment.expiresAt), 'long') }) }}
       </p>
+      <!-- The resolved provision type + engine recorded at provision time, so a run states
+           exactly what was provisioned and how (the what/where ÷ how split). -->
+      <dl v-if="provisionTypeLabel || engineLabel" class="flex flex-wrap gap-x-4 gap-y-0.5">
+        <div v-if="provisionTypeLabel" class="flex items-center gap-1 text-[11px]">
+          <dt class="text-slate-500">{{ t('environments.provisionTypeLabel') }}</dt>
+          <dd class="text-slate-300">{{ provisionTypeLabel }}</dd>
+        </div>
+        <div v-if="engineLabel" class="flex items-center gap-1 text-[11px]">
+          <dt class="text-slate-500">{{ t('environments.engineLabel') }}</dt>
+          <dd class="text-slate-300">{{ engineLabel }}</dd>
+        </div>
+      </dl>
       <!-- The verbatim provider error when the environment failed/expired. -->
       <pre
         v-if="

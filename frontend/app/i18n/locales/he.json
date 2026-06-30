@@ -400,6 +400,8 @@
       "composeHint": "משמש את ה-Tester להקמת התלויות של השירות מקומית.",
       "selectComposeTitle": "בחר את קובץ docker-compose",
       "selectComposeHint": "בחר את קובץ ה-compose במאגר. הנתיב שלו נשמר ביחס לשורש המאגר.",
+      "selectManifestTitle": "בחר את מניפסטי ה-Kubernetes",
+      "selectManifestHint": "בחר את קובץ או תיקיית המניפסטים במאגר. הנתיב שלו נשמר ביחס לשורש המאגר.",
       "selected": "נבחר: {path}",
       "noFileSelected": "לא נבחר קובץ.",
       "useThisFile": "השתמש בקובץ זה",
@@ -416,7 +418,26 @@
         "medium": "בינוני",
         "large": "גדול",
         "xlarge": "גדול במיוחד"
-      }
+      },
+      "renderers": {
+        "raw": "מניפסטים גולמיים",
+        "kustomize": "Kustomize"
+      },
+      "localDevOnly": "לפיתוח מקומי בלבד",
+      "manifestSourceLabel": "מקור המניפסטים",
+      "sourceColocated": "במאגר הזה",
+      "sourceSeparate": "מאגר נפרד",
+      "manifestRepo": "מאגר המניפסטים (owner/repo)",
+      "manifestRef": "Ref (ענף/תג/sha)",
+      "manifestPath": "נתיב המניפסטים",
+      "manifestPathHint": "קובץ או תיקייה של מניפסטי Kubernetes לכל PR, יחסית לשורש המאגר.",
+      "rendererLabel": "מנוע רינדור",
+      "rendererHint": "Raw מחיל את המניפסטים כפי שהם. Kustomize בונה תחילה overlay (דורש את מתאם הפריסה בקונטיינר).",
+      "customManifestId": "סוג מניפסט מותאם",
+      "customManifestIdPlaceholder": "בחר סוג מניפסט",
+      "customNoTypes": "עדיין לא הוגדרו סוגי מניפסט מותאמים. הוסף אחד בחלון התשתית.",
+      "customManifestIdHint": "הסוג המותאם שהשירות הזה מייצר, המותאם למטפל remote-custom שהמרחב מגדיר.",
+      "customManifestPath": "נתיב המניפסט (אופציונלי)"
     },
     "agentConfig": {
       "title": "תצורת סוכן",
@@ -1261,6 +1282,78 @@
         "kubernetesDesc": "הקצה מרחב שמות לכל PR באשכול Kubernetes שאתה מפעיל.",
         "environment-provider": "ספק HTTP מותאם",
         "environment-providerDesc": "הקצה סביבות ארעיות דרך ממשק ניהול HTTP משלך."
+      },
+      "dockerComposeInfo": "שירותי Docker Compose עולים על ה-Docker המקומי של זמן הריצה: אין צורך בחיבור (הקונטיינר של הריצה חייב לתמוך ב-Docker-in-Docker).",
+      "engine": {
+        "local-k3s": "k3s מקומי",
+        "remote-kubernetes": "Kubernetes מרוחק"
+      },
+      "kubernetesEngine": {
+        "label": "תווית החיבור",
+        "labelPlaceholder": "אשכול תצוגה מקדימה",
+        "apiServerUrl": "כתובת ה-API server",
+        "apiServerUrlHelp": "שורש ה-kube-apiserver, לדוגמה https://my-cluster.example:6443.",
+        "apiToken": "אסימון ServiceAccount",
+        "apiTokenHelp": "לכתיבה בלבד; הזן מחדש כדי להחליף. נשמר מוצפן ולעולם לא מוחזר.",
+        "urlSourceLabel": "מקור כתובת הסביבה",
+        "urlIngressTemplate": "תבנית מארח של Ingress",
+        "urlIngressStatus": "סטטוס Ingress",
+        "urlServiceStatus": "סטטוס Service (LoadBalancer)",
+        "urlGatewayStatus": "סטטוס Gateway (Gateway API)",
+        "urlHttpRouteStatus": "סטטוס HTTPRoute (Gateway API)",
+        "hostTemplate": "תבנית מארח",
+        "hostTemplateHelp": "תבנית המארח, מרונדרת עם משתני האספקה (לדוגמה branch, sha).",
+        "ingressName": "שם ה-Ingress",
+        "serviceName": "שם ה-Service",
+        "port": "פורט",
+        "gatewayName": "שם ה-Gateway",
+        "httpRouteName": "שם ה-HTTPRoute",
+        "scheme": "סכימת כתובת",
+        "schemeDefault": "ברירת מחדל",
+        "namespaceTemplate": "תבנית namespace",
+        "namespaceTemplateHelp": "שם ה-namespace לכל PR, מרונדר עם משתני האספקה. עבור kustomize, השאר ריק כדי לכבד את ה-namespace של ה-overlay.",
+        "imageTemplate": "תבנית תמונה",
+        "imageTemplateHelp": "הפניית תמונה הזמינה למניפסטים כמשתנה התמונה.",
+        "caCertPem": "תעודת CA (PEM)",
+        "caCertPemHelp": "מאמתת את תעודת ה-TLS של ה-apiserver. השמט רק עבור CA מהימן ציבורית.",
+        "insecureSkipTlsVerify": "דלג על אימות TLS",
+        "insecureSkipTlsVerifyHelp": "מומלץ מאוד להימנע: אשכולות פיתוח/kind בלבד."
+      },
+      "customType": {
+        "title": "סוגי מניפסט מותאמים",
+        "hint": "הקטלוג הפתוח של סוגי אספקה מותאמים שניתן להצמיד לשירות. הוסף משלך למטה; סוגים מהקוד הם לקריאה בלבד.",
+        "empty": "אין עדיין סוגי מניפסט מותאמים.",
+        "source": {
+          "registered": "מהקוד",
+          "workspace": "מרחב עבודה"
+        },
+        "editTitle": "עריכת {id}",
+        "addTitle": "הוספת סוג",
+        "manifestId": "מזהה מניפסט",
+        "manifestIdHelp": "slug באותיות קטנות ומקפים, לדוגמה my-kargo-template.",
+        "label": "תווית",
+        "acceptsInputHint": "רמז קלט (אופציונלי)",
+        "acceptsInputHintHelp": "מתאר את צורת הקלט שהספק מצפה לה.",
+        "description": "תיאור (אופציונלי)",
+        "add": "הוסף סוג",
+        "saveFailed": "לא ניתן לשמור את הסוג המותאם",
+        "removeFailed": "לא ניתן להסיר את הסוג המותאם"
+      },
+      "handler": {
+        "intro": "הגדר כיצד מטופל כל סוג אספקה שהשירות מצהיר עליו: המנוע והחיבור. המניפסטים או נתיב ה-compose של שירות (מה/היכן) מוגדרים על השירות.",
+        "activeEngine": "מנוע:",
+        "engineLabel": "מנוע",
+        "customHandlerTitle": "מטפל remote-custom",
+        "customTypeLabel": "סוג מותאם",
+        "customConnected": "המטפל מחובר.",
+        "saved": "המטפל נשמר",
+        "removed": "המטפל הוסר",
+        "saveFailed": "לא ניתן לשמור את המטפל",
+        "personalOverride": "עקיפה אישית (המכונה הזו)",
+        "overrideActive": "פעילה",
+        "personalOverrideHint": "עקוף את מטפל מרחב העבודה עבור סוג אספקה זה במכונה שלך. נשמר לכל משתמש.",
+        "removeOverride": "הסר עקיפה",
+        "loading": "טוען הגדרות תשתית…"
       }
     },
     "providerConnection": {
@@ -3000,7 +3093,22 @@
       "torn_down": "כובתה"
     },
     "expires": "פג תוקף ב-{date}",
-    "empty": "אין סביבה זמנית להרצה הזו."
+    "empty": "אין סביבה זמנית להרצה הזו.",
+    "provisionTypeLabel": "סוג אספקה:",
+    "engineLabel": "מנוע:",
+    "provisionType": {
+      "kubernetes": "Kubernetes",
+      "docker-compose": "Docker Compose",
+      "custom": "מותאם",
+      "infraless": "ללא תשתית"
+    },
+    "engine": {
+      "local-docker": "Docker מקומי",
+      "local-k3s": "k3s מקומי",
+      "remote-kubernetes": "Kubernetes מרוחק",
+      "remote-custom": "מותאם מרוחק (HTTP)",
+      "none": "ללא"
+    }
   },
   "provisioning": {
     "title": "יומני הקמה",
