@@ -15,7 +15,7 @@ import {
 } from '@cat-factory/node-server'
 import type { NodeContainerOptions } from '@cat-factory/node-server'
 import {
-  InProcessWorkRunner,
+  SqliteWorkRunner,
   type MothershipComposition,
   composeMothership,
   isMothershipMode,
@@ -428,12 +428,29 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     },
   })
 
-  // Mothership mode has no pg-boss: drive runs in-process through the SAME advance/poll loop
-  // with real timer-backed sleeps. Bound to the execution service AFTER the container is built
-  // (the service doesn't exist yet — chicken-and-egg with createCore).
-  const inProcessRunner = mothership
-    ? new InProcessWorkRunner(executionRuntime(config, env).drive, logger)
-    : undefined
+  // Mothership mode has no pg-boss: drive runs in-process through the SAME advance/poll loop with
+  // real timer-backed sleeps, backed by the durable local-sqlite work queue (so a crash/restart
+  // re-drives what was in flight — the durability pg-boss gives the Node facade). Bound to the
+  // execution service AFTER the container is built (the service doesn't exist yet — chicken-and-egg
+  // with createCore). The lease/sweeper timings reuse the same execution-runtime derivation the
+  // pg-boss queue/sweeper use, so durable recovery behaves consistently across the two runners.
+  const runtime = mothership ? executionRuntime(config, env) : undefined
+  const inProcessRunner =
+    mothership && runtime
+      ? new SqliteWorkRunner(
+          mothership.workQueue,
+          {
+            drive: runtime.drive,
+            leaseMs: runtime.queue.expireInSeconds * 1000,
+            reArmDelayMs: Math.max(1000, runtime.drive.ciPollIntervalMs),
+            errorBackoffMs: Math.max(1000, runtime.drive.ciPollIntervalMs),
+            sweepIntervalMs: runtime.sweeper.intervalMs,
+            maxAttempts: runtime.queue.retryLimit,
+            concurrency: runtime.concurrency,
+          },
+          logger,
+        )
+      : undefined
 
   const container = buildNodeContainer({
     ...options,
@@ -532,9 +549,17 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     ...container,
     vcsIdentity,
     ...(localSettingsService ? { localSettings: { service: localSettingsService } } : {}),
-    // Release the local credential SQLite handle on shutdown (mothership mode owns it; the
-    // boot path calls this from its SIGTERM/SIGINT handler). No-op otherwise.
-    ...(mothership ? { onShutdown: mothership.close } : {}),
+    // On shutdown (mothership mode; the boot path calls this from its SIGTERM/SIGINT handler):
+    // stop the work runner's recovery poll FIRST so it can't touch the queue mid-close, then
+    // release both local SQLite handles (credentials + work queue). No-op otherwise.
+    ...(mothership
+      ? {
+          onShutdown: () => {
+            inProcessRunner?.stop()
+            mothership.close()
+          },
+        }
+      : {}),
   }
 }
 

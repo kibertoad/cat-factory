@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DriveConfig } from '@cat-factory/node-server'
 import { buildLocalContainer } from './container.js'
-import { InProcessWorkRunner, composeMothership, isMothershipMode } from './mothership.js'
+import {
+  SqliteWorkRunner,
+  type SqliteWorkRunnerOptions,
+  composeMothership,
+  isMothershipMode,
+} from './mothership.js'
+import { type SqliteWorkQueue, createWorkQueue } from './sqlite/workQueue.js'
 
 // Unit coverage for the mothership composition seam (docs/initiatives/mothership-mode.md):
 //   - the boot-mode probe,
@@ -125,18 +131,51 @@ const DRIVE_CFG: DriveConfig = {
   ciMaxPolls: 1,
 }
 
+// Large lease / backoff / sweep so timing never interferes with the synchronous assertions; the
+// drive itself resolves in microtasks (instant sleep), so a `tick` macrotask flushes each drive.
+const RUNNER_OPTS: SqliteWorkRunnerOptions = {
+  drive: DRIVE_CFG,
+  leaseMs: 60_000,
+  reArmDelayMs: 60_000,
+  errorBackoffMs: 60_000,
+  sweepIntervalMs: 60_000,
+  maxAttempts: 5,
+  concurrency: 10,
+}
+
 const silentLog = { info: () => {}, error: () => {}, warn: () => {} } as never
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
-describe('InProcessWorkRunner', () => {
-  it('drives a run to completion via the execution service', async () => {
+// Track runners/queues so their (unref'd) timers + handles are released after each test.
+const cleanups: (() => void)[] = []
+afterEach(() => {
+  for (const c of cleanups.splice(0)) c()
+})
+
+function makeRunner(
+  queue: SqliteWorkQueue,
+  exec: unknown,
+  opts: Partial<SqliteWorkRunnerOptions> = {},
+): SqliteWorkRunner {
+  const runner = new SqliteWorkRunner(queue, { ...RUNNER_OPTS, ...opts }, silentLog)
+  runner.bind(exec as never)
+  cleanups.push(() => {
+    runner.stop()
+    queue.close()
+  })
+  return runner
+}
+
+describe('SqliteWorkRunner', () => {
+  it('drives a run to completion via the execution service, then settles its queue row', async () => {
+    const queue = createWorkQueue(':memory:')
     const advance = vi.fn(async () => ({ kind: 'done' as const }))
-    const runner = new InProcessWorkRunner(DRIVE_CFG, silentLog)
-    runner.bind({ advanceInstance: advance } as never)
+    const runner = makeRunner(queue, { advanceInstance: advance })
     await runner.startRun('ws', 'ex')
     await tick()
     expect(advance).toHaveBeenCalledTimes(1)
     expect(advance).toHaveBeenCalledWith('ws', 'ex', expect.anything())
+    expect(queue.size()).toBe(0) // standstill → row deleted
   })
 
   it('serializes per execution: signals during an in-flight drive coalesce into one re-drive', async () => {
@@ -148,12 +187,13 @@ describe('InProcessWorkRunner', () => {
           release = () => resolve({ kind: 'done' })
         }),
     )
-    const runner = new InProcessWorkRunner(DRIVE_CFG, silentLog)
-    runner.bind({ advanceInstance: advance } as never)
+    const queue = createWorkQueue(':memory:')
+    const runner = makeRunner(queue, { advanceInstance: advance })
 
     await runner.startRun('ws', 'ex')
     await tick()
     expect(advance).toHaveBeenCalledTimes(1) // first drive in flight
+    expect(queue.size('active')).toBe(1)
 
     // Two signals arrive mid-drive — they MUST coalesce into exactly one follow-up, not two.
     await runner.signalDecision('ws', 'ex')
@@ -167,6 +207,7 @@ describe('InProcessWorkRunner', () => {
     release!() // second drive finishes → no pending signal → runner goes idle
     await tick()
     expect(advance).toHaveBeenCalledTimes(2)
+    expect(queue.size()).toBe(0)
 
     // A fresh start after going idle drives again.
     await runner.startRun('ws', 'ex')
@@ -176,18 +217,52 @@ describe('InProcessWorkRunner', () => {
     await tick()
   })
 
-  it('swallows a drive error (logged, never an unhandled rejection)', async () => {
+  it('swallows a drive error and re-drives on a later trigger (no unhandled rejection)', async () => {
+    // advanceInstance throwing is caught INSIDE driveExecution (it fails the run and returns), so
+    // the run settles normally; a later trigger drives it again.
     const advance = vi.fn(async () => {
       throw new Error('boom')
     })
-    const runner = new InProcessWorkRunner(DRIVE_CFG, silentLog)
-    runner.bind({ advanceInstance: advance, failRun: vi.fn(async () => {}) } as never)
+    const queue = createWorkQueue(':memory:')
+    const runner = makeRunner(queue, { advanceInstance: advance, failRun: vi.fn(async () => {}) })
     await expect(runner.startRun('ws', 'ex')).resolves.toBeUndefined()
     await tick()
-    // The runner cleared its in-flight slot, so a later start drives again.
     await runner.startRun('ws', 'ex')
     await tick()
     expect(advance).toHaveBeenCalledTimes(2)
+  })
+
+  it('defers a run for retry when the drive loop itself throws (queue row survives)', async () => {
+    // Force driveExecution itself to throw: advanceInstance rejects AND failRun rejects, so the
+    // internal failure funnel re-throws out of the loop into the runner's own catch.
+    const advance = vi.fn(async () => {
+      throw new Error('boom')
+    })
+    const failRun = vi.fn(async () => {
+      throw new Error('fail too')
+    })
+    const queue = createWorkQueue(':memory:')
+    const runner = makeRunner(queue, { advanceInstance: advance, failRun })
+    await runner.startRun('ws', 'ex')
+    await tick()
+    expect(advance).toHaveBeenCalledTimes(1)
+    // The run is NOT lost: it is held (deferred) for a backoff'd retry, not deleted.
+    expect(queue.size()).toBe(1)
+  })
+
+  it('durable: a fresh runner re-drives runs orphaned by a prior process on bind', async () => {
+    // Simulate a prior process that claimed a run (marked it `active`) and crashed mid-drive.
+    const queue = createWorkQueue(':memory:')
+    queue.enqueue('ws', 'ex', Date.now())
+    queue.claim(Date.now(), RUNNER_OPTS.leaseMs, RUNNER_OPTS.maxAttempts, new Set())
+    expect(queue.size('active')).toBe(1)
+
+    // A new process boots over the SAME durable queue: bind() resets the orphan and re-drives it.
+    const advance = vi.fn(async () => ({ kind: 'done' as const }))
+    makeRunner(queue, { advanceInstance: advance }) // bind() runs recovery
+    await tick()
+    expect(advance).toHaveBeenCalledTimes(1)
+    expect(queue.size()).toBe(0)
   })
 })
 
@@ -200,6 +275,7 @@ describe('buildLocalContainer (mothership, no Postgres)', () => {
     LOCAL_MOTHERSHIP_URL: 'https://m.test',
     LOCAL_MOTHERSHIP_TOKEN: 'machine-tok',
     LOCAL_MOTHERSHIP_CREDENTIAL_DB: ':memory:',
+    LOCAL_MOTHERSHIP_WORK_DB: ':memory:',
   }
 
   it('composes the engine with NO db — remote repos + local credential store + in-process runner', () => {

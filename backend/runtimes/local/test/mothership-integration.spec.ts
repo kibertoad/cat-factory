@@ -29,7 +29,8 @@ import { setupTestDb } from './harness.js'
 //     `POST /internal/persistence` (machine-token gated, allow-list + account scope).
 //   - The LOCAL node is a mothership-mode `buildLocalContainer` with NO database
 //     (`db: undefined`): its `CoreRepositories` are the RPC-backed remote registry pointing
-//     at the loopback mothership, and runs drive in-process via `InProcessWorkRunner`.
+//     at the loopback mothership, and runs drive in-process via the durable `SqliteWorkRunner`
+//     (backed by an in-memory local work queue).
 //
 // Only the agent executor is faked (the deterministic `FakeAgentExecutor`); the persistence
 // path is entirely real, so an un-allow-listed repo method, a mis-scoped call, or a
@@ -98,6 +99,7 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
         LOCAL_MOTHERSHIP_URL: mothershipUrl,
         LOCAL_MOTHERSHIP_TOKEN: machineToken,
         LOCAL_MOTHERSHIP_CREDENTIAL_DB: ':memory:',
+        LOCAL_MOTHERSHIP_WORK_DB: ':memory:',
         // Opt the local node into the ephemeral-environment integration so `createCore` builds
         // the provisioning service — that is what makes `AgentContextBuilder` actually resolve
         // the block's environment per dispatch (`environmentRegistryRepository.getByBlock`,
@@ -209,8 +211,8 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
     expect(pipeline.status).toBe(201)
 
     // Start a run on a seeded task (executionRepository.upsert + blockRepository.update over RPC).
-    // In mothership mode the InProcessWorkRunner drives it immediately, in-process, reading and
-    // writing every execution rev back through the RPC's optimistic-concurrency contract.
+    // In mothership mode the durable SqliteWorkRunner drives it immediately, in-process, reading
+    // and writing every execution rev back through the RPC's optimistic-concurrency contract.
     const start = await local.call<{ id: string }>(
       'POST',
       `/workspaces/${workspaceId}/blocks/task_login/executions`,

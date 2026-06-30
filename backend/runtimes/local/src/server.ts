@@ -95,8 +95,10 @@ export async function startLocal(
  *
  * The periodic Postgres-backed sweepers the Node `start()` runs (retention, recurring-pipeline
  * fire, notification escalation, Kaizen) are intentionally NOT started here: they prune/scan
- * stores that live on the mothership (its own cron owns them), and the durable SQLite work
- * queue + telemetry sync are later initiative slices (PR 2 / PR 5).
+ * stores that live on the mothership (its own cron owns them). Durable execution IS now provided
+ * locally — the container's work runner is backed by a file-based `node:sqlite` work queue (the
+ * no-pg-boss analogue), so a crash/restart re-drives in-flight runs; telemetry local-first sync
+ * remains a later initiative slice (PR 5).
  */
 async function startLocalMothership(
   env: NodeJS.ProcessEnv,
