@@ -1,10 +1,15 @@
 # Infrastructure providers window — redesign (ephemeral environments + runner pool)
 
-> **Status:** This documents the planned changes
-> to the cat-factory SPA so the **ephemeral-environment window** and the **runner-pool
-> registration** become **one tabbed "Infrastructure" surface** with a **real in-app
-> manifest editor**, instead of two separate Integrations-Hub entries where the runner-pool
-> one dead-ends on a "use the API" disclaimer.
+> **Status: SHIPPED, then partly superseded — historical design record.** The merge into one
+> tabbed "Infrastructure" window + the in-app manifest editor shipped. The **environments
+> half** was subsequently reworked by the [per-service provisioning](./per-service-provisioning.md)
+> initiative: the per-workspace `delegateTestEnvToProvider` delegation toggle and the single
+> testEnv `InfrastructureBackendPicker` described below were **removed**, replaced by a
+> per-provision-type / per-engine configurator (`InfraHandlersConfigurator.vue` +
+> `KubernetesEngineForm.vue` + the custom-manifest-type editor), and the per-service `local`
+> vs `ephemeral` toggle is gone. Read this for the original UI rationale; read
+> [per-service-provisioning.md](./per-service-provisioning.md) for the current environment-side
+> shape. The **runner-pool half** of this redesign still describes the live UI.
 >
 > Companion docs: [`runner-pool-integration.md`](./runner-pool-integration.md) and
 > [`environments-integration.md`](./environments-integration.md) (the two backend
