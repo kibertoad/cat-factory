@@ -425,7 +425,10 @@ jobs:
   # NON-BLOCKING: deliberately NOT a dependency of the aggregated `Test` gate below, so a
   # browser/boot flake here can't block an otherwise-green PR. It still runs on every PR
   # and uploads its report; treat red runs as a signal to investigate, not a merge stop.
-  # Promote it into `test-gate.needs` once it has proven stable.
+  # A flaky test (failed then passed on retry) DOES turn the shard red — the Playwright
+  # config sets `failOnFlakyTests`, so a hidden first-attempt failure surfaces as a red
+  # check instead of a green one — but, being out of `test-gate.needs`, it still doesn't
+  # block the merge. Promote it into `test-gate.needs` once it has proven stable.
   #
   # SHARDED across 2 jobs via Playwright's --shard (deterministic file partition), mirroring
   # the `test-worker` vitest sharding above. Each shard is its own job, so the Postgres
