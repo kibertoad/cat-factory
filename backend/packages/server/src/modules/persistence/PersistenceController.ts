@@ -70,22 +70,48 @@ export function persistenceController(): Hono<AppEnv> {
     const resolveAccountId = (workspaceId: string) =>
       (workspaceRepository?.accountOf?.(workspaceId) as Promise<string | null | undefined>) ??
       Promise.resolve(undefined)
+
+    // The `block`/`serviceList` scope checks resolve the owning account by reading the entity
+    // (`blockRepository.findById` / `serviceRepository.listByIds`). When the request ALSO
+    // dispatches that same read, memoise it per request so the resolver's read is reused instead
+    // of issuing a second identical query. (For every other `serviceList` method the dispatched
+    // method differs from the resolver's read, so there is nothing to dedupe.)
+    const memoizeRead = (fn: (...args: unknown[]) => unknown) => {
+      const cache = new Map<string, Promise<unknown>>()
+      return (...args: unknown[]): Promise<unknown> => {
+        const key = JSON.stringify(args)
+        const hit = cache.get(key)
+        if (hit) return hit
+        const pending = Promise.resolve(fn(...args))
+        cache.set(key, pending)
+        return pending
+      }
+    }
+    const blockFindById = memoizeRead((blockId) => blockRepository?.findById?.(blockId as string))
+    const serviceListByIds = memoizeRead((ids) => serviceRepository?.listByIds?.(ids as string[]))
+    // For the two self-keyed reads, point the dispatcher's own call at the memo so it hits the
+    // resolver's already-resolved result. Only the one dispatched method is overridden; the rest
+    // of the registry is untouched.
+    const registryForDispatch =
+      request.repo === 'blockRepository' && request.method === 'findById'
+        ? { ...registry, blockRepository: { findById: blockFindById } }
+        : request.repo === 'serviceRepository' && request.method === 'listByIds'
+          ? { ...registry, serviceRepository: { listByIds: serviceListByIds } }
+          : registry
+
     const result = await dispatchPersistenceCall(request, {
-      registry,
+      registry: registryForDispatch,
       scope: { accountIds: payload.scope.accountIds, userId: payload.userId },
       resolveAccountId,
       // A block is keyed only by its id; resolve its home workspace, then that workspace's account.
       resolveBlockAccountId: async (blockId) => {
-        const found = (await blockRepository?.findById?.(blockId)) as
-          | { workspaceId?: string }
-          | null
-          | undefined
+        const found = (await blockFindById(blockId)) as { workspaceId?: string } | null | undefined
         const workspaceId = found?.workspaceId
         return typeof workspaceId === 'string' ? resolveAccountId(workspaceId) : undefined
       },
       // Services are account-owned; resolve each requested id's `accountId` for the scope check.
       resolveServiceAccountIds: async (serviceIds) => {
-        const services = (await serviceRepository?.listByIds?.(serviceIds)) as
+        const services = (await serviceListByIds(serviceIds)) as
           | Array<{ id: string; accountId: string | null }>
           | undefined
         const map = new Map<string, string | null | undefined>()

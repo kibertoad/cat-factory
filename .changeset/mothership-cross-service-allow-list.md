@@ -2,7 +2,7 @@
 '@cat-factory/server': minor
 ---
 
-Mothership mode (Phase 3 slice 2): widen the persistence-RPC allow-list to the cross-service +
+Mothership mode (Phase 3 slice 2): widen the persistence-RPC allow-list to the cross-service
 entity-id-keyed board-composition reads, via two new scope kinds that resolve the entity's owning
 account server-side before the scope check.
 

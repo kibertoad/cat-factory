@@ -1079,7 +1079,16 @@ export class ExecutionService {
     if (this.subscriptionActivations) {
       const prior = await this.executionRepository.getByBlock(workspaceId, blockId)
       if (prior && prior.id !== executionId) {
-        await this.subscriptionActivations.deleteByExecution(prior.id)
+        // Best-effort + idempotent, mirroring the terminal cleanup in RunStateMachine.emit: a
+        // failure here must never derail the start. In mothership mode this repo is remote and
+        // `deleteByExecution` is not yet allow-listed (it throws `unknown_method`), so an
+        // unguarded call would otherwise break re-running any block; the TTL sweep reclaims the
+        // stale activation row as the backstop.
+        try {
+          await this.subscriptionActivations.deleteByExecution(prior.id)
+        } catch {
+          // Swallow — see above.
+        }
       }
     }
 
