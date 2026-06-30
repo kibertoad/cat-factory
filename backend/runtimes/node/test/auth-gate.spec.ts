@@ -61,10 +61,10 @@ describe('Node auth gate wiring', () => {
     expect((await call('GET', '/health')).status).toBe(200)
   })
 
-  it('fails closed (503) when auth is unconfigured and dev-open is off', async () => {
-    // Production shape: no creds, no dev-open hatch → loadNodeConfig leaves auth
-    // disabled and the gate refuses rather than serving protected data openly.
-    const closed = makeApp(AUTH_UNCONFIGURED)
-    expect((await closed('GET', '/workspaces')).status).toBe(503)
+  it('refuses to boot when auth is unconfigured and dev-open is off', () => {
+    // Production shape: no creds, no dev-open hatch. Remote node mode has no anonymous
+    // tier, so loadNodeConfig fails fast at boot rather than starting a 503-only app that
+    // looks broken instead of misconfigured (see config.ts).
+    expect(() => makeApp(AUTH_UNCONFIGURED)).toThrow(/anonymous access/i)
   })
 })
