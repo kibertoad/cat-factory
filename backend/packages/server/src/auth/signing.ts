@@ -29,6 +29,12 @@ export const TOKEN_AUDIENCE = {
   container: 'llm-proxy',
   /** Single-workspace WebSocket event-stream ticket. */
   wsTicket: 'ws',
+  /**
+   * Machine-to-machine token a mothership-mode local node presents on the `/internal/*`
+   * API. Carries the accounts the node is authorised for; pinned so a user session /
+   * container / ws ticket can never be replayed against the persistence RPC.
+   */
+  machine: 'machine',
 } as const
 
 export type TokenAudience = (typeof TOKEN_AUDIENCE)[keyof typeof TOKEN_AUDIENCE]
@@ -49,6 +55,24 @@ export interface SessionUser {
 export interface SessionPayload extends SessionUser {
   /** Audience pin — always `session` for a user session. */
   aud: typeof TOKEN_AUDIENCE.session
+  exp: number
+}
+
+/**
+ * A signed machine token for a mothership-mode local node. Minted by the mothership
+ * after a whitelisted login (or provisioned for headless nodes); presented on every
+ * `/internal/*` call. `scope.accountIds` bounds which accounts the node may touch — the
+ * persistence RPC rejects (404) any call resolving to an account outside this set.
+ */
+export interface MachinePayload {
+  aud: typeof TOKEN_AUDIENCE.machine
+  /** Stable id of the local node this token was minted for (telemetry / revocation). */
+  nodeId: string
+  /** The mothership user the node acts as (set during login onboarding). */
+  userId: string
+  /** Accounts this node is authorised to read/write. */
+  scope: { accountIds: string[] }
+  /** Absolute expiry (epoch ms). */
   exp: number
 }
 

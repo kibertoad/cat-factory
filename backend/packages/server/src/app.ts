@@ -59,6 +59,7 @@ import {
   taskSourceController,
 } from './modules/tasks/TaskSourceController.js'
 import { workspaceController } from './modules/workspaces/WorkspaceController.js'
+import { persistenceController } from './modules/persistence/PersistenceController.js'
 
 /**
  * Mount the runtime-neutral controllers onto a facade's Hono app, preserving the
@@ -82,6 +83,12 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/', webSearchProxyController())
   // "Login with GitHub" (public; no-op endpoints when auth is unconfigured).
   app.route('/auth', authController())
+  // Mothership-mode machine API (`/internal/persistence`): a mothership-mode local node with
+  // no database forwards its org/durable repository calls here. Self-authenticated by a
+  // machine token (NOT the user session gate, which bypasses `/internal`); 503 unless the
+  // facade attached its repository registry. Mounted on both facades so either can be a
+  // mothership.
+  app.route('/', persistenceController())
   // Read-only catalogs + account/workspace roots (gated by the facade's auth middleware).
   app.route('/', promptFragmentController())
   app.route('/', modelController())
