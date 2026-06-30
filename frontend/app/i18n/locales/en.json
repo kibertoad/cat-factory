@@ -1344,6 +1344,7 @@
         "remote-kubernetes": "Remote Kubernetes"
       },
       "kubernetesEngine": {
+        "localK3sHint": "Prefilled for a local k3s/k3d/kind cluster on this machine. Bind a ServiceAccount to a role, mint its token with `kubectl create token <name> -n <namespace>` (Kubernetes 1.24+), and paste it below. Then choose how the environment URL is derived, and edit the API server URL if your cluster listens on a different port.",
         "label": "Connection label",
         "labelPlaceholder": "Preview cluster",
         "apiServerUrl": "API server URL",

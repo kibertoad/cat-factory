@@ -6,6 +6,7 @@ import type {
   EnvironmentHandlerView,
   ProvisionType,
   RegisterEnvironmentHandlerInput,
+  TestEnvironmentHandlerInput,
   UpsertCustomManifestTypeInput,
   UpsertEnvironmentUserHandlerBody,
 } from '@cat-factory/contracts'
@@ -95,6 +96,12 @@ export const useInfraConfigStore = defineStore('infraConfig', () => {
     return saved
   }
 
+  /** Probe a candidate handler connection before saving (nothing persisted). */
+  async function testHandler(input: TestEnvironmentHandlerInput) {
+    const ws = useWorkspaceStore()
+    return api.testEnvironmentHandler(ws.requireId(), input)
+  }
+
   /**
    * Auto-detect a NON-BINDING recommended provisioning config from a service's repo. The SPA
    * prefills the confirm form from the result; nothing is persisted server-side. Detection is
@@ -172,6 +179,7 @@ export const useInfraConfigStore = defineStore('infraConfig', () => {
     ensureLoaded,
     handlerFor,
     registerHandler,
+    testHandler,
     detectProvisioning,
     unregisterHandler,
     upsertCustomType,

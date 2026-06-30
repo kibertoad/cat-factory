@@ -5,6 +5,7 @@ import {
   registerEnvironmentHandlerContract,
   removeCustomManifestTypeContract,
   removeEnvironmentUserHandlerContract,
+  testEnvironmentHandlerContract,
   unregisterEnvironmentHandlerContract,
   upsertCustomManifestTypeContract,
   upsertEnvironmentUserHandlerContract,
@@ -13,6 +14,7 @@ import type {
   DetectServiceProvisioningInput,
   ProvisionType,
   RegisterEnvironmentHandlerInput,
+  TestEnvironmentHandlerInput,
   UpsertCustomManifestTypeInput,
   UpsertEnvironmentUserHandlerBody,
 } from '@cat-factory/contracts'
@@ -34,6 +36,10 @@ export function infraHandlersApi({ send, ws }: ApiContext) {
 
     registerEnvironmentHandler: (workspaceId: string, body: RegisterEnvironmentHandlerInput) =>
       send(registerEnvironmentHandlerContract, { pathPrefix: ws(workspaceId), body }),
+
+    // Probe a candidate handler connection before saving (nothing persisted).
+    testEnvironmentHandler: (workspaceId: string, body: TestEnvironmentHandlerInput) =>
+      send(testEnvironmentHandlerContract, { pathPrefix: ws(workspaceId), body }),
 
     // Auto-detect a non-binding recommended provisioning config from a service's repo.
     detectServiceProvisioning: (workspaceId: string, body: DetectServiceProvisioningInput) =>

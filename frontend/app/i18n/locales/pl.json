@@ -1753,6 +1753,7 @@
         "remote-kubernetes": "Zdalny Kubernetes"
       },
       "kubernetesEngine": {
+        "localK3sHint": "Wstępnie wypełnione dla lokalnego klastra k3s/k3d/kind na tym komputerze. Powiąż ServiceAccount z rolą, wygeneruj jego token poleceniem `kubectl create token <name> -n <namespace>` (Kubernetes 1.24+) i wklej go poniżej. Następnie wybierz sposób ustalania adresu URL środowiska i zmień URL serwera API, jeśli Twój klaster nasłuchuje na innym porcie.",
         "label": "Etykieta połączenia",
         "labelPlaceholder": "Klaster podglądu",
         "apiServerUrl": "URL serwera API",

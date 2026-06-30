@@ -25,6 +25,7 @@ import type {
   RunRepoContext,
   ServiceProvisioning,
   TestEnvironmentConnectionInput,
+  TestEnvironmentHandlerInput,
   ValidateEnvironmentRepoInput,
 } from '@cat-factory/kernel'
 import { ConflictError, ValidationError } from '@cat-factory/kernel'
@@ -46,6 +47,7 @@ import {
 import {
   buildInfraHandlerFields,
   handlerConfigToBackendConfig,
+  resolveHandlerBackend,
   type ServiceKubeInputs,
   toManifestId,
 } from './infra-handler-build.js'
@@ -528,6 +530,27 @@ export class EnvironmentConnectionService {
       config: {},
       resolveSecret: (key) => secrets[key],
     })
+  }
+
+  /**
+   * Probe a candidate per-type infra HANDLER connection before saving (nothing persisted).
+   * Lowers the engine-discriminated handler config to the backend config — with a placeholder
+   * manifest source, since a connectivity probe reads only the apiserver/token, never the
+   * (service-owned) source — and delegates to {@link testConnection}. So the per-type engine
+   * form (e.g. a `local-k3s` / `remote-kubernetes` Kubernetes engine) can verify the apiserver
+   * is reachable and the token authenticates before the operator commits the handler.
+   */
+  async testHandler(
+    workspaceId: string,
+    input: TestEnvironmentHandlerInput,
+  ): Promise<ConnectionTestResult> {
+    const backend = resolveHandlerBackend(
+      this.deps.environmentBackendRegistry,
+      input.config.engine,
+      input.backendKind,
+    )
+    const backendConfig = handlerConfigToBackendConfig(input.config, backend.kind)
+    return this.testConnection(workspaceId, { config: backendConfig, secrets: input.secrets })
   }
 
   /**
