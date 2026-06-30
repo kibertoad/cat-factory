@@ -1,5 +1,134 @@
 # @cat-factory/node-server
 
+## 0.51.0
+
+### Minor Changes
+
+- f9678df: Mothership mode (Phase 3 slice 3): route the board-load + run-path direct-db stores through the
+  remote registry when `db` is undefined. `buildNodeContainer` previously constructed these
+  org/durable stores directly from `options.db`, so a no-Postgres mothership-mode build would
+  `TypeError` on the first board load / run. They now go through a single exported
+  `pickRepoSource(remoteRepos, name, build)` seam: when `db` is undefined, `options.repos` is the
+  full-surface remote `Proxy` (from the local facade's `composeMothership`) and the repo is sourced
+  from there over RPC; otherwise the Drizzle repo is built over `db` exactly as before.
+
+  Routed: `githubInstallationRepository`, `repoProjectionRepository` and the five GitHub projections
+  (branch / PR / issue / commit / check-run), `runnerPoolConnectionRepository`, `bootstrapJobRepository`,
+  `referenceArchitectureRepository`, `envConfigRepairJobRepository`, `notificationRepository`,
+  `taskRepository` (issue writeback), and `subscriptionActivationRepository`. The separate
+  `DrizzleServiceFrameRepository` construction is removed — `buildResolveRepoTarget` now reuses
+  `repos.serviceRepository` (remote in mothership mode, Drizzle otherwise).
+
+  Routing is orthogonal to the server-side allow-list: an un-allow-listed remote method returns a
+  clean `unknown_method`, never a `db`-undefined `TypeError`. The standard (Postgres) build is
+  unchanged. Tests: `pickRepoSource` routing in `runtimes/node/test/mothership-repo-source.spec.ts`,
+  plus the existing no-Postgres build test which now exercises the remote-sourced repos and still makes
+  no build-time network call.
+
+  Still a DRAFT-gated initiative (see `docs/initiatives/mothership-mode.md`): the feature-flagged
+  integration repos owned by the sub-helpers (tasks / documents / environments / fragments / slack) and
+  the fake-mothership integration test (the runtime board-load + run-to-terminal assertion) remain
+  before the mothership boot can ship.
+
+- f9678df: Mothership mode (Phase 3 slice 4): the fake-mothership functional integration test — the merge
+  gate's exit criteria — plus the agent-context run-path repo surface it surfaced.
+
+  New test `runtimes/local/test/mothership-integration.spec.ts` boots a stock Node mothership
+  (`buildNodeContainer` over real Postgres) on a 127.0.0.1 loopback and a no-Postgres mothership-mode
+  `buildLocalContainer` whose `CoreRepositories` are the RPC-backed remote registry pointing at it,
+  then asserts the two things the build-only tests can't: a board **loads** over the remote
+  persistence RPC, and a run **drives to a persisted terminal state** (`done`) over it, with the
+  execution read back straight from the mothership's Postgres. Only the agent executor is faked; the
+  whole persistence path is real, so an un-allow-listed method, a mis-scoped call, or an unrouted
+  direct-db store fails the test instead of a developer's first board load.
+
+  Standing it up surfaced that `AgentContextBuilder` resolves a block's linked docs/tasks and its
+  provisioned environment on EVERY agent dispatch — so those feature-flagged sub-helper repos are on
+  the board-load + run path, not off it as previously assumed. Fixes:
+
+  - `@cat-factory/node-server`: in mothership mode (`db` undefined) route the context-builder
+    run-path repos — `documentRepository`, `taskRepository`, `environmentRegistryRepository` /
+    `environmentConnectionRepository` — from the remote registry (the sub-helpers built them directly
+    over the absent `db`). Their connect/provision surfaces stay db-direct (off the run path).
+  - `@cat-factory/server`: widen `PILOT_PERSISTENCE_METHODS` to the run/board methods the path
+    exercises, each workspace-scoped: `documentRepository.{listByBlock,get,getByUrl}`,
+    `taskRepository.{listByBlock,get,getByUrl}`, `environmentRegistryRepository.{getByBlock,get}`, the
+    run-start `modelPresetRepository.getDefault`, the board-load lazy default-preset seeds
+    `mergePresetRepository.upsert` / `modelPresetRepository.upsert`, and the completion notification
+    raise + inbox transitions `notificationRepository.{findOpenByBlock,upsertOpenForBlock,upsert}`.
+    (`*.getByUrl` resolves a URL named in a block's description, and `notificationRepository.upsert`
+    backs block-less raises + inbox act/dismiss/escalate — both squarely on the same run/post-run
+    path as the reads they sit next to, so omitting them would fail any task whose description
+    contains a link, or any inbox action after a run.) Round-trip + cross-account-scope unit tests
+    for each are added to `persistenceRpc.spec.ts`, and the integration test patches a task with a
+    URL + Jira/GitHub refs and enables the environment integration so these reads round-trip over the
+    RPC end-to-end (not just in the unit suite).
+
+  Still DRAFT-gated (`docs/initiatives/mothership-mode.md`): decrypting a remotely-sealed provisioned
+  environment's access cipher needs the mothership's key (a later secrets-delegation slice); the
+  kaizen-grading, LLM-metric and subscription-activation calls a run also makes degrade as best-effort
+  no-ops over the remote (telemetry is Phase 5 local-first; activation is the local-sqlite bucket); and
+  the remaining sub-helper surfaces (fragments / slack connect/provision) are follow-ups.
+
+- f9678df: Mothership mode: the no-Postgres local boot SPINE (initiative slice 1b). A local node can now
+  boot with `LOCAL_MOTHERSHIP_URL` set and NO local database: it composes the remote (RPC-backed)
+  org repositories + a local `node:sqlite` credential store (sealed with the LOCAL key; the
+  mothership's `ENCRYPTION_KEY` never reaches the machine) and drives runs with an in-process work
+  runner instead of pg-boss.
+
+  NOT yet functional end-to-end — keep the mothership PR a DRAFT. The pilot allow-list exposes only
+  the six core domain repositories remotely, but a board load and a run reach many more org repos
+  (mounts, settings, presets, notifications, projections, …) plus stores still built from the
+  now-absent local `db`, so those paths currently throw. Routing the full repository surface through
+  the remote registry + widening the server allow-list (with the per-method account/role scope rules
+  that boundary needs) is the gating phase in `docs/initiatives/mothership-mode.md`; this work must
+  not merge until that phase lands. See the tracker for the per-repo task list.
+
+  - `@cat-factory/server`: `createRemoteRepositoryRegistry(client)` — a drift-proof, full-surface
+    remote repository set (a `Proxy` that lazily forwards any accessed repository to one RPC), so a
+    mothership-mode node backs its entire `CoreRepositories` surface remotely with no per-repo
+    wiring. The server-side allow-list still gates which repo+method actually executes.
+  - `@cat-factory/node-server`: `buildNodeContainer` now tolerates `db: undefined` — the per-user
+    Postgres services (subscriptions, user secrets, OpenRouter catalog) turn themselves off, the
+    API-key pool + local-model endpoints accept injected repositories, and the composite `repos`
+    is required in that mode. Re-exports the execution driver + realtime pieces the local
+    mothership boot reuses.
+  - `@cat-factory/local-server`: `composeMothership` wires the remote repos + the local credential
+    store; `buildLocalContainer` composes them with `db: undefined`, injects the credential repos,
+    and drives runs with the new in-process `WorkRunner` (the no-pg-boss analogue, serialized per
+    execution); `startLocal()` takes the dedicated no-Postgres boot path automatically when
+    `LOCAL_MOTHERSHIP_URL` is set.
+  - `@cat-factory/contracts`: `localModeConfig.mothership` is surfaced to the SPA so the UI can
+    label what is stored locally vs delegated to the mothership.
+
+  Login-based machine-token minting also lands later (a static `LOCAL_MOTHERSHIP_TOKEN` is used for
+  now). Pre-1.0, no back-compat: the standard siloed-Postgres local mode is unchanged when
+  `LOCAL_MOTHERSHIP_URL` is unset.
+
+### Patch Changes
+
+- Updated dependencies [f9678df]
+- Updated dependencies [f9678df]
+- Updated dependencies [f9678df]
+- Updated dependencies [f9678df]
+- Updated dependencies [f9678df]
+- Updated dependencies [858799e]
+  - @cat-factory/server@0.55.0
+  - @cat-factory/contracts@0.65.0
+  - @cat-factory/orchestration@0.48.1
+  - @cat-factory/kernel@0.62.0
+  - @cat-factory/integrations@0.44.0
+  - @cat-factory/agents@0.24.3
+  - @cat-factory/consensus@0.7.91
+  - @cat-factory/gates@0.2.44
+  - @cat-factory/gitlab@0.4.14
+  - @cat-factory/prompt-fragments@0.9.18
+  - @cat-factory/spend@0.10.48
+  - @cat-factory/observability-langfuse@0.7.87
+  - @cat-factory/provider-bedrock@0.7.91
+  - @cat-factory/provider-cloudflare@0.7.91
+  - @cat-factory/provider-s3@0.2.37
+
 ## 0.50.0
 
 ### Minor Changes

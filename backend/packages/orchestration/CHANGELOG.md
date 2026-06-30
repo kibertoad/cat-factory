@@ -1,5 +1,32 @@
 # @cat-factory/orchestration
 
+## 0.48.1
+
+### Patch Changes
+
+- f9678df: Mothership Phase 3 review fixes:
+
+  - `ExecutionService.start` now clears a replaced block's prior per-run subscription activation
+    best-effort (try/catch), mirroring the terminal cleanup in `RunStateMachine.emit`. In mothership
+    mode `subscriptionActivationRepository` is remote and `deleteByExecution` is not yet allow-listed
+    (it throws `unknown_method`), so the previously-unguarded call would break re-running any block;
+    the TTL sweep reclaims the stale row as the backstop.
+  - The persistence RPC controller memoises the `block` / `serviceList` scope reads
+    (`blockRepository.findById` / `serviceRepository.listByIds`) per request, so when the request
+    also dispatches that same read it reuses the resolver's result instead of issuing a second
+    identical query.
+
+- Updated dependencies [f9678df]
+- Updated dependencies [858799e]
+  - @cat-factory/contracts@0.65.0
+  - @cat-factory/kernel@0.62.0
+  - @cat-factory/integrations@0.44.0
+  - @cat-factory/agents@0.24.3
+  - @cat-factory/prompt-fragments@0.9.18
+  - @cat-factory/sandbox@0.8.56
+  - @cat-factory/spend@0.10.48
+  - @cat-factory/workspaces@0.9.39
+
 ## 0.48.0
 
 ### Minor Changes
