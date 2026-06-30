@@ -63,10 +63,39 @@ webhooks) requires a valid session, and when auth is unconfigured those routes
 return `503 auth_not_configured` rather than serving data openly. **Production is
 therefore always authenticated** — an unconfigured deployment is locked, not open.
 
-The only way to run open is the explicit local-dev/test escape hatch
-`AUTH_DEV_OPEN=true`. It lives in `.dev.vars` (gitignored, for `wrangler dev`)
-and the vitest bindings, and must **never** be set in the deployed
-`wrangler.toml` — doing so would re-open production.
+### Running without configured auth: `AUTH_DEV_OPEN` vs `TESTING_NO_AUTH`
+
+There are **two** opt-out hatches, and they operate at **different layers**. Both are
+honoured **only outside a production-like `ENVIRONMENT`** (`production` / `prod` /
+`staging`), so a flag that leaks into a real deployment can't re-open it; both belong in
+`.dev.vars` (gitignored, for `wrangler dev`) / the vitest bindings / a non-prod `.env`,
+**never** in a deployed `wrangler.toml`. The distinction is what each one opts out of:
+
+| Hatch             | Opens the **API gate**? (anonymous requests pass instead of 503) | Tells the **SPA** to render anonymously? (skip the login screen) |
+| ----------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `AUTH_DEV_OPEN`   | **Yes**                                                          | **No**                                                           |
+| `TESTING_NO_AUTH` | **Yes** (it implies dev-open)                                    | **Yes**                                                          |
+
+- **`AUTH_DEV_OPEN=true`** opens only the **server** side: protected routes stop returning
+  `503 auth_not_configured` and serve anonymously. It is the escape hatch for **backend**
+  development and the API/integration test suites, and it is what **local mode** runs on by
+  default (so unauthenticated reads work while a developer signs in with a PAT/password to
+  get a per-user identity). It deliberately does **NOT** change the SPA: a remote facade has
+  **no anonymous tier**, so the SPA still routes to the **login screen** when the auth
+  handshake resolves with no user — a dev-open-but-unconfigured remote is a misconfiguration
+  to surface, not an invitation to use the board anonymously.
+
+- **`TESTING_NO_AUTH=true`** is the stronger, narrowly-scoped hatch for running the **whole
+  product with no authentication at all**. It implies `AUTH_DEV_OPEN` (so the API gate is
+  open) **and** is advertised to the SPA via `GET /auth/config` (`testingNoAuth: true`), so
+  the SPA renders the **board anonymously** instead of gating to login. This is what the
+  **end-to-end (Playwright) suite** opts into — the assembled product needs to boot straight
+  to the board with the external auth providers left off. Outside that test harness there is
+  no reason to set it.
+
+Rule of thumb: reach for `AUTH_DEV_OPEN` when you only need the **API** open; reach for
+`TESTING_NO_AUTH` when you need the **SPA** to skip sign-in too (i.e. an end-to-end test of
+the assembled product). Neither runs in production.
 
 Register an OAuth app (a GitHub App's OAuth credentials work, or a classic OAuth
 App) with the callback URL `<worker-origin>/auth/callback`, then:
@@ -82,15 +111,16 @@ wrangler secret put AUTH_SESSION_SECRET     # any high-entropy random string
 
 Optional vars:
 
-| Var                         | Purpose                                                         | Default                   |
-| --------------------------- | --------------------------------------------------------------- | ------------------------- |
-| `AUTH_SUCCESS_REDIRECT_URL` | Fixed SPA landing URL after login (recommended in production)   | request-provided          |
-| `AUTH_CALLBACK_URL`         | Override `redirect_uri` when the public URL differs from origin | `<origin>/auth/callback`  |
-| `AUTH_SESSION_TTL_HOURS`    | Session lifetime in hours                                       | `168` (7 days)            |
-| `AUTH_ALLOWED_LOGINS`       | Comma-separated GitHub logins permitted to sign in              | none (see access control) |
-| `AUTH_ALLOWED_ORGS`         | Comma-separated GitHub orgs whose members may sign in           | none (see access control) |
-| `GITHUB_OAUTH_BASE`         | OAuth host (set for GitHub Enterprise)                          | `https://github.com`      |
-| `AUTH_DEV_OPEN`             | Local/test ONLY: `true` runs the API open while unconfigured    | unset (prod fails closed) |
+| Var                         | Purpose                                                                                                             | Default                   |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `AUTH_SUCCESS_REDIRECT_URL` | Fixed SPA landing URL after login (recommended in production)                                                       | request-provided          |
+| `AUTH_CALLBACK_URL`         | Override `redirect_uri` when the public URL differs from origin                                                     | `<origin>/auth/callback`  |
+| `AUTH_SESSION_TTL_HOURS`    | Session lifetime in hours                                                                                           | `168` (7 days)            |
+| `AUTH_ALLOWED_LOGINS`       | Comma-separated GitHub logins permitted to sign in                                                                  | none (see access control) |
+| `AUTH_ALLOWED_ORGS`         | Comma-separated GitHub orgs whose members may sign in                                                               | none (see access control) |
+| `GITHUB_OAUTH_BASE`         | OAuth host (set for GitHub Enterprise)                                                                              | `https://github.com`      |
+| `AUTH_DEV_OPEN`             | Local/test ONLY: `true` runs the API open while unconfigured                                                        | unset (prod fails closed) |
+| `TESTING_NO_AUTH`           | Test ONLY: stronger `AUTH_DEV_OPEN` — open API + the SPA renders anonymously (no login gate). Used by the e2e suite | unset (prod refuses it)   |
 
 > **Production note:** set `AUTH_SUCCESS_REDIRECT_URL` to your SPA's URL. Without
 > it the post-login landing comes from the request's `redirect` query (dev

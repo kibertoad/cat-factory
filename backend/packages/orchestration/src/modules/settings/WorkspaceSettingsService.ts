@@ -51,8 +51,6 @@ export class WorkspaceSettingsService {
       kaizenEnabled: patch.kaizenEnabled ?? current.kaizenEnabled,
       delegateAgentsToRunnerPool:
         patch.delegateAgentsToRunnerPool ?? current.delegateAgentsToRunnerPool,
-      delegateTestEnvToProvider:
-        patch.delegateTestEnvToProvider ?? current.delegateTestEnvToProvider,
       spendCurrency:
         patch.spendCurrency !== undefined ? patch.spendCurrency : current.spendCurrency,
       spendMonthlyLimit:

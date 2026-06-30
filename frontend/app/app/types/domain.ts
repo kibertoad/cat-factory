@@ -27,6 +27,7 @@ export type {
   PullRequestRef,
   CloudProvider,
   InstanceSize,
+  ProvisionType,
   AgentConfigOption,
   AgentConfigDescriptor,
   TestConcernSeverity,

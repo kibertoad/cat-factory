@@ -94,6 +94,7 @@ import {
   FetchGitHubProvisioningClient,
   GitHubAppAuth,
   GitHubAppRegistry,
+  GitHubIdentityResolver,
   GitHubCiStatusProvider,
   GitHubMergeabilityProvider,
   GitHubPullRequestReviewProvider,
@@ -133,9 +134,11 @@ import {
 } from '@cat-factory/gates'
 import {
   buildGitLabEngineClient,
+  GitLabIdentityResolver,
   registerGitLab,
   StaticGitLabTokenSource,
 } from '@cat-factory/gitlab'
+import type { VcsIdentityRegistry } from '@cat-factory/kernel'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
@@ -186,6 +189,7 @@ import {
   DrizzleEnvironmentConnectionRepository,
   DrizzleEnvironmentRegistryRepository,
 } from './repositories/environments.js'
+import { DrizzleCustomManifestTypeRepository } from './repositories/customManifestType.js'
 import {
   DrizzleFragmentSourceRepository,
   DrizzlePromptFragmentRepository,
@@ -430,6 +434,26 @@ function buildNodeAppRegistry(
     privileged,
     installationRepository,
   })
+}
+
+/**
+ * The hosted PAT-login registry: lets a user sign in by pasting their OWN source-control PAT,
+ * which the shared `/auth/pat` flow resolves to the account it belongs to (and holds to the
+ * server's login/org/domain allowlist — see `AuthController`). GitHub is always available;
+ * GitLab is added when a GitLab connection is configured. Unlike local mode there is NO
+ * `configuredToken` — a remote deployment is multi-user, so there's no shared one-click env
+ * token; each user supplies their own PAT.
+ */
+function buildNodeVcsIdentityRegistry(config: AppConfig): VcsIdentityRegistry {
+  const registry: VcsIdentityRegistry = {
+    github: { resolver: new GitHubIdentityResolver({ apiBase: config.github.apiBase }) },
+  }
+  if (config.gitlab?.enabled) {
+    registry.gitlab = {
+      resolver: new GitLabIdentityResolver({ apiBase: config.gitlab.apiBase }),
+    }
+  }
+  return registry
 }
 
 export interface NodeContainerOptions {
@@ -2157,6 +2181,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // controllers + the visual-confirmation gate (configured per-account in the UI).
     resolveBinaryArtifactStore,
     gateways: createNodeGateways(env),
+    // Source-control PAT login: lets a user sign in with their own GitHub/GitLab PAT via
+    // `/auth/pat`, held to the server's login/org/domain allowlist. Local mode overrides this
+    // (via its container spread) with a configured-token, allowlist-exempt registry.
+    vcsIdentity: buildNodeVcsIdentityRegistry(config),
     // The vendor-credential (subscription token pool) service the shared controller
     // reads; present when the shared ENCRYPTION_KEY is configured.
     subscriptions,
@@ -2289,6 +2317,8 @@ function selectNodeEnvironmentsDeps(config: AppConfig, db: DrizzleDb): Partial<C
   return {
     environmentConnectionRepository: new DrizzleEnvironmentConnectionRepository(db),
     environmentRegistryRepository: new DrizzleEnvironmentRegistryRepository(db),
+    // The workspace-defined custom-manifest-type catalog is a workspace feature on every facade.
+    customManifestTypeRepository: new DrizzleCustomManifestTypeRepository(db),
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64: config.environments.encryptionKey,
     }),

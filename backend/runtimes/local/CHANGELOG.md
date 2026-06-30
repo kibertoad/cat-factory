@@ -1,5 +1,129 @@
 # @cat-factory/local-server
 
+## 0.29.0
+
+### Minor Changes
+
+- 9bb75b0: Per-service provision types (slices 3 + 4): the deployer engine step + run-details recording,
+  and the per-type handler controllers + container wiring.
+
+  Slice 3 — engine step:
+
+  - The `deployer` step now resolves the SERVICE frame's declared `provisioning` and routes to the
+    workspace handler for its type (merging the service's manifest source). A service declaring
+    `infraless` records a no-op step output (nothing provisioned); an undeclared service falls
+    through to the legacy single-connection path. The resolved provision type + engine are recorded
+    on the `EnvironmentRecord` (success and failed paths) and surfaced on the step output
+    (`Provision type:` / `Engine:` lines + `model: environment:<engine>:<providerId>`).
+  - `EnvironmentProvisioningService.provision` gains an `initiatedBy` arg and a
+    `resolveUserHandlerOverrides` seam: in local mode the run initiator's per-user handler
+    overrides layer over the workspace handlers.
+
+  Slice 4 — controllers + wiring:
+
+  - New per-type infra handler HTTP surface on `EnvironmentController` (workspace-scoped): a batched
+    `GET …/environments/handlers` bundle (handlers + custom-type catalog), `POST …/handlers`,
+    `PATCH …/handlers/:provisionType/secrets`, `DELETE …/handlers/:provisionType`, plus custom-type
+    CRUD (`PUT|DELETE …/environments/custom-types/:manifestId`).
+  - New **local-mode-only** `EnvironmentUserHandlerController` mounted at the root
+    (`GET /me/environment-handlers/:workspaceId`, `PUT|DELETE …/:provisionType`), backed by the new
+    `EnvironmentUserHandlerService`. The service + per-user overrides are wired ONLY by the local
+    facade (Worker/Node 503 the controller and ignore user overrides), enforced purely by container
+    wiring.
+  - `customManifestTypeRepository` is wired on all three facades (workspace catalog CRUD);
+    `environmentUserHandlerRepository` only on the local facade.
+  - The handler validation/lowering is extracted to a shared `buildInfraHandlerFields` helper used by
+    both the workspace and per-user stores. Cross-runtime conformance asserts the per-type handler
+    CRUD + custom-type CRUD + the `infraless` deployer no-op on every facade.
+
+### Patch Changes
+
+- Updated dependencies [9bb75b0]
+  - @cat-factory/contracts@0.64.0
+  - @cat-factory/integrations@0.43.0
+  - @cat-factory/orchestration@0.48.0
+  - @cat-factory/server@0.54.0
+  - @cat-factory/node-server@0.50.0
+  - @cat-factory/agents@0.24.2
+  - @cat-factory/gitlab@0.4.13
+  - @cat-factory/kernel@0.61.1
+
+## 0.28.1
+
+### Patch Changes
+
+- Updated dependencies [15c5894]
+  - @cat-factory/server@0.53.0
+  - @cat-factory/contracts@0.63.0
+  - @cat-factory/kernel@0.61.0
+  - @cat-factory/node-server@0.49.0
+  - @cat-factory/agents@0.24.1
+  - @cat-factory/gitlab@0.4.12
+  - @cat-factory/integrations@0.42.1
+  - @cat-factory/orchestration@0.47.1
+
+## 0.28.0
+
+### Minor Changes
+
+- f383515: Per-service provision types (slice 2c — tester collapse). **Breaking:** the per-task/per-service
+  `local` vs `ephemeral` Tester toggle is gone. A service's declared `provisioning` config now
+  drives the Tester's infra entirely, so these are removed (BC is a non-goal — stale rows/columns
+  are simply dropped):
+
+  - the `Block` fields `defaultTestEnvironment`, `testComposePath`, `noInfraDependencies` (folded
+    into `provisioning.type` / `provisioning.composePath`) — dropped from the contract, the shared
+    block mapper, and the D1 (`0026_drop_tester_env_columns.sql`) + Drizzle block columns;
+  - the `tester.environment` agent-config descriptor (`@cat-factory/agents`) and its prompt/job-body
+    consumers — the Tester's run mode is now derived from the service's provision type;
+  - the `delegateTestEnvToProvider` workspace setting (+ its D1/Drizzle column) and the local-facade
+    `resolveTesterFallbackDefault` / `resolveRequireEnvironmentProvider` wiring.
+
+  The start-time Tester gate is rewritten: it passes for an `infraless` (or undeclared) service,
+  refuses a `docker-compose` service on a runtime that can't nest containers OR with no compose
+  path declared (`tester_infra_unsupported` — "limited mode" / "nothing to stand up"), and requires
+  a resolvable workspace handler for a `kubernetes`/`custom` service (`provision_type_unhandled`, via
+  the new `EnvironmentConnectionService.resolveHandlerForType` /
+  `EnvironmentProvisioningService.canProvision` seam). The Tester's run mode (the `infra` job spec +
+  the prompt run-mode line, kept in lock-step) is derived from the provision type AND the run's
+  provisioned environment: a service that actually provisioned an env URL (e.g. via a `deployer`
+  step) tests against it regardless of declared type, and an undeclared service runs with no infra.
+  The agent-executor `service` context carries `provisioning` instead of the three legacy fields. The
+  service inspector replaces the local/ephemeral toggle with a provision-type selector.
+
+### Patch Changes
+
+- Updated dependencies [f383515]
+  - @cat-factory/kernel@0.60.0
+  - @cat-factory/contracts@0.62.0
+  - @cat-factory/agents@0.24.0
+  - @cat-factory/orchestration@0.47.0
+  - @cat-factory/integrations@0.42.0
+  - @cat-factory/server@0.52.0
+  - @cat-factory/node-server@0.48.0
+  - @cat-factory/gitlab@0.4.11
+
+## 0.27.4
+
+### Patch Changes
+
+- Updated dependencies [d21588d]
+  - @cat-factory/node-server@0.47.0
+
+## 0.27.3
+
+### Patch Changes
+
+- Updated dependencies [e4cddb4]
+  - @cat-factory/kernel@0.59.0
+  - @cat-factory/contracts@0.61.0
+  - @cat-factory/agents@0.23.4
+  - @cat-factory/gitlab@0.4.10
+  - @cat-factory/integrations@0.41.1
+  - @cat-factory/orchestration@0.46.1
+  - @cat-factory/server@0.51.3
+  - @cat-factory/node-server@0.46.1
+
 ## 0.27.2
 
 ### Patch Changes

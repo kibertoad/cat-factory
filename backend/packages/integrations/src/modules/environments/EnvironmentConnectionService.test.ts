@@ -208,6 +208,39 @@ describe('EnvironmentConnectionService — per-type handlers', () => {
     // The merged manifestSource rides the built manifest's providerConfig.
     expect(JSON.stringify(resolved.manifest)).toContain('deploy/k8s')
   })
+
+  it('merges shared + per-env helm releases by name (service overrides, no double install)', async () => {
+    const service = makeService(fakeConnections())
+    await service.registerHandler('ws1', {
+      provisionType: 'kubernetes',
+      config: {
+        engine: 'remote-kubernetes',
+        kubernetes: {
+          label: 'Cluster',
+          apiServerUrl: 'https://cluster.example.test:6443',
+          url: { source: 'ingressTemplate', hostTemplate: '{{branch}}.example.test' },
+          helmReleases: [
+            { name: 'gateway', chart: 'oci://x/gateway', version: '1.0.0', scope: 'shared' },
+          ],
+        },
+      },
+      secrets: { apiToken: 'k8s-tok' },
+    })
+    const resolved = await service.resolveProviderForType('ws1', {
+      type: 'kubernetes',
+      manifestSource: { type: 'colocated', path: 'deploy/k8s' },
+      helmReleases: [
+        // Same name as the engine's shared release ⇒ overrides it (not installed twice).
+        { name: 'gateway', chart: 'oci://x/gateway', version: '2.0.0', scope: 'shared' },
+        { name: 'app', chart: 'oci://x/app', version: '0.1.0' },
+      ],
+    })
+    const providerConfig = resolved.manifest.providerConfig as { helmReleases?: unknown }
+    expect(providerConfig.helmReleases).toEqual([
+      { name: 'gateway', chart: 'oci://x/gateway', version: '2.0.0', scope: 'shared' },
+      { name: 'app', chart: 'oci://x/app', version: '0.1.0' },
+    ])
+  })
 })
 
 // The legacy single-connection surface (register/getConnection/unregister/...) is a compat

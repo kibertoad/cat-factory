@@ -2,12 +2,17 @@ import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   bootstrapEnvironmentRepoSchema,
+  customManifestTypeSchema,
   environmentConnectionSchema,
   environmentHandleSchema,
+  environmentHandlerViewSchema,
+  environmentHandlersBundleSchema,
   provisionEnvironmentSchema,
+  registerEnvironmentHandlerSchema,
   registerEnvironmentProviderSchema,
   testEnvironmentConnectionSchema,
   updateEnvironmentSecretsSchema,
+  upsertCustomManifestTypeSchema,
   validateEnvironmentRepoSchema,
 } from '../environments.js'
 import {
@@ -93,6 +98,60 @@ export const bootstrapEnvironmentRepoContract = defineApiContract({
   pathResolver: () => '/environments/connection/bootstrap-repo',
   requestBodySchema: bootstrapEnvironmentRepoSchema,
   responsesByStatusCode: { 200: bootstrapRepoResultSchema, ...errorResponses },
+})
+
+// ---- per-type infra handlers (the workspace "how") + custom-type catalog ----
+
+const provisionTypeParams = singleStringParam('provisionType')
+const manifestIdParams = singleStringParam('manifestId')
+// `manifestId` keys a `custom` handler; absent ⇒ the bare (non-custom) handler.
+const handlerManifestIdQuery = v.object({ manifestId: v.optional(v.string()) })
+
+// The batched bundle: every registered handler + the custom-manifest-type catalog
+// (registered code types + workspace rows), so the infra configurator loads in one call.
+export const listEnvironmentHandlersContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/environments/handlers',
+  responsesByStatusCode: { 200: environmentHandlersBundleSchema, ...errorResponses },
+})
+
+export const registerEnvironmentHandlerContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/environments/handlers',
+  requestBodySchema: registerEnvironmentHandlerSchema,
+  responsesByStatusCode: { 201: environmentHandlerViewSchema, ...errorResponses },
+})
+
+export const updateEnvironmentHandlerSecretsContract = defineApiContract({
+  method: 'patch',
+  requestPathParamsSchema: provisionTypeParams,
+  requestQuerySchema: handlerManifestIdQuery,
+  pathResolver: ({ provisionType }) => `/environments/handlers/${provisionType}/secrets`,
+  requestBodySchema: updateEnvironmentSecretsSchema,
+  responsesByStatusCode: { 200: environmentHandlerViewSchema, ...errorResponses },
+})
+
+export const unregisterEnvironmentHandlerContract = defineApiContract({
+  method: 'delete',
+  requestPathParamsSchema: provisionTypeParams,
+  requestQuerySchema: handlerManifestIdQuery,
+  pathResolver: ({ provisionType }) => `/environments/handlers/${provisionType}`,
+  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+})
+
+export const upsertCustomManifestTypeContract = defineApiContract({
+  method: 'put',
+  requestPathParamsSchema: manifestIdParams,
+  pathResolver: ({ manifestId }) => `/environments/custom-types/${manifestId}`,
+  requestBodySchema: upsertCustomManifestTypeSchema,
+  responsesByStatusCode: { 200: customManifestTypeSchema, ...errorResponses },
+})
+
+export const removeCustomManifestTypeContract = defineApiContract({
+  method: 'delete',
+  requestPathParamsSchema: manifestIdParams,
+  pathResolver: ({ manifestId }) => `/environments/custom-types/${manifestId}`,
+  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
 })
 
 export const listEnvironmentsContract = defineApiContract({

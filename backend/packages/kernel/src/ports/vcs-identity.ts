@@ -44,6 +44,15 @@ export interface VcsIdentityResolver {
    * partial/empty identity — a login must never succeed against a bad token.
    */
   resolveIdentity(token: string): Promise<VcsIdentity>
+  /**
+   * The lowercased org / group logins the token's account belongs to, when the provider
+   * exposes them. Used by a HOSTED facade's PAT-login allowlist (a remote deployment admits
+   * a PAT only when its login, an org it belongs to, or its email domain is allowlisted —
+   * the same OR check the GitHub OAuth path applies). Optional: a provider that can't
+   * enumerate orgs (or a deployment that doesn't gate on them) omits it, and the org branch
+   * of the allowlist is simply skipped.
+   */
+  resolveOrgs?(token: string): Promise<string[]>
 }
 
 /** One provider's PAT-login capability: a resolver, plus any server-configured PAT. */

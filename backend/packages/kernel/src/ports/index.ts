@@ -237,6 +237,8 @@ export type {
   EnvironmentProvider,
   AsyncProvisionCapability,
   DeployProvisionJob,
+  DeployCloneTarget,
+  DeployProvisionInputs,
   EnvironmentConnectionTestRequest,
   ProvisionContext,
   ProvisionEnvironmentRequest,

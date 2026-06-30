@@ -32,8 +32,8 @@ is rejected with a clear error.
 ## Pointing at an existing local k3s (local mode)
 
 Local mode (`@cat-factory/local-server`) inherits the Node facade's environment wiring, so a
-developer running a local k3s (k3d, Rancher Desktop, or k3s-in-docker) can use the `kubernetes`
-backend with no extra code:
+developer running a local k3s (k3d, Rancher Desktop, k3s-in-docker, or k3s in WSL2 on Windows)
+can use the `kubernetes` backend with no extra code:
 
 1. Bring up a cluster and create a ServiceAccount + token with RBAC to create/patch/delete the
    namespaced resources above (and `namespaces`).
@@ -54,6 +54,89 @@ Local mode widens the environment URL-safety policy by default (`ENVIRONMENTS_AL
   / ingress-host URL the provider returns is accepted. Add more hosts via
   `ENVIRONMENTS_ALLOW_URL_HOSTS`. Hosted facades keep the strict public-https default.
 
+### Networking from WSL2 (Windows)
+
+On Windows, k3s runs inside a WSL2 distro (e.g. Ubuntu), not natively. Two facts make this work
+with no port-forwarding layer:
+
+- **WSL2 localhost-forwarding bridges Windows → WSL.** The k3s apiserver binds `0.0.0.0:6443`,
+  so `https://127.0.0.1:6443` reaches it from BOTH inside WSL and from a Windows-host process —
+  no `netsh portproxy` / `.wslconfig` change needed. Always use `127.0.0.1` / `localhost`, never
+  the WSL `eth0` address (the `172.x` NAT IP is reassigned on every reboot).
+- **Where you run `local-server` matters for the RUNNER path** (see below): running it _inside_
+  WSL (the same distro as k3s) keeps the executor-pod → host-proxy callback to a single hop.
+  Running it on the Windows host instead adds a pod → WSL → Windows-gateway hop plus a Windows
+  Firewall inbound rule, so prefer WSL for the runner backend. For _environments_ it makes no
+  difference — provisioning only needs outbound HTTPS to `:6443`.
+
+### ServiceAccount, RBAC, and token
+
+Both backends authenticate with a ServiceAccount bearer token. Apply this once — it covers the
+runner Role + a long-lived token; uncomment the `ClusterRoleBinding` to add the cluster-wide
+grant the ephemeral-ENVIRONMENTS backend needs to create per-PR namespaces:
+
+```yaml
+# k3s-cat-factory-rbac.yaml — kubectl apply -f k3s-cat-factory-rbac.yaml
+apiVersion: v1
+kind: Namespace
+metadata: { name: cat-factory }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: { name: cat-factory, namespace: cat-factory }
+---
+# Runner backend: manage run pods + reach the in-pod harness via the apiserver pod-proxy.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: { name: cat-factory-runner, namespace: cat-factory }
+rules:
+  - apiGroups: ['']
+    resources: ['pods']
+    verbs: ['create', 'get', 'list', 'delete']
+  - apiGroups: ['']
+    resources: ['pods/proxy']
+    verbs: ['create', 'get']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: { name: cat-factory-runner, namespace: cat-factory }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: cat-factory-runner }
+subjects:
+  - { kind: ServiceAccount, name: cat-factory, namespace: cat-factory }
+---
+# Long-lived SA token (k8s >= 1.24 no longer auto-creates one).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cat-factory-token
+  namespace: cat-factory
+  annotations: { kubernetes.io/service-account.name: cat-factory }
+type: kubernetes.io/service-account-token
+---
+# Ephemeral ENVIRONMENTS also create namespaces + apply resources cluster-wide. For a throwaway
+# local cluster the simplest grant is cluster-admin (drop this block if you only use the runner
+# backend, or replace cluster-admin with a least-privilege ClusterRole over the manifest kinds):
+# apiVersion: rbac.authorization.k8s.io/v1
+# kind: ClusterRoleBinding
+# metadata: { name: cat-factory-env-admin }
+# roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: cluster-admin }
+# subjects:
+#   - { kind: ServiceAccount, name: cat-factory, namespace: cat-factory }
+```
+
+Read the token (paste into the connection's `apiToken`):
+
+```bash
+kubectl -n cat-factory get secret cat-factory-token -o jsonpath='{.data.token}' | base64 -d; echo
+```
+
+The preset uses `insecureSkipTlsVerify`, so a CA is optional locally. To pin TLS instead, read
+the cluster CA into `caCertPem`:
+
+```bash
+kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d
+```
+
 ## Running AGENTS on a local k3s (runner backend)
 
 The same cluster can also back the **agent runner** (not just Tester environments): connect a
@@ -66,6 +149,28 @@ ServiceAccount token. No backend change is needed: the apiserver-URL validator a
 loopback/private hosts (it only requires `https` and blocks the cloud-metadata endpoint), and
 Node/local honors `insecureSkipTlsVerify`/`caCertPem` via undici. The token needs RBAC to
 create/get/delete `pods` and `pods/proxy` in the namespace.
+
+**The executor pod must reach this service's LLM proxy, and the local-mode default `PUBLIC_URL`
+does NOT resolve from inside a k3s pod.** The Docker per-run transport injects
+`--add-host=host.docker.internal:host-gateway`, so `PUBLIC_URL`'s default
+(`http://host.docker.internal:<port>`) works there — but a k3s pod runs in the cluster network
+namespace, where `host.docker.internal` is undefined, so the harness's `${PUBLIC_URL}/v1` model
+calls would fail DNS. Set `PUBLIC_URL` explicitly to an address the pod can reach the host-run
+proxy on:
+
+- **`local-server` in WSL (recommended):** the pod reaches the host via the node IP. Point
+  `PUBLIC_URL` at the WSL host's `eth0` address, e.g.
+  `PUBLIC_URL=http://$(ip -4 -o addr show eth0 | awk '{print $4}' | cut -d/ -f1):8787`. Since
+  that NAT IP changes across reboots, either re-resolve it on each start or pin a stable
+  in-cluster name with a headless `Service` + manual `Endpoints` pointing at the host IP.
+- **`local-server` on the Windows host:** the pod reaches Windows through the WSL gateway
+  (`http://<wsl-gateway-ip>:8787` — the `eth0` default-route address, e.g. `172.x.x.1`). You
+  must also open that port inbound in Windows Firewall and ensure `local-server` binds all
+  interfaces (the local default). This is the fiddlier path — prefer running `local-server` in
+  WSL.
+
+This applies only to the **runner** backend; Tester **environments** never call back to the
+proxy, so they need none of it.
 
 ## Future: managed local k3s lifecycle
 

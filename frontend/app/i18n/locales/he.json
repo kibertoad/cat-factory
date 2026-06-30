@@ -387,13 +387,13 @@
     },
     "testConfig": {
       "title": "תשתית בדיקות",
-      "defaultEnv": "סביבת בדיקות ברירת מחדל",
-      "defaultEnvHint": "ברירת המחדל שאיתה נוצרות המשימות תחת שירות זה. כל משימה יכולה לעקוף אותה בהגדרות הסוכן שלה.",
-      "env": {
-        "ephemeral": "סביבה זמנית",
-        "ephemeralHint": "הבדיקות רצות מול סביבה שהוקצתה",
-        "local": "מקומי (docker-compose)",
-        "localHint": "ה-Tester מקים את התלויות מקומית"
+      "provisionType": "סוג ההקצאה",
+      "provisionTypeHint": "כיצד שירות זה מקים את הסביבה שלו עבור ה-Tester. סביבת העבודה מגדירה כיצד מטופל כל סוג (המנוע + החיבור).",
+      "provisionTypes": {
+        "infraless": "ללא תשתית",
+        "docker-compose": "Docker Compose",
+        "kubernetes": "Kubernetes",
+        "custom": "מותאם אישית"
       },
       "composePath": "נתיב docker-compose",
       "browseRepo": "עיין במאגר עבור קובץ ה-compose",
@@ -403,8 +403,6 @@
       "selected": "נבחר: {path}",
       "noFileSelected": "לא נבחר קובץ.",
       "useThisFile": "השתמש בקובץ זה",
-      "noInfra": "אין תלויות תשתית (ה-Tester אינו מקים דבר)",
-      "missingInfra": "הגדר נתיב docker-compose או הפעל ללא תלויות תשתית, אחרת פייפליין עם Tester לא יתחיל.",
       "provisioningTitle": "הקצאת סביבת בדיקות זמנית",
       "provisioningHint": "רמז להקצאת סביבת הבדיקות הזמנית של שירות זה: לאיזה ספק ענן לפרוס וכמה גדול מופע לבקש. מתעלם בבדיקות מקומיות (docker-compose).",
       "cloudProvider": "ספק ענן",
@@ -774,7 +772,11 @@
       "sendResetLink": "שלח קישור איפוס",
       "backToSignIn": "חזרה להתחברות",
       "signInFailed": "ההתחברות נכשלה. בדוק את הפרטים שלך ונסה שוב.",
-      "genericError": "משהו השתבש. אנא נסה שוב."
+      "genericError": "משהו השתבש. אנא נסה שוב.",
+      "notConfiguredTitle": "האימות אינו מוגדר",
+      "notConfiguredBody": "בפריסה זו לא מופעלת אף שיטת התחברות, ולכן לא ניתן להתחבר או לגשת למרחבי העבודה שלך. מנהל המערכת צריך להגדיר ספק אימות (GitHub או Google OAuth, או התחברות עם אימייל וסיסמה).",
+      "patPlaceholder": "אסימון גישה אישי של {provider}",
+      "signInWithPat": "התחברות עם PAT של {provider}"
     },
     "resetPassword": {
       "title": "אפס סיסמה",

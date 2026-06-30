@@ -387,13 +387,13 @@
     },
     "testConfig": {
       "title": "Test altyapısı",
-      "defaultEnv": "Varsayılan test ortamı",
-      "defaultEnvHint": "Bu servisin altındaki görevlerin oluşturulduğu varsayılan ortam. Her görev kendi ajan ayarlarında bunu geçersiz kılabilir.",
-      "env": {
-        "ephemeral": "Geçici ortam",
-        "ephemeralHint": "testler sağlanan bir ortama karşı çalışır",
-        "local": "Yerel (docker-compose)",
-        "localHint": "Tester bağımlılıkları yerel olarak ayağa kaldırır"
+      "provisionType": "Sağlama türü",
+      "provisionTypeHint": "Bu hizmetin Tester için ortamını nasıl ayağa kaldırdığı. Her türün nasıl ele alınacağını (motor + bağlantı) çalışma alanı yapılandırır.",
+      "provisionTypes": {
+        "infraless": "Altyapısız",
+        "docker-compose": "Docker Compose",
+        "kubernetes": "Kubernetes",
+        "custom": "Özel"
       },
       "composePath": "docker-compose yolu",
       "browseRepo": "compose dosyası için depoya göz at",
@@ -403,8 +403,6 @@
       "selected": "Seçildi: {path}",
       "noFileSelected": "Dosya seçilmedi.",
       "useThisFile": "Bu dosyayı kullan",
-      "noInfra": "Altyapı bağımlılığı yok (Tester hiçbir şey ayağa kaldırmaz)",
-      "missingInfra": "Bir docker-compose yolu ayarlayın veya altyapı bağımlılığı yok seçeneğini etkinleştirin, aksi halde Tester içeren bir pipeline başlamaz.",
       "provisioningTitle": "Geçici ortam sağlama",
       "provisioningHint": "Bu servisin geçici test ortamını sağlamak için bir ipucu: hangi bulut sağlayıcısına dağıtılacağı ve ne kadar büyük bir örnek isteneceği. Yerel (docker-compose) testleri için yok sayılır.",
       "cloudProvider": "Bulut sağlayıcı",
@@ -774,7 +772,11 @@
       "sendResetLink": "Sıfırlama bağlantısı gönder",
       "backToSignIn": "Oturum açmaya dön",
       "signInFailed": "Oturum açma başarısız. Bilgilerinizi kontrol edip tekrar deneyin.",
-      "genericError": "Bir şeyler ters gitti. Lütfen tekrar deneyin."
+      "genericError": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
+      "notConfiguredTitle": "Kimlik doğrulama yapılandırılmamış",
+      "notConfiguredBody": "Bu dağıtımda etkin bir oturum açma yöntemi yok, bu nedenle oturum açamaz veya çalışma alanlarınıza erişemezsiniz. Bir yönetici, bir kimlik doğrulama sağlayıcısı (GitHub veya Google OAuth ya da e-posta ve parola ile oturum açma) yapılandırmalıdır.",
+      "patPlaceholder": "{provider} kişisel erişim belirteci",
+      "signInWithPat": "{provider} PAT ile oturum aç"
     },
     "resetPassword": {
       "title": "Parolayı sıfırla",

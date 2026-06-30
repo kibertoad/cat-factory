@@ -228,7 +228,12 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   const googleEnabled = googleClientId !== '' && googleClientSecret !== '' && strongSecret
   const passwordEnabled = env.AUTH_PASSWORD_ENABLED?.trim() === 'true' && strongSecret
 
-  const devOpen = env.AUTH_DEV_OPEN?.trim() === 'true' && !PRODUCTION_ENVIRONMENTS.has(environment)
+  const nonProd = !PRODUCTION_ENVIRONMENTS.has(environment)
+  // `TESTING_NO_AUTH` is a stronger `AUTH_DEV_OPEN`: besides leaving the API open it tells the
+  // SPA to render the board anonymously (no login gate). The e2e suite opts in; everything else
+  // leaves it off. Honoured only outside a production-like ENVIRONMENT, and it implies devOpen.
+  const testingNoAuth = env.TESTING_NO_AUTH?.trim() === 'true' && nonProd
+  const devOpen = (env.AUTH_DEV_OPEN?.trim() === 'true' || testingNoAuth) && nonProd
 
   // Fail fast on the silent-brick footgun: OAuth credentials are set (so real auth is
   // intended) but the session secret is missing/too short, which would disable the auth
@@ -243,6 +248,25 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     throw new Error(
       `AUTH_SESSION_SECRET must be at least ${MIN_SESSION_SECRET_LENGTH} characters when GitHub OAuth is configured ` +
         `(got ${sessionSecret.length}). Set a longer secret or enable AUTH_DEV_OPEN in a non-production environment.`,
+    )
+  }
+
+  // Remote node mode has NO anonymous tier: a hosted deployment must be able to sign a
+  // user in from the very first request. So refuse to boot when no login provider is
+  // configured AND the dev-open test hatch is off — rather than silently leaving auth
+  // disabled and 503-ing every protected route (a confusing half-brick that reads like a
+  // bug, not a misconfiguration). Local mode always enables password login via
+  // `applyLocalDefaults`, and the test/CI harnesses opt into AUTH_DEV_OPEN, so neither
+  // trips this; only a genuinely unconfigured remote deployment does.
+  const authEnabled = githubEnabled || googleEnabled || passwordEnabled
+  if (!authEnabled && !devOpen) {
+    throw new Error(
+      'No authentication provider is configured. Remote node mode has no anonymous access: ' +
+        'enable GitHub OAuth (GITHUB_OAUTH_CLIENT_ID + GITHUB_OAUTH_CLIENT_SECRET), Google OAuth ' +
+        '(GOOGLE_OAUTH_CLIENT_ID + GOOGLE_OAUTH_CLIENT_SECRET), or password login ' +
+        `(AUTH_PASSWORD_ENABLED=true) together with a ${MIN_SESSION_SECRET_LENGTH}+ character ` +
+        'AUTH_SESSION_SECRET. (For local development or tests, set AUTH_DEV_OPEN=true in a ' +
+        'non-production environment instead.)',
     )
   }
 
@@ -289,8 +313,9 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     },
     gitlab: loadGitLabConfig(env),
     auth: {
-      enabled: githubEnabled || googleEnabled || passwordEnabled,
+      enabled: authEnabled,
       devOpen,
+      testingNoAuth,
       githubEnabled,
       clientId,
       clientSecret,

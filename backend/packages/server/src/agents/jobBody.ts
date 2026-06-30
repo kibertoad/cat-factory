@@ -396,7 +396,7 @@ export function buildMigratedBuiltInBody(
       )
     // The tester clones the PR head branch (read-only — it makes NO commits), stands up
     // its dependencies (locally via the service's docker-compose, or against the
-    // provisioned ephemeral env — the task's `tester.environment` config picks which) and
+    // provisioned ephemeral env — the service's declared provision type picks which) and
     // returns ONLY a structured JSON report. It runs as a generic structured explore with
     // an `infra` spec the harness uses to stand the docker-compose dependencies up for the
     // run; `toRunResult` coerces the JSON into `testReport` (the conservative greenlight /

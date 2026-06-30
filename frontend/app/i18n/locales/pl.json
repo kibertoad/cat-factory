@@ -387,13 +387,13 @@
     },
     "testConfig": {
       "title": "Infrastruktura testowa",
-      "defaultEnv": "Domyślne środowisko testowe",
-      "defaultEnvHint": "Środowisko, z którym uruchamiane są domyślnie zadania w tej usłudze. Każde zadanie może je nadpisać w swoich ustawieniach agenta.",
-      "env": {
-        "ephemeral": "Środowisko efemeryczne",
-        "ephemeralHint": "testy uruchamiane wobec udostępnionego środowiska",
-        "local": "Lokalne (docker-compose)",
-        "localHint": "Tester stawia zależności lokalnie"
+      "provisionType": "Typ provisioningu",
+      "provisionTypeHint": "Jak ta usługa uruchamia swoje środowisko dla Testera. Obszar roboczy konfiguruje sposób obsługi każdego typu (silnik + połączenie).",
+      "provisionTypes": {
+        "infraless": "Bez infrastruktury",
+        "docker-compose": "Docker Compose",
+        "kubernetes": "Kubernetes",
+        "custom": "Niestandardowy"
       },
       "composePath": "Ścieżka docker-compose",
       "browseRepo": "Przeglądaj repozytorium w poszukiwaniu pliku compose",
@@ -403,8 +403,6 @@
       "selected": "Wybrano: {path}",
       "noFileSelected": "Nie wybrano pliku.",
       "useThisFile": "Użyj tego pliku",
-      "noInfra": "Brak zależności infrastrukturalnych (Tester niczego nie stawia)",
-      "missingInfra": "Ustaw ścieżkę docker-compose lub włącz brak zależności infrastrukturalnych, w przeciwnym razie potok z Testerem się nie uruchomi.",
       "provisioningTitle": "Udostępnianie środowiska efemerycznego",
       "provisioningHint": "Wskazówka dotycząca udostępniania efemerycznego środowiska testowego tej usługi: do którego dostawcy chmury wdrożyć i jak duży zażądać instancji. Ignorowane przy testach lokalnych (docker-compose).",
       "cloudProvider": "Dostawca chmury",
@@ -774,7 +772,11 @@
       "sendResetLink": "Wyślij link resetujący",
       "backToSignIn": "Powrót do logowania",
       "signInFailed": "Logowanie nie powiodło się. Sprawdź swoje dane i spróbuj ponownie.",
-      "genericError": "Coś poszło nie tak. Spróbuj ponownie."
+      "genericError": "Coś poszło nie tak. Spróbuj ponownie.",
+      "notConfiguredTitle": "Uwierzytelnianie nie jest skonfigurowane",
+      "notConfiguredBody": "To wdrożenie nie ma włączonej żadnej metody logowania, więc nie możesz się zalogować ani uzyskać dostępu do swoich przestrzeni roboczych. Administrator musi skonfigurować dostawcę uwierzytelniania (OAuth GitHub lub Google albo logowanie e-mailem i hasłem).",
+      "patPlaceholder": "Osobisty token dostępu {provider}",
+      "signInWithPat": "Zaloguj się tokenem PAT {provider}"
     },
     "resetPassword": {
       "title": "Zresetuj hasło",

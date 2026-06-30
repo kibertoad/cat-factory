@@ -1,5 +1,6 @@
 import {
   CryptoIdGenerator,
+  DrizzleEnvironmentUserHandlerRepository,
   DrizzleGitHubInstallationRepository,
   DrizzleLocalSettingsRepository,
   DrizzleRunnerPoolConnectionRepository,
@@ -68,10 +69,8 @@ import { createDockerComposeRuntime } from './compose.js'
 //     with the warm pool + per-repo checkout reuse configured from the DB local-mode
 //     settings), but PER WORKSPACE it can be delegated to the workspace's registered
 //     self-hosted runner pool (the `delegateAgentsToRunnerPool` setting) — the
-//     local-vs-external opt-in. The Tester's environment is the symmetric opt-in
-//     (`delegateTestEnvToProvider`, wired below as the tester fallback default), so a
-//     developer runs everything locally by default but can flip either concern to an
-//     external service from the UI;
+//     local-vs-external opt-in, so a developer runs agents locally by default but can flip
+//     them to an external runner pool from the UI;
 //   - optional NATIVE execution: run agents as a host process driving the developer's own
 //     installed `claude` / `codex` CLI (ambient login), bypassing Docker for the steps that
 //     use that login (`LOCAL_NATIVE_AGENTS`); everything else still runs in a container;
@@ -379,18 +378,6 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     }
   }
 
-  // The two tester-environment resolvers (used identically by the start gate and the
-  // agent-context materialisation): the local-mode default is `local` (host Docker / DinD),
-  // flipping to `ephemeral` only when the workspace opts into its environment provider; and
-  // when it opts in, the provider becomes REQUIRED so an `ephemeral` run with none connected
-  // is refused at start.
-  const resolveTesterFallbackDefault = async (
-    workspaceId: string,
-  ): Promise<'local' | 'ephemeral'> =>
-    (await wsSettings.get(workspaceId)).delegateTestEnvToProvider ? 'ephemeral' : 'local'
-  const resolveRequireEnvironmentProvider = async (workspaceId: string): Promise<boolean> =>
-    (await wsSettings.get(workspaceId)).delegateTestEnvToProvider
-
   // The selected runtime decides whether the Tester's LOCAL docker-compose infra (run
   // via Docker-in-Docker) is possible: Docker/Podman/OrbStack/Colima can nest a daemon,
   // Apple `container` (one VM per container) cannot. Surface that capability to the
@@ -476,12 +463,9 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     // connected with no manual connect step.
     ...(githubInstallationRepository ? { githubInstallationRepository } : {}),
     overrides: {
-      // The local-mode infrastructure-delegation opt-ins (per workspace). Listed BEFORE
-      // `...options.overrides` so a caller (the cross-runtime conformance harness) can pin
-      // the facade-NEUTRAL `ephemeral` tester default for the shared assertions — the local
-      // `local` default is a facade-specific behavior covered by its own tests.
-      resolveTesterFallbackDefault,
-      resolveRequireEnvironmentProvider,
+      // Refuse a run up front when the workspace delegates container agents to a runner pool
+      // that isn't registered. Listed BEFORE `...options.overrides` so a caller (the
+      // cross-runtime conformance harness) can override it.
       assertAgentBackendConfigured,
       ...options.overrides,
       // Mothership mode's in-process work runner (no pg-boss). After `...options.overrides` so an
@@ -499,6 +483,11 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       // (local-authoritative — after the overrides so a deployment can't accidentally
       // claim DinD support the runtime doesn't have).
       localTestInfraSupported,
+      // Per-USER infra handler overrides are a LOCAL-mode feature: only the local facade
+      // wires the repository, so the per-user override service + controller assemble here
+      // (and stay 503 / inert on the Worker + Node facades). A developer can point a
+      // provision type at their own Docker / k3s for the runs they initiate.
+      environmentUserHandlerRepository: new DrizzleEnvironmentUserHandlerRepository(options.db),
     } satisfies Partial<CoreDependencies>,
   })
 

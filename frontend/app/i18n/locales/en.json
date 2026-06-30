@@ -424,13 +424,13 @@
     },
     "testConfig": {
       "title": "Test infrastructure",
-      "defaultEnv": "Default test environment",
-      "defaultEnvHint": "The default tasks under this service are spawned with. Each task can override it in its agent settings.",
-      "env": {
-        "ephemeral": "Ephemeral environment",
-        "ephemeralHint": "tests run against a provisioned env",
-        "local": "Local (docker-compose)",
-        "localHint": "the Tester stands deps up locally"
+      "provisionType": "Provision type",
+      "provisionTypeHint": "How this service stands up its environment for the Tester. The workspace configures how each type is handled (the engine + connection).",
+      "provisionTypes": {
+        "infraless": "No infrastructure",
+        "docker-compose": "Docker Compose",
+        "kubernetes": "Kubernetes",
+        "custom": "Custom"
       },
       "composePath": "docker-compose path",
       "browseRepo": "Browse the repository for the compose file",
@@ -440,8 +440,6 @@
       "selected": "Selected: {path}",
       "noFileSelected": "No file selected.",
       "useThisFile": "Use this file",
-      "noInfra": "No infra dependencies (the Tester spins nothing up)",
-      "missingInfra": "Set a docker-compose path or enable no infra dependencies, otherwise a pipeline with a Tester won't start.",
       "provisioningTitle": "Ephemeral environment provisioning",
       "provisioningHint": "A hint for provisioning this service's ephemeral test environment: which cloud provider to deploy to and how large an instance to request. Ignored for local (docker-compose) testing.",
       "cloudProvider": "Cloud provider",
@@ -814,7 +812,11 @@
       "sendResetLink": "Send reset link",
       "backToSignIn": "Back to sign in",
       "signInFailed": "Sign-in failed. Check your details and try again.",
-      "genericError": "Something went wrong. Please try again."
+      "genericError": "Something went wrong. Please try again.",
+      "notConfiguredTitle": "Authentication isn't configured",
+      "notConfiguredBody": "This deployment has no sign-in method enabled, so you can't sign in or access your workspaces. An administrator needs to configure an authentication provider (GitHub or Google OAuth, or email and password login).",
+      "patPlaceholder": "{provider} personal access token",
+      "signInWithPat": "Sign in with {provider} PAT"
     },
     "resetPassword": {
       "title": "Reset password",

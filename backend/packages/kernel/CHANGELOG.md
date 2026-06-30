@@ -1,5 +1,125 @@
 # @cat-factory/kernel
 
+## 0.61.1
+
+### Patch Changes
+
+- Updated dependencies [9bb75b0]
+  - @cat-factory/contracts@0.64.0
+
+## 0.61.0
+
+### Minor Changes
+
+- 15c5894: feat(auth): remote node mode — surface the unauthenticated state and support PAT sign-in.
+
+  - A remote facade (node service / Worker) has no anonymous tier, so once the auth handshake
+    resolves with no signed-in user the SPA now routes to the login screen — even when the
+    backend reports auth "disabled" (a dev-open / unconfigured remote). Previously this dropped
+    the user onto a board where every per-user action silently failed with no sign-in affordance.
+    An unreachable backend still falls through to the board's own error UI.
+  - Source-control PAT sign-in now works on the remote node facade: a user pastes their own
+    GitHub/GitLab PAT and is resolved to the account it belongs to. A hosted PAT login is held
+    to the SAME login/org/domain allowlist as GitHub OAuth (admit when the login, an org it
+    belongs to, or its email domain is allowlisted; fail closed when none are configured). Local
+    mode keeps its configured-token, allowlist-exempt flow. `GET /auth/config` advertises the
+    available PAT providers and the login screen renders a PAT option alongside OAuth/password;
+    when a remote deployment has no sign-in method at all the screen explains that instead of
+    showing a blank card.
+  - New `TESTING_NO_AUTH` escape hatch (test-only, refused in a production-like ENVIRONMENT):
+    a stronger `AUTH_DEV_OPEN` that both leaves the API open AND advertises (via `GET
+/auth/config`) that the SPA may render the board anonymously instead of gating to login. The
+    e2e suite opts into it; `AUTH_DEV_OPEN` on its own keeps the SPA's login gate, since a
+    dev-open remote still has no anonymous tier.
+
+### Patch Changes
+
+- Updated dependencies [15c5894]
+  - @cat-factory/contracts@0.63.0
+
+## 0.60.0
+
+### Minor Changes
+
+- f383515: Per-service provision types (slice 2c — tester collapse). **Breaking:** the per-task/per-service
+  `local` vs `ephemeral` Tester toggle is gone. A service's declared `provisioning` config now
+  drives the Tester's infra entirely, so these are removed (BC is a non-goal — stale rows/columns
+  are simply dropped):
+
+  - the `Block` fields `defaultTestEnvironment`, `testComposePath`, `noInfraDependencies` (folded
+    into `provisioning.type` / `provisioning.composePath`) — dropped from the contract, the shared
+    block mapper, and the D1 (`0026_drop_tester_env_columns.sql`) + Drizzle block columns;
+  - the `tester.environment` agent-config descriptor (`@cat-factory/agents`) and its prompt/job-body
+    consumers — the Tester's run mode is now derived from the service's provision type;
+  - the `delegateTestEnvToProvider` workspace setting (+ its D1/Drizzle column) and the local-facade
+    `resolveTesterFallbackDefault` / `resolveRequireEnvironmentProvider` wiring.
+
+  The start-time Tester gate is rewritten: it passes for an `infraless` (or undeclared) service,
+  refuses a `docker-compose` service on a runtime that can't nest containers OR with no compose
+  path declared (`tester_infra_unsupported` — "limited mode" / "nothing to stand up"), and requires
+  a resolvable workspace handler for a `kubernetes`/`custom` service (`provision_type_unhandled`, via
+  the new `EnvironmentConnectionService.resolveHandlerForType` /
+  `EnvironmentProvisioningService.canProvision` seam). The Tester's run mode (the `infra` job spec +
+  the prompt run-mode line, kept in lock-step) is derived from the provision type AND the run's
+  provisioned environment: a service that actually provisioned an env URL (e.g. via a `deployer`
+  step) tests against it regardless of declared type, and an undeclared service runs with no infra.
+  The agent-executor `service` context carries `provisioning` instead of the three legacy fields. The
+  service inspector replaces the local/ephemeral toggle with a provision-type selector.
+
+### Patch Changes
+
+- Updated dependencies [f383515]
+  - @cat-factory/contracts@0.62.0
+
+## 0.59.0
+
+### Minor Changes
+
+- e4cddb4: Per-service provision types (Phase 2, slice 6 — Kustomize / Helm / Gateway-API contract +
+  port seam). Additive only; no migration (the new fields ride the existing `handler_json` /
+  service `provisioning` JSON columns).
+
+  Contracts (`@cat-factory/contracts` `environments.ts`):
+
+  - `kubernetesManifestSourceSchema` gains an optional `renderer: 'raw' | 'kustomize'` on both
+    the `colocated` and `separate` members (absent ⇒ `raw`). `kustomize` marks an overlay
+    directory that must be `kustomize build`-rendered before apply — handled only by the
+    container-backed deploy adapter, not the in-Worker REST adapter.
+  - New schemas `kubernetesImageOverrideSchema` (structured `images:`-style overrides),
+    `kubernetesHelmReleaseSchema` (+ `kubernetesHelmSetSchema`; pinned version,
+    `scope: 'per-environment' | 'shared'`), and `kubernetesSecretInjectionSchema` (+
+    `kubernetesSecretEntrySchema`; logical-key → `secretRef`/templated value mapping). The
+    injection has two `mode`s: `secret` (materialize a `Secret` directly) and
+    `generatorEnvFile` (write a `KEY=value` `.env` at `envFilePath` for an overlay's own
+    `secretGenerator` to consume — the common dedicated-overlay ephemeral-env shape).
+  - These schemas ENFORCE their documented invariants rather than only describing them: a
+    helm release `version` must be a pinned semver (floating tags like `latest`/`^1.0` are
+    rejected); an image override must set at least one of name/tag/digest and may not set both
+    a tag and a digest; a secret entry must set exactly one of `secretRef` or `valueTemplate`.
+  - `serviceProvisioningSchema` (the service "what/where") gains optional `images`,
+    `helmReleases`, and `secretInjections`; `kubernetesEngineConfigSchema` (the workspace
+    "how") gains optional `helmReleases` for cluster-singleton (`scope: 'shared'`) releases.
+  - `kubernetesUrlSourceSchema` gains `gatewayStatus` and `httpRouteStatus` variants for
+    Gateway-API URL discovery (alongside the existing Ingress/Service sources).
+
+  Kernel port seam (`@cat-factory/kernel`):
+
+  - `RunnerDispatchKind` widens to `'agent' | 'deploy'`; `RunnerDispatchOptions.image` gains
+    `'deploy'` (the separate deploy-harness image with `kubectl`/`kustomize`/`helm`).
+  - `EnvironmentProvider` gains an optional `asyncProvision` capability (`AsyncProvisionCapability`)
+    that pairs `buildProvisionJob(req)` (return a container-backed `DeployProvisionJob` to dispatch
+    - park on, or `null` for the synchronous path) with `finalizeProvision(view, req)` (map a
+      finished deploy job into a `ProvisionedEnvironment`). The two are grouped into one member so the
+      build⇒finalize invariant is type-enforced — a provider cannot supply one without the other.
+
+  The deploy-harness image, the provider implementation, the async deployer lifecycle, and the
+  facade wiring follow in later slices.
+
+### Patch Changes
+
+- Updated dependencies [e4cddb4]
+  - @cat-factory/contracts@0.61.0
+
 ## 0.58.0
 
 ### Minor Changes

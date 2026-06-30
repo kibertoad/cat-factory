@@ -1,0 +1,10 @@
+# Never ship secrets or local cruft into the image.
+.env
+.env.*
+*.pem
+*.key
+node_modules
+dist
+*.log
+.git
+test

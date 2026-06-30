@@ -134,43 +134,83 @@ manifest_id)`; columns `provision_type`, `manifest_id`, `engine`, **`backend_kin
   controller compiles + the existing conformance provisioning tests pass over the new table. A
   new `provision_type_unhandled` conflict reason was added (contracts + SPA title map).
 
-### Slice 2c — tester collapse (drop `defaultTestEnvironment`) (TODO)
+### Slice 2c — tester collapse (drop `defaultTestEnvironment`) (DONE)
 
-- **Tester collapse** (`tester-infra.logic.ts`): drop the `defaultTestEnvironment`/`local`↔
-  `ephemeral` branch; the only start-time check becomes `infraless` (run no-infra) OR a handler
-  resolves for the service's declared type (else refuse `provision_type_unhandled`, already in
-  the contract). Remove `defaultTestEnvironment` + the `tester.environment` task override +
-  `resolveTesterEnvironment` from the `Block` contract, the block mapper, both runtimes' block
-  columns, the agent-executor port `service`, the agent context materialisation, the harness
-  job body/prompts, workspace settings (`delegateTestEnvToProvider`), and the frontend Block
-  type + `ServiceTestConfig.vue`/`TaskAgentConfig.vue`. Add a `Block.provisioning` round-trip
-  conformance assertion (the JSON column is already persisted from slice 1 — verified by the
-  existing suite test). Split out from 2b because it is a large, independent behavioral
-  migration that the slice-2b bridge keeps working unchanged.
+Implemented. The per-task/per-service `local`↔`ephemeral` toggle is gone; the Tester's infra is
+driven entirely by the service's declared `provisioning`.
 
-### Slice 3 — engine step + run-details recording (TODO)
+- **Tester gate** (`tester-infra.logic.ts` + `ExecutionService.assertTesterInfraConfigured`): the
+  pure `decideTesterInfra` now takes `{ provisionType, localTestInfraSupported, handlerResolves }`
+  — `infraless`/undeclared → pass (no infra); `docker-compose` → pass only on a DinD-capable
+  runtime (else `tester_infra_unsupported` "limited mode"); `kubernetes`/`custom` → pass only when
+  a workspace handler resolves (`provision_type_unhandled`). The gate resolves the handler lazily
+  via the new `EnvironmentProvisioningService.canProvision` →
+  `EnvironmentConnectionService.resolveHandlerForType` (pass-through when the provisioning seam is
+  unwired). `resolveTesterEnvironment` is deleted.
+- **Removed** `defaultTestEnvironment` / `testComposePath` / `noInfraDependencies` from the `Block`
+  contract + `updateBlock` request, the shared block mapper, and both runtimes' block columns
+  (D1 `0026_drop_tester_env_columns.sql` ⇄ Drizzle `20260630150445_medical_ikaris`, `db:check`
+  clean). The agent-executor port `service` carries `provisioning` instead. The agent-context
+  materialisation of `tester.environment` is gone.
+- **Removed** the `tester.environment` agent-config descriptor (`@cat-factory/agents`);
+  `testerEnvironmentSection` + `testerInfraSpec` now read the service's `provisioning.type` (the
+  harness `infra` wire shape is unchanged — no image bump). The `tester.environment` doc-comment
+  examples were repointed to `playwright.e2eTarget`.
+- **Removed** the `delegateTestEnvToProvider` workspace setting (+ D1/Drizzle column,
+  `WorkspaceSettingsService`, both settings repos) and the local-facade
+  `resolveTesterFallbackDefault` / `resolveRequireEnvironmentProvider` wiring (+ the obsolete
+  `tester-default.spec.ts`). The `InfrastructureBackendPicker` `testEnv` axis is now
+  registration-driven (no delegate toggle) until slice 5's per-type configurator.
+- **Frontend**: `ServiceTestConfig.vue` replaces the local/ephemeral toggle + compose/no-infra
+  fields with a provision-type selector (+ compose path for `docker-compose`), writing
+  `block.provisioning`; `TaskAgentConfig.vue` dropped the `tester.environment` service-default
+  inheritance. New `inspector.testConfig.provision*` i18n keys across all 8 locales.
+- **Conformance**: the tester-gate tests now assert the `infraless`/undeclared pass-through; the
+  agent-config round-trip test uses `playwright.e2eTarget`; the workspace-settings test pairs
+  `delegateAgentsToRunnerPool` with `kaizenEnabled`. The `Block.provisioning` round-trip assertion
+  from slice 1 stays.
 
-- `RunDispatcher.runDeployerStep`: resolve the service frame's `provisioning`, pass it (+
-  the run-initiator `userId` in local mode) into `provision`; on `infraless` record a no-op
-  step output; add `Provision type:` / `Engine:` lines + `model:
-environment:<engine>:<providerId>`. Record `provisionType`/`engine` on the
-  `EnvironmentRecord` (both the success and failed-env paths) so the handle carries them.
+### Slice 3 — engine step + run-details recording (DONE)
 
-### Slice 4 — controllers + container wiring (TODO)
+- `RunDispatcher.runDeployerStep`: resolves the service frame's `provisioning` (walks up to the
+  frame), passes it (+ the run-initiator `instance.initiatedBy`) into `provision`; on `infraless`
+  records a no-op step output (`model: environment:none`); an UNDECLARED service falls through to
+  the legacy single-connection path (the compat bridge), so existing workspaces keep provisioning.
+  Adds `Provision type:` / `Engine:` lines + `model: environment:<engine>:<providerId>`.
+- `EnvironmentProvisioningService`: `ProvisionArgs` gains `initiatedBy` + a
+  `resolveUserHandlerOverrides` dependency seam (unwired ⇒ no per-user override). `provision`
+  captures the resolved `provisionType`/`engine` and records them on the `EnvironmentRecord` on
+  BOTH the success and failed-env (`persistFailedEnvironment`) paths. The registry repos already
+  map the columns (slice 1), so the handle carries them runtime-symmetrically.
+- Conformance: an `infraless` deployer no-op asserted on every facade; unit tests for the per-type
+  record fields + the `initiatedBy`→override threading.
 
-- `EnvironmentController`: per-type routes (`GET …/environments/handlers` batched bundle
+### Slice 4 — controllers + container wiring (DONE)
+
+- `EnvironmentController`: per-type routes DONE (`GET …/environments/handlers` batched bundle
   incl. the custom-type catalog; `POST …/handlers`; `PATCH …/handlers/:provisionType/secrets`;
-  `DELETE …/handlers/:provisionType`); `describe`/`test`/`validate`/`bootstrap` gain
-  `provisionType`/`manifestId`; custom-type CRUD (`…/environments/custom-types/:manifestId`).
+  `DELETE …/handlers/:provisionType`); custom-type CRUD DONE
+  (`PUT|DELETE …/environments/custom-types/:manifestId`). **DEFERRED to slice 5**: the per-type
+  `provisionType`/`manifestId` params on `describe`/`test`/`validate`/`bootstrap` — these stay on
+  the compat-bridge primary handler for now and are the frontend's concern when the per-type
+  configurator lands; the existing bridge endpoints keep working.
 - NEW `EnvironmentUserHandlerController` — **local-mode only**, mounted at ROOT (no
   `/workspaces` prefix), mirroring `LocalModelEndpointController` (401 w/o user; 503 where
-  unwired): `GET/PUT/DELETE /me/environment-handlers/:workspaceId/:provisionType`. Mount in
-  `@cat-factory/server` `app.ts`.
-- Wire all THREE facade containers (`runtimes/cloudflare/src/infrastructure/container.ts`,
-  `runtimes/node/src/container.ts`, `runtimes/local/src/container.ts`): the reshaped
-  connection repo + the new `environment_user_handlers` + `custom_manifest_types` repos into
-  `CoreDependencies`; local facade additionally wires the per-user override
-  service/controller and threads the run-initiator `userId`.
+  unwired): `GET /me/environment-handlers/:workspaceId` (batched LIST — maps to the repo's
+  `listByUserWorkspace`, slightly broader than the planned per-type GET) + `PUT|DELETE
+…/:workspaceId/:provisionType`. Mounted in `@cat-factory/server` `app.ts`. Backed by the new
+  `EnvironmentUserHandlerService` (integrations).
+- Wiring: `customManifestTypeRepository` wired on ALL THREE facades (workspace catalog CRUD is
+  runtime-neutral); `environmentUserHandlerRepository` wired ONLY on the local facade. The
+  per-user override SERVICE + the `resolveUserHandlerOverrides` provisioning seam are built in the
+  shared `createEnvironmentsModule` gated on that repo's presence — so "only the local facade
+  wires the service" is enforced purely by which facade wires the repo (no runtime branch in
+  shared code). The run-initiator `userId` is threaded via `instance.initiatedBy` (slice 3).
+- **Decision (no migration):** the per-user override's `backendKind` is re-derived from its engine
+  via the backend registry's `byEngine` (the per-user table is local-only, where each engine maps
+  1:1 to a backend) rather than adding a `backend_kind` column to `environment_user_handlers` — so
+  slice 4 adds NO migration. The shared `buildInfraHandlerFields` helper validates/lowers a handler
+  config for both the workspace and per-user stores.
 
 ### Slice 5 — frontend (TODO)
 
@@ -237,21 +277,64 @@ The rare slice with NO `db:generate` migration: every addition is nested JSON in
 - Conformance: a kustomize/helm/gateway-shaped handler config round-trips write→read on D1 + Postgres
   (`environment-handlers-suite.ts`).
 
-### Slice 7 — deploy-harness package + image (TODO)
+### Slice 7 — deploy-harness package + image (DONE)
 
 `backend/internal/deploy-harness` (private): slim base + `kubectl`/`kustomize`/`helm` + the job-registry
-scaffolding mirrored from `executor-harness`; same `POST /jobs` + `GET /jobs/{id}` contract with a
-`deploy` `KindEntry`; `handleDeploy` (clone → write `secretInjections`: a `Secret` resource OR a
-`generatorEnvFile` `.env` into the overlay tree → optionally `kustomize edit set namespace` when
-`namespaceTemplate` overrides → `kubectl apply -k` + `helm upgrade --install` → `kubectl rollout
-status` → discover Gateway/HTTPRoute address). New CF `[[containers]]` class + image tag (same
-fresh-immutable-tag discipline as the Pi image).
+scaffolding mirrored from `executor-harness`; same `POST /jobs` + `GET /jobs/{id}` contract (+ optional
+`x-harness-secret` gate) with a `deploy` `KindEntry`; `handleDeploy` (clone → ensure namespace → write
+`secretInjections`: a `Secret` resource OR a `generatorEnvFile` `.env` into the overlay tree →
+`kustomize edit set namespace` when `setNamespace` overrides + `kustomize edit set image` for the
+image overrides → install `scope: 'shared'` helm releases → `kubectl apply -k|-f` → per-environment
+helm releases → `kubectl rollout status` → discover the env URL from Gateway/HTTPRoute/Service/Ingress
+status). Returns a structured `DeployOutcome` (`namespace`/`url`/`status`) on the job result's `custom`
+channel for slice 8's `finalizeProvision` to map. Every templated/secret value arrives ALREADY RESOLVED
+in the job body (the backend resolves against the workspace bundle before dispatch) — the harness never
+touches the bundle; the apiserver + git tokens live only for the job and are scrubbed from any output.
 
-### Slice 8 — provider render path + Gateway URL (TODO)
+Shipped alongside: pure-logic unit tests (`job`/`url`/`deploy`/`kubeconfig`), a manual
+`scripts/publish-image.sh` + a multi-arch `publish-deploy` job in `docker-publish.yml` (gated on the
+deploy-harness paths), a `deploy/backend` `image:publish:deploy` target, and a changeset.
 
-`KubernetesEnvironmentProvider.buildProvisionJob`/`finalizeProvision` (kustomize/helm ⇒ container job;
-raw ⇒ keep the native REST path); the `gatewayStatus`/`httpRouteStatus` URL resolvers (REST). Keep
-REST teardown/status.
+**Deferred to slice 10 (kept green):** the actual CF `[[containers]]` wrangler block + its Durable
+Object container class. A `[[containers]]` entry that names a non-existent DO class fails the deploy,
+and that DO class IS the `image: 'deploy'` → container-class mapping that slice 10 ("facade wiring")
+owns. So slice 7 ships the IMAGE + its publish plumbing + the publish-target tag; the wrangler binding
+
+- transport mapping land with the facade wiring.
+
+### Slice 8 — provider render path + Gateway URL (DONE)
+
+Implemented. `KubernetesEnvironmentProvider` now exposes the `asyncProvision` capability and the
+native REST status path resolves Gateway-API URLs.
+
+- **`asyncProvision.buildProvisionJob`** returns a `deploy`-kind job (`image: 'deploy'`) when the
+  config needs rendering (`needsContainerRender`: `renderer: 'kustomize'`, or any helm release /
+  image override / secret injection), else `null` (the synchronous REST `provision()` path for
+  plain raw manifests). The pure spec builder (`kubernetes-deploy.logic.ts`) renders every template
+  - resolves every `secretRef` backend-side, mirroring the harness's `DeployJob` shape (duplicated,
+    not imported, so the backend never depends on the private deploy-harness package). `setNamespace`
+    is set only for a kustomize source WITH a `namespaceTemplate` (per-PR isolation); absent ⇒ honor
+    the overlay's namespace — the harness reads the namespace the built manifests actually declare and
+    ensures / monitors / reports / tears down THAT namespace (`resolveTargetNamespace` +
+    `extractManifestNamespace`, deploy-harness image `0.2.2`), never a stray per-PR default. Throws if
+    rendering is needed but the engine supplied no deploy inputs, or if the cluster `apiToken` is unset.
+- **`asyncProvision.finalizeProvision`** maps the harness `DeployOutcome` (on `view.result.custom`)
+  → `ProvisionedEnvironment`; a failed view becomes a `failed` env carrying the harness error.
+- **Native REST `status()`** gained `gatewayStatus` (prefer a concrete listener hostname over the
+  assigned `.status.addresses[]` value, skip wildcards) and `httpRouteStatus` (the route's own
+  hostname, else the parent Gateway's address read in the parentRef's namespace) URL resolvers,
+  mirroring the deploy-harness `url.ts` logic over the apiserver REST client. Teardown unchanged.
+- **Contracts**: `kubernetesProvisionConfigSchema` (the combined config + render inputs) is what the
+  deploy adapter consumes (`EnvironmentBackendConfig.kubernetes` now references it).
+  `EnvironmentConnectionService.handlerConfigToBackendConfig` merges the service's render inputs
+  (images / per-env helm releases / secret injections) with the workspace engine config (shared helm
+  releases) — alongside the existing `manifestSource` merge.
+- **Kernel**: `DeployCloneTarget` + `DeployProvisionInputs` (clone coords + token + job ref) on
+  `ProvisionEnvironmentRequest`, populated by the provisioning service in slice 9.
+- **NOT wired yet**: nothing dispatches a deploy job — the provisioning-service `provision()` branch
+  on `buildProvisionJob` + the `runDeployerStep` park/poll is slice 9. Tested as unit/mocked-fetch
+  (`kubernetes-deploy.logic.test.ts`, `KubernetesEnvironmentProvider.test.ts`); no migration (the
+  render fields ride existing JSON), so no conformance/D1⇄Drizzle change.
 
 ### Slice 9 — async deployer lifecycle (TODO; folds into slice 3)
 
@@ -262,10 +345,12 @@ unchanged.
 
 ### Slice 10 — facade wiring + local native CLI (TODO)
 
-CF container class + wrangler tag; pool/K8s-pod/local image mapping for `image: 'deploy'`; the
-local-mode `NativeCliDeployTransport` opt-in (`LOCAL_DEPLOY_RUNTIME`); conformance: a `deploy`
-dispatch is accepted by every facade transport, and a stubbed `RunnerJobView` settles to an
-identical `ProvisionedEnvironment` on both runtimes. Changesets + image-tag bump.
+CF container class + wrangler tag (the `[[containers]]` block + the Durable Object container class
+deferred from slice 7 — it IS the `image: 'deploy'` → container-class mapping; the
+`image:publish:deploy` target + image already exist from slice 7); pool/K8s-pod/local image mapping
+for `image: 'deploy'`; the local-mode `NativeCliDeployTransport` opt-in (`LOCAL_DEPLOY_RUNTIME`);
+conformance: a `deploy` dispatch is accepted by every facade transport, and a stubbed `RunnerJobView`
+settles to an identical `ProvisionedEnvironment` on both runtimes. Changesets + image-tag bump.
 
 ### Slice 11 — auto-detect a RECOMMENDED k8s config from the repo (TODO)
 
@@ -314,13 +399,13 @@ LoadBalancer` ⇒ `serviceStatus`); the namespace decision (a pinned `namespace:
 | 1   | Contracts (additive) + new tables (`environment_user_handlers`, `custom_manifest_types`) + `environments` columns + ports + repos + conformance                                                                                   | done   | #504 |
 | 2a  | Resolver (`infra-handler.logic`) + registry `engines()`/`byEngine` + custom-type registry seam                                                                                                                                    | done   | #504 |
 | 2b  | Reshape `environment_connections` (single→multi, `backend_kind`) + handler-aware `EnvironmentConnectionService` (`resolveProviderForType` w/ manifestSource merge) + `ProvisioningService` per-type + compat bridge + conformance | done   | #510 |
-| 2c  | Tester collapse: drop `defaultTestEnvironment`/`tester.environment`/`resolveTesterEnvironment`; gate on `infraless` OR a resolved handler (`provision_type_unhandled`)                                                            | todo   | —    |
-| 3   | `runDeployerStep` merge source+engine + record provisionType/engine; infraless no-op                                                                                                                                              | todo   | —    |
-| 4   | Controllers (per-type endpoints + custom-type CRUD + local-only per-user controller) + all three container wirings                                                                                                                | todo   | —    |
+| 2c  | Tester collapse: drop `defaultTestEnvironment`/`tester.environment`/`resolveTesterEnvironment`; gate on `infraless` OR a resolved handler (`provision_type_unhandled`)                                                            | done   | —    |
+| 3   | `runDeployerStep` merge source+engine + record provisionType/engine; infraless no-op                                                                                                                                              | done   | —    |
+| 4   | Controllers (per-type endpoints + custom-type CRUD + local-only per-user controller) + all three container wirings (describe/test/validate/bootstrap per-type params deferred to slice 5)                                         | done   | —    |
 | 5   | Frontend (service provisioning section + auto-detect; infra per-type/engine configurator + custom-type editor + local override; run-details surfacing; stores; i18n)                                                              | todo   | —    |
 | 6   | Phase 2: render contracts (`renderer`/`images`/`helmReleases`/`secretInjections`/gateway URL) + dispatch/port seam (`deploy` kind + `image`, `buildProvisionJob`/`finalizeProvision`); NO migration; conformance round-trip       | done   | —    |
-| 7   | Phase 2: `deploy-harness` package + image (kubectl/kustomize/helm; `deploy` KindEntry + `handleDeploy`; CF container class + tag)                                                                                                 | todo   | —    |
-| 8   | Phase 2: `KubernetesEnvironmentProvider` render path (`buildProvisionJob`/`finalizeProvision`; keep native REST) + Gateway-API URL resolvers                                                                                      | todo   | —    |
+| 7   | Phase 2: `deploy-harness` package + image (kubectl/kustomize/helm; `deploy` KindEntry + `handleDeploy`; publish plumbing + tag). CF container class/binding deferred to slice 10 (needs the DO class)                             | done   | —    |
+| 8   | Phase 2: `KubernetesEnvironmentProvider` render path (`buildProvisionJob`/`finalizeProvision`; keep native REST) + Gateway-API URL resolvers                                                                                      | done   | —    |
 | 9   | Phase 2: async deployer lifecycle (`provision()` branch + `pollProvision`; `runDeployerStep` park/poll + eviction re-dispatch) — folds into slice 3                                                                               | todo   | —    |
 | 10  | Phase 2: facade wiring + local `NativeCliDeployTransport` (`LOCAL_DEPLOY_RUNTIME`); deploy-dispatch + finalize conformance; image-tag bump                                                                                        | todo   | —    |
 | 11  | Phase 2: auto-detect a recommended `kubernetes` config from the repo (renderer / URL source / namespace / secret `.env` keys / image overrides high-confidence; overlay choice + helm as candidates) — non-binding, user confirms | todo   | —    |

@@ -1,5 +1,91 @@
 # @cat-factory/app
 
+## 0.59.1
+
+### Patch Changes
+
+- Updated dependencies [9bb75b0]
+  - @cat-factory/contracts@0.64.0
+
+## 0.59.0
+
+### Minor Changes
+
+- 15c5894: feat(auth): remote node mode — surface the unauthenticated state and support PAT sign-in.
+
+  - A remote facade (node service / Worker) has no anonymous tier, so once the auth handshake
+    resolves with no signed-in user the SPA now routes to the login screen — even when the
+    backend reports auth "disabled" (a dev-open / unconfigured remote). Previously this dropped
+    the user onto a board where every per-user action silently failed with no sign-in affordance.
+    An unreachable backend still falls through to the board's own error UI.
+  - Source-control PAT sign-in now works on the remote node facade: a user pastes their own
+    GitHub/GitLab PAT and is resolved to the account it belongs to. A hosted PAT login is held
+    to the SAME login/org/domain allowlist as GitHub OAuth (admit when the login, an org it
+    belongs to, or its email domain is allowlisted; fail closed when none are configured). Local
+    mode keeps its configured-token, allowlist-exempt flow. `GET /auth/config` advertises the
+    available PAT providers and the login screen renders a PAT option alongside OAuth/password;
+    when a remote deployment has no sign-in method at all the screen explains that instead of
+    showing a blank card.
+  - New `TESTING_NO_AUTH` escape hatch (test-only, refused in a production-like ENVIRONMENT):
+    a stronger `AUTH_DEV_OPEN` that both leaves the API open AND advertises (via `GET
+/auth/config`) that the SPA may render the board anonymously instead of gating to login. The
+    e2e suite opts into it; `AUTH_DEV_OPEN` on its own keeps the SPA's login gate, since a
+    dev-open remote still has no anonymous tier.
+
+### Patch Changes
+
+- Updated dependencies [15c5894]
+  - @cat-factory/contracts@0.63.0
+
+## 0.58.5
+
+### Patch Changes
+
+- f383515: Per-service provision types (slice 2c — tester collapse). **Breaking:** the per-task/per-service
+  `local` vs `ephemeral` Tester toggle is gone. A service's declared `provisioning` config now
+  drives the Tester's infra entirely, so these are removed (BC is a non-goal — stale rows/columns
+  are simply dropped):
+
+  - the `Block` fields `defaultTestEnvironment`, `testComposePath`, `noInfraDependencies` (folded
+    into `provisioning.type` / `provisioning.composePath`) — dropped from the contract, the shared
+    block mapper, and the D1 (`0026_drop_tester_env_columns.sql`) + Drizzle block columns;
+  - the `tester.environment` agent-config descriptor (`@cat-factory/agents`) and its prompt/job-body
+    consumers — the Tester's run mode is now derived from the service's provision type;
+  - the `delegateTestEnvToProvider` workspace setting (+ its D1/Drizzle column) and the local-facade
+    `resolveTesterFallbackDefault` / `resolveRequireEnvironmentProvider` wiring.
+
+  The start-time Tester gate is rewritten: it passes for an `infraless` (or undeclared) service,
+  refuses a `docker-compose` service on a runtime that can't nest containers OR with no compose
+  path declared (`tester_infra_unsupported` — "limited mode" / "nothing to stand up"), and requires
+  a resolvable workspace handler for a `kubernetes`/`custom` service (`provision_type_unhandled`, via
+  the new `EnvironmentConnectionService.resolveHandlerForType` /
+  `EnvironmentProvisioningService.canProvision` seam). The Tester's run mode (the `infra` job spec +
+  the prompt run-mode line, kept in lock-step) is derived from the provision type AND the run's
+  provisioned environment: a service that actually provisioned an env URL (e.g. via a `deployer`
+  step) tests against it regardless of declared type, and an undeclared service runs with no infra.
+  The agent-executor `service` context carries `provisioning` instead of the three legacy fields. The
+  service inspector replaces the local/ephemeral toggle with a provision-type selector.
+
+- Updated dependencies [f383515]
+  - @cat-factory/contracts@0.62.0
+
+## 0.58.4
+
+### Patch Changes
+
+- 8e305c3: Workspace settings tabs no longer truncate or scroll. The tab strip now wraps onto a
+  second row when the viewport is too narrow to fit every label, keeps each tab at its full
+  content width (no more "Workspa…"/"Bud…" ellipsis), and drops the sliding indicator — which
+  couldn't track wrapped rows — for a per-tab active underline, removing the stray vertical
+  scrollbar.
+
+## 0.58.3
+
+### Patch Changes
+
+- Updated dependencies [e4cddb4]
+  - @cat-factory/contracts@0.61.0
+
 ## 0.58.2
 
 ### Patch Changes
