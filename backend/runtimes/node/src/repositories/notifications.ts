@@ -10,7 +10,7 @@ import {
   notificationTypeSchema,
 } from '@cat-factory/contracts'
 import { decodeEnum, decodeEnumOr } from '@cat-factory/server'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { notifications } from '../db/schema.js'
 
@@ -124,5 +124,45 @@ export class DrizzleNotificationRepository implements NotificationRepository {
           resolved_at: values.resolved_at,
         },
       })
+  }
+
+  async upsertOpenForBlock(workspaceId: string, notification: Notification): Promise<Notification> {
+    // Atomic dedup: the conflict arbiter is the partial unique index on
+    // (workspace_id, block_id, type) WHERE status='open'. A second concurrent open raise
+    // for the same block/type updates the existing row in place instead of inserting a
+    // duplicate. id/severity/created_at/status are deliberately NOT updated so the card
+    // keeps its identity, escalated severity and original timestamp across a re-raise.
+    // `.returning()` yields the CANONICAL row so the caller delivers the persisted id, not
+    // its discarded optimistic one (a concurrent loser would otherwise push a phantom-id card).
+    const values = {
+      workspace_id: workspaceId,
+      id: notification.id,
+      type: notification.type,
+      status: 'open',
+      block_id: notification.blockId,
+      execution_id: notification.executionId,
+      title: notification.title,
+      body: notification.body,
+      payload: notification.payload ? JSON.stringify(notification.payload) : null,
+      severity: notification.severity ?? 'normal',
+      created_at: notification.createdAt,
+      resolved_at: notification.resolvedAt,
+    }
+    const rows = await this.db
+      .insert(notifications)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [notifications.workspace_id, notifications.block_id, notifications.type],
+        targetWhere: sql`${notifications.status} = 'open'`,
+        set: {
+          execution_id: values.execution_id,
+          title: values.title,
+          body: values.body,
+          payload: values.payload,
+          resolved_at: values.resolved_at,
+        },
+      })
+      .returning()
+    return rows[0] ? rowToNotification(rows[0]) : notification
   }
 }

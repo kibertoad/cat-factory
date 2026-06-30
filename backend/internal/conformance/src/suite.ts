@@ -26,8 +26,7 @@ import {
 } from '@cat-factory/prompt-fragments'
 import { clearRegisteredAgentKinds, registerAgentKind } from '@cat-factory/agents'
 import {
-  registerEnvironmentBackend,
-  registerRunnerBackend,
+  createBackendRegistries,
   type EnvironmentBackendProvider,
   type RunnerBackendProvider,
 } from '@cat-factory/integrations'
@@ -171,6 +170,59 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(a.workspace.id).not.toBe(b.workspace.id)
         expect(a.blocks.find((x) => x.id === 'blk_auth')).toBeTruthy()
         expect(b.blocks.find((x) => x.id === 'blk_auth')).toBeTruthy()
+      })
+    })
+
+    describe('execution optimistic concurrency (compareAndSwap)', () => {
+      // The lost-update fix: a human-action write that raced another writer must be REFUSED
+      // (so the loser re-reads and retries) rather than blindly clobbering the run snapshot.
+      // Asserted at the repository layer so D1 and Postgres are proven to behave identically.
+      it('refuses a stale compareAndSwap while a force upsert still bumps rev', async () => {
+        const app = harness.makeApp()
+        const repo = app.executionRepository()
+        const { workspace } = await app.createWorkspace()
+
+        const base: ExecutionInstance = {
+          id: 'exec_cas',
+          blockId: 'blk_cas',
+          pipelineId: 'pl',
+          pipelineName: 'Pipeline',
+          steps: [],
+          currentStep: 0,
+          status: 'running',
+          initiatedBy: null,
+        }
+        // A fresh insert starts at rev 0.
+        await repo.upsert(workspace.id, base)
+        expect((await repo.get(workspace.id, 'exec_cas'))?.rev).toBe(0)
+
+        // Two writers load the SAME revision (a double-submit / driver-vs-human race).
+        const writerA = await repo.get(workspace.id, 'exec_cas')
+        const writerB = await repo.get(workspace.id, 'exec_cas')
+        expect(writerA?.rev).toBe(0)
+        expect(writerB?.rev).toBe(0)
+
+        // The first compareAndSwap lands and bumps the in-memory + stored rev.
+        writerA!.status = 'blocked'
+        expect(await repo.compareAndSwap(workspace.id, writerA!)).toBe(true)
+        expect(writerA!.rev).toBe(1)
+
+        // The second, from the now-stale revision, is refused with NO write.
+        writerB!.status = 'done'
+        expect(await repo.compareAndSwap(workspace.id, writerB!)).toBe(false)
+
+        // The first writer's state survived; the stale write did not clobber it.
+        const afterCas = await repo.get(workspace.id, 'exec_cas')
+        expect(afterCas?.status).toBe('blocked')
+        expect(afterCas?.rev).toBe(1)
+
+        // The force upsert (the durable driver / lifecycle path) always lands AND keeps rev
+        // monotonic, so a later compareAndSwap still detects the row moved.
+        afterCas!.status = 'paused'
+        await repo.upsert(workspace.id, afterCas!)
+        const afterForce = await repo.get(workspace.id, 'exec_cas')
+        expect(afterForce?.status).toBe('paused')
+        expect(afterForce?.rev).toBe(2)
       })
     })
 
@@ -2140,9 +2192,9 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
       // first connect, and be advertised in the snapshot — identically on every runtime. A
       // facade that didn't open its repos/validation to a custom kind fails here.
       //
-      // Registered at suite-collection time (process-global registry, idempotent, survives the
-      // per-request container rebuilds) — exactly how a real deployment registers on import.
-      // The kinds don't collide with the built-ins, so they need no teardown.
+      // Registered BY REFERENCE into an app-owned registry the harness injects through
+      // `makeApp({ backendRegistries })` — exactly how a real deployment registers a custom
+      // backend (no module-global side effect, so module identity is irrelevant).
       const ENV_KIND = 'conformance-env'
       const RUNNER_KIND = 'conformance-runner'
 
@@ -2200,8 +2252,11 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         testConnection: async () => ({ ok: true, message: 'ok' }),
       }
 
-      registerEnvironmentBackend(customEnvBackend)
-      registerRunnerBackend(customRunnerBackend)
+      // The app-owned registries the harness injects, pre-loaded with the built-ins + the two
+      // custom backends — by reference, so the facade sees them regardless of module identity.
+      const backendRegistries = createBackendRegistries()
+      backendRegistries.environmentBackendRegistry.register(customEnvBackend)
+      backendRegistries.runnerBackendRegistry.register(customRunnerBackend)
 
       const envManifest = {
         providerId: ENV_KIND,
@@ -2223,7 +2278,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
       }
 
       it('connects + round-trips a custom ENVIRONMENT backend kind through the store', async () => {
-        const { call, createWorkspace } = harness.makeApp()
+        const { call, createWorkspace } = harness.makeApp(undefined, { backendRegistries })
         const { workspace } = await createWorkspace()
         const base = `/workspaces/${workspace.id}/environments`
 
@@ -2246,7 +2301,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
       })
 
       it('describes a registered custom kind BEFORE the first connect', async () => {
-        const { call, createWorkspace } = harness.makeApp()
+        const { call, createWorkspace } = harness.makeApp(undefined, { backendRegistries })
         const { workspace } = await createWorkspace()
         // No connection yet — the registry still resolves the kind so the SPA can render its form.
         const descr = await call<{ providerId: string; kind: string }>(
@@ -2258,7 +2313,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
       })
 
       it('connects + round-trips a custom RUNNER backend kind through the store', async () => {
-        const { call, createWorkspace } = harness.makeApp()
+        const { call, createWorkspace } = harness.makeApp(undefined, { backendRegistries })
         const { workspace } = await createWorkspace()
         const base = `/workspaces/${workspace.id}/runner-pool/connection`
 
@@ -2278,7 +2333,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
       })
 
       it('advertises the registered backend kinds in the workspace snapshot', async () => {
-        const { call, createWorkspace } = harness.makeApp()
+        const { call, createWorkspace } = harness.makeApp(undefined, { backendRegistries })
         const { workspace } = await createWorkspace()
         const snap = await call<{
           environmentBackendKinds?: { kind: string }[]
@@ -2293,7 +2348,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
       })
 
       it('rejects a config whose kind collides with a reserved built-in (guard)', async () => {
-        const { call, createWorkspace } = harness.makeApp()
+        const { call, createWorkspace } = harness.makeApp(undefined, { backendRegistries })
         const { workspace } = await createWorkspace()
         // A `kubernetes` kind carrying a manifest body (the wrong shape) must be REJECTED by
         // the reserved-kind guard, not silently accepted as the generic custom member.
@@ -3253,6 +3308,43 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         })
         expect(res.status).toBe(201)
         expect(res.body.level).toBe('frame')
+      })
+
+      it('deletes a top-level frame and reclaims its backing service in one batched read', async () => {
+        // Deleting a top-level frame reclaims the account-owned service it backs — resolved for
+        // every doomed frame in ONE batched query (`listByFrameBlocks`), then its row + mounts
+        // are deleted. Exercised on every runtime so the batched frame→service lookup can't map
+        // differently between stores. GitHub is off in conformance (the only production path that
+        // mints a service), so seed a real service linked to the frame directly, then assert the
+        // delete actually reclaims it — not just that the block vanished.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const frame = await app.call<Block>('POST', `/workspaces/${workspace.id}/blocks`, {
+          type: 'service',
+          position: { x: 0, y: 0 },
+        })
+        expect(frame.body.level).toBe('frame')
+        const serviceId = `svc-${frame.body.id}`
+        await app.seedService({
+          id: serviceId,
+          accountId: null,
+          frameBlockId: frame.body.id,
+          installationId: null,
+          repoGithubId: null,
+          createdAt: 1,
+        })
+        // The service resolves by its frame before deletion.
+        expect(await app.getService(serviceId)).not.toBeNull()
+
+        const removed = await app.call(
+          'DELETE',
+          `/workspaces/${workspace.id}/blocks/${frame.body.id}`,
+        )
+        expect(removed.status).toBe(204)
+        const snap = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
+        expect(snap.body.blocks.some((b) => b.id === frame.body.id)).toBe(false)
+        // The batched frame→service resolve found the backing service and reclaimed it.
+        expect(await app.getService(serviceId)).toBeNull()
       })
 
       it('adds a user-authored task pinning a pipeline', async () => {
@@ -5390,6 +5482,26 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
         await expect(
           ob.users.signupWithPassword({ email, password: 'another password' }),
         ).rejects.toMatchObject({ name: 'ConflictError' })
+      })
+
+      it('lists every account a user can switch between (batched multi-membership resolve)', async () => {
+        const ob = harness.makeApp().onboarding()
+        // An org owner belongs to BOTH the org and their auto-seeded personal account, so the
+        // switcher list resolves more than one membership's account in a single batched read —
+        // which must map identically on every store.
+        const org = await ob.makeOrgOwner('Switcher Org')
+        const accounts = await ob.accountsForUser({
+          id: org.ownerUserId,
+          login: 'switcher-owner',
+          name: 'Switcher Owner',
+        })
+        expect(accounts.some((a) => a.id === org.accountId && a.type === 'org')).toBe(true)
+        expect(accounts.some((a) => a.type === 'personal')).toBe(true)
+        // Personal account is listed first (the stable switcher order).
+        expect(accounts[0]?.type).toBe('personal')
+        // Every listed account carries the caller's role(s) — proving the membership join, not
+        // just the id resolve, survives the batched read.
+        expect(accounts.every((a) => a.roles.length > 0)).toBe(true)
       })
 
       it('invites + redeems org membership bound to the invited email', async () => {

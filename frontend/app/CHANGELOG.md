@@ -1,5 +1,35 @@
 # @cat-factory/app
 
+## 0.54.4
+
+### Patch Changes
+
+- Updated dependencies [f9a173f]
+  - @cat-factory/contracts@0.57.0
+
+## 0.54.3
+
+### Patch Changes
+
+- Updated dependencies [21b2096]
+  - @cat-factory/contracts@0.56.1
+
+## 0.54.2
+
+### Patch Changes
+
+- 7536092: Startup-time optimizations (no behavior change):
+
+  - **Node server boot**: run `migrate()` and `pgBoss.start()` concurrently (they touch
+    independent schemas) and start the pure-timer background sweepers after the HTTP
+    listener binds, so the server accepts requests sooner. The local facade inherits this
+    via the shared `start()`.
+  - **SPA workspace init**: fetch the accounts list and workspace list concurrently instead
+    of sequentially on first board load.
+  - **SPA bundle**: code-split the occasional, store-gated `BlockFocusView`,
+    `TaskSourceConnectModal`, `TaskImportModal`, and `RecurringPipelineModal` into their own
+    chunks (mounted only while open), matching the existing async-panel pattern.
+
 ## 0.54.1
 
 ### Patch Changes

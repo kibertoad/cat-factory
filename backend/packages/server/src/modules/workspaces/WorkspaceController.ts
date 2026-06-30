@@ -10,9 +10,9 @@ import {
   registeredAgentKinds,
   registeredKindRequiresContainer,
 } from '@cat-factory/agents'
-import { environmentBackendKinds, runnerBackendKinds } from '@cat-factory/integrations'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
+import type { EnvironmentBackendRegistry, RunnerBackendRegistry } from '@cat-factory/integrations'
 import type { BackendKindOption, CustomAgentKind, WorkspaceSnapshot } from '@cat-factory/contracts'
 import type { AgentRouting } from '@cat-factory/agents'
 import type { ModelRef } from '@cat-factory/kernel'
@@ -54,19 +54,22 @@ function snapshotCustomAgentKinds(): CustomAgentKind[] | undefined {
 
 /**
  * The registered ephemeral-environment / runner-pool backend kinds (built-in + any a
- * deployment registered via `registerEnvironmentBackend` / `registerRunnerBackend`), as the
- * `{ kind, label }` options the SPA drives its provider-connect backend selector from. Built
- * here (not in the shared `WorkspaceService.snapshot()`) because the registries live in
- * `@cat-factory/integrations`, which the `workspaces` package doesn't depend on. Static
- * (process-global registry) ⇒ identical per workspace + facade.
+ * deployment registered into the app-owned registries), as the `{ kind, label }` options the
+ * SPA drives its provider-connect backend selector from. Read off the request container's
+ * injected registries (built here, not in the shared `WorkspaceService.snapshot()`, because
+ * the registries live in `@cat-factory/integrations`, which the `workspaces` package doesn't
+ * depend on).
  */
-function snapshotBackendKinds(): {
+function snapshotBackendKinds(registries: {
+  environmentBackendRegistry: EnvironmentBackendRegistry
+  runnerBackendRegistry: RunnerBackendRegistry
+}): {
   environmentBackendKinds: BackendKindOption[]
   runnerBackendKinds: BackendKindOption[]
 } {
   return {
-    environmentBackendKinds: environmentBackendKinds(),
-    runnerBackendKinds: runnerBackendKinds(),
+    environmentBackendKinds: registries.environmentBackendRegistry.labelled(),
+    runnerBackendKinds: registries.runnerBackendRegistry.labelled(),
   }
 }
 
@@ -137,7 +140,7 @@ export function workspaceController(): Hono<AppEnv> {
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
-        ...snapshotBackendKinds(),
+        ...snapshotBackendKinds(container),
       },
       201,
     )
@@ -225,7 +228,7 @@ export function workspaceController(): Hono<AppEnv> {
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
-        ...snapshotBackendKinds(),
+        ...snapshotBackendKinds(container),
       },
       200,
     )

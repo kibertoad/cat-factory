@@ -8,7 +8,8 @@ import type {
 } from '@cat-factory/kernel'
 import { STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
 // The native Kubernetes runner backend lives in the kubernetes module (all K8s code
-// colocated). It is imported here purely to self-register, mirroring the manifest built-in.
+// colocated). Imported here so `defaultRunnerBackendRegistry()` can register it alongside
+// the manifest built-in.
 import { kubernetesRunnerBackend } from '../kubernetes/kubernetes-runner-backend.js'
 import { HttpRunnerPoolProvider } from './HttpRunnerPoolProvider.js'
 import { RunnerPoolTransport } from './RunnerPoolTransport.js'
@@ -21,11 +22,16 @@ import {
 // (`manifest` = BYO HTTP scheduler pool, `kubernetes` = native per-run pods, plus any
 // CUSTOM kind) registers a RunnerBackendProvider that maps its config → a RunnerTransport.
 // The connection service resolves a workspace's stored `kind` to the registered provider and
-// builds the transport. A CUSTOM third-party kind needs only a registry entry (an import
-// side effect) — it rides the contract's generic manifest member, so NO new config variant
-// and no new table/service/controller/UI window. Mirrors `environment-backends.ts` and the
-// registerGate / model-provider / agent-kind seams: built-ins self-register on import; a
-// third-party kind registers for side effect.
+// builds the transport. A CUSTOM third-party kind needs only a registry entry — it rides the
+// contract's generic manifest member, so NO new config variant and no new
+// table/service/controller/UI window.
+//
+// The registry is an INSTANCE owned by the composition root (`RunnerBackendRegistry`), NOT a
+// module-global Map. The app builds it via `defaultRunnerBackendRegistry()` /
+// `createBackendRegistries()` and injects it (through `CoreDependencies`) into the connection
+// service; a deployment registers a custom backend by reference (`registry.register(provider)`),
+// so the old "must share the same module instance to be seen" footgun is gone. Mirrors
+// `environment-backends.ts`. See `docs/initiatives/registry-di-migration.md`.
 //
 // NB: the `ctx.runnerPoolProvider` below is a DIFFERENT seam — a deployment-wide HTTP-pool
 // provider the `manifest` backend reuses (its OAuth cache), NOT the custom-kind mechanism. A
@@ -85,29 +91,46 @@ export interface RunnerBackendProvider {
   ): Promise<ConnectionTestResult>
 }
 
-const REGISTRY = new Map<string, RunnerBackendProvider>()
-
-/** Register a runner-backend provider (built-ins on import; third-party for side effect). */
-export function registerRunnerBackend(provider: RunnerBackendProvider): void {
-  REGISTRY.set(provider.kind, provider)
-}
-
-/** The provider for a backend kind, or undefined when unregistered. */
-export function runnerBackend(kind: string): RunnerBackendProvider | undefined {
-  return REGISTRY.get(kind)
-}
-
-/** All registered backend kinds (for diagnostics / a UI capabilities list). */
-export function registeredRunnerBackendKinds(): string[] {
-  return [...REGISTRY.keys()]
-}
-
 /**
- * Registered backend kinds + display labels, for the workspace snapshot → the SPA's
- * provider-connect backend-kind selector. Always includes the built-ins.
+ * The app-owned registry of runner-backend providers, keyed by `kind`. Constructed by the
+ * composition root (via {@link defaultRunnerBackendRegistry} / `createBackendRegistries`)
+ * and injected into the connection service. A deployment teaches the platform a custom
+ * backend by holding the same instance and calling {@link register} — registration is by
+ * reference, so it never depends on module identity.
  */
-export function runnerBackendKinds(): { kind: string; label: string }[] {
-  return [...REGISTRY.values()].map((p) => ({ kind: p.kind, label: p.displayLabel ?? p.kind }))
+export class RunnerBackendRegistry {
+  private readonly map = new Map<string, RunnerBackendProvider>()
+
+  /** Register (or replace by `kind`) a backend provider. Returns `this` for chaining. */
+  register(provider: RunnerBackendProvider): this {
+    this.map.set(provider.kind, provider)
+    return this
+  }
+
+  /** The provider for a backend kind, or undefined when unregistered. */
+  get(kind: string): RunnerBackendProvider | undefined {
+    return this.map.get(kind)
+  }
+
+  /** All registered backend kinds (for diagnostics / a UI capabilities list). */
+  kinds(): string[] {
+    return [...this.map.keys()]
+  }
+
+  /**
+   * Registered backend kinds + display labels, for the workspace snapshot → the SPA's
+   * provider-connect backend-kind selector. Always includes the built-ins.
+   */
+  labelled(): { kind: string; label: string }[] {
+    return [...this.map.values()].map((p) => ({ kind: p.kind, label: p.displayLabel ?? p.kind }))
+  }
+}
+
+/** A registry pre-loaded with the built-in `manifest` + `kubernetes` backends. */
+export function defaultRunnerBackendRegistry(): RunnerBackendRegistry {
+  return new RunnerBackendRegistry()
+    .register(manifestRunnerBackend)
+    .register(kubernetesRunnerBackend)
 }
 
 // --- Built-in: manifest (the original BYO HTTP scheduler pool) ----------------
@@ -157,8 +180,7 @@ export const manifestRunnerBackend: RunnerBackendProvider = {
 
 // --- Built-in: kubernetes (native per-run pods over the apiserver pod-proxy) ---
 // Defined in the kubernetes module (see the import above) so all K8s code is colocated;
-// re-exported here so the package's public surface (index.ts) is unchanged.
+// re-exported here so the package's public surface (index.ts) is unchanged. The built-ins
+// are registered into the default registry by `defaultRunnerBackendRegistry()` above (no
+// module-load side effect).
 export { kubernetesRunnerBackend }
-
-registerRunnerBackend(manifestRunnerBackend)
-registerRunnerBackend(kubernetesRunnerBackend)

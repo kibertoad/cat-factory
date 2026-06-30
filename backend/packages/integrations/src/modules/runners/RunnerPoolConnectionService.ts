@@ -18,7 +18,7 @@ import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import { missingRequiredConfigKeys } from '../environments/environments.logic.js'
-import { runnerBackend } from './runner-backends.js'
+import type { RunnerBackendRegistry } from './runner-backends.js'
 
 // RunnerPoolConnectionService: owns the binding between a workspace and its "agent
 // runner backend" — the place repo-operating coding jobs run. This generalises the
@@ -48,6 +48,8 @@ export interface RunnerPoolConnectionServiceDependencies {
   customTlsSupported?: boolean
   /** Injected manifest HTTP provider (its OAuth cache shared / a native pool adapter). */
   runnerPoolProvider?: RunnerPoolProvider
+  /** The app-owned registry resolving a stored backend `kind` to its provider. */
+  runnerBackendRegistry: RunnerBackendRegistry
 }
 
 /** A resolved runner backend: the live transport + its identity (for provisioning logs). */
@@ -70,7 +72,7 @@ export class RunnerPoolConnectionService {
   }
 
   private provider(kind: string) {
-    const provider = runnerBackend(kind)
+    const provider = this.deps.runnerBackendRegistry.get(kind)
     if (!provider) throw new ValidationError(`Unknown runner backend kind: '${kind}'`)
     return provider
   }
@@ -229,7 +231,7 @@ export class RunnerPoolConnectionService {
   async resolve(workspaceId: string): Promise<ResolvedRunnerBackend | null> {
     const record = await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)
     if (!record) return null
-    const provider = runnerBackend(record.kind)
+    const provider = this.deps.runnerBackendRegistry.get(record.kind)
     if (!provider) return null
     const config = JSON.parse(record.configJson) as RunnerBackendConfig
     const bundle = await this.decryptSecrets(record)

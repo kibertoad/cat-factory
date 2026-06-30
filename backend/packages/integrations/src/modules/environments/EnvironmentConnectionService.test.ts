@@ -14,6 +14,10 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
+import { defaultEnvironmentBackendRegistry } from './environment-backends.js'
+
+// The app-owned backend registry every service instance resolves a stored `kind` through.
+const registry = defaultEnvironmentBackendRegistry()
 
 // The manifest's `providerConfig` bag is the per-workspace config carrier for a NATIVE
 // injected adapter (e.g. Kargo's project). It rides inside the `manifestJson` JSON column
@@ -59,6 +63,7 @@ function makeService(repo: EnvironmentConnectionRepository) {
     workspaceRepository: fakeWorkspaces,
     secretCipher: fakeCipher,
     clock,
+    environmentBackendRegistry: registry,
   })
 }
 
@@ -139,6 +144,7 @@ describe('EnvironmentConnectionService — describeProvider.missingRequired', ()
       workspaceRepository: fakeWorkspaces,
       secretCipher: fakeCipher,
       clock,
+      environmentBackendRegistry: registry,
       environmentProvider: nativeProvider,
     })
   }
@@ -188,6 +194,7 @@ describe('EnvironmentConnectionService — describeProvider.missingRequired', ()
       workspaceRepository: fakeWorkspaces,
       secretCipher: fakeCipher,
       clock,
+      environmentBackendRegistry: registry,
       environmentProvider: {
         describeConfig: () => [{ key: 'baseUrl', label: 'Base URL', required: true }],
       } as unknown as EnvironmentProvider,
@@ -293,6 +300,7 @@ describe('EnvironmentConnectionService — validateRepo', () => {
       workspaceRepository: fakeWorkspaces,
       secretCipher: fakeCipher,
       clock,
+      environmentBackendRegistry: registry,
       environmentProvider: {
         validateRepo: async () => ({ ok: true, issues: [] }),
       } as unknown as EnvironmentProvider,
@@ -314,6 +322,7 @@ describe('EnvironmentConnectionService — validateRepo', () => {
       workspaceRepository: fakeWorkspaces,
       secretCipher: fakeCipher,
       clock,
+      environmentBackendRegistry: registry,
       environmentProvider: {
         validateRepo: async (req: RepoValidationRequest) => {
           captured = req
@@ -337,6 +346,7 @@ describe('EnvironmentConnectionService — validateRepo', () => {
       workspaceRepository: fakeWorkspaces,
       secretCipher: fakeCipher,
       clock,
+      environmentBackendRegistry: registry,
       environmentProvider: {
         validateRepo: async (req: RepoValidationRequest) => {
           captured = req
@@ -371,6 +381,7 @@ describe('EnvironmentConnectionService — validateRepo', () => {
       workspaceRepository: fakeWorkspaces,
       secretCipher: fakeCipher,
       clock,
+      environmentBackendRegistry: registry,
       environmentProvider: {
         validateRepo: async (req: RepoValidationRequest) => {
           const file = await req.readRepoFile('.kargo.yml')
@@ -428,6 +439,7 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
       workspaceRepository: fakeWorkspaces,
       secretCipher: fakeCipher,
       clock,
+      environmentBackendRegistry: registry,
       environmentProvider: provider,
       resolveRepoFilesForWorkspace: async () => repoCtx(repo),
       ...extra,

@@ -500,7 +500,9 @@ class DrizzleExecutionRepository implements ExecutionRepository {
     // every board that mounts it via `listByService`; refreshed on every write so it follows a
     // reparent that re-homes the block. Mirrors the D1 repo.
     const serviceIdSub = sql`(SELECT ${blocks.service_id} FROM ${blocks} WHERE ${blocks.workspace_id} = ${workspaceId} AND ${blocks.id} = ${execution.blockId})`
-    await this.db
+    // `rev` is bumped on every write (and read back onto the instance) so a concurrent
+    // compareAndSwap can detect the row moved. A fresh insert starts at 0.
+    const rows = await this.db
       .insert(agentRuns)
       .values({
         workspace_id: workspaceId,
@@ -513,6 +515,7 @@ class DrizzleExecutionRepository implements ExecutionRepository {
         updated_at: now,
         workflow_instance_id: execution.id,
         service_id: serviceIdSub,
+        rev: 0,
       })
       // error/failure/workflow_instance_id are left out of the update so they survive
       // normal step writes (see markFailed) — mirrors the D1 repo.
@@ -524,8 +527,42 @@ class DrizzleExecutionRepository implements ExecutionRepository {
           detail,
           updated_at: now,
           service_id: serviceIdSub,
+          rev: sql`${agentRuns.rev} + 1`,
         },
       })
+      .returning({ rev: agentRuns.rev })
+    if (rows[0]) execution.rev = rows[0].rev
+  }
+
+  async compareAndSwap(workspaceId: string, execution: ExecutionInstance): Promise<boolean> {
+    // Conditional update guarded on the rev last read onto this instance; only writes
+    // when the stored row is unchanged. No insert — the run must already exist.
+    const expected = execution.rev ?? 0
+    const now = this.clock.now()
+    const detail = executionToDetail(execution)
+    const serviceIdSub = sql`(SELECT ${blocks.service_id} FROM ${blocks} WHERE ${blocks.workspace_id} = ${workspaceId} AND ${blocks.id} = ${execution.blockId})`
+    const rows = await this.db
+      .update(agentRuns)
+      .set({
+        block_id: execution.blockId,
+        status: execution.status,
+        detail,
+        updated_at: now,
+        service_id: serviceIdSub,
+        rev: sql`${agentRuns.rev} + 1`,
+      })
+      .where(
+        and(
+          eq(agentRuns.workspace_id, workspaceId),
+          eq(agentRuns.id, execution.id),
+          this.isExecution,
+          eq(agentRuns.rev, expected),
+        ),
+      )
+      .returning({ rev: agentRuns.rev })
+    if (!rows[0]) return false
+    execution.rev = rows[0].rev
+    return true
   }
 
   async deleteByBlock(workspaceId: string, blockId: string): Promise<void> {
@@ -627,6 +664,20 @@ class DrizzleAccountRepository implements AccountRepository {
   async get(id: string): Promise<AccountRecord | null> {
     const [row] = await this.db.select().from(accounts).where(eq(accounts.id, id))
     return row ? rowToAccount(row) : null
+  }
+
+  async listByIds(ids: string[]): Promise<AccountRecord[]> {
+    if (ids.length === 0) return []
+    const out: AccountRecord[] = []
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < ids.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(accounts)
+        .where(inArray(accounts.id, ids.slice(i, i + 500)))
+      for (const row of rows) out.push(rowToAccount(row))
+    }
+    return out
   }
 
   async create(account: AccountRecord): Promise<void> {
@@ -1952,7 +2003,7 @@ function rowToService(row: typeof services.$inferSelect): Service {
 }
 
 /** Account-owned services (migration 0030). The canonical, shareable board unit. */
-class DrizzleServiceRepository implements ServiceRepository {
+export class DrizzleServiceRepository implements ServiceRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(id: string): Promise<Service | null> {
@@ -1966,6 +2017,20 @@ class DrizzleServiceRepository implements ServiceRepository {
       .from(services)
       .where(eq(services.frame_block_id, frameBlockId))
     return row ? rowToService(row) : null
+  }
+
+  async listByFrameBlocks(frameBlockIds: string[]): Promise<Service[]> {
+    if (frameBlockIds.length === 0) return []
+    const out: Service[] = []
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < frameBlockIds.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(services)
+        .where(inArray(services.frame_block_id, frameBlockIds.slice(i, i + 500)))
+      for (const row of rows) out.push(rowToService(row))
+    }
+    return out
   }
 
   async listByAccount(accountId: string | null): Promise<Service[]> {

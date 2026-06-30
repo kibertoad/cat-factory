@@ -386,6 +386,9 @@ export const agentRuns = pgTable(
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
     // The service this run targets (migration 0031), derived from its block.
     service_id: text('service_id'),
+    // Optimistic-concurrency revision, bumped on every write; guarded by compareAndSwap
+    // so a human-action write that raced the driver is retried, not silently clobbered.
+    rev: integer('rev').notNull().default(0),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
@@ -975,6 +978,13 @@ export const notifications = pgTable(
     primaryKey({ columns: [t.workspace_id, t.id] }),
     index('idx_notifications_open').on(t.workspace_id, t.status, t.created_at),
     index('idx_notifications_block').on(t.workspace_id, t.block_id, t.type, t.status),
+    // At most ONE open notification per (workspace, block, type) — the dedup invariant the
+    // service relied on via a racy read-before-write, now enforced atomically so two
+    // concurrent raises can't stack duplicate open cards. Partial (only open rows) so
+    // dismissed/acted history is unconstrained; block-less cards (NULL block_id) are exempt.
+    uniqueIndex('uniq_notifications_open_block')
+      .on(t.workspace_id, t.block_id, t.type)
+      .where(sql`${t.status} = 'open'`),
   ],
 )
 

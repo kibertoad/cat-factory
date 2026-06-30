@@ -522,6 +522,9 @@ export interface ExecutionRow {
   // Lease for the cron sweeper; not surfaced on the entity.
   updated_at: number
   workflow_instance_id: string | null
+  // Optimistic-concurrency revision, bumped on every write (absent/NULL on a legacy
+  // row predating the column → read as 0).
+  rev?: number | null
 }
 
 /** The execution-specific payload packed into `agent_runs.detail`. */
@@ -618,6 +621,8 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
     // LEGACY: drop a pre-#94 numeric initiator id to null (see the LEGACY USER-ID REPAIR
     // note; after 2026-07-15 revert to `detail.initiatedBy ?? null`).
     initiatedBy: legacyUserId(detail.initiatedBy),
+    // Optimistic-concurrency token; a legacy row without the column reads as 0.
+    rev: row.rev ?? 0,
   }
 }
 

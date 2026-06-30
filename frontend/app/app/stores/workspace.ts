@@ -113,11 +113,16 @@ export const useWorkspaceStore = defineStore(
       ready.value = false
       error.value = null
       try {
-        // Accounts are an auth concept — empty in dev, which leaves boards unscoped.
-        await useAccountsStore()
-          .load()
-          .catch(() => {})
-        workspaces.value = await api.listWorkspaces()
+        // Accounts (an auth concept — empty in dev, which leaves boards unscoped) and the
+        // workspace list are independent, so fetch them concurrently. resolveActiveBoard
+        // needs both, so it still runs after.
+        const [, workspaceList] = await Promise.all([
+          useAccountsStore()
+            .load()
+            .catch(() => {}),
+          api.listWorkspaces(),
+        ])
+        workspaces.value = workspaceList
         await resolveActiveBoard()
         ready.value = true
       } catch (e) {

@@ -107,9 +107,16 @@ export class AccountService {
   async listForUser(user: AccountUser): Promise<Account[]> {
     await this.ensurePersonalAccount(user)
     const memberships = await this.deps.membershipRepository.listByUser(user.id)
+    // One batched read for every membership's account, not an accountRepository.get per
+    // membership (N+1).
+    const accountsById = new Map(
+      (await this.deps.accountRepository.listByIds(memberships.map((m) => m.accountId))).map(
+        (account) => [account.id, account],
+      ),
+    )
     const accounts: Account[] = []
     for (const m of memberships) {
-      const account = await this.deps.accountRepository.get(m.accountId)
+      const account = accountsById.get(m.accountId)
       if (account) accounts.push(toWire(account, m.roles))
     }
     // Personal accounts first, then orgs, each alphabetical — a stable switcher order.
