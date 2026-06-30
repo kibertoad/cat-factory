@@ -51,9 +51,9 @@ RUN groupadd --system harness \
 # silently break a deploy — bump deliberately, and bump the image tag (CONTRIBUTING /
 # CLAUDE.md) when you do. git's dubious-ownership guard is disabled system-wide because
 # the clone may be owned by another uid in some runtimes.
-ARG KUBECTL_VERSION=v1.32.2
-ARG KUSTOMIZE_VERSION=v5.6.0
-ARG HELM_VERSION=v3.17.0
+ARG KUBECTL_VERSION=v1.36.2
+ARG KUSTOMIZE_VERSION=v5.8.1
+ARG HELM_VERSION=v4.2.2
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export CURL_CA_BUNDLE=/tmp/extra_ca.crt; fi; \
     apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl tar && rm -rf /var/lib/apt/lists/*; \
