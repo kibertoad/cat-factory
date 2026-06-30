@@ -232,7 +232,8 @@ The rare slice with NO `db:generate` migration: every addition is nested JSON in
   (a shared, fixed-namespace env); set ⇒ override for per-PR isolation" — so a shared-namespace
   redeploy and a per-PR namespace are both expressible.
 - Kernel port seam: `RunnerDispatchKind` → `'agent' | 'deploy'`; `RunnerDispatchOptions.image` →
-  `+ 'deploy'`; `EnvironmentProvider.buildProvisionJob?`/`finalizeProvision?` (+ `DeployProvisionJob`).
+  `+ 'deploy'`; `EnvironmentProvider.asyncProvision?` (the paired `buildProvisionJob`/`finalizeProvision`
+  capability, grouped so neither can be implemented without the other) + `DeployProvisionJob`.
 - Conformance: a kustomize/helm/gateway-shaped handler config round-trips write→read on D1 + Postgres
   (`environment-handlers-suite.ts`).
 

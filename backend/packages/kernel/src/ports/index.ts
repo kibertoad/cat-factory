@@ -235,6 +235,8 @@ export type { SecretCipher } from './secret-cipher.js'
 export type { PersonalSecretCipher } from './personal-secret-cipher.js'
 export type {
   EnvironmentProvider,
+  AsyncProvisionCapability,
+  DeployProvisionJob,
   EnvironmentConnectionTestRequest,
   ProvisionContext,
   ProvisionEnvironmentRequest,

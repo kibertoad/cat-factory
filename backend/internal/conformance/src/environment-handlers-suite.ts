@@ -1,3 +1,4 @@
+import { infraHandlerConfigSchema } from '@cat-factory/contracts'
 import type {
   CustomManifestTypeRecord,
   CustomManifestTypeRepository,
@@ -6,6 +7,7 @@ import type {
   EnvironmentUserHandlerRecord,
   EnvironmentUserHandlerRepository,
 } from '@cat-factory/kernel'
+import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
 
 // Cross-runtime parity for the per-service provision-type persistence (slice 1): the
@@ -275,10 +277,14 @@ export function defineEnvironmentHandlersSuite(
     })
 
     it('round-trips a kustomize/helm/gateway-shaped kubernetes handler config (JSON column)', async () => {
-      // The render additions (renderer / images / helmReleases / secretInjections / the
-      // gatewayStatus URL source) ride the existing `handler_json` TEXT column as nested
-      // JSON — no new columns. Assert the whole shape survives write→read byte-identical on
-      // whichever store, so a runtime that truncates or re-encodes the blob fails here.
+      // The render additions ride existing JSON columns — no new columns. The HANDLER
+      // ('how') config carries `helmReleases` and the `gatewayStatus`/`httpRouteStatus` URL
+      // source in `handler_json`; the service-owned `renderer`/`images`/`secretInjections`
+      // ride the service `provisioning` column instead (a different row). Assert BOTH that
+      // the blob survives write→read byte-identical on whichever store (a runtime that
+      // truncates or re-encodes the JSON fails here) AND that the stored shape parses as a
+      // valid `infraHandlerConfigSchema` instance (so schema↔store drift fails the test, not
+      // just storage corruption).
       const { connections } = makeRepos()
       const { ws } = ids()
       const handlerJson = JSON.stringify({
@@ -309,11 +315,13 @@ export function defineEnvironmentHandlersSuite(
       )
       const read = await connections.getByWorkspaceAndType(ws, 'kubernetes', null)
       expect(read?.handlerJson).toBe(handlerJson)
-      const parsed = JSON.parse(read!.handlerJson) as {
-        kubernetes: { url: { source: string }; helmReleases: { scope: string }[] }
-      }
-      expect(parsed.kubernetes.url.source).toBe('gatewayStatus')
-      expect(parsed.kubernetes.helmReleases[0]!.scope).toBe('shared')
+      // Validate the stored blob against the real contract, not a hand-written cast: a
+      // schema that rejected this shape (or a store that mangled it) throws here.
+      const config = v.parse(infraHandlerConfigSchema, JSON.parse(read!.handlerJson))
+      if (config.engine !== 'remote-kubernetes') throw new Error('expected remote-kubernetes')
+      expect(config.kubernetes.url.source).toBe('gatewayStatus')
+      expect(config.kubernetes.helmReleases?.[0]?.scope).toBe('shared')
+      expect(config.kubernetes.helmReleases?.[0]?.version).toBe('v1.8.0')
     })
 
     it('upsert replaces a handler in place; softDelete tombstones one by type', async () => {

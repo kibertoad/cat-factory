@@ -235,6 +235,20 @@ export const KUBERNETES_ENV_TOKEN_SECRET_KEY = 'apiToken'
 const templateString = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500))
 
 /**
+ * A PINNED helm chart version: an exact SemVer (optionally `v`-prefixed, with optional
+ * pre-release / build metadata). Floating tags (`latest`, `*`, `^1.0`, `1.x`, ranges) are
+ * rejected so provisioning is deterministic.
+ */
+const pinnedChartVersion = v.pipe(
+  v.string(),
+  v.trim(),
+  v.regex(
+    /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/,
+    'version must be a pinned semver (e.g. 1.2.3), not a floating tag like latest or ^1.0.',
+  ),
+)
+
+/**
  * How the manifests at `path` are turned into apiserver-ready resources. `raw` (the
  * default, and the only one the in-Worker native REST adapter handles) treats `path` as
  * a single manifest file or a flat directory of already-valid YAML docs. `kustomize`
@@ -357,16 +371,29 @@ export type KubernetesEnvironmentConfig = v.InferOutput<typeof kubernetesEnviron
  * overrides its repo and/or tag/digest; the override values are templated over the
  * provision vars (e.g. `newTagTemplate: '{{branch}}'`).
  */
-export const kubernetesImageOverrideSchema = v.object({
-  /** The image to match (the `name:` in a kustomization `images:` entry), e.g. `registry/app`. */
-  name: nonEmpty,
-  /** Optional replacement repo, templated; absent ⇒ keep the original repo. */
-  newNameTemplate: v.optional(templateString),
-  /** Replacement tag, templated (e.g. `{{branch}}` / `{{sha}}`); mutually exclusive with digest. */
-  newTagTemplate: v.optional(templateString),
-  /** Replacement digest, templated; alternative to a tag. */
-  digestTemplate: v.optional(templateString),
-})
+export const kubernetesImageOverrideSchema = v.pipe(
+  v.object({
+    /** The image to match (the `name:` in a kustomization `images:` entry), e.g. `registry/app`. */
+    name: nonEmpty,
+    /** Optional replacement repo, templated; absent ⇒ keep the original repo. */
+    newNameTemplate: v.optional(templateString),
+    /** Replacement tag, templated (e.g. `{{branch}}` / `{{sha}}`); mutually exclusive with digest. */
+    newTagTemplate: v.optional(templateString),
+    /** Replacement digest, templated; alternative to a tag. */
+    digestTemplate: v.optional(templateString),
+  }),
+  v.check(
+    (o) =>
+      o.newNameTemplate !== undefined ||
+      o.newTagTemplate !== undefined ||
+      o.digestTemplate !== undefined,
+    'an image override must set at least one of newNameTemplate, newTagTemplate, or digestTemplate.',
+  ),
+  v.check(
+    (o) => !(o.newTagTemplate !== undefined && o.digestTemplate !== undefined),
+    'newTagTemplate and digestTemplate are mutually exclusive on an image override.',
+  ),
+)
 export type KubernetesImageOverride = v.InferOutput<typeof kubernetesImageOverrideSchema>
 
 /** A single templated `--set path=value` for a helm release. */
@@ -391,8 +418,8 @@ export const kubernetesHelmReleaseSchema = v.object({
   chart: nonEmpty,
   /** Chart repo URL; absent ⇒ `chart` is an OCI ref. */
   repo: v.optional(urlString),
-  /** PINNED chart version (no floating tags). */
-  version: nonEmpty,
+  /** PINNED chart version, e.g. `1.2.3` / `v1.2.3` (floating tags like `latest`/`^1.0` rejected). */
+  version: pinnedChartVersion,
   /** Namespace to install into, templated; absent ⇒ the environment namespace. */
   namespaceTemplate: v.optional(templateString),
   /** Inline `--values` overrides. */
@@ -408,14 +435,20 @@ export const kubernetesHelmReleaseSchema = v.object({
 export type KubernetesHelmRelease = v.InferOutput<typeof kubernetesHelmReleaseSchema>
 
 /** One entry inside an injected Secret: a logical key mapped to a secret-bundle ref OR a templated value. */
-export const kubernetesSecretEntrySchema = v.object({
-  /** Key inside the rendered Secret / `.env`. */
-  key: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_.-]+$/), v.minLength(1), v.maxLength(256)),
-  /** Resolve the value from the workspace encrypted bundle by key. */
-  secretRef: v.optional(environmentSecretRefSchema),
-  /** OR a non-secret value, templated over the provision vars. */
-  valueTemplate: v.optional(v.pipe(v.string(), v.maxLength(2000))),
-})
+export const kubernetesSecretEntrySchema = v.pipe(
+  v.object({
+    /** Key inside the rendered Secret / `.env`. */
+    key: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_.-]+$/), v.minLength(1), v.maxLength(256)),
+    /** Resolve the value from the workspace encrypted bundle by key. */
+    secretRef: v.optional(environmentSecretRefSchema),
+    /** OR a non-secret value, templated over the provision vars. */
+    valueTemplate: v.optional(v.pipe(v.string(), v.maxLength(2000))),
+  }),
+  v.check(
+    (e) => (e.secretRef === undefined) !== (e.valueTemplate === undefined),
+    'a secret entry must set exactly one of secretRef or valueTemplate.',
+  ),
+)
 export type KubernetesSecretEntry = v.InferOutput<typeof kubernetesSecretEntrySchema>
 
 /**

@@ -111,11 +111,11 @@ export interface ProvisionedEnvironment {
 }
 
 /**
- * A container-backed provision job, returned by {@link EnvironmentProvider.buildProvisionJob}
+ * A container-backed provision job, returned by {@link AsyncProvisionCapability.buildProvisionJob}
  * when a provider stands the environment up asynchronously in a deploy container (real
  * `kubectl`/`kustomize`/`helm`) instead of inline over REST. The engine dispatches it
  * through the shared runner transport, parks the deployer step, polls, then settles via
- * {@link EnvironmentProvider.finalizeProvision}. The `spec` is the opaque (redacted) job
+ * {@link AsyncProvisionCapability.finalizeProvision}. The `spec` is the opaque (redacted) job
  * body the deploy harness consumes.
  */
 export interface DeployProvisionJob {
@@ -256,26 +256,42 @@ export interface RepairAgentSpec {
   systemPromptAddendum?: string
 }
 
+/**
+ * The asynchronous, container-backed provisioning capability: the paired job-builder +
+ * finalizer a provider exposes when it stands environments up in a deploy container (real
+ * `kubectl`/`kustomize`/`helm`) instead of inline over REST. Grouped into ONE optional
+ * member on {@link EnvironmentProvider} so the build⇒finalize invariant is enforced by the
+ * type system — a provider cannot supply a job-builder without the matching finalizer.
+ */
+export interface AsyncProvisionCapability {
+  /**
+   * Build an asynchronous, container-backed provision job instead of provisioning inline in
+   * {@link EnvironmentProvider.provision}. Returns a job for the engine to dispatch + park on
+   * (then settle via {@link finalizeProvision}), or `null` to use the synchronous
+   * `provision()` path. The Kubernetes adapter returns a job only when the manifest source
+   * needs rendering (`renderer: 'kustomize'`) or helm releases are declared; raw manifests
+   * keep the in-Worker REST path.
+   */
+  buildProvisionJob(req: ProvisionEnvironmentRequest): DeployProvisionJob | null
+  /**
+   * Map a finished deploy job's view (namespace, URL, status) into a
+   * {@link ProvisionedEnvironment}. Called by the engine when a job built by
+   * {@link buildProvisionJob} reaches a terminal state.
+   */
+  finalizeProvision(view: RunnerJobView, req: ProvisionEnvironmentRequest): ProvisionedEnvironment
+}
+
 export interface EnvironmentProvider {
   provision(req: ProvisionEnvironmentRequest): Promise<ProvisionedEnvironment>
   status(req: EnvironmentStatusRequest): Promise<ProvisionedEnvironment>
   teardown(req: EnvironmentTeardownRequest): Promise<{ status: EnvironmentStatus }>
   /**
-   * Build an asynchronous, container-backed provision job instead of provisioning inline
-   * in {@link provision}. Returns a job for the engine to dispatch + park on (then settle
-   * via {@link finalizeProvision}), or `null` to use the synchronous `provision()` path.
-   * Optional — absent ⇒ always synchronous. The Kubernetes adapter returns a job only when
-   * the manifest source needs rendering (`renderer: 'kustomize'`) or helm releases are
-   * declared; raw manifests keep the in-Worker REST path.
+   * Optional asynchronous, container-backed provisioning. Present ⇒ the provider stands
+   * environments up in a deploy container ({@link AsyncProvisionCapability}); absent ⇒ it is
+   * synchronous-only (the in-Worker REST `provision()` path). The two methods are paired into
+   * this single member so neither can be implemented without the other.
    */
-  buildProvisionJob?(req: ProvisionEnvironmentRequest): DeployProvisionJob | null
-  /**
-   * Map a finished deploy job's view (namespace, URL, status) into a
-   * {@link ProvisionedEnvironment}. Called by the engine when a job built by
-   * {@link buildProvisionJob} reaches a terminal state. Required when `buildProvisionJob`
-   * can return a job.
-   */
-  finalizeProvision?(view: RunnerJobView, req: ProvisionEnvironmentRequest): ProvisionedEnvironment
+  asyncProvision?: AsyncProvisionCapability
   /**
    * Declare the config fields this provider expects, so the UI can render a connect
    * form. A native adapter returns its own fields; the generic manifest adapter returns

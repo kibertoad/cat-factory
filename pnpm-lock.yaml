@@ -90,6 +90,9 @@ importers:
       '@cat-factory/agents':
         specifier: workspace:*
         version: link:../../packages/agents
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@cat-factory/gates':
         specifier: workspace:*
         version: link:../../packages/gates
@@ -108,6 +111,9 @@ importers:
       '@cat-factory/server':
         specifier: workspace:*
         version: link:../../packages/server
+      valibot:
+        specifier: ^1.4.2
+        version: 1.4.2(typescript@7.0.1-rc)
     devDependencies:
       typescript:
         specifier: 7.0.1-rc
