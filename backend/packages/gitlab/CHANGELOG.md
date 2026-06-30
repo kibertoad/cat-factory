@@ -1,5 +1,12 @@
 # @cat-factory/gitlab
 
+## 0.4.8
+
+### Patch Changes
+
+- Updated dependencies [6009266]
+  - @cat-factory/kernel@0.57.1
+
 ## 0.4.7
 
 ### Patch Changes
