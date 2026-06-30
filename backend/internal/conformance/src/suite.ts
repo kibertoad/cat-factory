@@ -2249,6 +2249,9 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           maxComplexity: 0.5,
           maxRisk: 0.5,
           maxImpact: 0.5,
+          ciMaxAttempts: 5,
+          maxRequirementIterations: 5,
+          maxRequirementConcernAllowed: 'none',
           isDefault: true,
         })
         expect(custom.body.isDefault).toBe(true)
@@ -2257,7 +2260,9 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(rebalanced.status).toBe(200)
         expect(rebalanced.body.isDefault).toBe(false)
         const afterReseed = await call<MergeThresholdPreset[]>('GET', base)
-        expect(afterReseed.body.filter((p) => p.isDefault).map((p) => p.id)).toEqual([custom.body.id])
+        expect(afterReseed.body.filter((p) => p.isDefault).map((p) => p.id)).toEqual([
+          custom.body.id,
+        ])
 
         // A non-catalog id cannot be reseeded (it would be a custom preset — delete instead).
         const bad = await call('POST', `${base}/mp_not_a_builtin/reseed`)
