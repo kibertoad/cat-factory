@@ -251,9 +251,25 @@ the board-load + run paths below are green**. The work is in three parts:
 > is exposed. Part 3 needed no registry change: the dispatcher already reflects over the full
 > `CoreDependencies` object, so allow-listing a method is enough to expose it. Round-trip +
 > cross-account-scope tests for every newly-listed method are in `packages/server/test/persistenceRpc.spec.ts`.
-> Still open before the gate lifts: the **cross-service** + **entity-id-keyed** reads (need the new
-> scope kind in part 2's last two bullets), **part 1** (routing the direct-db stores through the
-> remote registry when `db` is undefined), and the **fake-mothership integration test** in part 3.
+>
+> **Landed (Phase 3 slice 2):** part 2's **cross-service** + **entity-id-keyed** board-composition
+> reads are now allow-listed, via two NEW scope kinds that resolve the entity's owning account
+> server-side before the check: `serviceList` (arg0 = `serviceIds[]`; resolve each service's
+> account, EVERY id must be in scope, a missing/out-of-scope id fails closed, empty list is a no-op)
+> and `block` (arg0 = blockId; resolve block → home workspace → account). Newly callable:
+> `serviceRepository.listByIds`/`listByAccount` (the latter on the existing `account` rule, so the
+> `null` unscoped listing is refused), `blockRepository.findById`/`listByServices`,
+> `executionRepository.listByServices`, `bootstrapJobRepository.listByServices`,
+> `pipelineScheduleRepository.listByServices`, `workspaceMountRepository.countByServiceIds`. The two
+> resolvers are wired in `PersistenceController` (block → `blockRepository.findById` + `accountOf`;
+> service → `serviceRepository.listByIds`) and the dispatcher fails closed if a kind's resolver is
+> absent. Round-trip + cross-account-scope + unknown-id + empty-list tests are in `persistenceRpc.spec.ts`.
+> Still open before the gate lifts: **part 1** (routing the direct-db stores through the remote
+> registry when `db` is undefined), and the **fake-mothership integration test** in part 3. Note:
+> `subscriptionActivationRepository.deleteByExecution` is NOT exposed remotely — per the per-repo
+> bucket checklist it is the **local-sqlite** bucket (the token is re-sealed with the system key for
+> the run; how that key is available in mothership mode is an open design question for the
+> credential/activation slice), so it stays off the remote surface.
 
 1. **Route every direct-db store through the remote surface when `db` is undefined.**
    `buildNodeContainer` (and the local container) build these from `options.db` today; in mothership
@@ -279,15 +295,17 @@ the board-load + run paths below are green**. The work is in three parts:
    - ✅ **Mixed (workspaceId + entity id) — keep the workspace arg as the scope key — DONE (slice 1):**
      `requirementReviewRepository.getByBlock`, `clarityReviewRepository.getByBlock`,
      `brainstormSessionRepository.getByBlockStage` (+ `pipelineScheduleRepository.getByBlock`).
-   - ⬜ **Entity-id-keyed (NO workspaceId arg) — need a NEW scope kind that resolves the entity's
-     workspace/account server-side before the check; do NOT expose them with a naive rule:**
-     `subscriptionActivationRepository.deleteByExecution(executionId)`,
-     `blockRepository.findById(blockId)`.
-   - ⬜ **Cross-service reads (arg0 = serviceIds[] / accountId) — span workspaces, so gate by account
-     membership / service ownership, not a single workspace:** `serviceRepository.listByIds`,
-     `serviceRepository.listByAccount`, `blockRepository.listByServices`,
-     `executionRepository.listByServices`, `bootstrapJobRepository.listByServices`,
-     `pipelineScheduleRepository.listByServices`, `workspaceMountRepository.countByServiceIds`.
+   - ✅ **Entity-id-keyed (NO workspaceId arg) — NEW `block` scope kind resolves the entity's
+     workspace/account server-side before the check — DONE (slice 2) for `blockRepository.findById`.**
+     `subscriptionActivationRepository.deleteByExecution(executionId)` is NOT done: it is the
+     **local-sqlite** bucket (see the per-repo checklist), so it is off the remote surface, not a
+     remote allow-list entry.
+   - ✅ **Cross-service reads (arg0 = serviceIds[] / accountId) — NEW `serviceList` scope kind
+     resolves each service's owning account; `listByAccount` reuses the `account` rule — DONE
+     (slice 2):** `serviceRepository.listByIds`, `serviceRepository.listByAccount`,
+     `blockRepository.listByServices`, `executionRepository.listByServices`,
+     `bootstrapJobRepository.listByServices`, `pipelineScheduleRepository.listByServices`,
+     `workspaceMountRepository.countByServiceIds`.
 
 3. **Expose those repos in the mothership-side `PersistenceRegistry`** (the dispatcher reflects over
    it) and add round-trip + cross-account-scope tests for every newly-allow-listed method, plus an

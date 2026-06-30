@@ -40,12 +40,25 @@ function workspace(id: string, accountId: string): Workspace & { accountId: stri
 function makeRegistry(): {
   registry: PersistenceRegistry
   resolveAccountId: DispatchOptions['resolveAccountId']
+  resolveBlockAccountId: NonNullable<DispatchOptions['resolveBlockAccountId']>
+  resolveServiceAccountIds: NonNullable<DispatchOptions['resolveServiceAccountIds']>
 } {
   const workspaces = new Map<string, Workspace & { accountId: string }>([
     ['ws_in', workspace('ws_in', ACCOUNT)],
     ['ws_out', workspace('ws_out', OTHER_ACCOUNT)],
   ])
   const executions = new Map<string, ExecutionInstance>()
+  // Blocks home in a workspace (so a blockId resolves to that workspace's account); services are
+  // account-owned (so a serviceId resolves to its account). `*_in` live under ACCOUNT, `*_out`
+  // under OTHER_ACCOUNT — the in/out-of-scope split the cross-service + block rules are checked on.
+  const blocks = new Map<string, { workspaceId: string }>([
+    ['blk_in', { workspaceId: 'ws_in' }],
+    ['blk_out', { workspaceId: 'ws_out' }],
+  ])
+  const services = new Map<string, { id: string; accountId: string | null }>([
+    ['svc_in', { id: 'svc_in', accountId: ACCOUNT }],
+    ['svc_out', { id: 'svc_out', accountId: OTHER_ACCOUNT }],
+  ])
 
   const registry = {
     workspaceRepository: {
@@ -74,6 +87,22 @@ function makeRegistry(): {
       markFailed: async () => {
         throw new ConflictError('already terminal', 'invalid_state' as never)
       },
+      listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
+    },
+    // Entity-id-keyed (findById) + cross-service (listByServices) board-composition reads.
+    blockRepository: {
+      findById: async (blockId: string) => {
+        const home = blocks.get(blockId)
+        return home
+          ? { workspaceId: home.workspaceId, serviceId: null, block: { id: blockId } }
+          : null
+      },
+      listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
+    },
+    serviceRepository: {
+      // Mirror the real repo: a missing id is simply absent from the result (NOT an error row).
+      listByIds: async (ids: string[]) => ids.map((id) => services.get(id)).filter(Boolean),
+      listByAccount: async (accountId: string) => [{ accountId }],
     },
     accountRepository: {
       get: async (id: string) => ({ id, name: id }),
@@ -85,6 +114,7 @@ function makeRegistry(): {
     workspaceMountRepository: {
       listByWorkspace: async (ws: string) => [{ ws }],
       deleteByWorkspace: async (_ws: string) => undefined,
+      countByServiceIds: async (ids: string[]) => Object.fromEntries(ids.map((id) => [id, 1])),
     },
     workspaceSettingsRepository: { get: async (ws: string) => ({ ws }) },
     mergePresetRepository: { list: async (ws: string) => [{ ws }] },
@@ -93,10 +123,14 @@ function makeRegistry(): {
     pipelineScheduleRepository: {
       list: async (ws: string) => [{ ws }],
       getByBlock: async (ws: string, blockId: string) => ({ ws, blockId }),
+      listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
     },
     trackerSettingsRepository: { get: async (ws: string) => ({ ws }) },
     notificationRepository: { listOpen: async (ws: string) => [{ ws }] },
-    bootstrapJobRepository: { listByWorkspace: async (ws: string) => [{ ws }] },
+    bootstrapJobRepository: {
+      listByWorkspace: async (ws: string) => [{ ws }],
+      listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
+    },
     tokenUsageRepository: {
       totalsSinceForWorkspace: async (ws: string, _since: number) => ({ ws }),
     },
@@ -115,10 +149,29 @@ function makeRegistry(): {
     },
   } as unknown as PersistenceRegistry
 
+  const resolveAccountId = (id: string) =>
+    registry.workspaceRepository!.accountOf!(id) as Promise<string | null | undefined>
   return {
     registry,
-    resolveAccountId: (id) =>
-      registry.workspaceRepository!.accountOf!(id) as Promise<string | null | undefined>,
+    resolveAccountId,
+    // Built exactly as the controller builds them, so the round-trip exercises the real
+    // server-side resolution shape (block → home workspace → account; serviceId → account).
+    resolveBlockAccountId: async (blockId) => {
+      const found = (await registry.blockRepository!.findById!(blockId)) as {
+        workspaceId?: string
+      } | null
+      const ws = found?.workspaceId
+      return typeof ws === 'string' ? resolveAccountId(ws) : undefined
+    },
+    resolveServiceAccountIds: async (ids) => {
+      const services = (await registry.serviceRepository!.listByIds!(ids)) as Array<{
+        id: string
+        accountId: string | null
+      }>
+      const map = new Map<string, string | null | undefined>()
+      for (const service of services) map.set(service.id, service.accountId)
+      return map
+    },
   }
 }
 
@@ -126,10 +179,10 @@ function makeRegistry(): {
 // mothership-mode node builds `createRemoteRepositoryRegistry`), cast to the typed ports the
 // assertions below touch.
 function remote(accountIds = [ACCOUNT]) {
-  const { registry, resolveAccountId } = makeRegistry()
+  const { registry, ...resolvers } = makeRegistry()
   const client = inProcessClient({
     registry,
-    resolveAccountId,
+    ...resolvers,
     scope: { accountIds, userId: USER },
   })
   return createRemoteRepositoryRegistry(client) as unknown as {
@@ -249,10 +302,10 @@ describe('persistence RPC round-trip', () => {
 
 describe('createRemoteRepositoryRegistry (full-surface, drift-proof)', () => {
   function registryClient() {
-    const { registry, resolveAccountId } = makeRegistry()
+    const { registry, ...resolvers } = makeRegistry()
     return inProcessClient({
       registry,
-      resolveAccountId,
+      ...resolvers,
       scope: { accountIds: [ACCOUNT], userId: USER },
     })
   }
@@ -317,10 +370,10 @@ describe('board-load read surface (workspace-scoped)', () => {
   ]
 
   function remoteRegistry(accountIds = [ACCOUNT]) {
-    const { registry, resolveAccountId } = makeRegistry()
+    const { registry, ...resolvers } = makeRegistry()
     const client = inProcessClient({
       registry,
-      resolveAccountId,
+      ...resolvers,
       scope: { accountIds, userId: USER },
     })
     return createRemoteRepositoryRegistry(client) as unknown as Record<
@@ -350,5 +403,95 @@ describe('board-load read surface (workspace-scoped)', () => {
     await expect(
       remoteRegistry().workspaceMountRepository!.deleteByWorkspace!('ws_in'),
     ).rejects.toThrow(/not callable/)
+  })
+})
+
+describe('cross-service + entity-id read surface (board composition)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // The `serviceList`-scoped reads: arg0 is `serviceIds[]`, resolved to each service's account.
+  const SERVICE_READS: Array<{ repo: string; method: string }> = [
+    { repo: 'serviceRepository', method: 'listByIds' },
+    { repo: 'blockRepository', method: 'listByServices' },
+    { repo: 'executionRepository', method: 'listByServices' },
+    { repo: 'bootstrapJobRepository', method: 'listByServices' },
+    { repo: 'pipelineScheduleRepository', method: 'listByServices' },
+    { repo: 'workspaceMountRepository', method: 'countByServiceIds' },
+  ]
+
+  for (const { repo, method } of SERVICE_READS) {
+    it(`forwards ${repo}.${method} when every service is in scope`, async () => {
+      const result = await remoteRegistry()[repo]![method]!(['svc_in'])
+      expect(result).toBeDefined()
+    })
+
+    it(`rejects ${repo}.${method} when any service is out of scope (404)`, async () => {
+      // svc_out belongs to OTHER_ACCOUNT; one out-of-scope id fails the whole call closed.
+      await expect(remoteRegistry()[repo]![method]!(['svc_in', 'svc_out'])).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
+
+    it(`rejects ${repo}.${method} for an unknown service id (fails closed)`, async () => {
+      // A service that does not resolve cannot be scope-bound, so it is refused (no leak).
+      await expect(remoteRegistry()[repo]![method]!(['svc_missing'])).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
+
+    it(`allows ${repo}.${method} with an empty list (no service to scope)`, async () => {
+      // An empty input is a no-op read; it binds no service, so it is not a scope violation.
+      await expect(remoteRegistry()[repo]![method]!([])).resolves.toBeDefined()
+    })
+  }
+
+  it('forwards serviceRepository.listByAccount for an in-scope account', async () => {
+    await expect(
+      remoteRegistry().serviceRepository!.listByAccount!(ACCOUNT),
+    ).resolves.toMatchObject([{ accountId: ACCOUNT }])
+  })
+
+  it('rejects serviceRepository.listByAccount for an out-of-scope account (404)', async () => {
+    await expect(
+      remoteRegistry().serviceRepository!.listByAccount!(OTHER_ACCOUNT),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('rejects serviceRepository.listByAccount for the null (unscoped) listing', async () => {
+    // The auth-disabled `null` org listing must never be reachable over a scoped machine token.
+    await expect(remoteRegistry().serviceRepository!.listByAccount!(null)).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+
+  it('forwards blockRepository.findById for a block homed in an in-scope workspace', async () => {
+    const found = (await remoteRegistry().blockRepository!.findById!('blk_in')) as {
+      workspaceId: string
+    }
+    expect(found.workspaceId).toBe('ws_in')
+  })
+
+  it('rejects blockRepository.findById for a block homed out of scope (404)', async () => {
+    // blk_out homes in ws_out (OTHER_ACCOUNT).
+    await expect(remoteRegistry().blockRepository!.findById!('blk_out')).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+
+  it('rejects blockRepository.findById for an unknown block (fails closed)', async () => {
+    await expect(remoteRegistry().blockRepository!.findById!('blk_missing')).rejects.toMatchObject({
+      code: 'not_found',
+    })
   })
 })

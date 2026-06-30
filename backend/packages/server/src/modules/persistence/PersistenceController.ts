@@ -65,12 +65,33 @@ export function persistenceController(): Hono<AppEnv> {
     }
 
     const workspaceRepository = registry.workspaceRepository
+    const blockRepository = registry.blockRepository
+    const serviceRepository = registry.serviceRepository
+    const resolveAccountId = (workspaceId: string) =>
+      (workspaceRepository?.accountOf?.(workspaceId) as Promise<string | null | undefined>) ??
+      Promise.resolve(undefined)
     const result = await dispatchPersistenceCall(request, {
       registry,
       scope: { accountIds: payload.scope.accountIds, userId: payload.userId },
-      resolveAccountId: (workspaceId) =>
-        (workspaceRepository?.accountOf?.(workspaceId) as Promise<string | null | undefined>) ??
-        Promise.resolve(undefined),
+      resolveAccountId,
+      // A block is keyed only by its id; resolve its home workspace, then that workspace's account.
+      resolveBlockAccountId: async (blockId) => {
+        const found = (await blockRepository?.findById?.(blockId)) as
+          | { workspaceId?: string }
+          | null
+          | undefined
+        const workspaceId = found?.workspaceId
+        return typeof workspaceId === 'string' ? resolveAccountId(workspaceId) : undefined
+      },
+      // Services are account-owned; resolve each requested id's `accountId` for the scope check.
+      resolveServiceAccountIds: async (serviceIds) => {
+        const services = (await serviceRepository?.listByIds?.(serviceIds)) as
+          | Array<{ id: string; accountId: string | null }>
+          | undefined
+        const map = new Map<string, string | null | undefined>()
+        for (const service of services ?? []) map.set(service.id, service.accountId)
+        return map
+      },
     })
     return c.json(result.body, result.status as 200 | 400 | 403 | 404 | 409 | 422 | 428 | 500)
   })
