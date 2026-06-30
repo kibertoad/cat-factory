@@ -122,6 +122,7 @@ import {
   wireReleaseHealthProvider,
   wireIncidentEnrichment,
   wirePullRequestReviewProvider,
+  warnUnwiredGates,
 } from '@cat-factory/gates'
 import {
   buildGitLabEngineClient,
@@ -1663,6 +1664,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // local mode a PAT-backed CI provider is wired above and would otherwise win). Production
   // leaves `gateProviders` undefined, so this is a no-op outside tests.
   applyGateProviders(options.gateProviders)
+  // Surface any gate left as a silent pass-through (no provider wired) so a misconfigured
+  // deployment is visible in the logs instead of quietly auto-merging without checking CI.
+  warnUnwiredGates(logger)
 
   const dependencies: CoreDependencies = {
     ...releaseHealthDeps,

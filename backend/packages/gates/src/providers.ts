@@ -82,6 +82,59 @@ export function clearGateProviders(): void {
 /** Whether the CI status provider is wired (the `ci` gate's `wired()`). */
 export const isCiStatusProviderWired = (): boolean => isProviderWired(CI_STATUS_PROVIDER)
 
+/** Minimal structured-logger shape (the facade's pino logger satisfies it). */
+export interface GateWiringLogger {
+  warn(obj: Record<string, unknown>, msg?: string): void
+}
+
+// Each built-in gate that, when its provider is UNWIRED, silently passes through — and
+// what that pass-through actually means, so the warning names the operational risk.
+const PASS_THROUGH_GATES: ReadonlyArray<{
+  gate: string
+  token: ProviderToken<unknown>
+  effect: string
+}> = [
+  { gate: 'ci', token: CI_STATUS_PROVIDER, effect: 'CI is never checked — PRs advance as if green' },
+  {
+    gate: 'conflicts',
+    token: MERGEABILITY_PROVIDER,
+    effect: 'merge conflicts are never detected',
+  },
+  {
+    gate: 'post-release-health',
+    token: RELEASE_HEALTH_PROVIDER,
+    effect: 'release regressions are never caught',
+  },
+  {
+    gate: 'human-review',
+    token: PULL_REQUEST_REVIEW_PROVIDER,
+    effect: 'PR review approval is never required',
+  },
+]
+
+// Dedupe so a per-request container rebuild (Cloudflare) doesn't re-log every build:
+// each gate is warned at most once per process.
+const warnedGates = new Set<string>()
+
+/**
+ * Log (at WARN) every built-in gate whose provider is NOT wired — a pass-through gate is
+ * otherwise indistinguishable from a genuinely green one, so a deployment that forgot to
+ * configure the GitHub App would silently auto-merge without ever checking CI. Call once
+ * per container build with the facade's logger; the warning fires at most once per gate
+ * per process. Pass-through stays the behaviour — this only makes the misconfiguration
+ * visible.
+ */
+export function warnUnwiredGates(log: GateWiringLogger): void {
+  for (const { gate, token, effect } of PASS_THROUGH_GATES) {
+    if (isProviderWired(token) || warnedGates.has(gate)) continue
+    warnedGates.add(gate)
+    log.warn(
+      { gate, effect, passThrough: true },
+      `gate '${gate}' has no provider wired — passing through (${effect})`,
+    )
+  }
+}
+
 /** The built-in gates' providers as one optional bag, for wiring through a build step. */
 export interface GateProviderOverrides {
   ciStatus?: CiStatusProvider
