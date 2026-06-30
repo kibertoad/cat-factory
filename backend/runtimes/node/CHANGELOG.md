@@ -1,5 +1,48 @@
 # @cat-factory/node-server
 
+## 0.45.0
+
+### Minor Changes
+
+- bd23c46: Wire the mothership-mode persistence-RPC endpoint into both runtime facades: each attaches
+  its repository registry as `ServerContainer.repositories`, so a Node or Cloudflare deployment
+  can act as a mothership and serve `POST /internal/persistence` for mothership-mode local
+  nodes. The attachment is symmetric (sourced identically from each facade's `dependencies`),
+  and a cross-runtime conformance assertion guards it — a facade that forgot to attach its
+  registry would 503 instead of 403 on an unauthenticated machine call and fail the suite.
+- 1952d6b: Per-service provision types (slice 1 — additive foundation). Adds the
+  `provisionType`/`infraEngine`/`serviceProvisioning`/`infraHandlerConfig` and
+  custom-manifest-type contracts, a `provisioning` field on the service-frame `Block`
+  (persisted as a JSON column on both runtimes and settable via the block update endpoint),
+  and `provisionType`/`engine` fields on the environment handle. Introduces the per-user
+  infra handler override table (`environment_user_handlers`, local-mode) and the workspace
+  custom-manifest-type catalog (`custom_manifest_types`) — mirrored across D1 and Drizzle
+  with a cross-runtime conformance suite — plus `provision_type`/`engine` columns on the
+  `environments` registry. No behaviour is wired yet; the single→multi reshape of
+  `environment_connections`, the resolver, and the UI follow in later slices. See
+  `docs/initiatives/per-service-provision-types.md`.
+
+### Patch Changes
+
+- Updated dependencies [bd23c46]
+- Updated dependencies [1952d6b]
+- Updated dependencies [1952d6b]
+  - @cat-factory/server@0.51.0
+  - @cat-factory/contracts@0.59.0
+  - @cat-factory/kernel@0.57.0
+  - @cat-factory/integrations@0.40.0
+  - @cat-factory/agents@0.23.1
+  - @cat-factory/consensus@0.7.84
+  - @cat-factory/gates@0.2.37
+  - @cat-factory/gitlab@0.4.7
+  - @cat-factory/orchestration@0.45.2
+  - @cat-factory/prompt-fragments@0.9.12
+  - @cat-factory/spend@0.10.41
+  - @cat-factory/observability-langfuse@0.7.80
+  - @cat-factory/provider-bedrock@0.7.84
+  - @cat-factory/provider-cloudflare@0.7.84
+  - @cat-factory/provider-s3@0.2.30
+
 ## 0.44.3
 
 ### Patch Changes
