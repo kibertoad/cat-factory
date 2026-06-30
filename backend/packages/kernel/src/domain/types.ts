@@ -123,6 +123,13 @@ export type {
   KubernetesEnvironmentConfig,
   KubernetesManifestSource,
   KubernetesUrlSource,
+  KubernetesRenderer,
+  KubernetesImageOverride,
+  KubernetesHelmRelease,
+  KubernetesHelmSet,
+  KubernetesSecretEntry,
+  KubernetesSecretInjection,
+  KubernetesProvisionConfig,
   // Per-service provision type + per-type infra handlers (the what/where ÷ how split).
   ProvisionType,
   InfraEngine,

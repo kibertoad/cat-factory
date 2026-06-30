@@ -92,17 +92,29 @@ function toManifestId(providerId: string): string {
 }
 
 /**
+ * The service-owned kube provisioning inputs ("what + where" + render inputs) merged into the
+ * workspace engine config at provision time: the manifest source plus the container-deploy
+ * render fields (image overrides, per-environment helm releases, secret injections).
+ */
+type ServiceKubeInputs = Pick<
+  ServiceProvisioning,
+  'manifestSource' | 'images' | 'helmReleases' | 'secretInjections'
+>
+
+/**
  * Lower a discriminated-by-`engine` {@link InfraHandlerConfig} into the discriminated-by-`kind`
  * {@link EnvironmentBackendConfig} the backend registry consumes. For a kube engine the source
  * is resolved by precedence: the service-owned `manifestSource` (the split the whole initiative
  * is about) > a legacy source the compat bridge stored inline (a kube handler config MAY carry
  * one — see {@link toHandlerConfig}) > a placeholder (validation/metadata paths, where the kube
- * backend reads only the apiserver/sizing fields, never the source).
+ * backend reads only the apiserver/sizing fields, never the source). The service's render inputs
+ * (image overrides, secret injections, per-env helm releases) are folded in too; the workspace's
+ * shared (`scope: 'shared'`) helm releases on the engine config are merged ahead of the service's.
  */
 function handlerConfigToBackendConfig(
   config: InfraHandlerConfig,
   backendKind: string,
-  manifestSource?: KubernetesManifestSource,
+  service?: ServiceKubeInputs,
 ): EnvironmentBackendConfig {
   switch (config.engine) {
     case 'local-docker':
@@ -113,8 +125,18 @@ function handlerConfigToBackendConfig(
       const kube = config.kubernetes as typeof config.kubernetes & {
         manifestSource?: KubernetesManifestSource
       }
-      const source = manifestSource ?? kube.manifestSource ?? PLACEHOLDER_MANIFEST_SOURCE
-      return { kind: 'kubernetes', kubernetes: { ...kube, manifestSource: source } }
+      const source = service?.manifestSource ?? kube.manifestSource ?? PLACEHOLDER_MANIFEST_SOURCE
+      const helmReleases = [...(kube.helmReleases ?? []), ...(service?.helmReleases ?? [])]
+      return {
+        kind: 'kubernetes',
+        kubernetes: {
+          ...kube,
+          manifestSource: source,
+          ...(helmReleases.length > 0 ? { helmReleases } : {}),
+          ...(service?.images ? { images: service.images } : {}),
+          ...(service?.secretInjections ? { secretInjections: service.secretInjections } : {}),
+        },
+      }
     }
   }
 }
@@ -342,7 +364,12 @@ export class EnvironmentConnectionService {
       throw new ConflictError(message, 'provision_type_unhandled', { provisionType: service.type })
     }
     const record = resolution.handler!
-    const { provider, manifest } = this.buildFromRecord(record, service.manifestSource ?? undefined)
+    const { provider, manifest } = this.buildFromRecord(record, {
+      ...(service.manifestSource ? { manifestSource: service.manifestSource } : {}),
+      ...(service.images ? { images: service.images } : {}),
+      ...(service.helmReleases ? { helmReleases: service.helmReleases } : {}),
+      ...(service.secretInjections ? { secretInjections: service.secretInjections } : {}),
+    })
     return {
       provider,
       manifest,
@@ -1016,11 +1043,12 @@ export class EnvironmentConnectionService {
 
   /**
    * Build the live provider + stored manifest from a handler record, merging the SERVICE's
-   * `manifestSource` (a kube engine needs the manifests to apply from the service) when given.
+   * provisioning inputs (a kube engine needs the manifests + render inputs from the service)
+   * when given.
    */
   private buildFromRecord(
     record: EnvironmentConnectionRecord,
-    manifestSource?: KubernetesManifestSource,
+    service?: ServiceKubeInputs,
   ): {
     backend: EnvironmentBackendProvider
     provider: EnvironmentProvider
@@ -1029,9 +1057,9 @@ export class EnvironmentConnectionService {
   } {
     const config = JSON.parse(record.handlerJson) as InfraHandlerConfig
     const backend = this.requireBackend(record.backendKind)
-    // Pass the service source through (or undefined): a legacy bridge row carries its own kube
+    // Pass the service inputs through (or undefined): a legacy bridge row carries its own kube
     // source inline, and `handlerConfigToBackendConfig` falls back to it before the placeholder.
-    const backendConfig = handlerConfigToBackendConfig(config, backend.kind, manifestSource)
+    const backendConfig = handlerConfigToBackendConfig(config, backend.kind, service)
     return {
       backend,
       provider: this.buildProvider(backend),

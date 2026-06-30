@@ -487,6 +487,27 @@ export const kubernetesSecretInjectionSchema = v.variant('mode', [
 ])
 export type KubernetesSecretInjection = v.InferOutput<typeof kubernetesSecretInjectionSchema>
 
+/**
+ * The full Kubernetes provision config the deploy adapter consumes: the combined cluster +
+ * URL + manifest-source config PLUS the kustomize/helm render inputs (image overrides, helm
+ * releases, secret injections). It is assembled at provision time by MERGING the workspace
+ * kube engine config (the "how": apiserver, sizing, shared helm releases) with the service's
+ * own provisioning (the "what/where": manifest source, per-environment helm releases, image
+ * overrides, secret injections) — so the provider reads everything it needs from one place.
+ * The native in-Worker REST adapter ignores the render fields (raw manifests only); the
+ * container-backed deploy adapter consumes them. Carries secret KEYS, never values.
+ */
+export const kubernetesProvisionConfigSchema = v.object({
+  ...kubernetesEnvironmentConfigSchema.entries,
+  /** Structured image overrides (the kustomize `images:` shape), templated over provision vars. */
+  images: v.optional(v.array(kubernetesImageOverrideSchema)),
+  /** Helm releases to install — workspace-shared singletons merged with the service's per-env ones. */
+  helmReleases: v.optional(v.array(kubernetesHelmReleaseSchema)),
+  /** Secrets fed in before apply (a `Secret` resource or a `secretGenerator` `.env`). */
+  secretInjections: v.optional(v.array(kubernetesSecretInjectionSchema)),
+})
+export type KubernetesProvisionConfig = v.InferOutput<typeof kubernetesProvisionConfigSchema>
+
 /** Built-in environment backend kinds the contract knows by name. */
 export const RESERVED_ENVIRONMENT_BACKEND_KINDS = ['manifest', 'kubernetes'] as const
 
@@ -514,7 +535,7 @@ export const customEnvironmentBackendKindSchema = customBackendKindSchema(
  */
 export const environmentBackendConfigSchema = v.variant('kind', [
   v.object({ kind: v.literal('manifest'), manifest: environmentManifestSchema }),
-  v.object({ kind: v.literal('kubernetes'), kubernetes: kubernetesEnvironmentConfigSchema }),
+  v.object({ kind: v.literal('kubernetes'), kubernetes: kubernetesProvisionConfigSchema }),
   v.object({ kind: customEnvironmentBackendKindSchema, manifest: environmentManifestSchema }),
 ])
 export type EnvironmentBackendConfig = v.InferOutput<typeof environmentBackendConfigSchema>

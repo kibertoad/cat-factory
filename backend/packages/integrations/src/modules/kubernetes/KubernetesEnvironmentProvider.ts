@@ -1,22 +1,36 @@
 import type {
+  AsyncProvisionCapability,
   ConnectionTestResult,
+  DeployProvisionJob,
   EnvironmentConnectionTestRequest,
   EnvironmentProvider,
   EnvironmentStatus,
   EnvironmentStatusRequest,
   EnvironmentTeardownRequest,
   KubernetesEnvironmentConfig,
+  KubernetesProvisionConfig,
   ProviderConfigField,
   ProvisionEnvironmentRequest,
   ProvisionedEnvironment,
   RepoFiles,
+  RunnerJobView,
   RunRepoContext,
 } from '@cat-factory/kernel'
 import { KubernetesApiClient, safeText } from './KubernetesApiClient.js'
 import { apiBase, classifyDeploymentReadiness } from './kubernetes.logic.js'
 import {
+  buildDeployJobSpec,
+  mapDeployOutcome,
+  needsContainerRender,
+} from './kubernetes-deploy.logic.js'
+import {
   deriveUrl,
+  extractGatewayAddress,
+  extractGatewayListenerHost,
+  extractHttpRouteHost,
   extractLoadBalancerAddress,
+  firstListItem,
+  httpRouteParentRef,
   isManifestFile,
   type KubernetesResource,
   namespaceUrl,
@@ -26,6 +40,9 @@ import {
   resourceUrl,
   templateVars,
 } from './kubernetes-environment.logic.js'
+
+/** Gateway-API group/version for `Gateway` + `HTTPRoute` status reads. */
+const GATEWAY_API_VERSION = 'gateway.networking.k8s.io/v1'
 
 // Native Kubernetes ephemeral-environment provider. It applies an operator-authored
 // set of k3s/Kubernetes manifests (read from the PR repo or a separate repo) into a
@@ -50,6 +67,16 @@ export interface KubernetesEnvironmentProviderOptions {
 export class KubernetesEnvironmentProvider implements EnvironmentProvider {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   constructor(private readonly options: KubernetesEnvironmentProviderOptions = {}) {}
+
+  /**
+   * Asynchronous, container-backed provisioning for configs the in-Worker REST path can't
+   * render (`kustomize`, helm releases, structured image overrides, secret injections). The
+   * provider builds the deploy job + maps its outcome; the engine dispatches/polls it.
+   */
+  readonly asyncProvision: AsyncProvisionCapability = {
+    buildProvisionJob: (req) => this.buildProvisionJob(req),
+    finalizeProvision: (view, req) => this.finalizeProvision(view, req),
+  }
 
   async provision(req: ProvisionEnvironmentRequest): Promise<ProvisionedEnvironment> {
     const config = parseKubernetesEnvConfig(req.manifest)
@@ -168,6 +195,57 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
 
   // --- internals ----------------------------------------------------------
 
+  /**
+   * Build a deploy-container job for a config that needs rendering, or null to use the
+   * synchronous REST `provision()` path (raw manifests, no helm/images/secret-injections).
+   * Throws when rendering is required but the engine supplied no deploy inputs (a wiring bug).
+   */
+  private buildProvisionJob(req: ProvisionEnvironmentRequest): DeployProvisionJob | null {
+    const config: KubernetesProvisionConfig = parseKubernetesEnvConfig(req.manifest)
+    if (!needsContainerRender(config)) return null
+    const deploy = req.deploy
+    if (!deploy) {
+      throw new Error(
+        'This Kubernetes environment needs the container deploy adapter (kustomize / helm / ' +
+          'image overrides / secret injections), but the deploy inputs were not provided.',
+      )
+    }
+    const vars = this.provisionVars(config, req.inputs)
+    const spec = buildDeployJobSpec({
+      jobId: deploy.ref.jobId,
+      config,
+      vars,
+      namespace: resolveNamespace(config, req.inputs),
+      clone: deploy.clone,
+      resolveSecret: req.resolveSecret,
+    })
+    return {
+      ref: deploy.ref,
+      spec: spec as unknown as Record<string, unknown>,
+      kind: 'deploy',
+      options: { image: 'deploy' },
+    }
+  }
+
+  /** Map a finished deploy job's view into a provisioned environment. */
+  private finalizeProvision(
+    view: RunnerJobView,
+    req: ProvisionEnvironmentRequest,
+  ): ProvisionedEnvironment {
+    const config = parseKubernetesEnvConfig(req.manifest)
+    return mapDeployOutcome(view, this.provisionVars(config, req.inputs))
+  }
+
+  /** The `{{var}}` substitution map for templates (inputs + namespace + optional image). */
+  private provisionVars(
+    config: KubernetesProvisionConfig,
+    inputs: Record<string, string>,
+  ): Record<string, string> {
+    const namespace = resolveNamespace(config, inputs)
+    const image = config.imageTemplate ? renderImage(config.imageTemplate, inputs) : undefined
+    return templateVars(inputs, namespace, image)
+  }
+
   private async ensureNamespace(
     client: KubernetesApiClient,
     config: KubernetesEnvironmentConfig,
@@ -276,6 +354,8 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
       )
       return res.ok ? extractLoadBalancerAddress(await res.json()) : null
     }
+    if (url.source === 'gatewayStatus') return this.readGatewayHost(client, config, namespace)
+    if (url.source === 'httpRouteStatus') return this.readHttpRouteHost(client, config, namespace)
     // ingressTemplate is resolved by the caller; only ingressStatus reaches here.
     if (url.source !== 'ingressStatus') return null
     // ingressStatus: a named Ingress, else the only Ingress in the namespace.
@@ -299,6 +379,86 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     const items = Array.isArray(body.items) ? body.items : []
     if (items.length === 0) return null
     return extractLoadBalancerAddress(items[0])
+  }
+
+  /**
+   * Resolve a `gatewayStatus` host: a named `Gateway` (else the only one in the namespace),
+   * preferring a concrete listener hostname over the raw assigned address. Null until assigned.
+   */
+  private async readGatewayHost(
+    client: KubernetesApiClient,
+    config: KubernetesEnvironmentConfig,
+    namespace: string,
+  ): Promise<string | null> {
+    const url = config.url
+    if (url.source !== 'gatewayStatus') return null
+    const gw = await this.getGateway(client, config, namespace, url.gatewayName)
+    if (!gw) return null
+    return extractGatewayListenerHost(gw) ?? extractGatewayAddress(gw)
+  }
+
+  /**
+   * Resolve an `httpRouteStatus` host: a named `HTTPRoute` (else the only one), preferring its
+   * own concrete hostname; otherwise the parent `Gateway`'s assigned address (read in the
+   * parentRef's namespace, since a shared gateway commonly lives elsewhere). Null until assigned.
+   */
+  private async readHttpRouteHost(
+    client: KubernetesApiClient,
+    config: KubernetesEnvironmentConfig,
+    namespace: string,
+  ): Promise<string | null> {
+    const url = config.url
+    if (url.source !== 'httpRouteStatus') return null
+    let route: unknown
+    if (url.httpRouteName) {
+      const res = await client.fetch(
+        'GET',
+        resourceUrl(config, GATEWAY_API_VERSION, 'HTTPRoute', namespace, url.httpRouteName),
+        undefined,
+        READ_TIMEOUT_MS,
+      )
+      route = res.ok ? await res.json() : null
+    } else {
+      const res = await client.fetch(
+        'GET',
+        resourceUrl(config, GATEWAY_API_VERSION, 'HTTPRoute', namespace),
+        undefined,
+        READ_TIMEOUT_MS,
+      )
+      route = res.ok ? firstListItem(await res.json()) : null
+    }
+    if (!route) return null
+    const host = extractHttpRouteHost(route)
+    if (host) return host
+    const parent = httpRouteParentRef(route)
+    if (!parent) return null
+    const gw = await this.getGateway(client, config, parent.namespace ?? namespace, parent.name)
+    return gw ? extractGatewayAddress(gw) : null
+  }
+
+  /** GET a `Gateway` by name, or the first one in the namespace when `name` is omitted. */
+  private async getGateway(
+    client: KubernetesApiClient,
+    config: KubernetesEnvironmentConfig,
+    namespace: string,
+    name?: string,
+  ): Promise<unknown> {
+    if (name) {
+      const res = await client.fetch(
+        'GET',
+        resourceUrl(config, GATEWAY_API_VERSION, 'Gateway', namespace, name),
+        undefined,
+        READ_TIMEOUT_MS,
+      )
+      return res.ok ? await res.json() : null
+    }
+    const res = await client.fetch(
+      'GET',
+      resourceUrl(config, GATEWAY_API_VERSION, 'Gateway', namespace),
+      undefined,
+      READ_TIMEOUT_MS,
+    )
+    return res.ok ? firstListItem(await res.json()) : null
   }
 
   /** Read the manifest file(s) from the configured source (co-located or separate repo). */
