@@ -465,16 +465,21 @@ export interface NodeContainerOptions {
    * The Drizzle/Postgres client (the single persistence layer). OPTIONAL: a mothership-mode
    * local node runs with NO Postgres (`db` undefined) and supplies {@link repos} (org/durable
    * state served remotely) plus the credential-repo seams below instead. When `db` is
-   * undefined, `repos` is REQUIRED; the per-user Postgres services (subscriptions, user
-   * secrets, OpenRouter catalog) turn themselves off.
+   * undefined, `repos` is REQUIRED.
    *
-   * WARNING (mothership mode is NOT yet functional end-to-end): a board load and a run still
-   * reach a number of stores that are built directly from the db here (notifications, bootstrap,
-   * env-config-repair, subscription-activation, GitHub projections, …) AND org repos that the
-   * pilot allow-list does not yet expose remotely — so those paths currently throw (an undefined
-   * db dereference or a gated `unknown_method`). Routing every such store through the remote
-   * surface + widening the allow-list is the gating phase in docs/initiatives/mothership-mode.md;
-   * the mothership PR must stay a draft until it lands.
+   * Mothership-mode service matrix (what `db: undefined` turns off vs. routes remotely):
+   *   - Org/durable stores that were built directly from `db` (notifications, bootstrap,
+   *     env-config-repair, subscription-activation, GitHub projections, …) are routed through the
+   *     {@link pickRepoSource} seam, so they come from the remote registry ({@link repos}) instead
+   *     of the absent db — the board-load + run paths are covered (the Phase-3 merge gate, MET; see
+   *     docs/initiatives/mothership-mode.md). An org method the server-side allow-list does not yet
+   *     expose returns a clean `unknown_method`, never an undefined-db `TypeError`.
+   *   - The per-user Postgres-only services turn themselves OFF (no local-sqlite bucket yet, PR 3):
+   *     subscriptions, user secrets, OpenRouter catalog, personal subscriptions. See
+   *     {@link buildNodeSubscriptionService} et al.
+   *   - The credential pool + local-model endpoints stay ON via the local `node:sqlite` override
+   *     seams below ({@link providerApiKeyRepository}/{@link localModelEndpointRepository}) — they
+   *     are db-independent by design, so they are NOT in the "off without db" set above.
    */
   db?: DrizzleDb
   /**

@@ -37,14 +37,14 @@ function credentialDbPath(env: NodeJS.ProcessEnv): string {
 /** The composed mothership persistence: remote org repos + the local credential store. */
 export interface MothershipComposition {
   /**
-   * The full {@link CoreRepositories} surface, every entry remote (RPC-backed). The pilot
-   * allow-list gates which repo+method actually executes on the mothership; an
-   * un-allow-listed call returns `unknown_method`. IMPORTANT: the pilot table exposes only the
-   * six core domain repos, which is NOT enough for a board load or a run end-to-end — those
-   * touch many more repos (mounts, settings, presets, notifications, …) that are still
-   * un-allow-listed (and the direct-db repos in `buildNodeContainer` have no db here), so they
-   * currently throw. The widened surface is the gating phase in docs/initiatives/mothership-mode.md
-   * (this PR must stay a draft until it lands).
+   * The full {@link CoreRepositories} surface, every entry remote (RPC-backed). The server-side
+   * allow-list (`REMOTE_PERSISTENCE_METHODS`) gates which repo+method actually executes on the
+   * mothership; an un-allow-listed call returns `unknown_method`. The allow-list covers the
+   * board-load + run paths (resolved by the Phase-3 merge gate — see
+   * docs/initiatives/mothership-mode.md), so a board loads and a run drives to a persisted
+   * terminal state over this registry; the remaining `pending` org methods (the live per-repo
+   * checklist in the tracker) are widened slice by slice. Credentials are NOT here — they stay
+   * local (the `node:sqlite` store), composed over the top of this registry by the facade.
    */
   repos: CoreRepositories
   /** The local-sqlite credential store (kept on the laptop, sealed with the local key). */
