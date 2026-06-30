@@ -34,7 +34,13 @@ import {
 } from '@cat-factory/server'
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { BackendRegistries } from '@cat-factory/integrations'
-import type { Account, Clock, ExecutionInstance, Service, WorkspaceSnapshot } from '@cat-factory/kernel'
+import type {
+  Account,
+  Clock,
+  ExecutionInstance,
+  Service,
+  WorkspaceSnapshot,
+} from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type { LocalRunner, UpsertLocalModelEndpointInput } from '@cat-factory/contracts'
 import type { CoreDependencies } from '@cat-factory/orchestration'
@@ -71,7 +77,11 @@ const SEED_CLOCK: Clock = { now: () => Date.now() }
 // The fixed conformance user that owns every workspace the harness seeds on the mothership.
 // The machine token is signed for this user (so `selfUser`-scoped reads — `findPersonalByUser`,
 // `membership.listByUser` — resolve), and scoped to the accounts created below.
-const CONF_USER = { id: 'usr_conformance-owner', login: 'conformance-owner', name: 'Conformance Owner' }
+const CONF_USER = {
+  id: 'usr_conformance-owner',
+  login: 'conformance-owner',
+  name: 'Conformance Owner',
+}
 
 // The mothership runs a stock Node backend with every integration the SUT delegates to it
 // ENABLED, so its repository registry actually wires those repos (a remote call to an unwired
@@ -337,10 +347,16 @@ export function makeMothershipConformanceApp(
   }
 
   function boardEmits(blockId?: string) {
-    return blockId ? recorder.boardEvents.filter((e) => e.blockId === blockId) : recorder.boardEvents
+    return blockId
+      ? recorder.boardEvents.filter((e) => e.blockId === blockId)
+      : recorder.boardEvents
   }
 
-  async function driveBootstrap(workspaceId: string, jobId: string, maxPolls = 50): Promise<number> {
+  async function driveBootstrap(
+    workspaceId: string,
+    jobId: string,
+    maxPolls = 50,
+  ): Promise<number> {
     if (!container.bootstrap) throw new Error('bootstrap module is not configured in this app')
     for (let p = 0; p < maxPolls; p++) {
       const result = await container.bootstrap.service.pollBootstrapJob(workspaceId, jobId)
@@ -415,7 +431,8 @@ export function makeMothershipConformanceApp(
       if (!svc) return undefined
       return {
         list: (userId: string) => svc.list(userId),
-        upsert: (userId: string, input) => svc.upsert(userId, input as UpsertLocalModelEndpointInput),
+        upsert: (userId: string, input) =>
+          svc.upsert(userId, input as UpsertLocalModelEndpointInput),
         resolve: (userId: string, provider: string) => svc.resolve(userId, provider),
         remove: (userId: string, provider: string) => svc.remove(userId, provider as LocalRunner),
       }
