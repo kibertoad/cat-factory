@@ -1,5 +1,13 @@
 # @cat-factory/example-custom-agent
 
+## 0.0.78
+
+### Patch Changes
+
+- Updated dependencies [e4cddb4]
+  - @cat-factory/kernel@0.59.0
+  - @cat-factory/agents@0.23.4
+
 ## 0.0.77
 
 ### Patch Changes
