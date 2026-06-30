@@ -131,12 +131,6 @@ export function makeConformanceApp(
     environmentProvider?: CoreDependencies['environmentProvider']
     resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
     backendRegistries?: BackendRegistries
-    /**
-     * Keep the REAL local-mode Tester default (`local` / host DinD) instead of pinning the
-     * neutral `ephemeral` used for the shared assertions. Local-only tests that assert the
-     * facade-specific default set this.
-     */
-    realLocalTesterDefault?: boolean
   },
 ): ConformanceApp {
   const recorder = new RecordingEventPublisher()
@@ -176,13 +170,6 @@ export function makeConformanceApp(
     ...(opts?.resolveRepoFilesForCoords
       ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
       : {}),
-    // Pin the facade-NEUTRAL Tester default (`ephemeral`) for the SHARED conformance
-    // assertions: local mode's real default is `local` (host DinD), a facade-specific
-    // behavior covered by its own tests — but the shared fixtures don't configure a
-    // compose path, so they assume the zero-config `ephemeral` default node/worker use.
-    ...(opts?.realLocalTesterDefault
-      ? {}
-      : { resolveTesterFallbackDefault: () => Promise.resolve('ephemeral' as const) }),
   }
   const container = buildLocalContainer({
     db,

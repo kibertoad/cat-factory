@@ -387,13 +387,13 @@
     },
     "testConfig": {
       "title": "テストインフラ",
-      "defaultEnv": "デフォルトのテスト環境",
-      "defaultEnvHint": "このサービス配下のタスクが生成されるデフォルトの環境です。各タスクはエージェント設定で上書きできます。",
-      "env": {
-        "ephemeral": "エフェメラル環境",
-        "ephemeralHint": "プロビジョニングされた環境に対してテストを実行します",
-        "local": "ローカル (docker-compose)",
-        "localHint": "Tester が依存関係をローカルで立ち上げます"
+      "provisionType": "プロビジョニングの種類",
+      "provisionTypeHint": "このサービスが Tester 用の環境をどのように立ち上げるか。各種類の扱い方（エンジンと接続）はワークスペースで設定します。",
+      "provisionTypes": {
+        "infraless": "インフラなし",
+        "docker-compose": "Docker Compose",
+        "kubernetes": "Kubernetes",
+        "custom": "カスタム"
       },
       "composePath": "docker-compose のパス",
       "browseRepo": "リポジトリ内の compose ファイルを参照",
@@ -403,8 +403,6 @@
       "selected": "選択中: {path}",
       "noFileSelected": "ファイルが選択されていません。",
       "useThisFile": "このファイルを使用",
-      "noInfra": "インフラ依存なし (Tester は何も立ち上げません)",
-      "missingInfra": "docker-compose のパスを設定するか、インフラ依存なしを有効にしてください。そうしないと Tester を含むパイプラインは開始しません。",
       "provisioningTitle": "エフェメラルテスト環境のプロビジョニング",
       "provisioningHint": "このサービスのエフェメラルテスト環境をプロビジョニングするためのヒント: どのクラウドプロバイダーにデプロイするか、どの程度の大きさのインスタンスを要求するか。ローカル (docker-compose) テストでは無視されます。",
       "cloudProvider": "クラウドプロバイダー",

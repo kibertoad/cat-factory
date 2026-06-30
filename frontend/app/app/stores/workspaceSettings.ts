@@ -13,7 +13,6 @@ const DEFAULTS: WorkspaceSettings = {
   artifactRetentionDays: 14,
   kaizenEnabled: true,
   delegateAgentsToRunnerPool: false,
-  delegateTestEnvToProvider: false,
   spendCurrency: null,
   spendMonthlyLimit: null,
 }

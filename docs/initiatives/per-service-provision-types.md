@@ -134,19 +134,41 @@ manifest_id)`; columns `provision_type`, `manifest_id`, `engine`, **`backend_kin
   controller compiles + the existing conformance provisioning tests pass over the new table. A
   new `provision_type_unhandled` conflict reason was added (contracts + SPA title map).
 
-### Slice 2c — tester collapse (drop `defaultTestEnvironment`) (TODO)
+### Slice 2c — tester collapse (drop `defaultTestEnvironment`) (DONE)
 
-- **Tester collapse** (`tester-infra.logic.ts`): drop the `defaultTestEnvironment`/`local`↔
-  `ephemeral` branch; the only start-time check becomes `infraless` (run no-infra) OR a handler
-  resolves for the service's declared type (else refuse `provision_type_unhandled`, already in
-  the contract). Remove `defaultTestEnvironment` + the `tester.environment` task override +
-  `resolveTesterEnvironment` from the `Block` contract, the block mapper, both runtimes' block
-  columns, the agent-executor port `service`, the agent context materialisation, the harness
-  job body/prompts, workspace settings (`delegateTestEnvToProvider`), and the frontend Block
-  type + `ServiceTestConfig.vue`/`TaskAgentConfig.vue`. Add a `Block.provisioning` round-trip
-  conformance assertion (the JSON column is already persisted from slice 1 — verified by the
-  existing suite test). Split out from 2b because it is a large, independent behavioral
-  migration that the slice-2b bridge keeps working unchanged.
+Implemented. The per-task/per-service `local`↔`ephemeral` toggle is gone; the Tester's infra is
+driven entirely by the service's declared `provisioning`.
+
+- **Tester gate** (`tester-infra.logic.ts` + `ExecutionService.assertTesterInfraConfigured`): the
+  pure `decideTesterInfra` now takes `{ provisionType, localTestInfraSupported, handlerResolves }`
+  — `infraless`/undeclared → pass (no infra); `docker-compose` → pass only on a DinD-capable
+  runtime (else `tester_infra_unsupported` "limited mode"); `kubernetes`/`custom` → pass only when
+  a workspace handler resolves (`provision_type_unhandled`). The gate resolves the handler lazily
+  via the new `EnvironmentProvisioningService.canProvision` →
+  `EnvironmentConnectionService.resolveHandlerForType` (pass-through when the provisioning seam is
+  unwired). `resolveTesterEnvironment` is deleted.
+- **Removed** `defaultTestEnvironment` / `testComposePath` / `noInfraDependencies` from the `Block`
+  contract + `updateBlock` request, the shared block mapper, and both runtimes' block columns
+  (D1 `0026_drop_tester_env_columns.sql` ⇄ Drizzle `20260630150445_medical_ikaris`, `db:check`
+  clean). The agent-executor port `service` carries `provisioning` instead. The agent-context
+  materialisation of `tester.environment` is gone.
+- **Removed** the `tester.environment` agent-config descriptor (`@cat-factory/agents`);
+  `testerEnvironmentSection` + `testerInfraSpec` now read the service's `provisioning.type` (the
+  harness `infra` wire shape is unchanged — no image bump). The `tester.environment` doc-comment
+  examples were repointed to `playwright.e2eTarget`.
+- **Removed** the `delegateTestEnvToProvider` workspace setting (+ D1/Drizzle column,
+  `WorkspaceSettingsService`, both settings repos) and the local-facade
+  `resolveTesterFallbackDefault` / `resolveRequireEnvironmentProvider` wiring (+ the obsolete
+  `tester-default.spec.ts`). The `InfrastructureBackendPicker` `testEnv` axis is now
+  registration-driven (no delegate toggle) until slice 5's per-type configurator.
+- **Frontend**: `ServiceTestConfig.vue` replaces the local/ephemeral toggle + compose/no-infra
+  fields with a provision-type selector (+ compose path for `docker-compose`), writing
+  `block.provisioning`; `TaskAgentConfig.vue` dropped the `tester.environment` service-default
+  inheritance. New `inspector.testConfig.provision*` i18n keys across all 8 locales.
+- **Conformance**: the tester-gate tests now assert the `infraless`/undeclared pass-through; the
+  agent-config round-trip test uses `playwright.e2eTarget`; the workspace-settings test pairs
+  `delegateAgentsToRunnerPool` with `kaizenEnabled`. The `Block.provisioning` round-trip assertion
+  from slice 1 stays.
 
 ### Slice 3 — engine step + run-details recording (TODO)
 
@@ -314,7 +336,7 @@ LoadBalancer` ⇒ `serviceStatus`); the namespace decision (a pinned `namespace:
 | 1   | Contracts (additive) + new tables (`environment_user_handlers`, `custom_manifest_types`) + `environments` columns + ports + repos + conformance                                                                                   | done   | #504 |
 | 2a  | Resolver (`infra-handler.logic`) + registry `engines()`/`byEngine` + custom-type registry seam                                                                                                                                    | done   | #504 |
 | 2b  | Reshape `environment_connections` (single→multi, `backend_kind`) + handler-aware `EnvironmentConnectionService` (`resolveProviderForType` w/ manifestSource merge) + `ProvisioningService` per-type + compat bridge + conformance | done   | #510 |
-| 2c  | Tester collapse: drop `defaultTestEnvironment`/`tester.environment`/`resolveTesterEnvironment`; gate on `infraless` OR a resolved handler (`provision_type_unhandled`)                                                            | todo   | —    |
+| 2c  | Tester collapse: drop `defaultTestEnvironment`/`tester.environment`/`resolveTesterEnvironment`; gate on `infraless` OR a resolved handler (`provision_type_unhandled`)                                                            | done   | —    |
 | 3   | `runDeployerStep` merge source+engine + record provisionType/engine; infraless no-op                                                                                                                                              | todo   | —    |
 | 4   | Controllers (per-type endpoints + custom-type CRUD + local-only per-user controller) + all three container wirings                                                                                                                | todo   | —    |
 | 5   | Frontend (service provisioning section + auto-detect; infra per-type/engine configurator + custom-type editor + local override; run-details surfacing; stores; i18n)                                                              | todo   | —    |

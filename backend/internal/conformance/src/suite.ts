@@ -474,40 +474,40 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(after.body.currency).toBe('USD')
       })
 
-      it('round-trips the local-mode delegation toggles (D1 ⇄ Postgres)', async () => {
+      it('round-trips the local-mode delegation toggle + a paired boolean (D1 ⇄ Postgres)', async () => {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
         const wsId = workspace.id
 
         type Settings = {
           delegateAgentsToRunnerPool: boolean
-          delegateTestEnvToProvider: boolean
+          kaizenEnabled: boolean
         }
-        // Default off on a fresh workspace (local-everything is the default).
+        // Fresh-workspace defaults: agent delegation off (local-everything), Kaizen on.
         const initial = await call<Settings>('GET', `/workspaces/${wsId}/settings`)
         expect(initial.status).toBe(200)
         expect(initial.body.delegateAgentsToRunnerPool).toBe(false)
-        expect(initial.body.delegateTestEnvToProvider).toBe(false)
+        expect(initial.body.kaizenEnabled).toBe(true)
 
-        // Both flip and persist identically through the new workspace_settings columns.
+        // Both flip and persist identically through the workspace_settings columns.
         const put = await call<Settings>('PUT', `/workspaces/${wsId}/settings`, {
           delegateAgentsToRunnerPool: true,
-          delegateTestEnvToProvider: true,
+          kaizenEnabled: false,
         })
         expect(put.status).toBe(200)
         expect(put.body.delegateAgentsToRunnerPool).toBe(true)
-        expect(put.body.delegateTestEnvToProvider).toBe(true)
+        expect(put.body.kaizenEnabled).toBe(false)
 
         const reread = await call<Settings>('GET', `/workspaces/${wsId}/settings`)
         expect(reread.body.delegateAgentsToRunnerPool).toBe(true)
-        expect(reread.body.delegateTestEnvToProvider).toBe(true)
+        expect(reread.body.kaizenEnabled).toBe(false)
 
         // A partial patch leaves the untouched flag intact (per-field merge).
         const partial = await call<Settings>('PUT', `/workspaces/${wsId}/settings`, {
           delegateAgentsToRunnerPool: false,
         })
         expect(partial.body.delegateAgentsToRunnerPool).toBe(false)
-        expect(partial.body.delegateTestEnvToProvider).toBe(true)
+        expect(partial.body.kaizenEnabled).toBe(false)
       })
 
       it('round-trips incident-enrichment credentials, redacted + sealed (D1 ⇄ Postgres)', async () => {
@@ -3608,25 +3608,25 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const wsId = workspace.id
 
         // The catalog is derived from the seeded pipelines' agent kinds — which include
-        // `tester`, so its `tester.environment` descriptor must be present on BOTH stores.
+        // `playwright`, so its `playwright.e2eTarget` descriptor must be present on BOTH stores.
         const snap0 = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
-        expect(snap0.agentConfigCatalog?.some((d) => d.id === 'tester.environment')).toBe(true)
+        expect(snap0.agentConfigCatalog?.some((d) => d.id === 'playwright.e2eTarget')).toBe(true)
 
         // A task created with an explicit agent-config value round-trips through the store.
         const created = await app.call<Block>(
           'POST',
           `/workspaces/${wsId}/blocks/mod_sessions/tasks`,
-          { title: 'Configured task', agentConfig: { 'tester.environment': 'local' } },
+          { title: 'Configured task', agentConfig: { 'playwright.e2eTarget': 'ephemeral' } },
         )
         expect(created.status).toBe(201)
-        expect(created.body.agentConfig).toEqual({ 'tester.environment': 'local' })
+        expect(created.body.agentConfig).toEqual({ 'playwright.e2eTarget': 'ephemeral' })
 
         const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
         const task = snap.blocks.find((b) => b.id === created.body.id)!
-        expect(task.agentConfig).toEqual({ 'tester.environment': 'local' })
+        expect(task.agentConfig).toEqual({ 'playwright.e2eTarget': 'ephemeral' })
       })
 
-      it('blocks a local-mode Tester pipeline until the service test infra is configured', async () => {
+      it('starts a Tester pipeline for an `infraless` (or undeclared) service', async () => {
         const app = harness.makeApp()
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
@@ -3635,25 +3635,22 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           name: 'Code + test',
           agentKinds: ['coder', 'tester-api'],
         })
-        // Opt the task into LOCAL testing without configuring the service's infra.
-        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
-          agentConfig: { 'tester.environment': 'local' },
-        })
-        const blocked = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-          pipelineId: pipeline.body.id,
-        })
-        expect(blocked.status).toBeGreaterThanOrEqual(400)
 
-        // Mark the service frame as having no infra dependencies → the start succeeds.
+        // No provisioning declared → the Tester runs with no infra (the gate passes through).
+        const undeclared = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(undeclared.status).toBe(201)
+
+        // Explicitly `infraless` on the service frame also starts. `task_login` sits
+        // directly under its service frame (no intervening module), so its parent IS the
+        // service frame the engine resolves config from.
         const blocks = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body.blocks
-        const task = blocks.find((b) => b.id === 'task_login')!
-        // In the seed `task_login` is a task directly under the `blk_auth` service
-        // frame (no intervening module), so its parent IS the service frame to
-        // configure — matching how the engine resolves service config (walk up to the
-        // nearest `level:'frame'` ancestor).
-        const serviceFrameId = task.parentId!
+        const serviceFrameId = blocks.find((b) => b.id === 'task_login')!.parentId!
         await app.call('PATCH', `/workspaces/${wsId}/blocks/${serviceFrameId}`, {
-          noInfraDependencies: true,
+          provisioning: { type: 'infraless' },
         })
         const ok = await app.call<ExecutionInstance>(
           'POST',
@@ -3661,47 +3658,6 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           { pipelineId: pipeline.body.id },
         )
         expect(ok.status).toBe(201)
-      })
-
-      it('a task inherits the service frame default test environment, and a per-task override wins', async () => {
-        const app = harness.makeApp()
-        const { workspace } = await app.createWorkspace()
-        const wsId = workspace.id
-
-        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-          name: 'Code + test',
-          agentKinds: ['coder', 'tester-api'],
-        })
-
-        // Default the SERVICE frame to LOCAL testing without touching the task's own
-        // agent-config. `task_login` sits directly under its service frame.
-        const blocks = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body.blocks
-        const serviceFrameId = blocks.find((b) => b.id === 'task_login')!.parentId!
-        await app.call('PATCH', `/workspaces/${wsId}/blocks/${serviceFrameId}`, {
-          defaultTestEnvironment: 'local',
-        })
-
-        // The task INHERITS `local`, so the start guard blocks until the service infra is
-        // configured — proving the frame default (not the built-in `ephemeral`) reached the
-        // engine's resolution on this runtime.
-        const inheritedBlocked = await app.call(
-          'POST',
-          `/workspaces/${wsId}/blocks/task_login/executions`,
-          { pipelineId: pipeline.body.id },
-        )
-        expect(inheritedBlocked.status).toBeGreaterThanOrEqual(400)
-
-        // A per-task override to `ephemeral` WINS over the service default → the run starts
-        // with no infra configured.
-        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
-          agentConfig: { 'tester.environment': 'ephemeral' },
-        })
-        const overridden = await app.call<ExecutionInstance>(
-          'POST',
-          `/workspaces/${wsId}/blocks/task_login/executions`,
-          { pipelineId: pipeline.body.id },
-        )
-        expect(overridden.status).toBe(201)
       })
 
       it('loops the fixer until the tester greenlights, then completes', async () => {
@@ -3739,10 +3695,6 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Code + test loop',
           agentKinds: ['coder', 'tester-api'],
-        })
-        // Ephemeral mode keeps the start guard happy without service infra config.
-        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
-          agentConfig: { 'tester.environment': 'ephemeral' },
         })
         const start = await app.call<ExecutionInstance>(
           'POST',
@@ -3797,9 +3749,6 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           name: 'Code + test',
           agentKinds: ['coder', 'tester-api'],
         })
-        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
-          agentConfig: { 'tester.environment': 'ephemeral' },
-        })
         const start = await app.call<ExecutionInstance>(
           'POST',
           `/workspaces/${wsId}/blocks/task_login/executions`,
@@ -3828,9 +3777,6 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'UI test (no storage)',
           agentKinds: ['coder', 'tester-ui', 'visual-confirmation'],
-        })
-        await call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
-          agentConfig: { 'tester.environment': 'ephemeral' },
         })
         const blocked = await call<{
           error: { code: string; details?: { reason?: string } }
@@ -3871,9 +3817,6 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'UI test + visual confirmation',
           agentKinds: ['coder', 'tester-ui', 'visual-confirmation'],
-        })
-        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
-          agentConfig: { 'tester.environment': 'ephemeral' },
         })
         const start = await app.call<ExecutionInstance>(
           'POST',
@@ -3929,9 +3872,6 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'UI test + visual confirmation (fix)',
           agentKinds: ['coder', 'tester-ui', 'visual-confirmation'],
-        })
-        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
-          agentConfig: { 'tester.environment': 'ephemeral' },
         })
         const start = await app.call<ExecutionInstance>(
           'POST',
@@ -3994,9 +3934,6 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           name: 'Code + test nit',
           agentKinds: ['coder', 'tester-api'],
         })
-        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
-          agentConfig: { 'tester.environment': 'ephemeral' },
-        })
         const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
           pipelineId: pipeline.body.id,
         })
@@ -4039,9 +3976,6 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Code + test abort',
           agentKinds: ['coder', 'tester-api'],
-        })
-        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
-          agentConfig: { 'tester.environment': 'ephemeral' },
         })
         const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
           pipelineId: pipeline.body.id,
@@ -4089,9 +4023,6 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           name: 'Code + test failed-outcome',
           agentKinds: ['coder', 'tester-api'],
         })
-        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
-          agentConfig: { 'tester.environment': 'ephemeral' },
-        })
         const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
           pipelineId: pipeline.body.id,
         })
@@ -4130,9 +4061,6 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Test only',
           agentKinds: ['tester-api'],
-        })
-        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
-          agentConfig: { 'tester.environment': 'ephemeral' },
         })
         const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
           pipelineId: pipeline.body.id,

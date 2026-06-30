@@ -122,12 +122,7 @@ import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import { planResumedSteps, planRestartFromStep } from './retry.logic.js'
-import {
-  decideTesterInfra,
-  resolveTesterEnvironment,
-  TESTER_INFRA_MESSAGES,
-  type TesterEnvironment,
-} from './tester-infra.logic.js'
+import { decideTesterInfra, TESTER_INFRA_MESSAGES } from './tester-infra.logic.js'
 
 export interface ExecutionServiceDependencies {
   workspaceRepository: WorkspaceRepository
@@ -336,12 +331,12 @@ export interface ExecutionServiceDependencies {
    */
   llmObservability?: LlmObservabilityService
   /**
-   * Optional: whether the runtime can run the Tester's LOCAL docker-compose infra via
-   * Docker-in-Docker. Defaults to `true` (Cloudflare, Node, tests). The local facade
+   * Optional: whether the runtime can run a `docker-compose` service's infra in-container
+   * via Docker-in-Docker. Defaults to `true` (Cloudflare, Node, tests). The local facade
    * sets it `false` for runtimes without nesting (Apple `container`), which makes
-   * {@link ExecutionService.assertTesterInfraConfigured} refuse a local-infra Tester run
-   * (steering it to the ephemeral environment or a no-infra service) instead of
-   * dispatching a job that can't stand its dependencies up.
+   * {@link ExecutionService.assertTesterInfraConfigured} refuse a `docker-compose` Tester
+   * run ("limited mode" — steer to an `infraless` service or a runtime that nests
+   * containers) instead of dispatching a job that can't stand its dependencies up.
    */
   localTestInfraSupported?: boolean
   /**
@@ -352,22 +347,6 @@ export interface ExecutionServiceDependencies {
    * Absent (tests / GitHub not connected) → pre/post-ops are skipped.
    */
   resolveRunRepoContext?: ResolveRunRepoContext
-  /**
-   * Optional: the deployment's default Tester environment when neither the task nor its
-   * service frame pins one — the floor of {@link resolveTesterEnvironment}. Absent →
-   * `ephemeral` (Cloudflare/Node, where there is no host runtime to test on). The local
-   * facade wires it to `local` (host Docker / DinD) by default, flipping to `ephemeral`
-   * when the workspace opts into its environment provider (`delegateTestEnvToProvider`).
-   * Used identically by the start gate and the agent-context materialisation so they agree.
-   */
-  resolveTesterFallbackDefault?: (workspaceId: string) => Promise<TesterEnvironment>
-  /**
-   * Optional: whether the workspace REQUIRES its environment provider for the Tester (the
-   * local-mode "delegate test environments" opt-in). When it resolves true, an `ephemeral`
-   * Tester run with no provider connected is refused at start instead of failing later at
-   * provision time. Absent → false (Cloudflare/Node).
-   */
-  resolveRequireEnvironmentProvider?: (workspaceId: string) => Promise<boolean>
   /**
    * Optional: assert the workspace has a usable container-agent backend before a run
    * starts (local mode delegating agents to a runner pool that isn't registered throws a
@@ -463,12 +442,6 @@ export class ExecutionService {
   ) => Promise<string | undefined>
   /** Whether the runtime can run the Tester's local DinD infra (false = limited mode). */
   private readonly localTestInfraSupported: boolean
-  /** Local-mode floor for the Tester environment (default `ephemeral`). See deps doc. */
-  private readonly resolveTesterFallbackDefault?: (
-    workspaceId: string,
-  ) => Promise<TesterEnvironment>
-  /** Whether the workspace requires its env provider for the Tester (local-mode opt-in). */
-  private readonly resolveRequireEnvironmentProvider?: (workspaceId: string) => Promise<boolean>
   /** Start-time assertion that a container-agent backend is configured (local-mode pool). */
   private readonly assertAgentBackendConfigured?: (workspaceId: string) => Promise<void>
   /**
@@ -528,8 +501,6 @@ export class ExecutionService {
     resolveProviderCapabilities,
     localTestInfraSupported,
     resolveRunRepoContext,
-    resolveTesterFallbackDefault,
-    resolveRequireEnvironmentProvider,
     assertAgentBackendConfigured,
     runInitiatorScope,
   }: ExecutionServiceDependencies) {
@@ -578,7 +549,6 @@ export class ExecutionService {
       brainstormSessions: brainstormSessionRepository,
       environmentProvisioning,
       fragmentResolver,
-      resolveTesterFallbackDefault,
     })
     this.mergeResolver = new MergeResolver({
       blockRepository,
@@ -731,8 +701,6 @@ export class ExecutionService {
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
     this.resolveProviderCapabilities = resolveProviderCapabilities
     this.localTestInfraSupported = localTestInfraSupported ?? true
-    this.resolveTesterFallbackDefault = resolveTesterFallbackDefault
-    this.resolveRequireEnvironmentProvider = resolveRequireEnvironmentProvider
     this.assertAgentBackendConfigured = assertAgentBackendConfigured
     this.resolveBinaryArtifactStore = resolveBinaryArtifactStore
   }
@@ -845,35 +813,43 @@ export class ExecutionService {
   }
 
   /**
-   * Guard a Tester pipeline's start: local-mode testing must have its infra
-   * configured on the service frame — either a docker-compose path to stand the
-   * dependencies up, or the explicit "no infra dependencies" flag. Ephemeral-mode
-   * testing uses the provisioned environment, so it needs neither. Throws a
-   * {@link ConflictError} (surfaced as an actionable message) when neither is set.
+   * Guard a Tester pipeline's start on the service frame's declared provisioning being
+   * runnable. The Tester needs SOME way to stand its system up: `infraless` (or no
+   * provisioning declared) runs with no infra; a `docker-compose` service stands its stack
+   * up in-container (so a runtime without Docker-in-Docker is refused — "limited mode"); a
+   * `kubernetes`/`custom` service is provisioned by a workspace handler, so one must resolve
+   * for its type. Throws a {@link ConflictError} (`tester_infra_unsupported` when the local
+   * docker-compose infra can't run — no DinD or no compose path declared,
+   * `provision_type_unhandled` for a missing handler) — surfaced as an actionable message —
+   * otherwise. Passes through when the provisioning seam is unwired (tests / no environment
+   * integration), like the other optional start guards.
    */
   private async assertTesterInfraConfigured(workspaceId: string, block: Block): Promise<void> {
-    // Resolve the service config first: it carries the frame's default test environment,
-    // which the task inherits unless it pins its own `tester.environment` (the same
-    // resolution the agent-context materialisation applies, so the gate and the run agree).
     const service = await this.contextBuilder.resolveServiceConfig(workspaceId, block)
-    const fallbackDefault = await this.resolveTesterFallbackDefault?.(workspaceId)
-    const environment = resolveTesterEnvironment(
-      block.agentConfig?.['tester.environment'],
-      service?.defaultTestEnvironment,
-      fallbackDefault,
-    )
+    const provisioning = service?.provisioning
+    // Only `kubernetes`/`custom` need a workspace handler resolved; resolve it lazily and
+    // only when the provisioning seam is wired (else pass through, treating it as resolvable).
+    const needsHandler = provisioning?.type === 'kubernetes' || provisioning?.type === 'custom'
+    const handlerResolves =
+      needsHandler && this.environmentProvisioning
+        ? (await this.environmentProvisioning.canProvision(workspaceId, provisioning)).ok
+        : true
     const decision = decideTesterInfra({
+      provisionType: provisioning?.type,
       localTestInfraSupported: this.localTestInfraSupported,
-      environment,
-      noInfraDependencies: service?.noInfraDependencies === true,
-      hasComposePath: !!service?.testComposePath,
-      hasEnvironmentProvider: this.environmentProvisioning !== undefined,
-      requireEnvironmentProvider:
-        (await this.resolveRequireEnvironmentProvider?.(workspaceId)) === true,
+      hasComposePath: !!provisioning?.composePath,
+      handlerResolves,
     })
     if (decision.ok) return
-    throw new ConflictError(TESTER_INFRA_MESSAGES[decision.reason], 'tester_infra_unsupported', {
-      infraReason: decision.reason,
+    // A docker-compose service that can't stand its infra up (no DinD, or no compose path)
+    // surfaces as the "test infra not configured" conflict; a missing handler is distinct.
+    if (decision.reason === 'limited-local' || decision.reason === 'compose-unconfigured') {
+      throw new ConflictError(TESTER_INFRA_MESSAGES[decision.reason], 'tester_infra_unsupported', {
+        infraReason: decision.reason,
+      })
+    }
+    throw new ConflictError(TESTER_INFRA_MESSAGES[decision.reason], 'provision_type_unhandled', {
+      provisionType: provisioning!.type,
     })
   }
 
@@ -1031,10 +1007,10 @@ export class ExecutionService {
     // refuses to START as well (the same shared check).
     validatePipelineShape(pipeline)
 
-    // A pipeline with a Tester that runs locally needs the service's test infra
-    // configured (a docker-compose path, or an explicit "no infra dependencies"
-    // flag). Block the start with a clear, actionable error otherwise — before any
-    // side effects (activation mint / prior-run teardown).
+    // A pipeline with a Tester needs the service's declared provisioning to be runnable —
+    // `infraless`/none runs with no infra, `docker-compose` needs DinD, `kubernetes`/`custom`
+    // needs a workspace handler. Block the start with a clear, actionable error otherwise —
+    // before any side effects (activation mint / prior-run teardown).
     if (pipeline.agentKinds.some(isTesterKind)) {
       await this.assertTesterInfraConfigured(workspaceId, block)
     }

@@ -1,12 +1,7 @@
 import * as v from 'valibot'
 import { subscriptionVendorSchema } from './vendor-credentials.js'
 import { agentConfigValuesSchema } from './agent-config.js'
-import {
-  testConcernSchema,
-  testReportSchema,
-  testEnvironmentSchema,
-  testerInfraSetupSchema,
-} from './testing.js'
+import { testConcernSchema, testReportSchema, testerInfraSetupSchema } from './testing.js'
 import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from './consensus.js'
 import { followUpsStepStateSchema } from './followUp.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
@@ -160,34 +155,14 @@ export const blockSchema = v.object({
    */
   agentConfig: v.optional(agentConfigValuesSchema),
   /**
-   * Service-level (frame-only): path to the service's docker-compose file used to
-   * stand up the Tester's local infra dependencies, relative to the repo root
-   * (e.g. `docker-compose.yml`). Autodiscovered when the service is added but may
-   * be set later. Mutually exclusive with {@link noInfraDependencies}; a Tester
-   * pipeline cannot start until one of the two is set.
-   */
-  testComposePath: v.optional(v.string()),
-  /**
-   * Service-level (frame-only): the service has no infra dependencies to stand up,
-   * so the Tester spins nothing up. When true {@link testComposePath} is ignored.
-   */
-  noInfraDependencies: v.optional(v.boolean()),
-  /**
-   * Service-level (frame-only): the default test environment a task under this
-   * service is spawned with — `local` (the Tester stands the dependencies up via
-   * {@link testComposePath} / {@link noInfraDependencies}) or `ephemeral` (it runs
-   * against a provisioned environment). A task inherits this unless it overrides via
-   * its `tester.environment` agent-config value. Absent ⇒ the built-in `ephemeral`.
-   */
-  defaultTestEnvironment: v.optional(testEnvironmentSchema),
-  /**
    * Service-level (frame-only): the service-owned provisioning config — the provision
    * TYPE this service produces (kubernetes / docker-compose / custom / infraless) plus
    * the in-repo specifics (manifest source, compose path, custom manifest id). The
    * workspace/user config separately describes HOW each type is handled (the engine); the
-   * deployer merges the two at run time. See
-   * docs/initiatives/per-service-provision-types.md. Absent ⇒ legacy `defaultTestEnvironment`
-   * behaviour (superseded once the tester collapse lands).
+   * deployer merges the two at run time, and the Tester's start-time infra gate keys off
+   * it (`infraless` runs with no infra; any other type needs a workspace handler that
+   * resolves). See docs/initiatives/per-service-provision-types.md. Absent ⇒ the Tester
+   * runs with no infra stood up.
    */
   provisioning: v.optional(serviceProvisioningSchema),
   /**

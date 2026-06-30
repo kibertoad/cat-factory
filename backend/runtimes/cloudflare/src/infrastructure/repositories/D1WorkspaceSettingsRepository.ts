@@ -11,7 +11,6 @@ interface WorkspaceSettingsRow {
   artifact_retention_days: number
   kaizen_enabled: number
   delegate_agents_to_runner_pool: number
-  delegate_test_env_to_provider: number
   spend_currency: string | null
   spend_monthly_limit: number | null
 }
@@ -35,7 +34,6 @@ function rowToSettings(row: WorkspaceSettingsRow): WorkspaceSettings {
     artifactRetentionDays: row.artifact_retention_days,
     kaizenEnabled: row.kaizen_enabled === 1,
     delegateAgentsToRunnerPool: row.delegate_agents_to_runner_pool === 1,
-    delegateTestEnvToProvider: row.delegate_test_env_to_provider === 1,
     spendCurrency: row.spend_currency,
     spendMonthlyLimit: row.spend_monthly_limit,
   }
@@ -67,9 +65,9 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
         `INSERT INTO workspace_settings
            (workspace_id, waiting_escalation_minutes, task_limit_mode, task_limit_shared,
             task_limit_per_type, store_agent_context, artifact_retention_days, kaizen_enabled,
-            delegate_agents_to_runner_pool, delegate_test_env_to_provider, spend_currency,
+            delegate_agents_to_runner_pool, spend_currency,
             spend_monthly_limit)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id) DO UPDATE SET
            waiting_escalation_minutes = excluded.waiting_escalation_minutes,
            task_limit_mode = excluded.task_limit_mode,
@@ -79,7 +77,6 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
            artifact_retention_days = excluded.artifact_retention_days,
            kaizen_enabled = excluded.kaizen_enabled,
            delegate_agents_to_runner_pool = excluded.delegate_agents_to_runner_pool,
-           delegate_test_env_to_provider = excluded.delegate_test_env_to_provider,
            spend_currency = excluded.spend_currency,
            spend_monthly_limit = excluded.spend_monthly_limit`,
       )
@@ -93,7 +90,6 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
         settings.artifactRetentionDays,
         settings.kaizenEnabled ? 1 : 0,
         settings.delegateAgentsToRunnerPool ? 1 : 0,
-        settings.delegateTestEnvToProvider ? 1 : 0,
         settings.spendCurrency,
         settings.spendMonthlyLimit,
       )

@@ -387,13 +387,13 @@
     },
     "testConfig": {
       "title": "Infrastructure de test",
-      "defaultEnv": "Environnement de test par défaut",
-      "defaultEnvHint": "Celui avec lequel les tâches par défaut de ce service sont créées. Chaque tâche peut le remplacer dans ses paramètres d'agent.",
-      "env": {
-        "ephemeral": "Environnement éphémère",
-        "ephemeralHint": "les tests s'exécutent sur un environnement provisionné",
-        "local": "Local (docker-compose)",
-        "localHint": "le Testeur met en place les dépendances localement"
+      "provisionType": "Type de provisionnement",
+      "provisionTypeHint": "Comment ce service met en place son environnement pour le Tester. L'espace de travail configure la gestion de chaque type (le moteur + la connexion).",
+      "provisionTypes": {
+        "infraless": "Aucune infrastructure",
+        "docker-compose": "Docker Compose",
+        "kubernetes": "Kubernetes",
+        "custom": "Personnalisé"
       },
       "composePath": "Chemin docker-compose",
       "browseRepo": "Parcourir le dépôt pour trouver le fichier compose",
@@ -403,8 +403,6 @@
       "selected": "Sélectionné : {path}",
       "noFileSelected": "Aucun fichier sélectionné.",
       "useThisFile": "Utiliser ce fichier",
-      "noInfra": "Aucune dépendance d'infrastructure (le Testeur ne met rien en place)",
-      "missingInfra": "Définissez un chemin docker-compose ou activez l'absence de dépendances d'infrastructure, sinon un pipeline avec un Testeur ne démarrera pas.",
       "provisioningTitle": "Provisionnement de l'environnement éphémère",
       "provisioningHint": "Une indication pour provisionner l'environnement de test éphémère de ce service : quel fournisseur cloud cibler et quelle taille d'instance demander. Ignoré pour les tests locaux (docker-compose).",
       "cloudProvider": "Fournisseur cloud",

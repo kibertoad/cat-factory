@@ -97,6 +97,22 @@ export class EnvironmentProvisioningService {
     return this.deps.urlPolicy ?? STRICT_URL_SAFETY_POLICY
   }
 
+  /**
+   * Whether the workspace can provision a service's declared provisioning — the lightweight
+   * start-time check the Tester's infra gate uses (no provider build / no secret decrypt).
+   * `infraless` resolves trivially (it provisions nothing); any other type needs a workspace
+   * handler that resolves for it (a bare `custom` must be unambiguous). Mirrors exactly what
+   * {@link provision} would resolve, so a run that passes the gate also provisions.
+   */
+  async canProvision(
+    workspaceId: string,
+    service: ServiceProvisioning,
+  ): Promise<{ ok: boolean; reason?: 'no-handler' | 'type-mismatch' }> {
+    if (service.type === 'infraless') return { ok: true }
+    const resolution = await this.deps.connectionService.resolveHandlerForType(workspaceId, service)
+    return resolution.ok ? { ok: true } : { ok: false, reason: resolution.reason }
+  }
+
   /** Provision an environment, persisting an encrypted record keyed by block/run. */
   async provision(args: ProvisionArgs): Promise<EnvironmentHandle> {
     const { workspaceId } = args

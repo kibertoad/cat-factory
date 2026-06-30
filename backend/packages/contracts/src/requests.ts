@@ -4,7 +4,6 @@ import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
 import { writebackOverrideSchema } from './entities.js'
 import { serviceProvisioningSchema } from './environments.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
-import { testEnvironmentSchema } from './testing.js'
 import {
   agentKindSchema,
   blockTypeSchema,
@@ -153,14 +152,6 @@ export const updateBlockSchema = v.partial(
     pipelineId: v.pipe(v.string(), v.maxLength(120)),
     // Task-level agent-contributed config values (id→value map; replaces the map).
     agentConfig: agentConfigValuesSchema,
-    // Service-level (frame): docker-compose path for the Tester's local infra; an
-    // empty string clears it.
-    testComposePath: v.pipe(v.string(), v.maxLength(400)),
-    // Service-level (frame): the service has no infra dependencies to stand up.
-    noInfraDependencies: v.boolean(),
-    // Service-level (frame): the default test environment tasks under this service
-    // are spawned with (local docker-compose vs ephemeral); each task can override.
-    defaultTestEnvironment: testEnvironmentSchema,
     // Service-level (frame): the service-owned provisioning config — the provision type it
     // produces + in-repo specifics (the "what + where"). See
     // docs/initiatives/per-service-provision-types.md.

@@ -387,13 +387,13 @@
     },
     "testConfig": {
       "title": "Infraestructura de pruebas",
-      "defaultEnv": "Entorno de pruebas predeterminado",
-      "defaultEnvHint": "El entorno predeterminado con el que se generan las tareas de este servicio. Cada tarea puede anularlo en su configuración de agente.",
-      "env": {
-        "ephemeral": "Entorno efímero",
-        "ephemeralHint": "las pruebas se ejecutan contra un entorno aprovisionado",
-        "local": "Local (docker-compose)",
-        "localHint": "el Tester levanta las dependencias localmente"
+      "provisionType": "Tipo de aprovisionamiento",
+      "provisionTypeHint": "Cómo este servicio levanta su entorno para el Tester. El espacio de trabajo configura cómo se gestiona cada tipo (el motor + la conexión).",
+      "provisionTypes": {
+        "infraless": "Sin infraestructura",
+        "docker-compose": "Docker Compose",
+        "kubernetes": "Kubernetes",
+        "custom": "Personalizado"
       },
       "composePath": "Ruta de docker-compose",
       "browseRepo": "Explorar el repositorio en busca del archivo de compose",
@@ -403,8 +403,6 @@
       "selected": "Seleccionado: {path}",
       "noFileSelected": "Ningún archivo seleccionado.",
       "useThisFile": "Usar este archivo",
-      "noInfra": "Sin dependencias de infraestructura (el Tester no levanta nada)",
-      "missingInfra": "Define una ruta de docker-compose o habilita sin dependencias de infraestructura; de lo contrario, un pipeline con un Tester no se iniciará.",
       "provisioningTitle": "Aprovisionamiento del entorno efímero",
       "provisioningHint": "Una indicación para aprovisionar el entorno de pruebas efímero de este servicio: en qué proveedor de nube desplegar y qué tamaño de instancia solicitar. Se ignora en las pruebas locales (docker-compose).",
       "cloudProvider": "Proveedor de nube",
