@@ -1,5 +1,13 @@
 # @cat-factory/sandbox
 
+## 0.8.46
+
+### Patch Changes
+
+- Updated dependencies [fdeb466]
+  - @cat-factory/kernel@0.55.4
+  - @cat-factory/agents@0.22.5
+
 ## 0.8.45
 
 ### Patch Changes

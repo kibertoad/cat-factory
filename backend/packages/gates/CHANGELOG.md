@@ -1,5 +1,12 @@
 # @cat-factory/gates
 
+## 0.2.33
+
+### Patch Changes
+
+- Updated dependencies [fdeb466]
+  - @cat-factory/kernel@0.55.4
+
 ## 0.2.32
 
 ### Patch Changes
