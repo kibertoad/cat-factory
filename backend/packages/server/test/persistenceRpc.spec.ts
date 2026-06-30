@@ -79,6 +79,40 @@ function makeRegistry(): {
       get: async (id: string) => ({ id, name: id }),
       listByIds: async (ids: string[]) => ids.map((id) => ({ id, name: id })),
     },
+    // The workspace-scoped board-load read surface. Each stub echoes its workspaceId so the
+    // round-trip can assert the call reached the bound workspace; `deleteByWorkspace` is wired
+    // but absent from the allow-list, to prove a non-listed method on a listed repo is refused.
+    workspaceMountRepository: {
+      listByWorkspace: async (ws: string) => [{ ws }],
+      deleteByWorkspace: async (_ws: string) => undefined,
+    },
+    workspaceSettingsRepository: { get: async (ws: string) => ({ ws }) },
+    mergePresetRepository: { list: async (ws: string) => [{ ws }] },
+    modelPresetRepository: { list: async (ws: string) => [{ ws }] },
+    serviceFragmentDefaultsRepository: { get: async (ws: string) => [{ ws }] },
+    pipelineScheduleRepository: {
+      list: async (ws: string) => [{ ws }],
+      getByBlock: async (ws: string, blockId: string) => ({ ws, blockId }),
+    },
+    trackerSettingsRepository: { get: async (ws: string) => ({ ws }) },
+    notificationRepository: { listOpen: async (ws: string) => [{ ws }] },
+    bootstrapJobRepository: { listByWorkspace: async (ws: string) => [{ ws }] },
+    tokenUsageRepository: {
+      totalsSinceForWorkspace: async (ws: string, _since: number) => ({ ws }),
+    },
+    requirementReviewRepository: {
+      getByBlock: async (ws: string, blockId: string) => ({ ws, blockId }),
+    },
+    clarityReviewRepository: {
+      getByBlock: async (ws: string, blockId: string) => ({ ws, blockId }),
+    },
+    brainstormSessionRepository: {
+      getByBlockStage: async (ws: string, blockId: string, stage: string) => ({
+        ws,
+        blockId,
+        stage,
+      }),
+    },
   } as unknown as PersistenceRegistry
 
   return {
@@ -255,5 +289,66 @@ describe('createRemoteRepositoryRegistry (full-surface, drift-proof)', () => {
     >
     // e.g. an accidental `await registry` probes `then`/Symbol.toPrimitive — must be undefined.
     expect(repos[Symbol.toPrimitive]).toBeUndefined()
+  })
+})
+
+describe('board-load read surface (workspace-scoped)', () => {
+  // Every newly-allow-listed read. `args` are the trailing arguments AFTER the workspaceId
+  // (which the helper prepends), so the table reflects each method's real signature.
+  const READS: Array<{ repo: string; method: string; args: unknown[] }> = [
+    { repo: 'workspaceMountRepository', method: 'listByWorkspace', args: [] },
+    { repo: 'workspaceSettingsRepository', method: 'get', args: [] },
+    { repo: 'mergePresetRepository', method: 'list', args: [] },
+    { repo: 'modelPresetRepository', method: 'list', args: [] },
+    { repo: 'serviceFragmentDefaultsRepository', method: 'get', args: [] },
+    { repo: 'pipelineScheduleRepository', method: 'list', args: [] },
+    { repo: 'pipelineScheduleRepository', method: 'getByBlock', args: ['blk_1'] },
+    { repo: 'trackerSettingsRepository', method: 'get', args: [] },
+    { repo: 'notificationRepository', method: 'listOpen', args: [] },
+    { repo: 'bootstrapJobRepository', method: 'listByWorkspace', args: [] },
+    { repo: 'tokenUsageRepository', method: 'totalsSinceForWorkspace', args: [0] },
+    { repo: 'requirementReviewRepository', method: 'getByBlock', args: ['blk_1'] },
+    { repo: 'clarityReviewRepository', method: 'getByBlock', args: ['blk_1'] },
+    {
+      repo: 'brainstormSessionRepository',
+      method: 'getByBlockStage',
+      args: ['blk_1', 'discovery'],
+    },
+  ]
+
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, resolveAccountId } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      resolveAccountId,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  for (const { repo, method, args } of READS) {
+    it(`forwards ${repo}.${method} for an in-scope workspace`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('ws_in', ...args)
+      // Each stub echoes the workspaceId, proving the call reached the bound workspace.
+      const echoed = Array.isArray(result) ? result[0] : result
+      expect(echoed).toMatchObject({ ws: 'ws_in' })
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope workspace (404, no leak)`, async () => {
+      // ws_out belongs to OTHER_ACCOUNT; the token is scoped to ACCOUNT only.
+      await expect(remoteRegistry()[repo]![method]!('ws_out', ...args)).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
+  }
+
+  it('still refuses a non-allow-listed method on an allow-listed board repo', async () => {
+    // `deleteByWorkspace` is wired on the fake mount repo but absent from the allow-list.
+    await expect(
+      remoteRegistry().workspaceMountRepository!.deleteByWorkspace!('ws_in'),
+    ).rejects.toThrow(/not callable/)
   })
 })

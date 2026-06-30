@@ -245,6 +245,16 @@ It also carries login-based machine-token minting and the formal `db: undefined`
 larger than one hop — split it across several PRs, but **none of the mothership boot ships until
 the board-load + run paths below are green**. The work is in three parts:
 
+> **Landed (Phase 3 slice 1):** part 2's workspace-scoped + mixed (workspaceId + entity-id) board-load
+> reads are now allow-listed in `PILOT_PERSISTENCE_METHODS`, each reusing the existing `workspace`
+> scope rule (resolve the owning account, reject out-of-scope as 404). Reads only — no new mutation
+> is exposed. Part 3 needed no registry change: the dispatcher already reflects over the full
+> `CoreDependencies` object, so allow-listing a method is enough to expose it. Round-trip +
+> cross-account-scope tests for every newly-listed method are in `packages/server/test/persistenceRpc.spec.ts`.
+> Still open before the gate lifts: the **cross-service** + **entity-id-keyed** reads (need the new
+> scope kind in part 2's last two bullets), **part 1** (routing the direct-db stores through the
+> remote registry when `db` is undefined), and the **fake-mothership integration test** in part 3.
+
 1. **Route every direct-db store through the remote surface when `db` is undefined.**
    `buildNodeContainer` (and the local container) build these from `options.db` today; in mothership
    mode they must come from the remote registry instead (mirror the credential-repo override seam):
@@ -259,20 +269,21 @@ the board-load + run paths below are green**. The work is in three parts:
    exercise, each with a correct scope rule.** The boundary is security-sensitive: a machine token
    is scoped to ACCOUNTS, not roles, so admin-gated mutations and global sweeper reads stay excluded.
    The concrete map (from a call-graph trace of `GET /workspaces/:id` and the execution lifecycle):
-   - **Workspace-scoped (arg0 = workspaceId; reuse the existing `workspace` rule):**
+   - ✅ **Workspace-scoped (arg0 = workspaceId; reuse the existing `workspace` rule) — DONE (slice 1):**
      `workspaceMountRepository.listByWorkspace`, `workspaceSettingsRepository.get`,
      `mergePresetRepository.list`, `modelPresetRepository.list`, `serviceFragmentDefaultsRepository.get`,
      `pipelineScheduleRepository.list`, `trackerSettingsRepository.get`, `notificationRepository.listOpen`,
      `bootstrapJobRepository.listByWorkspace`, `tokenUsageRepository.totalsSinceForWorkspace`,
-     plus the run-path writes `blockRepository.update`, `executionRepository.upsert/getByBlock/deleteByBlock`.
-   - **Mixed (workspaceId + entity id) — keep the workspace arg as the scope key:**
+     plus the run-path writes `blockRepository.update`, `executionRepository.upsert/getByBlock/deleteByBlock`
+     (the latter were already in the pilot set).
+   - ✅ **Mixed (workspaceId + entity id) — keep the workspace arg as the scope key — DONE (slice 1):**
      `requirementReviewRepository.getByBlock`, `clarityReviewRepository.getByBlock`,
-     `brainstormSessionRepository.getByBlockStage`.
-   - **Entity-id-keyed (NO workspaceId arg) — need a NEW scope kind that resolves the entity's
+     `brainstormSessionRepository.getByBlockStage` (+ `pipelineScheduleRepository.getByBlock`).
+   - ⬜ **Entity-id-keyed (NO workspaceId arg) — need a NEW scope kind that resolves the entity's
      workspace/account server-side before the check; do NOT expose them with a naive rule:**
      `subscriptionActivationRepository.deleteByExecution(executionId)`,
      `blockRepository.findById(blockId)`.
-   - **Cross-service reads (arg0 = serviceIds[] / accountId) — span workspaces, so gate by account
+   - ⬜ **Cross-service reads (arg0 = serviceIds[] / accountId) — span workspaces, so gate by account
      membership / service ownership, not a single workspace:** `serviceRepository.listByIds`,
      `serviceRepository.listByAccount`, `blockRepository.listByServices`,
      `executionRepository.listByServices`, `bootstrapJobRepository.listByServices`,

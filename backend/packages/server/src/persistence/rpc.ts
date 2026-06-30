@@ -102,11 +102,20 @@ export interface MethodSpec {
 export type PersistenceMethodTable = Record<string, Record<string, MethodSpec>>
 
 /**
- * The pilot allow-list: the six core domain repositories needed to load a board and start
- * an execution. Cross-service reads (`listByService`/`findById`), global sweeper methods
- * (`listStale`), and high-impact unscoped ops (`workspaceRepository.delete`,
- * `accountRepository.create`) are deliberately EXCLUDED — they are added (with their own
- * scope rules) in later slices, or stay mothership-internal. See the initiative tracker.
+ * The mothership-mode persistence allow-list: the core domain repositories plus the
+ * workspace-scoped reads a board load (`GET /workspaces/:id`) and an execution exercise.
+ * Every method here binds to an account via its {@link ScopeRule} so a call outside the
+ * machine token's scope is refused as 404.
+ *
+ * Still EXCLUDED (added in later gate slices, with their own scope rules, or kept
+ * mothership-internal):
+ *   - Cross-service reads keyed on `serviceIds[]`/`accountId` (`listByServices`,
+ *     `serviceRepository.listByIds`/`listByAccount`, `countByServiceIds`) and entity-id-keyed
+ *     reads with NO workspaceId arg (`blockRepository.findById`,
+ *     `subscriptionActivationRepository.deleteByExecution`) — these need a NEW scope kind that
+ *     resolves the entity's owning account server-side, so they are not yet here.
+ *   - Global sweeper methods (`listStale`, `deleteOlderThan`) and high-impact unscoped ops
+ *     (`workspaceRepository.delete`, `accountRepository.create`).
  *
  * Admin-gated mutations are also EXCLUDED here. The RPC dispatches over the raw repository,
  * bypassing the service layer that normally enforces per-user role checks — e.g.
@@ -163,6 +172,51 @@ export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByUser: { scope: { kind: 'selfUser', arg: 0 } },
     listByAccount: { scope: { kind: 'account', arg: 0 } },
     get: { scope: { kind: 'account', arg: 0 } },
+  },
+  // --- Board-load read surface --------------------------------------------------
+  // The workspace-scoped reads a `GET /workspaces/:id` snapshot assembles. Each takes the
+  // workspaceId as arg0, so they reuse the `workspace` rule (resolve the owning account, reject
+  // out-of-scope as 404). Reads only — no mutation is exposed here.
+  workspaceMountRepository: {
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  workspaceSettingsRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  mergePresetRepository: {
+    list: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  modelPresetRepository: {
+    list: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  serviceFragmentDefaultsRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  pipelineScheduleRepository: {
+    list: { scope: { kind: 'workspace', arg: 0 } },
+    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  trackerSettingsRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  notificationRepository: {
+    listOpen: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  bootstrapJobRepository: {
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  tokenUsageRepository: {
+    totalsSinceForWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // Mixed (workspaceId + blockId/stage): the workspace arg stays the scope key.
+  requirementReviewRepository: {
+    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  clarityReviewRepository: {
+    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  brainstormSessionRepository: {
+    getByBlockStage: { scope: { kind: 'workspace', arg: 0 } },
   },
 }
 
