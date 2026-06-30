@@ -275,8 +275,8 @@ export function recordToHandle(
     createdAt: record.createdAt,
     expiresAt: record.expiresAt,
     lastError: record.lastError,
-    provisionType: (record.provisionType ?? null) as EnvironmentHandle['provisionType'],
-    engine: (record.engine ?? null) as EnvironmentHandle['engine'],
+    provisionType: record.provisionType as EnvironmentHandle['provisionType'],
+    engine: record.engine as EnvironmentHandle['engine'],
   }
 }
 

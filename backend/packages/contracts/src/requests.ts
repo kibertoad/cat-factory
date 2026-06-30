@@ -2,6 +2,7 @@ import * as v from 'valibot'
 import { agentConfigValuesSchema } from './agent-config.js'
 import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
 import { writebackOverrideSchema } from './entities.js'
+import { serviceProvisioningSchema } from './environments.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
 import { testEnvironmentSchema } from './testing.js'
 import {
@@ -160,6 +161,10 @@ export const updateBlockSchema = v.partial(
     // Service-level (frame): the default test environment tasks under this service
     // are spawned with (local docker-compose vs ephemeral); each task can override.
     defaultTestEnvironment: testEnvironmentSchema,
+    // Service-level (frame): the service-owned provisioning config — the provision type it
+    // produces + in-repo specifics (the "what + where"). See
+    // docs/initiatives/per-service-provision-types.md.
+    provisioning: serviceProvisioningSchema,
     // Service-level (frame): the cloud provider this service's jobs run on.
     cloudProvider: cloudProviderSchema,
     // Service-level (frame): the abstract instance size for this service's jobs.

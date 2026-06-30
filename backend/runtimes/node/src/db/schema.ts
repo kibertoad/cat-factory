@@ -251,6 +251,8 @@ export const blocks = pgTable(
     // Service-level (frame): default test environment tasks are spawned with
     // ('local' | 'ephemeral'); a task overrides via its tester.environment config.
     default_test_environment: text('default_test_environment'),
+    // Service-owned provisioning config (the "what + where") — serialized ServiceProvisioning.
+    provisioning: text('provisioning'),
     cloud_provider: text('cloud_provider'),
     instance_size: text('instance_size'),
     // The account-owned service this block belongs to (migration 0031); will become the

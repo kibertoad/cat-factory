@@ -6,6 +6,10 @@
 ALTER TABLE environments ADD COLUMN provision_type TEXT;
 ALTER TABLE environments ADD COLUMN engine TEXT;
 
+-- (1b) The service-owned provisioning config (the "what + where") on the service-frame
+--      block: the provision type it produces + in-repo specifics, as a JSON object.
+ALTER TABLE blocks ADD COLUMN provisioning TEXT;
+
 -- (2) Per-USER infra handler overrides (local mode): the per-user layer over a
 --     workspace's per-type handlers. `manifest_id` is '' for non-custom types so it sits
 --     in the composite primary key cleanly. The local-only behaviour is enforced at the

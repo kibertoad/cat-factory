@@ -560,6 +560,31 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(snap.body.blocks.find((b) => b.id === task.body.id)?.epicId).toBe(epic.body.id)
       })
 
+      it('round-trips a service frame provisioning config (the JSON column) on every store', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        // The service-owned provisioning config (the "what + where") is a JSON object on the
+        // service frame. A runtime that forgot to map the `provisioning` column drops it on
+        // write — so this asserts it survives PATCH + a fresh snapshot read on D1 and Postgres.
+        const provisioning = {
+          type: 'docker-compose' as const,
+          composePath: 'docker-compose.yml',
+          localDevOnly: true,
+        }
+        const patched = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+          provisioning,
+        })
+        expect(patched.status).toBe(200)
+        expect(patched.body.provisioning).toEqual(provisioning)
+
+        const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        expect(snap.body.blocks.find((b) => b.id === 'blk_auth')?.provisioning).toEqual(
+          provisioning,
+        )
+      })
+
       it('rejects a dependency edge that would create a cycle', async () => {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()

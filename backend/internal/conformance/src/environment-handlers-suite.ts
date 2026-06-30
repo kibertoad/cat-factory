@@ -68,7 +68,7 @@ export function defineEnvironmentHandlersSuite(
       return { u: `u-${tag}`, ws: `ws-${tag}` }
     }
 
-    it('lists a user’s overrides for a workspace, scoped out other workspaces', async () => {
+    it("lists a user's overrides for a workspace, scoped out other workspaces", async () => {
       const { userHandlers } = makeRepos()
       const { u, ws } = ids()
       const other = `${ws}-other`
