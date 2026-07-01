@@ -94,6 +94,10 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *                       account server-side (services are account-owned). EVERY requested id
  *                       must resolve to an in-scope account, so a missing or out-of-scope
  *                       service fails closed. Empty input is allowed (it returns empty).
+ *   - `service`       — `args[arg]` is a single serviceId with NO workspace arg; resolve the
+ *                       service's owning account server-side (services are account-owned), the
+ *                       single-id form of `serviceList`. A missing/out-of-scope service fails
+ *                       closed (404, no existence leak).
  */
 export type ScopeRule =
   | { kind: 'workspace'; arg: number }
@@ -104,6 +108,7 @@ export type ScopeRule =
   | { kind: 'visibility'; arg: number }
   | { kind: 'block'; arg: number }
   | { kind: 'serviceList'; arg: number }
+  | { kind: 'service'; arg: number }
 
 export interface MethodSpec {
   scope: ScopeRule
@@ -211,10 +216,31 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // blueprint reconcile). arg0 is a frame BLOCK id, so the `block` rule resolves it to its
     // home workspace's account server-side.
     getByFrameBlock: { scope: { kind: 'block', arg: 0 } },
+    // The org-catalog mount flow reads a single service by id before mounting it onto a board
+    // (`ServiceMountService.mount` — the cross-org guard that a service is mounted only within
+    // its own account). arg0 is a serviceId with no workspace arg, so the `service` rule resolves
+    // its owning account server-side.
+    get: { scope: { kind: 'service', arg: 0 } },
   },
+  // --- Shared-service mount management surface -------------------------------------
+  // The org-catalog / shared-service mounting flow a mothership-mode SPA drives
+  // (`ServiceMountService` / `ServiceMountController`): mount / unmount / re-layout a shared
+  // account service onto a workspace board. The reads that compose the catalog badge
+  // (`listByWorkspace`, `countByServiceIds`) were already exposed; these complete the write
+  // surface. `get`/`update`/`remove` take the workspaceId as arg0 (the `workspace` rule); the
+  // record-based `upsert(mount)` binds on the mount's `workspaceId` FIELD (the `workspaceField`
+  // rule — the id is a property of the record). Each is member-level (the mount endpoints are not
+  // admin-gated) and workspace-scoped. Sharing stays within one account: the local node's
+  // `mount()` reads `serviceRepository.get` first (the `service` rule 404s a foreign service), so
+  // a cross-org mount can never be persisted through the flow, and a stray direct `upsert` fails
+  // closed on board composition (its blocks read via the account-scoped `listByServices`).
   workspaceMountRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     countByServiceIds: { scope: { kind: 'serviceList', arg: 0 } },
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    update: { scope: { kind: 'workspace', arg: 0 } },
+    remove: { scope: { kind: 'workspace', arg: 0 } },
   },
   workspaceSettingsRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
@@ -599,6 +625,16 @@ export async function dispatchPersistenceCall(
       for (const id of ids as string[]) {
         if (!inScope(accounts.get(id))) return denied
       }
+      break
+    }
+    case 'service': {
+      // Bind via the service's owning account (services are account-owned; the single-id form of
+      // `serviceList`, reusing the same resolver). A missing service is absent from the map, so it
+      // is refused as 404 — no existence leak, matching the `serviceList`/`block` rules.
+      const serviceId = args[rule.arg]
+      if (typeof serviceId !== 'string' || !opts.resolveServiceAccountIds) return denied
+      const accounts = await opts.resolveServiceAccountIds([serviceId])
+      if (!inScope(accounts.get(serviceId))) return denied
       break
     }
     case 'visibility': {
