@@ -74,15 +74,15 @@ nobody enters real/production secrets.
 
 | Unit                                                                                                                                 | Status | PR  |
 | ------------------------------------------------------------------------------------------------------------------------------------ | ------ | --- |
-| Contracts: `TestCredentialPool` / `TestCredentialEntry` / `ServiceTestCredentials` + Valibot + upsert input                          | todo   | —   |
+| Contracts: `TestCredentialPool` / `TestCredentialEntry` / `ServiceTestCredentials` (incl. `authMode: 'none' \| 'pools'`) + Valibot + upsert input | todo | — |
 | Kernel port `TestCredentialsRepository` (`getByBlock`/`upsert`/`deleteByBlock`)                                                      | todo   | —   |
 | D1 migration + `D1TestCredentialsRepository` (cloudflare)                                                                            | todo   | —   |
 | Drizzle schema + migration + `DrizzleTestCredentialsRepository` (node)                                                               | todo   | —   |
 | `TestCredentialsService` (orchestration) + controller (server) `GET\|PUT\|DELETE /workspaces/:ws/services/:blockId/test-credentials` | todo   | —   |
 | Wire repo in all facades (Worker/Node/local)                                                                                         | todo   | —   |
 | `AgentContextBuilder.resolveTestCredentials` (walk to service frame) + `AgentRunContext.testCredentials`                             | todo   | —   |
-| `testCredentialsSection()` prompt (tester kinds), wired into `renderStandardUserPrompt`                                              | todo   | —   |
+| `testCredentialsSection()` prompt (tester kinds) — `authMode:'none'` → "no login required"; `'pools'` → full pools — wired into `renderStandardUserPrompt` | todo | — |
 | Cross-runtime conformance assertion (agent-context renders pools on both stores)                                                     | todo   | —   |
-| Frontend: `stores/testCredentials.ts` + `ServiceTestCredentials.vue` inspector panel                                                 | todo   | —   |
+| Frontend: `stores/testCredentials.ts` + `ServiceTestCredentials.vue` inspector panel (incl. "service needs no auth" toggle)          | todo   | —   |
 | **Explicit non-sensitive warning banner** (its own i18n key) + i18n keys in all locales                                              | todo   | —   |
 | Changesets (per touched published package)                                                                                           | todo   | —   |
