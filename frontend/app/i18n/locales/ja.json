@@ -39,6 +39,12 @@
     "accountSettings": "アカウント設定"
   },
   "board": {
+    "repoTypes": {
+      "service": "サービス",
+      "frontend": "フロントエンド",
+      "library": "ライブラリ",
+      "document": "ドキュメントリポジトリ"
+    },
     "toolbar": {
       "addService": "サービスを追加",
       "decisionWord": "決定 | 決定",

@@ -39,6 +39,12 @@
     "accountSettings": "Hesap ayarları"
   },
   "board": {
+    "repoTypes": {
+      "service": "Servis",
+      "frontend": "Frontend",
+      "library": "Kütüphane",
+      "document": "Doküman deposu"
+    },
     "toolbar": {
       "addService": "Servis ekle",
       "decisionWord": "karar | karar",

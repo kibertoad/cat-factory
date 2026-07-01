@@ -4,12 +4,10 @@
 // adapt it (in a sandbox container) — either by cloning a chosen reference
 // architecture, or from scratch following a freeform prompt. The modal pairs the
 // launch form with the managed base list.
-import { FRAME_REPO_TYPES } from '@cat-factory/contracts'
 import type { BootstrapStatus, FrameRepoType, ReferenceArchitecture } from '~/types/domain'
 // Explicit import (see GitHubPanel): the auto-import name for github/GitHubConnect
 // doesn't match the `<GitHubConnect>` tag, so bind it directly.
 import GitHubConnect from '~/components/github/GitHubConnect.vue'
-import { BLOCK_TYPE_META } from '~/utils/catalog'
 
 const ui = useUiStore()
 const bootstrap = useBootstrapStore()
@@ -76,13 +74,10 @@ const isPrivate = ref(true)
 const instructions = ref('')
 const launching = ref(false)
 
-// The behavioural repo role for the bootstrapped frame; `service` (backend) by default.
+// The behavioural repo role for the bootstrapped frame; `service` (backend) by default. The
+// options are shared with the import modal via useFrameRepoTypeItems.
 const selectedType = ref<FrameRepoType>('service')
-const typeItems = FRAME_REPO_TYPES.map((value) => ({
-  value,
-  label: BLOCK_TYPE_META[value].label,
-  icon: BLOCK_TYPE_META[value].icon,
-}))
+const typeItems = useFrameRepoTypeItems()
 
 const usingReference = computed(() => mode.value === 'reference')
 
@@ -244,6 +239,8 @@ async function launch() {
       repoName.value = ''
       description.value = ''
       instructions.value = ''
+      // Reset the repo role too, so a later bootstrap doesn't silently inherit this one's type.
+      selectedType.value = 'service'
       // The run is now tracked on the board, so get out of the way: close the
       // dialog as soon as bootstrapping has actually started.
       ui.closeBootstrap()

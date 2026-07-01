@@ -39,13 +39,13 @@ build on. Link the merged pilot PR here once it lands.
 
 ## Per-slice status
 
-| #   | Slice                                                                                | Status      | PR        |
-| --- | ------------------------------------------------------------------------------------ | ----------- | --------- |
-| 1   | Repo type selector + `library`/`document` types + task/pipeline gating               | done        | [#605](https://github.com/kibertoad/cat-factory/pull/605) |
-| 2   | `frontend` block + `frontendConfig` + inspector + board links + persistence/symmetry | todo        | —         |
-| 3   | Harness frontend infra + `ui` image bump + `testerInfraSpec` wiring + conformance    | todo        | —         |
-| 4   | Mocker frontend awareness + `pl_frontend` pipeline                                   | todo        | —         |
-| 5   | Browsable preview (local/node) + `frontendPreviewSupported` capability gate          | todo        | —         |
+| #   | Slice                                                                                | Status | PR                                                        |
+| --- | ------------------------------------------------------------------------------------ | ------ | --------------------------------------------------------- |
+| 1   | Repo type selector + `library`/`document` types + task/pipeline gating               | done   | [#605](https://github.com/kibertoad/cat-factory/pull/605) |
+| 2   | `frontend` block + `frontendConfig` + inspector + board links + persistence/symmetry | todo   | —                                                         |
+| 3   | Harness frontend infra + `ui` image bump + `testerInfraSpec` wiring + conformance    | todo   | —                                                         |
+| 4   | Mocker frontend awareness + `pl_frontend` pipeline                                   | todo   | —                                                         |
+| 5   | Browsable preview (local/node) + `frontendPreviewSupported` capability gate          | todo   | —                                                         |
 
 ## Conventions & gotchas carried between iterations
 
@@ -58,6 +58,12 @@ build on. Link the merged pilot PR here once it lands.
 - Any new frame-type meta must be added in BOTH `BLOCK_TYPE_LABEL`
   (`backend/packages/kernel/src/domain/catalog.ts`) and `BLOCK_TYPE_META`
   (`frontend/app/app/utils/catalog.ts`); `catalog.spec.ts`'s `BLOCK_TYPES` list gates coverage.
+- The document-repo task gate must hold at EVERY way a task enters a frame, not just create:
+  `BoardService.addTask` AND `BoardService.reparent` (drag-drop) AND
+  `RecurringPipelineService.create` all reject a non-`document`/`spike` task under a `document`
+  frame (shared via `BoardService.assertTaskTypeAllowed`). `reparent` also re-stamps a moved
+  task's behavioural `type` to its new enclosing frame. A future frame-type-behavioural
+  constraint should follow the same "gate all entry points" rule.
 - Bootstrap retry with no existing frame currently defaults the frame type to `service` (the
   chosen type is not yet persisted on the `bootstrap_jobs` row). Persist it in slice 2 when the
   bootstrap persistence is touched.

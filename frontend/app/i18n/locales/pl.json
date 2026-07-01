@@ -39,6 +39,12 @@
     "infrastructure": "Infrastruktura"
   },
   "board": {
+    "repoTypes": {
+      "service": "Usługa",
+      "frontend": "Frontend",
+      "library": "Biblioteka",
+      "document": "Repozytorium dokumentacji"
+    },
     "toolbar": {
       "addService": "Dodaj usługę",
       "decisionWord": "decyzja | decyzje | decyzji",

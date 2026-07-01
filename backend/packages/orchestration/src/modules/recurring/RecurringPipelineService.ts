@@ -123,6 +123,12 @@ export class RecurringPipelineService {
     if (frame.level !== 'frame') {
       throw new ConflictError('Recurring pipelines can only be attached to a service frame.')
     }
+    // A document repository is authored, not implemented: it has no code-producing pipeline, so
+    // a recurring schedule (always a code pipeline) can't run there. Reject rather than seed an
+    // un-runnable block — mirrors BoardService.addTask's doc-repo gate for this second entry.
+    if (frame.type === 'document') {
+      throw new ConflictError('A document repository cannot host a recurring pipeline.')
+    }
     assertFound(
       await this.pipelineRepository.get(workspaceId, input.pipelineId),
       'Pipeline',
@@ -139,7 +145,9 @@ export class RecurringPipelineService {
     const block: Block = {
       id: this.idGenerator.next('blk'),
       title: input.name,
-      type: 'service',
+      // Inherit the frame's (behavioural) repo type, like BoardService.addTask, instead of
+      // hardcoding `service` — a schedule on a frontend/library frame stays correctly typed.
+      type: frame.type,
       // The user's own prompt when given, else the canned template seed.
       description: input.description?.trim() || TEMPLATE_DESCRIPTIONS[input.template] || '',
       position: { x: 24, y: 96 },

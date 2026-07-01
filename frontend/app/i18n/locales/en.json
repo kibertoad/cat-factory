@@ -51,6 +51,12 @@
     "accountSettings": "Account settings"
   },
   "board": {
+    "repoTypes": {
+      "service": "Service",
+      "frontend": "Frontend",
+      "library": "Library",
+      "document": "Document repository"
+    },
     "toolbar": {
       "addService": "Add service",
       "decisionWord": "decision | decisions",

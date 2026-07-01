@@ -317,7 +317,10 @@ watch(open, (isOpen) => {
   title.value = ''
   description.value = ''
   saving.value = false
-  taskType.value = 'feature'
+  // This reset runs after the `isDocRepo` watcher in the same open tick, so it must pick the
+  // doc-repo-aware default itself — a document frame only offers document/spike, so `feature`
+  // would leave the selector on a hidden, server-rejected value.
+  taskType.value = isDocRepo.value ? 'document' : 'feature'
   technical.value = false
   severity.value = ''
   stepsToReproduce.value = ''

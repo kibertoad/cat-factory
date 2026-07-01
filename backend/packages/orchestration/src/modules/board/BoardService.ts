@@ -384,6 +384,18 @@ export class BoardService {
     return block
   }
 
+  /**
+   * A document repository is authored, not implemented: it accepts only document/spike tasks
+   * (there is no code-producing pipeline for it). Enforced everywhere a task can enter a frame
+   * (create AND reparent) so the board never holds an un-runnable feature/bug task under a doc
+   * frame — the gate at a single entry point is not enough because drag-drop moves in too.
+   */
+  private assertTaskTypeAllowed(frame: Block | undefined, taskType: Block['taskType']): void {
+    if (frame?.type === 'document' && taskType !== 'document' && taskType !== 'spike') {
+      throw new ValidationError('A document repository only accepts document or spike tasks')
+    }
+  }
+
   /** Add a task inside a container (a service frame or a module). */
   async addTask(
     workspaceId: string,
@@ -402,12 +414,7 @@ export class BoardService {
     const siblings = tasksOf(blocks, containerId).length
     const service = serviceOf(blocks, container)
     const taskType = input.taskType ?? 'feature'
-    // A document repository is authored, not implemented: it accepts only document/spike
-    // tasks (there is no code-producing pipeline for it). Gate at creation so the board
-    // never holds an un-runnable feature/bug task under a doc frame.
-    if (service?.type === 'document' && taskType !== 'document' && taskType !== 'spike') {
-      throw new ValidationError('A document repository only accepts document or spike tasks')
-    }
+    this.assertTaskTypeAllowed(service, taskType)
     const block: Block = {
       id: this.idGenerator.next('task'),
       title: input.title.trim(),
@@ -615,6 +622,19 @@ export class BoardService {
       throw new ValidationError(`A ${block.level} cannot be placed inside a ${parent.level}`)
     }
 
+    // The destination's enclosing frame drives two things: the doc-repo task gate (same as
+    // addTask — drag-drop must not smuggle a feature/bug/recurring task into a doc frame) and
+    // the moved task's inherited `type`, which is behavioural for the frame repo roles. Load
+    // the parent's workspace blocks once here; the branches below reuse this list.
+    const destBlocks = await this.blockRepository.listByWorkspace(parentHome)
+    const destFrame = serviceOf(destBlocks, parent)
+    if (block.level === 'task') {
+      this.assertTaskTypeAllowed(destFrame, block.taskType)
+    }
+    // A task inherits its enclosing frame's type, so a move re-stamps it (no-op when unchanged
+    // or when the destination isn't a resolvable frame). Non-task blocks keep their own type.
+    const movedType: BlockType = block.level === 'task' && destFrame ? destFrame.type : block.type
+
     // Same physical home (the common case, incl. two of the workspace's own services): move in
     // place and re-stamp `service_id`, the physical scope key that decides which boards render
     // the subtree and where its events fan out. No-op re-stamp when sharing isn't wired or the
@@ -623,13 +643,13 @@ export class BoardService {
       await this.blockRepository.update(blockHome, id, {
         parentId: input.parentId,
         position: input.position,
+        ...(movedType !== block.type ? { type: movedType } : {}),
       })
       if (this.serviceRepository) {
-        const blocks = await this.blockRepository.listByWorkspace(blockHome)
-        const destService = await this.serviceForContainer(blocks, parent)
+        const destService = await this.serviceForContainer(destBlocks, parent)
         await this.blockRepository.setService(
           blockHome,
-          [...descendantIds(blocks, id)],
+          [...descendantIds(destBlocks, id)],
           destService ?? null,
         )
       }
@@ -660,10 +680,12 @@ export class BoardService {
     const subtree = ids
       .map((bid) => srcBlocks.find((b) => b.id === bid))
       .filter((b): b is Block => b !== undefined)
-    const parentBlocks = await this.blockRepository.listByWorkspace(parentHome)
-    const destService = (await this.serviceForContainer(parentBlocks, parent)) ?? null
+    const destService = (await this.serviceForContainer(destBlocks, parent)) ?? null
     for (const b of subtree) {
-      const moved = b.id === id ? { ...b, parentId: input.parentId, position: input.position } : b
+      const moved =
+        b.id === id
+          ? { ...b, parentId: input.parentId, position: input.position, type: movedType }
+          : b
       await this.blockRepository.insert(parentHome, moved, destService)
       const exec = await this.executionRepository.getByBlock(blockHome, b.id)
       if (exec) {

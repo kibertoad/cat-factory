@@ -39,6 +39,12 @@
     "accountSettings": "הגדרות חשבון"
   },
   "board": {
+    "repoTypes": {
+      "service": "שירות",
+      "frontend": "פרונט-אנד",
+      "library": "ספרייה",
+      "document": "מאגר תיעוד"
+    },
     "toolbar": {
       "addService": "הוסף שירות",
       "decisionWord": "החלטה | החלטות",

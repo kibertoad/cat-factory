@@ -39,6 +39,12 @@
     "infrastructure": "Інфраструктура"
   },
   "board": {
+    "repoTypes": {
+      "service": "Сервіс",
+      "frontend": "Фронтенд",
+      "library": "Бібліотека",
+      "document": "Репозиторій документації"
+    },
     "toolbar": {
       "addService": "Додати сервіс",
       "decisionWord": "рішення | рішення | рішень",
