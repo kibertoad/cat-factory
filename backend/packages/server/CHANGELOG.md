@@ -1,5 +1,31 @@
 # @cat-factory/server
 
+## 0.63.0
+
+### Minor Changes
+
+- 762fe66: Add a first-class `frontend`-frame configuration. A frontend frame now carries a
+  `frontendConfig` (package manager, install/build/serve knobs, WireMock mappings path,
+  preview toggle) plus `backendBindings` that map each env var the frontend reads to an
+  upstream: a bound service frame's ephemeral environment, or a WireMock stub. The bindings
+  double as board links, drawn as frontend→service edges on the canvas. New inspector panel
+  (`FrontendConfig.vue`), the `frontend_config` JSON column mirrored across D1 and Drizzle
+  with a cross-runtime conformance round-trip, and `frontendConfig` on the update-block input.
+
+  Second slice of the frontend-preview + in-context UI-testing initiative
+  (docs/initiatives/frontend-preview-ui-testing.md).
+
+### Patch Changes
+
+- Updated dependencies [762fe66]
+  - @cat-factory/contracts@0.76.0
+  - @cat-factory/agents@0.24.16
+  - @cat-factory/integrations@0.51.4
+  - @cat-factory/kernel@0.66.1
+  - @cat-factory/orchestration@0.53.2
+  - @cat-factory/prompt-fragments@0.9.31
+  - @cat-factory/spend@0.10.61
+
 ## 0.62.3
 
 ### Patch Changes
