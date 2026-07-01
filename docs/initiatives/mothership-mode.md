@@ -28,6 +28,26 @@
 
 ### Landed so far
 
+- **Phase 3 follow-up (advanced review / structured-dialogue session surface)** — the clarity-review
+  (bug-report triage), brainstorm (structured dialogue) and consensus (multi-strategy orchestration)
+  session repositories are now fully allow-listed, so a mothership-mode SPA can not just READ the
+  board-load view of a review but PERSIST/REPLACE one as its window iterates (run → re-read →
+  upsert/delete). Previously only the board-load reads (`clarityReviewRepository.getByBlock`,
+  `brainstormSessionRepository.getByBlockStage`) were remotely callable; the write/delete methods came
+  back `unknown_method`. Newly allow-listed, mirroring the requirements-review surface: `clarityReview`
+  `get`/`upsert`/`deleteByBlock`, `brainstormSession` `get`/`upsert`/`deleteByBlockStage`,
+  `consensusSession` `get`/`getByStep`/`getByBlock`/`upsert` (a new repo entry), and
+  `requirementReview.deleteByBlock` (the pre-review-run drop that completes that repo). Every method
+  takes the workspaceId as arg0 — the `upsert(workspaceId, review)` signature carries it positionally,
+  so the existing `workspace` rule binds it (not `workspaceField`) — and each is member-level (none of
+  the review endpoints is admin-gated), matching the requirement-review policy. These are core repos
+  (`createDrizzleRepositories`), so a mothership-mode node already SOURCES them from the full-surface
+  remote registry (`composeMothership`) — no `pickRepoSource` routing change, just the allow-list.
+  Server-only, symmetric by construction (the dispatcher reflects over each facade's registry).
+  Round-trip + cross-account-scope unit tests for every new method are in
+  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
+  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending` (so the whole
+  clarity-review / brainstorm / consensus / requirement-review session surface is now remote).
 - **Phase 3 follow-up (post-release-health / observability settings write surface)** — the
   three settings repositories the post-release-health flow's panels manage are now allow-listed,
   so a mothership-mode SPA can PERSIST (not just display) an observability connection, a per-block
@@ -322,12 +342,12 @@ never remotely invocable (mothership-internal cron).
 | `trackerSettingsRepository`                                 | remote                                           | ✅ done | PR 3 (settings writes)          |
 | `serviceRepository`                                         | remote                                           | ⬜ todo | PR 3                            |
 | `workspaceMountRepository`                                  | remote                                           | ⬜ todo | PR 3                            |
-| `requirementReviewRepository`                               | remote                                           | ⬜ todo | PR 3                            |
-| `kaizenGradingRepository`                                   | remote                                           | ⬜ todo | PR 3                            |
-| `kaizenVerifiedComboRepository`                             | remote                                           | ⬜ todo | PR 3                            |
-| `consensusSessionRepository`                                | remote                                           | ⬜ todo | PR 3                            |
-| `clarityReviewRepository`                                   | remote                                           | ⬜ todo | PR 3                            |
-| `brainstormSessionRepository`                               | remote                                           | ⬜ todo | PR 3                            |
+| `requirementReviewRepository`                               | remote                                           | ✅ done | PR 3 (advanced-review surface)  |
+| `kaizenGradingRepository`                                   | remote (`getByStep`/`upsert`; rest pending)      | ◑ part  | PR 3                            |
+| `kaizenVerifiedComboRepository`                             | remote (`getByKey`; rest pending)                | ◑ part  | PR 3                            |
+| `consensusSessionRepository`                                | remote                                           | ✅ done | PR 3 (advanced-review surface)  |
+| `clarityReviewRepository`                                   | remote                                           | ✅ done | PR 3 (advanced-review surface)  |
+| `brainstormSessionRepository`                               | remote                                           | ✅ done | PR 3 (advanced-review surface)  |
 | `mergePresetRepository`                                     | remote                                           | ✅ done | PR 3 (settings writes)          |
 | `workspaceSettingsRepository`                               | remote                                           | ✅ done | PR 3 (settings writes)          |
 | `observabilityConnectionRepository`                         | remote                                           | ✅ done | PR 3 (release-health settings)  |

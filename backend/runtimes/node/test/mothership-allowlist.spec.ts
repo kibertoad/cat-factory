@@ -185,7 +185,9 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     remove: 'pending',
     removeByServices: 'pending',
   },
-  requirementReviewRepository: { deleteByBlock: 'pending' },
+  // The whole requirement-review repo is now remote (getByBlock/get/upsert were exposed earlier;
+  // deleteByBlock — the pre-review-run drop — completes it with the advanced-review slice).
+  requirementReviewRepository: {},
   kaizenGradingRepository: {
     get: 'pending',
     listByExecution: 'pending',
@@ -194,18 +196,12 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     claim: 'sweeper',
   },
   kaizenVerifiedComboRepository: { upsert: 'pending', listByWorkspace: 'pending' },
-  consensusSessionRepository: {
-    get: 'pending',
-    getByStep: 'pending',
-    getByBlock: 'pending',
-    upsert: 'pending',
-  },
-  clarityReviewRepository: { get: 'pending', upsert: 'pending', deleteByBlock: 'pending' },
-  brainstormSessionRepository: {
-    get: 'pending',
-    upsert: 'pending',
-    deleteByBlockStage: 'pending',
-  },
+  // The advanced review / structured-dialogue session surfaces are now fully remote (run + re-read
+  // + persist/replace as the window iterates) — get/getByStep/getByBlock/upsert for consensus,
+  // get/upsert/deleteBy* for clarity + brainstorm (getByBlock/getByBlockStage were already exposed).
+  consensusSessionRepository: {},
+  clarityReviewRepository: {},
+  brainstormSessionRepository: {},
   // `get`/`remove` are now allow-listed (the preset-library management surface); `list`/`getDefault`/
   // `upsert` were already remotely callable — so the whole merge-preset repo is remote.
   mergePresetRepository: {},

@@ -376,6 +376,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // The reviewer/incorporation companion persists the review as the gate iterates.
     // Member-level (the requirement-review endpoints are not admin-gated), workspace-scoped.
     upsert: { scope: { kind: 'workspace', arg: 0 } },
+    // The service drops a block's prior review before a fresh review run
+    // (`RequirementReviewService.review`). Workspace-scoped on arg0 — completes the repo.
+    deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
   },
   // The merge lifecycle's kaizen step reads any prior verified model/prompt combo
   // (`getByKey(workspaceId, comboKey)`) to skip re-grading. Workspace-scoped on arg0.
@@ -386,11 +389,33 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   envConfigRepairJobRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // --- Advanced review / structured-dialogue session surfaces ---------------------
+  // The clarity-review (bug-report triage), brainstorm (structured dialogue) and consensus
+  // (multi-strategy orchestration) windows mirror the requirements-review surface above: rows
+  // scoped by workspace, keyed by block/stage/step, with a live entry per block. A mothership-mode
+  // SPA runs and re-reads these reviews, and the services persist/replace them as the window
+  // iterates — every method takes the workspaceId as arg0 (the `upsert(workspaceId, review)`
+  // signature carries it positionally, so the `workspace` rule binds it, not `workspaceField`).
+  // Member-level (none of the review endpoints is admin-gated), workspace-scoped — the same policy
+  // as the requirement-review surface. Completes the read+write surface (`getByBlock` /
+  // `getByBlockStage` were already exposed for the board load).
   clarityReviewRepository: {
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
+    deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
   },
   brainstormSessionRepository: {
     getByBlockStage: { scope: { kind: 'workspace', arg: 0 } },
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
+    deleteByBlockStage: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  consensusSessionRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    getByStep: { scope: { kind: 'workspace', arg: 0 } },
+    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
   },
   // --- Post-release-health / observability settings surface -----------------------
   // The three settings repositories a mothership-mode SPA manages for the post-release-health
