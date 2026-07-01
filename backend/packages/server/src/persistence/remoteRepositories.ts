@@ -55,7 +55,7 @@ function makeRepoProxy<T extends object>(client: PersistenceRpcClient, repo: str
  *
  * Credentials are deliberately NOT part of this set — they stay local (the `node:sqlite`
  * store), composed over the top of this registry by the facade. This is the single mechanism
- * a mothership-mode node uses; there is no narrower typed pilot set to drift from it.
+ * a mothership-mode node uses; there is no narrower typed repository set to drift from it.
  */
 export function createRemoteRepositoryRegistry(
   client: PersistenceRpcClient,

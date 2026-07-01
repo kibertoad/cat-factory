@@ -1,23 +1,29 @@
 # Initiative: mothership mode for local mode
 
-**Status:** in progress (PR 1 = the no-Postgres boot SPINE; NOT yet functional end-to-end) · **Owner:** core · **Started:** 2026-06-30
+**Status:** in progress (board-load + run functional over the RPC; later slices widen the surface) · **Owner:** core · **Started:** 2026-06-30
 
 > This is the durable source of truth for a multi-PR initiative. Read it FIRST before picking
 > up the next slice; update the checklist at the end of each PR.
 
-> ## ⛔ MERGE GATE — do not merge the mothership boot until the functional surface lands
+> ## ✅ MERGE GATE — MET (the functional repository surface has landed)
 >
-> PR #514 (the no-Postgres boot spine) wires the composition but is **NOT functional
-> end-to-end**: the pilot allow-list exposes only the six core domain repos remotely, while a
-> **board load** and a **run** reach ~20 more org repos (mounts, settings, presets,
-> notifications, projections, …) plus stores still built from the now-absent local `db` — so
-> those paths currently throw (a gated `unknown_method` or an undefined-db `TypeError`).
+> The [Phase 3 — Functional repository surface](#phase-3--functional-repository-surface-the-merge-gate)
+> merge gate is **satisfied**. A no-Postgres mothership-mode `buildLocalContainer` **loads a board**
+> and **drives a run to a persisted terminal state** over the real `/internal/persistence` RPC —
+> asserted end-to-end by `backend/runtimes/local/test/mothership-integration.spec.ts` (a real
+> loopback Node mothership over Postgres + a no-Postgres local node) and by the cross-runtime
+> `[mothership]` conformance config. The board-load + run paths are allow-listed
+> (`REMOTE_PERSISTENCE_METHODS`) and every direct-db store on those paths is routed through the
+> `pickRepoSource` seam, so the earlier "first board load 500s" failure no longer applies.
 >
-> **PR #514 MUST stay a DRAFT and only merge after [Phase 3 — Functional repository
-> surface](#phase-3--functional-repository-surface-the-merge-gate) is complete.** Merging the
-> spine alone ships a `LOCAL_MOTHERSHIP_URL` switch that 500s on the first board load. The spine
-> is kept on the branch (reviewed, tested) so Phase 3 builds on it, not so it ships on its own.
-> See that phase for the exact per-repo + per-method (scope-rule) task list.
+> **Residuals that are explicitly NOT gating** (a maintainer decides if/when to lift any draft
+> status in light of them): decrypting a remotely-sealed PROVISIONED environment's access cipher
+> (needs the mothership's key — the secrets-delegation slice); the best-effort kaizen / telemetry /
+> subscription-activation no-ops a run makes over the remote (telemetry is local-first, Phase 5;
+> activation is the local-sqlite bucket); the `fragments` / `slack` connect/provision surfaces;
+> the durable SQLite work queue (PR 2 — the in-process runner is single-process / best-effort); and
+> login-based machine-token minting (PR 3 — a static `LOCAL_MOTHERSHIP_TOKEN` is used until then).
+> The remaining `pending` org methods are the live per-repo checklist below.
 
 ### Landed so far
 
@@ -90,7 +96,9 @@
     so BUILDING the container over `db: undefined` is safe — but CALLING the direct-db repos
     (notifications / bootstrap / projections / subscription-activation / …) on a board load or run
     still throws, because they are not yet routed to the remote surface. That, plus the narrow
-    allow-list, is why mothership mode is NOT yet functional (see the merge gate + Phase 3). The
+    allow-list, is why mothership mode was NOT yet functional at 1b (see the merge gate + Phase 3).
+    _(Superseded: Phase-3 slices 3–4 routed those direct-db stores via `pickRepoSource` and widened
+    the allow-list, so the board-load + run paths now work — the gate is MET; see the banner.)_ The
     **no-Postgres `startLocal` boot** is a dedicated path (`startLocalMothership`) — no
     `DATABASE_URL`/`migrate`/pg-boss; it serves the same Hono app + WebSocket transport and drives
     runs with the new in-process `WorkRunner` (serialized per execution, the pg-boss analogue). The
@@ -114,9 +122,9 @@
     Phase 2 alongside the durable SQLite work queue (the in-process runner is single-process /
     best-effort, with no durable queue or stale-run sweeper yet). The credential store keeps its
     isolated unit test (`sqlite/credentialStore.test.ts`) and is now proven _wired into the
-    container_ by the no-Postgres build test. The pilot allow-list still exposes only the six core
-    domain repos remotely, which is the spine, NOT a working board/run — making it actually
-    functional is [Phase 3](#phase-3--functional-repository-surface-the-merge-gate), the merge gate.
+    container_ by the no-Postgres build test. At 1b the allow-list exposed only the six core
+    domain repos remotely — the spine, NOT a working board/run; making it actually functional was
+    [Phase 3](#phase-3--functional-repository-surface-the-merge-gate), the merge gate, now **MET**.
 
 ## Goal & rationale
 
@@ -261,15 +269,14 @@ never remotely invocable (mothership-internal cron).
 ## Phased delivery
 
 - **PR 0 — this tracker doc.** No code.
-- **PR 1 — pilot vertical slice (the SPINE). ✅ code complete, but a DRAFT (see the merge gate).**
-  `machine` audience; `registerPersistenceController` (scope + allow-list); `PersistenceRpcClient` +
-  `createRemoteRepositoryRegistry` (the full-surface remote registry); local `node:sqlite` store +
-  local cipher with `providerApiKey` + `localModelEndpoint`; `LOCAL_MOTHERSHIP_URL` switch +
-  no-Postgres `startLocal` boot with an **in-process** work runner; static `LOCAL_MOTHERSHIP_TOKEN`
-  for now; `config.mothership` flag to the SPA. Conformance: rev/undefined/scope round-trip (server
-  spine) + the no-Postgres composition build. **Proves only:** a Postgres-free local node
-  _composes_ and _boots_. It does NOT yet load a board or run end-to-end — that is Phase 3, the
-  merge gate. **PR #514 must not merge until Phase 3 lands.**
+- **PR 1 — vertical slice (the SPINE).** `machine` audience; `registerPersistenceController`
+  (scope + allow-list); `PersistenceRpcClient` + `createRemoteRepositoryRegistry` (the full-surface
+  remote registry); local `node:sqlite` store + local cipher with `providerApiKey` +
+  `localModelEndpoint`; `LOCAL_MOTHERSHIP_URL` switch + no-Postgres `startLocal` boot with an
+  **in-process** work runner; static `LOCAL_MOTHERSHIP_TOKEN` for now; `config.mothership` flag to
+  the SPA. Conformance: rev/undefined/scope round-trip (server spine) + the no-Postgres composition
+  build. The board-load + run end-to-end surface that makes it functional landed under Phase 3 (the
+  merge gate, now **MET** — see the banner at the top).
 - **PR 2 — real-time both directions + durable SQLite work queue** (+ the deferred local-sqlite
   conformance binding via a fake mothership server). **Durable SQLite work queue: ✅ landed** (see
   "Landed so far"). Remaining in PR 2: real-time both directions (`RpcEventPublisher` +
@@ -283,7 +290,7 @@ larger than one hop — split it across several PRs, but **none of the mothershi
 the board-load + run paths below are green**. The work is in three parts:
 
 > **Landed (Phase 3 slice 1):** part 2's workspace-scoped + mixed (workspaceId + entity-id) board-load
-> reads are now allow-listed in `PILOT_PERSISTENCE_METHODS`, each reusing the existing `workspace`
+> reads are now allow-listed in `REMOTE_PERSISTENCE_METHODS`, each reusing the existing `workspace`
 > scope rule (resolve the owning account, reject out-of-scope as 404). Reads only — no new mutation
 > is exposed. Part 3 needed no registry change: the dispatcher already reflects over the full
 > `CoreDependencies` object, so allow-listing a method is enough to expose it. Round-trip +
@@ -335,7 +342,7 @@ the board-load + run paths below are green**. The work is in three parts:
 > board-load + run path, not off it. Fixes: `buildNodeContainer` now routes `documentRepository` /
 > `taskRepository` / `environmentRegistryRepository` / `environmentConnectionRepository` from the remote
 > registry when `db` is undefined (the sub-helpers built them directly over the absent `db`; their
-> connect/provision surfaces stay db-direct, off the path); and `PILOT_PERSISTENCE_METHODS` gained the
+> connect/provision surfaces stay db-direct, off the path); and `REMOTE_PERSISTENCE_METHODS` gained the
 > workspace-scoped methods the path exercises — `documentRepository.{listByBlock,get,getByUrl}`,
 > `taskRepository.{listByBlock,get,getByUrl}`, `environmentRegistryRepository.{getByBlock,get}`,
 > `modelPresetRepository.getDefault`, the board-load lazy default-preset seeds
@@ -372,7 +379,7 @@ the board-load + run paths below are green**. The work is in three parts:
    `tokenUsage`/`llmCallMetric`/`agentContextSnapshot`/`provisioningLog` — are the local-first
    telemetry bucket, Phase 5, NOT remote; they degrade as best-effort no-ops over the remote for now.)
 
-2. **Widen the server allow-list (`PILOT_PERSISTENCE_METHODS`) to the methods a board load + a run
+2. **Widen the server allow-list (`REMOTE_PERSISTENCE_METHODS`) to the methods a board load + a run
    exercise, each with a correct scope rule.** The boundary is security-sensitive: a machine token
    is scoped to ACCOUNTS, not roles, so admin-gated mutations and global sweeper reads stay excluded.
    The concrete map (from a call-graph trace of `GET /workspaces/:id` and the execution lifecycle):

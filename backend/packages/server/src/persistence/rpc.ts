@@ -78,7 +78,6 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  * the machine token's `scope.accountIds` (a 404, matching the auth gate's non-leak policy):
  *   - `workspace`     — `args[arg]` is a workspaceId; resolve its owning account.
  *   - `account`       — `args[arg]` IS an accountId.
- *   - `accountField`  — `args[arg][field]` is an accountId (e.g. a `Membership.accountId`).
  *   - `accountList`   — `args[arg]` is `string[]` of accountIds; ALL must be in scope.
  *   - `selfUser`      — `args[arg]` is a userId; must equal the token's `userId`.
  *   - `visibility`    — `args[arg]` is a `WorkspaceVisibility`; intersected with the token
@@ -93,7 +92,6 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
 export type ScopeRule =
   | { kind: 'workspace'; arg: number }
   | { kind: 'account'; arg: number }
-  | { kind: 'accountField'; arg: number; field: string }
   | { kind: 'accountList'; arg: number }
   | { kind: 'selfUser'; arg: number }
   | { kind: 'visibility'; arg: number }
@@ -140,7 +138,7 @@ export type PersistenceMethodTable = Record<string, Record<string, MethodSpec>>
  * (`workspaceRepository.rename`/`setDescription`, block/pipeline/execution CRUD) are
  * member-level in the service layer, so they remain.
  */
-export const PILOT_PERSISTENCE_METHODS: PersistenceMethodTable = {
+export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   workspaceRepository: {
     listVisible: { scope: { kind: 'visibility', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
@@ -363,7 +361,7 @@ export interface DispatchOptions {
    * hitting that kind with no resolver fails closed (404).
    */
   resolveServiceAccountIds?(serviceIds: string[]): Promise<Map<string, string | null | undefined>>
-  /** The method table to enforce (defaults to the pilot set). */
+  /** The method table to enforce (defaults to the full remote allow-list). */
   table?: PersistenceMethodTable
 }
 
@@ -398,7 +396,7 @@ export async function dispatchPersistenceCall(
   request: PersistenceRpcRequest,
   opts: DispatchOptions,
 ): Promise<DispatchResult> {
-  const table = opts.table ?? PILOT_PERSISTENCE_METHODS
+  const table = opts.table ?? REMOTE_PERSISTENCE_METHODS
   // Own-property lookups only: `request.repo`/`request.method` are attacker-controlled, so a
   // bracket access could otherwise resolve an inherited member (`__proto__`, `constructor`,
   // `toString`) to a truthy non-spec value, slip past the `if (!spec)` guard, and crash on
@@ -434,11 +432,6 @@ export async function dispatchPersistenceCall(
     }
     case 'account': {
       if (!inScope(args[rule.arg] as string)) return denied
-      break
-    }
-    case 'accountField': {
-      const obj = args[rule.arg] as Record<string, unknown> | undefined
-      if (!obj || !inScope(obj[rule.field] as string)) return denied
       break
     }
     case 'accountList': {

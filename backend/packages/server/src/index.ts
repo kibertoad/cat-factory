@@ -222,7 +222,7 @@ export {
   type ScopeRule,
   type DispatchOptions,
   type DispatchResult,
-  PILOT_PERSISTENCE_METHODS,
+  REMOTE_PERSISTENCE_METHODS,
   dispatchPersistenceCall,
   persistenceErrorToThrowable,
   statusForPersistenceError,

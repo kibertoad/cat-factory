@@ -7,11 +7,16 @@ import {
   buildNodeContainer,
   createApp as createNodeApp,
 } from '@cat-factory/node-server'
-import { HmacSigner, TOKEN_AUDIENCE } from '@cat-factory/server'
 import type { Account, ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
 import type { Pipeline } from '@cat-factory/contracts'
 import { buildLocalContainer } from '../src/container.js'
 import { setupTestDb } from './harness.js'
+import {
+  ENCRYPTION_KEY,
+  SESSION_SECRET,
+  buildMothershipEnv,
+  mintMachineToken,
+} from './mothership/setup.js'
 
 // ---------------------------------------------------------------------------
 // Mothership-mode functional integration test — the Phase 3 MERGE GATE
@@ -38,31 +43,15 @@ import { setupTestDb } from './harness.js'
 // first board load.
 // ---------------------------------------------------------------------------
 
-const SESSION_SECRET = 'mothership-integration-session-secret-0123456789'
-const ENCRYPTION_KEY = Buffer.alloc(32).toString('base64')
-
 // The mothership is a plain Node backend: real Postgres + the machine API. It does NOT run
 // in dev-open / local mode — it just answers persistence RPC for the local node. The org
 // authority carries the SAME integrations the local node delegates to it (documents / tasks /
 // environments / fragments), so its repository registry actually wires those repos — a remote
-// call to one otherwise comes back `... is not wired`. Mirrors the Node harness TEST_ENV.
-const MOTHERSHIP_ENV: NodeJS.ProcessEnv = {
-  ...process.env,
-  ENVIRONMENT: 'test',
-  ENCRYPTION_KEY,
-  // The shared secret the machine token is signed with and the mothership verifies against.
-  AUTH_SESSION_SECRET: SESSION_SECRET,
-  // A hosted (remote-node) backend has no anonymous tier: `loadNodeConfig` refuses to boot
-  // unless a login provider is configured or AUTH_DEV_OPEN is set. The mothership is NOT
-  // dev-open (it only answers the machine-token RPC here), so configure a login provider —
-  // password login over the session secret above. The test never makes a user-authenticated
-  // HTTP call to the mothership (seeding goes through its services; the local node carries the
-  // dev-open gate), so this only satisfies the boot guard.
-  AUTH_PASSWORD_ENABLED: 'true',
-  ENVIRONMENTS_ENABLED: 'true',
-  PROMPT_LIBRARY_ENABLED: 'true',
-  DOCUMENT_SOURCES: 'confluence,notion,github,figma,zeplin,linear',
-}
+// call to one otherwise comes back `... is not wired`. `buildMothershipEnv` (shared with the
+// conformance harness) sets `AUTH_PASSWORD_ENABLED` so a hosted backend with no anonymous tier
+// satisfies `loadNodeConfig`'s boot guard without being dev-open (the test only ever calls its
+// machine-token RPC; seeding goes through its services).
+const MOTHERSHIP_ENV: NodeJS.ProcessEnv = buildMothershipEnv()
 
 const ORG_OWNER = { id: 'usr_org-owner', login: 'org-owner', name: 'Org Owner' }
 
@@ -150,12 +139,10 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
 
     // The machine token the local node presents on every RPC: audience-pinned `machine`,
     // scoped to the seeded account, signed with the mothership's session secret.
-    machineToken = await new HmacSigner(SESSION_SECRET).sign({
-      aud: TOKEN_AUDIENCE.machine,
-      nodeId: 'node_integration-test',
+    machineToken = await mintMachineToken(SESSION_SECRET, {
       userId: ORG_OWNER.id,
-      scope: { accountIds: [account.id] },
-      exp: Date.now() + 3_600_000,
+      accountIds: [account.id],
+      nodeId: 'node_integration-test',
     })
 
     // Serve the mothership on an ephemeral loopback port (a REAL HTTP backend for the RPC).
