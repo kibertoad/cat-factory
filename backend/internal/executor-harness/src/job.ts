@@ -76,6 +76,17 @@ function posInt(value: unknown): number | undefined {
 }
 
 /**
+ * A valid TCP port (1..65535), or undefined for anything else. The backend already validates
+ * frontend ports against this range, but the harness re-checks at its untrusted-body boundary:
+ * an out-of-range value can never bind, so dropping it falls back to the harness default rather
+ * than spawning a server that fails to listen.
+ */
+function port(value: unknown): number | undefined {
+  const n = posInt(value)
+  return n !== undefined && n <= 65535 ? n : undefined
+}
+
+/**
  * Parse the optional per-job progress-guard overrides. Each knob must be a positive
  * int; a malformed value is dropped (the run keeps the env / default for that knob).
  * This only validates the SHAPE — it does NOT enforce loosen-only. The loosen-only
@@ -572,17 +583,35 @@ function parseAgentInfraSpec(value: unknown): AgentInfraSpec | undefined {
 
 /**
  * Env-var names never injected from a frontend binding: spread over `process.env` at build
- * time, so any of these would break the toolchain (or enable injection) rather than name an
- * upstream URL. Matched exactly (Linux env is case-sensitive).
+ * time, so any of these would break the toolchain (or enable code execution / cert overrides)
+ * rather than name an upstream URL. Matched exactly (Linux env is case-sensitive); the
+ * {@link RESERVED_ENV_PREFIXES} below cover whole families (`npm_config_*`, `GIT_*`, …).
  */
 const RESERVED_ENV_NAMES = new Set([
   'PATH',
   'HOME',
   'NODE_OPTIONS',
   'NODE_PATH',
+  'NODE_EXTRA_CA_CERTS',
   'LD_PRELOAD',
   'LD_LIBRARY_PATH',
+  'BASH_ENV',
+  'ENV',
+  'SHELL',
+  'IFS',
 ])
+
+/**
+ * Env-var name PREFIXES never injected from a frontend binding. `npm_config_*` reconfigures the
+ * package manager (registry, scripts, prefix), and `GIT_*` reconfigures git — both run during a
+ * frontend install/build, so a binding in either family is toolchain control, not an upstream URL.
+ */
+const RESERVED_ENV_PREFIXES = ['npm_config_', 'GIT_']
+
+/** Whether an env-var name is reserved (an exact name or a reserved family prefix). */
+function isReservedEnvName(key: string): boolean {
+  return RESERVED_ENV_NAMES.has(key) || RESERVED_ENV_PREFIXES.some((p) => key.startsWith(p))
+}
 
 /** Parse the frontend UI-test infra spec (`kind: 'frontend'`), tolerating missing knobs. */
 function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
@@ -601,11 +630,11 @@ function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
   const env: Record<string, string> = {}
   if (typeof o.env === 'object' && o.env !== null) {
     for (const [key, val] of Object.entries(o.env as Record<string, unknown>)) {
-      if (key && !RESERVED_ENV_NAMES.has(key) && typeof val === 'string') env[key] = val
+      if (key && !isReservedEnvName(key) && typeof val === 'string') env[key] = val
     }
   }
-  const servePort = posInt(o.servePort)
-  const wiremockPort = posInt(o.wiremockPort)
+  const servePort = port(o.servePort)
+  const wiremockPort = port(o.wiremockPort)
   return {
     kind: 'frontend',
     ...(packageManager ? { packageManager } : {}),

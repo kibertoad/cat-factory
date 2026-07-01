@@ -51,6 +51,22 @@ it works on Cloudflare and Apple `container` too.
   in a `mappings/` subfolder), and the env-injection hint notes the build-tool prefix caveat
   (e.g. Vite only exposes `VITE_*`). The UI-tester prompt flags a live-backend CORS failure as an
   infra gap rather than an app defect.
+- **Hardening (third review round)**: the frontend stand-up now runs in the run's SERVICE
+  SUBTREE (`workDir`), not the clone root — a monorepo frontend's `package.json` / `outputDir` /
+  `mocks/` live under its own subdirectory, so installing, building, serving and seeding WireMock
+  from the repo root would have targeted the wrong directory (the docker-compose stand-up still
+  runs at the root, where its repo-relative `composePath` resolves). The harness now bounds
+  frontend `servePort` / `wiremockPort` to 1..65535 at its untrusted-body boundary (an
+  out-of-range port can never bind, so it falls back to the default). The reserved-env filter —
+  in BOTH the harness parse and the backend infra-spec builder — grows the `NODE_EXTRA_CA_CERTS`
+  / `BASH_ENV` / `ENV` / `SHELL` / `IFS` names plus the `npm_config_*` and `GIT_*` FAMILIES, so a
+  binding that reconfigures the package manager, git, or the TLS trust store during the build is
+  dropped rather than injected. Runtime env injection under `serveMode: 'command'` now warns
+  (the `window.env` shim is only served in static mode; the forwarded `env` covers the command
+  server), and a failed shim write is logged instead of silently swallowed. `AgentContextBuilder`
+  gains `resolveServiceFrame` so the frontend-config resolution reuses the frame row the walk
+  already loaded instead of re-fetching it. Fixes the `Lint & format` failure (an unnecessary
+  `?? {}` empty-fallback spread in the serve env).
 
 BREAKING (pre-1.0): the harness `AgentInfraSpec` is now a discriminated union
 (`service` | `frontend`); the default backend-service tester shape is unchanged.

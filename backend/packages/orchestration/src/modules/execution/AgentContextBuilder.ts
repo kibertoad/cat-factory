@@ -269,13 +269,22 @@ export class AgentContextBuilder {
 
   /** The service-frame id for a block (walks up frame → module → task; cycle-guarded). */
   async resolveServiceFrameId(workspaceId: string, blockId: string): Promise<string | null> {
+    return (await this.resolveServiceFrame(workspaceId, blockId))?.id ?? null
+  }
+
+  /**
+   * The service-frame BLOCK for a block (walks up frame → module → task; cycle-guarded).
+   * Returns the frame itself rather than its id, so a caller that needs the frame's fields
+   * (e.g. `frontendConfig`) doesn't re-fetch the row the walk already loaded.
+   */
+  async resolveServiceFrame(workspaceId: string, blockId: string): Promise<Block | null> {
     let current = await this.deps.blockRepository.get(workspaceId, blockId)
     // Bounded walk (the tree is at most frame → module → task) guarded against cycles.
     for (let i = 0; current && i < 8; i++) {
-      if (current.level === 'frame' || !current.parentId) return current.id
+      if (current.level === 'frame' || !current.parentId) return current
       current = await this.deps.blockRepository.get(workspaceId, current.parentId)
     }
-    return current?.id ?? null
+    return current ?? null
   }
 
   /**
@@ -327,11 +336,7 @@ export class AgentContextBuilder {
     block: Block,
   ): Promise<AgentRunContext['frontend'] | undefined> {
     const frame =
-      block.level === 'frame'
-        ? block
-        : await this.resolveServiceFrameId(workspaceId, block.id).then((id) =>
-            id ? this.deps.blockRepository.get(workspaceId, id) : null,
-          )
+      block.level === 'frame' ? block : await this.resolveServiceFrame(workspaceId, block.id)
     if (!frame || frame.type !== 'frontend' || !frame.frontendConfig) return undefined
     const config = frame.frontendConfig
     // The distinct service block ids this frontend binds — the only envs whose live URLs matter.

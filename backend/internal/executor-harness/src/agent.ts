@@ -132,9 +132,16 @@ async function standUpInfra(
  * processes (torn down by killing them); the default backend-service flow stands the
  * docker-compose stack up (torn down with `docker compose down`). Unifying the two here keeps
  * `runExploreMode` free of the branch and guarantees the matching teardown runs in its finally.
+ *
+ * `dir` is the clone ROOT; `workDir` is the service subtree (equal to `dir` when the run is not
+ * monorepo-scoped). The docker-compose stand-up runs at the root (its `composePath` is
+ * repo-relative), but the FRONTEND stand-up runs in `workDir`: a monorepo frontend's
+ * `package.json` / `outputDir` / `mocks/` all live under the service subtree, so installing,
+ * building, serving and seeding WireMock from the root would target the wrong directory.
  */
 async function manageInfra(
   dir: string,
+  workDir: string,
   infra: AgentInfraSpec,
   signal: AbortSignal | undefined,
   onActivity: (() => void) | undefined,
@@ -148,7 +155,8 @@ async function manageInfra(
   if (infra.kind === 'frontend') {
     // `onActivity` feeds the inactivity watchdog through the frontend build/serve stand-up,
     // which (unlike docker-compose's 5-min-capped `up`) can run past the inactivity window.
-    const fe = await standUpFrontend(dir, infra, signal, onActivity, logger)
+    // Runs in `workDir` so a monorepo frontend builds/serves from its own package subtree.
+    const fe = await standUpFrontend(workDir, infra, signal, onActivity, logger)
     return {
       ...(fe.note ? { note: fe.note } : {}),
       ...(fe.serveUrl ? { serveUrl: fe.serveUrl } : {}),
@@ -247,7 +255,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
       // harness only manages the lifecycle + this dynamic stand-up note.
       const infra = job.infra
       const managed = infra
-        ? await manageInfra(dir, infra, opts.signal, opts.onActivity, logger)
+        ? await manageInfra(dir, workDir, infra, opts.signal, opts.onActivity, logger)
         : undefined
       // Fold the stand-up outcome into the agent prompt: a stand-up problem (build/compose
       // failure) is flagged as a concern; a frontend serve URL points the UI tester at the

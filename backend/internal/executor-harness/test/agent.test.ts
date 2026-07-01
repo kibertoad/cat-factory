@@ -156,6 +156,34 @@ describe('parseAgentJob', () => {
     expect(job.infra).toEqual({ kind: 'frontend', env: { GOOD: 'https://ok' } })
   })
 
+  it('drops reserved env NAMES and reserved FAMILIES from a frontend infra spec', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'explore',
+      infra: {
+        kind: 'frontend',
+        env: {
+          PUB_API_URL: 'https://ok', // kept
+          NODE_EXTRA_CA_CERTS: '/evil.pem', // reserved name → dropped
+          BASH_ENV: '/evil.sh', // reserved name → dropped
+          npm_config_registry: 'https://evil', // reserved family (npm_config_*) → dropped
+          GIT_SSH_COMMAND: 'ssh -oProxyCommand=evil', // reserved family (GIT_*) → dropped
+        },
+      },
+    })
+    expect(job.infra).toEqual({ kind: 'frontend', env: { PUB_API_URL: 'https://ok' } })
+  })
+
+  it('drops an out-of-range frontend servePort / wiremockPort (can never bind)', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'explore',
+      infra: { kind: 'frontend', servePort: 70000, wiremockPort: 0 },
+    })
+    // Both are outside 1..65535, so they fall back to the harness defaults (absent here).
+    expect(job.infra).toEqual({ kind: 'frontend' })
+  })
+
   it('accepts a coding job with a fresh branch + PR', () => {
     const job = parseAgentJob({
       ...base,

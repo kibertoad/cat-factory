@@ -295,18 +295,33 @@ const HARNESS_JOB_PORT = 8080
 /**
  * Env-var names never injected from a frontend binding: they are spread over `process.env` at
  * build time in the container, so a binding named `PATH` / `NODE_OPTIONS` / … would clobber the
- * toolchain (or enable code injection) rather than name an upstream URL. The harness re-filters
- * these on the way in (defence in depth); we also drop them here so a reserved name never leaves
- * the backend as an injected env var. Matched exactly (Linux env is case-sensitive).
+ * toolchain (or enable code execution / cert overrides) rather than name an upstream URL. The
+ * harness re-filters these on the way in (defence in depth); we also drop them here so a reserved
+ * name never leaves the backend as an injected env var. Matched exactly (Linux env is
+ * case-sensitive); {@link RESERVED_ENV_PREFIXES} covers whole families (`npm_config_*`, `GIT_*`).
+ * Kept in sync with the harness's own list in `executor-harness/src/job.ts`.
  */
 const RESERVED_ENV_NAMES = new Set([
   'PATH',
   'HOME',
   'NODE_OPTIONS',
   'NODE_PATH',
+  'NODE_EXTRA_CA_CERTS',
   'LD_PRELOAD',
   'LD_LIBRARY_PATH',
+  'BASH_ENV',
+  'ENV',
+  'SHELL',
+  'IFS',
 ])
+
+/** Env-var name prefixes never injected (reconfigure the package manager / git during the build). */
+const RESERVED_ENV_PREFIXES = ['npm_config_', 'GIT_']
+
+/** Whether an env-var name is reserved (an exact name or a reserved family prefix). */
+function isReservedEnvName(key: string): boolean {
+  return RESERVED_ENV_NAMES.has(key) || RESERVED_ENV_PREFIXES.some((p) => key.startsWith(p))
+}
 
 /**
  * The served port for a frontend UI test: the user's `servePort` unless it collides with a
@@ -364,7 +379,7 @@ function buildFrontendInfraSpec(
   const wiremockUrl = `http://localhost:${FRONTEND_WIREMOCK_PORT}`
   const env: Record<string, string> = {}
   for (const binding of bindings) {
-    if (!binding.envVar || RESERVED_ENV_NAMES.has(binding.envVar)) continue
+    if (!binding.envVar || isReservedEnvName(binding.envVar)) continue
     env[binding.envVar] = binding.serviceUrl ?? wiremockUrl
   }
   return {

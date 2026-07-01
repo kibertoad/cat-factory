@@ -145,8 +145,27 @@ export async function standUpFrontend(
     // (`<outputDir>/env.js`). Best-effort — the app must reference it; a build-time app ignores it.
     const outputDir = infra.outputDir ?? DEFAULTS.outputDir
     if ((infra.envInjection ?? DEFAULTS.envInjection) === 'runtime' && infra.env) {
+      // The shim is written under `outputDir`, which the STATIC server serves as its root. A
+      // `serveMode: 'command'` dev/preview server serves from its OWN root, so it won't expose
+      // `<outputDir>/env.js` — the shim is then inert. Warn rather than silently no-op, and the
+      // `env` is ALSO forwarded to the serve process (see startServe) so a runtime-reading
+      // server can still pick the URLs up from the environment.
+      if ((infra.serveMode ?? DEFAULTS.serveMode) === 'command') {
+        logger.warn(
+          'agent(frontend): runtime env injection with serveMode:command — the window.env shim ' +
+            'is only served in static mode; relying on the forwarded env instead',
+          { outputDir },
+        )
+      }
       const shim = `window.env = ${JSON.stringify(infra.env)};\n`
-      await writeFile(join(dir, outputDir, 'env.js'), shim, 'utf8').catch(() => {})
+      await writeFile(join(dir, outputDir, 'env.js'), shim, 'utf8').catch((err) => {
+        // Best-effort, but no longer silent: a missing/renamed output dir would drop the shim
+        // and the app would read no URLs, so surface it in the log for diagnosis.
+        logger.warn('agent(frontend): could not write runtime env shim', {
+          path: join(outputDir, 'env.js'),
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
     }
 
     // 3) WireMock for the mocked upstreams. Seeded from the FE repo's mappings dir when present;
@@ -275,7 +294,8 @@ function startServe(
         stdio: 'ignore',
         // Reserved names were already filtered from `infra.env` at parse; PORT wins last so
         // the health-check's port is authoritative even if a binding tried to set it.
-        env: { ...process.env, ...(infra.env ?? {}), PORT: String(servePort) },
+        // (Spreading an undefined `infra.env` is a no-op, so no `?? {}` fallback is needed.)
+        env: { ...process.env, ...infra.env, PORT: String(servePort) },
       }),
       'serve',
       logger,

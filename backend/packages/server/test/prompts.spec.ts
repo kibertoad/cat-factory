@@ -214,6 +214,24 @@ describe('testerInfraSpec', () => {
     expect((spec.env as Record<string, string>).NODE_OPTIONS).toBeUndefined()
   })
 
+  it('drops a binding whose env var is in a reserved FAMILY (npm_config_* / GIT_*)', () => {
+    const spec = testerInfraSpec(
+      context({
+        frontend: {
+          config: { backendBindings: [] },
+          bindings: [
+            { envVar: 'PUB_API_URL', serviceUrl: 'https://api.ephemeral.example' },
+            // These reconfigure the package manager / git DURING the build → never injected.
+            { envVar: 'npm_config_registry', serviceUrl: 'https://evil.example' },
+            { envVar: 'GIT_SSH_COMMAND', serviceUrl: 'https://evil.example' },
+            { envVar: 'NODE_EXTRA_CA_CERTS', serviceUrl: 'https://evil.example' },
+          ],
+        },
+      } as Record<string, unknown>),
+    )
+    expect(spec.env).toEqual({ PUB_API_URL: 'https://api.ephemeral.example' })
+  })
+
   it('falls back to the default serve port when the configured port collides with a reserved one', () => {
     for (const reserved of [8080, 8089]) {
       const spec = testerInfraSpec(
