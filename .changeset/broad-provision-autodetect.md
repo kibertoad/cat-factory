@@ -14,7 +14,10 @@ Broaden the provisioning auto-detector and make it monorepo-aware with user-sele
   subdirs (`overlays`, `base`, `helm`, `charts`, `kustomize`).
 - **Monorepo-aware.** When scoped to a service subdirectory, the detector checks both the colocated
   service folder AND the repo's root shared-deploy dirs (`deploy/<svc>`, `k8s/<svc>`,
-  `manifests/services/<svc>`, `apps/<svc>`, …), matching the service's slice by its directory basename.
+  `manifests/services/<svc>`, …), matching the service's slice by its directory basename. Unrelated
+  slices are not surfaced when colocated manifests already win, and a name-matched slice with no
+  confirmable manifests is only pre-selected when it actually matches the service name (never a
+  fabricated pick at an arbitrary directory).
 - **Choose instead of silent auto-pick.** The recommendation now surfaces `serviceDirCandidates`
   (which root-shared monorepo slice), `manifestRootCandidates` (which k8s root when several resolve),
   and `composeServiceCandidates` (which compose service) alongside the existing overlay candidates, each

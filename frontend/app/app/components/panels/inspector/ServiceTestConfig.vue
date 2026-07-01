@@ -207,6 +207,11 @@ function applyPicked() {
 const detecting = ref(false)
 const detectError = ref(false)
 const detectResult = ref<ProvisioningRecommendation | null>(null)
+// Advisory, LOCAL-ONLY selection: which compose `services:` key the user picked. It is NOT persisted
+// (the compose backend targets the file, not a single service), so it lives only in component state
+// and merely drives the chip highlight. Without it the highlight would compare `composePath` — which
+// every candidate shares — and light up ALL chips at once, making the picker look non-functional.
+const pickedComposeService = ref<string | null>(null)
 
 // A detection result is scoped to the inspected block — clear it (and any error) when the
 // selection changes, so block B never shows block A's stale recommendation / overlay chips.
@@ -215,6 +220,7 @@ watch(
   () => {
     detectResult.value = null
     detectError.value = false
+    pickedComposeService.value = null
   },
 )
 
@@ -238,6 +244,9 @@ async function detectFromRepo() {
       prefer: provisionType.value,
     })
     detectResult.value = rec
+    // Pre-select the recommended compose service so the picker opens on a real choice.
+    pickedComposeService.value =
+      rec.composeServiceCandidates?.find((c) => c.recommended)?.service ?? null
     // Only prefill when the detector actually inferred something. A `detected: false`
     // recommendation is `infraless`; applying it would WIPE the service's existing
     // provisioning (board.updateBlock persists immediately). Leave the current config
@@ -269,10 +278,12 @@ function applyServiceDir(candidate: ProvisioningServiceDirCandidate) {
   setKubePath(candidate.path)
 }
 
-// Point the compose file at the picked candidate's file. The service KEY is advisory (surfaced
-// as a note only) — the compose backend targets the file, not a single service — so we set the path.
+// Point the compose file at the picked candidate's file and record the advisory service selection.
+// The service KEY is not persisted (the compose backend targets the file, not a single service); the
+// picked key is tracked locally only to drive the chip highlight and the note.
 function applyComposeService(candidate: ProvisioningComposeServiceCandidate) {
   setComposePath(candidate.composePath)
+  pickedComposeService.value = candidate.service
 }
 
 function provisionTypeLabel(type: ProvisionType): string {
@@ -432,8 +443,8 @@ function setSize(value: InstanceSize) {
               <UButton
                 v-for="c in detectResult.composeServiceCandidates"
                 :key="c.service"
-                :color="composePath === c.composePath ? 'primary' : 'neutral'"
-                :variant="composePath === c.composePath ? 'soft' : 'ghost'"
+                :color="pickedComposeService === c.service ? 'primary' : 'neutral'"
+                :variant="pickedComposeService === c.service ? 'soft' : 'ghost'"
                 size="xs"
                 @click="applyComposeService(c)"
               >

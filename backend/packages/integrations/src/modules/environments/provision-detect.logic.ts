@@ -121,16 +121,21 @@ const K8S_NESTED_SUBDIRS = [
 ]
 // Root shared-deploy dirs a monorepo keys per-service subfolders under (e.g. `deploy/<svc>`,
 // `k8s/<svc>`, `manifests/services/<svc>`). Scanned at the REPO ROOT only when a service
-// subdirectory was given, to locate the slice belonging to this service.
+// subdirectory was given, to locate the slice belonging to this service. Deliberately excludes
+// `apps/` — that is almost always the SOURCE tree, not deploy manifests, so listing every app as a
+// "deploy folder" candidate is noise (a service whose manifests really live under `apps/<svc>` is
+// already covered by the colocated scan of its own directory).
 const SHARED_DEPLOY_ROOTS = [
   'deploy',
   'k8s',
   'kubernetes',
   'manifests',
   'manifests/services',
-  'apps',
   'infra/manifests',
 ]
+// Fast membership test used to drop a shared-root child that is ITSELF another shared root (e.g.
+// `manifests/services`, surfaced as a child of `manifests`) so it isn't offered as a bogus slice.
+const SHARED_DEPLOY_ROOT_SET = new Set(SHARED_DEPLOY_ROOTS)
 // The most k8s roots we collect as candidates (bounds the candidate list + the reads it triggers).
 const MAX_MANIFEST_ROOTS = 6
 // Overlay names ranked most→least likely to be the ephemeral/preview environment.
@@ -151,7 +156,11 @@ const OVERLAY_RANK = [
 const ENV_EXAMPLE_FILES = ['.env.example', '.env.sample', '.env.template', '.env.dist']
 // Bounds the total reads so a pathological repo can't fan out unboundedly. Raised from 80 because
 // the candidate lists grew (more k8s dirs, compose dirs, shared-deploy roots) and manifest-root
-// collection no longer short-circuits on the first hit — still tiny versus a real API.
+// collection no longer short-circuits on the first hit — still tiny versus a real API. Reads are
+// intentionally SEQUENTIAL (not batched/parallel): the budget short-circuit and the "first present
+// name/dir wins" ordering both depend on deterministic, in-order accounting. In practice a real
+// repo resolves in a handful of reads well before the cap; the cap only bites on decoy-heavy repos,
+// where truncation is surfaced as a note (see `Scanner.exhausted`).
 const READ_BUDGET = 200
 const MAX_IMAGES = 8
 
@@ -490,6 +499,9 @@ async function findServiceDeployCandidates(
       if (entry.type !== 'dir') continue
       const path = joinPath(deployRoot, entry.name)
       if (seen.has(path)) continue
+      // Skip a child that is itself a shared-deploy root (e.g. `manifests/services`): it's a
+      // container for slices, not a per-service slice of its own.
+      if (SHARED_DEPLOY_ROOT_SET.has(path)) continue
       seen.add(path)
       candidates.push({ path, name: entry.name })
     }
@@ -798,13 +810,17 @@ async function buildKubernetesRecommendation(
     notes.push({
       field: 'serviceDir',
       confidence: opts.chosenSlice.recommended ? 'high' : 'low',
-      message: `Found this service's manifests in the shared deploy directory ${opts.chosenSlice.path} (matched "${opts.chosenSlice.name}"). Pick a different slice below if that's wrong.`,
+      // Only claim a name match when the slice actually matched the service basename; otherwise it's
+      // the first slice that happened to hold manifests, so don't overstate the confidence.
+      message: opts.chosenSlice.recommended
+        ? `Found this service's manifests in the shared deploy directory ${opts.chosenSlice.path} (matched "${opts.chosenSlice.name}"). Pick a different slice below if that's wrong.`
+        : `Used manifests from the shared deploy directory ${opts.chosenSlice.path} (no slice matched this service's name). Pick a different slice below if that's wrong.`,
     })
   } else if (opts.serviceDirCandidates && opts.serviceDirCandidates.length > 0) {
     notes.push({
       field: 'serviceDir',
       confidence: 'low',
-      message: `A root shared deploy directory also holds per-service slice(s); the colocated manifests were used. Pick a shared slice below if those are the deploy target instead.`,
+      message: `A root shared deploy directory also holds a slice named after this service; the colocated manifests were used. Pick the shared slice below if that is the deploy target instead.`,
     })
   }
 
@@ -833,7 +849,10 @@ async function buildKubernetesRecommendation(
   let manifestRootCandidates: ProvisioningManifestRootCandidate[] | undefined
   if (roots.length > 1) {
     manifestRootCandidates = roots.map((r, i) => ({
-      path: r.dir || '.',
+      // The recommended root uses the RESOLVED source path (which may be a kustomize overlay subdir,
+      // e.g. `k8s/overlays/prenv`) so its chip matches `manifestSource.path` and stays highlighted —
+      // and picking it re-applies that same overlay-resolved path rather than the bare root.
+      path: i === 0 ? sourcePath : r.dir || '.',
       name: dirLabel(r.dir),
       renderer: r.hasKustomization ? ('kustomize' as const) : ('raw' as const),
       recommended: i === 0,
@@ -991,16 +1010,21 @@ export async function detectKubernetesProvisioning(
     return composeRecommendation(compose, serviceBasename, roots.length > 0)
   }
 
-  // Colocated k8s manifests win (highest confidence). In a monorepo, ALSO surface any root-shared
-  // per-service slices as a low-confidence "these might be the deploy target instead" hint.
+  // Colocated k8s manifests win (highest confidence). In a monorepo, ALSO surface a root-shared
+  // per-service slice as a low-confidence "this might be the deploy target instead" hint — but ONLY
+  // when a slice actually matches THIS service's name. Surfacing every unrelated `deploy/*` child
+  // here is pure noise (the colocated manifests are already the confident pick).
   if (roots.length > 0) {
-    const sharedHint = repoScanEnabled
-      ? await findServiceDeployCandidates(scanner, serviceBasename)
+    const lowerBasename = serviceBasename.toLowerCase()
+    const matchingHint = repoScanEnabled
+      ? (await findServiceDeployCandidates(scanner, serviceBasename)).filter(
+          (c) => c.name.toLowerCase() === lowerBasename,
+        )
       : []
     return buildKubernetesRecommendation(scanner, roots, root, {
       serviceBasename,
       compose,
-      ...(sharedHint.length > 0 ? { serviceDirCandidates: sharedHint } : {}),
+      ...(matchingHint.length > 0 ? { serviceDirCandidates: matchingHint } : {}),
     })
   }
 
@@ -1021,10 +1045,13 @@ export async function detectKubernetesProvisioning(
           })
         }
       }
-      // Slices exist but none resolved to real manifests — prefer compose, else surface the slice
-      // picker over the recommended slice path so the user can point it at the right one.
-      if (!compose) {
-        const chosen = ordered[0]!
+      // Slices exist but none resolved to real manifests. Only pre-select a k8s config when a slice
+      // actually matches THIS service's name (`ordered[0]` is the recommended one, if any): a
+      // basename match is a strong signal the slice is ours even if our heuristics didn't spot the
+      // manifests. Without a name match we do NOT fabricate a kubernetes pick at an arbitrary,
+      // unconfirmed dir — fall through to compose / none instead.
+      const chosen = ordered[0]!
+      if (chosen.recommended && !compose) {
         return {
           detected: true,
           provisioning: {
@@ -1036,7 +1063,7 @@ export async function detectKubernetesProvisioning(
             {
               field: 'serviceDir',
               confidence: 'low',
-              message: `Found root shared deploy slice(s) but couldn't confirm manifests inside; pre-selected ${chosen.path}. Pick the right slice below.`,
+              message: `Matched a shared deploy slice by name (${chosen.path}) but couldn't confirm Kubernetes manifests inside it. Pre-selected it; verify the path or pick a different slice below.`,
             },
           ],
         }
