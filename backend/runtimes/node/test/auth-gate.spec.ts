@@ -67,4 +67,22 @@ describe('Node auth gate wiring', () => {
     // looks broken instead of misconfigured (see config.ts).
     expect(() => makeApp(AUTH_UNCONFIGURED)).toThrow(/anonymous access/i)
   })
+
+  // Symmetric with the Worker's auth.spec: a hosted deployment advertises the PAT-login
+  // providers so a user can sign in with their own PAT (GitHub always; GitLab when a GitLab
+  // connection is configured). "Keep the runtimes symmetric" — both facades wire vcsIdentity.
+  it('advertises GitHub PAT login on a hosted deployment', async () => {
+    const call = makeApp(AUTH_ENABLED)
+    const res = await call('GET', '/auth/config')
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { patLogin?: { providers: string[] } }
+    expect(body.patLogin?.providers).toEqual(['github'])
+  })
+
+  it('adds GitLab to the PAT-login providers when GITLAB_TOKEN is configured', async () => {
+    const call = makeApp({ ...AUTH_ENABLED, GITLAB_TOKEN: 'glpat-test-token' })
+    const res = await call('GET', '/auth/config')
+    const body = (await res.json()) as { patLogin?: { providers: string[] } }
+    expect(body.patLogin?.providers).toEqual(['github', 'gitlab'])
+  })
 })
