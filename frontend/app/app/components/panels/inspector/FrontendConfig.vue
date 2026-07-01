@@ -35,6 +35,14 @@ function saveText(field: keyof FrontendConfig, value: string) {
   save({ [field]: value.trim() || undefined } as Partial<FrontendConfig>)
 }
 
+// The serve port must be an integer in [1, 65535] (the contract's schema bounds). Coerce and
+// clamp to a valid port, dropping anything else to undefined (clears it → the harness default),
+// so an out-of-range or non-integer value never 422s the PATCH.
+function saveServePort(value: string) {
+  const n = Math.trunc(Number(value.trim()))
+  save({ servePort: Number.isInteger(n) && n >= 1 && n <= 65535 ? n : undefined })
+}
+
 const PACKAGE_MANAGERS: FrontendPackageManager[] = ['pnpm', 'npm', 'yarn']
 const packageManager = computed(() => config.value.packageManager ?? 'pnpm')
 const serveMode = computed<FrontendServeMode>(() => config.value.serveMode ?? 'static')
@@ -118,6 +126,7 @@ function removeBinding(index: number) {
         :model-value="config.installCommand ?? ''"
         size="xs"
         class="font-mono"
+        maxlength="400"
         placeholder="pnpm install --frozen-lockfile"
         @blur="(e: FocusEvent) => saveText('installCommand', (e.target as HTMLInputElement).value)"
         @keydown.enter="
@@ -135,6 +144,7 @@ function removeBinding(index: number) {
           :model-value="config.buildScript ?? ''"
           size="xs"
           class="font-mono"
+          maxlength="200"
           placeholder="build"
           @blur="(e: FocusEvent) => saveText('buildScript', (e.target as HTMLInputElement).value)"
           @keydown.enter="
@@ -150,6 +160,7 @@ function removeBinding(index: number) {
           :model-value="config.outputDir ?? ''"
           size="xs"
           class="font-mono"
+          maxlength="400"
           placeholder="dist"
           @blur="(e: FocusEvent) => saveText('outputDir', (e.target as HTMLInputElement).value)"
           @keydown.enter="
@@ -193,6 +204,7 @@ function removeBinding(index: number) {
         :model-value="config.serveScript ?? ''"
         size="xs"
         class="font-mono"
+        maxlength="200"
         placeholder="preview"
         @blur="(e: FocusEvent) => saveText('serveScript', (e.target as HTMLInputElement).value)"
         @keydown.enter="
@@ -209,16 +221,13 @@ function removeBinding(index: number) {
         <UInput
           :model-value="config.servePort != null ? String(config.servePort) : ''"
           type="number"
+          min="1"
+          max="65535"
+          step="1"
           size="xs"
           class="font-mono"
           placeholder="8080"
-          @blur="
-            (e: FocusEvent) => {
-              const raw = (e.target as HTMLInputElement).value.trim()
-              const n = raw ? Number(raw) : undefined
-              save({ servePort: n && Number.isFinite(n) ? n : undefined })
-            }
-          "
+          @blur="(e: FocusEvent) => saveServePort((e.target as HTMLInputElement).value)"
         />
       </div>
       <div class="space-y-1">
@@ -229,6 +238,7 @@ function removeBinding(index: number) {
           :model-value="config.mockMappingsPath ?? ''"
           size="xs"
           class="font-mono"
+          maxlength="400"
           placeholder="mocks/"
           @blur="
             (e: FocusEvent) => saveText('mockMappingsPath', (e.target as HTMLInputElement).value)
@@ -292,6 +302,7 @@ function removeBinding(index: number) {
             :model-value="b.envVar"
             size="xs"
             class="flex-1 font-mono"
+            maxlength="200"
             placeholder="PUB_BACKEND_URL"
             @blur="(e: FocusEvent) => setBindingEnvVar(i, (e.target as HTMLInputElement).value)"
             @keydown.enter="
