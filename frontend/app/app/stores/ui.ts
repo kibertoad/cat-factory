@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { DocumentSourceKind, TaskSourceKind, LodLevel } from '~/types/domain'
+import type { DocumentSourceKind, TaskSourceKind, LodLevel, InfraSetupArea } from '~/types/domain'
 import type { PendingContext } from '~/composables/useContextLinking'
 import { zoomToLod } from '~/composables/useSemanticZoom'
 import { useExecutionStore } from '~/stores/execution'
@@ -189,6 +189,19 @@ export const useUiStore = defineStore('ui', () => {
   const aiPresetMismatchOpen = ref(false)
   const aiSetupDismissed = ref(false)
   const aiPresetDismissed = ref(false)
+
+  // Infra-setup banner: per-SESSION dismissals, one flag per area, cleared on workspace switch
+  // exactly like the AI-onboarding flags (a dismissal in one workspace must not suppress the
+  // independent prompt for another). The PERMANENT "don't notify me again" dismissal is per-USER
+  // and persists in localStorage from the banner component; this only covers "hide for now".
+  const infraSetupSessionDismissed = ref<InfraSetupArea[]>([])
+  function dismissInfraSetupForSession(area: InfraSetupArea) {
+    if (!infraSetupSessionDismissed.value.includes(area))
+      infraSetupSessionDismissed.value = [...infraSetupSessionDismissed.value, area]
+  }
+  function resetInfraSetupDismissals() {
+    infraSetupSessionDismissed.value = []
+  }
 
   // Dedicated result-view overlay: a step whose agent kind declares a bespoke
   // visualization (via the archetype's `resultView`) opens here instead of the generic
@@ -792,6 +805,9 @@ export const useUiStore = defineStore('ui', () => {
     aiPresetMismatchOpen,
     aiSetupDismissed,
     aiPresetDismissed,
+    infraSetupSessionDismissed,
+    dismissInfraSetupForSession,
+    resetInfraSetupDismissals,
     resultView,
     closeResultView,
     stepDetail,

@@ -1067,6 +1067,15 @@ export class EnvironmentConnectionService {
   }
 
   /**
+   * Whether a primary handler is registered for the workspace — a presence probe that does NOT
+   * decrypt the secret bundle (unlike {@link getConnection}). Used by the infra-setup snapshot
+   * projection, which only needs the yes/no and runs on the hot board-load path.
+   */
+  async hasConnection(workspaceId: string): Promise<boolean> {
+    return (await this.primaryRecord(workspaceId)) !== null
+  }
+
+  /**
    * Resolve the parsed manifest of the workspace's primary handler, else undefined — the
    * non-throwing sibling of {@link requireConnection}.
    */

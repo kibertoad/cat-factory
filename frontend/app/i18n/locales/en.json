@@ -1210,6 +1210,27 @@
         "runner-pool": "Configure runner pool"
       }
     },
+    "infraSetupBanner": {
+      "agentExecutor": {
+        "title": "Agent executor not configured",
+        "body": "This deployment runs agents on a self-hosted runner pool, but none is registered, so no agent can run until you connect one.",
+        "action": "Configure runner pool"
+      },
+      "ephemeralEnvironments": {
+        "title": "Test environment not configured",
+        "body": "No ephemeral environment provider is registered, so testing agents that need a live environment can't run. Connect one to enable them.",
+        "action": "Configure environment"
+      },
+      "binaryStorage": {
+        "title": "Content storage not configured",
+        "body": "No binary storage backend is configured for this account, so UI screenshots and reference images have nowhere to live and the visual checks are skipped. Configure storage to enable them.",
+        "action": "Configure storage"
+      },
+      "dismiss": {
+        "session": "Dismiss for this session",
+        "permanent": "I'm OK with the limitations, don't notify me again"
+      }
+    },
     "spendWarningBanner": {
       "title": "Spend limit reached, agent execution paused",
       "body": "This month's token spend has hit the configured budget, so running pipelines were paused to avoid further cost. Execution resumes automatically when the budget rolls over next month, or once the limit is raised.",

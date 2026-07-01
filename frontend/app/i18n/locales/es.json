@@ -1170,6 +1170,27 @@
         "runner-pool": "Configurar grupo de ejecutores"
       }
     },
+    "infraSetupBanner": {
+      "agentExecutor": {
+        "title": "Ejecutor de agentes no configurado",
+        "body": "Este despliegue ejecuta los agentes en un pool de runners autoalojado, pero no hay ninguno registrado, así que ningún agente podrá ejecutarse hasta que conectes uno.",
+        "action": "Configurar pool de runners"
+      },
+      "ephemeralEnvironments": {
+        "title": "Entorno de pruebas no configurado",
+        "body": "No hay ningún proveedor de entornos efímeros registrado, así que los agentes de pruebas que necesitan un entorno activo no pueden ejecutarse. Conecta uno para habilitarlos.",
+        "action": "Configurar entorno"
+      },
+      "binaryStorage": {
+        "title": "Almacenamiento de contenido no configurado",
+        "body": "No hay ningún backend de almacenamiento binario configurado para esta cuenta, así que las capturas de la interfaz y las imágenes de referencia no tienen dónde guardarse y las comprobaciones visuales se omiten. Configura el almacenamiento para habilitarlas.",
+        "action": "Configurar almacenamiento"
+      },
+      "dismiss": {
+        "session": "Descartar durante esta sesión",
+        "permanent": "Acepto las limitaciones, no volver a avisarme"
+      }
+    },
     "spendWarningBanner": {
       "title": "Límite de gasto alcanzado, ejecución de agentes en pausa",
       "body": "El gasto de tokens de este mes ha alcanzado el presupuesto configurado, por lo que las canalizaciones en curso se pausaron para evitar más costes. La ejecución se reanuda automáticamente cuando el presupuesto se renueva el mes que viene, o una vez que se aumente el límite.",

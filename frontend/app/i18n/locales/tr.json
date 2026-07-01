@@ -1170,6 +1170,27 @@
         "runner-pool": "Çalıştırıcı havuzunu yapılandır"
       }
     },
+    "infraSetupBanner": {
+      "agentExecutor": {
+        "title": "Aracı yürütücüsü yapılandırılmadı",
+        "body": "Bu dağıtım aracıları kendi barındırdığınız bir runner havuzunda çalıştırır, ancak kayıtlı bir havuz yok; bu yüzden bir tane bağlayana kadar hiçbir aracı çalışamaz.",
+        "action": "Runner havuzunu yapılandır"
+      },
+      "ephemeralEnvironments": {
+        "title": "Test ortamı yapılandırılmadı",
+        "body": "Kayıtlı bir geçici ortam sağlayıcısı yok; bu nedenle çalışan bir ortama ihtiyaç duyan test aracıları çalışamaz. Etkinleştirmek için bir tane bağlayın.",
+        "action": "Ortamı yapılandır"
+      },
+      "binaryStorage": {
+        "title": "İçerik depolama yapılandırılmadı",
+        "body": "Bu hesap için yapılandırılmış bir ikili depolama arka ucu yok; bu nedenle arayüz ekran görüntülerinin ve referans görsellerinin saklanacağı bir yer yok ve görsel kontroller atlanır. Etkinleştirmek için depolamayı yapılandırın.",
+        "action": "Depolamayı yapılandır"
+      },
+      "dismiss": {
+        "session": "Bu oturum için kapat",
+        "permanent": "Kısıtlamaları kabul ediyorum, beni tekrar bilgilendirme"
+      }
+    },
     "spendWarningBanner": {
       "title": "Harcama limitine ulaşıldı, ajan yürütmesi duraklatıldı",
       "body": "Bu ayki belirteç harcaması yapılandırılan bütçeye ulaştı, bu yüzden daha fazla maliyeti önlemek için çalışan boru hatları duraklatıldı. Yürütme, bütçe gelecek ay yenilendiğinde veya limit yükseltildiğinde otomatik olarak devam eder.",

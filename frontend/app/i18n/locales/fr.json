@@ -1170,6 +1170,27 @@
         "runner-pool": "Configurer le pool d'exécuteurs"
       }
     },
+    "infraSetupBanner": {
+      "agentExecutor": {
+        "title": "Exécuteur d'agents non configuré",
+        "body": "Ce déploiement exécute les agents sur un pool de runners auto-hébergé, mais aucun n'est enregistré, donc aucun agent ne pourra s'exécuter tant que vous n'en connectez pas un.",
+        "action": "Configurer le pool de runners"
+      },
+      "ephemeralEnvironments": {
+        "title": "Environnement de test non configuré",
+        "body": "Aucun fournisseur d'environnements éphémères n'est enregistré, donc les agents de test qui nécessitent un environnement actif ne peuvent pas s'exécuter. Connectez-en un pour les activer.",
+        "action": "Configurer l'environnement"
+      },
+      "binaryStorage": {
+        "title": "Stockage de contenu non configuré",
+        "body": "Aucun backend de stockage binaire n'est configuré pour ce compte, donc les captures d'écran de l'interface et les images de référence n'ont nulle part où être stockées et les contrôles visuels sont ignorés. Configurez le stockage pour les activer.",
+        "action": "Configurer le stockage"
+      },
+      "dismiss": {
+        "session": "Ignorer pour cette session",
+        "permanent": "J'accepte les limitations, ne plus me notifier"
+      }
+    },
     "spendWarningBanner": {
       "title": "Limite de dépense atteinte, exécution des agents en pause",
       "body": "La dépense en jetons de ce mois a atteint le budget configuré, les pipelines en cours ont donc été mis en pause pour éviter des coûts supplémentaires. L'exécution reprend automatiquement au renouvellement du budget le mois prochain, ou dès que la limite est relevée.",

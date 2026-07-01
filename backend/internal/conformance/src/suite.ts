@@ -152,6 +152,30 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(res.body.executions).toHaveLength(0)
       })
 
+      it('computes the infra-setup status projection on the snapshot (both create + read)', async () => {
+        // The shared controller derives `infraSetup` from whatever THIS deployment wired, so its
+        // per-area values legitimately differ across runtimes (e.g. the Worker binds R2 →
+        // binaryStorage `configured`; a stock Node deployment defaults to off → `not_defined`).
+        // The runtime-agnostic invariant the conformance suite pins is that BOTH facades attach
+        // the projection with all three areas set to a valid status — a facade that forgot it (or
+        // mistyped a value) fails here rather than shipping a banner that never renders.
+        const statuses = ['not_defined', 'configured', 'not_applicable']
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace({ seed: false })
+
+        const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
+        const infra = snap.body.infraSetup
+        expect(infra).toBeDefined()
+        expect(statuses).toContain(infra!.ephemeralEnvironments)
+        expect(statuses).toContain(infra!.agentExecutor)
+        expect(statuses).toContain(infra!.binaryStorage)
+
+        // The create response carries the same projection (so a fresh board renders the banner).
+        const created = await call<WorkspaceSnapshot>('POST', '/workspaces', { seed: false })
+        expect(created.body.infraSetup).toBeDefined()
+        expect(statuses).toContain(created.body.infraSetup!.binaryStorage)
+      })
+
       it('persists and updates a board name + description identically on every store', async () => {
         const { call } = harness.makeApp()
         const created = await call<WorkspaceSnapshot>('POST', '/workspaces', {

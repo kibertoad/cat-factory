@@ -1170,6 +1170,27 @@
         "runner-pool": "Skonfiguruj pulę silników"
       }
     },
+    "infraSetupBanner": {
+      "agentExecutor": {
+        "title": "Wykonawca agentów nie jest skonfigurowany",
+        "body": "To wdrożenie uruchamia agentów w samodzielnie hostowanej puli runnerów, ale żadna nie jest zarejestrowana, więc żaden agent nie będzie mógł działać, dopóki jej nie podłączysz.",
+        "action": "Skonfiguruj pulę runnerów"
+      },
+      "ephemeralEnvironments": {
+        "title": "Środowisko testowe nie jest skonfigurowane",
+        "body": "Nie zarejestrowano żadnego dostawcy środowisk efemerycznych, więc agenci testowi wymagający działającego środowiska nie mogą działać. Podłącz jednego, aby je włączyć.",
+        "action": "Skonfiguruj środowisko"
+      },
+      "binaryStorage": {
+        "title": "Magazyn treści nie jest skonfigurowany",
+        "body": "Dla tego konta nie skonfigurowano żadnego zaplecza magazynu binarnego, więc zrzuty ekranu interfejsu i obrazy referencyjne nie mają gdzie się zapisać, a kontrole wizualne są pomijane. Skonfiguruj magazyn, aby je włączyć.",
+        "action": "Skonfiguruj magazyn"
+      },
+      "dismiss": {
+        "session": "Odrzuć na tę sesję",
+        "permanent": "Akceptuję ograniczenia, nie powiadamiaj mnie ponownie"
+      }
+    },
     "spendWarningBanner": {
       "title": "Osiągnięto limit wydatków, wykonywanie agentów wstrzymane",
       "body": "Wydatki na tokeny w tym miesiącu osiągnęły skonfigurowany budżet, dlatego działające potoki zostały wstrzymane, aby uniknąć dalszych kosztów. Wykonywanie wznowi się automatycznie po odnowieniu budżetu w przyszłym miesiącu lub po podniesieniu limitu.",

@@ -139,6 +139,9 @@ importers:
       '@cat-factory/conformance':
         specifier: workspace:*
         version: link:../conformance
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@cat-factory/node-server':
         specifier: workspace:*
         version: link:../../runtimes/node

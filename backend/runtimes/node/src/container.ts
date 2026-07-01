@@ -2252,6 +2252,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Resolves the per-account binary-artifact store (screenshots) for the artifact
     // controllers + the visual-confirmation gate (configured per-account in the UI).
     resolveBinaryArtifactStore,
+    // Stock/remote Node has NO built-in container runtime, so container agents run ONLY on a
+    // self-hosted runner pool — an unregistered pool means no agent can run, which the infra-setup
+    // banner should surface. Local mode injects its own per-run-host-container `resolveTransport`
+    // (so the pool is optional there); detect that by the absence of the default pool transport.
+    agentExecutorRequiresRunnerPool: options.resolveTransport === undefined,
     gateways: createNodeGateways(env),
     // Source-control PAT login: lets a user sign in with their own GitHub/GitLab PAT via
     // `/auth/pat`, held to the server's login/org/domain allowlist. Local mode overrides this

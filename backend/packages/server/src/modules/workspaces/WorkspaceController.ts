@@ -12,8 +12,14 @@ import {
 } from '@cat-factory/agents'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
+import { logger as sharedLogger } from '../../observability/logger.js'
 import type { EnvironmentBackendRegistry, RunnerBackendRegistry } from '@cat-factory/integrations'
-import type { BackendKindOption, CustomAgentKind, WorkspaceSnapshot } from '@cat-factory/contracts'
+import type {
+  BackendKindOption,
+  CustomAgentKind,
+  InfraSetup,
+  WorkspaceSnapshot,
+} from '@cat-factory/contracts'
 import type { AgentRouting } from '@cat-factory/agents'
 import type { ModelRef } from '@cat-factory/kernel'
 
@@ -71,6 +77,122 @@ function snapshotBackendKinds(registries: {
     environmentBackendKinds: registries.environmentBackendRegistry.labelled(),
     runnerBackendKinds: registries.runnerBackendRegistry.labelled(),
   }
+}
+
+/**
+ * The per-area infrastructure-setup status for a workspace, computed from whatever THIS
+ * deployment actually wired (so it's runtime-symmetric by construction — the shared controller
+ * derives it, no per-facade code). Each area is:
+ *  - `not_applicable` — the integration isn't wired for this runtime (nothing to configure), so
+ *    the read function is absent. The runner-pool executor counts as an area ONLY when the pool is
+ *    the sole way container agents run (`agentExecutorRequiresRunnerPool`) — remote/stock Node;
+ *    Cloudflare (built-in per-run containers) and local mode (per-run host containers) both wire the
+ *    runner surface but keep a built-in executor, so the pool is optional there ⇒ `not_applicable`.
+ *    Binary storage is `not_applicable` only when the facade wired no artifact-store resolver at all — in practice
+ *    every facade wires one, so this area is `configured`/`not_defined` everywhere: a Cloudflare
+ *    deployment without an `ARTIFACT_BUCKET` binding (or any account that selected no backend)
+ *    reads `not_defined` too, not just stock Node.
+ *  - `not_defined`    — the deployment CAN use it but the operator hasn't set it up (banner-worthy):
+ *    no environment/runner-pool connection registered, or the account selected no content-storage
+ *    backend (Node defaults to `off`).
+ *  - `configured`     — a connection / backend is defined.
+ *
+ * IMPORTANT: this is an ADVISORY projection for a banner — it must never break the workspace
+ * snapshot (the board load). Each area's read is fault-isolated: a read that throws (e.g. a
+ * mothership persistence RPC that doesn't expose the connection repo, or a rotated encryption key
+ * that fails a secret decrypt) OR hangs past {@link AREA_PROBE_TIMEOUT_MS} degrades that area to
+ * `not_applicable` ("can't tell → don't nag") rather than 500-ing / stalling `GET /workspaces/:id`.
+ * A swallowed error/timeout is logged (best-effort) so a persistent misconfig that reads as
+ * `not_applicable` is still diagnosable instead of silently invisible.
+ */
+
+/** Structural best-effort logger (the facade's pino logger); a swallowed probe fault is logged here. */
+export interface InfraSetupLogger {
+  warn(obj: Record<string, unknown>, msg?: string): void
+}
+
+/** Cap on a single area probe so a slow/stuck backend read can't stall the whole board snapshot. */
+export const AREA_PROBE_TIMEOUT_MS = 2000
+
+export async function areaStatus(
+  wired: boolean,
+  read: () => Promise<unknown>,
+  opts: { area?: string; logger?: InfraSetupLogger; timeoutMs?: number } = {},
+): Promise<'not_applicable' | 'not_defined' | 'configured'> {
+  if (!wired) return 'not_applicable'
+  const timeoutMs = opts.timeoutMs ?? AREA_PROBE_TIMEOUT_MS
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    const result = await Promise.race([
+      read(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`infra-setup probe timed out after ${timeoutMs}ms`)),
+          timeoutMs,
+        )
+      }),
+    ])
+    return result ? 'configured' : 'not_defined'
+  } catch (err) {
+    opts.logger?.warn(
+      { area: opts.area, err: err instanceof Error ? err.message : String(err) },
+      'infra-setup probe failed; degrading area to not_applicable',
+    )
+    return 'not_applicable'
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+/**
+ * The subset of the request container `snapshotInfraSetup` reads. Named (rather than inlined)
+ * so the presence-probe method shapes are explicit and a signature change is caught here.
+ *
+ * The env/runner probes use `hasConnection` — a yes/no that does NOT decrypt the secret bundle.
+ * `resolveBinaryArtifactStore` is the store's single source of truth (an account can select a
+ * backend whose credentials don't yet resolve, which a presence-only check couldn't tell from a
+ * live one); it reads through the AccountSettingsService's short-TTL cache, so the underlying
+ * secret decrypt is amortized across board loads rather than paid on each.
+ */
+export interface InfraSetupSources {
+  environments?: { connectionService: { hasConnection(ws: string): Promise<boolean> } }
+  runners?: { connectionService: { hasConnection(ws: string): Promise<boolean> } }
+  /**
+   * True ONLY when a self-hosted runner pool is the sole execution backend for container agents
+   * (so an unregistered pool means NO agent can run) — i.e. this facade has no built-in per-run
+   * container runtime. Only remote/stock Node sets it: Cloudflare has built-in per-run containers
+   * and local mode runs agents in per-run HOST containers, so on both the pool is an OPTIONAL
+   * alternate target, not the executor of record. Without this gate the mere presence of the
+   * (always-wired-on-Node, opt-in-on-Cloudflare) runner surface would falsely nag "no agent can
+   * run" on local mode and on a Cloudflare deployment that set `RUNNERS_ENABLED`.
+   */
+  agentExecutorRequiresRunnerPool?: boolean
+  resolveBinaryArtifactStore?: (ws: string) => Promise<unknown>
+}
+
+export async function snapshotInfraSetup(
+  container: InfraSetupSources,
+  workspaceId: string,
+  logger: InfraSetupLogger = sharedLogger,
+): Promise<InfraSetup> {
+  const [ephemeralEnvironments, agentExecutor, binaryStorage] = await Promise.all([
+    areaStatus(
+      !!container.environments,
+      () => container.environments!.connectionService.hasConnection(workspaceId),
+      { area: 'ephemeralEnvironments', logger },
+    ),
+    areaStatus(
+      !!container.runners && !!container.agentExecutorRequiresRunnerPool,
+      () => container.runners!.connectionService.hasConnection(workspaceId),
+      { area: 'agentExecutor', logger },
+    ),
+    areaStatus(
+      !!container.resolveBinaryArtifactStore,
+      () => container.resolveBinaryArtifactStore!(workspaceId),
+      { area: 'binaryStorage', logger },
+    ),
+  ])
+  return { ephemeralEnvironments, agentExecutor, binaryStorage }
 }
 
 function deploymentModelDefaults(routing: AgentRouting) {
@@ -141,6 +263,7 @@ export function workspaceController(): Hono<AppEnv> {
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
         ...snapshotBackendKinds(container),
+        infraSetup: await snapshotInfraSetup(container, snapshot.workspace.id),
       },
       201,
     )
@@ -229,6 +352,7 @@ export function workspaceController(): Hono<AppEnv> {
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
         ...snapshotBackendKinds(container),
+        infraSetup: await snapshotInfraSetup(container, workspaceId),
       },
       200,
     )
