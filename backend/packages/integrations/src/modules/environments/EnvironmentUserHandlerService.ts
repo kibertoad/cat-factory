@@ -17,6 +17,7 @@ import type {
 import {
   buildInfraHandlerFields,
   handlerConfigToBackendConfig,
+  overlaySecrets,
   resolveHandlerBackend,
 } from './infra-handler-build.js'
 
@@ -61,16 +62,29 @@ export class EnvironmentUserHandlerService {
     workspaceId: string,
     input: RegisterHandlerInput,
   ): Promise<EnvironmentHandlerView> {
-    const fields = buildInfraHandlerFields(this.deps.environmentBackendRegistry, input, {
-      ...(this.deps.urlPolicy ? { urlPolicy: this.deps.urlPolicy } : {}),
-      ...(this.deps.customTlsSupported !== undefined
-        ? { customTlsSupported: this.deps.customTlsSupported }
-        : {}),
-    })
+    // Preserve write-only secrets the operator didn't re-enter on edit (a blank/omitted secret
+    // keeps the stored value), so editing a non-secret field never wipes the token — mirroring
+    // the workspace handler store. The lookup key matches the fields buildInfraHandlerFields
+    // derives from the input.
     const existing = (
       await this.deps.userHandlerRepository.listByUserWorkspace(userId, workspaceId)
-    ).find((h) => h.provisionType === fields.provisionType && h.manifestId === fields.manifestId)
-    const secretsCipher = await this.deps.secretCipher.encrypt(JSON.stringify(input.secrets))
+    ).find(
+      (h) => h.provisionType === input.provisionType && h.manifestId === (input.manifestId ?? null),
+    )
+    const secrets = existing
+      ? overlaySecrets(await this.decryptSecrets(existing), input.secrets)
+      : input.secrets
+    const fields = buildInfraHandlerFields(
+      this.deps.environmentBackendRegistry,
+      { ...input, secrets },
+      {
+        ...(this.deps.urlPolicy ? { urlPolicy: this.deps.urlPolicy } : {}),
+        ...(this.deps.customTlsSupported !== undefined
+          ? { customTlsSupported: this.deps.customTlsSupported }
+          : {}),
+      },
+    )
+    const secretsCipher = await this.deps.secretCipher.encrypt(JSON.stringify(secrets))
     const now = this.deps.clock.now()
     const record: EnvironmentUserHandlerRecord = {
       userId,
@@ -88,7 +102,17 @@ export class EnvironmentUserHandlerService {
       updatedAt: now,
     }
     await this.deps.userHandlerRepository.upsert(record)
-    return this.toView(record, Object.keys(input.secrets))
+    // Report set secret-key names from the persisted config, so a preserved token still shows.
+    return this.toView(record, this.referencedSecretKeyNames(record))
+  }
+
+  /** Decrypt a stored override's secret bundle (or {} when it carries none). */
+  private async decryptSecrets(
+    record: EnvironmentUserHandlerRecord,
+  ): Promise<Record<string, string>> {
+    if (!record.secretsCipher) return {}
+    const parsed = JSON.parse(await this.deps.secretCipher.decrypt(record.secretsCipher))
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {}
   }
 
   /** Remove one override. */

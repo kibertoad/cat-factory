@@ -32,6 +32,25 @@ export const PLACEHOLDER_MANIFEST_SOURCE: KubernetesManifestSource = {
 }
 
 /**
+ * Overlay a supplied secret bundle onto the stored one so an EDIT preserves write-only secrets
+ * the operator left blank. A non-empty supplied value replaces the stored one; a blank string
+ * (the edit form's "leave to keep the saved token") or an omitted key keeps the stored value.
+ * Shared by the workspace handler store and the per-user override store so they can't drift on
+ * how a saved secret is preserved.
+ */
+export function overlaySecrets(
+  stored: Record<string, string>,
+  supplied: Record<string, string> | undefined,
+): Record<string, string> {
+  const out = { ...stored }
+  for (const [key, value] of Object.entries(supplied ?? {})) {
+    if (typeof value === 'string' && value.trim() === '') continue
+    out[key] = value
+  }
+  return out
+}
+
+/**
  * Coerce an env-manifest `providerId` (regex `^[a-z0-9-]+$`, so a leading `-` is allowed) into a
  * valid `manifestId` (`^[a-z0-9][a-z0-9-]*$`) for the compat bridge's `acceptsManifestId`: strip
  * leading non-alphanumerics, cap to 64, and fall back to `custom` if nothing usable remains.
