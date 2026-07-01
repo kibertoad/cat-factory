@@ -293,7 +293,8 @@
         "no_pr_to_merge": "אין PR למיזוג",
         "github_not_connected": "GitHub אינו מחובר",
         "bootstrap_not_retryable": "לא ניתן להריץ מחדש את האתחול",
-        "bootstrap_reference_missing": "ארכיטקטורת ההפניה נעלמה"
+        "bootstrap_reference_missing": "ארכיטקטורת ההפניה נעלמה",
+        "preset_unsatisfiable": "קדם‑הגדרת המודל אינה יכולה להריץ צנרת זו"
       },
       "fallbackMessage": "פעולה זו מתנגשת עם המצב הנוכחי.",
       "providersUnconfigured": {

@@ -46,9 +46,23 @@ export interface ModelRef {
  * subscription model through: the container steps keep the harness, the inline steps
  * fall back to a provider model. A `pi` (or absent) harness is already inline-servable
  * and passes through unchanged.
+ *
+ * `opts.runsInline` is the deployment escape hatch: when a facade CAN run a harness ref
+ * as an inline call (local mode drives the developer's ambient `claude`/`codex` CLI as a
+ * host subprocess), it passes a predicate that returns true for the harness refs it can
+ * serve inline — those refs are then KEPT (not degraded) so they reach the harness-aware
+ * model provider. Absent / returns false ⇒ the historical degrade-to-fallback behaviour
+ * (Node/Worker have no inline harness path).
  */
-export function inlineModelRef(ref: ModelRef, fallback: ModelRef): ModelRef {
-  return ref.harness && ref.harness !== 'pi' ? fallback : ref
+export function inlineModelRef(
+  ref: ModelRef,
+  fallback: ModelRef,
+  opts?: { runsInline?: (ref: ModelRef) => boolean },
+): ModelRef {
+  if (ref.harness && ref.harness !== 'pi') {
+    return opts?.runsInline?.(ref) ? ref : fallback
+  }
+  return ref
 }
 
 export interface ModelProvider {

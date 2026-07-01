@@ -21,6 +21,7 @@ import {
   companionTargets,
   hasTrait,
   isCompanionKind,
+  isInlineModelStep,
 } from '@cat-factory/agents'
 import type { RunInitiatorScope } from '@cat-factory/kernel'
 import { validatePipelineShape } from '../pipelines/pipelineShape.js'
@@ -33,6 +34,8 @@ import {
   assertFound,
   ConflictError,
   isModelUsable,
+  isModelUsableInline,
+  type ModelRef,
   NotFoundError,
   type ProviderCapabilities,
   resolveModelRef,
@@ -244,6 +247,14 @@ export interface ExecutionServiceDependencies {
     initiatedBy?: string | null,
   ) => Promise<ProviderCapabilities>
   /**
+   * Optional: whether a container-only subscription harness ref (`claude-code` / `codex`)
+   * can run as an INLINE LLM call in this deployment (local mode's ambient CLI). The preset
+   * satisfiability guard uses it so an inline step pinned to a subscription model is
+   * satisfiable where the harness runs inline, and refused where it doesn't (Node/Worker).
+   * From `config.agents.inlineHarnessRef`; absent → no inline harness support.
+   */
+  inlineHarnessRef?: (ref: ModelRef) => boolean
+  /**
    * Optional: when the environment integration is configured, a `deployer` step
    * provisions an ephemeral environment deterministically through this service
    * (no LLM), and downstream steps discover the resulting env via it.
@@ -436,6 +447,7 @@ export class ExecutionService {
     workspaceId: string,
     initiatedBy?: string | null,
   ) => Promise<ProviderCapabilities>
+  private readonly inlineHarnessRef?: (ref: ModelRef) => boolean
   private readonly resolveWorkspaceModelDefault?: (
     workspaceId: string,
     agentKind: string,
@@ -500,6 +512,7 @@ export class ExecutionService {
     subscriptionActivationRepository,
     resolveWorkspaceModelDefault,
     resolveProviderCapabilities,
+    inlineHarnessRef,
     localTestInfraSupported,
     resolveRunRepoContext,
     assertAgentBackendConfigured,
@@ -701,6 +714,7 @@ export class ExecutionService {
     this.subscriptionActivations = subscriptionActivationRepository
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
     this.resolveProviderCapabilities = resolveProviderCapabilities
+    this.inlineHarnessRef = inlineHarnessRef
     this.localTestInfraSupported = localTestInfraSupported ?? true
     this.assertAgentBackendConfigured = assertAgentBackendConfigured
     this.resolveBinaryArtifactStore = resolveBinaryArtifactStore
@@ -919,16 +933,30 @@ export class ExecutionService {
   ): Promise<void> {
     if (!this.resolveProviderCapabilities) return
     const caps = await this.resolveProviderCapabilities(workspaceId, initiatedBy)
+    const runsInline = this.inlineHarnessRef
+    // Two failure buckets, so the error can steer the fix precisely:
+    //  - `unconfigured`: no usable provider AT ALL (container or inline) — add a key/sub/CF.
+    //  - `inlineUnsatisfiable`: usable for a container step but NOT for an INLINE step — a
+    //    subscription-only model an inline `generateText` call can't drive (and this
+    //    deployment can't run the harness inline). The remedy is different (pin an
+    //    inline-capable model, or a preset whose inline steps resolve to one), so a subscription
+    //    model that satisfies the container steps but strands the reviewer/brainstorm/estimator
+    //    is refused up front instead of failing mid-run against an ungated env default.
     const unconfigured = new Set<string>()
-    const check = (id: string | undefined): void => {
-      if (id && !isModelUsable(id, caps)) unconfigured.add(id)
+    const inlineUnsatisfiable = new Set<string>()
+    const check = (id: string | undefined, inline: boolean): void => {
+      if (!id) return
+      if (!isModelUsable(id, caps)) unconfigured.add(id)
+      else if (inline && !isModelUsableInline(id, caps, runsInline)) inlineUnsatisfiable.add(id)
     }
     if (block.modelId) {
-      // A block-level pin applies to every step.
-      check(block.modelId)
+      // A block-level pin applies to every step; it must satisfy an inline step too when the
+      // pipeline has one.
+      check(block.modelId, pipeline.agentKinds.some(isInlineModelStep))
     } else if (this.resolveWorkspaceModelDefault) {
       for (const kind of pipeline.agentKinds) {
-        check(await this.resolveWorkspaceModelDefault(workspaceId, kind, block.modelPresetId))
+        const id = await this.resolveWorkspaceModelDefault(workspaceId, kind, block.modelPresetId)
+        check(id, isInlineModelStep(kind))
       }
     }
     if (unconfigured.size > 0) {
@@ -938,6 +966,18 @@ export class ExecutionService {
           'before starting.',
         'providers_unconfigured',
         { models: [...unconfigured] },
+      )
+    }
+    if (inlineUnsatisfiable.size > 0) {
+      throw new ConflictError(
+        `This pipeline has inline steps (e.g. the requirements reviewer) whose model ` +
+          `cannot run inline: ${[...inlineUnsatisfiable].join(', ')}. A subscription-only model ` +
+          '(Claude / GPT / GLM) runs only in the container agents, not the inline reviewers — ' +
+          'and this deployment has no inline harness. Pick a model preset whose inline steps ' +
+          'resolve to a provider-backed model (a direct API key, OpenRouter, or Cloudflare AI), ' +
+          'or run local mode with the ambient Claude Code / Codex CLI enabled.',
+        'preset_unsatisfiable',
+        { models: [...inlineUnsatisfiable] },
       )
     }
   }

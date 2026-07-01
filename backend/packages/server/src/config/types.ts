@@ -19,6 +19,16 @@ export interface AgentsConfig {
    * direct/Cloudflare fallback based on which provider keys are configured.
    */
   resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
+  /**
+   * Whether this deployment can run a container-only subscription HARNESS ref
+   * (`claude-code` / `codex`) as an INLINE LLM call — true only in local mode, where the
+   * developer's ambient CLI login is driven as a host subprocess. Passed through to
+   * `inlineModelRef` at every inline call site so an ambient-eligible harness ref is KEPT
+   * (and served by the harness-aware model provider) instead of degraded to the routing
+   * default, and consulted by the preset-satisfiability guard. Undefined on Node/Worker,
+   * where inline harness execution is impossible.
+   */
+  inlineHarnessRef?: (ref: ModelRef) => boolean
 }
 
 export interface ExecutionConfig {

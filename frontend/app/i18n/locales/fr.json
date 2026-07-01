@@ -293,7 +293,8 @@
         "no_pr_to_merge": "Aucune PR à fusionner",
         "github_not_connected": "GitHub non connecté",
         "bootstrap_not_retryable": "L’initialisation ne peut pas être relancée",
-        "bootstrap_reference_missing": "L’architecture de référence a disparu"
+        "bootstrap_reference_missing": "L’architecture de référence a disparu",
+        "preset_unsatisfiable": "Le préréglage de modèle ne peut pas exécuter ce pipeline"
       },
       "fallbackMessage": "Cette action est en conflit avec l’état actuel.",
       "providersUnconfigured": {

@@ -613,6 +613,46 @@ export function isAmbientNativeVendor(
   return allow.includes(cfg.harness) && !cfg.baseUrl
 }
 
+/**
+ * The NATIVE ambient subscription vendor a harness ref belongs to, or undefined. A native
+ * vendor authenticates with the developer's own installed CLI login (`~/.claude` /
+ * `~/.codex`) and carries NO Anthropic-compatible base URL — so only `claude` (the
+ * `anthropic` + `claude-code` ref) and `codex` (any `codex` ref) qualify. A `claude-code`
+ * ref for any other provider is a non-native vendor (GLM/Kimi/DeepSeek) that reuses the
+ * harness with its own base URL, so it is deliberately excluded. Mirrors the
+ * no-`baseUrl` predicate {@link isAmbientNativeVendor} enforces, resolved from a bare ref
+ * (which carries no vendor). Used by a facade to decide whether it can run a harness ref
+ * as an inline CLI call (local ambient inline execution).
+ */
+export function nativeVendorForRef(ref: ModelRef): SubscriptionVendor | undefined {
+  if (!ref.harness || ref.harness === 'pi') return undefined
+  if (ref.harness === 'codex') return 'codex'
+  if (ref.harness === 'claude-code' && ref.provider === 'anthropic') return 'claude'
+  return undefined
+}
+
+/**
+ * Whether a catalog model id is usable for an INLINE LLM step (requirements reviewer,
+ * brainstorm, task-estimator, inline document kinds), given the workspace capabilities.
+ * Stricter than {@link isModelUsable}: an inline call cannot use a container-only
+ * subscription token, so a subscription-only model is inline-usable ONLY when the
+ * deployment can run its harness inline (`runsInline`, e.g. local ambient CLI). A model
+ * with a usable non-subscription flavour (direct / OpenRouter / Cloudflare) is inline-usable
+ * as normal; a model with no usable flavour at all is not. This is the check that closes
+ * the silent-degrade path — a subscription-only inline step with no inline-harness support
+ * used to fall back to an ungated env default and fail mid-run.
+ */
+export function isModelUsableInline(
+  id: string | undefined | null,
+  caps: ProviderCapabilities,
+  runsInline?: (ref: ModelRef) => boolean,
+): boolean {
+  const ref = resolveModelRef(id, caps)
+  if (!ref) return false
+  if (ref.harness && ref.harness !== 'pi') return runsInline?.(ref) ?? false
+  return isModelUsable(id, caps)
+}
+
 /** Every vendor flagged individual-usage only — the single source of truth for the
  *  per-user personal-subscription flow (e.g. activation refresh) so it never drifts
  *  from {@link SUBSCRIPTION_VENDORS}. */

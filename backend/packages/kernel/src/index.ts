@@ -58,6 +58,8 @@ export {
   parseOpenRouterModelId,
   resolveModelRef,
   isModelUsable,
+  isModelUsableInline,
+  nativeVendorForRef,
   subscriptionOptionFor,
   isIndividualVendor,
   isAmbientNativeVendor,

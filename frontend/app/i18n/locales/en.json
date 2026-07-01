@@ -327,7 +327,8 @@
         "github_not_connected": "GitHub not connected",
         "bootstrap_not_retryable": "Bootstrap can’t be retried",
         "bootstrap_reference_missing": "Reference architecture is gone",
-        "provision_type_unhandled": "No handler for this provision type"
+        "provision_type_unhandled": "No handler for this provision type",
+        "preset_unsatisfiable": "Model preset can't run this pipeline"
       },
       "fallbackMessage": "This action conflicts with the current state.",
       "providersUnconfigured": {

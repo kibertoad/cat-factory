@@ -59,6 +59,11 @@ export interface KaizenServiceDependencies {
   modelRef?: ModelRef
   /** Resolve a pinned model id to a ref (the deployment-aware resolver). */
   resolveBlockModel?: (modelId: string | undefined) => ModelRef | undefined
+  /**
+   * Whether a subscription harness ref can run as an INLINE call in this deployment (local
+   * mode's ambient CLI). Keeps it instead of degrading to the routing default. Absent → degrade.
+   */
+  runsInline?: (ref: ModelRef) => boolean
   /** Resolve the workspace's per-kind default model id for the `kaizen` kind. */
   resolveWorkspaceModelDefault?: (
     workspaceId: string,
@@ -295,7 +300,9 @@ export class KaizenService {
   /** Block pin > workspace per-kind default (`kaizen`) > routing default. */
   private async modelFor(workspaceId: string, blockId: string): Promise<ModelRef | undefined> {
     const fallback = this.deps.modelRef
-    const resolve = (ref: ModelRef): ModelRef => inlineModelRef(ref, fallback ?? ref)
+    const runsInline = this.deps.runsInline
+    const resolve = (ref: ModelRef): ModelRef =>
+      inlineModelRef(ref, fallback ?? ref, (runsInline ? { runsInline } : {}))
     const block = await this.deps.blockRepository.get(workspaceId, blockId)
     const fromBlock = this.deps.resolveBlockModel?.(block?.modelId)
     if (fromBlock) return resolve(fromBlock)

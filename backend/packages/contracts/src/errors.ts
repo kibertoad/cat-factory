@@ -12,6 +12,11 @@
  */
 export const CONFLICT_REASONS = [
   'providers_unconfigured',
+  // A pipeline has INLINE steps (e.g. the requirements reviewer) whose resolved model can't run
+  // inline — a subscription-only model with no inline-harness support on this deployment. The
+  // remedy differs from `providers_unconfigured` (pick an inline-capable preset / model), so the
+  // SPA steers the user to the model preset rather than the provider-key setup.
+  'preset_unsatisfiable',
   'dependencies_unmet',
   'task_limit_reached',
   'tester_infra_unsupported',

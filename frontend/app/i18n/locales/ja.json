@@ -293,7 +293,8 @@
         "no_pr_to_merge": "マージする PR がありません",
         "github_not_connected": "GitHub が接続されていません",
         "bootstrap_not_retryable": "ブートストラップは再試行できません",
-        "bootstrap_reference_missing": "リファレンスアーキテクチャが見つかりません"
+        "bootstrap_reference_missing": "リファレンスアーキテクチャが見つかりません",
+        "preset_unsatisfiable": "モデルプリセットではこのパイプラインを実行できません"
       },
       "fallbackMessage": "この操作は現在の状態と競合します。",
       "providersUnconfigured": {

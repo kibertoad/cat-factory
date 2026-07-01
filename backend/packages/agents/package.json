@@ -35,6 +35,7 @@
     "@ai-sdk/anthropic": "^3.0.89",
     "@ai-sdk/openai": "^3.0.77",
     "@ai-sdk/openai-compatible": "^2.0.54",
+    "@ai-sdk/provider": "^3.0.12",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/prompt-fragments": "workspace:*",
