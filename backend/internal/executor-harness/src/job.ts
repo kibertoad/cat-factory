@@ -692,6 +692,12 @@ export function parseAgentJob(input: unknown): AgentJob {
           ? 'preview'
           : undefined
   if (!mode) throw new Error("Invalid job: 'mode' must be 'explore', 'coding' or 'preview'")
+  // Preview runs NO agent (it only builds + serves the frontend), so the agent-only fields
+  // (system/user prompt, model) are unused there — accept them absent rather than forcing the
+  // preview dispatch to send dummy values it has no reason to supply. Every other mode still
+  // requires them (throws when missing/empty), exactly as before.
+  const agentField = (value: unknown, path: string): string =>
+    mode === 'preview' ? (typeof value === 'string' ? value : '') : str(value, path)
   const repo = (o.repo ?? {}) as Record<string, unknown>
   const output =
     typeof o.output === 'object' && o.output !== null
@@ -724,9 +730,9 @@ export function parseAgentJob(input: unknown): AgentJob {
   const job: AgentJob = {
     jobId: str(o.jobId, 'jobId'),
     mode,
-    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
-    userPrompt: str(o.userPrompt, 'userPrompt'),
-    model: str(o.model, 'model'),
+    systemPrompt: agentField(o.systemPrompt, 'systemPrompt'),
+    userPrompt: agentField(o.userPrompt, 'userPrompt'),
+    model: agentField(o.model, 'model'),
     ...parseHarnessAuth(o),
     ghToken: str(o.ghToken, 'ghToken'),
     repo: parseRepoSpec(repo),

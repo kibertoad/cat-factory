@@ -465,6 +465,28 @@ describe('parseAgentJob (preview mode)', () => {
     expect(job.infra?.kind).toBe('frontend')
   })
 
+  it('accepts a preview job WITHOUT the agent-only fields (no agent runs)', () => {
+    // Preview builds + serves only — it never runs an agent, so the model / system / user
+    // prompt are irrelevant and the dispatch need not send dummy values for them.
+    const { systemPrompt, userPrompt, model, ...rest } = base
+    void systemPrompt
+    void userPrompt
+    void model
+    const job = parseAgentJob({
+      ...rest,
+      mode: 'preview',
+      infra: { kind: 'frontend', servePort: 4173 },
+    })
+    expect(job.mode).toBe('preview')
+    expect(job).toMatchObject({ systemPrompt: '', userPrompt: '', model: '' })
+  })
+
+  it('still requires the agent-only fields for a non-preview mode', () => {
+    const { model, ...rest } = base
+    void model
+    expect(() => parseAgentJob({ ...rest, mode: 'explore' })).toThrow(/model/)
+  })
+
   it('rejects a job with an unknown mode', () => {
     expect(() => parseAgentJob({ ...base, mode: 'serve' })).toThrow(/mode/)
   })
