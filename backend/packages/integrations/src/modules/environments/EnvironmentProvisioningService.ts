@@ -664,27 +664,6 @@ export class EnvironmentProvisioningService {
       assertSafeEnvironmentUrl(provisioned.url, 'environment URL', this.urlPolicy)
     }
 
-    // A reconciliation that flips the env to `failed` (e.g. a rollout that exceeded its progress
-    // deadline, or a vanished namespace — the cases the provider maps to `failed` WITHOUT
-    // throwing) records a provisioning-log failure on the TRANSITION, so the run's "Infrastructure
-    // attempts" shows the env stopped spinning up instead of leaving it silently stuck. Repeated
-    // polls of an already-failed env don't re-log. (A read that THROWS is logged in the catch
-    // above; this covers the non-throwing failed verdict.)
-    if (provisioned.status === 'failed' && record.status !== 'failed') {
-      await this.deps.provisioningLog?.record({
-        workspaceId,
-        subsystem: 'environment',
-        operation: 'status',
-        targetId: record.id,
-        providerId: manifest.providerId,
-        blockId: record.blockId,
-        executionId: record.executionId,
-        outcome: 'failure',
-        error: 'Environment provisioning did not complete (it never became ready).',
-        detail: null,
-      })
-    }
-
     const patch = {
       status: provisioned.status,
       url: provisioned.url,
@@ -693,6 +672,34 @@ export class EnvironmentProvisioningService {
       accessCipher: await this.encryptAccess(provisioned.access),
     }
     await this.deps.environmentRegistryRepository.update(workspaceId, id, patch)
+
+    // A reconciliation that flips the env to `failed` (e.g. a rollout that exceeded its progress
+    // deadline, or a vanished namespace — the cases the provider maps to `failed` WITHOUT
+    // throwing) records a provisioning-log failure on the TRANSITION, so the run's "Infrastructure
+    // attempts" shows the env stopped spinning up instead of leaving it silently stuck. Repeated
+    // polls of an already-failed env don't re-log. (A read that THROWS is logged in the catch
+    // above; this covers the non-throwing failed verdict.) This runs AFTER the status patch is
+    // persisted and is best-effort: a logging hiccup must not throw back through refreshStatus and
+    // leave the env stuck at `provisioning` again — the exact bug this surfacing is meant to fix.
+    if (provisioned.status === 'failed' && record.status !== 'failed') {
+      try {
+        await this.deps.provisioningLog?.record({
+          workspaceId,
+          subsystem: 'environment',
+          operation: 'status',
+          targetId: record.id,
+          providerId: manifest.providerId,
+          blockId: record.blockId,
+          executionId: record.executionId,
+          outcome: 'failure',
+          error: 'Environment provisioning did not complete (it never became ready).',
+          detail: null,
+        })
+      } catch {
+        // swallow: the env is already persisted as `failed`; the log entry is advisory
+      }
+    }
+
     return recordToHandle({ ...record, ...patch })
   }
 
