@@ -66,8 +66,12 @@ jobs:
               - 'backend/packages/kernel/src/ports/environment-provider.ts'
               # The CLI's guided k3s setup (`cat-factory k3s`) has its own integration suite that
               # provisions against the SAME k3d cluster (`test-k8s`), so changes to its probe /
-              # provisioning logic or its integration config run the job too.
+              # provisioning logic or its integration config run the job too. `host-shell.ts` is
+              # included because its real, process-backed `createNodeShell()` is exercised ONLY by
+              # this integration suite (every unit test injects a fake shell) — so a change to the
+              # spawn/stdin/watchdog logic must run the one test that covers it for real.
               - 'backend/packages/cli/src/k3s*.ts'
+              - 'backend/packages/cli/src/host-shell.ts'
               - 'backend/packages/cli/vitest.integration.config.ts'
               - '.github/workflows/ci.yml'
             # The deploy-harness integration suite (also in `test-k8s`) drives `handleDeploy`

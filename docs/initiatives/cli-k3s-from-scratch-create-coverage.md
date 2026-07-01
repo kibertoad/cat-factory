@@ -36,12 +36,12 @@ Be precise about the gap before spending CI time on it. As of #603:
   the `create-k3d` **reuse** branch provisioning via a real `--context k3d-<name>`; the built
   handler + deep-link validated against the real contract schema from a real token/URL.
 - **CI environment** — the `test-k8s` job itself runs `k3d cluster create cf-it --api-port
-  127.0.0.1:6443` (with a 3× retry), so "`k3d cluster create` works in this runner" is already
-  proven — just not *through* `provisionCluster`.
+127.0.0.1:6443` (with a 3× retry), so "`k3d cluster create` works in this runner" is already
+  proven — just not _through_ `provisionCluster`.
 
 ### The residual gap (what ONLY a real from-scratch create adds)
 
-Everything below is the *entire* incremental coverage — it is small:
+Everything below is the _entire_ incremental coverage — it is small:
 
 1. `provisionCluster`'s create branch actually spawning `k3d cluster create` (vs. the mocked
    spawn in the unit test) and getting a 0 exit under the real create timeout.
@@ -60,7 +60,7 @@ hardcoded to `DEFAULT_API_PORT` and never plumbed from options). The IT then cre
 `cat-factory-cli-it` cluster on e.g. `6444`, so it coexists with `cf-it`'s `6443` in the same
 `test-k8s` job.
 
-- **Pros:** exercises the real create in the *existing* job (no second CI job); `--api-port` is
+- **Pros:** exercises the real create in the _existing_ job (no second CI job); `--api-port` is
   **independently useful product-wise** — a user whose 6443 is taken currently has no flag to
   move it (the port-collision hint just says "free it"). This is the option that turns the test
   from "extra cost" into "a test that rides along a feature we'd want anyway".
@@ -80,7 +80,7 @@ a separate job). No code change to the CLI.
 
 ### Option C — do nothing (keep #603's boundary)
 
-Accept that the create *command* is unit-tested, the reuse branch is integration-tested against a
+Accept that the create _command_ is unit-tested, the reuse branch is integration-tested against a
 real apiserver, and the runner itself proves `k3d cluster create` works.
 
 - **Pros:** zero added CI time/flake; matches the coverage-vs-cost call already made in #603.
@@ -92,7 +92,7 @@ real apiserver, and the runner itself proves `k3d cluster create` works.
 - **Benefit:** LOW as pure test coverage — the residual gap is 3 thin behaviours, and the highest-
   risk piece (does `k3d cluster create` work in CI) is already proven by the job's own setup.
 - **Cost:** MEDIUM — a second real cluster create (~20–40s with images cached, plus its own flake/
-  retry surface and guaranteed teardown), and for the *good* variant (Option A) a published-CLI
+  retry surface and guaranteed teardown), and for the _good_ variant (Option A) a published-CLI
   change with a changeset, not a test-only patch.
 
 ## Recommendation
@@ -103,7 +103,7 @@ real-cluster coverage does not justify a second cluster lifecycle in CI.
 **Revisit via Option A only if/when we add `--api-port` for product reasons** (a user with 6443
 occupied is a plausible real request). At that point a from-scratch create test on a non-default
 port is nearly free to add and validates the new flag at the same time — so the trigger for this
-work is a *product* need for `--api-port`, not a testing need. If that never arrives, the gap is
+work is a _product_ need for `--api-port`, not a testing need. If that never arrives, the gap is
 acceptable indefinitely.
 
 ## Gotchas carried forward (for whoever picks this up)
@@ -122,9 +122,9 @@ acceptable indefinitely.
 
 ## Status checklist
 
-| Item | Status | Notes / PR |
-| --- | --- | --- |
-| Decide whether to build from-scratch create coverage | **done — deferred (Option C)** | This doc; revisit only via Option A |
-| Add `--api-port` CLI option (+ arg parse/validate/help + changeset) | todo (only if product-driven) | Prerequisite for cheap Option A create IT |
-| From-scratch `create-k3d` integration test on a non-default port | todo (gated on the option above) | Piggyback on `--api-port`; guaranteed teardown + retry |
-| Reassess if `--api-port` lands for other reasons | todo | Trigger to pick this back up |
+| Item                                                                | Status                           | Notes / PR                                             |
+| ------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------ |
+| Decide whether to build from-scratch create coverage                | **done — deferred (Option C)**   | This doc; revisit only via Option A                    |
+| Add `--api-port` CLI option (+ arg parse/validate/help + changeset) | todo (only if product-driven)    | Prerequisite for cheap Option A create IT              |
+| From-scratch `create-k3d` integration test on a non-default port    | todo (gated on the option above) | Piggyback on `--api-port`; guaranteed teardown + retry |
+| Reassess if `--api-port` lands for other reasons                    | todo                             | Trigger to pick this back up                           |

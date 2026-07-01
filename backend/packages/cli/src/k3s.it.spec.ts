@@ -13,6 +13,7 @@ import {
   CAT_FACTORY_NAMESPACE,
   looksLocalCluster,
   normalizeApiServerUrl,
+  type ProvisionDeps,
   provisionCluster,
   readApiServerCommand,
   SERVICE_ACCOUNT_NAME,
@@ -62,6 +63,16 @@ function silentIo(): Io {
   }
 }
 
+/**
+ * Provisioning deps for the integration run. Raises the token-Secret poll budget far above the
+ * interactive default: a busy CI k3d cluster's token controller can take longer than the 10s
+ * default to populate a freshly-applied SA-token Secret, and a short budget would flake the
+ * required `test-k8s` job. 120 × 500ms = 60s, comfortably inside the suite's 180s timeout.
+ */
+function provisionDeps(): ProvisionDeps {
+  return { io: silentIo(), shell, tokenReadAttempts: 120 }
+}
+
 describe.skipIf(skip !== null)(
   `k3s guided setup (k3d integration)${skip ? ` — ${skip}` : ''}`,
   () => {
@@ -99,7 +110,7 @@ describe.skipIf(skip !== null)(
     })
 
     it('use-existing provisions idempotently: same token across re-runs, no duplicate resources', async () => {
-      const first = await provisionCluster('use-existing', state, opts(), { io: silentIo(), shell })
+      const first = await provisionCluster('use-existing', state, opts(), provisionDeps())
       expect(first.engine).toBe('local-k3s')
       expect(first.apiServerUrl).toMatch(/^https:\/\//)
       expect(first.apiToken.length).toBeGreaterThan(0)
@@ -120,10 +131,7 @@ describe.skipIf(skip !== null)(
       // SA/RBAC, and the long-lived token Secret is preserved — so the token is byte-identical.
       // This is the core "already completed before" guarantee: a re-run does not rotate a token
       // the user may already have pasted into the UI.
-      const second = await provisionCluster('use-existing', state, opts(), {
-        io: silentIo(),
-        shell,
-      })
+      const second = await provisionCluster('use-existing', state, opts(), provisionDeps())
       expect(second.apiToken).toBe(first.apiToken)
       expect(second.apiServerUrl).toBe(first.apiServerUrl)
 
@@ -143,10 +151,12 @@ describe.skipIf(skip !== null)(
     it.skipIf(!canReuseCreatePath)(
       'create-k3d reuses the already-running named cluster (no create) and provisions via --context',
       async () => {
-        const conn = await provisionCluster('create-k3d', state, opts({ clusterName: k3dName }), {
-          io: silentIo(),
-          shell,
-        })
+        const conn = await provisionCluster(
+          'create-k3d',
+          state,
+          opts({ clusterName: k3dName }),
+          provisionDeps(),
+        )
         // The create-k3d path names the (reused) cluster and still mints a working connection —
         // exercising its explicit `--context k3d-<name>` targeting against the real apiserver.
         expect(conn.clusterName).toBe(k3dName)
@@ -156,7 +166,7 @@ describe.skipIf(skip !== null)(
     )
 
     it('builds a schema-valid infra handler + deep-link from the REAL provisioned connection', async () => {
-      const conn = await provisionCluster('use-existing', state, opts(), { io: silentIo(), shell })
+      const conn = await provisionCluster('use-existing', state, opts(), provisionDeps())
       const handler = buildK3sHandler(conn)
 
       // Validate the built handler against the REAL contract schema (`@cat-factory/contracts` is a
