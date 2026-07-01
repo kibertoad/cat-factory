@@ -10,8 +10,8 @@
 // `@cat-factory/app`; `templates.pins.test.ts` fails the build if a pin drifts out of range of the
 // workspace version. Bump these when cutting a CLI release against newer libraries. (The two
 // libraries version independently.)
-export const LOCAL_SERVER_VERSION = '^0.33.0'
-export const APP_VERSION = '^0.64.0'
+export const LOCAL_SERVER_VERSION = '^0.34.0'
+export const APP_VERSION = '^0.66.0'
 export const NUXT_VERSION = '^4.4.8'
 export const TYPES_NODE_VERSION = '^26.0.1'
 export const TYPESCRIPT_VERSION = '7.0.1-rc'
