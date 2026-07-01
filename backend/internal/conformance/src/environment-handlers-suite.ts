@@ -45,6 +45,8 @@ function customType(
     label: 'Custom',
     acceptsInputHint: null,
     description: null,
+    defaultManifestPath: null,
+    fixerPrompt: null,
     createdAt: 1,
     updatedAt: 1,
     ...overrides,
@@ -213,12 +215,17 @@ export function defineEnvironmentHandlersSuite(
           manifestId: 'tf',
           label: 'Terraform',
           acceptsInputHint: 'HCL',
+          defaultManifestPath: 'deploy/preview.tf',
+          fixerPrompt: 'Author a valid Terraform preview manifest.',
           createdAt: 2,
         }),
       )
       let list = await customTypes.listByWorkspace(ws)
       expect(list.map((t) => t.manifestId).sort()).toEqual(['helm', 'tf'])
-      expect(list.find((t) => t.manifestId === 'tf')!.acceptsInputHint).toBe('HCL')
+      const tf = list.find((t) => t.manifestId === 'tf')!
+      expect(tf.acceptsInputHint).toBe('HCL')
+      expect(tf.defaultManifestPath).toBe('deploy/preview.tf')
+      expect(tf.fixerPrompt).toBe('Author a valid Terraform preview manifest.')
 
       // Upsert replaces the label in place.
       await customTypes.upsert(

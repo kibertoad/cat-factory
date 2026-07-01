@@ -1252,6 +1252,8 @@ function createEnvironmentsModule(
                 gitRef: input.gitRef,
                 issues: input.issues,
                 ...(input.inputs ? { inputs: input.inputs } : {}),
+                ...(input.promptOverride ? { promptOverride: input.promptOverride } : {}),
+                ...(input.manifestPath ? { manifestPath: input.manifestPath } : {}),
               })
               .then((job) => ({ jobId: job.id })),
         }

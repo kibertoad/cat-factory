@@ -9,6 +9,7 @@ import type {
   EnvConfigRepairRunner,
   ExecutionEventPublisher,
   IdGenerator,
+  RepairAgentSpec,
   RepoValidationIssue,
   RepoValidationResult,
   StepSubtasks,
@@ -39,6 +40,10 @@ export interface StartEnvConfigRepairInput {
   issues: RepoValidationIssue[]
   /** The bootstrap form inputs, when available (folded into the agent prompt). */
   inputs?: Record<string, string>
+  /** Explicit repair prompt (custom-manifest generate/fix), overriding `describeRepairAgent`. */
+  promptOverride?: RepairAgentSpec
+  /** The single repo-relative manifest path the agent creates/fixes (for the prompt context). */
+  manifestPath?: string
 }
 
 export interface EnvConfigRepairServiceDependencies {
@@ -157,6 +162,8 @@ export class EnvConfigRepairService {
         gitRef: input.gitRef,
         issues: input.issues,
         ...(input.inputs ? { inputs: input.inputs } : {}),
+        ...(input.promptOverride ? { promptOverride: input.promptOverride } : {}),
+        ...(input.manifestPath ? { manifestPath: input.manifestPath } : {}),
       })
     } catch (error) {
       const message = getErrorMessage(error)

@@ -17,6 +17,16 @@ export interface RegisteredCustomManifestType {
   /** Optional hint describing the input shape the provider expects. */
   acceptsInputHint?: string
   description?: string
+  /**
+   * Default in-repo manifest path (complete relative path + filename, or a bare filename)
+   * prefilled when a service selects this type and used as the seed for path auto-detection.
+   */
+  defaultManifestPath?: string
+  /**
+   * The coding-agent prompt used to generate the manifest (when absent) or fix it (when
+   * present but invalid). Absent ⇒ no generate/fix affordance for this type.
+   */
+  fixerPrompt?: string
 }
 
 export class CustomManifestTypeRegistry {
@@ -52,6 +62,8 @@ export function aggregateCustomManifestTypes(
       source: 'registered',
       ...(def.acceptsInputHint ? { acceptsInputHint: def.acceptsInputHint } : {}),
       ...(def.description ? { description: def.description } : {}),
+      ...(def.defaultManifestPath ? { defaultManifestPath: def.defaultManifestPath } : {}),
+      ...(def.fixerPrompt ? { fixerPrompt: def.fixerPrompt } : {}),
     })
   }
   for (const row of workspaceRows) {
@@ -61,6 +73,8 @@ export function aggregateCustomManifestTypes(
       source: 'workspace',
       ...(row.acceptsInputHint ? { acceptsInputHint: row.acceptsInputHint } : {}),
       ...(row.description ? { description: row.description } : {}),
+      ...(row.defaultManifestPath ? { defaultManifestPath: row.defaultManifestPath } : {}),
+      ...(row.fixerPrompt ? { fixerPrompt: row.fixerPrompt } : {}),
     })
   }
   return [...byId.values()].sort((a, b) => a.manifestId.localeCompare(b.manifestId))

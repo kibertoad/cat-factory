@@ -162,6 +162,13 @@ sources by `manifestId`:
     manifestId: 'kargo', // what a service pins and the handler's `acceptsManifestId` matches
     label: 'Kargo PREnv',
     description: 'Kargo ephemeral preview environment, provisioned from the repo config.',
+    // Optional: prefilled onto a service's `manifestPath` on selection + the seed for path
+    // auto-detection (a complete path, or a bare filename searched one level deep).
+    defaultManifestPath: '.kargo/prenv.yaml',
+    // Optional: the coding-agent prompt for the service inspector's "Generate / fix" button
+    // (generate the manifest when missing, fix it when invalid). Absent ⇒ no button.
+    fixerPrompt:
+      'Author a valid Kargo PREnv manifest describing this service (image, ports, health check).',
   })
   ```
 

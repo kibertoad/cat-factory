@@ -12,6 +12,7 @@ import {
   provisioningRecommendationSchema,
   registerEnvironmentHandlerSchema,
   registerEnvironmentProviderSchema,
+  repairCustomManifestSchema,
   testEnvironmentConnectionSchema,
   testEnvironmentHandlerSchema,
   updateEnvironmentSecretsSchema,
@@ -110,6 +111,16 @@ export const detectServiceProvisioningContract = defineApiContract({
   pathResolver: () => '/environments/detect-provisioning',
   requestBodySchema: detectServiceProvisioningSchema,
   responsesByStatusCode: { 200: provisioningRecommendationSchema, ...errorResponses },
+})
+
+// Generate (or fix) a service's custom manifest file via the fixer coding agent. Returns a
+// BootstrapRepoResult-shaped body: an async `env-config-repair` run is dispatched (usedAgent +
+// repairJobId) and tracked exactly like the provider-config repair fallback.
+export const repairCustomManifestContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/environments/custom-manifest/repair',
+  requestBodySchema: repairCustomManifestSchema,
+  responsesByStatusCode: { 200: bootstrapRepoResultSchema, ...errorResponses },
 })
 
 // ---- per-type infra handlers (the workspace "how") + custom-type catalog ----

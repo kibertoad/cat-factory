@@ -12,7 +12,14 @@ const infra = useInfraConfigStore()
 const toast = useToast()
 
 // A draft for the add/edit form. `manifestId` is locked on edit (it's the PK).
-const draft = reactive({ manifestId: '', label: '', acceptsInputHint: '', description: '' })
+const draft = reactive({
+  manifestId: '',
+  label: '',
+  acceptsInputHint: '',
+  description: '',
+  defaultManifestPath: '',
+  fixerPrompt: '',
+})
 const editing = ref(false)
 const busy = ref(false)
 
@@ -22,7 +29,14 @@ const canSave = computed(
 )
 
 function startAdd() {
-  Object.assign(draft, { manifestId: '', label: '', acceptsInputHint: '', description: '' })
+  Object.assign(draft, {
+    manifestId: '',
+    label: '',
+    acceptsInputHint: '',
+    description: '',
+    defaultManifestPath: '',
+    fixerPrompt: '',
+  })
   editing.value = false
 }
 
@@ -32,6 +46,8 @@ function startEdit(type: CustomManifestType) {
     label: type.label,
     acceptsInputHint: type.acceptsInputHint ?? '',
     description: type.description ?? '',
+    defaultManifestPath: type.defaultManifestPath ?? '',
+    fixerPrompt: type.fixerPrompt ?? '',
   })
   editing.value = true
 }
@@ -44,6 +60,10 @@ async function save() {
       label: draft.label.trim(),
       ...(draft.acceptsInputHint.trim() ? { acceptsInputHint: draft.acceptsInputHint.trim() } : {}),
       ...(draft.description.trim() ? { description: draft.description.trim() } : {}),
+      ...(draft.defaultManifestPath.trim()
+        ? { defaultManifestPath: draft.defaultManifestPath.trim() }
+        : {}),
+      ...(draft.fixerPrompt.trim() ? { fixerPrompt: draft.fixerPrompt.trim() } : {}),
     })
     startAdd()
   } catch (e) {
@@ -157,6 +177,22 @@ async function remove(type: CustomManifestType) {
       </UFormField>
       <UFormField :label="t('settings.infrastructure.customType.description')">
         <UTextarea v-model="draft.description" :rows="2" />
+      </UFormField>
+      <UFormField
+        :label="t('settings.infrastructure.customType.defaultManifestPath')"
+        :help="t('settings.infrastructure.customType.defaultManifestPathHelp')"
+      >
+        <UInput
+          v-model="draft.defaultManifestPath"
+          class="font-mono"
+          placeholder="deploy/preview.yaml"
+        />
+      </UFormField>
+      <UFormField
+        :label="t('settings.infrastructure.customType.fixerPrompt')"
+        :help="t('settings.infrastructure.customType.fixerPromptHelp')"
+      >
+        <UTextarea v-model="draft.fixerPrompt" :rows="3" />
       </UFormField>
       <div class="flex justify-end gap-2">
         <UButton v-if="editing" color="neutral" variant="ghost" size="sm" @click="startAdd">

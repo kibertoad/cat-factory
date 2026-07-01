@@ -4,7 +4,7 @@ import type {
   EnvConfigRepairStatus,
   StepSubtasks,
 } from '../domain/types.js'
-import type { RepoValidationIssue } from './environment-provider.js'
+import type { RepairAgentSpec, RepoValidationIssue } from './environment-provider.js'
 
 // ---------------------------------------------------------------------------
 // Ports for the environment-provider CONFIG-REPAIR agent (PR #416 increment 2).
@@ -77,6 +77,14 @@ export interface EnvConfigRepairRequest {
   issues: RepoValidationIssue[]
   /** The bootstrap form inputs, when available (folded into the agent prompt). */
   inputs?: Record<string, string>
+  /**
+   * An explicit repair prompt. When set, the container agent is dispatched with THIS prompt
+   * instead of the provider's `describeRepairAgent` — used by the custom-manifest generate/fix
+   * flow, whose prompt comes from the custom-manifest-type definition.
+   */
+  promptOverride?: RepairAgentSpec
+  /** The single repo-relative manifest path the agent creates/fixes (for the prompt context). */
+  manifestPath?: string
 }
 
 /** Addresses a dispatched repair job for polling (the container is keyed by job id). */

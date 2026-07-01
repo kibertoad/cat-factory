@@ -132,6 +132,10 @@ export interface CustomManifestTypeRecord {
   label: string
   acceptsInputHint: string | null
   description: string | null
+  /** Default in-repo manifest path prefilled/seed-detected for a service; `null` when unset. */
+  defaultManifestPath: string | null
+  /** Coding-agent prompt to generate/fix the manifest; `null` ⇒ no generate/fix affordance. */
+  fixerPrompt: string | null
   createdAt: number
   updatedAt: number
 }

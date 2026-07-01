@@ -454,6 +454,19 @@
         "namespace": "Manifesty ustalają przestrzeń nazw \"{namespace}\"; zaleca się jej przestrzeganie w handlerze przestrzeni roboczej.",
         "confidenceHigh": "Wykryto",
         "confidenceLow": "Sugestia"
+      },
+      "customManifestPathHint": "Wypełniane wartością domyślną typu po jego wybraniu. Użyj Wykryj, aby znaleźć istniejący manifest w repozytorium.",
+      "generateManifest": {
+        "title": "Plik manifestu",
+        "button": "Generuj / napraw",
+        "hint": "Uruchamia agenta kodu, aby utworzyć manifest w tej ścieżce (lub naprawić go, jeśli istnieje, ale jest nieprawidłowy) i wypchnąć go do gałęzi.",
+        "error": "Nie udało się rozpocząć generowania manifestu.",
+        "dispatched": "Rozpoczęto generowanie manifestu.",
+        "status": {
+          "running": "Generowanie manifestu…",
+          "succeeded": "Manifest wygenerowany i wypchnięty.",
+          "failed": "Generowanie manifestu nie powiodło się. Spróbuj ponownie w oknie Infrastruktura."
+        }
       }
     },
     "agentConfig": {
@@ -1815,7 +1828,11 @@
         "description": "Opis (opcjonalnie)",
         "add": "Dodaj typ",
         "saveFailed": "Nie udało się zapisać niestandardowego typu",
-        "removeFailed": "Nie udało się usunąć niestandardowego typu"
+        "removeFailed": "Nie udało się usunąć niestandardowego typu",
+        "defaultManifestPath": "Domyślna ścieżka manifestu (opcjonalnie)",
+        "defaultManifestPathHelp": "Wypełniane dla usługi, która przypina ten typ, oraz podstawa automatycznego wykrywania ścieżki. Pełna ścieżka (deploy/preview.yaml) lub sama nazwa pliku.",
+        "fixerPrompt": "Prompt naprawczy (opcjonalnie)",
+        "fixerPromptHelp": "Instrukcje dla agenta kodu do wygenerowania lub naprawy manifestu. Gdy ustawione, usługa pokazuje przycisk Generuj / napraw."
       },
       "handler": {
         "intro": "Skonfiguruj, jak obsługiwany jest każdy typ provisioningu zadeklarowany przez usługę: silnik i połączenie. Manifesty lub ścieżka compose usługi (co/gdzie) są ustawiane na usłudze.",

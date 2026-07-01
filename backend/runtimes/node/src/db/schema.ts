@@ -1512,6 +1512,8 @@ export const customManifestTypes = pgTable(
     label: text('label').notNull(),
     accepts_input_hint: text('accepts_input_hint'),
     description: text('description'),
+    default_manifest_path: text('default_manifest_path'),
+    fixer_prompt: text('fixer_prompt'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },

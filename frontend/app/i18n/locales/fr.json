@@ -454,6 +454,19 @@
         "namespace": "Les manifestes fixent l'espace de noms « {namespace} » ; il est recommandé de le respecter sur le gestionnaire de l'espace de travail.",
         "confidenceHigh": "Détecté",
         "confidenceLow": "Suggestion"
+      },
+      "customManifestPathHint": "Prérempli avec la valeur par défaut du type lors de sa sélection. Utilisez Détecter pour localiser un manifeste existant dans le dépôt.",
+      "generateManifest": {
+        "title": "Fichier de manifeste",
+        "button": "Générer / corriger",
+        "hint": "Lance un agent de code pour créer le manifeste à ce chemin (ou le corriger s'il existe mais n'est pas valide) et le pousser sur la branche.",
+        "error": "Impossible de démarrer la génération du manifeste.",
+        "dispatched": "Une exécution de génération du manifeste a démarré.",
+        "status": {
+          "running": "Génération du manifeste…",
+          "succeeded": "Manifeste généré et poussé.",
+          "failed": "La génération du manifeste a échoué. Réessayez depuis la fenêtre Infrastructure."
+        }
       }
     },
     "agentConfig": {
@@ -1815,7 +1828,11 @@
         "description": "Description (facultatif)",
         "add": "Ajouter le type",
         "saveFailed": "Impossible d'enregistrer le type personnalisé",
-        "removeFailed": "Impossible de supprimer le type personnalisé"
+        "removeFailed": "Impossible de supprimer le type personnalisé",
+        "defaultManifestPath": "Chemin de manifeste par défaut (facultatif)",
+        "defaultManifestPathHelp": "Prérempli sur un service qui épingle ce type, et base de la détection automatique du chemin. Un chemin complet (deploy/preview.yaml) ou un simple nom de fichier.",
+        "fixerPrompt": "Prompt de correction (facultatif)",
+        "fixerPromptHelp": "Instructions pour l'agent de code afin de générer ou corriger le manifeste. Lorsqu'il est défini, le service affiche un bouton Générer / corriger."
       },
       "handler": {
         "intro": "Configurez la manière dont chaque type de provisionnement déclaré par un service est géré: le moteur et la connexion. Les manifestes ou le chemin compose d'un service (le quoi/où) se définissent sur le service.",

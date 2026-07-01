@@ -5,6 +5,7 @@ import {
   registerEnvironmentHandlerContract,
   removeCustomManifestTypeContract,
   removeEnvironmentUserHandlerContract,
+  repairCustomManifestContract,
   testEnvironmentHandlerContract,
   unregisterEnvironmentHandlerContract,
   upsertCustomManifestTypeContract,
@@ -14,6 +15,7 @@ import type {
   DetectServiceProvisioningInput,
   ProvisionType,
   RegisterEnvironmentHandlerInput,
+  RepairCustomManifestInput,
   TestEnvironmentHandlerInput,
   UpsertCustomManifestTypeInput,
   UpsertEnvironmentUserHandlerBody,
@@ -44,6 +46,10 @@ export function infraHandlersApi({ send, ws }: ApiContext) {
     // Auto-detect a non-binding recommended provisioning config from a service's repo.
     detectServiceProvisioning: (workspaceId: string, body: DetectServiceProvisioningInput) =>
       send(detectServiceProvisioningContract, { pathPrefix: ws(workspaceId), body }),
+
+    // Generate/fix a service's custom manifest via the fixer coding agent (async repair run).
+    repairCustomManifest: (workspaceId: string, body: RepairCustomManifestInput) =>
+      send(repairCustomManifestContract, { pathPrefix: ws(workspaceId), body }),
 
     // `manifestId` (for a `custom` handler) rides as a query param; absent ⇒ the bare handler.
     unregisterEnvironmentHandler: (
