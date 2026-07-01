@@ -46,6 +46,8 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
     'You rejected this step’s proposal, stopping the run. Retry to re-run the pipeline from the rejected step.',
   companion_rejected:
     'A companion agent could not return a usable quality assessment (its reply was truncated or malformed) even after a repair retry. Review the companion’s raw output on the run, then retry.',
+  stalled:
+    'This run stopped making progress — its durable driver was lost (most often a crashed or restarted orchestrator) and automatic recovery could not resume it in time, so it was flagged rather than left spinning. Retry to start a fresh run.',
   cancelled: 'You stopped this run; its container was killed. Retry to start it again.',
   dispatch:
     'The agent’s container could not be started — the run never began executing. The provider/runtime’s verbatim response is shown below. Most often this is transient (a capacity blip or a new-version rollout); retrying spins a fresh container. If it persists it points at a misconfigured container binding/image or runner pool. Retry to try again.',

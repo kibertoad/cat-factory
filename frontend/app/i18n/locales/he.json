@@ -157,6 +157,7 @@
       "environmentFailed": "הקצאת הסביבה נכשלה",
       "bootstrapFailed": "האתחול נכשל",
       "runFailed": "הריצה נכשלה",
+      "stalled": "הריצה נתקעה",
       "retryBootstrap": "נסה שוב לאתחל",
       "retryRun": "נסה שוב להריץ",
       "showDetail": "הצג פרטים",

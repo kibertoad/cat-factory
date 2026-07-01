@@ -122,6 +122,13 @@ export interface ContainerRuntimeAdapter {
    * on a runtime that doesn't support pooling.
    */
   listPoolMembers(exec: ContainerExec): Promise<string[]>
+  /**
+   * Every managed, still-RUNNING per-run container this runtime holds, tagged by its run
+   * id. Used at boot to reap containers whose run has since gone terminal/away (their
+   * `release()` never ran because the previous process crashed). Exited ones are handled
+   * by {@link reapExited}; this covers the ones still up.
+   */
+  listRunContainers(exec: ContainerExec): Promise<Array<{ runId: string; containerId: string }>>
 }
 
 export type RuntimeId = 'docker' | 'podman' | 'orbstack' | 'colima' | 'apple'

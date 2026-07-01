@@ -635,6 +635,11 @@ export const agentFailureKindSchema = v.picklist([
   // (Exhausting the automatic rework budget no longer fails the run — it parks on the
   // companion iteration-cap gate for a human; see `companion.exceeded`.)
   'companion_rejected',
+  // The run was still `running` in storage but its durable driver was gone (a crashed /
+  // restarted orchestrator left the advance job orphaned), and the stale-run sweeper could
+  // not recover it within the hard-stall deadline — so it is failed for human attention
+  // instead of spinning `running` forever with no progress. Retry spins a fresh run.
+  'stalled',
   'cancelled',
   'unknown',
 ])

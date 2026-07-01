@@ -81,6 +81,8 @@ function errInfo(error: unknown): { message: string; stack?: string } {
 
 /** A run is treated as orphaned if its lease is older than this. */
 const SWEEP_LEASE_MS = 5 * 60 * 1000
+/** An execution whose instance stays missing this long is failed `stalled`, not re-driven. */
+const SWEEP_HARD_STALL_MS = 60 * 60 * 1000
 /** A GitHub projection is reconciled if it hasn't synced within this window. */
 const GITHUB_RECONCILE_STALE_MS = 30 * 60 * 1000
 /** A `running` Kaizen grading older than this is re-driven (its sweep crashed mid-flight). */
@@ -272,14 +274,27 @@ export default {
               })
             }
           },
+          // An execution whose instance stays missing past this deadline is failed
+          // `stalled` rather than re-created forever (symmetric with the Node sweeper).
+          failStalled: async (ref) => {
+            const container = buildContainer(env)
+            await container.executionService.failRun(
+              ref.workspaceId,
+              ref.id,
+              'Run stalled: its durable driver was lost and automatic recovery could not resume it.',
+              'stalled',
+              null,
+            )
+          },
           clock,
           leaseMs: SWEEP_LEASE_MS,
+          hardStallMs: SWEEP_HARD_STALL_MS,
         })
           // Surface what the sweep did — the key signal for "are runs getting stuck?"
           // Only log when it actually acted.
-          .then(({ redriven, finalized }) => {
-            if (redriven > 0 || finalized > 0) {
-              logger.warn({ cron: 'run-sweeper', redriven, finalized }, 'swept stuck runs')
+          .then(({ redriven, finalized, stalled }) => {
+            if (redriven > 0 || finalized > 0 || stalled > 0) {
+              logger.warn({ cron: 'run-sweeper', redriven, finalized, stalled }, 'swept stuck runs')
             }
           })
           .catch((error) =>

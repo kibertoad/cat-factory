@@ -56,9 +56,17 @@ export interface SweepDeps {
    * such a run would show as `running` forever (the re-drive is a silent no-op).
    */
   finalizeOrphan(ref: AgentRunRef): Promise<void>
+  /**
+   * Fail an execution run whose instance stayed `missing` past the hard-stall deadline —
+   * re-driving isn't resurrecting it, so flag it `stalled` (loud banner + retry) instead of
+   * re-creating forever. Symmetric with the Node sweeper's hard-stall backstop.
+   */
+  failStalled(ref: AgentRunRef): Promise<void>
   clock: Clock
   /** A run is considered stuck if its lease is older than this many ms. */
   leaseMs: number
+  /** A `missing` execution stale longer than this is failed `stalled` instead of re-driven. */
+  hardStallMs: number
 }
 
 /** What a sweep did, for logging. */
@@ -67,6 +75,8 @@ export interface SweepResult {
   redriven: number
   /** Runs whose instance was terminal and so were finalized instead. */
   finalized: number
+  /** Runs failed `stalled` (instance missing past the hard-stall deadline). */
+  stalled: number
 }
 
 /**
@@ -85,22 +95,34 @@ export async function sweepStuckRuns({
   instanceState,
   redrive,
   finalizeOrphan,
+  failStalled,
   clock,
   leaseMs,
+  hardStallMs,
 }: SweepDeps): Promise<SweepResult> {
-  const stale = await agentRunRepository.listStale(clock.now() - leaseMs)
+  const now = clock.now()
+  const stale = await agentRunRepository.listStale(now - leaseMs)
   let redriven = 0
   let finalized = 0
+  let stalled = 0
   for (const ref of stale) {
     const state = await instanceState(ref)
     if (state === 'alive') continue
-    if (state === 'missing') {
-      await redrive(ref)
-      redriven++
-    } else {
+    if (state === 'terminal') {
       await finalizeOrphan(ref)
       finalized++
+      continue
     }
+    // `missing`: re-create the driver — unless an execution has stayed missing past the hard
+    // deadline (re-driving isn't resurrecting it), in which case fail it `stalled` so it stops
+    // showing `running` forever and surfaces the failure banner + retry.
+    if (ref.kind === 'execution' && now - ref.updatedAt > hardStallMs) {
+      await failStalled(ref)
+      stalled++
+      continue
+    }
+    await redrive(ref)
+    redriven++
   }
-  return { redriven, finalized }
+  return { redriven, finalized, stalled }
 }

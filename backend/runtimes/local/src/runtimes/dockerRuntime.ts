@@ -170,4 +170,33 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
       .map((s) => s.trim())
       .filter(Boolean)
   }
+
+  async listRunContainers(
+    exec: ContainerExec,
+  ): Promise<Array<{ runId: string; containerId: string }>> {
+    // Running (not exited) per-run containers, printed as "<runId>|<containerId>" so we get
+    // both the run-id label and the id in one call. `status=running` excludes what reapExited
+    // already handles; the `runId` label excludes pool members (which carry `pool=1` instead).
+    const { stdout } = await exec([
+      'ps',
+      '--filter',
+      `label=${LABEL_MANAGED}`,
+      '--filter',
+      `label=${LABEL_RUN}`,
+      '--filter',
+      'status=running',
+      '--format',
+      `{{.Label "${LABEL_RUN}"}}|{{.ID}}`,
+    ])
+    return stdout
+      .trim()
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const sep = line.indexOf('|')
+        return { runId: line.slice(0, sep), containerId: line.slice(sep + 1) }
+      })
+      .filter((c) => c.runId && c.containerId)
+  }
 }

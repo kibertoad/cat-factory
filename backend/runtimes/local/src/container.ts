@@ -266,6 +266,20 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
         'local mode: could not reap / pre-warm job containers at startup',
       )
     })
+    // Also reap per-run containers left RUNNING by a crashed previous process whose run is
+    // now terminal/gone (release() never ran). A run that is still live is left for the
+    // stale-run sweeper to re-drive (it re-attaches to the same container by run-id label).
+    await transport
+      .reapOrphanedRuns((ids) => repos.agentRunRepository.liveRunIds(ids))
+      .then((n) => {
+        if (n > 0) logger.warn({ reaped: n }, 'local mode: reaped orphaned per-run containers')
+      })
+      .catch((err) => {
+        logger.warn(
+          { err: err instanceof Error ? err.message : String(err) },
+          'local mode: could not reap orphaned run containers at startup',
+        )
+      })
     return transport
   }
   const resolveContainerTransport = (): Promise<LocalContainerRunnerTransport> => {

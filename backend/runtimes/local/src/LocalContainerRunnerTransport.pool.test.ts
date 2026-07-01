@@ -301,6 +301,7 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
       removeRun: vi.fn(async () => {}),
       reapExited: vi.fn(async () => 0),
       listPoolMembers: vi.fn(async () => []),
+      listRunContainers: vi.fn(async () => []),
     }
     const fetchImpl = okFetch()
     const transport = new LocalContainerRunnerTransport({

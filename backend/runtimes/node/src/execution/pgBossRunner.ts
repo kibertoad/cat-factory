@@ -1,9 +1,10 @@
 import type { WorkRunner } from '@cat-factory/kernel'
 import type { Logger, ServerContainer } from '@cat-factory/server'
 import type { Job, PgBoss, SendOptions } from 'pg-boss'
-import { reenqueueStaleBootstrap } from './bootstrapRunner.js'
-import { reenqueueStaleEnvConfigRepair } from './envConfigRepairRunner.js'
+import { BOOTSTRAP_QUEUE, reenqueueStaleBootstrap } from './bootstrapRunner.js'
+import { ENV_CONFIG_REPAIR_QUEUE, reenqueueStaleEnvConfigRepair } from './envConfigRepairRunner.js'
 import { type DriveConfig, driveExecution } from './drive.js'
+import { type JobStore, classifyAdvanceJob, reclaimAdvanceJob } from './reclaim.js'
 
 // Durable execution on pg-boss: the analogue of the Worker's Cloudflare Workflows
 // driver. `startRun` enqueues an advance job (deduped per run via singletonKey); a
@@ -163,37 +164,137 @@ export async function startExecutionWorker(
   )
 }
 
-/** How often the stale-run sweeper runs, and how stale a `running` run must be to re-drive. */
+/**
+ * How often the stale-run sweeper runs, how stale a `running` run must be to re-drive, and
+ * how long an orphaned run may stay unrecovered before it is failed as `stalled`.
+ */
 export interface SweeperConfig {
   intervalMs: number
   leaseMs: number
+  /**
+   * Hard deadline: a `running` execution this process has been UNABLE TO RECOVER for this
+   * long (its advance job stays not-live across ticks despite re-driving) is failed `stalled`
+   * rather than re-driven forever — so a run orphaned by a crashed orchestrator that recovery
+   * can't resume stops spinning silently and surfaces (loudly) the failure banner + retry.
+   *
+   * The clock is per-PROCESS (measured from the first tick that observed the run orphaned),
+   * NOT the raw lease age: a long orchestrator downtime inflates `updated_at`, so keying the
+   * deadline off lease age would fail an otherwise-recoverable run on the very first boot tick
+   * — before recovery was even attempted. Measuring from first-observed-orphaned excludes the
+   * downtime and guarantees at least one re-drive attempt before giving up.
+   */
+  hardStallMs: number
+}
+
+/** Queue name carrying a run kind's durable advance/drive job. */
+function queueForKind(kind: string): string | null {
+  if (kind === 'execution') return QUEUE
+  if (kind === 'bootstrap') return BOOTSTRAP_QUEUE
+  if (kind === 'env-config-repair') return ENV_CONFIG_REPAIR_QUEUE
+  return null
 }
 
 /**
- * Backstop for runs that are still `running` in storage but whose advance job is gone
- * (the worker crashed/was evicted before the job retried). Mirrors the Worker's cron
- * `sweepStuckRuns`: on each tick it re-enqueues every stale `running` execution run.
- * The re-enqueue carries the run's `singletonKey` and the queue is `exclusive`, so a run
- * that IS still being driven (its advance job active/retrying) is a silent no-op — only
- * genuinely orphaned runs re-drive.
- * Decision-parked (`blocked`) and spend-paused (`paused`) runs aren't `running`, so the
- * sweeper leaves them alone. Returns a stop function (clears the interval).
+ * Backstop for runs still `running` in storage but whose durable advance job is gone or
+ * orphaned (the worker crashed/was evicted). Mirrors — and now matches the recovery power
+ * of — the Worker's cron `sweepStuckRuns`.
+ *
+ * Per stale run, the sweeper first classifies its advance job by pg-boss's own heartbeat
+ * (see {@link classifyAdvanceJob}), because the `exclusive` queue makes a bare re-`send` a
+ * no-op while ANY advance job exists — which previously left an ORPHANED-`active` run (job
+ * stuck active, worker dead, heartbeat frozen) permanently un-recoverable by this sweeper:
+ *
+ * - `live`     — a real drive is running (or a job is queued to run). Leave it.
+ * - `orphaned` — reclaim the dead job to free its singletonKey, then re-drive (or fail).
+ * - `missing`  — re-drive directly.
+ *
+ * An execution this process has been unable to recover for `hardStallMs` (measured from the
+ * first tick that saw it orphaned, so a long downtime doesn't count) is failed `stalled`
+ * instead of re-driven forever, so an unrecoverable run doesn't spin `running` forever — but
+ * every orphan still gets at least one re-drive attempt first. Decision-parked (`blocked`)
+ * and spend-paused (`paused`) runs aren't `running`, so they're left alone. Returns a stop
+ * function; also runs one tick immediately (boot reconcile — recover runs a crashed previous
+ * process orphaned without waiting a full interval).
  */
 export function startStaleRunSweeper(
   boss: PgBoss,
+  jobs: JobStore,
   container: ServerContainer,
   cfg: SweeperConfig,
   queueOptions: AdvanceQueueOptions,
   log: Logger,
 ): () => void {
+  // A live drive heartbeats its active job every `heartbeatSeconds`; treat a heartbeat older
+  // than a generous multiple of that (but at least the lease) as a dead worker.
+  const staleHeartbeatMs = Math.max(cfg.leaseMs, queueOptions.heartbeatSeconds * 1000 * 3)
+  // Per-PROCESS "first observed orphaned" clock, keyed by run id. The hard-stall deadline is
+  // measured from this — NOT the raw lease age — so a long orchestrator downtime (which
+  // inflates `updated_at`) can't fail an otherwise-recoverable run before recovery is even
+  // attempted. Entries are dropped once a run recovers or leaves the stale set.
+  const orphanedSince = new Map<string, number>()
   const tick = async () => {
     try {
-      const stale = await container.agentRunRepository.listStale(Date.now() - cfg.leaseMs)
+      const now = Date.now()
+      const stale = await container.agentRunRepository.listStale(now - cfg.leaseMs)
+      const stillOrphaned = new Set<string>()
       for (const ref of stale) {
-        // Every durable kind is re-driven: an orphaned execution back onto the advance
-        // queue, an orphaned bootstrap onto the bootstrap drive queue, an orphaned
-        // env-config-repair onto its drive queue (parity with the Worker's sweepStuckRuns,
-        // which covers execution + bootstrap + env-config-repair).
+        const queue = queueForKind(ref.kind)
+        if (!queue) continue
+
+        // Distinguish a healthy long drive (heartbeating) from an orphaned job whose worker
+        // died, so we recover the orphan instead of silently no-op re-sending onto it.
+        const { state, jobId } = await classifyAdvanceJob(
+          jobs,
+          queue,
+          ref.id,
+          staleHeartbeatMs,
+          now,
+        )
+        if (state === 'live') {
+          orphanedSince.delete(ref.id)
+          continue
+        }
+        // Start (or carry forward) this run's per-process orphaned clock.
+        const firstSeenOrphaned = orphanedSince.get(ref.id) ?? now
+        orphanedSince.set(ref.id, firstSeenOrphaned)
+        stillOrphaned.add(ref.id)
+
+        if (state === 'orphaned' && jobId) {
+          log.warn(
+            { workspaceId: ref.workspaceId, runId: ref.id, kind: ref.kind, jobId },
+            'reclaiming orphaned advance job (dead worker) before re-drive',
+          )
+          await reclaimAdvanceJob(boss, queue, jobId).catch((err) =>
+            log.error(
+              { runId: ref.id, err: err instanceof Error ? err.message : String(err) },
+              'failed to reclaim orphaned advance job',
+            ),
+          )
+        }
+
+        // Hard-stall backstop (execution only): a run this process has been unable to recover
+        // for the whole deadline — re-driven on earlier ticks yet still not live — is failed
+        // rather than left spinning `running`. Gated on the per-process clock (not lease age),
+        // so a run first seen orphaned this tick (e.g. right after a long downtime) is always
+        // re-driven at least once below before it can ever be given up on.
+        if (ref.kind === 'execution' && now - firstSeenOrphaned > cfg.hardStallMs) {
+          const mins = Math.round((now - ref.updatedAt) / 60_000)
+          log.warn(
+            { workspaceId: ref.workspaceId, executionId: ref.id, staleMinutes: mins },
+            'run stalled past hard deadline; recovery could not resume it; failing',
+          )
+          await container.executionService.failRun(
+            ref.workspaceId,
+            ref.id,
+            `Run stalled: no progress for ${mins} minutes and recovery could not resume it.`,
+            'stalled',
+            null,
+          )
+          orphanedSince.delete(ref.id)
+          stillOrphaned.delete(ref.id)
+          continue
+        }
+
         if (ref.kind === 'bootstrap') {
           log.warn({ workspaceId: ref.workspaceId, jobId: ref.id }, 're-driving stale bootstrap')
           await reenqueueStaleBootstrap(boss, ref.workspaceId, ref.id, queueOptions)
@@ -207,13 +308,17 @@ export function startStaleRunSweeper(
           await reenqueueStaleEnvConfigRepair(boss, ref.workspaceId, ref.id, queueOptions)
           continue
         }
-        if (ref.kind !== 'execution') continue
         log.warn({ workspaceId: ref.workspaceId, executionId: ref.id }, 're-driving stale run')
         await boss.send(
           QUEUE,
           { workspaceId: ref.workspaceId, executionId: ref.id },
           sendOptions(ref.id, queueOptions),
         )
+      }
+      // Forget runs that recovered (bumped their lease → left the stale set) or went terminal,
+      // so their per-process orphaned clock restarts if they ever stall again.
+      for (const id of orphanedSince.keys()) {
+        if (!stillOrphaned.has(id)) orphanedSince.delete(id)
       }
     } catch (error) {
       log.error(
@@ -222,6 +327,9 @@ export function startStaleRunSweeper(
       )
     }
   }
+  // Boot reconcile: recover runs a crashed previous process orphaned right away, not after
+  // one full interval (the incident that motivated this: a restart left a run frozen).
+  void tick()
   const timer = setInterval(() => void tick(), cfg.intervalMs)
   timer.unref?.() // never keep the process alive on the sweep timer alone
   return () => clearInterval(timer)

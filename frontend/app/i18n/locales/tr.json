@@ -157,6 +157,7 @@
       "environmentFailed": "Ortam sağlama başarısız oldu",
       "bootstrapFailed": "Bootstrap başarısız oldu",
       "runFailed": "Çalıştırma başarısız oldu",
+      "stalled": "Çalıştırma askıda kaldı",
       "retryBootstrap": "Bootstrap'ı yeniden dene",
       "retryRun": "Çalıştırmayı yeniden dene",
       "showDetail": "Ayrıntıyı göster",

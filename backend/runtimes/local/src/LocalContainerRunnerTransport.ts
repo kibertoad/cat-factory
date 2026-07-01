@@ -394,6 +394,27 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     return reaped
   }
 
+  /**
+   * Reap per-run containers left still RUNNING by a crashed previous process whose run has
+   * since gone terminal/away — their `release()` never ran, so `reapExited` (exited-only)
+   * misses them and they leak. `liveRunIds` returns which of the given run ids are still live
+   * (non-terminal, e.g. `running`/`blocked`/`paused`); every running per-run container NOT in
+   * that set is removed. Best-effort; resolves to the count removed. Call once at boot. The
+   * stale-run sweeper re-drives genuinely live runs and releases their container on terminal,
+   * so this only sweeps the ones recovery will never touch again.
+   */
+  async reapOrphanedRuns(liveRunIds: (ids: string[]) => Promise<string[]>): Promise<number> {
+    const running = await this.adapter.listRunContainers(this.exec)
+    if (running.length === 0) return 0
+    const live = new Set(await liveRunIds(running.map((c) => c.runId)))
+    const orphans = running.filter((c) => !live.has(c.runId))
+    for (const c of orphans) {
+      this.cache.delete(c.runId)
+      await this.adapter.remove(this.exec, c.containerId).catch(() => undefined)
+    }
+    return orphans.length
+  }
+
   // --- warm pool ----------------------------------------------------------
 
   private async dispatchPooled(

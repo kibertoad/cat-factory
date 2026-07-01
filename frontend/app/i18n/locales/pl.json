@@ -157,6 +157,7 @@
       "environmentFailed": "Nie udało się przygotować środowiska",
       "bootstrapFailed": "Inicjalizacja nie powiodła się",
       "runFailed": "Uruchomienie nie powiodło się",
+      "stalled": "Uruchomienie utknęło",
       "retryBootstrap": "Ponów inicjalizację",
       "retryRun": "Ponów uruchomienie",
       "showDetail": "Pokaż szczegóły",
