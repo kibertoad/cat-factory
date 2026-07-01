@@ -1,5 +1,12 @@
 # @cat-factory/worker
 
+## 0.51.1
+
+### Patch Changes
+
+- Updated dependencies [eab2b60]
+  - @cat-factory/server@0.63.1
+
 ## 0.51.0
 
 ### Minor Changes

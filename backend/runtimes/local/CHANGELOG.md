@@ -1,5 +1,13 @@
 # @cat-factory/local-server
 
+## 0.35.4
+
+### Patch Changes
+
+- Updated dependencies [eab2b60]
+  - @cat-factory/server@0.63.1
+  - @cat-factory/node-server@0.55.1
+
 ## 0.35.3
 
 ### Patch Changes
