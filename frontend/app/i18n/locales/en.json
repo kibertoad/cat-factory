@@ -18,7 +18,17 @@
     "remove": "Remove",
     "confirm": {
       "defaultTitle": "Are you sure?",
-      "confirm": "Confirm"
+      "confirm": "Confirm",
+      "irreversible": "This can't be undone.",
+      "reconnectHint": "You'll need to reconnect it before you can use it again.",
+      "titles": {
+        "disconnect": "Disconnect {name}?",
+        "remove": "Remove {name}?",
+        "revoke": "Revoke {name}?",
+        "clear": "Clear {name}?",
+        "destroy": "Destroy {name}?"
+      },
+      "reconfigureHint": "You can set it up again later."
     },
     "block": "Block",
     "@block": {
@@ -30,7 +40,20 @@
       "description": "Verb meaning dismiss / shut (a panel, drawer, dialog), NOT the adjective 'near'. Used as an aria-label on close affordances - translate as the imperative verb."
     },
     "disconnect": "Disconnect",
-    "copyFailed": "Couldn't copy to clipboard"
+    "copyFailed": "Couldn't copy to clipboard",
+    "revoke": "Revoke",
+    "clear": "Clear",
+    "destroy": "Destroy",
+    "toast": {
+      "disconnected": "Disconnected {name}",
+      "removed": "Removed {name}",
+      "revoked": "Revoked {name}",
+      "cleared": "Cleared {name}",
+      "destroyed": "Destroyed {name}"
+    },
+    "@clear": {
+      "description": "Verb meaning empty / reset a stored value (a config, a saved connection), NOT the adjective 'transparent / obvious'. Used as a destructive-action button label."
+    }
   },
   "nav": {
     "menu": "Navigation menu",
@@ -474,7 +497,8 @@
       "saveMonitoring": "Save monitoring",
       "savedToast": "Monitoring saved",
       "saveFailed": "Could not save the mapping",
-      "clearFailed": "Could not clear the mapping"
+      "clearFailed": "Could not clear the mapping",
+      "configNoun": "the release health configuration"
     },
     "testConfig": {
       "title": "Test infrastructure",
@@ -1105,7 +1129,8 @@
         "revokeInvite": "Could not revoke invitation",
         "connectEmail": "Could not connect email sender",
         "disconnectEmail": "Could not disconnect email sender"
-      }
+      },
+      "emailNoun": "email sending"
     },
     "boardSwitcher": {
       "accountFallback": "Account",
@@ -1565,7 +1590,10 @@
         "overrideActive": "Active",
         "personalOverrideHint": "Override the workspace handler for this provision type on your own machine. Stored per user.",
         "removeOverride": "Remove override",
-        "loading": "Loading infrastructure settings…"
+        "loading": "Loading infrastructure settings…",
+        "kubeNoun": "the Kubernetes handler",
+        "kubeOverrideNoun": "the Kubernetes override",
+        "customNoun": "this handler"
       }
     },
     "providerConnection": {
@@ -1874,7 +1902,9 @@
         "connected": "Observability connected",
         "connectFailed": "Could not save the connection",
         "disconnectFailed": "Could not disconnect"
-      }
+      },
+      "connectionNoun": "the observability connection",
+      "incidentNoun": "the incident provider"
     },
     "localMode": {
       "title": "Local mode",
@@ -2174,7 +2204,8 @@
           "step1": "Generate a virtual key on your LiteLLM gateway (or use its master key).",
           "step2": "The gateway's base URL is set by your deployment operator (LITELLM_BASE_URL), not here."
         }
-      }
+      },
+      "keyNoun": "this API key"
     },
     "vendorCredentials": {
       "title": "LLM Vendors",
@@ -3267,7 +3298,9 @@
       "completed": "completed",
       "failed": "failed",
       "inProgress": "in progress"
-    }
+    },
+    "envNoun": "the test environment",
+    "destroyFailed": "Could not destroy the environment"
   },
   "testing": {
     "title": "Test report",

@@ -15,6 +15,7 @@ const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
 const toast = useToast()
 const { t } = useI18n()
+const { confirmAction, toastDone } = useConfirmAction()
 
 const open = computed({
   get: () => ui.bootstrapOpen,
@@ -349,9 +350,11 @@ async function saveArch() {
 }
 
 async function removeArch(a: ReferenceArchitecture) {
+  if (!(await confirmAction('remove', a.name))) return
   try {
     await bootstrap.deleteArchitecture(a.id)
     if (selectedArchId.value === a.id) selectedArchId.value = undefined
+    toastDone('remove', a.name)
   } catch (e) {
     toast.add({
       title: t('bootstrap.toast.deleteFailed'),

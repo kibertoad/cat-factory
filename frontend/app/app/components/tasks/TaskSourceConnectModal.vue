@@ -17,6 +17,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const tasks = useTasksStore()
 const toast = useToast()
+const { confirmAction } = useConfirmAction()
 
 const source = computed(() => ui.taskConnect?.source ?? null)
 const descriptor = computed(() => (source.value ? tasks.descriptorFor(source.value) : undefined))
@@ -99,12 +100,12 @@ async function startOAuth() {
 
 async function disconnect() {
   if (!source.value) return
+  const label = descriptor.value?.label ?? t('tasks.connect.sourceFallback')
+  if (!(await confirmAction('disconnect', label))) return
   await tasks.disconnect(source.value)
   await tasks.probe()
   toast.add({
-    title: t('tasks.connect.disconnectedToast', {
-      label: descriptor.value?.label ?? t('tasks.connect.sourceFallback'),
-    }),
+    title: t('tasks.connect.disconnectedToast', { label }),
     icon: 'i-lucide-unplug',
   })
   ui.closeTaskConnect()

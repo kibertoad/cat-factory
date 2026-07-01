@@ -20,11 +20,31 @@
     "remove": "Usuń",
     "confirm": {
       "defaultTitle": "Na pewno?",
-      "confirm": "Potwierdź"
+      "confirm": "Potwierdź",
+      "irreversible": "Tej operacji nie można cofnąć.",
+      "reconnectHint": "Aby użyć tego ponownie, trzeba będzie połączyć to na nowo.",
+      "titles": {
+        "disconnect": "Rozłączyć {name}?",
+        "remove": "Usunąć {name}?",
+        "revoke": "Unieważnić {name}?",
+        "clear": "Wyczyścić {name}?",
+        "destroy": "Zniszczyć {name}?"
+      },
+      "reconfigureHint": "Możesz skonfigurować to ponownie później."
     },
     "copied": "Skopiowano do schowka",
     "disconnect": "Rozłącz",
-    "copyFailed": "Nie udało się skopiować do schowka"
+    "copyFailed": "Nie udało się skopiować do schowka",
+    "revoke": "Unieważnij",
+    "clear": "Wyczyść",
+    "destroy": "Zniszcz",
+    "toast": {
+      "disconnected": "Rozłączono {name}",
+      "removed": "Usunięto {name}",
+      "revoked": "Unieważniono {name}",
+      "cleared": "Wyczyszczono {name}",
+      "destroyed": "Zniszczono {name}"
+    }
   },
   "nav": {
     "menu": "Menu nawigacji",
@@ -437,7 +457,8 @@
       "saveMonitoring": "Zapisz monitorowanie",
       "savedToast": "Monitorowanie zapisane",
       "saveFailed": "Nie udało się zapisać mapowania",
-      "clearFailed": "Nie udało się wyczyścić mapowania"
+      "clearFailed": "Nie udało się wyczyścić mapowania",
+      "configNoun": "konfigurację kondycji wydania"
     },
     "testConfig": {
       "title": "Infrastruktura testowa",
@@ -1065,7 +1086,8 @@
         "revokeInvite": "Nie udało się odwołać zaproszenia",
         "connectEmail": "Nie udało się połączyć nadawcy e-maili",
         "disconnectEmail": "Nie udało się rozłączyć nadawcy e-maili"
-      }
+      },
+      "emailNoun": "wysyłanie e-maili"
     },
     "boardSwitcher": {
       "accountFallback": "Konto",
@@ -1718,7 +1740,9 @@
         "connected": "Obserwowalność połączona",
         "connectFailed": "Nie można zapisać połączenia",
         "disconnectFailed": "Nie można rozłączyć"
-      }
+      },
+      "connectionNoun": "połączenie obserwowalności",
+      "incidentNoun": "dostawcę incydentów"
     },
     "localMode": {
       "title": "Tryb lokalny",
@@ -1988,7 +2012,10 @@
         "overrideActive": "Aktywne",
         "personalOverrideHint": "Nadpisz handler przestrzeni roboczej dla tego typu provisioningu na własnej maszynie. Przechowywane na użytkownika.",
         "removeOverride": "Usuń nadpisanie",
-        "loading": "Ładowanie ustawień infrastruktury…"
+        "loading": "Ładowanie ustawień infrastruktury…",
+        "kubeNoun": "obsługę Kubernetes",
+        "kubeOverrideNoun": "nadpisanie Kubernetes",
+        "customNoun": "tę obsługę"
       }
     }
   },
@@ -2112,7 +2139,8 @@
           "step1": "Wygeneruj klucz wirtualny na swojej bramie LiteLLM (lub użyj jej klucza głównego).",
           "step2": "Bazowy URL bramy ustawia operator Twojego wdrożenia (LITELLM_BASE_URL), nie tutaj."
         }
-      }
+      },
+      "keyNoun": "ten klucz API"
     },
     "vendorCredentials": {
       "title": "Dostawcy LLM",
@@ -3147,7 +3175,9 @@
       "completed": "zakończono",
       "failed": "niepowodzenie",
       "inProgress": "w toku"
-    }
+    },
+    "envNoun": "środowisko testowe",
+    "destroyFailed": "Nie udało się zniszczyć środowiska"
   },
   "testing": {
     "title": "Raport z testów",

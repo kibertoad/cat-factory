@@ -10,6 +10,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const documents = useDocumentsStore()
 const toast = useToast()
+const { confirmAction } = useConfirmAction()
 
 const source = computed(() => ui.documentConnect?.source ?? null)
 const descriptor = computed(() =>
@@ -70,11 +71,11 @@ async function submit() {
 
 async function disconnect() {
   if (!source.value) return
+  const label = descriptor.value?.label ?? t('documents.connect.sourceFallback')
+  if (!(await confirmAction('disconnect', label))) return
   await documents.disconnect(source.value)
   toast.add({
-    title: t('documents.connect.disconnected', {
-      source: descriptor.value?.label ?? t('documents.connect.sourceFallback'),
-    }),
+    title: t('documents.connect.disconnected', { source: label }),
     icon: 'i-lucide-unplug',
   })
   ui.closeDocumentConnect()
