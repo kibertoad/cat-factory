@@ -13,7 +13,7 @@ import {
   loadNodeConfig,
   withProvisioningLog,
 } from '@cat-factory/node-server'
-import type { NodeContainerOptions } from '@cat-factory/node-server'
+import type { CoreRepositories, NodeContainerOptions } from '@cat-factory/node-server'
 import {
   SqliteWorkRunner,
   type MothershipComposition,
@@ -85,15 +85,41 @@ import { createDockerComposeRuntime } from './compose.js'
 // blueprints/ci-fixer/merger jobs entirely locally, pushing real branches and opening
 // real PRs on github.com via the PAT.
 
+/**
+ * Resolve the local facade's persistence backing in one place: mothership mode (remote RPC org
+ * repos + local `node:sqlite` credentials/work-queue, `db` left undefined) vs the standard
+ * siloed-Postgres local mode (Drizzle repos over the local db). `repos` prefers an explicitly
+ * injected set (the conformance harness), then the mothership composite, then Drizzle over `db`.
+ * The `mothership` composition (when present) also carries the credential store + work queue the
+ * caller threads into `buildNodeContainer`.
+ */
+function resolveLocalPersistence(
+  options: NodeContainerOptions,
+  env: NodeJS.ProcessEnv,
+  clock: SystemClock,
+): { mothership: MothershipComposition | undefined; repos: CoreRepositories } {
+  const mothership = isMothershipMode(env) && !options.db ? composeMothership(env) : undefined
+  const repos =
+    options.repos ??
+    mothership?.repos ??
+    createDrizzleRepositories(options.db as Parameters<typeof createDrizzleRepositories>[0], clock)
+  return { mothership, repos }
+}
+
 export function buildLocalContainer(options: NodeContainerOptions): ServerContainer {
   const env = applyLocalDefaults(options.env ?? process.env)
-  // Mothership mode (docs/initiatives/mothership-mode.md): no local Postgres. Org/durable
-  // state is served remotely (RPC) and credentials stay local (node:sqlite). When on, we
-  // build the composite repositories + credential store here and thread them through the
-  // existing NodeContainer seams with `db` left undefined; the in-process work runner replaces
-  // pg-boss. Off → the standard siloed-Postgres local mode is unchanged.
-  const mothership: MothershipComposition | undefined =
-    isMothershipMode(env) && !options.db ? composeMothership(env) : undefined
+  // One shared clock/idGenerator, reused by the per-workspace transport chooser below AND
+  // threaded into `buildNodeContainer` (which would otherwise build its own) so the chooser
+  // reads the same workspace settings the rest of the engine does. Created up front because the
+  // mothership-vs-Postgres persistence decision (which needs the clock) is resolved next.
+  const clock = new SystemClock()
+  const idGenerator = new CryptoIdGenerator()
+  // Mothership mode (docs/initiatives/mothership-mode.md): no local Postgres. Org/durable state
+  // is served remotely (RPC) and credentials stay local (node:sqlite); `repos` is then the
+  // remote (RPC-backed) composite, threaded through the existing NodeContainer seams with `db`
+  // left undefined, and the in-process work runner replaces pg-boss. Off → the standard
+  // siloed-Postgres local mode is unchanged (`repos` is the Drizzle set over the local Postgres).
+  const { mothership, repos } = resolveLocalPersistence(options, env, clock)
   const pat = env.GITHUB_PAT?.trim()
   const gitlabPat = env.GITLAB_PAT?.trim()
   // The push/clone token and the VCS client are provider-agnostic. Prefer a GitHub PAT, else
@@ -176,17 +202,6 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
         )
       : undefined
 
-  // One shared persistence set + clock/idGenerator, reused by the per-workspace transport
-  // chooser below AND threaded into `buildNodeContainer` (which would otherwise build its
-  // own) so the chooser reads the same workspace settings the rest of the engine does.
-  const clock = new SystemClock()
-  const idGenerator = new CryptoIdGenerator()
-  // In mothership mode the repository set is the remote (RPC-backed) composite; otherwise the
-  // Drizzle set over the local Postgres. The credential repos are injected separately below.
-  const repos =
-    options.repos ??
-    mothership?.repos ??
-    createDrizzleRepositories(options.db as Parameters<typeof createDrizzleRepositories>[0], clock)
   const wsSettings = new WorkspaceSettingsService({
     workspaceSettingsRepository: repos.workspaceSettingsRepository,
     workspaceRepository: repos.workspaceRepository,

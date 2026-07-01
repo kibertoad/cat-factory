@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite'
+import type { DatabaseSync } from 'node:sqlite'
 import type {
   ApiKeyProvider,
   ApiKeyScope,
@@ -9,6 +9,7 @@ import type {
   ProviderApiKeyRepository,
 } from '@cat-factory/kernel'
 import type { LocalRunner } from '@cat-factory/contracts'
+import { openSqliteDb } from './db.js'
 
 // The mothership-mode LOCAL credential store.
 //
@@ -68,13 +69,7 @@ CREATE TABLE IF NOT EXISTS local_model_endpoints (
 
 /** Open (creating if absent) the local credential SQLite database and ensure its schema. */
 export function openLocalCredentialDb(path: string): DatabaseSync {
-  const db = new DatabaseSync(path)
-  // WAL keeps readers and the single writer from blocking each other; the busy timeout
-  // absorbs a brief lock contention (e.g. an OS sync) instead of throwing SQLITE_BUSY.
-  db.exec('PRAGMA journal_mode = WAL')
-  db.exec('PRAGMA busy_timeout = 5000')
-  db.exec(SCHEMA)
-  return db
+  return openSqliteDb(path, SCHEMA)
 }
 
 // ---------------------------------------------------------------------------

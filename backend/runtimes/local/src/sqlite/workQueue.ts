@@ -1,4 +1,5 @@
-import { DatabaseSync } from 'node:sqlite'
+import type { DatabaseSync } from 'node:sqlite'
+import { openSqliteDb } from './db.js'
 
 // The mothership-mode DURABLE execution work queue.
 //
@@ -44,13 +45,7 @@ CREATE INDEX IF NOT EXISTS execution_work_queue_claimable
 
 /** Open (creating if absent) the work-queue SQLite database and ensure its schema. */
 export function openWorkQueueDb(path: string): DatabaseSync {
-  const db = new DatabaseSync(path)
-  // Mirror the credential store's pragmas: WAL keeps the single writer from blocking readers,
-  // and the busy timeout absorbs a brief lock instead of throwing SQLITE_BUSY.
-  db.exec('PRAGMA journal_mode = WAL')
-  db.exec('PRAGMA busy_timeout = 5000')
-  db.exec(SCHEMA)
-  return db
+  return openSqliteDb(path, SCHEMA)
 }
 
 /**
